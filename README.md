@@ -30,17 +30,28 @@ Native macOS Diktier-App mit bester Transkriptionsqualität.
 git clone https://github.com/yourname/whisperm8.git
 cd whisperm8
 
-# Bauen (Xcode muss installiert sein)
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build
+# App bauen und starten (killt alte Instanzen automatisch)
+make run
 
-# Starten
-.build/debug/WhisperM8
+# Oder mit Scripts:
+./scripts/run.sh
 ```
+
+## Development
+
+```bash
+make run      # Build und Start (empfohlen)
+make build    # Nur bauen
+make kill     # Alle Instanzen beenden
+make clean    # Build-Artefakte löschen
+```
+
+**In Xcode:** `WhisperM8.xcodeproj` öffnen → Cmd+R
 
 ## Systemanforderungen
 
 - macOS 14+ (Sonoma)
-- Xcode (zum Bauen)
+- Xcode 15+
 - OpenAI oder Groq API-Key
 
 ## Einrichtung
