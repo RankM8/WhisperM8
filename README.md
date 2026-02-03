@@ -1,102 +1,87 @@
 # WhisperM8
 
-Eine native macOS Diktier-App mit bester Transkriptionsqualität.
+Native macOS Diktier-App mit bester Transkriptionsqualität.
+
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
+![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
+![License MIT](https://img.shields.io/badge/License-MIT-green)
 
 ## Features
 
-- Globaler Hotkey (Hold-to-Record) fur Sprachaufnahme
-- Automatische Transkription via OpenAI gpt-4o-transcribe oder Groq whisper-large-v3
-- Minimales Floating Overlay wahrend der Aufnahme mit Audio-Level Anzeige
-- Text direkt in die Zwischenablage
-- Einfache Konfiguration uber Onboarding-Wizard
-- Leichtgewichtige native macOS App (kein Dock-Icon)
+- **Hold-to-Record Hotkey** - Halte eine Taste gedrückt zum Diktieren
+- **Beste Transkription** - OpenAI gpt-4o-transcribe oder Groq whisper-large-v3
+- **Floating Overlay** - Echtzeit Audio-Level Anzeige während der Aufnahme
+- **Clipboard Integration** - Text landet automatisch in der Zwischenablage
+- **Native macOS App** - Läuft in der Menüleiste, kein Dock-Icon
+- **Sicher** - API-Keys im macOS Keychain gespeichert
+
+## Screenshots
+
+```
+┌────────────────────────────────────┐
+│  🔴  Aufnahme...  00:05  ▁▃▅▇▅▃▁  │
+└────────────────────────────────────┘
+```
+
+## Quick Start
+
+```bash
+# Repository klonen
+git clone https://github.com/yourname/whisperm8.git
+cd whisperm8
+
+# Bauen (Xcode muss installiert sein)
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build
+
+# Starten
+.build/debug/WhisperM8
+```
 
 ## Systemanforderungen
 
 - macOS 14+ (Sonoma)
-- OpenAI API Key oder Groq API Key
+- Xcode (zum Bauen)
+- OpenAI oder Groq API-Key
 
-## Installation
+## Einrichtung
 
-### Option 1: In Xcode offnen (Empfohlen)
+1. **App starten** - Mikrofon-Icon erscheint in der Menüleiste
+2. **Einstellungen öffnen** - Klick auf Icon → "Einstellungen..."
+3. **API-Key eingeben** - OpenAI oder Groq Key eintragen
+4. **Hotkey wählen** - z.B. `Ctrl + Shift + Space`
+5. **Diktieren** - Hotkey halten, sprechen, loslassen → Text in Zwischenablage
 
-1. Repository klonen:
-   ```bash
-   git clone https://github.com/yourname/whisperm8.git
-   cd whisperm8
-   ```
+## Dokumentation
 
-2. Das Projekt in Xcode offnen:
-   ```bash
-   open WhisperM8.xcodeproj
-   ```
+- [Benutzerhandbuch](docs/USER_GUIDE.md)
+- [Architektur](docs/ARCHITECTURE.md)
+- [Implementierungsplan](docs/03-implementierungsplan.md)
 
-3. In Xcode: Product > Run (Cmd+R)
+## API-Provider
 
-### Option 2: Swift Package (Xcode erforderlich)
-
-Das Projekt nutzt externe Dependencies mit #Preview Makros, die nur in Xcode funktionieren.
-
-## Verwendung
-
-1. **Erster Start:** Der Onboarding-Wizard fuhrt dich durch die Einrichtung:
-   - Hotkey konfigurieren (z.B. Ctrl+Shift+Space)
-   - Mikrofon-Berechtigung erteilen
-   - API-Key eingeben (OpenAI oder Groq)
-
-2. **Diktieren:**
-   - Halte deinen Hotkey gedruckt
-   - Sprich deinen Text
-   - Lass den Hotkey los
-   - Der transkribierte Text ist automatisch in der Zwischenablage
-
-3. **Einstellungen:** Klicke auf das Mikrofon-Icon in der Menubar > Einstellungen
+| Provider | Modell | Qualität | Preis |
+|----------|--------|----------|-------|
+| OpenAI | gpt-4o-transcribe | Beste | $0.006/min |
+| Groq | whisper-large-v3 | Sehr gut | $0.002/min |
 
 ## Tech Stack
 
 - Swift / SwiftUI
-- macOS 14+ (Sonoma)
-- AVFoundation (Audio-Aufnahme)
-- KeyboardShortcuts (sindresorhus)
-- Defaults (sindresorhus)
-- LaunchAtLogin-Modern (sindresorhus)
-
-## API-Provider
-
-| Provider | Modell | Preis |
-|----------|--------|-------|
-| OpenAI | gpt-4o-transcribe | $0.006/min |
-| Groq | whisper-large-v3 | $0.002/min |
+- AVFoundation (Audio)
+- [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts)
+- [Defaults](https://github.com/sindresorhus/Defaults)
+- [LaunchAtLogin-Modern](https://github.com/sindresorhus/LaunchAtLogin-Modern)
 
 ## Projektstruktur
 
 ```
 WhisperM8/
-├── WhisperM8App.swift         # Entry Point, MenuBarExtra, Hotkey-Setup
-├── Models/
-│   ├── AppState.swift         # Zentraler App-Zustand
-│   └── APIProvider.swift      # Provider-Enum (OpenAI/Groq)
-├── Views/
-│   ├── MenuBarView.swift      # Menubar-Dropdown
-│   ├── SettingsView.swift     # Einstellungen
-│   ├── OnboardingView.swift   # Setup-Wizard
-│   └── RecordingOverlayView.swift # Overlay UI
-├── Windows/
-│   └── RecordingPanel.swift   # NSPanel fur Overlay
-├── Services/
-│   ├── AudioRecorder.swift    # AVAudioEngine Recording
-│   ├── TranscriptionService.swift # API Integration
-│   └── KeychainManager.swift  # Sichere Key-Speicherung
-├── Info.plist
-└── WhisperM8.entitlements
+├── WhisperM8App.swift         # Entry Point
+├── Models/                    # AppState, APIProvider
+├── Views/                     # SwiftUI Views
+├── Windows/                   # NSPanel für Overlay
+└── Services/                  # Audio, API, Keychain
 ```
-
-## Berechtigungen
-
-| Berechtigung | Benotigt | Methode |
-|--------------|----------|---------|
-| Mikrofon | Ja | Automatischer System-Dialog |
-| Accessibility | Nein | - |
 
 ## Lizenz
 
