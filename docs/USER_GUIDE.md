@@ -95,7 +95,7 @@ Nach dem Start erscheint ein **Mikrofon-Symbol** in der Menüleiste (oben rechts
 
 1. **Halte** deinen konfigurierten Hotkey gedrückt
 2. Ein Overlay erscheint am unteren Bildschirmrand mit:
-   - Roter pulsierender Punkt
+   - Mikrofon-Indicator (reaktiv auf Stimme)
    - Timer (MM:SS)
    - Audio-Level Anzeige
 3. **Sprich** deinen Text

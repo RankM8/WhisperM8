@@ -57,11 +57,7 @@ class OverlayController: ObservableObject {
         let panel = RecordingPanel()
 
         // Create view with bindings (ONCE) - view will update via bindings
-        let view = RecordingOverlayView(
-            audioLevel: Binding(get: { self.audioLevel }, set: { self.audioLevel = $0 }),
-            duration: Binding(get: { self.duration }, set: { self.duration = $0 }),
-            isTranscribing: Binding(get: { self.isTranscribing }, set: { self.isTranscribing = $0 })
-        )
+        let view = RecordingOverlayView(controller: self)
 
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 56)

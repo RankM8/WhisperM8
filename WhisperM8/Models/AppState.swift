@@ -64,7 +64,11 @@ class AppState {
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 guard let self else { return }
                 Task { @MainActor in
-                    self.recordingDuration += 0.1
+                    if let startTime = self.recordingStartTime {
+                        self.recordingDuration = Date().timeIntervalSince(startTime)
+                    } else {
+                        self.recordingDuration = 0
+                    }
                     self.audioLevel = self.audioRecorder?.audioLevel ?? 0
                     self.overlayController?.update(appState: self)
                 }

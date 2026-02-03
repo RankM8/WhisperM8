@@ -1,40 +1,25 @@
 import SwiftUI
 
 struct RecordingOverlayView: View {
-    @Binding var audioLevel: Float
-    @Binding var duration: TimeInterval
-    @Binding var isTranscribing: Bool
-
-    @State private var isPulsing = false
+    @ObservedObject var controller: OverlayController
 
     var body: some View {
         HStack(spacing: 12) {
-            // Pulsing red dot
-            Circle()
-                .fill(isTranscribing ? Color.orange : Color.red)
-                .frame(width: 12, height: 12)
-                .scaleEffect(isPulsing && !isTranscribing ? 1.3 : 1.0)
-                .animation(
-                    isTranscribing ? .none : .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
-                    value: isPulsing
-                )
-                .onAppear {
-                    isPulsing = true
-                }
+            RecordingStatusIndicator(level: controller.audioLevel, isTranscribing: controller.isTranscribing)
 
             // Status text
-            Text(isTranscribing ? "Transkribiere..." : "Aufnahme...")
+            Text(controller.isTranscribing ? "Transkribiere..." : "Aufnahme...")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.primary)
 
             // Timer
-            Text(formatDuration(duration))
+            Text(formatDuration(controller.duration))
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
 
             // Audio level bars (only during recording)
-            if !isTranscribing {
-                AudioLevelBars(level: audioLevel)
+            if !controller.isTranscribing {
+                AudioLevelBars(level: controller.audioLevel)
             } else {
                 ProgressView()
                     .scaleEffect(0.6)
@@ -61,6 +46,42 @@ struct RecordingOverlayView: View {
     }
 }
 
+// MARK: - Status Indicator
+
+struct RecordingStatusIndicator: View {
+    let level: Float
+    let isTranscribing: Bool
+
+    private var clampedLevel: CGFloat {
+        max(0, min(CGFloat(level), 1))
+    }
+
+    private var ringColor: Color {
+        isTranscribing ? .orange : .green
+    }
+
+    var body: some View {
+        let intensity = isTranscribing ? 0 : clampedLevel
+
+        ZStack {
+            Circle()
+                .fill(Color.black.opacity(0.08))
+                .frame(width: 20, height: 20)
+
+            Circle()
+                .strokeBorder(ringColor.opacity(0.4 + 0.5 * intensity), lineWidth: 1.5)
+                .scaleEffect(0.85 + intensity * 0.35)
+                .animation(.easeOut(duration: 0.12), value: intensity)
+
+            Image(systemName: isTranscribing ? "waveform" : "mic.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(ringColor)
+        }
+        .frame(width: 20, height: 20)
+        .accessibilityLabel(isTranscribing ? "Transkribieren" : "Aufnahme aktiv")
+    }
+}
+
 // MARK: - Audio Level Bars
 
 struct AudioLevelBars: View {
@@ -78,25 +99,34 @@ struct AudioLevelBars: View {
         .frame(height: 20)
     }
 
+    private var easedLevel: CGFloat {
+        let clamped = max(0, min(CGFloat(level), 1))
+        return pow(clamped, 0.6)
+    }
+
+    private func barIntensity(for index: Int) -> CGFloat {
+        let boost = 0.55 + CGFloat(index) * 0.12
+        return min(1, easedLevel * boost)
+    }
+
     private func barHeight(for index: Int) -> CGFloat {
-        let threshold = Float(index + 1) / 5.0
-        let active = level >= threshold * 0.8
         let baseHeight: CGFloat = 4
-        let maxHeight = CGFloat(8 + index * 3)
-        return active ? maxHeight : baseHeight
+        let maxHeight = CGFloat(10 + index * 4)
+        let intensity = barIntensity(for: index)
+        return baseHeight + (maxHeight - baseHeight) * intensity
     }
 
     private func barColor(for index: Int) -> Color {
-        let threshold = Float(index + 1) / 5.0
-        if level >= threshold * 0.8 {
-            if index >= 4 {
-                return .orange
-            } else if index >= 3 {
-                return .yellow
-            }
-            return .green
+        let intensity = barIntensity(for: index)
+        if intensity < 0.08 {
+            return .gray.opacity(0.25)
         }
-        return .gray.opacity(0.3)
+        if intensity > 0.75 {
+            return .orange.opacity(0.9)
+        }
+        if intensity > 0.5 {
+            return .yellow.opacity(0.85)
+        }
+        return .green.opacity(0.8)
     }
 }
-
