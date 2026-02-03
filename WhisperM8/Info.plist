@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Menu bar app without Dock icon -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <!-- Microphone permission -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.</string>
+
+    <!-- App info -->
+    <key>CFBundleName</key>
+    <string>WhisperM8</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.yourname.WhisperM8</string>
+    <key>CFBundleVersion</key>
+    <string>1.0.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+</dict>
+</plist>
