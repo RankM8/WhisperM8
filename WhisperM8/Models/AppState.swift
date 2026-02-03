@@ -1,8 +1,12 @@
 import SwiftUI
 import AVFoundation
+import Carbon.HIToolbox
 
 @Observable
 class AppState {
+    // Singleton instance
+    static let shared = AppState()
+
     var isRecording = false
     var isTranscribing = false
     var audioLevel: Float = 0
@@ -13,6 +17,8 @@ class AppState {
     private var audioRecorder: AudioRecorder?
     private var overlayController: OverlayController?
     private var timer: Timer?
+    private var recordingStartTime: Date?
+    private var isProcessing = false
 
     var menuBarIcon: String {
         if isRecording { return "mic.fill" }
@@ -26,20 +32,31 @@ class AppState {
         return "Bereit"
     }
 
-    init() {
+    private init() {
         self.audioRecorder = AudioRecorder()
         self.overlayController = OverlayController()
     }
 
     @MainActor
     func startRecording() async {
-        guard !isRecording && !isTranscribing else { return }
+        guard !isRecording && !isTranscribing && !isProcessing else { return }
+
+        isProcessing = true
+
+        // Cleanup before starting
+        timer?.invalidate()
+        timer = nil
+        overlayController?.hide()
 
         do {
             try await audioRecorder?.startRecording()
+
+            recordingStartTime = Date()
             isRecording = true
             recordingDuration = 0
+            audioLevel = 0
             lastError = nil
+            isProcessing = false
 
             overlayController?.show(appState: self)
 
@@ -54,28 +71,43 @@ class AppState {
             }
         } catch {
             lastError = error.localizedDescription
+            isProcessing = false
         }
     }
 
     @MainActor
     func stopRecording() async {
-        guard isRecording else { return }
+        guard isRecording, !isTranscribing, !isProcessing else { return }
 
+        // Minimum recording duration (300ms)
+        if let startTime = recordingStartTime {
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < 0.3 { return }
+        }
+
+        isProcessing = true
+
+        // Stop timer
         timer?.invalidate()
         timer = nil
 
-        guard let audioURL = audioRecorder?.stopRecording() else {
-            isRecording = false
+        // Stop recording
+        let audioURL = audioRecorder?.stopRecording()
+        isRecording = false
+        audioLevel = 0
+        recordingStartTime = nil
+
+        guard let audioURL else {
             overlayController?.hide()
+            isProcessing = false
             return
         }
 
-        isRecording = false
+        // Transcribe
         isTranscribing = true
         overlayController?.update(appState: self)
 
         do {
-            // Get provider and API key from settings
             let providerRawValue = UserDefaults.standard.string(forKey: "selectedProvider") ?? APIProvider.openai.rawValue
             let provider = APIProvider(rawValue: providerRawValue) ?? .openai
 
@@ -95,7 +127,10 @@ class AppState {
 
             lastTranscription = text
 
-            // Cleanup temp file
+            // Auto-paste
+            pasteToActiveApp()
+
+            // Cleanup
             try? FileManager.default.removeItem(at: audioURL)
 
         } catch {
@@ -103,6 +138,23 @@ class AppState {
         }
 
         isTranscribing = false
+        isProcessing = false
         overlayController?.hide()
+    }
+
+    // MARK: - Auto-Paste
+
+    private func pasteToActiveApp() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            let source = CGEventSource(stateID: .combinedSessionState)
+
+            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: UInt16(kVK_ANSI_V), keyDown: true)
+            keyDown?.flags = .maskCommand
+            keyDown?.post(tap: .cghidEventTap)
+
+            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: UInt16(kVK_ANSI_V), keyDown: false)
+            keyUp?.flags = .maskCommand
+            keyUp?.post(tap: .cghidEventTap)
+        }
     }
 }

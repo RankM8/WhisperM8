@@ -3,26 +3,35 @@ import KeyboardShortcuts
 
 @main
 struct WhisperM8App: App {
-    @State private var appState = AppState()
     @AppStorage("onboardingCompleted") private var onboardingCompleted = false
 
     init() {
+        // Single instance check - quit if already running
+        let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+        if runningApps.count > 1 {
+            // Another instance is already running - activate it and quit this one
+            for app in runningApps where app != NSRunningApplication.current {
+                app.activate(options: .activateIgnoringOtherApps)
+            }
+            NSApp.terminate(nil)
+        }
+
         setupHotkeys()
     }
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarView()
-                .environment(appState)
+                .environment(AppState.shared)
         } label: {
-            Image(systemName: appState.menuBarIcon)
+            Image(systemName: AppState.shared.menuBarIcon)
         }
         .menuBarExtraStyle(.menu)
 
         // Settings Window
         Window("WhisperM8 Einstellungen", id: "settings") {
             SettingsView()
-                .environment(appState)
+                .environment(AppState.shared)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
@@ -30,22 +39,22 @@ struct WhisperM8App: App {
         // Onboarding window
         Window("WhisperM8 Setup", id: "onboarding") {
             OnboardingView()
-                .environment(appState)
+                .environment(AppState.shared)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
     }
 
     private func setupHotkeys() {
-        KeyboardShortcuts.onKeyDown(for: .toggleRecording) { [self] in
+        KeyboardShortcuts.onKeyDown(for: .toggleRecording) {
             Task { @MainActor in
-                await appState.startRecording()
+                await AppState.shared.startRecording()
             }
         }
 
-        KeyboardShortcuts.onKeyUp(for: .toggleRecording) { [self] in
+        KeyboardShortcuts.onKeyUp(for: .toggleRecording) {
             Task { @MainActor in
-                await appState.stopRecording()
+                await AppState.shared.stopRecording()
             }
         }
     }

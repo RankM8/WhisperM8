@@ -40,17 +40,32 @@ class RecordingPanel: NSPanel {
 
 // MARK: - Overlay Controller
 
-class OverlayController {
+class OverlayController: ObservableObject {
     private var panel: RecordingPanel?
+    @Published var audioLevel: Float = 0
+    @Published var duration: TimeInterval = 0
+    @Published var isTranscribing: Bool = false
 
     func show(appState: AppState) {
+        hide()  // Cleanup any existing panel first
+
+        // Initialize state from appState
+        self.audioLevel = appState.audioLevel
+        self.duration = appState.recordingDuration
+        self.isTranscribing = appState.isTranscribing
+
         let panel = RecordingPanel()
+
+        // Create view with bindings (ONCE) - view will update via bindings
         let view = RecordingOverlayView(
-            audioLevel: appState.audioLevel,
-            duration: appState.recordingDuration,
-            isTranscribing: appState.isTranscribing
+            audioLevel: Binding(get: { self.audioLevel }, set: { self.audioLevel = $0 }),
+            duration: Binding(get: { self.duration }, set: { self.duration = $0 }),
+            isTranscribing: Binding(get: { self.isTranscribing }, set: { self.isTranscribing = $0 })
         )
-        panel.updateContent(with: view)
+
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 56)
+        panel.contentView = hostingView
         panel.orderFront(nil)
         self.panel = panel
     }
@@ -61,12 +76,9 @@ class OverlayController {
     }
 
     func update(appState: AppState) {
-        guard let panel else { return }
-        let view = RecordingOverlayView(
-            audioLevel: appState.audioLevel,
-            duration: appState.recordingDuration,
-            isTranscribing: appState.isTranscribing
-        )
-        panel.updateContent(with: view)
+        // Only update properties - view stays the same, SwiftUI handles animations
+        self.audioLevel = appState.audioLevel
+        self.duration = appState.recordingDuration
+        self.isTranscribing = appState.isTranscribing
     }
 }

@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct RecordingOverlayView: View {
-    let audioLevel: Float
-    let duration: TimeInterval
-    let isTranscribing: Bool
+    @Binding var audioLevel: Float
+    @Binding var duration: TimeInterval
+    @Binding var isTranscribing: Bool
 
     @State private var isPulsing = false
 
@@ -13,7 +13,7 @@ struct RecordingOverlayView: View {
             Circle()
                 .fill(isTranscribing ? Color.orange : Color.red)
                 .frame(width: 12, height: 12)
-                .scaleEffect(isPulsing && !isTranscribing ? 1.2 : 1.0)
+                .scaleEffect(isPulsing && !isTranscribing ? 1.3 : 1.0)
                 .animation(
                     isTranscribing ? .none : .easeInOut(duration: 0.5).repeatForever(autoreverses: true),
                     value: isPulsing
@@ -44,10 +44,14 @@ struct RecordingOverlayView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: 14)
+                .fill(.thinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
+                )
         }
+        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 2)
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -63,12 +67,12 @@ struct AudioLevelBars: View {
     let level: Float
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 3) {
             ForEach(0..<5, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 1)
+                Capsule()
                     .fill(barColor(for: index))
-                    .frame(width: 3, height: barHeight(for: index))
-                    .animation(.easeOut(duration: 0.1), value: level)
+                    .frame(width: 4, height: barHeight(for: index))
+                    .animation(.easeOut(duration: 0.08), value: level)
             }
         }
         .frame(height: 20)

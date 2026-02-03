@@ -12,12 +12,24 @@ class AudioRecorder {
     var isRecording = false
 
     func startRecording() async throws {
+        // Always cleanup first
+        if engine != nil {
+            _ = stopRecording()
+        }
+
+        // Reset state
+        audioLevel = 0
+        recordingURL = nil
+        audioFile = nil
+        converter = nil
+
         // Check permission
         let permission = await AVCaptureDevice.requestAccess(for: .audio)
         guard permission else {
             throw RecordingError.microphonePermissionDenied
         }
 
+        // Create fresh engine
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
@@ -75,17 +87,26 @@ class AudioRecorder {
     }
 
     func stopRecording() -> URL? {
-        engine?.inputNode.removeTap(onBus: 0)
-        engine?.stop()
+        guard isRecording else { return nil }
+
+        // Remove tap first
+        if let engine = engine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
         engine = nil
+        converter = nil
         isRecording = false
         audioLevel = 0
-        converter = nil
 
         // Close the audio file
         audioFile = nil
 
-        return recordingURL
+        // Save URL and reset
+        let url = recordingURL
+        recordingURL = nil
+
+        return url
     }
 
     private func calculateLevel(buffer: AVAudioPCMBuffer) -> Float {
@@ -134,7 +155,7 @@ class AudioRecorder {
                 try audioFile.write(from: buffer)
             }
         } catch {
-            print("Error writing audio buffer: \(error)")
+            // Silently ignore write errors
         }
     }
 }

@@ -1,0 +1,458 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001000010000000000000001 /* WhisperM8App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000001 /* WhisperM8App.swift */; };
+		001000010000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000002 /* AppState.swift */; };
+		001000010000000000000003 /* APIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000003 /* APIProvider.swift */; };
+		001000010000000000000004 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000004 /* MenuBarView.swift */; };
+		001000010000000000000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000005 /* SettingsView.swift */; };
+		001000010000000000000006 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000006 /* OnboardingView.swift */; };
+		001000010000000000000007 /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000007 /* RecordingOverlayView.swift */; };
+		001000010000000000000008 /* RecordingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000008 /* RecordingPanel.swift */; };
+		001000010000000000000009 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000009 /* AudioRecorder.swift */; };
+		001000010000000000000010 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000010 /* TranscriptionService.swift */; };
+		001000010000000000000011 /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000011 /* KeychainManager.swift */; };
+		001000010000000000000015 /* FocusableTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000014 /* FocusableTextField.swift */; };
+		001000010000000000000012 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 003000010000000000000001 /* KeyboardShortcuts */; };
+		001000010000000000000013 /* Defaults in Frameworks */ = {isa = PBXBuildFile; productRef = 003000010000000000000002 /* Defaults */; };
+		001000010000000000000014 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 003000010000000000000003 /* LaunchAtLogin */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		002000010000000000000000 /* WhisperM8.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhisperM8.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		002000010000000000000001 /* WhisperM8App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperM8App.swift; sourceTree = "<group>"; };
+		002000010000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		002000010000000000000003 /* APIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIProvider.swift; sourceTree = "<group>"; };
+		002000010000000000000004 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		002000010000000000000005 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		002000010000000000000006 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		002000010000000000000007 /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
+		002000010000000000000008 /* RecordingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingPanel.swift; sourceTree = "<group>"; };
+		002000010000000000000009 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		002000010000000000000010 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		002000010000000000000011 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
+		002000010000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		002000010000000000000013 /* WhisperM8.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WhisperM8.entitlements; sourceTree = "<group>"; };
+		002000010000000000000014 /* FocusableTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusableTextField.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		004000010000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000010000000000000012 /* KeyboardShortcuts in Frameworks */,
+				001000010000000000000013 /* Defaults in Frameworks */,
+				001000010000000000000014 /* LaunchAtLogin in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		005000010000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				005000010000000000000002 /* WhisperM8 */,
+				005000010000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		005000010000000000000002 /* WhisperM8 */ = {
+			isa = PBXGroup;
+			children = (
+				002000010000000000000001 /* WhisperM8App.swift */,
+				005000010000000000000004 /* Models */,
+				005000010000000000000005 /* Views */,
+				005000010000000000000006 /* Windows */,
+				005000010000000000000007 /* Services */,
+				002000010000000000000012 /* Info.plist */,
+				002000010000000000000013 /* WhisperM8.entitlements */,
+			);
+			path = WhisperM8;
+			sourceTree = "<group>";
+		};
+		005000010000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				002000010000000000000000 /* WhisperM8.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		005000010000000000000004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				002000010000000000000002 /* AppState.swift */,
+				002000010000000000000003 /* APIProvider.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		005000010000000000000005 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				002000010000000000000004 /* MenuBarView.swift */,
+				002000010000000000000005 /* SettingsView.swift */,
+				002000010000000000000006 /* OnboardingView.swift */,
+				002000010000000000000007 /* RecordingOverlayView.swift */,
+				002000010000000000000014 /* FocusableTextField.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		005000010000000000000006 /* Windows */ = {
+			isa = PBXGroup;
+			children = (
+				002000010000000000000008 /* RecordingPanel.swift */,
+			);
+			path = Windows;
+			sourceTree = "<group>";
+		};
+		005000010000000000000007 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				002000010000000000000009 /* AudioRecorder.swift */,
+				002000010000000000000010 /* TranscriptionService.swift */,
+				002000010000000000000011 /* KeychainManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		006000010000000000000001 /* WhisperM8 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 007000010000000000000001 /* Build configuration list for PBXNativeTarget "WhisperM8" */;
+			buildPhases = (
+				006000010000000000000002 /* Sources */,
+				004000010000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WhisperM8;
+			packageProductDependencies = (
+				003000010000000000000001 /* KeyboardShortcuts */,
+				003000010000000000000002 /* Defaults */,
+				003000010000000000000003 /* LaunchAtLogin */,
+			);
+			productName = WhisperM8;
+			productReference = 002000010000000000000000 /* WhisperM8.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		008000010000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					006000010000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 007000010000000000000002 /* Build configuration list for PBXProject "WhisperM8" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = de;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				de,
+				Base,
+			);
+			mainGroup = 005000010000000000000001;
+			packageReferences = (
+				009000010000000000000001 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				009000010000000000000002 /* XCRemoteSwiftPackageReference "Defaults" */,
+				009000010000000000000003 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
+			);
+			productRefGroup = 005000010000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				006000010000000000000001 /* WhisperM8 */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		006000010000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000010000000000000001 /* WhisperM8App.swift in Sources */,
+				001000010000000000000002 /* AppState.swift in Sources */,
+				001000010000000000000003 /* APIProvider.swift in Sources */,
+				001000010000000000000004 /* MenuBarView.swift in Sources */,
+				001000010000000000000005 /* SettingsView.swift in Sources */,
+				001000010000000000000006 /* OnboardingView.swift in Sources */,
+				001000010000000000000007 /* RecordingOverlayView.swift in Sources */,
+				001000010000000000000008 /* RecordingPanel.swift in Sources */,
+				001000010000000000000009 /* AudioRecorder.swift in Sources */,
+				001000010000000000000010 /* TranscriptionService.swift in Sources */,
+				001000010000000000000011 /* KeychainManager.swift in Sources */,
+				001000010000000000000015 /* FocusableTextField.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		00A000010000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		00A000010000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		00A000010000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WhisperM8/WhisperM8.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WhisperM8/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.WhisperM8;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		00A000010000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WhisperM8/WhisperM8.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WhisperM8/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.WhisperM8;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		007000010000000000000001 /* Build configuration list for PBXNativeTarget "WhisperM8" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000010000000000000003 /* Debug */,
+				00A000010000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		007000010000000000000002 /* Build configuration list for PBXProject "WhisperM8" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000010000000000000001 /* Debug */,
+				00A000010000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		009000010000000000000001 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+		009000010000000000000002 /* XCRemoteSwiftPackageReference "Defaults" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/Defaults";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+		009000010000000000000003 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/LaunchAtLogin-Modern";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		003000010000000000000001 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 009000010000000000000001 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
+		003000010000000000000002 /* Defaults */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 009000010000000000000002 /* XCRemoteSwiftPackageReference "Defaults" */;
+			productName = Defaults;
+		};
+		003000010000000000000003 /* LaunchAtLogin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 009000010000000000000003 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */;
+			productName = LaunchAtLogin;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+	};
+	rootObject = 008000010000000000000001 /* Project object */;
+}
