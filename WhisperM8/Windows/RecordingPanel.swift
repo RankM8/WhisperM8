@@ -42,11 +42,16 @@ class RecordingPanel: NSPanel {
 
 class OverlayController: ObservableObject {
     private var panel: RecordingPanel?
+    private var previousApp: NSRunningApplication?
     @Published var audioLevel: Float = 0
     @Published var duration: TimeInterval = 0
     @Published var isTranscribing: Bool = false
 
     func show(appState: AppState) {
+        // Capture the frontmost app BEFORE showing our panel
+        previousApp = NSWorkspace.shared.frontmostApplication
+        Logger.focus.info("Captured previousApp: \(self.previousApp?.localizedName ?? "nil", privacy: .public)")
+
         hide()  // Cleanup any existing panel first
 
         // Initialize state from appState
@@ -69,6 +74,10 @@ class OverlayController: ObservableObject {
     func hide() {
         panel?.close()
         panel = nil
+    }
+
+    func getPreviousApp() -> NSRunningApplication? {
+        return previousApp
     }
 
     func update(appState: AppState) {

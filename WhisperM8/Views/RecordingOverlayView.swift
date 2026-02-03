@@ -20,6 +20,18 @@ struct RecordingOverlayView: View {
             // Audio level bars (only during recording)
             if !controller.isTranscribing {
                 AudioLevelBars(level: controller.audioLevel)
+
+                // Cancel button (only during recording)
+                Button {
+                    AppState.shared.cancelRecording()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .contentShape(Circle())
+                .accessibilityLabel("Aufnahme abbrechen")
             } else {
                 ProgressView()
                     .scaleEffect(0.6)

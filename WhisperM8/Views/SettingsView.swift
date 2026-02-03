@@ -152,10 +152,15 @@ struct HotkeySettingsView: View {
 // MARK: - General Settings
 
 struct GeneralSettingsView: View {
+    @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
+
     var body: some View {
         Form {
             Section {
                 LaunchAtLogin.Toggle("Bei Anmeldung starten")
+
+                Toggle("Auto-Paste nach Transkription", isOn: $autoPasteEnabled)
+                    .help("Text automatisch einfügen oder nur in Zwischenablage kopieren")
             }
 
             Section {

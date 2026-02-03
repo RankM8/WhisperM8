@@ -10,6 +10,9 @@ xcuserdata/
 .build/
 .swiftpm/
 
+# App Bundle (build artifact)
+WhisperM8.app/
+
 # macOS
 .DS_Store
 *.swp
