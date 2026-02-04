@@ -14,7 +14,7 @@ struct OnboardingView: View {
     @State private var accessibilityGranted = false
     @State private var hotkeySet = false
     @State private var apiKey = ""
-    @State private var selectedProvider = APIProvider.openai
+    @State private var selectedProvider = APIProvider.openai_gpt4o
     @State private var testResult: String?
     @State private var isTestingRecording = false
 
@@ -427,21 +427,23 @@ struct APIKeyStep: View {
                     .buttonStyle(.borderless)
                 }
                 .onChange(of: apiKey) { _, newValue in
-                    KeychainManager.save(key: "\(selectedProvider.rawValue)_apikey", value: newValue)
+                    KeychainManager.save(key: selectedProvider.keychainKey, value: newValue)
                 }
                 .onChange(of: selectedProvider) { oldValue, newValue in
-                    if !apiKey.isEmpty {
-                        KeychainManager.save(key: "\(oldValue.rawValue)_apikey", value: apiKey)
+                    // Save current key if not empty and switching to different keychain
+                    if !apiKey.isEmpty && oldValue.keychainKey != newValue.keychainKey {
+                        KeychainManager.save(key: oldValue.keychainKey, value: apiKey)
                     }
-                    apiKey = KeychainManager.load(key: "\(newValue.rawValue)_apikey") ?? ""
+                    apiKey = KeychainManager.load(key: newValue.keychainKey) ?? ""
                     UserDefaults.standard.set(newValue.rawValue, forKey: "selectedProvider")
                 }
 
-                if selectedProvider == .openai {
-                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                // Show appropriate API key link based on provider
+                if selectedProvider == .groq {
+                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
                         .font(.caption)
                 } else {
-                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
+                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
                         .font(.caption)
                 }
             }
@@ -472,7 +474,7 @@ struct APIKeyStep: View {
         }
         .padding(30)
         .onAppear {
-            apiKey = KeychainManager.load(key: "\(selectedProvider.rawValue)_apikey") ?? ""
+            apiKey = KeychainManager.load(key: selectedProvider.keychainKey) ?? ""
         }
     }
 }

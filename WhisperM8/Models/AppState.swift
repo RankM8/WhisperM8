@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Carbon.HIToolbox
 import ApplicationServices
+import UserNotifications
 
 @Observable
 class AppState {
@@ -86,15 +87,25 @@ class AppState {
 
     @MainActor
     func stopRecording() async {
-        guard isRecording, !isTranscribing, !isProcessing else { return }
+        guard isRecording, !isTranscribing, !isProcessing else {
+            Logger.debug("stopRecording guard failed: isRecording=\(isRecording), isTranscribing=\(isTranscribing), isProcessing=\(isProcessing)")
+            return
+        }
 
         // Minimum recording duration (300ms)
         if let startTime = recordingStartTime {
             let elapsed = Date().timeIntervalSince(startTime)
-            if elapsed < 0.3 { return }
+            if elapsed < 0.3 {
+                Logger.debug(" Recording too short: \(elapsed)s")
+                return
+            }
         }
 
         isProcessing = true
+
+        // Store duration BEFORE stopping timer (important!)
+        let audioDuration = recordingDuration
+        Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")
 
         // Stop timer and remove ESC key monitor
         timer?.invalidate()
@@ -108,9 +119,23 @@ class AppState {
         recordingStartTime = nil
 
         guard let audioURL else {
+            Logger.debug(" ERROR: No audio URL returned from recorder")
             overlayController?.hide()
             isProcessing = false
+            showErrorAlert(title: "Recording Error", message: "No audio file was created.")
             return
+        }
+
+        Logger.debug(" Audio file: \(audioURL.path)")
+
+        // Check file exists and get size
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: audioURL.path)
+            let fileSize = attributes[.size] as? Int64 ?? 0
+            let fileSizeMB = Double(fileSize) / (1024 * 1024)
+            Logger.debug(" Audio file size: \(String(format: "%.2f", fileSizeMB)) MB")
+        } catch {
+            Logger.debug(" WARNING: Could not get file attributes: \(error)")
         }
 
         // Transcribe
@@ -118,17 +143,26 @@ class AppState {
         overlayController?.update(appState: self)
 
         do {
-            let providerRawValue = UserDefaults.standard.string(forKey: "selectedProvider") ?? APIProvider.openai.rawValue
-            let provider = APIProvider(rawValue: providerRawValue) ?? .openai
+            let providerRawValue = UserDefaults.standard.string(forKey: "selectedProvider") ?? APIProvider.openai_gpt4o.rawValue
+            let provider = APIProvider.fromLegacy(providerRawValue)
+            Logger.debug("Using provider: \(provider.rawValue) (model: \(provider.modelName))")
 
-            guard let apiKey = KeychainManager.load(key: "\(provider.rawValue)_apikey"), !apiKey.isEmpty else {
+            guard let apiKey = KeychainManager.load(key: provider.keychainKey), !apiKey.isEmpty else {
+                Logger.debug("ERROR: No API key found for \(provider.keychainKey)")
                 throw TranscriptionError.missingAPIKey
             }
+            Logger.debug(" API key loaded (length: \(apiKey.count))")
 
             let language = UserDefaults.standard.string(forKey: "language") ?? "de"
+            Logger.debug(" Language: \(language)")
 
             let service = provider.createService(apiKey: apiKey)
-            let text = try await service.transcribe(audioURL: audioURL, language: language.isEmpty ? nil : language)
+            Logger.debug(" Starting transcription...")
+
+            let text = try await service.transcribe(audioURL: audioURL, language: language.isEmpty ? nil : language, audioDuration: audioDuration)
+
+            Logger.debug(" Transcription SUCCESS! Text length: \(text.count) characters")
+            Logger.debug(" Text preview: \(String(text.prefix(100)))...")
 
             // Copy to clipboard
             let pasteboard = NSPasteboard.general
@@ -145,16 +179,65 @@ class AppState {
                 pasteToActiveApp()
             } else {
                 overlayController?.hide()
-                Logger.paste.info("Auto-paste disabled, text copied to clipboard only")
+                Logger.debug(" Auto-paste disabled, text copied to clipboard only")
             }
 
-        } catch {
-            lastError = error.localizedDescription
+        } catch let urlError as URLError {
+            // Handle URL/network errors specifically
+            let errorMessage: String
+            switch urlError.code {
+            case .timedOut:
+                errorMessage = "Request timed out. The server took too long to respond."
+            case .notConnectedToInternet:
+                errorMessage = "No internet connection."
+            case .networkConnectionLost:
+                errorMessage = "Network connection was lost."
+            case .cannotConnectToHost:
+                errorMessage = "Cannot connect to server."
+            default:
+                errorMessage = "Network error: \(urlError.localizedDescription)"
+            }
+            Logger.debug(" URL ERROR: \(urlError.code.rawValue) - \(errorMessage)")
+            lastError = errorMessage
             overlayController?.hide()
+            try? FileManager.default.removeItem(at: audioURL)
+            showErrorAlert(title: "Transcription Failed", message: errorMessage)
+
+        } catch let transcriptionError as TranscriptionError {
+            // Handle our custom errors
+            let errorMessage = transcriptionError.errorDescription ?? "Unknown error"
+            Logger.debug(" TRANSCRIPTION ERROR: \(errorMessage)")
+            lastError = errorMessage
+            overlayController?.hide()
+            try? FileManager.default.removeItem(at: audioURL)
+            showErrorAlert(title: "Transcription Failed", message: errorMessage)
+
+        } catch {
+            // Handle any other errors
+            let errorMessage = error.localizedDescription
+            Logger.debug(" UNKNOWN ERROR: \(type(of: error)) - \(errorMessage)")
+            lastError = errorMessage
+            overlayController?.hide()
+            try? FileManager.default.removeItem(at: audioURL)
+            showErrorAlert(title: "Transcription Failed", message: errorMessage)
         }
 
         isTranscribing = false
         isProcessing = false
+        Logger.debug(" stopRecording completed")
+    }
+
+    // MARK: - Error Alert
+
+    private func showErrorAlert(title: String, message: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = message
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 
     @MainActor

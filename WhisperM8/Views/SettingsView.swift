@@ -15,53 +15,50 @@ struct SettingsView: View {
                     Label("Hotkey", systemImage: "keyboard")
                 }
 
-            GeneralSettingsView()
+            BehaviorSettingsView()
                 .tabItem {
-                    Label("General", systemImage: "gear")
+                    Label("Behavior", systemImage: "gearshape")
+                }
+
+            AboutView()
+                .tabItem {
+                    Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 450, height: 280)
-        .onAppear {
-            // Temporarily show in dock to allow keyboard input
-            NSApp.setActivationPolicy(.regular)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.title.contains("Settings") }) {
-                    window.makeKeyAndOrderFront(nil)
-                    window.makeFirstResponder(window.contentView)
-                }
-            }
-        }
-        .onDisappear {
-            // Hide from dock again when settings close
-            NSApp.setActivationPolicy(.accessory)
-        }
+        .frame(width: 400, height: 320)
     }
 }
 
 // MARK: - API Settings
 
 struct APISettingsView: View {
-    @AppStorage("selectedProvider") private var selectedProvider = APIProvider.openai.rawValue
+    @AppStorage("selectedProvider") private var selectedProviderRaw = APIProvider.openai_gpt4o.rawValue
     @AppStorage("language") private var language = "de"
     @State private var apiKey = ""
     @State private var showingAPIKey = false
 
     private var provider: APIProvider {
-        APIProvider(rawValue: selectedProvider) ?? .openai
+        APIProvider.fromLegacy(selectedProviderRaw)
     }
 
     var body: some View {
         Form {
             Section {
-                Picker("Provider", selection: $selectedProvider) {
-                    ForEach(APIProvider.allCases, id: \.rawValue) { provider in
-                        Text(provider.displayName).tag(provider.rawValue)
+                Picker("Provider", selection: $selectedProviderRaw) {
+                    ForEach(APIProvider.allCases, id: \.rawValue) { p in
+                        VStack(alignment: .leading) {
+                            Text(p.displayName)
+                            Text(p.modelDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(p.rawValue)
                     }
                 }
-                .onChange(of: selectedProvider) { _, newValue in
+                .onChange(of: selectedProviderRaw) { _, newValue in
                     // Load API key for new provider
-                    apiKey = KeychainManager.load(key: "\(newValue)_apikey") ?? ""
+                    let newProvider = APIProvider.fromLegacy(newValue)
+                    apiKey = KeychainManager.load(key: newProvider.keychainKey) ?? ""
                 }
 
                 HStack {
@@ -80,7 +77,7 @@ struct APISettingsView: View {
                     .buttonStyle(.borderless)
                 }
                 .onChange(of: apiKey) { _, newValue in
-                    KeychainManager.save(key: "\(selectedProvider)_apikey", value: newValue)
+                    KeychainManager.save(key: provider.keychainKey, value: newValue)
                 }
 
                 Picker("Language", selection: $language) {
@@ -100,18 +97,19 @@ struct APISettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if provider == .openai {
-                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                // Show appropriate API key link based on provider
+                if provider == .groq {
+                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
                         .font(.caption)
                 } else {
-                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
+                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
                         .font(.caption)
                 }
             }
         }
         .padding()
         .onAppear {
-            apiKey = KeychainManager.load(key: "\(selectedProvider)_apikey") ?? ""
+            apiKey = KeychainManager.load(key: provider.keychainKey) ?? ""
         }
     }
 }
@@ -122,61 +120,74 @@ struct HotkeySettingsView: View {
     var body: some View {
         Form {
             Section {
-                KeyboardShortcuts.Recorder("Recording key:", name: .toggleRecording)
+                KeyboardShortcuts.Recorder("Recording Hotkey:", name: .toggleRecording)
+                    .padding(.vertical, 4)
 
-                Text("Hold this key to dictate. Release to start transcription.")
+                Text("Press and hold to record, release to transcribe")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Notes:")
-                        .font(.caption)
-                        .fontWeight(.medium)
-
-                    Text("• Avoid Option-only shortcuts on macOS 15+")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Text("• Recommended: Control + Shift + Space")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
         }
         .padding()
     }
 }
 
-// MARK: - General Settings
+// MARK: - Behavior Settings
 
-struct GeneralSettingsView: View {
+struct BehaviorSettingsView: View {
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
 
     var body: some View {
         Form {
             Section {
-                LaunchAtLogin.Toggle("Launch at login")
-
                 Toggle("Auto-paste after transcription", isOn: $autoPasteEnabled)
-                    .help("Automatically paste text or copy to clipboard only")
+
+                Text(autoPasteEnabled
+                    ? "Transcribed text will be automatically pasted"
+                    : "Transcribed text will only be copied to clipboard")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("WhisperM8")
-                        .font(.headline)
-                    Text("Version 1.0.0")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Native macOS dictation app with best-in-class transcription.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                LaunchAtLogin.Toggle("Start at Login")
             }
         }
         .padding()
     }
 }
 
+// MARK: - About View
+
+struct AboutView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            if let imageURL = Bundle.module.url(forResource: "AppLogo", withExtension: "png"),
+               let image = NSImage(contentsOf: imageURL) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 64, height: 64)
+            }
+
+            Text("WhisperM8")
+                .font(.title2.bold())
+
+            Text("Version 1.0.0")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("Native macOS dictation with AI transcription")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Divider()
+
+            Link("Built by 360WebManager", destination: URL(string: "https://360web-manager.com/")!)
+                .font(.caption)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}

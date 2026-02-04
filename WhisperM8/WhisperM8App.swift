@@ -1,5 +1,6 @@
 import SwiftUI
 import KeyboardShortcuts
+import UserNotifications
 
 @main
 struct WhisperM8App: App {
@@ -66,12 +67,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var onboardingWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Request notification permissions for error alerts
+        requestNotificationPermission()
+
         // Check if onboarding needs to be shown
         let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
 
         if !onboardingCompleted {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.showOnboardingWindow()
+            }
+        }
+    }
+
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+            if let error = error {
+                Logger.transcription.error("Notification permission error: \(error.localizedDescription)")
             }
         }
     }
