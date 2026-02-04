@@ -70,34 +70,47 @@ make install
 
 ## Troubleshooting
 
-Having issues? Run a clean install:
-
-```bash
-make clean-install
-```
-
-This removes all app data and reinstalls fresh. You'll need to reconfigure permissions and settings.
-
 For detailed troubleshooting, see [docs/README.md](docs/README.md).
 
 ## Development
 
 ```bash
-# Build and run (debug)
-make run
+# Recommended: Clean build, install to /Applications, and launch
+make dev
 
-# Build release
+# Build release only (no install)
 make build
+
+# Quick debug build (for rapid iteration)
+make run
 
 # Install to /Applications
 make install
 
 # Create DMG for distribution
 make dmg
+```
 
-# Clean install (reset everything)
+### Troubleshooting Duplicate Apps in Spotlight
+
+If Spotlight shows multiple WhisperM8 versions:
+
+```bash
+# Remove ALL app bundles from everywhere
+make clean-apps
+
+# Then reinstall fresh
+make dev
+```
+
+### Full Reset
+
+```bash
+# Reset all data (API keys, settings, permissions)
 make clean-install
 ```
+
+This removes all app data and reinstalls fresh. You'll need to reconfigure permissions and settings.
 
 ## Documentation
 

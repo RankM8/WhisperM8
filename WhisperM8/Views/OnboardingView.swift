@@ -14,7 +14,8 @@ struct OnboardingView: View {
     @State private var accessibilityGranted = false
     @State private var hotkeySet = false
     @State private var apiKey = ""
-    @State private var selectedProvider = APIProvider.openai_gpt4o
+    @State private var selectedProvider = TranscriptionProvider.openai
+    @State private var selectedModel = TranscriptionModel.openai_gpt4o
     @State private var testResult: String?
     @State private var isTestingRecording = false
 
@@ -47,7 +48,8 @@ struct OnboardingView: View {
                 case 3:
                     APIKeyStep(
                         apiKey: $apiKey,
-                        selectedProvider: $selectedProvider
+                        selectedProvider: $selectedProvider,
+                        selectedModel: $selectedModel
                     )
                 case 4:
                     TestStep(
@@ -382,33 +384,46 @@ struct HotkeyStep: View {
 
 struct APIKeyStep: View {
     @Binding var apiKey: String
-    @Binding var selectedProvider: APIProvider
+    @Binding var selectedProvider: TranscriptionProvider
+    @Binding var selectedModel: TranscriptionModel
 
     @State private var showingAPIKey = false
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             Image(systemName: "gearshape.2")
-                .font(.system(size: 60))
+                .font(.system(size: 50))
                 .foregroundStyle(.blue)
 
             Text("Configuration")
                 .font(.title)
                 .fontWeight(.bold)
 
-            // API Key Section
+            // Provider & API Key Section
             VStack(spacing: 12) {
-                Text("Transcription Provider")
+                Text("Provider")
                     .font(.headline)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Picker("Provider", selection: $selectedProvider) {
-                    ForEach(APIProvider.allCases, id: \.self) { provider in
+                    ForEach(TranscriptionProvider.allCases, id: \.self) { provider in
                         Text(provider.displayName).tag(provider)
                     }
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: selectedProvider) { oldValue, newValue in
+                    // Save current key if not empty and switching to different keychain
+                    if !apiKey.isEmpty && oldValue.keychainKey != newValue.keychainKey {
+                        KeychainManager.save(key: oldValue.keychainKey, value: apiKey)
+                    }
+                    apiKey = KeychainManager.load(key: newValue.keychainKey) ?? ""
+                    // Switch to default model if current doesn't match provider
+                    if selectedModel.provider != newValue {
+                        selectedModel = newValue.defaultModel
+                    }
+                    UserDefaults.standard.set(newValue.rawValue, forKey: "selectedProvider")
+                }
 
                 HStack {
                     if showingAPIKey {
@@ -429,39 +444,63 @@ struct APIKeyStep: View {
                 .onChange(of: apiKey) { _, newValue in
                     KeychainManager.save(key: selectedProvider.keychainKey, value: newValue)
                 }
-                .onChange(of: selectedProvider) { oldValue, newValue in
-                    // Save current key if not empty and switching to different keychain
-                    if !apiKey.isEmpty && oldValue.keychainKey != newValue.keychainKey {
-                        KeychainManager.save(key: oldValue.keychainKey, value: apiKey)
+
+                Link("Get \(selectedProvider.displayName) API key \u{2192}", destination: selectedProvider.apiKeyLink)
+                    .font(.caption)
+            }
+            .padding()
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
+
+            // Model Selection
+            VStack(spacing: 8) {
+                Text("Model")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                ForEach(selectedProvider.availableModels, id: \.rawValue) { model in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.displayName)
+                                .fontWeight(selectedModel == model ? .semibold : .regular)
+                            Text(model.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if selectedModel == model {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.blue)
+                        } else {
+                            Image(systemName: "circle")
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    apiKey = KeychainManager.load(key: newValue.keychainKey) ?? ""
-                    UserDefaults.standard.set(newValue.rawValue, forKey: "selectedProvider")
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedModel = model
+                        UserDefaults.standard.set(model.rawValue, forKey: "selectedModel")
+                    }
                 }
 
-                // Show appropriate API key link based on provider
-                if selectedProvider == .groq {
-                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
+                HStack {
+                    Text("Price: \(selectedProvider.priceInfo)")
                         .font(.caption)
-                } else {
-                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
-                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
                 }
             }
             .padding()
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
 
             // Auto-Paste Option
-            VStack(spacing: 12) {
-                Text("After Transcription")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
+            VStack(spacing: 8) {
                 Toggle(isOn: $autoPasteEnabled) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Auto-paste text")
                             .font(.body)
                         Text(autoPasteEnabled
-                            ? "Text will be automatically pasted into the active app"
+                            ? "Text will be automatically pasted"
                             : "Text will only be copied to clipboard")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -472,8 +511,12 @@ struct APIKeyStep: View {
             .padding()
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
         }
-        .padding(30)
+        .padding(24)
         .onAppear {
+            // Migrate if needed
+            TranscriptionSettings.migrateIfNeeded()
+            selectedProvider = TranscriptionSettings.loadProvider()
+            selectedModel = TranscriptionSettings.loadModel()
             apiKey = KeychainManager.load(key: selectedProvider.keychainKey) ?? ""
         }
     }

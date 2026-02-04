@@ -124,16 +124,21 @@ struct MenuBarIcon: View {
             // Transcribing: show spinner
             Image(systemName: "ellipsis.circle")
         } else {
-            // Ready: show logo
+            // Ready: show logo as template (auto white/black based on theme)
             if let imageURL = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
                let image = NSImage(contentsOf: imageURL) {
-                Image(nsImage: image)
+                Image(nsImage: makeTemplate(image))
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
                 Image(systemName: "mic")
             }
         }
+    }
+
+    private func makeTemplate(_ image: NSImage) -> NSImage {
+        image.isTemplate = true
+        return image
     }
 }
 

@@ -143,9 +143,12 @@ class AppState {
         overlayController?.update(appState: self)
 
         do {
-            let providerRawValue = UserDefaults.standard.string(forKey: "selectedProvider") ?? APIProvider.openai_gpt4o.rawValue
-            let provider = APIProvider.fromLegacy(providerRawValue)
-            Logger.debug("Using provider: \(provider.rawValue) (model: \(provider.modelName))")
+            // Migrate settings if needed (for old installations)
+            TranscriptionSettings.migrateIfNeeded()
+
+            let provider = TranscriptionSettings.loadProvider()
+            let model = TranscriptionSettings.loadModel()
+            Logger.debug("Using provider: \(provider.rawValue), model: \(model.rawValue)")
 
             guard let apiKey = KeychainManager.load(key: provider.keychainKey), !apiKey.isEmpty else {
                 Logger.debug("ERROR: No API key found for \(provider.keychainKey)")
@@ -156,7 +159,7 @@ class AppState {
             let language = UserDefaults.standard.string(forKey: "language") ?? "de"
             Logger.debug(" Language: \(language)")
 
-            let service = provider.createService(apiKey: apiKey)
+            let service = provider.createService(apiKey: apiKey, model: model)
             Logger.debug(" Starting transcription...")
 
             let text = try await service.transcribe(audioURL: audioURL, language: language.isEmpty ? nil : language, audioDuration: audioDuration)

@@ -1,4 +1,4 @@
-.PHONY: run build install kill clean help dmg clean-install
+.PHONY: run build install kill clean clean-apps help dmg clean-install dev
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -7,23 +7,42 @@ APP_BUNDLE = $(APP_NAME).app
 export DEVELOPER_DIR = /Applications/Xcode.app/Contents/Developer
 
 help:
-	@echo "WhisperM8 Commands:"
-	@echo "  make build         - Build release app bundle"
-	@echo "  make run           - Build debug and run"
+	@echo "WhisperM8 Development Commands:"
+	@echo ""
+	@echo "  make dev           - [RECOMMENDED] Clean build, install, and launch"
+	@echo "  make build         - Build release app bundle only"
 	@echo "  make install       - Build and install to /Applications"
-	@echo "  make dmg           - Build distributable DMG"
-	@echo "  make clean-install - Reset all data and reinstall fresh"
-	@echo "  make kill          - Kill running instances"
+	@echo "  make run           - Quick debug build (creates local .app)"
+	@echo ""
+	@echo "  make kill          - Kill all running instances"
 	@echo "  make clean         - Clean build artifacts"
+	@echo "  make clean-apps    - Remove ALL app bundles (fixes Spotlight duplicates)"
+	@echo "  make clean-install - Full reset (removes all app data + reinstall)"
+	@echo "  make dmg           - Build distributable DMG"
+	@echo ""
+	@echo "Note: Use 'make dev' for development to avoid duplicate app versions."
 
-# Build release app bundle
+# Development workflow: clean build, install to /Applications, launch
+# This ensures only ONE app version exists (in /Applications)
+dev: kill
+	@echo "🔄 Development build..."
+	@rm -rf "$(APP_BUNDLE)"
+	@swift build -c release
+	@$(MAKE) _bundle BUILD=release
+	@rm -rf "/Applications/$(APP_BUNDLE)"
+	@cp -R "$(APP_BUNDLE)" "/Applications/"
+	@rm -rf "$(APP_BUNDLE)"
+	@echo "✅ Installed to /Applications/$(APP_BUNDLE)"
+	@open "/Applications/$(APP_BUNDLE)"
+
+# Build release app bundle (leaves .app in project directory)
 build:
 	@echo "Building release..."
 	@swift build -c release
 	@$(MAKE) _bundle BUILD=release
 	@echo "Done: $(APP_BUNDLE)"
 
-# Build debug and run
+# Quick debug build and run (for rapid iteration, creates local .app)
 run: kill
 	@echo "Building debug..."
 	@swift build
@@ -35,17 +54,33 @@ install: build
 	@echo "Installing to /Applications..."
 	@rm -rf "/Applications/$(APP_BUNDLE)"
 	@cp -R "$(APP_BUNDLE)" "/Applications/"
+	@rm -rf "$(APP_BUNDLE)"
 	@echo "Installed: /Applications/$(APP_BUNDLE)"
 
 # Kill running instances
 kill:
 	@pkill -x $(APP_NAME) 2>/dev/null || true
 
-# Clean
+# Clean build artifacts and local app bundle
 clean:
-	@echo "Cleaning..."
+	@echo "Cleaning build artifacts..."
 	@rm -rf .build $(APP_BUNDLE)
 	@echo "Done"
+
+# Remove ALL app versions from everywhere (use if Spotlight shows duplicates)
+clean-apps: kill
+	@echo "Removing all WhisperM8 app bundles..."
+	@rm -rf "$(APP_BUNDLE)"
+	@rm -rf "/Applications/$(APP_BUNDLE)"
+	@rm -rf "$(HOME)/Applications/$(APP_BUNDLE)"
+	@rm -rf "$(HOME)/Desktop/$(APP_BUNDLE)"
+	@rm -rf "$(HOME)/Downloads/$(APP_BUNDLE)"
+	@echo "✅ All app bundles removed."
+	@echo ""
+	@echo "If Spotlight still shows duplicates, wait a few minutes or run:"
+	@echo "  sudo mdutil -E /"
+	@echo ""
+	@echo "Then run 'make dev' to reinstall."
 
 # Build distributable DMG
 dmg:

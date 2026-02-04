@@ -25,46 +25,46 @@ struct SettingsView: View {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 400, height: 320)
+        .frame(width: 420, height: 380)
     }
 }
 
 // MARK: - API Settings
 
 struct APISettingsView: View {
-    @AppStorage("selectedProvider") private var selectedProviderRaw = APIProvider.openai_gpt4o.rawValue
+    @AppStorage("selectedProvider") private var selectedProviderRaw = TranscriptionProvider.openai.rawValue
+    @AppStorage("selectedModel") private var selectedModelRaw = TranscriptionModel.openai_gpt4o.rawValue
     @AppStorage("language") private var language = "de"
     @State private var apiKey = ""
     @State private var showingAPIKey = false
 
-    private var provider: APIProvider {
-        APIProvider.fromLegacy(selectedProviderRaw)
+    private var provider: TranscriptionProvider {
+        TranscriptionProvider(rawValue: selectedProviderRaw) ?? .openai
     }
 
     var body: some View {
         Form {
+            // Provider & API Key
             Section {
                 Picker("Provider", selection: $selectedProviderRaw) {
-                    ForEach(APIProvider.allCases, id: \.rawValue) { p in
-                        VStack(alignment: .leading) {
-                            Text(p.displayName)
-                            Text(p.modelDescription)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tag(p.rawValue)
+                    ForEach(TranscriptionProvider.allCases, id: \.rawValue) { p in
+                        Text(p.displayName).tag(p.rawValue)
                     }
                 }
+                .pickerStyle(.segmented)
                 .onChange(of: selectedProviderRaw) { _, newValue in
-                    // Load API key for new provider
-                    let newProvider = APIProvider.fromLegacy(newValue)
+                    let newProvider = TranscriptionProvider(rawValue: newValue) ?? .openai
                     apiKey = KeychainManager.load(key: newProvider.keychainKey) ?? ""
+                    if let currentModel = TranscriptionModel(rawValue: selectedModelRaw),
+                       currentModel.provider != newProvider {
+                        selectedModelRaw = newProvider.defaultModel.rawValue
+                    }
                 }
 
                 HStack {
                     FocusableTextField(
                         text: $apiKey,
-                        placeholder: "Enter API key...",
+                        placeholder: "\(provider.displayName) API key...",
                         isSecure: !showingAPIKey
                     )
                     .frame(height: 22)
@@ -80,35 +80,47 @@ struct APISettingsView: View {
                     KeychainManager.save(key: provider.keychainKey, value: newValue)
                 }
 
+                Link("Get \(provider.displayName) API key \u{2192}", destination: provider.apiKeyLink)
+                    .font(.caption)
+            }
+
+            // Model Selection
+            Section {
+                Picker("Model", selection: $selectedModelRaw) {
+                    ForEach(provider.availableModels, id: \.rawValue) { m in
+                        Text(m.displayName).tag(m.rawValue)
+                    }
+                }
+
+                if let currentModel = TranscriptionModel(rawValue: selectedModelRaw) {
+                    Text(currentModel.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Language & Info
+            Section {
                 Picker("Language", selection: $language) {
                     Text("German").tag("de")
                     Text("English").tag("en")
                     Text("Auto-detect").tag("")
                 }
-            }
 
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Model: \(provider.modelName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Price: \(provider.priceInfo)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack {
+                    Text("Price")
+                    Spacer()
+                    Text(provider.priceInfo)
                 }
-
-                // Show appropriate API key link based on provider
-                if provider == .groq {
-                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
-                        .font(.caption)
-                } else {
-                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
-                        .font(.caption)
-                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
-        .padding()
+        .formStyle(.grouped)
         .onAppear {
+            TranscriptionSettings.migrateIfNeeded()
+            selectedProviderRaw = UserDefaults.standard.string(forKey: "selectedProvider") ?? TranscriptionProvider.openai.rawValue
+            selectedModelRaw = UserDefaults.standard.string(forKey: "selectedModel") ?? TranscriptionModel.openai_gpt4o.rawValue
             apiKey = KeychainManager.load(key: provider.keychainKey) ?? ""
         }
     }
@@ -123,12 +135,12 @@ struct HotkeySettingsView: View {
                 KeyboardShortcuts.Recorder("Recording Hotkey:", name: .toggleRecording)
                     .padding(.vertical, 4)
 
-                Text("Press and hold to record, release to transcribe")
+                Text("Press once to start recording, press again to stop and transcribe")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 }
 
@@ -153,7 +165,7 @@ struct BehaviorSettingsView: View {
                 LaunchAtLogin.Toggle("Start at Login")
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 }
 

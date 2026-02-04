@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Protocol
 
-protocol TranscriptionProvider {
+protocol TranscriptionServiceProtocol {
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval?) async throws -> String
 }
 
@@ -61,7 +61,7 @@ enum OpenAIModel: String, CaseIterable {
 
 // MARK: - OpenAI Service
 
-class OpenAITranscriptionService: TranscriptionProvider {
+class OpenAITranscriptionService: TranscriptionServiceProtocol {
     private let apiKey: String
     private let model: OpenAIModel
     private let baseURL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
@@ -149,15 +149,30 @@ class OpenAITranscriptionService: TranscriptionProvider {
     }
 }
 
+// MARK: - Groq Models
+
+enum GroqModel: String, CaseIterable {
+    case whisperV3 = "whisper-large-v3"
+    case whisperV3Turbo = "whisper-large-v3-turbo"
+
+    var displayName: String {
+        switch self {
+        case .whisperV3: return "Whisper Large v3"
+        case .whisperV3Turbo: return "Whisper Large v3 Turbo"
+        }
+    }
+}
+
 // MARK: - Groq Service
 
-class GroqTranscriptionService: TranscriptionProvider {
+class GroqTranscriptionService: TranscriptionServiceProtocol {
     private let apiKey: String
     private let baseURL = URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!
-    private let model = "whisper-large-v3"
+    private let model: GroqModel
 
-    init(apiKey: String) {
+    init(apiKey: String, model: GroqModel = .whisperV3) {
         self.apiKey = apiKey
+        self.model = model
     }
 
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval? = nil) async throws -> String {
@@ -167,7 +182,7 @@ class GroqTranscriptionService: TranscriptionProvider {
         Logger.debug("Groq transcription starting...")
         Logger.debug("- Timeout: \(Int(timeout))s")
         Logger.debug("- Audio duration: \(Int(audioDuration ?? 0))s")
-        Logger.debug("- Model: \(model)")
+        Logger.debug("- Model: \(model.rawValue)")
 
         var request = URLRequest(url: baseURL)
         request.httpMethod = "POST"
@@ -186,7 +201,7 @@ class GroqTranscriptionService: TranscriptionProvider {
 
         let body = buildMultipartBody(
             boundary: boundary,
-            model: model,
+            model: model.rawValue,
             audioData: audioData,
             filename: audioURL.lastPathComponent,
             language: language
