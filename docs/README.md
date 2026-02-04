@@ -12,12 +12,18 @@ Native macOS Diktier-App mit OpenAI Whisper / Groq Transkription.
 
 ## Installation
 
-### Voraussetzungen
+### Option A: DMG (empfohlen für Endnutzer)
 
+1. DMG-Datei von Kollegen erhalten (oder selbst bauen: `make dmg`)
+2. DMG öffnen
+3. `WhisperM8.app` in den `Applications`-Ordner ziehen
+4. App starten
+
+### Option B: Aus Source bauen
+
+**Voraussetzungen:**
 - macOS 14.0+
 - Xcode Command Line Tools: `xcode-select --install`
-
-### Build & Install
 
 ```bash
 git clone <repo-url>
@@ -28,6 +34,9 @@ make install
 
 # Oder nur bauen (App bleibt im Repo-Ordner)
 make build
+
+# DMG für Verteilung erstellen
+make dmg
 ```
 
 Die App landet in `/Applications/WhisperM8.app`.
@@ -44,6 +53,16 @@ make kill
 # Aufräumen
 make clean
 ```
+
+### Clean Install (bei Problemen)
+
+Falls die App crasht oder sich seltsam verhält:
+
+```bash
+make clean-install
+```
+
+Das entfernt alle alten Einstellungen, Berechtigungen und Cache-Daten und installiert komplett neu.
 
 ## Ersteinrichtung
 

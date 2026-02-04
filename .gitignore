@@ -13,6 +13,9 @@ xcuserdata/
 # App Bundle (build artifact)
 WhisperM8.app/
 
+# Distribution
+dist/
+
 # macOS
 .DS_Store
 *.swp

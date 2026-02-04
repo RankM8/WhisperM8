@@ -1,4 +1,4 @@
-.PHONY: run build install kill clean help
+.PHONY: run build install kill clean help dmg clean-install
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -8,11 +8,13 @@ export DEVELOPER_DIR = /Applications/Xcode.app/Contents/Developer
 
 help:
 	@echo "WhisperM8 Commands:"
-	@echo "  make build   - Build release app bundle"
-	@echo "  make run     - Build debug and run"
-	@echo "  make install - Build and install to /Applications"
-	@echo "  make kill    - Kill running instances"
-	@echo "  make clean   - Clean build artifacts"
+	@echo "  make build         - Build release app bundle"
+	@echo "  make run           - Build debug and run"
+	@echo "  make install       - Build and install to /Applications"
+	@echo "  make dmg           - Build distributable DMG"
+	@echo "  make clean-install - Reset all data and reinstall fresh"
+	@echo "  make kill          - Kill running instances"
+	@echo "  make clean         - Clean build artifacts"
 
 # Build release app bundle
 build:
@@ -44,6 +46,15 @@ clean:
 	@echo "Cleaning..."
 	@rm -rf .build $(APP_BUNDLE)
 	@echo "Done"
+
+# Build distributable DMG
+dmg:
+	@./scripts/build-dmg.sh
+
+# Clean install (reset all data)
+clean-install:
+	@./scripts/clean-install.sh
+	@$(MAKE) install
 
 # Internal: Create app bundle
 _bundle:
