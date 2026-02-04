@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		001000010000000000000001 /* WhisperM8App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000001 /* WhisperM8App.swift */; };
 		001000010000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000002 /* AppState.swift */; };
-		001000010000000000000003 /* APIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000003 /* APIProvider.swift */; };
+		001000010000000000000003 /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000003 /* TranscriptionProvider.swift */; };
 		001000010000000000000004 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000004 /* MenuBarView.swift */; };
 		001000010000000000000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000005 /* SettingsView.swift */; };
 		001000010000000000000006 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000006 /* OnboardingView.swift */; };
@@ -19,6 +19,8 @@
 		001000010000000000000010 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000010 /* TranscriptionService.swift */; };
 		001000010000000000000011 /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000011 /* KeychainManager.swift */; };
 		001000010000000000000015 /* FocusableTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000014 /* FocusableTextField.swift */; };
+		001000010000000000000016 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000015 /* Logger.swift */; };
+		001000010000000000000017 /* AudioDeviceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000010000000000000016 /* AudioDeviceManager.swift */; };
 		001000010000000000000012 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 003000010000000000000001 /* KeyboardShortcuts */; };
 		001000010000000000000013 /* Defaults in Frameworks */ = {isa = PBXBuildFile; productRef = 003000010000000000000002 /* Defaults */; };
 		001000010000000000000014 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 003000010000000000000003 /* LaunchAtLogin */; };
@@ -28,7 +30,7 @@
 		002000010000000000000000 /* WhisperM8.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhisperM8.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		002000010000000000000001 /* WhisperM8App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperM8App.swift; sourceTree = "<group>"; };
 		002000010000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
-		002000010000000000000003 /* APIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIProvider.swift; sourceTree = "<group>"; };
+		002000010000000000000003 /* TranscriptionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionProvider.swift; sourceTree = "<group>"; };
 		002000010000000000000004 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		002000010000000000000005 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		002000010000000000000006 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -40,6 +42,8 @@
 		002000010000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		002000010000000000000013 /* WhisperM8.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WhisperM8.entitlements; sourceTree = "<group>"; };
 		002000010000000000000014 /* FocusableTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusableTextField.swift; sourceTree = "<group>"; };
+		002000010000000000000015 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		002000010000000000000016 /* AudioDeviceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,7 +94,7 @@
 			isa = PBXGroup;
 			children = (
 				002000010000000000000002 /* AppState.swift */,
-				002000010000000000000003 /* APIProvider.swift */,
+				002000010000000000000003 /* TranscriptionProvider.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -119,8 +123,10 @@
 			isa = PBXGroup;
 			children = (
 				002000010000000000000009 /* AudioRecorder.swift */,
+				002000010000000000000016 /* AudioDeviceManager.swift */,
 				002000010000000000000010 /* TranscriptionService.swift */,
 				002000010000000000000011 /* KeychainManager.swift */,
+				002000010000000000000015 /* Logger.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -195,7 +201,7 @@
 			files = (
 				001000010000000000000001 /* WhisperM8App.swift in Sources */,
 				001000010000000000000002 /* AppState.swift in Sources */,
-				001000010000000000000003 /* APIProvider.swift in Sources */,
+				001000010000000000000003 /* TranscriptionProvider.swift in Sources */,
 				001000010000000000000004 /* MenuBarView.swift in Sources */,
 				001000010000000000000005 /* SettingsView.swift in Sources */,
 				001000010000000000000006 /* OnboardingView.swift in Sources */,
@@ -205,6 +211,8 @@
 				001000010000000000000010 /* TranscriptionService.swift in Sources */,
 				001000010000000000000011 /* KeychainManager.swift in Sources */,
 				001000010000000000000015 /* FocusableTextField.swift in Sources */,
+				001000010000000000000016 /* Logger.swift in Sources */,
+				001000010000000000000017 /* AudioDeviceManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -349,7 +357,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.WhisperM8;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -377,7 +385,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.WhisperM8;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

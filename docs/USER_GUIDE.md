@@ -167,6 +167,14 @@ Open: Microphone icon → "Settings..." (or `Cmd + ,`)
 | Launch at login | Start app automatically at login |
 | Auto-paste | Paste text automatically (or clipboard only) |
 
+### Audio Tab
+
+| Setting | Description |
+|---------|-------------|
+| Input Device | Select microphone or audio input device. "System Default" uses whatever macOS has configured as default input. |
+
+**Bluetooth-Mikrofone (AirPods, etc.):** WhisperM8 unterstützt Bluetooth-Mikrofone vollständig. Bei AirPods wechselt macOS automatisch vom Musik-Profil (A2DP) zum Telefon-Profil (HFP) - dies ist normal und wird automatisch gehandhabt. Empfehlung: "System Default" verwenden.
+
 ---
 
 ## Troubleshooting
@@ -204,6 +212,23 @@ This removes all old data and reinstalls. After that:
 1. Check if another app uses the same hotkey
 2. Try different key combination
 3. Avoid Option-only shortcuts on macOS 15+
+
+### Audio device not appearing
+
+1. Check if device is recognized in System Settings → Sound → Input
+2. Reconnect USB device and wait 2-3 seconds
+3. Restart WhisperM8
+4. For Bluetooth: Ensure device is connected and in input mode
+
+### Bluetooth-Mikrofon (AirPods) produziert keine Aufnahme
+
+**Das Problem ist gelöst in Version 1.1.** Falls du eine ältere Version nutzt:
+
+```bash
+git pull && make install
+```
+
+**Hintergrund:** Bluetooth-Geräte wechseln beim Mikrofonzugriff vom A2DP-Profil (48kHz, Musik) zum HFP-Profil (16kHz, Telefon). WhisperM8 erkennt diesen Wechsel automatisch und passt das Audio-Format an.
 
 ### API errors
 

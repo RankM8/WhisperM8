@@ -122,17 +122,10 @@ struct WelcomeStep: View {
     var body: some View {
         VStack(spacing: 24) {
             // App Logo
-            if let imageURL = Bundle.module.url(forResource: "AppLogo", withExtension: "png"),
-               let nsImage = NSImage(contentsOf: imageURL) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 100, height: 100)
-            } else {
-                Image(systemName: "mic.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.blue)
-            }
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 100, height: 100)
 
             Text("Welcome to WhisperM8")
                 .font(.largeTitle)

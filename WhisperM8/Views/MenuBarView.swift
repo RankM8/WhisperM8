@@ -4,6 +4,7 @@ import KeyboardShortcuts
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.openWindow) private var openWindow
+    @State private var deviceManager = AudioDeviceManager.shared
 
     var body: some View {
         Group {
@@ -61,6 +62,25 @@ struct MenuBarView: View {
             Text("No hotkey configured")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+
+        Divider()
+
+        // Input Device Picker (inline, not nested Menu)
+        Picker(selection: Binding(
+            get: { deviceManager.selectedDeviceUID ?? "" },
+            set: { deviceManager.selectedDeviceUID = $0.isEmpty ? nil : $0 }
+        ), label: Label("Input Device", systemImage: "mic")) {
+            Text("System Default").tag("")
+            if !deviceManager.availableDevices.isEmpty {
+                Divider()
+                ForEach(deviceManager.availableDevices) { device in
+                    Text(device.name).tag(device.uid)
+                }
+            }
+        }
+        .onAppear {
+            deviceManager.refreshDevices()
         }
 
         Divider()

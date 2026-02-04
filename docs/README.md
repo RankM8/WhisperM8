@@ -62,7 +62,7 @@ The app will be installed to `/Applications/WhisperM8.app`.
 | `make build` | Create release build (app stays in repo) |
 | `make install` | Build + install to `/Applications` |
 | `make run` | Debug build + launch immediately |
-| `make dmg` | Create DMG for distribution (`dist/WhisperM8-1.0.0.dmg`) |
+| `make dmg` | Create DMG for distribution (`dist/WhisperM8-1.1.0.dmg`) |
 | `make clean-install` | **Reset everything** + reinstall |
 | `make kill` | Stop all running instances |
 | `make clean` | Delete build artifacts |
@@ -176,6 +176,7 @@ Via menu bar icon → "Settings...":
 | API | Choose provider, API key, language (de/en/auto) |
 | Hotkey | Configure recording key |
 | General | Auto-start, auto-paste on/off |
+| Audio | Select input device (microphone) |
 
 ---
 
@@ -210,6 +211,22 @@ This is usually due to old settings or permissions from previous versions.
 ```bash
 make clean-install
 ```
+
+### Bluetooth-Mikrofone (AirPods, etc.)
+
+WhisperM8 unterstützt Bluetooth-Mikrofone vollständig. **Wichtige Hinweise:**
+
+**Automatischer Profilwechsel:** Wenn du AirPods als Eingabegerät verwendest, wechselt macOS automatisch vom A2DP-Profil (Musik, 48kHz) zum HFP-Profil (Telefon, 16kHz). Dies ist normal und wird von WhisperM8 automatisch gehandhabt.
+
+**Gerät während Aufnahme wechseln:** Du kannst Bluetooth-Geräte auch während einer laufenden Aufnahme verbinden oder trennen. WhisperM8 erkennt den Konfigurationswechsel und passt sich automatisch an.
+
+**Empfohlene Einstellung:** Verwende "System Default" als Eingabegerät in den Audio-Einstellungen. So folgt WhisperM8 automatisch dem macOS-Standardgerät.
+
+**Technischer Hintergrund:**
+- Bluetooth-Audio wechselt bei Mikrofonzugriff von A2DP (48kHz, nur Ausgabe) zu HFP (16kHz, bidirektional)
+- WhisperM8 verwendet `inputFormat(forBus:)` für das korrekte Hardware-Format
+- Bei Konfigurationsänderungen wird der Audio-Tap automatisch mit dem neuen Format reinstalliert
+- Retry-Logik sorgt für Stabilität bei kurzzeitig ungültigen Formaten
 
 ### API errors
 
@@ -262,6 +279,7 @@ whisperm8/
 │   │   └── RecordingPanel.swift  # Floating overlay + controller
 │   ├── Services/
 │   │   ├── AudioRecorder.swift   # AVAudioRecorder wrapper
+│   │   ├── AudioDeviceManager.swift # CoreAudio device management
 │   │   ├── TranscriptionService.swift # OpenAI/Groq API
 │   │   ├── KeychainManager.swift # Secure API key storage
 │   │   └── Logger.swift          # Debug logging

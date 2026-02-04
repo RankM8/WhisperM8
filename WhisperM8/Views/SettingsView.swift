@@ -15,6 +15,11 @@ struct SettingsView: View {
                     Label("Hotkey", systemImage: "keyboard")
                 }
 
+            AudioSettingsView()
+                .tabItem {
+                    Label("Audio", systemImage: "waveform")
+                }
+
             BehaviorSettingsView()
                 .tabItem {
                     Label("Behavior", systemImage: "gearshape")
@@ -25,7 +30,7 @@ struct SettingsView: View {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 420, height: 380)
+        .frame(width: 520, height: 400)
     }
 }
 
@@ -144,6 +149,38 @@ struct HotkeySettingsView: View {
     }
 }
 
+// MARK: - Audio Settings
+
+struct AudioSettingsView: View {
+    @State private var deviceManager = AudioDeviceManager.shared
+    @State private var selectedDeviceUID: String = ""
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Input Device", selection: $selectedDeviceUID) {
+                    Text("System Default").tag("")
+                    ForEach(deviceManager.availableDevices) { device in
+                        Text(device.name).tag(device.uid)
+                    }
+                }
+                .onChange(of: selectedDeviceUID) { _, newValue in
+                    deviceManager.selectedDeviceUID = newValue.isEmpty ? nil : newValue
+                }
+
+                Text("Select which microphone to use. Changes apply to the next recording.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear {
+            deviceManager.refreshDevices()
+            selectedDeviceUID = deviceManager.selectedDeviceUID ?? ""
+        }
+    }
+}
+
 // MARK: - Behavior Settings
 
 struct BehaviorSettingsView: View {
@@ -174,18 +211,15 @@ struct BehaviorSettingsView: View {
 struct AboutView: View {
     var body: some View {
         VStack(spacing: 16) {
-            if let imageURL = Bundle.module.url(forResource: "AppLogo", withExtension: "png"),
-               let image = NSImage(contentsOf: imageURL) {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 64, height: 64)
-            }
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 64, height: 64)
 
             Text("WhisperM8")
                 .font(.title2.bold())
 
-            Text("Version 1.0.0")
+            Text("Version 1.1.0")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

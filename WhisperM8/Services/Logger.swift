@@ -8,6 +8,7 @@ enum Logger {
     static let focus = os.Logger(subsystem: subsystem, category: "Focus")
     static let permission = os.Logger(subsystem: subsystem, category: "Permission")
     static let transcription = os.Logger(subsystem: subsystem, category: "Transcription")
+    static let audio = os.Logger(subsystem: subsystem, category: "Audio")
 
     // MARK: - File Logging (for debugging)
 
