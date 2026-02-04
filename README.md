@@ -1,103 +1,66 @@
 # WhisperM8
 
-Native macOS Diktier-App mit bester Transkriptionsqualität.
+Native macOS Diktier-App mit OpenAI Whisper / Groq Transkription.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
-![License MIT](https://img.shields.io/badge/License-MIT-green)
 
 ## Features
 
-- **Hold-to-Record Hotkey** - Halte eine Taste gedrückt zum Diktieren
-- **Beste Transkription** - OpenAI gpt-4o-transcribe oder Groq whisper-large-v3
-- **Floating Overlay** - Echtzeit Audio-Level Anzeige während der Aufnahme
-- **Clipboard Integration** - Text landet automatisch in der Zwischenablage
-- **Native macOS App** - Läuft in der Menüleiste, kein Dock-Icon
-- **Sicher** - API-Keys im macOS Keychain gespeichert
+- **Push-to-Talk**: Hotkey gedrückt halten → sprechen → loslassen → Text eingefügt
+- **Auto-Paste**: Text wird automatisch in die aktive App eingefügt
+- **Dual-Provider**: OpenAI Whisper oder Groq (schneller, günstiger)
+- **Menu Bar App**: Läuft diskret in der Menüleiste
 
-## Screenshots
-
-```
-┌────────────────────────────────────┐
-│  MIC  Aufnahme...  00:05  ▁▃▅▇▅▃▁  │
-└────────────────────────────────────┘
-```
-
-## Quick Start
+## Schnellstart
 
 ```bash
-# Repository klonen
-git clone https://github.com/yourname/whisperm8.git
+git clone git@github.com:RankM8/whisperm8.git
 cd whisperm8
-
-# App bauen und starten (killt alte Instanzen automatisch)
-make run
-
-# Oder mit Scripts:
-./scripts/run.sh
+make install
 ```
 
-## Development
-
+**Bei Problemen:**
 ```bash
-make run      # Build und Start (empfohlen)
-make build    # Nur bauen
-make kill     # Alle Instanzen beenden
-make clean    # Build-Artefakte löschen
+make clean-install
 ```
 
-**In Xcode:** `WhisperM8.xcodeproj` öffnen → Cmd+R
+## Make-Befehle
 
-## Systemanforderungen
+| Befehl | Beschreibung |
+|--------|--------------|
+| `make install` | Build + Installation nach `/Applications` |
+| `make run` | Debug-Build + sofort starten |
+| `make dmg` | DMG für Verteilung erstellen |
+| `make clean-install` | **Alles zurücksetzen** + neu installieren |
+| `make kill` | Laufende Instanzen beenden |
 
-- macOS 14+ (Sonoma)
-- Xcode 15+
-- OpenAI oder Groq API-Key
+## Berechtigungen
 
-## Einrichtung
-
-1. **App starten** - Mikrofon-Icon erscheint in der Menüleiste
-2. **Einstellungen öffnen** - Klick auf Icon → "Einstellungen..."
-3. **API-Key eingeben** - OpenAI oder Groq Key eintragen
-4. **Hotkey wählen** - z.B. `Ctrl + Shift + Space`
-5. **Diktieren** - Hotkey halten, sprechen, loslassen → Text in Zwischenablage
+Die App benötigt:
+- **Mikrofon**: Für Sprachaufnahme
+- **Accessibility**: Für Auto-Paste (Cmd+V senden)
 
 ## Dokumentation
 
-- [Benutzerhandbuch](docs/USER_GUIDE.md)
-- [Architektur](docs/ARCHITECTURE.md)
-- [Implementierungsplan](docs/03-implementierungsplan.md)
+**→ [Vollständige Dokumentation](docs/README.md)**
+
+Enthält:
+- Detaillierte Installation (DMG / Source)
+- Ersteinrichtung (API-Keys, Hotkey, Berechtigungen)
+- Verwendung und Einstellungen
+- Troubleshooting (Crashes, Berechtigungsprobleme)
+- Projektstruktur für Entwickler
 
 ## API-Provider
 
-| Provider | Modell | Qualität | Preis |
-|----------|--------|----------|-------|
-| OpenAI | gpt-4o-transcribe | Beste | $0.006/min |
-| Groq | whisper-large-v3 | Sehr gut | $0.002/min |
+| Provider | Preis | Link |
+|----------|-------|------|
+| OpenAI | ~$0.006/min | [API-Key erstellen](https://platform.openai.com/api-keys) |
+| Groq | Kostenlos* | [API-Key erstellen](https://console.groq.com/keys) |
 
-## Tech Stack
-
-- Swift / SwiftUI
-- AVFoundation (Audio)
-- [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts)
-- [Defaults](https://github.com/sindresorhus/Defaults)
-- [LaunchAtLogin-Modern](https://github.com/sindresorhus/LaunchAtLogin-Modern)
-
-## Projektstruktur
-
-```
-WhisperM8/
-├── WhisperM8App.swift         # Entry Point
-├── Models/                    # AppState, APIProvider
-├── Views/                     # SwiftUI Views
-├── Windows/                   # NSPanel für Overlay
-└── Services/                  # Audio, API, Keychain
-```
+*Rate-Limited
 
 ## Lizenz
 
-MIT
-
----
-
-Made with Claude Code
+Intern - nur für Team-Nutzung.

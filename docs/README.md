@@ -2,6 +2,22 @@
 
 Native macOS Diktier-App mit OpenAI Whisper / Groq Transkription.
 
+## Schnellstart (TL;DR)
+
+```bash
+git clone git@github.com:RankM8/whisperm8.git
+cd whisperm8
+make install
+# App starten → Berechtigungen erteilen → API-Key eingeben → Fertig!
+```
+
+**Bei Problemen (Crashes, seltsames Verhalten):**
+```bash
+make clean-install
+```
+
+---
+
 ## Features
 
 - **Push-to-Talk**: Hotkey gedrückt halten → sprechen → loslassen → Text wird transkribiert und eingefügt
@@ -10,11 +26,13 @@ Native macOS Diktier-App mit OpenAI Whisper / Groq Transkription.
 - **Dual-Provider**: OpenAI Whisper oder Groq (schneller, günstiger)
 - **Menu Bar App**: Läuft diskret in der Menüleiste
 
+---
+
 ## Installation
 
-### Option A: DMG (empfohlen für Endnutzer)
+### Option A: DMG (empfohlen)
 
-1. DMG-Datei von Kollegen erhalten (oder selbst bauen: `make dmg`)
+1. DMG-Datei erhalten (von Kollegen oder `make dmg`)
 2. DMG öffnen
 3. `WhisperM8.app` in den `Applications`-Ordner ziehen
 4. App starten
@@ -26,43 +44,59 @@ Native macOS Diktier-App mit OpenAI Whisper / Groq Transkription.
 - Xcode Command Line Tools: `xcode-select --install`
 
 ```bash
-git clone <repo-url>
+git clone git@github.com:RankM8/whisperm8.git
 cd whisperm8
-
-# Release build + Installation
 make install
-
-# Oder nur bauen (App bleibt im Repo-Ordner)
-make build
-
-# DMG für Verteilung erstellen
-make dmg
 ```
 
 Die App landet in `/Applications/WhisperM8.app`.
 
-### Entwicklung
+---
 
-```bash
-# Debug build + starten
-make run
+## Make-Befehle
 
-# Alte Instanzen killen
-make kill
+| Befehl | Beschreibung |
+|--------|--------------|
+| `make build` | Release-Build erstellen (App bleibt im Repo) |
+| `make install` | Build + nach `/Applications` installieren |
+| `make run` | Debug-Build + sofort starten |
+| `make dmg` | DMG für Verteilung erstellen (`dist/WhisperM8-1.0.0.dmg`) |
+| `make clean-install` | **Alles zurücksetzen** + neu installieren |
+| `make kill` | Alle laufenden Instanzen beenden |
+| `make clean` | Build-Artefakte löschen |
 
-# Aufräumen
-make clean
-```
+---
 
-### Clean Install (bei Problemen)
+## Clean Install (bei Problemen)
 
-Falls die App crasht oder sich seltsam verhält:
+Falls die App crasht, sich seltsam verhält, oder nach dem ersten Mal nicht mehr startet:
 
 ```bash
 make clean-install
 ```
 
-Das entfernt alle alten Einstellungen, Berechtigungen und Cache-Daten und installiert komplett neu.
+**Was das Script macht (`scripts/clean-install.sh`):**
+1. Beendet alle WhisperM8-Prozesse
+2. Löscht alte App-Installationen aus `/Applications`
+3. Setzt **alle** TCC-Berechtigungen zurück (Accessibility + Mikrofon)
+4. Löscht UserDefaults (gespeicherte Einstellungen)
+5. Löscht Cache-Daten
+6. Löscht gespeicherten Window-State
+7. Installiert die App neu
+
+**Danach musst du:**
+- Berechtigungen neu erteilen (Mikrofon + Accessibility)
+- API-Key neu eingeben
+
+### Manueller Reset (ohne Neuinstallation)
+
+Falls du nur die Berechtigungen zurücksetzen willst:
+```bash
+./scripts/clean-install.sh
+# Dann manuell: make install
+```
+
+---
 
 ## Ersteinrichtung
 
@@ -89,16 +123,18 @@ Die App benötigt zwei Berechtigungen:
 
 #### Mikrofon
 - Wird beim ersten Aufnahmeversuch automatisch angefragt
-- Falls verweigert: Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon → WhisperM8 aktivieren
+- Falls verweigert: **Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon → WhisperM8** aktivieren
 
 #### Accessibility (für Auto-Paste)
 - Wird benötigt um Cmd+V an andere Apps zu senden
-- Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen → WhisperM8 aktivieren
+- **Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen → WhisperM8** aktivieren
 
 **Falls WhisperM8 nicht in der Liste erscheint:**
 1. Klick auf "+"
-2. Navigiere zu `/Applications/WhisperM8.app`
+2. Drücke `Cmd+Shift+G` und gib ein: `/Applications/WhisperM8.app`
 3. Hinzufügen und Toggle aktivieren
+
+---
 
 ## Verwendung
 
@@ -132,78 +168,39 @@ Während der Aufnahme erscheint unten am Bildschirm:
 | Hotkey | Aufnahme-Taste konfigurieren |
 | Allgemein | Auto-Start, Auto-Paste an/aus |
 
-## Architektur
-
-```
-WhisperM8/
-├── WhisperM8App.swift      # App-Entry, Single-Instance Check
-├── Models/
-│   └── AppState.swift      # Zentraler State, Recording + Paste Logic
-├── Views/
-│   ├── MenuBarView.swift   # Menüleisten-UI
-│   ├── SettingsView.swift  # Einstellungen
-│   └── OnboardingView.swift
-├── Windows/
-│   └── RecordingPanel.swift # Floating Overlay + Controller
-├── Services/
-│   ├── AudioRecorder.swift # AVAudioRecorder Wrapper
-│   ├── TranscriptionService.swift # OpenAI/Groq API
-│   ├── KeychainManager.swift # Sichere API-Key Speicherung
-│   └── Logger.swift        # Debug Logging
-└── Info.plist              # App-Konfiguration, Permissions
-```
-
-### Wichtige Code-Stellen
-
-#### Auto-Paste Sequenz (`AppState.swift:166-237`)
-```
-1. AXIsProcessTrusted() Check
-2. previousApp von OverlayController holen
-3. Panel verstecken
-4. 50ms warten
-5. targetApp.activate()
-6. Polling bis App aktiv (max 1s)
-7. 100ms warten
-8. CGEvent Cmd+V posten
-```
-
-#### Previous App Capture (`RecordingPanel.swift:50-53`)
-Die App die vor dem Overlay aktiv war wird in `show()` gespeichert:
-```swift
-previousApp = NSWorkspace.shared.frontmostApplication
-```
-
-#### Accessibility Permission (`AppState.swift:157-164`)
-```swift
-var hasAccessibilityPermission: Bool {
-    AXIsProcessTrusted()
-}
-
-func requestAccessibilityPermission() {
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-    AXIsProcessTrustedWithOptions(options)
-}
-```
+---
 
 ## Troubleshooting
+
+### App crasht nach dem ersten Mal / bei jedem Start
+
+**Lösung:** Clean Install
+```bash
+make clean-install
+```
+
+Das liegt meist an alten Einstellungen oder Berechtigungen von früheren Versionen.
 
 ### Auto-Paste funktioniert nicht
 
 1. **Accessibility-Berechtigung prüfen:**
-   ```bash
-   # Logs anschauen
-   log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
-   ```
-   Falls "Accessibility permission missing" → Berechtigung in Systemeinstellungen aktivieren
+   - Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen
+   - WhisperM8 muss aktiviert sein
 
 2. **App neu starten** nach Berechtigungsänderung
 
 3. **Auto-Paste deaktiviert?** → Einstellungen → Allgemein prüfen
 
-### Mikrofon-Fehler
+4. **Logs prüfen:**
+   ```bash
+   log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
+   ```
 
-- Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon → WhisperM8 aktivieren
-- Bei "Microphone usage description" Crash: `make clean && make install`
+### Mikrofon-Fehler / "Microphone usage description" Crash
+
+```bash
+make clean-install
+```
 
 ### API-Fehler
 
@@ -216,6 +213,16 @@ func requestAccessibilityPermission() {
 - Schon eine Instanz offen? `make kill`
 - Console.app → WhisperM8 Logs prüfen
 
+### Berechtigungen komplett zurücksetzen
+
+```bash
+# Nur Berechtigungen zurücksetzen (ohne Neuinstallation)
+tccutil reset Accessibility com.whisperm8.app
+tccutil reset Microphone com.whisperm8.app
+```
+
+---
+
 ## Debug Logging
 
 ```bash
@@ -227,6 +234,77 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 # - Focus: App-Aktivierung
 # - Permission: Berechtigungen
 ```
+
+---
+
+## Projektstruktur
+
+```
+whisperm8/
+├── WhisperM8/                    # Source Code
+│   ├── WhisperM8App.swift        # App-Entry, Single-Instance Check
+│   ├── Models/
+│   │   └── AppState.swift        # Zentraler State, Recording + Paste Logic
+│   ├── Views/
+│   │   ├── MenuBarView.swift     # Menüleisten-UI
+│   │   ├── SettingsView.swift    # Einstellungen
+│   │   └── OnboardingView.swift
+│   ├── Windows/
+│   │   └── RecordingPanel.swift  # Floating Overlay + Controller
+│   ├── Services/
+│   │   ├── AudioRecorder.swift   # AVAudioRecorder Wrapper
+│   │   ├── TranscriptionService.swift # OpenAI/Groq API
+│   │   ├── KeychainManager.swift # Sichere API-Key Speicherung
+│   │   └── Logger.swift          # Debug Logging
+│   ├── Resources/
+│   │   └── AppIcon.icns          # App Icon
+│   └── Info.plist                # App-Konfiguration, Permissions
+├── scripts/
+│   ├── build-dmg.sh              # DMG erstellen
+│   └── clean-install.sh          # Reset + Neuinstallation
+├── docs/
+│   └── README.md                 # Diese Dokumentation
+├── Makefile                      # Build-Befehle
+└── Package.swift                 # Swift Package Definition
+```
+
+---
+
+## Für Entwickler
+
+### Wichtige Code-Stellen
+
+#### Auto-Paste Sequenz (`AppState.swift`)
+```
+1. AXIsProcessTrusted() Check
+2. previousApp von OverlayController holen
+3. Panel verstecken
+4. 50ms warten
+5. targetApp.activate()
+6. Polling bis App aktiv (max 1s)
+7. 100ms warten
+8. CGEvent Cmd+V posten
+```
+
+#### Previous App Capture (`RecordingPanel.swift`)
+Die App die vor dem Overlay aktiv war wird in `show()` gespeichert:
+```swift
+previousApp = NSWorkspace.shared.frontmostApplication
+```
+
+#### Accessibility Permission Check (`AppState.swift`)
+```swift
+var hasAccessibilityPermission: Bool {
+    AXIsProcessTrusted()
+}
+
+func requestAccessibilityPermission() {
+    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+    AXIsProcessTrustedWithOptions(options)
+}
+```
+
+---
 
 ## Lizenz
 
