@@ -43,14 +43,14 @@ Die App benötigt:
 
 ## Dokumentation
 
-**→ [Vollständige Dokumentation](docs/README.md)**
+| Dokument | Beschreibung |
+|----------|--------------|
+| **[docs/README.md](docs/README.md)** | Technische Doku, Projektstruktur, Troubleshooting |
+| **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** | Benutzerhandbuch, Schritt-für-Schritt Anleitung |
 
-Enthält:
-- Detaillierte Installation (DMG / Source)
-- Ersteinrichtung (API-Keys, Hotkey, Berechtigungen)
-- Verwendung und Einstellungen
-- Troubleshooting (Crashes, Berechtigungsprobleme)
-- Projektstruktur für Entwickler
+**Wichtig für neue Installationen:**
+- Bei Crashes oder Problemen: `make clean-install`
+- Das entfernt ALLE alten Daten und installiert sauber neu
 
 ## API-Provider
 

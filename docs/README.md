@@ -2,6 +2,8 @@
 
 Native macOS Diktier-App mit OpenAI Whisper / Groq Transkription.
 
+> **Weitere Dokumentation:** [USER_GUIDE.md](USER_GUIDE.md) - Ausführliches Benutzerhandbuch
+
 ## Schnellstart (TL;DR)
 
 ```bash
@@ -77,16 +79,22 @@ make clean-install
 
 **Was das Script macht (`scripts/clean-install.sh`):**
 1. Beendet alle WhisperM8-Prozesse
-2. Löscht alte App-Installationen aus `/Applications`
-3. Setzt **alle** TCC-Berechtigungen zurück (Accessibility + Mikrofon)
-4. Löscht UserDefaults (gespeicherte Einstellungen)
-5. Löscht Cache-Daten
-6. Löscht gespeicherten Window-State
-7. Installiert die App neu
+2. Löscht alte App-Installationen (`/Applications`, `~/Applications`, `~/Desktop`, `~/Downloads`)
+3. Setzt **alle** TCC-Berechtigungen zurück (für alle möglichen Bundle-IDs)
+4. Löscht UserDefaults (für alle möglichen Bundle-IDs)
+5. Löscht Preferences-Dateien direkt
+6. Löscht Keychain-Einträge (API-Keys)
+7. Löscht Cache-Daten
+8. Löscht Application Support
+9. Löscht gespeicherten Window-State
+10. Löscht Container-Daten (falls vorhanden)
+11. Löscht temporäre Dateien
+12. Installiert die App neu
 
 **Danach musst du:**
 - Berechtigungen neu erteilen (Mikrofon + Accessibility)
 - API-Key neu eingeben
+- Hotkey festlegen
 
 ### Manueller Reset (ohne Neuinstallation)
 
@@ -263,7 +271,8 @@ whisperm8/
 │   ├── build-dmg.sh              # DMG erstellen
 │   └── clean-install.sh          # Reset + Neuinstallation
 ├── docs/
-│   └── README.md                 # Diese Dokumentation
+│   ├── README.md                 # Technische Dokumentation (diese Datei)
+│   └── USER_GUIDE.md             # Benutzerhandbuch
 ├── Makefile                      # Build-Befehle
 └── Package.swift                 # Swift Package Definition
 ```
