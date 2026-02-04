@@ -110,7 +110,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Credits
 
-Built and open-sourced by [360° Web Manager](https://360web-manager.com/) — Your partner for web development and digital solutions.
+Built and open-sourced by [360WebManager](https://360web-manager.com/) — Your partner for web development and digital solutions.
 
 ## License
 
