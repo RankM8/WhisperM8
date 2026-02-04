@@ -14,7 +14,7 @@ class RecordingPanel: NSPanel {
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.backgroundColor = .clear
-        self.hasShadow = true
+        self.hasShadow = false  // Disable window shadow - SwiftUI view has its own
         self.isOpaque = false
 
         positionAtBottomCenter()
@@ -34,6 +34,11 @@ class RecordingPanel: NSPanel {
     func updateContent(with view: some View) {
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 56)
+
+        // Configure hosting view for full transparency
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = .clear
+
         self.contentView = hostingView
     }
 }
@@ -66,6 +71,11 @@ class OverlayController: ObservableObject {
 
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 56)
+
+        // Configure hosting view for full transparency
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = .clear
+
         panel.contentView = hostingView
         panel.orderFront(nil)
         self.panel = panel
