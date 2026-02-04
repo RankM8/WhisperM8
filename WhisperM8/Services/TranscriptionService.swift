@@ -148,16 +148,16 @@ enum TranscriptionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "Ungültige Antwort vom Server."
+            return "Invalid response from server."
         case .apiError(let statusCode, let message):
             if statusCode == 401 {
-                return "Ungültiger API-Key. Bitte überprüfe deine Einstellungen."
+                return "Invalid API key. Please check your settings."
             } else if statusCode == 429 {
-                return "Zu viele Anfragen. Bitte warte einen Moment."
+                return "Too many requests. Please wait a moment."
             }
-            return "API-Fehler (\(statusCode)): \(message)"
+            return "API error (\(statusCode)): \(message)"
         case .missingAPIKey:
-            return "Kein API-Key konfiguriert. Bitte gib deinen API-Key in den Einstellungen ein."
+            return "No API key configured. Please enter your API key in settings."
         }
     }
 }

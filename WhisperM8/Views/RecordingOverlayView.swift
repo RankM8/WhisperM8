@@ -8,7 +8,7 @@ struct RecordingOverlayView: View {
             RecordingStatusIndicator(level: controller.audioLevel, isTranscribing: controller.isTranscribing)
 
             // Status text
-            Text(controller.isTranscribing ? "Transkribiere..." : "Aufnahme...")
+            Text(controller.isTranscribing ? "Transcribing..." : "Recording...")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.primary)
 
@@ -31,7 +31,7 @@ struct RecordingOverlayView: View {
                 }
                 .buttonStyle(.plain)
                 .contentShape(Circle())
-                .accessibilityLabel("Aufnahme abbrechen")
+                .accessibilityLabel("Cancel recording")
             } else {
                 ProgressView()
                     .scaleEffect(0.6)
@@ -90,7 +90,7 @@ struct RecordingStatusIndicator: View {
                 .foregroundStyle(ringColor)
         }
         .frame(width: 20, height: 20)
-        .accessibilityLabel(isTranscribing ? "Transkribieren" : "Aufnahme aktiv")
+        .accessibilityLabel(isTranscribing ? "Transcribing" : "Recording")
     }
 }
 

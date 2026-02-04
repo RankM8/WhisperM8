@@ -3,7 +3,7 @@ import KeyboardShortcuts
 
 @main
 struct WhisperM8App: App {
-    @AppStorage("onboardingCompleted") private var onboardingCompleted = false
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     init() {
         // Single instance check - quit if already running
@@ -11,7 +11,7 @@ struct WhisperM8App: App {
         if runningApps.count > 1 {
             // Another instance is already running - activate it and quit this one
             for app in runningApps where app != NSRunningApplication.current {
-                app.activate(options: .activateIgnoringOtherApps)
+                app.activate()
             }
             NSApp.terminate(nil)
         }
@@ -24,12 +24,12 @@ struct WhisperM8App: App {
             MenuBarView()
                 .environment(AppState.shared)
         } label: {
-            Image(systemName: AppState.shared.menuBarIcon)
+            MenuBarIcon()
         }
         .menuBarExtraStyle(.menu)
 
         // Settings Window
-        Window("WhisperM8 Einstellungen", id: "settings") {
+        Window("Settings", id: "settings") {
             SettingsView()
                 .environment(AppState.shared)
         }
@@ -55,6 +55,71 @@ struct WhisperM8App: App {
         KeyboardShortcuts.onKeyUp(for: .toggleRecording) {
             Task { @MainActor in
                 await AppState.shared.stopRecording()
+            }
+        }
+    }
+}
+
+// MARK: - App Delegate
+
+class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    private var onboardingWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Check if onboarding needs to be shown
+        let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
+
+        if !onboardingCompleted {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.showOnboardingWindow()
+            }
+        }
+    }
+
+    private func showOnboardingWindow() {
+        let onboardingView = OnboardingView()
+            .environment(AppState.shared)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "WhisperM8 Setup"
+        window.contentView = NSHostingView(rootView: onboardingView)
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        self.onboardingWindow = window
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+// MARK: - Menu Bar Icon
+
+struct MenuBarIcon: View {
+    @State private var appState = AppState.shared
+
+    var body: some View {
+        if appState.isRecording {
+            // Recording: show red dot
+            Image(systemName: "record.circle.fill")
+                .foregroundStyle(.red)
+        } else if appState.isTranscribing {
+            // Transcribing: show spinner
+            Image(systemName: "ellipsis.circle")
+        } else {
+            // Ready: show logo
+            if let imageURL = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
+               let image = NSImage(contentsOf: imageURL) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: "mic")
             }
         }
     }

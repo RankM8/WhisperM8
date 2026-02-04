@@ -1,6 +1,8 @@
 import SwiftUI
 import KeyboardShortcuts
 import AVFoundation
+import ApplicationServices
+import AppKit
 
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
@@ -9,6 +11,8 @@ struct OnboardingView: View {
 
     @State private var currentStep = 0
     @State private var micPermissionGranted = false
+    @State private var accessibilityGranted = false
+    @State private var hotkeySet = false
     @State private var apiKey = ""
     @State private var selectedProvider = APIProvider.openai
     @State private var testResult: String?
@@ -34,9 +38,12 @@ struct OnboardingView: View {
                 case 0:
                     WelcomeStep()
                 case 1:
-                    HotkeyStep()
+                    PermissionsStep(
+                        micGranted: $micPermissionGranted,
+                        accessibilityGranted: $accessibilityGranted
+                    )
                 case 2:
-                    MicrophoneStep(isGranted: $micPermissionGranted)
+                    HotkeyStep(hotkeySet: $hotkeySet)
                 case 3:
                     APIKeyStep(
                         apiKey: $apiKey,
@@ -59,7 +66,7 @@ struct OnboardingView: View {
             // Navigation
             HStack {
                 if currentStep > 0 {
-                    Button("Zurück") {
+                    Button("Back") {
                         withAnimation { currentStep -= 1 }
                     }
                 }
@@ -67,13 +74,13 @@ struct OnboardingView: View {
                 Spacer()
 
                 if currentStep < totalSteps - 1 {
-                    Button("Weiter") {
+                    Button("Next") {
                         withAnimation { currentStep += 1 }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canProceed)
                 } else {
-                    Button("Fertig") {
+                    Button("Done") {
                         onboardingCompleted = true
                         dismiss()
                     }
@@ -83,15 +90,15 @@ struct OnboardingView: View {
             }
             .padding()
         }
-        .frame(width: 500, height: 450)
+        .frame(width: 520, height: 560)
     }
 
     private var canProceed: Bool {
         switch currentStep {
         case 1:
-            return KeyboardShortcuts.getShortcut(for: .toggleRecording) != nil
+            return micPermissionGranted && accessibilityGranted
         case 2:
-            return micPermissionGranted
+            return hotkeySet
         case 3:
             return !apiKey.isEmpty
         default:
@@ -100,8 +107,9 @@ struct OnboardingView: View {
     }
 
     private var canFinish: Bool {
-        return KeyboardShortcuts.getShortcut(for: .toggleRecording) != nil
+        return hotkeySet
             && micPermissionGranted
+            && accessibilityGranted
             && !apiKey.isEmpty
     }
 }
@@ -111,23 +119,32 @@ struct OnboardingView: View {
 struct WelcomeStep: View {
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "mic.circle.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.blue)
+            // App Logo
+            if let imageURL = Bundle.module.url(forResource: "AppLogo", withExtension: "png"),
+               let nsImage = NSImage(contentsOf: imageURL) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 100, height: 100)
+            } else {
+                Image(systemName: "mic.circle.fill")
+                    .font(.system(size: 80))
+                    .foregroundStyle(.blue)
+            }
 
-            Text("Willkommen bei WhisperM8")
+            Text("Welcome to WhisperM8")
                 .font(.largeTitle)
                 .fontWeight(.bold)
 
-            Text("Die native macOS Diktier-App mit bester Transkriptionsqualität.")
+            Text("Native macOS dictation app with best-in-class transcription.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             VStack(alignment: .leading, spacing: 12) {
-                FeatureRow(icon: "keyboard", text: "Globaler Hotkey für schnelles Diktieren")
-                FeatureRow(icon: "waveform", text: "Echtzeit Audio-Feedback")
-                FeatureRow(icon: "doc.on.clipboard", text: "Text direkt in die Zwischenablage")
+                FeatureRow(icon: "keyboard", text: "Press hotkey to start/stop recording")
+                FeatureRow(icon: "waveform", text: "Real-time audio feedback")
+                FeatureRow(icon: "doc.on.clipboard", text: "Auto-paste or clipboard")
             }
             .padding(.top, 16)
         }
@@ -150,78 +167,213 @@ struct FeatureRow: View {
     }
 }
 
-// MARK: - Hotkey Step
+// MARK: - Permissions Step (Combined)
 
-struct HotkeyStep: View {
-    var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "keyboard")
-                .font(.system(size: 60))
-                .foregroundStyle(.blue)
+struct PermissionsStep: View {
+    @Binding var micGranted: Bool
+    @Binding var accessibilityGranted: Bool
 
-            Text("Hotkey konfigurieren")
-                .font(.title)
-                .fontWeight(.bold)
-
-            Text("Wähle eine Tastenkombination für die Aufnahme. Halte sie gedrückt, um zu diktieren.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            KeyboardShortcuts.Recorder("Aufnahme-Taste:", name: .toggleRecording)
-                .padding(.top, 16)
-
-            Text("Empfehlung: Control + Shift + Space")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(40)
-    }
-}
-
-// MARK: - Microphone Step
-
-struct MicrophoneStep: View {
-    @Binding var isGranted: Bool
+    @State private var checkTimer: Timer?
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "mic.circle")
+            Image(systemName: "shield.checkered")
                 .font(.system(size: 60))
-                .foregroundStyle(isGranted ? .green : .blue)
+                .foregroundStyle(allGranted ? .green : .blue)
 
-            Text("Mikrofon-Zugriff")
+            Text("App Permissions")
                 .font(.title)
                 .fontWeight(.bold)
 
-            Text("WhisperM8 benötigt Zugriff auf dein Mikrofon, um deine Sprache aufzunehmen.")
+            Text("WhisperM8 needs two permissions to work properly.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            if isGranted {
-                Label("Berechtigung erteilt", systemImage: "checkmark.circle.fill")
+            VStack(spacing: 16) {
+                // Microphone Permission
+                PermissionRow(
+                    icon: "mic.fill",
+                    title: "Microphone",
+                    description: "Record your voice for transcription",
+                    isGranted: micGranted,
+                    action: requestMicrophonePermission
+                )
+
+                // Accessibility Permission
+                PermissionRow(
+                    icon: "accessibility",
+                    title: "Accessibility",
+                    description: "Auto-paste text into other apps",
+                    isGranted: accessibilityGranted,
+                    action: requestAccessibilityPermission
+                )
+            }
+            .padding(.top, 8)
+
+            if allGranted {
+                Label("All permissions granted!", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.headline)
+                    .padding(.top, 8)
             } else {
-                Button("Berechtigung anfragen") {
-                    Task {
-                        isGranted = await AVCaptureDevice.requestAccess(for: .audio)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
+                Text("Click each button to grant permission")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 8)
             }
         }
         .padding(40)
         .onAppear {
-            checkPermission()
+            checkPermissions()
+            startPermissionPolling()
+        }
+        .onDisappear {
+            stopPermissionPolling()
         }
     }
 
-    private func checkPermission() {
+    private var allGranted: Bool {
+        micGranted && accessibilityGranted
+    }
+
+    private func checkPermissions() {
+        // Check microphone
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
-            isGranted = true
+            micGranted = true
         default:
-            isGranted = false
+            micGranted = false
+        }
+
+        // Check accessibility
+        accessibilityGranted = AXIsProcessTrusted()
+    }
+
+    private func requestMicrophonePermission() {
+        Task {
+            micGranted = await AVCaptureDevice.requestAccess(for: .audio)
+        }
+    }
+
+    private func requestAccessibilityPermission() {
+        // This opens System Settings to the Accessibility pane
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+        AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func startPermissionPolling() {
+        // Poll for accessibility permission since user grants it in System Settings
+        checkTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            checkPermissions()
+        }
+    }
+
+    private func stopPermissionPolling() {
+        checkTimer?.invalidate()
+        checkTimer = nil
+    }
+}
+
+struct PermissionRow: View {
+    let icon: String
+    let title: String
+    let description: String
+    let isGranted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundStyle(isGranted ? .green : .blue)
+                .frame(width: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isGranted {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.green)
+            } else {
+                Button("Grant") {
+                    action()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isGranted ? Color.green.opacity(0.1) : Color.secondary.opacity(0.1))
+        )
+    }
+}
+
+// MARK: - Hotkey Step
+
+struct HotkeyStep: View {
+    @Binding var hotkeySet: Bool
+    @State private var shortcutName: String = ""
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "keyboard")
+                .font(.system(size: 60))
+                .foregroundStyle(hotkeySet ? .green : .blue)
+
+            Text("Configure Hotkey")
+                .font(.title)
+                .fontWeight(.bold)
+
+            Text("Press once to start recording, press again to stop and transcribe.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            KeyboardShortcuts.Recorder("Recording key:", name: .toggleRecording)
+                .padding(.top, 16)
+                .onChange(of: shortcutName) { _, _ in
+                    checkHotkey()
+                }
+
+            if hotkeySet {
+                Label("Hotkey configured!", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.subheadline)
+            } else {
+                Text("Recommended: Control + Shift + Space")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(40)
+        .onAppear {
+            checkHotkey()
+            // Poll for shortcut changes since Recorder doesn't have a direct callback
+            startPolling()
+        }
+    }
+
+    private func checkHotkey() {
+        hotkeySet = KeyboardShortcuts.getShortcut(for: .toggleRecording) != nil
+    }
+
+    private func startPolling() {
+        // Check every 0.3s if shortcut was set
+        Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { timer in
+            let wasSet = hotkeySet
+            checkHotkey()
+            if hotkeySet && !wasSet {
+                timer.invalidate()
+            }
         }
     }
 }
@@ -233,22 +385,24 @@ struct APIKeyStep: View {
     @Binding var selectedProvider: APIProvider
 
     @State private var showingAPIKey = false
+    @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
 
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "key")
+        VStack(spacing: 20) {
+            Image(systemName: "gearshape.2")
                 .font(.system(size: 60))
                 .foregroundStyle(.blue)
 
-            Text("API-Key eingeben")
+            Text("Configuration")
                 .font(.title)
                 .fontWeight(.bold)
 
-            Text("Wähle deinen Transkriptions-Provider und gib deinen API-Key ein.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            // API Key Section
+            VStack(spacing: 12) {
+                Text("Transcription Provider")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(spacing: 16) {
                 Picker("Provider", selection: $selectedProvider) {
                     ForEach(APIProvider.allCases, id: \.self) { provider in
                         Text(provider.displayName).tag(provider)
@@ -258,10 +412,10 @@ struct APIKeyStep: View {
 
                 HStack {
                     if showingAPIKey {
-                        TextField("API-Key", text: $apiKey)
+                        TextField("API Key", text: $apiKey)
                             .textFieldStyle(.roundedBorder)
                     } else {
-                        SecureField("API-Key", text: $apiKey)
+                        SecureField("API Key", text: $apiKey)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -276,27 +430,47 @@ struct APIKeyStep: View {
                     KeychainManager.save(key: "\(selectedProvider.rawValue)_apikey", value: newValue)
                 }
                 .onChange(of: selectedProvider) { oldValue, newValue in
-                    // Save current key
                     if !apiKey.isEmpty {
                         KeychainManager.save(key: "\(oldValue.rawValue)_apikey", value: apiKey)
                     }
-                    // Load key for new provider
                     apiKey = KeychainManager.load(key: "\(newValue.rawValue)_apikey") ?? ""
-                    // Save selected provider
                     UserDefaults.standard.set(newValue.rawValue, forKey: "selectedProvider")
                 }
 
                 if selectedProvider == .openai {
-                    Link("OpenAI API-Key erstellen →", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
                         .font(.caption)
                 } else {
-                    Link("Groq API-Key erstellen →", destination: URL(string: "https://console.groq.com/keys")!)
+                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
                         .font(.caption)
                 }
             }
-            .padding(.top, 16)
+            .padding()
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
+
+            // Auto-Paste Option
+            VStack(spacing: 12) {
+                Text("After Transcription")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Toggle(isOn: $autoPasteEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Auto-paste text")
+                            .font(.body)
+                        Text(autoPasteEnabled
+                            ? "Text will be automatically pasted into the active app"
+                            : "Text will only be copied to clipboard")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+            }
+            .padding()
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
         }
-        .padding(40)
+        .padding(30)
         .onAppear {
             apiKey = KeychainManager.load(key: "\(selectedProvider.rawValue)_apikey") ?? ""
         }
@@ -316,16 +490,16 @@ struct TestStep: View {
                 .font(.system(size: 60))
                 .foregroundStyle(.green)
 
-            Text("Alles bereit!")
+            Text("All set!")
                 .font(.title)
                 .fontWeight(.bold)
 
-            Text("Teste jetzt deine Konfiguration. Halte deinen Hotkey gedrückt und sage etwas.")
+            Text("Test your configuration now. Press your hotkey to start, speak, then press again to stop.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecording) {
-                Text("Dein Hotkey: \(shortcut.description)")
+                Text("Your hotkey: \(shortcut.description)")
                     .font(.headline)
                     .foregroundStyle(.blue)
             }
@@ -335,7 +509,7 @@ struct TestStep: View {
                     Circle()
                         .fill(.red)
                         .frame(width: 12, height: 12)
-                    Text("Aufnahme läuft...")
+                    Text("Recording...")
                 }
                 .padding()
                 .background(RoundedRectangle(cornerRadius: 8).fill(.red.opacity(0.1)))
@@ -343,14 +517,14 @@ struct TestStep: View {
                 HStack(spacing: 12) {
                     ProgressView()
                         .scaleEffect(0.8)
-                    Text("Transkribiere...")
+                    Text("Transcribing...")
                 }
                 .padding()
             }
 
             if let result = appState.lastTranscription {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Ergebnis:")
+                    Text("Result:")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(result)
@@ -368,4 +542,3 @@ struct TestStep: View {
         .padding(40)
     }
 }
-

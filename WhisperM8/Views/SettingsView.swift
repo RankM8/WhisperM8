@@ -17,7 +17,7 @@ struct SettingsView: View {
 
             GeneralSettingsView()
                 .tabItem {
-                    Label("Allgemein", systemImage: "gear")
+                    Label("General", systemImage: "gear")
                 }
         }
         .frame(width: 450, height: 280)
@@ -26,7 +26,7 @@ struct SettingsView: View {
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.title.contains("Einstellungen") }) {
+                if let window = NSApp.windows.first(where: { $0.title.contains("Settings") }) {
                     window.makeKeyAndOrderFront(nil)
                     window.makeFirstResponder(window.contentView)
                 }
@@ -67,7 +67,7 @@ struct APISettingsView: View {
                 HStack {
                     FocusableTextField(
                         text: $apiKey,
-                        placeholder: "API-Key eingeben...",
+                        placeholder: "Enter API key...",
                         isSecure: !showingAPIKey
                     )
                     .frame(height: 22)
@@ -83,28 +83,28 @@ struct APISettingsView: View {
                     KeychainManager.save(key: "\(selectedProvider)_apikey", value: newValue)
                 }
 
-                Picker("Sprache", selection: $language) {
-                    Text("Deutsch").tag("de")
-                    Text("Englisch").tag("en")
-                    Text("Automatisch erkennen").tag("")
+                Picker("Language", selection: $language) {
+                    Text("German").tag("de")
+                    Text("English").tag("en")
+                    Text("Auto-detect").tag("")
                 }
             }
 
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Modell: \(provider.modelName)")
+                    Text("Model: \(provider.modelName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Preis: \(provider.priceInfo)")
+                    Text("Price: \(provider.priceInfo)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 if provider == .openai {
-                    Link("OpenAI API-Key erstellen →", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                    Link("Get OpenAI API key →", destination: URL(string: "https://platform.openai.com/api-keys")!)
                         .font(.caption)
                 } else {
-                    Link("Groq API-Key erstellen →", destination: URL(string: "https://console.groq.com/keys")!)
+                    Link("Get Groq API key →", destination: URL(string: "https://console.groq.com/keys")!)
                         .font(.caption)
                 }
             }
@@ -122,24 +122,24 @@ struct HotkeySettingsView: View {
     var body: some View {
         Form {
             Section {
-                KeyboardShortcuts.Recorder("Aufnahme-Taste:", name: .toggleRecording)
+                KeyboardShortcuts.Recorder("Recording key:", name: .toggleRecording)
 
-                Text("Halte diese Taste gedrückt, um zu diktieren. Lass los, um die Transkription zu starten.")
+                Text("Hold this key to dictate. Release to start transcription.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Hinweise:")
+                    Text("Notes:")
                         .font(.caption)
                         .fontWeight(.medium)
 
-                    Text("• Vermeide Option-only Shortcuts auf macOS 15+")
+                    Text("• Avoid Option-only shortcuts on macOS 15+")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Text("• Empfohlen: Control + Shift + Space")
+                    Text("• Recommended: Control + Shift + Space")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -157,10 +157,10 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                LaunchAtLogin.Toggle("Bei Anmeldung starten")
+                LaunchAtLogin.Toggle("Launch at login")
 
-                Toggle("Auto-Paste nach Transkription", isOn: $autoPasteEnabled)
-                    .help("Text automatisch einfügen oder nur in Zwischenablage kopieren")
+                Toggle("Auto-paste after transcription", isOn: $autoPasteEnabled)
+                    .help("Automatically paste text or copy to clipboard only")
             }
 
             Section {
@@ -170,7 +170,7 @@ struct GeneralSettingsView: View {
                     Text("Version 1.0.0")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Native macOS Diktier-App mit bester Transkriptionsqualität.")
+                    Text("Native macOS dictation app with best-in-class transcription.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

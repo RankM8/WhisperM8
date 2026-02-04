@@ -170,11 +170,11 @@ enum RecordingError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .microphonePermissionDenied:
-            return "Mikrofon-Berechtigung wurde verweigert. Bitte erlaube den Zugriff in den Systemeinstellungen."
+            return "Microphone permission denied. Please allow access in System Settings."
         case .recordingFailed:
-            return "Aufnahme fehlgeschlagen. Bitte versuche es erneut."
+            return "Recording failed. Please try again."
         case .invalidFormat:
-            return "Ungültiges Audio-Format."
+            return "Invalid audio format."
         }
     }
 }

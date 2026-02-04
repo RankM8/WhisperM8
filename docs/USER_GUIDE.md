@@ -1,6 +1,6 @@
-# WhisperM8 - Benutzerhandbuch
+# WhisperM8 - User Guide
 
-## Schnellstart
+## Quick Start
 
 ```bash
 git clone git@github.com:RankM8/whisperm8.git
@@ -8,40 +8,40 @@ cd whisperm8
 make install
 ```
 
-**Bei Problemen (Crashes, alte Installation):**
+**Having issues (crashes, old installation)?**
 ```bash
 make clean-install
 ```
 
 ---
 
-## Inhaltsverzeichnis
+## Table of Contents
 
 1. [Installation](#installation)
-2. [Erste Schritte](#erste-schritte)
-3. [Verwendung](#verwendung)
-4. [Einstellungen](#einstellungen)
-5. [Fehlerbehebung](#fehlerbehebung)
-6. [Make-Befehle](#make-befehle)
+2. [First Steps](#first-steps)
+3. [Usage](#usage)
+4. [Settings](#settings)
+5. [Troubleshooting](#troubleshooting)
+6. [Make Commands](#make-commands)
 
 ---
 
 ## Installation
 
-### Voraussetzungen
+### Requirements
 
-- macOS 14 (Sonoma) oder neuer
+- macOS 14 (Sonoma) or newer
 - Xcode Command Line Tools: `xcode-select --install`
-- OpenAI API-Key oder Groq API-Key
+- OpenAI API key or Groq API key
 
-### Option A: DMG (empfohlen für Endnutzer)
+### Option A: DMG (recommended for end users)
 
-1. DMG-Datei erhalten (oder selbst bauen: `make dmg`)
-2. DMG öffnen
-3. `WhisperM8.app` in den `Applications`-Ordner ziehen
-4. App starten
+1. Get DMG file (or build yourself: `make dmg`)
+2. Open DMG
+3. Drag `WhisperM8.app` to `Applications` folder
+4. Launch app
 
-### Option B: Aus Source bauen
+### Option B: Build from source
 
 ```bash
 git clone git@github.com:RankM8/whisperm8.git
@@ -49,166 +49,167 @@ cd whisperm8
 make install
 ```
 
-Die App wird nach `/Applications/WhisperM8.app` installiert.
+The app will be installed to `/Applications/WhisperM8.app`.
 
-### Erstinstallation bei Kollegen / Neuer Mac
+### First install on colleague's Mac / new Mac
 
-**WICHTIG:** Falls vorher eine andere Version installiert war:
+**IMPORTANT:** If a different version was installed before:
 
 ```bash
 make clean-install
 ```
 
-Das entfernt alle alten Daten (Permissions, Cache, Settings) und installiert sauber neu.
+This removes all old data (permissions, cache, settings) and installs fresh.
 
 ---
 
-## Erste Schritte
+## First Steps
 
-### 1. App starten
+### 1. Launch App
 
-Nach dem Start erscheint ein **Mikrofon-Symbol** in der Menüleiste (oben rechts).
+After launch, a **microphone icon** appears in the menu bar (top right).
 
-### 2. Berechtigungen erteilen
+### 2. Grant Permissions
 
-Beim ersten Start werden zwei Berechtigungen benötigt:
+On first launch, two permissions are required:
 
-#### Mikrofon
-- Dialog erscheint automatisch beim ersten Aufnahmeversuch
-- "Erlauben" klicken
+#### Microphone
+- Dialog appears automatically on first recording attempt
+- Click "Allow"
 
-#### Accessibility (für Auto-Paste)
-- Systemeinstellungen öffnet sich automatisch
-- WhisperM8 in der Liste finden und aktivieren
-- **Falls nicht in Liste:** "+" klicken → `/Applications/WhisperM8.app` auswählen
+#### Accessibility (for Auto-Paste)
+- System Settings opens automatically
+- Find WhisperM8 in the list and enable
+- **If not in list:** Click "+" → select `/Applications/WhisperM8.app`
 
-### 3. API-Key einrichten
+### 3. Set up API Key
 
-1. Klicke auf Mikrofon-Symbol → "Einstellungen..."
-2. Tab "API" wählen
-3. Provider auswählen:
-   - **OpenAI** - Beste Qualität (~$0.006/min)
-   - **Groq** - Kostenlos (Rate-Limited)
-4. API-Key eingeben
+1. Click microphone icon → "Settings..."
+2. Select "API" tab
+3. Choose provider:
+   - **OpenAI** - Best quality (~$0.006/min)
+   - **Groq** - Free (rate-limited)
+4. Enter API key
 
-**API-Keys erstellen:**
+**Get API keys:**
 - OpenAI: https://platform.openai.com/api-keys
 - Groq: https://console.groq.com/keys
 
-### 4. Hotkey konfigurieren
+### 4. Configure Hotkey
 
-1. Tab "Hotkey" wählen
-2. In das Recorder-Feld klicken
-3. Gewünschte Tastenkombination drücken
+1. Select "Hotkey" tab
+2. Click in the recorder field
+3. Press desired key combination
 
-**Empfohlen:** `Control + Shift + Space`
+**Recommended:** `Control + Shift + Space`
 
-**Hinweis:** Option-only Shortcuts funktionieren auf macOS 15+ nicht zuverlässig.
+**Note:** Option-only shortcuts don't work reliably on macOS 15+.
 
 ---
 
-## Verwendung
+## Usage
 
-### Diktieren (Push-to-Talk)
+### Dictation (Push-to-Talk)
 
-1. **Cursor platzieren** in einem Textfeld (TextEdit, Slack, Browser, etc.)
-2. **Hotkey gedrückt halten** und sprechen
-3. **Loslassen** → Transkription startet
-4. **Text erscheint** automatisch im Textfeld (Auto-Paste)
+1. **Place cursor** in a text field (TextEdit, Slack, browser, etc.)
+2. **Press hotkey** to start recording
+3. **Speak** your text
+4. **Press hotkey again** to stop → transcription starts
+5. **Text appears** automatically in text field (or clipboard)
 
-### Aufnahme abbrechen
+### Cancel Recording
 
-Während der Aufnahme kannst du jederzeit abbrechen:
-- **X-Button** im Overlay klicken
+During recording you can cancel anytime:
+- **X button** in overlay click
 
-Die Aufnahme wird verworfen, nichts wird transkribiert.
+The recording is discarded, nothing is transcribed.
 
-### Overlay-Anzeige
+### Overlay Display
 
-Während der Aufnahme erscheint unten am Bildschirm:
-- Mikrofon-Indicator (reagiert auf Stimme)
+During recording, appears at bottom of screen:
+- Microphone indicator (responds to voice)
 - Timer (MM:SS)
-- Audio-Level Balken
-- X-Button zum Abbrechen
+- Audio level bars
+- X button to cancel
 
-### Status in der Menüleiste
+### Menu Bar Status
 
 | Icon | Status |
 |------|--------|
-| 🎤 | Bereit |
-| 🎤 (gefüllt) | Aufnahme läuft |
-| ⏳ | Transkription läuft |
+| 🎤 | Ready |
+| 🎤 (filled) | Recording |
+| ⏳ | Transcribing |
 
 ---
 
-## Einstellungen
+## Settings
 
-Öffnen: Mikrofon-Symbol → "Einstellungen..." (oder `Cmd + ,`)
+Open: Microphone icon → "Settings..." (or `Cmd + ,`)
 
 ### API Tab
 
-| Einstellung | Beschreibung |
-|-------------|--------------|
-| Provider | OpenAI oder Groq |
-| API-Key | Dein persönlicher API-Schlüssel (sicher im Keychain gespeichert) |
-| Sprache | Deutsch, Englisch, oder Automatisch |
+| Setting | Description |
+|---------|-------------|
+| Provider | OpenAI or Groq |
+| API Key | Your personal API key (stored securely in Keychain) |
+| Language | German, English, or Auto-detect |
 
 ### Hotkey Tab
 
-| Einstellung | Beschreibung |
-|-------------|--------------|
-| Aufnahme-Taste | Tastenkombination für Push-to-Talk |
+| Setting | Description |
+|---------|-------------|
+| Recording key | Key combination for push-to-talk |
 
-### Allgemein Tab
+### General Tab
 
-| Einstellung | Beschreibung |
-|-------------|--------------|
-| Bei Anmeldung starten | App automatisch beim Login starten |
-| Auto-Paste | Text automatisch einfügen (oder nur Clipboard) |
+| Setting | Description |
+|---------|-------------|
+| Launch at login | Start app automatically at login |
+| Auto-paste | Paste text automatically (or clipboard only) |
 
 ---
 
-## Fehlerbehebung
+## Troubleshooting
 
-### App crasht / startet nicht / verhält sich seltsam
+### App crashes / won't start / behaves strangely
 
-**Lösung:** Clean Install
+**Solution:** Clean Install
 ```bash
 make clean-install
 ```
 
-Das entfernt alle alten Daten und installiert neu. Danach:
-1. Accessibility-Berechtigung erteilen
-2. API-Key neu eingeben
-3. Hotkey festlegen
+This removes all old data and reinstalls. After that:
+1. Grant Accessibility permission
+2. Re-enter API key
+3. Set hotkey
 
-### Auto-Paste funktioniert nicht
+### Auto-paste not working
 
-1. **Accessibility-Berechtigung prüfen:**
-   - Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen
-   - WhisperM8 muss aktiviert sein
+1. **Check Accessibility permission:**
+   - System Settings → Privacy & Security → Accessibility
+   - WhisperM8 must be enabled
 
-2. **App neu starten** nach Berechtigungsänderung
+2. **Restart app** after permission change
 
-3. **Auto-Paste aktiviert?** → Einstellungen → Allgemein prüfen
+3. **Auto-paste enabled?** → Check Settings → General
 
-### Mikrofon-Berechtigung verweigert
+### Microphone permission denied
 
-1. Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon
-2. WhisperM8 aktivieren
-3. App neu starten
+1. System Settings → Privacy & Security → Microphone
+2. Enable WhisperM8
+3. Restart app
 
-### Hotkey funktioniert nicht
+### Hotkey not working
 
-1. Prüfe ob andere App den gleichen Hotkey verwendet
-2. Versuche andere Tastenkombination
-3. Vermeide Option-only Shortcuts auf macOS 15+
+1. Check if another app uses the same hotkey
+2. Try different key combination
+3. Avoid Option-only shortcuts on macOS 15+
 
-### API-Fehler
+### API errors
 
-- Key korrekt eingegeben? (keine Leerzeichen am Ende)
-- Groq Rate-Limit erreicht? → Warten oder zu OpenAI wechseln
-- Internetverbindung prüfen
+- Key entered correctly? (no spaces at end)
+- Groq rate limit reached? → Wait or switch to OpenAI
+- Check internet connection
 
 ### Debug Logging
 
@@ -218,40 +219,48 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 
 ---
 
-## Make-Befehle
+## Make Commands
 
-| Befehl | Beschreibung |
-|--------|--------------|
-| `make install` | Build + Installation nach `/Applications` |
-| `make run` | Debug-Build + sofort starten |
-| `make build` | Release-Build (App bleibt im Repo) |
-| `make dmg` | DMG für Verteilung erstellen |
-| `make clean-install` | **Alles zurücksetzen** + neu installieren |
-| `make kill` | Laufende Instanzen beenden |
-| `make clean` | Build-Artefakte löschen |
+| Command | Description |
+|---------|-------------|
+| `make install` | Build + install to `/Applications` |
+| `make run` | Debug build + launch immediately |
+| `make build` | Release build (app stays in repo) |
+| `make dmg` | Create DMG for distribution |
+| `make clean-install` | **Reset everything** + reinstall |
+| `make kill` | Stop running instances |
+| `make clean` | Delete build artifacts |
 
-### Wann welchen Befehl?
+### When to use which command?
 
-- **Normale Updates:** `git pull && make install`
-- **Bei Problemen:** `make clean-install`
-- **Für Kollegen:** `make dmg` → DMG verschicken
-
----
-
-## Datenschutz
-
-- **API-Keys** werden sicher im macOS Keychain gespeichert
-- **Audio** wird nur temporär gespeichert und nach der Transkription gelöscht
-- **Einstellungen** werden in UserDefaults gespeichert
-- Audio wird an OpenAI/Groq zur Transkription gesendet
+- **Normal updates:** `git pull && make install`
+- **Having issues:** `make clean-install`
+- **For colleagues:** `make dmg` → send DMG
 
 ---
 
-## Tastenkürzel
+## Privacy
 
-| Kürzel | Aktion |
-|--------|--------|
-| `Cmd + ,` | Einstellungen öffnen |
-| `Cmd + Q` | App beenden |
-| [Dein Hotkey] | Aufnahme starten (halten) / stoppen (loslassen) |
-| X-Button | Aufnahme abbrechen |
+- **API keys** are stored securely in macOS Keychain
+- **Audio** is stored temporarily and deleted after transcription
+- **Settings** are stored in UserDefaults
+- Audio is sent to OpenAI/Groq for transcription
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd + ,` | Open settings |
+| `Cmd + Q` | Quit app |
+| [Your hotkey] | Toggle recording (start/stop) |
+| X button | Cancel recording |
+
+---
+
+## License
+
+MIT License — see [LICENSE](../LICENSE) for details.
+
+Built by [360° Web Manager](https://360web-manager.com/)

@@ -24,6 +24,12 @@ let package = Package(
             ],
             path: "WhisperM8",
             exclude: ["Info.plist", "WhisperM8.entitlements"],
+            resources: [
+                .process("Resources/MenuBarIcon.png"),
+                .process("Resources/MenuBarIcon@2x.png"),
+                .process("Resources/AppLogo.png"),
+                .process("Resources/AppLogo@2x.png"),
+            ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
             ]

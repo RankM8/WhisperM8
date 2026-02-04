@@ -29,9 +29,9 @@ class AppState {
     }
 
     var statusText: String {
-        if isRecording { return "Aufnahme läuft..." }
-        if isTranscribing { return "Transkribiere..." }
-        return "Bereit"
+        if isRecording { return "Recording..." }
+        if isTranscribing { return "Transcribing..." }
+        return "Ready"
     }
 
     private init() {
@@ -227,7 +227,7 @@ class AppState {
         // 1. Check permission
         guard AXIsProcessTrusted() else {
             Logger.permission.error("Accessibility permission missing - cannot auto-paste")
-            lastError = "Accessibility-Berechtigung fehlt für Auto-Paste"
+            lastError = "Accessibility permission required for auto-paste"
             requestAccessibilityPermission()
             overlayController?.hide()
             return

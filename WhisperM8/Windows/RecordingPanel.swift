@@ -4,7 +4,7 @@ import SwiftUI
 class RecordingPanel: NSPanel {
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 200, height: 56),
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 56),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -33,7 +33,7 @@ class RecordingPanel: NSPanel {
 
     func updateContent(with view: some View) {
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 56)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 56)
         self.contentView = hostingView
     }
 }
@@ -65,7 +65,7 @@ class OverlayController: ObservableObject {
         let view = RecordingOverlayView(controller: self)
 
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 56)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 56)
         panel.contentView = hostingView
         panel.orderFront(nil)
         self.panel = panel

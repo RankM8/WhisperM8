@@ -12,27 +12,27 @@ struct MenuBarView: View {
                     Circle()
                         .fill(.red)
                         .frame(width: 8, height: 8)
-                    Text("Aufnahme läuft...")
+                    Text("Recording...")
                 }
             } else if appState.isTranscribing {
                 HStack {
                     ProgressView()
                         .scaleEffect(0.5)
                         .frame(width: 16, height: 16)
-                    Text("Transkribiere...")
+                    Text("Transcribing...")
                 }
             } else {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                    Text("Bereit")
+                    Text("Ready")
                 }
             }
         }
 
         if let lastTranscription = appState.lastTranscription {
             Divider()
-            Text("Letzte Transkription:")
+            Text("Last transcription:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(lastTranscription.prefix(100) + (lastTranscription.count > 100 ? "..." : ""))
@@ -58,14 +58,14 @@ struct MenuBarView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
-            Text("Kein Hotkey konfiguriert")
+            Text("No hotkey configured")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
 
         Divider()
 
-        Button("Einstellungen...") {
+        Button("Settings...") {
             openWindow(id: "settings")
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -73,7 +73,7 @@ struct MenuBarView: View {
 
         Divider()
 
-        Button("Beenden") {
+        Button("Quit") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
