@@ -13,6 +13,7 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "1.16.1"),
         .package(url: "https://github.com/sindresorhus/Defaults", from: "8.0.0"),
         .package(url: "https://github.com/sindresorhus/LaunchAtLogin-Modern", from: "1.0.0"),
+        .package(url: "https://github.com/InerziaSoft/ISSoundAdditions", from: "2.0.0"),
     ],
     targets: [
         .executableTarget(
@@ -21,6 +22,7 @@ let package = Package(
                 "KeyboardShortcuts",
                 "Defaults",
                 .product(name: "LaunchAtLogin", package: "LaunchAtLogin-Modern"),
+                "ISSoundAdditions",
             ],
             path: "WhisperM8",
             exclude: ["Info.plist", "WhisperM8.entitlements"],

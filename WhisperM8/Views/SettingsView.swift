@@ -185,6 +185,8 @@ struct AudioSettingsView: View {
 
 struct BehaviorSettingsView: View {
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
+    @AppStorage("audioDuckingEnabled") private var audioDuckingEnabled = true
+    @AppStorage("audioDuckingFactor") private var audioDuckingFactor = 0.2
 
     var body: some View {
         Form {
@@ -196,6 +198,24 @@ struct BehaviorSettingsView: View {
                     : "Transcribed text will only be copied to clipboard")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Audio Ducking") {
+                Toggle("Reduce system volume while recording", isOn: $audioDuckingEnabled)
+
+                if audioDuckingEnabled {
+                    HStack {
+                        Text("Target volume")
+                        Slider(value: $audioDuckingFactor, in: 0.05...0.3, step: 0.05)
+                        Text("\(Int(audioDuckingFactor * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 35, alignment: .trailing)
+                    }
+
+                    Text("System volume will be set to \(Int(audioDuckingFactor * 100))% during recording")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {

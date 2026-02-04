@@ -54,6 +54,18 @@ class AppState {
         do {
             try await audioRecorder?.startRecording()
 
+            // Duck system audio immediately
+            AudioDuckingManager.shared.duck()
+
+            // Re-enforce duck multiple times to catch AirPods HFP switch
+            Task { @MainActor in
+                for delay in [0.3, 0.6, 1.0, 1.5] {
+                    try? await Task.sleep(for: .seconds(delay))
+                    guard self.isRecording else { break }
+                    AudioDuckingManager.shared.duck()
+                }
+            }
+
             recordingStartTime = Date()
             isRecording = true
             recordingDuration = 0
@@ -117,6 +129,10 @@ class AppState {
         isRecording = false
         audioLevel = 0
         recordingStartTime = nil
+
+        // Restore system audio
+        Logger.debug("[AppState] Calling AudioDuckingManager.restore()")
+        AudioDuckingManager.shared.restore()
 
         guard let audioURL else {
             Logger.debug(" ERROR: No audio URL returned from recorder")
@@ -264,6 +280,9 @@ class AppState {
         isRecording = false
         audioLevel = 0
         recordingStartTime = nil
+
+        // Restore system audio
+        AudioDuckingManager.shared.restore()
 
         // Hide overlay
         overlayController?.hide()

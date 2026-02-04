@@ -10,6 +10,15 @@
       }
     },
     {
+      "identity" : "issoundadditions",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/InerziaSoft/ISSoundAdditions",
+      "state" : {
+        "revision" : "4b555f0354e6c280917bae8a598a258efe87ab98",
+        "version" : "2.0.1"
+      }
+    },
+    {
       "identity" : "keyboardshortcuts",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/sindresorhus/KeyboardShortcuts",
