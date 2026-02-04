@@ -239,7 +239,7 @@ struct AboutView: View {
             Text("WhisperM8")
                 .font(.title2.bold())
 
-            Text("Version 1.1.0")
+            Text("Version 1.2.0")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
