@@ -5,7 +5,7 @@
 set -e
 
 APP_NAME="WhisperM8"
-VERSION="1.1.0"
+VERSION="1.2.0"
 DMG_NAME="${APP_NAME}-${VERSION}"
 DMG_DIR="dist"
 DMG_PATH="${DMG_DIR}/${DMG_NAME}.dmg"

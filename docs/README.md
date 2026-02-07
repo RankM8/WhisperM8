@@ -62,7 +62,7 @@ The app will be installed to `/Applications/WhisperM8.app`.
 | `make build` | Create release build (app stays in repo) |
 | `make install` | Build + install to `/Applications` |
 | `make run` | Debug build + launch immediately |
-| `make dmg` | Create DMG for distribution (`dist/WhisperM8-1.1.0.dmg`) |
+| `make dmg` | Create DMG for distribution (`dist/WhisperM8-1.2.0.dmg`) |
 | `make clean-install` | **Reset everything** + reinstall |
 | `make kill` | Stop all running instances |
 | `make clean` | Delete build artifacts |
