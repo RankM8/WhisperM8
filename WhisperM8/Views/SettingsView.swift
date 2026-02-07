@@ -187,6 +187,7 @@ struct BehaviorSettingsView: View {
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
     @AppStorage("audioDuckingEnabled") private var audioDuckingEnabled = true
     @AppStorage("audioDuckingFactor") private var audioDuckingFactor = 0.2
+    @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.full.rawValue
 
     var body: some View {
         Form {
@@ -216,6 +217,23 @@ struct BehaviorSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section("Recording Overlay") {
+                Picker("Overlay UI", selection: $overlayStyleRaw) {
+                    ForEach(OverlayStyle.allCases, id: \.rawValue) { style in
+                        Text(style.displayName).tag(style.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Button("Reset Overlay Position") {
+                    OverlayPositionStore.clearPosition()
+                }
+
+                Text("Overlay is draggable and remembers its position.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

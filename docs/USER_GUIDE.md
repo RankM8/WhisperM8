@@ -131,6 +131,9 @@ During recording, appears at bottom of screen:
 - Timer (MM:SS)
 - Audio level bars
 - X button to cancel
+- Default position is bottom-center (40pt), but you can drag it freely on-screen
+- Overlay position is saved and restored on the next recording
+- You can switch between `Full` and `Mini` overlay UI in Settings → Behavior
 
 ### Menu Bar Status
 
@@ -160,12 +163,13 @@ Open: Microphone icon → "Settings..." (or `Cmd + ,`)
 |---------|-------------|
 | Recording key | Key combination for push-to-talk |
 
-### General Tab
+### Behavior Tab
 
 | Setting | Description |
 |---------|-------------|
 | Launch at login | Start app automatically at login |
 | Auto-paste | Paste text automatically (or clipboard only) |
+| Overlay UI | Choose `Full` or `Mini` overlay, and reset saved position |
 
 ### Audio Tab
 
@@ -199,7 +203,7 @@ This removes all old data and reinstalls. After that:
 
 2. **Restart app** after permission change
 
-3. **Auto-paste enabled?** → Check Settings → General
+3. **Auto-paste enabled?** → Check Settings → Behavior
 
 ### Microphone permission denied
 

@@ -166,6 +166,9 @@ During recording, appears at bottom of screen:
 - Audio level visualization
 - X button to cancel (right side)
 - "Transcribing..." during API call
+- Default position is bottom-center (40pt), but you can drag it anywhere on-screen
+- Overlay position is remembered for the next recordings
+- Overlay UI can be switched between `Full` and `Mini` in Settings → Behavior
 
 ### Settings
 
@@ -175,7 +178,7 @@ Via menu bar icon → "Settings...":
 |-----|---------|
 | API | Choose provider, API key, language (de/en/auto) |
 | Hotkey | Configure recording key |
-| General | Auto-start, auto-paste on/off |
+| Behavior | Auto-start, auto-paste, audio ducking, overlay UI style (`Full`/`Mini`) |
 | Audio | Select input device (microphone) |
 
 ---
@@ -199,7 +202,7 @@ This is usually due to old settings or permissions from previous versions.
 
 2. **Restart app** after permission change
 
-3. **Auto-paste disabled?** → Check Settings → General
+3. **Auto-paste disabled?** → Check Settings → Behavior
 
 4. **Check logs:**
    ```bash
