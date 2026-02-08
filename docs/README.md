@@ -32,14 +32,7 @@ make clean-install
 
 ## Installation
 
-### Option A: DMG (recommended)
-
-1. Get DMG file (from colleague or `make dmg`)
-2. Open DMG
-3. Drag `WhisperM8.app` to `Applications` folder
-4. Launch app
-
-### Option B: Build from source
+### Build from source (current supported path)
 
 **Requirements:**
 - macOS 14.0+
@@ -62,7 +55,6 @@ The app will be installed to `/Applications/WhisperM8.app`.
 | `make build` | Create release build (app stays in repo) |
 | `make install` | Build + install to `/Applications` |
 | `make run` | Debug build + launch immediately |
-| `make dmg` | Create DMG for distribution (`dist/WhisperM8-1.2.0.dmg`) |
 | `make clean-install` | **Reset everything** + reinstall |
 | `make kill` | Stop all running instances |
 | `make clean` | Delete build artifacts |
@@ -290,7 +282,7 @@ whisperm8/
 │   │   └── AppIcon.icns          # App icon
 │   └── Info.plist                # App configuration, permissions
 ├── scripts/
-│   ├── build-dmg.sh              # Create DMG
+│   ├── build-dmg.sh              # Packaging script (currently not the primary install path)
 │   └── clean-install.sh          # Reset + reinstall
 ├── docs/
 │   ├── README.md                 # Technical documentation (this file)

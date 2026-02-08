@@ -178,9 +178,10 @@ class AppState {
             let service = provider.createService(apiKey: apiKey, model: model)
             Logger.debug(" Starting transcription...")
 
-            let text = try await service.transcribe(audioURL: audioURL, language: language.isEmpty ? nil : language, audioDuration: audioDuration)
+            let rawText = try await service.transcribe(audioURL: audioURL, language: language.isEmpty ? nil : language, audioDuration: audioDuration)
+            let text = normalizeTranscriptionText(rawText)
 
-            Logger.debug(" Transcription SUCCESS! Text length: \(text.count) characters")
+            Logger.debug(" Transcription SUCCESS! Raw length: \(rawText.count), normalized length: \(text.count)")
             Logger.debug(" Text preview: \(String(text.prefix(100)))...")
 
             // Copy to clipboard
@@ -399,5 +400,17 @@ class AppState {
         keyUp.post(tap: .cghidEventTap)
 
         Logger.paste.info("Paste event posted successfully")
+    }
+
+    // MARK: - Text Normalization
+
+    private func normalizeTranscriptionText(_ text: String) -> String {
+        // Some providers prepend invisible Unicode characters (NBSP/BOM/zero-width spaces).
+        // Remove those so pasted text never starts with an unwanted leading gap.
+        let extendedWhitespace = CharacterSet.whitespacesAndNewlines
+            .union(.controlCharacters)
+            .union(CharacterSet(charactersIn: "\u{00A0}\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}"))
+
+        return text.trimmingCharacters(in: extendedWhitespace)
     }
 }

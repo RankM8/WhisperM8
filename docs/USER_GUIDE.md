@@ -34,14 +34,7 @@ make clean-install
 - Xcode Command Line Tools: `xcode-select --install`
 - OpenAI API key or Groq API key
 
-### Option A: DMG (recommended for end users)
-
-1. Get DMG file (or build yourself: `make dmg`)
-2. Open DMG
-3. Drag `WhisperM8.app` to `Applications` folder
-4. Launch app
-
-### Option B: Build from source
+### Build from source (current supported path)
 
 ```bash
 git clone git@github.com:RankM8/whisperm8.git
@@ -255,7 +248,6 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 | `make install` | Build + install to `/Applications` |
 | `make run` | Debug build + launch immediately |
 | `make build` | Release build (app stays in repo) |
-| `make dmg` | Create DMG for distribution |
 | `make clean-install` | **Reset everything** + reinstall |
 | `make kill` | Stop running instances |
 | `make clean` | Delete build artifacts |
@@ -264,7 +256,7 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 
 - **Normal updates:** `git pull && make install`
 - **Having issues:** `make clean-install`
-- **For colleagues:** `make dmg` → send DMG
+- **For colleagues (current path):** clone repo and run `make install`
 
 ---
 

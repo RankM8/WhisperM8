@@ -27,11 +27,7 @@
 
 ## Installation
 
-### Option 1: Download DMG
-
-Download the latest release from the [Releases](https://github.com/RankM8/whisperm8/releases) page.
-
-### Option 2: Build from Source
+### Build from Source (current supported path)
 
 ```bash
 git clone https://github.com/RankM8/whisperm8.git
@@ -86,9 +82,6 @@ make run
 
 # Install to /Applications
 make install
-
-# Create DMG for distribution
-make dmg
 ```
 
 ### Troubleshooting Duplicate Apps in Spotlight
