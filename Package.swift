@@ -25,7 +25,7 @@ let package = Package(
                 "ISSoundAdditions",
             ],
             path: "WhisperM8",
-            exclude: ["Info.plist", "WhisperM8.entitlements"],
+            exclude: ["Info.plist", "WhisperM8.entitlements", "Resources/AppIcon.icns"],
             resources: [
                 .process("Resources/MenuBarIcon.png"),
                 .process("Resources/MenuBarIcon@2x.png"),
@@ -35,6 +35,10 @@ let package = Package(
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
             ]
+        ),
+        .testTarget(
+            name: "WhisperM8Tests",
+            dependencies: ["WhisperM8"]
         )
     ]
 )

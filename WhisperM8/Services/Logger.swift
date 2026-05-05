@@ -9,24 +9,40 @@ enum Logger {
     static let permission = os.Logger(subsystem: subsystem, category: "Permission")
     static let transcription = os.Logger(subsystem: subsystem, category: "Transcription")
     static let audio = os.Logger(subsystem: subsystem, category: "Audio")
+    static let debugLog = os.Logger(subsystem: subsystem, category: "Debug")
 
-    // MARK: - File Logging (for debugging)
+    // MARK: - Optional File Logging
 
     private static let logFileURL: URL = {
-        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
-        return desktop.appendingPathComponent("WhisperM8-debug.log")
+        let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent("WhisperM8", isDirectory: true)
+        return logsDirectory.appendingPathComponent("WhisperM8-debug.log")
     }()
 
-    /// Write debug message to file on Desktop for easy viewing
+    private static var isFileLoggingEnabled: Bool {
+        AppPreferences.shared.isDebugFileLoggingEnabled
+    }
+
     static func debug(_ message: String) {
+        debugLog.debug("\(message, privacy: .public)")
+
+        #if DEBUG
+        print("[WhisperM8] \(message)")
+        #endif
+
+        guard isFileLoggingEnabled else { return }
+
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let logLine = "[\(timestamp)] \(message)\n"
 
-        // Also print to console (visible when running from Terminal)
-        print("[WhisperM8] \(message)")
-
-        // Append to file
         if let data = logLine.data(using: .utf8) {
+            try? FileManager.default.createDirectory(
+                at: logFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+
             if FileManager.default.fileExists(atPath: logFileURL.path) {
                 if let handle = try? FileHandle(forWritingTo: logFileURL) {
                     handle.seekToEndOfFile()
@@ -39,7 +55,6 @@ enum Logger {
         }
     }
 
-    /// Clear the debug log file
     static func clearDebugLog() {
         try? FileManager.default.removeItem(at: logFileURL)
         debug("=== Log cleared ===")

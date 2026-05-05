@@ -124,8 +124,8 @@ struct APISettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             TranscriptionSettings.migrateIfNeeded()
-            selectedProviderRaw = UserDefaults.standard.string(forKey: "selectedProvider") ?? TranscriptionProvider.openai.rawValue
-            selectedModelRaw = UserDefaults.standard.string(forKey: "selectedModel") ?? TranscriptionModel.openai_gpt4o.rawValue
+            selectedProviderRaw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.openai.rawValue
+            selectedModelRaw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.openai_gpt4o.rawValue
             apiKey = KeychainManager.load(key: provider.keychainKey) ?? ""
         }
     }

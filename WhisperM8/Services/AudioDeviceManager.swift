@@ -53,15 +53,11 @@ class AudioDeviceManager {
     var onDefaultDeviceChanged: ((AudioDeviceID) -> Void)?
 
     var selectedDeviceUID: String? {
-        get { UserDefaults.standard.string(forKey: "selectedAudioDeviceUID") }
+        get { AppPreferences.shared.selectedAudioDeviceUID }
         set {
-            let oldValue = UserDefaults.standard.string(forKey: "selectedAudioDeviceUID")
+            let oldValue = AppPreferences.shared.selectedAudioDeviceUID
             Logger.debug("[AudioDeviceManager] selectedDeviceUID changing: '\(oldValue ?? "nil")' -> '\(newValue ?? "nil")'")
-            if let value = newValue {
-                UserDefaults.standard.set(value, forKey: "selectedAudioDeviceUID")
-            } else {
-                UserDefaults.standard.removeObject(forKey: "selectedAudioDeviceUID")
-            }
+            AppPreferences.shared.selectedAudioDeviceUID = newValue
         }
     }
 

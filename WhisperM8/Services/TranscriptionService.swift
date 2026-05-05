@@ -6,6 +6,17 @@ protocol TranscriptionServiceProtocol {
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval?) async throws -> String
 }
 
+protocol Transcribing {
+    func transcribe(audioURL: URL, request: TranscriptionRequest) async throws -> String
+}
+
+struct TranscriptionRequest: Equatable {
+    let provider: TranscriptionProvider
+    let model: TranscriptionModel
+    let language: String?
+    let audioDuration: TimeInterval?
+}
+
 // MARK: - Timeout Calculation
 
 /// Calculate appropriate timeout based on audio duration
@@ -13,7 +24,7 @@ protocol TranscriptionServiceProtocol {
 /// - Per minute of audio: 120 seconds (2 minutes processing time)
 /// - Minimum: 180 seconds (3 minutes)
 /// - Maximum: 900 seconds (15 minutes)
-private func calculateTimeout(for audioDuration: TimeInterval?) -> TimeInterval {
+func calculateTimeout(for audioDuration: TimeInterval?) -> TimeInterval {
     let baseDuration: TimeInterval = 180
     let perMinute: TimeInterval = 120
     let minimum: TimeInterval = 180
@@ -62,90 +73,17 @@ enum OpenAIModel: String, CaseIterable {
 // MARK: - OpenAI Service
 
 class OpenAITranscriptionService: TranscriptionServiceProtocol {
-    private let apiKey: String
-    private let model: OpenAIModel
-    private let baseURL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
+    private let client: MultipartTranscriptionClient
 
     init(apiKey: String, model: OpenAIModel = .gpt4oTranscribe) {
-        self.apiKey = apiKey
-        self.model = model
+        self.client = MultipartTranscriptionClient(
+            apiKey: apiKey,
+            config: .openAI(model: model.rawValue)
+        )
     }
 
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval? = nil) async throws -> String {
-        let boundary = UUID().uuidString
-        let timeout = calculateTimeout(for: audioDuration)
-
-        Logger.debug("OpenAI transcription starting...")
-        Logger.debug("- Timeout: \(Int(timeout))s")
-        Logger.debug("- Audio duration: \(Int(audioDuration ?? 0))s")
-        Logger.debug("- Model: \(model.rawValue)")
-
-        var request = URLRequest(url: baseURL)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = timeout
-
-        let audioData: Data
-        do {
-            audioData = try Data(contentsOf: audioURL)
-        } catch {
-            Logger.debug("ERROR reading audio file: \(error)")
-            throw error
-        }
-
-        let fileSizeMB = Double(audioData.count) / (1024 * 1024)
-        Logger.debug("- File size: \(String(format: "%.2f", fileSizeMB)) MB")
-
-        // Check file size limit (25 MB)
-        if audioData.count > 25 * 1024 * 1024 {
-            Logger.debug("ERROR: File too large!")
-            throw TranscriptionError.fileTooLarge(sizeMB: fileSizeMB)
-        }
-
-        let body = buildMultipartBody(
-            boundary: boundary,
-            model: model.rawValue,
-            audioData: audioData,
-            filename: audioURL.lastPathComponent,
-            language: language
-        )
-
-        Logger.debug("Uploading to OpenAI... (timeout: \(Int(timeout))s)")
-        let startTime = Date()
-
-        // Use custom session with extended timeouts (URLSession.shared has 60s default!)
-        let session = createLongTimeoutSession(timeout: timeout)
-        let (data, response) = try await session.upload(for: request, from: body)
-
-        let elapsed = Date().timeIntervalSince(startTime)
-        Logger.debug("Response received in \(String(format: "%.1f", elapsed))s")
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            Logger.debug("ERROR: Invalid response type")
-            throw TranscriptionError.invalidResponse
-        }
-
-        Logger.debug("HTTP Status: \(httpResponse.statusCode)")
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            Logger.debug("ERROR: \(httpResponse.statusCode) - \(errorBody)")
-            throw TranscriptionError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
-        }
-
-        let result: TranscriptionResponse
-        do {
-            result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
-        } catch {
-            let responseText = String(data: data, encoding: .utf8) ?? "Unable to decode"
-            Logger.debug("ERROR decoding response: \(error)")
-            Logger.debug("Raw response: \(responseText.prefix(500))")
-            throw error
-        }
-
-        Logger.debug("SUCCESS! Text length: \(result.text.count) characters")
-        return result.text
+        try await client.transcribe(audioURL: audioURL, language: language, audioDuration: audioDuration)
     }
 }
 
@@ -166,51 +104,73 @@ enum GroqModel: String, CaseIterable {
 // MARK: - Groq Service
 
 class GroqTranscriptionService: TranscriptionServiceProtocol {
-    private let apiKey: String
-    private let baseURL = URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!
-    private let model: GroqModel
+    private let client: MultipartTranscriptionClient
 
     init(apiKey: String, model: GroqModel = .whisperV3) {
+        self.client = MultipartTranscriptionClient(
+            apiKey: apiKey,
+            config: .groq(model: model.rawValue)
+        )
+    }
+
+    func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval? = nil) async throws -> String {
+        try await client.transcribe(audioURL: audioURL, language: language, audioDuration: audioDuration)
+    }
+}
+
+// MARK: - Multipart Client
+
+final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
+    private let apiKey: String
+    private let config: ProviderConfig
+
+    init(apiKey: String, config: ProviderConfig) {
         self.apiKey = apiKey
-        self.model = model
+        self.config = config
     }
 
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval? = nil) async throws -> String {
         let boundary = UUID().uuidString
         let timeout = calculateTimeout(for: audioDuration)
 
-        Logger.debug("Groq transcription starting...")
+        Logger.debug("\(config.name) transcription starting...")
         Logger.debug("- Timeout: \(Int(timeout))s")
         Logger.debug("- Audio duration: \(Int(audioDuration ?? 0))s")
-        Logger.debug("- Model: \(model.rawValue)")
+        Logger.debug("- Model: \(config.model)")
 
-        var request = URLRequest(url: baseURL)
+        var request = URLRequest(url: config.endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeout
 
-        let audioData = try Data(contentsOf: audioURL)
+        let audioData: Data
+        do {
+            audioData = try Data(contentsOf: audioURL)
+        } catch {
+            Logger.debug("ERROR reading audio file: \(error)")
+            throw error
+        }
+
         let fileSizeMB = Double(audioData.count) / (1024 * 1024)
         Logger.debug("- File size: \(String(format: "%.2f", fileSizeMB)) MB")
 
-        // Check file size limit (25 MB for free tier, 100 MB for paid via URL)
-        if audioData.count > 25 * 1024 * 1024 {
+        if audioData.count > config.maxFileSizeBytes {
+            Logger.debug("ERROR: File too large!")
             throw TranscriptionError.fileTooLarge(sizeMB: fileSizeMB)
         }
 
-        let body = buildMultipartBody(
+        let body = MultipartFormDataBuilder.buildAudioTranscriptionBody(
             boundary: boundary,
-            model: model.rawValue,
+            model: config.model,
             audioData: audioData,
             filename: audioURL.lastPathComponent,
             language: language
         )
 
-        Logger.debug("Uploading to Groq... (timeout: \(Int(timeout))s)")
+        Logger.debug("Uploading to \(config.name)... (timeout: \(Int(timeout))s)")
         let startTime = Date()
 
-        // Use custom session with extended timeouts
         let session = createLongTimeoutSession(timeout: timeout)
         let (data, response) = try await session.upload(for: request, from: body)
 
@@ -225,51 +185,89 @@ class GroqTranscriptionService: TranscriptionServiceProtocol {
         Logger.debug("HTTP Status: \(httpResponse.statusCode)")
 
         guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            let errorBody = sanitizedErrorBody(data)
             Logger.debug("ERROR: \(httpResponse.statusCode) - \(errorBody)")
             throw TranscriptionError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
         }
 
-        let result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+        let result: TranscriptionResponse
+        do {
+            result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+        } catch {
+            let responseText = String(data: data, encoding: .utf8) ?? "Unable to decode"
+            Logger.debug("ERROR decoding response: \(error)")
+            Logger.debug("Raw response: \(responseText.prefix(500))")
+            throw error
+        }
+
         Logger.debug("SUCCESS! Text length: \(result.text.count) characters")
         return result.text
+    }
+
+    private func sanitizedErrorBody(_ data: Data) -> String {
+        let rawBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+        let trimmed = rawBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.prefix(500))
     }
 }
 
 // MARK: - Shared Helpers
 
-private func buildMultipartBody(
-    boundary: String,
-    model: String,
-    audioData: Data,
-    filename: String,
-    language: String?
-) -> Data {
-    var body = Data()
+struct MultipartFormDataBuilder {
+    static func buildAudioTranscriptionBody(
+        boundary: String,
+        model: String,
+        audioData: Data,
+        filename: String,
+        language: String?
+    ) -> Data {
+        var body = Data()
 
-    // Model field
-    body.append("--\(boundary)\r\n".data(using: .utf8)!)
-    body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-    body.append("\(model)\r\n".data(using: .utf8)!)
-
-    // Language field (optional)
-    if let language = language, !language.isEmpty {
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(language)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(model)\r\n".data(using: .utf8)!)
+
+        if let language = language, !language.isEmpty {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(language)\r\n".data(using: .utf8)!)
+        }
+
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
+        body.append(audioData)
+        body.append("\r\n".data(using: .utf8)!)
+
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        return body
+    }
+}
+
+struct ProviderConfig {
+    let name: String
+    let endpoint: URL
+    let model: String
+    let maxFileSizeBytes: Int
+
+    static func openAI(model: String) -> ProviderConfig {
+        ProviderConfig(
+            name: "OpenAI",
+            endpoint: URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
+            model: model,
+            maxFileSizeBytes: 25 * 1024 * 1024
+        )
     }
 
-    // Audio file
-    body.append("--\(boundary)\r\n".data(using: .utf8)!)
-    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-    body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
-    body.append(audioData)
-    body.append("\r\n".data(using: .utf8)!)
-
-    // End boundary
-    body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-    return body
+    static func groq(model: String) -> ProviderConfig {
+        ProviderConfig(
+            name: "Groq",
+            endpoint: URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!,
+            model: model,
+            maxFileSizeBytes: 25 * 1024 * 1024
+        )
+    }
 }
 
 // MARK: - Response Model

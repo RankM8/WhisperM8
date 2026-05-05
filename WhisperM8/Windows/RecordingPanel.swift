@@ -31,29 +31,28 @@ struct OverlayPositionStore {
     static let defaultBottomOffset: CGFloat = 40
 
     static func loadStyle() -> OverlayStyle {
-        let raw = UserDefaults.standard.string(forKey: styleKey) ?? OverlayStyle.full.rawValue
+        let raw = AppPreferences.shared.overlayStyleRaw
         return OverlayStyle(rawValue: raw) ?? .full
     }
 
     static func savePosition(_ origin: NSPoint) {
-        UserDefaults.standard.set(origin.x, forKey: xKey)
-        UserDefaults.standard.set(origin.y, forKey: yKey)
+        AppPreferences.shared.set(origin.x, for: xKey)
+        AppPreferences.shared.set(origin.y, for: yKey)
     }
 
     static func clearPosition() {
-        UserDefaults.standard.removeObject(forKey: xKey)
-        UserDefaults.standard.removeObject(forKey: yKey)
+        AppPreferences.shared.removeObject(for: xKey)
+        AppPreferences.shared.removeObject(for: yKey)
     }
 
     static func loadPosition() -> NSPoint? {
-        let defaults = UserDefaults.standard
-
-        guard defaults.object(forKey: xKey) != nil, defaults.object(forKey: yKey) != nil else {
+        guard AppPreferences.shared.objectExists(for: xKey),
+              AppPreferences.shared.objectExists(for: yKey) else {
             return nil
         }
 
-        let x = defaults.double(forKey: xKey)
-        let y = defaults.double(forKey: yKey)
+        let x = AppPreferences.shared.double(for: xKey)
+        let y = AppPreferences.shared.double(for: yKey)
         guard x.isFinite, y.isFinite else { return nil }
 
         return NSPoint(x: x, y: y)
@@ -101,8 +100,10 @@ struct OverlayPositionStore {
     }
 
     static func clamp(origin: NSPoint, size: NSSize, on screen: NSScreen) -> NSPoint {
-        let visibleFrame = screen.visibleFrame
+        clamp(origin: origin, size: size, visibleFrame: screen.visibleFrame)
+    }
 
+    static func clamp(origin: NSPoint, size: NSSize, visibleFrame: NSRect) -> NSPoint {
         let maxX = max(visibleFrame.minX, visibleFrame.maxX - size.width)
         let maxY = max(visibleFrame.minY, visibleFrame.maxY - size.height)
 
@@ -181,21 +182,24 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
 
 // MARK: - Overlay Controller
 
+@MainActor
 class OverlayController: ObservableObject {
     private var panel: RecordingPanel?
     private var hostingView: NSHostingView<RecordingOverlayView>?
     private var previousApp: NSRunningApplication?
+    private var onCancel: (() -> Void)?
     @Published var audioLevel: Float = 0
     @Published var duration: TimeInterval = 0
     @Published var isTranscribing: Bool = false
     @Published var overlayStyle: OverlayStyle = .full
 
-    func show(appState: AppState) {
+    func show(appState: AppState, onCancel: @escaping () -> Void) {
         // Capture the frontmost app BEFORE showing our panel
         previousApp = NSWorkspace.shared.frontmostApplication
         Logger.focus.info("Captured previousApp: \(self.previousApp?.localizedName ?? "nil", privacy: .public)")
 
         hide()  // Cleanup any existing panel first
+        self.onCancel = onCancel
 
         // Initialize state from appState
         self.audioLevel = appState.audioLevel
@@ -232,10 +236,15 @@ class OverlayController: ObservableObject {
         panel?.close()
         panel = nil
         hostingView = nil
+        onCancel = nil
     }
 
     func getPreviousApp() -> NSRunningApplication? {
         return previousApp
+    }
+
+    func cancelRecording() {
+        onCancel?()
     }
 
     func update(appState: AppState) {

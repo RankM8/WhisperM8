@@ -104,15 +104,15 @@ struct TranscriptionSettings {
     /// Old format: "openai_gpt4o", "openai_whisper", "groq"
     /// New format: provider="openai"/"groq", model="gpt-4o-transcribe"/"whisper-1" etc.
     static func migrateIfNeeded() {
-        let defaults = UserDefaults.standard
+        let preferences = AppPreferences.shared
 
         // Check if already migrated (new keys exist)
-        if defaults.string(forKey: "selectedModel") != nil {
+        if preferences.selectedModelRaw != nil {
             return  // Already migrated
         }
 
         // Read old provider value
-        let oldProviderRaw = defaults.string(forKey: "selectedProvider") ?? "openai_gpt4o"
+        let oldProviderRaw = preferences.selectedProviderRaw ?? "openai_gpt4o"
 
         // Map old values to new provider + model
         let (newProvider, newModel): (TranscriptionProvider, TranscriptionModel)
@@ -134,40 +134,40 @@ struct TranscriptionSettings {
         }
 
         // Save new values
-        defaults.set(newProvider.rawValue, forKey: "selectedProvider")
-        defaults.set(newModel.rawValue, forKey: "selectedModel")
+        preferences.selectedProviderRaw = newProvider.rawValue
+        preferences.selectedModelRaw = newModel.rawValue
 
         Logger.debug("Migrated settings: \(oldProviderRaw) -> provider=\(newProvider.rawValue), model=\(newModel.rawValue)")
     }
 
     /// Load current provider from UserDefaults
     static func loadProvider() -> TranscriptionProvider {
-        let raw = UserDefaults.standard.string(forKey: "selectedProvider") ?? "openai"
+        let raw = AppPreferences.shared.selectedProviderRaw ?? "openai"
         return TranscriptionProvider(rawValue: raw) ?? .openai
     }
 
     /// Load current model from UserDefaults
     static func loadModel() -> TranscriptionModel {
-        let raw = UserDefaults.standard.string(forKey: "selectedModel") ?? "gpt-4o-transcribe"
+        let raw = AppPreferences.shared.selectedModelRaw ?? "gpt-4o-transcribe"
         return TranscriptionModel(rawValue: raw) ?? .openai_gpt4o
     }
 
     /// Save provider and update model if needed
     static func saveProvider(_ provider: TranscriptionProvider) {
-        let defaults = UserDefaults.standard
-        defaults.set(provider.rawValue, forKey: "selectedProvider")
+        let preferences = AppPreferences.shared
+        preferences.selectedProviderRaw = provider.rawValue
 
         // If current model doesn't belong to new provider, switch to default
         let currentModel = loadModel()
         if currentModel.provider != provider {
-            defaults.set(provider.defaultModel.rawValue, forKey: "selectedModel")
+            preferences.selectedModelRaw = provider.defaultModel.rawValue
         }
     }
 
     /// Save model (also updates provider to match)
     static func saveModel(_ model: TranscriptionModel) {
-        let defaults = UserDefaults.standard
-        defaults.set(model.rawValue, forKey: "selectedModel")
-        defaults.set(model.provider.rawValue, forKey: "selectedProvider")
+        let preferences = AppPreferences.shared
+        preferences.selectedModelRaw = model.rawValue
+        preferences.selectedProviderRaw = model.provider.rawValue
     }
 }

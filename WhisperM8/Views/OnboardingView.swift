@@ -318,6 +318,7 @@ struct PermissionRow: View {
 struct HotkeyStep: View {
     @Binding var hotkeySet: Bool
     @State private var shortcutName: String = ""
+    @State private var pollingTimer: Timer?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -355,6 +356,9 @@ struct HotkeyStep: View {
             // Poll for shortcut changes since Recorder doesn't have a direct callback
             startPolling()
         }
+        .onDisappear {
+            stopPolling()
+        }
     }
 
     private func checkHotkey() {
@@ -362,14 +366,22 @@ struct HotkeyStep: View {
     }
 
     private func startPolling() {
+        stopPolling()
+
         // Check every 0.3s if shortcut was set
-        Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { timer in
+        pollingTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { timer in
             let wasSet = hotkeySet
             checkHotkey()
             if hotkeySet && !wasSet {
                 timer.invalidate()
+                pollingTimer = nil
             }
         }
+    }
+
+    private func stopPolling() {
+        pollingTimer?.invalidate()
+        pollingTimer = nil
     }
 }
 
@@ -415,7 +427,7 @@ struct APIKeyStep: View {
                     if selectedModel.provider != newValue {
                         selectedModel = newValue.defaultModel
                     }
-                    UserDefaults.standard.set(newValue.rawValue, forKey: "selectedProvider")
+                    TranscriptionSettings.saveProvider(newValue)
                 }
 
                 HStack {
@@ -472,7 +484,7 @@ struct APIKeyStep: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         selectedModel = model
-                        UserDefaults.standard.set(model.rawValue, forKey: "selectedModel")
+                        TranscriptionSettings.saveModel(model)
                     }
                 }
 

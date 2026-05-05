@@ -13,14 +13,12 @@ final class AudioDuckingManager {
 
     /// Whether audio ducking is enabled (from UserDefaults)
     var isEnabled: Bool {
-        UserDefaults.standard.object(forKey: "audioDuckingEnabled") == nil ||
-        UserDefaults.standard.bool(forKey: "audioDuckingEnabled")
+        AppPreferences.shared.isAudioDuckingEnabled
     }
 
     /// Target volume level during recording (0.1 - 0.5, default 0.2)
     var targetVolume: Float {
-        let value = UserDefaults.standard.double(forKey: "audioDuckingFactor")
-        return value > 0 ? Float(value) : 0.2
+        Float(AppPreferences.shared.audioDuckingFactor)
     }
 
     /// Reduce system volume while recording

@@ -1,5 +1,6 @@
 import SwiftUI
 import KeyboardShortcuts
+import LaunchAtLogin
 import UserNotifications
 
 @main
@@ -14,6 +15,7 @@ struct WhisperM8App: App {
             for app in runningApps where app != NSRunningApplication.current {
                 app.activate()
             }
+            WindowRequestCenter.notifyRunningInstanceToOpenSettings()
             NSApp.terminate(nil)
         }
 
@@ -26,6 +28,8 @@ struct WhisperM8App: App {
                 .environment(AppState.shared)
         } label: {
             MenuBarIcon()
+                .environment(AppState.shared)
+                .background(WindowRequestHandler())
         }
         .menuBarExtraStyle(.menu)
 
@@ -64,20 +68,25 @@ struct WhisperM8App: App {
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
-    private var onboardingWindow: NSWindow?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Request notification permissions for error alerts
         requestNotificationPermission()
 
         // Check if onboarding needs to be shown
-        let onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
-
-        if !onboardingCompleted {
+        if !AppPreferences.shared.onboardingCompleted {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.showOnboardingWindow()
+                WindowRequestCenter.shared.request(.onboarding)
+            }
+        } else if !LaunchAtLogin.wasLaunchedAtLogin {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                WindowRequestCenter.shared.request(.settings)
             }
         }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        WindowRequestCenter.shared.request(.settings)
+        return true
     }
 
     private func requestNotificationPermission() {
@@ -87,33 +96,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             }
         }
     }
-
-    private func showOnboardingWindow() {
-        let onboardingView = OnboardingView()
-            .environment(AppState.shared)
-
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "WhisperM8 Setup"
-        window.contentView = NSHostingView(rootView: onboardingView)
-        window.center()
-        window.isReleasedWhenClosed = false
-
-        self.onboardingWindow = window
-
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
 }
 
 // MARK: - Menu Bar Icon
 
 struct MenuBarIcon: View {
-    @State private var appState = AppState.shared
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         if appState.isRecording {

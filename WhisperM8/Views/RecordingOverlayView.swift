@@ -37,7 +37,7 @@ struct FullRecordingOverlayView: View {
                 AudioLevelBars(level: controller.audioLevel)
 
                 // Cancel button (only during recording)
-                CancelRecordingButton(iconSize: 16)
+                CancelRecordingButton(iconSize: 16, action: controller.cancelRecording)
             } else {
                 ProgressView()
                     .scaleEffect(0.6)
@@ -77,7 +77,7 @@ struct MiniRecordingOverlayView: View {
                     .accessibilityLabel("Transcribing")
             } else {
                 MiniAudioLevelBars(level: controller.audioLevel)
-                CancelRecordingButton(iconSize: 14)
+                CancelRecordingButton(iconSize: 14, action: controller.cancelRecording)
             }
         }
         .padding(.horizontal, 10)
@@ -96,10 +96,11 @@ struct MiniRecordingOverlayView: View {
 
 struct CancelRecordingButton: View {
     let iconSize: CGFloat
+    let action: () -> Void
 
     var body: some View {
         Button {
-            AppState.shared.cancelRecording()
+            action()
         } label: {
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: iconSize))

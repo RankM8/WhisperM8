@@ -3,7 +3,6 @@ import KeyboardShortcuts
 
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.openWindow) private var openWindow
     @State private var deviceManager = AudioDeviceManager.shared
 
     var body: some View {
@@ -86,8 +85,7 @@ struct MenuBarView: View {
         Divider()
 
         Button("Settings...") {
-            openWindow(id: "settings")
-            NSApp.activate(ignoringOtherApps: true)
+            WindowRequestCenter.shared.request(.settings)
         }
         .keyboardShortcut(",", modifiers: .command)
 
