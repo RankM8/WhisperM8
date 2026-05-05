@@ -4,9 +4,15 @@ import SwiftUI
 enum WindowRequest: String, Equatable {
     case settings
     case onboarding
+    case outputDashboard = "output-dashboard"
 
     var windowID: String {
-        rawValue
+        switch self {
+        case .settings, .outputDashboard:
+            return "settings"
+        case .onboarding:
+            return rawValue
+        }
     }
 }
 

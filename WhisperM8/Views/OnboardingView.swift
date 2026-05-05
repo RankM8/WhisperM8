@@ -14,6 +14,7 @@ struct OnboardingView: View {
     @State private var accessibilityGranted = false
     @State private var hotkeySet = false
     @State private var apiKey = ""
+    @State private var apiKeyAvailable = false
     @State private var selectedProvider = TranscriptionProvider.openai
     @State private var selectedModel = TranscriptionModel.openai_gpt4o
     @State private var testResult: String?
@@ -48,6 +49,7 @@ struct OnboardingView: View {
                 case 3:
                     APIKeyStep(
                         apiKey: $apiKey,
+                        apiKeyAvailable: $apiKeyAvailable,
                         selectedProvider: $selectedProvider,
                         selectedModel: $selectedModel
                     )
@@ -102,7 +104,7 @@ struct OnboardingView: View {
         case 2:
             return hotkeySet
         case 3:
-            return !apiKey.isEmpty
+            return !apiKey.isEmpty || apiKeyAvailable
         default:
             return true
         }
@@ -112,7 +114,7 @@ struct OnboardingView: View {
         return hotkeySet
             && micPermissionGranted
             && accessibilityGranted
-            && !apiKey.isEmpty
+            && (!apiKey.isEmpty || apiKeyAvailable)
     }
 }
 
@@ -389,6 +391,7 @@ struct HotkeyStep: View {
 
 struct APIKeyStep: View {
     @Binding var apiKey: String
+    @Binding var apiKeyAvailable: Bool
     @Binding var selectedProvider: TranscriptionProvider
     @Binding var selectedModel: TranscriptionModel
 
@@ -422,7 +425,8 @@ struct APIKeyStep: View {
                     if !apiKey.isEmpty && oldValue.keychainKey != newValue.keychainKey {
                         KeychainManager.save(key: oldValue.keychainKey, value: apiKey)
                     }
-                    apiKey = KeychainManager.load(key: newValue.keychainKey) ?? ""
+                    apiKey = ""
+                    apiKeyAvailable = KeychainManager.exists(key: newValue.keychainKey)
                     // Switch to default model if current doesn't match provider
                     if selectedModel.provider != newValue {
                         selectedModel = newValue.defaultModel
@@ -433,11 +437,13 @@ struct APIKeyStep: View {
                 HStack {
                     if showingAPIKey {
                         TextField("API Key", text: $apiKey)
-                            .textFieldStyle(.roundedBorder)
-                    } else {
-                        SecureField("API Key", text: $apiKey)
-                            .textFieldStyle(.roundedBorder)
-                    }
+                    .textFieldStyle(.roundedBorder)
+                    .help(apiKeyAvailable ? "\(selectedProvider.displayName) API key is already saved" : "Enter a \(selectedProvider.displayName) API key")
+                } else {
+                    SecureField(apiKeyAvailable ? "Saved API key" : "API Key", text: $apiKey)
+                        .textFieldStyle(.roundedBorder)
+                        .help(apiKeyAvailable ? "\(selectedProvider.displayName) API key is already saved" : "Enter a \(selectedProvider.displayName) API key")
+                }
 
                     Button {
                         showingAPIKey.toggle()
@@ -447,11 +453,21 @@ struct APIKeyStep: View {
                     .buttonStyle(.borderless)
                 }
                 .onChange(of: apiKey) { _, newValue in
+                    if newValue.isEmpty {
+                        return
+                    }
                     KeychainManager.save(key: selectedProvider.keychainKey, value: newValue)
+                    apiKeyAvailable = true
                 }
 
                 Link("Get \(selectedProvider.displayName) API key \u{2192}", destination: selectedProvider.apiKeyLink)
                     .font(.caption)
+
+                if apiKeyAvailable && apiKey.isEmpty {
+                    Label("API key is saved in Keychain", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
             }
             .padding()
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
@@ -522,7 +538,8 @@ struct APIKeyStep: View {
             TranscriptionSettings.migrateIfNeeded()
             selectedProvider = TranscriptionSettings.loadProvider()
             selectedModel = TranscriptionSettings.loadModel()
-            apiKey = KeychainManager.load(key: selectedProvider.keychainKey) ?? ""
+            apiKey = ""
+            apiKeyAvailable = KeychainManager.exists(key: selectedProvider.keychainKey)
         }
     }
 }

@@ -7,19 +7,19 @@ final class RecordingCoordinator {
     private let overlayController: OverlayController
     private let pasteService: PasteService
     private let recordingTimer: RecordingTimer
+    private let postProcessingService: PostProcessingService
 
     private var recordingStartTime: Date?
     private var isProcessing = false
     private var escKeyMonitor: Any?
 
-    init(
-        appState: AppState
-    ) {
+    init(appState: AppState, postProcessingService: PostProcessingService = PostProcessingService()) {
         self.appState = appState
         self.audioRecorder = AudioRecorder()
         self.overlayController = OverlayController()
         self.pasteService = PasteService()
         self.recordingTimer = RecordingTimer()
+        self.postProcessingService = postProcessingService
     }
 
     func startRecording() async {
@@ -40,11 +40,19 @@ final class RecordingCoordinator {
             appState.recordingDuration = 0
             appState.audioLevel = 0
             appState.lastError = nil
+            appState.isPostProcessing = false
+            appState.selectedOutputMode = OutputMode.defaultMode()
             isProcessing = false
 
-            overlayController.show(appState: appState) { [weak self] in
-                self?.cancelRecording()
-            }
+            overlayController.show(
+                appState: appState,
+                onCancel: { [weak self] in
+                    self?.cancelRecording()
+                },
+                onOutputModeChange: { [weak appState] mode in
+                    appState?.setOutputMode(mode)
+                }
+            )
 
             setupEscKeyMonitor()
             startDurationTimer()
@@ -72,6 +80,7 @@ final class RecordingCoordinator {
 
         isProcessing = true
         let audioDuration = appState.recordingDuration
+        let frozenOutputMode = appState.selectedOutputMode
         Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")
 
         recordingTimer.stop()
@@ -96,10 +105,15 @@ final class RecordingCoordinator {
         logAudioFileAttributes(audioURL)
 
         appState.isTranscribing = true
+        appState.lastOutputMode = frozenOutputMode
         overlayController.update(appState: appState)
 
         do {
-            try await transcribeAndDeliver(audioURL: audioURL, audioDuration: audioDuration)
+            try await transcribeAndDeliver(
+                audioURL: audioURL,
+                audioDuration: audioDuration,
+                outputMode: frozenOutputMode
+            )
         } catch let urlError as URLError {
             handleTranscriptionFailure(audioURL: audioURL, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
         } catch let transcriptionError as TranscriptionError {
@@ -109,6 +123,7 @@ final class RecordingCoordinator {
         }
 
         appState.isTranscribing = false
+        appState.isPostProcessing = false
         isProcessing = false
         Logger.debug(" stopRecording completed")
     }
@@ -126,6 +141,7 @@ final class RecordingCoordinator {
 
         appState.isRecording = false
         appState.audioLevel = 0
+        appState.isPostProcessing = false
         recordingStartTime = nil
 
         AudioDuckingManager.shared.restore()
@@ -142,7 +158,7 @@ final class RecordingCoordinator {
         PermissionService.requestAccessibilityPermission()
     }
 
-    private func transcribeAndDeliver(audioURL: URL, audioDuration: TimeInterval) async throws {
+    private func transcribeAndDeliver(audioURL: URL, audioDuration: TimeInterval, outputMode: OutputMode) async throws {
         guard let appState else { return }
 
         TranscriptionSettings.migrateIfNeeded()
@@ -168,13 +184,22 @@ final class RecordingCoordinator {
             language: language.isEmpty ? nil : language,
             audioDuration: audioDuration
         )
-        let text = TextNormalizer.normalizeTranscriptionText(rawText)
+        let normalizedRawText = TextNormalizer.normalizeTranscriptionText(rawText)
 
-        Logger.debug(" Transcription SUCCESS! Raw length: \(rawText.count), normalized length: \(text.count)")
-        Logger.debug(" Text preview: \(String(text.prefix(100)))...")
+        Logger.debug(" Transcription SUCCESS! Raw length: \(rawText.count), normalized length: \(normalizedRawText.count)")
+        Logger.debug(" Text preview: \(String(normalizedRawText.prefix(100)))...")
 
-        pasteService.copyToClipboard(text)
-        appState.lastTranscription = text
+        appState.lastRawTranscription = normalizedRawText
+
+        let finalText = try await processTranscriptIfNeeded(
+            normalizedRawText,
+            mode: outputMode,
+            language: language
+        )
+
+        pasteService.copyToClipboard(finalText)
+        appState.lastFinalTranscription = finalText
+        appState.lastTranscription = finalText
 
         try? FileManager.default.removeItem(at: audioURL)
 
@@ -194,6 +219,41 @@ final class RecordingCoordinator {
         } else {
             overlayController.hide()
             Logger.debug(" Auto-paste disabled, text copied to clipboard only")
+        }
+    }
+
+    private func processTranscriptIfNeeded(_ rawText: String, mode: OutputMode, language: String) async throws -> String {
+        guard let appState else { return rawText }
+
+        guard mode.usesPostProcessing else {
+            return rawText
+        }
+
+        appState.isTranscribing = false
+        appState.isPostProcessing = true
+        overlayController.update(appState: appState)
+
+        do {
+            let processedText = try await postProcessingService.process(
+                rawText: rawText,
+                mode: mode,
+                language: language
+            )
+            appState.isPostProcessing = false
+            overlayController.update(appState: appState)
+            return TextNormalizer.normalizeTranscriptionText(processedText)
+        } catch {
+            appState.isPostProcessing = false
+            overlayController.update(appState: appState)
+
+            if AppPreferences.shared.fallbackToRawOnProcessingError {
+                let message = error.localizedDescription
+                appState.lastError = message
+                Logger.transcription.error("Post-processing failed; falling back to raw: \(message)")
+                return rawText
+            }
+
+            throw error
         }
     }
 

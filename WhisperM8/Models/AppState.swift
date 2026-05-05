@@ -11,20 +11,32 @@ final class AppState {
     var recordingDuration: TimeInterval = 0
     var lastError: String?
     var lastTranscription: String?
+    var selectedOutputMode = OutputMode.defaultMode()
+    var isPostProcessing = false
+    var lastRawTranscription: String?
+    var lastFinalTranscription: String?
+    var lastOutputMode: OutputMode?
 
     @ObservationIgnored
     private var recordingCoordinator: RecordingCoordinator!
 
     var menuBarIcon: String {
         if isRecording { return "mic.fill" }
+        if isPostProcessing { return "sparkles" }
         if isTranscribing { return "ellipsis.circle" }
         return "mic"
     }
 
     var statusText: String {
         if isRecording { return "Recording..." }
+        if isPostProcessing { return "Improving..." }
         if isTranscribing { return "Transcribing..." }
         return "Ready"
+    }
+
+    func setOutputMode(_ mode: OutputMode) {
+        selectedOutputMode = mode
+        AppPreferences.shared.lastSelectedOutputModeID = mode.id
     }
 
     private init() {

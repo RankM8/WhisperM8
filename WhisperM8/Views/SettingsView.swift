@@ -2,35 +2,132 @@ import SwiftUI
 import KeyboardShortcuts
 import LaunchAtLogin
 
-struct SettingsView: View {
-    var body: some View {
-        TabView {
-            APISettingsView()
-                .tabItem {
-                    Label("API", systemImage: "key")
-                }
+enum ControlCenterSection: String, CaseIterable, Identifiable {
+    case api = "Transcription API"
+    case codex = "Codex / ChatGPT"
+    case outputOverview = "Output Overview"
+    case modes = "Modes"
+    case templates = "Templates"
+    case testLab = "Test Lab"
+    case hotkey = "Hotkey"
+    case audio = "Audio"
+    case behavior = "Behavior"
+    case about = "About"
 
-            HotkeySettingsView()
-                .tabItem {
-                    Label("Hotkey", systemImage: "keyboard")
-                }
+    var id: String { rawValue }
 
-            AudioSettingsView()
-                .tabItem {
-                    Label("Audio", systemImage: "waveform")
-                }
-
-            BehaviorSettingsView()
-                .tabItem {
-                    Label("Behavior", systemImage: "gearshape")
-                }
-
-            AboutView()
-                .tabItem {
-                    Label("About", systemImage: "info.circle")
-                }
+    var systemImage: String {
+        switch self {
+        case .api:
+            return "key"
+        case .codex:
+            return "sparkles"
+        case .outputOverview:
+            return "rectangle.grid.2x2"
+        case .modes:
+            return "slider.horizontal.3"
+        case .templates:
+            return "doc.text"
+        case .testLab:
+            return "testtube.2"
+        case .hotkey:
+            return "keyboard"
+        case .audio:
+            return "waveform"
+        case .behavior:
+            return "gearshape"
+        case .about:
+            return "info.circle"
         }
-        .frame(width: 520, height: 400)
+    }
+
+    var groupTitle: String {
+        switch self {
+        case .api, .codex:
+            return "Accounts"
+        case .outputOverview, .modes, .templates, .testLab:
+            return "Output"
+        case .hotkey, .audio, .behavior:
+            return "App"
+        case .about:
+            return "About"
+        }
+    }
+}
+
+struct SettingsView: View {
+    @Environment(AppState.self) private var appState
+    @State private var selection: ControlCenterSection? = .api
+
+    var body: some View {
+        NavigationSplitView {
+            List(selection: $selection) {
+                Section("Accounts") {
+                    sidebarRow(.api)
+                    sidebarRow(.codex)
+                }
+
+                Section("Output") {
+                    sidebarRow(.outputOverview)
+                    sidebarRow(.modes)
+                    sidebarRow(.templates)
+                    sidebarRow(.testLab)
+                }
+
+                Section("App") {
+                    sidebarRow(.hotkey)
+                    sidebarRow(.audio)
+                    sidebarRow(.behavior)
+                }
+
+                Section("About") {
+                    sidebarRow(.about)
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("WhisperM8")
+            .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 260)
+        } detail: {
+            detailView(for: selection ?? .api)
+        }
+        .frame(minWidth: 860, minHeight: 620)
+    }
+
+    private func sidebarRow(_ section: ControlCenterSection) -> some View {
+        Label(section.rawValue, systemImage: section.systemImage)
+            .tag(section)
+    }
+
+    @ViewBuilder
+    private func detailView(for section: ControlCenterSection) -> some View {
+        switch section {
+        case .api:
+            APISettingsView()
+                .navigationTitle(section.rawValue)
+        case .codex:
+            CodexSettingsView()
+        case .outputOverview:
+            OutputOverviewView()
+                .environment(appState)
+        case .modes:
+            OutputModesView()
+        case .templates:
+            OutputTemplatesView()
+        case .testLab:
+            OutputTestLabView()
+        case .hotkey:
+            HotkeySettingsView()
+                .navigationTitle(section.rawValue)
+        case .audio:
+            AudioSettingsView()
+                .navigationTitle(section.rawValue)
+        case .behavior:
+            BehaviorSettingsView()
+                .navigationTitle(section.rawValue)
+        case .about:
+            AboutView()
+                .navigationTitle(section.rawValue)
+        }
     }
 }
 
@@ -41,6 +138,7 @@ struct APISettingsView: View {
     @AppStorage("selectedModel") private var selectedModelRaw = TranscriptionModel.openai_gpt4o.rawValue
     @AppStorage("language") private var language = "de"
     @State private var apiKey = ""
+    @State private var apiKeyAvailable = false
     @State private var showingAPIKey = false
 
     private var provider: TranscriptionProvider {
@@ -59,7 +157,8 @@ struct APISettingsView: View {
                 .pickerStyle(.segmented)
                 .onChange(of: selectedProviderRaw) { _, newValue in
                     let newProvider = TranscriptionProvider(rawValue: newValue) ?? .openai
-                    apiKey = KeychainManager.load(key: newProvider.keychainKey) ?? ""
+                    apiKey = ""
+                    apiKeyAvailable = KeychainManager.exists(key: newProvider.keychainKey)
                     if let currentModel = TranscriptionModel(rawValue: selectedModelRaw),
                        currentModel.provider != newProvider {
                         selectedModelRaw = newProvider.defaultModel.rawValue
@@ -69,7 +168,7 @@ struct APISettingsView: View {
                 HStack {
                     FocusableTextField(
                         text: $apiKey,
-                        placeholder: "\(provider.displayName) API key...",
+                        placeholder: apiKeyAvailable ? "Saved \(provider.displayName) API key" : "\(provider.displayName) API key...",
                         isSecure: !showingAPIKey
                     )
                     .frame(height: 22)
@@ -82,11 +181,21 @@ struct APISettingsView: View {
                     .buttonStyle(.borderless)
                 }
                 .onChange(of: apiKey) { _, newValue in
+                    if newValue.isEmpty {
+                        return
+                    }
                     KeychainManager.save(key: provider.keychainKey, value: newValue)
+                    apiKeyAvailable = true
                 }
 
                 Link("Get \(provider.displayName) API key \u{2192}", destination: provider.apiKeyLink)
                     .font(.caption)
+
+                if apiKeyAvailable && apiKey.isEmpty {
+                    Label("API key is saved in Keychain", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
             }
 
             // Model Selection
@@ -126,7 +235,8 @@ struct APISettingsView: View {
             TranscriptionSettings.migrateIfNeeded()
             selectedProviderRaw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.openai.rawValue
             selectedModelRaw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.openai_gpt4o.rawValue
-            apiKey = KeychainManager.load(key: provider.keychainKey) ?? ""
+            apiKey = ""
+            apiKeyAvailable = KeychainManager.exists(key: provider.keychainKey)
         }
     }
 }

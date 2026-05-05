@@ -19,24 +19,36 @@ struct FullRecordingOverlayView: View {
     @ObservedObject var controller: OverlayController
 
     var body: some View {
-        HStack(spacing: 12) {
-            RecordingStatusIndicator(level: controller.audioLevel, isTranscribing: controller.isTranscribing)
+        HStack(spacing: 10) {
+            RecordingStatusIndicator(
+                level: controller.audioLevel,
+                isTranscribing: controller.isTranscribing,
+                isPostProcessing: controller.isPostProcessing
+            )
 
-            // Status text
-            Text(controller.isTranscribing ? "Transcribing..." : "Recording...")
+            Text(statusText)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.primary)
+                .lineLimit(1)
+                .frame(width: 88, alignment: .leading)
 
-            // Timer
             Text(formatDuration(controller.duration))
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
+                .frame(width: 44, alignment: .trailing)
 
-            // Audio level bars (only during recording)
-            if !controller.isTranscribing {
+            OutputModeMenu(
+                modes: controller.outputModes,
+                selectedMode: controller.selectedOutputMode,
+                isDisabled: controller.isTranscribing || controller.isPostProcessing,
+                action: controller.setOutputMode
+            )
+
+            Spacer(minLength: 0)
+
+            if !controller.isTranscribing && !controller.isPostProcessing {
                 AudioLevelBars(level: controller.audioLevel)
 
-                // Cancel button (only during recording)
                 CancelRecordingButton(iconSize: 16, action: controller.cancelRecording)
             } else {
                 ProgressView()
@@ -57,6 +69,12 @@ struct FullRecordingOverlayView: View {
         .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 2)
     }
 
+    private var statusText: String {
+        if controller.isPostProcessing { return "Improving..." }
+        if controller.isTranscribing { return "Transcribing..." }
+        return "Recording..."
+    }
+
     private func formatDuration(_ duration: TimeInterval) -> String {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
@@ -69,12 +87,19 @@ struct MiniRecordingOverlayView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if controller.isTranscribing {
+            if controller.showModePickerInMiniOverlay {
+                MiniOutputModeChip(
+                    mode: controller.selectedOutputMode,
+                    isDisabled: controller.isTranscribing || controller.isPostProcessing
+                )
+            }
+
+            if controller.isTranscribing || controller.isPostProcessing {
                 ProgressView()
                     .controlSize(.small)
                     .scaleEffect(0.7)
                     .frame(width: 14, height: 14)
-                    .accessibilityLabel("Transcribing")
+                    .accessibilityLabel(controller.isPostProcessing ? "Improving" : "Transcribing")
             } else {
                 MiniAudioLevelBars(level: controller.audioLevel)
                 CancelRecordingButton(iconSize: 14, action: controller.cancelRecording)
@@ -91,6 +116,67 @@ struct MiniRecordingOverlayView: View {
                 )
         }
         .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 2)
+    }
+}
+
+struct OutputModeMenu: View {
+    let modes: [OutputMode]
+    let selectedMode: OutputMode
+    let isDisabled: Bool
+    let action: (OutputMode) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(modes) { mode in
+                Button {
+                    action(mode)
+                } label: {
+                    if mode.id == selectedMode.id {
+                        Label(mode.name, systemImage: "checkmark")
+                    } else {
+                        Text(mode.name)
+                    }
+                }
+                .disabled(!mode.isEnabled)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(selectedMode.shortLabel)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(isDisabled ? Color.secondary.opacity(0.7) : Color.primary)
+            .frame(width: 70, height: 24)
+            .background {
+                Capsule()
+                    .fill(Color.primary.opacity(0.08))
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel("Output mode")
+    }
+}
+
+struct MiniOutputModeChip: View {
+    let mode: OutputMode
+    let isDisabled: Bool
+
+    var body: some View {
+        Text(mode.shortLabel)
+            .font(.system(size: 11, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .foregroundStyle(isDisabled ? .secondary : .primary)
+            .frame(width: 48, height: 22)
+            .background {
+                Capsule()
+                    .fill(Color.primary.opacity(0.08))
+            }
+            .accessibilityLabel("Output mode \(mode.name)")
     }
 }
 
@@ -117,17 +203,19 @@ struct CancelRecordingButton: View {
 struct RecordingStatusIndicator: View {
     let level: Float
     let isTranscribing: Bool
+    let isPostProcessing: Bool
 
     private var clampedLevel: CGFloat {
         max(0, min(CGFloat(level), 1))
     }
 
     private var ringColor: Color {
-        isTranscribing ? .orange : .green
+        if isPostProcessing { return .purple }
+        return isTranscribing ? .orange : .green
     }
 
     var body: some View {
-        let intensity = isTranscribing ? 0 : clampedLevel
+        let intensity = (isTranscribing || isPostProcessing) ? 0 : clampedLevel
 
         ZStack {
             Circle()
@@ -139,12 +227,22 @@ struct RecordingStatusIndicator: View {
                 .scaleEffect(0.85 + intensity * 0.35)
                 .animation(.easeOut(duration: 0.12), value: intensity)
 
-            Image(systemName: isTranscribing ? "waveform" : "mic.fill")
+            Image(systemName: statusIcon)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(ringColor)
         }
         .frame(width: 20, height: 20)
-        .accessibilityLabel(isTranscribing ? "Transcribing" : "Recording")
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var statusIcon: String {
+        if isPostProcessing { return "sparkles" }
+        return isTranscribing ? "waveform" : "mic.fill"
+    }
+
+    private var accessibilityLabel: String {
+        if isPostProcessing { return "Improving" }
+        return isTranscribing ? "Transcribing" : "Recording"
     }
 }
 

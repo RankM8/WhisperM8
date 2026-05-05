@@ -33,12 +33,12 @@ struct WhisperM8App: App {
         }
         .menuBarExtraStyle(.menu)
 
-        // Settings Window
-        Window("Settings", id: "settings") {
+        // Control Center Window
+        Window("WhisperM8", id: "settings") {
             SettingsView()
                 .environment(AppState.shared)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 900, height: 640)
         .defaultPosition(.center)
 
         // Onboarding window

@@ -12,6 +12,9 @@ final class WindowAndOverlayTests: XCTestCase {
 
         center.request(.onboarding)
         XCTAssertEqual(center.latestRequest, .onboarding)
+
+        center.request(.outputDashboard)
+        XCTAssertEqual(center.latestRequest, .outputDashboard)
     }
 
     func testOverlayClampKeepsPanelInsideVisibleFrame() {

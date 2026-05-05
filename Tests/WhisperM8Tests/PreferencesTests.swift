@@ -11,6 +11,12 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.audioDuckingFactor, 0.2)
             XCTAssertEqual(preferences.overlayStyleRaw, OverlayStyle.full.rawValue)
             XCTAssertFalse(preferences.onboardingCompleted)
+            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.rawID)
+            XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.rawID)
+            XCTAssertTrue(preferences.fallbackToRawOnProcessingError)
+            XCTAssertTrue(preferences.showModePickerInMiniOverlay)
+            XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.defaultModel.rawValue)
+            XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.defaultEffort.rawValue)
         }
     }
 
@@ -20,11 +26,23 @@ final class PreferencesTests: XCTestCase {
             preferences.isAutoPasteEnabled = false
             preferences.audioDuckingFactor = 0.15
             preferences.selectedAudioDeviceUID = "device-1"
+            preferences.defaultOutputModeID = OutputMode.cleanID
+            preferences.lastSelectedOutputModeID = OutputMode.emailID
+            preferences.fallbackToRawOnProcessingError = false
+            preferences.showModePickerInMiniOverlay = false
+            preferences.codexPostProcessingModelRaw = CodexPostProcessingModel.gpt52.rawValue
+            preferences.codexReasoningEffortRaw = CodexReasoningEffort.high.rawValue
 
             XCTAssertEqual(preferences.language, "en")
             XCTAssertFalse(preferences.isAutoPasteEnabled)
             XCTAssertEqual(preferences.audioDuckingFactor, 0.15)
             XCTAssertEqual(preferences.selectedAudioDeviceUID, "device-1")
+            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.cleanID)
+            XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.emailID)
+            XCTAssertFalse(preferences.fallbackToRawOnProcessingError)
+            XCTAssertFalse(preferences.showModePickerInMiniOverlay)
+            XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.gpt52.rawValue)
+            XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.high.rawValue)
         }
     }
 

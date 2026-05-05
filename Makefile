@@ -1,4 +1,4 @@
-.PHONY: run build install kill clean clean-apps help dmg clean-install dev
+.PHONY: run build install kill clean clean-apps help dmg clean-install dev dev-reinstall dev-skip-onboarding mark-onboarded
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -10,6 +10,8 @@ help:
 	@echo "WhisperM8 Development Commands:"
 	@echo ""
 	@echo "  make dev           - [RECOMMENDED] Clean build, install, and launch"
+	@echo "  make dev-reinstall - Same as dev; preserves settings, API keys, permissions"
+	@echo "  make dev-skip-onboarding - Dev reinstall and force onboardingCompleted=true"
 	@echo "  make build         - Build release app bundle only"
 	@echo "  make install       - Build and install to /Applications"
 	@echo "  make run           - Quick debug build (creates local .app)"
@@ -20,7 +22,8 @@ help:
 	@echo "  make clean-install - Full reset (removes all app data + reinstall)"
 	@echo "  make dmg           - Build distributable DMG"
 	@echo ""
-	@echo "Note: Use 'make dev' for development to avoid duplicate app versions."
+	@echo "Note: Use 'make dev' or 'make dev-reinstall' for normal testing."
+	@echo "Only use 'make clean-install' when you intentionally want to reset onboarding, permissions, settings, and API keys."
 
 # Development workflow: clean build, install to /Applications, launch
 # This ensures only ONE app version exists (in /Applications)
@@ -34,6 +37,19 @@ dev: kill
 	@rm -rf "$(APP_BUNDLE)"
 	@echo "✅ Installed to /Applications/$(APP_BUNDLE)"
 	@open "/Applications/$(APP_BUNDLE)"
+
+# Explicit dev reinstall alias: replaces the app bundle but keeps UserDefaults,
+# Keychain items, TCC permissions, Application Support, and onboarding state.
+dev-reinstall: dev
+
+# Mark onboarding as completed for test installs where app data was reset.
+mark-onboarded:
+	@echo "✅ Marking onboarding as completed for com.whisperm8.app"
+	@defaults write com.whisperm8.app onboardingCompleted -bool true
+
+# Dev reinstall that also skips onboarding. Useful after accidental clean-install.
+dev-skip-onboarding: kill mark-onboarded
+	@$(MAKE) dev
 
 # Build release app bundle (leaves .app in project directory)
 build:

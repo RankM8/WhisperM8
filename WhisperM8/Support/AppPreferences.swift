@@ -62,6 +62,36 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.debugFileLoggingEnabled) }
     }
 
+    var defaultOutputModeID: String {
+        get { defaults.string(forKey: Keys.defaultOutputModeID) ?? OutputMode.rawID }
+        nonmutating set { defaults.set(newValue, forKey: Keys.defaultOutputModeID) }
+    }
+
+    var lastSelectedOutputModeID: String {
+        get { defaults.string(forKey: Keys.lastSelectedOutputModeID) ?? defaultOutputModeID }
+        nonmutating set { defaults.set(newValue, forKey: Keys.lastSelectedOutputModeID) }
+    }
+
+    var fallbackToRawOnProcessingError: Bool {
+        get { boolWithDefault(true, forKey: Keys.fallbackToRawOnProcessingError) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.fallbackToRawOnProcessingError) }
+    }
+
+    var showModePickerInMiniOverlay: Bool {
+        get { boolWithDefault(true, forKey: Keys.showModePickerInMiniOverlay) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.showModePickerInMiniOverlay) }
+    }
+
+    var codexPostProcessingModelRaw: String {
+        get { defaults.string(forKey: Keys.codexPostProcessingModel) ?? CodexPostProcessingModel.defaultModel.rawValue }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexPostProcessingModel) }
+    }
+
+    var codexReasoningEffortRaw: String {
+        get { defaults.string(forKey: Keys.codexReasoningEffort) ?? CodexReasoningEffort.defaultEffort.rawValue }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexReasoningEffort) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -105,6 +135,12 @@ enum PreferenceKeys {
     static let selectedAudioDeviceUID = "selectedAudioDeviceUID"
     static let onboardingCompleted = "onboardingCompleted"
     static let debugFileLoggingEnabled = "debugFileLoggingEnabled"
+    static let defaultOutputModeID = "defaultOutputModeID"
+    static let lastSelectedOutputModeID = "lastSelectedOutputModeID"
+    static let fallbackToRawOnProcessingError = "fallbackToRawOnProcessingError"
+    static let showModePickerInMiniOverlay = "showModePickerInMiniOverlay"
+    static let codexPostProcessingModel = "codexPostProcessingModel"
+    static let codexReasoningEffort = "codexReasoningEffort"
 }
 
 private typealias Keys = PreferenceKeys

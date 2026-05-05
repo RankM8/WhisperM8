@@ -17,9 +17,9 @@ enum OverlayStyle: String, CaseIterable {
     var panelSize: NSSize {
         switch self {
         case .full:
-            return NSSize(width: 300, height: 56)
+            return NSSize(width: 380, height: 56)
         case .mini:
-            return NSSize(width: 124, height: 46)
+            return NSSize(width: 178, height: 46)
         }
     }
 }
@@ -188,23 +188,37 @@ class OverlayController: ObservableObject {
     private var hostingView: NSHostingView<RecordingOverlayView>?
     private var previousApp: NSRunningApplication?
     private var onCancel: (() -> Void)?
+    private var onOutputModeChange: ((OutputMode) -> Void)?
     @Published var audioLevel: Float = 0
     @Published var duration: TimeInterval = 0
     @Published var isTranscribing: Bool = false
+    @Published var isPostProcessing: Bool = false
     @Published var overlayStyle: OverlayStyle = .full
+    @Published var selectedOutputMode: OutputMode = OutputMode.defaultMode()
+    @Published var outputModes: [OutputMode] = OutputMode.enabledBuiltInModes
+    @Published var showModePickerInMiniOverlay: Bool = true
 
-    func show(appState: AppState, onCancel: @escaping () -> Void) {
+    func show(
+        appState: AppState,
+        onCancel: @escaping () -> Void,
+        onOutputModeChange: @escaping (OutputMode) -> Void
+    ) {
         // Capture the frontmost app BEFORE showing our panel
         previousApp = NSWorkspace.shared.frontmostApplication
         Logger.focus.info("Captured previousApp: \(self.previousApp?.localizedName ?? "nil", privacy: .public)")
 
         hide()  // Cleanup any existing panel first
         self.onCancel = onCancel
+        self.onOutputModeChange = onOutputModeChange
 
         // Initialize state from appState
         self.audioLevel = appState.audioLevel
         self.duration = appState.recordingDuration
         self.isTranscribing = appState.isTranscribing
+        self.isPostProcessing = appState.isPostProcessing
+        self.selectedOutputMode = appState.selectedOutputMode
+        self.outputModes = OutputMode.enabledBuiltInModes
+        self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
         self.overlayStyle = OverlayPositionStore.loadStyle()
 
         let initialOrigin = OverlayPositionStore.resolveInitialOrigin(for: overlayStyle)
@@ -237,6 +251,7 @@ class OverlayController: ObservableObject {
         panel = nil
         hostingView = nil
         onCancel = nil
+        onOutputModeChange = nil
     }
 
     func getPreviousApp() -> NSRunningApplication? {
@@ -247,11 +262,20 @@ class OverlayController: ObservableObject {
         onCancel?()
     }
 
+    func setOutputMode(_ mode: OutputMode) {
+        selectedOutputMode = mode
+        onOutputModeChange?(mode)
+    }
+
     func update(appState: AppState) {
         // Only update properties - view stays the same, SwiftUI handles animations
         self.audioLevel = appState.audioLevel
         self.duration = appState.recordingDuration
         self.isTranscribing = appState.isTranscribing
+        self.isPostProcessing = appState.isPostProcessing
+        self.selectedOutputMode = appState.selectedOutputMode
+        self.outputModes = OutputMode.enabledBuiltInModes
+        self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
 
         let latestStyle = OverlayPositionStore.loadStyle()
         if latestStyle != overlayStyle {

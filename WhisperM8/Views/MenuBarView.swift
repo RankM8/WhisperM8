@@ -84,10 +84,14 @@ struct MenuBarView: View {
 
         Divider()
 
-        Button("Settings...") {
+        Button("Open WhisperM8...") {
             WindowRequestCenter.shared.request(.settings)
         }
         .keyboardShortcut(",", modifiers: .command)
+
+        Button("Output & Templates...") {
+            WindowRequestCenter.shared.request(.outputDashboard)
+        }
 
         Divider()
 
