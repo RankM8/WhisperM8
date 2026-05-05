@@ -16,6 +16,10 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.fallbackToRawOnProcessingError)
             XCTAssertTrue(preferences.showModePickerInMiniOverlay)
             XCTAssertTrue(preferences.isSelectedContextCaptureEnabled)
+            XCTAssertTrue(preferences.isVisualContextCaptureEnabled)
+            XCTAssertEqual(preferences.maxScreenshotsPerRecording, 3)
+            XCTAssertEqual(preferences.maxScreenRecordingDuration, 30)
+            XCTAssertTrue(preferences.deleteContextFilesAfterProcessing)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.defaultModel.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.defaultEffort.rawValue)
         }
@@ -32,6 +36,10 @@ final class PreferencesTests: XCTestCase {
             preferences.fallbackToRawOnProcessingError = false
             preferences.showModePickerInMiniOverlay = false
             preferences.isSelectedContextCaptureEnabled = false
+            preferences.isVisualContextCaptureEnabled = false
+            preferences.maxScreenshotsPerRecording = 2
+            preferences.maxScreenRecordingDuration = 12
+            preferences.deleteContextFilesAfterProcessing = false
             preferences.codexPostProcessingModelRaw = CodexPostProcessingModel.gpt52.rawValue
             preferences.codexReasoningEffortRaw = CodexReasoningEffort.high.rawValue
 
@@ -44,6 +52,10 @@ final class PreferencesTests: XCTestCase {
             XCTAssertFalse(preferences.fallbackToRawOnProcessingError)
             XCTAssertFalse(preferences.showModePickerInMiniOverlay)
             XCTAssertFalse(preferences.isSelectedContextCaptureEnabled)
+            XCTAssertFalse(preferences.isVisualContextCaptureEnabled)
+            XCTAssertEqual(preferences.maxScreenshotsPerRecording, 2)
+            XCTAssertEqual(preferences.maxScreenRecordingDuration, 12)
+            XCTAssertFalse(preferences.deleteContextFilesAfterProcessing)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.gpt52.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.high.rawValue)
         }

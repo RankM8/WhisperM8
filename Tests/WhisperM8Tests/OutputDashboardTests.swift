@@ -86,7 +86,7 @@ final class OutputDashboardTests: XCTestCase {
             id: "custom",
             name: "Custom",
             description: "Custom",
-            instruction: "{rawTranscript} {selectedContext} {activeApp} {language} {date}",
+            instruction: "{rawTranscript} {selectedContext} {activeApp} {visualContextSummary} {attachmentCount} {language} {date}",
             createdAt: Date(timeIntervalSince1970: 0),
             updatedAt: Date(timeIntervalSince1970: 0),
             isBuiltIn: false
@@ -181,7 +181,7 @@ final class OutputDashboardTests: XCTestCase {
 
     func testContextPolicyPassesSelectedContextOnlyWhenEnabled() async throws {
         let selectedContext = SelectedContext(text: "Context", sourceAppName: "Slack", sourceBundleIdentifier: nil)
-        var capturedContext = SelectedContext.empty
+        var capturedContext = TranscriptContextBundle.empty
         let service = PostProcessingService(
             processor: MockPostProcessor(output: "processed") { _, _, _, context in
                 capturedContext = context
@@ -195,7 +195,7 @@ final class OutputDashboardTests: XCTestCase {
             selectedContext: selectedContext
         )
 
-        XCTAssertEqual(capturedContext, selectedContext)
+        XCTAssertEqual(capturedContext.selectedText, selectedContext)
 
         _ = try await service.process(
             rawText: "raw",
@@ -205,6 +205,43 @@ final class OutputDashboardTests: XCTestCase {
         )
 
         XCTAssertEqual(capturedContext, .empty)
+    }
+
+    func testCodexInvocationIncludesImageArguments() {
+        let outputURL = URL(fileURLWithPath: "/tmp/output.txt")
+        let imageURL = URL(fileURLWithPath: "/tmp/context.png")
+
+        let arguments = CodexInvocation.arguments(
+            promptImageURLs: [imageURL],
+            outputURL: outputURL,
+            model: "gpt-5.5",
+            reasoningEffort: "medium"
+        )
+
+        XCTAssertTrue(arguments.contains("--image"))
+        XCTAssertTrue(arguments.contains("/tmp/context.png"))
+        XCTAssertEqual(arguments.last, "-")
+    }
+
+    func testContextBundleStoresAttachments() {
+        let screenshot = ContextAttachment(
+            kind: .screenshot,
+            fileURL: URL(fileURLWithPath: "/tmp/shot.png")
+        )
+        let frame = ContextAttachment(
+            kind: .visualFrame,
+            fileURL: URL(fileURLWithPath: "/tmp/frame.png")
+        )
+        let bundle = TranscriptContextBundle(
+            selectedText: SelectedContext(text: "Selected", sourceAppName: "Slack", sourceBundleIdentifier: nil),
+            screenshots: [screenshot],
+            visualFrames: [frame]
+        )
+
+        XCTAssertEqual(bundle.attachmentCount, 2)
+        XCTAssertEqual(bundle.visualAttachments.map(\.fileURL.path), ["/tmp/shot.png", "/tmp/frame.png"])
+        XCTAssertTrue(bundle.displaySummary.contains("Text"))
+        XCTAssertTrue(bundle.displaySummary.contains("Shot"))
     }
 }
 

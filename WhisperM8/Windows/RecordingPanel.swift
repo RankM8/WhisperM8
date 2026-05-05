@@ -17,7 +17,7 @@ enum OverlayStyle: String, CaseIterable {
     var panelSize: NSSize {
         switch self {
         case .full:
-            return NSSize(width: 450, height: 56)
+            return NSSize(width: 520, height: 56)
         case .mini:
             return NSSize(width: 220, height: 46)
         }
@@ -189,6 +189,9 @@ class OverlayController: ObservableObject {
     private var previousApp: NSRunningApplication?
     private var onCancel: (() -> Void)?
     private var onOutputModeChange: ((OutputMode) -> Void)?
+    private var onAddScreenshot: (() -> Void)?
+    private var onToggleScreenClip: (() -> Void)?
+    private var onClearContext: (() -> Void)?
     @Published var audioLevel: Float = 0
     @Published var duration: TimeInterval = 0
     @Published var isTranscribing: Bool = false
@@ -198,11 +201,16 @@ class OverlayController: ObservableObject {
     @Published var outputModes: [OutputMode] = OutputMode.enabledBuiltInModes
     @Published var showModePickerInMiniOverlay: Bool = true
     @Published var selectedContext: SelectedContext = .empty
+    @Published var contextBundle: TranscriptContextBundle = .empty
+    @Published var isScreenClipRecording: Bool = false
 
     func show(
         appState: AppState,
         onCancel: @escaping () -> Void,
-        onOutputModeChange: @escaping (OutputMode) -> Void
+        onOutputModeChange: @escaping (OutputMode) -> Void,
+        onAddScreenshot: @escaping () -> Void,
+        onToggleScreenClip: @escaping () -> Void,
+        onClearContext: @escaping () -> Void
     ) {
         // Capture the frontmost app BEFORE showing our panel
         previousApp = NSWorkspace.shared.frontmostApplication
@@ -211,6 +219,9 @@ class OverlayController: ObservableObject {
         hide()  // Cleanup any existing panel first
         self.onCancel = onCancel
         self.onOutputModeChange = onOutputModeChange
+        self.onAddScreenshot = onAddScreenshot
+        self.onToggleScreenClip = onToggleScreenClip
+        self.onClearContext = onClearContext
 
         // Initialize state from appState
         self.audioLevel = appState.audioLevel
@@ -221,6 +232,8 @@ class OverlayController: ObservableObject {
         self.outputModes = OutputMode.enabledBuiltInModes
         self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
         self.selectedContext = appState.selectedContext
+        self.contextBundle = appState.contextBundle
+        self.isScreenClipRecording = appState.isScreenClipRecording
         self.overlayStyle = OverlayPositionStore.loadStyle()
 
         let initialOrigin = OverlayPositionStore.resolveInitialOrigin(for: overlayStyle)
@@ -254,6 +267,9 @@ class OverlayController: ObservableObject {
         hostingView = nil
         onCancel = nil
         onOutputModeChange = nil
+        onAddScreenshot = nil
+        onToggleScreenClip = nil
+        onClearContext = nil
     }
 
     func getPreviousApp() -> NSRunningApplication? {
@@ -269,6 +285,18 @@ class OverlayController: ObservableObject {
         onOutputModeChange?(mode)
     }
 
+    func addScreenshot() {
+        onAddScreenshot?()
+    }
+
+    func toggleScreenClip() {
+        onToggleScreenClip?()
+    }
+
+    func clearContext() {
+        onClearContext?()
+    }
+
     func update(appState: AppState) {
         // Only update properties - view stays the same, SwiftUI handles animations
         self.audioLevel = appState.audioLevel
@@ -279,6 +307,8 @@ class OverlayController: ObservableObject {
         self.outputModes = OutputMode.enabledBuiltInModes
         self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
         self.selectedContext = appState.selectedContext
+        self.contextBundle = appState.contextBundle
+        self.isScreenClipRecording = appState.isScreenClipRecording
 
         let latestStyle = OverlayPositionStore.loadStyle()
         if latestStyle != overlayStyle {

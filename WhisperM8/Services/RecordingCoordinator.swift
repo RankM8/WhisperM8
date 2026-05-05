@@ -9,15 +9,19 @@ final class RecordingCoordinator {
     private let recordingTimer: RecordingTimer
     private let postProcessingService: PostProcessingService
     private let selectedContextService: SelectedContextService
+    private let visualContextCaptureService: VisualContextCaptureService
 
     private var recordingStartTime: Date?
     private var isProcessing = false
     private var escKeyMonitor: Any?
+    private var contextSourceApp: NSRunningApplication?
+    private var screenClipLimitTask: Task<Void, Never>?
 
     init(
         appState: AppState,
         postProcessingService: PostProcessingService = PostProcessingService(),
-        selectedContextService: SelectedContextService = SelectedContextService()
+        selectedContextService: SelectedContextService = SelectedContextService(),
+        visualContextCaptureService: VisualContextCaptureService? = nil
     ) {
         self.appState = appState
         self.audioRecorder = AudioRecorder()
@@ -26,6 +30,7 @@ final class RecordingCoordinator {
         self.recordingTimer = RecordingTimer()
         self.postProcessingService = postProcessingService
         self.selectedContextService = selectedContextService
+        self.visualContextCaptureService = visualContextCaptureService ?? VisualContextCaptureService()
     }
 
     func startRecording() async {
@@ -34,10 +39,11 @@ final class RecordingCoordinator {
         isProcessing = true
         recordingTimer.stop()
         overlayController.hide()
-        let contextSourceApp = NSWorkspace.shared.frontmostApplication
+        contextSourceApp = NSWorkspace.shared.frontmostApplication
 
         do {
             let selectedContext = await selectedContextService.capture(from: contextSourceApp)
+            let contextBundle = TranscriptContextBundle.from(selectedContext: selectedContext, sourceApp: contextSourceApp)
             try await audioRecorder.startRecording()
 
             AudioDuckingManager.shared.duck()
@@ -52,6 +58,9 @@ final class RecordingCoordinator {
             appState.selectedOutputMode = OutputMode.defaultMode()
             appState.selectedContext = selectedContext
             appState.lastSelectedContext = selectedContext.isEmpty ? nil : selectedContext
+            appState.contextBundle = contextBundle
+            appState.lastContextBundle = contextBundle.isEmpty ? nil : contextBundle
+            appState.isScreenClipRecording = false
             isProcessing = false
 
             overlayController.show(
@@ -61,6 +70,15 @@ final class RecordingCoordinator {
                 },
                 onOutputModeChange: { [weak appState] mode in
                     appState?.setOutputMode(mode)
+                },
+                onAddScreenshot: { [weak self] in
+                    self?.addContextScreenshot()
+                },
+                onToggleScreenClip: { [weak self] in
+                    self?.toggleScreenClip()
+                },
+                onClearContext: { [weak self] in
+                    self?.clearContextBundle()
                 }
             )
 
@@ -89,9 +107,13 @@ final class RecordingCoordinator {
         }
 
         isProcessing = true
+        if appState.isScreenClipRecording {
+            await stopScreenClipAndAttach()
+        }
+
         let audioDuration = appState.recordingDuration
         let frozenOutputMode = appState.selectedOutputMode
-        let frozenSelectedContext = appState.selectedContext
+        let frozenContextBundle = appState.contextBundle
         Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")
 
         recordingTimer.stop()
@@ -124,7 +146,7 @@ final class RecordingCoordinator {
                 audioURL: audioURL,
                 audioDuration: audioDuration,
                 outputMode: frozenOutputMode,
-                selectedContext: frozenSelectedContext
+                contextBundle: frozenContextBundle
             )
         } catch let urlError as URLError {
             handleTranscriptionFailure(audioURL: audioURL, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
@@ -137,6 +159,8 @@ final class RecordingCoordinator {
         appState.isTranscribing = false
         appState.isPostProcessing = false
         appState.selectedContext = .empty
+        appState.contextBundle = .empty
+        appState.isScreenClipRecording = false
         isProcessing = false
         Logger.debug(" stopRecording completed")
     }
@@ -146,6 +170,8 @@ final class RecordingCoordinator {
 
         recordingTimer.stop()
         removeEscKeyMonitor()
+        screenClipLimitTask?.cancel()
+        screenClipLimitTask = nil
 
         let audioURL = audioRecorder.stopRecording()
         if let audioURL {
@@ -156,8 +182,13 @@ final class RecordingCoordinator {
         appState.audioLevel = 0
         appState.isPostProcessing = false
         appState.selectedContext = .empty
+        appState.contextBundle = .empty
+        appState.isScreenClipRecording = false
         recordingStartTime = nil
 
+        Task {
+            await visualContextCaptureService.cancelActiveClip()
+        }
         AudioDuckingManager.shared.restore()
         overlayController.hide()
 
@@ -172,11 +203,57 @@ final class RecordingCoordinator {
         PermissionService.requestAccessibilityPermission()
     }
 
+    func addContextScreenshot() {
+        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
+        guard appState.contextBundle.screenshots.count < AppPreferences.shared.maxScreenshotsPerRecording else {
+            appState.lastError = "Maximum screenshots for this recording reached."
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                let screenshot = try await visualContextCaptureService.captureScreenshot(sourceApp: contextSourceApp)
+                appState.contextBundle.screenshots.append(screenshot)
+                appState.lastContextBundle = appState.contextBundle
+                overlayController.update(appState: appState)
+            } catch {
+                appState.lastError = error.localizedDescription
+                Logger.permission.warning("Visual screenshot context failed: \(error.localizedDescription, privacy: .public)")
+                if error as? VisualContextCaptureError == .missingPermission {
+                    _ = PermissionService.requestScreenRecordingPermission()
+                }
+                overlayController.update(appState: appState)
+            }
+        }
+    }
+
+    func toggleScreenClip() {
+        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
+
+        Task { @MainActor in
+            if appState.isScreenClipRecording {
+                await stopScreenClipAndAttach()
+            } else {
+                await startScreenClip()
+            }
+        }
+    }
+
+    func clearContextBundle() {
+        guard let appState, appState.isRecording, !appState.isScreenClipRecording else { return }
+        visualContextCaptureService.cleanup(appState.contextBundle)
+        appState.contextBundle = TranscriptContextBundle.from(selectedContext: .empty, sourceApp: contextSourceApp)
+        appState.selectedContext = .empty
+        appState.lastContextBundle = nil
+        appState.lastSelectedContext = nil
+        overlayController.update(appState: appState)
+    }
+
     private func transcribeAndDeliver(
         audioURL: URL,
         audioDuration: TimeInterval,
         outputMode: OutputMode,
-        selectedContext: SelectedContext
+        contextBundle: TranscriptContextBundle
     ) async throws {
         guard let appState else { return }
 
@@ -214,7 +291,7 @@ final class RecordingCoordinator {
             normalizedRawText,
             mode: outputMode,
             language: language,
-            selectedContext: selectedContext
+            contextBundle: contextBundle
         )
 
         pasteService.copyToClipboard(finalText)
@@ -222,6 +299,7 @@ final class RecordingCoordinator {
         appState.lastTranscription = finalText
 
         try? FileManager.default.removeItem(at: audioURL)
+        visualContextCaptureService.cleanup(contextBundle)
 
         if AppPreferences.shared.isAutoPasteEnabled {
             let previousApp = overlayController.getPreviousApp()
@@ -246,7 +324,7 @@ final class RecordingCoordinator {
         _ rawText: String,
         mode: OutputMode,
         language: String,
-        selectedContext: SelectedContext
+        contextBundle: TranscriptContextBundle
     ) async throws -> String {
         guard let appState else { return rawText }
 
@@ -263,7 +341,7 @@ final class RecordingCoordinator {
                 rawText: rawText,
                 mode: mode,
                 language: language,
-                selectedContext: selectedContext
+                contextBundle: contextBundle
             )
             appState.isPostProcessing = false
             overlayController.update(appState: appState)
@@ -289,6 +367,54 @@ final class RecordingCoordinator {
         overlayController.hide()
         try? FileManager.default.removeItem(at: audioURL)
         showErrorAlert(title: "Transcription Failed", message: message)
+    }
+
+    private func startScreenClip() async {
+        guard let appState else { return }
+
+        do {
+            try await visualContextCaptureService.startScreenClip(sourceApp: contextSourceApp)
+            appState.isScreenClipRecording = true
+            overlayController.update(appState: appState)
+            scheduleScreenClipLimit()
+        } catch {
+            appState.lastError = error.localizedDescription
+            Logger.permission.warning("Screen clip context failed: \(error.localizedDescription, privacy: .public)")
+            if error as? VisualContextCaptureError == .missingPermission {
+                _ = PermissionService.requestScreenRecordingPermission()
+            }
+            overlayController.update(appState: appState)
+        }
+    }
+
+    private func stopScreenClipAndAttach() async {
+        guard let appState else { return }
+
+        screenClipLimitTask?.cancel()
+        screenClipLimitTask = nil
+
+        do {
+            let result = try await visualContextCaptureService.stopScreenClip()
+            appState.contextBundle.screenClips.append(result.clip)
+            appState.contextBundle.visualFrames.append(contentsOf: result.visualFrames)
+            appState.lastContextBundle = appState.contextBundle
+        } catch {
+            appState.lastError = error.localizedDescription
+            Logger.permission.warning("Screen clip stop failed: \(error.localizedDescription, privacy: .public)")
+        }
+
+        appState.isScreenClipRecording = false
+        overlayController.update(appState: appState)
+    }
+
+    private func scheduleScreenClipLimit() {
+        screenClipLimitTask?.cancel()
+        let maxDuration = AppPreferences.shared.maxScreenRecordingDuration
+        screenClipLimitTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(maxDuration))
+            guard !Task.isCancelled, appState?.isRecording == true, appState?.isScreenClipRecording == true else { return }
+            await stopScreenClipAndAttach()
+        }
     }
 
     private func networkErrorMessage(for urlError: URLError) -> String {

@@ -10,6 +10,10 @@
     <key>NSMicrophoneUsageDescription</key>
     <string>WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.</string>
 
+    <!-- Screen Recording permission -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>WhisperM8 kann Screenshots und kurze Bildschirmaufnahmen als optionalen Kontext für die Nachbearbeitung verwenden.</string>
+
     <!-- App info -->
     <key>CFBundleName</key>
     <string>WhisperM8</string>

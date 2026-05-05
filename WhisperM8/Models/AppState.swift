@@ -18,6 +18,9 @@ final class AppState {
     var lastOutputMode: OutputMode?
     var selectedContext = SelectedContext.empty
     var lastSelectedContext: SelectedContext?
+    var contextBundle = TranscriptContextBundle.empty
+    var lastContextBundle: TranscriptContextBundle?
+    var isScreenClipRecording = false
 
     @ObservationIgnored
     private var recordingCoordinator: RecordingCoordinator!
@@ -55,6 +58,18 @@ final class AppState {
 
     func cancelRecording() {
         recordingCoordinator.cancelRecording()
+    }
+
+    func addContextScreenshot() {
+        recordingCoordinator.addContextScreenshot()
+    }
+
+    func toggleScreenClip() {
+        recordingCoordinator.toggleScreenClip()
+    }
+
+    func clearContextBundle() {
+        recordingCoordinator.clearContextBundle()
     }
 
     var hasAccessibilityPermission: Bool {

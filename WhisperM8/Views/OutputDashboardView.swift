@@ -94,7 +94,7 @@ struct OutputOverviewView: View {
             }
 
             Section("Last Output") {
-                LastOutputPreview(title: "Context", text: appState.lastSelectedContext?.text)
+                LastOutputPreview(title: "Context", text: lastContextText)
                 LastOutputPreview(title: "Raw", text: appState.lastRawTranscription)
                 LastOutputPreview(title: "Final", text: appState.lastFinalTranscription ?? appState.lastTranscription)
             }
@@ -104,6 +104,22 @@ struct OutputOverviewView: View {
         .onAppear {
             codexStatus = CodexStatusProbe().status()
         }
+    }
+
+    private var lastContextText: String? {
+        guard let bundle = appState.lastContextBundle ?? appState.lastSelectedContext.map({ TranscriptContextBundle(selectedText: $0) }),
+              !bundle.isEmpty else {
+            return nil
+        }
+
+        var parts: [String] = []
+        if !bundle.selectedText.isEmpty {
+            parts.append(bundle.selectedText.text)
+        }
+        if !bundle.visualContextSummary.isEmpty {
+            parts.append(bundle.visualContextSummary)
+        }
+        return parts.joined(separator: "\n\n")
     }
 }
 
@@ -548,7 +564,7 @@ struct OutputTemplatesView: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(selectedTemplate.isBuiltIn)
 
-                    Text("Placeholders: {rawTranscript}, {selectedContext}, {activeApp}, {language}, {date}")
+                    Text("Placeholders: {rawTranscript}, {selectedContext}, {visualContextSummary}, {attachmentCount}, {activeApp}, {language}, {date}")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

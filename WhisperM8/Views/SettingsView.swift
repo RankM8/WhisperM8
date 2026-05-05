@@ -271,6 +271,7 @@ struct HotkeySettingsView: View {
 struct PermissionsSettingsView: View {
     @State private var microphoneStatus = PermissionService.microphoneAuthorizationStatus
     @State private var accessibilityGranted = PermissionService.hasAccessibilityPermission
+    @State private var screenRecordingGranted = PermissionService.hasScreenRecordingPermission
     @State private var permissionTimer: Timer?
 
     private var microphoneGranted: Bool {
@@ -322,7 +323,7 @@ struct PermissionsSettingsView: View {
                 SystemPermissionRow(
                     icon: "accessibility",
                     title: "Accessibility",
-                    description: "Required for auto-paste and selected-context capture.",
+                    description: "Required for auto-paste and selected text capture.",
                     statusText: accessibilityGranted ? "Granted" : "Not granted",
                     isGranted: accessibilityGranted,
                     primaryButtonTitle: accessibilityGranted ? "Check Again" : "Grant",
@@ -332,8 +333,22 @@ struct PermissionsSettingsView: View {
                 )
             }
 
+            Section("Optional Visual Context") {
+                SystemPermissionRow(
+                    icon: "rectangle.dashed.badge.record",
+                    title: "Screen Recording",
+                    description: "Required only when you add screenshots or screen clips as context.",
+                    statusText: screenRecordingGranted ? "Granted" : "Not granted",
+                    isGranted: screenRecordingGranted,
+                    primaryButtonTitle: screenRecordingGranted ? "Check Again" : "Grant",
+                    primaryAction: handleScreenRecordingAction,
+                    secondaryButtonTitle: "Open Settings",
+                    secondaryAction: PermissionService.openScreenRecordingPrivacySettings
+                )
+            }
+
             Section("What happens without permissions") {
-                Text("Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste and selected-context capture will be blocked by macOS.")
+                Text("Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste and selected text capture will be blocked by macOS. Screen Recording is optional and only needed for screenshot or screen clip context.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -403,9 +418,19 @@ struct PermissionsSettingsView: View {
         }
     }
 
+    private func handleScreenRecordingAction() {
+        if screenRecordingGranted {
+            refreshPermissions()
+        } else {
+            _ = PermissionService.requestScreenRecordingPermission()
+            PermissionService.openScreenRecordingPrivacySettings()
+        }
+    }
+
     private func refreshPermissions() {
         microphoneStatus = PermissionService.microphoneAuthorizationStatus
         accessibilityGranted = PermissionService.hasAccessibilityPermission
+        screenRecordingGranted = PermissionService.hasScreenRecordingPermission
     }
 
     private func startPermissionPolling() {
@@ -515,6 +540,10 @@ struct BehaviorSettingsView: View {
     @AppStorage("audioDuckingFactor") private var audioDuckingFactor = 0.2
     @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.full.rawValue
     @AppStorage("selectedContextCaptureEnabled") private var selectedContextCaptureEnabled = true
+    @AppStorage("visualContextCaptureEnabled") private var visualContextCaptureEnabled = true
+    @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = 3
+    @AppStorage("maxScreenRecordingDuration") private var maxScreenRecordingDuration = 30.0
+    @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = true
 
     var body: some View {
         Form {
@@ -532,6 +561,26 @@ struct BehaviorSettingsView: View {
                 Toggle("Use selected text as context", isOn: $selectedContextCaptureEnabled)
 
                 Text("When enabled, WhisperM8 can capture highlighted text from the active app before recording and pass it to context-aware modes like Slack, WhatsApp, and Email.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Visual Context") {
+                Toggle("Allow screenshots and screen clips as context", isOn: $visualContextCaptureEnabled)
+
+                Stepper("Screenshots per recording: \(maxScreenshotsPerRecording)", value: $maxScreenshotsPerRecording, in: 1...6)
+
+                HStack {
+                    Text("Max screen clip")
+                    Slider(value: $maxScreenRecordingDuration, in: 5...60, step: 5)
+                    Text("\(Int(maxScreenRecordingDuration))s")
+                        .monospacedDigit()
+                        .frame(width: 38, alignment: .trailing)
+                }
+
+                Toggle("Delete visual context files after processing", isOn: $deleteContextFilesAfterProcessing)
+
+                Text("Visual context is captured only when you click Screenshot or Screen Clip in the recording overlay. It requires Screen Recording permission.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

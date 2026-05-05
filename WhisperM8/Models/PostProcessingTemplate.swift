@@ -12,16 +12,32 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
     func render(
         rawTranscript: String,
         language: String,
-        selectedContext: SelectedContext = .empty,
+        contextBundle: TranscriptContextBundle = .empty,
         date: Date = Date()
     ) -> String {
         let renderedDate = Self.dateFormatter.string(from: date)
         return instruction
             .replacingOccurrences(of: "{rawTranscript}", with: rawTranscript)
-            .replacingOccurrences(of: "{selectedContext}", with: selectedContext.text)
-            .replacingOccurrences(of: "{activeApp}", with: selectedContext.sourceAppName ?? "")
+            .replacingOccurrences(of: "{selectedContext}", with: contextBundle.selectedText.text)
+            .replacingOccurrences(of: "{visualContextSummary}", with: contextBundle.visualContextSummary)
+            .replacingOccurrences(of: "{attachmentCount}", with: "\(contextBundle.attachmentCount)")
+            .replacingOccurrences(of: "{activeApp}", with: contextBundle.sourceAppName ?? contextBundle.selectedText.sourceAppName ?? "")
             .replacingOccurrences(of: "{language}", with: language.isEmpty ? "auto" : language)
             .replacingOccurrences(of: "{date}", with: renderedDate)
+    }
+
+    func render(
+        rawTranscript: String,
+        language: String,
+        selectedContext: SelectedContext,
+        date: Date = Date()
+    ) -> String {
+        render(
+            rawTranscript: rawTranscript,
+            language: language,
+            contextBundle: TranscriptContextBundle(selectedText: selectedContext),
+            date: date
+        )
     }
 
     func duplicated(now: Date = Date()) -> PostProcessingTemplate {
@@ -65,10 +81,17 @@ extension PostProcessingTemplate {
                 - Output only the final text.
                 - Do not explain your changes.
                 - Preserve the original meaning strictly.
+                - If selected text or visual context is present, use it only to clarify terms, UI references, names, and visible context.
                 - Fix punctuation, casing, obvious speech artifacts, and paragraph breaks.
                 - Do not invent facts or add new information.
 
                 Language: {language}
+
+                Selected context:
+                {selectedContext}
+
+                Visual context:
+                {visualContextSummary}
 
                 Transcript:
                 {rawTranscript}
@@ -99,6 +122,7 @@ extension PostProcessingTemplate {
 
                 Technical cleanup focus:
                 - Correct obvious AI/software/design/IT terms that speech-to-text often mishears.
+                - If selected text or visual context is present, use it only to disambiguate terminology, UI labels, product names, code names, and conversation references.
                 - Prefer established spellings and casing for tools, frameworks, models, and engineering terms.
                 - Keep product and model names precise when context makes them clear.
                 - Fix split or phonetically transcribed terms such as API, CLI, SDK, OAuth, JSON, SwiftUI, Xcode, GitHub, GitLab, TypeScript, JavaScript, React, Next.js, Tailwind, Supabase, PostgreSQL, backend, frontend, full stack, dashboard, template, prompt, model, reasoning, Keychain, onboarding, Spotlight, Finder, menu bar, auto-paste, clipboard, transcription, post-processing, Codex, ChatGPT, OpenAI, Groq, Whisper, Claude, Claude Code, Cursor, Figma, Linear, Slack.
@@ -112,6 +136,12 @@ extension PostProcessingTemplate {
                 - Keep lists as lists only if the speaker dictated a list-like structure.
 
                 Language: {language}
+
+                Selected context:
+                {selectedContext}
+
+                Visual context:
+                {visualContextSummary}
 
                 Transcript:
                 {rawTranscript}
@@ -130,10 +160,14 @@ extension PostProcessingTemplate {
                 Context:
                 {selectedContext}
 
+                Visual context:
+                {visualContextSummary}
+
                 Rules:
                 - Output only the final text.
                 - Keep the user's intent and factual content.
-                - If Context is present, use it as background for the reply or message.
+                - If context is present, use it as background for the reply or message.
+                - If visual context is present, use it only to understand the screen, selected item, UI, or referenced content.
                 - Be polite and professional without exaggerating.
                 - Do not invent missing details.
                 - Do not add dates, names, greetings, signatures, subjects, or placeholders unless they are present or explicitly requested in the transcript.
@@ -161,9 +195,13 @@ extension PostProcessingTemplate {
                 Context:
                 {selectedContext}
 
+                Visual context:
+                {visualContextSummary}
+
                 Rules:
                 - Output only the final message.
-                - If Context is present, treat it as the selected conversation or source text the user is responding to.
+                - If context is present, treat it as the selected conversation or source text the user is responding to.
+                - If visual context is present, use it only to understand the visible app, selected message, UI, or referenced content.
                 - Use the transcript as the user's instruction for what to write.
                 - Use Du-Form when addressing people.
                 - Keep it concise, but do not remove important context.
@@ -202,9 +240,13 @@ extension PostProcessingTemplate {
                 Context:
                 {selectedContext}
 
+                Visual context:
+                {visualContextSummary}
+
                 Rules:
                 - Output only the final message.
-                - If Context is present, treat it as the selected chat or source text the user is responding to.
+                - If context is present, treat it as the selected chat or source text the user is responding to.
+                - If visual context is present, use it only to understand the visible chat, selected message, UI, or referenced content.
                 - Use the transcript as the user's instruction for what to write.
                 - Use Du-Form.
                 - Keep it short and conversational.
@@ -221,6 +263,12 @@ extension PostProcessingTemplate {
                 - So, als würde man einer bekannten Person oder einem Teammitglied schreiben.
 
                 Language: {language}
+
+                Selected context:
+                {selectedContext}
+
+                Visual context:
+                {visualContextSummary}
 
                 Transcript:
                 {rawTranscript}

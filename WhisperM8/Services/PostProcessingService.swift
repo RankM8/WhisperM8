@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 
 protocol PostProcessing {
-    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String
+    func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String
 }
 
 enum PostProcessingError: LocalizedError, Equatable {
@@ -20,17 +20,17 @@ enum PostProcessingError: LocalizedError, Equatable {
 }
 
 struct NoOpPostProcessor: PostProcessing {
-    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String {
+    func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
         rawText
     }
 }
 
 struct MockPostProcessor: PostProcessing {
     var output: String
-    var onProcess: ((String, OutputMode, String, SelectedContext) -> Void)?
+    var onProcess: ((String, OutputMode, String, TranscriptContextBundle) -> Void)?
 
-    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String {
-        onProcess?(rawText, mode, language, selectedContext)
+    func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
+        onProcess?(rawText, mode, language, contextBundle)
         return output
     }
 }
@@ -43,7 +43,7 @@ struct CodexPostProcessor: PostProcessing {
         self.templateStore = templateStore
     }
 
-    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String {
+    func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
         guard let template = templateStore.template(for: mode.templateID) else {
             throw PostProcessingError.missingTemplate
         }
@@ -55,17 +55,17 @@ struct CodexPostProcessor: PostProcessing {
             )
         }
 
-        let prompt = template.render(rawTranscript: rawText, language: language, selectedContext: selectedContext)
-        return try await runCodex(prompt: prompt)
+        let prompt = template.render(rawTranscript: rawText, language: language, contextBundle: contextBundle)
+        return try await runCodex(prompt: prompt, imageURLs: contextBundle.visualAttachments.map(\.fileURL))
     }
 
-    private func runCodex(prompt: String) async throws -> String {
+    private func runCodex(prompt: String, imageURLs: [URL]) async throws -> String {
         try await Task.detached(priority: .userInitiated) {
-            try performCodexRun(prompt: prompt)
+            try performCodexRun(prompt: prompt, imageURLs: imageURLs)
         }.value
     }
 
-    private func performCodexRun(prompt: String) throws -> String {
+    private func performCodexRun(prompt: String, imageURLs: [URL]) throws -> String {
         guard let codexPath = CodexStatusProbe().commandPath("codex") else {
             throw PostProcessingError.codexUnavailable("Codex CLI is not installed.")
         }
@@ -78,16 +78,12 @@ struct CodexPostProcessor: PostProcessing {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: codexPath)
         process.currentDirectoryURL = FileManager.default.temporaryDirectory
-        process.arguments = [
-            "exec",
-            "-m", AppPreferences.shared.codexPostProcessingModelRaw,
-            "-c", "model_reasoning_effort=\(AppPreferences.shared.codexReasoningEffortRaw)",
-            "--sandbox", "read-only",
-            "--skip-git-repo-check",
-            "--ephemeral",
-            "--output-last-message", outputURL.path,
-            "-"
-        ]
+        process.arguments = CodexInvocation.arguments(
+            promptImageURLs: imageURLs,
+            outputURL: outputURL,
+            model: AppPreferences.shared.codexPostProcessingModelRaw,
+            reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw
+        )
 
         let inputPipe = Pipe()
         let logPipe = Pipe()
@@ -161,37 +157,77 @@ struct PostProcessingService {
         rawText: String,
         mode: OutputMode,
         language: String,
-        selectedContext: SelectedContext = .empty
+        contextBundle: TranscriptContextBundle = .empty
     ) async throws -> String {
         guard mode.usesPostProcessing else {
             return try await NoOpPostProcessor().process(
                 rawText: rawText,
                 mode: mode,
                 language: language,
-                selectedContext: selectedContext
+                contextBundle: contextBundle
             )
         }
 
-        let allowedContext = allowedSelectedContext(for: mode, capturedContext: selectedContext)
+        let allowedContext = allowedContextBundle(for: mode, capturedContext: contextBundle)
         if mode.contextPolicy == .required, allowedContext.isEmpty {
-            throw PostProcessingError.codexUnavailable("This mode requires selected context, but no selected text was captured.")
+            throw PostProcessingError.codexUnavailable("This mode requires context, but no selected text or visual context was captured.")
         }
 
         return try await processor.process(
             rawText: rawText,
             mode: mode,
             language: language,
-            selectedContext: allowedContext
+            contextBundle: allowedContext
         )
     }
 
-    private func allowedSelectedContext(for mode: OutputMode, capturedContext: SelectedContext) -> SelectedContext {
+    private func allowedContextBundle(for mode: OutputMode, capturedContext: TranscriptContextBundle) -> TranscriptContextBundle {
         switch mode.contextPolicy {
         case .off:
             return .empty
         case .auto, .required:
             return capturedContext
         }
+    }
+
+    func process(
+        rawText: String,
+        mode: OutputMode,
+        language: String,
+        selectedContext: SelectedContext
+    ) async throws -> String {
+        try await process(
+            rawText: rawText,
+            mode: mode,
+            language: language,
+            contextBundle: TranscriptContextBundle(selectedText: selectedContext)
+        )
+    }
+}
+
+enum CodexInvocation {
+    static func arguments(
+        promptImageURLs: [URL],
+        outputURL: URL,
+        model: String,
+        reasoningEffort: String
+    ) -> [String] {
+        var arguments = [
+            "exec",
+            "-m", model,
+            "-c", "model_reasoning_effort=\(reasoningEffort)",
+            "--sandbox", "read-only",
+            "--skip-git-repo-check",
+            "--ephemeral",
+            "--output-last-message", outputURL.path,
+        ]
+
+        for imageURL in promptImageURLs {
+            arguments.append(contentsOf: ["--image", imageURL.path])
+        }
+
+        arguments.append("-")
+        return arguments
     }
 }
 

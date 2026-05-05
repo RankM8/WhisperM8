@@ -1,6 +1,7 @@
 import AVFoundation
 import ApplicationServices
 import AppKit
+import CoreGraphics
 
 enum PermissionService {
     static var microphoneAuthorizationStatus: AVAuthorizationStatus {
@@ -15,6 +16,10 @@ enum PermissionService {
         AXIsProcessTrusted()
     }
 
+    static var hasScreenRecordingPermission: Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
     static func requestAccessibilityPermission() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
@@ -24,12 +29,20 @@ enum PermissionService {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
 
+    static func requestScreenRecordingPermission() -> Bool {
+        CGRequestScreenCaptureAccess()
+    }
+
     static func openMicrophonePrivacySettings() {
         openPrivacyPane("Privacy_Microphone")
     }
 
     static func openAccessibilityPrivacySettings() {
         openPrivacyPane("Privacy_Accessibility")
+    }
+
+    static func openScreenRecordingPrivacySettings() {
+        openPrivacyPane("Privacy_ScreenCapture")
     }
 
     private static func openPrivacyPane(_ pane: String) {

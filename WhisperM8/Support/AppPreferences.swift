@@ -87,6 +87,32 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.selectedContextCaptureEnabled) }
     }
 
+    var isVisualContextCaptureEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.visualContextCaptureEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.visualContextCaptureEnabled) }
+    }
+
+    var maxScreenshotsPerRecording: Int {
+        get {
+            let value = defaults.integer(forKey: Keys.maxScreenshotsPerRecording)
+            return value > 0 ? value : 3
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.maxScreenshotsPerRecording) }
+    }
+
+    var maxScreenRecordingDuration: TimeInterval {
+        get {
+            let value = defaults.double(forKey: Keys.maxScreenRecordingDuration)
+            return value > 0 ? value : 30
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.maxScreenRecordingDuration) }
+    }
+
+    var deleteContextFilesAfterProcessing: Bool {
+        get { boolWithDefault(true, forKey: Keys.deleteContextFilesAfterProcessing) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.deleteContextFilesAfterProcessing) }
+    }
+
     var codexPostProcessingModelRaw: String {
         get { defaults.string(forKey: Keys.codexPostProcessingModel) ?? CodexPostProcessingModel.defaultModel.rawValue }
         nonmutating set { defaults.set(newValue, forKey: Keys.codexPostProcessingModel) }
@@ -145,6 +171,10 @@ enum PreferenceKeys {
     static let fallbackToRawOnProcessingError = "fallbackToRawOnProcessingError"
     static let showModePickerInMiniOverlay = "showModePickerInMiniOverlay"
     static let selectedContextCaptureEnabled = "selectedContextCaptureEnabled"
+    static let visualContextCaptureEnabled = "visualContextCaptureEnabled"
+    static let maxScreenshotsPerRecording = "maxScreenshotsPerRecording"
+    static let maxScreenRecordingDuration = "maxScreenRecordingDuration"
+    static let deleteContextFilesAfterProcessing = "deleteContextFilesAfterProcessing"
     static let codexPostProcessingModel = "codexPostProcessingModel"
     static let codexReasoningEffort = "codexReasoningEffort"
 }

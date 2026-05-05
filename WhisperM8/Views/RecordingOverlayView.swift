@@ -44,7 +44,9 @@ struct FullRecordingOverlayView: View {
                 action: controller.setOutputMode
             )
 
-            ContextStatusChip(selectedContext: controller.selectedContext, compact: false)
+            ContextControl(controller: controller, compact: false)
+
+            VisualContextActionButtons(controller: controller)
 
             Spacer(minLength: 0)
 
@@ -84,6 +86,63 @@ struct FullRecordingOverlayView: View {
     }
 }
 
+struct VisualContextActionButtons: View {
+    @ObservedObject var controller: OverlayController
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                if PermissionService.hasScreenRecordingPermission {
+                    controller.addScreenshot()
+                } else {
+                    _ = PermissionService.requestScreenRecordingPermission()
+                    PermissionService.openScreenRecordingPrivacySettings()
+                }
+            } label: {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 24, height: 24)
+                    .background {
+                        Circle()
+                            .fill(Color.primary.opacity(0.08))
+                    }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canAddVisualContext ? Color.green : Color.secondary.opacity(0.7))
+            .disabled(controller.isTranscribing || controller.isPostProcessing || controller.isScreenClipRecording)
+            .help(PermissionService.hasScreenRecordingPermission ? "Add screenshot context" : "Grant Screen Recording permission")
+            .accessibilityLabel("Add screenshot context")
+
+            Button {
+                if PermissionService.hasScreenRecordingPermission {
+                    controller.toggleScreenClip()
+                } else {
+                    _ = PermissionService.requestScreenRecordingPermission()
+                    PermissionService.openScreenRecordingPrivacySettings()
+                }
+            } label: {
+                Image(systemName: controller.isScreenClipRecording ? "stop.circle.fill" : "record.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 24, height: 24)
+                    .background {
+                        Circle()
+                            .fill(controller.isScreenClipRecording ? Color.red.opacity(0.18) : Color.primary.opacity(0.08))
+                    }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(controller.isScreenClipRecording ? Color.red : (canAddVisualContext ? Color.green : Color.secondary.opacity(0.7)))
+            .disabled(controller.isTranscribing || controller.isPostProcessing)
+            .help(controller.isScreenClipRecording ? "Stop screen clip context" : (PermissionService.hasScreenRecordingPermission ? "Start screen clip context" : "Grant Screen Recording permission"))
+            .accessibilityLabel(controller.isScreenClipRecording ? "Stop screen clip context" : "Start screen clip context")
+        }
+    }
+
+    private var canAddVisualContext: Bool {
+        AppPreferences.shared.isVisualContextCaptureEnabled
+            && PermissionService.hasScreenRecordingPermission
+    }
+}
+
 struct MiniRecordingOverlayView: View {
     @ObservedObject var controller: OverlayController
 
@@ -96,7 +155,7 @@ struct MiniRecordingOverlayView: View {
                 )
             }
 
-            ContextStatusChip(selectedContext: controller.selectedContext, compact: true)
+            ContextControl(controller: controller, compact: true)
 
             if controller.isTranscribing || controller.isPostProcessing {
                 ProgressView()
@@ -165,43 +224,132 @@ struct OutputModeMenu: View {
     }
 }
 
-struct ContextStatusChip: View {
-    let selectedContext: SelectedContext
+struct ContextControl: View {
+    @ObservedObject var controller: OverlayController
     let compact: Bool
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: selectedContext.isEmpty ? "text.badge.xmark" : "text.viewfinder")
-                .font(.system(size: compact ? 9 : 10, weight: .semibold))
+        Menu {
+            ContextMenuContent(controller: controller)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: iconName)
+                    .font(.system(size: compact ? 9 : 10, weight: .semibold))
 
-            Text(label)
-                .font(.system(size: compact ? 10 : 11, weight: .medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                Text(label)
+                    .font(.system(size: compact ? 10 : 11, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .foregroundStyle(controller.contextBundle.isEmpty ? Color.secondary.opacity(0.75) : Color.green)
+            .frame(width: compact ? 58 : 96, height: compact ? 22 : 24)
+            .background {
+                Capsule()
+                    .fill(Color.primary.opacity(0.08))
+            }
         }
-        .foregroundStyle(selectedContext.isEmpty ? Color.secondary.opacity(0.75) : Color.green)
-        .frame(width: compact ? 54 : 76, height: compact ? 22 : 24)
-        .background {
-            Capsule()
-                .fill(Color.primary.opacity(0.08))
-        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .disabled(controller.isTranscribing || controller.isPostProcessing)
         .help(helpText)
         .accessibilityLabel(helpText)
     }
 
     private var label: String {
         if compact {
-            return selectedContext.isEmpty ? "No Ctx" : "Ctx"
+            return controller.contextBundle.compactSummary
         }
-        return selectedContext.isEmpty ? "No Context" : "Context"
+        return controller.contextBundle.displaySummary
+    }
+
+    private var iconName: String {
+        if controller.isScreenClipRecording { return "record.circle" }
+        if !controller.contextBundle.screenshots.isEmpty || !controller.contextBundle.screenClips.isEmpty {
+            return "photo.on.rectangle"
+        }
+        return controller.contextBundle.selectedText.isEmpty ? "text.badge.xmark" : "text.viewfinder"
     }
 
     private var helpText: String {
-        if selectedContext.isEmpty {
-            return "No selected text was captured for this recording."
+        if controller.contextBundle.isEmpty {
+            return "No context was captured for this recording."
         }
-        let source = selectedContext.sourceAppName ?? "the active app"
-        return "Selected context captured from \(source)."
+        return "Context captured for this recording: \(controller.contextBundle.displaySummary)."
+    }
+}
+
+struct ContextMenuContent: View {
+    @ObservedObject var controller: OverlayController
+
+    var body: some View {
+        if !controller.contextBundle.selectedText.isEmpty {
+            Text("Selected Text")
+            Text(contextPreview)
+        } else {
+            Text("No selected text")
+        }
+
+        Divider()
+
+        if PermissionService.hasScreenRecordingPermission {
+            Button {
+                controller.addScreenshot()
+            } label: {
+                Label("Add Screenshot", systemImage: "camera.viewfinder")
+            }
+            .disabled(!canAddVisualContext)
+
+            Button {
+                controller.toggleScreenClip()
+            } label: {
+                Label(controller.isScreenClipRecording ? "Stop Screen Clip" : "Start Screen Clip", systemImage: controller.isScreenClipRecording ? "stop.circle" : "record.circle")
+            }
+            .disabled(!canAddVisualContext && !controller.isScreenClipRecording)
+        } else {
+            Button {
+                _ = PermissionService.requestScreenRecordingPermission()
+                PermissionService.openScreenRecordingPrivacySettings()
+            } label: {
+                Label("Grant Screen Recording", systemImage: "rectangle.dashed.badge.record")
+            }
+        }
+
+        Button {
+            controller.clearContext()
+        } label: {
+            Label("Clear Context", systemImage: "trash")
+        }
+        .disabled(controller.contextBundle.isEmpty || controller.isScreenClipRecording)
+
+        Divider()
+
+        Text(attachmentSummary)
+    }
+
+    private var canAddVisualContext: Bool {
+        AppPreferences.shared.isVisualContextCaptureEnabled
+            && PermissionService.hasScreenRecordingPermission
+            && !controller.isScreenClipRecording
+    }
+
+    private var contextPreview: String {
+        let text = controller.contextBundle.selectedText.text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.count > 42 {
+            return String(text.prefix(42)) + "..."
+        }
+        return text
+    }
+
+    private var attachmentSummary: String {
+        if controller.isScreenClipRecording {
+            return "Screen clip recording..."
+        }
+        if controller.contextBundle.isEmpty {
+            return PermissionService.hasScreenRecordingPermission ? "Ready for visual context" : "Screen Recording permission needed"
+        }
+        return controller.contextBundle.displaySummary
     }
 }
 
