@@ -77,6 +77,14 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertTrue(rendered.contains("1970-01-01"))
     }
 
+    func testBuiltInTemplatesIncludeTechDenglishCleanup() {
+        let template = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.techCleanID }
+
+        XCTAssertEqual(template?.name, "Tech/Denglisch clean transcript")
+        XCTAssertTrue(template?.instruction.contains("Claude Code") == true)
+        XCTAssertTrue(template?.instruction.contains("Preserve the speaker's meaning") == true)
+    }
+
     func testTemplateStoreLoadsBuiltInsAndSavesCustomTemplates() throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8Tests-\(UUID().uuidString)")

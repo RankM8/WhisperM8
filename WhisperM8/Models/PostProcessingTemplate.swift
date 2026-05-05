@@ -38,6 +38,7 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
 
 extension PostProcessingTemplate {
     static let cleanID = "template.clean"
+    static let techCleanID = "template.tech-clean"
     static let emailID = "template.email"
     static let notesID = "template.notes"
 
@@ -57,6 +58,49 @@ extension PostProcessingTemplate {
                 - Preserve the original meaning strictly.
                 - Fix punctuation, casing, obvious speech artifacts, and paragraph breaks.
                 - Do not invent facts or add new information.
+
+                Language: {language}
+
+                Transcript:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: techCleanID,
+                name: "Tech/Denglisch clean transcript",
+                description: "Räumt deutsche/englische AI-, Software-, IT- und Design-Diktate auf und korrigiert offensichtliche Fachbegriff-Verhörer.",
+                instruction: """
+                Clean up this transcript for a technical German/English mixed work context.
+
+                Goal:
+                Produce a polished transcript that preserves exactly what the speaker meant, while fixing obvious speech-to-text mistakes, punctuation, casing, paragraph breaks, and malformed technical terms.
+
+                Hard rules:
+                - Output only the final cleaned transcript.
+                - Do not explain your changes.
+                - Preserve the speaker's meaning, tone, intent, order, and level of detail.
+                - Do not summarize, shorten, expand, or restructure into notes unless the speaker explicitly asked for that.
+                - Do not invent facts, names, dates, decisions, links, files, tools, or requirements.
+                - Keep German, English, and Denglisch naturally mixed when the transcript is mixed.
+                - Keep casual spoken wording when it carries intent, but remove filler only when it is clearly accidental.
+                - If a term is ambiguous, prefer the original wording instead of guessing.
+
+                Technical cleanup focus:
+                - Correct obvious AI/software/design/IT terms that speech-to-text often mishears.
+                - Prefer established spellings and casing for tools, frameworks, models, and engineering terms.
+                - Keep product and model names precise when context makes them clear.
+                - Fix split or phonetically transcribed terms such as API, CLI, SDK, OAuth, JSON, SwiftUI, Xcode, GitHub, GitLab, TypeScript, JavaScript, React, Next.js, Tailwind, Supabase, PostgreSQL, backend, frontend, full stack, dashboard, template, prompt, model, reasoning, Keychain, onboarding, Spotlight, Finder, menu bar, auto-paste, clipboard, transcription, post-processing, Codex, ChatGPT, OpenAI, Groq, Whisper, Claude, Claude Code, Cursor, Figma, Linear, Slack.
+                - Example: if context clearly points to Anthropic's coding tool, correct "Cloud Code", "Cloth Code", or similar variants to "Claude Code".
+                - Example: correct "open AI" to "OpenAI" when referring to the company/API, and "chat GPT" to "ChatGPT".
+                - Example: correct "front end" or "back end" to "frontend" or "backend" when used as engineering nouns/adjectives.
+
+                Formatting:
+                - Use readable paragraphs.
+                - Add punctuation and capitalization.
+                - Keep lists as lists only if the speaker dictated a list-like structure.
 
                 Language: {language}
 

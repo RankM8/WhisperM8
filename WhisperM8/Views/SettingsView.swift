@@ -9,6 +9,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
     case modes = "Modes"
     case templates = "Templates"
     case testLab = "Test Lab"
+    case permissions = "Permissions"
     case hotkey = "Hotkey"
     case audio = "Audio"
     case behavior = "Behavior"
@@ -30,6 +31,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "doc.text"
         case .testLab:
             return "testtube.2"
+        case .permissions:
+            return "shield.checkered"
         case .hotkey:
             return "keyboard"
         case .audio:
@@ -47,7 +50,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "Accounts"
         case .outputOverview, .modes, .templates, .testLab:
             return "Output"
-        case .hotkey, .audio, .behavior:
+        case .permissions, .hotkey, .audio, .behavior:
             return "App"
         case .about:
             return "About"
@@ -75,6 +78,7 @@ struct SettingsView: View {
                 }
 
                 Section("App") {
+                    sidebarRow(.permissions)
                     sidebarRow(.hotkey)
                     sidebarRow(.audio)
                     sidebarRow(.behavior)
@@ -115,6 +119,9 @@ struct SettingsView: View {
             OutputTemplatesView()
         case .testLab:
             OutputTestLabView()
+        case .permissions:
+            PermissionsSettingsView()
+                .navigationTitle(section.rawValue)
         case .hotkey:
             HotkeySettingsView()
                 .navigationTitle(section.rawValue)
@@ -256,6 +263,215 @@ struct HotkeySettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Permissions Settings
+
+struct PermissionsSettingsView: View {
+    @State private var microphoneStatus = PermissionService.microphoneAuthorizationStatus
+    @State private var accessibilityGranted = PermissionService.hasAccessibilityPermission
+    @State private var permissionTimer: Timer?
+
+    private var microphoneGranted: Bool {
+        microphoneStatus == .authorized
+    }
+
+    private var allGranted: Bool {
+        microphoneGranted && accessibilityGranted
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(alignment: .center, spacing: 14) {
+                    Image(systemName: allGranted ? "checkmark.shield.fill" : "shield.lefthalf.filled")
+                        .font(.system(size: 28))
+                        .foregroundStyle(allGranted ? .green : .orange)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(allGranted ? "All system permissions are active" : "WhisperM8 needs system access")
+                            .font(.headline)
+                        Text("You can re-check or repair permissions here without running onboarding again.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button("Refresh") {
+                        refreshPermissions()
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section("Required") {
+                SystemPermissionRow(
+                    icon: "mic.fill",
+                    title: "Microphone",
+                    description: "Required to record your voice for transcription.",
+                    statusText: microphoneStatusText,
+                    isGranted: microphoneGranted,
+                    primaryButtonTitle: microphonePrimaryButtonTitle,
+                    primaryAction: handleMicrophoneAction,
+                    secondaryButtonTitle: "Open Settings",
+                    secondaryAction: PermissionService.openMicrophonePrivacySettings
+                )
+
+                SystemPermissionRow(
+                    icon: "accessibility",
+                    title: "Accessibility",
+                    description: "Required for auto-paste into the previously active app.",
+                    statusText: accessibilityGranted ? "Granted" : "Not granted",
+                    isGranted: accessibilityGranted,
+                    primaryButtonTitle: accessibilityGranted ? "Check Again" : "Grant",
+                    primaryAction: handleAccessibilityAction,
+                    secondaryButtonTitle: "Open Settings",
+                    secondaryAction: PermissionService.openAccessibilityPrivacySettings
+                )
+            }
+
+            Section("What happens without permissions") {
+                Text("Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste will be blocked by macOS.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear {
+            refreshPermissions()
+            startPermissionPolling()
+        }
+        .onDisappear {
+            stopPermissionPolling()
+        }
+    }
+
+    private var microphoneStatusText: String {
+        switch microphoneStatus {
+        case .authorized:
+            return "Granted"
+        case .denied:
+            return "Denied"
+        case .restricted:
+            return "Restricted"
+        case .notDetermined:
+            return "Not requested"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    private var microphonePrimaryButtonTitle: String {
+        switch microphoneStatus {
+        case .authorized:
+            return "Check Again"
+        case .denied, .restricted:
+            return "Open Settings"
+        case .notDetermined:
+            return "Grant"
+        @unknown default:
+            return "Open Settings"
+        }
+    }
+
+    private func handleMicrophoneAction() {
+        switch microphoneStatus {
+        case .authorized:
+            refreshPermissions()
+        case .notDetermined:
+            Task {
+                _ = await PermissionService.requestMicrophonePermission()
+                await MainActor.run {
+                    refreshPermissions()
+                }
+            }
+        case .denied, .restricted:
+            PermissionService.openMicrophonePrivacySettings()
+        @unknown default:
+            PermissionService.openMicrophonePrivacySettings()
+        }
+    }
+
+    private func handleAccessibilityAction() {
+        if accessibilityGranted {
+            refreshPermissions()
+        } else {
+            PermissionService.requestAccessibilityPermission()
+            PermissionService.openAccessibilityPrivacySettings()
+        }
+    }
+
+    private func refreshPermissions() {
+        microphoneStatus = PermissionService.microphoneAuthorizationStatus
+        accessibilityGranted = PermissionService.hasAccessibilityPermission
+    }
+
+    private func startPermissionPolling() {
+        stopPermissionPolling()
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            refreshPermissions()
+        }
+    }
+
+    private func stopPermissionPolling() {
+        permissionTimer?.invalidate()
+        permissionTimer = nil
+    }
+}
+
+struct SystemPermissionRow: View {
+    let icon: String
+    let title: String
+    let description: String
+    let statusText: String
+    let isGranted: Bool
+    let primaryButtonTitle: String
+    let primaryAction: () -> Void
+    let secondaryButtonTitle: String
+    let secondaryAction: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 22))
+                .foregroundStyle(isGranted ? .green : .blue)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 16)
+
+            Text(statusText)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isGranted ? .green : .orange)
+                .frame(minWidth: 86, alignment: .trailing)
+
+            if isGranted {
+                Button(primaryButtonTitle) {
+                    primaryAction()
+                }
+                .buttonStyle(.borderless)
+            } else {
+                Button(primaryButtonTitle) {
+                    primaryAction()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Button(secondaryButtonTitle) {
+                secondaryAction()
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.vertical, 6)
     }
 }
 
