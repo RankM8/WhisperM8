@@ -243,6 +243,47 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertTrue(bundle.displaySummary.contains("Text"))
         XCTAssertTrue(bundle.displaySummary.contains("Shot"))
     }
+
+    func testTranscriptRunReportStorePersistsContextAndOutput() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8ReportTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sourceImage = root.appendingPathComponent("source.png")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("image".utf8).write(to: sourceImage)
+
+        let store = TranscriptRunReportStore(
+            reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true)
+        )
+        let report = try store.save(TranscriptRunReportDraft(
+            sourceAppName: "Slack",
+            sourceBundleIdentifier: "com.tinyspeck.slackmacgap",
+            status: .succeeded,
+            errorMessage: nil,
+            mode: OutputMode.mode(for: OutputMode.slackID),
+            provider: .openai,
+            transcriptionModel: .openai_gpt4o,
+            language: "de",
+            audioDuration: 3.2,
+            contextBundle: TranscriptContextBundle(
+                selectedText: SelectedContext(text: "selected context", sourceAppName: "Slack", sourceBundleIdentifier: nil),
+                screenshots: [ContextAttachment(kind: .screenshot, fileURL: sourceImage)]
+            ),
+            renderedPrompt: "Prompt",
+            rawTranscript: "Raw",
+            finalTranscript: "Final",
+            copiedToClipboard: true,
+            autoPasteRequested: true
+        ))
+
+        let recentReports = store.recentReports()
+        XCTAssertEqual(recentReports.first?.id, report.id)
+        XCTAssertEqual(recentReports.first?.selectedText, "selected context")
+        XCTAssertEqual(recentReports.first?.attachments.count, 1)
+        XCTAssertEqual(recentReports.first?.attachments.first?.includedInCodexInput, true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recentReports.first?.attachments.first?.storedPath ?? ""))
+    }
 }
 
 private func withIsolatedOutputPreferences(_ body: (AppPreferences) throws -> Void) rethrows {

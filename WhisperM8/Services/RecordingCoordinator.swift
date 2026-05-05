@@ -1,5 +1,11 @@
 import AppKit
 
+private struct PostProcessingRunResult {
+    var finalText: String
+    var renderedPrompt: String?
+    var errorMessage: String?
+}
+
 @MainActor
 final class RecordingCoordinator {
     private weak var appState: AppState?
@@ -10,6 +16,7 @@ final class RecordingCoordinator {
     private let postProcessingService: PostProcessingService
     private let selectedContextService: SelectedContextService
     private let visualContextCaptureService: VisualContextCaptureService
+    private let reportStore: TranscriptRunReportStore
 
     private var recordingStartTime: Date?
     private var isProcessing = false
@@ -21,7 +28,8 @@ final class RecordingCoordinator {
         appState: AppState,
         postProcessingService: PostProcessingService = PostProcessingService(),
         selectedContextService: SelectedContextService = SelectedContextService(),
-        visualContextCaptureService: VisualContextCaptureService? = nil
+        visualContextCaptureService: VisualContextCaptureService? = nil,
+        reportStore: TranscriptRunReportStore = TranscriptRunReportStore()
     ) {
         self.appState = appState
         self.audioRecorder = AudioRecorder()
@@ -31,6 +39,7 @@ final class RecordingCoordinator {
         self.postProcessingService = postProcessingService
         self.selectedContextService = selectedContextService
         self.visualContextCaptureService = visualContextCaptureService ?? VisualContextCaptureService()
+        self.reportStore = reportStore
     }
 
     func startRecording() async {
@@ -287,16 +296,33 @@ final class RecordingCoordinator {
 
         appState.lastRawTranscription = normalizedRawText
 
-        let finalText = try await processTranscriptIfNeeded(
+        let postProcessingResult = try await processTranscriptIfNeeded(
             normalizedRawText,
             mode: outputMode,
             language: language,
             contextBundle: contextBundle
         )
+        let finalText = postProcessingResult.finalText
 
         pasteService.copyToClipboard(finalText)
         appState.lastFinalTranscription = finalText
         appState.lastTranscription = finalText
+
+        saveRunReport(
+            status: postProcessingResult.errorMessage == nil ? .succeeded : .rawFallback,
+            errorMessage: postProcessingResult.errorMessage,
+            outputMode: outputMode,
+            provider: provider,
+            model: model,
+            language: language,
+            audioDuration: audioDuration,
+            contextBundle: contextBundle,
+            renderedPrompt: postProcessingResult.renderedPrompt,
+            rawText: normalizedRawText,
+            finalText: finalText,
+            copiedToClipboard: true,
+            autoPasteRequested: AppPreferences.shared.isAutoPasteEnabled
+        )
 
         try? FileManager.default.removeItem(at: audioURL)
         visualContextCaptureService.cleanup(contextBundle)
@@ -325,12 +351,22 @@ final class RecordingCoordinator {
         mode: OutputMode,
         language: String,
         contextBundle: TranscriptContextBundle
-    ) async throws -> String {
-        guard let appState else { return rawText }
+    ) async throws -> PostProcessingRunResult {
+        guard let appState else {
+            return PostProcessingRunResult(finalText: rawText)
+        }
 
         guard mode.usesPostProcessing else {
-            return rawText
+            return PostProcessingRunResult(finalText: rawText)
         }
+
+        let allowedContextBundle = postProcessingService.allowedContextBundle(for: mode, capturedContext: contextBundle)
+        let renderedPrompt = postProcessingService.renderedPrompt(
+            rawText: rawText,
+            mode: mode,
+            language: language,
+            contextBundle: allowedContextBundle
+        )
 
         appState.isTranscribing = false
         appState.isPostProcessing = true
@@ -345,7 +381,10 @@ final class RecordingCoordinator {
             )
             appState.isPostProcessing = false
             overlayController.update(appState: appState)
-            return TextNormalizer.normalizeTranscriptionText(processedText)
+            return PostProcessingRunResult(
+                finalText: TextNormalizer.normalizeTranscriptionText(processedText),
+                renderedPrompt: renderedPrompt
+            )
         } catch {
             appState.isPostProcessing = false
             overlayController.update(appState: appState)
@@ -354,10 +393,54 @@ final class RecordingCoordinator {
                 let message = error.localizedDescription
                 appState.lastError = message
                 Logger.transcription.error("Post-processing failed; falling back to raw: \(message)")
-                return rawText
+                return PostProcessingRunResult(
+                    finalText: rawText,
+                    renderedPrompt: renderedPrompt,
+                    errorMessage: message
+                )
             }
 
             throw error
+        }
+    }
+
+    private func saveRunReport(
+        status: TranscriptRunStatus,
+        errorMessage: String?,
+        outputMode: OutputMode,
+        provider: TranscriptionProvider,
+        model: TranscriptionModel,
+        language: String,
+        audioDuration: TimeInterval,
+        contextBundle: TranscriptContextBundle,
+        renderedPrompt: String?,
+        rawText: String?,
+        finalText: String?,
+        copiedToClipboard: Bool,
+        autoPasteRequested: Bool
+    ) {
+        let draft = TranscriptRunReportDraft(
+            sourceAppName: contextSourceApp?.localizedName,
+            sourceBundleIdentifier: contextSourceApp?.bundleIdentifier,
+            status: status,
+            errorMessage: errorMessage,
+            mode: outputMode,
+            provider: provider,
+            transcriptionModel: model,
+            language: language,
+            audioDuration: audioDuration,
+            contextBundle: contextBundle,
+            renderedPrompt: renderedPrompt,
+            rawTranscript: rawText,
+            finalTranscript: finalText,
+            copiedToClipboard: copiedToClipboard,
+            autoPasteRequested: autoPasteRequested
+        )
+
+        do {
+            appState?.lastTranscriptRunReport = try reportStore.save(draft)
+        } catch {
+            Logger.debug("Failed to save transcript report: \(error.localizedDescription)")
         }
     }
 

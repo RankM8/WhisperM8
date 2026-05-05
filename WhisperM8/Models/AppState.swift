@@ -21,6 +21,7 @@ final class AppState {
     var contextBundle = TranscriptContextBundle.empty
     var lastContextBundle: TranscriptContextBundle?
     var isScreenClipRecording = false
+    var lastTranscriptRunReport: TranscriptRunReport?
 
     @ObservationIgnored
     private var recordingCoordinator: RecordingCoordinator!

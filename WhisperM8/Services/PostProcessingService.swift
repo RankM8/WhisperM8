@@ -181,13 +181,26 @@ struct PostProcessingService {
         )
     }
 
-    private func allowedContextBundle(for mode: OutputMode, capturedContext: TranscriptContextBundle) -> TranscriptContextBundle {
+    func allowedContextBundle(for mode: OutputMode, capturedContext: TranscriptContextBundle) -> TranscriptContextBundle {
         switch mode.contextPolicy {
         case .off:
             return .empty
         case .auto, .required:
             return capturedContext
         }
+    }
+
+    func renderedPrompt(
+        rawText: String,
+        mode: OutputMode,
+        language: String,
+        contextBundle: TranscriptContextBundle
+    ) -> String? {
+        guard mode.usesPostProcessing,
+              let template = PostProcessingTemplateStore().template(for: mode.templateID) else {
+            return nil
+        }
+        return template.render(rawTranscript: rawText, language: language, contextBundle: contextBundle)
     }
 
     func process(

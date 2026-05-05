@@ -1,7 +1,9 @@
+import AppKit
 import SwiftUI
 
 enum OutputDashboardSection: String, CaseIterable, Identifiable {
     case overview = "Overview"
+    case reports = "Reports"
     case modes = "Modes"
     case templates = "Templates"
     case codex = "Codex"
@@ -13,6 +15,8 @@ enum OutputDashboardSection: String, CaseIterable, Identifiable {
         switch self {
         case .overview:
             return "rectangle.grid.2x2"
+        case .reports:
+            return "list.bullet.rectangle"
         case .modes:
             return "slider.horizontal.3"
         case .templates:
@@ -41,6 +45,8 @@ struct OutputDashboardView: View {
             case .overview:
                 OutputOverviewView()
                     .environment(appState)
+            case .reports:
+                TranscriptReportsView()
             case .modes:
                 OutputModesView()
             case .templates:
@@ -94,6 +100,7 @@ struct OutputOverviewView: View {
             }
 
             Section("Last Output") {
+                LastOutputPreview(title: "Report", text: appState.lastTranscriptRunReport?.title)
                 LastOutputPreview(title: "Context", text: lastContextText)
                 LastOutputPreview(title: "Raw", text: appState.lastRawTranscription)
                 LastOutputPreview(title: "Final", text: appState.lastFinalTranscription ?? appState.lastTranscription)
@@ -120,6 +127,313 @@ struct OutputOverviewView: View {
             parts.append(bundle.visualContextSummary)
         }
         return parts.joined(separator: "\n\n")
+    }
+}
+
+struct TranscriptReportsView: View {
+    @State private var store = TranscriptRunReportStore()
+    @State private var reports: [TranscriptRunReport] = []
+    @State private var selectedReportID: UUID?
+    @State private var errorMessage: String?
+
+    private var selectedReport: TranscriptRunReport? {
+        reports.first { $0.id == selectedReportID } ?? reports.first
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            reportList
+                .frame(width: 320)
+
+            Divider()
+
+            if let selectedReport {
+                TranscriptReportDetailView(report: selectedReport) {
+                    delete(selectedReport)
+                }
+            } else {
+                ContentUnavailableView("No Reports Yet", systemImage: "list.bullet.rectangle")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .navigationTitle("Reports")
+        .onAppear(perform: reload)
+    }
+
+    private var reportList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Reports")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    reload()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Reload reports")
+            }
+            .padding([.top, .horizontal], 16)
+
+            List(selection: $selectedReportID) {
+                ForEach(reports) { report in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(report.mode.shortLabel)
+                                .font(.body.weight(.semibold))
+                            Spacer()
+                            Text(report.status.displayText)
+                                .font(.caption)
+                                .foregroundStyle(statusColor(report.status))
+                        }
+
+                        Text(report.sourceAppName ?? "Unknown app")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text(report.shortSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+
+                        Text(report.createdAt, format: .dateTime.month().day().hour().minute())
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .tag(report.id)
+                    .padding(.vertical, 4)
+                }
+            }
+            .listStyle(.sidebar)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func reload() {
+        reports = store.recentReports()
+        if selectedReportID == nil || !reports.contains(where: { $0.id == selectedReportID }) {
+            selectedReportID = reports.first?.id
+        }
+        errorMessage = nil
+    }
+
+    private func delete(_ report: TranscriptRunReport) {
+        do {
+            try store.delete(report)
+            reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func statusColor(_ status: TranscriptRunStatus) -> Color {
+        switch status {
+        case .succeeded:
+            return .green
+        case .rawFallback:
+            return .orange
+        case .failed:
+            return .red
+        }
+    }
+}
+
+struct TranscriptReportDetailView: View {
+    let report: TranscriptRunReport
+    var onDelete: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(report.title)
+                            .font(.title2.weight(.semibold))
+                        Text(report.createdAt, format: .dateTime.weekday().month().day().hour().minute().second())
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button("Delete Report", role: .destructive, action: onDelete)
+                }
+
+                reportOverview
+                reportContext
+                reportPrompt
+                reportOutput
+            }
+            .padding(24)
+        }
+    }
+
+    private var reportOverview: some View {
+        ReportCard("Run") {
+            ReportKeyValue("Status", report.status.displayText)
+            ReportKeyValue("Mode", "\(report.mode.name) (\(report.mode.shortLabel))")
+            ReportKeyValue("Template", report.mode.templateID ?? "None")
+            ReportKeyValue("Source App", report.sourceAppName ?? "Unknown")
+            ReportKeyValue("Provider", report.transcription.provider)
+            ReportKeyValue("STT Model", report.transcription.model)
+            ReportKeyValue("Language", report.transcription.language)
+            ReportKeyValue("Audio Duration", String(format: "%.1fs", report.transcription.audioDuration))
+            ReportKeyValue("Clipboard", report.copiedToClipboard ? "Copied" : "Not copied")
+            ReportKeyValue("Auto-Paste", report.autoPasteRequested ? "Requested" : "Off")
+            if let codex = report.codex {
+                ReportKeyValue("Codex Model", codex.model)
+                ReportKeyValue("Thinking", codex.reasoningEffort)
+                ReportKeyValue("Images Sent", "\(codex.imageInputPaths.count)")
+            }
+            if let errorMessage = report.errorMessage {
+                ReportKeyValue("Error", errorMessage)
+            }
+        }
+    }
+
+    private var reportContext: some View {
+        ReportCard("Input Context") {
+            ReportTextBlock(title: "Selected Text", text: report.selectedText)
+            ReportTextBlock(title: "Visual Summary", text: report.visualContextSummary)
+
+            if !report.attachments.isEmpty {
+                Text("Attachments")
+                    .font(.headline)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                    ForEach(report.attachments) { attachment in
+                        TranscriptAttachmentCard(attachment: attachment)
+                    }
+                }
+            }
+        }
+    }
+
+    private var reportPrompt: some View {
+        ReportCard("Prompt / Codex Input") {
+            ReportTextBlock(title: "Rendered Prompt", text: report.renderedPrompt)
+            if let command = report.codex?.commandPreview, !command.isEmpty {
+                ReportTextBlock(title: "Command Preview", text: command.joined(separator: " "))
+            }
+        }
+    }
+
+    private var reportOutput: some View {
+        ReportCard("Output") {
+            ReportTextBlock(title: "Raw Transcript", text: report.rawTranscript)
+            ReportTextBlock(title: "Final Output", text: report.finalTranscript)
+        }
+    }
+}
+
+struct ReportCard<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+struct ReportKeyValue: View {
+    let key: String
+    let value: String
+
+    init(_ key: String, _ value: String) {
+        self.key = key
+        self.value = value
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(key)
+                .foregroundStyle(.secondary)
+                .frame(width: 130, alignment: .leading)
+            Text(value)
+                .textSelection(.enabled)
+            Spacer()
+        }
+        .font(.caption)
+    }
+}
+
+struct ReportTextBlock: View {
+    let title: String
+    let text: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(text?.isEmpty == false ? text! : "None")
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+struct TranscriptAttachmentCard: View {
+    let attachment: TranscriptRunAttachmentReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let image = imagePreview {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 86)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.black.opacity(0.18))
+                    Image(systemName: attachment.kind == .screenClip ? "video" : "photo")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(height: 86)
+            }
+
+            Text(attachment.kind.rawValue)
+                .font(.caption.weight(.semibold))
+            Text(attachment.includedInCodexInput ? "Sent to Codex" : "Stored locally")
+                .font(.caption2)
+                .foregroundStyle(attachment.includedInCodexInput ? .green : .secondary)
+            if let duration = attachment.duration {
+                Text(String(format: "%.1fs", duration))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var imagePreview: NSImage? {
+        let path = attachment.thumbnailPath ?? attachment.storedPath
+        guard let path else { return nil }
+        return NSImage(contentsOfFile: path)
     }
 }
 
