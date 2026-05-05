@@ -288,7 +288,12 @@ struct TranscriptReportDetailView: View {
             if let codex = report.codex {
                 ReportKeyValue("Codex Model", codex.model)
                 ReportKeyValue("Thinking", codex.reasoningEffort)
+                ReportKeyValue("Visual Input", CodexVisualInputMode.resolve(codex.visualInputMode).displayName)
                 ReportKeyValue("Images Sent", "\(codex.imageInputPaths.count)")
+                ReportKeyValue("Video Paths", "\(codex.videoInputPaths.count)")
+                if codex.usesFrameFallbackForVideo {
+                    ReportKeyValue("Video Fallback", "Frames sent via --image")
+                }
             }
             if let errorMessage = report.errorMessage {
                 ReportKeyValue("Error", errorMessage)
@@ -319,6 +324,9 @@ struct TranscriptReportDetailView: View {
             ReportTextBlock(title: "Rendered Prompt", text: report.renderedPrompt)
             if let command = report.codex?.commandPreview, !command.isEmpty {
                 ReportTextBlock(title: "Command Preview", text: command.joined(separator: " "))
+            }
+            if let videoPaths = report.codex?.videoInputPaths, !videoPaths.isEmpty {
+                ReportTextBlock(title: "Video Paths Given In Prompt", text: videoPaths.joined(separator: "\n"))
             }
         }
     }
@@ -878,7 +886,7 @@ struct OutputTemplatesView: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(selectedTemplate.isBuiltIn)
 
-                    Text("Placeholders: {rawTranscript}, {selectedContext}, {visualContextSummary}, {attachmentCount}, {activeApp}, {language}, {date}")
+                    Text("Placeholders: {rawTranscript}, {selectedContext}, {visualContextSummary}, {screenClipPaths}, {visualInputMode}, {attachmentCount}, {activeApp}, {language}, {date}")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -988,6 +996,7 @@ struct OutputTemplatesView: View {
 struct CodexSettingsView: View {
     @AppStorage("codexPostProcessingModel") private var selectedModelRaw = CodexPostProcessingModel.defaultModel.rawValue
     @AppStorage("codexReasoningEffort") private var reasoningEffortRaw = CodexReasoningEffort.defaultEffort.rawValue
+    @AppStorage("codexVisualInputMode") private var visualInputModeRaw = CodexVisualInputMode.defaultMode.rawValue
     @State private var status = CodexConnectionStatus.unknown
     @State private var codexVersion = "Unknown"
 
@@ -997,6 +1006,10 @@ struct CodexSettingsView: View {
 
     private var selectedReasoningEffort: CodexReasoningEffort {
         CodexReasoningEffort.resolve(reasoningEffortRaw)
+    }
+
+    private var selectedVisualInputMode: CodexVisualInputMode {
+        CodexVisualInputMode.resolve(visualInputModeRaw)
     }
 
     private var codexLooksTooOldForGPT55: Bool {
@@ -1062,6 +1075,22 @@ struct CodexSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
+            }
+
+            Section("Visual Input") {
+                Picker("Screen clips", selection: $visualInputModeRaw) {
+                    ForEach(CodexVisualInputMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+
+                Text(selectedVisualInputMode.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("Current codex exec \(codexVersion) exposes --image but no --video flag. Video mode therefore passes the clip path in the prompt and keeps image frames as fallback.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
 
             Section("Privacy") {

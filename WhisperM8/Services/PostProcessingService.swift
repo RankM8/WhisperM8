@@ -56,7 +56,8 @@ struct CodexPostProcessor: PostProcessing {
         }
 
         let prompt = template.render(rawTranscript: rawText, language: language, contextBundle: contextBundle)
-        return try await runCodex(prompt: prompt, imageURLs: contextBundle.visualAttachments.map(\.fileURL))
+        let visualInput = CodexVisualInputSelection(contextBundle: contextBundle)
+        return try await runCodex(prompt: prompt, imageURLs: visualInput.imageURLs)
     }
 
     private func runCodex(prompt: String, imageURLs: [URL]) async throws -> String {
@@ -241,6 +242,37 @@ enum CodexInvocation {
 
         arguments.append("-")
         return arguments
+    }
+}
+
+struct CodexVisualInputSelection {
+    let mode: CodexVisualInputMode
+    let imageURLs: [URL]
+    let videoURLs: [URL]
+    let usesFrameFallback: Bool
+
+    init(contextBundle: TranscriptContextBundle, modeRaw: String = AppPreferences.shared.codexVisualInputModeRaw) {
+        let resolvedMode = CodexVisualInputMode.resolve(modeRaw)
+        self.mode = resolvedMode
+        self.videoURLs = contextBundle.screenClips.map(\.fileURL)
+
+        switch resolvedMode {
+        case .auto, .frames:
+            self.imageURLs = contextBundle.visualAttachments.map(\.fileURL)
+            self.usesFrameFallback = false
+        case .video:
+            self.imageURLs = contextBundle.visualAttachments.map(\.fileURL)
+            self.usesFrameFallback = !videoURLs.isEmpty
+        }
+    }
+
+    func includes(_ attachment: ContextAttachment) -> Bool {
+        switch attachment.kind {
+        case .screenshot, .visualFrame:
+            return imageURLs.contains { $0.path == attachment.fileURL.path }
+        case .screenClip:
+            return videoURLs.contains { $0.path == attachment.fileURL.path }
+        }
     }
 }
 

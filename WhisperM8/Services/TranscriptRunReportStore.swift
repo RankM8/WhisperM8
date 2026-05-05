@@ -42,12 +42,25 @@ struct TranscriptRunReportStore {
             withIntermediateDirectories: true
         )
 
+        let visualInput = CodexVisualInputSelection(contextBundle: draft.contextBundle)
         let attachments = try draft.contextBundle.allAttachments.map { attachment in
-            try attachmentReport(for: attachment, attachmentsDirectory: attachmentsDirectory)
+            try attachmentReport(
+                for: attachment,
+                visualInput: visualInput,
+                attachmentsDirectory: attachmentsDirectory
+            )
         }
-
         let imageInputPaths = attachments
-            .filter(\.includedInCodexInput)
+            .filter { attachment in
+                attachment.includedInCodexInput
+                    && visualInput.imageURLs.contains { $0.path == attachment.originalPath }
+            }
+            .compactMap(\.storedPath)
+        let videoInputPaths = attachments
+            .filter { attachment in
+                attachment.kind == .screenClip
+                    && visualInput.videoURLs.contains { $0.path == attachment.originalPath }
+            }
             .compactMap(\.storedPath)
 
         let codex: TranscriptRunReport.CodexSnapshot?
@@ -56,13 +69,16 @@ struct TranscriptRunReportStore {
             codex = TranscriptRunReport.CodexSnapshot(
                 model: AppPreferences.shared.codexPostProcessingModelRaw,
                 reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+                visualInputMode: visualInput.mode.rawValue,
                 commandPreview: CodexInvocation.arguments(
                     promptImageURLs: imageInputPaths.map(URL.init(fileURLWithPath:)),
                     outputURL: outputURL,
                     model: AppPreferences.shared.codexPostProcessingModelRaw,
                     reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw
                 ),
-                imageInputPaths: imageInputPaths
+                imageInputPaths: imageInputPaths,
+                videoInputPaths: videoInputPaths,
+                usesFrameFallbackForVideo: visualInput.usesFrameFallback
             )
         } else {
             codex = nil
@@ -134,6 +150,7 @@ struct TranscriptRunReportStore {
 
     private func attachmentReport(
         for attachment: ContextAttachment,
+        visualInput: CodexVisualInputSelection,
         attachmentsDirectory: URL
     ) throws -> TranscriptRunAttachmentReport {
         let sourceURL = attachment.fileURL
@@ -160,7 +177,7 @@ struct TranscriptRunReportStore {
             duration: attachment.duration,
             sourceDisplayID: attachment.sourceDisplayID,
             sourceAppName: attachment.sourceAppName,
-            includedInCodexInput: attachment.kind == .screenshot || attachment.kind == .visualFrame,
+            includedInCodexInput: visualInput.includes(attachment),
             createdAt: attachment.createdAt
         )
     }

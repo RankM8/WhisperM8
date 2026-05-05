@@ -49,8 +49,51 @@ struct TranscriptRunReport: Identifiable, Codable, Equatable {
     struct CodexSnapshot: Codable, Equatable {
         var model: String
         var reasoningEffort: String
+        var visualInputMode: String
         var commandPreview: [String]
         var imageInputPaths: [String]
+        var videoInputPaths: [String]
+        var usesFrameFallbackForVideo: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case model
+            case reasoningEffort
+            case visualInputMode
+            case commandPreview
+            case imageInputPaths
+            case videoInputPaths
+            case usesFrameFallbackForVideo
+        }
+
+        init(
+            model: String,
+            reasoningEffort: String,
+            visualInputMode: String,
+            commandPreview: [String],
+            imageInputPaths: [String],
+            videoInputPaths: [String],
+            usesFrameFallbackForVideo: Bool
+        ) {
+            self.model = model
+            self.reasoningEffort = reasoningEffort
+            self.visualInputMode = visualInputMode
+            self.commandPreview = commandPreview
+            self.imageInputPaths = imageInputPaths
+            self.videoInputPaths = videoInputPaths
+            self.usesFrameFallbackForVideo = usesFrameFallbackForVideo
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            model = try container.decode(String.self, forKey: .model)
+            reasoningEffort = try container.decode(String.self, forKey: .reasoningEffort)
+            visualInputMode = try container.decodeIfPresent(String.self, forKey: .visualInputMode)
+                ?? CodexVisualInputMode.defaultMode.rawValue
+            commandPreview = try container.decode([String].self, forKey: .commandPreview)
+            imageInputPaths = try container.decodeIfPresent([String].self, forKey: .imageInputPaths) ?? []
+            videoInputPaths = try container.decodeIfPresent([String].self, forKey: .videoInputPaths) ?? []
+            usesFrameFallbackForVideo = try container.decodeIfPresent(Bool.self, forKey: .usesFrameFallbackForVideo) ?? false
+        }
     }
 
     var id: UUID

@@ -244,6 +244,25 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertTrue(bundle.displaySummary.contains("Shot"))
     }
 
+    func testVideoVisualInputKeepsFramesAndVideoPath() {
+        let clipURL = URL(fileURLWithPath: "/tmp/clip.mp4")
+        let frameURL = URL(fileURLWithPath: "/tmp/frame.png")
+        let bundle = TranscriptContextBundle(
+            screenClips: [ContextAttachment(kind: .screenClip, fileURL: clipURL)],
+            visualFrames: [ContextAttachment(kind: .visualFrame, fileURL: frameURL)]
+        )
+
+        let selection = CodexVisualInputSelection(
+            contextBundle: bundle,
+            modeRaw: CodexVisualInputMode.video.rawValue
+        )
+
+        XCTAssertEqual(selection.videoURLs.map(\.path), ["/tmp/clip.mp4"])
+        XCTAssertEqual(selection.imageURLs.map(\.path), ["/tmp/frame.png"])
+        XCTAssertTrue(selection.usesFrameFallback)
+        XCTAssertTrue(bundle.visualContextSummary.contains("/tmp/clip.mp4"))
+    }
+
     func testTranscriptRunReportStorePersistsContextAndOutput() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8ReportTests-\(UUID().uuidString)", isDirectory: true)

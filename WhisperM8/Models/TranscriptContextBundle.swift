@@ -73,6 +73,10 @@ struct TranscriptContextBundle: Codable, Equatable {
         screenshots + visualFrames
     }
 
+    var screenClipPaths: [String] {
+        screenClips.map(\.fileURL.path)
+    }
+
     var allAttachments: [ContextAttachment] {
         screenshots + screenClips + visualFrames
     }
@@ -130,7 +134,17 @@ struct TranscriptContextBundle: Codable, Equatable {
             lines.append("\(visualFrames.count) visual summary image(s) extracted from screen clip(s).")
         }
 
+        if !screenClips.isEmpty {
+            lines.append("Full screen clip file(s), stored locally for review and future direct video input:")
+            lines.append(contentsOf: screenClipPaths.map { "- \($0)" })
+            lines.append("Current Codex CLI non-interactive input uses image frames for visual understanding; use these video paths only as local reference if available.")
+        }
+
         return lines.joined(separator: "\n")
+    }
+
+    var screenClipPathSummary: String {
+        screenClipPaths.joined(separator: "\n")
     }
 
     static let empty = TranscriptContextBundle()

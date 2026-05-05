@@ -20,6 +20,8 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
             .replacingOccurrences(of: "{rawTranscript}", with: rawTranscript)
             .replacingOccurrences(of: "{selectedContext}", with: contextBundle.selectedText.text)
             .replacingOccurrences(of: "{visualContextSummary}", with: contextBundle.visualContextSummary)
+            .replacingOccurrences(of: "{screenClipPaths}", with: contextBundle.screenClipPathSummary)
+            .replacingOccurrences(of: "{visualInputMode}", with: CodexVisualInputMode.resolve(AppPreferences.shared.codexVisualInputModeRaw).displayName)
             .replacingOccurrences(of: "{attachmentCount}", with: "\(contextBundle.attachmentCount)")
             .replacingOccurrences(of: "{activeApp}", with: contextBundle.sourceAppName ?? contextBundle.selectedText.sourceAppName ?? "")
             .replacingOccurrences(of: "{language}", with: language.isEmpty ? "auto" : language)

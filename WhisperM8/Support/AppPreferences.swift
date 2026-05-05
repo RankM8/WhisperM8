@@ -123,6 +123,11 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.codexReasoningEffort) }
     }
 
+    var codexVisualInputModeRaw: String {
+        get { defaults.string(forKey: Keys.codexVisualInputMode) ?? CodexVisualInputMode.defaultMode.rawValue }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVisualInputMode) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -177,6 +182,7 @@ enum PreferenceKeys {
     static let deleteContextFilesAfterProcessing = "deleteContextFilesAfterProcessing"
     static let codexPostProcessingModel = "codexPostProcessingModel"
     static let codexReasoningEffort = "codexReasoningEffort"
+    static let codexVisualInputMode = "codexVisualInputMode"
 }
 
 private typealias Keys = PreferenceKeys
