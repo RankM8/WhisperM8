@@ -17,9 +17,9 @@ enum OverlayStyle: String, CaseIterable {
     var panelSize: NSSize {
         switch self {
         case .full:
-            return NSSize(width: 380, height: 56)
+            return NSSize(width: 450, height: 56)
         case .mini:
-            return NSSize(width: 178, height: 46)
+            return NSSize(width: 220, height: 46)
         }
     }
 }
@@ -197,6 +197,7 @@ class OverlayController: ObservableObject {
     @Published var selectedOutputMode: OutputMode = OutputMode.defaultMode()
     @Published var outputModes: [OutputMode] = OutputMode.enabledBuiltInModes
     @Published var showModePickerInMiniOverlay: Bool = true
+    @Published var selectedContext: SelectedContext = .empty
 
     func show(
         appState: AppState,
@@ -219,6 +220,7 @@ class OverlayController: ObservableObject {
         self.selectedOutputMode = appState.selectedOutputMode
         self.outputModes = OutputMode.enabledBuiltInModes
         self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
+        self.selectedContext = appState.selectedContext
         self.overlayStyle = OverlayPositionStore.loadStyle()
 
         let initialOrigin = OverlayPositionStore.resolveInitialOrigin(for: overlayStyle)
@@ -276,6 +278,7 @@ class OverlayController: ObservableObject {
         self.selectedOutputMode = appState.selectedOutputMode
         self.outputModes = OutputMode.enabledBuiltInModes
         self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
+        self.selectedContext = appState.selectedContext
 
         let latestStyle = OverlayPositionStore.loadStyle()
         if latestStyle != overlayStyle {

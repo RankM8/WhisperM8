@@ -9,10 +9,17 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
     var updatedAt: Date
     var isBuiltIn: Bool
 
-    func render(rawTranscript: String, language: String, date: Date = Date()) -> String {
+    func render(
+        rawTranscript: String,
+        language: String,
+        selectedContext: SelectedContext = .empty,
+        date: Date = Date()
+    ) -> String {
         let renderedDate = Self.dateFormatter.string(from: date)
         return instruction
             .replacingOccurrences(of: "{rawTranscript}", with: rawTranscript)
+            .replacingOccurrences(of: "{selectedContext}", with: selectedContext.text)
+            .replacingOccurrences(of: "{activeApp}", with: selectedContext.sourceAppName ?? "")
             .replacingOccurrences(of: "{language}", with: language.isEmpty ? "auto" : language)
             .replacingOccurrences(of: "{date}", with: renderedDate)
     }
@@ -40,6 +47,8 @@ extension PostProcessingTemplate {
     static let cleanID = "template.clean"
     static let techCleanID = "template.tech-clean"
     static let emailID = "template.email"
+    static let slackID = "template.slack"
+    static let whatsappID = "template.whatsapp"
     static let notesID = "template.notes"
 
     static let builtInTemplates: [PostProcessingTemplate] = {
@@ -118,13 +127,98 @@ extension PostProcessingTemplate {
                 instruction: """
                 Turn this transcript into a concise professional message or email.
 
+                Context:
+                {selectedContext}
+
                 Rules:
                 - Output only the final text.
                 - Keep the user's intent and factual content.
+                - If Context is present, use it as background for the reply or message.
                 - Be polite and professional without exaggerating.
                 - Do not invent missing details.
                 - Do not add dates, names, greetings, signatures, subjects, or placeholders unless they are present or explicitly requested in the transcript.
                 - If the transcript asks for an email, write the email body directly.
+
+                Language: {language}
+
+                Transcript:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: slackID,
+                name: "Slack message",
+                description: "Formt das Diktat in eine lockere, klare Slack-Nachricht in Du-Form um.",
+                instruction: """
+                Turn this transcript into a clear Slack message.
+
+                Goal:
+                Write like a friendly teammate: direct, useful, casual, and natural in German/English mixed work chat.
+
+                Context:
+                {selectedContext}
+
+                Rules:
+                - Output only the final message.
+                - If Context is present, treat it as the selected conversation or source text the user is responding to.
+                - Use the transcript as the user's instruction for what to write.
+                - Use Du-Form when addressing people.
+                - Keep it concise, but do not remove important context.
+                - Keep the speaker's intent and factual content.
+                - Preserve technical terms, product names, links, file names, and concrete asks.
+                - Do not invent names, deadlines, decisions, emojis, mentions, channels, or links.
+                - Do not add greetings or signatures unless they are present or clearly requested.
+                - Use short paragraphs or bullets only when that makes the Slack message easier to scan.
+                - Keep Denglisch natural when the transcript is mixed.
+                - Fix obvious speech-to-text mistakes, punctuation, and casing.
+
+                Tone:
+                - Locker, kollegial, klar.
+                - Nicht steif, nicht übertrieben höflich.
+                - Keine Marketing-Sprache.
+
+                Language: {language}
+
+                Transcript:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: whatsappID,
+                name: "WhatsApp message",
+                description: "Formt das Diktat in eine kurze, natürliche WhatsApp-Nachricht in Du-Form um.",
+                instruction: """
+                Turn this transcript into a natural WhatsApp message.
+
+                Goal:
+                Write like a real person sending a quick message: warm, clear, informal, and easy to read.
+
+                Context:
+                {selectedContext}
+
+                Rules:
+                - Output only the final message.
+                - If Context is present, treat it as the selected chat or source text the user is responding to.
+                - Use the transcript as the user's instruction for what to write.
+                - Use Du-Form.
+                - Keep it short and conversational.
+                - Keep the speaker's intent and factual content.
+                - Do not invent facts, names, dates, times, links, greetings, closings, or emojis.
+                - Add punctuation and clean wording, but keep the message casual.
+                - If the transcript contains multiple points, split them into short readable sentences.
+                - Keep Denglisch natural when the transcript is mixed.
+                - Preserve technical terms when they matter.
+                - Do not make it sound like a formal email or corporate announcement.
+
+                Tone:
+                - Locker, direkt, freundlich.
+                - So, als würde man einer bekannten Person oder einem Teammitglied schreiben.
 
                 Language: {language}
 

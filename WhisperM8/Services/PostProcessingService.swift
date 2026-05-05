@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 
 protocol PostProcessing {
-    func process(rawText: String, mode: OutputMode, language: String) async throws -> String
+    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String
 }
 
 enum PostProcessingError: LocalizedError, Equatable {
@@ -20,17 +20,17 @@ enum PostProcessingError: LocalizedError, Equatable {
 }
 
 struct NoOpPostProcessor: PostProcessing {
-    func process(rawText: String, mode: OutputMode, language: String) async throws -> String {
+    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String {
         rawText
     }
 }
 
 struct MockPostProcessor: PostProcessing {
     var output: String
-    var onProcess: ((String, OutputMode, String) -> Void)?
+    var onProcess: ((String, OutputMode, String, SelectedContext) -> Void)?
 
-    func process(rawText: String, mode: OutputMode, language: String) async throws -> String {
-        onProcess?(rawText, mode, language)
+    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String {
+        onProcess?(rawText, mode, language, selectedContext)
         return output
     }
 }
@@ -43,7 +43,7 @@ struct CodexPostProcessor: PostProcessing {
         self.templateStore = templateStore
     }
 
-    func process(rawText: String, mode: OutputMode, language: String) async throws -> String {
+    func process(rawText: String, mode: OutputMode, language: String, selectedContext: SelectedContext) async throws -> String {
         guard let template = templateStore.template(for: mode.templateID) else {
             throw PostProcessingError.missingTemplate
         }
@@ -55,7 +55,7 @@ struct CodexPostProcessor: PostProcessing {
             )
         }
 
-        let prompt = template.render(rawTranscript: rawText, language: language)
+        let prompt = template.render(rawTranscript: rawText, language: language, selectedContext: selectedContext)
         return try await runCodex(prompt: prompt)
     }
 
@@ -157,12 +157,41 @@ struct PostProcessingService {
         self.processor = processor
     }
 
-    func process(rawText: String, mode: OutputMode, language: String) async throws -> String {
+    func process(
+        rawText: String,
+        mode: OutputMode,
+        language: String,
+        selectedContext: SelectedContext = .empty
+    ) async throws -> String {
         guard mode.usesPostProcessing else {
-            return try await NoOpPostProcessor().process(rawText: rawText, mode: mode, language: language)
+            return try await NoOpPostProcessor().process(
+                rawText: rawText,
+                mode: mode,
+                language: language,
+                selectedContext: selectedContext
+            )
         }
 
-        return try await processor.process(rawText: rawText, mode: mode, language: language)
+        let allowedContext = allowedSelectedContext(for: mode, capturedContext: selectedContext)
+        if mode.contextPolicy == .required, allowedContext.isEmpty {
+            throw PostProcessingError.codexUnavailable("This mode requires selected context, but no selected text was captured.")
+        }
+
+        return try await processor.process(
+            rawText: rawText,
+            mode: mode,
+            language: language,
+            selectedContext: allowedContext
+        )
+    }
+
+    private func allowedSelectedContext(for mode: OutputMode, capturedContext: SelectedContext) -> SelectedContext {
+        switch mode.contextPolicy {
+        case .off:
+            return .empty
+        case .auto, .required:
+            return capturedContext
+        }
     }
 }
 

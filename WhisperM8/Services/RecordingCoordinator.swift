@@ -8,18 +8,24 @@ final class RecordingCoordinator {
     private let pasteService: PasteService
     private let recordingTimer: RecordingTimer
     private let postProcessingService: PostProcessingService
+    private let selectedContextService: SelectedContextService
 
     private var recordingStartTime: Date?
     private var isProcessing = false
     private var escKeyMonitor: Any?
 
-    init(appState: AppState, postProcessingService: PostProcessingService = PostProcessingService()) {
+    init(
+        appState: AppState,
+        postProcessingService: PostProcessingService = PostProcessingService(),
+        selectedContextService: SelectedContextService = SelectedContextService()
+    ) {
         self.appState = appState
         self.audioRecorder = AudioRecorder()
         self.overlayController = OverlayController()
         self.pasteService = PasteService()
         self.recordingTimer = RecordingTimer()
         self.postProcessingService = postProcessingService
+        self.selectedContextService = selectedContextService
     }
 
     func startRecording() async {
@@ -28,8 +34,10 @@ final class RecordingCoordinator {
         isProcessing = true
         recordingTimer.stop()
         overlayController.hide()
+        let contextSourceApp = NSWorkspace.shared.frontmostApplication
 
         do {
+            let selectedContext = await selectedContextService.capture(from: contextSourceApp)
             try await audioRecorder.startRecording()
 
             AudioDuckingManager.shared.duck()
@@ -42,6 +50,8 @@ final class RecordingCoordinator {
             appState.lastError = nil
             appState.isPostProcessing = false
             appState.selectedOutputMode = OutputMode.defaultMode()
+            appState.selectedContext = selectedContext
+            appState.lastSelectedContext = selectedContext.isEmpty ? nil : selectedContext
             isProcessing = false
 
             overlayController.show(
@@ -81,6 +91,7 @@ final class RecordingCoordinator {
         isProcessing = true
         let audioDuration = appState.recordingDuration
         let frozenOutputMode = appState.selectedOutputMode
+        let frozenSelectedContext = appState.selectedContext
         Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")
 
         recordingTimer.stop()
@@ -112,7 +123,8 @@ final class RecordingCoordinator {
             try await transcribeAndDeliver(
                 audioURL: audioURL,
                 audioDuration: audioDuration,
-                outputMode: frozenOutputMode
+                outputMode: frozenOutputMode,
+                selectedContext: frozenSelectedContext
             )
         } catch let urlError as URLError {
             handleTranscriptionFailure(audioURL: audioURL, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
@@ -124,6 +136,7 @@ final class RecordingCoordinator {
 
         appState.isTranscribing = false
         appState.isPostProcessing = false
+        appState.selectedContext = .empty
         isProcessing = false
         Logger.debug(" stopRecording completed")
     }
@@ -142,6 +155,7 @@ final class RecordingCoordinator {
         appState.isRecording = false
         appState.audioLevel = 0
         appState.isPostProcessing = false
+        appState.selectedContext = .empty
         recordingStartTime = nil
 
         AudioDuckingManager.shared.restore()
@@ -158,7 +172,12 @@ final class RecordingCoordinator {
         PermissionService.requestAccessibilityPermission()
     }
 
-    private func transcribeAndDeliver(audioURL: URL, audioDuration: TimeInterval, outputMode: OutputMode) async throws {
+    private func transcribeAndDeliver(
+        audioURL: URL,
+        audioDuration: TimeInterval,
+        outputMode: OutputMode,
+        selectedContext: SelectedContext
+    ) async throws {
         guard let appState else { return }
 
         TranscriptionSettings.migrateIfNeeded()
@@ -194,7 +213,8 @@ final class RecordingCoordinator {
         let finalText = try await processTranscriptIfNeeded(
             normalizedRawText,
             mode: outputMode,
-            language: language
+            language: language,
+            selectedContext: selectedContext
         )
 
         pasteService.copyToClipboard(finalText)
@@ -222,7 +242,12 @@ final class RecordingCoordinator {
         }
     }
 
-    private func processTranscriptIfNeeded(_ rawText: String, mode: OutputMode, language: String) async throws -> String {
+    private func processTranscriptIfNeeded(
+        _ rawText: String,
+        mode: OutputMode,
+        language: String,
+        selectedContext: SelectedContext
+    ) async throws -> String {
         guard let appState else { return rawText }
 
         guard mode.usesPostProcessing else {
@@ -237,7 +262,8 @@ final class RecordingCoordinator {
             let processedText = try await postProcessingService.process(
                 rawText: rawText,
                 mode: mode,
-                language: language
+                language: language,
+                selectedContext: selectedContext
             )
             appState.isPostProcessing = false
             overlayController.update(appState: appState)

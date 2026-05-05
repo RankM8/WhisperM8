@@ -15,6 +15,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.rawID)
             XCTAssertTrue(preferences.fallbackToRawOnProcessingError)
             XCTAssertTrue(preferences.showModePickerInMiniOverlay)
+            XCTAssertTrue(preferences.isSelectedContextCaptureEnabled)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.defaultModel.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.defaultEffort.rawValue)
         }
@@ -30,6 +31,7 @@ final class PreferencesTests: XCTestCase {
             preferences.lastSelectedOutputModeID = OutputMode.emailID
             preferences.fallbackToRawOnProcessingError = false
             preferences.showModePickerInMiniOverlay = false
+            preferences.isSelectedContextCaptureEnabled = false
             preferences.codexPostProcessingModelRaw = CodexPostProcessingModel.gpt52.rawValue
             preferences.codexReasoningEffortRaw = CodexReasoningEffort.high.rawValue
 
@@ -41,6 +43,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.emailID)
             XCTAssertFalse(preferences.fallbackToRawOnProcessingError)
             XCTAssertFalse(preferences.showModePickerInMiniOverlay)
+            XCTAssertFalse(preferences.isSelectedContextCaptureEnabled)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.gpt52.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.high.rawValue)
         }

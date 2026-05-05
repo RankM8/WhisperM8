@@ -79,6 +79,10 @@ struct OutputModeStore {
                 mode.isEnabled = true
                 mode.kind = .raw
                 mode.templateID = nil
+                mode.contextPolicy = .off
+            }
+            if mode.isDefault {
+                mode.isEnabled = true
             }
             return mode
         }
@@ -90,6 +94,9 @@ struct OutputModeStore {
                 var updatedMode = mode
                 updatedMode.kind = .custom
                 updatedMode.isDefault = updatedMode.id == defaultID
+                if updatedMode.isDefault {
+                    updatedMode.isEnabled = true
+                }
                 return updatedMode
             }
 

@@ -44,6 +44,8 @@ struct FullRecordingOverlayView: View {
                 action: controller.setOutputMode
             )
 
+            ContextStatusChip(selectedContext: controller.selectedContext, compact: false)
+
             Spacer(minLength: 0)
 
             if !controller.isTranscribing && !controller.isPostProcessing {
@@ -93,6 +95,8 @@ struct MiniRecordingOverlayView: View {
                     isDisabled: controller.isTranscribing || controller.isPostProcessing
                 )
             }
+
+            ContextStatusChip(selectedContext: controller.selectedContext, compact: true)
 
             if controller.isTranscribing || controller.isPostProcessing {
                 ProgressView()
@@ -158,6 +162,46 @@ struct OutputModeMenu: View {
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .accessibilityLabel("Output mode")
+    }
+}
+
+struct ContextStatusChip: View {
+    let selectedContext: SelectedContext
+    let compact: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: selectedContext.isEmpty ? "text.badge.xmark" : "text.viewfinder")
+                .font(.system(size: compact ? 9 : 10, weight: .semibold))
+
+            Text(label)
+                .font(.system(size: compact ? 10 : 11, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .foregroundStyle(selectedContext.isEmpty ? Color.secondary.opacity(0.75) : Color.green)
+        .frame(width: compact ? 54 : 76, height: compact ? 22 : 24)
+        .background {
+            Capsule()
+                .fill(Color.primary.opacity(0.08))
+        }
+        .help(helpText)
+        .accessibilityLabel(helpText)
+    }
+
+    private var label: String {
+        if compact {
+            return selectedContext.isEmpty ? "No Ctx" : "Ctx"
+        }
+        return selectedContext.isEmpty ? "No Context" : "Context"
+    }
+
+    private var helpText: String {
+        if selectedContext.isEmpty {
+            return "No selected text was captured for this recording."
+        }
+        let source = selectedContext.sourceAppName ?? "the active app"
+        return "Selected context captured from \(source)."
     }
 }
 

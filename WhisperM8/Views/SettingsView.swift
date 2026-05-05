@@ -322,7 +322,7 @@ struct PermissionsSettingsView: View {
                 SystemPermissionRow(
                     icon: "accessibility",
                     title: "Accessibility",
-                    description: "Required for auto-paste into the previously active app.",
+                    description: "Required for auto-paste and selected-context capture.",
                     statusText: accessibilityGranted ? "Granted" : "Not granted",
                     isGranted: accessibilityGranted,
                     primaryButtonTitle: accessibilityGranted ? "Check Again" : "Grant",
@@ -333,7 +333,7 @@ struct PermissionsSettingsView: View {
             }
 
             Section("What happens without permissions") {
-                Text("Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste will be blocked by macOS.")
+                Text("Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste and selected-context capture will be blocked by macOS.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -514,6 +514,7 @@ struct BehaviorSettingsView: View {
     @AppStorage("audioDuckingEnabled") private var audioDuckingEnabled = true
     @AppStorage("audioDuckingFactor") private var audioDuckingFactor = 0.2
     @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.full.rawValue
+    @AppStorage("selectedContextCaptureEnabled") private var selectedContextCaptureEnabled = true
 
     var body: some View {
         Form {
@@ -523,6 +524,14 @@ struct BehaviorSettingsView: View {
                 Text(autoPasteEnabled
                     ? "Transcribed text will be automatically pasted"
                     : "Transcribed text will only be copied to clipboard")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Selected Context") {
+                Toggle("Use selected text as context", isOn: $selectedContextCaptureEnabled)
+
+                Text("When enabled, WhisperM8 can capture highlighted text from the active app before recording and pass it to context-aware modes like Slack, WhatsApp, and Email.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

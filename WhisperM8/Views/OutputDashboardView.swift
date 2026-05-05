@@ -94,6 +94,7 @@ struct OutputOverviewView: View {
             }
 
             Section("Last Output") {
+                LastOutputPreview(title: "Context", text: appState.lastSelectedContext?.text)
                 LastOutputPreview(title: "Raw", text: appState.lastRawTranscription)
                 LastOutputPreview(title: "Final", text: appState.lastFinalTranscription ?? appState.lastTranscription)
             }
@@ -140,7 +141,7 @@ struct OutputModesView: View {
                         }
 
                         VStack(spacing: 0) {
-                            ForEach(modes) { mode in
+                            ForEach($modes) { $mode in
                                 Button {
                                     selectedModeID = mode.id
                                 } label: {
@@ -159,6 +160,13 @@ struct OutputModesView: View {
                                         }
 
                                         Spacer()
+
+                                        Toggle("Enabled", isOn: modeEnabledBinding(for: $mode))
+                                            .labelsHidden()
+                                            .toggleStyle(.switch)
+                                            .controlSize(.small)
+                                            .disabled(!canDisable(mode))
+                                            .help(modeToggleHelp(mode))
 
                                         if mode.id == defaultOutputModeID {
                                             Image(systemName: "checkmark.circle.fill")
@@ -251,10 +259,24 @@ struct OutputModesView: View {
                 TextField("Mode name", text: mode.name)
                 TextField("Overlay label", text: mode.shortLabel)
 
-                Toggle("Enabled in overlay and Test Lab", isOn: mode.isEnabled)
-                    .disabled(mode.wrappedValue.id == OutputMode.rawID)
+                Toggle("Show in recording overlay and Test Lab", isOn: modeEnabledBinding(for: mode))
+                    .disabled(!canDisable(mode.wrappedValue))
+
+                Text(modeVisibilityHelp(mode.wrappedValue))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 if mode.wrappedValue.usesPostProcessing {
+                    Picker("Selected context", selection: mode.contextPolicy) {
+                        ForEach(ContextCapturePolicy.allCases) { policy in
+                            Text(policy.displayName).tag(policy)
+                        }
+                    }
+
+                    Text(mode.wrappedValue.contextPolicy.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     Picker("Template", selection: templateSelection(for: mode)) {
                         ForEach(templates) { template in
                             Text(template.name).tag(template.id)
@@ -297,6 +319,17 @@ struct OutputModesView: View {
         Binding(
             get: { mode.wrappedValue.templateID ?? PostProcessingTemplate.cleanID },
             set: { mode.wrappedValue.templateID = $0 }
+        )
+    }
+
+    private func modeEnabledBinding(for mode: Binding<OutputMode>) -> Binding<Bool> {
+        Binding(
+            get: { mode.wrappedValue.isEnabled },
+            set: { newValue in
+                if newValue || canDisable(mode.wrappedValue) {
+                    mode.wrappedValue.isEnabled = newValue
+                }
+            }
         )
     }
 
@@ -357,6 +390,32 @@ struct OutputModesView: View {
         }
         let templateName = templates.first { $0.id == mode.templateID }?.name ?? "No template"
         return "\(mode.shortLabel) · \(templateName)"
+    }
+
+    private func canDisable(_ mode: OutputMode) -> Bool {
+        mode.id != OutputMode.rawID && mode.id != defaultOutputModeID
+    }
+
+    private func modeToggleHelp(_ mode: OutputMode) -> String {
+        if mode.id == OutputMode.rawID {
+            return "Raw stays available as a safe fallback."
+        }
+        if mode.id == defaultOutputModeID {
+            return "The default mode stays visible. Pick another default before hiding it."
+        }
+        return mode.isEnabled ? "Hide this mode from recording." : "Show this mode while recording."
+    }
+
+    private func modeVisibilityHelp(_ mode: OutputMode) -> String {
+        if mode.id == OutputMode.rawID {
+            return "Raw stays visible as the fallback mode."
+        }
+        if mode.id == defaultOutputModeID {
+            return "The current default mode stays visible. Make another mode default before hiding this one."
+        }
+        return mode.isEnabled
+            ? "This mode appears in the recording overlay and Test Lab."
+            : "This mode is hidden from the recording overlay and Test Lab."
     }
 }
 
@@ -489,7 +548,7 @@ struct OutputTemplatesView: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(selectedTemplate.isBuiltIn)
 
-                Text("Placeholders: {rawTranscript}, {language}, {date}")
+                    Text("Placeholders: {rawTranscript}, {selectedContext}, {activeApp}, {language}, {date}")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

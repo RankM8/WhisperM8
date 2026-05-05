@@ -82,6 +82,11 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.showModePickerInMiniOverlay) }
     }
 
+    var isSelectedContextCaptureEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.selectedContextCaptureEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.selectedContextCaptureEnabled) }
+    }
+
     var codexPostProcessingModelRaw: String {
         get { defaults.string(forKey: Keys.codexPostProcessingModel) ?? CodexPostProcessingModel.defaultModel.rawValue }
         nonmutating set { defaults.set(newValue, forKey: Keys.codexPostProcessingModel) }
@@ -139,6 +144,7 @@ enum PreferenceKeys {
     static let lastSelectedOutputModeID = "lastSelectedOutputModeID"
     static let fallbackToRawOnProcessingError = "fallbackToRawOnProcessingError"
     static let showModePickerInMiniOverlay = "showModePickerInMiniOverlay"
+    static let selectedContextCaptureEnabled = "selectedContextCaptureEnabled"
     static let codexPostProcessingModel = "codexPostProcessingModel"
     static let codexReasoningEffort = "codexReasoningEffort"
 }

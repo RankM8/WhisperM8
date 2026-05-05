@@ -14,9 +14,54 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
     var templateID: String?
     var isEnabled: Bool
     var isDefault: Bool
+    var contextPolicy: ContextCapturePolicy
 
     var usesPostProcessing: Bool {
         kind != .raw
+    }
+
+    init(
+        id: String,
+        name: String,
+        shortLabel: String,
+        kind: Kind,
+        templateID: String?,
+        isEnabled: Bool,
+        isDefault: Bool,
+        contextPolicy: ContextCapturePolicy = .off
+    ) {
+        self.id = id
+        self.name = name
+        self.shortLabel = shortLabel
+        self.kind = kind
+        self.templateID = templateID
+        self.isEnabled = isEnabled
+        self.isDefault = isDefault
+        self.contextPolicy = contextPolicy
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case shortLabel
+        case kind
+        case templateID
+        case isEnabled
+        case isDefault
+        case contextPolicy
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        shortLabel = try container.decode(String.self, forKey: .shortLabel)
+        kind = try container.decode(Kind.self, forKey: .kind)
+        templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        isDefault = try container.decode(Bool.self, forKey: .isDefault)
+        contextPolicy = try container.decodeIfPresent(ContextCapturePolicy.self, forKey: .contextPolicy)
+            ?? Self.defaultContextPolicy(for: id)
     }
 }
 
@@ -24,6 +69,8 @@ extension OutputMode {
     static let rawID = "raw"
     static let cleanID = "clean"
     static let emailID = "email"
+    static let slackID = "slack"
+    static let whatsappID = "whatsapp"
     static let notesID = "notes"
 
     static let builtInModes: [OutputMode] = [
@@ -52,7 +99,28 @@ extension OutputMode {
             kind: .builtIn,
             templateID: PostProcessingTemplate.emailID,
             isEnabled: true,
-            isDefault: false
+            isDefault: false,
+            contextPolicy: .auto
+        ),
+        OutputMode(
+            id: slackID,
+            name: "Slack",
+            shortLabel: "Slack",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.slackID,
+            isEnabled: true,
+            isDefault: false,
+            contextPolicy: .auto
+        ),
+        OutputMode(
+            id: whatsappID,
+            name: "WhatsApp",
+            shortLabel: "WA",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.whatsappID,
+            isEnabled: true,
+            isDefault: false,
+            contextPolicy: .auto
         ),
         OutputMode(
             id: notesID,
@@ -75,5 +143,14 @@ extension OutputMode {
 
     static var enabledBuiltInModes: [OutputMode] {
         OutputModeStore().enabledModes
+    }
+
+    static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {
+        switch id {
+        case emailID, slackID, whatsappID:
+            return .auto
+        default:
+            return .off
+        }
     }
 }

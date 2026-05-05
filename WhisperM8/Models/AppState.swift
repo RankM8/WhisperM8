@@ -16,6 +16,8 @@ final class AppState {
     var lastRawTranscription: String?
     var lastFinalTranscription: String?
     var lastOutputMode: OutputMode?
+    var selectedContext = SelectedContext.empty
+    var lastSelectedContext: SelectedContext?
 
     @ObservationIgnored
     private var recordingCoordinator: RecordingCoordinator!
