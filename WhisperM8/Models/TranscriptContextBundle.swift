@@ -3,6 +3,7 @@ import Foundation
 
 enum ContextAttachmentKind: String, Codable, Equatable, CaseIterable {
     case screenshot
+    case annotation
     case screenClip
     case visualFrame
 }
@@ -15,6 +16,9 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
     var duration: TimeInterval?
     var sourceDisplayID: UInt32?
     var sourceAppName: String?
+    var annotationNumber: Int?
+    var annotationComment: String?
+    var annotationRect: CGRect?
     var createdAt: Date
 
     init(
@@ -25,6 +29,9 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
         duration: TimeInterval? = nil,
         sourceDisplayID: UInt32? = nil,
         sourceAppName: String? = nil,
+        annotationNumber: Int? = nil,
+        annotationComment: String? = nil,
+        annotationRect: CGRect? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -34,6 +41,9 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
         self.duration = duration
         self.sourceDisplayID = sourceDisplayID
         self.sourceAppName = sourceAppName
+        self.annotationNumber = annotationNumber
+        self.annotationComment = annotationComment
+        self.annotationRect = annotationRect
         self.createdAt = createdAt
     }
 }
@@ -41,6 +51,7 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
 struct TranscriptContextBundle: Codable, Equatable {
     var selectedText: SelectedContext
     var screenshots: [ContextAttachment]
+    var annotations: [ContextAttachment]
     var screenClips: [ContextAttachment]
     var visualFrames: [ContextAttachment]
     var sourceAppName: String?
@@ -50,6 +61,7 @@ struct TranscriptContextBundle: Codable, Equatable {
     init(
         selectedText: SelectedContext = .empty,
         screenshots: [ContextAttachment] = [],
+        annotations: [ContextAttachment] = [],
         screenClips: [ContextAttachment] = [],
         visualFrames: [ContextAttachment] = [],
         sourceAppName: String? = nil,
@@ -58,6 +70,7 @@ struct TranscriptContextBundle: Codable, Equatable {
     ) {
         self.selectedText = selectedText
         self.screenshots = screenshots
+        self.annotations = annotations
         self.screenClips = screenClips
         self.visualFrames = visualFrames
         self.sourceAppName = sourceAppName
@@ -66,11 +79,11 @@ struct TranscriptContextBundle: Codable, Equatable {
     }
 
     var isEmpty: Bool {
-        selectedText.isEmpty && screenshots.isEmpty && screenClips.isEmpty && visualFrames.isEmpty
+        selectedText.isEmpty && screenshots.isEmpty && annotations.isEmpty && screenClips.isEmpty && visualFrames.isEmpty
     }
 
     var visualAttachments: [ContextAttachment] {
-        screenshots + visualFrames
+        screenshots + annotations + visualFrames
     }
 
     var screenClipPaths: [String] {
@@ -78,7 +91,7 @@ struct TranscriptContextBundle: Codable, Equatable {
     }
 
     var allAttachments: [ContextAttachment] {
-        screenshots + screenClips + visualFrames
+        screenshots + annotations + screenClips + visualFrames
     }
 
     var attachmentCount: Int {
@@ -96,6 +109,10 @@ struct TranscriptContextBundle: Codable, Equatable {
             parts.append(screenshots.count == 1 ? "Shot" : "\(screenshots.count) Shots")
         }
 
+        if !annotations.isEmpty {
+            parts.append(annotations.count == 1 ? "Mark" : "\(annotations.count) Marks")
+        }
+
         if !screenClips.isEmpty {
             parts.append(screenClips.count == 1 ? "Clip" : "\(screenClips.count) Clips")
         }
@@ -110,6 +127,7 @@ struct TranscriptContextBundle: Codable, Equatable {
     var compactSummary: String {
         if isEmpty { return "No Ctx" }
         if !screenClips.isEmpty { return "Clip" }
+        if !annotations.isEmpty { return "Mark" }
         if !screenshots.isEmpty { return "Shot" }
         return "Ctx"
     }
@@ -119,6 +137,18 @@ struct TranscriptContextBundle: Codable, Equatable {
 
         if !screenshots.isEmpty {
             lines.append("\(screenshots.count) screenshot(s) captured from the active screen.")
+        }
+
+        if !annotations.isEmpty {
+            lines.append("\(annotations.count) annotated screenshot(s) captured:")
+            for annotation in annotations.sorted(by: { ($0.annotationNumber ?? 0) < ($1.annotationNumber ?? 0) }) {
+                let number = annotation.annotationNumber.map { "\($0)" } ?? "?"
+                let comment = annotation.annotationComment?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let rect = annotation.annotationRect.map {
+                    "x=\(Int($0.origin.x)), y=\(Int($0.origin.y)), w=\(Int($0.width)), h=\(Int($0.height))"
+                } ?? "unknown region"
+                lines.append("- Annotation \(number): \(comment?.isEmpty == false ? comment! : "No comment") (\(rect)).")
+            }
         }
 
         if !screenClips.isEmpty {

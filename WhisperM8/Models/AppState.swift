@@ -65,6 +65,10 @@ final class AppState {
         recordingCoordinator.addContextScreenshot()
     }
 
+    func addContextAnnotation() {
+        recordingCoordinator.addContextAnnotation()
+    }
+
     func toggleScreenClip() {
         recordingCoordinator.toggleScreenClip()
     }

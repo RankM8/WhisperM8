@@ -177,6 +177,9 @@ struct TranscriptRunReportStore {
             duration: attachment.duration,
             sourceDisplayID: attachment.sourceDisplayID,
             sourceAppName: attachment.sourceAppName,
+            annotationNumber: attachment.annotationNumber,
+            annotationComment: attachment.annotationComment,
+            annotationRect: attachment.annotationRect,
             includedInCodexInput: visualInput.includes(attachment),
             createdAt: attachment.createdAt
         )
@@ -206,7 +209,7 @@ struct TranscriptRunReportStore {
 
     private func defaultPathExtension(for kind: ContextAttachmentKind) -> String {
         switch kind {
-        case .screenshot, .visualFrame:
+        case .screenshot, .annotation, .visualFrame:
             return "png"
         case .screenClip:
             return "mp4"

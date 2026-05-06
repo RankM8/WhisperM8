@@ -83,6 +83,9 @@ final class RecordingCoordinator {
                 onAddScreenshot: { [weak self] in
                     self?.addContextScreenshot()
                 },
+                onAddAnnotation: { [weak self] in
+                    self?.addContextAnnotation()
+                },
                 onToggleScreenClip: { [weak self] in
                     self?.toggleScreenClip()
                 },
@@ -228,6 +231,32 @@ final class RecordingCoordinator {
             } catch {
                 appState.lastError = error.localizedDescription
                 Logger.permission.warning("Visual screenshot context failed: \(error.localizedDescription, privacy: .public)")
+                if error as? VisualContextCaptureError == .missingPermission {
+                    _ = PermissionService.requestScreenRecordingPermission()
+                }
+                overlayController.update(appState: appState)
+            }
+        }
+    }
+
+    func addContextAnnotation() {
+        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
+        let nextNumber = appState.contextBundle.annotations.count + 1
+
+        Task { @MainActor in
+            do {
+                let annotation = try await visualContextCaptureService.captureAnnotation(
+                    sourceApp: contextSourceApp,
+                    number: nextNumber
+                )
+                appState.contextBundle.annotations.append(annotation)
+                appState.lastContextBundle = appState.contextBundle
+                overlayController.update(appState: appState)
+            } catch is CancellationError {
+                overlayController.update(appState: appState)
+            } catch {
+                appState.lastError = error.localizedDescription
+                Logger.permission.warning("Visual annotation context failed: \(error.localizedDescription, privacy: .public)")
                 if error as? VisualContextCaptureError == .missingPermission {
                     _ = PermissionService.requestScreenRecordingPermission()
                 }

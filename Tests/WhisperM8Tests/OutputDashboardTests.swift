@@ -232,16 +232,26 @@ final class OutputDashboardTests: XCTestCase {
             kind: .visualFrame,
             fileURL: URL(fileURLWithPath: "/tmp/frame.png")
         )
+        let annotation = ContextAttachment(
+            kind: .annotation,
+            fileURL: URL(fileURLWithPath: "/tmp/mark.png"),
+            annotationNumber: 1,
+            annotationComment: "Make this smaller",
+            annotationRect: CGRect(x: 10, y: 20, width: 30, height: 40)
+        )
         let bundle = TranscriptContextBundle(
             selectedText: SelectedContext(text: "Selected", sourceAppName: "Slack", sourceBundleIdentifier: nil),
             screenshots: [screenshot],
+            annotations: [annotation],
             visualFrames: [frame]
         )
 
-        XCTAssertEqual(bundle.attachmentCount, 2)
-        XCTAssertEqual(bundle.visualAttachments.map(\.fileURL.path), ["/tmp/shot.png", "/tmp/frame.png"])
+        XCTAssertEqual(bundle.attachmentCount, 3)
+        XCTAssertEqual(bundle.visualAttachments.map(\.fileURL.path), ["/tmp/shot.png", "/tmp/mark.png", "/tmp/frame.png"])
         XCTAssertTrue(bundle.displaySummary.contains("Text"))
         XCTAssertTrue(bundle.displaySummary.contains("Shot"))
+        XCTAssertTrue(bundle.displaySummary.contains("Mark"))
+        XCTAssertTrue(bundle.visualContextSummary.contains("Make this smaller"))
     }
 
     func testVideoVisualInputKeepsFramesAndVideoPath() {

@@ -416,7 +416,7 @@ struct TranscriptAttachmentCard: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.black.opacity(0.18))
-                    Image(systemName: attachment.kind == .screenClip ? "video" : "photo")
+                    Image(systemName: attachment.kind == .screenClip ? "video" : (attachment.kind == .annotation ? "cursorarrow.rays" : "photo"))
                         .font(.title2)
                         .foregroundStyle(.secondary)
                 }
@@ -428,6 +428,17 @@ struct TranscriptAttachmentCard: View {
             Text(attachment.includedInCodexInput ? "Sent to Codex" : "Stored locally")
                 .font(.caption2)
                 .foregroundStyle(attachment.includedInCodexInput ? .green : .secondary)
+            if let number = attachment.annotationNumber {
+                Text("Annotation \(number)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if let comment = attachment.annotationComment, !comment.isEmpty {
+                Text(comment)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
             if let duration = attachment.duration {
                 Text(String(format: "%.1fs", duration))
                     .font(.caption2)

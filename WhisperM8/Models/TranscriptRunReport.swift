@@ -26,6 +26,9 @@ struct TranscriptRunAttachmentReport: Identifiable, Codable, Equatable {
     var duration: TimeInterval?
     var sourceDisplayID: UInt32?
     var sourceAppName: String?
+    var annotationNumber: Int?
+    var annotationComment: String?
+    var annotationRect: CGRect?
     var includedInCodexInput: Bool
     var createdAt: Date
 }

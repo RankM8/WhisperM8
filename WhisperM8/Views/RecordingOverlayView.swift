@@ -115,6 +115,28 @@ struct VisualContextActionButtons: View {
 
             Button {
                 if PermissionService.hasScreenRecordingPermission {
+                    controller.addAnnotation()
+                } else {
+                    _ = PermissionService.requestScreenRecordingPermission()
+                    PermissionService.openScreenRecordingPrivacySettings()
+                }
+            } label: {
+                Image(systemName: "cursorarrow.rays")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 24, height: 24)
+                    .background {
+                        Circle()
+                            .fill(Color.primary.opacity(0.08))
+                    }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canAddVisualContext ? Color.green : Color.secondary.opacity(0.7))
+            .disabled(controller.isTranscribing || controller.isPostProcessing || controller.isScreenClipRecording)
+            .help(PermissionService.hasScreenRecordingPermission ? "Select and comment on a screen region" : "Grant Screen Recording permission")
+            .accessibilityLabel("Select and comment on a screen region")
+
+            Button {
+                if PermissionService.hasScreenRecordingPermission {
                     controller.toggleScreenClip()
                 } else {
                     _ = PermissionService.requestScreenRecordingPermission()
@@ -267,6 +289,9 @@ struct ContextControl: View {
         if !controller.contextBundle.screenshots.isEmpty || !controller.contextBundle.screenClips.isEmpty {
             return "photo.on.rectangle"
         }
+        if !controller.contextBundle.annotations.isEmpty {
+            return "cursorarrow.rays"
+        }
         return controller.contextBundle.selectedText.isEmpty ? "text.badge.xmark" : "text.viewfinder"
     }
 
@@ -296,6 +321,13 @@ struct ContextMenuContent: View {
                 controller.addScreenshot()
             } label: {
                 Label("Add Screenshot", systemImage: "camera.viewfinder")
+            }
+            .disabled(!canAddVisualContext)
+
+            Button {
+                controller.addAnnotation()
+            } label: {
+                Label("Select + Comment", systemImage: "cursorarrow.rays")
             }
             .disabled(!canAddVisualContext)
 

@@ -268,7 +268,7 @@ struct CodexVisualInputSelection {
 
     func includes(_ attachment: ContextAttachment) -> Bool {
         switch attachment.kind {
-        case .screenshot, .visualFrame:
+        case .screenshot, .annotation, .visualFrame:
             return imageURLs.contains { $0.path == attachment.fileURL.path }
         case .screenClip:
             return videoURLs.contains { $0.path == attachment.fileURL.path }
