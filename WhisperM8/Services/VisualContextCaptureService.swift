@@ -543,42 +543,7 @@ private struct AnnotationSelectionView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack(alignment: .topLeading) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
-                    .overlay(Color.black.opacity(0.18))
-
-                if let rect = model.selectionRect {
-                    AnnotationSelectionBox(number: model.number, rect: rect)
-                    commentEditor(near: rect, in: proxy.size)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Bereich auswählen")
-                            .font(.title2.weight(.semibold))
-                        Text("Ziehe einen Rahmen um das UI-Element. Danach Kommentar eingeben und mit Enter speichern.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(18)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                    .padding(28)
-                }
-            }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 4)
-                    .onChanged { value in
-                        model.updateDrag(to: value.location)
-                        commentFocused = false
-                    }
-                    .onEnded { _ in
-                        model.finishDrag()
-                        commentFocused = true
-                    }
-            )
+            content(in: proxy.size)
             .onAppear {
                 model.viewSize = proxy.size
             }
@@ -590,6 +555,39 @@ private struct AnnotationSelectionView: View {
         .onExitCommand {
             model.onCancel()
         }
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size.width, height: size.height)
+                .clipped()
+                .overlay(Color.black.opacity(0.18))
+
+            if let rect = model.selectionRect {
+                AnnotationSelectionBox(number: model.number, rect: rect)
+                commentEditor(near: rect, in: size)
+                    .onAppear {
+                        commentFocused = true
+                    }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Bereich auswählen")
+                        .font(.title2.weight(.semibold))
+                    Text("Ziehe einen Rahmen um das UI-Element. Danach Kommentar eingeben und mit Enter speichern.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(18)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .padding(28)
+            }
+        }
+        .contentShape(Rectangle())
+        .modifier(AnnotationDragModifier(isEnabled: model.selectionRect == nil, model: model, commentFocused: $commentFocused))
     }
 
     private func commentEditor(near rect: CGRect, in size: CGSize) -> some View {
@@ -645,6 +643,30 @@ private struct AnnotationSelectionBox: View {
         }
         .frame(width: rect.width, height: rect.height)
         .position(x: rect.midX, y: rect.midY)
+    }
+}
+
+private struct AnnotationDragModifier: ViewModifier {
+    let isEnabled: Bool
+    @ObservedObject var model: AnnotationSelectionModel
+    var commentFocused: FocusState<Bool>.Binding
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.gesture(
+                DragGesture(minimumDistance: 4)
+                    .onChanged { value in
+                        model.updateDrag(to: value.location)
+                        commentFocused.wrappedValue = false
+                    }
+                    .onEnded { _ in
+                        model.finishDrag()
+                        commentFocused.wrappedValue = true
+                    }
+            )
+        } else {
+            content
+        }
     }
 }
 
