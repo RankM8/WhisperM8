@@ -543,7 +543,7 @@ struct BehaviorSettingsView: View {
     @AppStorage("visualContextCaptureEnabled") private var visualContextCaptureEnabled = true
     @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = 3
     @AppStorage("maxScreenRecordingDuration") private var maxScreenRecordingDuration = 30.0
-    @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = true
+    @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = false
 
     var body: some View {
         Form {
@@ -580,7 +580,7 @@ struct BehaviorSettingsView: View {
 
                 Toggle("Delete visual context files after processing", isOn: $deleteContextFilesAfterProcessing)
 
-                Text("Visual context is captured only when you click Screenshot or Screen Clip in the recording overlay. It requires Screen Recording permission.")
+                Text("Clipboard screenshots are captured automatically while recording when you use macOS screenshot-to-clipboard. Screen clips still require Screen Recording permission.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

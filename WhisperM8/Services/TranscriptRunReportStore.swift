@@ -14,6 +14,8 @@ struct TranscriptRunReportDraft {
     var audioDuration: TimeInterval
     var contextBundle: TranscriptContextBundle
     var renderedPrompt: String?
+    var replyIntent: ReplyIntentKind?
+    var visualManifest: VisualManifest?
     var rawTranscript: String?
     var finalTranscript: String?
     var copiedToClipboard: Bool
@@ -107,6 +109,8 @@ struct TranscriptRunReportStore {
             codex: codex,
             selectedText: draft.contextBundle.selectedText.isEmpty ? nil : draft.contextBundle.selectedText.text,
             visualContextSummary: draft.contextBundle.visualContextSummary.isEmpty ? nil : draft.contextBundle.visualContextSummary,
+            replyIntent: draft.replyIntent,
+            visualManifest: draft.visualManifest,
             attachments: attachments,
             renderedPrompt: draft.renderedPrompt,
             rawTranscript: draft.rawTranscript,

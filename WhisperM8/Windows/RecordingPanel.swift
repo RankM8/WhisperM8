@@ -17,7 +17,7 @@ enum OverlayStyle: String, CaseIterable {
     var panelSize: NSSize {
         switch self {
         case .full:
-            return NSSize(width: 560, height: 56)
+            return NSSize(width: 590, height: 56)
         case .mini:
             return NSSize(width: 220, height: 46)
         }
@@ -190,7 +190,6 @@ class OverlayController: ObservableObject {
     private var onCancel: (() -> Void)?
     private var onOutputModeChange: ((OutputMode) -> Void)?
     private var onAddScreenshot: (() -> Void)?
-    private var onAddAnnotation: (() -> Void)?
     private var onToggleScreenClip: (() -> Void)?
     private var onClearContext: (() -> Void)?
     @Published var audioLevel: Float = 0
@@ -204,13 +203,13 @@ class OverlayController: ObservableObject {
     @Published var selectedContext: SelectedContext = .empty
     @Published var contextBundle: TranscriptContextBundle = .empty
     @Published var isScreenClipRecording: Bool = false
+    @Published var postProcessingStatusText: String?
 
     func show(
         appState: AppState,
         onCancel: @escaping () -> Void,
         onOutputModeChange: @escaping (OutputMode) -> Void,
         onAddScreenshot: @escaping () -> Void,
-        onAddAnnotation: @escaping () -> Void,
         onToggleScreenClip: @escaping () -> Void,
         onClearContext: @escaping () -> Void
     ) {
@@ -222,7 +221,6 @@ class OverlayController: ObservableObject {
         self.onCancel = onCancel
         self.onOutputModeChange = onOutputModeChange
         self.onAddScreenshot = onAddScreenshot
-        self.onAddAnnotation = onAddAnnotation
         self.onToggleScreenClip = onToggleScreenClip
         self.onClearContext = onClearContext
 
@@ -237,6 +235,7 @@ class OverlayController: ObservableObject {
         self.selectedContext = appState.selectedContext
         self.contextBundle = appState.contextBundle
         self.isScreenClipRecording = appState.isScreenClipRecording
+        self.postProcessingStatusText = appState.postProcessingStatusText
         self.overlayStyle = OverlayPositionStore.loadStyle()
 
         let initialOrigin = OverlayPositionStore.resolveInitialOrigin(for: overlayStyle)
@@ -271,7 +270,6 @@ class OverlayController: ObservableObject {
         onCancel = nil
         onOutputModeChange = nil
         onAddScreenshot = nil
-        onAddAnnotation = nil
         onToggleScreenClip = nil
         onClearContext = nil
     }
@@ -291,10 +289,6 @@ class OverlayController: ObservableObject {
 
     func addScreenshot() {
         onAddScreenshot?()
-    }
-
-    func addAnnotation() {
-        onAddAnnotation?()
     }
 
     func toggleScreenClip() {
@@ -317,6 +311,7 @@ class OverlayController: ObservableObject {
         self.selectedContext = appState.selectedContext
         self.contextBundle = appState.contextBundle
         self.isScreenClipRecording = appState.isScreenClipRecording
+        self.postProcessingStatusText = appState.postProcessingStatusText
 
         let latestStyle = OverlayPositionStore.loadStyle()
         if latestStyle != overlayStyle {

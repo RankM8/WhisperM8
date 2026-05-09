@@ -37,10 +37,14 @@ struct MockPostProcessor: PostProcessing {
 
 struct CodexPostProcessor: PostProcessing {
     private let templateStore: PostProcessingTemplateStore
-    private let timeout: TimeInterval = 120
+    private let promptPackageBuilder: PromptPackageBuilder
 
-    init(templateStore: PostProcessingTemplateStore = PostProcessingTemplateStore()) {
+    init(
+        templateStore: PostProcessingTemplateStore = PostProcessingTemplateStore(),
+        promptPackageBuilder: PromptPackageBuilder = PromptPackageBuilder()
+    ) {
         self.templateStore = templateStore
+        self.promptPackageBuilder = promptPackageBuilder
     }
 
     func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
@@ -55,9 +59,15 @@ struct CodexPostProcessor: PostProcessing {
             )
         }
 
-        let prompt = template.render(rawTranscript: rawText, language: language, contextBundle: contextBundle)
         let visualInput = CodexVisualInputSelection(contextBundle: contextBundle)
-        return try await runCodex(prompt: prompt, imageURLs: visualInput.imageURLs)
+        let package = promptPackageBuilder.build(
+            rawText: rawText,
+            mode: mode,
+            template: template,
+            language: language,
+            contextBundle: contextBundle
+        )
+        return try await runCodex(prompt: package.prompt, imageURLs: visualInput.imageURLs)
     }
 
     private func runCodex(prompt: String, imageURLs: [URL]) async throws -> String {
@@ -92,11 +102,6 @@ struct CodexPostProcessor: PostProcessing {
         process.standardOutput = logPipe
         process.standardError = logPipe
 
-        let semaphore = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in
-            semaphore.signal()
-        }
-
         do {
             try process.run()
             if let data = prompt.data(using: .utf8) {
@@ -107,11 +112,7 @@ struct CodexPostProcessor: PostProcessing {
             throw PostProcessingError.codexUnavailable("Failed to start Codex: \(error.localizedDescription)")
         }
 
-        let timeoutResult = semaphore.wait(timeout: .now() + timeout)
-        if timeoutResult == .timedOut {
-            process.terminate()
-            throw PostProcessingError.codexUnavailable("Codex post-processing timed out.")
-        }
+        process.waitUntilExit()
 
         let logData = logPipe.fileHandleForReading.readDataToEndOfFile()
         let logOutput = String(data: logData, encoding: .utf8) ?? ""
@@ -201,7 +202,32 @@ struct PostProcessingService {
               let template = PostProcessingTemplateStore().template(for: mode.templateID) else {
             return nil
         }
-        return template.render(rawTranscript: rawText, language: language, contextBundle: contextBundle)
+        return PromptPackageBuilder().build(
+            rawText: rawText,
+            mode: mode,
+            template: template,
+            language: language,
+            contextBundle: contextBundle
+        ).prompt
+    }
+
+    func promptPackage(
+        rawText: String,
+        mode: OutputMode,
+        language: String,
+        contextBundle: TranscriptContextBundle
+    ) -> PromptPackage? {
+        guard mode.usesPostProcessing,
+              let template = PostProcessingTemplateStore().template(for: mode.templateID) else {
+            return nil
+        }
+        return PromptPackageBuilder().build(
+            rawText: rawText,
+            mode: mode,
+            template: template,
+            language: language,
+            contextBundle: contextBundle
+        )
     }
 
     func process(

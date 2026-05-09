@@ -30,7 +30,7 @@ struct FullRecordingOverlayView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-                .frame(width: 88, alignment: .leading)
+                .frame(width: 118, alignment: .leading)
 
             Text(formatDuration(controller.duration))
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -74,7 +74,7 @@ struct FullRecordingOverlayView: View {
     }
 
     private var statusText: String {
-        if controller.isPostProcessing { return "Improving..." }
+        if controller.isPostProcessing { return controller.postProcessingStatusText ?? "Improving..." }
         if controller.isTranscribing { return "Transcribing..." }
         return "Recording..."
     }
@@ -92,12 +92,7 @@ struct VisualContextActionButtons: View {
     var body: some View {
         HStack(spacing: 6) {
             Button {
-                if PermissionService.hasScreenRecordingPermission {
-                    controller.addScreenshot()
-                } else {
-                    _ = PermissionService.requestScreenRecordingPermission()
-                    PermissionService.openScreenRecordingPrivacySettings()
-                }
+                controller.addScreenshot()
             } label: {
                 Image(systemName: "camera.viewfinder")
                     .font(.system(size: 12, weight: .semibold))
@@ -108,32 +103,10 @@ struct VisualContextActionButtons: View {
                     }
             }
             .buttonStyle(.plain)
-            .foregroundStyle(canAddVisualContext ? Color.green : Color.secondary.opacity(0.7))
-            .disabled(controller.isTranscribing || controller.isPostProcessing || controller.isScreenClipRecording)
-            .help(PermissionService.hasScreenRecordingPermission ? "Add screenshot context" : "Grant Screen Recording permission")
-            .accessibilityLabel("Add screenshot context")
-
-            Button {
-                if PermissionService.hasScreenRecordingPermission {
-                    controller.addAnnotation()
-                } else {
-                    _ = PermissionService.requestScreenRecordingPermission()
-                    PermissionService.openScreenRecordingPrivacySettings()
-                }
-            } label: {
-                Image(systemName: "cursorarrow.rays")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 24, height: 24)
-                    .background {
-                        Circle()
-                            .fill(Color.primary.opacity(0.08))
-                    }
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(canAddVisualContext ? Color.green : Color.secondary.opacity(0.7))
-            .disabled(controller.isTranscribing || controller.isPostProcessing || controller.isScreenClipRecording)
-            .help(PermissionService.hasScreenRecordingPermission ? "Select and comment on a screen region" : "Grant Screen Recording permission")
-            .accessibilityLabel("Select and comment on a screen region")
+            .foregroundStyle(isVisualContextEnabled ? Color.green : Color.secondary.opacity(0.7))
+            .disabled(!isVisualContextEnabled || controller.isTranscribing || controller.isPostProcessing || controller.isScreenClipRecording)
+            .help(isVisualContextEnabled ? "Import the current clipboard screenshot" : "Visual context capture is disabled")
+            .accessibilityLabel("Import clipboard screenshot context")
 
             Button {
                 if PermissionService.hasScreenRecordingPermission {
@@ -152,16 +125,19 @@ struct VisualContextActionButtons: View {
                     }
             }
             .buttonStyle(.plain)
-            .foregroundStyle(controller.isScreenClipRecording ? Color.red : (canAddVisualContext ? Color.green : Color.secondary.opacity(0.7)))
-            .disabled(controller.isTranscribing || controller.isPostProcessing)
+            .foregroundStyle(controller.isScreenClipRecording ? Color.red : (canRecordScreenClip ? Color.green : Color.secondary.opacity(0.7)))
+            .disabled(controller.isTranscribing || controller.isPostProcessing || (!isVisualContextEnabled && !controller.isScreenClipRecording))
             .help(controller.isScreenClipRecording ? "Stop screen clip context" : (PermissionService.hasScreenRecordingPermission ? "Start screen clip context" : "Grant Screen Recording permission"))
             .accessibilityLabel(controller.isScreenClipRecording ? "Stop screen clip context" : "Start screen clip context")
         }
     }
 
-    private var canAddVisualContext: Bool {
+    private var isVisualContextEnabled: Bool {
         AppPreferences.shared.isVisualContextCaptureEnabled
-            && PermissionService.hasScreenRecordingPermission
+    }
+
+    private var canRecordScreenClip: Bool {
+        isVisualContextEnabled && PermissionService.hasScreenRecordingPermission
     }
 }
 
@@ -289,9 +265,6 @@ struct ContextControl: View {
         if !controller.contextBundle.screenshots.isEmpty || !controller.contextBundle.screenClips.isEmpty {
             return "photo.on.rectangle"
         }
-        if !controller.contextBundle.annotations.isEmpty {
-            return "cursorarrow.rays"
-        }
         return controller.contextBundle.selectedText.isEmpty ? "text.badge.xmark" : "text.viewfinder"
     }
 
@@ -316,27 +289,21 @@ struct ContextMenuContent: View {
 
         Divider()
 
-        if PermissionService.hasScreenRecordingPermission {
-            Button {
-                controller.addScreenshot()
-            } label: {
-                Label("Add Screenshot", systemImage: "camera.viewfinder")
-            }
-            .disabled(!canAddVisualContext)
+        Button {
+            controller.addScreenshot()
+        } label: {
+            Label("Import Clipboard Screenshot", systemImage: "camera.viewfinder")
+        }
+        .disabled(!isVisualContextEnabled || controller.isScreenClipRecording)
 
-            Button {
-                controller.addAnnotation()
-            } label: {
-                Label("Select + Comment", systemImage: "cursorarrow.rays")
-            }
-            .disabled(!canAddVisualContext)
+        if PermissionService.hasScreenRecordingPermission {
 
             Button {
                 controller.toggleScreenClip()
             } label: {
                 Label(controller.isScreenClipRecording ? "Stop Screen Clip" : "Start Screen Clip", systemImage: controller.isScreenClipRecording ? "stop.circle" : "record.circle")
             }
-            .disabled(!canAddVisualContext && !controller.isScreenClipRecording)
+            .disabled((!canRecordScreenClip && !controller.isScreenClipRecording))
         } else {
             Button {
                 _ = PermissionService.requestScreenRecordingPermission()
@@ -358,8 +325,12 @@ struct ContextMenuContent: View {
         Text(attachmentSummary)
     }
 
-    private var canAddVisualContext: Bool {
+    private var isVisualContextEnabled: Bool {
         AppPreferences.shared.isVisualContextCaptureEnabled
+    }
+
+    private var canRecordScreenClip: Bool {
+        isVisualContextEnabled
             && PermissionService.hasScreenRecordingPermission
             && !controller.isScreenClipRecording
     }
@@ -379,7 +350,7 @@ struct ContextMenuContent: View {
             return "Screen clip recording..."
         }
         if controller.contextBundle.isEmpty {
-            return PermissionService.hasScreenRecordingPermission ? "Ready for visual context" : "Screen Recording permission needed"
+            return "Copy a macOS screenshot to the clipboard to attach it automatically."
         }
         return controller.contextBundle.displaySummary
     }

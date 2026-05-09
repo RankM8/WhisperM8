@@ -3,6 +3,7 @@ import Foundation
 enum TranscriptRunStatus: String, Codable, Equatable {
     case succeeded
     case rawFallback
+    case cautiousFallback
     case failed
 
     var displayText: String {
@@ -11,6 +12,8 @@ enum TranscriptRunStatus: String, Codable, Equatable {
             return "Succeeded"
         case .rawFallback:
             return "Raw Fallback"
+        case .cautiousFallback:
+            return "Cautious Fallback"
         case .failed:
             return "Failed"
         }
@@ -110,6 +113,8 @@ struct TranscriptRunReport: Identifiable, Codable, Equatable {
     var codex: CodexSnapshot?
     var selectedText: String?
     var visualContextSummary: String?
+    var replyIntent: ReplyIntentKind?
+    var visualManifest: VisualManifest?
     var attachments: [TranscriptRunAttachmentReport]
     var renderedPrompt: String?
     var rawTranscript: String?

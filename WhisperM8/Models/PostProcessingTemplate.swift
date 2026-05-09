@@ -64,6 +64,8 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
 extension PostProcessingTemplate {
     static let cleanID = "template.clean"
     static let techCleanID = "template.tech-clean"
+    static let promptID = "template.prompt"
+    static let taskID = "template.task"
     static let emailID = "template.email"
     static let slackID = "template.slack"
     static let whatsappID = "template.whatsapp"
@@ -146,6 +148,86 @@ extension PostProcessingTemplate {
                 {visualContextSummary}
 
                 Transcript:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: promptID,
+                name: "Agent prompt",
+                description: "Verwandelt Diktat und visuellen Kontext in einen präzisen Prompt für Claude Code oder Codex.",
+                instruction: """
+                Build a high-quality Markdown prompt for an AI coding or work agent.
+
+                Goal:
+                Turn the user's spoken instruction and captured context into a prompt that another agent can execute accurately.
+
+                Required structure:
+                - Start with a short task title.
+                - Include the user's goal in clear imperative language.
+                - Include the relevant context from selected text and visual inputs.
+                - Reference screenshots and videos by their manifest labels when they matter.
+                - Include concrete requirements and acceptance criteria.
+                - Include constraints and non-goals only when implied by the user or context.
+                - Include open questions only when the task cannot be safely executed without them.
+
+                Rules:
+                - Output only the final Markdown prompt.
+                - Do not answer the task itself.
+                - Do not invent context that is not in the transcript or visual inputs.
+                - Preserve the user's intent, priority, language, and desired tone.
+                - If the user asks to write in a specific language, make that a requirement in the prompt.
+
+                Language: {language}
+
+                Selected context:
+                {selectedContext}
+
+                Visual context:
+                {visualContextSummary}
+
+                User instruction:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: taskID,
+                name: "Agent task",
+                description: "Führt den gesprochenen Task mit Codex aus und liefert das fertige Ergebnis.",
+                instruction: """
+                Execute this task and return the finished result.
+
+                Goal:
+                Use the user's spoken instruction and captured context to complete the task directly.
+
+                Execution rules:
+                - Do the task yourself as far as the current non-interactive Codex session allows.
+                - Use selected text, screenshots, video frames, and visual context as direct task input.
+                - If screenshots or visual frames are present, inspect them before answering.
+                - If the user asks for research or checking, perform the check if available in this environment.
+                - If a requested step cannot be completed because credentials, external access, write permission, or a missing tool is required, say exactly what blocked it and provide the best useful result possible.
+
+                Output rules:
+                - Output only the final answer or deliverable.
+                - Do not output a prompt for another agent unless the user explicitly asks for a prompt.
+                - Do not invent facts, research results, links, files, or decisions.
+                - Keep the output concise unless the task requires detail.
+                - If the user wants a reply for Slack, WhatsApp, or email, output the finished message.
+
+                Language: {language}
+
+                Selected context:
+                {selectedContext}
+
+                Visual context:
+                {visualContextSummary}
+
+                User instruction:
                 {rawTranscript}
                 """,
                 createdAt: referenceDate,

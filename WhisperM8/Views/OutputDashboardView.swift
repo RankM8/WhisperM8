@@ -4,6 +4,7 @@ import SwiftUI
 enum OutputDashboardSection: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case reports = "Reports"
+    case tasks = "Tasks"
     case modes = "Modes"
     case templates = "Templates"
     case codex = "Codex"
@@ -17,6 +18,8 @@ enum OutputDashboardSection: String, CaseIterable, Identifiable {
             return "rectangle.grid.2x2"
         case .reports:
             return "list.bullet.rectangle"
+        case .tasks:
+            return "checklist"
         case .modes:
             return "slider.horizontal.3"
         case .templates:
@@ -47,6 +50,8 @@ struct OutputDashboardView: View {
                     .environment(appState)
             case .reports:
                 TranscriptReportsView()
+            case .tasks:
+                TaskReportsView()
             case .modes:
                 OutputModesView()
             case .templates:
@@ -63,7 +68,7 @@ struct OutputDashboardView: View {
 
 struct OutputOverviewView: View {
     @Environment(AppState.self) private var appState
-    @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.rawID
+    @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.cleanID
     @State private var codexStatus = CodexConnectionStatus.unknown
 
     var body: some View {
@@ -238,8 +243,61 @@ struct TranscriptReportsView: View {
             return .green
         case .rawFallback:
             return .orange
+        case .cautiousFallback:
+            return .orange
         case .failed:
             return .red
+        }
+    }
+}
+
+struct TaskReportsView: View {
+    @State private var reports: [TranscriptRunReport] = []
+    @State private var selectedReportID: UUID?
+    private let store = TranscriptRunReportStore()
+
+    private var taskReports: [TranscriptRunReport] {
+        reports.filter { report in
+            report.mode.id == OutputMode.taskID || report.replyIntent == .agenticReply
+        }
+    }
+
+    private var selectedReport: TranscriptRunReport? {
+        taskReports.first { $0.id == selectedReportID } ?? taskReports.first
+    }
+
+    var body: some View {
+        NavigationSplitView {
+            List(selection: $selectedReportID) {
+                ForEach(taskReports) { report in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(report.title)
+                            .lineLimit(1)
+                        Text(report.replyIntent?.displayName ?? report.status.displayText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .tag(report.id)
+                }
+            }
+            .navigationTitle("Tasks")
+        } detail: {
+            if let selectedReport {
+                TranscriptReportDetailView(report: selectedReport) {
+                    try? store.delete(selectedReport)
+                    refresh()
+                }
+            } else {
+                ContentUnavailableView("No Tasks Yet", systemImage: "checklist")
+            }
+        }
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        reports = store.recentReports()
+        if selectedReportID == nil || !taskReports.contains(where: { $0.id == selectedReportID }) {
+            selectedReportID = taskReports.first?.id
         }
     }
 }
@@ -277,6 +335,9 @@ struct TranscriptReportDetailView: View {
         ReportCard("Run") {
             ReportKeyValue("Status", report.status.displayText)
             ReportKeyValue("Mode", "\(report.mode.name) (\(report.mode.shortLabel))")
+            if let replyIntent = report.replyIntent {
+                ReportKeyValue("Router", replyIntent.displayName)
+            }
             ReportKeyValue("Template", report.mode.templateID ?? "None")
             ReportKeyValue("Source App", report.sourceAppName ?? "Unknown")
             ReportKeyValue("Provider", report.transcription.provider)
@@ -321,6 +382,9 @@ struct TranscriptReportDetailView: View {
 
     private var reportPrompt: some View {
         ReportCard("Prompt / Codex Input") {
+            if let manifest = report.visualManifest, !manifest.isEmpty {
+                ReportTextBlock(title: "Visual Manifest", text: manifest.markdown)
+            }
             ReportTextBlock(title: "Rendered Prompt", text: report.renderedPrompt)
             if let command = report.codex?.commandPreview, !command.isEmpty {
                 ReportTextBlock(title: "Command Preview", text: command.joined(separator: " "))

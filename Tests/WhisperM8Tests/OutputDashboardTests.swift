@@ -9,6 +9,8 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(modes.map(\.id), [
             OutputMode.rawID,
             OutputMode.cleanID,
+            OutputMode.promptID,
+            OutputMode.taskID,
             OutputMode.emailID,
             OutputMode.slackID,
             OutputMode.whatsappID,
@@ -17,6 +19,8 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(OutputMode.mode(for: OutputMode.emailID).shortLabel, "Mail")
         XCTAssertEqual(OutputMode.mode(for: OutputMode.whatsappID).shortLabel, "WA")
         XCTAssertEqual(OutputMode.mode(for: OutputMode.slackID).contextPolicy, .auto)
+        XCTAssertEqual(OutputMode.mode(for: OutputMode.promptID).contextPolicy, .auto)
+        XCTAssertEqual(OutputMode.mode(for: OutputMode.taskID).contextPolicy, .auto)
         XCTAssertEqual(OutputMode.mode(for: OutputMode.rawID).contextPolicy, .off)
         XCTAssertFalse(OutputMode.mode(for: OutputMode.rawID).usesPostProcessing)
         XCTAssertTrue(OutputMode.mode(for: OutputMode.cleanID).usesPostProcessing)
@@ -43,6 +47,8 @@ final class OutputDashboardTests: XCTestCase {
     }
 
     func testOutputModeStoreSavesModeOverrides() throws {
+        try withIsolatedOutputPreferences { preferences in
+            preferences.defaultOutputModeID = OutputMode.cleanID
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8Modes-\(UUID().uuidString)")
             .appendingPathExtension("json")
@@ -51,14 +57,15 @@ final class OutputDashboardTests: XCTestCase {
 
         var modes = OutputMode.builtInModes
         modes[0].isEnabled = false
-        modes[1].shortLabel = "Fix"
-        modes[1].isEnabled = false
+        modes[2].shortLabel = "Ask"
+        modes[2].isEnabled = false
 
         try store.saveModes(modes)
 
         XCTAssertTrue(store.mode(for: OutputMode.rawID).isEnabled)
-        XCTAssertEqual(store.mode(for: OutputMode.cleanID).shortLabel, "Fix")
-        XCTAssertFalse(store.mode(for: OutputMode.cleanID).isEnabled)
+        XCTAssertEqual(store.mode(for: OutputMode.promptID).shortLabel, "Ask")
+        XCTAssertFalse(store.mode(for: OutputMode.promptID).isEnabled)
+        }
     }
 
     func testOutputModeStoreKeepsDefaultModeEnabled() throws {
@@ -128,6 +135,17 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(whatsappTemplate?.name, "WhatsApp message")
         XCTAssertTrue(whatsappTemplate?.instruction.contains("Use Du-Form") == true)
         XCTAssertTrue(whatsappTemplate?.instruction.contains("short and conversational") == true)
+    }
+
+    func testBuiltInTemplatesIncludePromptAndTaskModes() {
+        let promptTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.promptID }
+        let taskTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.taskID }
+
+        XCTAssertEqual(promptTemplate?.name, "Agent prompt")
+        XCTAssertTrue(promptTemplate?.instruction.contains("Markdown prompt") == true)
+        XCTAssertEqual(taskTemplate?.name, "Agent task")
+        XCTAssertTrue(taskTemplate?.instruction.contains("Execute this task") == true)
+        XCTAssertTrue(taskTemplate?.instruction.contains("Do not output a prompt") == true)
     }
 
     func testTemplateStoreLoadsBuiltInsAndSavesCustomTemplates() throws {
@@ -223,6 +241,66 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(arguments.last, "-")
     }
 
+    func testReplyIntentRouterClassifiesModes() {
+        let router = ReplyIntentRouter()
+        let context = TranscriptContextBundle(
+            screenshots: [ContextAttachment(kind: .screenshot, fileURL: URL(fileURLWithPath: "/tmp/shot.png"))]
+        )
+
+        XCTAssertEqual(
+            router.route(rawText: "formuliere das locker", mode: OutputMode.mode(for: OutputMode.slackID), contextBundle: .empty),
+            .rewrite
+        )
+        XCTAssertEqual(
+            router.route(rawText: "antworte darauf", mode: OutputMode.mode(for: OutputMode.slackID), contextBundle: context),
+            .agenticReply
+        )
+        XCTAssertEqual(
+            router.route(rawText: "mach daraus einen prompt", mode: OutputMode.mode(for: OutputMode.promptID), contextBundle: context),
+            .promptPackage
+        )
+        XCTAssertEqual(
+            router.route(rawText: "recherchiere das kurz", mode: OutputMode.mode(for: OutputMode.taskID), contextBundle: context),
+            .taskPrompt
+        )
+    }
+
+    func testTaskPromptPackageInstructsExecutionNotPromptGeneration() {
+        let package = PromptPackageBuilder().build(
+            rawText: "Recherchiere kurz, ob das funktioniert, und gib mir eine Antwort.",
+            mode: OutputMode.mode(for: OutputMode.taskID),
+            template: PostProcessingTemplate.builtInTemplate(id: PostProcessingTemplate.taskID)!,
+            language: "de",
+            contextBundle: .empty
+        )
+
+        XCTAssertEqual(package.intent, .taskPrompt)
+        XCTAssertTrue(package.prompt.contains("Task mode must not return a prompt"))
+        XCTAssertTrue(package.prompt.contains("Execute this task"))
+    }
+
+    func testPromptPackageIncludesGlobalContractAndVisualManifest() {
+        let screenshot = ContextAttachment(
+            kind: .screenshot,
+            fileURL: URL(fileURLWithPath: "/tmp/context.png"),
+            sourceAppName: "Chrome"
+        )
+        let bundle = TranscriptContextBundle(screenshots: [screenshot], sourceAppName: "Chrome")
+        let package = PromptPackageBuilder().build(
+            rawText: "Schreib einen guten Prompt.",
+            mode: OutputMode.mode(for: OutputMode.promptID),
+            template: PostProcessingTemplate.builtInTemplate(id: PostProcessingTemplate.promptID)!,
+            language: "de",
+            contextBundle: bundle
+        )
+
+        XCTAssertEqual(package.intent, .promptPackage)
+        XCTAssertTrue(package.prompt.contains("You are WhisperM8's post-processing agent."))
+        XCTAssertTrue(package.prompt.contains("Visual manifest:"))
+        XCTAssertTrue(package.prompt.contains("Screenshot 1"))
+        XCTAssertTrue(package.prompt.contains("/tmp/context.png"))
+    }
+
     func testContextBundleStoresAttachments() {
         let screenshot = ContextAttachment(
             kind: .screenshot,
@@ -300,6 +378,8 @@ final class OutputDashboardTests: XCTestCase {
                 screenshots: [ContextAttachment(kind: .screenshot, fileURL: sourceImage)]
             ),
             renderedPrompt: "Prompt",
+            replyIntent: .contextAnswer,
+            visualManifest: VisualManifest(entries: []),
             rawTranscript: "Raw",
             finalTranscript: "Final",
             copiedToClipboard: true,
@@ -310,6 +390,7 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(recentReports.first?.id, report.id)
         XCTAssertEqual(recentReports.first?.selectedText, "selected context")
         XCTAssertEqual(recentReports.first?.attachments.count, 1)
+        XCTAssertEqual(recentReports.first?.replyIntent, .contextAnswer)
         XCTAssertEqual(recentReports.first?.attachments.first?.includedInCodexInput, true)
         XCTAssertTrue(FileManager.default.fileExists(atPath: recentReports.first?.attachments.first?.storedPath ?? ""))
     }

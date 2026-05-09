@@ -63,7 +63,7 @@ struct AppPreferences {
     }
 
     var defaultOutputModeID: String {
-        get { defaults.string(forKey: Keys.defaultOutputModeID) ?? OutputMode.rawID }
+        get { defaults.string(forKey: Keys.defaultOutputModeID) ?? OutputMode.cleanID }
         nonmutating set { defaults.set(newValue, forKey: Keys.defaultOutputModeID) }
     }
 
@@ -109,7 +109,7 @@ struct AppPreferences {
     }
 
     var deleteContextFilesAfterProcessing: Bool {
-        get { boolWithDefault(true, forKey: Keys.deleteContextFilesAfterProcessing) }
+        get { boolWithDefault(false, forKey: Keys.deleteContextFilesAfterProcessing) }
         nonmutating set { defaults.set(newValue, forKey: Keys.deleteContextFilesAfterProcessing) }
     }
 

@@ -68,6 +68,8 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
 extension OutputMode {
     static let rawID = "raw"
     static let cleanID = "clean"
+    static let promptID = "prompt"
+    static let taskID = "task"
     static let emailID = "email"
     static let slackID = "slack"
     static let whatsappID = "whatsapp"
@@ -91,6 +93,26 @@ extension OutputMode {
             templateID: PostProcessingTemplate.cleanID,
             isEnabled: true,
             isDefault: false
+        ),
+        OutputMode(
+            id: promptID,
+            name: "Prompt",
+            shortLabel: "Prompt",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.promptID,
+            isEnabled: true,
+            isDefault: false,
+            contextPolicy: .auto
+        ),
+        OutputMode(
+            id: taskID,
+            name: "Task",
+            shortLabel: "Task",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.taskID,
+            isEnabled: true,
+            isDefault: false,
+            contextPolicy: .auto
         ),
         OutputMode(
             id: emailID,
@@ -147,7 +169,7 @@ extension OutputMode {
 
     static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {
         switch id {
-        case emailID, slackID, whatsappID:
+        case promptID, taskID, emailID, slackID, whatsappID:
             return .auto
         default:
             return .off

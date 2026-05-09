@@ -22,6 +22,7 @@ final class AppState {
     var lastContextBundle: TranscriptContextBundle?
     var isScreenClipRecording = false
     var lastTranscriptRunReport: TranscriptRunReport?
+    var postProcessingStatusText: String?
 
     @ObservationIgnored
     private var recordingCoordinator: RecordingCoordinator!
@@ -35,7 +36,7 @@ final class AppState {
 
     var statusText: String {
         if isRecording { return "Recording..." }
-        if isPostProcessing { return "Improving..." }
+        if isPostProcessing { return postProcessingStatusText ?? "Improving..." }
         if isTranscribing { return "Transcribing..." }
         return "Ready"
     }
@@ -63,10 +64,6 @@ final class AppState {
 
     func addContextScreenshot() {
         recordingCoordinator.addContextScreenshot()
-    }
-
-    func addContextAnnotation() {
-        recordingCoordinator.addContextAnnotation()
     }
 
     func toggleScreenClip() {

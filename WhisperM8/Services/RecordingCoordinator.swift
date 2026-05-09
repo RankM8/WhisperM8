@@ -3,6 +3,9 @@ import AppKit
 private struct PostProcessingRunResult {
     var finalText: String
     var renderedPrompt: String?
+    var replyIntent: ReplyIntentKind?
+    var visualManifest: VisualManifest?
+    var fallbackStatus: TranscriptRunStatus?
     var errorMessage: String?
 }
 
@@ -23,6 +26,8 @@ final class RecordingCoordinator {
     private var escKeyMonitor: Any?
     private var contextSourceApp: NSRunningApplication?
     private var screenClipLimitTask: Task<Void, Never>?
+    private var clipboardScreenshotTask: Task<Void, Never>?
+    private var observedPasteboardChangeCount = NSPasteboard.general.changeCount
 
     init(
         appState: AppState,
@@ -64,6 +69,7 @@ final class RecordingCoordinator {
             appState.audioLevel = 0
             appState.lastError = nil
             appState.isPostProcessing = false
+            appState.postProcessingStatusText = nil
             appState.selectedOutputMode = OutputMode.defaultMode()
             appState.selectedContext = selectedContext
             appState.lastSelectedContext = selectedContext.isEmpty ? nil : selectedContext
@@ -71,6 +77,7 @@ final class RecordingCoordinator {
             appState.lastContextBundle = contextBundle.isEmpty ? nil : contextBundle
             appState.isScreenClipRecording = false
             isProcessing = false
+            startClipboardScreenshotMonitor()
 
             overlayController.show(
                 appState: appState,
@@ -82,9 +89,6 @@ final class RecordingCoordinator {
                 },
                 onAddScreenshot: { [weak self] in
                     self?.addContextScreenshot()
-                },
-                onAddAnnotation: { [weak self] in
-                    self?.addContextAnnotation()
                 },
                 onToggleScreenClip: { [weak self] in
                     self?.toggleScreenClip()
@@ -122,6 +126,8 @@ final class RecordingCoordinator {
         if appState.isScreenClipRecording {
             await stopScreenClipAndAttach()
         }
+        importClipboardScreenshotIfNeeded()
+        stopClipboardScreenshotMonitor()
 
         let audioDuration = appState.recordingDuration
         let frozenOutputMode = appState.selectedOutputMode
@@ -170,6 +176,7 @@ final class RecordingCoordinator {
 
         appState.isTranscribing = false
         appState.isPostProcessing = false
+        appState.postProcessingStatusText = nil
         appState.selectedContext = .empty
         appState.contextBundle = .empty
         appState.isScreenClipRecording = false
@@ -182,6 +189,7 @@ final class RecordingCoordinator {
 
         recordingTimer.stop()
         removeEscKeyMonitor()
+        stopClipboardScreenshotMonitor()
         screenClipLimitTask?.cancel()
         screenClipLimitTask = nil
 
@@ -193,6 +201,7 @@ final class RecordingCoordinator {
         appState.isRecording = false
         appState.audioLevel = 0
         appState.isPostProcessing = false
+        appState.postProcessingStatusText = nil
         appState.selectedContext = .empty
         appState.contextBundle = .empty
         appState.isScreenClipRecording = false
@@ -217,51 +226,9 @@ final class RecordingCoordinator {
 
     func addContextScreenshot() {
         guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
-        guard appState.contextBundle.screenshots.count < AppPreferences.shared.maxScreenshotsPerRecording else {
-            appState.lastError = "Maximum screenshots for this recording reached."
-            return
-        }
-
-        Task { @MainActor in
-            do {
-                let screenshot = try await visualContextCaptureService.captureScreenshot(sourceApp: contextSourceApp)
-                appState.contextBundle.screenshots.append(screenshot)
-                appState.lastContextBundle = appState.contextBundle
-                overlayController.update(appState: appState)
-            } catch {
-                appState.lastError = error.localizedDescription
-                Logger.permission.warning("Visual screenshot context failed: \(error.localizedDescription, privacy: .public)")
-                if error as? VisualContextCaptureError == .missingPermission {
-                    _ = PermissionService.requestScreenRecordingPermission()
-                }
-                overlayController.update(appState: appState)
-            }
-        }
-    }
-
-    func addContextAnnotation() {
-        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
-        let nextNumber = appState.contextBundle.annotations.count + 1
-
-        Task { @MainActor in
-            do {
-                let annotation = try await visualContextCaptureService.captureAnnotation(
-                    sourceApp: contextSourceApp,
-                    number: nextNumber
-                )
-                appState.contextBundle.annotations.append(annotation)
-                appState.lastContextBundle = appState.contextBundle
-                overlayController.update(appState: appState)
-            } catch is CancellationError {
-                overlayController.update(appState: appState)
-            } catch {
-                appState.lastError = error.localizedDescription
-                Logger.permission.warning("Visual annotation context failed: \(error.localizedDescription, privacy: .public)")
-                if error as? VisualContextCaptureError == .missingPermission {
-                    _ = PermissionService.requestScreenRecordingPermission()
-                }
-                overlayController.update(appState: appState)
-            }
+        let didImport = importClipboardScreenshotIfNeeded(force: true)
+        if !didImport {
+            appState.lastError = "No screenshot image found on the clipboard. Use macOS screenshot-to-clipboard, then try again."
         }
     }
 
@@ -338,7 +305,7 @@ final class RecordingCoordinator {
         appState.lastTranscription = finalText
 
         saveRunReport(
-            status: postProcessingResult.errorMessage == nil ? .succeeded : .rawFallback,
+            status: postProcessingResult.errorMessage == nil ? .succeeded : (postProcessingResult.fallbackStatus ?? .rawFallback),
             errorMessage: postProcessingResult.errorMessage,
             outputMode: outputMode,
             provider: provider,
@@ -347,6 +314,8 @@ final class RecordingCoordinator {
             audioDuration: audioDuration,
             contextBundle: contextBundle,
             renderedPrompt: postProcessingResult.renderedPrompt,
+            replyIntent: postProcessingResult.replyIntent,
+            visualManifest: postProcessingResult.visualManifest,
             rawText: normalizedRawText,
             finalText: finalText,
             copiedToClipboard: true,
@@ -390,15 +359,17 @@ final class RecordingCoordinator {
         }
 
         let allowedContextBundle = postProcessingService.allowedContextBundle(for: mode, capturedContext: contextBundle)
-        let renderedPrompt = postProcessingService.renderedPrompt(
+        let promptPackage = postProcessingService.promptPackage(
             rawText: rawText,
             mode: mode,
             language: language,
             contextBundle: allowedContextBundle
         )
+        let renderedPrompt = promptPackage?.prompt
 
         appState.isTranscribing = false
         appState.isPostProcessing = true
+        appState.postProcessingStatusText = promptPackage?.intent.overlayStatusText
         overlayController.update(appState: appState)
 
         do {
@@ -409,27 +380,60 @@ final class RecordingCoordinator {
                 contextBundle: contextBundle
             )
             appState.isPostProcessing = false
+            appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
             return PostProcessingRunResult(
                 finalText: TextNormalizer.normalizeTranscriptionText(processedText),
-                renderedPrompt: renderedPrompt
+                renderedPrompt: renderedPrompt,
+                replyIntent: promptPackage?.intent,
+                visualManifest: promptPackage?.visualManifest
             )
         } catch {
             appState.isPostProcessing = false
+            appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
 
             if AppPreferences.shared.fallbackToRawOnProcessingError {
                 let message = error.localizedDescription
                 appState.lastError = message
                 Logger.transcription.error("Post-processing failed; falling back to raw: \(message)")
+                let fallback = cautiousFallbackText(
+                    rawText: rawText,
+                    mode: mode,
+                    intent: promptPackage?.intent
+                )
                 return PostProcessingRunResult(
-                    finalText: rawText,
+                    finalText: fallback.text,
                     renderedPrompt: renderedPrompt,
+                    replyIntent: promptPackage?.intent,
+                    visualManifest: promptPackage?.visualManifest,
+                    fallbackStatus: fallback.status,
                     errorMessage: message
                 )
             }
 
             throw error
+        }
+    }
+
+    private func cautiousFallbackText(
+        rawText: String,
+        mode: OutputMode,
+        intent: ReplyIntentKind?
+    ) -> (text: String, status: TranscriptRunStatus) {
+        guard intent == .agenticReply || intent == .contextAnswer else {
+            return (rawText, .rawFallback)
+        }
+
+        switch mode.id {
+        case OutputMode.slackID:
+            return ("Ich prüfe das kurz sauber und melde mich direkt mit einer konkreten Antwort.", .cautiousFallback)
+        case OutputMode.whatsappID:
+            return ("Ich schau mir das kurz in Ruhe an und melde mich gleich mit einer konkreten Antwort.", .cautiousFallback)
+        case OutputMode.emailID:
+            return ("Ich prüfe das kurz sorgfältig und melde mich anschließend mit einer konkreten Antwort.", .cautiousFallback)
+        default:
+            return (rawText, .rawFallback)
         }
     }
 
@@ -443,6 +447,8 @@ final class RecordingCoordinator {
         audioDuration: TimeInterval,
         contextBundle: TranscriptContextBundle,
         renderedPrompt: String?,
+        replyIntent: ReplyIntentKind?,
+        visualManifest: VisualManifest?,
         rawText: String?,
         finalText: String?,
         copiedToClipboard: Bool,
@@ -460,6 +466,8 @@ final class RecordingCoordinator {
             audioDuration: audioDuration,
             contextBundle: contextBundle,
             renderedPrompt: renderedPrompt,
+            replyIntent: replyIntent,
+            visualManifest: visualManifest,
             rawTranscript: rawText,
             finalTranscript: finalText,
             copiedToClipboard: copiedToClipboard,
@@ -526,6 +534,62 @@ final class RecordingCoordinator {
             try? await Task.sleep(for: .seconds(maxDuration))
             guard !Task.isCancelled, appState?.isRecording == true, appState?.isScreenClipRecording == true else { return }
             await stopScreenClipAndAttach()
+        }
+    }
+
+    private func startClipboardScreenshotMonitor() {
+        stopClipboardScreenshotMonitor()
+        observedPasteboardChangeCount = NSPasteboard.general.changeCount
+
+        clipboardScreenshotTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                self?.importClipboardScreenshotIfNeeded()
+            }
+        }
+    }
+
+    private func stopClipboardScreenshotMonitor() {
+        clipboardScreenshotTask?.cancel()
+        clipboardScreenshotTask = nil
+    }
+
+    @discardableResult
+    private func importClipboardScreenshotIfNeeded(force: Bool = false) -> Bool {
+        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return false }
+        guard AppPreferences.shared.isVisualContextCaptureEnabled else { return false }
+
+        let pasteboard = NSPasteboard.general
+        let changeCount = pasteboard.changeCount
+        guard force || changeCount != observedPasteboardChangeCount else { return false }
+        observedPasteboardChangeCount = changeCount
+
+        guard appState.contextBundle.screenshots.count < AppPreferences.shared.maxScreenshotsPerRecording else {
+            appState.lastError = "Maximum screenshots for this recording reached."
+            overlayController.update(appState: appState)
+            return false
+        }
+
+        do {
+            guard let screenshot = try visualContextCaptureService.captureClipboardScreenshot(
+                from: pasteboard,
+                changeCount: changeCount,
+                sourceApp: contextSourceApp
+            ) else {
+                return false
+            }
+
+            appState.contextBundle.screenshots.append(screenshot)
+            appState.lastContextBundle = appState.contextBundle
+            appState.lastError = nil
+            overlayController.update(appState: appState)
+            return true
+        } catch {
+            appState.lastError = error.localizedDescription
+            Logger.permission.warning("Clipboard screenshot context failed: \(error.localizedDescription, privacy: .public)")
+            overlayController.update(appState: appState)
+            return false
         }
     }
 

@@ -3,8 +3,6 @@ import AVFoundation
 import CoreGraphics
 import CoreMedia
 import ScreenCaptureKit
-import SwiftUI
-import UniformTypeIdentifiers
 
 enum VisualContextCaptureError: LocalizedError, Equatable {
     case disabled
@@ -42,59 +40,29 @@ final class VisualContextCaptureService {
         activeClipSession != nil
     }
 
-    func captureScreenshot(sourceApp: NSRunningApplication?) async throws -> ContextAttachment {
+    func captureClipboardScreenshot(
+        from pasteboard: NSPasteboard,
+        changeCount: Int,
+        sourceApp: NSRunningApplication?
+    ) throws -> ContextAttachment? {
         guard AppPreferences.shared.isVisualContextCaptureEnabled else {
             throw VisualContextCaptureError.disabled
         }
-        guard PermissionService.hasScreenRecordingPermission else {
-            throw VisualContextCaptureError.missingPermission
+
+        guard let image = NSImage(pasteboard: pasteboard) else {
+            return nil
         }
 
-        let captured = try await captureDisplayImage()
         let fileURL = try contextDirectory()
-            .appendingPathComponent("Screenshot-\(UUID().uuidString)")
+            .appendingPathComponent("ClipboardScreenshot-\(changeCount)-\(UUID().uuidString)")
             .appendingPathExtension("png")
-        try writePNG(captured.image, to: fileURL)
+        try writePNG(image, to: fileURL)
 
         return ContextAttachment(
             kind: .screenshot,
             fileURL: fileURL,
             thumbnailURL: fileURL,
-            sourceDisplayID: captured.displayID,
-            sourceAppName: sourceApp?.localizedName
-        )
-    }
-
-    func captureAnnotation(sourceApp: NSRunningApplication?, number: Int) async throws -> ContextAttachment {
-        guard AppPreferences.shared.isVisualContextCaptureEnabled else {
-            throw VisualContextCaptureError.disabled
-        }
-        guard PermissionService.hasScreenRecordingPermission else {
-            throw VisualContextCaptureError.missingPermission
-        }
-
-        let captured = try await captureDisplayImage()
-        let selection = try await AnnotationSelectionWindow.present(
-            image: captured.image,
-            displayID: captured.displayID,
-            number: number
-        )
-        let annotatedImage = try makeAnnotatedImage(baseImage: captured.image, selection: selection)
-
-        let fileURL = try contextDirectory()
-            .appendingPathComponent("Annotation-\(number)-\(UUID().uuidString)")
-            .appendingPathExtension("png")
-        try writePNG(annotatedImage, to: fileURL)
-
-        return ContextAttachment(
-            kind: .annotation,
-            fileURL: fileURL,
-            thumbnailURL: fileURL,
-            sourceDisplayID: captured.displayID,
-            sourceAppName: sourceApp?.localizedName,
-            annotationNumber: number,
-            annotationComment: selection.comment,
-            annotationRect: selection.pixelRect
+            sourceAppName: sourceApp?.localizedName ?? "Clipboard"
         )
     }
 
@@ -216,25 +184,6 @@ final class VisualContextCaptureService {
         return ScreenCaptureTarget(display: display, filter: filter)
     }
 
-    private func captureDisplayImage() async throws -> (image: CGImage, displayID: CGDirectDisplayID) {
-        let target = try await makeCaptureTarget()
-        let configuration = streamConfiguration(for: target.display, frameRate: 1)
-
-        let image: CGImage = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGImage, Error>) in
-            SCScreenshotManager.captureImage(contentFilter: target.filter, configuration: configuration) { image, error in
-                if let error {
-                    continuation.resume(throwing: VisualContextCaptureError.captureFailed(error.localizedDescription))
-                } else if let image {
-                    continuation.resume(returning: image)
-                } else {
-                    continuation.resume(throwing: VisualContextCaptureError.captureFailed("No screenshot image was returned."))
-                }
-            }
-        }
-
-        return (image, target.display.displayID)
-    }
-
     private func activeDisplay(from content: SCShareableContent) -> SCDisplay? {
         guard let screen = OverlayPositionStore.activeScreen,
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
@@ -243,21 +192,6 @@ final class VisualContextCaptureService {
 
         let displayID = CGDirectDisplayID(number.uint32Value)
         return content.displays.first { $0.displayID == displayID }
-    }
-
-    private func streamConfiguration(for display: SCDisplay, frameRate: Int32) -> SCStreamConfiguration {
-        let configuration = SCStreamConfiguration()
-        configuration.width = max(1, CGDisplayPixelsWide(display.displayID))
-        configuration.height = max(1, CGDisplayPixelsHigh(display.displayID))
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: frameRate)
-        configuration.queueDepth = 3
-        configuration.showsCursor = true
-        configuration.capturesAudio = false
-        configuration.excludesCurrentProcessAudio = true
-        if #available(macOS 15.0, *) {
-            configuration.captureMicrophone = false
-        }
-        return configuration
     }
 
     private func contextDirectory() throws -> URL {
@@ -275,399 +209,17 @@ final class VisualContextCaptureService {
         try data.write(to: url, options: .atomic)
     }
 
-    private func makeAnnotatedImage(baseImage: CGImage, selection: AnnotationSelection) throws -> CGImage {
-        let width = baseImage.width
-        let height = baseImage.height
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            throw VisualContextCaptureError.captureFailed("Failed to create annotated screenshot.")
+    private func writePNG(_ image: NSImage, to url: URL) throws {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw VisualContextCaptureError.captureFailed("Failed to read clipboard screenshot image.")
         }
-
-        let imageRect = CGRect(x: 0, y: 0, width: width, height: height)
-        context.draw(baseImage, in: imageRect)
-
-        let rect = selection.pixelRect.standardized
-        context.setFillColor(NSColor.systemBlue.withAlphaComponent(0.14).cgColor)
-        context.fill(rect)
-        context.setStrokeColor(NSColor.systemBlue.cgColor)
-        context.setLineWidth(max(4, CGFloat(width) / 500))
-        context.stroke(rect)
-
-        drawAnnotationBadge(number: selection.number, at: rect.origin, in: context, imageHeight: CGFloat(height))
-
-        if !selection.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            drawAnnotationComment(selection.comment, near: rect, in: context, imageSize: imageRect.size)
-        }
-
-        guard let image = context.makeImage() else {
-            throw VisualContextCaptureError.captureFailed("Failed to render annotated screenshot.")
-        }
-        return image
-    }
-
-    private func drawAnnotationBadge(number: Int, at origin: CGPoint, in context: CGContext, imageHeight: CGFloat) {
-        let diameter: CGFloat = 46
-        let point = CGPoint(
-            x: max(12, origin.x - diameter * 0.45),
-            y: min(imageHeight - diameter - 12, max(12, origin.y - diameter * 0.45))
-        )
-        let rect = CGRect(origin: point, size: CGSize(width: diameter, height: diameter))
-        context.setFillColor(NSColor.systemBlue.cgColor)
-        context.fillEllipse(in: rect)
-        context.setStrokeColor(NSColor.white.cgColor)
-        context.setLineWidth(4)
-        context.strokeEllipse(in: rect.insetBy(dx: 2, dy: 2))
-
-        let text = "\(number)" as NSString
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 24, weight: .bold),
-            .foregroundColor: NSColor.white,
-            .paragraphStyle: paragraph
-        ]
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        text.draw(in: rect.insetBy(dx: 0, dy: 8), withAttributes: attributes)
-        NSGraphicsContext.restoreGraphicsState()
-    }
-
-    private func drawAnnotationComment(_ comment: String, near rect: CGRect, in context: CGContext, imageSize: CGSize) {
-        let trimmed = comment.trimmingCharacters(in: .whitespacesAndNewlines)
-        let maxWidth: CGFloat = min(520, imageSize.width - 40)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 24, weight: .medium),
-            .foregroundColor: NSColor.white
-        ]
-        let attributed = NSAttributedString(string: trimmed, attributes: attributes)
-        let measured = attributed.boundingRect(
-            with: CGSize(width: maxWidth - 32, height: 300),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        let boxSize = CGSize(width: min(maxWidth, measured.width + 32), height: measured.height + 24)
-        let boxX = min(max(20, rect.midX - boxSize.width / 2), imageSize.width - boxSize.width - 20)
-        let preferredY = rect.minY - boxSize.height - 18
-        let boxY = preferredY > 20 ? preferredY : min(imageSize.height - boxSize.height - 20, rect.maxY + 18)
-        let box = CGRect(x: boxX, y: boxY, width: boxSize.width, height: boxSize.height)
-
-        context.setFillColor(NSColor.black.withAlphaComponent(0.76).cgColor)
-        context.fill(box)
-
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        attributed.draw(
-            with: box.insetBy(dx: 16, dy: 12),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        NSGraphicsContext.restoreGraphicsState()
+        try writePNG(cgImage, to: url)
     }
 }
 
 struct ScreenCaptureTarget {
     let display: SCDisplay
     let filter: SCContentFilter
-}
-
-struct AnnotationSelection {
-    var number: Int
-    var comment: String
-    var pixelRect: CGRect
-}
-
-@MainActor
-private final class AnnotationSelectionWindow: NSObject, NSWindowDelegate {
-    private static var activeWindow: AnnotationSelectionWindow?
-
-    private var window: NSWindow?
-    private var continuation: CheckedContinuation<AnnotationSelection, Error>?
-    private let image: CGImage
-    private let displayID: CGDirectDisplayID
-    private let number: Int
-
-    init(image: CGImage, displayID: CGDirectDisplayID, number: Int) {
-        self.image = image
-        self.displayID = displayID
-        self.number = number
-        super.init()
-    }
-
-    static func present(image: CGImage, displayID: CGDirectDisplayID, number: Int) async throws -> AnnotationSelection {
-        try await withCheckedThrowingContinuation { continuation in
-            let selector = AnnotationSelectionWindow(image: image, displayID: displayID, number: number)
-            selector.continuation = continuation
-            activeWindow = selector
-            selector.show()
-        }
-    }
-
-    private func show() {
-        let screen = NSScreen.screens.first { screen in
-            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
-                return false
-            }
-            return number.uint32Value == displayID
-        } ?? NSScreen.main
-
-        let frame = screen?.frame ?? NSScreen.main?.frame ?? .zero
-        let model = AnnotationSelectionModel(
-            number: number,
-            imageSize: CGSize(width: image.width, height: image.height),
-            onCancel: { [weak self] in
-                self?.cancel()
-            },
-            onComplete: { [weak self] selection in
-                self?.complete(selection)
-            }
-        )
-        let view = AnnotationSelectionView(image: NSImage(cgImage: image, size: frame.size), model: model)
-        let hostingView = NSHostingView(rootView: view)
-
-        let window = NSWindow(
-            contentRect: frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = hostingView
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.level = .screenSaver
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        window.delegate = self
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        self.window = window
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        if continuation != nil {
-            cancel()
-        }
-    }
-
-    private func complete(_ selection: AnnotationSelection) {
-        continuation?.resume(returning: selection)
-        continuation = nil
-        close()
-    }
-
-    private func cancel() {
-        continuation?.resume(throwing: CancellationError())
-        continuation = nil
-        close()
-    }
-
-    private func close() {
-        window?.delegate = nil
-        window?.close()
-        window = nil
-        Self.activeWindow = nil
-    }
-}
-
-@MainActor
-private final class AnnotationSelectionModel: ObservableObject {
-    let number: Int
-    let imageSize: CGSize
-    let onCancel: () -> Void
-    let onComplete: (AnnotationSelection) -> Void
-
-    @Published var selectionRect: CGRect?
-    @Published var dragStart: CGPoint?
-    @Published var comment = ""
-    @Published var viewSize = CGSize(width: 1, height: 1)
-
-    init(
-        number: Int,
-        imageSize: CGSize,
-        onCancel: @escaping () -> Void,
-        onComplete: @escaping (AnnotationSelection) -> Void
-    ) {
-        self.number = number
-        self.imageSize = imageSize
-        self.onCancel = onCancel
-        self.onComplete = onComplete
-    }
-
-    func updateDrag(to point: CGPoint) {
-        if dragStart == nil {
-            dragStart = point
-        }
-        guard let dragStart else { return }
-        selectionRect = CGRect(
-            x: min(dragStart.x, point.x),
-            y: min(dragStart.y, point.y),
-            width: abs(point.x - dragStart.x),
-            height: abs(point.y - dragStart.y)
-        )
-    }
-
-    func finishDrag() {
-        dragStart = nil
-    }
-
-    func save() {
-        guard let rect = selectionRect?.standardized, rect.width >= 8, rect.height >= 8 else { return }
-        onComplete(
-            AnnotationSelection(
-                number: number,
-                comment: comment,
-                pixelRect: pixelRect(for: rect)
-            )
-        )
-    }
-
-    private func pixelRect(for rect: CGRect) -> CGRect {
-        let scaleX = imageSize.width / max(1, viewSize.width)
-        let scaleY = imageSize.height / max(1, viewSize.height)
-        return CGRect(
-            x: rect.minX * scaleX,
-            y: (viewSize.height - rect.maxY) * scaleY,
-            width: rect.width * scaleX,
-            height: rect.height * scaleY
-        )
-    }
-}
-
-private struct AnnotationSelectionView: View {
-    let image: NSImage
-    @ObservedObject var model: AnnotationSelectionModel
-    @FocusState private var commentFocused: Bool
-
-    var body: some View {
-        GeometryReader { proxy in
-            content(in: proxy.size)
-            .onAppear {
-                model.viewSize = proxy.size
-            }
-            .onChange(of: proxy.size) { _, newSize in
-                model.viewSize = newSize
-            }
-        }
-        .ignoresSafeArea()
-        .onExitCommand {
-            model.onCancel()
-        }
-    }
-
-    @ViewBuilder
-    private func content(in size: CGSize) -> some View {
-        ZStack(alignment: .topLeading) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: size.width, height: size.height)
-                .clipped()
-                .overlay(Color.black.opacity(0.18))
-
-            if let rect = model.selectionRect {
-                AnnotationSelectionBox(number: model.number, rect: rect)
-                commentEditor(near: rect, in: size)
-                    .onAppear {
-                        commentFocused = true
-                    }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Bereich auswählen")
-                        .font(.title2.weight(.semibold))
-                    Text("Ziehe einen Rahmen um das UI-Element. Danach Kommentar eingeben und mit Enter speichern.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(18)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .padding(28)
-            }
-        }
-        .contentShape(Rectangle())
-        .modifier(AnnotationDragModifier(isEnabled: model.selectionRect == nil, model: model, commentFocused: $commentFocused))
-    }
-
-    private func commentEditor(near rect: CGRect, in size: CGSize) -> some View {
-        let width: CGFloat = 440
-        let x = min(max(24, rect.midX - width / 2), max(24, size.width - width - 24))
-        let belowY = rect.maxY + 16
-        let y = belowY + 82 < size.height ? belowY : max(24, rect.minY - 98)
-
-        return HStack(spacing: 10) {
-            Text("\(model.number)")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(Color.blue))
-
-            TextField("Kommentar hinzufügen...", text: $model.comment)
-                .textFieldStyle(.plain)
-                .focused($commentFocused)
-                .onSubmit {
-                    model.save()
-                }
-
-            Button {
-                model.save()
-            } label: {
-                Image(systemName: "checkmark")
-            }
-            .buttonStyle(.borderless)
-            .disabled((model.selectionRect?.width ?? 0) < 8 || (model.selectionRect?.height ?? 0) < 8)
-        }
-        .padding(.horizontal, 14)
-        .frame(width: width, height: 58)
-        .background(.thinMaterial, in: Capsule())
-        .position(x: x + width / 2, y: y + 29)
-    }
-}
-
-private struct AnnotationSelectionBox: View {
-    let number: Int
-    let rect: CGRect
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            Rectangle()
-                .fill(Color.blue.opacity(0.14))
-                .overlay(Rectangle().stroke(Color.blue, lineWidth: 3))
-            Text("\(number)")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(Color.blue))
-                .offset(x: -15, y: -15)
-        }
-        .frame(width: rect.width, height: rect.height)
-        .position(x: rect.midX, y: rect.midY)
-    }
-}
-
-private struct AnnotationDragModifier: ViewModifier {
-    let isEnabled: Bool
-    @ObservedObject var model: AnnotationSelectionModel
-    var commentFocused: FocusState<Bool>.Binding
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.gesture(
-                DragGesture(minimumDistance: 4)
-                    .onChanged { value in
-                        model.updateDrag(to: value.location)
-                        commentFocused.wrappedValue = false
-                    }
-                    .onEnded { _ in
-                        model.finishDrag()
-                        commentFocused.wrappedValue = true
-                    }
-            )
-        } else {
-            content
-        }
-    }
 }
 
 private protocol ScreenClipCapturing: AnyObject {
