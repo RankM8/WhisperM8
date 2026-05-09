@@ -112,6 +112,17 @@ struct VisualManifest: Codable, Equatable {
         entries.isEmpty
     }
 
+    var imageEntries: [VisualManifestEntry] {
+        entries.filter { entry in
+            switch entry.kind {
+            case .screenshot, .annotation, .visualFrame:
+                return true
+            case .screenClip:
+                return false
+            }
+        }
+    }
+
     var markdown: String {
         guard !entries.isEmpty else {
             return "No visual context was captured."
@@ -135,23 +146,24 @@ struct VisualManifest: Codable, Equatable {
 struct VisualManifestBuilder {
     func build(contextBundle: TranscriptContextBundle, visualInput: CodexVisualInputSelection) -> VisualManifest {
         var entries: [VisualManifestEntry] = []
+        var imageIndex = 1
 
-        append(
+        appendImages(
             contextBundle.screenshots,
-            prefix: "Screenshot",
             visualInput: visualInput,
+            nextIndex: &imageIndex,
             entries: &entries
         )
-        append(
+        appendImages(
             contextBundle.annotations,
-            prefix: "Annotation",
             visualInput: visualInput,
+            nextIndex: &imageIndex,
             entries: &entries
         )
-        append(
+        appendImages(
             contextBundle.visualFrames,
-            prefix: "Visual Frame",
             visualInput: visualInput,
+            nextIndex: &imageIndex,
             entries: &entries
         )
         append(
@@ -162,6 +174,28 @@ struct VisualManifestBuilder {
         )
 
         return VisualManifest(entries: entries)
+    }
+
+    private func appendImages(
+        _ attachments: [ContextAttachment],
+        visualInput: CodexVisualInputSelection,
+        nextIndex: inout Int,
+        entries: inout [VisualManifestEntry]
+    ) {
+        for attachment in attachments {
+            entries.append(
+                VisualManifestEntry(
+                    id: attachment.id,
+                    label: "Screenshot \(nextIndex)",
+                    kind: attachment.kind,
+                    path: attachment.fileURL.path,
+                    sourceAppName: attachment.sourceAppName,
+                    duration: attachment.duration,
+                    includedInCodexInput: visualInput.includes(attachment)
+                )
+            )
+            nextIndex += 1
+        }
     }
 
     private func append(
@@ -266,6 +300,22 @@ struct PromptPackageBuilder {
 
         Visual manifest:
         \(visualManifest.markdown)
+
+        Attached images:
+        \(attachedImagesBlock(visualManifest: visualManifest))
         """
+    }
+
+    private func attachedImagesBlock(visualManifest: VisualManifest) -> String {
+        let imageEntries = visualManifest.imageEntries
+        guard !imageEntries.isEmpty else {
+            return "None"
+        }
+
+        return imageEntries
+            .map { entry in
+                "- \(entry.label): see attached image \"\(entry.label).png\""
+            }
+            .joined(separator: "\n")
     }
 }

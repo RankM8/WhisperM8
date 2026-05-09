@@ -80,6 +80,7 @@ struct OutputModeStore {
                 mode.kind = .raw
                 mode.templateID = nil
                 mode.contextPolicy = .off
+                mode.pasteVisualAttachments = false
             }
             if mode.isDefault {
                 mode.isEnabled = true

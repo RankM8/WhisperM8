@@ -5,6 +5,7 @@ import XCTest
 final class OutputDashboardTests: XCTestCase {
     func testBuiltInModesUseExpectedLabels() {
         let modes = OutputMode.builtInModes
+        let modesByID = Dictionary(uniqueKeysWithValues: modes.map { ($0.id, $0) })
 
         XCTAssertEqual(modes.map(\.id), [
             OutputMode.rawID,
@@ -16,14 +17,40 @@ final class OutputDashboardTests: XCTestCase {
             OutputMode.whatsappID,
             OutputMode.notesID
         ])
-        XCTAssertEqual(OutputMode.mode(for: OutputMode.emailID).shortLabel, "Mail")
-        XCTAssertEqual(OutputMode.mode(for: OutputMode.whatsappID).shortLabel, "WA")
-        XCTAssertEqual(OutputMode.mode(for: OutputMode.slackID).contextPolicy, .auto)
-        XCTAssertEqual(OutputMode.mode(for: OutputMode.promptID).contextPolicy, .auto)
-        XCTAssertEqual(OutputMode.mode(for: OutputMode.taskID).contextPolicy, .auto)
-        XCTAssertEqual(OutputMode.mode(for: OutputMode.rawID).contextPolicy, .off)
-        XCTAssertFalse(OutputMode.mode(for: OutputMode.rawID).usesPostProcessing)
-        XCTAssertTrue(OutputMode.mode(for: OutputMode.cleanID).usesPostProcessing)
+        XCTAssertEqual(modesByID[OutputMode.emailID]?.shortLabel, "Mail")
+        XCTAssertEqual(modesByID[OutputMode.whatsappID]?.shortLabel, "WA")
+        XCTAssertEqual(modesByID[OutputMode.slackID]?.contextPolicy, .auto)
+        XCTAssertEqual(modesByID[OutputMode.promptID]?.contextPolicy, .auto)
+        XCTAssertEqual(modesByID[OutputMode.taskID]?.contextPolicy, .auto)
+        XCTAssertEqual(modesByID[OutputMode.rawID]?.contextPolicy, .off)
+        XCTAssertFalse(modesByID[OutputMode.rawID]?.usesPostProcessing ?? true)
+        XCTAssertTrue(modesByID[OutputMode.cleanID]?.usesPostProcessing ?? false)
+        XCTAssertFalse(modesByID[OutputMode.rawID]?.pasteVisualAttachments ?? true)
+        XCTAssertFalse(modesByID[OutputMode.cleanID]?.pasteVisualAttachments ?? true)
+        XCTAssertTrue(modesByID[OutputMode.promptID]?.pasteVisualAttachments ?? false)
+        XCTAssertTrue(modesByID[OutputMode.taskID]?.pasteVisualAttachments ?? false)
+        XCTAssertTrue(modesByID[OutputMode.emailID]?.pasteVisualAttachments ?? false)
+        XCTAssertTrue(modesByID[OutputMode.slackID]?.pasteVisualAttachments ?? false)
+        XCTAssertTrue(modesByID[OutputMode.whatsappID]?.pasteVisualAttachments ?? false)
+        XCTAssertFalse(modesByID[OutputMode.notesID]?.pasteVisualAttachments ?? true)
+    }
+
+    func testOutputModeMigrationDefaultsVisualAttachmentPaste() throws {
+        let json = """
+        {
+          "id": "slack",
+          "name": "Slack",
+          "shortLabel": "Slack",
+          "kind": "builtIn",
+          "templateID": "slack",
+          "isEnabled": true,
+          "isDefault": false,
+          "contextPolicy": "auto"
+        }
+        """
+        let mode = try JSONDecoder().decode(OutputMode.self, from: Data(json.utf8))
+
+        XCTAssertTrue(mode.pasteVisualAttachments)
     }
 
     func testCodexPostProcessingModelDefaultsToGPT55() {
@@ -298,7 +325,52 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertTrue(package.prompt.contains("You are WhisperM8's post-processing agent."))
         XCTAssertTrue(package.prompt.contains("Visual manifest:"))
         XCTAssertTrue(package.prompt.contains("Screenshot 1"))
+        XCTAssertTrue(package.prompt.contains("Attached images:"))
+        XCTAssertTrue(package.prompt.contains("see attached image \"Screenshot 1.png\""))
         XCTAssertTrue(package.prompt.contains("/tmp/context.png"))
+    }
+
+    func testVisualAttachmentDeliveryBuilderUsesStableScreenshotLabels() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8DeliveryTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let first = root.appendingPathComponent("first.png")
+        let second = root.appendingPathComponent("second.png")
+        try Data("first".utf8).write(to: first)
+        try Data("second".utf8).write(to: second)
+
+        let builder = VisualAttachmentDeliveryBuilder(
+            rootDirectory: root.appendingPathComponent("Delivery", isDirectory: true)
+        )
+        let attachments = try builder.build(
+            contextBundle: TranscriptContextBundle(
+                screenshots: [ContextAttachment(kind: .screenshot, fileURL: first)],
+                visualFrames: [ContextAttachment(kind: .visualFrame, fileURL: second)]
+            ),
+            mode: OutputMode.mode(for: OutputMode.promptID),
+            runID: UUID(),
+            maxAttachments: 10
+        )
+
+        XCTAssertEqual(attachments.map(\.label), ["Screenshot 1", "Screenshot 2"])
+        XCTAssertEqual(attachments.map { $0.fileURL.lastPathComponent }, ["Screenshot 1.png", "Screenshot 2.png"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: attachments[0].fileURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: attachments[1].fileURL.path))
+    }
+
+    func testVisualAttachmentDeliveryBuilderSkipsDisabledMode() throws {
+        let builder = VisualAttachmentDeliveryBuilder()
+        let attachments = try builder.build(
+            contextBundle: TranscriptContextBundle(
+                screenshots: [ContextAttachment(kind: .screenshot, fileURL: URL(fileURLWithPath: "/tmp/missing.png"))]
+            ),
+            mode: OutputMode.mode(for: OutputMode.cleanID),
+            maxAttachments: 10
+        )
+
+        XCTAssertTrue(attachments.isEmpty)
     }
 
     func testContextBundleStoresAttachments() {
@@ -383,7 +455,12 @@ final class OutputDashboardTests: XCTestCase {
             rawTranscript: "Raw",
             finalTranscript: "Final",
             copiedToClipboard: true,
-            autoPasteRequested: true
+            autoPasteRequested: true,
+            autoPasteTextRequested: true,
+            autoPasteAttachmentsRequested: true,
+            pastedAttachmentCount: 1,
+            pasteErrors: ["none"],
+            deliveryAttachmentLabels: ["Screenshot 1"]
         ))
 
         let recentReports = store.recentReports()
@@ -392,6 +469,9 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(recentReports.first?.attachments.count, 1)
         XCTAssertEqual(recentReports.first?.replyIntent, .contextAnswer)
         XCTAssertEqual(recentReports.first?.attachments.first?.includedInCodexInput, true)
+        XCTAssertEqual(recentReports.first?.pastedAttachmentCount, 1)
+        XCTAssertEqual(recentReports.first?.deliveryAttachmentLabels, ["Screenshot 1"])
+        XCTAssertEqual(recentReports.first?.pasteErrors, ["none"])
         XCTAssertTrue(FileManager.default.fileExists(atPath: recentReports.first?.attachments.first?.storedPath ?? ""))
     }
 }

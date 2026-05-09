@@ -324,6 +324,7 @@ struct TranscriptReportDetailView: View {
 
                 reportOverview
                 reportContext
+                reportDelivery
                 reportPrompt
                 reportOutput
             }
@@ -346,6 +347,9 @@ struct TranscriptReportDetailView: View {
             ReportKeyValue("Audio Duration", String(format: "%.1fs", report.transcription.audioDuration))
             ReportKeyValue("Clipboard", report.copiedToClipboard ? "Copied" : "Not copied")
             ReportKeyValue("Auto-Paste", report.autoPasteRequested ? "Requested" : "Off")
+            if report.autoPasteAttachmentsRequested == true {
+                ReportKeyValue("Images Pasted", "\(report.pastedAttachmentCount ?? 0)")
+            }
             if let codex = report.codex {
                 ReportKeyValue("Codex Model", codex.model)
                 ReportKeyValue("Thinking", codex.reasoningEffort)
@@ -358,6 +362,22 @@ struct TranscriptReportDetailView: View {
             }
             if let errorMessage = report.errorMessage {
                 ReportKeyValue("Error", errorMessage)
+            }
+        }
+    }
+
+    private var reportDelivery: some View {
+        ReportCard("Delivery") {
+            ReportKeyValue("Text Paste", report.autoPasteTextRequested == true ? "Requested" : "Off")
+            ReportKeyValue("Image Paste", report.autoPasteAttachmentsRequested == true ? "Requested" : "Off")
+            ReportKeyValue("Images Pasted", "\(report.pastedAttachmentCount ?? 0)")
+
+            if let labels = report.deliveryAttachmentLabels, !labels.isEmpty {
+                ReportTextBlock(title: "Delivery Labels", text: labels.joined(separator: "\n"))
+            }
+
+            if let errors = report.pasteErrors, !errors.isEmpty {
+                ReportTextBlock(title: "Paste Errors", text: errors.joined(separator: "\n"))
             }
         }
     }
@@ -676,6 +696,12 @@ struct OutputModesView: View {
                     .disabled(!canDisable(mode.wrappedValue))
 
                 Text(modeVisibilityHelp(mode.wrappedValue))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Paste screenshots into target app", isOn: mode.pasteVisualAttachments)
+
+                Text("When Auto-paste is enabled, captured screenshots are pasted into the target composer after the text. The message is not sent.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

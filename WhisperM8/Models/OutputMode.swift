@@ -15,6 +15,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
     var isEnabled: Bool
     var isDefault: Bool
     var contextPolicy: ContextCapturePolicy
+    var pasteVisualAttachments: Bool
 
     var usesPostProcessing: Bool {
         kind != .raw
@@ -28,7 +29,8 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         templateID: String?,
         isEnabled: Bool,
         isDefault: Bool,
-        contextPolicy: ContextCapturePolicy = .off
+        contextPolicy: ContextCapturePolicy = .off,
+        pasteVisualAttachments: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -38,6 +40,8 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         self.isEnabled = isEnabled
         self.isDefault = isDefault
         self.contextPolicy = contextPolicy
+        self.pasteVisualAttachments = pasteVisualAttachments
+            ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -49,6 +53,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         case isEnabled
         case isDefault
         case contextPolicy
+        case pasteVisualAttachments
     }
 
     init(from decoder: Decoder) throws {
@@ -62,6 +67,8 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         isDefault = try container.decode(Bool.self, forKey: .isDefault)
         contextPolicy = try container.decodeIfPresent(ContextCapturePolicy.self, forKey: .contextPolicy)
             ?? Self.defaultContextPolicy(for: id)
+        pasteVisualAttachments = try container.decodeIfPresent(Bool.self, forKey: .pasteVisualAttachments)
+            ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
     }
 }
 
@@ -102,7 +109,8 @@ extension OutputMode {
             templateID: PostProcessingTemplate.promptID,
             isEnabled: true,
             isDefault: false,
-            contextPolicy: .auto
+            contextPolicy: .auto,
+            pasteVisualAttachments: true
         ),
         OutputMode(
             id: taskID,
@@ -112,7 +120,8 @@ extension OutputMode {
             templateID: PostProcessingTemplate.taskID,
             isEnabled: true,
             isDefault: false,
-            contextPolicy: .auto
+            contextPolicy: .auto,
+            pasteVisualAttachments: true
         ),
         OutputMode(
             id: emailID,
@@ -122,7 +131,8 @@ extension OutputMode {
             templateID: PostProcessingTemplate.emailID,
             isEnabled: true,
             isDefault: false,
-            contextPolicy: .auto
+            contextPolicy: .auto,
+            pasteVisualAttachments: true
         ),
         OutputMode(
             id: slackID,
@@ -132,7 +142,8 @@ extension OutputMode {
             templateID: PostProcessingTemplate.slackID,
             isEnabled: true,
             isDefault: false,
-            contextPolicy: .auto
+            contextPolicy: .auto,
+            pasteVisualAttachments: true
         ),
         OutputMode(
             id: whatsappID,
@@ -142,7 +153,8 @@ extension OutputMode {
             templateID: PostProcessingTemplate.whatsappID,
             isEnabled: true,
             isDefault: false,
-            contextPolicy: .auto
+            contextPolicy: .auto,
+            pasteVisualAttachments: true
         ),
         OutputMode(
             id: notesID,
@@ -173,6 +185,23 @@ extension OutputMode {
             return .auto
         default:
             return .off
+        }
+    }
+
+    static func defaultPasteVisualAttachments(
+        for id: String,
+        kind: Kind = .builtIn,
+        contextPolicy: ContextCapturePolicy = .off
+    ) -> Bool {
+        if kind == .custom {
+            return contextPolicy != .off
+        }
+
+        switch id {
+        case promptID, taskID, emailID, slackID, whatsappID:
+            return true
+        default:
+            return false
         }
     }
 }

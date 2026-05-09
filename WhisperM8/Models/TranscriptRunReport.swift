@@ -121,6 +121,11 @@ struct TranscriptRunReport: Identifiable, Codable, Equatable {
     var finalTranscript: String?
     var copiedToClipboard: Bool
     var autoPasteRequested: Bool
+    var autoPasteTextRequested: Bool?
+    var autoPasteAttachmentsRequested: Bool?
+    var pastedAttachmentCount: Int?
+    var pasteErrors: [String]?
+    var deliveryAttachmentLabels: [String]?
 }
 
 extension TranscriptRunReport {

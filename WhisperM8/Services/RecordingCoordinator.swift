@@ -19,6 +19,7 @@ final class RecordingCoordinator {
     private let postProcessingService: PostProcessingService
     private let selectedContextService: SelectedContextService
     private let visualContextCaptureService: VisualContextCaptureService
+    private let visualAttachmentDeliveryBuilder: VisualAttachmentDeliveryBuilder
     private let reportStore: TranscriptRunReportStore
 
     private var recordingStartTime: Date?
@@ -44,6 +45,7 @@ final class RecordingCoordinator {
         self.postProcessingService = postProcessingService
         self.selectedContextService = selectedContextService
         self.visualContextCaptureService = visualContextCaptureService ?? VisualContextCaptureService()
+        self.visualAttachmentDeliveryBuilder = VisualAttachmentDeliveryBuilder()
         self.reportStore = reportStore
     }
 
@@ -299,10 +301,54 @@ final class RecordingCoordinator {
             contextBundle: contextBundle
         )
         let finalText = postProcessingResult.finalText
+        let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled
+        var deliveryAttachments: [PasteAttachment] = []
+        var deliveryErrors: [String] = []
+
+        do {
+            deliveryAttachments = try visualAttachmentDeliveryBuilder.build(
+                contextBundle: contextBundle,
+                mode: outputMode
+            )
+        } catch {
+            let message = "Could not prepare visual attachments for paste: \(error.localizedDescription)"
+            Logger.paste.error("\(message, privacy: .public)")
+            deliveryErrors.append(message)
+        }
 
         pasteService.copyToClipboard(finalText)
         appState.lastFinalTranscription = finalText
         appState.lastTranscription = finalText
+
+        var pasteResult = PasteDeliveryResult.notRequested
+
+        if autoPasteRequested {
+            let previousApp = overlayController.getPreviousApp()
+            overlayController.hide()
+            pasteResult = await pasteService.pastePayloadToActiveApp(
+                PastePayload(
+                    text: finalText,
+                    attachments: deliveryAttachments,
+                    restoreTextToClipboardAfterPaste: true
+                ),
+                previousApp: previousApp,
+                onMissingPermission: {
+                    appState.lastError = "Accessibility permission required for auto-paste"
+                    overlayController.hide()
+                },
+                onMissingTarget: {
+                    overlayController.hide()
+                }
+            )
+        } else {
+            overlayController.hide()
+            Logger.debug(" Auto-paste disabled, text copied to clipboard only")
+        }
+
+        deliveryErrors.append(contentsOf: pasteResult.errors)
+        if appState.lastError == nil, let firstError = deliveryErrors.first {
+            appState.lastError = firstError
+        }
 
         saveRunReport(
             status: postProcessingResult.errorMessage == nil ? .succeeded : (postProcessingResult.fallbackStatus ?? .rawFallback),
@@ -319,29 +365,16 @@ final class RecordingCoordinator {
             rawText: normalizedRawText,
             finalText: finalText,
             copiedToClipboard: true,
-            autoPasteRequested: AppPreferences.shared.isAutoPasteEnabled
+            autoPasteRequested: autoPasteRequested,
+            autoPasteTextRequested: autoPasteRequested,
+            autoPasteAttachmentsRequested: autoPasteRequested && !deliveryAttachments.isEmpty,
+            pastedAttachmentCount: pasteResult.pastedAttachments.count,
+            pasteErrors: deliveryErrors,
+            deliveryAttachmentLabels: deliveryAttachments.map(\.label)
         )
 
         try? FileManager.default.removeItem(at: audioURL)
         visualContextCaptureService.cleanup(contextBundle)
-
-        if AppPreferences.shared.isAutoPasteEnabled {
-            let previousApp = overlayController.getPreviousApp()
-            overlayController.hide()
-            pasteService.pasteToActiveApp(
-                previousApp: previousApp,
-                onMissingPermission: {
-                    appState.lastError = "Accessibility permission required for auto-paste"
-                    overlayController.hide()
-                },
-                onMissingTarget: {
-                    overlayController.hide()
-                }
-            )
-        } else {
-            overlayController.hide()
-            Logger.debug(" Auto-paste disabled, text copied to clipboard only")
-        }
     }
 
     private func processTranscriptIfNeeded(
@@ -452,7 +485,12 @@ final class RecordingCoordinator {
         rawText: String?,
         finalText: String?,
         copiedToClipboard: Bool,
-        autoPasteRequested: Bool
+        autoPasteRequested: Bool,
+        autoPasteTextRequested: Bool = false,
+        autoPasteAttachmentsRequested: Bool = false,
+        pastedAttachmentCount: Int = 0,
+        pasteErrors: [String] = [],
+        deliveryAttachmentLabels: [String] = []
     ) {
         let draft = TranscriptRunReportDraft(
             sourceAppName: contextSourceApp?.localizedName,
@@ -471,7 +509,12 @@ final class RecordingCoordinator {
             rawTranscript: rawText,
             finalTranscript: finalText,
             copiedToClipboard: copiedToClipboard,
-            autoPasteRequested: autoPasteRequested
+            autoPasteRequested: autoPasteRequested,
+            autoPasteTextRequested: autoPasteTextRequested,
+            autoPasteAttachmentsRequested: autoPasteAttachmentsRequested,
+            pastedAttachmentCount: pastedAttachmentCount,
+            pasteErrors: pasteErrors,
+            deliveryAttachmentLabels: deliveryAttachmentLabels
         )
 
         do {

@@ -20,6 +20,11 @@ struct TranscriptRunReportDraft {
     var finalTranscript: String?
     var copiedToClipboard: Bool
     var autoPasteRequested: Bool
+    var autoPasteTextRequested = false
+    var autoPasteAttachmentsRequested = false
+    var pastedAttachmentCount = 0
+    var pasteErrors: [String] = []
+    var deliveryAttachmentLabels: [String] = []
 }
 
 struct TranscriptRunReportStore {
@@ -116,7 +121,12 @@ struct TranscriptRunReportStore {
             rawTranscript: draft.rawTranscript,
             finalTranscript: draft.finalTranscript,
             copiedToClipboard: draft.copiedToClipboard,
-            autoPasteRequested: draft.autoPasteRequested
+            autoPasteRequested: draft.autoPasteRequested,
+            autoPasteTextRequested: draft.autoPasteTextRequested,
+            autoPasteAttachmentsRequested: draft.autoPasteAttachmentsRequested,
+            pastedAttachmentCount: draft.pastedAttachmentCount,
+            pasteErrors: draft.pasteErrors,
+            deliveryAttachmentLabels: draft.deliveryAttachmentLabels
         )
 
         let encoder = JSONEncoder()
