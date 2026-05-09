@@ -129,6 +129,15 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.createdAt = createdAt
         self.lastActivityAt = lastActivityAt
     }
+
+    var runtimeDisplayText: String {
+        switch provider {
+        case .codex:
+            return "Codex · \(model) · \(reasoningEffort)"
+        case .claude:
+            return "Claude · Claude Code"
+        }
+    }
 }
 
 struct AgentWorkspace: Codable, Equatable {

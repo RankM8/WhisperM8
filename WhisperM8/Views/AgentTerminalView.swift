@@ -10,6 +10,12 @@ final class AgentTerminalRegistry: ObservableObject {
         Set(controllers.values.filter(\.isRunning).map(\.sessionID))
     }
 
+    var runningControllers: [AgentTerminalController] {
+        controllers.values
+            .filter(\.isRunning)
+            .sorted { $0.sessionID.uuidString < $1.sessionID.uuidString }
+    }
+
     func controller(for sessionID: UUID) -> AgentTerminalController? {
         controllers[sessionID]
     }
@@ -52,6 +58,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     @Published private(set) var isRunning = false
     @Published private(set) var hasStarted = false
     @Published private(set) var exitCode: Int32?
+
+    var processID: Int32? {
+        let pid = terminal.process.shellPid
+        return pid > 0 ? pid : nil
+    }
 
     private var onLaunched: () -> Void
     private var onTerminated: (Int32?) -> Void

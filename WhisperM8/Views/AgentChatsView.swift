@@ -1,6 +1,17 @@
 import AppKit
 import SwiftUI
 
+private struct AgentSessionActionRequest: Equatable {
+    enum Kind: Equatable {
+        case start
+        case restart
+    }
+
+    let id = UUID()
+    let sessionID: UUID
+    let kind: Kind
+}
+
 struct AgentChatsView: View {
     @State private var store = AgentSessionStore()
     @State private var workspace = AgentWorkspace.empty
@@ -9,7 +20,9 @@ struct AgentChatsView: View {
     @State private var expandedProjectIDs: Set<UUID> = []
     @State private var searchText = ""
     @State private var errorMessage: String?
+    @State private var sessionActionRequest: AgentSessionActionRequest?
     @StateObject private var terminalRegistry = AgentTerminalRegistry()
+    @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
 
     private var selectedProject: AgentProject? {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
@@ -38,6 +51,25 @@ struct AgentChatsView: View {
         }
     }
 
+    private var runningResourceDescriptors: [AgentResourceSessionDescriptor] {
+        terminalRegistry.runningControllers.compactMap { controller in
+            guard let session = workspace.sessions.first(where: { $0.id == controller.sessionID }),
+                  let project = workspace.projects.first(where: { $0.id == session.projectID })
+            else {
+                return nil
+            }
+
+            return AgentResourceSessionDescriptor(
+                id: session.id,
+                projectName: project.name,
+                projectPath: project.path,
+                title: session.title,
+                provider: session.provider,
+                rootProcessID: controller.processID
+            )
+        }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             hashboardSidebar
@@ -48,20 +80,22 @@ struct AgentChatsView: View {
             mainWorkspace
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
+            if isInspectorVisible {
+                Divider()
 
-            ProjectDetailPanel(
-                project: selectedProject,
-                session: selectedSession,
-                sessions: projectSessions,
-                onRefresh: refresh,
-                onNewCodexChat: { createSession(provider: .codex) },
-                onNewClaudeChat: { createSession(provider: .claude) },
-                onOpenPHPStorm: openSelectedProjectInPHPStorm
-            )
-            .frame(width: 292)
+                ProjectDetailPanel(
+                    project: selectedProject,
+                    session: selectedSession,
+                    sessions: projectSessions,
+                    onRefresh: refresh,
+                    onNewCodexChat: { createSession(provider: .codex) },
+                    onNewClaudeChat: { createSession(provider: .claude) },
+                    onOpenPHPStorm: openSelectedProjectInPHPStorm
+                )
+                .frame(width: 292)
+            }
         }
-        .frame(minWidth: 1180, minHeight: 720)
+        .frame(minWidth: isInspectorVisible ? 1180 : 920, minHeight: 720)
         .background(AgentTheme.background)
         .onAppear(perform: refresh)
     }
@@ -177,9 +211,7 @@ struct AgentChatsView: View {
 
                 Spacer()
 
-                ProgressView()
-                    .scaleEffect(0.55)
-                    .opacity(terminalRegistry.activeSessionIDs.isEmpty ? 0 : 1)
+                AgentResourceSummaryButton(descriptors: runningResourceDescriptors)
             }
 
             HStack(spacing: 8) {
@@ -237,12 +269,7 @@ struct AgentChatsView: View {
                     project: selectedProject,
                     session: selectedSession,
                     terminalRegistry: terminalRegistry,
-                    onClose: { markSession(selectedSession.id, status: .closed) },
-                    onArchive: { markSession(selectedSession.id, status: .archived) },
-                    onRelaunch: { relaunch(selectedSession.id) },
-                    onRename: renameSession,
-                    onSetGroup: setSessionGroup,
-                    onSetColor: setSessionColor,
+                    actionRequest: sessionActionRequest,
                     onStateChanged: refresh
                 )
             } else {
@@ -283,6 +310,32 @@ struct AgentChatsView: View {
 
                 Spacer()
 
+                if let selectedSession {
+                    selectedSessionHeaderControls(selectedSession)
+                }
+
+                if selectedProject != nil {
+                    Button {
+                        openSelectedProjectInPHPStorm()
+                    } label: {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                            .frame(width: 28, height: 28)
+                            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("PHPStorm öffnen")
+                }
+
+                Button {
+                    isInspectorVisible.toggle()
+                } label: {
+                    Image(systemName: "sidebar.right")
+                        .frame(width: 28, height: 28)
+                        .background(isInspectorVisible ? AgentTheme.selection : AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .help(isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen")
+
                 Menu {
                     Button("Neuer Codex Chat") { createSession(provider: .codex) }
                     Button("Neuer Claude Chat") { createSession(provider: .claude) }
@@ -314,6 +367,88 @@ struct AgentChatsView: View {
             }
         }
         .background(AgentTheme.surface)
+    }
+
+    private func selectedSessionHeaderControls(_ session: AgentChatSession) -> some View {
+        let controller = terminalRegistry.controller(for: session.id)
+        let isRunning = controller?.isRunning == true
+
+        return HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: session.provider.systemImage)
+                    .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
+                Text(session.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(isRunning ? "Running" : session.status.displayName)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(isRunning ? .green : .secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 4))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+            .frame(maxWidth: 260)
+
+            Text(session.runtimeDisplayText)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 6))
+
+            Button {
+                sessionActionRequest = AgentSessionActionRequest(
+                    sessionID: session.id,
+                    kind: isRunning ? .restart : .start
+                )
+            } label: {
+                Label(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start" : "Resume"), systemImage: isRunning ? "arrow.clockwise" : "play.fill")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.plain)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 7))
+
+            Menu {
+                Button(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start Terminal" : "Resume Terminal"), systemImage: isRunning ? "arrow.clockwise" : "play.fill") {
+                    sessionActionRequest = AgentSessionActionRequest(
+                        sessionID: session.id,
+                        kind: isRunning ? .restart : .start
+                    )
+                }
+                Button("Close Terminal", systemImage: "xmark.circle") {
+                    markSession(session.id, status: .closed)
+                }
+                .disabled(controller == nil)
+                Button("Archive", systemImage: "archivebox", role: .destructive) {
+                    markSession(session.id, status: .archived)
+                }
+                Divider()
+                Button("In Work gruppieren") { setSessionGroup(id: session.id, groupName: "Work") }
+                Button("In Research gruppieren") { setSessionGroup(id: session.id, groupName: "Research") }
+                Button("Gruppe entfernen") { setSessionGroup(id: session.id, groupName: nil) }
+                Divider()
+                Menu("Tab-Farbe") {
+                    ForEach(AgentChatColor.palette, id: \.self) { color in
+                        Button(color) { setSessionColor(id: session.id, color: color) }
+                    }
+                    Button("Provider-Farbe verwenden") { setSessionColor(id: session.id, color: nil) }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .frame(width: 28, height: 28)
+                    .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+            }
+            .menuStyle(.borderlessButton)
+            .help("Chat-Aktionen")
+        }
     }
 
     private func refresh() {
@@ -413,6 +548,7 @@ struct AgentChatsView: View {
             )
             workspace = store.loadWorkspace()
             selectedSessionID = session.id
+            sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -508,6 +644,209 @@ struct AgentChatsView: View {
                 }
             }
         }
+    }
+}
+
+private struct AgentResourceSummaryButton: View {
+    let descriptors: [AgentResourceSessionDescriptor]
+
+    @State private var snapshot = AgentResourceSnapshot.empty
+    @State private var isPopoverPresented = false
+
+    private var shouldPoll: Bool {
+        isPopoverPresented || !descriptors.isEmpty
+    }
+
+    private var pollingKey: String {
+        let processKey = descriptors
+            .map { "\($0.id.uuidString):\($0.rootProcessID ?? 0)" }
+            .joined(separator: ",")
+        return "\(shouldPoll)-\(processKey)"
+    }
+
+    var body: some View {
+        Button {
+            refresh()
+            isPopoverPresented.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "memorychip")
+                Text(summaryText)
+                    .lineLimit(1)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(snapshot.runningSessionCount > 0 ? .primary : .secondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .help("Session-Ressourcen anzeigen")
+        .popover(isPresented: $isPopoverPresented, arrowEdge: .trailing) {
+            AgentResourcePopover(snapshot: snapshot, onRefresh: refresh)
+                .frame(width: 420)
+        }
+        .onAppear(perform: refresh)
+        .onChange(of: descriptors) { _, _ in
+            refresh()
+        }
+        .task(id: pollingKey) {
+            guard shouldPoll else {
+                refresh()
+                return
+            }
+
+            while !Task.isCancelled {
+                refresh()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    private var summaryText: String {
+        guard snapshot.runningSessionCount > 0 else { return "0 running" }
+        return "\(snapshot.runningSessionCount) running · \(AgentResourceFormat.cpu(snapshot.totalCPUPercent)) · \(AgentResourceFormat.memory(snapshot.totalMemoryBytes))"
+    }
+
+    private func refresh() {
+        let descriptors = descriptors
+        Task {
+            let next = await Task.detached(priority: .utility) {
+                AgentResourceMonitor().snapshot(for: descriptors)
+            }.value
+            snapshot = next
+        }
+    }
+}
+
+private struct AgentResourcePopover: View {
+    let snapshot: AgentResourceSnapshot
+    var onRefresh: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Resource Usage")
+                    .font(.headline.weight(.semibold))
+                Spacer()
+                Button(action: onRefresh) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .help("Aktualisieren")
+            }
+            .padding(14)
+
+            HStack(spacing: 20) {
+                metricColumn("CPU", AgentResourceFormat.cpu(snapshot.totalCPUPercent))
+                metricColumn("Memory", AgentResourceFormat.memory(snapshot.totalMemoryBytes))
+                if let ramShare = snapshot.ramSharePercent {
+                    metricColumn("RAM Share", AgentResourceFormat.percent(ramShare))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+
+            Divider()
+
+            if snapshot.projects.isEmpty {
+                Text("Keine laufenden Agent-Sessions.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(14)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(snapshot.projects) { project in
+                            projectSection(project)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+                .frame(maxHeight: 360)
+            }
+        }
+        .background(AgentTheme.panel)
+    }
+
+    private func metricColumn(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title3.monospacedDigit())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func projectSection(_ project: AgentResourceProjectSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(project.projectName.uppercased())
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(AgentResourceFormat.cpu(project.cpuPercent))  \(AgentResourceFormat.memory(project.memoryBytes))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+
+            ForEach(project.sessions) { session in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Image(systemName: session.provider.systemImage)
+                            .foregroundStyle(Color(hex: session.provider == .codex ? "#32D74B" : "#FF9F0A"))
+                            .frame(width: 18)
+                        Text(session.title)
+                            .lineLimit(1)
+                        Spacer()
+                        Text("\(AgentResourceFormat.cpu(session.cpuPercent))  \(AgentResourceFormat.memory(session.memoryBytes))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(session.processes) { process in
+                        HStack {
+                            Text(process.command)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Text("\(AgentResourceFormat.cpu(process.cpuPercent))  \(AgentResourceFormat.memory(process.memoryBytes))")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 26)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(AgentTheme.background.opacity(0.35))
+            }
+        }
+    }
+}
+
+private enum AgentResourceFormat {
+    static func cpu(_ value: Double) -> String {
+        "\(String(format: "%.1f", max(0, value)))%"
+    }
+
+    static func percent(_ value: Double) -> String {
+        "\(String(format: "%.0f", max(0, value)))%"
+    }
+
+    static func memory(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0 MB" }
+        let megabytes = Double(bytes) / 1_048_576
+        if megabytes < 1024 {
+            return "\(String(format: "%.1f", megabytes)) MB"
+        }
+        return "\(String(format: "%.2f", megabytes / 1024)) GB"
     }
 }
 
@@ -975,18 +1314,11 @@ private struct AgentSessionDetailView: View {
     let project: AgentProject
     let session: AgentChatSession
     @ObservedObject var terminalRegistry: AgentTerminalRegistry
-    var onClose: () -> Void
-    var onArchive: () -> Void
-    var onRelaunch: () -> Void
-    var onRename: (UUID, String) -> Void
-    var onSetGroup: (UUID, String?) -> Void
-    var onSetColor: (UUID, String?) -> Void
+    var actionRequest: AgentSessionActionRequest?
     var onStateChanged: () -> Void
 
     @State private var store = AgentSessionStore()
     @State private var errorMessage: String?
-    @State private var editableTitle: String = ""
-    @State private var editableGroup: String = ""
 
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
@@ -994,182 +1326,62 @@ private struct AgentSessionDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
-
-            Divider()
-
             if let controller {
                 AgentTerminalView(controller: controller)
                 .background(Color.black)
             } else {
-                inactiveSessionPreview
+                inactiveTerminalPreview
             }
         }
         .onAppear {
-            editableTitle = session.title
-            editableGroup = session.groupName ?? ""
             if session.shouldLaunchOnOpen == true {
                 prepareCommand()
             }
         }
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
-            editableTitle = session.title
-            editableGroup = session.groupName ?? ""
+            if session.shouldLaunchOnOpen == true {
+                prepareCommand()
+            }
+        }
+        .onChange(of: actionRequest) { _, request in
+            handleActionRequest(request)
         }
     }
 
-    private var toolbar: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color(hex: AgentChatColor.fallback(for: session)).opacity(0.18))
-                .frame(width: 30, height: 30)
-                .overlay(
-                    Image(systemName: session.provider.systemImage)
-                        .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
-                )
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text(session.title)
-                        .font(.headline)
-                    Text(session.status.displayName)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(statusColor(session.status))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 4))
-                }
-                Text(project.path)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .textSelection(.enabled)
-            }
+    private var inactiveTerminalPreview: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black
 
-            Spacer()
-
-            Text("model \(session.model)")
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 5))
-
-            Menu {
-                ForEach(AgentChatColor.palette, id: \.self) { color in
-                    Button(color) {
-                        onSetColor(session.id, color)
-                    }
-                }
-                Button("Provider-Farbe verwenden") {
-                    onSetColor(session.id, nil)
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color(hex: AgentChatColor.fallback(for: session)))
-                        .frame(width: 9, height: 9)
-                    Image(systemName: "paintpalette")
-                        .font(.caption)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 7))
-            }
-            .menuStyle(.borderlessButton)
-            .help("Tab-Farbe setzen")
-
-            HStack(spacing: 0) {
-                Button(controller == nil ? "Start Terminal" : "Restart", action: prepareCommand)
-                Divider().frame(height: 26)
-                Button("Close Terminal", action: closeTerminal)
-                Divider().frame(height: 26)
-                Button("Archive", role: .destructive, action: onArchive)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
-            .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(AgentTheme.border, lineWidth: 1))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(AgentTheme.surface)
-    }
-
-    private func statusColor(_ status: AgentChatStatus) -> Color {
-        switch status {
-        case .pending:
-            return .yellow
-        case .running:
-            return .green
-        case .closed, .archived:
-            return .secondary
-        }
-    }
-
-    private var inactiveSessionPreview: some View {
-        VStack(alignment: .leading, spacing: 18) {
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
-                    .padding(12)
-                    .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 10))
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Nicht gestartet")
-                    .font(.title3.weight(.semibold))
-                Text("Metadaten sind geladen, aber kein Codex-/Claude-Prozess läuft. Starte oder resume den Chat nur, wenn du ihn wirklich brauchst.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    prepareCommand()
-                } label: {
-                    Label(session.externalSessionID == nil ? "Chat starten" : "Chat resumen", systemImage: "play.fill")
-                }
-                .controlSize(.large)
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(AgentTheme.border, lineWidth: 1))
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Verwalten")
-                    .font(.headline)
-
-                HStack {
-                    TextField("Chat-Name", text: $editableTitle)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Umbenennen") {
-                        onRename(session.id, editableTitle)
-                    }
-                    .disabled(editableTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-
-                HStack {
-                    TextField("Gruppe, z. B. Research", text: $editableGroup)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Gruppe setzen") {
-                        onSetGroup(session.id, editableGroup)
-                    }
-                    Button("Entfernen") {
-                        editableGroup = ""
-                        onSetGroup(session.id, nil)
+                    .font(.callout.monospaced())
+                    .padding(18)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Session metadata loaded. Terminal is not attached.")
+                    Text("Use Resume in the header to reconnect this \(session.provider.displayName) session.")
+                    if let externalSessionID = session.externalSessionID {
+                        Text("session \(externalSessionID)")
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .font(.callout.monospaced())
+                .foregroundStyle(.secondary)
+                .padding(18)
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(AgentTheme.border, lineWidth: 1))
-
-            Spacer()
         }
-        .padding(22)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func handleActionRequest(_ request: AgentSessionActionRequest?) {
+        guard let request, request.sessionID == session.id else { return }
+        switch request.kind {
+        case .start:
+            prepareCommand()
+        case .restart:
+            restartTerminal()
+        }
     }
 
     private func prepareCommand() {
@@ -1187,9 +1399,9 @@ private struct AgentSessionDetailView: View {
         }
     }
 
-    private func closeTerminal() {
+    private func restartTerminal() {
         terminalRegistry.terminate(sessionID: session.id)
-        onClose()
+        prepareCommand()
     }
 
     private func markLaunched() {
