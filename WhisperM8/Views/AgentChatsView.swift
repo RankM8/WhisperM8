@@ -6,6 +6,8 @@ struct AgentChatsView: View {
     @State private var workspace = AgentWorkspace.empty
     @State private var selectedProjectID: UUID?
     @State private var selectedSessionID: UUID?
+    @State private var expandedProjectIDs: Set<UUID> = []
+    @State private var searchText = ""
     @State private var errorMessage: String?
     @StateObject private var terminalRegistry = AgentTerminalRegistry()
 
@@ -20,6 +22,20 @@ struct AgentChatsView: View {
 
     private var selectedSession: AgentChatSession? {
         projectSessions.first { $0.id == selectedSessionID } ?? projectSessions.first
+    }
+
+    private var visibleProjects: [AgentProject] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return workspace.projects }
+        return workspace.projects.filter { project in
+            project.name.localizedCaseInsensitiveContains(query)
+                || project.path.localizedCaseInsensitiveContains(query)
+                || sessions(for: project).contains { session in
+                    session.title.localizedCaseInsensitiveContains(query)
+                        || session.provider.displayName.localizedCaseInsensitiveContains(query)
+                        || (session.groupName?.localizedCaseInsensitiveContains(query) == true)
+                }
+        }
     }
 
     var body: some View {
@@ -60,32 +76,55 @@ struct AgentChatsView: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     sidebarCommandRows
 
-                    Text("Projekte")
-                        .font(.caption.weight(.semibold))
+                    HStack(spacing: 8) {
+                        Text("PROJECTS · \(visibleProjects.count)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            if expandedProjectIDs.count == workspace.projects.count {
+                                expandedProjectIDs.removeAll()
+                            } else {
+                                expandedProjectIDs = Set(workspace.projects.map(\.id))
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .rotationEffect(.degrees(expandedProjectIDs.count == workspace.projects.count ? 180 : 0))
+                        }
+                        .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 8)
+                        .help("Projektgruppen auf-/zuklappen")
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
 
-                    ForEach(workspace.projects) { project in
+                    ForEach(visibleProjects) { project in
                         ProjectChatGroup(
                             project: project,
                             sessions: sessions(for: project),
+                            isExpanded: expandedProjectIDs.contains(project.id) || !searchText.isEmpty,
                             selectedProjectID: selectedProjectID,
                             selectedSessionID: selectedSessionID,
                             onSelectProject: {
                                 selectProject(project.id)
                             },
+                            onToggleExpanded: {
+                                toggleProject(project.id)
+                            },
                             onSelectSession: { sessionID in
                                 selectedProjectID = project.id
+                                expandedProjectIDs.insert(project.id)
                                 selectedSessionID = sessionID
                                 AppPreferences.shared.agentDefaultProjectPath = project.path
                             },
                             onNewChat: {
                                 selectedProjectID = project.id
+                                expandedProjectIDs.insert(project.id)
                                 createSession(provider: .codex)
                             },
                             onRename: renameSession,
                             onSetGroup: setSessionGroup,
+                            onSetColor: setSessionColor,
                             onMove: moveSession
                         )
                     }
@@ -121,21 +160,48 @@ struct AgentChatsView: View {
     }
 
     private var sidebarHeader: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color.accentColor)
-                .frame(width: 22, height: 22)
-                .overlay(Text("#").font(.caption.weight(.bold)).foregroundStyle(.white))
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.accentColor)
+                    .frame(width: 28, height: 28)
+                    .overlay(Text("W8").font(.caption.weight(.bold)).foregroundStyle(.white))
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Hashboard")
-                    .font(.headline.weight(.semibold))
-                Text("Agent Chats")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Hashboard")
+                        .font(.headline.weight(.semibold))
+                    Text("Agent Chats")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                ProgressView()
+                    .scaleEffect(0.55)
+                    .opacity(terminalRegistry.activeSessionIDs.isEmpty ? 0 : 1)
             }
 
-            Spacer()
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Filter projects, chats...", text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .font(.callout)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(AgentTheme.border, lineWidth: 1))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
@@ -176,6 +242,7 @@ struct AgentChatsView: View {
                     onRelaunch: { relaunch(selectedSession.id) },
                     onRename: renameSession,
                     onSetGroup: setSessionGroup,
+                    onSetColor: setSessionColor,
                     onStateChanged: refresh
                 )
             } else {
@@ -189,11 +256,26 @@ struct AgentChatsView: View {
     private var projectChatStrip: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(selectedProject?.name ?? "Kein Projekt")
-                        .font(.headline.weight(.semibold))
+                if let selectedProject {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color(hex: selectedProject.color))
+                        .frame(width: 34, height: 34)
+                        .overlay(Text(selectedProject.name.prefix(1)).font(.headline.weight(.bold)).foregroundStyle(.white))
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(selectedProject?.name ?? "Kein Projekt")
+                            .font(.headline.weight(.semibold))
+                        Label(selectedProject?.lastBranch ?? "local", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 5))
+                    }
                     Text(selectedProject?.path ?? "Projekt auswählen oder hinzufügen")
-                        .font(.caption)
+                        .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -210,8 +292,8 @@ struct AgentChatsView: View {
                 .disabled(selectedProject == nil)
             }
             .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+            .padding(.top, 12)
+            .padding(.bottom, 11)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -258,6 +340,12 @@ struct AgentChatsView: View {
         if selectedProjectID == nil || !workspace.projects.contains(where: { $0.id == selectedProjectID }) {
             selectedProjectID = workspace.projects.first?.id
         }
+        if expandedProjectIDs.isEmpty {
+            expandedProjectIDs = Set(workspace.projects.prefix(3).map(\.id))
+        }
+        if let selectedProjectID {
+            expandedProjectIDs.insert(selectedProjectID)
+        }
         if selectedSessionID == nil || !projectSessions.contains(where: { $0.id == selectedSessionID }) {
             selectedSessionID = projectSessions.first?.id
         }
@@ -272,12 +360,21 @@ struct AgentChatsView: View {
 
     private func selectProject(_ projectID: UUID) {
         selectedProjectID = projectID
+        expandedProjectIDs.insert(projectID)
         let sessions = workspace.sessions
             .filter { $0.projectID == projectID && $0.status != .archived }
             .sorted { $0.lastActivityAt > $1.lastActivityAt }
         selectedSessionID = sessions.first?.id
         if let project = workspace.projects.first(where: { $0.id == projectID }) {
             AppPreferences.shared.agentDefaultProjectPath = project.path
+        }
+    }
+
+    private func toggleProject(_ projectID: UUID) {
+        if expandedProjectIDs.contains(projectID) {
+            expandedProjectIDs.remove(projectID)
+        } else {
+            expandedProjectIDs.insert(projectID)
         }
     }
 
@@ -311,6 +408,7 @@ struct AgentChatsView: View {
                 title: title,
                 model: AppPreferences.shared.codexPostProcessingModelRaw,
                 reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+                externalSessionID: provider == .claude ? UUID().uuidString.lowercased() : nil,
                 shouldLaunchOnOpen: true
             )
             workspace = store.loadWorkspace()
@@ -357,6 +455,15 @@ struct AgentChatsView: View {
         }
     }
 
+    private func setSessionColor(id: UUID, color: String?) {
+        do {
+            try store.setSessionColor(id: id, color: color)
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func moveSession(id: UUID, direction: AgentSessionMoveDirection) {
         do {
             try store.moveSession(id: id, direction: direction)
@@ -374,6 +481,17 @@ struct AgentChatsView: View {
         Button("In Work gruppieren") { setSessionGroup(id: session.id, groupName: "Work") }
         Button("In Research gruppieren") { setSessionGroup(id: session.id, groupName: "Research") }
         Button("Gruppe entfernen") { setSessionGroup(id: session.id, groupName: nil) }
+        Divider()
+        Menu("Tab-Farbe") {
+            ForEach(AgentChatColor.palette, id: \.self) { color in
+                Button {
+                    setSessionColor(id: session.id, color: color)
+                } label: {
+                    Label(color, systemImage: "circle.fill")
+                }
+            }
+            Button("Provider-Farbe verwenden") { setSessionColor(id: session.id, color: nil) }
+        }
     }
 
     private func openSelectedProjectInPHPStorm() {
@@ -396,13 +514,16 @@ struct AgentChatsView: View {
 private struct ProjectChatGroup: View {
     let project: AgentProject
     let sessions: [AgentChatSession]
+    let isExpanded: Bool
     let selectedProjectID: UUID?
     let selectedSessionID: UUID?
     var onSelectProject: () -> Void
+    var onToggleExpanded: () -> Void
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
     var onRename: (UUID, String) -> Void
     var onSetGroup: (UUID, String?) -> Void
+    var onSetColor: (UUID, String?) -> Void
     var onMove: (UUID, AgentSessionMoveDirection) -> Void
 
     private var isSelected: Bool {
@@ -411,70 +532,99 @@ private struct ProjectChatGroup: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button(action: onSelectProject) {
-                HStack(spacing: 9) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(hex: project.color))
-                        .frame(width: 19, height: 19)
-                        .overlay(Text(project.name.prefix(1)).font(.caption2.weight(.bold)).foregroundStyle(.white))
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(project.name)
-                            .font(.callout.weight(.semibold))
-                            .lineLimit(1)
-                        Text(project.lastBranch ?? "local")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
-
-                    Text("\(sessions.count)")
-                        .font(.caption2.monospacedDigit())
+            HStack(spacing: 8) {
+                Button(action: onToggleExpanded) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-
-                    Button(action: onNewChat) {
-                        Image(systemName: "plus")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Neuen Codex Chat im Projekt starten")
+                        .frame(width: 12)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(isSelected ? AgentTheme.selection : Color.clear, in: RoundedRectangle(cornerRadius: 7))
+                .buttonStyle(.plain)
+
+                Button(action: onSelectProject) {
+                    projectHeader
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onNewChat) {
+                    Image(systemName: "plus")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 25, height: 25)
+                        .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Neuen Codex Chat im Projekt starten")
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(isSelected ? AgentTheme.selection : Color.clear, in: RoundedRectangle(cornerRadius: 8))
 
-            ForEach(groupedSessions.prefix(6), id: \.name) { group in
-                if group.name != nil {
-                    Text(group.name ?? "")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 34)
-                        .padding(.top, 4)
-                }
+            if isExpanded {
+                ForEach(groupedSessions.prefix(8), id: \.name) { group in
+                    if group.name != nil {
+                        Text(group.name ?? "")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 42)
+                            .padding(.top, 4)
+                    }
 
-                ForEach(group.sessions.prefix(8)) { session in
-                    SessionListButton(
-                        session: session,
-                        isSelected: selectedSessionID == session.id,
-                        relativeTime: relativeTime(session.lastActivityAt),
-                        onSelect: { onSelectSession(session.id) }
-                    )
-                    .contextMenu {
-                        Button("Nach oben") { onMove(session.id, .up) }
-                        Button("Nach unten") { onMove(session.id, .down) }
-                        Divider()
-                        Button("In Work gruppieren") { onSetGroup(session.id, "Work") }
-                        Button("In Research gruppieren") { onSetGroup(session.id, "Research") }
-                        Button("Gruppe entfernen") { onSetGroup(session.id, nil) }
+                    ForEach(group.sessions.prefix(10)) { session in
+                        SessionListButton(
+                            session: session,
+                            isSelected: selectedSessionID == session.id,
+                            relativeTime: relativeTime(session.lastActivityAt),
+                            onSelect: { onSelectSession(session.id) }
+                        )
+                        .contextMenu {
+                            Button("Nach oben") { onMove(session.id, .up) }
+                            Button("Nach unten") { onMove(session.id, .down) }
+                            Divider()
+                            Button("In Work gruppieren") { onSetGroup(session.id, "Work") }
+                            Button("In Research gruppieren") { onSetGroup(session.id, "Research") }
+                            Button("Gruppe entfernen") { onSetGroup(session.id, nil) }
+                            Divider()
+                            Menu("Tab-Farbe") {
+                                ForEach(AgentChatColor.palette, id: \.self) { color in
+                                    Button(color) { onSetColor(session.id, color) }
+                                }
+                                Button("Provider-Farbe verwenden") { onSetColor(session.id, nil) }
+                            }
+                        }
                     }
                 }
             }
         }
         .padding(.horizontal, 8)
+    }
+
+    private var projectHeader: some View {
+        HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color(hex: project.color))
+                .frame(width: 28, height: 28)
+                .overlay(Text(project.name.prefix(1)).font(.callout.weight(.bold)).foregroundStyle(.white))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.name)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                Label(project.lastBranch ?? "local", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text("\(sessions.count)")
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 5))
+        }
     }
 
     private var groupedSessions: [(name: String?, sessions: [AgentChatSession])] {
@@ -510,9 +660,13 @@ private struct SessionListButton: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color(hex: AgentChatColor.fallback(for: session)))
+                    .frame(width: 3, height: 18)
+
                 Image(systemName: session.provider.systemImage)
                     .font(.caption)
-                    .foregroundStyle(session.provider == .codex ? .green : .orange)
+                    .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
                     .frame(width: 14)
 
                 Text(session.title)
@@ -525,13 +679,17 @@ private struct SessionListButton: View {
                     Circle()
                         .fill(.green)
                         .frame(width: 6, height: 6)
-                } else {
+                } else if session.status == .closed {
                     Text(relativeTime)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                } else {
+                    Text(session.status.displayName)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(statusColor(session.status))
                 }
             }
-            .padding(.leading, 34)
+            .padding(.leading, 36)
             .padding(.trailing, 10)
             .padding(.vertical, 5)
             .background(
@@ -540,6 +698,19 @@ private struct SessionListButton: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func statusColor(_ status: AgentChatStatus) -> Color {
+        switch status {
+        case .pending:
+            return .yellow
+        case .running:
+            return .green
+        case .closed:
+            return .secondary
+        case .archived:
+            return .secondary
+        }
     }
 }
 
@@ -570,24 +741,42 @@ private struct ChatTabButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: session.provider.systemImage)
-                    .font(.caption)
-                    .foregroundStyle(session.provider == .codex ? .green : .orange)
-                Text(session.title)
-                    .lineLimit(1)
-                Text(session.status.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(Color(hex: AgentChatColor.fallback(for: session)))
+                    .frame(height: isSelected ? 3 : 2)
+                    .opacity(isSelected ? 1 : 0.75)
+
+                HStack(spacing: 8) {
+                    Image(systemName: session.provider.systemImage)
+                        .font(.caption)
+                        .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
+                    Text(session.title)
+                        .lineLimit(1)
+
+                    if session.status == .running {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 6, height: 6)
+                    } else {
+                        Text(session.status.displayName)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+                .font(.callout.weight(isSelected ? .semibold : .regular))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .font(.callout.weight(isSelected ? .semibold : .regular))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .frame(maxWidth: 220)
+            .frame(maxWidth: 240)
             .background(isSelected ? AgentTheme.selection : AgentTheme.panel, in: RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.accentColor.opacity(0.45) : AgentTheme.border, lineWidth: 1)
+                    .stroke(isSelected ? Color(hex: AgentChatColor.fallback(for: session)).opacity(0.7) : AgentTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -608,8 +797,14 @@ private struct ProjectDetailPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Projekt")
-                    .font(.headline.weight(.semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Project context")
+                        .font(.headline.weight(.semibold))
+                    Text("\(project?.name ?? "-") · \(session?.title ?? "Kein Chat")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
                 Button {
                     refreshPanel()
@@ -617,6 +812,27 @@ private struct ProjectDetailPanel: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
+            }
+
+            detailCard {
+                DetailHeader(title: "Recording Context", icon: "mic")
+                DetailRow(label: "Kontextquelle", value: "Aktiver Chat")
+                if let session {
+                    HStack {
+                        Image(systemName: session.provider.systemImage)
+                            .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
+                        Text(session.title)
+                            .font(.callout.weight(.medium))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(session.status.displayName)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 7))
+                }
             }
 
             detailCard {
@@ -764,6 +980,7 @@ private struct AgentSessionDetailView: View {
     var onRelaunch: () -> Void
     var onRename: (UUID, String) -> Void
     var onSetGroup: (UUID, String?) -> Void
+    var onSetColor: (UUID, String?) -> Void
     var onStateChanged: () -> Void
 
     @State private var store = AgentSessionStore()
@@ -804,11 +1021,24 @@ private struct AgentSessionDetailView: View {
 
     private var toolbar: some View {
         HStack(spacing: 12) {
-            Image(systemName: session.provider.systemImage)
-                .foregroundStyle(session.provider == .codex ? .green : .orange)
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color(hex: AgentChatColor.fallback(for: session)).opacity(0.18))
+                .frame(width: 30, height: 30)
+                .overlay(
+                    Image(systemName: session.provider.systemImage)
+                        .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
+                )
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title)
-                    .font(.headline)
+                HStack(spacing: 8) {
+                    Text(session.title)
+                        .font(.headline)
+                    Text(session.status.displayName)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(statusColor(session.status))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 4))
+                }
                 Text(project.path)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -818,17 +1048,64 @@ private struct AgentSessionDetailView: View {
 
             Spacer()
 
-            Text(session.model)
-                .font(.caption)
+            Text("model \(session.model)")
+                .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 5))
 
-            Button(controller == nil ? "Start Terminal" : "Restart", action: prepareCommand)
-            Button("Close Terminal", action: closeTerminal)
-            Button("Archive", role: .destructive, action: onArchive)
+            Menu {
+                ForEach(AgentChatColor.palette, id: \.self) { color in
+                    Button(color) {
+                        onSetColor(session.id, color)
+                    }
+                }
+                Button("Provider-Farbe verwenden") {
+                    onSetColor(session.id, nil)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(hex: AgentChatColor.fallback(for: session)))
+                        .frame(width: 9, height: 9)
+                    Image(systemName: "paintpalette")
+                        .font(.caption)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 7))
+            }
+            .menuStyle(.borderlessButton)
+            .help("Tab-Farbe setzen")
+
+            HStack(spacing: 0) {
+                Button(controller == nil ? "Start Terminal" : "Restart", action: prepareCommand)
+                Divider().frame(height: 26)
+                Button("Close Terminal", action: closeTerminal)
+                Divider().frame(height: 26)
+                Button("Archive", role: .destructive, action: onArchive)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
+            .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(AgentTheme.border, lineWidth: 1))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(AgentTheme.surface)
+    }
+
+    private func statusColor(_ status: AgentChatStatus) -> Color {
+        switch status {
+        case .pending:
+            return .yellow
+        case .running:
+            return .green
+        case .closed, .archived:
+            return .secondary
+        }
     }
 
     private var inactiveSessionPreview: some View {

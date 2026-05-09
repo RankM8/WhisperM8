@@ -592,7 +592,7 @@ struct BehaviorSettingsView: View {
     @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.full.rawValue
     @AppStorage("selectedContextCaptureEnabled") private var selectedContextCaptureEnabled = true
     @AppStorage("visualContextCaptureEnabled") private var visualContextCaptureEnabled = true
-    @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = 3
+    @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = AppPreferences.defaultMaxScreenshotsPerRecording
     @AppStorage("maxScreenRecordingDuration") private var maxScreenRecordingDuration = 30.0
     @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = false
 
@@ -619,7 +619,11 @@ struct BehaviorSettingsView: View {
             Section("Visual Context") {
                 Toggle("Allow screenshots and screen clips as context", isOn: $visualContextCaptureEnabled)
 
-                Stepper("Screenshots per recording: \(maxScreenshotsPerRecording)", value: $maxScreenshotsPerRecording, in: 1...6)
+                Stepper(
+                    "Screenshots per recording: \(maxScreenshotsPerRecording)",
+                    value: $maxScreenshotsPerRecording,
+                    in: 1...AppPreferences.maximumScreenshotsPerRecording
+                )
 
                 HStack {
                     Text("Max screen clip")

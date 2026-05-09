@@ -28,7 +28,7 @@ struct AgentCommandBuilder {
         if command == "codex" {
             return CodexStatusProbe().commandPath(command)
         }
-        return Self.which(command)
+        return Self.commandPath(command)
     }
 
     func command(for session: AgentChatSession, project: AgentProject) throws -> AgentLaunchCommand {
@@ -49,8 +49,10 @@ struct AgentCommandBuilder {
             throw AgentCommandError.commandNotFound("Codex")
         }
 
-        if let externalSessionID = session.externalSessionID,
-           session.hasLaunchedInitialPrompt || session.initialPrompt == nil {
+        if session.hasLaunchedInitialPrompt {
+            guard let externalSessionID = session.externalSessionID else {
+                throw AgentCommandError.missingExternalSessionID(session.title)
+            }
             return AgentLaunchCommand(
                 executablePath: executable,
                 arguments: [
@@ -62,10 +64,6 @@ struct AgentCommandBuilder {
                 ],
                 workingDirectory: project.path
             )
-        }
-
-        if session.hasLaunchedInitialPrompt && session.initialPrompt == nil {
-            throw AgentCommandError.missingExternalSessionID(session.title)
         }
 
         var arguments = [
@@ -93,12 +91,18 @@ struct AgentCommandBuilder {
         }
 
         var arguments: [String] = []
-        if let externalSessionID = session.externalSessionID,
-           session.hasLaunchedInitialPrompt || session.initialPrompt == nil {
+        if session.hasLaunchedInitialPrompt {
+            guard let externalSessionID = session.externalSessionID else {
+                throw AgentCommandError.missingExternalSessionID(session.title)
+            }
             arguments.append(contentsOf: ["--resume", externalSessionID])
-        } else if session.hasLaunchedInitialPrompt && session.initialPrompt == nil {
-            throw AgentCommandError.missingExternalSessionID(session.title)
-        } else if let initialPrompt = session.initialPrompt, !initialPrompt.isEmpty {
+        } else if let externalSessionID = session.externalSessionID {
+            arguments.append(contentsOf: ["--session-id", externalSessionID])
+        }
+
+        if !session.hasLaunchedInitialPrompt,
+           let initialPrompt = session.initialPrompt,
+           !initialPrompt.isEmpty {
             arguments.append(initialPrompt)
         }
 
@@ -107,6 +111,21 @@ struct AgentCommandBuilder {
             arguments: arguments,
             workingDirectory: project.path
         )
+    }
+
+    static func commandPath(_ command: String) -> String? {
+        if let path = which(command) {
+            return path
+        }
+
+        for directory in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] {
+            let path = "\(directory)/\(command)"
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        return nil
     }
 
     private static func which(_ command: String) -> String? {

@@ -82,6 +82,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     var model: String
     var reasoningEffort: String
     var status: AgentChatStatus
+    var color: String?
     var groupName: String?
     var sortIndex: Int?
     var initialPrompt: String?
@@ -100,6 +101,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         model: String = CodexPostProcessingModel.defaultModel.rawValue,
         reasoningEffort: String = CodexReasoningEffort.defaultEffort.rawValue,
         status: AgentChatStatus = .pending,
+        color: String? = nil,
         groupName: String? = nil,
         sortIndex: Int? = nil,
         initialPrompt: String? = nil,
@@ -117,6 +119,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.model = model
         self.reasoningEffort = reasoningEffort
         self.status = status
+        self.color = color
         self.groupName = groupName
         self.sortIndex = sortIndex
         self.initialPrompt = initialPrompt
@@ -146,4 +149,29 @@ enum AgentProjectColor {
         "#FFD60A",
         "#AC8E68"
     ]
+}
+
+enum AgentChatColor {
+    static let palette = [
+        "#32D74B",
+        "#FF9F0A",
+        "#0A84FF",
+        "#BF5AF2",
+        "#FF453A",
+        "#64D2FF",
+        "#FFD60A",
+        "#AC8E68"
+    ]
+
+    static func fallback(for session: AgentChatSession) -> String {
+        if let color = session.color, !color.isEmpty {
+            return color
+        }
+        switch session.provider {
+        case .codex:
+            return "#32D74B"
+        case .claude:
+            return "#FF9F0A"
+        }
+    }
 }

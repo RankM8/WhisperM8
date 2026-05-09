@@ -68,39 +68,125 @@ struct CodexSessionIndexer {
 }
 
 struct ClaudeSessionIndexer {
-    var tasksDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    var projectsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".claude", isDirectory: true)
-        .appendingPathComponent("tasks", isDirectory: true)
+        .appendingPathComponent("projects", isDirectory: true)
 
     func indexedSessions(limit: Int = 100) -> [IndexedAgentSession] {
-        guard let directories = try? FileManager.default.contentsOfDirectory(
-            at: tasksDirectory,
-            includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey],
+        guard let enumerator = FileManager.default.enumerator(
+            at: projectsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey, .isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
         }
 
-        return directories
-            .filter { $0.hasDirectoryPath }
-            .compactMap(parseTaskDirectory)
+        var sessions: [IndexedAgentSession] = []
+        for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
+            guard !fileURL.path.contains("/subagents/"),
+                  let session = parseSessionFile(fileURL) else {
+                continue
+            }
+            sessions.append(session)
+        }
+
+        return sessions
             .sorted { $0.lastActivityAt > $1.lastActivityAt }
             .prefix(limit)
             .map { $0 }
     }
 
-    private func parseTaskDirectory(_ directory: URL) -> IndexedAgentSession? {
-        let resourceValues = try? directory.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey])
-        let date = resourceValues?.contentModificationDate ?? resourceValues?.creationDate ?? Date()
+    private func parseSessionFile(_ fileURL: URL) -> IndexedAgentSession? {
+        guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
+            return nil
+        }
+
+        let fallbackID = fileURL.deletingPathExtension().lastPathComponent
+        var sessionID: String?
+        var cwd: String?
+        var title: String?
+        var createdAt: Date?
+        var lastMessageDate: Date?
+
+        for line in content.split(separator: "\n").prefix(200) {
+            guard let data = String(line).data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                continue
+            }
+
+            if sessionID == nil {
+                sessionID = object["sessionId"] as? String
+            }
+            if cwd == nil {
+                cwd = object["cwd"] as? String
+            }
+            if title == nil {
+                title = object["customTitle"] as? String
+                    ?? object["aiTitle"] as? String
+                    ?? firstPromptTitle(from: object)
+            }
+            if let timestamp = parseDate(object["timestamp"] as? String) {
+                createdAt = min(createdAt ?? timestamp, timestamp)
+                lastMessageDate = max(lastMessageDate ?? timestamp, timestamp)
+            }
+
+            if sessionID != nil, cwd != nil, title != nil, createdAt != nil {
+                break
+            }
+        }
+
+        guard let cwd else {
+            return nil
+        }
+        guard !AgentSessionStore.isClaudeWorktreePath(cwd) else {
+            return nil
+        }
+
+        let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey])
+        let fallbackDate = resourceValues?.creationDate ?? resourceValues?.contentModificationDate ?? Date()
+        let created = createdAt ?? fallbackDate
+        let lastActivity = max(lastMessageDate ?? created, resourceValues?.contentModificationDate ?? created)
+
         return IndexedAgentSession(
             provider: .claude,
-            externalSessionID: directory.lastPathComponent,
-            cwd: FileManager.default.homeDirectoryForCurrentUser.path,
-            title: "Claude \(directory.lastPathComponent.prefix(8))",
+            externalSessionID: sessionID ?? fallbackID,
+            cwd: cwd,
+            title: title?.isEmpty == false ? title! : "Claude \(fallbackID.prefix(8))",
             model: nil,
             reasoningEffort: nil,
-            createdAt: resourceValues?.creationDate ?? date,
-            lastActivityAt: date
+            createdAt: created,
+            lastActivityAt: lastActivity
         )
+    }
+
+    private func firstPromptTitle(from object: [String: Any]) -> String? {
+        guard object["type"] as? String == "user" else {
+            return nil
+        }
+
+        if let content = object["content"] as? String {
+            return shortTitle(content)
+        }
+        if let content = (object["message"] as? [String: Any])?["content"] as? String {
+            return shortTitle(content)
+        }
+        return nil
+    }
+
+    private func shortTitle(_ text: String) -> String {
+        let normalized = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.count > 46 else {
+            return normalized
+        }
+        return "\(normalized.prefix(46))..."
+    }
+
+    private func parseDate(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: string) ?? ISO8601DateFormatter().date(from: string)
     }
 }

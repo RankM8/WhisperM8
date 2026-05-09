@@ -16,7 +16,12 @@ struct AgentSessionStore {
             let data = try Data(contentsOf: fileURL)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(AgentWorkspace.self, from: data)
+            let workspace = try decoder.decode(AgentWorkspace.self, from: data)
+            let migrated = Self.migratedWorkspace(workspace)
+            if migrated != workspace {
+                try? saveWorkspace(migrated)
+            }
+            return migrated
         } catch {
             Logger.debug("Failed to load agent sessions: \(error.localizedDescription)")
             return .empty
@@ -37,7 +42,7 @@ struct AgentSessionStore {
 
     func upsertProject(path: String, name: String? = nil, color: String? = nil) throws -> AgentProject {
         var workspace = loadWorkspace()
-        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let standardizedPath = Self.canonicalProjectPath(path)
         if let index = workspace.projects.firstIndex(where: { $0.path == standardizedPath }) {
             workspace.projects[index].updatedAt = Date()
             workspace.projects[index].lastBranch = Self.currentGitBranch(at: standardizedPath)
@@ -85,6 +90,13 @@ struct AgentSessionStore {
         try updateSession(id: id) { session in
             let normalized = groupName?.trimmingCharacters(in: .whitespacesAndNewlines)
             session.groupName = normalized?.isEmpty == false ? normalized : nil
+        }
+    }
+
+    func setSessionColor(id: UUID, color: String?) throws {
+        try updateSession(id: id) { session in
+            let normalized = color?.trimmingCharacters(in: .whitespacesAndNewlines)
+            session.color = normalized?.isEmpty == false ? normalized : nil
         }
     }
 
@@ -137,6 +149,7 @@ struct AgentSessionStore {
         title: String,
         model: String = AppPreferences.shared.codexPostProcessingModelRaw,
         reasoningEffort: String = AppPreferences.shared.codexReasoningEffortRaw,
+        externalSessionID: String? = nil,
         initialPrompt: String? = nil,
         imagePaths: [String] = [],
         shouldLaunchOnOpen: Bool = false
@@ -145,6 +158,7 @@ struct AgentSessionStore {
         let session = AgentChatSession(
             provider: provider,
             projectID: project.id,
+            externalSessionID: externalSessionID,
             title: title,
             model: model,
             reasoningEffort: reasoningEffort,
@@ -162,6 +176,7 @@ struct AgentSessionStore {
         projectPath: String,
         indexedSessions: [IndexedAgentSession]
     ) throws -> AgentChatSession? {
+        guard !Self.isClaudeWorktreePath(projectPath) else { return nil }
         var workspace = loadWorkspace()
         guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
             return nil
@@ -171,12 +186,13 @@ struct AgentSessionStore {
             return workspace.sessions[index]
         }
 
-        let standardizedPath = URL(fileURLWithPath: projectPath).standardizedFileURL.path
+        let standardizedPath = Self.canonicalProjectPath(projectPath)
         let createdAt = workspace.sessions[index].createdAt
         guard let indexed = indexedSessions
             .filter({
                 $0.provider == provider
-                    && URL(fileURLWithPath: $0.cwd).standardizedFileURL.path == standardizedPath
+                    && !Self.isClaudeWorktreePath($0.cwd)
+                    && Self.canonicalProjectPath($0.cwd) == standardizedPath
                     && $0.createdAt >= createdAt.addingTimeInterval(-5)
             })
             .sorted(by: { $0.lastActivityAt > $1.lastActivityAt })
@@ -196,8 +212,11 @@ struct AgentSessionStore {
 
     func mergeIndexedSessions(_ indexedSessions: [IndexedAgentSession]) throws {
         var workspace = loadWorkspace()
+        Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
+        Self.removeUnresumableClaudeSessions(from: &workspace)
         for indexed in indexedSessions {
-            let projectPath = URL(fileURLWithPath: indexed.cwd).standardizedFileURL.path
+            guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
+            let projectPath = Self.canonicalProjectPath(indexed.cwd)
             let project: AgentProject
             if let existingProject = workspace.projects.first(where: { $0.path == projectPath }) {
                 project = existingProject
@@ -247,6 +266,8 @@ struct AgentSessionStore {
                 )
             }
         }
+        Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
+        Self.removeUnresumableClaudeSessions(from: &workspace)
         try saveWorkspace(workspace)
     }
 
@@ -283,6 +304,49 @@ struct AgentSessionStore {
         } catch {
             return nil
         }
+    }
+
+    static func canonicalProjectPath(_ path: String) -> String {
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let marker = "/.claude/worktrees/"
+        guard let range = standardizedPath.range(of: marker) else {
+            return standardizedPath
+        }
+        return String(standardizedPath[..<range.lowerBound])
+    }
+
+    static func isClaudeWorktreePath(_ path: String) -> Bool {
+        URL(fileURLWithPath: path).standardizedFileURL.path.contains("/.claude/worktrees/")
+    }
+
+    private static func removeClaudeWorktreeProjectsAndSessions(from workspace: inout AgentWorkspace) {
+        let worktreeProjectIDs = Set(
+            workspace.projects
+                .filter { isClaudeWorktreePath($0.path) }
+                .map(\.id)
+        )
+        guard !worktreeProjectIDs.isEmpty else {
+            return
+        }
+
+        workspace.sessions.removeAll { worktreeProjectIDs.contains($0.projectID) }
+        workspace.projects.removeAll { worktreeProjectIDs.contains($0.id) }
+    }
+
+    private static func removeUnresumableClaudeSessions(from workspace: inout AgentWorkspace) {
+        workspace.sessions.removeAll { session in
+            session.provider == .claude
+                && session.hasLaunchedInitialPrompt
+                && session.externalSessionID == nil
+                && session.initialPrompt == nil
+        }
+    }
+
+    private static func migratedWorkspace(_ workspace: AgentWorkspace) -> AgentWorkspace {
+        var migrated = workspace
+        removeClaudeWorktreeProjectsAndSessions(from: &migrated)
+        removeUnresumableClaudeSessions(from: &migrated)
+        return migrated
     }
 
     private static func defaultFileURL() -> URL {

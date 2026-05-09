@@ -401,28 +401,12 @@ struct CodexStatusProbe {
 
     func commandPath(_ command: String) -> String? {
         let bundledCodexPath = "/Applications/Codex.app/Contents/Resources/codex"
-        if FileManager.default.isExecutableFile(atPath: bundledCodexPath) {
+        if command == "codex",
+           FileManager.default.isExecutableFile(atPath: bundledCodexPath) {
             return bundledCodexPath
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = [command]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return path?.isEmpty == false ? path : nil
-        } catch {
-            return nil
-        }
+        return AgentCommandBuilder.commandPath(command)
     }
 
     private func run(_ path: String, arguments: [String]) -> String {

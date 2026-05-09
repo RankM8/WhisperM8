@@ -3,10 +3,14 @@ import Foundation
 struct AppPreferences {
     static var shared = AppPreferences()
 
+    static let defaultMaxScreenshotsPerRecording = 20
+    static let maximumScreenshotsPerRecording = 20
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        migrateScreenshotLimitDefaultIfNeeded()
     }
 
     var selectedProviderRaw: String? {
@@ -95,9 +99,12 @@ struct AppPreferences {
     var maxScreenshotsPerRecording: Int {
         get {
             let value = defaults.integer(forKey: Keys.maxScreenshotsPerRecording)
-            return value > 0 ? value : 3
+            guard value > 0 else { return Self.defaultMaxScreenshotsPerRecording }
+            return min(value, Self.maximumScreenshotsPerRecording)
         }
-        nonmutating set { defaults.set(newValue, forKey: Keys.maxScreenshotsPerRecording) }
+        nonmutating set {
+            defaults.set(max(1, min(newValue, Self.maximumScreenshotsPerRecording)), forKey: Keys.maxScreenshotsPerRecording)
+        }
     }
 
     var maxScreenRecordingDuration: TimeInterval {
@@ -164,6 +171,20 @@ struct AppPreferences {
             defaults.removeObject(forKey: key)
         }
     }
+
+    private func migrateScreenshotLimitDefaultIfNeeded() {
+        guard defaults.bool(forKey: Keys.didMigrateMaxScreenshotsPerRecordingTo20) == false else {
+            return
+        }
+
+        let value = defaults.integer(forKey: Keys.maxScreenshotsPerRecording)
+        if value <= 0 || value == 3 {
+            defaults.set(Self.defaultMaxScreenshotsPerRecording, forKey: Keys.maxScreenshotsPerRecording)
+        } else if value > Self.maximumScreenshotsPerRecording {
+            defaults.set(Self.maximumScreenshotsPerRecording, forKey: Keys.maxScreenshotsPerRecording)
+        }
+        defaults.set(true, forKey: Keys.didMigrateMaxScreenshotsPerRecordingTo20)
+    }
 }
 
 enum PreferenceKeys {
@@ -186,6 +207,7 @@ enum PreferenceKeys {
     static let selectedContextCaptureEnabled = "selectedContextCaptureEnabled"
     static let visualContextCaptureEnabled = "visualContextCaptureEnabled"
     static let maxScreenshotsPerRecording = "maxScreenshotsPerRecording"
+    static let didMigrateMaxScreenshotsPerRecordingTo20 = "didMigrateMaxScreenshotsPerRecordingTo20"
     static let maxScreenRecordingDuration = "maxScreenRecordingDuration"
     static let deleteContextFilesAfterProcessing = "deleteContextFilesAfterProcessing"
     static let codexPostProcessingModel = "codexPostProcessingModel"

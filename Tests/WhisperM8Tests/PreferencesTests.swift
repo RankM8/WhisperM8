@@ -17,13 +17,27 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.showModePickerInMiniOverlay)
             XCTAssertTrue(preferences.isSelectedContextCaptureEnabled)
             XCTAssertTrue(preferences.isVisualContextCaptureEnabled)
-            XCTAssertEqual(preferences.maxScreenshotsPerRecording, 3)
+            XCTAssertEqual(preferences.maxScreenshotsPerRecording, 20)
             XCTAssertEqual(preferences.maxScreenRecordingDuration, 30)
             XCTAssertFalse(preferences.deleteContextFilesAfterProcessing)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.defaultModel.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.defaultEffort.rawValue)
             XCTAssertEqual(preferences.codexVisualInputModeRaw, CodexVisualInputMode.defaultMode.rawValue)
         }
+    }
+
+    func testMigratesLegacyScreenshotDefaultToTwenty() {
+        let suiteName = "WhisperM8Tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(3, forKey: PreferenceKeys.maxScreenshotsPerRecording)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.maxScreenshotsPerRecording, 20)
     }
 
     func testSavesAndLoadsValues() {
