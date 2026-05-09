@@ -25,6 +25,9 @@ struct TranscriptRunReportDraft {
     var pastedAttachmentCount = 0
     var pasteErrors: [String] = []
     var deliveryAttachmentLabels: [String] = []
+    var agentProvider: AgentProvider?
+    var agentSessionID: String?
+    var agentProjectPath: String?
 }
 
 struct TranscriptRunReportStore {
@@ -71,7 +74,7 @@ struct TranscriptRunReportStore {
             .compactMap(\.storedPath)
 
         let codex: TranscriptRunReport.CodexSnapshot?
-        if draft.mode.usesPostProcessing {
+        if draft.mode.usesPostProcessing && draft.mode.id != OutputMode.chatID {
             let outputURL = runDirectory.appendingPathComponent("codex-output.txt")
             codex = TranscriptRunReport.CodexSnapshot(
                 model: AppPreferences.shared.codexPostProcessingModelRaw,
@@ -81,7 +84,9 @@ struct TranscriptRunReportStore {
                     promptImageURLs: imageInputPaths.map(URL.init(fileURLWithPath:)),
                     outputURL: outputURL,
                     model: AppPreferences.shared.codexPostProcessingModelRaw,
-                    reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw
+                    reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+                    isEphemeral: draft.mode.id != OutputMode.taskID,
+                    projectPath: draft.mode.id == OutputMode.taskID ? AppPreferences.shared.agentDefaultProjectPath : nil
                 ),
                 imageInputPaths: imageInputPaths,
                 videoInputPaths: videoInputPaths,
@@ -126,7 +131,10 @@ struct TranscriptRunReportStore {
             autoPasteAttachmentsRequested: draft.autoPasteAttachmentsRequested,
             pastedAttachmentCount: draft.pastedAttachmentCount,
             pasteErrors: draft.pasteErrors,
-            deliveryAttachmentLabels: draft.deliveryAttachmentLabels
+            deliveryAttachmentLabels: draft.deliveryAttachmentLabels,
+            agentProvider: draft.agentProvider,
+            agentSessionID: draft.agentSessionID,
+            agentProjectPath: draft.agentProjectPath
         )
 
         let encoder = JSONEncoder()

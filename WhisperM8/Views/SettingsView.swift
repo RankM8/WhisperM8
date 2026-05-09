@@ -9,6 +9,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
     case modes = "Modes"
     case templates = "Templates"
     case testLab = "Test Lab"
+    case agentChats = "Agent Chats"
     case permissions = "Permissions"
     case hotkey = "Hotkey"
     case audio = "Audio"
@@ -31,6 +32,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "doc.text"
         case .testLab:
             return "testtube.2"
+        case .agentChats:
+            return "terminal"
         case .permissions:
             return "shield.checkered"
         case .hotkey:
@@ -50,6 +53,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "Accounts"
         case .outputOverview, .modes, .templates, .testLab:
             return "Output"
+        case .agentChats:
+            return "Agents"
         case .permissions, .hotkey, .audio, .behavior:
             return "App"
         case .about:
@@ -77,6 +82,10 @@ struct SettingsView: View {
                     sidebarRow(.testLab)
                 }
 
+                Section("Agents") {
+                    sidebarRow(.agentChats)
+                }
+
                 Section("App") {
                     sidebarRow(.permissions)
                     sidebarRow(.hotkey)
@@ -95,6 +104,11 @@ struct SettingsView: View {
             detailView(for: selection ?? .api)
         }
         .frame(minWidth: 860, minHeight: 620)
+        .onChange(of: selection) { _, newSelection in
+            if newSelection == .agentChats {
+                WindowRequestCenter.shared.request(.agentChats)
+            }
+        }
     }
 
     private func sidebarRow(_ section: ControlCenterSection) -> some View {
@@ -119,6 +133,9 @@ struct SettingsView: View {
             OutputTemplatesView()
         case .testLab:
             OutputTestLabView()
+        case .agentChats:
+            AgentChatsAccessView()
+                .navigationTitle(section.rawValue)
         case .permissions:
             PermissionsSettingsView()
                 .navigationTitle(section.rawValue)
@@ -135,6 +152,40 @@ struct SettingsView: View {
             AboutView()
                 .navigationTitle(section.rawValue)
         }
+    }
+}
+
+struct AgentChatsAccessView: View {
+    var body: some View {
+        Form {
+            Section("Agent Workspace") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Agent Chats")
+                            .font(.headline)
+                        Text("Open the Codex and Claude session hub for project chats, resumes, and task follow-up.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        WindowRequestCenter.shared.request(.agentChats)
+                    } label: {
+                        Label("Open Agent Chats", systemImage: "arrow.up.forward.app")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            Section("Why this is here") {
+                Text("Important workflow areas should not depend on the macOS menu bar. Use this entry whenever the menu bar is hidden, crowded, or unavailable on smaller screens.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

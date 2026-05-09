@@ -126,6 +126,9 @@ struct TranscriptRunReport: Identifiable, Codable, Equatable {
     var pastedAttachmentCount: Int?
     var pasteErrors: [String]?
     var deliveryAttachmentLabels: [String]?
+    var agentProvider: AgentProvider?
+    var agentSessionID: String?
+    var agentProjectPath: String?
 }
 
 extension TranscriptRunReport {

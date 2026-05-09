@@ -5,11 +5,14 @@ enum WindowRequest: String, Equatable {
     case settings
     case onboarding
     case outputDashboard = "output-dashboard"
+    case agentChats = "agent-chats"
 
     var windowID: String {
         switch self {
         case .settings, .outputDashboard:
             return "settings"
+        case .agentChats:
+            return rawValue
         case .onboarding:
             return rawValue
         }

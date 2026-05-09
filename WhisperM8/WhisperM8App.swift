@@ -48,6 +48,12 @@ struct WhisperM8App: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
+
+        Window("Agent Chats", id: "agent-chats") {
+            AgentChatsView()
+        }
+        .defaultSize(width: 1100, height: 720)
+        .defaultPosition(.center)
     }
 
     private func setupHotkeys() {

@@ -319,6 +319,12 @@ struct TranscriptReportDetailView: View {
 
                     Spacer()
 
+                    if report.agentSessionID != nil {
+                        Button("Open in Agent Chats") {
+                            WindowRequestCenter.shared.request(.agentChats)
+                        }
+                    }
+
                     Button("Delete Report", role: .destructive, action: onDelete)
                 }
 
@@ -362,6 +368,15 @@ struct TranscriptReportDetailView: View {
             }
             if let errorMessage = report.errorMessage {
                 ReportKeyValue("Error", errorMessage)
+            }
+            if let agentProvider = report.agentProvider {
+                ReportKeyValue("Agent Provider", agentProvider.displayName)
+            }
+            if let agentSessionID = report.agentSessionID {
+                ReportKeyValue("Agent Session", agentSessionID)
+            }
+            if let agentProjectPath = report.agentProjectPath {
+                ReportKeyValue("Agent Project", agentProjectPath)
             }
         }
     }

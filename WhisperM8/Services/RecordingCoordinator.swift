@@ -7,6 +7,9 @@ private struct PostProcessingRunResult {
     var visualManifest: VisualManifest?
     var fallbackStatus: TranscriptRunStatus?
     var errorMessage: String?
+    var agentProvider: AgentProvider?
+    var agentSessionID: String?
+    var agentProjectPath: String?
 }
 
 @MainActor
@@ -301,19 +304,21 @@ final class RecordingCoordinator {
             contextBundle: contextBundle
         )
         let finalText = postProcessingResult.finalText
-        let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled
+        let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled && outputMode.id != OutputMode.chatID
         var deliveryAttachments: [PasteAttachment] = []
         var deliveryErrors: [String] = []
 
-        do {
-            deliveryAttachments = try visualAttachmentDeliveryBuilder.build(
-                contextBundle: contextBundle,
-                mode: outputMode
-            )
-        } catch {
-            let message = "Could not prepare visual attachments for paste: \(error.localizedDescription)"
-            Logger.paste.error("\(message, privacy: .public)")
-            deliveryErrors.append(message)
+        if autoPasteRequested {
+            do {
+                deliveryAttachments = try visualAttachmentDeliveryBuilder.build(
+                    contextBundle: contextBundle,
+                    mode: outputMode
+                )
+            } catch {
+                let message = "Could not prepare visual attachments for paste: \(error.localizedDescription)"
+                Logger.paste.error("\(message, privacy: .public)")
+                deliveryErrors.append(message)
+            }
         }
 
         pasteService.copyToClipboard(finalText)
@@ -370,7 +375,10 @@ final class RecordingCoordinator {
             autoPasteAttachmentsRequested: autoPasteRequested && !deliveryAttachments.isEmpty,
             pastedAttachmentCount: pasteResult.pastedAttachments.count,
             pasteErrors: deliveryErrors,
-            deliveryAttachmentLabels: deliveryAttachments.map(\.label)
+            deliveryAttachmentLabels: deliveryAttachments.map(\.label),
+            agentProvider: postProcessingResult.agentProvider,
+            agentSessionID: postProcessingResult.agentSessionID,
+            agentProjectPath: postProcessingResult.agentProjectPath
         )
 
         try? FileManager.default.removeItem(at: audioURL)
@@ -406,12 +414,34 @@ final class RecordingCoordinator {
         overlayController.update(appState: appState)
 
         do {
+            if mode.id == OutputMode.chatID, let promptPackage {
+                let visualInput = CodexVisualInputSelection(contextBundle: contextBundle)
+                let result = try AgentChatLaunchService().openCodexChat(
+                    title: chatTitle(from: rawText),
+                    prompt: promptPackage.prompt,
+                    imagePaths: visualInput.imageURLs.map(\.path)
+                )
+                appState.isPostProcessing = false
+                appState.postProcessingStatusText = nil
+                overlayController.update(appState: appState)
+                return PostProcessingRunResult(
+                    finalText: "Opened Codex chat: \(result.session.title)",
+                    renderedPrompt: renderedPrompt,
+                    replyIntent: promptPackage.intent,
+                    visualManifest: promptPackage.visualManifest,
+                    agentProvider: .codex,
+                    agentSessionID: result.session.externalSessionID ?? result.session.id.uuidString,
+                    agentProjectPath: result.project.path
+                )
+            }
+
             let processedText = try await postProcessingService.process(
                 rawText: rawText,
                 mode: mode,
                 language: language,
                 contextBundle: contextBundle
             )
+            let agentSession = mode.id == OutputMode.taskID ? latestTaskAgentSession() : nil
             appState.isPostProcessing = false
             appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
@@ -419,7 +449,10 @@ final class RecordingCoordinator {
                 finalText: TextNormalizer.normalizeTranscriptionText(processedText),
                 renderedPrompt: renderedPrompt,
                 replyIntent: promptPackage?.intent,
-                visualManifest: promptPackage?.visualManifest
+                visualManifest: promptPackage?.visualManifest,
+                agentProvider: agentSession?.provider,
+                agentSessionID: agentSession?.externalSessionID,
+                agentProjectPath: agentSession?.projectPath
             )
         } catch {
             appState.isPostProcessing = false
@@ -446,6 +479,28 @@ final class RecordingCoordinator {
             }
 
             throw error
+        }
+    }
+
+    private func chatTitle(from rawText: String) -> String {
+        let trimmed = rawText
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Voice Chat" }
+        return String(trimmed.prefix(52))
+    }
+
+    private func latestTaskAgentSession() -> (provider: AgentProvider, externalSessionID: String?, projectPath: String?)? {
+        let projectPath = AppPreferences.shared.agentDefaultProjectPath
+        do {
+            let store = AgentSessionStore()
+            let indexedSessions = CodexSessionIndexer().indexedSessions(limit: 20)
+            try store.mergeIndexedSessions(indexedSessions)
+            let latest = indexedSessions.first { URL(fileURLWithPath: $0.cwd).standardizedFileURL.path == URL(fileURLWithPath: projectPath).standardizedFileURL.path }
+            return latest.map { ($0.provider, $0.externalSessionID, $0.cwd) }
+        } catch {
+            Logger.debug("Failed to sync task agent session: \(error.localizedDescription)")
+            return nil
         }
     }
 
@@ -490,7 +545,10 @@ final class RecordingCoordinator {
         autoPasteAttachmentsRequested: Bool = false,
         pastedAttachmentCount: Int = 0,
         pasteErrors: [String] = [],
-        deliveryAttachmentLabels: [String] = []
+        deliveryAttachmentLabels: [String] = [],
+        agentProvider: AgentProvider? = nil,
+        agentSessionID: String? = nil,
+        agentProjectPath: String? = nil
     ) {
         let draft = TranscriptRunReportDraft(
             sourceAppName: contextSourceApp?.localizedName,
@@ -514,7 +572,10 @@ final class RecordingCoordinator {
             autoPasteAttachmentsRequested: autoPasteAttachmentsRequested,
             pastedAttachmentCount: pastedAttachmentCount,
             pasteErrors: pasteErrors,
-            deliveryAttachmentLabels: deliveryAttachmentLabels
+            deliveryAttachmentLabels: deliveryAttachmentLabels,
+            agentProvider: agentProvider,
+            agentSessionID: agentSessionID,
+            agentProjectPath: agentProjectPath
         )
 
         do {

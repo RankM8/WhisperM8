@@ -5,6 +5,7 @@ enum ReplyIntentKind: String, Codable, Equatable {
     case contextAnswer
     case agenticReply
     case promptPackage
+    case agentChat
     case taskPrompt
 
     var displayName: String {
@@ -17,6 +18,8 @@ enum ReplyIntentKind: String, Codable, Equatable {
             return "Agentic Reply"
         case .promptPackage:
             return "Prompt Package"
+        case .agentChat:
+            return "Agent Chat"
         case .taskPrompt:
             return "Task Run"
         }
@@ -32,6 +35,8 @@ enum ReplyIntentKind: String, Codable, Equatable {
             return "Checking..."
         case .promptPackage:
             return "Building prompt..."
+        case .agentChat:
+            return "Opening chat..."
         case .taskPrompt:
             return "Running task..."
         }
@@ -42,6 +47,9 @@ struct ReplyIntentRouter {
     func route(rawText: String, mode: OutputMode, contextBundle: TranscriptContextBundle) -> ReplyIntentKind {
         if mode.id == OutputMode.promptID {
             return .promptPackage
+        }
+        if mode.id == OutputMode.chatID {
+            return .agentChat
         }
         if mode.id == OutputMode.taskID {
             return .taskPrompt
@@ -281,6 +289,7 @@ struct PromptPackageBuilder {
         - Router decision: \(intent.displayName)
         - For Slack, WhatsApp, and Email, always return the finished message, never a prompt for the user to run elsewhere.
         - For Prompt mode, return a polished Markdown prompt for Claude Code or Codex.
+        - For Chat mode, return a polished first message for a persistent Codex or Claude chat.
         - For Task mode, execute the user's task as far as the current Codex session can do non-interactively, then return the final answer or deliverable.
         - Task mode must not return a prompt unless the user explicitly asks for a prompt.
         - If a Task mode request cannot be completed because required external access, credentials, or write permissions are unavailable, return the best safe result plus the exact blocker.

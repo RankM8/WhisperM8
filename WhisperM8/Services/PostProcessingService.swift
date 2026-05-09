@@ -67,16 +67,20 @@ struct CodexPostProcessor: PostProcessing {
             language: language,
             contextBundle: contextBundle
         )
-        return try await runCodex(prompt: package.prompt, imageURLs: visualInput.imageURLs)
+        return try await runCodex(
+            prompt: package.prompt,
+            imageURLs: visualInput.imageURLs,
+            mode: mode
+        )
     }
 
-    private func runCodex(prompt: String, imageURLs: [URL]) async throws -> String {
+    private func runCodex(prompt: String, imageURLs: [URL], mode: OutputMode) async throws -> String {
         try await Task.detached(priority: .userInitiated) {
-            try performCodexRun(prompt: prompt, imageURLs: imageURLs)
+            try performCodexRun(prompt: prompt, imageURLs: imageURLs, mode: mode)
         }.value
     }
 
-    private func performCodexRun(prompt: String, imageURLs: [URL]) throws -> String {
+    private func performCodexRun(prompt: String, imageURLs: [URL], mode: OutputMode) throws -> String {
         guard let codexPath = CodexStatusProbe().commandPath("codex") else {
             throw PostProcessingError.codexUnavailable("Codex CLI is not installed.")
         }
@@ -88,12 +92,15 @@ struct CodexPostProcessor: PostProcessing {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: codexPath)
-        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        let projectPath = mode.id == OutputMode.taskID ? AppPreferences.shared.agentDefaultProjectPath : nil
+        process.currentDirectoryURL = projectPath.map(URL.init(fileURLWithPath:)) ?? FileManager.default.temporaryDirectory
         process.arguments = CodexInvocation.arguments(
             promptImageURLs: imageURLs,
             outputURL: outputURL,
             model: AppPreferences.shared.codexPostProcessingModelRaw,
-            reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw
+            reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+            isEphemeral: mode.id != OutputMode.taskID,
+            projectPath: projectPath
         )
 
         let inputPipe = Pipe()
@@ -250,7 +257,9 @@ enum CodexInvocation {
         promptImageURLs: [URL],
         outputURL: URL,
         model: String,
-        reasoningEffort: String
+        reasoningEffort: String,
+        isEphemeral: Bool = true,
+        projectPath: String? = nil
     ) -> [String] {
         var arguments = [
             "exec",
@@ -258,9 +267,16 @@ enum CodexInvocation {
             "-c", "model_reasoning_effort=\(reasoningEffort)",
             "--sandbox", "read-only",
             "--skip-git-repo-check",
-            "--ephemeral",
             "--output-last-message", outputURL.path,
         ]
+
+        if let projectPath, !projectPath.isEmpty {
+            arguments.append(contentsOf: ["-C", projectPath])
+        }
+
+        if isEphemeral {
+            arguments.append("--ephemeral")
+        }
 
         for imageURL in promptImageURLs {
             arguments.append(contentsOf: ["--image", imageURL.path])

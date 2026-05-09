@@ -76,6 +76,7 @@ extension OutputMode {
     static let rawID = "raw"
     static let cleanID = "clean"
     static let promptID = "prompt"
+    static let chatID = "chat"
     static let taskID = "task"
     static let emailID = "email"
     static let slackID = "slack"
@@ -107,6 +108,17 @@ extension OutputMode {
             shortLabel: "Prompt",
             kind: .builtIn,
             templateID: PostProcessingTemplate.promptID,
+            isEnabled: true,
+            isDefault: false,
+            contextPolicy: .auto,
+            pasteVisualAttachments: true
+        ),
+        OutputMode(
+            id: chatID,
+            name: "Chat",
+            shortLabel: "Chat",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.chatID,
             isEnabled: true,
             isDefault: false,
             contextPolicy: .auto,
@@ -181,7 +193,7 @@ extension OutputMode {
 
     static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {
         switch id {
-        case promptID, taskID, emailID, slackID, whatsappID:
+        case promptID, chatID, taskID, emailID, slackID, whatsappID:
             return .auto
         default:
             return .off
@@ -198,7 +210,7 @@ extension OutputMode {
         }
 
         switch id {
-        case promptID, taskID, emailID, slackID, whatsappID:
+        case promptID, chatID, taskID, emailID, slackID, whatsappID:
             return true
         default:
             return false

@@ -128,6 +128,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.codexVisualInputMode) }
     }
 
+    var agentDefaultProjectPath: String {
+        get {
+            defaults.string(forKey: Keys.agentDefaultProjectPath)
+                ?? FileManager.default.homeDirectoryForCurrentUser.path
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentDefaultProjectPath) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -183,6 +191,7 @@ enum PreferenceKeys {
     static let codexPostProcessingModel = "codexPostProcessingModel"
     static let codexReasoningEffort = "codexReasoningEffort"
     static let codexVisualInputMode = "codexVisualInputMode"
+    static let agentDefaultProjectPath = "agentDefaultProjectPath"
 }
 
 private typealias Keys = PreferenceKeys
