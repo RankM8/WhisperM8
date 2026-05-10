@@ -2561,6 +2561,11 @@ private struct AgentSessionDetailView: View {
             if session.shouldLaunchOnOpen == true {
                 prepareCommand()
             }
+            // Direkt nach dem Mount Tastaturfokus auf das Terminal setzen,
+            // damit der User sofort tippen kann und nicht im Sidebar-Filter
+            // hängenbleibt. `focusTerminal` is async-dispatched — okay wenn
+            // das View jetzt erst mountet.
+            controller?.focusTerminal()
             // Beim Öffnen einer geschlossenen Session ohne Summary einmal
             // im Hintergrund anstoßen — der Coordinator (AgentChatsView)
             // entscheidet, ob das tatsächlich ausgeführt wird (in-flight,
@@ -2574,6 +2579,8 @@ private struct AgentSessionDetailView: View {
             if session.shouldLaunchOnOpen == true {
                 prepareCommand()
             }
+            // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
+            controller?.focusTerminal()
             if controller == nil && session.summary == nil {
                 onRequestSummary(session.id, false)
             }
@@ -2623,6 +2630,9 @@ private struct AgentSessionDetailView: View {
             }
             bindExternalSessionIDWhenAvailable()
             onSessionLaunched(session.id)
+            // Erster Start: Terminal-NSView ist jetzt mit dem Window verbunden
+            // → Tastaturfokus dorthin, damit der User direkt tippen kann.
+            controller?.focusTerminal()
             onStateChanged()
         } catch {
             errorMessage = error.localizedDescription

@@ -254,6 +254,20 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         isRunning = false
     }
 
+    /// Macht die `LocalProcessTerminalView` zum Window-`firstResponder`, sodass
+    /// Tasteneingaben direkt im PTY landen statt z. B. im Sidebar-Filter-Feld
+    /// hängen zu bleiben. Async-dispatch, damit der Aufruf nach dem aktuellen
+    /// SwiftUI-Render-Cycle ausgeführt wird — sonst kann das Terminal-NSView
+    /// noch gar nicht in der Window-Hierarchie sein, und `makeFirstResponder`
+    /// greift ins Leere.
+    func focusTerminal() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  let window = self.terminal.window else { return }
+            window.makeFirstResponder(self.terminal)
+        }
+    }
+
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
