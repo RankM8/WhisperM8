@@ -62,6 +62,7 @@ enum TerminalShortcut {
     /// Virtual-Key-Codes (NSEvent.keyCode) der relevanten Tasten.
     enum KeyCode {
         public static let z: UInt16 = 6
+        public static let returnKey: UInt16 = 36
         public static let delete: UInt16 = 51   // Backspace
         public static let leftArrow: UInt16 = 123
         public static let rightArrow: UInt16 = 124
@@ -79,6 +80,16 @@ enum TerminalShortcut {
         let hasCommand = modifiers.contains(.command)
         let hasControl = modifiers.contains(.control)
         let hasShift = modifiers.contains(.shift)
+
+        // Ctrl+- (bzw. Ctrl+_) → Readline-Undo (`Ctrl+_` = 0x1f).
+        // SwiftTerm sendet Ctrl+_ nur, wenn `charactersIgnoringModifiers == "_"`.
+        // Auf deutscher Tastatur liefert die Minus-Taste aber "-" und SwiftTerm
+        // verwirft das Event komplett — Undo per Ctrl+- funktioniert dadurch nie.
+        if hasControl && !hasCommand && !hasOption,
+           let ch = characters,
+           ch == "-" || ch == "_" {
+            return [0x1f]
+        }
 
         // Cmd-Combos kollidieren mit Ctrl-Combos auf TUI-Ebene → wenn Control gehalten
         // wird, immer durchreichen (User will die Standard-Control-Sequence).
@@ -99,6 +110,13 @@ enum TerminalShortcut {
             if hasCommand && !hasShift,
                characters?.lowercased() == "z" {
                 return [0x1f]   // Ctrl+_ (Readline-undo)
+            }
+        case KeyCode.returnKey:
+            // Shift+Enter → Backslash-Continuation (`\` + CR), die Claude Code und
+            // Codex CLI als Multi-Line-Input akzeptieren. Ohne diesen Eingriff
+            // sendet SwiftTerm bei Enter und Shift+Enter identisch nur `\r`.
+            if hasShift && !hasOption && !hasCommand {
+                return [0x5c, 0x0d]
             }
         default:
             break
@@ -197,6 +215,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         let themedBackground = NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
         terminal.nativeBackgroundColor = themedBackground
         terminal.layer?.backgroundColor = themedBackground.cgColor
+
+        // Option-Taste NICHT als Meta-Modifikator behandeln, sonst schluckt
+        // SwiftTerm die deutschen Sonderzeichen (Option+L=@, Option+8={, …).
+        terminal.optionAsMetaKey = false
 
         // macOS-Edit-Shortcuts (Option/Command+Backspace, Word-Move, Undo) in
         // Claude-Code-/Codex-/Readline-kompatible Control-Sequences übersetzen.
