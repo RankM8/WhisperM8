@@ -55,9 +55,9 @@ Hotkey Event → AppState → AudioRecorder/TranscriptionService → UI Update
 3. Hotkey release → `AppState.stopRecording()` → Recording stops, audio sent to transcription API
 4. Result copied to clipboard, optionally auto-pasted via CGEvent to previously active app
 
-### LSUIElement Considerations
+### App activation policy
 
-The app runs as a menu bar-only application (LSUIElement=true). This causes focus issues with text fields in windows. The workaround is temporarily switching to `.regular` activation policy when Settings/Onboarding windows appear.
+WhisperM8 ships as a regular Dock app (`LSUIElement=false`). It still has a `MenuBarExtra` for the recording toggle and quick actions, but the main window (`Agent Chats`) lives in the Dock so it can be pinned, fullscreened, and Cmd+Tab-switched like any other macOS app. `applicationShouldTerminateAfterLastWindowClosed` returns `false` so closing the last window keeps the menu bar extra alive (Cmd+Q still quits explicitly).
 
 ## Dependencies
 

@@ -2,9 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Menu bar app without Dock icon -->
+    <!-- Regular Dock app: WhisperM8 keeps its menu bar extra, but the main
+         window also lives in the Dock so it can be pinned, fullscreened,
+         and switched to via Cmd+Tab like any other macOS app. -->
     <key>LSUIElement</key>
-    <true/>
+    <false/>
 
     <!-- Microphone permission -->
     <key>NSMicrophoneUsageDescription</key>

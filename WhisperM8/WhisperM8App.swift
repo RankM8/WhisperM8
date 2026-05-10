@@ -15,7 +15,7 @@ struct WhisperM8App: App {
             for app in runningApps where app != NSRunningApplication.current {
                 app.activate()
             }
-            WindowRequestCenter.notifyRunningInstanceToOpenSettings()
+            WindowRequestCenter.notifyRunningInstanceToOpenAgentChats()
             NSApp.terminate(nil)
         }
 
@@ -23,6 +23,16 @@ struct WhisperM8App: App {
     }
 
     var body: some Scene {
+        // Agent-Chats ist die Hauptansicht der App und das erste Window in
+        // dieser Scene-Liste — SwiftUI öffnet das oberste Window beim
+        // Launch, es sei denn der AppDelegate routet was anderes (Onboarding).
+        Window("Agent Chats", id: "agent-chats") {
+            AgentChatsView()
+        }
+        .defaultSize(width: 1100, height: 720)
+        .defaultPosition(.center)
+        .windowStyle(.hiddenTitleBar)
+
         MenuBarExtra {
             MenuBarView()
                 .environment(AppState.shared)
@@ -33,7 +43,8 @@ struct WhisperM8App: App {
         }
         .menuBarExtraStyle(.menu)
 
-        // Control Center Window
+        // Settings-/Control-Center-Window — manuell geöffnet via Menubar oder
+        // Cmd+, , nicht mehr Default-Startansicht.
         Window("WhisperM8", id: "settings") {
             SettingsView()
                 .environment(AppState.shared)
@@ -48,13 +59,6 @@ struct WhisperM8App: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
-
-        Window("Agent Chats", id: "agent-chats") {
-            AgentChatsView()
-        }
-        .defaultSize(width: 1100, height: 720)
-        .defaultPosition(.center)
-        .windowStyle(.hiddenTitleBar)
     }
 
     private func setupHotkeys() {
@@ -79,21 +83,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Request notification permissions for error alerts
         requestNotificationPermission()
 
-        // Check if onboarding needs to be shown
+        // Routing: Onboarding wenn nötig, sonst Agent-Chats als Default-Hub.
+        // Settings ist nicht mehr die Default-Startansicht — es wird nur noch
+        // explizit über Menubar oder Cmd+, geöffnet.
         if !AppPreferences.shared.onboardingCompleted {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WindowRequestCenter.shared.request(.onboarding)
             }
         } else if !LaunchAtLogin.wasLaunchedAtLogin {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                WindowRequestCenter.shared.request(.settings)
+                WindowRequestCenter.shared.request(.agentChats)
             }
         }
     }
 
+    /// Re-Activate (Klick auf Dock-Icon, wenn die App schon läuft). Wir öffnen
+    /// das Agent-Chats-Window — sei es weil alle Windows zu sind oder weil
+    /// der User explizit zur Hauptansicht zurück will.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        WindowRequestCenter.shared.request(.settings)
+        WindowRequestCenter.shared.request(.agentChats)
         return true
+    }
+
+    /// Halten der App am Leben, wenn der User das letzte Window schließt —
+    /// die Menubar-Funktionen (Hotkey-Recording, Output-Modes) sollen weiter
+    /// funktionieren, auch ohne offenes Hauptfenster.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
     }
 
     private func requestNotificationPermission() {
