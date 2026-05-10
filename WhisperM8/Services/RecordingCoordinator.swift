@@ -62,7 +62,20 @@ final class RecordingCoordinator {
 
         do {
             let selectedContext = await selectedContextService.capture(from: contextSourceApp)
-            let contextBundle = TranscriptContextBundle.from(selectedContext: selectedContext, sourceApp: contextSourceApp)
+            // Auto-Inject des Agent-Chat-Refs nur, wenn WhisperM8 selbst frontmost war
+            // beim Recording-Start. Wenn der User in Cursor/VS Code/Browser arbeitet,
+            // ist der Chat-Kontext irrelevant — wir wollen ihn nicht „aufzwingen".
+            let activeAgentChat: AgentChatContextRef?
+            if contextSourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
+                activeAgentChat = appState.activeAgentChat
+            } else {
+                activeAgentChat = nil
+            }
+            let contextBundle = TranscriptContextBundle.from(
+                selectedContext: selectedContext,
+                sourceApp: contextSourceApp,
+                agentChat: activeAgentChat
+            )
             try await audioRecorder.startRecording()
 
             AudioDuckingManager.shared.duck()
@@ -103,6 +116,17 @@ final class RecordingCoordinator {
                 },
                 onClearContext: { [weak self] in
                     self?.clearContextBundle()
+                },
+                onContextAction: { [weak self] action in
+                    guard let self else { return }
+                    switch action {
+                    case .removeAgentChat:
+                        self.removeAgentChatFromContext()
+                    case .removeSelectedText:
+                        self.removeSelectedTextFromContext()
+                    case .removeAttachment(let id):
+                        self.removeAttachmentFromContext(id: id)
+                    }
                 }
             )
 
@@ -264,10 +288,73 @@ final class RecordingCoordinator {
     func clearContextBundle() {
         guard let appState, appState.isRecording, !appState.isScreenClipRecording else { return }
         visualContextCaptureService.cleanup(appState.contextBundle)
-        appState.contextBundle = TranscriptContextBundle.from(selectedContext: .empty, sourceApp: contextSourceApp)
+        // Komplettes Clear inkl. Agent-Chat-Ref — User hat explizit „alles weg" geklickt.
+        appState.contextBundle = TranscriptContextBundle.from(
+            selectedContext: .empty,
+            sourceApp: contextSourceApp,
+            agentChat: nil
+        )
         appState.selectedContext = .empty
         appState.lastContextBundle = nil
         appState.lastSelectedContext = nil
+        overlayController.update(appState: appState)
+    }
+
+    // MARK: - Granulare Kontext-Bearbeitung während des Recordings
+
+    /// Entfernt die Agent-Chat-Referenz aus dem laufenden Recording-Bundle.
+    /// Andere Kontext-Slots (Text, Screenshots) bleiben erhalten.
+    func removeAgentChatFromContext() {
+        guard let appState, appState.isRecording else { return }
+        guard appState.contextBundle.agentChat != nil else { return }
+        appState.contextBundle.agentChat = nil
+        overlayController.update(appState: appState)
+    }
+
+    /// Entfernt nur den ausgewählten Text aus dem laufenden Recording-Bundle.
+    func removeSelectedTextFromContext() {
+        guard let appState, appState.isRecording else { return }
+        guard !appState.contextBundle.selectedText.isEmpty else { return }
+        appState.contextBundle.selectedText = .empty
+        appState.selectedContext = .empty
+        overlayController.update(appState: appState)
+    }
+
+    /// Entfernt einen einzelnen Anhang (Screenshot / Annotation / ScreenClip / VisualFrame)
+    /// aus dem laufenden Recording-Bundle und räumt die zugehörige Datei auf.
+    func removeAttachmentFromContext(id: UUID) {
+        guard let appState, appState.isRecording, !appState.isScreenClipRecording else { return }
+        var bundle = appState.contextBundle
+
+        let removed: ContextAttachment?
+        if let attachment = bundle.screenshots.first(where: { $0.id == id }) {
+            bundle.screenshots.removeAll { $0.id == id }
+            removed = attachment
+        } else if let attachment = bundle.annotations.first(where: { $0.id == id }) {
+            bundle.annotations.removeAll { $0.id == id }
+            removed = attachment
+        } else if let attachment = bundle.screenClips.first(where: { $0.id == id }) {
+            bundle.screenClips.removeAll { $0.id == id }
+            removed = attachment
+        } else if let attachment = bundle.visualFrames.first(where: { $0.id == id }) {
+            bundle.visualFrames.removeAll { $0.id == id }
+            removed = attachment
+        } else {
+            return
+        }
+
+        if let removed {
+            visualContextCaptureService.cleanup(
+                TranscriptContextBundle(
+                    screenshots: bundle.screenshots.contains(where: { $0.id == removed.id }) ? [] : (removed.kind == .screenshot ? [removed] : []),
+                    annotations: removed.kind == .annotation ? [removed] : [],
+                    screenClips: removed.kind == .screenClip ? [removed] : [],
+                    visualFrames: removed.kind == .visualFrame ? [removed] : []
+                )
+            )
+        }
+
+        appState.contextBundle = bundle
         overlayController.update(appState: appState)
     }
 

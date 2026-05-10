@@ -28,6 +28,8 @@ struct AgentChatsView: View {
     @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
     @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
     @State private var openTabIDs: Set<UUID> = []
+    @State private var renameTargetID: UUID?
+    @State private var renameDraft: String = ""
 
     private var selectedProject: AgentProject? {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
@@ -70,8 +72,12 @@ struct AgentChatsView: View {
     }
 
     private var runningResourceDescriptors: [AgentResourceSessionDescriptor] {
-        terminalRegistry.runningControllers.compactMap { controller in
-            guard let session = workspace.sessions.first(where: { $0.id == controller.sessionID }),
+        // Quelle: `workspace.sessions` ist `@State` — Updates triggern Re-Render der View
+        // und damit Re-Berechnung dieser Property. `terminalRegistry.runningControllers`
+        // hingegen tut das nicht zuverlässig, weil `controller.isRunning` ein innerer
+        // ObservableObject-State ist und kein `@Published` auf der Registry selbst.
+        workspace.sessions.compactMap { session in
+            guard session.status == .running,
                   let project = workspace.projects.first(where: { $0.id == session.projectID })
             else {
                 return nil
@@ -83,7 +89,7 @@ struct AgentChatsView: View {
                 projectPath: project.path,
                 title: session.title,
                 provider: session.provider,
-                rootProcessID: controller.processID
+                rootProcessID: terminalRegistry.controller(for: session.id)?.processID
             )
         }
     }
@@ -117,17 +123,106 @@ struct AgentChatsView: View {
         .background(AgentTheme.background)
         .background(AgentChatsWindowAccessor())
         .ignoresSafeArea(.all, edges: .top)
+        .sheet(isPresented: Binding(
+            get: { renameTargetID != nil },
+            set: { if !$0 { renameTargetID = nil } }
+        )) {
+            renameSheet
+        }
         .onAppear {
             loadWorkspaceFast()
+            syncActiveAgentChat()
         }
         .onDisappear {
             indexRefreshTask?.cancel()
+            // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
+            AppState.shared.activeAgentChat = nil
         }
+        .onChange(of: selectedSessionID) { _, _ in syncActiveAgentChat() }
+        .onChange(of: selectedProjectID) { _, _ in syncActiveAgentChat() }
+        .onChange(of: workspace) { _, _ in syncActiveAgentChat() }
+    }
+
+    /// Spiegelt die aktuelle Selection (Session + Projekt) in `AppState.activeAgentChat`.
+    /// Wird beim Recording-Start vom Coordinator gelesen und ins Context-Bundle übernommen.
+    private func syncActiveAgentChat() {
+        guard let project = selectedProject,
+              let session = selectedSession,
+              session.status != .archived
+        else {
+            if AppState.shared.activeAgentChat != nil {
+                AppState.shared.activeAgentChat = nil
+            }
+            return
+        }
+
+        let ref = AgentChatContextRef(
+            sessionID: session.id,
+            provider: session.provider,
+            projectName: project.name,
+            projectPath: project.path,
+            title: session.title,
+            externalSessionID: session.externalSessionID
+        )
+        if AppState.shared.activeAgentChat != ref {
+            AppState.shared.activeAgentChat = ref
+        }
+    }
+
+    private var renameSheet: some View {
+        let originalTitle = renameTargetID
+            .flatMap { id in workspace.sessions.first(where: { $0.id == id })?.title }
+            ?? ""
+        return VStack(alignment: .leading, spacing: 14) {
+            Text("Chat umbenennen")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AgentTheme.textPrimary)
+
+            TextField("Tab-Name", text: $renameDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(AgentTheme.border, lineWidth: 1))
+                .onSubmit { commitRename() }
+
+            HStack {
+                Spacer()
+                Button("Abbrechen") { renameTargetID = nil }
+                    .keyboardShortcut(.cancelAction)
+                Button("Speichern") { commitRename() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(
+                        renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || renameDraft == originalTitle
+                    )
+            }
+        }
+        .padding(18)
+        .frame(width: 360)
+        .background(AgentTheme.panel)
+    }
+
+    private func commitRename() {
+        guard let id = renameTargetID else { return }
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        renameSession(id: id, title: trimmed)
+        renameTargetID = nil
     }
 
     private var hashboardSidebar: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: 28)
+            HStack(spacing: 6) {
+                // Reservierter Bereich für die macOS-Window-Controls (rot/gelb/grün
+                // floaten transparent über der Sidebar bei x ≈ 8–78).
+                Spacer().frame(width: 70)
+                Spacer(minLength: 4)
+                AgentResourceSummaryButton(descriptors: runningResourceDescriptors)
+            }
+            .padding(.trailing, 8)
+            .frame(height: 28)
 
             if isIndexingSessions {
                 Label("Sessions werden gescannt", systemImage: "arrow.triangle.2.circlepath")
@@ -170,9 +265,10 @@ struct AgentChatsView: View {
                             onNewChat: {
                                 selectedProjectID = project.id
                                 expandedProjectIDs.insert(project.id)
-                                createSession(provider: .codex)
+                                createSession(provider: defaultAgentProvider)
                             },
                             onCloseSession: { closeHeaderTab($0) },
+                            onRenameRequest: { beginRename($0) },
                             onRename: renameSession,
                             onSetColor: setSessionColor,
                             isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true }
@@ -268,10 +364,14 @@ struct AgentChatsView: View {
         }
     }
 
+    private var defaultAgentProvider: AgentProvider {
+        AgentProvider(rawValue: AppPreferences.shared.defaultAgentProviderRaw) ?? .claude
+    }
+
     private var sidebarCommandRows: some View {
         VStack(spacing: 1) {
             Button {
-                createSession(provider: .codex)
+                createSession(provider: defaultAgentProvider)
             } label: {
                 SidebarCommandRow(icon: "square.stack.3d.up", title: "Neuer Chat", isActive: selectedProject != nil)
             }
@@ -332,8 +432,10 @@ struct AgentChatsView: View {
                     onStateChanged: loadWorkspaceFast
                 )
                 .id(selectedSession.id)
-                .padding(.top, 10)
-                .background(Color.black)
+                .padding(.top, 14)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+                .background(AgentTheme.background)
             } else {
                 ContentUnavailableView("Kein Agent Chat", systemImage: "terminal")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -545,23 +647,30 @@ struct AgentChatsView: View {
                         kind: isRunning ? .restart : .start
                     )
                 }
-                Button("Close Terminal", systemImage: "xmark.circle") {
-                    markSession(session.id, status: .closed)
+                Button("Umbenennen…", systemImage: "pencil") {
+                    beginRename(session)
                 }
-                .disabled(controller == nil)
-                Button("Archive", systemImage: "archivebox", role: .destructive) {
-                    markSession(session.id, status: .archived)
-                }
-                Divider()
-                Button("In Work gruppieren") { setSessionGroup(id: session.id, groupName: "Work") }
-                Button("In Research gruppieren") { setSessionGroup(id: session.id, groupName: "Research") }
-                Button("Gruppe entfernen") { setSessionGroup(id: session.id, groupName: nil) }
                 Divider()
                 Menu("Tab-Farbe") {
                     ForEach(AgentChatColor.palette, id: \.self) { color in
-                        Button(color) { setSessionColor(id: session.id, color: color) }
+                        Button {
+                            setSessionColor(id: session.id, color: color)
+                        } label: {
+                            Label {
+                                Text(AgentChatColorName.label(for: color))
+                            } icon: {
+                                Image(nsImage: colorSwatchImage(hex: color))
+                            }
+                        }
                     }
-                    Button("Provider-Farbe verwenden") { setSessionColor(id: session.id, color: nil) }
+                    Divider()
+                    Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
+                        setSessionColor(id: session.id, color: nil)
+                    }
+                }
+                Divider()
+                Button("Schließen", systemImage: "xmark", role: .destructive) {
+                    closeHeaderTab(session)
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -791,23 +900,37 @@ struct AgentChatsView: View {
 
     @ViewBuilder
     private func sessionManagementMenu(_ session: AgentChatSession) -> some View {
-        Button("Nach oben") { moveSession(id: session.id, direction: .up) }
-        Button("Nach unten") { moveSession(id: session.id, direction: .down) }
-        Divider()
-        Button("In Work gruppieren") { setSessionGroup(id: session.id, groupName: "Work") }
-        Button("In Research gruppieren") { setSessionGroup(id: session.id, groupName: "Research") }
-        Button("Gruppe entfernen") { setSessionGroup(id: session.id, groupName: nil) }
-        Divider()
-        Menu("Tab-Farbe") {
-            ForEach(AgentChatColor.palette, id: \.self) { color in
-                Button {
-                    setSessionColor(id: session.id, color: color)
-                } label: {
-                    Label(color, systemImage: "circle.fill")
+        Group {
+            Button("Umbenennen…", systemImage: "pencil") {
+                beginRename(session)
+            }
+            Menu("Tab-Farbe") {
+                ForEach(AgentChatColor.palette, id: \.self) { color in
+                    Button {
+                        setSessionColor(id: session.id, color: color)
+                    } label: {
+                        Label {
+                            Text(AgentChatColorName.label(for: color))
+                        } icon: {
+                            Image(nsImage: colorSwatchImage(hex: color))
+                        }
+                    }
+                }
+                Divider()
+                Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
+                    setSessionColor(id: session.id, color: nil)
                 }
             }
-            Button("Provider-Farbe verwenden") { setSessionColor(id: session.id, color: nil) }
+            Divider()
+            Button("Schließen", systemImage: "xmark", role: .destructive) {
+                closeHeaderTab(session)
+            }
         }
+    }
+
+    private func beginRename(_ session: AgentChatSession) {
+        renameTargetID = session.id
+        renameDraft = session.title
     }
 
     private func closeHeaderTab(_ session: AgentChatSession) {
@@ -885,24 +1008,33 @@ private struct AgentResourceSummaryButton: View {
         return "\(shouldPoll)-\(processKey)"
     }
 
+    @State private var isHovered = false
+
     var body: some View {
         Button {
             refresh()
             isPopoverPresented.toggle()
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Image(systemName: "memorychip")
+                    .font(.system(size: 9, weight: .medium))
                 Text(summaryText)
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
                     .lineLimit(1)
             }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(snapshot.runningSessionCount > 0 ? .primary : .secondary)
+            .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textTertiary)
             .padding(.horizontal, 7)
-            .padding(.vertical, 5)
-            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+            .frame(height: 20)
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 4))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isActive ? AgentTheme.border : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("Session-Ressourcen anzeigen")
+        .onHover { isHovered = $0 }
         .popover(isPresented: $isPopoverPresented, arrowEdge: .trailing) {
             AgentResourcePopover(snapshot: snapshot, onRefresh: refresh)
                 .frame(width: 420)
@@ -924,9 +1056,17 @@ private struct AgentResourceSummaryButton: View {
         }
     }
 
+    private var isActive: Bool { snapshot.runningSessionCount > 0 }
+
+    private var rowBackground: Color {
+        if isActive { return AgentTheme.surface }
+        if isHovered { return AgentTheme.hover }
+        return Color.clear
+    }
+
     private var summaryText: String {
-        guard snapshot.runningSessionCount > 0 else { return "0 running" }
-        return "\(snapshot.runningSessionCount) running · \(AgentResourceFormat.cpu(snapshot.totalCPUPercent)) · \(AgentResourceFormat.memory(snapshot.totalMemoryBytes))"
+        guard snapshot.runningSessionCount > 0 else { return "0" }
+        return "\(snapshot.runningSessionCount) · \(AgentResourceFormat.cpu(snapshot.totalCPUPercent)) · \(AgentResourceFormat.memory(snapshot.totalMemoryBytes))"
     }
 
     private func refresh() {
@@ -1085,6 +1225,7 @@ private struct ProjectChatGroup: View {
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
     var onCloseSession: (AgentChatSession) -> Void
+    var onRenameRequest: (AgentChatSession) -> Void
     var onRename: (UUID, String) -> Void
     var onSetColor: (UUID, String?) -> Void
     var isRunning: (UUID) -> Bool
@@ -1110,14 +1251,28 @@ private struct ProjectChatGroup: View {
                             onClose: { onCloseSession(session) }
                         )
                         .contextMenu {
+                            Button("Umbenennen…", systemImage: "pencil") {
+                                onRenameRequest(session)
+                            }
                             Menu("Tab-Farbe") {
                                 ForEach(AgentChatColor.palette, id: \.self) { color in
-                                    Button(color) { onSetColor(session.id, color) }
+                                    Button {
+                                        onSetColor(session.id, color)
+                                    } label: {
+                                        Label {
+                                            Text(AgentChatColorName.label(for: color))
+                                        } icon: {
+                                            Image(nsImage: colorSwatchImage(hex: color))
+                                        }
+                                    }
                                 }
-                                Button("Provider-Farbe verwenden") { onSetColor(session.id, nil) }
+                                Divider()
+                                Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
+                                    onSetColor(session.id, nil)
+                                }
                             }
                             Divider()
-                            Button("Schließen", role: .destructive) {
+                            Button("Schließen", systemImage: "xmark", role: .destructive) {
                                 onCloseSession(session)
                             }
                         }
@@ -1490,6 +1645,43 @@ private struct ChatTabButton: View {
 
 /// Rendert das offizielle Provider-Logo (Claude / Codex) aus dem Asset-Bundle.
 /// Fällt bei fehlendem Asset auf das SF-Symbol zurück.
+/// Lesbarer Name für jede Palette-Farbe — wird im Tab-Farbe-Menü als
+/// Haupttext angezeigt (statt nur Hex-Code).
+private enum AgentChatColorName {
+    static let map: [String: String] = [
+        "#32D74B": "Grün",
+        "#FF9F0A": "Orange",
+        "#0A84FF": "Blau",
+        "#BF5AF2": "Lila",
+        "#FF453A": "Rot",
+        "#64D2FF": "Türkis",
+        "#FFD60A": "Gelb",
+        "#AC8E68": "Sand"
+    ]
+
+    static func label(for hex: String) -> String {
+        map[hex] ?? hex
+    }
+}
+
+/// Erzeugt ein farbiges 12×12-Swatch als NSImage. Für Context-Menüs robuster
+/// als `Image(systemName:).foregroundStyle(...)`, das im Menü-Renderer oft
+/// die Tint-Farbe verliert.
+private func colorSwatchImage(hex: String, size: CGFloat = 12) -> NSImage {
+    let nsColor = NSColor(Color(hex: hex))
+    let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+        nsColor.setFill()
+        NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).fill()
+        NSColor.black.withAlphaComponent(0.25).setStroke()
+        let stroke = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+        stroke.lineWidth = 0.5
+        stroke.stroke()
+        return true
+    }
+    image.isTemplate = false
+    return image
+}
+
 private struct ProviderIcon: View {
     let provider: AgentProvider
     var size: CGFloat = 11
@@ -1849,7 +2041,7 @@ private struct AgentSessionDetailView: View {
         VStack(spacing: 0) {
             if let controller {
                 AgentTerminalView(controller: controller)
-                .background(Color.black)
+                    .background(AgentTheme.background)
             } else {
                 inactiveTerminalPreview
             }
@@ -1872,7 +2064,7 @@ private struct AgentSessionDetailView: View {
 
     private var inactiveTerminalPreview: some View {
         ZStack(alignment: .topLeading) {
-            Color.black
+            AgentTheme.background
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")

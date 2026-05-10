@@ -158,6 +158,8 @@ struct CodexPostProcessor: PostProcessing {
             isEphemeral: mode.id != OutputMode.taskID,
             projectPath: projectPath
         )
+        // Korrigierter PATH, falls Codex CLI intern Tools wie `git` aufruft.
+        process.environment = LoginShellEnvironment.shared.processEnvironment()
 
         let inputPipe = Pipe()
         let logPipe = Pipe()

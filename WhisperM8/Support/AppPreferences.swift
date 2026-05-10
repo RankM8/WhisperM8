@@ -143,6 +143,28 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentDefaultProjectPath) }
     }
 
+    /// Default-Provider für „Neuer Chat" in der Agent-Chats-Sidebar.
+    /// Werte: "codex" oder "claude" (matched `AgentProvider.rawValue`).
+    var defaultAgentProviderRaw: String {
+        get { defaults.string(forKey: Keys.defaultAgentProvider) ?? "claude" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.defaultAgentProvider) }
+    }
+
+    /// Frei konfigurierbare zusätzliche CLI-Argumente, die an den Codex-Aufruf
+    /// vorne (vor `-C <path>`/`-m <model>`/`resume`/...) angehängt werden.
+    /// Beispiel: `--ask-for-approval untrusted`. Eingabe via Whitespace-getrennt.
+    var codexExtraArguments: String {
+        get { defaults.string(forKey: Keys.codexExtraArguments) ?? "" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexExtraArguments) }
+    }
+
+    /// Frei konfigurierbare zusätzliche CLI-Argumente für Claude-Aufrufe.
+    /// Beispiel: `--dangerously-skip-permissions`. Eingabe via Whitespace-getrennt.
+    var claudeExtraArguments: String {
+        get { defaults.string(forKey: Keys.claudeExtraArguments) ?? "" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeExtraArguments) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -214,6 +236,9 @@ enum PreferenceKeys {
     static let codexReasoningEffort = "codexReasoningEffort"
     static let codexVisualInputMode = "codexVisualInputMode"
     static let agentDefaultProjectPath = "agentDefaultProjectPath"
+    static let defaultAgentProvider = "defaultAgentProvider"
+    static let codexExtraArguments = "codexExtraArguments"
+    static let claudeExtraArguments = "claudeExtraArguments"
 }
 
 private typealias Keys = PreferenceKeys

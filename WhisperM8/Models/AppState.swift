@@ -24,6 +24,12 @@ final class AppState {
     var lastTranscriptRunReport: TranscriptRunReport?
     var postProcessingStatusText: String?
 
+    /// Aktuell ausgewählter Agent-Chat im Agent-Chats-Window. Wird von dort via
+    /// `onChange/onAppear/onDisappear` gepflegt. `RecordingCoordinator` liest diesen
+    /// Slot beim Start einer Aufnahme und propagiert ihn ins `contextBundle`,
+    /// sodass der Recording-Overlay „Chat" als aktiven Kontext anzeigt.
+    var activeAgentChat: AgentChatContextRef?
+
     @ObservationIgnored
     private var recordingCoordinator: RecordingCoordinator!
 
@@ -64,6 +70,18 @@ final class AppState {
 
     func cancelPostProcessing() {
         recordingCoordinator.cancelPostProcessing()
+    }
+
+    func removeAgentChatFromContext() {
+        recordingCoordinator.removeAgentChatFromContext()
+    }
+
+    func removeSelectedTextFromContext() {
+        recordingCoordinator.removeSelectedTextFromContext()
+    }
+
+    func removeAttachmentFromContext(id: UUID) {
+        recordingCoordinator.removeAttachmentFromContext(id: id)
     }
 
     func addContextScreenshot() {

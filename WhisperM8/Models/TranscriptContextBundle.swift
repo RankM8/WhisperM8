@@ -50,6 +50,11 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
 
 struct TranscriptContextBundle: Codable, Equatable {
     var selectedText: SelectedContext
+    /// Aktive Agent-Chat-Session (Claude oder Codex) zum Zeitpunkt der Aufnahme.
+    /// Wird vom `RecordingCoordinator` aus `AppState.activeAgentChat` befüllt, falls
+    /// ein Chat im Agent-Chats-Window ausgewählt ist. Optional, damit alte JSONs
+    /// (ohne dieses Feld) weiterhin dekodierbar sind.
+    var agentChat: AgentChatContextRef?
     var screenshots: [ContextAttachment]
     var annotations: [ContextAttachment]
     var screenClips: [ContextAttachment]
@@ -60,6 +65,7 @@ struct TranscriptContextBundle: Codable, Equatable {
 
     init(
         selectedText: SelectedContext = .empty,
+        agentChat: AgentChatContextRef? = nil,
         screenshots: [ContextAttachment] = [],
         annotations: [ContextAttachment] = [],
         screenClips: [ContextAttachment] = [],
@@ -69,6 +75,7 @@ struct TranscriptContextBundle: Codable, Equatable {
         createdAt: Date = Date()
     ) {
         self.selectedText = selectedText
+        self.agentChat = agentChat
         self.screenshots = screenshots
         self.annotations = annotations
         self.screenClips = screenClips
@@ -79,7 +86,12 @@ struct TranscriptContextBundle: Codable, Equatable {
     }
 
     var isEmpty: Bool {
-        selectedText.isEmpty && screenshots.isEmpty && annotations.isEmpty && screenClips.isEmpty && visualFrames.isEmpty
+        selectedText.isEmpty
+            && agentChat == nil
+            && screenshots.isEmpty
+            && annotations.isEmpty
+            && screenClips.isEmpty
+            && visualFrames.isEmpty
     }
 
     var visualAttachments: [ContextAttachment] {
@@ -100,6 +112,10 @@ struct TranscriptContextBundle: Codable, Equatable {
 
     var displaySummary: String {
         var parts: [String] = []
+
+        if agentChat != nil {
+            parts.append("Chat")
+        }
 
         if !selectedText.isEmpty {
             parts.append("Text")
@@ -126,6 +142,7 @@ struct TranscriptContextBundle: Codable, Equatable {
 
     var compactSummary: String {
         if isEmpty { return "No Ctx" }
+        if agentChat != nil { return "Chat" }
         if !screenClips.isEmpty { return "Clip" }
         if !annotations.isEmpty { return "Mark" }
         if !screenshots.isEmpty { return "Shot" }
@@ -179,9 +196,14 @@ struct TranscriptContextBundle: Codable, Equatable {
 
     static let empty = TranscriptContextBundle()
 
-    static func from(selectedContext: SelectedContext, sourceApp: NSRunningApplication?) -> TranscriptContextBundle {
+    static func from(
+        selectedContext: SelectedContext,
+        sourceApp: NSRunningApplication?,
+        agentChat: AgentChatContextRef? = nil
+    ) -> TranscriptContextBundle {
         TranscriptContextBundle(
             selectedText: selectedContext,
+            agentChat: agentChat,
             sourceAppName: sourceApp?.localizedName ?? selectedContext.sourceAppName,
             sourceBundleIdentifier: sourceApp?.bundleIdentifier ?? selectedContext.sourceBundleIdentifier
         )

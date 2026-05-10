@@ -156,6 +156,10 @@ struct SettingsView: View {
 }
 
 struct AgentChatsAccessView: View {
+    @AppStorage("defaultAgentProvider") private var defaultAgentProviderRaw = "claude"
+    @AppStorage("codexExtraArguments") private var codexExtraArguments = ""
+    @AppStorage("claudeExtraArguments") private var claudeExtraArguments = ""
+
     var body: some View {
         Form {
             Section("Agent Workspace") {
@@ -179,8 +183,34 @@ struct AgentChatsAccessView: View {
                 }
             }
 
-            Section("Why this is here") {
-                Text("Important workflow areas should not depend on the macOS menu bar. Use this entry whenever the menu bar is hidden, crowded, or unavailable on smaller screens.")
+            Section("Standard-Provider") {
+                Picker("Neuer Chat startet mit", selection: $defaultAgentProviderRaw) {
+                    Text("Claude Code").tag("claude")
+                    Text("Codex").tag("codex")
+                }
+                .pickerStyle(.segmented)
+
+                Text("Bestimmt, welcher Provider beim 'Neuer Chat'-Button und beim Plus-Knopf eines Projekts genutzt wird.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Claude CLI · Extra-Argumente") {
+                TextField("z. B. --dangerously-skip-permissions", text: $claudeExtraArguments)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+
+                Text("Wird vorne an jeden `claude`-Aufruf angehängt — auch beim Resume bestehender Sessions. Whitespace-getrennt; Quotes erlaubt für Argumente mit Leerzeichen.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Codex CLI · Extra-Argumente") {
+                TextField("z. B. --ask-for-approval untrusted", text: $codexExtraArguments)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+
+                Text("Wird vorne an jeden `codex`-Aufruf angehängt (vor `-C`/`-m`/`resume`). Whitespace-getrennt; Quotes erlaubt.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

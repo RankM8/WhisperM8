@@ -31,6 +31,50 @@ struct AgentCommandBuilder {
         return Self.commandPath(command)
     }
 
+    /// Liefert nutzerdefinierte Extra-Argumente für einen Provider (aus AppPreferences).
+    /// Standard liest aus `AppPreferences.shared`, im Test überschreibbar.
+    var extraArgumentsResolver: (AgentProvider) -> [String] = { provider in
+        let raw: String
+        switch provider {
+        case .codex: raw = AppPreferences.shared.codexExtraArguments
+        case .claude: raw = AppPreferences.shared.claudeExtraArguments
+        }
+        return Self.parseArguments(raw)
+    }
+
+    /// Parsed eine Whitespace-getrennte Argument-Zeile.
+    /// Unterstützt einfache Quotes für Argumente mit Leerzeichen: `--text "hello world"`.
+    static func parseArguments(_ raw: String) -> [String] {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        var result: [String] = []
+        var current = ""
+        var quote: Character? = nil
+        for ch in trimmed {
+            if let q = quote {
+                if ch == q {
+                    quote = nil
+                } else {
+                    current.append(ch)
+                }
+            } else if ch == "\"" || ch == "'" {
+                quote = ch
+            } else if ch.isWhitespace {
+                if !current.isEmpty {
+                    result.append(current)
+                    current = ""
+                }
+            } else {
+                current.append(ch)
+            }
+        }
+        if !current.isEmpty {
+            result.append(current)
+        }
+        return result
+    }
+
     func command(for session: AgentChatSession, project: AgentProject) throws -> AgentLaunchCommand {
         guard FileManager.default.fileExists(atPath: project.path) else {
             throw AgentCommandError.missingProject(project.path)
@@ -49,28 +93,34 @@ struct AgentCommandBuilder {
             throw AgentCommandError.commandNotFound("Codex")
         }
 
+        let extra = extraArgumentsResolver(.codex)
+
         if session.hasLaunchedInitialPrompt {
             guard let externalSessionID = session.externalSessionID else {
                 throw AgentCommandError.missingExternalSessionID(session.title)
             }
+            var arguments: [String] = ["resume"]
+            arguments.append(contentsOf: extra)
+            arguments.append(contentsOf: [
+                "-C", project.path,
+                "-m", session.model,
+                "-c", "model_reasoning_effort=\(session.reasoningEffort)",
+                externalSessionID
+            ])
             return AgentLaunchCommand(
                 executablePath: executable,
-                arguments: [
-                    "resume",
-                    "-C", project.path,
-                    "-m", session.model,
-                    "-c", "model_reasoning_effort=\(session.reasoningEffort)",
-                    externalSessionID
-                ],
+                arguments: arguments,
                 workingDirectory: project.path
             )
         }
 
-        var arguments = [
+        var arguments: [String] = []
+        arguments.append(contentsOf: extra)
+        arguments.append(contentsOf: [
             "-C", project.path,
             "-m", session.model,
             "-c", "model_reasoning_effort=\(session.reasoningEffort)"
-        ]
+        ])
         for imagePath in session.imagePaths {
             arguments.append(contentsOf: ["--image", imagePath])
         }
@@ -91,6 +141,10 @@ struct AgentCommandBuilder {
         }
 
         var arguments: [String] = []
+        // User-defined extras (z. B. --dangerously-skip-permissions) zuerst,
+        // damit sie auch beim Resume durchgehen.
+        arguments.append(contentsOf: extraArgumentsResolver(.claude))
+
         if session.hasLaunchedInitialPrompt {
             guard let externalSessionID = session.externalSessionID else {
                 throw AgentCommandError.missingExternalSessionID(session.title)

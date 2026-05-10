@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 @testable import WhisperM8
@@ -5,7 +6,8 @@ import XCTest
 final class AgentChatsTests: XCTestCase {
     func testAgentCommandBuilderBuildsCodexNewAndResumeCommands() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
-        let builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
         let newSession = AgentChatSession(
             provider: .codex,
             projectID: project.id,
@@ -41,7 +43,8 @@ final class AgentChatsTests: XCTestCase {
 
     func testAgentCommandBuilderBuildsClaudeCommands() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
-        let builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -59,7 +62,8 @@ final class AgentChatsTests: XCTestCase {
 
     func testAgentCommandBuilderBuildsClaudeNewSessionWithStableSessionID() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
-        let builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -76,7 +80,8 @@ final class AgentChatsTests: XCTestCase {
 
     func testAgentCommandBuilderDoesNotSilentlyCreateNewSessionWhenResumeIDIsMissing() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
-        let builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
         let launchedSession = AgentChatSession(
             provider: .codex,
             projectID: project.id,
@@ -87,6 +92,78 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertThrowsError(try builder.command(for: launchedSession, project: project)) { error in
             XCTAssertEqual(error as? AgentCommandError, .missingExternalSessionID("Running Task"))
         }
+    }
+
+    func testParseArgumentsHandlesWhitespaceAndQuotes() {
+        XCTAssertEqual(AgentCommandBuilder.parseArguments(""), [])
+        XCTAssertEqual(AgentCommandBuilder.parseArguments("   "), [])
+        XCTAssertEqual(AgentCommandBuilder.parseArguments("--dangerously-skip-permissions"), ["--dangerously-skip-permissions"])
+        XCTAssertEqual(
+            AgentCommandBuilder.parseArguments("--ask-for-approval untrusted"),
+            ["--ask-for-approval", "untrusted"]
+        )
+        XCTAssertEqual(
+            AgentCommandBuilder.parseArguments("--text \"hello world\" --flag"),
+            ["--text", "hello world", "--flag"]
+        )
+        // Quotes ohne Whitespace dazwischen werden konkateniert — POSIX-kompatibel.
+        XCTAssertEqual(
+            AgentCommandBuilder.parseArguments("--text 'mit ''doppelt'' tokens'"),
+            ["--text", "mit doppelt tokens"]
+        )
+    }
+
+    func testAgentCommandBuilderPrependsClaudeExtraArgumentsForResume() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { provider in
+            provider == .claude ? ["--dangerously-skip-permissions"] : []
+        }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "claude-session",
+            title: "Claude",
+            hasLaunchedInitialPrompt: true
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        // Extra-Args MÜSSEN vor `--resume` stehen, sonst würden sie als Sub-Command-Args behandelt.
+        XCTAssertEqual(command.arguments, ["--dangerously-skip-permissions", "--resume", "claude-session"])
+    }
+
+    func testAgentCommandBuilderPrependsCodexExtraArgumentsForNewAndResume() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { provider in
+            provider == .codex ? ["--ask-for-approval", "untrusted"] : []
+        }
+
+        let newSession = AgentChatSession(
+            provider: .codex,
+            projectID: project.id,
+            title: "New",
+            model: "gpt-5.5",
+            reasoningEffort: "medium",
+            initialPrompt: "Do it"
+        )
+        let newCommand = try builder.command(for: newSession, project: project)
+        XCTAssertEqual(Array(newCommand.arguments.prefix(2)), ["--ask-for-approval", "untrusted"])
+        XCTAssertTrue(newCommand.arguments.contains("-C"))
+        XCTAssertEqual(newCommand.arguments.last, "Do it")
+
+        let resumeSession = AgentChatSession(
+            provider: .codex,
+            projectID: project.id,
+            externalSessionID: "abc",
+            title: "Resume",
+            hasLaunchedInitialPrompt: true
+        )
+        let resumeCommand = try builder.command(for: resumeSession, project: project)
+        // `resume` Sub-Command muss als erstes stehen; Extras kommen direkt danach.
+        XCTAssertEqual(Array(resumeCommand.arguments.prefix(3)), ["resume", "--ask-for-approval", "untrusted"])
+        XCTAssertEqual(resumeCommand.arguments.last, "abc")
     }
 
     func testCodexSessionIndexerReadsSessionMetadata() throws {
@@ -611,5 +688,276 @@ final class AgentChatsTests: XCTestCase {
 
         XCTAssertEqual(claude.runtimeDisplayText, "Claude · Claude Code")
         XCTAssertEqual(codex.runtimeDisplayText, "Codex · gpt-5.5 · medium")
+    }
+
+    // MARK: - Auto-Chat-Context
+
+    func testTranscriptContextBundleIsNotEmptyWhenAgentChatPresent() {
+        let ref = AgentChatContextRef(
+            sessionID: UUID(),
+            provider: .claude,
+            projectName: "heartbeat",
+            projectPath: "/tmp/heartbeat",
+            title: "Claude Chat",
+            externalSessionID: nil
+        )
+        let bundle = TranscriptContextBundle(agentChat: ref)
+        XCTAssertFalse(bundle.isEmpty)
+    }
+
+    func testTranscriptContextBundleDisplaySummaryShowsChat() {
+        let ref = AgentChatContextRef(
+            sessionID: UUID(),
+            provider: .codex,
+            projectName: "heartbeat",
+            projectPath: "/tmp/heartbeat",
+            title: "Codex Chat",
+            externalSessionID: nil
+        )
+        let bundle = TranscriptContextBundle(agentChat: ref)
+        XCTAssertEqual(bundle.displaySummary, "Chat")
+    }
+
+    func testTranscriptContextBundleDisplaySummaryCombinesChatWithText() {
+        let ref = AgentChatContextRef(
+            sessionID: UUID(),
+            provider: .claude,
+            projectName: "heartbeat",
+            projectPath: "/tmp/heartbeat",
+            title: "Claude Chat",
+            externalSessionID: nil
+        )
+        let selected = SelectedContext(
+            text: "hello",
+            sourceAppName: "Cursor",
+            sourceBundleIdentifier: "com.cursor.app"
+        )
+        let bundle = TranscriptContextBundle(selectedText: selected, agentChat: ref)
+        XCTAssertEqual(bundle.displaySummary, "Chat + Text")
+    }
+
+    func testTranscriptContextBundleCompactSummaryPrefersChat() {
+        let ref = AgentChatContextRef(
+            sessionID: UUID(),
+            provider: .claude,
+            projectName: "x",
+            projectPath: "/tmp/x",
+            title: "Chat",
+            externalSessionID: nil
+        )
+        // Selbst wenn Screenshots da sind, gewinnt Chat im Compact-Slot.
+        let shot = ContextAttachment(
+            kind: .screenshot,
+            fileURL: URL(fileURLWithPath: "/tmp/shot.png")
+        )
+        let bundle = TranscriptContextBundle(agentChat: ref, screenshots: [shot])
+        XCTAssertEqual(bundle.compactSummary, "Chat")
+    }
+
+    func testTranscriptContextBundleFromHelperPropagatesAgentChat() {
+        let ref = AgentChatContextRef(
+            sessionID: UUID(),
+            provider: .claude,
+            projectName: "heartbeat",
+            projectPath: "/tmp/heartbeat",
+            title: "Claude Chat",
+            externalSessionID: "ext-id"
+        )
+        let bundle = TranscriptContextBundle.from(
+            selectedContext: .empty,
+            sourceApp: nil,
+            agentChat: ref
+        )
+        XCTAssertEqual(bundle.agentChat, ref)
+        XCTAssertEqual(bundle.displaySummary, "Chat")
+    }
+
+    func testTranscriptContextBundleNoChatStillReportsNoContext() {
+        let bundle = TranscriptContextBundle()
+        XCTAssertTrue(bundle.isEmpty)
+        XCTAssertEqual(bundle.displaySummary, "No Context")
+    }
+
+    // MARK: - Terminal Keyboard Shortcuts (Claude Code / Codex / Readline)
+
+    func testTerminalShortcutOptionBackspaceMapsToCtrlW() {
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.delete,
+            modifiers: [.option],
+            characters: nil
+        )
+        XCTAssertEqual(bytes, [0x17])
+    }
+
+    func testTerminalShortcutCommandBackspaceMapsToCtrlU() {
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.delete,
+            modifiers: [.command],
+            characters: nil
+        )
+        XCTAssertEqual(bytes, [0x15])
+    }
+
+    func testTerminalShortcutCommandZMapsToReadlineUndo() {
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.z,
+            modifiers: [.command],
+            characters: "z"
+        )
+        XCTAssertEqual(bytes, [0x1f])
+    }
+
+    func testTerminalShortcutCommandShiftZIsNotIntercepted() {
+        // Cmd+Shift+Z (Redo) → durchreichen, Readline kennt kein Redo.
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.z,
+            modifiers: [.command, .shift],
+            characters: "Z"
+        )
+        XCTAssertNil(bytes)
+    }
+
+    func testTerminalShortcutOptionArrowsMapToWordMovement() {
+        let leftBytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.leftArrow,
+            modifiers: [.option],
+            characters: nil
+        )
+        let rightBytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.rightArrow,
+            modifiers: [.option],
+            characters: nil
+        )
+        XCTAssertEqual(leftBytes, [0x1b, 0x62])   // Esc+B
+        XCTAssertEqual(rightBytes, [0x1b, 0x66])  // Esc+F
+    }
+
+    func testTerminalShortcutCommandArrowsMapToLineMovement() {
+        let leftBytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.leftArrow,
+            modifiers: [.command],
+            characters: nil
+        )
+        let rightBytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.rightArrow,
+            modifiers: [.command],
+            characters: nil
+        )
+        XCTAssertEqual(leftBytes, [0x01])  // Ctrl+A
+        XCTAssertEqual(rightBytes, [0x05]) // Ctrl+E
+    }
+
+    func testTerminalShortcutPlainBackspaceIsNotIntercepted() {
+        // Ohne Modifier soll SwiftTerms Default greifen (sendet 0x7f).
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.delete,
+            modifiers: [],
+            characters: nil
+        )
+        XCTAssertNil(bytes)
+    }
+
+    // MARK: - Login Shell Environment
+
+    func testLoginShellEnvironmentMergesUserPathWithFallback() {
+        let env = LoginShellEnvironment(pathLoader: {
+            "/Users/test/.mise/shims:/Users/test/bin:/opt/homebrew/bin:/usr/bin:/bin"
+        })
+        let path = env.path
+        // User-spezifische Pfade müssen vorne stehen (mise/asdf-shims gewinnen).
+        XCTAssertTrue(path.hasPrefix("/Users/test/.mise/shims:/Users/test/bin"))
+        // Fallback-Pfade dürfen nur einmal vorkommen (Dedup).
+        let occurrences = path.components(separatedBy: "/usr/bin").count - 1
+        XCTAssertEqual(occurrences, 1)
+        // Fallback-Pfade müssen vorhanden sein, auch wenn nicht im User-PATH.
+        XCTAssertTrue(path.contains("/usr/sbin"))
+        XCTAssertTrue(path.contains("/sbin"))
+    }
+
+    func testLoginShellEnvironmentFallsBackOnEmptyResult() {
+        let env = LoginShellEnvironment(pathLoader: { "" })
+        XCTAssertEqual(env.path, LoginShellEnvironment.fallbackPath)
+    }
+
+    func testLoginShellEnvironmentFallsBackOnNil() {
+        let env = LoginShellEnvironment(pathLoader: { nil })
+        XCTAssertEqual(env.path, LoginShellEnvironment.fallbackPath)
+    }
+
+    func testLoginShellEnvironmentCachesResult() {
+        var calls = 0
+        let env = LoginShellEnvironment(pathLoader: {
+            calls += 1
+            return "/opt/homebrew/bin:/usr/bin"
+        })
+        _ = env.path
+        _ = env.path
+        _ = env.path
+        XCTAssertEqual(calls, 1, "PATH-Loader darf nur einmal aufgerufen werden (Cache)")
+    }
+
+    func testLoginShellEnvironmentProcessEnvironmentInjectsPath() {
+        let env = LoginShellEnvironment(pathLoader: { "/opt/homebrew/bin:/usr/bin" })
+        let envDict = env.processEnvironment(base: ["HOME": "/Users/test", "PATH": "/old"])
+        XCTAssertEqual(envDict["HOME"], "/Users/test", "Andere ENV-Vars bleiben erhalten")
+        XCTAssertTrue(envDict["PATH"]?.contains("/opt/homebrew/bin") == true)
+        XCTAssertNotEqual(envDict["PATH"], "/old", "Alter PATH wird ersetzt")
+    }
+
+    func testLoginShellEnvironmentTerminalEnvironmentArrayHasPathKey() {
+        let env = LoginShellEnvironment(pathLoader: { "/opt/homebrew/bin:/usr/bin" })
+        let array = env.terminalEnvironmentArray(base: ["HOME": "/Users/test"])
+        XCTAssertTrue(array.contains { $0.hasPrefix("PATH=") && $0.contains("/opt/homebrew/bin") })
+        XCTAssertTrue(array.contains("HOME=/Users/test"))
+    }
+
+    func testLoginShellEnvironmentSetsTerminalColorDefaults() {
+        // Regression: ohne TERM/COLORTERM rendern Claude Code & Codex CLI monochrom,
+        // weil GUI-Apps diese Vars nicht von launchd erben.
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let envDict = env.processEnvironment(base: [:])
+        XCTAssertEqual(envDict["TERM"], "xterm-256color")
+        XCTAssertEqual(envDict["COLORTERM"], "truecolor")
+        XCTAssertEqual(envDict["CLICOLOR"], "1")
+        XCTAssertEqual(envDict["LANG"], "en_US.UTF-8")
+    }
+
+    func testLoginShellEnvironmentRespectsExistingTerminalVars() {
+        // User-Profile (z. B. iTerm-User mit TERM=xterm-kitty) sollen nicht
+        // überschrieben werden — wir füllen nur Lücken.
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let envDict = env.processEnvironment(base: [
+            "TERM": "xterm-kitty",
+            "COLORTERM": "24bit",
+            "LC_ALL": "de_DE.UTF-8"
+        ])
+        XCTAssertEqual(envDict["TERM"], "xterm-kitty")
+        XCTAssertEqual(envDict["COLORTERM"], "24bit")
+        XCTAssertEqual(envDict["LC_ALL"], "de_DE.UTF-8")
+        XCTAssertNil(envDict["LANG"], "LANG nicht gesetzt, weil LC_ALL bereits eine Locale liefert")
+    }
+
+    func testFallbackPathContainsCommonLocations() {
+        // Sanity-Check: alle wichtigen Pfade abgedeckt für Apple Silicon + Intel
+        let fallback = LoginShellEnvironment.fallbackPath
+        for expected in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"] {
+            XCTAssertTrue(fallback.contains(expected), "fallbackPath muss \(expected) enthalten")
+        }
+    }
+
+    func testTerminalShortcutControlCombosAreNotIntercepted() {
+        // Wenn der User Control hält, soll SwiftTerm seine Standard-Control-
+        // Sequences durchgeben (Ctrl+W = 0x17, Ctrl+U = 0x15 etc.) — wir
+        // konkurrieren nicht damit.
+        XCTAssertNil(TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.delete,
+            modifiers: [.control, .option],
+            characters: nil
+        ))
+        XCTAssertNil(TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.z,
+            modifiers: [.control, .command],
+            characters: "z"
+        ))
     }
 }

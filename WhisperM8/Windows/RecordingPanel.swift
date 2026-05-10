@@ -182,6 +182,15 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
 
 // MARK: - Overlay Controller
 
+/// Granulare Bearbeitungs-Aktion auf dem laufenden Recording-Kontext-Bundle.
+/// Wird vom Overlay-Menu ausgelöst und vom RecordingCoordinator in die einzelnen
+/// Bundle-Slots übersetzt.
+enum ContextAction {
+    case removeAgentChat
+    case removeSelectedText
+    case removeAttachment(id: UUID)
+}
+
 @MainActor
 class OverlayController: ObservableObject {
     private var panel: RecordingPanel?
@@ -193,6 +202,8 @@ class OverlayController: ObservableObject {
     private var onAddScreenshot: (() -> Void)?
     private var onToggleScreenClip: (() -> Void)?
     private var onClearContext: (() -> Void)?
+    /// Vereinte Schiene für granulare Kontext-Bearbeitung pro Item.
+    private var onContextAction: ((ContextAction) -> Void)?
     @Published var audioLevel: Float = 0
     @Published var duration: TimeInterval = 0
     @Published var isTranscribing: Bool = false
@@ -213,7 +224,8 @@ class OverlayController: ObservableObject {
         onOutputModeChange: @escaping (OutputMode) -> Void,
         onAddScreenshot: @escaping () -> Void,
         onToggleScreenClip: @escaping () -> Void,
-        onClearContext: @escaping () -> Void
+        onClearContext: @escaping () -> Void,
+        onContextAction: @escaping (ContextAction) -> Void
     ) {
         // Capture the frontmost app BEFORE showing our panel
         previousApp = NSWorkspace.shared.frontmostApplication
@@ -226,6 +238,7 @@ class OverlayController: ObservableObject {
         self.onAddScreenshot = onAddScreenshot
         self.onToggleScreenClip = onToggleScreenClip
         self.onClearContext = onClearContext
+        self.onContextAction = onContextAction
 
         // Initialize state from appState
         self.audioLevel = appState.audioLevel
@@ -276,6 +289,7 @@ class OverlayController: ObservableObject {
         onAddScreenshot = nil
         onToggleScreenClip = nil
         onClearContext = nil
+        onContextAction = nil
     }
 
     func getPreviousApp() -> NSRunningApplication? {
@@ -305,6 +319,10 @@ class OverlayController: ObservableObject {
 
     func clearContext() {
         onClearContext?()
+    }
+
+    func performContextAction(_ action: ContextAction) {
+        onContextAction?(action)
     }
 
     func update(appState: AppState) {

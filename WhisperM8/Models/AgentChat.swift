@@ -164,6 +164,19 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     }
 }
 
+/// Leichter Zeiger auf den im Agent-Chats-Window aktuell aktiven Chat.
+/// Wird von `AgentChatsView` in `AppState.activeAgentChat` gepusht und vom
+/// `RecordingCoordinator` beim Start einer Aufnahme ins Context-Bundle übernommen,
+/// damit der Recording-Overlay „Chat" als aktiven Kontext anzeigen kann.
+struct AgentChatContextRef: Codable, Equatable, Hashable {
+    let sessionID: UUID
+    let provider: AgentProvider
+    let projectName: String
+    let projectPath: String
+    let title: String
+    let externalSessionID: String?
+}
+
 struct AgentWorkspace: Codable, Equatable {
     var projects: [AgentProject]
     var sessions: [AgentChatSession]
