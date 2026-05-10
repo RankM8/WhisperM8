@@ -182,6 +182,14 @@ struct AgentSessionStore {
         }
     }
 
+    /// Vom `AgentSessionSummarizer` nach erfolgreicher Headless-Generierung
+    /// aufgerufen. Setzt `summary` ohne andere Felder zu berühren.
+    func setSessionSummary(id: UUID, summary: AgentSessionSummary?) throws {
+        try updateSession(id: id) { session in
+            session.summary = summary
+        }
+    }
+
     func setSessionGroup(id: UUID, groupName: String?) throws {
         try updateSession(id: id) { session in
             let normalized = groupName?.trimmingCharacters(in: .whitespacesAndNewlines)

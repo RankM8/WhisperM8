@@ -1317,6 +1317,111 @@ final class AgentChatsTests: XCTestCase {
         )
     }
 
+    // MARK: - Summary excerpt + parser
+
+    func testBuildExtendedKeepsFirstAndLastMessagesWithMarker() {
+        var lines: [String] = []
+        for i in 1...30 {
+            let role = i.isMultiple(of: 2) ? "assistant" : "user"
+            let content = "msg-\(i)"
+            if role == "assistant" {
+                lines.append(#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"\#(content)"}],"stop_reason":"end_turn"}}"#)
+            } else {
+                lines.append(#"{"type":"user","message":{"role":"user","content":"\#(content)"}}"#)
+            }
+        }
+        let text = lines.joined(separator: "\n")
+        let result = AgentTranscriptExcerpt.buildExtended(fromText: text, provider: .claude)
+
+        XCTAssertTrue(result.contains("msg-1"), "Anfangs-Messages müssen erhalten bleiben")
+        XCTAssertTrue(result.contains("msg-30"), "Ende-Messages müssen erhalten bleiben")
+        XCTAssertTrue(result.contains("trimmed for brevity"), "Truncation-Marker erwartet bei > 24 Messages")
+    }
+
+    func testBuildExtendedShortSessionContainsAllMessages() {
+        let lines = [
+            #"{"type":"user","message":{"role":"user","content":"hi"}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hello"}],"stop_reason":"end_turn"}}"#
+        ]
+        let result = AgentTranscriptExcerpt.buildExtended(fromText: lines.joined(separator: "\n"), provider: .claude)
+        XCTAssertTrue(result.contains("hi"))
+        XCTAssertTrue(result.contains("hello"))
+        XCTAssertFalse(result.contains("trimmed"))
+    }
+
+    func testParseSummaryExtractsHeadlineAndDetails() {
+        let raw = """
+        HEADLINE: Refactor login flow with new validation rules
+        DETAILS:
+        - Aufgabe: Login-Flow überarbeiten
+        - Änderungen: neue Validatoren, Tests grün
+        - Stand: Branch ready für Review
+        """
+        let parsed = AgentSessionSummarizer.parseSummary(raw)
+        XCTAssertEqual(parsed.headline, "Refactor login flow with new validation rules")
+        XCTAssertTrue(parsed.details.contains("Login-Flow überarbeiten"))
+        XCTAssertTrue(parsed.details.contains("Branch ready"))
+    }
+
+    func testParseSummaryToleratesPreambleAndStripsTrailingPunctuation() {
+        let raw = """
+        Sure, here is the summary:
+        HEADLINE: Token rotation fix.
+        DETAILS:
+        Some details here.
+        """
+        let parsed = AgentSessionSummarizer.parseSummary(raw)
+        XCTAssertEqual(parsed.headline, "Token rotation fix")
+        XCTAssertEqual(parsed.details, "Some details here.")
+    }
+
+    func testParseSummaryReturnsEmptyOnGarbage() {
+        let parsed = AgentSessionSummarizer.parseSummary("")
+        XCTAssertEqual(parsed.headline, "")
+        XCTAssertEqual(parsed.details, "")
+    }
+
+    // MARK: - Session summary persistence
+
+    func testSetSessionSummaryPersistsValue() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let session = try store.createSession(
+            provider: .claude,
+            projectPath: NSTemporaryDirectory(),
+            title: "Claude Chat"
+        )
+        let summary = AgentSessionSummary(
+            headline: "Auth flow refactor",
+            details: "Touched login.rs and session.rs",
+            generatedAt: Date(timeIntervalSinceReferenceDate: 1_000_000),
+            transcriptDigest: "size=1234;mtime=5678"
+        )
+        try store.setSessionSummary(id: session.id, summary: summary)
+        let stored = store.loadWorkspace().sessions.first { $0.id == session.id }?.summary
+        XCTAssertEqual(stored?.headline, "Auth flow refactor")
+        XCTAssertEqual(stored?.details, "Touched login.rs and session.rs")
+        XCTAssertEqual(stored?.transcriptDigest, "size=1234;mtime=5678")
+    }
+
+    func testSetSessionSummaryWithNilClearsValue() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let session = try store.createSession(
+            provider: .claude,
+            projectPath: NSTemporaryDirectory(),
+            title: "Claude Chat"
+        )
+        try store.setSessionSummary(
+            id: session.id,
+            summary: AgentSessionSummary(headline: "x", details: "y", generatedAt: Date())
+        )
+        try store.setSessionSummary(id: session.id, summary: nil)
+        XCTAssertNil(store.loadWorkspace().sessions.first { $0.id == session.id }?.summary)
+    }
+
     // MARK: - Project icon resolver
 
     func testProjectIconResolverPicksPublicFavicon() throws {
