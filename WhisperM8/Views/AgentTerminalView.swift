@@ -62,6 +62,7 @@ enum TerminalShortcut {
     /// Virtual-Key-Codes (NSEvent.keyCode) der relevanten Tasten.
     enum KeyCode {
         public static let z: UInt16 = 6
+        public static let p: UInt16 = 35
         public static let returnKey: UInt16 = 36
         public static let delete: UInt16 = 51   // Backspace
         public static let leftArrow: UInt16 = 123
@@ -117,6 +118,13 @@ enum TerminalShortcut {
             // sendet SwiftTerm bei Enter und Shift+Enter identisch nur `\r`.
             if hasShift && !hasOption && !hasCommand {
                 return [0x5c, 0x0d]
+            }
+        case KeyCode.p:
+            // Alt+P → `ESC p` (Meta-P), Claude Codes Model-Switch.
+            // Ohne Mapping würde `optionAsMetaKey=false` das macOS-Sonderzeichen
+            // `π` an die TUI schicken, statt der erwarteten Meta-Sequenz.
+            if hasOption && !hasCommand && !hasShift {
+                return [0x1b, 0x70]
             }
         default:
             break
