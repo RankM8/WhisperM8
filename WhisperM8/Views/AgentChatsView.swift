@@ -1531,6 +1531,11 @@ private struct SessionListButton: View {
                         .foregroundStyle(isSelected ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        // Text dehnt sich über die verbleibende Row-Breite, damit
+                        // der Status-/Close-Indicator immer rechts bündig sitzt
+                        // und der Hover-Background bis an die Sidebar-Kante reicht.
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .help(session.title)
 
                     trailingIndicator
                         .frame(width: 18, alignment: .trailing)
@@ -1538,7 +1543,10 @@ private struct SessionListButton: View {
                 .padding(.leading, 28)
                 .padding(.trailing, 8)
             }
-            .frame(minHeight: 26, maxHeight: 26)
+            // Volle Sidebar-Breite, damit der Background und die Hit-Area die
+            // ganze Row abdecken — sonst klebt der Hover-Hintergrund nur am
+            // Text-Inhalt und kurze Chat-Namen sehen abgeschnitten aus.
+            .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 26, alignment: .leading)
             .background(rowBackground)
             .contentShape(Rectangle())
         }
