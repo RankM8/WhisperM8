@@ -907,6 +907,12 @@ struct AgentChatsView: View {
                 guard !Task.isCancelled else { return }
                 lastIndexStats = stats
                 loadWorkspaceFast()
+                // Manuelles Sessions-Scannen ist auch der natürliche Trigger,
+                // um *alle* generisch benannten Sessions nachträglich vom
+                // Auto-Namer benennen zu lassen — sowohl frisch indexierte
+                // alte Sessions als auch solche, deren erster
+                // Auto-Naming-Versuch vorher gescheitert ist.
+                forceAutoNameUntitledSessions()
                 Logger.agentPerformance.info("agent_chats_background_index reason=\(reason, privacy: .public) durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) stats=\(lastIndexStats.map { "\($0.provider.rawValue):\($0.scannedFiles)/\($0.cacheHits)/\($0.bytesRead)" }.joined(separator: ","), privacy: .public)")
             } catch is CancellationError {
                 return
@@ -915,6 +921,46 @@ struct AgentChatsView: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// Geht durch alle nicht-archivierten Sessions, die noch einen generischen
+    /// Default-Namen tragen ("Claude Chat" / "Codex Chat" / "… Chat") und ruft
+    /// den Auto-Namer im Force-Modus auf. Nutzt `forceGenerateTitle`, das
+    /// `lastTurnAt` und `alreadyAttempted` ignoriert — `canAutoRenameTitle`
+    /// bleibt aber Schutz gegen User-Renames.
+    private func forceAutoNameUntitledSessions() {
+        guard let autoNamer else { return }
+
+        let candidates: [(session: AgentChatSession, project: AgentProject)] = workspace.sessions.compactMap { session in
+            guard session.status != .archived else { return nil }
+            guard session.externalSessionID != nil else { return nil }
+            guard isDefaultUntitled(session) else { return nil }
+            guard let project = workspace.projects.first(where: { $0.id == session.projectID }) else { return nil }
+            return (session, project)
+        }
+
+        guard !candidates.isEmpty else { return }
+
+        for entry in candidates {
+            autoNamer.forceGenerateTitle(session: entry.session, cwd: entry.project.path) { [store] result in
+                if case .success = result {
+                    Task { @MainActor in
+                        workspace = store.loadWorkspace()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Liefert `true`, wenn die Session noch einen generischen
+    /// Auto-Default-Namen trägt — und damit Kandidat für nachträgliches
+    /// Auto-Naming ist.
+    private func isDefaultUntitled(_ session: AgentChatSession) -> Bool {
+        let normalized = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty
+            || normalized == "Claude Chat"
+            || normalized == "Codex Chat"
+            || normalized.hasSuffix(" Chat")
     }
 
     private func sessions(for project: AgentProject) -> [AgentChatSession] {

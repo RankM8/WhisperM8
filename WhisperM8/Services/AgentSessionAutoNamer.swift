@@ -258,10 +258,67 @@ final class AgentSessionAutoNamer {
             return
         }
 
-        inFlight.insert(session.id)
-        alreadyAttempted.insert(session.id)
-        let sessionID = session.id
-        let provider = session.provider
+        runTitleGeneration(
+            sessionID: session.id,
+            provider: session.provider,
+            externalSessionID: externalSessionID,
+            cwd: cwd,
+            onCompletion: onCompletion
+        )
+    }
+
+    /// Wie `handleTurnFinished`, aber ohne `lastTurnAt`-Check und mit
+    /// Reset des `alreadyAttempted`-Markers für die jeweilige Session.
+    /// Aufgerufen vom „Sessions scannen"-Trigger, damit alte/gescannte Sessions
+    /// und Sessions mit zuvor fehlgeschlagenem Auto-Naming explizit
+    /// nachträglich benannt werden können.
+    ///
+    /// `canAutoRenameTitle == false` (= User hat manuell umbenannt) wird
+    /// weiterhin respektiert — wir überschreiben niemals einen User-Namen.
+    /// `inFlight`-Schutz bleibt aktiv.
+    func forceGenerateTitle(
+        session: AgentChatSession,
+        cwd: String,
+        onCompletion: ((Result<String, Error>) -> Void)? = nil
+    ) {
+        guard session.canAutoRenameTitle else { return }
+        guard !inFlight.contains(session.id) else { return }
+        guard let externalSessionID = session.externalSessionID, !externalSessionID.isEmpty else {
+            return
+        }
+
+        alreadyAttempted.remove(session.id)
+        runTitleGeneration(
+            sessionID: session.id,
+            provider: session.provider,
+            externalSessionID: externalSessionID,
+            cwd: cwd,
+            onCompletion: onCompletion
+        )
+    }
+
+    /// Reset für Tests + manuelle „erneut versuchen"-Trigger.
+    func resetAttemptTracking() {
+        inFlight.removeAll()
+        alreadyAttempted.removeAll()
+    }
+
+    /// Backwards-compatible alias (Tests rufen das vor der Umbenennung auf).
+    func resetTrackingForTesting() {
+        resetAttemptTracking()
+    }
+
+    // MARK: - Shared title-generation pipeline
+
+    private func runTitleGeneration(
+        sessionID: UUID,
+        provider: AgentProvider,
+        externalSessionID: String,
+        cwd: String,
+        onCompletion: ((Result<String, Error>) -> Void)?
+    ) {
+        inFlight.insert(sessionID)
+        alreadyAttempted.insert(sessionID)
         let store = store
         let generator = titleGenerator
 
@@ -298,11 +355,5 @@ final class AgentSessionAutoNamer {
                 onCompletion?(.failure(error))
             }
         }
-    }
-
-    /// Reset für Tests.
-    func resetTrackingForTesting() {
-        inFlight.removeAll()
-        alreadyAttempted.removeAll()
     }
 }
