@@ -25,6 +25,13 @@ struct AgentChatsView: View {
     @State private var lastIndexStats: [AgentSessionIndexStats] = []
     @State private var sessionActionRequest: AgentSessionActionRequest?
     @StateObject private var terminalRegistry = AgentTerminalRegistry()
+    /// Live-Status-Store für die Sidebar-Indikatoren. Wird vom
+    /// `AgentSessionRuntimeWatcher` gepflegt, ephemeral (nicht persistiert).
+    @StateObject private var runtimeStatusStore = AgentSessionRuntimeStatusStore()
+    /// Lazy-init in `setupRuntimeServicesIfNeeded()`, weil beide Services Refs
+    /// auf Store + Closures brauchen, die wir vor `body` nicht haben.
+    @State private var runtimeWatcher: AgentSessionRuntimeWatcher?
+    @State private var autoNamer: AgentSessionAutoNamer?
     @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
     @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
     @State private var openTabIDs: Set<UUID> = []
@@ -130,6 +137,7 @@ struct AgentChatsView: View {
             renameSheet
         }
         .onAppear {
+            setupRuntimeServicesIfNeeded()
             loadWorkspaceFast()
             syncActiveAgentChat()
         }
@@ -271,7 +279,8 @@ struct AgentChatsView: View {
                             onRenameRequest: { beginRename($0) },
                             onRename: renameSession,
                             onSetColor: setSessionColor,
-                            isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true }
+                            isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true },
+                            runtimeStatus: { id in runtimeStatusStore.statuses[id] }
                         )
                     }
                 }
@@ -429,7 +438,16 @@ struct AgentChatsView: View {
                     session: selectedSession,
                     terminalRegistry: terminalRegistry,
                     actionRequest: sessionActionRequest,
-                    onStateChanged: loadWorkspaceFast
+                    onStateChanged: loadWorkspaceFast,
+                    onSessionLaunched: { sessionID in
+                        attachWatcher(sessionID: sessionID)
+                    },
+                    onSessionTerminated: { sessionID, exitCode in
+                        runtimeWatcher?.markTerminated(sessionID: sessionID, exitCode: exitCode)
+                    },
+                    onExternalSessionIDBound: { sessionID in
+                        attachWatcher(sessionID: sessionID)
+                    }
                 )
                 .id(selectedSession.id)
                 .padding(.top, 14)
@@ -689,6 +707,83 @@ struct AgentChatsView: View {
     private func refresh() {
         loadWorkspaceFast()
         refreshSessionsInBackground(reason: "refresh")
+    }
+
+    /// Lazy-init der Runtime-Services. Wird einmal beim ersten `onAppear`
+    /// aufgerufen — verträgt aber Re-Calls, weil sie sich mit `nil`-Check
+    /// schützen. Wir können das nicht im `init()` machen, weil
+    /// `runtimeStatusStore` ein `@StateObject` ist und vor `body` noch nicht
+    /// instanziiert ist.
+    private func setupRuntimeServicesIfNeeded() {
+        if autoNamer == nil {
+            autoNamer = AgentSessionAutoNamer(store: store)
+        }
+        if runtimeWatcher == nil {
+            let store = self.store
+            let statusStore = runtimeStatusStore
+            let watcher = AgentSessionRuntimeWatcher(statusStore: statusStore) { [weak autoNamer] sessionID in
+                AgentChatsView.handleTurnFinished(
+                    sessionID: sessionID,
+                    store: store,
+                    autoNamer: autoNamer
+                ) {
+                    // Wir können hier kein `self` capturen (wäre stale beim
+                    // mehrfachen Watcher-Init); der Workspace-Reload passiert
+                    // beim nächsten `loadWorkspaceFast`-Tick (Indexer-Refresh
+                    // bzw. UI-Reload).
+                }
+            }
+            runtimeWatcher = watcher
+        }
+    }
+
+    /// Hängt den Watcher an eine laufende Session — entweder direkt nach
+    /// `markLaunched` (externalSessionID kann noch fehlen) oder nach
+    /// `bindExternalSessionIDWhenAvailable` (jetzt mit valider ID).
+    /// Idempotent: bei wiederholtem Aufruf updated der Watcher die ID intern.
+    private func attachWatcher(sessionID: UUID) {
+        guard let watcher = runtimeWatcher else { return }
+        let workspace = store.loadWorkspace()
+        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+              let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
+            return
+        }
+        watcher.watch(
+            sessionID: session.id,
+            provider: session.provider,
+            externalSessionID: session.externalSessionID,
+            cwd: project.path,
+            priorTurnFinishedAt: session.lastTurnAt
+        )
+    }
+
+    /// Triggert beim turn-finished-Signal des Watchers das Persistieren des
+    /// `lastTurnAt`-Stempels und den Auto-Namer. Bewusst static, damit der
+    /// Closure beim Watcher-Init kein View-`self` festhält.
+    private static func handleTurnFinished(
+        sessionID: UUID,
+        store: AgentSessionStore,
+        autoNamer: AgentSessionAutoNamer?,
+        onCompletion: @escaping () -> Void
+    ) {
+        let workspace = store.loadWorkspace()
+        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+              let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
+            return
+        }
+
+        // Auto-Namer mit Snapshot starten (lastTurnAt ist hier noch nil) —
+        // der `recordTurnEnded` läuft direkt danach und beeinflusst diesen
+        // Snapshot nicht mehr.
+        autoNamer?.handleTurnFinished(session: session, cwd: project.path) { _ in
+            Task { @MainActor in onCompletion() }
+        }
+
+        do {
+            try store.recordTurnEnded(id: sessionID)
+        } catch {
+            Logger.debug("Failed to record turn ended: \(error.localizedDescription)")
+        }
     }
 
     private func loadWorkspaceFast() {
@@ -1229,6 +1324,7 @@ private struct ProjectChatGroup: View {
     var onRename: (UUID, String) -> Void
     var onSetColor: (UUID, String?) -> Void
     var isRunning: (UUID) -> Bool
+    var runtimeStatus: (UUID) -> AgentSessionRuntimeStatus?
 
     @State private var isHeaderHovered = false
 
@@ -1247,6 +1343,7 @@ private struct ProjectChatGroup: View {
                             session: session,
                             isSelected: selectedSessionID == session.id,
                             isRunning: isRunning(session.id),
+                            runtimeStatus: runtimeStatus(session.id),
                             onSelect: { onSelectSession(session.id) },
                             onClose: { onCloseSession(session) }
                         )
@@ -1389,10 +1486,15 @@ private struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
     let isRunning: Bool
+    /// Live-Status der Session, ermittelt vom `AgentSessionRuntimeWatcher`.
+    /// `nil` solange die Session nicht läuft oder der Watcher noch keinen
+    /// ersten Sample produziert hat — dann fallen wir auf `isRunning` zurück.
+    let runtimeStatus: AgentSessionRuntimeStatus?
     var onSelect: () -> Void
     var onClose: () -> Void
 
     @State private var isHovered = false
+    @State private var pulsePhase: Bool = false
 
     /// Position des Connector-Strichs vom linken Rand der Sidebar — exakt unter
     /// der Mitte des 18×18 Project-Avatars (8 px outer-padding + 9 px Avatar-Halbbreite).
@@ -1456,13 +1558,56 @@ private struct SessionListButton: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
                 .help("Chat schließen")
-        } else if isRunning {
-            Circle()
-                .fill(Color.green.opacity(0.65))
-                .frame(width: 5, height: 5)
         } else {
+            statusIndicator
+        }
+    }
+
+    /// Bildet den Live-Status der Session als kompakte Glyphe ab (5 px). Die
+    /// fünf Zustände sind aufsteigend „aufdringlicher" gestaffelt:
+    /// idle → unscheinbar grau, working → grün-gepulst, awaitingInput →
+    /// orange-gepulst, errored → rot-fest, stopped → versteckt.
+    @ViewBuilder
+    private var statusIndicator: some View {
+        let resolved = resolvedStatus
+        switch resolved {
+        case .working:
+            Circle()
+                .fill(Color.green)
+                .frame(width: 5, height: 5)
+                .opacity(pulsePhase ? 1.0 : 0.45)
+                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsePhase)
+                .onAppear { pulsePhase = true }
+                .help("Arbeitet …")
+        case .awaitingInput:
+            Circle()
+                .fill(Color.orange)
+                .frame(width: 5, height: 5)
+                .opacity(pulsePhase ? 1.0 : 0.4)
+                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulsePhase)
+                .onAppear { pulsePhase = true }
+                .help("Wartet möglicherweise auf User-Input")
+        case .idle:
+            Circle()
+                .fill(Color.green.opacity(0.55))
+                .frame(width: 5, height: 5)
+                .help("Bereit")
+        case .errored:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.red.opacity(0.8))
+                .help("Mit Fehler beendet")
+        case .stopped, .none:
             Color.clear.frame(width: 1, height: 1)
         }
+    }
+
+    /// Wenn der Watcher noch keinen Status geliefert hat, wir aber wissen, dass
+    /// der Process läuft, gehen wir defaultmäßig auf `.working`. Verhindert
+    /// einen Glüh-Glitch direkt nach dem Start.
+    private var resolvedStatus: AgentSessionRuntimeStatus? {
+        if let runtimeStatus { return runtimeStatus }
+        return isRunning ? .working : nil
     }
 
     private var rowBackground: Color {
@@ -2029,6 +2174,12 @@ private struct AgentSessionDetailView: View {
     @ObservedObject var terminalRegistry: AgentTerminalRegistry
     var actionRequest: AgentSessionActionRequest?
     var onStateChanged: () -> Void
+    /// Runtime-Watcher-Hooks. Aufrufer (AgentChatsView) reicht hier Closures
+    /// rein, die intern `runtimeWatcher?.watch(...)` etc. aufrufen — so muss
+    /// die Detail-View nichts vom Watcher selbst wissen.
+    var onSessionLaunched: (UUID) -> Void = { _ in }
+    var onSessionTerminated: (UUID, Int32?) -> Void = { _, _ in }
+    var onExternalSessionIDBound: (UUID) -> Void = { _ in }
 
     @State private var store = AgentSessionStore()
     @State private var errorMessage: String?
@@ -2104,7 +2255,7 @@ private struct AgentSessionDetailView: View {
                 sessionID: session.id,
                 command: command,
                 onLaunched: markLaunched,
-                onTerminated: { _ in markTerminated() }
+                onTerminated: { exitCode in markTerminated(exitCode: exitCode) }
             )
             errorMessage = nil
         } catch {
@@ -2126,19 +2277,21 @@ private struct AgentSessionDetailView: View {
                 updated.initialPrompt = nil
             }
             bindExternalSessionIDWhenAvailable()
+            onSessionLaunched(session.id)
             onStateChanged()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func markTerminated() {
+    private func markTerminated(exitCode: Int32?) {
         do {
             try store.updateSession(id: session.id) { updated in
                 if updated.status == .running {
                     updated.status = .closed
                 }
             }
+            onSessionTerminated(session.id, exitCode)
             onStateChanged()
         } catch {
             errorMessage = error.localizedDescription
@@ -2157,6 +2310,7 @@ private struct AgentSessionDetailView: View {
                     projectPath: project.path,
                     indexedSessions: indexedSessions
                 ) != nil {
+                    onExternalSessionIDBound(session.id)
                     onStateChanged()
                 }
             } catch {
