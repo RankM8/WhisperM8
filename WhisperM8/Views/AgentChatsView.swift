@@ -37,6 +37,12 @@ struct AgentChatsView: View {
     @State private var openTabIDs: Set<UUID> = []
     @State private var renameTargetID: UUID?
     @State private var renameDraft: String = ""
+    @State private var renameProjectTargetID: UUID?
+    @State private var renameProjectDraft: String = ""
+    /// Projekte, für die wir in dieser App-Session schon einen Auto-Icon-Lookup
+    /// gestartet haben — verhindert wiederholte Filesystem-Scans bei jedem
+    /// Workspace-Reload.
+    @State private var iconLookupAttempted: Set<UUID> = []
 
     private var selectedProject: AgentProject? {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
@@ -136,10 +142,21 @@ struct AgentChatsView: View {
         )) {
             renameSheet
         }
+        .sheet(isPresented: Binding(
+            get: { renameProjectTargetID != nil },
+            set: { if !$0 { renameProjectTargetID = nil } }
+        )) {
+            renameProjectSheet
+        }
         .onAppear {
             setupRuntimeServicesIfNeeded()
             loadWorkspaceFast()
             syncActiveAgentChat()
+            attemptAutoDetectProjectIcons()
+        }
+        .onChange(of: workspace.projects.map(\.id)) { _, _ in
+            // Neue Projekte (z.B. nach Sessions-Scan) → ggf. Icon resolven.
+            attemptAutoDetectProjectIcons()
         }
         .onDisappear {
             indexRefreshTask?.cancel()
@@ -220,6 +237,49 @@ struct AgentChatsView: View {
         renameTargetID = nil
     }
 
+    private var renameProjectSheet: some View {
+        let originalName = renameProjectTargetID
+            .flatMap { id in workspace.projects.first(where: { $0.id == id })?.name }
+            ?? ""
+        return VStack(alignment: .leading, spacing: 14) {
+            Text("Projekt umbenennen")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AgentTheme.textPrimary)
+
+            TextField("Projekt-Name", text: $renameProjectDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(AgentTheme.border, lineWidth: 1))
+                .onSubmit { commitProjectRename() }
+
+            HStack {
+                Spacer()
+                Button("Abbrechen") { renameProjectTargetID = nil }
+                    .keyboardShortcut(.cancelAction)
+                Button("Speichern") { commitProjectRename() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(
+                        renameProjectDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || renameProjectDraft == originalName
+                    )
+            }
+        }
+        .padding(18)
+        .frame(width: 360)
+        .background(AgentTheme.panel)
+    }
+
+    private func commitProjectRename() {
+        guard let id = renameProjectTargetID else { return }
+        let trimmed = renameProjectDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        renameProject(id: id, name: trimmed)
+        renameProjectTargetID = nil
+    }
+
     private var hashboardSidebar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
@@ -280,7 +340,12 @@ struct AgentChatsView: View {
                             onRename: renameSession,
                             onSetColor: setSessionColor,
                             isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true },
-                            runtimeStatus: { id in runtimeStatusStore.statuses[id] }
+                            runtimeStatus: { id in runtimeStatusStore.statuses[id] },
+                            onRenameProjectRequest: { beginRenameProject($0) },
+                            onSetProjectColor: setProjectColor,
+                            onChooseProjectIcon: { chooseProjectIcon($0) },
+                            onAutoDetectProjectIcon: { reAutoDetectProjectIcon($0) },
+                            onClearProjectIcon: { clearProjectIcon($0) }
                         )
                     }
                 }
@@ -984,6 +1049,108 @@ struct AgentChatsView: View {
         }
     }
 
+    // MARK: - Project metadata actions
+
+    private func beginRenameProject(_ project: AgentProject) {
+        renameProjectTargetID = project.id
+        renameProjectDraft = project.name
+    }
+
+    private func renameProject(id: UUID, name: String) {
+        do {
+            try store.renameProject(id: id, name: name)
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func setProjectColor(id: UUID, color: String) {
+        do {
+            try store.setProjectColor(id: id, color: color)
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Öffnet einen NSOpenPanel und speichert den absoluten Pfad als
+    /// `customIconAbsolutePath` (Vorrang vor Auto-Detect-Pfad). Akzeptiert die
+    /// üblichen Bildformate, die NSImage zuverlässig darstellt.
+    private func chooseProjectIcon(_ project: AgentProject) {
+        let panel = NSOpenPanel()
+        panel.title = "Projekt-Icon wählen"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.png, .jpeg, .tiff, .gif, .svg, .icns, .ico, .image]
+        panel.directoryURL = URL(fileURLWithPath: project.path)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.setProjectCustomIcon(id: project.id, absolutePath: url.path)
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Setzt den Auto-Lookup-Status zurück und triggert sofort einen neuen
+    /// Resolver-Lauf — User-getriggert via Context-Menü.
+    private func reAutoDetectProjectIcon(_ project: AgentProject) {
+        do {
+            try store.clearProjectIcon(id: project.id)
+            iconLookupAttempted.remove(project.id)
+            workspace = store.loadWorkspace()
+            attemptAutoDetectProjectIcons()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func clearProjectIcon(_ id: UUID) {
+        do {
+            try store.clearProjectIcon(id: id)
+            iconLookupAttempted.insert(id)  // nicht direkt re-resolven
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Iteriert über alle Projekte und scannt deren Repos asynchron nach Icons,
+    /// sofern noch kein Lookup gemacht wurde. Bewusst lazy: nur Projekte, deren
+    /// `iconAutoLookupAttempted != true` und die in dieser App-Session noch
+    /// nicht gescannt wurden.
+    private func attemptAutoDetectProjectIcons() {
+        let candidates = workspace.projects.filter { project in
+            !iconLookupAttempted.contains(project.id)
+                && project.iconAutoLookupAttempted != true
+                && (project.customIconAbsolutePath?.isEmpty ?? true)
+                && (project.iconRelativePath?.isEmpty ?? true)
+        }
+        guard !candidates.isEmpty else { return }
+
+        for project in candidates {
+            iconLookupAttempted.insert(project.id)
+        }
+
+        Task.detached(priority: .utility) { [store] in
+            for project in candidates {
+                let path = project.path
+                let id = project.id
+                let resolved = AgentProjectIconResolver.findIconRelativePath(in: path)
+                do {
+                    try store.applyAutoResolvedProjectIcon(id: id, relativePath: resolved)
+                } catch {
+                    Logger.debug("project_icon_auto_resolve_failed project=\(id.uuidString) error=\(error.localizedDescription)")
+                }
+            }
+            await MainActor.run {
+                workspace = store.loadWorkspace()
+            }
+        }
+    }
+
     private func moveSession(id: UUID, direction: AgentSessionMoveDirection) {
         do {
             try store.moveSession(id: id, direction: direction)
@@ -1325,6 +1492,11 @@ private struct ProjectChatGroup: View {
     var onSetColor: (UUID, String?) -> Void
     var isRunning: (UUID) -> Bool
     var runtimeStatus: (UUID) -> AgentSessionRuntimeStatus?
+    var onRenameProjectRequest: (AgentProject) -> Void
+    var onSetProjectColor: (UUID, String) -> Void
+    var onChooseProjectIcon: (AgentProject) -> Void
+    var onAutoDetectProjectIcon: (AgentProject) -> Void
+    var onClearProjectIcon: (UUID) -> Void
 
     @State private var isHeaderHovered = false
 
@@ -1393,14 +1565,7 @@ private struct ProjectChatGroup: View {
                 }
                 .buttonStyle(.plain)
 
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(hex: project.color))
-                    .frame(width: 18, height: 18)
-                    .overlay(
-                        Text(project.name.prefix(1).uppercased())
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                    )
+                ProjectAvatar(project: project)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(project.name)
@@ -1450,6 +1615,38 @@ private struct ProjectChatGroup: View {
         }
         .buttonStyle(.plain)
         .onHover { isHeaderHovered = $0 }
+        .contextMenu {
+            Button("Umbenennen…", systemImage: "pencil") {
+                onRenameProjectRequest(project)
+            }
+            Menu("Farbe") {
+                ForEach(AgentProjectColor.palette, id: \.self) { color in
+                    Button {
+                        onSetProjectColor(project.id, color)
+                    } label: {
+                        Label {
+                            Text(AgentChatColorName.label(for: color))
+                        } icon: {
+                            Image(nsImage: colorSwatchImage(hex: color))
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button("Icon wählen…", systemImage: "photo") {
+                onChooseProjectIcon(project)
+            }
+            Button("Auto-Icon erkennen", systemImage: "sparkles.rectangle.stack") {
+                onAutoDetectProjectIcon(project)
+            }
+            if project.resolvedIconURL != nil
+                || project.iconRelativePath != nil
+                || project.customIconAbsolutePath != nil {
+                Button("Icon entfernen", systemImage: "xmark.circle", role: .destructive) {
+                    onClearProjectIcon(project.id)
+                }
+            }
+        }
     }
 
     private var headerBackground: Color {
@@ -1861,6 +2058,44 @@ private struct ProviderIcon: View {
         let copy = image.copy() as! NSImage
         copy.isTemplate = true
         return copy
+    }
+}
+
+/// Sidebar-Avatar eines Projekts. Render-Reihenfolge:
+/// 1. User-gewähltes Custom-Icon (`customIconAbsolutePath`)
+/// 2. Auto-erkanntes Repo-Icon (`iconRelativePath`)
+/// 3. Fallback: farbiges 18×18-Quadrat mit Initial-Buchstaben.
+///
+/// Das Loading erfolgt synchron via `NSImage(contentsOf:)` — die Files sind
+/// in der Regel < 50 KB und liegen lokal. Wird das zum Hotspot, kann hier
+/// ein In-Memory-Cache nachgerüstet werden.
+private struct ProjectAvatar: View {
+    let project: AgentProject
+    var size: CGFloat = 18
+
+    var body: some View {
+        if let icon = loadedIcon() {
+            Image(nsImage: icon)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fill)
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        } else {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(hex: project.color))
+                .frame(width: size, height: size)
+                .overlay(
+                    Text(project.name.prefix(1).uppercased())
+                        .font(.system(size: max(8, size * 0.55), weight: .bold))
+                        .foregroundStyle(.white)
+                )
+        }
+    }
+
+    private func loadedIcon() -> NSImage? {
+        guard let url = project.resolvedIconURL else { return nil }
+        return NSImage(contentsOf: url)
     }
 }
 
