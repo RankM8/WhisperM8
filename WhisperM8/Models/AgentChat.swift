@@ -97,6 +97,20 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
     /// `true` wenn das Projekt vom Nutzer manuell hinzugefügt wurde, `nil`/`false` für Auto-Imports.
     /// Optional damit ältere Workspace-Dateien ohne dieses Feld weiter dekodiert werden können.
     var createdManually: Bool?
+    /// Pfad eines im Projekt-Repo gefundenen Icons relativ zu `path` — wird vom
+    /// `AgentProjectIconResolver` gesetzt (z. B. "public/favicon.png"). Bleibt
+    /// auch dann gültig, wenn das Repo verschoben wird, solange der relative
+    /// Pfad stabil ist.
+    var iconRelativePath: String?
+    /// Absoluter Pfad eines vom User explizit ausgewählten Icons (z. B. via
+    /// File-Picker auf ein Bild außerhalb des Repos). Hat Vorrang vor
+    /// `iconRelativePath`.
+    var customIconAbsolutePath: String?
+    /// `true` wenn der Auto-Resolver schon mindestens einmal versucht hat ein
+    /// Icon zu finden — verhindert wiederholte Filesystem-Scans bei jedem
+    /// Workspace-Reload. Manuelles "Auto-Icon erkennen" setzt das wieder auf
+    /// `nil`/`false`, um einen Re-Lookup zu erzwingen.
+    var iconAutoLookupAttempted: Bool?
 
     init(
         id: UUID = UUID(),
@@ -106,7 +120,10 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         lastBranch: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
-        createdManually: Bool? = nil
+        createdManually: Bool? = nil,
+        iconRelativePath: String? = nil,
+        customIconAbsolutePath: String? = nil,
+        iconAutoLookupAttempted: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -116,9 +133,31 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.createdManually = createdManually
+        self.iconRelativePath = iconRelativePath
+        self.customIconAbsolutePath = customIconAbsolutePath
+        self.iconAutoLookupAttempted = iconAutoLookupAttempted
     }
 
     var isManuallyAdded: Bool { createdManually == true }
+
+    /// Effektiver Icon-Pfad in Vorrang-Reihenfolge: User-gewähltes File >
+    /// Auto-erkanntes Repo-Icon > nichts. Liefert `nil`, wenn beide Felder
+    /// leer sind oder der File auf der Disk verschwunden ist.
+    var resolvedIconURL: URL? {
+        if let custom = customIconAbsolutePath, !custom.isEmpty {
+            let url = URL(fileURLWithPath: custom)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        if let relative = iconRelativePath, !relative.isEmpty {
+            let url = URL(fileURLWithPath: path).appendingPathComponent(relative)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        return nil
+    }
 }
 
 struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {

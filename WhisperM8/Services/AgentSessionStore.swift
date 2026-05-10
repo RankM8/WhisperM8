@@ -75,6 +75,64 @@ struct AgentSessionStore {
         return project
     }
 
+    // MARK: - Project metadata mutators
+
+    /// Generic Mutator analog zu `updateSession` — bewusst nicht `inout`-Closure
+    /// Capture, damit der Aufrufer den Update als `(inout AgentProject) -> Void`
+    /// reichen kann.
+    func updateProject(id: UUID, _ update: (inout AgentProject) -> Void) throws {
+        var workspace = loadWorkspace()
+        guard let index = workspace.projects.firstIndex(where: { $0.id == id }) else { return }
+        update(&workspace.projects[index])
+        workspace.projects[index].updatedAt = Date()
+        try saveWorkspace(workspace)
+    }
+
+    func renameProject(id: UUID, name: String) throws {
+        try updateProject(id: id) { project in
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            project.name = trimmed
+        }
+    }
+
+    func setProjectColor(id: UUID, color: String) throws {
+        try updateProject(id: id) { project in
+            let trimmed = color.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            project.color = trimmed
+        }
+    }
+
+    /// Vom User explizit ausgewähltes Icon (File-Picker auf ein Bild beliebiger
+    /// Lage). Hat Vorrang vor `iconRelativePath`.
+    func setProjectCustomIcon(id: UUID, absolutePath: String?) throws {
+        try updateProject(id: id) { project in
+            let trimmed = absolutePath?.trimmingCharacters(in: .whitespacesAndNewlines)
+            project.customIconAbsolutePath = (trimmed?.isEmpty == false) ? trimmed : nil
+        }
+    }
+
+    /// Vom Auto-Resolver gefundenes Icon im Projekt-Repo. `relativePath = nil`
+    /// markiert nur, dass der Lookup gelaufen ist, aber nichts gefunden wurde —
+    /// damit der nächste Workspace-Reload nicht erneut scannt.
+    func applyAutoResolvedProjectIcon(id: UUID, relativePath: String?) throws {
+        try updateProject(id: id) { project in
+            project.iconRelativePath = relativePath
+            project.iconAutoLookupAttempted = true
+        }
+    }
+
+    /// Setzt den Lookup-Status zurück und entfernt beide Icon-Slots — Trigger
+    /// für "Auto-Icon erneut erkennen".
+    func clearProjectIcon(id: UUID) throws {
+        try updateProject(id: id) { project in
+            project.iconRelativePath = nil
+            project.customIconAbsolutePath = nil
+            project.iconAutoLookupAttempted = nil
+        }
+    }
+
     func upsertSession(_ session: AgentChatSession) throws -> AgentChatSession {
         var workspace = loadWorkspace()
         if let index = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
