@@ -10,6 +10,7 @@ enum Logger {
     static let transcription = os.Logger(subsystem: subsystem, category: "Transcription")
     static let audio = os.Logger(subsystem: subsystem, category: "Audio")
     static let debugLog = os.Logger(subsystem: subsystem, category: "Debug")
+    static let agentPerformance = os.Logger(subsystem: subsystem, category: "AgentPerformance")
 
     // MARK: - Optional File Logging
 

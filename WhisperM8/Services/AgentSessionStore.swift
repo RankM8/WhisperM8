@@ -8,6 +8,11 @@ struct AgentSessionStore {
     }
 
     func loadWorkspace() -> AgentWorkspace {
+        let startedAt = Date()
+        defer {
+            Logger.agentPerformance.debug("agent_store_load durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000))")
+        }
+
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return .empty
         }
@@ -29,6 +34,11 @@ struct AgentSessionStore {
     }
 
     func saveWorkspace(_ workspace: AgentWorkspace) throws {
+        let startedAt = Date()
+        defer {
+            Logger.agentPerformance.debug("agent_store_save durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)")
+        }
+
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -40,12 +50,15 @@ struct AgentSessionStore {
         try data.write(to: fileURL, options: .atomic)
     }
 
-    func upsertProject(path: String, name: String? = nil, color: String? = nil) throws -> AgentProject {
+    func upsertProject(path: String, name: String? = nil, color: String? = nil, createdManually: Bool = false) throws -> AgentProject {
         var workspace = loadWorkspace()
         let standardizedPath = Self.canonicalProjectPath(path)
         if let index = workspace.projects.firstIndex(where: { $0.path == standardizedPath }) {
             workspace.projects[index].updatedAt = Date()
             workspace.projects[index].lastBranch = Self.currentGitBranch(at: standardizedPath)
+            if createdManually {
+                workspace.projects[index].createdManually = true
+            }
             try saveWorkspace(workspace)
             return workspace.projects[index]
         }
@@ -54,7 +67,8 @@ struct AgentSessionStore {
             name: name ?? URL(fileURLWithPath: standardizedPath).lastPathComponent,
             path: standardizedPath,
             color: color ?? AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
-            lastBranch: Self.currentGitBranch(at: standardizedPath)
+            lastBranch: Self.currentGitBranch(at: standardizedPath),
+            createdManually: createdManually ? true : nil
         )
         workspace.projects.append(project)
         try saveWorkspace(workspace)
@@ -152,9 +166,10 @@ struct AgentSessionStore {
         externalSessionID: String? = nil,
         initialPrompt: String? = nil,
         imagePaths: [String] = [],
-        shouldLaunchOnOpen: Bool = false
+        shouldLaunchOnOpen: Bool = false,
+        createdManually: Bool = true
     ) throws -> AgentChatSession {
-        let project = try upsertProject(path: projectPath)
+        let project = try upsertProject(path: projectPath, createdManually: createdManually)
         let session = AgentChatSession(
             provider: provider,
             projectID: project.id,
@@ -164,7 +179,8 @@ struct AgentSessionStore {
             reasoningEffort: reasoningEffort,
             initialPrompt: initialPrompt,
             imagePaths: imagePaths,
-            shouldLaunchOnOpen: shouldLaunchOnOpen
+            shouldLaunchOnOpen: shouldLaunchOnOpen,
+            createdManually: createdManually ? true : nil
         )
         return try upsertSession(session)
     }
@@ -361,7 +377,7 @@ enum AgentSessionMoveDirection {
     case down
 }
 
-struct IndexedAgentSession: Equatable {
+struct IndexedAgentSession: Codable, Equatable {
     var provider: AgentProvider
     var externalSessionID: String
     var cwd: String

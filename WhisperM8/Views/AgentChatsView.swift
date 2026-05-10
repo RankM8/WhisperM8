@@ -20,9 +20,14 @@ struct AgentChatsView: View {
     @State private var expandedProjectIDs: Set<UUID> = []
     @State private var searchText = ""
     @State private var errorMessage: String?
+    @State private var isIndexingSessions = false
+    @State private var indexRefreshTask: Task<Void, Never>?
+    @State private var lastIndexStats: [AgentSessionIndexStats] = []
     @State private var sessionActionRequest: AgentSessionActionRequest?
     @StateObject private var terminalRegistry = AgentTerminalRegistry()
     @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
+    @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
+    @State private var openTabIDs: Set<UUID> = []
 
     private var selectedProject: AgentProject? {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
@@ -33,14 +38,27 @@ struct AgentChatsView: View {
         return sessions(for: selectedProject)
     }
 
+    private var headerTabs: [AgentChatSession] {
+        projectSessions.filter { session in
+            if session.status == .running || session.status == .pending { return true }
+            if openTabIDs.contains(session.id) { return true }
+            if session.id == selectedSessionID { return true }
+            return false
+        }
+    }
+
     private var selectedSession: AgentChatSession? {
         projectSessions.first { $0.id == selectedSessionID } ?? projectSessions.first
     }
 
+    private var manualProjects: [AgentProject] {
+        workspace.projects.filter(\.isManuallyAdded)
+    }
+
     private var visibleProjects: [AgentProject] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return workspace.projects }
-        return workspace.projects.filter { project in
+        guard !query.isEmpty else { return manualProjects }
+        return manualProjects.filter { project in
             project.name.localizedCaseInsensitiveContains(query)
                 || project.path.localizedCaseInsensitiveContains(query)
                 || sessions(for: project).contains { session in
@@ -72,10 +90,10 @@ struct AgentChatsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            hashboardSidebar
-                .frame(width: 276)
-
-            Divider()
+            if isSidebarVisible {
+                hashboardSidebar
+                    .frame(width: 276)
+            }
 
             mainWorkspace
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,7 +105,7 @@ struct AgentChatsView: View {
                     project: selectedProject,
                     session: selectedSession,
                     sessions: projectSessions,
-                    onRefresh: refresh,
+                    onRefresh: { refreshSessionsInBackground(reason: "inspector") },
                     onNewCodexChat: { createSession(provider: .codex) },
                     onNewClaudeChat: { createSession(provider: .claude) },
                     onOpenPHPStorm: openSelectedProjectInPHPStorm
@@ -95,42 +113,39 @@ struct AgentChatsView: View {
                 .frame(width: 292)
             }
         }
-        .frame(minWidth: isInspectorVisible ? 1180 : 920, minHeight: 720)
+        .frame(minWidth: 920, minHeight: 700)
         .background(AgentTheme.background)
-        .onAppear(perform: refresh)
+        .background(AgentChatsWindowAccessor())
+        .ignoresSafeArea(.all, edges: .top)
+        .onAppear {
+            loadWorkspaceFast()
+        }
+        .onDisappear {
+            indexRefreshTask?.cancel()
+        }
     }
 
     private var hashboardSidebar: some View {
         VStack(spacing: 0) {
-            sidebarHeader
+            Color.clear.frame(height: 28)
 
-            Divider()
+            if isIndexingSessions {
+                Label("Sessions werden gescannt", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 4)
+            }
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     sidebarCommandRows
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 4)
 
-                    HStack(spacing: 8) {
-                        Text("PROJECTS · \(visibleProjects.count)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button {
-                            if expandedProjectIDs.count == workspace.projects.count {
-                                expandedProjectIDs.removeAll()
-                            } else {
-                                expandedProjectIDs = Set(workspace.projects.map(\.id))
-                            }
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .rotationEffect(.degrees(expandedProjectIDs.count == workspace.projects.count ? 180 : 0))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .help("Projektgruppen auf-/zuklappen")
+                    if visibleProjects.isEmpty && searchText.isEmpty {
+                        sidebarEmptyState
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 8)
 
                     ForEach(visibleProjects) { project in
                         ProjectChatGroup(
@@ -149,6 +164,7 @@ struct AgentChatsView: View {
                                 selectedProjectID = project.id
                                 expandedProjectIDs.insert(project.id)
                                 selectedSessionID = sessionID
+                                openTabIDs.insert(sessionID)
                                 AppPreferences.shared.agentDefaultProjectPath = project.path
                             },
                             onNewChat: {
@@ -156,113 +172,156 @@ struct AgentChatsView: View {
                                 expandedProjectIDs.insert(project.id)
                                 createSession(provider: .codex)
                             },
+                            onCloseSession: { closeHeaderTab($0) },
                             onRename: renameSession,
-                            onSetGroup: setSessionGroup,
                             onSetColor: setSessionColor,
-                            onMove: moveSession
+                            isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true }
                         )
                     }
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, 6)
             }
 
             Spacer(minLength: 0)
 
-            Divider()
-
-            HStack(spacing: 10) {
-                Button {
-                    addProject()
-                } label: {
-                    Label("Projekt hinzufügen", systemImage: "plus")
-                }
-
-                Spacer()
-
-                Button {
-                    refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help("Sessions aktualisieren")
-            }
-            .buttonStyle(.plain)
-            .font(.callout.weight(.medium))
-            .padding(12)
+            sidebarFooter
         }
         .background(AgentTheme.sidebar)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(AgentTheme.border)
+                .frame(width: 1)
+        }
     }
 
-    private var sidebarHeader: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.accentColor)
-                    .frame(width: 28, height: 28)
-                    .overlay(Text("W8").font(.caption.weight(.bold)).foregroundStyle(.white))
+    private var sidebarEmptyState: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Noch keine Projekte")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Text("Füge ein Projekt hinzu, um Codex- oder Claude-Chats darin anzulegen.")
+                .font(.system(size: 11))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Hashboard")
-                        .font(.headline.weight(.semibold))
-                    Text("Agent Chats")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            Button {
+                addProject()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 11, weight: .medium))
+                    Text("Projekt hinzufügen")
+                        .font(.system(size: 11, weight: .medium))
                 }
-
-                Spacer()
-
-                AgentResourceSummaryButton(descriptors: runningResourceDescriptors)
+                .foregroundStyle(AgentTheme.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(AgentTheme.border, lineWidth: 1))
             }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+    }
 
-            HStack(spacing: 8) {
+    private var sidebarFooter: some View {
+        HStack(spacing: 4) {
+            Button {
+                WindowRequestCenter.shared.request(.settings)
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 16)
+                    Text("Settings")
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                }
+                .foregroundStyle(AgentTheme.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SidebarRowButtonStyle())
+            .help("Einstellungen öffnen")
+
+            Button {
+                WindowRequestCenter.shared.request(.onboarding)
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Onboarding / Hilfe öffnen")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AgentTheme.border)
+                .frame(height: 1)
+        }
+    }
+
+    private var sidebarCommandRows: some View {
+        VStack(spacing: 1) {
+            Button {
+                createSession(provider: .codex)
+            } label: {
+                SidebarCommandRow(icon: "square.stack.3d.up", title: "Neuer Chat", isActive: selectedProject != nil)
+            }
+            .buttonStyle(SidebarRowButtonStyle())
+            .disabled(selectedProject == nil)
+            .help("Neuen Codex Chat im aktuellen Projekt starten")
+
+            Button {
+                refreshSessionsInBackground(reason: "manual")
+            } label: {
+                SidebarCommandRow(icon: "arrow.triangle.2.circlepath", title: "Sessions scannen")
+            }
+            .buttonStyle(SidebarRowButtonStyle())
+            .help("Sessions im Hintergrund neu indizieren")
+
+            Button {
+                addProject()
+            } label: {
+                SidebarCommandRow(icon: "plus", title: "Projekt hinzufügen", trailingIcon: "folder.badge.plus")
+            }
+            .buttonStyle(SidebarRowButtonStyle())
+            .help("Ordner als Projekt hinzufügen")
+
+            HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Filter projects, chats...", text: $searchText)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                TextField("Filter…", text: $searchText)
                     .textFieldStyle(.plain)
+                    .font(.system(size: 11))
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 10))
+                            .foregroundStyle(AgentTheme.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .font(.callout)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(AgentTheme.border, lineWidth: 1))
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
-    }
-
-    private var sidebarCommandRows: some View {
-        VStack(spacing: 4) {
-            Button {
-                createSession(provider: .codex)
-            } label: {
-                SidebarCommandRow(icon: "square.and.pencil", title: "Neuer Codex Chat")
-            }
-            .disabled(selectedProject == nil)
-
-            Button {
-                refresh()
-            } label: {
-                SidebarCommandRow(icon: "magnifyingglass", title: "Sessions scannen")
-            }
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 8)
     }
 
     private var mainWorkspace: some View {
         VStack(spacing: 0) {
             projectChatStrip
-
-            Divider()
 
             if let selectedProject, let selectedSession {
                 AgentSessionDetailView(
@@ -270,8 +329,11 @@ struct AgentChatsView: View {
                     session: selectedSession,
                     terminalRegistry: terminalRegistry,
                     actionRequest: sessionActionRequest,
-                    onStateChanged: refresh
+                    onStateChanged: loadWorkspaceFast
                 )
+                .id(selectedSession.id)
+                .padding(.top, 10)
+                .background(Color.black)
             } else {
                 ContentUnavailableView("Kein Agent Chat", systemImage: "terminal")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -282,124 +344,179 @@ struct AgentChatsView: View {
 
     private var projectChatStrip: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                if let selectedProject {
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(Color(hex: selectedProject.color))
-                        .frame(width: 34, height: 34)
-                        .overlay(Text(selectedProject.name.prefix(1)).font(.headline.weight(.bold)).foregroundStyle(.white))
+            HStack(spacing: 6) {
+                if !isSidebarVisible {
+                    Spacer().frame(width: 70)
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 8) {
-                        Text(selectedProject?.name ?? "Kein Projekt")
-                            .font(.headline.weight(.semibold))
-                        Label(selectedProject?.lastBranch ?? "local", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 5))
+                TitlebarIconButton(systemImage: "sidebar.left", help: isSidebarVisible ? "Sidebar ausblenden" : "Sidebar einblenden", isActive: isSidebarVisible) {
+                    isSidebarVisible.toggle()
+                }
+
+                Text("Chat")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .padding(.leading, 2)
+
+                if !headerTabs.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            ForEach(headerTabs) { session in
+                                ChatTabButton(
+                                    session: session,
+                                    isSelected: session.id == selectedSession?.id,
+                                    onSelect: {
+                                        openTabIDs.insert(session.id)
+                                        selectedSessionID = session.id
+                                    },
+                                    onClose: {
+                                        closeHeaderTab(session)
+                                    }
+                                )
+                                .contextMenu {
+                                    sessionManagementMenu(session)
+                                }
+                            }
+                        }
                     }
-                    Text(selectedProject?.path ?? "Projekt auswählen oder hinzufügen")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
                 }
 
-                Spacer()
+                Menu {
+                    Button("Neuer Codex Chat") { createSession(provider: .codex) }
+                    Button("Neuer Claude Chat") { createSession(provider: .claude) }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .frame(width: 22, height: 22)
+                        .background(AgentTheme.control.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(AgentTheme.border, lineWidth: 1))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(selectedProject == nil)
+                .help("Neuen Chat anlegen")
+
+                Spacer(minLength: 8)
+
+                if let branch = selectedProject?.lastBranch, !branch.isEmpty {
+                    BranchTag(branch: branch)
+                        .help(selectedProject?.path ?? branch)
+                }
+
+                TitlebarIconButton(systemImage: "sidebar.right", help: isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen", isActive: isInspectorVisible) {
+                    isInspectorVisible.toggle()
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+
+            HStack(spacing: 12) {
+                Button {
+                    isInspectorVisible.toggle()
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Session-Einstellungen")
+
+                ProviderTab(provider: .claude, isActive: selectedSession?.provider == .claude) {
+                    switchSelectedProvider(to: .claude)
+                }
+                ProviderTab(provider: .codex, isActive: selectedSession?.provider == .codex) {
+                    switchSelectedProvider(to: .codex)
+                }
 
                 if let selectedSession {
                     selectedSessionHeaderControls(selectedSession)
                 }
+
+                Spacer()
 
                 if selectedProject != nil {
                     Button {
                         openSelectedProjectInPHPStorm()
                     } label: {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .frame(width: 28, height: 28)
-                            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+                            .font(.system(size: 11))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                            .frame(width: 18, height: 18)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("PHPStorm öffnen")
                 }
-
-                Button {
-                    isInspectorVisible.toggle()
-                } label: {
-                    Image(systemName: "sidebar.right")
-                        .frame(width: 28, height: 28)
-                        .background(isInspectorVisible ? AgentTheme.selection : AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
-                }
-                .buttonStyle(.plain)
-                .help(isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen")
-
-                Menu {
-                    Button("Neuer Codex Chat") { createSession(provider: .codex) }
-                    Button("Neuer Claude Chat") { createSession(provider: .claude) }
-                } label: {
-                    Label("Chat", systemImage: "plus")
-                }
-                .disabled(selectedProject == nil)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .padding(.bottom, 11)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 5)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(projectSessions) { session in
-                        ChatTabButton(
-                            session: session,
-                            isSelected: session.id == selectedSession?.id
-                        ) {
-                            selectedSessionID = session.id
-                        }
-                        .contextMenu {
-                            sessionManagementMenu(session)
-                        }
-                    }
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textTertiary)
+
+                if let selectedSession {
+                    Text(selectedSession.title)
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .lineLimit(1)
+                } else if let selectedProject {
+                    Text(URL(fileURLWithPath: selectedProject.path).lastPathComponent)
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .lineLimit(1)
+                } else {
+                    Text("Kein Projekt ausgewählt")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textTertiary)
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 12)
+
+                Spacer()
+
+                if let selectedSession {
+                    Text(selectedSession.runtimeDisplayText)
+                        .font(.system(size: 9, weight: .regular).monospacedDigit())
+                        .foregroundStyle(AgentTheme.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 5)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(AgentTheme.border)
+                    .frame(height: 1)
             }
         }
-        .background(AgentTheme.surface)
+        .background(AgentTheme.header)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(AgentTheme.border)
+                .frame(height: 1)
+        }
     }
 
     private func selectedSessionHeaderControls(_ session: AgentChatSession) -> some View {
         let controller = terminalRegistry.controller(for: session.id)
         let isRunning = controller?.isRunning == true
 
-        return HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: session.provider.systemImage)
-                    .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
-                Text(session.title)
-                    .font(.caption.weight(.semibold))
+        return HStack(spacing: 6) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(isRunning ? AgentTheme.textSecondary : AgentTheme.textTertiary)
+                    .frame(width: 5, height: 5)
+                Text(session.runtimeDisplayText)
+                    .font(.system(size: 10, weight: .regular).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(isRunning ? "Running" : session.status.displayName)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(isRunning ? .green : .secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 4))
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
-            .frame(maxWidth: 260)
-
-            Text(session.runtimeDisplayText)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 6))
+            .padding(.vertical, 3)
 
             Button {
                 sessionActionRequest = AgentSessionActionRequest(
@@ -407,14 +524,19 @@ struct AgentChatsView: View {
                     kind: isRunning ? .restart : .start
                 )
             } label: {
-                Label(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start" : "Resume"), systemImage: isRunning ? "arrow.clockwise" : "play.fill")
-                    .labelStyle(.titleAndIcon)
+                HStack(spacing: 5) {
+                    Image(systemName: isRunning ? "arrow.clockwise" : "play.fill")
+                        .font(.system(size: 9, weight: .medium))
+                    Text(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start" : "Resume"))
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(AgentTheme.textSecondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(AgentTheme.border, lineWidth: 1))
             }
             .buttonStyle(.plain)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 7))
 
             Menu {
                 Button(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start Terminal" : "Resume Terminal"), systemImage: isRunning ? "arrow.clockwise" : "play.fill") {
@@ -442,35 +564,33 @@ struct AgentChatsView: View {
                     Button("Provider-Farbe verwenden") { setSessionColor(id: session.id, color: nil) }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
-                    .frame(width: 28, height: 28)
-                    .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 7))
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
             .help("Chat-Aktionen")
         }
     }
 
     private func refresh() {
+        loadWorkspaceFast()
+        refreshSessionsInBackground(reason: "refresh")
+    }
+
+    private func loadWorkspaceFast() {
+        let startedAt = Date()
         do {
             try store.markStaleRunningSessionsClosed(excluding: terminalRegistry.activeSessionIDs)
-            try store.mergeIndexedSessions(
-                CodexSessionIndexer().indexedSessions()
-                    + ClaudeSessionIndexer().indexedSessions()
-            )
         } catch {
             errorMessage = error.localizedDescription
         }
 
         workspace = store.loadWorkspace()
-        if workspace.projects.isEmpty {
-            do {
-                _ = try store.upsertProject(path: AppPreferences.shared.agentDefaultProjectPath)
-                workspace = store.loadWorkspace()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
 
         if selectedProjectID == nil || !workspace.projects.contains(where: { $0.id == selectedProjectID }) {
             selectedProjectID = workspace.projects.first?.id
@@ -484,12 +604,65 @@ struct AgentChatsView: View {
         if selectedSessionID == nil || !projectSessions.contains(where: { $0.id == selectedSessionID }) {
             selectedSessionID = projectSessions.first?.id
         }
+        Logger.agentPerformance.debug("agent_chats_fast_load durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)")
+    }
+
+    private func refreshSessionsInBackground(reason: String) {
+        indexRefreshTask?.cancel()
+        isIndexingSessions = true
+        let startedAt = Date()
+        let activeSessionIDs = terminalRegistry.activeSessionIDs
+
+        indexRefreshTask = Task {
+            defer {
+                if !Task.isCancelled {
+                    isIndexingSessions = false
+                }
+            }
+            let result = Task.detached(priority: .utility) {
+                let cacheStore = AgentSessionIndexCacheStore()
+                var cache = cacheStore.load()
+                let codex = CodexSessionIndexer().indexedSessionResult(cache: &cache)
+                let claude = ClaudeSessionIndexer().indexedSessionResult(cache: &cache)
+                cacheStore.save(cache)
+
+                let store = AgentSessionStore()
+                try store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
+                try store.mergeIndexedSessions(codex.sessions + claude.sessions)
+                return [codex.stats, claude.stats]
+            }
+
+            guard !Task.isCancelled else { return }
+            do {
+                let stats = try await result.value
+                guard !Task.isCancelled else { return }
+                lastIndexStats = stats
+                loadWorkspaceFast()
+                Logger.agentPerformance.info("agent_chats_background_index reason=\(reason, privacy: .public) durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) stats=\(lastIndexStats.map { "\($0.provider.rawValue):\($0.scannedFiles)/\($0.cacheHits)/\($0.bytesRead)" }.joined(separator: ","), privacy: .public)")
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func sessions(for project: AgentProject) -> [AgentChatSession] {
+        // Identische Sichtbarkeitsregel wie `headerTabs`: nur Sessions, die im Header
+        // aktiv sind. Sidebar und Header bleiben so 1:1 synchron — kein "Ghost"-Eintrag
+        // einer geschlossenen Session, die oben schon weg ist.
         AgentSessionStore.sortedSessions(
-            workspace.sessions
-                .filter { $0.projectID == project.id && $0.status != .archived }
+            workspace.sessions.filter { session in
+                guard session.projectID == project.id,
+                      session.status != .archived,
+                      session.isManuallyCreated
+                else { return false }
+                if session.status == .running || session.status == .pending { return true }
+                if openTabIDs.contains(session.id) { return true }
+                if session.id == selectedSessionID { return true }
+                return false
+            }
         )
     }
 
@@ -499,7 +672,12 @@ struct AgentChatsView: View {
         let sessions = workspace.sessions
             .filter { $0.projectID == projectID && $0.status != .archived }
             .sorted { $0.lastActivityAt > $1.lastActivityAt }
-        selectedSessionID = sessions.first?.id
+        if let firstID = sessions.first?.id {
+            selectedSessionID = firstID
+            openTabIDs.insert(firstID)
+        } else {
+            selectedSessionID = nil
+        }
         if let project = workspace.projects.first(where: { $0.id == projectID }) {
             AppPreferences.shared.agentDefaultProjectPath = project.path
         }
@@ -522,10 +700,11 @@ struct AgentChatsView: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
-                let project = try store.upsertProject(path: url.path)
+                let project = try store.upsertProject(path: url.path, createdManually: true)
                 workspace = store.loadWorkspace()
                 selectedProjectID = project.id
                 selectedSessionID = sessions(for: project).first?.id
+                expandedProjectIDs.insert(project.id)
                 AppPreferences.shared.agentDefaultProjectPath = project.path
             } catch {
                 errorMessage = error.localizedDescription
@@ -548,6 +727,7 @@ struct AgentChatsView: View {
             )
             workspace = store.loadWorkspace()
             selectedSessionID = session.id
+            openTabIDs.insert(session.id)
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
         } catch {
             errorMessage = error.localizedDescription
@@ -628,6 +808,47 @@ struct AgentChatsView: View {
             }
             Button("Provider-Farbe verwenden") { setSessionColor(id: session.id, color: nil) }
         }
+    }
+
+    private func closeHeaderTab(_ session: AgentChatSession) {
+        // X-Klick auf Tab/Sidebar = Chat vollständig schließen.
+        // Terminal terminieren (falls läuft) und Session archivieren – dadurch verschwindet
+        // sie aus Header UND Sidebar (beide nutzen denselben `status != .archived` Filter).
+        // Daten bleiben in der Workspace-Datei erhalten, nichts geht verloren.
+        if terminalRegistry.controller(for: session.id)?.isRunning == true {
+            terminalRegistry.terminate(sessionID: session.id)
+        }
+
+        do {
+            try store.updateSession(id: session.id) { $0.status = .archived }
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        openTabIDs.remove(session.id)
+
+        if selectedSessionID == session.id {
+            // Nächste verfügbare Session im selben Projekt wählen (oder nil, wenn keine).
+            let remaining = workspace.sessions.filter { other in
+                other.id != session.id &&
+                other.projectID == session.projectID &&
+                other.status != .archived &&
+                other.isManuallyCreated &&
+                (other.status == .running || other.status == .pending || openTabIDs.contains(other.id))
+            }
+            selectedSessionID = remaining.first?.id
+        }
+    }
+
+    private func switchSelectedProvider(to provider: AgentProvider) {
+        guard let project = selectedProject else { return }
+        if let match = projectSessions.first(where: { $0.provider == provider }) {
+            selectedSessionID = match.id
+        } else {
+            createSession(provider: provider)
+        }
+        AppPreferences.shared.agentDefaultProjectPath = project.path
     }
 
     private func openSelectedProjectInPHPStorm() {
@@ -797,9 +1018,12 @@ private struct AgentResourcePopover: View {
             ForEach(project.sessions) { session in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Image(systemName: session.provider.systemImage)
-                            .foregroundStyle(Color(hex: session.provider == .codex ? "#32D74B" : "#FF9F0A"))
-                            .frame(width: 18)
+                        ProviderIcon(
+                            provider: session.provider,
+                            size: 12,
+                            tint: Color(hex: session.provider == .codex ? "#32D74B" : "#FF9F0A")
+                        )
+                        .frame(width: 18)
                         Text(session.title)
                             .lineLimit(1)
                         Spacer()
@@ -860,110 +1084,126 @@ private struct ProjectChatGroup: View {
     var onToggleExpanded: () -> Void
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
+    var onCloseSession: (AgentChatSession) -> Void
     var onRename: (UUID, String) -> Void
-    var onSetGroup: (UUID, String?) -> Void
     var onSetColor: (UUID, String?) -> Void
-    var onMove: (UUID, AgentSessionMoveDirection) -> Void
+    var isRunning: (UUID) -> Bool
+
+    @State private var isHeaderHovered = false
 
     private var isSelected: Bool {
         selectedProjectID == project.id
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Button(action: onToggleExpanded) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 12)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 0) {
+            groupHeader
 
-                Button(action: onSelectProject) {
-                    projectHeader
-                }
-                .buttonStyle(.plain)
-
-                Button(action: onNewChat) {
-                    Image(systemName: "plus")
-                        .font(.caption.weight(.semibold))
-                        .frame(width: 25, height: 25)
-                        .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .help("Neuen Codex Chat im Projekt starten")
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(isSelected ? AgentTheme.selection : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-
-            if isExpanded {
-                ForEach(groupedSessions.prefix(8), id: \.name) { group in
-                    if group.name != nil {
-                        Text(group.name ?? "")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 42)
-                            .padding(.top, 4)
-                    }
-
-                    ForEach(group.sessions.prefix(10)) { session in
+            if isExpanded && !sessions.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(sessions.prefix(20)) { session in
                         SessionListButton(
                             session: session,
                             isSelected: selectedSessionID == session.id,
-                            relativeTime: relativeTime(session.lastActivityAt),
-                            onSelect: { onSelectSession(session.id) }
+                            isRunning: isRunning(session.id),
+                            onSelect: { onSelectSession(session.id) },
+                            onClose: { onCloseSession(session) }
                         )
                         .contextMenu {
-                            Button("Nach oben") { onMove(session.id, .up) }
-                            Button("Nach unten") { onMove(session.id, .down) }
-                            Divider()
-                            Button("In Work gruppieren") { onSetGroup(session.id, "Work") }
-                            Button("In Research gruppieren") { onSetGroup(session.id, "Research") }
-                            Button("Gruppe entfernen") { onSetGroup(session.id, nil) }
-                            Divider()
                             Menu("Tab-Farbe") {
                                 ForEach(AgentChatColor.palette, id: \.self) { color in
                                     Button(color) { onSetColor(session.id, color) }
                                 }
                                 Button("Provider-Farbe verwenden") { onSetColor(session.id, nil) }
                             }
+                            Divider()
+                            Button("Schließen", role: .destructive) {
+                                onCloseSession(session)
+                            }
                         }
                     }
                 }
             }
         }
-        .padding(.horizontal, 8)
     }
 
-    private var projectHeader: some View {
-        HStack(spacing: 9) {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color(hex: project.color))
-                .frame(width: 28, height: 28)
-                .overlay(Text(project.name.prefix(1)).font(.callout.weight(.bold)).foregroundStyle(.white))
+    private var groupHeader: some View {
+        Button(action: onSelectProject) {
+            HStack(alignment: .center, spacing: 9) {
+                Button(action: onToggleExpanded) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                        .frame(width: 12, height: 12)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .animation(.easeOut(duration: 0.12), value: isExpanded)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(1)
-                Label(project.lastBranch ?? "local", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(hex: project.color))
+                    .frame(width: 18, height: 18)
+                    .overlay(
+                        Text(project.name.prefix(1).uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(project.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AgentTheme.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 8))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                        Text(project.lastBranch ?? "local")
+                            .font(.system(size: 10))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if !sessions.isEmpty {
+                            Text("·")
+                                .font(.system(size: 10))
+                                .foregroundStyle(AgentTheme.textTertiary)
+                            Text("\(sessions.count)")
+                                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                                .foregroundStyle(AgentTheme.textTertiary)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 6)
+
+                if isHeaderHovered {
+                    Button(action: onNewChat) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Neuen Codex Chat im Projekt starten")
+                }
             }
-
-            Spacer()
-
-            Text("\(sessions.count)")
-                .font(.caption2.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 5))
+            .padding(.leading, 8)
+            .padding(.trailing, 8)
+            .frame(minHeight: 36, maxHeight: 36)
+            .background(headerBackground)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .onHover { isHeaderHovered = $0 }
+    }
+
+    private var headerBackground: Color {
+        if isSelected { return AgentTheme.selection }
+        if isHeaderHovered { return AgentTheme.hover }
+        return Color.clear
     }
 
     private var groupedSessions: [(name: String?, sessions: [AgentChatSession])] {
@@ -993,132 +1233,410 @@ private struct ProjectChatGroup: View {
 private struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
-    let relativeTime: String
+    let isRunning: Bool
     var onSelect: () -> Void
+    var onClose: () -> Void
+
+    @State private var isHovered = false
+
+    /// Position des Connector-Strichs vom linken Rand der Sidebar — exakt unter
+    /// der Mitte des 18×18 Project-Avatars (8 px outer-padding + 9 px Avatar-Halbbreite).
+    private static let connectorX: CGFloat = 18
+
+    private var customColor: Color? {
+        guard let hex = session.color, !hex.isEmpty else { return nil }
+        return Color(hex: hex)
+    }
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color(hex: AgentChatColor.fallback(for: session)))
-                    .frame(width: 3, height: 18)
+            ZStack(alignment: .leading) {
+                // Vertikale Connector-Linie — pro Sub-Item rendern, dadurch kontinuierlich
+                // wenn die Items in einer VStack mit spacing 0 stehen.
+                Rectangle()
+                    .fill(isSelected ? AgentTheme.connectorActive : AgentTheme.connector)
+                    .frame(width: 1)
+                    .frame(maxHeight: .infinity)
+                    .padding(.leading, Self.connectorX)
 
-                Image(systemName: session.provider.systemImage)
-                    .font(.caption)
-                    .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
-                    .frame(width: 14)
+                HStack(spacing: 8) {
+                    if let customColor {
+                        Circle()
+                            .fill(customColor.opacity(isSelected ? 0.95 : 0.7))
+                            .frame(width: 6, height: 6)
+                    } else {
+                        ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
+                            .frame(width: 11, alignment: .center)
+                    }
 
-                Text(session.title)
-                    .font(.callout)
-                    .lineLimit(1)
+                    Text(session.title)
+                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                        .foregroundStyle(isSelected ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-                Spacer()
-
-                if session.status == .running {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 6, height: 6)
-                } else if session.status == .closed {
-                    Text(relativeTime)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(session.status.displayName)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(statusColor(session.status))
+                    trailingIndicator
+                        .frame(width: 18, alignment: .trailing)
                 }
+                .padding(.leading, 28)
+                .padding(.trailing, 8)
             }
-            .padding(.leading, 36)
-            .padding(.trailing, 10)
-            .padding(.vertical, 5)
-            .background(
-                isSelected ? AgentTheme.selection.opacity(0.95) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 7)
-            )
+            .frame(minHeight: 26, maxHeight: 26)
+            .background(rowBackground)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 
-    private func statusColor(_ status: AgentChatStatus) -> Color {
-        switch status {
-        case .pending:
-            return .yellow
-        case .running:
-            return .green
-        case .closed:
-            return .secondary
-        case .archived:
-            return .secondary
+    @ViewBuilder
+    private var trailingIndicator: some View {
+        if isHovered || isSelected {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(AgentTheme.textSecondary)
+                .frame(width: 16, height: 16)
+                .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                .contentShape(Rectangle())
+                .onTapGesture { onClose() }
+                .help("Chat schließen")
+        } else if isRunning {
+            Circle()
+                .fill(Color.green.opacity(0.65))
+                .frame(width: 5, height: 5)
+        } else {
+            Color.clear.frame(width: 1, height: 1)
         }
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return AgentTheme.selection }
+        if isHovered { return AgentTheme.hover }
+        return Color.clear
     }
 }
 
 private struct SidebarCommandRow: View {
     let icon: String
     let title: String
+    var isActive: Bool = false
+    var trailingIcon: String? = nil
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .frame(width: 18)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 16)
+                .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textSecondary)
             Text(title)
+                .font(.system(size: 12, weight: isActive ? .semibold : .medium))
+                .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                 .lineLimit(1)
             Spacer()
+            if let trailingIcon {
+                Image(systemName: trailingIcon)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .frame(width: 16)
+            }
         }
-        .font(.callout)
-        .foregroundStyle(.primary)
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Color.clear, in: RoundedRectangle(cornerRadius: 7))
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SidebarRowButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(rowBackground(pressed: configuration.isPressed))
+            )
+            .padding(.horizontal, 8)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+
+    private func rowBackground(pressed: Bool) -> Color {
+        if pressed { return AgentTheme.selectionStrong }
+        if isHovered { return AgentTheme.hover }
+        return Color.clear
+    }
+}
+
+private struct ProviderTab: View {
+    let provider: AgentProvider
+    let isActive: Bool
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                ProviderIcon(
+                    provider: provider,
+                    size: 12,
+                    tint: isActive ? AgentTheme.textPrimary : AgentTheme.textTertiary
+                )
+                Text(provider.displayName)
+                    .font(.system(size: 11, weight: isActive ? .semibold : .regular))
+                    .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(background, in: RoundedRectangle(cornerRadius: 3))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+
+    private var background: Color {
+        if isActive { return AgentTheme.tabSelected }
+        if isHovered { return AgentTheme.surface }
+        return Color.clear
     }
 }
 
 private struct ChatTabButton: View {
     let session: AgentChatSession
     let isSelected: Bool
+    var onSelect: () -> Void
+    var onClose: () -> Void
+
+    @State private var isHovered = false
+
+    private var customColor: Color? {
+        guard let hex = session.color, !hex.isEmpty else { return nil }
+        return Color(hex: hex)
+    }
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 6) {
+                if let customColor {
+                    Rectangle()
+                        .fill(customColor.opacity(isSelected ? 0.85 : 0.55))
+                        .frame(width: 3, height: 14)
+                } else {
+                    ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
+                }
+
+                Text(session.title)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                trailingIndicator
+                    .frame(width: 18, alignment: .trailing)
+            }
+            .padding(.horizontal, 7)
+            .frame(minWidth: 90, maxWidth: 200, minHeight: 22, maxHeight: 22)
+            .background(tabBackground, in: RoundedRectangle(cornerRadius: 3))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 3))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+
+    @ViewBuilder
+    private var trailingIndicator: some View {
+        if isHovered || isSelected {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(AgentTheme.textSecondary)
+                .frame(width: 16, height: 16)
+                .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                .contentShape(Rectangle())
+                .onTapGesture { onClose() }
+                .help("Tab schließen")
+        } else if session.status == .running {
+            Circle()
+                .fill(AgentTheme.textTertiary)
+                .frame(width: 4, height: 4)
+        } else if session.status != .archived {
+            Text(session.status.displayName)
+                .font(.system(size: 9))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .lineLimit(1)
+        } else {
+            Color.clear.frame(width: 1, height: 1)
+        }
+    }
+
+    private var tabBackground: Color {
+        if isSelected { return AgentTheme.tabSelected }
+        if isHovered { return AgentTheme.surface }
+        return Color.clear
+    }
+
+    private var borderColor: Color {
+        isSelected ? AgentTheme.borderStrong : AgentTheme.border
+    }
+}
+
+/// Rendert das offizielle Provider-Logo (Claude / Codex) aus dem Asset-Bundle.
+/// Fällt bei fehlendem Asset auf das SF-Symbol zurück.
+private struct ProviderIcon: View {
+    let provider: AgentProvider
+    var size: CGFloat = 11
+    var tint: Color = AgentTheme.textSecondary
+
+    var body: some View {
+        if let nsImage = NSImage(named: provider.assetName) {
+            let templateImage = Self.templateCopy(nsImage)
+            Image(nsImage: templateImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+                .foregroundStyle(tint)
+        } else {
+            Image(systemName: provider.systemImage)
+                .font(.system(size: size - 1, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
+        }
+    }
+
+    private static func templateCopy(_ image: NSImage) -> NSImage {
+        let copy = image.copy() as! NSImage
+        copy.isTemplate = true
+        return copy
+    }
+}
+
+private struct AgentChatsWindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            configure(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configure(nsView.window)
+        }
+    }
+
+    private func configure(_ window: NSWindow?) {
+        guard let window else { return }
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarSeparatorStyle = .none
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
+    }
+}
+
+private struct TitlebarIconButton: View {
+    let systemImage: String
+    let help: String
+    var isActive: Bool = false
+    var isDisabled: Bool = false
     var action: () -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(Color(hex: AgentChatColor.fallback(for: session)))
-                    .frame(height: isSelected ? 3 : 2)
-                    .opacity(isSelected ? 1 : 0.75)
-
-                HStack(spacing: 8) {
-                    Image(systemName: session.provider.systemImage)
-                        .font(.caption)
-                        .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
-                    Text(session.title)
-                        .lineLimit(1)
-
-                    if session.status == .running {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 6, height: 6)
-                    } else {
-                        Text(session.status.displayName)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(AgentTheme.background, in: RoundedRectangle(cornerRadius: 4))
-                    }
-                }
-                .font(.callout.weight(isSelected ? .semibold : .regular))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-            }
-            .frame(maxWidth: 240)
-            .background(isSelected ? AgentTheme.selection : AgentTheme.panel, in: RoundedRectangle(cornerRadius: 8))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color(hex: AgentChatColor.fallback(for: session)).opacity(0.7) : AgentTheme.border, lineWidth: 1)
-            )
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(foreground)
+                .frame(width: 24, height: 22)
+                .background(background, in: RoundedRectangle(cornerRadius: 4))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help(help)
+        .onHover { isHovered = $0 && !isDisabled }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+
+    private var foreground: Color {
+        if isDisabled { return AgentTheme.textTertiary.opacity(0.6) }
+        if isActive { return AgentTheme.textPrimary }
+        return AgentTheme.textSecondary
+    }
+
+    private var background: Color {
+        if isDisabled { return Color.clear }
+        if isActive { return AgentTheme.selection }
+        if isHovered { return AgentTheme.hover }
+        return Color.clear
+    }
+}
+
+private struct BranchTag: View {
+    let branch: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 9, weight: .bold))
+            Text(formattedBranch)
+                .font(.system(size: 10, weight: .semibold).monospaced())
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .foregroundStyle(Color(red: 0.78, green: 0.62, blue: 1.0))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color(red: 0.78, green: 0.62, blue: 1.0).opacity(0.10), in: RoundedRectangle(cornerRadius: 5))
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color(red: 0.78, green: 0.62, blue: 1.0).opacity(0.25), lineWidth: 1))
+        .frame(maxWidth: 180)
+    }
+
+    private var formattedBranch: String {
+        branch.hasPrefix("/") ? branch : "/\(branch)"
+    }
+}
+
+private struct HeaderIconButton: View {
+    let systemImage: String
+    let help: String
+    var isActive: Bool = false
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                .frame(width: 24, height: 24)
+                .background(background, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(AgentTheme.border, lineWidth: 1))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+
+    private var background: Color {
+        if isActive { return AgentTheme.selection }
+        if isHovered { return AgentTheme.surface }
+        return AgentTheme.headerTab
     }
 }
 
@@ -1158,8 +1676,11 @@ private struct ProjectDetailPanel: View {
                 DetailRow(label: "Kontextquelle", value: "Aktiver Chat")
                 if let session {
                     HStack {
-                        Image(systemName: session.provider.systemImage)
-                            .foregroundStyle(Color(hex: AgentChatColor.fallback(for: session)))
+                        ProviderIcon(
+                            provider: session.provider,
+                            size: 13,
+                            tint: Color(hex: AgentChatColor.fallback(for: session))
+                        )
                         Text(session.title)
                             .font(.callout.weight(.medium))
                             .lineLimit(1)
@@ -1504,13 +2025,27 @@ private struct GitProjectStatus {
 }
 
 private enum AgentTheme {
-    static let background = Color(nsColor: NSColor(calibratedRed: 0.07, green: 0.075, blue: 0.075, alpha: 1))
-    static let sidebar = Color(nsColor: NSColor(calibratedRed: 0.10, green: 0.115, blue: 0.12, alpha: 1))
-    static let surface = Color(nsColor: NSColor(calibratedRed: 0.095, green: 0.10, blue: 0.105, alpha: 1))
-    static let panel = Color(nsColor: NSColor(calibratedRed: 0.13, green: 0.135, blue: 0.14, alpha: 1))
-    static let control = Color(nsColor: NSColor(calibratedRed: 0.18, green: 0.185, blue: 0.195, alpha: 1))
-    static let selection = Color(nsColor: NSColor(calibratedRed: 0.22, green: 0.225, blue: 0.235, alpha: 1))
-    static let border = Color.white.opacity(0.08)
+    static let background = Color(nsColor: NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1))
+    static let sidebar = Color(nsColor: NSColor(calibratedRed: 0.075, green: 0.078, blue: 0.082, alpha: 1))
+    static let header = Color(nsColor: NSColor(calibratedRed: 0.070, green: 0.072, blue: 0.076, alpha: 1))
+    static let surface = Color(nsColor: NSColor(calibratedRed: 0.090, green: 0.092, blue: 0.097, alpha: 1))
+    static let panel = Color(nsColor: NSColor(calibratedRed: 0.105, green: 0.108, blue: 0.114, alpha: 1))
+    static let control = Color(nsColor: NSColor(calibratedRed: 0.140, green: 0.143, blue: 0.150, alpha: 1))
+    static let hover = Color.white.opacity(0.04)
+    static let selection = Color.white.opacity(0.07)
+    static let selectionStrong = Color.white.opacity(0.10)
+    static let headerTab = Color(nsColor: NSColor(calibratedRed: 0.080, green: 0.082, blue: 0.086, alpha: 1))
+    static let tabSelected = Color(nsColor: NSColor(calibratedRed: 0.115, green: 0.118, blue: 0.124, alpha: 1))
+    static let statusPill = Color(nsColor: NSColor(calibratedRed: 0.050, green: 0.052, blue: 0.055, alpha: 1))
+    static let border = Color.white.opacity(0.06)
+    static let borderStrong = Color.white.opacity(0.10)
+    static let connector = Color.white.opacity(0.10)
+    static let connectorActive = Color.white.opacity(0.22)
+    static let textPrimary = Color.white.opacity(0.92)
+    static let textSecondary = Color.white.opacity(0.55)
+    static let textTertiary = Color.white.opacity(0.38)
+    static let accentDiffPos = Color(nsColor: NSColor(calibratedRed: 0.40, green: 0.85, blue: 0.45, alpha: 1))
+    static let accentDiffNeg = Color(nsColor: NSColor(calibratedRed: 0.95, green: 0.40, blue: 0.40, alpha: 1))
 }
 
 private extension Color {

@@ -89,6 +89,9 @@ final class RecordingCoordinator {
                 onCancel: { [weak self] in
                     self?.cancelRecording()
                 },
+                onCancelPostProcessing: { [weak self] in
+                    self?.cancelPostProcessing()
+                },
                 onOutputModeChange: { [weak appState] mode in
                     appState?.setOutputMode(mode)
                 },
@@ -187,6 +190,15 @@ final class RecordingCoordinator {
         appState.isScreenClipRecording = false
         isProcessing = false
         Logger.debug(" stopRecording completed")
+    }
+
+    /// Bricht das laufende Codex-Post-Processing ab. Aufgerufen vom Cancel-Button im Overlay,
+    /// wenn `isPostProcessing == true`. Der `performCodexRun`-Pfad erkennt das Cancel-Flag und
+    /// wirft einen klaren Fehler statt unendlich auf einen toten Stream zu warten.
+    func cancelPostProcessing() {
+        guard let appState, appState.isPostProcessing else { return }
+        _ = CodexProcessRegistry.shared.cancel()
+        appState.postProcessingStatusText = "Abgebrochen…"
     }
 
     func cancelRecording() {

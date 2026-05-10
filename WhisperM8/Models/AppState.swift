@@ -62,6 +62,10 @@ final class AppState {
         recordingCoordinator.cancelRecording()
     }
 
+    func cancelPostProcessing() {
+        recordingCoordinator.cancelPostProcessing()
+    }
+
     func addContextScreenshot() {
         recordingCoordinator.addContextScreenshot()
     }

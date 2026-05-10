@@ -161,6 +161,10 @@ struct MiniRecordingOverlayView: View {
                     .scaleEffect(0.7)
                     .frame(width: 14, height: 14)
                     .accessibilityLabel(controller.isPostProcessing ? "Improving" : "Transcribing")
+                if controller.isPostProcessing {
+                    CancelRecordingButton(iconSize: 14, action: controller.cancelPostProcessing)
+                        .help("Codex-Post-Processing abbrechen")
+                }
             } else {
                 MiniAudioLevelBars(level: controller.audioLevel)
                 CancelRecordingButton(iconSize: 14, action: controller.cancelRecording)

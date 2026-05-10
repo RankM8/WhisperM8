@@ -114,17 +114,27 @@ struct AgentCommandBuilder {
     }
 
     static func commandPath(_ command: String) -> String? {
+        if let cached = AgentCommandPathCache.shared.path(for: command) {
+            return cached
+        }
+
+        let startedAt = Date()
         if let path = which(command) {
+            AgentCommandPathCache.shared.store(path, for: command)
+            Logger.agentPerformance.debug("agent_command_resolve command=\(command, privacy: .public) source=which durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000))")
             return path
         }
 
         for directory in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] {
             let path = "\(directory)/\(command)"
             if FileManager.default.isExecutableFile(atPath: path) {
+                AgentCommandPathCache.shared.store(path, for: command)
+                Logger.agentPerformance.debug("agent_command_resolve command=\(command, privacy: .public) source=fallback durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000))")
                 return path
             }
         }
 
+        Logger.agentPerformance.debug("agent_command_resolve command=\(command, privacy: .public) source=missing durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000))")
         return nil
     }
 
@@ -147,5 +157,24 @@ struct AgentCommandBuilder {
         } catch {
             return nil
         }
+    }
+}
+
+private final class AgentCommandPathCache {
+    static let shared = AgentCommandPathCache()
+
+    private let lock = NSLock()
+    private var paths: [String: String] = [:]
+
+    func path(for command: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return paths[command]
+    }
+
+    func store(_ path: String, for command: String) {
+        lock.lock()
+        paths[command] = path
+        lock.unlock()
     }
 }

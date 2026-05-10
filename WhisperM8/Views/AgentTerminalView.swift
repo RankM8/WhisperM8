@@ -129,6 +129,10 @@ struct AgentTerminalView: NSViewRepresentable {
     }
 
     private func attach(_ terminal: LocalProcessTerminalView, to container: NSView) {
+        container.subviews
+            .filter { $0 !== terminal }
+            .forEach { $0.removeFromSuperview() }
+
         guard terminal.superview !== container else { return }
         terminal.removeFromSuperview()
         terminal.translatesAutoresizingMaskIntoConstraints = false

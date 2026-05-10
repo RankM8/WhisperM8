@@ -54,6 +54,7 @@ struct WhisperM8App: App {
         }
         .defaultSize(width: 1100, height: 720)
         .defaultPosition(.center)
+        .windowStyle(.hiddenTitleBar)
     }
 
     private func setupHotkeys() {

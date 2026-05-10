@@ -31,6 +31,10 @@ let package = Package(
                 .process("Resources/MenuBarIcon@2x.png"),
                 .process("Resources/AppLogo.png"),
                 .process("Resources/AppLogo@2x.png"),
+                .process("Resources/ProviderClaude.png"),
+                .process("Resources/ProviderClaude@2x.png"),
+                .process("Resources/ProviderCodex.png"),
+                .process("Resources/ProviderCodex@2x.png"),
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])

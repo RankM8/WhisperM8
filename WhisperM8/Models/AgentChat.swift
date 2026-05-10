@@ -23,6 +23,17 @@ enum AgentProvider: String, CaseIterable, Identifiable, Codable, Equatable {
             return "seal"
         }
     }
+
+    /// Bundle-Asset-Name für das offizielle Provider-Logo.
+    /// Liegt in `WhisperM8/Resources/<assetName>.png` (+ @2x).
+    var assetName: String {
+        switch self {
+        case .codex:
+            return "ProviderCodex"
+        case .claude:
+            return "ProviderClaude"
+        }
+    }
 }
 
 enum AgentChatStatus: String, Codable, Equatable {
@@ -53,6 +64,9 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
     var lastBranch: String?
     var createdAt: Date
     var updatedAt: Date
+    /// `true` wenn das Projekt vom Nutzer manuell hinzugefügt wurde, `nil`/`false` für Auto-Imports.
+    /// Optional damit ältere Workspace-Dateien ohne dieses Feld weiter dekodiert werden können.
+    var createdManually: Bool?
 
     init(
         id: UUID = UUID(),
@@ -61,7 +75,8 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         color: String = AgentProjectColor.palette[0],
         lastBranch: String? = nil,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        createdManually: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -70,7 +85,10 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         self.lastBranch = lastBranch
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.createdManually = createdManually
     }
+
+    var isManuallyAdded: Bool { createdManually == true }
 }
 
 struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
@@ -91,6 +109,8 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     var shouldLaunchOnOpen: Bool?
     var createdAt: Date
     var lastActivityAt: Date
+    /// `true` wenn die Session vom Nutzer manuell erstellt wurde, `nil`/`false` für Auto-Imports.
+    var createdManually: Bool?
 
     init(
         id: UUID = UUID(),
@@ -109,7 +129,8 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         hasLaunchedInitialPrompt: Bool = false,
         shouldLaunchOnOpen: Bool = false,
         createdAt: Date = Date(),
-        lastActivityAt: Date = Date()
+        lastActivityAt: Date = Date(),
+        createdManually: Bool? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -128,7 +149,10 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.shouldLaunchOnOpen = shouldLaunchOnOpen
         self.createdAt = createdAt
         self.lastActivityAt = lastActivityAt
+        self.createdManually = createdManually
     }
+
+    var isManuallyCreated: Bool { createdManually == true }
 
     var runtimeDisplayText: String {
         switch provider {
