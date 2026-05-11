@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 
 /// Trackt den aktuell laufenden Codex-Subprocess für externes Cancel
-/// (z. B. Cancel-Button im Recording-Overlay) und für Idle-Timeout-Logging.
+/// (z. B. Cancel-Button im Recording-Overlay).
 final class CodexProcessRegistry: @unchecked Sendable {
     static let shared = CodexProcessRegistry()
 
@@ -47,11 +47,6 @@ final class CodexProcessRegistry: @unchecked Sendable {
     func resetCancelFlag() {
         lock.lock(); cancelledByUser = false; lock.unlock()
     }
-}
-
-enum CodexCancelReason: Equatable {
-    case userCancelled
-    case idleTimeout(seconds: Int)
 }
 
 protocol PostProcessing {
@@ -136,9 +131,6 @@ struct CodexPostProcessor: PostProcessing {
         }.value
     }
 
-    /// Sekunden ohne Aktivität auf stdout/stderr → Stream gilt als tot, Process wird terminiert.
-    private static let codexIdleTimeoutSeconds: Int = 30
-
     private func performCodexRun(prompt: String, imageURLs: [URL], mode: OutputMode) throws -> String {
         guard let codexPath = CodexStatusProbe().commandPath("codex") else {
             throw PostProcessingError.codexUnavailable("Codex CLI is not installed.")
@@ -170,16 +162,13 @@ struct CodexPostProcessor: PostProcessing {
         process.standardOutput = logPipe
         process.standardError = logPipe
 
-        // Idle-Timeout: tracke Zeitstempel des letzten Bytes auf stdout/stderr.
         let activityLock = NSLock()
-        var lastActivity = Date()
         var collectedLog = Data()
         logPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
             activityLock.lock()
             collectedLog.append(chunk)
-            lastActivity = Date()
             activityLock.unlock()
         }
 
@@ -197,28 +186,8 @@ struct CodexPostProcessor: PostProcessing {
             throw PostProcessingError.codexUnavailable("Failed to start Codex: \(error.localizedDescription)")
         }
 
-        // Watchdog: terminiert den Prozess wenn `codexIdleTimeoutSeconds` lang keine Bytes ankommen.
-        var didTimeout = false
-        let timeoutLock = NSLock()
-        let timeoutSeconds = Self.codexIdleTimeoutSeconds
-        let watchdog = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        watchdog.schedule(deadline: .now() + 2, repeating: 2)
-        watchdog.setEventHandler { [weak process] in
-            activityLock.lock()
-            let elapsed = Date().timeIntervalSince(lastActivity)
-            activityLock.unlock()
-            if elapsed > Double(timeoutSeconds), let process, process.isRunning {
-                timeoutLock.lock()
-                didTimeout = true
-                timeoutLock.unlock()
-                process.terminate()
-            }
-        }
-        watchdog.resume()
-
         process.waitUntilExit()
 
-        watchdog.cancel()
         logPipe.fileHandleForReading.readabilityHandler = nil
         // Restbytes konsumieren, falls Pipe-Buffer noch was hat.
         let trailing = (try? logPipe.fileHandleForReading.readToEnd()) ?? Data()
@@ -233,14 +202,6 @@ struct CodexPostProcessor: PostProcessing {
 
         if wasCancelledByUser {
             throw PostProcessingError.userCancelled
-        }
-        timeoutLock.lock()
-        let timedOut = didTimeout
-        timeoutLock.unlock()
-        if timedOut {
-            throw PostProcessingError.codexUnavailable(
-                "Codex hat \(timeoutSeconds) s lang keine Antwort gesendet — Stream abgebrochen. Prompt erneut versuchen oder Reasoning Effort senken."
-            )
         }
 
         guard process.terminationStatus == 0 else {

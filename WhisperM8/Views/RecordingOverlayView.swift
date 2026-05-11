@@ -53,11 +53,27 @@ struct FullRecordingOverlayView: View {
             if !controller.isTranscribing && !controller.isPostProcessing {
                 AudioLevelBars(level: controller.audioLevel)
 
-                CancelRecordingButton(iconSize: 16, action: controller.cancelRecording)
+                CancelRecordingButton(
+                    iconSize: 16,
+                    accessibilityLabel: "Cancel recording",
+                    action: controller.cancelRecording
+                )
             } else {
-                ProgressView()
-                    .scaleEffect(0.6)
-                    .frame(width: 24, height: 20)
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 18, height: 20)
+
+                    if controller.isPostProcessing {
+                        CancelRecordingButton(
+                            iconSize: 16,
+                            accessibilityLabel: "Cancel Codex post-processing",
+                            action: controller.cancelPostProcessing
+                        )
+                        .help("Codex-Post-Processing abbrechen und Raw-Transkript verwenden")
+                    }
+                }
+                .frame(width: controller.isPostProcessing ? 42 : 24, height: 20, alignment: .trailing)
             }
         }
         .padding(.horizontal, 16)
@@ -162,12 +178,20 @@ struct MiniRecordingOverlayView: View {
                     .frame(width: 14, height: 14)
                     .accessibilityLabel(controller.isPostProcessing ? "Improving" : "Transcribing")
                 if controller.isPostProcessing {
-                    CancelRecordingButton(iconSize: 14, action: controller.cancelPostProcessing)
+                    CancelRecordingButton(
+                        iconSize: 14,
+                        accessibilityLabel: "Cancel Codex post-processing",
+                        action: controller.cancelPostProcessing
+                    )
                         .help("Codex-Post-Processing abbrechen")
                 }
             } else {
                 MiniAudioLevelBars(level: controller.audioLevel)
-                CancelRecordingButton(iconSize: 14, action: controller.cancelRecording)
+                CancelRecordingButton(
+                    iconSize: 14,
+                    accessibilityLabel: "Cancel recording",
+                    action: controller.cancelRecording
+                )
             }
         }
         .padding(.horizontal, 10)
@@ -473,6 +497,7 @@ struct MiniOutputModeChip: View {
 
 struct CancelRecordingButton: View {
     let iconSize: CGFloat
+    var accessibilityLabel: String = "Cancel recording"
     let action: () -> Void
 
     var body: some View {
@@ -485,7 +510,7 @@ struct CancelRecordingButton: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .accessibilityLabel("Cancel recording")
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

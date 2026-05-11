@@ -217,8 +217,8 @@ final class RecordingCoordinator {
     }
 
     /// Bricht das laufende Codex-Post-Processing ab. Aufgerufen vom Cancel-Button im Overlay,
-    /// wenn `isPostProcessing == true`. Der `performCodexRun`-Pfad erkennt das Cancel-Flag und
-    /// wirft einen klaren Fehler statt unendlich auf einen toten Stream zu warten.
+    /// wenn `isPostProcessing == true`. Der `performCodexRun`-Pfad erkennt das Cancel-Flag,
+    /// terminiert den Codex-Prozess und der Coordinator fällt kontrolliert auf Raw zurück.
     func cancelPostProcessing() {
         guard let appState, appState.isPostProcessing else { return }
         _ = CodexProcessRegistry.shared.cancel()
@@ -455,7 +455,7 @@ final class RecordingCoordinator {
         }
 
         saveRunReport(
-            status: postProcessingResult.errorMessage == nil ? .succeeded : (postProcessingResult.fallbackStatus ?? .rawFallback),
+            status: postProcessingResult.fallbackStatus ?? (postProcessingResult.errorMessage == nil ? .succeeded : .rawFallback),
             errorMessage: postProcessingResult.errorMessage,
             outputMode: outputMode,
             provider: provider,
@@ -560,7 +560,13 @@ final class RecordingCoordinator {
 
             if case PostProcessingError.userCancelled = error {
                 Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
-                return PostProcessingRunResult(finalText: rawText)
+                return PostProcessingRunResult(
+                    finalText: rawText,
+                    renderedPrompt: renderedPrompt,
+                    replyIntent: promptPackage?.intent,
+                    visualManifest: promptPackage?.visualManifest,
+                    fallbackStatus: .rawFallback
+                )
             }
 
             if AppPreferences.shared.fallbackToRawOnProcessingError {
