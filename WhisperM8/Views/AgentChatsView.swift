@@ -71,7 +71,9 @@ struct AgentChatsView: View {
     }
 
     private var manualProjects: [AgentProject] {
-        workspace.projects.filter(\.isManuallyAdded)
+        AgentSessionStore.sortedProjects(
+            workspace.projects.filter(\.isManuallyAdded)
+        )
     }
 
     private var visibleProjects: [AgentProject] {
@@ -350,7 +352,13 @@ struct AgentChatsView: View {
                             onSetProjectColor: setProjectColor,
                             onChooseProjectIcon: { chooseProjectIcon($0) },
                             onAutoDetectProjectIcon: { reAutoDetectProjectIcon($0) },
-                            onClearProjectIcon: { clearProjectIcon($0) }
+                            onClearProjectIcon: { clearProjectIcon($0) },
+                            onSessionDrop: { dropped, beforeID, targetProjectID in
+                                dropSession(dropped, in: targetProjectID, beforeSessionID: beforeID)
+                            },
+                            onProjectDrop: { dropped, beforeID in
+                                dropProject(dropped, beforeProjectID: beforeID)
+                            }
                         )
                     }
                 }
@@ -567,6 +575,12 @@ struct AgentChatsView: View {
                                         closeHeaderTab(session)
                                     }
                                 )
+                                .draggable(DraggableSession(sessionID: session.id, sourceProjectID: session.projectID))
+                                .dropDestination(for: DraggableSession.self) { items, _ in
+                                    guard let dropped = items.first else { return false }
+                                    dropSession(dropped, in: session.projectID, beforeSessionID: session.id)
+                                    return true
+                                }
                                 .contextMenu {
                                     sessionManagementMenu(session)
                                 }
@@ -937,6 +951,85 @@ struct AgentChatsView: View {
                 guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    // MARK: - Drag-and-Drop coordinators
+
+    /// Reordert die Sessions eines Projekts: `droppedSession` wird *vor*
+    /// `beforeSessionID` einsortiert (`nil` bedeutet ans Ende anhängen).
+    /// Cross-Project: wenn `droppedSession.sourceProjectID != projectID`,
+    /// wird die Session zusätzlich in das Ziel-Projekt verschoben.
+    private func dropSession(
+        _ dropped: DraggableSession,
+        in projectID: UUID,
+        beforeSessionID: UUID?
+    ) {
+        if dropped.sourceProjectID == projectID {
+            // Reorder innerhalb desselben Projekts.
+            let currentSessions = workspace.sessions
+                .filter { $0.projectID == projectID && $0.status != .archived }
+            let sorted = AgentSessionStore.sortedSessions(currentSessions)
+            var orderedIDs = sorted.map(\.id).filter { $0 != dropped.sessionID }
+            let insertAt: Int
+            if let beforeSessionID, let idx = orderedIDs.firstIndex(of: beforeSessionID) {
+                insertAt = idx
+            } else {
+                insertAt = orderedIDs.count
+            }
+            orderedIDs.insert(dropped.sessionID, at: insertAt)
+            do {
+                try store.reorderSessions(in: projectID, orderedIDs: orderedIDs)
+                workspace = store.loadWorkspace()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
+
+        // Cross-Project-Move: Session ins Ziel-Projekt verschieben und an
+        // der gewünschten Position einsortieren.
+        let targetSessions = workspace.sessions
+            .filter { $0.projectID == projectID && $0.status != .archived }
+        let sorted = AgentSessionStore.sortedSessions(targetSessions)
+        let targetIndex: Int
+        if let beforeSessionID, let idx = sorted.firstIndex(where: { $0.id == beforeSessionID }) {
+            targetIndex = idx
+        } else {
+            targetIndex = sorted.count
+        }
+        do {
+            try store.moveSessionToProject(
+                sessionID: dropped.sessionID,
+                newProjectID: projectID,
+                targetIndex: targetIndex
+            )
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Reordert die Projekt-Reihenfolge in der Sidebar — `droppedProject`
+    /// wird vor `beforeProjectID` einsortiert (`nil` = ans Ende).
+    private func dropProject(
+        _ dropped: DraggableProject,
+        beforeProjectID: UUID?
+    ) {
+        let visible = manualProjects
+        var orderedIDs = visible.map(\.id).filter { $0 != dropped.projectID }
+        let insertAt: Int
+        if let beforeProjectID, let idx = orderedIDs.firstIndex(of: beforeProjectID) {
+            insertAt = idx
+        } else {
+            insertAt = orderedIDs.count
+        }
+        orderedIDs.insert(dropped.projectID, at: insertAt)
+        do {
+            try store.reorderProjects(orderedIDs: orderedIDs)
+            workspace = store.loadWorkspace()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -1631,8 +1724,16 @@ private struct ProjectChatGroup: View {
     var onChooseProjectIcon: (AgentProject) -> Void
     var onAutoDetectProjectIcon: (AgentProject) -> Void
     var onClearProjectIcon: (UUID) -> Void
+    /// Drop-Handler: `droppedSession` soll vor `beforeSessionID` einsortiert
+    /// werden (oder ans Ende wenn `nil`). Wenn `droppedSession.sourceProjectID`
+    /// vom aktuellen Projekt abweicht, ist's automatisch ein Cross-Project-Move.
+    var onSessionDrop: (DraggableSession, _ beforeSessionID: UUID?, _ targetProjectID: UUID) -> Void
+    /// Drop eines Projekts vor diesem Projekt (oder `nil` = ans Ende der Liste).
+    var onProjectDrop: (DraggableProject, _ beforeProjectID: UUID?) -> Void
 
     @State private var isHeaderHovered = false
+    @State private var isSessionDragOver: Bool = false
+    @State private var isProjectDragOver: Bool = false
 
     private var isSelected: Bool {
         selectedProjectID == project.id
@@ -1645,46 +1746,68 @@ private struct ProjectChatGroup: View {
             if isExpanded && !sessions.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(sessions.prefix(20)) { session in
-                        SessionListButton(
-                            session: session,
-                            isSelected: selectedSessionID == session.id,
-                            isRunning: isRunning(session.id),
-                            runtimeStatus: runtimeStatus(session.id),
-                            onSelect: { onSelectSession(session.id) },
-                            onClose: { onCloseSession(session) }
-                        )
-                        .contextMenu {
-                            Button("Umbenennen…", systemImage: "pencil") {
-                                onRenameRequest(session)
-                            }
-                            Button("Titel automatisch generieren", systemImage: "sparkles") {
-                                onAutoNameRequest(session)
-                            }
-                            .disabled(session.externalSessionID == nil)
-                            Menu("Tab-Farbe") {
-                                ForEach(AgentChatColor.palette, id: \.self) { color in
-                                    Button {
-                                        onSetColor(session.id, color)
-                                    } label: {
-                                        Label {
-                                            Text(AgentChatColorName.label(for: color))
-                                        } icon: {
-                                            Image(nsImage: colorSwatchImage(hex: color))
-                                        }
-                                    }
-                                }
-                                Divider()
-                                Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
-                                    onSetColor(session.id, nil)
-                                }
-                            }
-                            Divider()
-                            Button("Schließen", systemImage: "xmark", role: .destructive) {
-                                onCloseSession(session)
-                            }
+                        sessionRow(session)
+                    }
+                    // Trailing-Spacer als Drop-Target für "ans Ende anhängen":
+                    // 8px transparente Zone unterhalb der letzten Row fängt
+                    // Drops, die unter alle Sessions zielen.
+                    Color.clear
+                        .frame(height: 8)
+                        .contentShape(Rectangle())
+                        .dropDestination(for: DraggableSession.self) { items, _ in
+                            guard let dropped = items.first else { return false }
+                            onSessionDrop(dropped, nil, project.id)
+                            return true
+                        }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionRow(_ session: AgentChatSession) -> some View {
+        SessionListButton(
+            session: session,
+            isSelected: selectedSessionID == session.id,
+            isRunning: isRunning(session.id),
+            runtimeStatus: runtimeStatus(session.id),
+            onSelect: { onSelectSession(session.id) },
+            onClose: { onCloseSession(session) }
+        )
+        .draggable(DraggableSession(sessionID: session.id, sourceProjectID: project.id))
+        .dropDestination(for: DraggableSession.self) { items, _ in
+            guard let dropped = items.first else { return false }
+            onSessionDrop(dropped, session.id, project.id)
+            return true
+        }
+        .contextMenu {
+            Button("Umbenennen…", systemImage: "pencil") {
+                onRenameRequest(session)
+            }
+            Button("Titel automatisch generieren", systemImage: "sparkles") {
+                onAutoNameRequest(session)
+            }
+            .disabled(session.externalSessionID == nil)
+            Menu("Tab-Farbe") {
+                ForEach(AgentChatColor.palette, id: \.self) { color in
+                    Button {
+                        onSetColor(session.id, color)
+                    } label: {
+                        Label {
+                            Text(AgentChatColorName.label(for: color))
+                        } icon: {
+                            Image(nsImage: colorSwatchImage(hex: color))
                         }
                     }
                 }
+                Divider()
+                Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
+                    onSetColor(session.id, nil)
+                }
+            }
+            Divider()
+            Button("Schließen", systemImage: "xmark", role: .destructive) {
+                onCloseSession(session)
             }
         }
     }
@@ -1748,11 +1871,29 @@ private struct ProjectChatGroup: View {
             .padding(.leading, 8)
             .padding(.trailing, 8)
             .frame(minHeight: 36, maxHeight: 36)
-            .background(headerBackground)
+            .background(headerBackground.overlay(
+                isSessionDragOver || isProjectDragOver
+                    ? AgentTheme.selection.opacity(0.5)
+                    : Color.clear
+            ))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHeaderHovered = $0 }
+        .draggable(DraggableProject(projectID: project.id))
+        // Drop eines anderen Projekts → ordnet sich VOR diesem Projekt ein.
+        .dropDestination(for: DraggableProject.self) { items, _ in
+            guard let dropped = items.first, dropped.projectID != project.id else { return false }
+            onProjectDrop(dropped, project.id)
+            return true
+        } isTargeted: { isProjectDragOver = $0 }
+        // Drop einer Session auf den Projekt-Header → an's Ende dieses Projekts
+        // (Cross-Project-Move oder Reorder-an-Ende im selben Projekt).
+        .dropDestination(for: DraggableSession.self) { items, _ in
+            guard let dropped = items.first else { return false }
+            onSessionDrop(dropped, nil, project.id)
+            return true
+        } isTargeted: { isSessionDragOver = $0 }
         .contextMenu {
             Button("Umbenennen…", systemImage: "pencil") {
                 onRenameProjectRequest(project)
