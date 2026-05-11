@@ -567,6 +567,10 @@ struct AgentSessionStore {
                 && session.hasLaunchedInitialPrompt
                 && session.externalSessionID == nil
                 && session.initialPrompt == nil
+                && session.createdManually != true
+                && session.shouldLaunchOnOpen != true
+                && session.status != .running
+                && session.status != .pending
         }
     }
 

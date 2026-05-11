@@ -751,6 +751,32 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(sessions.first?.id, resumable.id)
     }
 
+    func testAgentSessionStoreKeepsManualClaudeSessionWithoutExternalIDDuringRecoveryStart() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8AgentManualRecovery-\(UUID().uuidString)")
+            .appendingPathExtension("json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        let recovering = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude Chat",
+            status: .running,
+            hasLaunchedInitialPrompt: true,
+            createdManually: true
+        )
+        let store = AgentSessionStore(fileURL: fileURL)
+        try store.saveWorkspace(AgentWorkspace(projects: [project], sessions: [recovering]))
+
+        try store.mergeIndexedSessions([])
+
+        let sessions = store.loadWorkspace().sessions
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.id, recovering.id)
+        XCTAssertEqual(sessions.first?.status, .running)
+    }
+
     func testAgentSessionStoreMigratesUnresumableClaudeSessionsOnLoad() throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8AgentLoadMigration-\(UUID().uuidString)")
