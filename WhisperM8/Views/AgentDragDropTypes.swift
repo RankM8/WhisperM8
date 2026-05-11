@@ -7,6 +7,13 @@ import UniformTypeIdentifiers
 ///
 /// - Source == Target Project → Reorder innerhalb des Projekts
 /// - Source ≠ Target Project → Cross-Project-Move
+///
+/// **Wichtig zur UTI-Registrierung**: Custom UTIs via
+/// `UTType(exportedAs:)` müssen zusätzlich in der `Info.plist` als
+/// `UTExportedTypeDeclarations` deklariert sein, sonst registriert
+/// LaunchServices die UTI nicht und SwiftUI behandelt `.draggable(...)`
+/// stillschweigend als no-op (kein Cursor-Feedback, kein Drop). Siehe
+/// `WhisperM8/Info.plist` — beide UTIs sind dort registriert.
 struct DraggableSession: Codable, Transferable {
     let sessionID: UUID
     let sourceProjectID: UUID
@@ -16,7 +23,6 @@ struct DraggableSession: Codable, Transferable {
     }
 }
 
-/// Transferable-Payload für einen Project-Drag (Sidebar-Header).
 struct DraggableProject: Codable, Transferable {
     let projectID: UUID
 
@@ -26,8 +32,9 @@ struct DraggableProject: Codable, Transferable {
 }
 
 extension UTType {
-    /// Eigene UTI, damit SwiftUI Session- und Project-Drags unterscheidet
-    /// und Finder-/Browser-Drags (`.fileURL`, `.url`) hier nicht einklinken.
-    static let agentChatSession = UTType(exportedAs: "com.whisperm8.app.agent-chat-session")
-    static let agentProject = UTType(exportedAs: "com.whisperm8.app.agent-project")
+    /// Eigene UTI für In-App Session-Drags. Conformt zu `.data`, damit das
+    /// System sie als opaken Datenblock behandelt.
+    static let agentChatSession = UTType(exportedAs: "com.whisperm8.app.agent-chat-session", conformingTo: .data)
+    /// Eigene UTI für In-App Project-Drags.
+    static let agentProject = UTType(exportedAs: "com.whisperm8.app.agent-project", conformingTo: .data)
 }

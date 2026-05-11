@@ -62,6 +62,10 @@ dev: kill
 	@mkdir -p "$(INSTALLED_APP)"
 	@rsync -a --delete "$(APP_BUNDLE)/" "$(INSTALLED_APP)/"
 	@rm -rf "$(APP_BUNDLE)"
+	@# LaunchServices muss den Bundle neu indexieren, sonst werden Info.plist-
+	@# Änderungen (z. B. neue UTExportedTypeDeclarations für Drag-Drop) bei
+	@# einem in-place rsync nicht aktiv. `-f` zwingt Re-Registrierung.
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$(INSTALLED_APP)" 2>/dev/null || true
 	@echo "✅ Updated $(INSTALLED_APP)"
 	@open "$(INSTALLED_APP)"
 
