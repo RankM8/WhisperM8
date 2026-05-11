@@ -608,10 +608,10 @@ struct AgentChatsView: View {
 
                 Spacer(minLength: 8)
 
-                if let branch = selectedProject?.lastBranch, !branch.isEmpty {
-                    BranchTag(branch: branch)
-                        .help(selectedProject?.path ?? branch)
-                }
+                // Branch-Badge entfernt — die Branch steht ohnehin schon in
+                // der Sidebar-Projekt-Zeile und im Project-Inspector, und
+                // visueller Clutter im Titlebar-Bereich kostet mehr als er
+                // hier liefert.
 
                 TitlebarIconButton(systemImage: "sidebar.right", help: isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen", isActive: isInspectorVisible) {
                     isInspectorVisible.toggle()
