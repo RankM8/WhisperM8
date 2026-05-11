@@ -10,19 +10,25 @@ struct AgentTerminalSnapshotContext: Equatable {
     var cwd: String
 }
 
-/// Reine, testbare Snapshot-Bau-Logik.
+/// Pure Snapshot-Bau-Logik. Walkt den SwiftTerm-Buffer und gruppiert
+/// aufeinanderfolgende Cells mit identischen Attributen in `AgentTerminalRun`s.
 enum AgentTerminalSnapshotBuilder {
+    /// Maximale Anzahl Zeilen pro Snapshot. Inkludiert Scrollback. Bei
+    /// typischer Claude-Session mit ~30 sichtbaren Zeilen + Scrollback
+    /// reichen 2000 Zeilen weit aus — ein voller Snapshot ist dann
+    /// ~300-800 KB als JSON.
+    static let maxLines = 2000
+
     static func makeSnapshot(
         context: AgentTerminalSnapshotContext,
-        rawText: String,
+        lines: [AgentTerminalLine],
         terminalColumns: Int?,
         terminalRows: Int?,
         processWasRunning: Bool,
         exitCode: Int32?,
         capturedAt: Date = Date()
     ) -> AgentTerminalSnapshot {
-        let clamped = AgentTerminalSnapshot.clamp(visible: rawText, scrollback: rawText)
-        return AgentTerminalSnapshot(
+        AgentTerminalSnapshot(
             localSessionID: context.localSessionID,
             provider: context.provider,
             externalSessionID: context.externalSessionID,
@@ -32,37 +38,134 @@ enum AgentTerminalSnapshotBuilder {
             terminalRows: terminalRows,
             processWasRunning: processWasRunning,
             exitCode: exitCode,
-            visibleText: clamped.visible,
-            scrollbackText: clamped.scrollback,
-            ansiReplayDataPath: nil
+            lines: lines
         )
     }
 
-    /// Heuristik fuer "Snapshot hat sich geaendert" — nutzt einen schnellen
-    /// Hash ueber den Tail.
-    static func contentDigest(_ text: String) -> Int {
-        let tail = AgentTerminalSnapshot.clampedFromEnd(text, maxBytes: 4 * 1024)
-        return tail.hashValue
+    /// Extrahiert die sichtbaren Buffer-Zeilen (`0..<terminal.rows`). Wir
+    /// koennen ueber das public API keinen Scrollback einlesen
+    /// (`buffer.lines` ist intern in SwiftTerm). Fuer den Use-Case
+    /// "Zustand beim Schliessen wiederherstellen" reicht der Viewport.
+    static func extractLines(from terminal: SwiftTerm.Terminal) -> [AgentTerminalLine] {
+        let rows = terminal.rows
+        guard rows > 0 else { return [] }
+        var result: [AgentTerminalLine] = []
+        result.reserveCapacity(rows)
+        for row in 0..<rows {
+            guard let bufferLine = terminal.getLine(row: row) else {
+                result.append(AgentTerminalLine(runs: []))
+                continue
+            }
+            result.append(extractLine(bufferLine))
+        }
+        // Hintere Leerzeilen abschneiden, aber eine Leerzeile als optischen
+        // Boden erhalten.
+        while result.count > 1,
+              let last = result.last,
+              last.runs.allSatisfy({ $0.text.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            result.removeLast()
+        }
+        return result
+    }
+
+    /// Buffer-Line → AgentTerminalLine mit gruppierten Runs.
+    /// Wide-Char-Continuation-Cells (folgende Zelle nach einer width-2-Zelle)
+    /// werden uebersprungen — ihre Character-Daten sind `"\0"` und wuerden
+    /// sonst doppelt erscheinen.
+    static func extractLine(_ line: BufferLine) -> AgentTerminalLine {
+        let cellCount = line.count
+        guard cellCount > 0 else {
+            return AgentTerminalLine(runs: [])
+        }
+
+        var runs: [AgentTerminalRun] = []
+        var current: AgentTerminalRun?
+
+        var i = 0
+        while i < cellCount {
+            let cell = line[i]
+            let ch = cell.getCharacter()
+            // Wide-char continuation: NULL-Char direkt nach width=2 Zelle.
+            if i > 0, ch == "\0", line[i - 1].width == 2 {
+                i += 1
+                continue
+            }
+
+            let attr = cell.attribute
+            let fg = convertColor(attr.fg, isBackground: false)
+            let bg = convertColor(attr.bg, isBackground: true)
+            let style = attr.style
+            let bold = style.contains(.bold)
+            let italic = style.contains(.italic)
+            let underline = style.contains(.underline)
+            let inverse = style.contains(.inverse)
+            let dim = style.contains(.dim)
+
+            // NULL-Character als sichtbares Padding-Space behandeln (kommt
+            // bei leeren Buffer-Cells vor).
+            let effectiveChar: Character = (ch == "\0") ? " " : ch
+
+            if var run = current,
+               run.fg == fg,
+               run.bg == bg,
+               run.bold == bold,
+               run.italic == italic,
+               run.underline == underline,
+               run.inverse == inverse,
+               run.dim == dim {
+                run.text.append(effectiveChar)
+                current = run
+            } else {
+                if let finished = current {
+                    runs.append(finished)
+                }
+                current = AgentTerminalRun(
+                    text: String(effectiveChar),
+                    fg: fg,
+                    bg: bg,
+                    bold: bold,
+                    italic: italic,
+                    underline: underline,
+                    inverse: inverse,
+                    dim: dim
+                )
+            }
+            i += 1
+        }
+
+        if let finished = current {
+            runs.append(finished)
+        }
+        return AgentTerminalLine(runs: runs)
+    }
+
+    /// SwiftTerm.Attribute.Color → AgentTerminalCellColor. Default-Werte
+    /// werden role-spezifisch gemappt, damit der Renderer ohne weiteren
+    /// Kontext weiss "das ist eine Default-FG vs. Default-BG".
+    static func convertColor(_ color: SwiftTerm.Attribute.Color, isBackground: Bool) -> AgentTerminalCellColor {
+        switch color {
+        case .defaultColor:
+            return isBackground ? .defaultBg : .defaultFg
+        case .defaultInvertedColor:
+            return isBackground ? .defaultFg : .defaultBg
+        case .ansi256(let code):
+            return .ansi(code)
+        case .trueColor(let r, let g, let b):
+            return .rgb(r: r, g: g, b: b)
+        }
     }
 }
 
-/// Event-driven Snapshot-Worker. Schreibt den Terminal-Zustand auf Disk an
-/// folgenden Triggern (statt periodischem Polling):
-///
-/// 1. App wechselt in den Hintergrund (`willResignActiveNotification`)
+/// Event-driven Snapshot-Worker. Snapshotted bei:
+/// 1. App geht in Hintergrund (`willResignActiveNotification`)
 /// 2. App wird beendet (`willTerminateNotification`)
 /// 3. Subprozess beendet sich (`markProcessTerminated`)
 /// 4. Externer Aufrufer ruft `flush()` (z. B. Tab-Switch, Resume-Klick)
 ///
-/// Damit eine *paranoide* Sicherheit bei Force-Quit erhalten bleibt, schreiben
-/// wir ZUSAETZLICH alle 30 s einen Heartbeat-Snapshot, falls sich der Buffer
-/// veraendert hat. Bei einem ruhigen Terminal: 1 Write/30s. Bei aktiver
-/// Session: max 1 Write/30s — Snapshots sind State, kein Audit-Log.
+/// Plus alle 30s ein opportunistischer Heartbeat — schreibt nur, wenn der
+/// Buffer-Inhalt sich seit dem letzten Snapshot veraendert hat.
 @MainActor
 final class AgentTerminalSnapshotCapturer {
-    /// Sicherheits-Snapshot-Intervall: 30 s. Bewusst sehr langsam — die
-    /// wirkliche Persistenz erfolgt event-driven. Dieser Timer ist nur fuer
-    /// den seltenen Fall "App crashed ohne willResignActive zu feuern".
     private static let heartbeatInterval: TimeInterval = 30.0
 
     private let context: AgentTerminalSnapshotContext
@@ -95,12 +198,9 @@ final class AgentTerminalSnapshotCapturer {
         }
     }
 
-    /// Bindet den Capturer an einen Terminal-View. Registriert die
-    /// AppKit-Observer und startet den 30s-Heartbeat-Timer.
     func attach(terminal: LocalProcessTerminalView) {
         self.terminalView = terminal
 
-        // App geht in Hintergrund → synchroner Flush.
         willResignActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willResignActiveNotification,
             object: nil,
@@ -122,12 +222,9 @@ final class AgentTerminalSnapshotCapturer {
     func updateExternalSessionID(_ id: String?) {
         self.overriddenExternalSessionID = id
         self.lastDigest = 0
-        // Direkt schreiben, damit der naechste Restart die richtige ID sieht.
         flush()
     }
 
-    /// Final-Snapshot bei Prozess-Exit. Danach Heartbeat-Timer aus, weil
-    /// nichts mehr zu beobachten ist.
     func markProcessTerminated(exitCode: Int32?) {
         self.processWasRunning = false
         self.exitCode = exitCode
@@ -136,12 +233,11 @@ final class AgentTerminalSnapshotCapturer {
         heartbeatTimer = nil
     }
 
-    /// Synchroner Snapshot-Write — schreibt IMMER, auch wenn der Digest
-    /// gleich geblieben ist. Wird von allen externen Triggern (App-
-    /// Background, Tab-Switch, etc.) genutzt.
+    /// Synchroner Snapshot-Write — schreibt IMMER.
     func flush() {
         guard let terminal = terminalView else { return }
-        let text = readActiveBufferText(from: terminal)
+        let lines = AgentTerminalSnapshotBuilder.extractLines(from: terminal.getTerminal())
+        let digest = Self.computeDigest(for: lines)
         var effectiveContext = context
         if let override = overriddenExternalSessionID {
             effectiveContext.externalSessionID = override
@@ -150,19 +246,17 @@ final class AgentTerminalSnapshotCapturer {
         let rows = terminal.getTerminal().rows
         let snapshot = AgentTerminalSnapshotBuilder.makeSnapshot(
             context: effectiveContext,
-            rawText: text,
+            lines: lines,
             terminalColumns: cols,
             terminalRows: rows,
             processWasRunning: processWasRunning,
             exitCode: exitCode
         )
         if store.save(snapshot) {
-            lastDigest = AgentTerminalSnapshotBuilder.contentDigest(text)
+            lastDigest = digest
         }
     }
 
-    /// Stoppt den Heartbeat-Timer. Wird vom Controller in `terminate()`
-    /// aufgerufen.
     func stopTimer() {
         heartbeatTimer?.invalidate()
         heartbeatTimer = nil
@@ -181,13 +275,13 @@ final class AgentTerminalSnapshotCapturer {
         self.heartbeatTimer = timer
     }
 
-    /// 30s-Heartbeat: nur schreiben, wenn der Buffer-Inhalt sich seit dem
-    /// letzten Snapshot veraendert hat. Bei idle-Terminal: kein Write,
-    /// kein Disk-IO ausser dem Hash-Check.
+    /// 30s-Heartbeat: nur schreiben wenn Content sich seit letztem Snapshot
+    /// veraendert hat. Wir hashen ueber die letzten N Linien als
+    /// Aenderungs-Proxy.
     private func heartbeatTick() {
         guard let terminal = terminalView else { return }
-        let text = readActiveBufferText(from: terminal)
-        let digest = AgentTerminalSnapshotBuilder.contentDigest(text)
+        let lines = AgentTerminalSnapshotBuilder.extractLines(from: terminal.getTerminal())
+        let digest = Self.computeDigest(for: lines)
         guard digest != lastDigest else { return }
         var effectiveContext = context
         if let override = overriddenExternalSessionID {
@@ -197,7 +291,7 @@ final class AgentTerminalSnapshotCapturer {
         let rows = terminal.getTerminal().rows
         let snapshot = AgentTerminalSnapshotBuilder.makeSnapshot(
             context: effectiveContext,
-            rawText: text,
+            lines: lines,
             terminalColumns: cols,
             terminalRows: rows,
             processWasRunning: processWasRunning,
@@ -208,8 +302,16 @@ final class AgentTerminalSnapshotCapturer {
         }
     }
 
-    private func readActiveBufferText(from terminal: LocalProcessTerminalView) -> String {
-        let data = terminal.getTerminal().getBufferAsData(kind: .active, encoding: .utf8)
-        return String(data: data, encoding: .utf8) ?? ""
+    /// Hash ueber die letzten ~50 Zeilen — billig zu berechnen,
+    /// erkennt Aenderungen am Visible-Bereich zuverlaessig.
+    nonisolated static func computeDigest(for lines: [AgentTerminalLine]) -> Int {
+        var hasher = Hasher()
+        let tail = lines.suffix(50)
+        for line in tail {
+            for run in line.runs {
+                hasher.combine(run.text)
+            }
+        }
+        return hasher.finalize()
     }
 }

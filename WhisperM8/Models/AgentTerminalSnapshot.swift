@@ -1,90 +1,169 @@
 import Foundation
 
-/// Persistierter Terminal-Zustand einer Agent-Session. Anzeige-Layer, nicht
-/// Wahrheit fuer Resume — die echte Identitaet sitzt weiterhin in
-/// `AgentChatSession.externalSessionID`. Snapshot wird vom
-/// `AgentTerminalSnapshotStore` atomisch geschrieben.
+/// Eine zusammenhaengende Sequenz von Zeichen mit identischen Attributen
+/// (foreground, background, bold, italic). Vom Capturer aus aufeinander-
+/// folgenden Buffer-Cells gruppiert, damit das Snapshot kompakt bleibt.
+struct AgentTerminalRun: Codable, Equatable {
+    var text: String
+    var fg: AgentTerminalCellColor
+    var bg: AgentTerminalCellColor
+    var bold: Bool
+    var italic: Bool
+    var underline: Bool
+    var inverse: Bool
+    var dim: Bool
+
+    /// Default-Attribute (kein Color-Override, keine Style-Flags). Wird vom
+    /// Decoder als Fallback und beim Whitespace-Padding verwendet.
+    static var plain: AgentTerminalRun {
+        AgentTerminalRun(
+            text: "",
+            fg: .defaultFg,
+            bg: .defaultBg,
+            bold: false,
+            italic: false,
+            underline: false,
+            inverse: false,
+            dim: false
+        )
+    }
+}
+
+/// Eine Zeile aus dem Terminal-Buffer als Sequenz von attributed runs.
+struct AgentTerminalLine: Codable, Equatable {
+    var runs: [AgentTerminalRun]
+}
+
+/// Codable-Repraesentation einer SwiftTerm-Cell-Farbe. Wir behalten das
+/// Original-Format bei: bei `ansi`/`rgb` resolven wir erst beim Render mit
+/// der aktuellen App-Palette → Light/Dark wird beim erneuten Oeffnen korrekt
+/// dargestellt.
+enum AgentTerminalCellColor: Codable, Equatable {
+    case defaultFg
+    case defaultBg
+    case ansi(UInt8)
+    case rgb(r: UInt8, g: UInt8, b: UInt8)
+
+    enum Kind: String, Codable {
+        case defaultFg
+        case defaultBg
+        case ansi
+        case rgb
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case kind, code, r, g, b
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try c.decode(Kind.self, forKey: .kind)
+        switch kind {
+        case .defaultFg: self = .defaultFg
+        case .defaultBg: self = .defaultBg
+        case .ansi:
+            self = .ansi(try c.decode(UInt8.self, forKey: .code))
+        case .rgb:
+            self = .rgb(
+                r: try c.decode(UInt8.self, forKey: .r),
+                g: try c.decode(UInt8.self, forKey: .g),
+                b: try c.decode(UInt8.self, forKey: .b)
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .defaultFg:
+            try c.encode(Kind.defaultFg, forKey: .kind)
+        case .defaultBg:
+            try c.encode(Kind.defaultBg, forKey: .kind)
+        case .ansi(let code):
+            try c.encode(Kind.ansi, forKey: .kind)
+            try c.encode(code, forKey: .code)
+        case .rgb(let r, let g, let b):
+            try c.encode(Kind.rgb, forKey: .kind)
+            try c.encode(r, forKey: .r)
+            try c.encode(g, forKey: .g)
+            try c.encode(b, forKey: .b)
+        }
+    }
+}
+
+/// Persistierter Terminal-Zustand. Speichert den Buffer als Sequenz von
+/// attributed lines (statt Plain-Text) — beim Restore wird damit der exakte
+/// optische Zustand inkl. Farben rekonstruiert.
 struct AgentTerminalSnapshot: Codable, Equatable {
-    /// Lokale WhisperM8-Tab-Identitaet — derselbe Wert wie
-    /// `AgentChatSession.id`. Snapshot wird pro lokalem Tab gehalten, nicht
-    /// pro externer Session, weil dieselbe externe Session nach `/resume`
-    /// in einem anderen Tab landen kann.
     var localSessionID: UUID
     var provider: AgentProvider
-    /// Zum Zeitpunkt der Erfassung bekannte externe Conversation-ID. Wird
-    /// nur fuer Logging/Debug benoetigt — beim Restore wird die aktuelle
-    /// `externalSessionID` aus dem Store verwendet.
     var externalSessionID: String?
-    /// Project-CWD zum Zeitpunkt des Snapshots. Falls der User das Projekt
-    /// inzwischen verschoben hat, hilft das beim Forensik-Logging.
     var cwd: String
     var capturedAt: Date
     var terminalColumns: Int?
     var terminalRows: Int?
-    /// `true` wenn der Subprocess beim letzten Snapshot noch lief — danach
-    /// ist das Snapshot ein definitiver Final-State (Force Quit oder Exit).
     var processWasRunning: Bool
     var exitCode: Int32?
-    /// Visible-Slice (~ letzte 2000 Zeichen) fuer den schnellen Render in der
-    /// Snapshot-Ansicht. Plain Text, keine ANSI-Codes.
-    var visibleText: String
-    /// Erweiterter Scrollback (~ 64 KiB) fuer Recovery-Detailview.
-    var scrollbackText: String
-    /// Optionaler Pfad zu einem ANSI-Replay-Tail fuer spaetere
-    /// pixel-genaue Rekonstruktion. Phase 7+, initial `nil`.
-    var ansiReplayDataPath: String?
+    /// Zeilen aus dem aktiven SwiftTerm-Buffer (inkl. Scrollback). Frische
+    /// Snapshot-Files schreiben hier rein; Legacy-Snapshots ohne dieses
+    /// Feld werden weiterhin geladen (siehe init(from:)).
+    var lines: [AgentTerminalLine]
 
-    /// Maximalwerte fuer die Text-Slots. Wenn Capture mehr liefert, kuerzen
-    /// wir am Anfang (aelteste Zeilen verlieren).
-    enum Limits {
-        static let visibleTextBytes = 8 * 1024
-        static let scrollbackTextBytes = 64 * 1024
+    enum CodingKeys: String, CodingKey {
+        case localSessionID
+        case provider
+        case externalSessionID
+        case cwd
+        case capturedAt
+        case terminalColumns
+        case terminalRows
+        case processWasRunning
+        case exitCode
+        case lines
     }
 
-    /// Schneidet die uebergebenen Strings auf die `Limits` zu. Wir kuerzen
-    /// am Anfang, damit die juengsten Ausgaben erhalten bleiben.
-    static func clamp(visible: String, scrollback: String) -> (visible: String, scrollback: String) {
-        return (
-            visible: clampedFromEnd(visible, maxBytes: Limits.visibleTextBytes),
-            scrollback: clampedFromEnd(scrollback, maxBytes: Limits.scrollbackTextBytes)
-        )
+    init(
+        localSessionID: UUID,
+        provider: AgentProvider,
+        externalSessionID: String?,
+        cwd: String,
+        capturedAt: Date,
+        terminalColumns: Int?,
+        terminalRows: Int?,
+        processWasRunning: Bool,
+        exitCode: Int32?,
+        lines: [AgentTerminalLine]
+    ) {
+        self.localSessionID = localSessionID
+        self.provider = provider
+        self.externalSessionID = externalSessionID
+        self.cwd = cwd
+        self.capturedAt = capturedAt
+        self.terminalColumns = terminalColumns
+        self.terminalRows = terminalRows
+        self.processWasRunning = processWasRunning
+        self.exitCode = exitCode
+        self.lines = lines
     }
 
-    /// Schneidet `text` so, dass das UTF-8-Bytecount-Limit `maxBytes` nicht
-    /// ueberschritten wird. Wir tasten uns vom Ende zurueck und schneiden an
-    /// einer UTF-8-Codepoint-Grenze, damit kein halber Multibyte-Char
-    /// uebrigbleibt.
-    static func clampedFromEnd(_ text: String, maxBytes: Int) -> String {
-        let bytes = text.utf8
-        if bytes.count <= maxBytes { return text }
-
-        // Suche das aelteste Byte das wir noch nehmen wuerden.
-        // Wir wollen die letzten `maxBytes` Bytes — also Offset = count - maxBytes.
-        // Dann tasten wir uns nach vorn, bis wir auf den Anfang einer
-        // UTF-8-Sequence treffen (Byte beginnt nicht mit 10xxxxxx).
-        var startOffset = bytes.count - maxBytes
-        let bytesArray = Array(bytes)
-        while startOffset < bytesArray.count {
-            let byte = bytesArray[startOffset]
-            // UTF-8 continuation byte? -> nach vorn.
-            if (byte & 0b1100_0000) == 0b1000_0000 {
-                startOffset += 1
-            } else {
-                break
-            }
-        }
-        let slice = Array(bytesArray[startOffset...])
-        return String(decoding: slice, as: UTF8.self)
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        localSessionID = try c.decode(UUID.self, forKey: .localSessionID)
+        provider = try c.decode(AgentProvider.self, forKey: .provider)
+        externalSessionID = try c.decodeIfPresent(String.self, forKey: .externalSessionID)
+        cwd = try c.decode(String.self, forKey: .cwd)
+        capturedAt = try c.decode(Date.self, forKey: .capturedAt)
+        terminalColumns = try c.decodeIfPresent(Int.self, forKey: .terminalColumns)
+        terminalRows = try c.decodeIfPresent(Int.self, forKey: .terminalRows)
+        processWasRunning = try c.decode(Bool.self, forKey: .processWasRunning)
+        exitCode = try c.decodeIfPresent(Int32.self, forKey: .exitCode)
+        lines = try c.decodeIfPresent([AgentTerminalLine].self, forKey: .lines) ?? []
     }
 }
 
-/// Persistenz-Layer fuer `AgentTerminalSnapshot`. Pro lokaler Session eine
-/// JSON-Datei in `~/Library/Application Support/WhisperM8/agent-terminal-snapshots/`.
-/// Schreiben ist atomisch via `Data.write(options: .atomic)`. Robust gegen
-/// Korruption: kaputtes JSON wird gestillt geloescht und der Aufrufer bekommt
-/// `nil`, damit die App nicht crashed.
+/// Persistenz-Layer fuer `AgentTerminalSnapshot`. Atomisches Save/Load,
+/// Korruption-resilient, plus Orphan-Pruning.
 struct AgentTerminalSnapshotStore {
-    /// Wurzelverzeichnis fuer alle Snapshot-Dateien.
     var directory: URL
 
     init(directory: URL? = nil) {
@@ -101,8 +180,6 @@ struct AgentTerminalSnapshotStore {
         directory.appendingPathComponent("\(localSessionID.uuidString).json", isDirectory: false)
     }
 
-    /// Schreibt das Snapshot atomisch. Existierendes Snapshot fuer dieselbe
-    /// `localSessionID` wird ueberschrieben.
     @discardableResult
     func save(_ snapshot: AgentTerminalSnapshot) -> Bool {
         do {
@@ -112,10 +189,11 @@ struct AgentTerminalSnapshotStore {
             )
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            // Snapshots koennen MB-gross werden bei langem Scrollback — keine
+            // pretty-print, das spart Disk + JSON-Parse-Zeit.
             let data = try encoder.encode(snapshot)
             try data.write(to: fileURL(for: snapshot.localSessionID), options: .atomic)
-            Logger.terminalSnapshot.debug("snapshot_saved localID=\(snapshot.localSessionID.uuidString, privacy: .public) size=\(data.count) provider=\(snapshot.provider.rawValue, privacy: .public)")
+            Logger.terminalSnapshot.debug("snapshot_saved localID=\(snapshot.localSessionID.uuidString, privacy: .public) bytes=\(data.count) lines=\(snapshot.lines.count)")
             return true
         } catch {
             Logger.terminalSnapshot.warning("snapshot_save_failed localID=\(snapshot.localSessionID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
@@ -123,10 +201,6 @@ struct AgentTerminalSnapshotStore {
         }
     }
 
-    /// Liefert das Snapshot, oder `nil` wenn keins existiert oder das File
-    /// korrupt ist. Korrupte Files werden zur naechsten Schreib-Operation
-    /// einfach ueberschrieben — wir haben keinen Grund, kaputten Read-State
-    /// als „echte Quelle" zu behandeln.
     func load(localSessionID: UUID) -> AgentTerminalSnapshot? {
         let url = fileURL(for: localSessionID)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -137,7 +211,7 @@ struct AgentTerminalSnapshotStore {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let snapshot = try decoder.decode(AgentTerminalSnapshot.self, from: data)
-            Logger.terminalSnapshot.debug("snapshot_loaded localID=\(localSessionID.uuidString, privacy: .public)")
+            Logger.terminalSnapshot.debug("snapshot_loaded localID=\(localSessionID.uuidString, privacy: .public) lines=\(snapshot.lines.count)")
             return snapshot
         } catch {
             Logger.terminalSnapshot.warning("snapshot_corrupted localID=\(localSessionID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
@@ -145,8 +219,6 @@ struct AgentTerminalSnapshotStore {
         }
     }
 
-    /// Loescht das Snapshot fuer eine lokale Session. Idempotent — fehlende
-    /// Dateien sind kein Fehler.
     @discardableResult
     func delete(localSessionID: UUID) -> Bool {
         let url = fileURL(for: localSessionID)
@@ -163,9 +235,6 @@ struct AgentTerminalSnapshotStore {
         }
     }
 
-    /// Loescht alle Snapshots, deren `localSessionID` nicht im uebergebenen
-    /// Set vorkommt. Wird vom Cleanup-Job (Phase 7) genutzt — entfernt
-    /// Snapshots fuer Sessions, die der User aus dem Workspace geloescht hat.
     @discardableResult
     func pruneOrphans(keeping liveLocalIDs: Set<UUID>) -> Int {
         guard let urls = try? FileManager.default.contentsOfDirectory(

@@ -2172,13 +2172,12 @@ final class AgentChatsTests: XCTestCase {
         return dir
     }
 
-    func testAgentTerminalSnapshotStoreSaveLoadRoundTrip() {
-        let dir = makeTempSnapshotDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = AgentTerminalSnapshotStore(directory: dir)
-        let id = UUID()
-        let snapshot = AgentTerminalSnapshot(
-            localSessionID: id,
+    private func makeSampleSnapshot(
+        localSessionID: UUID = UUID(),
+        lines: [AgentTerminalLine] = []
+    ) -> AgentTerminalSnapshot {
+        AgentTerminalSnapshot(
+            localSessionID: localSessionID,
             provider: .claude,
             externalSessionID: "abc",
             cwd: "/tmp/repo",
@@ -2187,14 +2186,26 @@ final class AgentChatsTests: XCTestCase {
             terminalRows: 40,
             processWasRunning: false,
             exitCode: 0,
-            visibleText: "Hello world",
-            scrollbackText: "line 1\nline 2\nHello world",
-            ansiReplayDataPath: nil
+            lines: lines
         )
+    }
+
+    func testAgentTerminalSnapshotStoreSaveLoadRoundTrip() {
+        let dir = makeTempSnapshotDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = AgentTerminalSnapshotStore(directory: dir)
+        let id = UUID()
+        let line = AgentTerminalLine(runs: [
+            AgentTerminalRun(text: "Hello ", fg: .defaultFg, bg: .defaultBg, bold: false, italic: false, underline: false, inverse: false, dim: false),
+            AgentTerminalRun(text: "world", fg: .ansi(9), bg: .defaultBg, bold: true, italic: false, underline: false, inverse: false, dim: false)
+        ])
+        let snapshot = makeSampleSnapshot(localSessionID: id, lines: [line])
 
         XCTAssertTrue(store.save(snapshot))
         let loaded = store.load(localSessionID: id)
         XCTAssertEqual(loaded, snapshot)
+        XCTAssertEqual(loaded?.lines.first?.runs.count, 2)
+        XCTAssertEqual(loaded?.lines.first?.runs.last?.bold, true)
     }
 
     func testAgentTerminalSnapshotStoreReturnsNilForMissingID() {
@@ -2218,23 +2229,8 @@ final class AgentChatsTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = AgentTerminalSnapshotStore(directory: dir)
         let id = UUID()
-        let snapshot = AgentTerminalSnapshot(
-            localSessionID: id,
-            provider: .codex,
-            externalSessionID: nil,
-            cwd: "/tmp/r",
-            capturedAt: Date(),
-            terminalColumns: nil,
-            terminalRows: nil,
-            processWasRunning: true,
-            exitCode: nil,
-            visibleText: "",
-            scrollbackText: "",
-            ansiReplayDataPath: nil
-        )
-        _ = store.save(snapshot)
+        _ = store.save(makeSampleSnapshot(localSessionID: id))
         XCTAssertTrue(store.delete(localSessionID: id))
-        // Zweiter Delete: idempotent.
         XCTAssertFalse(store.delete(localSessionID: id))
         XCTAssertNil(store.load(localSessionID: id))
     }
@@ -2247,20 +2243,7 @@ final class AgentChatsTests: XCTestCase {
         let orphan1 = UUID()
         let orphan2 = UUID()
         for id in [alive, orphan1, orphan2] {
-            _ = store.save(AgentTerminalSnapshot(
-                localSessionID: id,
-                provider: .claude,
-                externalSessionID: nil,
-                cwd: "/tmp",
-                capturedAt: Date(),
-                terminalColumns: nil,
-                terminalRows: nil,
-                processWasRunning: false,
-                exitCode: nil,
-                visibleText: "x",
-                scrollbackText: "x",
-                ansiReplayDataPath: nil
-            ))
+            _ = store.save(makeSampleSnapshot(localSessionID: id))
         }
         let removed = store.pruneOrphans(keeping: [alive])
         XCTAssertEqual(removed, 2)
@@ -2269,51 +2252,49 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertNil(store.load(localSessionID: orphan2))
     }
 
-    func testAgentTerminalSnapshotClampKeepsLastBytes() {
-        // 16 KiB Visible-Limit > 8 KiB. Wir bauen 12 KiB an "x" und erwarten,
-        // dass die letzten 8 KiB uebrig bleiben.
-        let raw = String(repeating: "x", count: 12 * 1024)
-        let clamped = AgentTerminalSnapshot.clampedFromEnd(raw, maxBytes: 8 * 1024)
-        XCTAssertEqual(clamped.utf8.count, 8 * 1024)
-        XCTAssertEqual(clamped.first, "x")
-        XCTAssertEqual(clamped.last, "x")
+    func testAgentTerminalSnapshotConvertColorMapping() {
+        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.defaultColor, isBackground: false), .defaultFg)
+        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.defaultColor, isBackground: true), .defaultBg)
+        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.ansi256(code: 9), isBackground: false), .ansi(9))
+        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.trueColor(red: 10, green: 20, blue: 30), isBackground: false), .rgb(r: 10, g: 20, b: 30))
     }
 
-    func testAgentTerminalSnapshotBuilderProducesClampedSnapshot() {
-        let context = AgentTerminalSnapshotContext(
-            localSessionID: UUID(),
-            provider: .claude,
-            externalSessionID: "claude-123",
-            cwd: "/tmp/repo"
-        )
-        // 80 KiB Roh-Text → Scrollback wird auf 64 KiB gekuerzt, Visible auf 8 KiB.
-        let raw = String(repeating: "a", count: 80 * 1024)
-        let snapshot = AgentTerminalSnapshotBuilder.makeSnapshot(
-            context: context,
-            rawText: raw,
-            terminalColumns: 100,
-            terminalRows: 30,
-            processWasRunning: true,
-            exitCode: nil
-        )
-        XCTAssertEqual(snapshot.localSessionID, context.localSessionID)
-        XCTAssertEqual(snapshot.provider, .claude)
-        XCTAssertEqual(snapshot.externalSessionID, "claude-123")
-        XCTAssertEqual(snapshot.terminalColumns, 100)
-        XCTAssertEqual(snapshot.terminalRows, 30)
-        XCTAssertEqual(snapshot.visibleText.utf8.count, 8 * 1024)
-        XCTAssertEqual(snapshot.scrollbackText.utf8.count, 64 * 1024)
-        XCTAssertTrue(snapshot.processWasRunning)
-        XCTAssertNil(snapshot.exitCode)
+    func testAgentTerminalSnapshotCellColorRoundTripsViaJSON() throws {
+        let colors: [AgentTerminalCellColor] = [.defaultFg, .defaultBg, .ansi(42), .rgb(r: 255, g: 128, b: 0)]
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        for color in colors {
+            let data = try encoder.encode(color)
+            let decoded = try decoder.decode(AgentTerminalCellColor.self, from: data)
+            XCTAssertEqual(decoded, color)
+        }
     }
 
-    func testAgentTerminalSnapshotBuilderDigestChangesWithTail() {
-        let textA = String(repeating: "a", count: 100) + "\nlast-line-A\n"
-        let textB = String(repeating: "a", count: 100) + "\nlast-line-B\n"
+    func testAgentTerminalSnapshotComputeDigestChangesWithLastLines() {
+        let line1 = AgentTerminalLine(runs: [AgentTerminalRun(text: "first", fg: .defaultFg, bg: .defaultBg, bold: false, italic: false, underline: false, inverse: false, dim: false)])
+        let line2 = AgentTerminalLine(runs: [AgentTerminalRun(text: "second", fg: .defaultFg, bg: .defaultBg, bold: false, italic: false, underline: false, inverse: false, dim: false)])
         XCTAssertNotEqual(
-            AgentTerminalSnapshotBuilder.contentDigest(textA),
-            AgentTerminalSnapshotBuilder.contentDigest(textB)
+            AgentTerminalSnapshotCapturer.computeDigest(for: [line1]),
+            AgentTerminalSnapshotCapturer.computeDigest(for: [line2])
         )
+    }
+
+    func testAgentTerminalSnapshotLegacyJSONDecodesWithoutLines() throws {
+        // Snapshot ohne `lines`-Feld (Pre-v2-Format) muss laden, lines == [].
+        let json = """
+        {
+          "localSessionID":"\(UUID().uuidString)",
+          "provider":"claude",
+          "cwd":"/tmp/repo",
+          "capturedAt":"2026-05-11T20:00:00Z",
+          "processWasRunning":false
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(AgentTerminalSnapshot.self, from: data)
+        XCTAssertEqual(snapshot.lines, [])
     }
 
     // MARK: - Retention
@@ -2333,18 +2314,8 @@ final class AgentChatsTests: XCTestCase {
         let live = UUID()
         let orphan = UUID()
 
-        _ = snapshotStore.save(AgentTerminalSnapshot(
-            localSessionID: live, provider: .claude, externalSessionID: nil, cwd: "/tmp",
-            capturedAt: Date(), terminalColumns: nil, terminalRows: nil,
-            processWasRunning: false, exitCode: nil,
-            visibleText: "x", scrollbackText: "x", ansiReplayDataPath: nil
-        ))
-        _ = snapshotStore.save(AgentTerminalSnapshot(
-            localSessionID: orphan, provider: .claude, externalSessionID: nil, cwd: "/tmp",
-            capturedAt: Date(), terminalColumns: nil, terminalRows: nil,
-            processWasRunning: false, exitCode: nil,
-            visibleText: "x", scrollbackText: "x", ansiReplayDataPath: nil
-        ))
+        _ = snapshotStore.save(makeSampleSnapshot(localSessionID: live))
+        _ = snapshotStore.save(makeSampleSnapshot(localSessionID: orphan))
         // Hook-Settings + Event-Files erzeugen.
         try Data().write(to: hookPaths.settingsFileURL(localSessionID: live))
         try Data().write(to: hookPaths.settingsFileURL(localSessionID: orphan))
@@ -2546,14 +2517,4 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(decision, .rebind(newExternalID: "leader", title: "Some Session"))
     }
 
-    func testAgentTerminalSnapshotClampPreservesUtf8Codepoints() {
-        // Ein 4-Byte-Emoji am Anfang darf nicht halbiert werden.
-        let prefix = "😀😀😀😀" // 16 bytes
-        let body = String(repeating: "a", count: 100)
-        let combined = prefix + body
-        let clamped = AgentTerminalSnapshot.clampedFromEnd(combined, maxBytes: 50)
-        // Resultat muss ein valider UTF-8-String sein (kein halber Codepoint).
-        XCTAssertEqual(Data(clamped.utf8).count, clamped.utf8.count)
-        XCTAssertTrue(clamped.utf8.count <= 50)
-    }
 }

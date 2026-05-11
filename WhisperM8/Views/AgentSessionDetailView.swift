@@ -76,11 +76,11 @@ struct AgentSessionDetailView: View {
             // das View jetzt erst mountet.
             controller?.focusTerminal()
             loadSnapshotIfNeeded()
-            // Beim Öffnen einer geschlossenen Session ohne Summary einmal
-            // im Hintergrund anstoßen — der Coordinator (AgentChatsView)
-            // entscheidet, ob das tatsächlich ausgeführt wird (in-flight,
-            // schon vorhanden, fehlende externalSessionID).
-            if controller == nil && session.summary == nil {
+            // Auto-Summary nur anstoßen, wenn KEIN Snapshot vorhanden ist —
+            // sonst zeigen wir eh die Terminal-Snapshot-Ansicht und der
+            // teure `claude -p`-Subprocess (samt seiner TCC-Prompts) ist
+            // unnötig. User kann manuell via "Neu generieren" triggern.
+            if controller == nil && session.summary == nil && cachedSnapshot == nil {
                 onRequestSummary(session.id, false)
             }
         }
@@ -93,7 +93,7 @@ struct AgentSessionDetailView: View {
             // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
             controller?.focusTerminal()
             loadSnapshotIfNeeded()
-            if controller == nil && session.summary == nil {
+            if controller == nil && session.summary == nil && cachedSnapshot == nil {
                 onRequestSummary(session.id, false)
             }
         }

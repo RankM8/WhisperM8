@@ -304,8 +304,20 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     }
 
     func terminate() {
+        // Snapshot vor dem Abschied schreiben — danach kommt Claude nicht
+        // mehr zum Rendern und der Buffer ist tot.
         snapshotCapturer?.flush()
         snapshotCapturer?.stopTimer()
+        // Graceful Claude/Codex-Quit: zwei Ctrl+C senden + kurze Wartezeit,
+        // damit die TUI ihre eigene Exit-Routine durchlaeuft
+        // (Resume-Hinweis druckt, Hooks feuern, etc.) bevor wir den
+        // Subprocess hart killen.
+        if isRunning {
+            terminal.send([0x03])
+            usleep(80_000)
+            terminal.send([0x03])
+            usleep(180_000)
+        }
         terminal.terminate()
         isRunning = false
     }
