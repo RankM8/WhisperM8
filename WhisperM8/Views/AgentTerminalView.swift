@@ -203,6 +203,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
 
     private var onLaunched: () -> Void
     private var onTerminated: (Int32?) -> Void
+    private var themeObserver: NSObjectProtocol?
 
     init(
         sessionID: UUID,
@@ -217,12 +218,20 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         super.init()
         terminal.processDelegate = self
 
-        // Terminal-Hintergrund an das App-Theme angleichen — kein hartes Schwarz mehr,
-        // damit sich der Terminal-Bereich visuell ins dunkle UI integriert statt als
-        // Fremdkörper zu wirken.
-        let themedBackground = NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
-        terminal.nativeBackgroundColor = themedBackground
-        terminal.layer?.backgroundColor = themedBackground.cgColor
+        // Initial-Theme an die aktuelle ColorScheme koppeln. Wird bei jedem
+        // macOS-Erscheinungsbild-Wechsel oder User-Override-Toggle aktualisiert.
+        applyTheme(for: ThemeManager.shared.resolvedColorScheme)
+        themeObserver = NotificationCenter.default.addObserver(
+            forName: AgentTerminalController.themeDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let scheme = notification.userInfo?["scheme"] as? ColorScheme else { return }
+            Task { @MainActor [weak self] in
+                self?.applyTheme(for: scheme)
+            }
+        }
 
         // Option-Taste NICHT als Meta-Modifikator behandeln, sonst schluckt
         // SwiftTerm die deutschen Sonderzeichen (Option+L=@, Option+8={, …).
@@ -232,6 +241,30 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // Claude-Code-/Codex-/Readline-kompatible Control-Sequences übersetzen.
         keyboardShortcutHandler = TerminalKeyboardShortcutHandler(attachedTo: terminal)
     }
+
+    deinit {
+        if let themeObserver {
+            NotificationCenter.default.removeObserver(themeObserver)
+        }
+    }
+
+    /// Wechselt Terminal-Background + Foreground + 16-Color-ANSI-Palette zur
+    /// Laufzeit, ohne den Subprocess neu zu starten. Claude Code / Codex CLI
+    /// emittieren ANSI-Color-Indizes (z. B. `ESC[31m` für Rot) — der
+    /// tatsächliche RGB-Wert kommt aus `installColors`, daher reicht ein
+    /// In-Process-Palette-Swap.
+    func applyTheme(for scheme: ColorScheme) {
+        let palette = AgentTerminalPalette.palette(for: scheme)
+        terminal.nativeBackgroundColor = palette.background
+        terminal.nativeForegroundColor = palette.foreground
+        terminal.layer?.backgroundColor = palette.background.cgColor
+        terminal.installColors(palette.ansi16)
+        terminal.needsDisplay = true
+    }
+
+    /// Broadcast vom `ThemeManager`, wenn sich das resolved Color-Scheme
+    /// ändert (System-Wechsel oder User-Override).
+    static let themeDidChangeNotification = Notification.Name("AgentTerminalController.themeDidChange")
 
     func start() {
         guard !hasStarted else { return }

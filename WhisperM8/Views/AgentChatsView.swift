@@ -2883,28 +2883,124 @@ private struct GitProjectStatus {
     }
 }
 
+/// 22 Theme-Tokens, je in Light- und Dark-Variante. Alle Werte werden über
+/// `Color.dynamic(light:dark:)` aufgelöst — der zugrundeliegende
+/// `NSColor(name:dynamicProvider:)` liest die aktuelle `NSAppearance` aus
+/// der View-Hierarchie, sodass `.preferredColorScheme(.light/.dark)` auf
+/// dem Root die Tokens automatisch umschaltet.
 private enum AgentTheme {
-    static let background = Color(nsColor: NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1))
-    static let sidebar = Color(nsColor: NSColor(calibratedRed: 0.075, green: 0.078, blue: 0.082, alpha: 1))
-    static let header = Color(nsColor: NSColor(calibratedRed: 0.070, green: 0.072, blue: 0.076, alpha: 1))
-    static let surface = Color(nsColor: NSColor(calibratedRed: 0.090, green: 0.092, blue: 0.097, alpha: 1))
-    static let panel = Color(nsColor: NSColor(calibratedRed: 0.105, green: 0.108, blue: 0.114, alpha: 1))
-    static let control = Color(nsColor: NSColor(calibratedRed: 0.140, green: 0.143, blue: 0.150, alpha: 1))
-    static let hover = Color.white.opacity(0.04)
-    static let selection = Color.white.opacity(0.07)
-    static let selectionStrong = Color.white.opacity(0.10)
-    static let headerTab = Color(nsColor: NSColor(calibratedRed: 0.080, green: 0.082, blue: 0.086, alpha: 1))
-    static let tabSelected = Color(nsColor: NSColor(calibratedRed: 0.115, green: 0.118, blue: 0.124, alpha: 1))
-    static let statusPill = Color(nsColor: NSColor(calibratedRed: 0.050, green: 0.052, blue: 0.055, alpha: 1))
-    static let border = Color.white.opacity(0.06)
-    static let borderStrong = Color.white.opacity(0.10)
-    static let connector = Color.white.opacity(0.10)
-    static let connectorActive = Color.white.opacity(0.22)
-    static let textPrimary = Color.white.opacity(0.92)
-    static let textSecondary = Color.white.opacity(0.55)
-    static let textTertiary = Color.white.opacity(0.38)
-    static let accentDiffPos = Color(nsColor: NSColor(calibratedRed: 0.40, green: 0.85, blue: 0.45, alpha: 1))
-    static let accentDiffNeg = Color(nsColor: NSColor(calibratedRed: 0.95, green: 0.40, blue: 0.40, alpha: 1))
+    // Surfaces: dunkles Off-Black ↔ helles Off-White, mit subtilen Stufen
+    // damit Sidebar/Header/Panel/Surface in beiden Modi voneinander abheben.
+    static let background = Color.dynamic(
+        light: Color(red: 0.965, green: 0.965, blue: 0.970),
+        dark: Color(red: 0.058, green: 0.060, blue: 0.064)
+    )
+    static let sidebar = Color.dynamic(
+        light: Color(red: 0.935, green: 0.935, blue: 0.940),
+        dark: Color(red: 0.075, green: 0.078, blue: 0.082)
+    )
+    static let header = Color.dynamic(
+        light: Color(red: 0.950, green: 0.950, blue: 0.955),
+        dark: Color(red: 0.070, green: 0.072, blue: 0.076)
+    )
+    static let surface = Color.dynamic(
+        light: Color(red: 1.0, green: 1.0, blue: 1.0),
+        dark: Color(red: 0.090, green: 0.092, blue: 0.097)
+    )
+    static let panel = Color.dynamic(
+        light: Color(red: 1.0, green: 1.0, blue: 1.0),
+        dark: Color(red: 0.105, green: 0.108, blue: 0.114)
+    )
+    static let control = Color.dynamic(
+        light: Color(red: 0.920, green: 0.920, blue: 0.928),
+        dark: Color(red: 0.140, green: 0.143, blue: 0.150)
+    )
+
+    // Translucent overlays: schwarz auf hell, weiß auf dunkel.
+    // (Reine Inversion: gleich aussehende Tiefe in beiden Modi.)
+    static let hover = Color.dynamic(
+        light: Color.black.opacity(0.045),
+        dark: Color.white.opacity(0.04)
+    )
+    static let selection = Color.dynamic(
+        light: Color.black.opacity(0.075),
+        dark: Color.white.opacity(0.07)
+    )
+    static let selectionStrong = Color.dynamic(
+        light: Color.black.opacity(0.11),
+        dark: Color.white.opacity(0.10)
+    )
+
+    static let headerTab = Color.dynamic(
+        light: Color(red: 0.928, green: 0.928, blue: 0.936),
+        dark: Color(red: 0.080, green: 0.082, blue: 0.086)
+    )
+    static let tabSelected = Color.dynamic(
+        light: Color(red: 1.0, green: 1.0, blue: 1.0),
+        dark: Color(red: 0.115, green: 0.118, blue: 0.124)
+    )
+    static let statusPill = Color.dynamic(
+        light: Color(red: 0.985, green: 0.985, blue: 0.990),
+        dark: Color(red: 0.050, green: 0.052, blue: 0.055)
+    )
+
+    // Hairlines/Connectors: minimaler Kontrast genügt. Im Light leicht
+    // sichtbarer (8%) als im Dark (6%), weil schwarze Hairlines auf weiß
+    // visuell stärker wirken bei gleicher Opacity wäre zu schwach.
+    static let border = Color.dynamic(
+        light: Color.black.opacity(0.08),
+        dark: Color.white.opacity(0.06)
+    )
+    static let borderStrong = Color.dynamic(
+        light: Color.black.opacity(0.13),
+        dark: Color.white.opacity(0.10)
+    )
+    static let connector = Color.dynamic(
+        light: Color.black.opacity(0.11),
+        dark: Color.white.opacity(0.10)
+    )
+    static let connectorActive = Color.dynamic(
+        light: Color.black.opacity(0.25),
+        dark: Color.white.opacity(0.22)
+    )
+
+    // Text: schwarz auf hell, weiß auf dunkel. Opacity-Stufen so dass
+    // primary/secondary/tertiary in beiden Modi die gleiche Hierarchie haben.
+    static let textPrimary = Color.dynamic(
+        light: Color.black.opacity(0.90),
+        dark: Color.white.opacity(0.92)
+    )
+    static let textSecondary = Color.dynamic(
+        light: Color.black.opacity(0.58),
+        dark: Color.white.opacity(0.55)
+    )
+    static let textTertiary = Color.dynamic(
+        light: Color.black.opacity(0.42),
+        dark: Color.white.opacity(0.38)
+    )
+
+    // Akzente: gleiches Hue, im Light leicht dunkler für Kontrast auf weiß.
+    static let accentDiffPos = Color.dynamic(
+        light: Color(red: 0.18, green: 0.62, blue: 0.30),
+        dark: Color(red: 0.40, green: 0.85, blue: 0.45)
+    )
+    static let accentDiffNeg = Color.dynamic(
+        light: Color(red: 0.78, green: 0.22, blue: 0.22),
+        dark: Color(red: 0.95, green: 0.40, blue: 0.40)
+    )
+}
+
+private extension Color {
+    /// Erzeugt eine Color, deren tatsächlicher Wert zur Render-Zeit anhand
+    /// der View-Hierarchie-Appearance entschieden wird. Reicht sowohl für
+    /// macOS-System-Theme-Wechsel als auch für `.preferredColorScheme(...)`
+    /// Override auf einer Scene.
+    static func dynamic(light: Color, dark: Color) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return NSColor(isDark ? dark : light)
+        })
+    }
 }
 
 private extension Color {
