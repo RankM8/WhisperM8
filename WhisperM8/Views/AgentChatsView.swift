@@ -2231,7 +2231,7 @@ private struct AgentChatsWindowAccessor: NSViewRepresentable {
         window.backgroundColor = NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark
-                ? NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
+                ? NSColor(srgbRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
                 : NSColor.white
         }
     }

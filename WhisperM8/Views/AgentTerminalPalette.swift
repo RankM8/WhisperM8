@@ -28,10 +28,13 @@ enum AgentTerminalPalette {
     }
 
     // MARK: - Dark (Default, wie bisher in WhisperM8)
-
+    // sRGB statt calibratedRGB für konsistente Farbwerte mit SwiftUI's
+    // `Color(red:green:blue:)` (auch sRGB) — sonst entsteht auf P3-Displays
+    // ein sichtbarer Rand zwischen Terminal-Background und App-Background
+    // bei identischen RGB-Werten.
     private static let dark = Resolved(
-        background: NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1),
-        foreground: NSColor(calibratedRed: 0.92,  green: 0.92,  blue: 0.93,  alpha: 1),
+        background: NSColor(srgbRed: 0.058, green: 0.060, blue: 0.064, alpha: 1),
+        foreground: NSColor(srgbRed: 0.92,  green: 0.92,  blue: 0.93,  alpha: 1),
         ansi16: [
             // Standard
             term(0x1d, 0x1f, 0x21), // 0: black
@@ -57,8 +60,8 @@ enum AgentTerminalPalette {
     // MARK: - Light (neu — kalibriert für weißen Background)
 
     private static let light = Resolved(
-        background: NSColor(calibratedRed: 1.00,  green: 1.00,  blue: 1.00,  alpha: 1),
-        foreground: NSColor(calibratedRed: 0.12,  green: 0.12,  blue: 0.13,  alpha: 1),
+        background: NSColor.white,
+        foreground: NSColor(srgbRed: 0.12,  green: 0.12,  blue: 0.13,  alpha: 1),
         ansi16: [
             // Standard — gleiche Hue-Familie wie Dark, aber kontrastreicher gegen weiß.
             term(0x20, 0x21, 0x24), // 0: black (sehr dunkel)
