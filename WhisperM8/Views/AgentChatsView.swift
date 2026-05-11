@@ -2232,7 +2232,7 @@ private struct AgentChatsWindowAccessor: NSViewRepresentable {
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark
                 ? NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
-                : NSColor(calibratedRed: 0.965, green: 0.965, blue: 0.970, alpha: 1)
+                : NSColor.white
         }
     }
 }
@@ -2899,8 +2899,10 @@ private struct GitProjectStatus {
 private enum AgentTheme {
     // Surfaces: dunkles Off-Black ↔ helles Off-White, mit subtilen Stufen
     // damit Sidebar/Header/Panel/Surface in beiden Modi voneinander abheben.
+    // Main content area: pure white im Light (Apple-HIG: main pane ist
+    // weiß, Sidebar/Header tinted), Off-Black im Dark.
     static let background = Color.dynamic(
-        light: Color(red: 0.965, green: 0.965, blue: 0.970),
+        light: Color(red: 1.0, green: 1.0, blue: 1.0),
         dark: Color(red: 0.058, green: 0.060, blue: 0.064)
     )
     static let sidebar = Color.dynamic(
