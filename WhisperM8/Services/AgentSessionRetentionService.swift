@@ -1,26 +1,22 @@
 import Foundation
 
-/// Cleanup-Job fuer Terminal-Snapshots und Claude-Hook-Files. Laeuft beim
+/// Cleanup-Job fuer Claude-Hook-Files (Settings + Events). Laeuft beim
 /// App-Start mit dem aktuellen Workspace-Snapshot als "alive set" — alles
 /// was nicht zu einer aktuellen lokalen Session gehoert, wird entfernt.
+///
+/// Terminal-Snapshots werden NICHT mehr persistiert (siehe TranscriptReader-
+/// Architektur — geschlossene Sessions werden direkt aus den nativen
+/// Claude/Codex-JSONLs gerendert).
 struct AgentSessionRetentionService {
-    let snapshotStore: AgentTerminalSnapshotStore
     let hookPaths: ClaudeHookPaths
 
-    init(
-        snapshotStore: AgentTerminalSnapshotStore = AgentTerminalSnapshotStore(),
-        hookPaths: ClaudeHookPaths = ClaudeHookPaths()
-    ) {
-        self.snapshotStore = snapshotStore
+    init(hookPaths: ClaudeHookPaths = ClaudeHookPaths()) {
         self.hookPaths = hookPaths
     }
 
-    /// Raeumt verwaiste Snapshot- und Hook-Dateien. `liveLocalSessionIDs`
-    /// kommt typischerweise aus `AgentWorkspace.sessions.map(\.id)`.
     @discardableResult
     func prune(liveLocalSessionIDs: Set<UUID>) -> RetentionResult {
         var result = RetentionResult()
-        result.snapshotsRemoved = snapshotStore.pruneOrphans(keeping: liveLocalSessionIDs)
         result.hookSettingsRemoved = pruneDirectory(
             hookPaths.settingsDirectory,
             extension: "json",
@@ -33,14 +29,12 @@ struct AgentSessionRetentionService {
         )
         if result.hasAnyRemoval {
             Logger.terminalSnapshot.info(
-                "snapshot_pruned snapshots=\(result.snapshotsRemoved) hookSettings=\(result.hookSettingsRemoved) hookEvents=\(result.hookEventsRemoved)"
+                "retention_pruned hookSettings=\(result.hookSettingsRemoved) hookEvents=\(result.hookEventsRemoved)"
             )
         }
         return result
     }
 
-    /// Entfernt Files in `directory` mit `extension`, deren Dateiname (ohne
-    /// Suffix) eine UUID ist, die nicht in `keeping` vorkommt. Idempotent.
     private func pruneDirectory(_ directory: URL, extension ext: String, keeping: Set<UUID>) -> Int {
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: directory,
@@ -62,11 +56,10 @@ struct AgentSessionRetentionService {
 }
 
 struct RetentionResult: Equatable {
-    var snapshotsRemoved: Int = 0
     var hookSettingsRemoved: Int = 0
     var hookEventsRemoved: Int = 0
 
     var hasAnyRemoval: Bool {
-        snapshotsRemoved + hookSettingsRemoved + hookEventsRemoved > 0
+        hookSettingsRemoved + hookEventsRemoved > 0
     }
 }

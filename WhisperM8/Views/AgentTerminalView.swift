@@ -24,7 +24,6 @@ final class AgentTerminalRegistry: ObservableObject {
     func startController(
         sessionID: UUID,
         command: AgentLaunchCommand,
-        snapshotContext: AgentTerminalSnapshotContext? = nil,
         onLaunched: @escaping () -> Void,
         onTerminated: @escaping (Int32?) -> Void
     ) -> AgentTerminalController {
@@ -35,7 +34,6 @@ final class AgentTerminalRegistry: ObservableObject {
         let controller = AgentTerminalController(
             sessionID: sessionID,
             command: command,
-            snapshotContext: snapshotContext,
             onLaunched: onLaunched,
             onTerminated: onTerminated
         )
@@ -193,10 +191,6 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     let terminal = LocalProcessTerminalView(frame: .zero)
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
-    /// Snapshot-Worker: schreibt periodisch den Buffer-Zustand auf Disk,
-    /// damit nach Force Quit eine read-only Snapshot-Ansicht moeglich ist.
-    /// `nil` wenn kein Snapshot-Context uebergeben wurde (z. B. in Tests).
-    private(set) var snapshotCapturer: AgentTerminalSnapshotCapturer?
 
     @Published private(set) var isRunning = false
     @Published private(set) var hasStarted = false
@@ -214,7 +208,6 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     init(
         sessionID: UUID,
         command: AgentLaunchCommand,
-        snapshotContext: AgentTerminalSnapshotContext? = nil,
         onLaunched: @escaping () -> Void,
         onTerminated: @escaping (Int32?) -> Void
     ) {
@@ -222,9 +215,6 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         self.command = command
         self.onLaunched = onLaunched
         self.onTerminated = onTerminated
-        if let snapshotContext {
-            self.snapshotCapturer = AgentTerminalSnapshotCapturer(context: snapshotContext)
-        }
         super.init()
         terminal.processDelegate = self
 
@@ -260,10 +250,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
 
     /// Wird vom Caller aufgerufen, wenn die externe Session-ID (Claude
     /// conversation UUID / Codex rollout id) waehrend der Laufzeit gebunden
-    /// oder umgebunden wird. Snapshot-Capturer schreibt diese ID in den
-    /// naechsten Snapshot.
+    /// oder umgebunden wird. Aktuell ein No-op — wir speichern die ID nur
+    /// im Store, die Transcript-Ansicht liest sie von dort.
     func updateExternalSessionID(_ id: String?) {
-        snapshotCapturer?.updateExternalSessionID(id)
+        _ = id
     }
 
     /// Wechselt Terminal-Background + Foreground + 16-Color-ANSI-Palette zur
@@ -297,21 +287,13 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             environment: LoginShellEnvironment.shared.terminalEnvironmentArray(),
             currentDirectory: command.workingDirectory
         )
-        // Snapshot-Capturer einklinken, sobald der Prozess laeuft und der
-        // Terminal-Buffer real existiert.
-        snapshotCapturer?.attach(terminal: terminal)
         onLaunched()
     }
 
     func terminate() {
-        // Snapshot vor dem Abschied schreiben — danach kommt Claude nicht
-        // mehr zum Rendern und der Buffer ist tot.
-        snapshotCapturer?.flush()
-        snapshotCapturer?.stopTimer()
         // Graceful Claude/Codex-Quit: zwei Ctrl+C senden + kurze Wartezeit,
-        // damit die TUI ihre eigene Exit-Routine durchlaeuft
-        // (Resume-Hinweis druckt, Hooks feuern, etc.) bevor wir den
-        // Subprocess hart killen.
+        // damit die TUI ihre eigene Exit-Routine durchlaeuft (Resume-Hinweis,
+        // letzter JSONL-Flush) bevor wir den Subprocess hart killen.
         if isRunning {
             terminal.send([0x03])
             usleep(80_000)
@@ -344,9 +326,6 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         Task { @MainActor in
             self.exitCode = exitCode
             self.isRunning = false
-            // Final-Snapshot mit definitivem Prozess-Status persistieren,
-            // dann das Polling beenden.
-            self.snapshotCapturer?.markProcessTerminated(exitCode: exitCode)
             self.onTerminated(exitCode)
         }
     }

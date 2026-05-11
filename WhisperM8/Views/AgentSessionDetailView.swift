@@ -39,12 +39,13 @@ struct AgentSessionDetailView: View {
     var onClaudeHookLaunched: (UUID) -> Void = { _ in }
 
     @State private var store = AgentSessionStore()
-    @State private var snapshotStore = AgentTerminalSnapshotStore()
     @State private var errorMessage: String?
-    /// Lokal gecachtes Snapshot fuer die Offline-Ansicht. Wird beim Mount /
-    /// Session-Wechsel asynchron geladen — verhindert dass jedes
-    /// Re-Render erneut ueber Disk muss.
-    @State private var cachedSnapshot: AgentTerminalSnapshot?
+    /// Lokal gecachtes Transcript fuer die Offline-Ansicht. Wird beim Mount
+    /// / Session-Wechsel asynchron via TranscriptReader von der JSONL der
+    /// jeweiligen CLI geladen — verhindert dass jedes Re-Render erneut
+    /// parsen muss.
+    @State private var cachedTranscript: AgentChatTranscript?
+    @State private var isLoadingTranscript = false
 
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
@@ -55,8 +56,10 @@ struct AgentSessionDetailView: View {
             if let controller {
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
-            } else if let snapshot = cachedSnapshot {
-                AgentTerminalSnapshotView(snapshot: snapshot, session: session)
+            } else if let transcript = cachedTranscript, !transcript.isEmpty {
+                AgentChatTranscriptView(transcript: transcript, session: session)
+            } else if isLoadingTranscript {
+                loadingView
             } else {
                 ClosedSessionSummaryView(
                     session: session,
@@ -75,42 +78,71 @@ struct AgentSessionDetailView: View {
             // hängenbleibt. `focusTerminal` is async-dispatched — okay wenn
             // das View jetzt erst mountet.
             controller?.focusTerminal()
-            loadSnapshotIfNeeded()
-            // Auto-Summary nur anstoßen, wenn KEIN Snapshot vorhanden ist —
-            // sonst zeigen wir eh die Terminal-Snapshot-Ansicht und der
-            // teure `claude -p`-Subprocess (samt seiner TCC-Prompts) ist
-            // unnötig. User kann manuell via "Neu generieren" triggern.
-            if controller == nil && session.summary == nil && cachedSnapshot == nil {
-                onRequestSummary(session.id, false)
-            }
+            loadTranscriptIfNeeded()
         }
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
-            cachedSnapshot = nil
+            cachedTranscript = nil
+            isLoadingTranscript = false
             if session.shouldLaunchOnOpen == true {
                 prepareCommand()
             }
             // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
             controller?.focusTerminal()
-            loadSnapshotIfNeeded()
-            if controller == nil && session.summary == nil && cachedSnapshot == nil {
-                onRequestSummary(session.id, false)
-            }
+            loadTranscriptIfNeeded()
         }
         .onChange(of: actionRequest) { _, request in
             handleActionRequest(request)
         }
     }
 
-    /// Laedt das persistierte Snapshot fuer die aktuelle Session, falls
-    /// noch nicht gecacht und kein Live-Controller laeuft. Synchron weil
-    /// das File klein ist (max ~100 KiB) — async waere overkill.
-    private func loadSnapshotIfNeeded() {
+    /// Laedt das Transcript fuer die aktuelle Session aus der JSONL-Datei
+    /// der jeweiligen CLI. Nur wenn kein Live-Controller laeuft und eine
+    /// externe Session-ID bekannt ist. Asynchron weil JSONL gross sein
+    /// kann (mehrere MB / Sekunden zum Parsen).
+    private func loadTranscriptIfNeeded() {
         guard controller == nil else {
-            cachedSnapshot = nil
+            cachedTranscript = nil
+            isLoadingTranscript = false
             return
         }
-        cachedSnapshot = snapshotStore.load(localSessionID: session.id)
+        guard let externalID = session.externalSessionID, !externalID.isEmpty else {
+            cachedTranscript = nil
+            isLoadingTranscript = false
+            return
+        }
+        let provider = session.provider
+        let cwd = project.path
+        let targetSessionID = session.id
+        isLoadingTranscript = true
+        Task.detached(priority: .userInitiated) {
+            let transcript: AgentChatTranscript?
+            switch provider {
+            case .claude:
+                transcript = ClaudeTranscriptReader.read(cwd: cwd, sessionID: externalID)
+            case .codex:
+                transcript = CodexTranscriptReader.read(sessionID: externalID)
+            }
+            await MainActor.run {
+                // Falls der User waehrend des Loads umgeschaltet hat,
+                // diese Antwort verwerfen.
+                guard targetSessionID == session.id else { return }
+                cachedTranscript = transcript
+                isLoadingTranscript = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var loadingView: some View {
+        VStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Konversation wird geladen…")
+                .font(.system(size: 12))
+                .foregroundStyle(AgentTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AgentTheme.background)
     }
 
     private func handleActionRequest(_ request: AgentSessionActionRequest?) {
@@ -137,16 +169,9 @@ struct AgentSessionDetailView: View {
                 }
             }
             let command = try builder.command(for: launchSession, project: project)
-            let snapshotContext = AgentTerminalSnapshotContext(
-                localSessionID: launchSession.id,
-                provider: launchSession.provider,
-                externalSessionID: launchSession.externalSessionID,
-                cwd: project.path
-            )
             terminalRegistry.startController(
                 sessionID: launchSession.id,
                 command: command,
-                snapshotContext: snapshotContext,
                 onLaunched: markLaunched,
                 onTerminated: { exitCode in markTerminated(exitCode: exitCode) }
             )

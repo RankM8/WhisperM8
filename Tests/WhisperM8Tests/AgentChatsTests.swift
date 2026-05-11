@@ -2163,138 +2163,103 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .dark), "dark-ansi")
     }
 
-    // MARK: - AgentTerminalSnapshot / Store
+    // MARK: - Transcript readers
 
-    private func makeTempSnapshotDir() -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("WhisperM8SnapshotTests-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
-    private func makeSampleSnapshot(
-        localSessionID: UUID = UUID(),
-        lines: [AgentTerminalLine] = []
-    ) -> AgentTerminalSnapshot {
-        AgentTerminalSnapshot(
-            localSessionID: localSessionID,
-            provider: .claude,
-            externalSessionID: "abc",
-            cwd: "/tmp/repo",
-            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            terminalColumns: 120,
-            terminalRows: 40,
-            processWasRunning: false,
-            exitCode: 0,
-            lines: lines
+    func testClaudeTranscriptURLEncodesCWDWithDashes() {
+        let url = ClaudeTranscriptReader.transcriptURL(
+            forCwd: "/Users/foo/repos/whisperm8",
+            sessionID: "abc-123"
         )
+        XCTAssertTrue(url.path.hasSuffix("/.claude/projects/-Users-foo-repos-whisperm8/abc-123.jsonl"))
     }
 
-    func testAgentTerminalSnapshotStoreSaveLoadRoundTrip() {
-        let dir = makeTempSnapshotDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = AgentTerminalSnapshotStore(directory: dir)
-        let id = UUID()
-        let line = AgentTerminalLine(runs: [
-            AgentTerminalRun(text: "Hello ", fg: .defaultFg, bg: .defaultBg, bold: false, italic: false, underline: false, inverse: false, dim: false),
-            AgentTerminalRun(text: "world", fg: .ansi(9), bg: .defaultBg, bold: true, italic: false, underline: false, inverse: false, dim: false)
-        ])
-        let snapshot = makeSampleSnapshot(localSessionID: id, lines: [line])
+    func testClaudeTranscriptReaderParsesUserAndAssistantEntries() throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-claude-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
 
-        XCTAssertTrue(store.save(snapshot))
-        let loaded = store.load(localSessionID: id)
-        XCTAssertEqual(loaded, snapshot)
-        XCTAssertEqual(loaded?.lines.first?.runs.count, 2)
-        XCTAssertEqual(loaded?.lines.first?.runs.last?.bold, true)
+        let lines = [
+            #"{"type":"user","timestamp":"2026-05-11T10:00:00Z","message":{"role":"user","content":"Hello Claude"}}"#,
+            #"{"type":"queue-operation","timestamp":"2026-05-11T10:00:01Z","operation":"x","sessionId":"s"}"#,
+            #"{"type":"assistant","timestamp":"2026-05-11T10:00:02Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi there!"},{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}"#,
+            #"{"type":"user","timestamp":"2026-05-11T10:00:03Z","message":{"role":"user","content":[{"type":"tool_result","content":"file.txt","is_error":false}]}}"#
+        ]
+        try lines.joined(separator: "\n").write(to: tempURL, atomically: true, encoding: .utf8)
+
+        let transcript = ClaudeTranscriptReader.read(fileURL: tempURL)
+        XCTAssertEqual(transcript.messages.count, 3)
+        XCTAssertEqual(transcript.messages[0].role, .user)
+        if case .text(let t) = transcript.messages[0].blocks[0] {
+            XCTAssertEqual(t, "Hello Claude")
+        } else { XCTFail("Expected text block") }
+
+        XCTAssertEqual(transcript.messages[1].role, .assistant)
+        XCTAssertEqual(transcript.messages[1].blocks.count, 2)
+        if case .toolUse(let name, let input) = transcript.messages[1].blocks[1] {
+            XCTAssertEqual(name, "Bash")
+            XCTAssertTrue(input.contains("ls"))
+        } else { XCTFail("Expected toolUse block") }
+
+        XCTAssertEqual(transcript.messages[2].role, .user)
+        if case .toolResult(let content, let isError) = transcript.messages[2].blocks[0] {
+            XCTAssertEqual(content, "file.txt")
+            XCTAssertFalse(isError)
+        } else { XCTFail("Expected toolResult block") }
     }
 
-    func testAgentTerminalSnapshotStoreReturnsNilForMissingID() {
-        let dir = makeTempSnapshotDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = AgentTerminalSnapshotStore(directory: dir)
-        XCTAssertNil(store.load(localSessionID: UUID()))
-    }
+    func testClaudeTranscriptReaderSkipsCorruptedLines() throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-claude-corrupt-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
 
-    func testAgentTerminalSnapshotStoreReturnsNilForCorruptedFile() throws {
-        let dir = makeTempSnapshotDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = AgentTerminalSnapshotStore(directory: dir)
-        let id = UUID()
-        try "{ not a snapshot".write(to: store.fileURL(for: id), atomically: true, encoding: .utf8)
-        XCTAssertNil(store.load(localSessionID: id))
-    }
-
-    func testAgentTerminalSnapshotStoreDeleteIsIdempotent() {
-        let dir = makeTempSnapshotDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = AgentTerminalSnapshotStore(directory: dir)
-        let id = UUID()
-        _ = store.save(makeSampleSnapshot(localSessionID: id))
-        XCTAssertTrue(store.delete(localSessionID: id))
-        XCTAssertFalse(store.delete(localSessionID: id))
-        XCTAssertNil(store.load(localSessionID: id))
-    }
-
-    func testAgentTerminalSnapshotStorePrunesOrphans() {
-        let dir = makeTempSnapshotDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = AgentTerminalSnapshotStore(directory: dir)
-        let alive = UUID()
-        let orphan1 = UUID()
-        let orphan2 = UUID()
-        for id in [alive, orphan1, orphan2] {
-            _ = store.save(makeSampleSnapshot(localSessionID: id))
-        }
-        let removed = store.pruneOrphans(keeping: [alive])
-        XCTAssertEqual(removed, 2)
-        XCTAssertNotNil(store.load(localSessionID: alive))
-        XCTAssertNil(store.load(localSessionID: orphan1))
-        XCTAssertNil(store.load(localSessionID: orphan2))
-    }
-
-    func testAgentTerminalSnapshotConvertColorMapping() {
-        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.defaultColor, isBackground: false), .defaultFg)
-        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.defaultColor, isBackground: true), .defaultBg)
-        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.ansi256(code: 9), isBackground: false), .ansi(9))
-        XCTAssertEqual(AgentTerminalSnapshotBuilder.convertColor(.trueColor(red: 10, green: 20, blue: 30), isBackground: false), .rgb(r: 10, g: 20, b: 30))
-    }
-
-    func testAgentTerminalSnapshotCellColorRoundTripsViaJSON() throws {
-        let colors: [AgentTerminalCellColor] = [.defaultFg, .defaultBg, .ansi(42), .rgb(r: 255, g: 128, b: 0)]
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-        for color in colors {
-            let data = try encoder.encode(color)
-            let decoded = try decoder.decode(AgentTerminalCellColor.self, from: data)
-            XCTAssertEqual(decoded, color)
-        }
-    }
-
-    func testAgentTerminalSnapshotComputeDigestChangesWithLastLines() {
-        let line1 = AgentTerminalLine(runs: [AgentTerminalRun(text: "first", fg: .defaultFg, bg: .defaultBg, bold: false, italic: false, underline: false, inverse: false, dim: false)])
-        let line2 = AgentTerminalLine(runs: [AgentTerminalRun(text: "second", fg: .defaultFg, bg: .defaultBg, bold: false, italic: false, underline: false, inverse: false, dim: false)])
-        XCTAssertNotEqual(
-            AgentTerminalSnapshotCapturer.computeDigest(for: [line1]),
-            AgentTerminalSnapshotCapturer.computeDigest(for: [line2])
-        )
-    }
-
-    func testAgentTerminalSnapshotLegacyJSONDecodesWithoutLines() throws {
-        // Snapshot ohne `lines`-Feld (Pre-v2-Format) muss laden, lines == [].
-        let json = """
-        {
-          "localSessionID":"\(UUID().uuidString)",
-          "provider":"claude",
-          "cwd":"/tmp/repo",
-          "capturedAt":"2026-05-11T20:00:00Z",
-          "processWasRunning":false
-        }
+        let content = """
+        {"type":"user","timestamp":"2026-05-11T10:00:00Z","message":{"role":"user","content":"OK"}}
+        not valid json line
+        {"type":"assistant","timestamp":"2026-05-11T10:00:02Z","message":{"role":"assistant","content":[{"type":"text","text":"Response"}]}}
         """
-        let data = json.data(using: .utf8)!
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let snapshot = try decoder.decode(AgentTerminalSnapshot.self, from: data)
-        XCTAssertEqual(snapshot.lines, [])
+        try content.write(to: tempURL, atomically: true, encoding: .utf8)
+
+        let transcript = ClaudeTranscriptReader.read(fileURL: tempURL)
+        // Korrupte Mittelzeile uebersprungen, andere zwei kamen durch.
+        XCTAssertEqual(transcript.messages.count, 2)
+    }
+
+    func testClaudeTranscriptReaderHandlesImagePayload() throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-claude-image-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let line = #"{"type":"user","timestamp":"2026-05-11T10:00:00Z","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}},{"type":"text","text":"look at this"}]}}"#
+        try line.write(to: tempURL, atomically: true, encoding: .utf8)
+
+        let transcript = ClaudeTranscriptReader.read(fileURL: tempURL)
+        XCTAssertEqual(transcript.messages.count, 1)
+        XCTAssertEqual(transcript.messages[0].blocks.count, 2)
+        if case .imagePlaceholder(let mediaType, _) = transcript.messages[0].blocks[0] {
+            XCTAssertEqual(mediaType, "image/png")
+        } else { XCTFail("Expected imagePlaceholder block") }
+    }
+
+    func testCodexTranscriptReaderParsesUserAndAgentMessages() throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-codex-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let lines = [
+            #"{"timestamp":"2026-05-11T10:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"x"}}"#,
+            #"{"timestamp":"2026-05-11T10:00:01Z","type":"event_msg","payload":{"type":"user_message","message":"Hi Codex"}}"#,
+            #"{"timestamp":"2026-05-11T10:00:02Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"ls"}}"#,
+            #"{"timestamp":"2026-05-11T10:00:03Z","type":"event_msg","payload":{"type":"agent_message","message":"Hello back"}}"#
+        ]
+        try lines.joined(separator: "\n").write(to: tempURL, atomically: true, encoding: .utf8)
+
+        let transcript = CodexTranscriptReader.read(fileURL: tempURL)
+        XCTAssertEqual(transcript.messages.count, 2)
+        XCTAssertEqual(transcript.messages[0].role, .user)
+        XCTAssertEqual(transcript.messages[1].role, .assistant)
+        if case .text(let t) = transcript.messages[1].blocks[0] {
+            XCTAssertEqual(t, "Hello back")
+        } else { XCTFail("Expected assistant text block") }
     }
 
     // MARK: - Retention
@@ -2304,9 +2269,6 @@ final class AgentChatsTests: XCTestCase {
             .appendingPathComponent("WhisperM8Retention-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let snapshotStore = AgentTerminalSnapshotStore(
-            directory: root.appendingPathComponent("snapshots", isDirectory: true)
-        )
         let hookPaths = ClaudeHookPaths(rootDirectory: root)
         try FileManager.default.createDirectory(at: hookPaths.settingsDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: hookPaths.eventsDirectory, withIntermediateDirectories: true)
@@ -2314,22 +2276,16 @@ final class AgentChatsTests: XCTestCase {
         let live = UUID()
         let orphan = UUID()
 
-        _ = snapshotStore.save(makeSampleSnapshot(localSessionID: live))
-        _ = snapshotStore.save(makeSampleSnapshot(localSessionID: orphan))
-        // Hook-Settings + Event-Files erzeugen.
         try Data().write(to: hookPaths.settingsFileURL(localSessionID: live))
         try Data().write(to: hookPaths.settingsFileURL(localSessionID: orphan))
         try Data().write(to: hookPaths.eventFileURL(localSessionID: live))
         try Data().write(to: hookPaths.eventFileURL(localSessionID: orphan))
 
-        let service = AgentSessionRetentionService(snapshotStore: snapshotStore, hookPaths: hookPaths)
+        let service = AgentSessionRetentionService(hookPaths: hookPaths)
         let result = service.prune(liveLocalSessionIDs: [live])
 
-        XCTAssertEqual(result.snapshotsRemoved, 1)
         XCTAssertEqual(result.hookSettingsRemoved, 1)
         XCTAssertEqual(result.hookEventsRemoved, 1)
-        XCTAssertNotNil(snapshotStore.load(localSessionID: live))
-        XCTAssertNil(snapshotStore.load(localSessionID: orphan))
         XCTAssertTrue(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: live).path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: orphan).path))
     }
