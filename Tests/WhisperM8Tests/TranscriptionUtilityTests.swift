@@ -40,4 +40,23 @@ final class TranscriptionUtilityTests: XCTestCase {
         XCTAssertEqual(TranscriptionModel.groq_whisper_v3.provider, .groq)
         XCTAssertEqual(TranscriptionModel.groq_whisper_v3_turbo.provider, .groq)
     }
+
+    func testRecordingPhasePriorityMatchesExistingStatusPrecedence() {
+        XCTAssertEqual(
+            RecordingPhase.resolve(isRecording: true, isTranscribing: true, isPostProcessing: true),
+            .recording
+        )
+        XCTAssertEqual(
+            RecordingPhase.resolve(isRecording: false, isTranscribing: true, isPostProcessing: true),
+            .postProcessing
+        )
+        XCTAssertEqual(
+            RecordingPhase.resolve(isRecording: false, isTranscribing: true, isPostProcessing: false),
+            .transcribing
+        )
+        XCTAssertEqual(
+            RecordingPhase.resolve(isRecording: false, isTranscribing: false, isPostProcessing: false),
+            .idle
+        )
+    }
 }

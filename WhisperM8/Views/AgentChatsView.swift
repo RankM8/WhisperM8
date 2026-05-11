@@ -965,48 +965,32 @@ struct AgentChatsView: View {
         in projectID: UUID,
         beforeSessionID: UUID?
     ) {
-        if dropped.sourceProjectID == projectID {
-            // Reorder innerhalb desselben Projekts.
-            let currentSessions = workspace.sessions
-                .filter { $0.projectID == projectID && $0.status != .archived }
-            let sorted = AgentSessionStore.sortedSessions(currentSessions)
-            var orderedIDs = sorted.map(\.id).filter { $0 != dropped.sessionID }
-            let insertAt: Int
-            if let beforeSessionID, let idx = orderedIDs.firstIndex(of: beforeSessionID) {
-                insertAt = idx
-            } else {
-                insertAt = orderedIDs.count
-            }
-            orderedIDs.insert(dropped.sessionID, at: insertAt)
+        switch AgentDragDropPlanner.sessionDropPlan(
+            dropped: dropped,
+            targetProjectID: projectID,
+            beforeSessionID: beforeSessionID,
+            workspace: workspace
+        ) {
+        case .reorder(let projectID, let orderedIDs):
             do {
                 try store.reorderSessions(in: projectID, orderedIDs: orderedIDs)
                 workspace = store.loadWorkspace()
             } catch {
                 errorMessage = error.localizedDescription
             }
+        case .move(let sessionID, let newProjectID, let targetIndex):
+            do {
+                try store.moveSessionToProject(
+                    sessionID: sessionID,
+                    newProjectID: newProjectID,
+                    targetIndex: targetIndex
+                )
+                workspace = store.loadWorkspace()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        case .none:
             return
-        }
-
-        // Cross-Project-Move: Session ins Ziel-Projekt verschieben und an
-        // der gewünschten Position einsortieren.
-        let targetSessions = workspace.sessions
-            .filter { $0.projectID == projectID && $0.status != .archived }
-        let sorted = AgentSessionStore.sortedSessions(targetSessions)
-        let targetIndex: Int
-        if let beforeSessionID, let idx = sorted.firstIndex(where: { $0.id == beforeSessionID }) {
-            targetIndex = idx
-        } else {
-            targetIndex = sorted.count
-        }
-        do {
-            try store.moveSessionToProject(
-                sessionID: dropped.sessionID,
-                newProjectID: projectID,
-                targetIndex: targetIndex
-            )
-            workspace = store.loadWorkspace()
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 
@@ -1016,15 +1000,12 @@ struct AgentChatsView: View {
         _ dropped: DraggableProject,
         beforeProjectID: UUID?
     ) {
-        let visible = manualProjects
-        var orderedIDs = visible.map(\.id).filter { $0 != dropped.projectID }
-        let insertAt: Int
-        if let beforeProjectID, let idx = orderedIDs.firstIndex(of: beforeProjectID) {
-            insertAt = idx
-        } else {
-            insertAt = orderedIDs.count
-        }
-        orderedIDs.insert(dropped.projectID, at: insertAt)
+        let plan = AgentDragDropPlanner.projectDropPlan(
+            dropped: dropped,
+            beforeProjectID: beforeProjectID,
+            visibleProjects: manualProjects
+        )
+        guard case .reorder(let orderedIDs) = plan else { return }
         do {
             try store.reorderProjects(orderedIDs: orderedIDs)
             workspace = store.loadWorkspace()
@@ -2378,40 +2359,6 @@ private struct ProjectAvatar: View {
     }
 }
 
-private struct AgentChatsWindowAccessor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            configure(view.window)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            configure(nsView.window)
-        }
-    }
-
-    private func configure(_ window: NSWindow?) {
-        guard let window else { return }
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.styleMask.insert(.fullSizeContentView)
-        window.titlebarSeparatorStyle = .none
-        window.isMovableByWindowBackground = true
-        // Dynamischer Background: reagiert auf NSAppearance der Hosting-View,
-        // damit der durch `titlebarAppearsTransparent + fullSizeContentView`
-        // sichtbare Window-Background nicht im Light-Mode dunkel bleibt.
-        window.backgroundColor = NSColor(name: nil) { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return isDark
-                ? NSColor(srgbRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
-                : NSColor.white
-        }
-    }
-}
-
 private struct TitlebarIconButton: View {
     let systemImage: String
     let help: String
@@ -2838,181 +2785,37 @@ private struct AgentSessionDetailView: View {
 
     private func bindExternalSessionIDWhenAvailable() {
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            do {
-                let indexedSessions = CodexSessionIndexer().indexedSessions(limit: 20)
-                    + ClaudeSessionIndexer().indexedSessions(limit: 20)
-                if try store.bindLatestIndexedSession(
-                    localSessionID: session.id,
-                    provider: session.provider,
-                    projectPath: project.path,
-                    indexedSessions: indexedSessions
-                ) != nil {
-                    onExternalSessionIDBound(session.id)
-                    onStateChanged()
+            let retryDelays: [UInt64] = [
+                250_000_000,
+                500_000_000,
+                1_000_000_000,
+                2_000_000_000,
+                4_000_000_000
+            ]
+
+            for delay in retryDelays {
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { return }
+
+                do {
+                    let indexedSessions = CodexSessionIndexer().indexedSessions(limit: 20)
+                        + ClaudeSessionIndexer().indexedSessions(limit: 20)
+                    if try store.bindLatestIndexedSession(
+                        localSessionID: session.id,
+                        provider: session.provider,
+                        projectPath: project.path,
+                        indexedSessions: indexedSessions
+                    ) != nil {
+                        onExternalSessionIDBound(session.id)
+                        onStateChanged()
+                        return
+                    }
+                } catch {
+                    errorMessage = error.localizedDescription
+                    return
                 }
-            } catch {
-                errorMessage = error.localizedDescription
             }
         }
-    }
-}
-
-/// Detail-View einer geschlossenen / nicht-attached Session. Zeigt eine kurze
-/// Headline + ausführliche Beschreibung, statt der bisherigen rein technischen
-/// "Session metadata loaded" Hinweise. Resume- und Session-ID-Hinweise bleiben
-/// als Footer kleingedruckt erhalten, damit Power-User weiterhin Zugriff
-/// haben.
-private struct ClosedSessionSummaryView: View {
-    let session: AgentChatSession
-    let errorMessage: String?
-    let isGenerating: Bool
-    /// Ruft den Summarizer auf. `force = true` bedeutet "Neu generieren"-Klick;
-    /// `false` ist der „passive" Anstoß beim Öffnen.
-    var onGenerate: (_ force: Bool) -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
-                        .font(.callout)
-                        .padding(12)
-                        .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AgentTheme.border, lineWidth: 1))
-                }
-
-                if let summary = session.summary {
-                    summaryBody(summary)
-                } else if isGenerating {
-                    generatingPlaceholder
-                } else {
-                    emptyPlaceholder
-                }
-
-                technicalFooter
-            }
-            .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(AgentTheme.background)
-    }
-
-    @ViewBuilder
-    private func summaryBody(_ summary: AgentSessionSummary) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 10) {
-                Text(summary.headline)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AgentTheme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 12)
-                regenerateButton
-            }
-
-            Divider().background(AgentTheme.border)
-
-            Text(summary.details)
-                .font(.system(size: 13))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 10))
-                Text("Automatisch zusammengefasst · \(relativeDate(summary.generatedAt))")
-                    .font(.system(size: 11))
-            }
-            .foregroundStyle(AgentTheme.textTertiary)
-        }
-    }
-
-    @ViewBuilder
-    private var generatingPlaceholder: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text("Zusammenfassung wird generiert …")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AgentTheme.textPrimary)
-            }
-            Text("Wir lesen das Transcript dieser Session und fragen \(session.provider.displayName) nach einer kurzen Zusammenfassung. Das dauert in der Regel ein paar Sekunden.")
-                .font(.system(size: 12))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder
-    private var emptyPlaceholder: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Noch keine Zusammenfassung verfügbar")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(AgentTheme.textPrimary)
-            Text("Wenn diese Session ein vollständiges Transcript bei \(session.provider.displayName) hinterlassen hat, kann WhisperM8 daraus eine kurze Zusammenfassung erzeugen.")
-                .font(.system(size: 12))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                onGenerate(true)
-            } label: {
-                Label("Zusammenfassung erzeugen", systemImage: "sparkles")
-                    .font(.system(size: 12, weight: .medium))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    @ViewBuilder
-    private var regenerateButton: some View {
-        if isGenerating {
-            ProgressView().controlSize(.small)
-        } else {
-            Button {
-                onGenerate(true)
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .buttonStyle(.borderless)
-            .help("Zusammenfassung neu generieren")
-        }
-    }
-
-    @ViewBuilder
-    private var technicalFooter: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Divider().background(AgentTheme.border)
-            HStack(spacing: 6) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 10))
-                Text("Diese Session ist aktuell nicht verbunden. ")
-                + Text("Resume").bold()
-                + Text(" oben in der Header-Leiste verbindet sie wieder.")
-            }
-            .font(.system(size: 11))
-            .foregroundStyle(AgentTheme.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            if let externalSessionID = session.externalSessionID {
-                Text("Session-ID: \(externalSessionID)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                    .textSelection(.enabled)
-            }
-        }
-        .padding(.top, 12)
-    }
-
-    private func relativeDate(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -3063,146 +2866,5 @@ private struct GitProjectStatus {
         } catch {
             return nil
         }
-    }
-}
-
-/// 22 Theme-Tokens, je in Light- und Dark-Variante. Alle Werte werden über
-/// `Color.dynamic(light:dark:)` aufgelöst — der zugrundeliegende
-/// `NSColor(name:dynamicProvider:)` liest die aktuelle `NSAppearance` aus
-/// der View-Hierarchie, sodass `.preferredColorScheme(.light/.dark)` auf
-/// dem Root die Tokens automatisch umschaltet.
-private enum AgentTheme {
-    // Surfaces: dunkles Off-Black ↔ helles Off-White, mit subtilen Stufen
-    // damit Sidebar/Header/Panel/Surface in beiden Modi voneinander abheben.
-    // Main content area: pure white im Light (Apple-HIG: main pane ist
-    // weiß, Sidebar/Header tinted), Off-Black im Dark.
-    static let background = Color.dynamic(
-        light: Color(red: 1.0, green: 1.0, blue: 1.0),
-        dark: Color(red: 0.058, green: 0.060, blue: 0.064)
-    )
-    static let sidebar = Color.dynamic(
-        light: Color(red: 0.935, green: 0.935, blue: 0.940),
-        dark: Color(red: 0.075, green: 0.078, blue: 0.082)
-    )
-    static let header = Color.dynamic(
-        light: Color(red: 0.950, green: 0.950, blue: 0.955),
-        dark: Color(red: 0.070, green: 0.072, blue: 0.076)
-    )
-    static let surface = Color.dynamic(
-        light: Color(red: 1.0, green: 1.0, blue: 1.0),
-        dark: Color(red: 0.090, green: 0.092, blue: 0.097)
-    )
-    static let panel = Color.dynamic(
-        light: Color(red: 1.0, green: 1.0, blue: 1.0),
-        dark: Color(red: 0.105, green: 0.108, blue: 0.114)
-    )
-    static let control = Color.dynamic(
-        light: Color(red: 0.920, green: 0.920, blue: 0.928),
-        dark: Color(red: 0.140, green: 0.143, blue: 0.150)
-    )
-
-    // Translucent overlays: schwarz auf hell, weiß auf dunkel.
-    // (Reine Inversion: gleich aussehende Tiefe in beiden Modi.)
-    static let hover = Color.dynamic(
-        light: Color.black.opacity(0.045),
-        dark: Color.white.opacity(0.04)
-    )
-    static let selection = Color.dynamic(
-        light: Color.black.opacity(0.075),
-        dark: Color.white.opacity(0.07)
-    )
-    static let selectionStrong = Color.dynamic(
-        light: Color.black.opacity(0.11),
-        dark: Color.white.opacity(0.10)
-    )
-
-    static let headerTab = Color.dynamic(
-        light: Color(red: 0.928, green: 0.928, blue: 0.936),
-        dark: Color(red: 0.080, green: 0.082, blue: 0.086)
-    )
-    static let tabSelected = Color.dynamic(
-        light: Color(red: 1.0, green: 1.0, blue: 1.0),
-        dark: Color(red: 0.115, green: 0.118, blue: 0.124)
-    )
-    static let statusPill = Color.dynamic(
-        light: Color(red: 0.985, green: 0.985, blue: 0.990),
-        dark: Color(red: 0.050, green: 0.052, blue: 0.055)
-    )
-
-    // Hairlines/Connectors: minimaler Kontrast genügt. Im Light leicht
-    // sichtbarer (8%) als im Dark (6%), weil schwarze Hairlines auf weiß
-    // visuell stärker wirken bei gleicher Opacity wäre zu schwach.
-    static let border = Color.dynamic(
-        light: Color.black.opacity(0.08),
-        dark: Color.white.opacity(0.06)
-    )
-    static let borderStrong = Color.dynamic(
-        light: Color.black.opacity(0.13),
-        dark: Color.white.opacity(0.10)
-    )
-    static let connector = Color.dynamic(
-        light: Color.black.opacity(0.11),
-        dark: Color.white.opacity(0.10)
-    )
-    static let connectorActive = Color.dynamic(
-        light: Color.black.opacity(0.25),
-        dark: Color.white.opacity(0.22)
-    )
-
-    // Text: schwarz auf hell, weiß auf dunkel. Opacity-Stufen so dass
-    // primary/secondary/tertiary in beiden Modi die gleiche Hierarchie haben.
-    static let textPrimary = Color.dynamic(
-        light: Color.black.opacity(0.90),
-        dark: Color.white.opacity(0.92)
-    )
-    static let textSecondary = Color.dynamic(
-        light: Color.black.opacity(0.58),
-        dark: Color.white.opacity(0.55)
-    )
-    static let textTertiary = Color.dynamic(
-        light: Color.black.opacity(0.42),
-        dark: Color.white.opacity(0.38)
-    )
-
-    // Akzente: gleiches Hue, im Light leicht dunkler für Kontrast auf weiß.
-    static let accentDiffPos = Color.dynamic(
-        light: Color(red: 0.18, green: 0.62, blue: 0.30),
-        dark: Color(red: 0.40, green: 0.85, blue: 0.45)
-    )
-    static let accentDiffNeg = Color.dynamic(
-        light: Color(red: 0.78, green: 0.22, blue: 0.22),
-        dark: Color(red: 0.95, green: 0.40, blue: 0.40)
-    )
-}
-
-private extension Color {
-    /// Erzeugt eine Color, deren tatsächlicher Wert zur Render-Zeit anhand
-    /// der View-Hierarchie-Appearance entschieden wird. Reicht sowohl für
-    /// macOS-System-Theme-Wechsel als auch für `.preferredColorScheme(...)`
-    /// Override auf einer Scene.
-    static func dynamic(light: Color, dark: Color) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(isDark ? dark : light)
-        })
-    }
-}
-
-private extension Color {
-    init(hex: String) {
-        let scanner = Scanner(string: hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")))
-        var rgb: UInt64 = 0
-        scanner.scanHexInt64(&rgb)
-        self.init(
-            red: Double((rgb >> 16) & 0xFF) / 255.0,
-            green: Double((rgb >> 8) & 0xFF) / 255.0,
-            blue: Double(rgb & 0xFF) / 255.0
-        )
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
     }
 }

@@ -56,9 +56,10 @@ struct SelectedContextService {
             return nil
         }
 
+        let focusedAXElement = unsafeBitCast(focusedElement, to: AXUIElement.self)
         var selectedTextValue: CFTypeRef?
         let selectedTextStatus = AXUIElementCopyAttributeValue(
-            focusedElement as! AXUIElement,
+            focusedAXElement,
             kAXSelectedTextAttribute as CFString,
             &selectedTextValue
         )

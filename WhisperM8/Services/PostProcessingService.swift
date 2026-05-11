@@ -60,12 +60,15 @@ protocol PostProcessing {
 
 enum PostProcessingError: LocalizedError, Equatable {
     case missingTemplate
+    case userCancelled
     case codexUnavailable(String)
 
     var errorDescription: String? {
         switch self {
         case .missingTemplate:
             return "No template is configured for this output mode."
+        case .userCancelled:
+            return "Codex wurde abgebrochen."
         case .codexUnavailable(let message):
             return message
         }
@@ -196,6 +199,7 @@ struct CodexPostProcessor: PostProcessing {
 
         // Watchdog: terminiert den Prozess wenn `codexIdleTimeoutSeconds` lang keine Bytes ankommen.
         var didTimeout = false
+        let timeoutLock = NSLock()
         let timeoutSeconds = Self.codexIdleTimeoutSeconds
         let watchdog = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         watchdog.schedule(deadline: .now() + 2, repeating: 2)
@@ -204,7 +208,9 @@ struct CodexPostProcessor: PostProcessing {
             let elapsed = Date().timeIntervalSince(lastActivity)
             activityLock.unlock()
             if elapsed > Double(timeoutSeconds), let process, process.isRunning {
+                timeoutLock.lock()
                 didTimeout = true
+                timeoutLock.unlock()
                 process.terminate()
             }
         }
@@ -226,9 +232,12 @@ struct CodexPostProcessor: PostProcessing {
         CodexProcessRegistry.shared.unregister(process)
 
         if wasCancelledByUser {
-            throw PostProcessingError.codexUnavailable("Codex wurde abgebrochen.")
+            throw PostProcessingError.userCancelled
         }
-        if didTimeout {
+        timeoutLock.lock()
+        let timedOut = didTimeout
+        timeoutLock.unlock()
+        if timedOut {
             throw PostProcessingError.codexUnavailable(
                 "Codex hat \(timeoutSeconds) s lang keine Antwort gesendet — Stream abgebrochen. Prompt erneut versuchen oder Reasoning Effort senken."
             )

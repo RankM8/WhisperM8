@@ -18,6 +18,39 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var routeID: String {
+        switch self {
+        case .api:
+            return "api"
+        case .codex:
+            return "codex"
+        case .outputOverview:
+            return "outputOverview"
+        case .modes:
+            return "modes"
+        case .templates:
+            return "templates"
+        case .testLab:
+            return "testLab"
+        case .agentChats:
+            return "agentChats"
+        case .permissions:
+            return "permissions"
+        case .hotkey:
+            return "hotkey"
+        case .audio:
+            return "audio"
+        case .behavior:
+            return "behavior"
+        case .about:
+            return "about"
+        }
+    }
+
+    static func section(routeID: String) -> ControlCenterSection? {
+        allCases.first { $0.routeID == routeID }
+    }
+
     var systemImage: String {
         switch self {
         case .api:
@@ -65,6 +98,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @StateObject private var windowRequestCenter = WindowRequestCenter.shared
     @State private var selection: ControlCenterSection? = .api
 
     var body: some View {
@@ -109,6 +143,20 @@ struct SettingsView: View {
                 WindowRequestCenter.shared.request(.agentChats)
             }
         }
+        .onAppear {
+            applySettingsRoute(windowRequestCenter.latestRequest)
+        }
+        .onReceive(windowRequestCenter.$latestRequest.compactMap { $0 }) { request in
+            applySettingsRoute(request)
+        }
+    }
+
+    private func applySettingsRoute(_ request: WindowRequest?) {
+        guard let routeID = request?.settingsSectionID,
+              let section = ControlCenterSection.section(routeID: routeID) else {
+            return
+        }
+        selection = section
     }
 
     private func sidebarRow(_ section: ControlCenterSection) -> some View {
@@ -735,6 +783,21 @@ struct BehaviorSettingsView: View {
 // MARK: - About View
 
 struct AboutView: View {
+    private var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        switch (version?.isEmpty == false ? version : nil, build?.isEmpty == false ? build : nil) {
+        case let (version?, build?) where version != build:
+            return "Version \(version) (\(build))"
+        case let (version?, _):
+            return "Version \(version)"
+        case (_, let build?):
+            return "Build \(build)"
+        default:
+            return "Version unknown"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Image(nsImage: NSApp.applicationIconImage)
@@ -745,7 +808,7 @@ struct AboutView: View {
             Text("WhisperM8")
                 .font(.title2.bold())
 
-            Text("Version 1.2.0")
+            Text(versionText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

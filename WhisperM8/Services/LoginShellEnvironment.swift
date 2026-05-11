@@ -84,7 +84,7 @@ final class LoginShellEnvironment: @unchecked Sendable {
         var env = base
         env["PATH"] = path
 
-        if (env["TERM"]?.isEmpty ?? true) {
+        if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {
             env["TERM"] = "xterm-256color"
         }
         if (env["COLORTERM"]?.isEmpty ?? true) {
@@ -93,6 +93,7 @@ final class LoginShellEnvironment: @unchecked Sendable {
         if (env["CLICOLOR"]?.isEmpty ?? true) {
             env["CLICOLOR"] = "1"
         }
+        env.removeValue(forKey: "NO_COLOR")
         let hasLocale = !(env["LANG"]?.isEmpty ?? true) || !(env["LC_ALL"]?.isEmpty ?? true)
         if !hasLocale {
             env["LANG"] = "en_US.UTF-8"

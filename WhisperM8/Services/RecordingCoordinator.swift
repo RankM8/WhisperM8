@@ -558,6 +558,11 @@ final class RecordingCoordinator {
             appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
 
+            if case PostProcessingError.userCancelled = error {
+                Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
+                return PostProcessingRunResult(finalText: rawText)
+            }
+
             if AppPreferences.shared.fallbackToRawOnProcessingError {
                 let message = error.localizedDescription
                 appState.lastError = message

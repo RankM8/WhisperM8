@@ -339,6 +339,64 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(workspace.sessions.first?.initialPrompt, "Prompt")
     }
 
+    func testAgentSessionStoreLoadsLegacyWorkspaceWithoutRecentSessionFields() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let projectID = UUID()
+        let sessionID = UUID()
+        try """
+        {
+          "projects": [
+            {
+              "id": "\(projectID.uuidString)",
+              "name": "Legacy Repo",
+              "path": "/tmp/legacy-repo",
+              "color": "#0A84FF",
+              "createdAt": "2026-05-09T12:00:00Z",
+              "updatedAt": "2026-05-09T12:00:00Z"
+            }
+          ],
+          "sessions": [
+            {
+              "id": "\(sessionID.uuidString)",
+              "provider": "codex",
+              "projectID": "\(projectID.uuidString)",
+              "title": "Codex Chat",
+              "model": "gpt-5.5",
+              "reasoningEffort": "medium",
+              "status": "pending",
+              "createdAt": "2026-05-09T12:00:00Z",
+              "lastActivityAt": "2026-05-09T12:00:00Z"
+            }
+          ]
+        }
+        """.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let workspace = AgentSessionStore(fileURL: fileURL).loadWorkspace()
+
+        XCTAssertEqual(workspace.schemaVersion, AgentWorkspace.currentSchemaVersion)
+        XCTAssertEqual(workspace.sessions.first?.id, sessionID)
+        XCTAssertEqual(workspace.sessions.first?.imagePaths, [])
+        XCTAssertEqual(workspace.sessions.first?.hasLaunchedInitialPrompt, false)
+    }
+
+    func testAgentSessionStoreBacksUpUnreadableWorkspaceBeforeReturningEmpty() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        try "{ not valid json".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let workspace = AgentSessionStore(fileURL: fileURL).loadWorkspace()
+        let backups = try FileManager.default.contentsOfDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.contains("decode-failed") && $0.pathExtension == "bak" }
+
+        XCTAssertEqual(workspace.projects.count, 0)
+        XCTAssertEqual(workspace.sessions.count, 0)
+        XCTAssertEqual(backups.count, 1)
+    }
+
     func testAgentSessionStorePersistsLaunchOnOpenFlagForExplicitStarts() throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8AgentLaunch-\(UUID().uuidString)")
@@ -922,6 +980,23 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(envDict["LANG"], "en_US.UTF-8")
     }
 
+    func testLoginShellEnvironmentRepairsMonochromeLauncherEnvironment() {
+        // Regression: `make dev` aus Codex kann die App mit TERM=dumb und
+        // NO_COLOR=1 starten. Diese Werte dürfen nicht an SwiftTerm-Child-
+        // Prozesse weitergereicht werden, sonst rendert Claude/Codex grau.
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let envDict = env.processEnvironment(base: [
+            "TERM": "dumb",
+            "COLORTERM": "",
+            "NO_COLOR": "1"
+        ])
+
+        XCTAssertEqual(envDict["TERM"], "xterm-256color")
+        XCTAssertEqual(envDict["COLORTERM"], "truecolor")
+        XCTAssertEqual(envDict["CLICOLOR"], "1")
+        XCTAssertNil(envDict["NO_COLOR"])
+    }
+
     func testLoginShellEnvironmentRespectsExistingTerminalVars() {
         // User-Profile (z. B. iTerm-User mit TERM=xterm-kitty) sollen nicht
         // überschrieben werden — wir füllen nur Lücken.
@@ -1126,6 +1201,43 @@ final class AgentChatsTests: XCTestCase {
         let long = String(repeating: "A", count: 120)
         let cleaned = AgentTitleGenerator.cleanTitle(long)
         XCTAssertLessThanOrEqual(cleaned.count, 60)
+    }
+
+    func testAgentHeadlessCLIReturnsStdout() async throws {
+        let output = try await AgentHeadlessCLI(timeout: 2).run(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: ["hello"],
+            environment: [:]
+        )
+
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "hello")
+    }
+
+    func testAgentHeadlessCLIReportsNonZeroExit() async throws {
+        do {
+            _ = try await AgentHeadlessCLI(timeout: 2).run(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "echo nope >&2; exit 7"],
+                environment: [:]
+            )
+            XCTFail("Expected non-zero exit")
+        } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr) {
+            XCTAssertEqual(code, 7)
+            XCTAssertTrue(stderr.contains("nope"))
+        }
+    }
+
+    func testAgentHeadlessCLITimesOut() async throws {
+        do {
+            _ = try await AgentHeadlessCLI(timeout: 0.05).run(
+                executable: URL(fileURLWithPath: "/bin/sleep"),
+                arguments: ["2"],
+                environment: [:]
+            )
+            XCTFail("Expected timeout")
+        } catch AgentHeadlessCLIError.timedOut {
+            // Expected.
+        }
     }
 
     // MARK: - Auto-Title Flag
@@ -1659,6 +1771,97 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(otherSnapshot?.projectID, p2.id)
     }
 
+    func testReorderSessionsWithSameOrderIsNoOpAfterSortIndicesExist() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let project = try store.upsertProject(path: NSTemporaryDirectory() + "noop-p1", name: "A", createdManually: true)
+        let first = try store.createSession(provider: .claude, projectPath: project.path, title: "S1")
+        let second = try store.createSession(provider: .claude, projectPath: project.path, title: "S2")
+        try store.reorderSessions(in: project.id, orderedIDs: [first.id, second.id])
+        let before = store.loadWorkspace()
+
+        try store.reorderSessions(in: project.id, orderedIDs: [first.id, second.id])
+
+        XCTAssertEqual(store.loadWorkspace(), before)
+    }
+
+    func testReorderAndMoveIgnoreStaleIDs() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let project = try store.upsertProject(path: NSTemporaryDirectory() + "stale-p1", name: "A", createdManually: true)
+        let session = try store.createSession(provider: .claude, projectPath: project.path, title: "S1")
+        let before = store.loadWorkspace()
+
+        try store.reorderSessions(in: project.id, orderedIDs: [UUID()])
+        try store.moveSessionToProject(sessionID: session.id, newProjectID: UUID(), targetIndex: 0)
+
+        XCTAssertEqual(store.loadWorkspace(), before)
+    }
+
+    func testAgentDragDropPlannerBuildsSessionReorderPlan() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo")
+        let first = AgentChatSession(provider: .claude, projectID: project.id, title: "First", sortIndex: 0)
+        let second = AgentChatSession(provider: .claude, projectID: project.id, title: "Second", sortIndex: 1)
+        let workspace = AgentWorkspace(projects: [project], sessions: [first, second])
+
+        let plan = AgentDragDropPlanner.sessionDropPlan(
+            dropped: DraggableSession(sessionID: second.id, sourceProjectID: project.id),
+            targetProjectID: project.id,
+            beforeSessionID: first.id,
+            workspace: workspace
+        )
+
+        XCTAssertEqual(plan, .reorder(projectID: project.id, orderedIDs: [second.id, first.id]))
+    }
+
+    func testAgentDragDropPlannerTreatsSelfDropAsNoOp() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo")
+        let first = AgentChatSession(provider: .claude, projectID: project.id, title: "First", sortIndex: 0)
+        let second = AgentChatSession(provider: .claude, projectID: project.id, title: "Second", sortIndex: 1)
+        let workspace = AgentWorkspace(projects: [project], sessions: [first, second])
+
+        let plan = AgentDragDropPlanner.sessionDropPlan(
+            dropped: DraggableSession(sessionID: first.id, sourceProjectID: project.id),
+            targetProjectID: project.id,
+            beforeSessionID: second.id,
+            workspace: workspace
+        )
+
+        XCTAssertEqual(plan, .none)
+    }
+
+    func testAgentDragDropPlannerBuildsCrossProjectMovePlan() {
+        let source = AgentProject(name: "Source", path: "/tmp/source")
+        let target = AgentProject(name: "Target", path: "/tmp/target")
+        let mover = AgentChatSession(provider: .claude, projectID: source.id, title: "Mover")
+        let targetSession = AgentChatSession(provider: .claude, projectID: target.id, title: "Target", sortIndex: 0)
+        let workspace = AgentWorkspace(projects: [source, target], sessions: [mover, targetSession])
+
+        let plan = AgentDragDropPlanner.sessionDropPlan(
+            dropped: DraggableSession(sessionID: mover.id, sourceProjectID: source.id),
+            targetProjectID: target.id,
+            beforeSessionID: targetSession.id,
+            workspace: workspace
+        )
+
+        XCTAssertEqual(plan, .move(sessionID: mover.id, newProjectID: target.id, targetIndex: 0))
+    }
+
+    func testAgentDragDropPlannerBuildsProjectReorderPlan() {
+        let first = AgentProject(name: "First", path: "/tmp/first", sortIndex: 0)
+        let second = AgentProject(name: "Second", path: "/tmp/second", sortIndex: 1)
+
+        let plan = AgentDragDropPlanner.projectDropPlan(
+            dropped: DraggableProject(projectID: second.id),
+            beforeProjectID: first.id,
+            visibleProjects: [first, second]
+        )
+
+        XCTAssertEqual(plan, .reorder(orderedIDs: [second.id, first.id]))
+    }
+
     func testMoveSessionToProjectInsertsAtTargetIndex() throws {
         let url = makeTempStoreURL()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -1668,6 +1871,7 @@ final class AgentChatsTests: XCTestCase {
         let s1 = try store.createSession(provider: .claude, projectPath: p2.path, title: "T1")
         let s2 = try store.createSession(provider: .claude, projectPath: p2.path, title: "T2")
         let mover = try store.createSession(provider: .claude, projectPath: p1.path, title: "Mover")
+        try store.reorderSessions(in: p2.id, orderedIDs: [s1.id, s2.id])
 
         // Mover von p1 nach p2 verschieben, an Position 1 (zwischen T1 und T2).
         try store.moveSessionToProject(sessionID: mover.id, newProjectID: p2.id, targetIndex: 1)

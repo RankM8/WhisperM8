@@ -177,6 +177,7 @@ enum AgentTitleGeneratorError: Error, LocalizedError {
     case executableNotFound(AgentProvider)
     case emptyOutput
     case nonZeroExit(Int32)
+    case timedOut(TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -186,6 +187,8 @@ enum AgentTitleGeneratorError: Error, LocalizedError {
             return "Headless-Call lieferte keinen Title."
         case .nonZeroExit(let code):
             return "Headless-Call beendet mit Exit-Code \(code)."
+        case .timedOut(let timeout):
+            return "Headless-Call nach \(Int(timeout)) Sekunden abgebrochen."
         }
     }
 }
@@ -275,37 +278,22 @@ struct AgentTitleGenerator {
         arguments: [String],
         environment: [String: String]
     ) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = executable
-            process.arguments = arguments
-            process.environment = environment
-
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
-
-            process.terminationHandler = { proc in
-                let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-                if proc.terminationStatus != 0 {
-                    let stderr = String(data: stderrData, encoding: .utf8) ?? ""
-                    Logger.agentPerformance.warning(
-                        "auto_namer_subprocess_exit code=\(proc.terminationStatus) stderr=\(stderr.prefix(200), privacy: .public)"
-                    )
-                    continuation.resume(throwing: AgentTitleGeneratorError.nonZeroExit(proc.terminationStatus))
-                    return
-                }
-                continuation.resume(returning: stdout)
-            }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
+        do {
+            return try await AgentHeadlessCLI().run(
+                executable: executable,
+                arguments: arguments,
+                environment: environment
+            )
+        } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr) {
+            Logger.agentPerformance.warning(
+                "auto_namer_subprocess_exit code=\(code) stderr=\(stderr.prefix(200), privacy: .public)"
+            )
+            throw AgentTitleGeneratorError.nonZeroExit(code)
+        } catch AgentHeadlessCLIError.timedOut(let timeout) {
+            Logger.agentPerformance.warning(
+                "auto_namer_subprocess_timeout timeout=\(timeout)"
+            )
+            throw AgentTitleGeneratorError.timedOut(timeout)
         }
     }
 }

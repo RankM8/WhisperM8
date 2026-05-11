@@ -7,7 +7,7 @@ enum WindowRequest: String, Equatable {
     case outputDashboard = "output-dashboard"
     case agentChats = "agent-chats"
 
-    var windowID: String {
+    var targetWindowID: String {
         switch self {
         case .settings, .outputDashboard:
             return "settings"
@@ -15,6 +15,17 @@ enum WindowRequest: String, Equatable {
             return rawValue
         case .onboarding:
             return rawValue
+        }
+    }
+
+    var settingsSectionID: String? {
+        switch self {
+        case .settings:
+            return "api"
+        case .outputDashboard:
+            return "outputOverview"
+        case .agentChats, .onboarding:
+            return nil
         }
     }
 }
@@ -61,6 +72,10 @@ final class WindowRequestCenter: ObservableObject {
         NotificationCenter.default.post(name: Self.localNotificationName, object: request.rawValue)
     }
 
+    func resetForTesting() {
+        latestRequest = nil
+    }
+
     /// Triggert in einer bereits laufenden Instanz das Öffnen des
     /// Agent-Chats-Fensters. Wird beim Single-Instance-Check vom
     /// frisch gestarteten (zweiten) Process aufgerufen, bevor er sich selbst
@@ -83,9 +98,15 @@ struct WindowRequestHandler: View {
         Color.clear
             .frame(width: 0, height: 0)
             .onReceive(requestCenter.$latestRequest.compactMap { $0 }) { request in
-                openWindow(id: request.windowID)
+                openWindow(id: request.targetWindowID)
                 WindowActivationService.activateApp()
             }
+    }
+}
+
+struct AppWindowRequestHost: View {
+    var body: some View {
+        WindowRequestHandler()
     }
 }
 

@@ -31,6 +31,23 @@ struct TranscriptRunReportDraft {
 }
 
 struct TranscriptRunReportStore {
+    struct CleanupPolicy {
+        var maxAge: TimeInterval?
+        var maxCount: Int?
+        var maxBytes: Int64?
+
+        init(maxAge: TimeInterval? = nil, maxCount: Int? = nil, maxBytes: Int64? = nil) {
+            self.maxAge = maxAge
+            self.maxCount = maxCount
+            self.maxBytes = maxBytes
+        }
+    }
+
+    struct CleanupResult: Equatable {
+        var removedCount: Int
+        var removedBytes: Int64
+    }
+
     private let reportsDirectory: URL
 
     init(reportsDirectory: URL? = nil) {
@@ -170,6 +187,55 @@ struct TranscriptRunReportStore {
         }
     }
 
+    @discardableResult
+    func cleanup(policy: CleanupPolicy, now: Date = Date()) throws -> CleanupResult {
+        let directories = reportDirectories()
+        var candidates: [(url: URL, createdAt: Date, size: Int64)] = directories.map { directory in
+            let report = try? loadReport(from: directory.appendingPathComponent("report.json"))
+            return (
+                url: directory,
+                createdAt: report?.createdAt ?? directoryModificationDate(directory),
+                size: directorySize(directory)
+            )
+        }
+        candidates.sort { $0.createdAt > $1.createdAt }
+
+        var removalPaths = Set<URL>()
+        if let maxAge = policy.maxAge {
+            for candidate in candidates where now.timeIntervalSince(candidate.createdAt) > maxAge {
+                removalPaths.insert(candidate.url)
+            }
+        }
+
+        if let maxCount = policy.maxCount, maxCount >= 0, candidates.count > maxCount {
+            for candidate in candidates.dropFirst(maxCount) {
+                removalPaths.insert(candidate.url)
+            }
+        }
+
+        if let maxBytes = policy.maxBytes, maxBytes >= 0 {
+            var keptBytes = candidates
+                .filter { !removalPaths.contains($0.url) }
+                .reduce(Int64(0)) { $0 + $1.size }
+            for candidate in candidates.reversed() where keptBytes > maxBytes && !removalPaths.contains(candidate.url) {
+                removalPaths.insert(candidate.url)
+                keptBytes -= candidate.size
+            }
+        }
+
+        var removedCount = 0
+        var removedBytes: Int64 = 0
+        for candidate in candidates where removalPaths.contains(candidate.url) {
+            if FileManager.default.fileExists(atPath: candidate.url.path) {
+                try FileManager.default.removeItem(at: candidate.url)
+                removedCount += 1
+                removedBytes += candidate.size
+            }
+        }
+
+        return CleanupResult(removedCount: removedCount, removedBytes: removedBytes)
+    }
+
     private func attachmentReport(
         for attachment: ContextAttachment,
         visualInput: CodexVisualInputSelection,
@@ -243,6 +309,37 @@ struct TranscriptRunReportStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(TranscriptRunReport.self, from: data)
+    }
+
+    private func reportDirectories() -> [URL] {
+        (try? FileManager.default.contentsOfDirectory(
+            at: reportsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey, .totalFileAllocatedSizeKey],
+            options: [.skipsHiddenFiles]
+        ))?.filter { url in
+            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        } ?? []
+    }
+
+    private func directoryModificationDate(_ directory: URL) -> Date {
+        (try? directory.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+
+    private func directorySize(_ directory: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return 0
+        }
+
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            let values = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey])
+            total += Int64(values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? 0)
+        }
+        return total
     }
 
     private func reportURL(for id: UUID) -> URL {

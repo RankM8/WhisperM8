@@ -34,6 +34,20 @@ struct WhisperM8App: App {
         .defaultSize(width: 1100, height: 720)
         .defaultPosition(.center)
         .windowStyle(.hiddenTitleBar)
+        .commands {
+            CommandMenu("WhisperM8") {
+                Button("Agent Chats") {
+                    WindowRequestCenter.shared.request(.agentChats)
+                }
+                Button("Output & Templates") {
+                    WindowRequestCenter.shared.request(.outputDashboard)
+                }
+                Button("Settings") {
+                    WindowRequestCenter.shared.request(.settings)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
 
         MenuBarExtra {
             MenuBarView()
@@ -42,7 +56,7 @@ struct WhisperM8App: App {
         } label: {
             MenuBarIcon()
                 .environment(AppState.shared)
-                .background(WindowRequestHandler())
+                .background(AppWindowRequestHost())
         }
         .menuBarExtraStyle(.menu)
 

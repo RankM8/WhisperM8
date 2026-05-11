@@ -1,4 +1,4 @@
-.PHONY: run build install kill clean clean-apps help dmg clean-install dev dev-reinstall dev-skip-onboarding mark-onboarded
+.PHONY: run build install kill clean clean-apps help dmg clean-install dev dev-reinstall dev-skip-onboarding mark-onboarded _install_bundle
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -58,14 +58,7 @@ dev: kill
 	@rm -rf "$(APP_BUNDLE)"
 	@swift build -c release
 	@$(MAKE) _bundle BUILD=release
-	@echo "📦 Syncing into $(INSTALLED_APP) (preserving TCC + settings)..."
-	@mkdir -p "$(INSTALLED_APP)"
-	@rsync -a --delete "$(APP_BUNDLE)/" "$(INSTALLED_APP)/"
-	@rm -rf "$(APP_BUNDLE)"
-	@# LaunchServices muss den Bundle neu indexieren, sonst werden Info.plist-
-	@# Änderungen (z. B. neue UTExportedTypeDeclarations für Drag-Drop) bei
-	@# einem in-place rsync nicht aktiv. `-f` zwingt Re-Registrierung.
-	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$(INSTALLED_APP)" 2>/dev/null || true
+	@$(MAKE) _install_bundle
 	@echo "✅ Updated $(INSTALLED_APP)"
 	@open "$(INSTALLED_APP)"
 
@@ -100,11 +93,18 @@ run: kill
 
 # Same in-place strategy as `dev`, but without launching afterwards.
 install: kill build
-	@echo "Syncing into $(INSTALLED_APP)..."
+	@$(MAKE) _install_bundle
+	@echo "Installed: $(INSTALLED_APP)"
+
+_install_bundle:
+	@echo "📦 Syncing into $(INSTALLED_APP) (preserving TCC + settings)..."
 	@mkdir -p "$(INSTALLED_APP)"
 	@rsync -a --delete "$(APP_BUNDLE)/" "$(INSTALLED_APP)/"
 	@rm -rf "$(APP_BUNDLE)"
-	@echo "Installed: $(INSTALLED_APP)"
+	@# LaunchServices muss den Bundle neu indexieren, sonst werden Info.plist-
+	@# Änderungen (z. B. neue UTExportedTypeDeclarations für Drag-Drop) bei
+	@# einem in-place rsync nicht aktiv. `-f` zwingt Re-Registrierung.
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$(INSTALLED_APP)" 2>/dev/null || true
 
 kill:
 	@pkill -x $(APP_NAME) 2>/dev/null || true
@@ -131,7 +131,7 @@ clean-apps: kill
 	@echo ""
 	@echo "Then run 'make dev' to reinstall."
 
-dmg:
+dmg: kill
 	@./scripts/build-dmg.sh
 
 # ------------------------------------------------------------------------------

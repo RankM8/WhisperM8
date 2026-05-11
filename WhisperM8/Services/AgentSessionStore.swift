@@ -24,11 +24,21 @@ struct AgentSessionStore {
             let workspace = try decoder.decode(AgentWorkspace.self, from: data)
             let migrated = Self.migratedWorkspace(workspace)
             if migrated != workspace {
-                try? saveWorkspace(migrated)
+                do {
+                    try backupWorkspaceFile(reason: "pre-migration")
+                    try saveWorkspace(migrated)
+                } catch {
+                    Logger.debug("Failed to migrate agent sessions: \(error.localizedDescription)")
+                }
             }
             return migrated
         } catch {
             Logger.debug("Failed to load agent sessions: \(error.localizedDescription)")
+            do {
+                try backupWorkspaceFile(reason: "decode-failed")
+            } catch {
+                Logger.debug("Failed to back up unreadable agent sessions: \(error.localizedDescription)")
+            }
             return .empty
         }
     }
@@ -51,28 +61,27 @@ struct AgentSessionStore {
     }
 
     func upsertProject(path: String, name: String? = nil, color: String? = nil, createdManually: Bool = false) throws -> AgentProject {
-        var workspace = loadWorkspace()
-        let standardizedPath = Self.canonicalProjectPath(path)
-        if let index = workspace.projects.firstIndex(where: { $0.path == standardizedPath }) {
-            workspace.projects[index].updatedAt = Date()
-            workspace.projects[index].lastBranch = Self.currentGitBranch(at: standardizedPath)
-            if createdManually {
-                workspace.projects[index].createdManually = true
+        try mutateWorkspace { workspace in
+            let standardizedPath = Self.canonicalProjectPath(path)
+            if let index = workspace.projects.firstIndex(where: { $0.path == standardizedPath }) {
+                workspace.projects[index].updatedAt = Date()
+                workspace.projects[index].lastBranch = Self.currentGitBranch(at: standardizedPath)
+                if createdManually {
+                    workspace.projects[index].createdManually = true
+                }
+                return workspace.projects[index]
             }
-            try saveWorkspace(workspace)
-            return workspace.projects[index]
-        }
 
-        let project = AgentProject(
-            name: name ?? URL(fileURLWithPath: standardizedPath).lastPathComponent,
-            path: standardizedPath,
-            color: color ?? AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
-            lastBranch: Self.currentGitBranch(at: standardizedPath),
-            createdManually: createdManually ? true : nil
-        )
-        workspace.projects.append(project)
-        try saveWorkspace(workspace)
-        return project
+            let project = AgentProject(
+                name: name ?? URL(fileURLWithPath: standardizedPath).lastPathComponent,
+                path: standardizedPath,
+                color: color ?? AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
+                lastBranch: Self.currentGitBranch(at: standardizedPath),
+                createdManually: createdManually ? true : nil
+            )
+            workspace.projects.append(project)
+            return project
+        }
     }
 
     // MARK: - Project metadata mutators
@@ -81,11 +90,12 @@ struct AgentSessionStore {
     /// Capture, damit der Aufrufer den Update als `(inout AgentProject) -> Void`
     /// reichen kann.
     func updateProject(id: UUID, _ update: (inout AgentProject) -> Void) throws {
-        var workspace = loadWorkspace()
-        guard let index = workspace.projects.firstIndex(where: { $0.id == id }) else { return }
-        update(&workspace.projects[index])
-        workspace.projects[index].updatedAt = Date()
-        try saveWorkspace(workspace)
+        try mutateWorkspaceIfChanged { workspace in
+            guard let index = workspace.projects.firstIndex(where: { $0.id == id }) else { return false }
+            update(&workspace.projects[index])
+            workspace.projects[index].updatedAt = Date()
+            return true
+        }
     }
 
     func renameProject(id: UUID, name: String) throws {
@@ -134,22 +144,23 @@ struct AgentSessionStore {
     }
 
     func upsertSession(_ session: AgentChatSession) throws -> AgentChatSession {
-        var workspace = loadWorkspace()
-        if let index = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
-            workspace.sessions[index] = session
-        } else {
-            workspace.sessions.append(session)
+        try mutateWorkspace { workspace in
+            if let index = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
+                workspace.sessions[index] = session
+            } else {
+                workspace.sessions.append(session)
+            }
+            return session
         }
-        try saveWorkspace(workspace)
-        return session
     }
 
     func updateSession(id: UUID, _ update: (inout AgentChatSession) -> Void) throws {
-        var workspace = loadWorkspace()
-        guard let index = workspace.sessions.firstIndex(where: { $0.id == id }) else { return }
-        update(&workspace.sessions[index])
-        workspace.sessions[index].lastActivityAt = Date()
-        try saveWorkspace(workspace)
+        try mutateWorkspaceIfChanged { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == id }) else { return false }
+            update(&workspace.sessions[index])
+            workspace.sessions[index].lastActivityAt = Date()
+            return true
+        }
     }
 
     /// Manuelle Umbenennung durch den Nutzer. Setzt `titleIsAutoGenerated = false`,
@@ -212,12 +223,17 @@ struct AgentSessionStore {
     /// komplette Reihenfolge.
     func reorderProjects(orderedIDs: [UUID]) throws {
         var workspace = loadWorkspace()
+        var changed = false
         for (newIndex, projectID) in orderedIDs.enumerated() {
             guard let idx = workspace.projects.firstIndex(where: { $0.id == projectID }) else { continue }
+            guard workspace.projects[idx].sortIndex != newIndex else { continue }
             workspace.projects[idx].sortIndex = newIndex
             workspace.projects[idx].updatedAt = Date()
+            changed = true
         }
-        try saveWorkspace(workspace)
+        if changed {
+            try saveWorkspace(workspace)
+        }
     }
 
     /// Schreibt fortlaufende `sortIndex`-Werte für die Sessions in einem
@@ -225,15 +241,20 @@ struct AgentSessionStore {
     /// unangetastet.
     func reorderSessions(in projectID: UUID, orderedIDs: [UUID]) throws {
         var workspace = loadWorkspace()
+        var changed = false
         for (newIndex, sessionID) in orderedIDs.enumerated() {
             guard let idx = workspace.sessions.firstIndex(where: { $0.id == sessionID }),
                   workspace.sessions[idx].projectID == projectID else {
                 continue
             }
+            guard workspace.sessions[idx].sortIndex != newIndex else { continue }
             workspace.sessions[idx].sortIndex = newIndex
             workspace.sessions[idx].lastActivityAt = Date()
+            changed = true
         }
-        try saveWorkspace(workspace)
+        if changed {
+            try saveWorkspace(workspace)
+        }
     }
 
     /// Verschiebt eine Session in ein anderes Projekt und ordnet sie an der
@@ -532,9 +553,37 @@ struct AgentSessionStore {
 
     private static func migratedWorkspace(_ workspace: AgentWorkspace) -> AgentWorkspace {
         var migrated = workspace
+        migrated.schemaVersion = AgentWorkspace.currentSchemaVersion
         removeClaudeWorktreeProjectsAndSessions(from: &migrated)
         removeUnresumableClaudeSessions(from: &migrated)
         return migrated
+    }
+
+    private func backupWorkspaceFile(reason: String) throws {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let timestamp = formatter.string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let backupURL = fileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(fileURL.lastPathComponent).\(reason).\(timestamp).bak")
+        try FileManager.default.copyItem(at: fileURL, to: backupURL)
+    }
+
+    private func mutateWorkspace<Result>(_ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
+        var workspace = loadWorkspace()
+        let result = try mutate(&workspace)
+        try saveWorkspace(workspace)
+        return result
+    }
+
+    private func mutateWorkspaceIfChanged(_ mutate: (inout AgentWorkspace) throws -> Bool) throws {
+        var workspace = loadWorkspace()
+        let changed = try mutate(&workspace)
+        if changed {
+            try saveWorkspace(workspace)
+        }
     }
 
     private static func defaultFileURL() -> URL {
