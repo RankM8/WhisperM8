@@ -1,0 +1,31 @@
+import AppKit
+import SwiftUI
+
+struct ProviderIcon: View {
+    let provider: AgentProvider
+    var size: CGFloat = 11
+    var tint: Color = AgentTheme.textSecondary
+
+    var body: some View {
+        if let nsImage = NSImage(named: provider.assetName) {
+            let templateImage = Self.templateCopy(nsImage)
+            Image(nsImage: templateImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+                .foregroundStyle(tint)
+        } else {
+            Image(systemName: provider.systemImage)
+                .font(.system(size: size - 1, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
+        }
+    }
+
+    private static func templateCopy(_ image: NSImage) -> NSImage {
+        let copy = image.copy() as! NSImage
+        copy.isTemplate = true
+        return copy
+    }
+}

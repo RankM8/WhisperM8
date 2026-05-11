@@ -497,9 +497,18 @@ final class OutputDashboardTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let store = TranscriptRunReportStore(reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true))
-        let oldest = try store.save(makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "oldest"))
-        let middle = try store.save(makeReportDraft(createdAt: Date(timeIntervalSince1970: 2), finalTranscript: "middle"))
-        let newest = try store.save(makeReportDraft(createdAt: Date(timeIntervalSince1970: 3), finalTranscript: "newest"))
+        let oldest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "oldest"),
+            cleanupPolicy: nil
+        )
+        let middle = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 2), finalTranscript: "middle"),
+            cleanupPolicy: nil
+        )
+        let newest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 3), finalTranscript: "newest"),
+            cleanupPolicy: nil
+        )
 
         let result = try store.cleanup(policy: .init(maxCount: 2), now: Date(timeIntervalSince1970: 10))
         let remaining = store.recentReports(limit: 10)
@@ -516,8 +525,14 @@ final class OutputDashboardTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let store = TranscriptRunReportStore(reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true))
-        let old = try store.save(makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "old"))
-        let recent = try store.save(makeReportDraft(createdAt: Date(timeIntervalSince1970: 9), finalTranscript: "recent"))
+        let old = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "old"),
+            cleanupPolicy: nil
+        )
+        let recent = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 9), finalTranscript: "recent"),
+            cleanupPolicy: nil
+        )
 
         let result = try store.cleanup(policy: .init(maxAge: 5), now: Date(timeIntervalSince1970: 10))
         let remaining = store.recentReports(limit: 10)
@@ -525,6 +540,32 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(result.removedCount, 1)
         XCTAssertFalse(remaining.contains { $0.id == old.id })
         XCTAssertTrue(remaining.contains { $0.id == recent.id })
+    }
+
+    func testTranscriptRunReportStoreAppliesCleanupPolicyAfterSave() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8ReportSaveCleanupTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = TranscriptRunReportStore(reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true))
+        let oldest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "oldest"),
+            cleanupPolicy: nil
+        )
+        let middle = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 2), finalTranscript: "middle"),
+            cleanupPolicy: nil
+        )
+        let newest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 3), finalTranscript: "newest"),
+            cleanupPolicy: .init(maxCount: 2)
+        )
+
+        let remaining = store.recentReports(limit: 10)
+
+        XCTAssertFalse(remaining.contains { $0.id == oldest.id })
+        XCTAssertTrue(remaining.contains { $0.id == middle.id })
+        XCTAssertTrue(remaining.contains { $0.id == newest.id })
     }
 }
 

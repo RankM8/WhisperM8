@@ -36,6 +36,12 @@ struct TranscriptRunReportStore {
         var maxCount: Int?
         var maxBytes: Int64?
 
+        static let productionDefault = CleanupPolicy(
+            maxAge: 180 * 24 * 60 * 60,
+            maxCount: 500,
+            maxBytes: 2 * 1024 * 1024 * 1024
+        )
+
         init(maxAge: TimeInterval? = nil, maxCount: Int? = nil, maxBytes: Int64? = nil) {
             self.maxAge = maxAge
             self.maxCount = maxCount
@@ -58,7 +64,10 @@ struct TranscriptRunReportStore {
         }
     }
 
-    func save(_ draft: TranscriptRunReportDraft) throws -> TranscriptRunReport {
+    func save(
+        _ draft: TranscriptRunReportDraft,
+        cleanupPolicy: CleanupPolicy? = .productionDefault
+    ) throws -> TranscriptRunReport {
         let runDirectory = reportsDirectory
             .appendingPathComponent(draft.id.uuidString, isDirectory: true)
         let attachmentsDirectory = runDirectory
@@ -159,6 +168,7 @@ struct TranscriptRunReportStore {
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(report)
         try data.write(to: reportURL(for: draft.id), options: .atomic)
+        runCleanupIfNeeded(policy: cleanupPolicy)
         return report
     }
 
@@ -234,6 +244,18 @@ struct TranscriptRunReportStore {
         }
 
         return CleanupResult(removedCount: removedCount, removedBytes: removedBytes)
+    }
+
+    private func runCleanupIfNeeded(policy: CleanupPolicy?) {
+        guard let policy else { return }
+        do {
+            let result = try cleanup(policy: policy)
+            if result.removedCount > 0 {
+                Logger.debug("Cleaned transcript reports: removed=\(result.removedCount) bytes=\(result.removedBytes)")
+            }
+        } catch {
+            Logger.debug("Failed to clean transcript reports: \(error.localizedDescription)")
+        }
     }
 
     private func attachmentReport(
