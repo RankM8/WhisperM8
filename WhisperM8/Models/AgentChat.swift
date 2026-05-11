@@ -111,6 +111,13 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
     /// Workspace-Reload. Manuelles "Auto-Icon erkennen" setzt das wieder auf
     /// `nil`/`false`, um einen Re-Lookup zu erzwingen.
     var iconAutoLookupAttempted: Bool?
+    /// User-gesteuerte Sortierreihenfolge in der Sidebar. `nil` für Legacy-
+    /// Projekte ohne explizite Reihenfolge — die werden weiterhin nach
+    /// `updatedAt` (jüngste zuerst) einsortiert. Sobald der User per
+    /// Drag-and-Drop reorderdt, bekommen ALLE sichtbaren Projekte
+    /// fortlaufende `sortIndex`-Werte (0, 1, 2, …) und das Feld ist nicht
+    /// mehr `nil`.
+    var sortIndex: Int?
 
     init(
         id: UUID = UUID(),
@@ -123,7 +130,8 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         createdManually: Bool? = nil,
         iconRelativePath: String? = nil,
         customIconAbsolutePath: String? = nil,
-        iconAutoLookupAttempted: Bool? = nil
+        iconAutoLookupAttempted: Bool? = nil,
+        sortIndex: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -136,6 +144,7 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         self.iconRelativePath = iconRelativePath
         self.customIconAbsolutePath = customIconAbsolutePath
         self.iconAutoLookupAttempted = iconAutoLookupAttempted
+        self.sortIndex = sortIndex
     }
 
     var isManuallyAdded: Bool { createdManually == true }

@@ -204,6 +204,71 @@ struct AgentSessionStore {
         }
     }
 
+    // MARK: - Drag-and-Drop reordering
+
+    /// Schreibt fortlaufende `sortIndex`-Werte (0…n-1) anhand der gegebenen
+    /// Reihenfolge ALLER sichtbaren Projekte. Aufruf erfolgt nach einem
+    /// Drag-and-Drop in der Sidebar — der UI-Layer übergibt die neue
+    /// komplette Reihenfolge.
+    func reorderProjects(orderedIDs: [UUID]) throws {
+        var workspace = loadWorkspace()
+        for (newIndex, projectID) in orderedIDs.enumerated() {
+            guard let idx = workspace.projects.firstIndex(where: { $0.id == projectID }) else { continue }
+            workspace.projects[idx].sortIndex = newIndex
+            workspace.projects[idx].updatedAt = Date()
+        }
+        try saveWorkspace(workspace)
+    }
+
+    /// Schreibt fortlaufende `sortIndex`-Werte für die Sessions in einem
+    /// Projekt anhand der gegebenen Reihenfolge. Andere Projekte bleiben
+    /// unangetastet.
+    func reorderSessions(in projectID: UUID, orderedIDs: [UUID]) throws {
+        var workspace = loadWorkspace()
+        for (newIndex, sessionID) in orderedIDs.enumerated() {
+            guard let idx = workspace.sessions.firstIndex(where: { $0.id == sessionID }),
+                  workspace.sessions[idx].projectID == projectID else {
+                continue
+            }
+            workspace.sessions[idx].sortIndex = newIndex
+            workspace.sessions[idx].lastActivityAt = Date()
+        }
+        try saveWorkspace(workspace)
+    }
+
+    /// Verschiebt eine Session in ein anderes Projekt und ordnet sie an der
+    /// angegebenen Ziel-Position ein. Wenn `targetIndex == nil`, wird die
+    /// Session ans Ende des Ziel-Projekts gehängt.
+    func moveSessionToProject(
+        sessionID: UUID,
+        newProjectID: UUID,
+        targetIndex: Int? = nil
+    ) throws {
+        var workspace = loadWorkspace()
+        guard let sessionIdx = workspace.sessions.firstIndex(where: { $0.id == sessionID }),
+              workspace.projects.contains(where: { $0.id == newProjectID }) else {
+            return
+        }
+
+        workspace.sessions[sessionIdx].projectID = newProjectID
+        workspace.sessions[sessionIdx].lastActivityAt = Date()
+
+        // Neue Sortier-Reihenfolge im Ziel-Projekt aufbauen.
+        let targetSessions = Self.sortedSessions(
+            workspace.sessions.filter { $0.projectID == newProjectID && $0.status != .archived }
+        )
+        var ordered = targetSessions.filter { $0.id != sessionID }
+        let clampedIndex = max(0, min(targetIndex ?? ordered.count, ordered.count))
+        ordered.insert(workspace.sessions[sessionIdx], at: clampedIndex)
+
+        for (newIndex, session) in ordered.enumerated() {
+            if let idx = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
+                workspace.sessions[idx].sortIndex = newIndex
+            }
+        }
+        try saveWorkspace(workspace)
+    }
+
     func moveSession(id: UUID, direction: AgentSessionMoveDirection) throws {
         var workspace = loadWorkspace()
         guard let current = workspace.sessions.first(where: { $0.id == id }) else { return }
@@ -388,6 +453,23 @@ struct AgentSessionStore {
                 return false
             default:
                 return lhs.lastActivityAt > rhs.lastActivityAt
+            }
+        }
+    }
+
+    /// Identische Sortier-Semantik wie `sortedSessions`: explicit `sortIndex`
+    /// wins, sonst `updatedAt` als Tiebreaker (jüngste zuerst).
+    static func sortedProjects(_ projects: [AgentProject]) -> [AgentProject] {
+        projects.sorted { lhs, rhs in
+            switch (lhs.sortIndex, rhs.sortIndex) {
+            case let (left?, right?) where left != right:
+                return left < right
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                return lhs.updatedAt > rhs.updatedAt
             }
         }
     }

@@ -1615,6 +1615,82 @@ final class AgentChatsTests: XCTestCase {
         return dir.appendingPathComponent("AgentSessions.json")
     }
 
+    // MARK: - Drag-and-drop reordering
+
+    func testReorderProjectsAssignsSequentialSortIndices() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        // Drei Test-Projekte mit unterschiedlichen Pfaden anlegen.
+        let p1 = try store.upsertProject(path: NSTemporaryDirectory() + "p1", name: "A", createdManually: true)
+        let p2 = try store.upsertProject(path: NSTemporaryDirectory() + "p2", name: "B", createdManually: true)
+        let p3 = try store.upsertProject(path: NSTemporaryDirectory() + "p3", name: "C", createdManually: true)
+
+        // C, A, B — eine vom Default-Order abweichende Reihenfolge.
+        try store.reorderProjects(orderedIDs: [p3.id, p1.id, p2.id])
+
+        let sorted = AgentSessionStore.sortedProjects(store.loadWorkspace().projects)
+        XCTAssertEqual(sorted.map(\.id), [p3.id, p1.id, p2.id])
+        XCTAssertEqual(sorted.map(\.sortIndex), [0, 1, 2])
+    }
+
+    func testReorderSessionsAffectsOnlyTargetProject() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let p1 = try store.upsertProject(path: NSTemporaryDirectory() + "drag-p1", name: "A", createdManually: true)
+        let p2 = try store.upsertProject(path: NSTemporaryDirectory() + "drag-p2", name: "B", createdManually: true)
+        let s1 = try store.createSession(provider: .claude, projectPath: p1.path, title: "S1")
+        let s2 = try store.createSession(provider: .claude, projectPath: p1.path, title: "S2")
+        let s3 = try store.createSession(provider: .claude, projectPath: p1.path, title: "S3")
+        let other = try store.createSession(provider: .claude, projectPath: p2.path, title: "Other")
+
+        // Innerhalb p1 umordnen: S3, S1, S2
+        try store.reorderSessions(in: p1.id, orderedIDs: [s3.id, s1.id, s2.id])
+
+        let workspace = store.loadWorkspace()
+        let p1Sessions = AgentSessionStore.sortedSessions(
+            workspace.sessions.filter { $0.projectID == p1.id }
+        )
+        XCTAssertEqual(p1Sessions.map(\.id), [s3.id, s1.id, s2.id])
+        // Andere Projekt-Session unverändert.
+        let otherSnapshot = workspace.sessions.first { $0.id == other.id }
+        XCTAssertNotNil(otherSnapshot)
+        XCTAssertEqual(otherSnapshot?.projectID, p2.id)
+    }
+
+    func testMoveSessionToProjectInsertsAtTargetIndex() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let p1 = try store.upsertProject(path: NSTemporaryDirectory() + "move-p1", name: "A", createdManually: true)
+        let p2 = try store.upsertProject(path: NSTemporaryDirectory() + "move-p2", name: "B", createdManually: true)
+        let s1 = try store.createSession(provider: .claude, projectPath: p2.path, title: "T1")
+        let s2 = try store.createSession(provider: .claude, projectPath: p2.path, title: "T2")
+        let mover = try store.createSession(provider: .claude, projectPath: p1.path, title: "Mover")
+
+        // Mover von p1 nach p2 verschieben, an Position 1 (zwischen T1 und T2).
+        try store.moveSessionToProject(sessionID: mover.id, newProjectID: p2.id, targetIndex: 1)
+
+        let workspace = store.loadWorkspace()
+        let p2Sessions = AgentSessionStore.sortedSessions(
+            workspace.sessions.filter { $0.projectID == p2.id }
+        )
+        XCTAssertEqual(p2Sessions.map(\.id), [s1.id, mover.id, s2.id])
+
+        let updatedMover = workspace.sessions.first { $0.id == mover.id }
+        XCTAssertEqual(updatedMover?.projectID, p2.id)
+    }
+
+    func testSortedProjectsPrefersExplicitSortIndex() {
+        let now = Date()
+        let p1 = AgentProject(id: UUID(), name: "Latest", path: "/a", createdAt: now, updatedAt: now, sortIndex: nil)
+        let p2 = AgentProject(id: UUID(), name: "Pinned", path: "/b", createdAt: now.addingTimeInterval(-1000), updatedAt: now.addingTimeInterval(-1000), sortIndex: 0)
+        let sorted = AgentSessionStore.sortedProjects([p1, p2])
+        // Explizit gesetzter sortIndex schlägt jüngeres updatedAt.
+        XCTAssertEqual(sorted.first?.id, p2.id)
+    }
+
     // MARK: - ThemeManager.resolve
 
     func testThemeResolveOverrideLightAlwaysReturnsLight() {
