@@ -2225,7 +2225,15 @@ private struct AgentChatsWindowAccessor: NSViewRepresentable {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarSeparatorStyle = .none
         window.isMovableByWindowBackground = true
-        window.backgroundColor = NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
+        // Dynamischer Background: reagiert auf NSAppearance der Hosting-View,
+        // damit der durch `titlebarAppearsTransparent + fullSizeContentView`
+        // sichtbare Window-Background nicht im Light-Mode dunkel bleibt.
+        window.backgroundColor = NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return isDark
+                ? NSColor(calibratedRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
+                : NSColor(calibratedRed: 0.965, green: 0.965, blue: 0.970, alpha: 1)
+        }
     }
 }
 
