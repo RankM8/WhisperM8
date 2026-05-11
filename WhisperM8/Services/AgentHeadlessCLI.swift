@@ -69,10 +69,10 @@ struct AgentHeadlessCLI {
             completion.setWatchdog(timer)
             timer.schedule(deadline: .now() + timeout)
             timer.setEventHandler { [weak process] in
+                completion.finish(.failure(AgentHeadlessCLIError.timedOut(timeout)), continuation: continuation)
                 if process?.isRunning == true {
                     process?.terminate()
                 }
-                completion.finish(.failure(AgentHeadlessCLIError.timedOut(timeout)), continuation: continuation)
             }
             timer.resume()
         }

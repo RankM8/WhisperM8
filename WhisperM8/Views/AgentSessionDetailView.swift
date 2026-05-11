@@ -98,9 +98,10 @@ struct AgentSessionDetailView: View {
 
     private func prepareCommand() {
         do {
-            let command = try AgentCommandBuilder().command(for: session, project: project)
+            let launchSession = try repairedSessionForLaunch()
+            let command = try AgentCommandBuilder().command(for: launchSession, project: project)
             terminalRegistry.startController(
-                sessionID: session.id,
+                sessionID: launchSession.id,
                 command: command,
                 onLaunched: markLaunched,
                 onTerminated: { exitCode in markTerminated(exitCode: exitCode) }
@@ -109,6 +110,37 @@ struct AgentSessionDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func repairedSessionForLaunch() throws -> AgentChatSession {
+        guard session.provider == .claude,
+              session.hasLaunchedInitialPrompt,
+              session.externalSessionID?.isEmpty == false else {
+            return session
+        }
+
+        let indexedSessions = ClaudeSessionIndexer().indexedSessions(limit: 500)
+        guard let repair = try store.repairResumeStateBeforeLaunch(
+            localSessionID: session.id,
+            projectPath: project.path,
+            indexedSessions: indexedSessions
+        ) else {
+            return session
+        }
+
+        switch repair.outcome {
+        case .unchanged:
+            break
+        case .rebound(let oldID, let newID):
+            Logger.debug("Rebound Claude resume ID \(oldID) -> \(newID)")
+            onExternalSessionIDBound(session.id)
+            onStateChanged()
+        case .resetInvalid(let oldID):
+            Logger.debug("Reset invalid Claude resume ID \(oldID); starting a fresh terminal session in the existing tab")
+            onStateChanged()
+        }
+
+        return repair.session
     }
 
     private func restartTerminal() {

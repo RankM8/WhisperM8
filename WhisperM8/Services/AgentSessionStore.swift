@@ -357,6 +357,70 @@ struct AgentSessionStore {
         return workspace.sessions[index]
     }
 
+    @discardableResult
+    func repairResumeStateBeforeLaunch(
+        localSessionID: UUID,
+        projectPath: String,
+        indexedSessions: [IndexedAgentSession],
+        now: Date = Date()
+    ) throws -> AgentResumeRepairResult? {
+        var workspace = loadWorkspace()
+        guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
+            return nil
+        }
+
+        let session = workspace.sessions[index]
+        guard session.provider == .claude,
+              session.hasLaunchedInitialPrompt,
+              let currentExternalID = session.externalSessionID,
+              !currentExternalID.isEmpty else {
+            return AgentResumeRepairResult(session: session, outcome: .unchanged)
+        }
+
+        let canonicalProjectPath = Self.canonicalProjectPath(projectPath)
+        let indexedForProject = indexedSessions.filter { indexed in
+            indexed.provider == session.provider
+                && !Self.isClaudeWorktreePath(indexed.cwd)
+                && Self.canonicalProjectPath(indexed.cwd) == canonicalProjectPath
+        }
+
+        if indexedForProject.contains(where: { $0.externalSessionID == currentExternalID }) {
+            return AgentResumeRepairResult(session: session, outcome: .unchanged)
+        }
+
+        if let replacement = Self.bestResumeReplacement(
+            for: session,
+            currentExternalID: currentExternalID,
+            indexedSessions: indexedForProject,
+            now: now
+        ) {
+            workspace.sessions[index].externalSessionID = replacement.externalSessionID
+            workspace.sessions[index].lastActivityAt = max(
+                replacement.lastActivityAt,
+                workspace.sessions[index].lastActivityAt
+            )
+            if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
+                workspace.sessions[index].title = replacement.title
+            }
+            try saveWorkspace(workspace)
+            return AgentResumeRepairResult(
+                session: workspace.sessions[index],
+                outcome: .rebound(from: currentExternalID, to: replacement.externalSessionID)
+            )
+        }
+
+        workspace.sessions[index].externalSessionID = nil
+        workspace.sessions[index].hasLaunchedInitialPrompt = false
+        workspace.sessions[index].status = .closed
+        workspace.sessions[index].shouldLaunchOnOpen = false
+        workspace.sessions[index].lastActivityAt = now
+        try saveWorkspace(workspace)
+        return AgentResumeRepairResult(
+            session: workspace.sessions[index],
+            outcome: .resetInvalid(currentExternalID)
+        )
+    }
+
     func mergeIndexedSessions(_ indexedSessions: [IndexedAgentSession]) throws {
         var workspace = loadWorkspace()
         Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
@@ -514,6 +578,33 @@ struct AgentSessionStore {
         return migrated
     }
 
+    private static func bestResumeReplacement(
+        for session: AgentChatSession,
+        currentExternalID: String,
+        indexedSessions: [IndexedAgentSession],
+        now: Date
+    ) -> IndexedAgentSession? {
+        let maxCreationDistance = max(
+            30 * 60,
+            session.lastActivityAt.timeIntervalSince(session.createdAt) + 5 * 60
+        )
+        let candidates = indexedSessions.filter { indexed in
+            indexed.externalSessionID != currentExternalID
+                && indexed.createdAt >= session.createdAt.addingTimeInterval(-10)
+                && indexed.createdAt <= now.addingTimeInterval(60)
+                && abs(indexed.createdAt.timeIntervalSince(session.createdAt)) <= maxCreationDistance
+        }
+
+        return candidates.sorted { lhs, rhs in
+            let lhsDistance = abs(lhs.createdAt.timeIntervalSince(session.createdAt))
+            let rhsDistance = abs(rhs.createdAt.timeIntervalSince(session.createdAt))
+            if lhsDistance != rhsDistance {
+                return lhsDistance < rhsDistance
+            }
+            return lhs.lastActivityAt > rhs.lastActivityAt
+        }.first
+    }
+
     private func mutateWorkspace<Result>(_ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
         var workspace = loadWorkspace()
         let result = try mutate(&workspace)
@@ -544,4 +635,15 @@ struct IndexedAgentSession: Codable, Equatable {
     var reasoningEffort: String?
     var createdAt: Date
     var lastActivityAt: Date
+}
+
+struct AgentResumeRepairResult: Equatable {
+    var session: AgentChatSession
+    var outcome: AgentResumeRepairOutcome
+}
+
+enum AgentResumeRepairOutcome: Equatable {
+    case unchanged
+    case rebound(from: String, to: String)
+    case resetInvalid(String)
 }

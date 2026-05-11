@@ -523,6 +523,135 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(store.loadWorkspace().sessions.first?.externalSessionID, "indexed-session")
     }
 
+    func testAgentSessionStoreRebindsInvalidClaudeResumeIDBeforeLaunch() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8AgentClaudeRebind-\(UUID().uuidString)", isDirectory: true)
+        let fileURL = root.appendingPathComponent("workspace.json")
+        let projectPath = root.appendingPathComponent("repo", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: projectPath, withIntermediateDirectories: true)
+
+        let createdAt = Date(timeIntervalSince1970: 100)
+        let project = AgentProject(name: "Repo", path: projectPath.path)
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "stale-local-id",
+            title: "Claude Chat",
+            status: .closed,
+            hasLaunchedInitialPrompt: true,
+            createdAt: createdAt,
+            lastActivityAt: createdAt.addingTimeInterval(120)
+        )
+        let indexed = IndexedAgentSession(
+            provider: .claude,
+            externalSessionID: "real-claude-id",
+            cwd: projectPath.path,
+            title: "Recovered Claude Chat",
+            model: nil,
+            reasoningEffort: nil,
+            createdAt: createdAt.addingTimeInterval(4),
+            lastActivityAt: createdAt.addingTimeInterval(180)
+        )
+        let store = AgentSessionStore(fileURL: fileURL)
+        try store.saveWorkspace(AgentWorkspace(projects: [project], sessions: [session]))
+
+        let result = try store.repairResumeStateBeforeLaunch(
+            localSessionID: session.id,
+            projectPath: projectPath.path,
+            indexedSessions: [indexed],
+            now: createdAt.addingTimeInterval(300)
+        )
+
+        XCTAssertEqual(result?.outcome, .rebound(from: "stale-local-id", to: "real-claude-id"))
+        XCTAssertEqual(result?.session.externalSessionID, "real-claude-id")
+        XCTAssertEqual(store.loadWorkspace().sessions.first?.externalSessionID, "real-claude-id")
+    }
+
+    func testAgentSessionStoreKeepsValidClaudeResumeIDBeforeLaunch() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8AgentClaudeValid-\(UUID().uuidString)", isDirectory: true)
+        let fileURL = root.appendingPathComponent("workspace.json")
+        let projectPath = root.appendingPathComponent("repo", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: projectPath, withIntermediateDirectories: true)
+
+        let createdAt = Date(timeIntervalSince1970: 100)
+        let project = AgentProject(name: "Repo", path: projectPath.path)
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "valid-claude-id",
+            title: "Claude Chat",
+            status: .closed,
+            hasLaunchedInitialPrompt: true,
+            createdAt: createdAt,
+            lastActivityAt: createdAt.addingTimeInterval(120)
+        )
+        let indexed = IndexedAgentSession(
+            provider: .claude,
+            externalSessionID: "valid-claude-id",
+            cwd: projectPath.path,
+            title: "Claude Chat",
+            model: nil,
+            reasoningEffort: nil,
+            createdAt: createdAt,
+            lastActivityAt: createdAt.addingTimeInterval(180)
+        )
+        let store = AgentSessionStore(fileURL: fileURL)
+        try store.saveWorkspace(AgentWorkspace(projects: [project], sessions: [session]))
+
+        let result = try store.repairResumeStateBeforeLaunch(
+            localSessionID: session.id,
+            projectPath: projectPath.path,
+            indexedSessions: [indexed],
+            now: createdAt.addingTimeInterval(300)
+        )
+
+        XCTAssertEqual(result?.outcome, .unchanged)
+        XCTAssertEqual(result?.session.externalSessionID, "valid-claude-id")
+        XCTAssertEqual(store.loadWorkspace().sessions.first?.externalSessionID, "valid-claude-id")
+    }
+
+    func testAgentSessionStoreResetsInvalidClaudeResumeIDWhenNoConversationExists() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8AgentClaudeReset-\(UUID().uuidString)", isDirectory: true)
+        let fileURL = root.appendingPathComponent("workspace.json")
+        let projectPath = root.appendingPathComponent("repo", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: projectPath, withIntermediateDirectories: true)
+
+        let createdAt = Date(timeIntervalSince1970: 100)
+        let project = AgentProject(name: "Repo", path: projectPath.path)
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "missing-claude-id",
+            title: "Claude Chat",
+            status: .closed,
+            hasLaunchedInitialPrompt: true,
+            createdAt: createdAt,
+            lastActivityAt: createdAt.addingTimeInterval(120)
+        )
+        let store = AgentSessionStore(fileURL: fileURL)
+        try store.saveWorkspace(AgentWorkspace(projects: [project], sessions: [session]))
+
+        let result = try store.repairResumeStateBeforeLaunch(
+            localSessionID: session.id,
+            projectPath: projectPath.path,
+            indexedSessions: [],
+            now: createdAt.addingTimeInterval(300)
+        )
+        let repaired = try XCTUnwrap(result?.session)
+        let command = try AgentCommandBuilder(commandResolver: { _ in "/usr/local/bin/claude" })
+            .command(for: repaired, project: project)
+
+        XCTAssertEqual(result?.outcome, .resetInvalid("missing-claude-id"))
+        XCTAssertNil(repaired.externalSessionID)
+        XCTAssertFalse(repaired.hasLaunchedInitialPrompt)
+        XCTAssertFalse(command.arguments.contains("--resume"))
+    }
+
     func testAgentSessionStoreSkipsClaudeWorktreeSessions() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8AgentWorktree-\(UUID().uuidString)", isDirectory: true)
