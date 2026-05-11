@@ -22,6 +22,16 @@ struct AgentChatsView: View {
     @State private var runtimeWatcher: AgentSessionRuntimeWatcher?
     @State private var autoNamer: AgentSessionAutoNamer?
     @State private var summarizer: AgentSessionSummarizer?
+    /// Beobachtet Claude-Transcript-Dateien, um interaktives `/resume`
+    /// (Session-Wechsel im laufenden Prozess) zu erkennen und die
+    /// `externalSessionID` nachzufuehren. Fallback-Pfad ohne Hooks.
+    @State private var claudeActiveTracker: ClaudeActiveSessionTracker?
+    /// Hook-Bridge fuer schnelle Detection von SessionStart/SessionEnd via
+    /// Claude-Code-Hooks. Optimization-Layer ueber dem Transcript-Tracker.
+    @State private var claudeHookBridge: ClaudeHookBridge?
+    /// Pending ambiguous-rebind-Picker (Phase 6 UI). `nil` solange keine
+    /// Mehrdeutigkeit erkannt wurde.
+    @State private var pendingAmbiguousRebind: AmbiguousRebindRequest?
     /// In-flight Summary-IDs für UI-Spinner. Wird vom Coordinator beim Aufruf
     /// gesetzt und nach Completion wieder geräumt.
     @State private var summariesInFlight: Set<UUID> = []
@@ -143,11 +153,35 @@ struct AgentChatsView: View {
         )) {
             renameProjectSheet
         }
+        .sheet(item: $pendingAmbiguousRebind) { request in
+            AgentSessionAmbiguousRebindPicker(
+                request: request,
+                onChoice: { externalID in
+                    applyAmbiguousRebindChoice(request: request, externalID: externalID)
+                    pendingAmbiguousRebind = nil
+                },
+                onCancel: {
+                    pendingAmbiguousRebind = nil
+                }
+            )
+        }
         .onAppear {
             setupRuntimeServicesIfNeeded()
             loadWorkspaceFast()
             syncActiveAgentChat()
             attemptAutoDetectProjectIcons()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
+            guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
+            // Wenn der User gerade nicht in diesem Tab ist, ueberspringen wir
+            // den Picker und loggen es — die naechste UI-Interaktion kann
+            // den Picker erneut triggern via Resume-Button.
+            guard request.localSessionID == selectedSessionID else {
+                Logger.claudeRecovery.info("recovery_picker_skipped reason=tab-not-selected localID=\(request.localSessionID.uuidString, privacy: .public)")
+                return
+            }
+            pendingAmbiguousRebind = request
+            Logger.claudeRecovery.info("recovery_picker_shown localID=\(request.localSessionID.uuidString, privacy: .public) candidates=\(request.candidates.count)")
         }
         .onChange(of: workspace.projects.map(\.id)) { _, _ in
             // Neue Projekte (z.B. nach Sessions-Scan) → ggf. Icon resolven.
@@ -511,6 +545,8 @@ struct AgentChatsView: View {
                     },
                     onSessionTerminated: { sessionID, exitCode in
                         runtimeWatcher?.markTerminated(sessionID: sessionID, exitCode: exitCode)
+                        claudeActiveTracker?.stopTracking(localSessionID: sessionID)
+                        claudeHookBridge?.stopTracking(localSessionID: sessionID)
                     },
                     onExternalSessionIDBound: { sessionID in
                         attachWatcher(sessionID: sessionID)
@@ -518,7 +554,13 @@ struct AgentChatsView: View {
                     onRequestSummary: { sessionID, force in
                         requestSummary(sessionID: sessionID, force: force)
                     },
-                    isGeneratingSummary: { id in summariesInFlight.contains(id) }
+                    isGeneratingSummary: { id in summariesInFlight.contains(id) },
+                    onPrepareClaudeHookArguments: { sessionID in
+                        claudeHookBridge?.prepareLaunch(localSessionID: sessionID) ?? []
+                    },
+                    onClaudeHookLaunched: { sessionID in
+                        claudeHookBridge?.startTracking(localSessionID: sessionID)
+                    }
                 )
                 .id(selectedSession.id)
                 .padding(.top, 14)
@@ -819,6 +861,150 @@ struct AgentChatsView: View {
             }
             runtimeWatcher = watcher
         }
+        if claudeHookBridge == nil {
+            let store = self.store
+            let registry = terminalRegistry
+            let bridge = ClaudeHookBridge()
+            bridge.setDecisionHandler { localID, event in
+                AgentChatsView.handleClaudeHookEvent(
+                    localID: localID,
+                    event: event,
+                    store: store,
+                    terminalRegistry: registry
+                )
+            }
+            claudeHookBridge = bridge
+        }
+        if claudeActiveTracker == nil {
+            let store = self.store
+            let registry = terminalRegistry
+            let tracker = ClaudeActiveSessionTracker()
+            tracker.setDecisionHandler { localID, decision in
+                AgentChatsView.handleClaudeActiveDecision(
+                    localID: localID,
+                    decision: decision,
+                    store: store,
+                    terminalRegistry: registry,
+                    onAmbiguous: { request in
+                        Task { @MainActor in
+                            // SwiftUI-State von hier aus zu setzen waere ohne
+                            // self-capture nicht moeglich → wir gehen ueber
+                            // NotificationCenter, das `body` abonniert.
+                            NotificationCenter.default.post(
+                                name: AgentChatsView.ambiguousRebindNotification,
+                                object: nil,
+                                userInfo: ["request": request]
+                            )
+                        }
+                    }
+                )
+            }
+            claudeActiveTracker = tracker
+        }
+    }
+
+    /// Statisch + ohne `self`-Capture: reagiert auf einen Tracker-Decision
+    /// und persistiert ggf. die neue externalSessionID. Ambigue Faelle
+    /// werden an den Aufrufer zurueckgegeben (UI-Picker in Phase 6).
+    private static func handleClaudeActiveDecision(
+        localID: UUID,
+        decision: ClaudeActiveSessionDecision,
+        store: AgentSessionStore,
+        terminalRegistry: AgentTerminalRegistry,
+        onAmbiguous: @escaping (AmbiguousRebindRequest) -> Void
+    ) {
+        switch decision {
+        case .unchanged:
+            return
+        case .rebind(let newID, let title):
+            do {
+                try store.updateSession(id: localID) { session in
+                    let oldID = session.externalSessionID
+                    session.externalSessionID = newID
+                    if let title, session.canAutoRenameTitle {
+                        session.title = title
+                        session.titleIsAutoGenerated = true
+                    }
+                    Logger.claudeBinding.info("binding_rebound localID=\(localID.uuidString, privacy: .public) old=\(oldID ?? "nil", privacy: .public) new=\(newID, privacy: .public)")
+                }
+                // Snapshot-Capturer Bescheid geben, damit naechster Snapshot
+                // die neue ID festhaelt.
+                Task { @MainActor in
+                    terminalRegistry.controller(for: localID)?.updateExternalSessionID(newID)
+                }
+            } catch {
+                Logger.claudeBinding.warning("binding_rebound_failed localID=\(localID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            }
+        case .ambiguous(let candidates):
+            onAmbiguous(AmbiguousRebindRequest(localSessionID: localID, candidates: candidates))
+        }
+    }
+
+    /// Notification fuer den ambiguous-rebind-Picker (Phase 6).
+    static let ambiguousRebindNotification = Notification.Name("AgentChatsView.ambiguousRebind")
+
+    /// Verarbeitet die User-Wahl im Ambiguous-Picker. `externalID == nil`
+    /// bedeutet "Neue Session starten" — wir nullen die externe ID und
+    /// markieren die Session als nicht gelauncht, damit der naechste
+    /// Resume-Klick einen frischen Claude-Lauf startet.
+    private func applyAmbiguousRebindChoice(request: AmbiguousRebindRequest, externalID: String?) {
+        do {
+            try store.updateSession(id: request.localSessionID) { session in
+                let old = session.externalSessionID
+                session.externalSessionID = externalID
+                if externalID == nil {
+                    session.hasLaunchedInitialPrompt = false
+                }
+                Logger.claudeRecovery.info("recovery_user_chose localID=\(request.localSessionID.uuidString, privacy: .public) old=\(old ?? "nil", privacy: .public) new=\(externalID ?? "nil", privacy: .public)")
+            }
+            claudeActiveTracker?.updateBoundExternalID(
+                localSessionID: request.localSessionID,
+                externalID: externalID
+            )
+            Task { @MainActor in
+                terminalRegistry.controller(for: request.localSessionID)?
+                    .updateExternalSessionID(externalID)
+            }
+            loadWorkspaceFast()
+        } catch {
+            Logger.claudeRecovery.warning("recovery_user_chose_failed localID=\(request.localSessionID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Hook-Event-Handler: bei `SessionStart` mit nicht-leerer `session_id`
+    /// updaten wir die externalSessionID; bei `SessionEnd(reason: "resume")`
+    /// machen wir uns mental "darauf bereit, dass eine neue ID kommt" —
+    /// behalten aber die alte ID bis das naechste SessionStart-Event kommt.
+    private static func handleClaudeHookEvent(
+        localID: UUID,
+        event: ClaudeHookEvent,
+        store: AgentSessionStore,
+        terminalRegistry: AgentTerminalRegistry
+    ) {
+        switch event.hookEventName {
+        case .sessionStart:
+            guard let newID = event.sessionID, !newID.isEmpty else { return }
+            do {
+                try store.updateSession(id: localID) { session in
+                    let old = session.externalSessionID
+                    guard old != newID else { return }
+                    session.externalSessionID = newID
+                    Logger.claudeBinding.info("binding_launch_id_set localID=\(localID.uuidString, privacy: .public) old=\(old ?? "nil", privacy: .public) new=\(newID, privacy: .public)")
+                }
+                Task { @MainActor in
+                    terminalRegistry.controller(for: localID)?.updateExternalSessionID(newID)
+                }
+            } catch {
+                Logger.claudeBinding.warning("binding_launch_set_failed localID=\(localID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            }
+        case .sessionEnd:
+            // /resume-Wechsel ist erwartet — naechstes SessionStart wird die
+            // neue ID liefern. Nichts tun ausser Logging.
+            let reason = event.reason ?? "unknown"
+            Logger.claudeBinding.info("binding_session_end localID=\(localID.uuidString, privacy: .public) reason=\(reason, privacy: .public)")
+        case .other:
+            return
+        }
     }
 
     /// Hängt den Watcher an eine laufende Session — entweder direkt nach
@@ -839,6 +1025,15 @@ struct AgentChatsView: View {
             cwd: project.path,
             priorTurnFinishedAt: session.lastTurnAt
         )
+        // Claude-spezifischer Transcript-Tracker fuer interaktives /resume:
+        // detect Session-Wechsel im laufenden Prozess und update ID.
+        if session.provider == .claude {
+            claudeActiveTracker?.startTracking(
+                localSessionID: session.id,
+                projectCwd: project.path,
+                currentExternalID: session.externalSessionID
+            )
+        }
     }
 
     /// Triggert beim turn-finished-Signal des Watchers das Persistieren des

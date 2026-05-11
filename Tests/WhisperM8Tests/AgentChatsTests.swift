@@ -2162,4 +2162,398 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .light), "light-ansi")
         XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .dark), "dark-ansi")
     }
+
+    // MARK: - AgentTerminalSnapshot / Store
+
+    private func makeTempSnapshotDir() -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8SnapshotTests-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    func testAgentTerminalSnapshotStoreSaveLoadRoundTrip() {
+        let dir = makeTempSnapshotDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = AgentTerminalSnapshotStore(directory: dir)
+        let id = UUID()
+        let snapshot = AgentTerminalSnapshot(
+            localSessionID: id,
+            provider: .claude,
+            externalSessionID: "abc",
+            cwd: "/tmp/repo",
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            terminalColumns: 120,
+            terminalRows: 40,
+            processWasRunning: false,
+            exitCode: 0,
+            visibleText: "Hello world",
+            scrollbackText: "line 1\nline 2\nHello world",
+            ansiReplayDataPath: nil
+        )
+
+        XCTAssertTrue(store.save(snapshot))
+        let loaded = store.load(localSessionID: id)
+        XCTAssertEqual(loaded, snapshot)
+    }
+
+    func testAgentTerminalSnapshotStoreReturnsNilForMissingID() {
+        let dir = makeTempSnapshotDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = AgentTerminalSnapshotStore(directory: dir)
+        XCTAssertNil(store.load(localSessionID: UUID()))
+    }
+
+    func testAgentTerminalSnapshotStoreReturnsNilForCorruptedFile() throws {
+        let dir = makeTempSnapshotDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = AgentTerminalSnapshotStore(directory: dir)
+        let id = UUID()
+        try "{ not a snapshot".write(to: store.fileURL(for: id), atomically: true, encoding: .utf8)
+        XCTAssertNil(store.load(localSessionID: id))
+    }
+
+    func testAgentTerminalSnapshotStoreDeleteIsIdempotent() {
+        let dir = makeTempSnapshotDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = AgentTerminalSnapshotStore(directory: dir)
+        let id = UUID()
+        let snapshot = AgentTerminalSnapshot(
+            localSessionID: id,
+            provider: .codex,
+            externalSessionID: nil,
+            cwd: "/tmp/r",
+            capturedAt: Date(),
+            terminalColumns: nil,
+            terminalRows: nil,
+            processWasRunning: true,
+            exitCode: nil,
+            visibleText: "",
+            scrollbackText: "",
+            ansiReplayDataPath: nil
+        )
+        _ = store.save(snapshot)
+        XCTAssertTrue(store.delete(localSessionID: id))
+        // Zweiter Delete: idempotent.
+        XCTAssertFalse(store.delete(localSessionID: id))
+        XCTAssertNil(store.load(localSessionID: id))
+    }
+
+    func testAgentTerminalSnapshotStorePrunesOrphans() {
+        let dir = makeTempSnapshotDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = AgentTerminalSnapshotStore(directory: dir)
+        let alive = UUID()
+        let orphan1 = UUID()
+        let orphan2 = UUID()
+        for id in [alive, orphan1, orphan2] {
+            _ = store.save(AgentTerminalSnapshot(
+                localSessionID: id,
+                provider: .claude,
+                externalSessionID: nil,
+                cwd: "/tmp",
+                capturedAt: Date(),
+                terminalColumns: nil,
+                terminalRows: nil,
+                processWasRunning: false,
+                exitCode: nil,
+                visibleText: "x",
+                scrollbackText: "x",
+                ansiReplayDataPath: nil
+            ))
+        }
+        let removed = store.pruneOrphans(keeping: [alive])
+        XCTAssertEqual(removed, 2)
+        XCTAssertNotNil(store.load(localSessionID: alive))
+        XCTAssertNil(store.load(localSessionID: orphan1))
+        XCTAssertNil(store.load(localSessionID: orphan2))
+    }
+
+    func testAgentTerminalSnapshotClampKeepsLastBytes() {
+        // 16 KiB Visible-Limit > 8 KiB. Wir bauen 12 KiB an "x" und erwarten,
+        // dass die letzten 8 KiB uebrig bleiben.
+        let raw = String(repeating: "x", count: 12 * 1024)
+        let clamped = AgentTerminalSnapshot.clampedFromEnd(raw, maxBytes: 8 * 1024)
+        XCTAssertEqual(clamped.utf8.count, 8 * 1024)
+        XCTAssertEqual(clamped.first, "x")
+        XCTAssertEqual(clamped.last, "x")
+    }
+
+    func testAgentTerminalSnapshotBuilderProducesClampedSnapshot() {
+        let context = AgentTerminalSnapshotContext(
+            localSessionID: UUID(),
+            provider: .claude,
+            externalSessionID: "claude-123",
+            cwd: "/tmp/repo"
+        )
+        // 80 KiB Roh-Text → Scrollback wird auf 64 KiB gekuerzt, Visible auf 8 KiB.
+        let raw = String(repeating: "a", count: 80 * 1024)
+        let snapshot = AgentTerminalSnapshotBuilder.makeSnapshot(
+            context: context,
+            rawText: raw,
+            terminalColumns: 100,
+            terminalRows: 30,
+            processWasRunning: true,
+            exitCode: nil
+        )
+        XCTAssertEqual(snapshot.localSessionID, context.localSessionID)
+        XCTAssertEqual(snapshot.provider, .claude)
+        XCTAssertEqual(snapshot.externalSessionID, "claude-123")
+        XCTAssertEqual(snapshot.terminalColumns, 100)
+        XCTAssertEqual(snapshot.terminalRows, 30)
+        XCTAssertEqual(snapshot.visibleText.utf8.count, 8 * 1024)
+        XCTAssertEqual(snapshot.scrollbackText.utf8.count, 64 * 1024)
+        XCTAssertTrue(snapshot.processWasRunning)
+        XCTAssertNil(snapshot.exitCode)
+    }
+
+    func testAgentTerminalSnapshotBuilderDigestChangesWithTail() {
+        let textA = String(repeating: "a", count: 100) + "\nlast-line-A\n"
+        let textB = String(repeating: "a", count: 100) + "\nlast-line-B\n"
+        XCTAssertNotEqual(
+            AgentTerminalSnapshotBuilder.contentDigest(textA),
+            AgentTerminalSnapshotBuilder.contentDigest(textB)
+        )
+    }
+
+    // MARK: - Retention
+
+    func testAgentSessionRetentionServicePrunesOrphanedFiles() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8Retention-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let snapshotStore = AgentTerminalSnapshotStore(
+            directory: root.appendingPathComponent("snapshots", isDirectory: true)
+        )
+        let hookPaths = ClaudeHookPaths(rootDirectory: root)
+        try FileManager.default.createDirectory(at: hookPaths.settingsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: hookPaths.eventsDirectory, withIntermediateDirectories: true)
+
+        let live = UUID()
+        let orphan = UUID()
+
+        _ = snapshotStore.save(AgentTerminalSnapshot(
+            localSessionID: live, provider: .claude, externalSessionID: nil, cwd: "/tmp",
+            capturedAt: Date(), terminalColumns: nil, terminalRows: nil,
+            processWasRunning: false, exitCode: nil,
+            visibleText: "x", scrollbackText: "x", ansiReplayDataPath: nil
+        ))
+        _ = snapshotStore.save(AgentTerminalSnapshot(
+            localSessionID: orphan, provider: .claude, externalSessionID: nil, cwd: "/tmp",
+            capturedAt: Date(), terminalColumns: nil, terminalRows: nil,
+            processWasRunning: false, exitCode: nil,
+            visibleText: "x", scrollbackText: "x", ansiReplayDataPath: nil
+        ))
+        // Hook-Settings + Event-Files erzeugen.
+        try Data().write(to: hookPaths.settingsFileURL(localSessionID: live))
+        try Data().write(to: hookPaths.settingsFileURL(localSessionID: orphan))
+        try Data().write(to: hookPaths.eventFileURL(localSessionID: live))
+        try Data().write(to: hookPaths.eventFileURL(localSessionID: orphan))
+
+        let service = AgentSessionRetentionService(snapshotStore: snapshotStore, hookPaths: hookPaths)
+        let result = service.prune(liveLocalSessionIDs: [live])
+
+        XCTAssertEqual(result.snapshotsRemoved, 1)
+        XCTAssertEqual(result.hookSettingsRemoved, 1)
+        XCTAssertEqual(result.hookEventsRemoved, 1)
+        XCTAssertNotNil(snapshotStore.load(localSessionID: live))
+        XCTAssertNil(snapshotStore.load(localSessionID: orphan))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: live).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: orphan).path))
+    }
+
+    // MARK: - Claude Hook Bridge
+
+    func testClaudeHookSettingsBuilderProducesValidJSON() throws {
+        let data = try ClaudeHookSettingsBuilder.serializedSettings(eventFilePath: "/tmp/events.jsonl")
+        let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNotNil(parsed?["hooks"])
+        let hooks = parsed?["hooks"] as? [String: Any]
+        XCTAssertNotNil(hooks?["SessionStart"])
+        XCTAssertNotNil(hooks?["SessionEnd"])
+    }
+
+    func testClaudeHookSettingsBuilderEscapesQuotesInPath() {
+        let cmd = ClaudeHookSettingsBuilder.appendCommand(eventFilePath: "/tmp/with\"quote.jsonl")
+        XCTAssertTrue(cmd.contains("\\\"quote.jsonl"))
+        // Wir wollen ausserdem die Datei in Double-Quotes haben.
+        XCTAssertTrue(cmd.hasPrefix("(cat; echo) >> \""))
+    }
+
+    func testClaudeHookEventStoreParsesSessionStartLine() {
+        let line = "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"abc-123\",\"cwd\":\"/tmp/repo\",\"transcript_path\":\"/tmp/x.jsonl\"}"
+        let event = ClaudeHookEventStore.parseLine(line)
+        XCTAssertEqual(event?.hookEventName, .sessionStart)
+        XCTAssertEqual(event?.sessionID, "abc-123")
+        XCTAssertEqual(event?.cwd, "/tmp/repo")
+    }
+
+    func testClaudeHookEventStoreParsesSessionEndWithResumeReason() {
+        let line = "{\"hook_event_name\":\"SessionEnd\",\"session_id\":\"old\",\"reason\":\"resume\"}"
+        let event = ClaudeHookEventStore.parseLine(line)
+        XCTAssertEqual(event?.hookEventName, .sessionEnd)
+        XCTAssertEqual(event?.reason, "resume")
+    }
+
+    func testClaudeHookEventStoreIgnoresInvalidLine() {
+        XCTAssertNil(ClaudeHookEventStore.parseLine("not json"))
+        XCTAssertNil(ClaudeHookEventStore.parseLine(""))
+    }
+
+    func testClaudeHookEventStoreTailReadsIncrementally() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hook-tail-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = ClaudeHookEventStore()
+
+        let line1 = "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"first\"}\n"
+        try line1.write(to: url, atomically: true, encoding: .utf8)
+        let events1 = store.readNewEvents(from: url)
+        XCTAssertEqual(events1.count, 1)
+        XCTAssertEqual(events1.first?.sessionID, "first")
+
+        // Append zweite Zeile — nur die soll im naechsten Read sichtbar sein.
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        let line2 = "{\"hook_event_name\":\"SessionEnd\",\"session_id\":\"first\",\"reason\":\"resume\"}\n"
+        handle.write(line2.data(using: .utf8)!)
+        try handle.close()
+
+        let events2 = store.readNewEvents(from: url)
+        XCTAssertEqual(events2.count, 1)
+        XCTAssertEqual(events2.first?.hookEventName, .sessionEnd)
+        XCTAssertEqual(events2.first?.reason, "resume")
+    }
+
+    func testClaudeHookPathsAreUnderAppSupport() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("WhisperM8HookPaths-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let paths = ClaudeHookPaths(rootDirectory: root)
+        let id = UUID()
+        XCTAssertTrue(paths.settingsFileURL(localSessionID: id).path.contains("claude-hooks"))
+        XCTAssertTrue(paths.eventFileURL(localSessionID: id).path.contains("claude-session-events"))
+        XCTAssertTrue(paths.settingsFileURL(localSessionID: id).lastPathComponent.hasPrefix(id.uuidString))
+    }
+
+    // MARK: - ClaudeActiveSessionResolver
+
+    private func makeIndexedClaudeSession(
+        id: String,
+        cwd: String,
+        lastActivityAt: Date,
+        title: String = "Some Session"
+    ) -> IndexedAgentSession {
+        IndexedAgentSession(
+            provider: .claude,
+            externalSessionID: id,
+            cwd: cwd,
+            title: title,
+            model: nil,
+            reasoningEffort: nil,
+            createdAt: lastActivityAt.addingTimeInterval(-3600),
+            lastActivityAt: lastActivityAt
+        )
+    }
+
+    func testClaudeActiveSessionResolverReturnsUnchangedWhenNoNewActivity() {
+        let entry = ClaudeActiveSessionTrackerEntry(
+            localSessionID: UUID(),
+            projectCwd: "/tmp/repo",
+            currentExternalID: "current",
+            launchedAt: Date()
+        )
+        let indexed = [
+            makeIndexedClaudeSession(id: "current", cwd: "/tmp/repo", lastActivityAt: Date()),
+            // Andere Session liegt VOR Launch → kein Kandidat.
+            makeIndexedClaudeSession(id: "older", cwd: "/tmp/repo", lastActivityAt: Date().addingTimeInterval(-600))
+        ]
+        let decision = ClaudeActiveSessionResolver.decide(entry: entry, indexedSessions: indexed)
+        XCTAssertEqual(decision, .unchanged)
+    }
+
+    func testClaudeActiveSessionResolverRebindsOnSingleNewCandidate() {
+        let launched = Date().addingTimeInterval(-30)
+        let entry = ClaudeActiveSessionTrackerEntry(
+            localSessionID: UUID(),
+            projectCwd: "/tmp/repo",
+            currentExternalID: "current",
+            launchedAt: launched
+        )
+        let indexed = [
+            makeIndexedClaudeSession(id: "current", cwd: "/tmp/repo", lastActivityAt: launched),
+            makeIndexedClaudeSession(id: "new-one", cwd: "/tmp/repo", lastActivityAt: Date(), title: "Fresh Chat")
+        ]
+        let decision = ClaudeActiveSessionResolver.decide(entry: entry, indexedSessions: indexed)
+        XCTAssertEqual(decision, .rebind(newExternalID: "new-one", title: "Fresh Chat"))
+    }
+
+    func testClaudeActiveSessionResolverIgnoresOtherProjects() {
+        let launched = Date().addingTimeInterval(-30)
+        let entry = ClaudeActiveSessionTrackerEntry(
+            localSessionID: UUID(),
+            projectCwd: "/tmp/repo",
+            currentExternalID: "current",
+            launchedAt: launched
+        )
+        let indexed = [
+            makeIndexedClaudeSession(id: "current", cwd: "/tmp/repo", lastActivityAt: launched),
+            // Andere CWD darf NIE als Kandidat zaehlen, selbst wenn frischer.
+            makeIndexedClaudeSession(id: "wrong-repo", cwd: "/tmp/different", lastActivityAt: Date())
+        ]
+        let decision = ClaudeActiveSessionResolver.decide(entry: entry, indexedSessions: indexed)
+        XCTAssertEqual(decision, .unchanged)
+    }
+
+    func testClaudeActiveSessionResolverReturnsAmbiguousOnCompetingCandidates() {
+        let launched = Date().addingTimeInterval(-30)
+        let entry = ClaudeActiveSessionTrackerEntry(
+            localSessionID: UUID(),
+            projectCwd: "/tmp/repo",
+            currentExternalID: "current",
+            launchedAt: launched
+        )
+        let now = Date()
+        let indexed = [
+            makeIndexedClaudeSession(id: "candidate-a", cwd: "/tmp/repo", lastActivityAt: now),
+            // < 2s Differenz → ambiguous.
+            makeIndexedClaudeSession(id: "candidate-b", cwd: "/tmp/repo", lastActivityAt: now.addingTimeInterval(-1))
+        ]
+        let decision = ClaudeActiveSessionResolver.decide(entry: entry, indexedSessions: indexed)
+        if case .ambiguous(let candidates) = decision {
+            XCTAssertEqual(candidates.count, 2)
+            XCTAssertEqual(candidates.first?.externalSessionID, "candidate-a")
+        } else {
+            XCTFail("Expected .ambiguous, got \(decision)")
+        }
+    }
+
+    func testClaudeActiveSessionResolverRebindsWhenLeaderDominatesByGap() {
+        let launched = Date().addingTimeInterval(-30)
+        let entry = ClaudeActiveSessionTrackerEntry(
+            localSessionID: UUID(),
+            projectCwd: "/tmp/repo",
+            currentExternalID: "current",
+            launchedAt: launched
+        )
+        let now = Date()
+        let indexed = [
+            makeIndexedClaudeSession(id: "leader", cwd: "/tmp/repo", lastActivityAt: now),
+            // 5s zurueck → leader dominiert, automatischer Rebind erlaubt.
+            makeIndexedClaudeSession(id: "stale", cwd: "/tmp/repo", lastActivityAt: now.addingTimeInterval(-5))
+        ]
+        let decision = ClaudeActiveSessionResolver.decide(entry: entry, indexedSessions: indexed)
+        XCTAssertEqual(decision, .rebind(newExternalID: "leader", title: "Some Session"))
+    }
+
+    func testAgentTerminalSnapshotClampPreservesUtf8Codepoints() {
+        // Ein 4-Byte-Emoji am Anfang darf nicht halbiert werden.
+        let prefix = "😀😀😀😀" // 16 bytes
+        let body = String(repeating: "a", count: 100)
+        let combined = prefix + body
+        let clamped = AgentTerminalSnapshot.clampedFromEnd(combined, maxBytes: 50)
+        // Resultat muss ein valider UTF-8-String sein (kein halber Codepoint).
+        XCTAssertEqual(Data(clamped.utf8).count, clamped.utf8.count)
+        XCTAssertTrue(clamped.utf8.count <= 50)
+    }
 }

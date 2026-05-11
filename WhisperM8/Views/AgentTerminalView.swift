@@ -24,6 +24,7 @@ final class AgentTerminalRegistry: ObservableObject {
     func startController(
         sessionID: UUID,
         command: AgentLaunchCommand,
+        snapshotContext: AgentTerminalSnapshotContext? = nil,
         onLaunched: @escaping () -> Void,
         onTerminated: @escaping (Int32?) -> Void
     ) -> AgentTerminalController {
@@ -34,6 +35,7 @@ final class AgentTerminalRegistry: ObservableObject {
         let controller = AgentTerminalController(
             sessionID: sessionID,
             command: command,
+            snapshotContext: snapshotContext,
             onLaunched: onLaunched,
             onTerminated: onTerminated
         )
@@ -191,6 +193,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     let terminal = LocalProcessTerminalView(frame: .zero)
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
+    /// Snapshot-Worker: schreibt periodisch den Buffer-Zustand auf Disk,
+    /// damit nach Force Quit eine read-only Snapshot-Ansicht moeglich ist.
+    /// `nil` wenn kein Snapshot-Context uebergeben wurde (z. B. in Tests).
+    private(set) var snapshotCapturer: AgentTerminalSnapshotCapturer?
 
     @Published private(set) var isRunning = false
     @Published private(set) var hasStarted = false
@@ -204,10 +210,13 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     private var onLaunched: () -> Void
     private var onTerminated: (Int32?) -> Void
     private var themeObserver: NSObjectProtocol?
+    private var willResignActiveObserver: NSObjectProtocol?
+    private var willTerminateObserver: NSObjectProtocol?
 
     init(
         sessionID: UUID,
         command: AgentLaunchCommand,
+        snapshotContext: AgentTerminalSnapshotContext? = nil,
         onLaunched: @escaping () -> Void,
         onTerminated: @escaping (Int32?) -> Void
     ) {
@@ -215,8 +224,31 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         self.command = command
         self.onLaunched = onLaunched
         self.onTerminated = onTerminated
+        if let snapshotContext {
+            self.snapshotCapturer = AgentTerminalSnapshotCapturer(context: snapshotContext)
+        }
         super.init()
         terminal.processDelegate = self
+
+        // App-Background und Terminate: synchroner Final-Flush des Snapshots,
+        // damit nach Force Quit oder normalem Beenden der letzte Zustand
+        // auf Disk liegt.
+        if let capturer = snapshotCapturer {
+            willResignActiveObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.willResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task { @MainActor in capturer.flush() }
+            }
+            willTerminateObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.willTerminateNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task { @MainActor in capturer.flush() }
+            }
+        }
 
         // Initial-Theme an die aktuelle ColorScheme koppeln. Wird bei jedem
         // macOS-Erscheinungsbild-Wechsel oder User-Override-Toggle aktualisiert.
@@ -246,6 +278,20 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         if let themeObserver {
             NotificationCenter.default.removeObserver(themeObserver)
         }
+        if let willResignActiveObserver {
+            NotificationCenter.default.removeObserver(willResignActiveObserver)
+        }
+        if let willTerminateObserver {
+            NotificationCenter.default.removeObserver(willTerminateObserver)
+        }
+    }
+
+    /// Wird vom Caller aufgerufen, wenn die externe Session-ID (Claude
+    /// conversation UUID / Codex rollout id) waehrend der Laufzeit gebunden
+    /// oder umgebunden wird. Snapshot-Capturer schreibt diese ID in den
+    /// naechsten Snapshot.
+    func updateExternalSessionID(_ id: String?) {
+        snapshotCapturer?.updateExternalSessionID(id)
     }
 
     /// Wechselt Terminal-Background + Foreground + 16-Color-ANSI-Palette zur
@@ -279,10 +325,15 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             environment: LoginShellEnvironment.shared.terminalEnvironmentArray(),
             currentDirectory: command.workingDirectory
         )
+        // Snapshot-Capturer einklinken, sobald der Prozess laeuft und der
+        // Terminal-Buffer real existiert.
+        snapshotCapturer?.attach(terminal: terminal)
         onLaunched()
     }
 
     func terminate() {
+        snapshotCapturer?.flush()
+        snapshotCapturer?.stopTimer()
         terminal.terminate()
         isRunning = false
     }
@@ -309,6 +360,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         Task { @MainActor in
             self.exitCode = exitCode
             self.isRunning = false
+            // Final-Snapshot mit definitivem Prozess-Status persistieren,
+            // dann das Polling beenden.
+            self.snapshotCapturer?.markProcessTerminated(exitCode: exitCode)
             self.onTerminated(exitCode)
         }
     }

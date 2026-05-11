@@ -1,0 +1,120 @@
+import Foundation
+
+/// Pure Helper-Logik fuer das Erzeugen der temporaeren Claude-Code-Settings-
+/// Datei, die wir per `--settings <path>` an einen Claude-Launch haengen.
+/// Sie definiert nur unsere eigenen Hooks — User-Settings und Project-
+/// Settings bleiben unangetastet (Claude mergt additiv).
+enum ClaudeHookSettingsBuilder {
+    /// Baut das Settings-Dict mit `SessionStart`- und `SessionEnd`-Hooks,
+    /// die jeden Event als JSON-Zeile in `eventFilePath` appenden. Wir
+    /// nutzen `(cat ; echo) >> "$path"` — das ist robust gegen Pfade mit
+    /// Leerzeichen und braucht keine externen Tools wie `jq`.
+    static func makeSettings(eventFilePath: String) -> [String: Any] {
+        let command = appendCommand(eventFilePath: eventFilePath)
+        let entry: [String: Any] = [
+            "matcher": ".*",
+            "hooks": [
+                [
+                    "type": "command",
+                    "command": command
+                ]
+            ]
+        ]
+        return [
+            "hooks": [
+                "SessionStart": [entry],
+                "SessionEnd": [entry]
+            ]
+        ]
+    }
+
+    /// Serialisiert die Settings als utf8-JSON-Daten. Sortierung der Keys
+    /// damit die Datei deterministisch wird (gut fuer Tests + Logs).
+    static func serializedSettings(eventFilePath: String) throws -> Data {
+        let dict = makeSettings(eventFilePath: eventFilePath)
+        return try JSONSerialization.data(
+            withJSONObject: dict,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+    }
+
+    /// Schreibt die Settings atomisch nach `outURL` mit POSIX-0600.
+    static func writeSettingsFile(eventFilePath: String, to outURL: URL) throws {
+        try FileManager.default.createDirectory(
+            at: outURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data = try serializedSettings(eventFilePath: eventFilePath)
+        try data.write(to: outURL, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: outURL.path
+        )
+    }
+
+    /// Shell-Command der das stdin-JSON appended. Wir packen das in
+    /// `bash -lc`, weil Claude Hooks Commands direkt mit `sh` ausfuehren —
+    /// `bash -lc` macht Sicherheit, dass Standard-Tools und PATH stimmen.
+    /// Der Pfad wird mit doppelten Quotes geschuetzt; sollten Backslashes
+    /// oder Quotes im Pfad selbst auftauchen escapen wir die.
+    static func appendCommand(eventFilePath: String) -> String {
+        let escaped = shellEscapeDoubleQuoted(eventFilePath)
+        return "(cat; echo) >> \"\(escaped)\""
+    }
+
+    /// Escape-Regeln fuer einen String, der innerhalb von Double-Quotes
+    /// in einer Shell auftaucht: `\` -> `\\`, `"` -> `\"`, `$` -> `\$`,
+    /// Backtick -> `\``.
+    static func shellEscapeDoubleQuoted(_ raw: String) -> String {
+        var result = ""
+        result.reserveCapacity(raw.count)
+        for ch in raw {
+            switch ch {
+            case "\\":
+                result.append("\\\\")
+            case "\"":
+                result.append("\\\"")
+            case "$":
+                result.append("\\$")
+            case "`":
+                result.append("\\`")
+            default:
+                result.append(ch)
+            }
+        }
+        return result
+    }
+}
+
+/// Verwaltet die Pfade fuer unsere Claude-Hook-Settings + Event-Dateien.
+/// Pro lokaler WhisperM8-Session eine Settings-Datei + ein Event-File.
+/// Diese Files liegen im App-Support-Verzeichnis (nicht `/tmp`) und sind
+/// 0600.
+struct ClaudeHookPaths {
+    let rootDirectory: URL
+
+    init(rootDirectory: URL? = nil) {
+        self.rootDirectory = rootDirectory ?? Self.defaultRoot()
+    }
+
+    static func defaultRoot() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("WhisperM8", isDirectory: true)
+    }
+
+    var settingsDirectory: URL {
+        rootDirectory.appendingPathComponent("claude-hooks", isDirectory: true)
+    }
+
+    var eventsDirectory: URL {
+        rootDirectory.appendingPathComponent("claude-session-events", isDirectory: true)
+    }
+
+    func settingsFileURL(localSessionID: UUID) -> URL {
+        settingsDirectory.appendingPathComponent("\(localSessionID.uuidString).json")
+    }
+
+    func eventFileURL(localSessionID: UUID) -> URL {
+        eventsDirectory.appendingPathComponent("\(localSessionID.uuidString).jsonl")
+    }
+}

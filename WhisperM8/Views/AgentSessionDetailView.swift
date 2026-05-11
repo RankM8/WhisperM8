@@ -31,9 +31,20 @@ struct AgentSessionDetailView: View {
     /// Liefert `true`, solange ein Summary für diese Session aktuell generiert
     /// wird — die UI bindet das auf einen Spinner.
     var isGeneratingSummary: (UUID) -> Bool = { _ in false }
+    /// Wird gerufen direkt VOR dem Claude-Launch und liefert zusaetzliche
+    /// CLI-Argumente (typisch: `--settings <hook-settings-path>`). `nil`
+    /// erlaubt der View, im Test-Setup ohne Hook-Bridge zu laufen.
+    var onPrepareClaudeHookArguments: (UUID) -> [String] = { _ in [] }
+    /// Wird gerufen direkt NACH dem Launch um Hook-Tail-Polling zu starten.
+    var onClaudeHookLaunched: (UUID) -> Void = { _ in }
 
     @State private var store = AgentSessionStore()
+    @State private var snapshotStore = AgentTerminalSnapshotStore()
     @State private var errorMessage: String?
+    /// Lokal gecachtes Snapshot fuer die Offline-Ansicht. Wird beim Mount /
+    /// Session-Wechsel asynchron geladen — verhindert dass jedes
+    /// Re-Render erneut ueber Disk muss.
+    @State private var cachedSnapshot: AgentTerminalSnapshot?
 
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
@@ -44,6 +55,8 @@ struct AgentSessionDetailView: View {
             if let controller {
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
+            } else if let snapshot = cachedSnapshot {
+                AgentTerminalSnapshotView(snapshot: snapshot, session: session)
             } else {
                 ClosedSessionSummaryView(
                     session: session,
@@ -62,6 +75,7 @@ struct AgentSessionDetailView: View {
             // hängenbleibt. `focusTerminal` is async-dispatched — okay wenn
             // das View jetzt erst mountet.
             controller?.focusTerminal()
+            loadSnapshotIfNeeded()
             // Beim Öffnen einer geschlossenen Session ohne Summary einmal
             // im Hintergrund anstoßen — der Coordinator (AgentChatsView)
             // entscheidet, ob das tatsächlich ausgeführt wird (in-flight,
@@ -72,11 +86,13 @@ struct AgentSessionDetailView: View {
         }
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
+            cachedSnapshot = nil
             if session.shouldLaunchOnOpen == true {
                 prepareCommand()
             }
             // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
             controller?.focusTerminal()
+            loadSnapshotIfNeeded()
             if controller == nil && session.summary == nil {
                 onRequestSummary(session.id, false)
             }
@@ -84,6 +100,17 @@ struct AgentSessionDetailView: View {
         .onChange(of: actionRequest) { _, request in
             handleActionRequest(request)
         }
+    }
+
+    /// Laedt das persistierte Snapshot fuer die aktuelle Session, falls
+    /// noch nicht gecacht und kein Live-Controller laeuft. Synchron weil
+    /// das File klein ist (max ~100 KiB) — async waere overkill.
+    private func loadSnapshotIfNeeded() {
+        guard controller == nil else {
+            cachedSnapshot = nil
+            return
+        }
+        cachedSnapshot = snapshotStore.load(localSessionID: session.id)
     }
 
     private func handleActionRequest(_ request: AgentSessionActionRequest?) {
@@ -99,13 +126,33 @@ struct AgentSessionDetailView: View {
     private func prepareCommand() {
         do {
             let launchSession = try repairedSessionForLaunch()
-            let command = try AgentCommandBuilder().command(for: launchSession, project: project)
+            // Claude-Hook-Bridge: VOR dem Command-Build die Settings-Datei
+            // erzeugen und `--settings <path>` als extra-Argument liefern.
+            // Codex bekommt das nicht (kein Hook-API).
+            var builder = AgentCommandBuilder()
+            if launchSession.provider == .claude {
+                let hookArgs = onPrepareClaudeHookArguments(launchSession.id)
+                if !hookArgs.isEmpty {
+                    builder.extraLaunchArguments = hookArgs
+                }
+            }
+            let command = try builder.command(for: launchSession, project: project)
+            let snapshotContext = AgentTerminalSnapshotContext(
+                localSessionID: launchSession.id,
+                provider: launchSession.provider,
+                externalSessionID: launchSession.externalSessionID,
+                cwd: project.path
+            )
             terminalRegistry.startController(
                 sessionID: launchSession.id,
                 command: command,
+                snapshotContext: snapshotContext,
                 onLaunched: markLaunched,
                 onTerminated: { exitCode in markTerminated(exitCode: exitCode) }
             )
+            if launchSession.provider == .claude {
+                onClaudeHookLaunched(launchSession.id)
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

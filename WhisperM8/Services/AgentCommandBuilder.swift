@@ -75,6 +75,11 @@ struct AgentCommandBuilder {
         return result
     }
 
+    /// Zusaetzliche CLI-Argumente, die VOR den session-spezifischen Args
+    /// eingefuegt werden — z. B. `--settings <path>` fuer die Hook-Bridge
+    /// (Phase 5). `nil` wenn kein zusaetzlicher Inject gewuenscht ist.
+    var extraLaunchArguments: [String] = []
+
     func command(for session: AgentChatSession, project: AgentProject) throws -> AgentLaunchCommand {
         guard FileManager.default.fileExists(atPath: project.path) else {
             throw AgentCommandError.missingProject(project.path)
@@ -141,6 +146,9 @@ struct AgentCommandBuilder {
         }
 
         var arguments: [String] = []
+        // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
+        // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.
+        arguments.append(contentsOf: extraLaunchArguments)
         // User-defined extras (z. B. --dangerously-skip-permissions) zuerst,
         // damit sie auch beim Resume durchgehen.
         arguments.append(contentsOf: extraArgumentsResolver(.claude))

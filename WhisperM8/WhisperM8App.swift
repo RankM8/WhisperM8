@@ -109,6 +109,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             ThemeManager.shared.performInitialClaudeThemeSync()
         }
 
+        // Retention: verwaiste Snapshot- und Hook-Files raeumen. Wird nicht
+        // im UI-Thread blockierend — schreibt nur Logs.
+        Task.detached(priority: .background) {
+            let workspace = AgentSessionStore().loadWorkspace()
+            let liveIDs = Set(workspace.sessions.map(\.id))
+            _ = AgentSessionRetentionService().prune(liveLocalSessionIDs: liveIDs)
+        }
+
         // Routing: Onboarding wenn nötig, sonst Agent-Chats als Default-Hub.
         // Settings ist nicht mehr die Default-Startansicht — es wird nur noch
         // explizit über Menubar oder Cmd+, geöffnet.
