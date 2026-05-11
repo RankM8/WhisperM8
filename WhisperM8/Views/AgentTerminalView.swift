@@ -285,12 +285,16 @@ struct AgentTerminalView: NSViewRepresentable {
     @ObservedObject var controller: AgentTerminalController
 
     func makeNSView(context: Context) -> NSView {
-        let container = NSView(frame: .zero)
+        let container = AgentTerminalContainerView(frame: .zero)
+        container.terminal = controller.terminal
         attach(controller.terminal, to: container)
         return container
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        if let container = nsView as? AgentTerminalContainerView {
+            container.terminal = controller.terminal
+        }
         attach(controller.terminal, to: nsView)
     }
 
@@ -314,5 +318,97 @@ struct AgentTerminalView: NSViewRepresentable {
             terminal.topAnchor.constraint(equalTo: container.topAnchor),
             terminal.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
+    }
+}
+
+/// NSView-Container, der `LocalProcessTerminalView` wrappt **und**
+/// Finder-Drag-Drop akzeptiert. SwiftTerm selbst registriert keine
+/// Drag-Types — beim direkten Drop auf das Terminal landet die Datei sonst
+/// einfach im Nichts.
+///
+/// Verhalten orientiert sich an `Terminal.app`: gedroppte Datei-Pfade werden
+/// als Shell-escaped String an die PTY geschrieben, sodass der User sie sofort
+/// in einen Befehl einbauen kann (`@<pfad>` für Claude Code, oder einfach in
+/// der nächsten Eingabe zitieren). Mehrere Dateien werden mit Leerzeichen
+/// getrennt.
+final class AgentTerminalContainerView: NSView {
+    weak var terminal: LocalProcessTerminalView?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return hasAnyFileURL(in: sender) ? .copy : []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return hasAnyFileURL(in: sender) ? .copy : []
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let terminal else { return false }
+        let urls = sender.draggingPasteboard
+            .readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard !urls.isEmpty else { return false }
+
+        let payload = TerminalDropPayload.build(from: urls.map(\.path))
+        // PTY frisst UTF-8 Bytes — keine `txt:`-API-Annahme, das ist sicherer.
+        terminal.send(txt: payload)
+        // Terminal aktivieren, damit der Cursor blinkt und der nächste
+        // Tastendruck dort landet.
+        window?.makeFirstResponder(terminal)
+        return true
+    }
+
+    private func hasAnyFileURL(in info: NSDraggingInfo) -> Bool {
+        guard let types = info.draggingPasteboard.types else { return false }
+        return types.contains(.fileURL)
+    }
+}
+
+/// Pure Helper: bauen aus Datei-Pfaden den String, der ins Terminal injiziert
+/// wird. Mehrere Pfade werden space-getrennt; jeder einzeln shell-escaped,
+/// damit Spaces, Umlaute und Sonderzeichen nicht den Befehl zerschießen.
+/// Bewusst keine eigene Datei — engl klein gehalten und am Container-Ort,
+/// hier auch testbar via `build(from:)`.
+enum TerminalDropPayload {
+    static func build(from paths: [String]) -> String {
+        paths.map(shellEscape).joined(separator: " ")
+    }
+
+    /// macOS Terminal.app-Konvention: kein Quoting nötig, wenn der Pfad nur
+    /// aus „sicheren" ASCII-Zeichen besteht; sonst Backslash-escape jedes
+    /// Sonderzeichens. Wir nehmen denselben Ansatz statt Single-Quote-Wrap,
+    /// weil das Resultat optisch näher am normalen Tippverhalten ist.
+    static func shellEscape(_ path: String) -> String {
+        var result = ""
+        result.reserveCapacity(path.count)
+        for scalar in path.unicodeScalars {
+            if isShellSafe(scalar) {
+                result.unicodeScalars.append(scalar)
+            } else {
+                result.append("\\")
+                result.unicodeScalars.append(scalar)
+            }
+        }
+        return result
+    }
+
+    private static func isShellSafe(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar {
+        case "a"..."z", "A"..."Z", "0"..."9":
+            return true
+        case "/", "-", "_", ".", "+", "=", ":", "@", "%", ",":
+            return true
+        default:
+            return false
+        }
     }
 }
