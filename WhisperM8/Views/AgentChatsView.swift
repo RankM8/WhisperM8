@@ -956,8 +956,8 @@ struct AgentChatsView: View {
 
     // MARK: - Drag-and-Drop coordinators
 
-    /// Reordert die Sessions eines Projekts: `droppedSession` wird *vor*
-    /// `beforeSessionID` einsortiert (`nil` bedeutet ans Ende anhängen).
+    /// Reordert die Sessions eines Projekts: Row-Drops werden vom Planner
+    /// richtungsabhaengig eingeordnet, `nil` bedeutet ans Ende anhaengen.
     /// Cross-Project: wenn `droppedSession.sourceProjectID != projectID`,
     /// wird die Session zusätzlich in das Ziel-Projekt verschoben.
     private func dropSession(
@@ -1705,8 +1705,9 @@ private struct ProjectChatGroup: View {
     var onChooseProjectIcon: (AgentProject) -> Void
     var onAutoDetectProjectIcon: (AgentProject) -> Void
     var onClearProjectIcon: (UUID) -> Void
-    /// Drop-Handler: `droppedSession` soll vor `beforeSessionID` einsortiert
-    /// werden (oder ans Ende wenn `nil`). Wenn `droppedSession.sourceProjectID`
+    /// Drop-Handler: `beforeSessionID` bezeichnet die Ziel-Row. Der Planner
+    /// entscheidet anhand der Drag-Richtung, ob davor oder danach einsortiert
+    /// wird (oder ans Ende wenn `nil`). Wenn `droppedSession.sourceProjectID`
     /// vom aktuellen Projekt abweicht, ist's automatisch ein Cross-Project-Move.
     var onSessionDrop: (DraggableSession, _ beforeSessionID: UUID?, _ targetProjectID: UUID) -> Void
     /// Drop eines Projekts vor diesem Projekt (oder `nil` = ans Ende der Liste).

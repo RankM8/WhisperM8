@@ -1800,7 +1800,7 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(store.loadWorkspace(), before)
     }
 
-    func testAgentDragDropPlannerBuildsSessionReorderPlan() {
+    func testAgentDragDropPlannerBuildsSessionReorderPlanForLowerToUpperDrop() {
         let project = AgentProject(name: "Repo", path: "/tmp/repo")
         let first = AgentChatSession(provider: .claude, projectID: project.id, title: "First", sortIndex: 0)
         let second = AgentChatSession(provider: .claude, projectID: project.id, title: "Second", sortIndex: 1)
@@ -1816,7 +1816,7 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(plan, .reorder(projectID: project.id, orderedIDs: [second.id, first.id]))
     }
 
-    func testAgentDragDropPlannerTreatsSelfDropAsNoOp() {
+    func testAgentDragDropPlannerBuildsSessionReorderPlanForUpperToLowerDrop() {
         let project = AgentProject(name: "Repo", path: "/tmp/repo")
         let first = AgentChatSession(provider: .claude, projectID: project.id, title: "First", sortIndex: 0)
         let second = AgentChatSession(provider: .claude, projectID: project.id, title: "Second", sortIndex: 1)
@@ -1826,6 +1826,49 @@ final class AgentChatsTests: XCTestCase {
             dropped: DraggableSession(sessionID: first.id, sourceProjectID: project.id),
             targetProjectID: project.id,
             beforeSessionID: second.id,
+            workspace: workspace
+        )
+
+        XCTAssertEqual(plan, .reorder(projectID: project.id, orderedIDs: [second.id, first.id]))
+    }
+
+    func testAgentDragDropPlannerPersistsUpperToLowerSessionReorder() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let project = try store.upsertProject(path: NSTemporaryDirectory() + "dnd-down", name: "Repo", createdManually: true)
+        let first = try store.createSession(provider: .claude, projectPath: project.path, title: "First")
+        let second = try store.createSession(provider: .claude, projectPath: project.path, title: "Second")
+        try store.reorderSessions(in: project.id, orderedIDs: [first.id, second.id])
+        let workspace = store.loadWorkspace()
+
+        let plan = AgentDragDropPlanner.sessionDropPlan(
+            dropped: DraggableSession(sessionID: first.id, sourceProjectID: project.id),
+            targetProjectID: project.id,
+            beforeSessionID: second.id,
+            workspace: workspace
+        )
+
+        guard case .reorder(let projectID, let orderedIDs) = plan else {
+            return XCTFail("Expected reorder plan for downward session drop")
+        }
+        try store.reorderSessions(in: projectID, orderedIDs: orderedIDs)
+
+        let reloaded = store.loadWorkspace()
+        let sortedIDs = AgentSessionStore.sortedSessions(reloaded.sessions.filter { $0.projectID == project.id }).map(\.id)
+        XCTAssertEqual(sortedIDs, [second.id, first.id])
+    }
+
+    func testAgentDragDropPlannerTreatsSelfDropAsNoOp() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo")
+        let first = AgentChatSession(provider: .claude, projectID: project.id, title: "First", sortIndex: 0)
+        let second = AgentChatSession(provider: .claude, projectID: project.id, title: "Second", sortIndex: 1)
+        let workspace = AgentWorkspace(projects: [project], sessions: [first, second])
+
+        let plan = AgentDragDropPlanner.sessionDropPlan(
+            dropped: DraggableSession(sessionID: first.id, sourceProjectID: project.id),
+            targetProjectID: project.id,
+            beforeSessionID: first.id,
             workspace: workspace
         )
 
@@ -1856,6 +1899,19 @@ final class AgentChatsTests: XCTestCase {
         let plan = AgentDragDropPlanner.projectDropPlan(
             dropped: DraggableProject(projectID: second.id),
             beforeProjectID: first.id,
+            visibleProjects: [first, second]
+        )
+
+        XCTAssertEqual(plan, .reorder(orderedIDs: [second.id, first.id]))
+    }
+
+    func testAgentDragDropPlannerBuildsProjectReorderPlanForUpperToLowerDrop() {
+        let first = AgentProject(name: "First", path: "/tmp/first", sortIndex: 0)
+        let second = AgentProject(name: "Second", path: "/tmp/second", sortIndex: 1)
+
+        let plan = AgentDragDropPlanner.projectDropPlan(
+            dropped: DraggableProject(projectID: first.id),
+            beforeProjectID: second.id,
             visibleProjects: [first, second]
         )
 

@@ -28,12 +28,14 @@ struct AgentDragDropPlanner {
                 workspace.sessions.filter { $0.projectID == targetProjectID && $0.status != .archived }
             )
             let currentIDs = sorted.map(\.id)
-            guard currentIDs.contains(dropped.sessionID) else { return .none }
+            guard let sourceIndex = currentIDs.firstIndex(of: dropped.sessionID) else { return .none }
+            guard beforeSessionID != dropped.sessionID else { return .none }
 
             var orderedIDs = currentIDs.filter { $0 != dropped.sessionID }
             let insertAt: Int
             if let beforeSessionID, let index = orderedIDs.firstIndex(of: beforeSessionID) {
-                insertAt = index
+                let targetIndex = currentIDs.firstIndex(of: beforeSessionID) ?? index
+                insertAt = sourceIndex < targetIndex ? min(index + 1, orderedIDs.count) : index
             } else {
                 insertAt = orderedIDs.count
             }
@@ -64,11 +66,13 @@ struct AgentDragDropPlanner {
         visibleProjects: [AgentProject]
     ) -> AgentProjectDropPlan {
         let currentIDs = visibleProjects.map(\.id)
-        guard currentIDs.contains(dropped.projectID) else { return .none }
+        guard let sourceIndex = currentIDs.firstIndex(of: dropped.projectID) else { return .none }
+        guard beforeProjectID != dropped.projectID else { return .none }
         var orderedIDs = currentIDs.filter { $0 != dropped.projectID }
         let insertAt: Int
         if let beforeProjectID, let index = orderedIDs.firstIndex(of: beforeProjectID) {
-            insertAt = index
+            let targetIndex = currentIDs.firstIndex(of: beforeProjectID) ?? index
+            insertAt = sourceIndex < targetIndex ? min(index + 1, orderedIDs.count) : index
         } else {
             insertAt = orderedIDs.count
         }
