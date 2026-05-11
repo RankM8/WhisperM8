@@ -161,5 +161,19 @@ _bundle:
 	@cp "WhisperM8/Resources/ProviderCodex@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@/usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$(APP_BUNDLE)/Contents/Info.plist" 2>/dev/null || true
 	@/usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string 'AppIcon'" "$(APP_BUNDLE)/Contents/Info.plist"
-	@codesign --force --deep --sign - --entitlements "WhisperM8/WhisperM8.entitlements" --timestamp=none "$(APP_BUNDLE)"
+	@# Codesign identity: prefer the persistent local-dev cert if it
+	@# exists (created via `scripts/setup-codesign-cert.sh`), else fall
+	@# back to ad-hoc. The persistent cert keeps the binary's code
+	@# identity stable across rebuilds so macOS TCC grants
+	@# ("Files and Folders" permissions) survive `make dev`. Ad-hoc
+	@# signing re-prompts the user on every rebuild because the
+	@# identity is bound to the binary hash.
+	@CODESIGN_ID=$$(security find-identity -p codesigning -v 2>/dev/null | grep "WhisperM8 Local Dev" | awk -F'"' '{print $$2}' | head -1); \
+	if [ -z "$$CODESIGN_ID" ]; then \
+		echo "ℹ Signing ad-hoc (run scripts/setup-codesign-cert.sh for stable TCC grants)..."; \
+		CODESIGN_ID="-"; \
+	else \
+		echo "✔ Signing with persistent identity: $$CODESIGN_ID"; \
+	fi; \
+	codesign --force --deep --sign "$$CODESIGN_ID" --entitlements "WhisperM8/WhisperM8.entitlements" --timestamp=none "$(APP_BUNDLE)"
 	@codesign --verify --deep --strict --verbose=2 "$(APP_BUNDLE)"
