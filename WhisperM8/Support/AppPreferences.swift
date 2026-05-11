@@ -56,6 +56,16 @@ struct AppPreferences {
         nonmutating set { setOptionalString(newValue, forKey: Keys.selectedAudioDeviceUID) }
     }
 
+    /// Theme-Override: `system` (default, folgt macOS), `light` oder `dark`.
+    /// Wird vom `ThemeManager` und einem optionalen Settings-Picker gelesen.
+    var appearanceOverride: AppearanceOverride {
+        get {
+            let raw = defaults.string(forKey: Keys.appearanceOverride) ?? AppearanceOverride.system.rawValue
+            return AppearanceOverride(rawValue: raw) ?? .system
+        }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.appearanceOverride) }
+    }
+
     var onboardingCompleted: Bool {
         get { defaults.bool(forKey: Keys.onboardingCompleted) }
         nonmutating set { defaults.set(newValue, forKey: Keys.onboardingCompleted) }
@@ -239,6 +249,7 @@ enum PreferenceKeys {
     static let defaultAgentProvider = "defaultAgentProvider"
     static let codexExtraArguments = "codexExtraArguments"
     static let claudeExtraArguments = "claudeExtraArguments"
+    static let appearanceOverride = "appearanceOverride"
 }
 
 private typealias Keys = PreferenceKeys
