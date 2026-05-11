@@ -625,9 +625,28 @@ struct BehaviorSettingsView: View {
     @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = AppPreferences.defaultMaxScreenshotsPerRecording
     @AppStorage("maxScreenRecordingDuration") private var maxScreenRecordingDuration = 30.0
     @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = false
+    @ObservedObject private var themeManager = ThemeManager.shared
 
     var body: some View {
         Form {
+            Section("Erscheinungsbild") {
+                Picker("Theme", selection: Binding(
+                    get: { themeManager.override },
+                    set: { themeManager.setOverride($0) }
+                )) {
+                    ForEach(AppearanceOverride.allCases) { option in
+                        Label(option.displayName, systemImage: option.systemImage)
+                            .tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                Text("\"System\" folgt macOS. Bei \"Hell\" / \"Dunkel\" wird auch Claude Code (über ~/.claude.json → light-ansi / dark-ansi) entsprechend umgestellt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Toggle("Auto-paste after transcription", isOn: $autoPasteEnabled)
 

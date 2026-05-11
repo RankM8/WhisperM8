@@ -6,6 +6,7 @@ import UserNotifications
 @main
 struct WhisperM8App: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var themeManager = ThemeManager.shared
 
     init() {
         // Single instance check - quit if already running
@@ -28,6 +29,7 @@ struct WhisperM8App: App {
         // Launch, es sei denn der AppDelegate routet was anderes (Onboarding).
         Window("Agent Chats", id: "agent-chats") {
             AgentChatsView()
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
         .defaultSize(width: 1100, height: 720)
         .defaultPosition(.center)
@@ -36,6 +38,7 @@ struct WhisperM8App: App {
         MenuBarExtra {
             MenuBarView()
                 .environment(AppState.shared)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
         } label: {
             MenuBarIcon()
                 .environment(AppState.shared)
@@ -48,6 +51,7 @@ struct WhisperM8App: App {
         Window("WhisperM8", id: "settings") {
             SettingsView()
                 .environment(AppState.shared)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
         .defaultSize(width: 900, height: 640)
         .defaultPosition(.center)
@@ -56,6 +60,7 @@ struct WhisperM8App: App {
         Window("WhisperM8 Setup", id: "onboarding") {
             OnboardingView()
                 .environment(AppState.shared)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
@@ -82,6 +87,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Request notification permissions for error alerts
         requestNotificationPermission()
+
+        // Claude-Code-Theme einmalig synchron mit unserem aufgelösten
+        // Color-Scheme — falls der User WhisperM8 nach einem manuellen
+        // `/theme dark` in Claude öffnet, ziehen wir das passend nach.
+        Task { @MainActor in
+            ThemeManager.shared.performInitialClaudeThemeSync()
+        }
 
         // Routing: Onboarding wenn nötig, sonst Agent-Chats als Default-Hub.
         // Settings ist nicht mehr die Default-Startansicht — es wird nur noch

@@ -1614,4 +1614,61 @@ final class AgentChatsTests: XCTestCase {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("AgentSessions.json")
     }
+
+    // MARK: - ThemeManager.resolve
+
+    func testThemeResolveOverrideLightAlwaysReturnsLight() {
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .light, systemAppearance: NSAppearance(named: .darkAqua)),
+            .light
+        )
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .light, systemAppearance: NSAppearance(named: .aqua)),
+            .light
+        )
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .light, systemAppearance: nil),
+            .light
+        )
+    }
+
+    func testThemeResolveOverrideDarkAlwaysReturnsDark() {
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .dark, systemAppearance: NSAppearance(named: .aqua)),
+            .dark
+        )
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .dark, systemAppearance: NSAppearance(named: .darkAqua)),
+            .dark
+        )
+    }
+
+    func testThemeResolveSystemFollowsAppearance() {
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .system, systemAppearance: NSAppearance(named: .aqua)),
+            .light
+        )
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .system, systemAppearance: NSAppearance(named: .darkAqua)),
+            .dark
+        )
+    }
+
+    func testThemeResolveSystemFallsBackToDarkWhenAppearanceUnknown() {
+        XCTAssertEqual(
+            ThemeManager.resolve(override: .system, systemAppearance: nil),
+            .dark
+        )
+    }
+
+    func testAppearanceOverridePreferredColorSchemeMapping() {
+        XCTAssertNil(AppearanceOverride.system.preferredColorScheme)
+        XCTAssertEqual(AppearanceOverride.light.preferredColorScheme, .light)
+        XCTAssertEqual(AppearanceOverride.dark.preferredColorScheme, .dark)
+    }
+
+    func testClaudeThemeNameMapping() {
+        XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .light), "light-ansi")
+        XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .dark), "dark-ansi")
+    }
 }
