@@ -210,8 +210,6 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     private var onLaunched: () -> Void
     private var onTerminated: (Int32?) -> Void
     private var themeObserver: NSObjectProtocol?
-    private var willResignActiveObserver: NSObjectProtocol?
-    private var willTerminateObserver: NSObjectProtocol?
 
     init(
         sessionID: UUID,
@@ -229,26 +227,6 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         }
         super.init()
         terminal.processDelegate = self
-
-        // App-Background und Terminate: synchroner Final-Flush des Snapshots,
-        // damit nach Force Quit oder normalem Beenden der letzte Zustand
-        // auf Disk liegt.
-        if let capturer = snapshotCapturer {
-            willResignActiveObserver = NotificationCenter.default.addObserver(
-                forName: NSApplication.willResignActiveNotification,
-                object: nil,
-                queue: .main
-            ) { _ in
-                Task { @MainActor in capturer.flush() }
-            }
-            willTerminateObserver = NotificationCenter.default.addObserver(
-                forName: NSApplication.willTerminateNotification,
-                object: nil,
-                queue: .main
-            ) { _ in
-                Task { @MainActor in capturer.flush() }
-            }
-        }
 
         // Initial-Theme an die aktuelle ColorScheme koppeln. Wird bei jedem
         // macOS-Erscheinungsbild-Wechsel oder User-Override-Toggle aktualisiert.
@@ -277,12 +255,6 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     deinit {
         if let themeObserver {
             NotificationCenter.default.removeObserver(themeObserver)
-        }
-        if let willResignActiveObserver {
-            NotificationCenter.default.removeObserver(willResignActiveObserver)
-        }
-        if let willTerminateObserver {
-            NotificationCenter.default.removeObserver(willTerminateObserver)
         }
     }
 
