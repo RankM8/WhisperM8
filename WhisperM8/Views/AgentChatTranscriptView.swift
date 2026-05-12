@@ -8,7 +8,9 @@ import SwiftUI
 ///
 /// Die ScrollView startet am Ende (juengste Message) — wie ein Chat-App.
 struct AgentChatTranscriptView: View {
-    let transcript: AgentChatTranscript
+    /// `nil` heisst: kein Transcript verfuegbar (JSONL existiert nicht). Wird
+    /// dann als spezieller Empty-State angezeigt mit Hinweis auf Resume.
+    let transcript: AgentChatTranscript?
     let session: AgentChatSession
 
     /// Wie viele Messages initial ueber `ForEach` ausgegeben werden.
@@ -22,26 +24,35 @@ struct AgentChatTranscriptView: View {
 
     @State private var visibleCount: Int = initialMessageWindow
 
-    /// Die tatsaechlich gerenderten Messages — Suffix von `transcript.messages`.
+    /// Sichere Liste der Messages — leer falls Transcript fehlt.
+    private var allMessages: [AgentChatMessage] {
+        transcript?.messages ?? []
+    }
+
+    /// Die tatsaechlich gerenderten Messages — Suffix von allMessages.
     private var visibleMessages: ArraySlice<AgentChatMessage> {
-        guard !transcript.messages.isEmpty else { return [] }
-        let start = max(0, transcript.messages.count - visibleCount)
-        return transcript.messages[start..<transcript.messages.count]
+        guard !allMessages.isEmpty else { return [] }
+        let start = max(0, allMessages.count - visibleCount)
+        return allMessages[start..<allMessages.count]
     }
 
     private var hasMoreEarlier: Bool {
-        visibleMessages.count < transcript.messages.count
+        visibleMessages.count < allMessages.count
     }
 
     private var hiddenEarlierCount: Int {
-        max(0, transcript.messages.count - visibleMessages.count)
+        max(0, allMessages.count - visibleMessages.count)
+    }
+
+    private var isReallyEmpty: Bool {
+        allMessages.isEmpty
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             statusBanner
 
-            if transcript.isEmpty {
+            if isReallyEmpty {
                 emptyState
             } else {
                 ScrollView(.vertical) {
@@ -62,7 +73,7 @@ struct AgentChatTranscriptView: View {
             }
         }
         .background(AgentTheme.background)
-        .onChange(of: transcript.messages.count) { _, _ in
+        .onChange(of: allMessages.count) { _, _ in
             // Neuer Transcript geladen → Window zuruecksetzen auf die letzten N.
             visibleCount = Self.initialMessageWindow
         }
@@ -72,7 +83,7 @@ struct AgentChatTranscriptView: View {
     private var earlierButton: some View {
         Button {
             visibleCount = min(
-                transcript.messages.count,
+                allMessages.count,
                 visibleCount + Self.messageBatchIncrement
             )
         } label: {
@@ -99,10 +110,10 @@ struct AgentChatTranscriptView: View {
     @ViewBuilder
     private var statusBanner: some View {
         HStack(spacing: 10) {
-            Image(systemName: "checkmark.bubble")
+            Image(systemName: isReallyEmpty ? "moon.zzz" : "checkmark.bubble")
                 .foregroundStyle(AgentTheme.textTertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Konversation geladen")
+                Text(bannerTitle)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AgentTheme.textPrimary)
                 Text(bannerSubtitle)
@@ -122,9 +133,21 @@ struct AgentChatTranscriptView: View {
         )
     }
 
+    private var bannerTitle: String {
+        if isReallyEmpty {
+            return transcript == nil
+                ? "Session noch nicht gestartet"
+                : "Konversation ist leer"
+        }
+        return "Konversation geladen"
+    }
+
     private var bannerSubtitle: String {
-        let total = transcript.messages.count
         let resumeHint = "Resume oben startet \(session.provider.displayName) erneut."
+        if isReallyEmpty {
+            return resumeHint
+        }
+        let total = allMessages.count
         if hasMoreEarlier {
             return "\(visibleMessages.count) von \(total) Nachrichten · " + resumeHint
         }
@@ -133,17 +156,40 @@ struct AgentChatTranscriptView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
             Spacer()
-            Image(systemName: "ellipsis.bubble")
-                .font(.system(size: 28))
+            Image(systemName: transcript == nil ? "play.rectangle" : "ellipsis.bubble")
+                .font(.system(size: 32))
                 .foregroundStyle(AgentTheme.textTertiary)
-            Text("Noch keine Nachrichten in dieser Session")
-                .font(.system(size: 13))
+            Text(emptyStateTitle)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AgentTheme.textPrimary)
+            Text(emptyStateDetail)
+                .font(.system(size: 12))
                 .foregroundStyle(AgentTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+            if let id = session.externalSessionID, !id.isEmpty {
+                Text("Session-ID: \(id)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .textSelection(.enabled)
+                    .padding(.top, 4)
+            }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 32)
+    }
+
+    private var emptyStateTitle: String {
+        transcript == nil
+            ? "Diese Session hat noch keine Konversation"
+            : "Diese Konversation enthaelt noch keine Nachrichten"
+    }
+
+    private var emptyStateDetail: String {
+        "Klick **Resume** oben in der Header-Leiste, um \(session.provider.displayName) zu starten und mit dieser Session weiterzumachen."
     }
 
     @ViewBuilder

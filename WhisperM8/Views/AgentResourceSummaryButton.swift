@@ -57,9 +57,17 @@ struct AgentResourceSummaryButton: View {
                 return
             }
 
+            // Schnelles Refresh nur wenn der Popover offen ist — der User
+            // schaut aktiv hin. Bei geschlossenem Popover reicht ein
+            // langsamerer Refresh (Badge zeigt nur Counter + Total).
+            // Reduziert die /bin/ps-Forks von 30 → 12 pro Minute wenn nur
+            // das Badge gerendert wird.
             while !Task.isCancelled {
                 refresh()
-                try? await Task.sleep(for: .seconds(2))
+                let interval: Duration = isPopoverPresented
+                    ? .seconds(2)
+                    : .seconds(5)
+                try? await Task.sleep(for: interval)
             }
         }
     }

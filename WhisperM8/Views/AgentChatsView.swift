@@ -21,20 +21,12 @@ struct AgentChatsView: View {
     /// auf Store + Closures brauchen, die wir vor `body` nicht haben.
     @State private var runtimeWatcher: AgentSessionRuntimeWatcher?
     @State private var autoNamer: AgentSessionAutoNamer?
-    @State private var summarizer: AgentSessionSummarizer?
-    /// Beobachtet Claude-Transcript-Dateien, um interaktives `/resume`
-    /// (Session-Wechsel im laufenden Prozess) zu erkennen und die
-    /// `externalSessionID` nachzufuehren. Fallback-Pfad ohne Hooks.
     /// Hook-Bridge fuer Real-Time-Detection von SessionStart/SessionEnd via
     /// Claude-Code-Hooks. Event-driven via `DispatchSource` — 0% idle CPU.
-    /// Ersetzt das alte Transcript-Tail-Polling.
     @State private var claudeHookBridge: ClaudeHookBridge?
-    /// Pending ambiguous-rebind-Picker (Phase 6 UI). `nil` solange keine
+    /// Pending ambiguous-rebind-Picker. `nil` solange keine
     /// Mehrdeutigkeit erkannt wurde.
     @State private var pendingAmbiguousRebind: AmbiguousRebindRequest?
-    /// In-flight Summary-IDs für UI-Spinner. Wird vom Coordinator beim Aufruf
-    /// gesetzt und nach Completion wieder geräumt.
-    @State private var summariesInFlight: Set<UUID> = []
     @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
     @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
     @State private var openTabIDs: Set<UUID> = []
@@ -550,10 +542,6 @@ struct AgentChatsView: View {
                     onExternalSessionIDBound: { sessionID in
                         attachWatcher(sessionID: sessionID)
                     },
-                    onRequestSummary: { sessionID, force in
-                        requestSummary(sessionID: sessionID, force: force)
-                    },
-                    isGeneratingSummary: { id in summariesInFlight.contains(id) },
                     onPrepareClaudeHookArguments: { sessionID in
                         claudeHookBridge?.prepareLaunch(localSessionID: sessionID) ?? []
                     },
@@ -840,9 +828,6 @@ struct AgentChatsView: View {
         if autoNamer == nil {
             autoNamer = AgentSessionAutoNamer(store: store)
         }
-        if summarizer == nil {
-            summarizer = AgentSessionSummarizer(store: store)
-        }
         if runtimeWatcher == nil {
             let store = self.store
             let statusStore = runtimeStatusStore
@@ -1050,7 +1035,6 @@ struct AgentChatsView: View {
                 // alte Sessions als auch solche, deren erster
                 // Auto-Naming-Versuch vorher gescheitert ist.
                 forceAutoNameUntitledSessions()
-                generateMissingSummariesAfterScan()
                 Logger.agentPerformance.info("agent_chats_background_index reason=\(reason, privacy: .public) durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) stats=\(lastIndexStats.map { "\($0.provider.rawValue):\($0.scannedFiles)/\($0.cacheHits)/\($0.bytesRead)" }.joined(separator: ","), privacy: .public)")
             } catch is CancellationError {
                 return
@@ -1167,52 +1151,6 @@ struct AgentChatsView: View {
                     }
                 }
             }
-        }
-    }
-
-    /// Nach einem Sessions-Scan: für alle nicht-archivierten Sessions ohne
-    /// `summary` einen passiven Generate-Pass anstoßen. Reuses den selben
-    /// in-flight-Tracker wie der Detail-View, sodass UI-Spinner konsistent
-    /// bleiben, falls der User in der Zeit eine Session öffnet.
-    private func generateMissingSummariesAfterScan() {
-        for session in workspace.sessions {
-            guard session.status != .archived else { continue }
-            guard session.summary == nil else { continue }
-            guard session.externalSessionID != nil else { continue }
-            requestSummary(sessionID: session.id, force: false)
-        }
-    }
-
-    /// Wird vom Detail-View bei `onAppear` (passiv, force=false) und vom
-    /// "Neu generieren"-Button (force=true) aufgerufen. Verwaltet den
-    /// in-flight Set für den Spinner-State und reloaded den Workspace
-    /// nach erfolgreichem Schreiben.
-    private func requestSummary(sessionID: UUID, force: Bool) {
-        guard let summarizer else { return }
-        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
-              let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
-            return
-        }
-        if !force, session.summary != nil { return }
-        if summariesInFlight.contains(sessionID) { return }
-
-        summariesInFlight.insert(sessionID)
-        let started = summarizer.generateSummary(
-            for: session,
-            cwd: project.path,
-            force: force
-        ) { [store] result in
-            Task { @MainActor in
-                summariesInFlight.remove(sessionID)
-                if case .success = result {
-                    workspace = store.loadWorkspace()
-                }
-            }
-        }
-        if !started {
-            // generateSummary hat schon vorher abgebrochen (z.B. weil
-            // bereits ein Summary existiert). UI-State entsprechend zurücknehmen.
-            summariesInFlight.remove(sessionID)
         }
     }
 

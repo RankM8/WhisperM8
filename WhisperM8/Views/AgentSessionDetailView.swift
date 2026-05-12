@@ -23,14 +23,6 @@ struct AgentSessionDetailView: View {
     var onSessionLaunched: (UUID) -> Void = { _ in }
     var onSessionTerminated: (UUID, Int32?) -> Void = { _, _ in }
     var onExternalSessionIDBound: (UUID) -> Void = { _ in }
-    /// Wird aufgerufen wenn der Detail-View eine inhaltliche Zusammenfassung
-    /// der geschlossenen Session generieren möchte. `force == true` bedeutet
-    /// "User hat 'Neu generieren' geklickt" — dann auch dann generieren, wenn
-    /// schon ein `summary` existiert.
-    var onRequestSummary: (UUID, _ force: Bool) -> Void = { _, _ in }
-    /// Liefert `true`, solange ein Summary für diese Session aktuell generiert
-    /// wird — die UI bindet das auf einen Spinner.
-    var isGeneratingSummary: (UUID) -> Bool = { _ in false }
     /// Wird gerufen direkt VOR dem Claude-Launch und liefert zusaetzliche
     /// CLI-Argumente (typisch: `--settings <hook-settings-path>`). `nil`
     /// erlaubt der View, im Test-Setup ohne Hook-Bridge zu laufen.
@@ -56,16 +48,15 @@ struct AgentSessionDetailView: View {
             if let controller {
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
-            } else if let transcript = cachedTranscript, !transcript.isEmpty {
-                AgentChatTranscriptView(transcript: transcript, session: session)
             } else if isLoadingTranscript {
                 loadingView
             } else {
-                ClosedSessionSummaryView(
-                    session: session,
-                    errorMessage: errorMessage,
-                    isGenerating: isGeneratingSummary(session.id),
-                    onGenerate: { force in onRequestSummary(session.id, force) }
+                // Universal-Fallback fuer geschlossene Sessions: Transcript-
+                // View nutzt seinen eingebauten Empty-State wenn `cachedTranscript`
+                // nil oder leer ist (z. B. wenn die JSONL noch nicht existiert).
+                AgentChatTranscriptView(
+                    transcript: cachedTranscript,
+                    session: session
                 )
             }
         }
@@ -187,10 +178,27 @@ struct AgentSessionDetailView: View {
     private func repairedSessionForLaunch() throws -> AgentChatSession {
         guard session.provider == .claude,
               session.hasLaunchedInitialPrompt,
-              session.externalSessionID?.isEmpty == false else {
+              let externalID = session.externalSessionID,
+              !externalID.isEmpty else {
             return session
         }
 
+        // FAST PATH: wenn die JSONL fuer die gespeicherte externalSessionID
+        // bereits an der erwarteten Stelle liegt, gilt die ID als valide —
+        // kein Scan ueber 2000+ Files noetig. Das ist der 99%-Fall und
+        // verhindert den 2-Sekunden-UI-Block beim Resume-Klick.
+        let expectedTranscript = ClaudeTranscriptReader.transcriptURL(
+            forCwd: project.path,
+            sessionID: externalID
+        )
+        if FileManager.default.fileExists(atPath: expectedTranscript.path) {
+            return session
+        }
+
+        // SLOW PATH: gespeicherte ID hat keine entsprechende JSONL — vielleicht
+        // wurde sie von Claude per `/resume` umgebogen, oder das Transcript
+        // wurde manuell geloescht. Erst jetzt machen wir den teuren
+        // Indexer-Scan ueber alle Projekte und versuchen einen Repair.
         let indexedSessions = ClaudeSessionIndexer().indexedSessions(limit: 500)
         guard let repair = try store.repairResumeStateBeforeLaunch(
             localSessionID: session.id,

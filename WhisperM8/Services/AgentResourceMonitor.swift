@@ -181,22 +181,37 @@ struct AgentResourceMonitor {
         return Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    /// Forkt einen Subprocess und sammelt stdout. Wichtig: erst stdout
+    /// vollstaendig lesen DANN `waitUntilExit()` — sonst kann der Child
+    /// blockieren weil der Pipe-Puffer (~64 KB) voll laeuft und auf einen
+    /// Leser wartet. Symptom des alten Bugs: ps-Children blieben als
+    /// "sleeping" Prozesse stehen und unser Parent-Thread sass in
+    /// waitUntilExit fest. Plus: stderr-Pipe leeren damit auch dort kein
+    /// Block entsteht.
     private static func runProcess(executable: String, arguments: [String]) -> String {
         let process = Process()
-        let pipe = Pipe()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
-        process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return ""
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
+        // stdout vor waitUntilExit lesen — Pipe-Puffer waere sonst der
+        // Deadlock-Risiko. `readDataToEndOfFile` blockiert bis der Child
+        // seinen stdout schliesst, was bei Exit passiert.
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        // stderr leer-lesen damit der Child nicht in einer write() haengt
+        // (rare, aber moeglich bei Diagnostics).
+        _ = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+
+        process.waitUntilExit()
+        return String(data: stdoutData, encoding: .utf8) ?? ""
     }
 }
