@@ -234,11 +234,12 @@ struct AgentChatsAccessView: View {
             Section("Standard-Provider") {
                 Picker("Neuer Chat startet mit", selection: $defaultAgentProviderRaw) {
                     Text("Claude Code").tag("claude")
+                    Text("Claude Agents").tag("claude-agents")
                     Text("Codex").tag("codex")
                 }
                 .pickerStyle(.segmented)
 
-                Text("Bestimmt, welcher Provider beim 'Neuer Chat'-Button und beim Plus-Knopf eines Projekts genutzt wird.")
+                Text("Bestimmt, welcher Provider beim 'Neuer Chat'-Button und beim Plus-Knopf eines Projekts genutzt wird. **Claude Agents** öffnet die Multi-Session-Dashboard-View statt eines einzelnen Chats.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

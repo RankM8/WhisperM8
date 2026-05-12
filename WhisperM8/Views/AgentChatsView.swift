@@ -354,7 +354,7 @@ struct AgentChatsView: View {
                             onNewChat: {
                                 selectedProjectID = project.id
                                 expandedProjectIDs.insert(project.id)
-                                createSession(provider: defaultAgentProvider)
+                                createDefaultSession()
                             },
                             onCloseSession: { closeHeaderTab($0) },
                             onRenameRequest: { beginRename($0) },
@@ -467,13 +467,22 @@ struct AgentChatsView: View {
     }
 
     private var defaultAgentProvider: AgentProvider {
-        AgentProvider(rawValue: AppPreferences.shared.defaultAgentProviderRaw) ?? .claude
+        AppPreferences.shared.defaultAgentLaunchTarget.provider
+    }
+
+    private var defaultAgentKind: AgentSessionKind? {
+        AppPreferences.shared.defaultAgentLaunchTarget.kind
+    }
+
+    private func createDefaultSession() {
+        let target = AppPreferences.shared.defaultAgentLaunchTarget
+        createSession(provider: target.provider, kind: target.kind)
     }
 
     private var sidebarCommandRows: some View {
         VStack(spacing: 1) {
             Button {
-                createSession(provider: defaultAgentProvider)
+                createDefaultSession()
             } label: {
                 SidebarCommandRow(icon: "square.stack.3d.up", title: "Neuer Chat", isActive: selectedProject != nil)
             }

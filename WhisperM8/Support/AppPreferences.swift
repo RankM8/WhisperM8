@@ -154,10 +154,30 @@ struct AppPreferences {
     }
 
     /// Default-Provider für „Neuer Chat" in der Agent-Chats-Sidebar.
-    /// Werte: "codex" oder "claude" (matched `AgentProvider.rawValue`).
+    /// Werte:
+    /// - "claude" (AgentProvider.claude, Chat-Modus)
+    /// - "codex" (AgentProvider.codex, Chat-Modus)
+    /// - "claude-agents" (AgentProvider.claude, Agent-View-Modus via `claude agents`)
+    /// Backward-kompatibel: alte Workspaces mit nur "claude"/"codex" funktionieren weiter.
     var defaultAgentProviderRaw: String {
         get { defaults.string(forKey: Keys.defaultAgentProvider) ?? "claude" }
         nonmutating set { defaults.set(newValue, forKey: Keys.defaultAgentProvider) }
+    }
+
+    /// Liefert `(provider, kind)` aus `defaultAgentProviderRaw` aufgeloest.
+    /// `kind == nil` bedeutet "Default-Chat" (passt mit `AgentChatSession.kind == nil`,
+    /// das via `effectiveKind` zu `.chat` resolved).
+    var defaultAgentLaunchTarget: (provider: AgentProvider, kind: AgentSessionKind?) {
+        switch defaultAgentProviderRaw {
+        case "codex":
+            return (.codex, nil)
+        case "claude-agents":
+            return (.claude, .agentView)
+        case "claude":
+            return (.claude, nil)
+        default:
+            return (.claude, nil)
+        }
     }
 
     /// Frei konfigurierbare zusätzliche CLI-Argumente, die an den Codex-Aufruf

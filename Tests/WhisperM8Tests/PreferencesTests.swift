@@ -78,6 +78,30 @@ final class PreferencesTests: XCTestCase {
         }
     }
 
+    func testDefaultAgentLaunchTargetMapsRawValueToProviderAndKind() {
+        withIsolatedPreferences { preferences in
+            // Default ohne user-set value: "claude" → (claude, nil)
+            let defaultTarget = preferences.defaultAgentLaunchTarget
+            XCTAssertEqual(defaultTarget.provider, .claude)
+            XCTAssertNil(defaultTarget.kind)
+
+            // Codex
+            preferences.defaultAgentProviderRaw = "codex"
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.provider, .codex)
+            XCTAssertNil(preferences.defaultAgentLaunchTarget.kind)
+
+            // Claude Agents View — neuer 3-Wege Wert
+            preferences.defaultAgentProviderRaw = "claude-agents"
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.provider, .claude)
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.kind, .agentView)
+
+            // Unbekannter Wert: konservativ auf Claude chat zurueckfallen.
+            preferences.defaultAgentProviderRaw = "garbage-string"
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.provider, .claude)
+            XCTAssertNil(preferences.defaultAgentLaunchTarget.kind)
+        }
+    }
+
     func testMigratesLegacyOpenAIWhisperProvider() {
         withIsolatedPreferences { preferences in
             preferences.selectedProviderRaw = "openai_whisper"
