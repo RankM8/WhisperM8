@@ -705,7 +705,7 @@ struct BehaviorSettingsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
 
-                Text("\"System\" folgt macOS. Bei \"Hell\" / \"Dunkel\" wird auch Claude Code (über ~/.claude.json → light-ansi / dark-ansi) entsprechend umgestellt.")
+                Text("\"System\" folgt macOS. Bei \"Hell\" / \"Dunkel\" wird auch Claude Code (über ~/.claude.json → light / dark-ansi) entsprechend umgestellt.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

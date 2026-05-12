@@ -57,30 +57,40 @@ enum AgentTerminalPalette {
         ]
     )
 
-    // MARK: - Light (neu — kalibriert für weißen Background)
-
+    // MARK: - Light (konventionelle ANSI-Palette für weißen Background)
+    //
+    // Wichtig: Color 7 (white) und 15 (bright white) MÜSSEN helle Töne sein.
+    // TUIs (Claude Code, Codex CLI) nutzen sie häufig als Hintergrundfarbe
+    // für Status-Pills, Hinweis-Bänder und das Input-Box-Chrome (z. B.
+    // `ESC[47m` für hellen BG mit dunklem FG). Werden 7/15 als dunkles Grau
+    // gesetzt, werden diese Bänder im Light-Mode schwarz und damit unlesbar
+    // — genau das Problem, das wir hier korrigieren.
+    //
+    // Default-Foreground für unkolorierten Text läuft über
+    // `nativeForegroundColor` (s. u.) — der bleibt dunkel und sorgt für
+    // lesbaren Fließtext auf weißem Hintergrund.
     private static let light = Resolved(
         background: NSColor.white,
         foreground: NSColor(srgbRed: 0.12,  green: 0.12,  blue: 0.13,  alpha: 1),
         ansi16: [
             // Standard — gleiche Hue-Familie wie Dark, aber kontrastreicher gegen weiß.
-            term(0x20, 0x21, 0x24), // 0: black (sehr dunkel)
+            term(0x20, 0x21, 0x24), // 0: black
             term(0xa6, 0x1b, 0x29), // 1: red
             term(0x2f, 0x7d, 0x1f), // 2: green
             term(0xb4, 0x6a, 0x00), // 3: yellow (eher amber für Lesbarkeit)
             term(0x1f, 0x4f, 0xa5), // 4: blue
             term(0x82, 0x35, 0xa0), // 5: magenta
             term(0x0e, 0x6f, 0x79), // 6: cyan (teal)
-            term(0x4a, 0x4e, 0x55), // 7: white (= dunkleres Grau für Standard-Foreground)
+            term(0xd0, 0xd0, 0xd2), // 7: white (helles Grau — Standard für hellen BG)
             // Bright
-            term(0x66, 0x6a, 0x6e), // 8: bright black (mittleres Grau)
+            term(0x9a, 0x9c, 0xa0), // 8: bright black (mittleres Grau)
             term(0xc9, 0x2e, 0x3a), // 9: bright red
             term(0x40, 0x99, 0x2d), // 10: bright green
             term(0xd9, 0x82, 0x0d), // 11: bright yellow
             term(0x29, 0x69, 0xc8), // 12: bright blue
             term(0xa0, 0x47, 0xc0), // 13: bright magenta
             term(0x10, 0x8c, 0x96), // 14: bright cyan
-            term(0x20, 0x21, 0x24)  // 15: bright white (= dark text auf weiß)
+            term(0xf5, 0xf5, 0xf6)  // 15: bright white (fast reines Weiß)
         ]
     )
 

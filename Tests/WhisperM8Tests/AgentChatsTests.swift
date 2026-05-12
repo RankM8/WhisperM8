@@ -2212,7 +2212,11 @@ final class AgentChatsTests: XCTestCase {
     }
 
     func testClaudeThemeNameMapping() {
-        XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .light), "light-ansi")
+        // Light → `light` (Claude's eigene Light-Theme-Farben), nicht
+        // `light-ansi`: letzteres rendert UI-Chrome (Input-Box, Status-Pills)
+        // mit ANSI-Indizes, die gegen den weißen Background als schwarze
+        // Bänder erscheinen.
+        XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .light), "light")
         XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .dark), "dark-ansi")
     }
 

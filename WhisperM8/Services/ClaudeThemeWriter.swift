@@ -26,11 +26,22 @@ final class ClaudeThemeWriter {
     static let shared = ClaudeThemeWriter()
 
     /// Mapping ColorScheme → von Claude akzeptierter Theme-String.
-    /// `*-ansi` lässt Claude die Host-(SwiftTerm-)Palette verwenden statt
-    /// einer eigenen — passt damit automatisch zu unseren `AgentTerminalPalette`.
+    ///
+    /// **Dark** → `dark-ansi`: lässt Claude die Host-(SwiftTerm-)Palette
+    /// verwenden. Funktioniert gut, weil unsere Dark-Palette eine
+    /// klassische ANSI-Farbtabelle ist und Claude's UI-Chrome auf dunklem
+    /// Background sauber rendert.
+    ///
+    /// **Light** → `light`: nutzt Claude's eigene Light-Theme-Farben für
+    /// Input-Box, Status-Pills und Highlights. `light-ansi` führte dazu,
+    /// dass Claude für UI-Chrome ANSI-Indizes verwendet, die in jeder
+    /// Light-Palette zwangsläufig dunkel rendern (z. B. inverse Video
+    /// gegen den hellen Background → schwarzer Balken). Mit `light`
+    /// rendert Claude die Chrome-Elemente in den vorgesehenen hellen
+    /// Grautönen — das ist das Verhalten, das der User in iTerm sieht.
     nonisolated static func claudeThemeName(for scheme: ColorScheme) -> String {
         switch scheme {
-        case .light: return "light-ansi"
+        case .light: return "light"
         default:     return "dark-ansi"
         }
     }

@@ -136,7 +136,7 @@ struct OutputTemplatesView: View {
                 TextEditor(text: $editableInstruction)
                     .font(.system(.body, design: .monospaced))
                     .scrollContentBackground(.hidden)
-                    .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.secondary.opacity(0.25), lineWidth: 1)

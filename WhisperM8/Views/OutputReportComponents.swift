@@ -58,7 +58,7 @@ struct ReportTextBlock: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
-                .background(Color.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }
@@ -77,7 +77,7 @@ struct TranscriptAttachmentCard: View {
             } else {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.black.opacity(0.18))
+                        .fill(.quaternary.opacity(0.6))
                     Image(systemName: attachment.kind == .screenClip ? "video" : (attachment.kind == .annotation ? "cursorarrow.rays" : "photo"))
                         .font(.title2)
                         .foregroundStyle(.secondary)
