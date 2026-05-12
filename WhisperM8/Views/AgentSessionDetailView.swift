@@ -97,6 +97,14 @@ struct AgentSessionDetailView: View {
             isLoadingTranscript = false
             return
         }
+        // Agent View hat keinen eigenen Transcript-Stream — die JSONLs der
+        // einzelnen Background-Sessions liegen jeweils dort wo Claude sie
+        // schreibt, nicht unter dem Agent-View-Tab. Empty-State zeigen.
+        guard !session.isAgentView else {
+            cachedTranscript = nil
+            isLoadingTranscript = false
+            return
+        }
         guard let externalID = session.externalSessionID, !externalID.isEmpty else {
             cachedTranscript = nil
             isLoadingTranscript = false
@@ -153,7 +161,11 @@ struct AgentSessionDetailView: View {
             // erzeugen und `--settings <path>` als extra-Argument liefern.
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
-            if launchSession.provider == .claude {
+            // Hook-Bridge nur fuer normale interaktive Claude-Sessions —
+            // Agent View ist ein Dashboard, hat keine eigene Session-ID
+            // zum Tracken.
+            let useHookBridge = launchSession.provider == .claude && !launchSession.isAgentView
+            if useHookBridge {
                 let hookArgs = onPrepareClaudeHookArguments(launchSession.id)
                 if !hookArgs.isEmpty {
                     builder.extraLaunchArguments = hookArgs
@@ -166,7 +178,7 @@ struct AgentSessionDetailView: View {
                 onLaunched: markLaunched,
                 onTerminated: { exitCode in markTerminated(exitCode: exitCode) }
             )
-            if launchSession.provider == .claude {
+            if useHookBridge {
                 onClaudeHookLaunched(launchSession.id)
             }
             errorMessage = nil
@@ -176,6 +188,10 @@ struct AgentSessionDetailView: View {
     }
 
     private func repairedSessionForLaunch() throws -> AgentChatSession {
+        // Agent View hat keine externe Session-ID — kein Repair noetig.
+        guard !session.isAgentView else {
+            return session
+        }
         guard session.provider == .claude,
               session.hasLaunchedInitialPrompt,
               let externalID = session.externalSessionID,
@@ -236,7 +252,10 @@ struct AgentSessionDetailView: View {
                 updated.shouldLaunchOnOpen = false
                 updated.initialPrompt = nil
             }
-            bindExternalSessionIDWhenAvailable()
+            // Agent View hat keine externe Session-ID — kein binding noetig.
+            if !session.isAgentView {
+                bindExternalSessionIDWhenAvailable()
+            }
             onSessionLaunched(session.id)
             // Erster Start: Terminal-NSView ist jetzt mit dem Window verbunden
             // → Tastaturfokus dorthin, damit der User direkt tippen kann.

@@ -290,7 +290,8 @@ struct AgentSessionStore {
         initialPrompt: String? = nil,
         imagePaths: [String] = [],
         shouldLaunchOnOpen: Bool = false,
-        createdManually: Bool = true
+        createdManually: Bool = true,
+        kind: AgentSessionKind? = nil
     ) throws -> AgentChatSession {
         let project = try upsertProject(path: projectPath, createdManually: createdManually)
         let session = AgentChatSession(
@@ -303,7 +304,8 @@ struct AgentSessionStore {
             initialPrompt: initialPrompt,
             imagePaths: imagePaths,
             shouldLaunchOnOpen: shouldLaunchOnOpen,
-            createdManually: createdManually ? true : nil
+            createdManually: createdManually ? true : nil,
+            kind: kind
         )
         return try upsertSession(session)
     }

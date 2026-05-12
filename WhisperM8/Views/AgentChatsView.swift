@@ -610,6 +610,10 @@ struct AgentChatsView: View {
                 Menu {
                     Button("Neuer Codex Chat") { createSession(provider: .codex) }
                     Button("Neuer Claude Chat") { createSession(provider: .claude) }
+                    Divider()
+                    Button("Neuer Claude Agent View") {
+                        createSession(provider: .claude, kind: .agentView)
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
@@ -1229,18 +1233,30 @@ struct AgentChatsView: View {
         }
     }
 
-    private func createSession(provider: AgentProvider) {
+    private func createSession(provider: AgentProvider, kind: AgentSessionKind? = nil) {
         guard let selectedProject else { return }
         do {
-            let title = "\(provider.displayName) Chat"
+            // Agent View hat keine externe Session-ID (es ist ein Dashboard
+            // ueber viele Sessions). Auch der Titel ist anders.
+            let isAgentView = kind == .agentView
+            let title = isAgentView
+                ? "Agent View"
+                : "\(provider.displayName) Chat"
+            // Vorbereitete externe Session-ID nur fuer normale Claude-Chats —
+            // damit unsere Hook-Bridge die JSONL findet. Codex und Agent View
+            // generieren ihre IDs intern.
+            let externalSessionID: String? = (provider == .claude && !isAgentView)
+                ? UUID().uuidString.lowercased()
+                : nil
             let session = try store.createSession(
                 provider: provider,
                 projectPath: selectedProject.path,
                 title: title,
                 model: AppPreferences.shared.codexPostProcessingModelRaw,
                 reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
-                externalSessionID: provider == .claude ? UUID().uuidString.lowercased() : nil,
-                shouldLaunchOnOpen: true
+                externalSessionID: externalSessionID,
+                shouldLaunchOnOpen: true,
+                kind: kind
             )
             workspace = store.loadWorkspace()
             selectedSessionID = session.id

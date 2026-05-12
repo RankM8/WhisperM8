@@ -145,6 +145,21 @@ struct AgentCommandBuilder {
             throw AgentCommandError.commandNotFound("Claude")
         }
 
+        // Claude Agents View ist ein separater Subcommand (`claude agents`)
+        // mit eigener TUI fuer Background-Sessions. Kein --resume,
+        // kein --session-id, keine Hook-Bridge — das ist ein
+        // Dashboard, kein Chat.
+        if session.isAgentView {
+            var arguments: [String] = ["agents"]
+            // User-defined claude-Args koennen z. B. `--setting-sources` setzen.
+            arguments.append(contentsOf: extraArgumentsResolver(.claude))
+            return AgentLaunchCommand(
+                executablePath: executable,
+                arguments: arguments,
+                workingDirectory: project.path
+            )
+        }
+
         var arguments: [String] = []
         // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
         // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.

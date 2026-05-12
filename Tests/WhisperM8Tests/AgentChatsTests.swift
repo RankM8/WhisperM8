@@ -78,6 +78,72 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(command.workingDirectory, project.path)
     }
 
+    func testAgentCommandBuilderProducesAgentsSubcommandForAgentViewSession() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: nil,
+            title: "Agent View",
+            kind: .agentView
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.executablePath, "/usr/local/bin/claude")
+        // Erstes Argument muss `agents` sein — Claude's dashboard
+        // subcommand. KEIN --resume / --session-id / --settings.
+        XCTAssertEqual(command.arguments.first, "agents")
+        XCTAssertFalse(command.arguments.contains("--resume"))
+        XCTAssertFalse(command.arguments.contains("--session-id"))
+        XCTAssertFalse(command.arguments.contains("--settings"))
+    }
+
+    func testAgentSessionKindRoundTripsViaJSON() throws {
+        let projectID = UUID()
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: projectID,
+            title: "View",
+            kind: .agentView
+        )
+        let encoded = try JSONEncoder().encode(session)
+        let decoded = try JSONDecoder().decode(AgentChatSession.self, from: encoded)
+        XCTAssertEqual(decoded.kind, .agentView)
+        XCTAssertEqual(decoded.effectiveKind, .agentView)
+        XCTAssertTrue(decoded.isAgentView)
+    }
+
+    func testAgentSessionKindLegacyJSONDefaultsToChat() throws {
+        // Eine Legacy-Session-JSON ohne kind-Feld muss als .chat dekodiert
+        // werden (decodeIfPresent ist Schema-evolution-friendly).
+        let id = UUID()
+        let projectID = UUID()
+        let json = """
+        {
+          "id":"\(id.uuidString)",
+          "provider":"claude",
+          "projectID":"\(projectID.uuidString)",
+          "title":"Legacy",
+          "model":"x",
+          "reasoningEffort":"medium",
+          "status":"pending",
+          "imagePaths":[],
+          "hasLaunchedInitialPrompt":false,
+          "createdAt":"2026-01-01T00:00:00Z",
+          "lastActivityAt":"2026-01-01T00:00:00Z"
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let session = try decoder.decode(AgentChatSession.self, from: json.data(using: .utf8)!)
+        XCTAssertNil(session.kind)
+        XCTAssertEqual(session.effectiveKind, .chat)
+        XCTAssertFalse(session.isAgentView)
+    }
+
     func testAgentCommandBuilderDoesNotSilentlyCreateNewSessionWhenResumeIDIsMissing() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
