@@ -16,6 +16,7 @@ enum AgentCommandError: LocalizedError, Equatable {
     case commandNotFound(String)
     case missingProject(String)
     case missingExternalSessionID(String)
+    case missingBackgroundShortID(String)
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +26,8 @@ enum AgentCommandError: LocalizedError, Equatable {
             return "Project folder does not exist: \(path)"
         case .missingExternalSessionID(let title):
             return "Cannot resume \(title): the original agent session ID was not indexed yet. Refresh sessions or start a new chat explicitly."
+        case .missingBackgroundShortID(let title):
+            return "Cannot attach to background agent \(title): no short ID stored yet. Spawn the agent first."
         }
     }
 }
@@ -169,6 +172,30 @@ struct AgentCommandBuilder {
             )
         }
 
+        // Background-Agent: vom Claude-Supervisor-Daemon gehostet, von uns
+        // per `claude --bg "<prompt>"` gespawnt (separater Process, siehe
+        // `BackgroundAgentSpawner`) und hier per `claude attach <short-id>`
+        // in den PTY-Tab geklemmt. Voraussetzung: die Short-ID ist
+        // bekannt — den Spawn-Pfad bauen wir nicht hier, weil er kein
+        // PTY ist.
+        if session.isBackgroundChat {
+            guard let shortID = session.backgroundShortID, !shortID.isEmpty else {
+                throw AgentCommandError.missingBackgroundShortID(session.title)
+            }
+            var arguments: [String] = ["attach"]
+            // User-defined extras zuerst, falls jemand z. B. `--verbose` will.
+            arguments.append(contentsOf: extraArgumentsResolver(.claude))
+            arguments.append(shortID)
+            return AgentLaunchCommand(
+                executablePath: executable,
+                arguments: arguments,
+                workingDirectory: project.path,
+                // Attach landet in einer normalen Claude-Chat-Session, also
+                // selbes Keyboard-Profil wie ein interaktiver `.chat`.
+                keyboardProfile: .claudeCodeChat
+            )
+        }
+
         var arguments: [String] = []
         // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
         // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.
@@ -198,6 +225,32 @@ struct AgentCommandBuilder {
             workingDirectory: project.path,
             keyboardProfile: .claudeCodeChat
         )
+    }
+
+    /// Baut die Argv fuer einen `claude --bg`-Spawn-Subprocess. Wird vom
+    /// `BackgroundAgentSpawner` benutzt — der Spawn selbst ist *kein*
+    /// PTY-Launch, sondern ein einmaliger Subprocess der die Short-ID
+    /// auf stdout druckt und dann beendet. Wir bauen die Args trotzdem
+    /// hier zentral, damit Spawn und Attach in derselben Code-Linie liegen.
+    ///
+    /// Reihenfolge: `--bg` muss vor dem Prompt stehen; `--agent` und
+    /// `--permission-mode` sind optionale Flags vor dem Prompt.
+    static func backgroundSpawnArguments(
+        initialPrompt: String,
+        subAgent: String? = nil,
+        permissionMode: String? = nil,
+        extraArguments: [String] = []
+    ) -> [String] {
+        var args: [String] = ["--bg"]
+        if let agent = subAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !agent.isEmpty {
+            args.append(contentsOf: ["--agent", agent])
+        }
+        if let mode = permissionMode?.trimmingCharacters(in: .whitespacesAndNewlines), !mode.isEmpty {
+            args.append(contentsOf: ["--permission-mode", mode])
+        }
+        args.append(contentsOf: extraArguments)
+        args.append(initialPrompt)
+        return args
     }
 
     static func commandPath(_ command: String) -> String? {

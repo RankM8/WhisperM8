@@ -116,6 +116,141 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertTrue(decoded.isAgentView)
     }
 
+    // MARK: - Background-Agent (Phase 1)
+
+    func testAgentCommandBuilderProducesAttachCommandForBackgroundChat() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "BG",
+            kind: .backgroundChat,
+            backgroundShortID: "7c5dcf5d"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.executablePath, "/usr/local/bin/claude")
+        // claude attach <shortID> — keine --bg/--agent/--resume.
+        XCTAssertEqual(command.arguments, ["attach", "7c5dcf5d"])
+        XCTAssertFalse(command.arguments.contains("--bg"))
+        XCTAssertFalse(command.arguments.contains("--resume"))
+        XCTAssertFalse(command.arguments.contains("--session-id"))
+        XCTAssertEqual(command.keyboardProfile, .claudeCodeChat)
+    }
+
+    func testAgentCommandBuilderRefusesAttachForBackgroundChatWithoutShortID() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Pending BG",
+            kind: .backgroundChat,
+            backgroundShortID: nil
+        )
+
+        XCTAssertThrowsError(try builder.command(for: session, project: project)) { error in
+            guard let cmdErr = error as? AgentCommandError else {
+                return XCTFail("expected AgentCommandError, got \(error)")
+            }
+            if case .missingBackgroundShortID = cmdErr {
+                // ok
+            } else {
+                XCTFail("expected missingBackgroundShortID, got \(cmdErr)")
+            }
+        }
+    }
+
+    func testBackgroundSpawnArgumentsBuildsMinimalArgs() {
+        let args = AgentCommandBuilder.backgroundSpawnArguments(
+            initialPrompt: "investigate flaky test"
+        )
+        XCTAssertEqual(args, ["--bg", "investigate flaky test"])
+    }
+
+    func testBackgroundSpawnArgumentsIncludesAgentAndPermissionMode() {
+        let args = AgentCommandBuilder.backgroundSpawnArguments(
+            initialPrompt: "review pr",
+            subAgent: "code-reviewer",
+            permissionMode: "acceptEdits"
+        )
+        XCTAssertEqual(args, [
+            "--bg",
+            "--agent", "code-reviewer",
+            "--permission-mode", "acceptEdits",
+            "review pr"
+        ])
+    }
+
+    func testBackgroundSpawnArgumentsPrependsExtraArgumentsBeforePrompt() {
+        let args = AgentCommandBuilder.backgroundSpawnArguments(
+            initialPrompt: "do stuff",
+            extraArguments: ["--verbose", "--effort", "high"]
+        )
+        XCTAssertEqual(args, ["--bg", "--verbose", "--effort", "high", "do stuff"])
+    }
+
+    func testBackgroundSpawnArgumentsTrimsAndIgnoresEmptyAgentAndMode() {
+        let args = AgentCommandBuilder.backgroundSpawnArguments(
+            initialPrompt: "x",
+            subAgent: "   ",
+            permissionMode: ""
+        )
+        XCTAssertEqual(args, ["--bg", "x"])
+    }
+
+    func testAgentSessionBackgroundFieldsRoundTripViaJSON() throws {
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: UUID(),
+            title: "BG",
+            kind: .backgroundChat,
+            backgroundShortID: "abc123",
+            backgroundSubAgent: "code-reviewer",
+            backgroundPermissionMode: "acceptEdits"
+        )
+        let data = try JSONEncoder().encode(session)
+        let decoded = try JSONDecoder().decode(AgentChatSession.self, from: data)
+        XCTAssertEqual(decoded.kind, .backgroundChat)
+        XCTAssertTrue(decoded.isBackgroundChat)
+        XCTAssertEqual(decoded.backgroundShortID, "abc123")
+        XCTAssertEqual(decoded.backgroundSubAgent, "code-reviewer")
+        XCTAssertEqual(decoded.backgroundPermissionMode, "acceptEdits")
+        XCTAssertTrue(decoded.hasBackgroundShortID)
+    }
+
+    func testAgentSessionLegacyJSONHasNilBackgroundFields() throws {
+        let id = UUID()
+        let projectID = UUID()
+        let json = """
+        {
+          "id":"\(id.uuidString)",
+          "provider":"claude",
+          "projectID":"\(projectID.uuidString)",
+          "title":"Legacy",
+          "model":"x",
+          "reasoningEffort":"medium",
+          "status":"pending",
+          "imagePaths":[],
+          "hasLaunchedInitialPrompt":false,
+          "createdAt":"2026-01-01T00:00:00Z",
+          "lastActivityAt":"2026-01-01T00:00:00Z"
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let session = try decoder.decode(AgentChatSession.self, from: json.data(using: .utf8)!)
+        XCTAssertNil(session.backgroundShortID)
+        XCTAssertNil(session.backgroundSubAgent)
+        XCTAssertNil(session.backgroundPermissionMode)
+        XCTAssertFalse(session.hasBackgroundShortID)
+        XCTAssertFalse(session.isBackgroundChat)
+    }
+
     func testAgentSessionKindLegacyJSONDefaultsToChat() throws {
         // Eine Legacy-Session-JSON ohne kind-Feld muss als .chat dekodiert
         // werden (decodeIfPresent ist Schema-evolution-friendly).

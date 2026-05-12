@@ -338,7 +338,10 @@ struct AgentSessionStore {
         imagePaths: [String] = [],
         shouldLaunchOnOpen: Bool = false,
         createdManually: Bool = true,
-        kind: AgentSessionKind? = nil
+        kind: AgentSessionKind? = nil,
+        backgroundShortID: String? = nil,
+        backgroundSubAgent: String? = nil,
+        backgroundPermissionMode: String? = nil
     ) throws -> AgentChatSession {
         let project = try upsertProject(path: projectPath, createdManually: createdManually)
         let session = AgentChatSession(
@@ -352,9 +355,32 @@ struct AgentSessionStore {
             imagePaths: imagePaths,
             shouldLaunchOnOpen: shouldLaunchOnOpen,
             createdManually: createdManually ? true : nil,
-            kind: kind
+            kind: kind,
+            backgroundShortID: backgroundShortID,
+            backgroundSubAgent: backgroundSubAgent,
+            backgroundPermissionMode: backgroundPermissionMode
         )
         return try upsertSession(session)
+    }
+
+    /// Setzt die vom Supervisor zurueckgegebene Short-ID nachtraeglich auf
+    /// eine `.backgroundChat`-Session. Wird vom Spawn-Flow benutzt, sobald
+    /// `BackgroundAgentSpawner.spawn(...)` zurueckkehrt — vorher existiert
+    /// die ID nicht.
+    func setBackgroundShortID(localSessionID: UUID, shortID: String) throws {
+        try mutateWorkspaceIfChanged { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
+                return false
+            }
+            let trimmed = shortID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return false }
+            if workspace.sessions[index].backgroundShortID == trimmed {
+                return false
+            }
+            workspace.sessions[index].backgroundShortID = trimmed
+            workspace.sessions[index].lastActivityAt = Date()
+            return true
+        }
     }
 
     @discardableResult
