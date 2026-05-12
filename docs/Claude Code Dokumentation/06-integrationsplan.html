@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<title>WhisperM8 · Agent-View-Integration · UI/UX-Plan</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --bg: #0e1117;
+    --panel: #151b24;
+    --panel-2: #1a2230;
+    --border: #232c3b;
+    --border-strong: #2f3a4d;
+    --text: #e6edf3;
+    --text-dim: #8b96a8;
+    --text-faint: #5b6577;
+    --accent: #FF9F0A;
+    --accent-soft: rgba(255,159,10,0.14);
+    --claude: #FF9F0A;
+    --codex: #32D74B;
+    --bg-pill: #6366f1;
+    --green: #32D74B;
+    --yellow: #FFD60A;
+    --red: #FF453A;
+    --grey: #6b7280;
+    --blue: #0A84FF;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; line-height: 1.55; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 40px 120px; }
+
+  /* Typography */
+  h1 { font-size: 38px; margin: 0 0 8px; letter-spacing: -0.02em; font-weight: 700; }
+  h2 { font-size: 24px; margin: 56px 0 18px; letter-spacing: -0.01em; font-weight: 600; }
+  h2 .num { display: inline-block; width: 32px; height: 32px; line-height: 32px; text-align: center; background: var(--accent-soft); color: var(--accent); border-radius: 8px; font-size: 15px; margin-right: 12px; vertical-align: middle; font-weight: 700; }
+  h3 { font-size: 16px; margin: 26px 0 10px; letter-spacing: -0.005em; color: var(--text); font-weight: 600; }
+  p { color: var(--text-dim); margin: 0 0 14px; }
+  .lead { color: var(--text); font-size: 17px; max-width: 720px; }
+  code { font-family: var(--mono); background: var(--panel); padding: 1px 6px; border-radius: 4px; font-size: 0.9em; color: var(--accent); border: 1px solid var(--border); }
+  strong { color: var(--text); font-weight: 600; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Header */
+  .hero { padding: 32px; border: 1px solid var(--border); border-radius: 16px; background: linear-gradient(135deg, rgba(255,159,10,0.06), rgba(99,102,241,0.04)); margin-bottom: 8px; }
+  .hero .meta { color: var(--text-faint); font-size: 13px; margin-bottom: 14px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .hero .pitch { color: var(--text-dim); font-size: 17px; max-width: 760px; }
+
+  /* Pills */
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+  .pill { background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 12px; color: var(--text-dim); }
+  .pill.accent { background: var(--accent-soft); color: var(--accent); border-color: rgba(255,159,10,0.3); }
+
+  /* Phase Cards */
+  .phases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 28px 0 8px; }
+  .phase { padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; position: relative; }
+  .phase .num { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .phase .title { font-size: 14px; font-weight: 600; margin: 4px 0 6px; }
+  .phase .desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .phase .effort { position: absolute; top: 14px; right: 14px; font-size: 10px; color: var(--text-faint); }
+
+  /* Mockup container */
+  .mockup { border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden; background: var(--panel); margin: 18px 0 30px; box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+  .mockup .caption { padding: 10px 16px; background: var(--panel-2); border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .mockup .caption .badge { background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+
+  /* macOS window chrome */
+  .win { background: #11161e; }
+  .win .titlebar { height: 34px; background: linear-gradient(180deg, #1c232f, #151b24); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+  .win .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .win .dot.r { background: #ff5f57; }
+  .win .dot.y { background: #febc2e; }
+  .win .dot.g { background: #28c840; }
+  .win .title { color: var(--text-faint); font-size: 12px; margin-left: 8px; }
+  .win .titlebar-right { margin-left: auto; display: flex; gap: 6px; }
+  .win .tb-btn { width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-faint); font-size: 11px; background: transparent; border: 1px solid transparent; }
+  .win .tb-btn:hover { background: var(--panel-2); }
+
+  /* App layout */
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 540px; }
+  .sidebar { background: #0d1219; border-right: 1px solid var(--border); padding: 12px 0; overflow: hidden; }
+  .sidebar .group { padding: 6px 14px 6px; color: var(--text-faint); text-transform: uppercase; font-size: 10px; letter-spacing: 0.08em; }
+  .sidebar .cmds { padding: 0 8px; margin-bottom: 6px; }
+  .sidebar .row { padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
+  .sidebar .row.active { background: rgba(255,159,10,0.12); color: var(--accent); }
+  .sidebar .row:hover { background: var(--panel); color: var(--text); }
+  .sidebar .icon { width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; }
+  .sidebar .proj { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: 12px; color: var(--text); font-weight: 500; }
+  .sidebar .proj-color { width: 8px; height: 8px; border-radius: 2px; }
+  .sidebar .sessions { margin: 0 8px 8px; }
+  .sidebar .ses { display: flex; align-items: center; gap: 8px; padding: 6px 18px 6px 22px; border-radius: 6px; font-size: 12px; color: var(--text-dim); position: relative; cursor: pointer; }
+  .sidebar .ses:hover { background: var(--panel); color: var(--text); }
+  .sidebar .ses.sel { background: rgba(255,159,10,0.10); color: var(--text); border-left: 2px solid var(--accent); padding-left: 20px; }
+  .sidebar .ses .state { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sidebar .ses .state.working { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .sidebar .ses .state.needs { background: var(--yellow); animation: pulse 1s ease-in-out infinite; }
+  .sidebar .ses .state.idle { background: var(--grey); }
+  .sidebar .ses .state.done { background: var(--green); }
+  .sidebar .ses .state.fail { background: var(--red); }
+  .sidebar .ses .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar .ses .pill-bg { background: rgba(99,102,241,0.18); color: #a5b4fc; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; letter-spacing: 0.04em; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* Main area */
+  .main { display: flex; flex-direction: column; background: #11161e; }
+  .tabs { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); gap: 4px; background: #11161e; }
+  .tab { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 12px; color: var(--text-dim); cursor: pointer; border: 1px solid transparent; }
+  .tab.active { background: var(--panel); color: var(--text); border-color: var(--border-strong); }
+  .tab .tab-state { width: 6px; height: 6px; border-radius: 50%; }
+  .tab .x { color: var(--text-faint); font-size: 14px; margin-left: 4px; }
+  .tabs .plus { margin-left: auto; width: 24px; height: 24px; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); color: var(--text-dim); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
+  /* Content area */
+  .content { flex: 1; padding: 22px 24px; overflow: hidden; }
+
+  /* Status bar of running session */
+  .session-head { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .session-head .ses-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .session-head .ses-sub { color: var(--text-faint); font-size: 12px; }
+  .session-head .status-chip { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
+  .chip-working { background: rgba(255,159,10,0.15); color: var(--accent); }
+  .chip-needs { background: rgba(255,214,10,0.15); color: var(--yellow); }
+  .chip-done { background: rgba(50,215,75,0.15); color: var(--green); }
+  .chip-idle { background: rgba(139,150,168,0.15); color: var(--text-dim); }
+  .session-head .actions { margin-left: auto; display: flex; gap: 6px; }
+  .session-head .btn { font-size: 11px; padding: 4px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; color: var(--text-dim); cursor: pointer; }
+  .session-head .btn:hover { background: var(--panel); color: var(--text); }
+  .session-head .btn.primary { background: var(--accent-soft); color: var(--accent); border-color: rgba(255,159,10,0.3); }
+  .session-head .btn.danger { color: var(--red); }
+
+  /* Terminal/transcript */
+  .terminal { background: #0a0f17; border-radius: 8px; padding: 14px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.6; color: #d0d8e0; min-height: 280px; border: 1px solid var(--border); }
+  .terminal .prompt { color: var(--green); }
+  .terminal .user { color: var(--blue); }
+  .terminal .tool { color: var(--accent); }
+  .terminal .ok { color: var(--green); }
+  .terminal .dim { color: var(--text-faint); }
+  .terminal .needs { background: rgba(255,214,10,0.08); border-left: 2px solid var(--yellow); padding: 6px 10px; margin: 8px 0; border-radius: 4px; }
+
+  /* Inline approval */
+  .approval-card { background: rgba(255,214,10,0.06); border: 1px solid rgba(255,214,10,0.25); border-radius: 10px; padding: 14px; margin: 14px 0; }
+  .approval-card .ah { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--yellow); font-weight: 600; margin-bottom: 8px; }
+  .approval-card .acmd { font-family: var(--mono); font-size: 12px; background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: 6px; color: #f3e8a3; margin-bottom: 10px; }
+  .approval-card .arow { display: flex; gap: 8px; }
+  .approval-card .abtn { font-size: 12px; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); cursor: pointer; font-weight: 500; }
+  .approval-card .abtn.ok { background: rgba(50,215,75,0.15); border-color: rgba(50,215,75,0.35); color: var(--green); }
+  .approval-card .abtn.no { background: rgba(255,69,58,0.10); border-color: rgba(255,69,58,0.3); color: var(--red); }
+
+  /* Voice overlay */
+  .voice-overlay { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px 20px; background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(255,159,10,0.08)); border: 1px solid rgba(99,102,241,0.25); border-radius: 12px; margin: 14px 0; }
+  .voice-overlay .mic { width: 44px; height: 44px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; box-shadow: 0 0 0 6px rgba(255,159,10,0.18); animation: micpulse 1.2s ease-in-out infinite; }
+  @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 6px rgba(255,159,10,0.18); } 50% { box-shadow: 0 0 0 12px rgba(255,159,10,0.08); } }
+  .voice-overlay .vlabel { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 3px; }
+  .voice-overlay .vtext { font-size: 14px; color: var(--text); }
+  .voice-overlay .vmode { margin-left: auto; padding: 6px 12px; background: rgba(99,102,241,0.18); border-radius: 6px; font-size: 11px; color: #a5b4fc; font-weight: 600; }
+
+  /* Dispatch modal */
+  .modal { background: var(--panel); border: 1px solid var(--border-strong); border-radius: 12px; padding: 20px; max-width: 540px; margin: 14px auto; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+  .modal h3 { margin-top: 0; }
+  .modal .field { margin-bottom: 14px; }
+  .modal .field label { font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .modal .field .input { background: #0a0f17; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 13px; color: var(--text); min-height: 70px; font-family: var(--sans); }
+  .modal .field .input.small { min-height: auto; }
+  .modal .agent-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+  .modal .agent { padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+  .modal .agent:hover { border-color: var(--accent); }
+  .modal .agent.sel { background: var(--accent-soft); border-color: var(--accent); }
+  .modal .agent .an { font-size: 12px; color: var(--text); font-weight: 600; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+  .modal .agent .ad { font-size: 10px; color: var(--text-faint); line-height: 1.4; }
+  .modal .agent .color { width: 7px; height: 7px; border-radius: 50%; }
+  .modal .row { display: flex; gap: 12px; align-items: center; }
+  .modal .footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .modal .btn { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim); font-size: 12px; cursor: pointer; }
+  .modal .btn.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+
+  /* Overview table */
+  .ovw-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+  .ovw-table thead th { padding: 10px 12px; background: var(--panel-2); color: var(--text-faint); text-align: left; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+  .ovw-table td { padding: 12px; border-bottom: 1px solid var(--border); }
+  .ovw-table tr:hover td { background: rgba(255,159,10,0.04); }
+  .ovw-table .ses-name { color: var(--text); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .ovw-table .one-liner { color: var(--text-dim); }
+  .ovw-table .meta { color: var(--text-faint); font-size: 11px; }
+  .ovw-table .pr-link { color: var(--accent); }
+  .ovw-table .action-grp { display: flex; gap: 4px; }
+  .ovw-table .iconbtn { width: 22px; height: 22px; border-radius: 4px; background: var(--panel); border: 1px solid var(--border); color: var(--text-faint); display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; }
+
+  /* Filter bar */
+  .filterbar { display: flex; gap: 8px; align-items: center; padding: 8px 0 14px; }
+  .filterbar .fil { padding: 4px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--text-dim); }
+  .filterbar .fil.active { background: var(--accent-soft); color: var(--accent); border-color: rgba(255,159,10,0.3); }
+  .filterbar .search { flex: 1; max-width: 240px; background: #0a0f17; border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 12px; color: var(--text-dim); }
+
+  /* Side info boxes */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+  .info { padding: 14px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  .info .it { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .info .iv { color: var(--text); font-size: 13px; }
+  .info ul { padding-left: 18px; margin: 6px 0; color: var(--text-dim); font-size: 12px; }
+  .info ul li { margin: 3px 0; }
+
+  /* Feature list */
+  .feat { padding: 14px 18px; border-left: 3px solid var(--accent); background: rgba(255,159,10,0.04); border-radius: 0 8px 8px 0; margin: 8px 0; }
+  .feat .ft { color: var(--text); font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .feat .fd { color: var(--text-dim); font-size: 13px; }
+
+  /* Risks table */
+  .risks { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .risks th { text-align: left; padding: 10px 12px; background: var(--panel-2); color: var(--text-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+  .risks td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .risks td:first-child { color: var(--text); font-weight: 500; width: 35%; }
+  .risks td:last-child { color: var(--text-dim); }
+
+  /* Toast */
+  .toast { display: inline-flex; align-items: center; gap: 10px; background: #111722; border: 1px solid var(--border-strong); border-radius: 10px; padding: 10px 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); font-size: 12px; color: var(--text); }
+  .toast .ico { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+
+  /* Footer */
+  .foot { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="meta">WhisperM8 · Agent View Integration · Rev. 2026-05-12</div>
+    <h1>Hintergrund-Agents als native WhisperM8-Erfahrung</h1>
+    <p class="pitch">Hybrid-Strategie: Wir bauen auf <code>claude --bg</code> + <code>attach</code> + <code>logs</code> + <code>hooks</code> auf — alles offiziell stabile Schnittstellen. Anthropics Agent-View-TUI bleibt als Fallback, die echte UX-Tiefe entsteht in unserer App: native Tabs, Sidebar-Status, Voice-Dispatch, Inline-Approvals und ein eigenes Multi-Session-Dashboard.</p>
+    <div class="pills">
+      <span class="pill accent">Strategie 🅒 · Hybrid</span>
+      <span class="pill">Aufwand ≈ 4–6 Wochen</span>
+      <span class="pill">Min. Claude Code v2.1.139</span>
+      <span class="pill">Provider: Claude (Codex skipped — kein --bg)</span>
+    </div>
+  </header>
+
+  <h2><span class="num">①</span>Phasenplan auf einen Blick</h2>
+  <div class="phases">
+    <div class="phase">
+      <div class="effort">~3 d</div>
+      <div class="num">Phase 1</div>
+      <div class="title">Plumbing</div>
+      <div class="desc"><code>.backgroundChat</code>-Kind, Spawn/Attach im Command-Builder, Short-ID persistieren</div>
+    </div>
+    <div class="phase">
+      <div class="effort">~5 d</div>
+      <div class="num">Phase 2</div>
+      <div class="title">Dispatch + UI</div>
+      <div class="desc">"+"-Menu, Dispatch-Modal, BG-Tabs mit Status in der Sidebar</div>
+    </div>
+    <div class="phase">
+      <div class="effort">~3 d</div>
+      <div class="num">Phase 3</div>
+      <div class="title">Lifecycle</div>
+      <div class="desc">Stop/Respawn/RM, Logs-Preview, Worktree-Aktionen</div>
+    </div>
+    <div class="phase">
+      <div class="effort">~2 d</div>
+      <div class="num">Phase 4</div>
+      <div class="title">Hook-Bridge ➤</div>
+      <div class="desc">PreToolUse + Notification + Stop für Live-Status und Inline-Approvals</div>
+    </div>
+    <div class="phase">
+      <div class="effort">~1 wk</div>
+      <div class="num">Phase 5</div>
+      <div class="title">Polish + Voice</div>
+      <div class="desc">Voice-Dispatch, Übersichts-Panel, PR-Awareness, Sub-Agent-Library</div>
+    </div>
+  </div>
+
+  <!-- ============= UI MOCKUP 1 ============= -->
+  <h2><span class="num">②</span>Hauptansicht — Sidebar mit Hintergrund-Agents</h2>
+  <p>Die Sidebar zeigt Hintergrund-Agents als eigene Sektion pro Projekt. Statusfarben matchen Anthropics Konvention (Working/Needs/Idle/Done/Failed) — der animierte Pulse signalisiert Aktivität, das <span class="pill" style="background:rgba(99,102,241,0.18);color:#a5b4fc;border-color:transparent;font-size:10px;padding:2px 6px">BG</span>-Pill zeigt, dass es ein Background-Agent ist (nicht eine angeheftete interaktive Session).</p>
+
+  <div class="mockup">
+    <div class="caption"><span>WhisperM8 · Agent Chats</span><span class="badge">Phase 2 Mockup</span></div>
+    <div class="win">
+      <div class="titlebar">
+        <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        <div class="title">whisperm8 · feature-auth</div>
+        <div class="titlebar-right">
+          <div class="tb-btn">⌘</div>
+          <div class="tb-btn">⚙</div>
+        </div>
+      </div>
+      <div class="app">
+        <div class="sidebar">
+          <div class="cmds">
+            <div class="row active"><span class="icon">＋</span> Neuer Chat</div>
+            <div class="row"><span class="icon">🎙</span> Sprachbefehl an Agent</div>
+            <div class="row"><span class="icon">⟳</span> Aktualisieren</div>
+            <div class="row"><span class="icon">📁</span> Projekt hinzufügen</div>
+          </div>
+          <div style="border-top:1px solid var(--border); margin: 6px 0;"></div>
+
+          <div class="proj"><div class="proj-color" style="background:#0A84FF"></div> whisperm8</div>
+          <div class="sessions">
+            <div class="ses"><span class="state idle"></span><span class="label">Claude · Sidebar redesign</span></div>
+            <div class="ses sel"><span class="state working"></span><span class="label">Hook bridge expand</span><span class="pill-bg">BG</span></div>
+            <div class="ses"><span class="state needs"></span><span class="label">Auth refactor</span><span class="pill-bg">BG</span></div>
+            <div class="ses"><span class="state done"></span><span class="label">Audio ducking polish</span><span class="pill-bg">BG</span></div>
+            <div class="ses"><span class="state idle"></span><span class="label">Agent View · Anthropic TUI</span></div>
+          </div>
+
+          <div class="proj"><div class="proj-color" style="background:#32D74B"></div> dashboard-app</div>
+          <div class="sessions">
+            <div class="ses"><span class="state working"></span><span class="label">Migrate to TanStack</span><span class="pill-bg">BG</span></div>
+            <div class="ses"><span class="state fail"></span><span class="label">Flaky test triage</span><span class="pill-bg">BG</span></div>
+          </div>
+
+          <div class="proj"><div class="proj-color" style="background:#BF5AF2"></div> seo-engine</div>
+          <div class="sessions">
+            <div class="ses"><span class="state done"></span><span class="label">Schema markup audit</span><span class="pill-bg">BG</span></div>
+          </div>
+        </div>
+
+        <div class="main">
+          <div class="tabs">
+            <div class="tab"><span class="tab-state" style="background:var(--accent)"></span> Sidebar redesign</div>
+            <div class="tab active"><span class="tab-state" style="background:var(--accent);animation:pulse 1.4s infinite"></span> Hook bridge expand <span class="x">×</span></div>
+            <div class="tab"><span class="tab-state" style="background:var(--yellow)"></span> Auth refactor</div>
+            <div class="plus">＋</div>
+          </div>
+          <div class="content">
+            <div class="session-head">
+              <div>
+                <div class="ses-title">Hook bridge expand · <span class="ses-sub">whisperm8 / feature-auth</span></div>
+                <div class="ses-sub" style="margin-top:2px">claude · sonnet 4.6 · started 12 min ago · short ID <code style="padding:1px 4px;font-size:11px">7c5dcf5d</code></div>
+              </div>
+              <span class="status-chip chip-working">● Working</span>
+              <div class="actions">
+                <button class="btn">📋 Logs</button>
+                <button class="btn">⏸ Background</button>
+                <button class="btn primary">⏎ Attach</button>
+                <button class="btn danger">⏹ Stop</button>
+              </div>
+            </div>
+
+            <div class="terminal">
+<span class="user">› extend the ClaudeHookBridge to also handle PreToolUse and Notification events</span>
+<span class="dim">─────────────────────────────────────────────────────────────────────</span>
+
+I'll extend <span style="color:#ffd">ClaudeHookSettingsBuilder</span> to register hooks for <span class="tool">PreToolUse</span>
+and <span class="tool">Notification</span> events in addition to the existing SessionStart/End.
+
+<span class="tool">● Read</span> WhisperM8/Services/ClaudeHookSettingsBuilder.swift <span class="ok">(120 lines)</span>
+<span class="tool">● Grep</span> "matcher" in Services/ <span class="ok">(8 matches)</span>
+<span class="tool">● Edit</span> ClaudeHookSettingsBuilder.swift <span class="ok">+42 / -3</span>
+<span class="tool">● Write</span> Tests/WhisperM8Tests/ClaudeHookSettingsBuilderTests.swift
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= UI MOCKUP 2 — VOICE DISPATCH ============= -->
+  <h2><span class="num">③</span>Voice-Dispatch — der WhisperM8-Move</h2>
+  <p>Drückst du den globalen Hotkey, wenn kein Tab den Fokus hat, kannst du einen <strong>neuen Hintergrund-Agent direkt per Stimme spawnen</strong>. Der existierende Recording-Overlay bekommt einen zusätzlichen Modus <code>→ Background-Agent</code>; der Transkript-Text läuft in <code>claude --bg "&lt;text&gt;"</code> + optional <code>--agent &lt;name&gt;</code>. Toast bestätigt den Spawn, Sidebar zeigt die neue Row.</p>
+
+  <div class="mockup">
+    <div class="caption"><span>Recording Overlay · Background-Mode</span><span class="badge">Phase 5</span></div>
+    <div class="win">
+      <div class="titlebar">
+        <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        <div class="title">Aufnahme läuft… ⌃⇧Space</div>
+      </div>
+      <div style="padding: 28px 32px; background: linear-gradient(135deg, #0d1219, #11161e);">
+        <div class="voice-overlay">
+          <div class="mic">🎙</div>
+          <div style="flex:1">
+            <div class="vlabel">Aufnahme läuft</div>
+            <div class="vtext">"Untersuch mal warum der SettingsChangeDetector-Test in CI flaky ist, schreib einen Fix und mach einen PR"</div>
+          </div>
+          <div class="vmode">→ Background-Agent</div>
+        </div>
+        <div style="display:flex; gap: 10px; margin-top: 16px; align-items: center;">
+          <span style="font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em;">Modus wechseln:</span>
+          <span class="pill">↹ Paste in active app</span>
+          <span class="pill">↹ Append to active chat</span>
+          <span class="pill accent">↹ Background-Agent</span>
+        </div>
+        <div style="margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); display:flex; gap: 12px; align-items: center;">
+          <span style="font-size: 11px; color: var(--text-faint); text-transform: uppercase;">Sub-Agent:</span>
+          <span class="pill">none</span>
+          <span class="pill">@code-reviewer</span>
+          <span class="pill accent">@debug-pro</span>
+          <span class="pill">@docs-writer</span>
+          <span style="margin-left:auto; color: var(--text-faint); font-size: 11px;">⏎ Senden · ⎋ Abbrechen</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap: 16px; align-items: center; margin: 8px 0 30px;">
+    <div class="toast"><div class="ico">✓</div><div><strong>Background-Agent gestartet</strong> · 7c5dcf5d · @debug-pro · <span style="color:var(--text-faint)">in feature-auth</span></div></div>
+    <span style="color:var(--text-faint); font-size: 12px;">→ Erscheint als Sidebar-Row mit Working-Pulse</span>
+  </div>
+
+  <!-- ============= UI MOCKUP 3 — INLINE APPROVAL ============= -->
+  <h2><span class="num">④</span>Inline-Approvals — Hooks statt PTY</h2>
+  <p>Mit erweiterter Hook-Bridge (<code>PreToolUse</code> + <code>Notification</code>) lassen sich Permission-Prompts <strong>außerhalb des Terminals</strong> rendern. Sidebar zeigt gelbes Pulse, der Tab zeigt eine Approval-Karte, Cmd+Enter approved. Wir antworten via <code>--permission-prompt-tool</code> (MCP) oder per stdin-Bridge in den PTY.</p>
+
+  <div class="mockup">
+    <div class="caption"><span>Background-Agent · Needs Input</span><span class="badge">Phase 4</span></div>
+    <div class="win">
+      <div class="titlebar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="title">Auth refactor · Needs input</div></div>
+      <div style="padding: 22px 28px; background: #11161e;">
+        <div class="session-head" style="border-bottom: 1px solid var(--border); padding-bottom: 14px;">
+          <div>
+            <div class="ses-title">Auth refactor</div>
+            <div class="ses-sub">whisperm8 / feature-auth · waiting since 2 min</div>
+          </div>
+          <span class="status-chip chip-needs">⚠ Needs input</span>
+        </div>
+
+        <div class="approval-card">
+          <div class="ah">⚠ Tool-Approval erforderlich · Bash</div>
+          <div class="acmd">$ rm -rf node_modules &amp;&amp; npm install --force</div>
+          <div style="color: var(--text-dim); font-size: 12px; margin-bottom: 10px;">Claude möchte das Dependency-Setup neu aufsetzen, um den lockfile-conflict aufzulösen. Befehl ist nicht in deiner Allow-Liste.</div>
+          <div class="arow">
+            <button class="abtn ok">✓ Approve (⌘⏎)</button>
+            <button class="abtn">▶ Approve once</button>
+            <button class="abtn no">✗ Deny (⌘⌫)</button>
+            <button class="abtn" style="margin-left:auto">⚙ Add to allow-list…</button>
+          </div>
+        </div>
+
+        <div class="terminal" style="margin-top: 8px;">
+<span class="dim">…earlier output omitted…</span>
+<span class="tool">● Bash</span> npm ci <span style="color: var(--red)">FAILED</span>
+<span class="dim">npm ERR! lockfile-conflict in package-lock.json</span>
+<span class="dim">retrying with cleanup approach…</span>
+<div class="needs">⏸ Awaiting user decision on rm -rf node_modules</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= UI MOCKUP 4 — DASHBOARD ============= -->
+  <h2><span class="num">⑤</span>Übersicht-Panel — projektübergreifend</h2>
+  <p>Ein zusätzlicher Top-Level-Reiter <strong>"Alle Agents"</strong> zeigt alle Background-Sessions projektübergreifend in einer macOS-Tabelle. Filter wie in Anthropics TUI (<code>s:blocked</code>, <code>a:&lt;agent&gt;</code>, <code>#PR</code>), aber mit Maus, Cmd+Klick, Multi-Selection und Bulk-Aktionen. Das ist unser Ersatz für die TUI — nativ.</p>
+
+  <div class="mockup">
+    <div class="caption"><span>Alle Hintergrund-Agents · projektübergreifend</span><span class="badge">Phase 5</span></div>
+    <div class="win">
+      <div class="titlebar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="title">WhisperM8 · Alle Agents (7)</div></div>
+      <div style="padding: 18px 24px;">
+        <div class="filterbar">
+          <input class="search" value="🔍 Filter…" />
+          <span class="fil active">Alle (7)</span>
+          <span class="fil">Working (3)</span>
+          <span class="fil">Needs Input (1)</span>
+          <span class="fil">Done (2)</span>
+          <span class="fil">Failed (1)</span>
+          <span style="flex:1"></span>
+          <span class="fil">Group: State ▾</span>
+        </div>
+
+        <table class="ovw-table">
+          <thead><tr>
+            <th>Name</th><th>Projekt</th><th>Status</th><th>Aktivität</th><th>One-Liner</th><th>PR</th><th>Aktionen</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td><div class="ses-name"><span class="state working" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span> Hook bridge expand</div></td>
+              <td class="meta">whisperm8</td>
+              <td><span class="status-chip chip-working">Working</span></td>
+              <td class="meta">2 min</td>
+              <td class="one-liner">Edit ClaudeHookSettingsBuilder.swift</td>
+              <td class="meta">—</td>
+              <td><div class="action-grp"><span class="iconbtn">⏎</span><span class="iconbtn">⏸</span><span class="iconbtn">⏹</span></div></td>
+            </tr>
+            <tr>
+              <td><div class="ses-name"><span class="state needs" style="width:8px;height:8px;border-radius:50%;background:var(--yellow)"></span> Auth refactor</div></td>
+              <td class="meta">whisperm8</td>
+              <td><span class="status-chip chip-needs">Needs Input</span></td>
+              <td class="meta">12 min</td>
+              <td class="one-liner">needs input: approve rm -rf node_modules?</td>
+              <td class="meta">—</td>
+              <td><div class="action-grp"><span class="iconbtn">⏎</span><span class="iconbtn">⏸</span><span class="iconbtn">⏹</span></div></td>
+            </tr>
+            <tr>
+              <td><div class="ses-name"><span class="state working" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span> Migrate to TanStack</div></td>
+              <td class="meta">dashboard-app</td>
+              <td><span class="status-chip chip-working">Working</span></td>
+              <td class="meta">4 min</td>
+              <td class="one-liner">Write src/router/index.tsx</td>
+              <td class="meta">—</td>
+              <td><div class="action-grp"><span class="iconbtn">⏎</span><span class="iconbtn">⏸</span><span class="iconbtn">⏹</span></div></td>
+            </tr>
+            <tr>
+              <td><div class="ses-name"><span class="state working" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span> SettingsChangeDetector flaky fix</div></td>
+              <td class="meta">whisperm8</td>
+              <td><span class="status-chip chip-working">Working</span></td>
+              <td class="meta">23 s</td>
+              <td class="one-liner">Run tests in retry loop · 3/10 passed</td>
+              <td class="meta">—</td>
+              <td><div class="action-grp"><span class="iconbtn">⏎</span><span class="iconbtn">⏸</span><span class="iconbtn">⏹</span></div></td>
+            </tr>
+            <tr>
+              <td><div class="ses-name"><span class="state done" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span> Audio ducking polish</div></td>
+              <td class="meta">whisperm8</td>
+              <td><span class="status-chip chip-done">Done</span></td>
+              <td class="meta">42 min</td>
+              <td class="one-liner">result: PR opened with 4 commits</td>
+              <td><span class="pr-link">#412 ✓</span></td>
+              <td><div class="action-grp"><span class="iconbtn">⏎</span><span class="iconbtn">🗑</span></div></td>
+            </tr>
+            <tr>
+              <td><div class="ses-name"><span class="state done" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span> Schema markup audit</div></td>
+              <td class="meta">seo-engine</td>
+              <td><span class="status-chip chip-done">Done</span></td>
+              <td class="meta">2 h</td>
+              <td class="one-liner">result: 12 issues found, report.md generated</td>
+              <td class="meta">—</td>
+              <td><div class="action-grp"><span class="iconbtn">⏎</span><span class="iconbtn">🗑</span></div></td>
+            </tr>
+            <tr>
+              <td><div class="ses-name"><span class="state fail" style="width:8px;height:8px;border-radius:50%;background:var(--red)"></span> Flaky test triage</div></td>
+              <td class="meta">dashboard-app</td>
+              <td><span class="status-chip" style="background:rgba(255,69,58,0.15);color:var(--red)">Failed</span></td>
+              <td class="meta">5 min</td>
+              <td class="one-liner">Bash failure: command not found: pnpm</td>
+              <td class="meta">—</td>
+              <td><div class="action-grp"><span class="iconbtn">↻</span><span class="iconbtn">⏎</span><span class="iconbtn">🗑</span></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= UI MOCKUP 5 — DISPATCH MODAL ============= -->
+  <h2><span class="num">⑥</span>Dispatch-Modal — Sub-Agent &amp; Permission-Mode wählen</h2>
+  <p>"+"-Button → modaler Dialog. Statt <code>@code-reviewer …</code> tippen zu müssen, sieht der User die <strong>Sub-Agent-Library</strong> visuell. Frontmatter (<code>description</code>, <code>tools</code>, <code>color</code>) wird gelesen aus <code>~/.claude/agents/</code> + <code>.claude/agents/</code>.</p>
+
+  <div style="background: rgba(0,0,0,0.4); border-radius: 14px; padding: 40px 20px; border: 1px solid var(--border);">
+    <div class="modal">
+      <h3 style="display:flex;align-items:center;gap:10px;">📋 Neuer Hintergrund-Agent</h3>
+      <div class="field">
+        <label>Initialer Prompt</label>
+        <div class="input">untersuch mal warum der SettingsChangeDetector-Test in CI flaky ist, schreib einen Fix und mach einen PR</div>
+      </div>
+      <div class="row" style="margin-bottom: 14px;">
+        <div class="field" style="flex:1; margin-bottom: 0;">
+          <label>Projekt</label>
+          <div class="input small">whisperm8 · feature-auth</div>
+        </div>
+        <div class="field" style="flex:1; margin-bottom: 0;">
+          <label>Permission Mode</label>
+          <div class="input small">acceptEdits ▾</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Sub-Agent (optional)</label>
+        <div class="agent-grid">
+          <div class="agent">
+            <div class="an"><span class="color" style="background:#888"></span> none</div>
+            <div class="ad">Default Claude — keine Spezialisierung</div>
+          </div>
+          <div class="agent sel">
+            <div class="an"><span class="color" style="background:var(--red)"></span> debug-pro</div>
+            <div class="ad">Findet root causes in CI/test failures, ist defensiv mit destructive commands</div>
+          </div>
+          <div class="agent">
+            <div class="an"><span class="color" style="background:#64D2FF"></span> code-reviewer</div>
+            <div class="ad">Reviews PRs für Quality + Security, isolation: worktree</div>
+          </div>
+          <div class="agent">
+            <div class="an"><span class="color" style="background:#BF5AF2"></span> docs-writer</div>
+            <div class="ad">Schreibt + aktualisiert User-facing Doku, prüft Links</div>
+          </div>
+          <div class="agent">
+            <div class="an"><span class="color" style="background:var(--green)"></span> migrator</div>
+            <div class="ad">Mechanische Refactors über viele Files, batch-fähig</div>
+          </div>
+          <div class="agent">
+            <div class="an"><span class="color" style="background:var(--yellow)"></span> + neu…</div>
+            <div class="ad">Sub-Agent definieren (öffnet Editor)</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <button class="btn">Abbrechen</button>
+        <button class="btn primary">⌘⏎ Hintergrund-Agent starten</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= IMPLEMENTATION DETAILS ============= -->
+  <h2><span class="num">⑦</span>Technische Bausteine pro Phase</h2>
+
+  <h3>Phase 1 · Plumbing</h3>
+  <div class="info-grid">
+    <div class="info">
+      <div class="it">Neue Modell-Felder</div>
+      <div class="iv"><code>AgentSessionKind.backgroundChat</code></div>
+      <ul>
+        <li><code>backgroundShortID: String?</code> auf <code>AgentChatSession</code></li>
+        <li><code>backgroundSubAgent: String?</code> (z. B. "debug-pro")</li>
+        <li><code>backgroundPermissionMode: String?</code></li>
+      </ul>
+    </div>
+    <div class="info">
+      <div class="it">Command-Builder-Erweiterung</div>
+      <div class="iv">Zwei neue Builder-Pfade in <code>AgentCommandBuilder</code></div>
+      <ul>
+        <li><strong>Spawn</strong>: <code>claude --bg [--agent X] [--permission-mode Y] "&lt;prompt&gt;"</code></li>
+        <li><strong>Attach</strong>: <code>claude attach &lt;shortID&gt;</code></li>
+        <li>Stdout-Parser für <code>"backgrounded · &lt;id&gt;"</code> mit defensivem Regex</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Phase 2 · Dispatch &amp; UI</h3>
+  <div class="info-grid">
+    <div class="info">
+      <div class="it">Neue Views</div>
+      <div class="iv">Dispatch-Modal &amp; Sidebar-BG-Badge</div>
+      <ul>
+        <li><code>BackgroundDispatchModal.swift</code> — modaler Dialog mit Prompt/Agent/Mode</li>
+        <li><code>AgentChatsSidebarViews.swift</code> erweitert um BG-Pill + Pulse-Indicator</li>
+        <li><code>AgentSessionDetailView.swift</code> für <code>.backgroundChat</code>-Pfad</li>
+      </ul>
+    </div>
+    <div class="info">
+      <div class="it">Top-Bar-Menu</div>
+      <div class="iv">Neuer Eintrag im "+"-Menü</div>
+      <ul>
+        <li>"Neuer Codex Chat"</li>
+        <li>"Neuer Claude Chat"</li>
+        <li>"Neuer Hintergrund-Agent…" (öffnet Modal)</li>
+        <li>"Anthropic Agent View (TUI)" — bleibt als Power-User-Option</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Phase 3 · Lifecycle</h3>
+  <div class="info-grid">
+    <div class="info">
+      <div class="it">Subprocess-Wrapper</div>
+      <div class="iv">Neues <code>BackgroundAgentControl.swift</code></div>
+      <ul>
+        <li><code>logs(shortID) -&gt; String</code> via <code>claude logs &lt;id&gt;</code></li>
+        <li><code>stop(shortID)</code> via <code>claude stop &lt;id&gt;</code></li>
+        <li><code>respawn(shortID)</code> via <code>claude respawn &lt;id&gt;</code></li>
+        <li><code>remove(shortID)</code> via <code>claude rm &lt;id&gt;</code> + lokal löschen</li>
+      </ul>
+    </div>
+    <div class="info">
+      <div class="it">Context-Menü</div>
+      <div class="iv">Right-Click auf Sidebar-Row</div>
+      <ul>
+        <li>Detach / Re-Attach / Logs / Stop / Respawn / Remove</li>
+        <li>Worktree-Pfad öffnen (Finder / VS Code / iTerm)</li>
+        <li>Branch in main mergen + Cleanup</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Phase 4 · Hook-Bridge expand</h3>
+  <div class="info-grid">
+    <div class="info">
+      <div class="it">Settings-Builder erweitern</div>
+      <div class="iv"><code>ClaudeHookSettingsBuilder.swift</code></div>
+      <ul>
+        <li>+ <code>PreToolUse</code> mit Matcher <code>".*"</code></li>
+        <li>+ <code>PostToolUse</code> mit Matcher <code>Edit|Write</code> (geänderte Files tracken)</li>
+        <li>+ <code>Notification</code> für Permission-Prompts</li>
+        <li>+ <code>Stop</code> / <code>StopFailure</code> für Result-Erkennung</li>
+      </ul>
+    </div>
+    <div class="info">
+      <div class="it">UI-Reaktionen</div>
+      <div class="iv">Event-driven UI updates</div>
+      <ul>
+        <li><code>Notification</code> → Sidebar-Yellow-Pulse + Approval-Card im Tab</li>
+        <li><code>PostToolUse</code> → "geänderte Files"-Liste pro Session</li>
+        <li><code>Stop</code> → Auto-Summary-Trigger + Toast</li>
+        <li><code>StopFailure</code> → Red-State + Error-Reason im Tab-Header</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Phase 5 · Polish + Voice</h3>
+  <div class="info-grid">
+    <div class="info">
+      <div class="it">Voice-Mode-Erweiterung</div>
+      <div class="iv">Neuer <code>OutputMode.backgroundAgent</code></div>
+      <ul>
+        <li>Recording-Overlay zeigt Modus-Switcher (Tab-Taste)</li>
+        <li>Beim Stop → <code>claude --bg "&lt;transcript&gt;"</code></li>
+        <li>Optional: Sub-Agent via gesprochenen Prefix ("@debug-pro …")</li>
+      </ul>
+    </div>
+    <div class="info">
+      <div class="it">Übersichts-Panel</div>
+      <div class="iv">Neuer Top-Level-Reiter "Alle Agents"</div>
+      <ul>
+        <li>Projektübergreifende Tabelle aller BG-Sessions</li>
+        <li>Filter <code>s:&lt;state&gt;</code>, <code>a:&lt;agent&gt;</code>, <code>#&lt;pr&gt;</code></li>
+        <li>Multi-Select + Bulk-Actions (Stop alle, Cleanup completed)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============= RISKS ============= -->
+  <h2><span class="num">⑧</span>Risiken &amp; Mitigations</h2>
+  <table class="risks">
+    <tr><th>Risiko</th><th>Mitigation</th></tr>
+    <tr>
+      <td>Stdout-Format von <code>claude --bg</code> ändert sich</td>
+      <td>Defensiver Regex, Fallback: <code>roster.json</code> vor/nach Spawn diffen — neue Short-ID = die mit höchster <code>created_at</code></td>
+    </tr>
+    <tr>
+      <td>Organisations-Policy <code>disableAgentView: true</code></td>
+      <td>Beim Onboarding <code>claude --bg --help</code> probe-checken; Feature-Flag, BG-Funktionen grayed out anzeigen mit Erklär-Tooltip</td>
+    </tr>
+    <tr>
+      <td><code>--permission-mode bypassPermissions</code> ohne Konsens blockiert</td>
+      <td>Onboarding-Step: einmal interaktiv durchführen lassen; danach in Settings persistent als "akzeptiert" markieren</td>
+    </tr>
+    <tr>
+      <td>User hat <code>CLAUDE_CONFIG_DIR</code> gesetzt</td>
+      <td>Bei jedem Indexer-Run die Env-Var lesen + Pfade dynamisch resolven</td>
+    </tr>
+    <tr>
+      <td>Permission-Approval via Sidebar reicht nicht in PTY-State zurück</td>
+      <td>Phase 4.1: Eigenes <code>permission-prompt-tool</code> MCP-Server bauen; oder per <code>claude attach</code> stdin-Bridge antworten</td>
+    </tr>
+    <tr>
+      <td>Auto-Update von Claude Code bricht eine Version</td>
+      <td><code>claude --version</code> bei Start parsen, Feature-Gate auf min. 2.1.139; Warning-Banner wenn unter Min-Version</td>
+    </tr>
+  </table>
+
+  <!-- ============= STRATEGIC OUTCOME ============= -->
+  <h2><span class="num">⑨</span>Was am Ende dasteht</h2>
+
+  <div class="feat">
+    <div class="ft">🎙 Voice-Driven Agent Orchestrator</div>
+    <div class="fd">"Sprich Tasks an, WhisperM8 dispatched sie als Background-Agents, kriegt Push-Toasts wenn einer Input braucht, mergst PRs mit Klick." Eine UX, die sonst niemand anbietet.</div>
+  </div>
+  <div class="feat">
+    <div class="ft">🖥 Native macOS-Alternative zur Anthropic-TUI</div>
+    <div class="fd">Vollständig in Swift gerenderte Multi-Session-Übersicht, mit Maus, Drag, Cmd+Klick, Right-Click, Multi-Select — alles, was die TUI nicht kann.</div>
+  </div>
+  <div class="feat">
+    <div class="ft">🪝 Hook-driven Live-Status ohne API</div>
+    <div class="fd">Anthropic gibt kein offizielles Read-API für Agent-View-State. Wir nutzen Hooks (offiziell, stabil, file-watch-basiert mit 0 % Idle-CPU) und sind unabhängig von Implementation-Details.</div>
+  </div>
+  <div class="feat">
+    <div class="ft">🔁 Sub-Agent-Library als visuelle Erfahrung</div>
+    <div class="fd">Sub-Agents werden zu first-class Citizens: erstellen, editieren, in Dispatch-Modal auswählen — der Sub-Agent-Layer von Claude Code wird in macOS sichtbar gemacht.</div>
+  </div>
+  <div class="feat">
+    <div class="ft">📦 Worktree-, Branch- &amp; PR-Awareness</div>
+    <div class="fd">Background-Agents arbeiten in <code>.claude/worktrees/</code>. WhisperM8 zeigt den Worktree, integriert "öffnen in IDE", PR-Status, "Mergen wenn grün". Das macht aus jedem Agent ein verschiffbares Ergebnis.</div>
+  </div>
+
+  <div class="foot">
+    <p>WhisperM8 · Agent View Integration Plan · Erstellt 2026-05-12 · Branch <code>worktree-claude-code-docs</code> · Commit basiert auf <code>main @ 87bf783</code>.</p>
+    <p>Querverweise: <a href="README.md">README</a> · <a href="01-agent-view.md">01 · Agent View</a> · <a href="03-hooks-sdk.md">03 · Hooks &amp; SDK</a> · <a href="05-beratung-optionen.md">05 · Beratung</a></p>
+  </div>
+
+</div>
+</body>
+</html>
