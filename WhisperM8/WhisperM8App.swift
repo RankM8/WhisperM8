@@ -117,6 +117,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             _ = AgentSessionRetentionService().prune(liveLocalSessionIDs: liveIDs)
         }
 
+        // Sessions-Scan automatisch: einmal direkt beim Launch, danach bei
+        // jeder Foreground-Reaktivierung (mit 30 s Cooldown). Der ScanCoordinator
+        // installiert seinen eigenen `didBecomeActive`-Observer.
+        AgentScanCoordinator.shared.installLifecycleHooks()
+        AgentScanCoordinator.shared.requestScan(reason: .launch)
+
         // Routing: Onboarding wenn nötig, sonst Agent-Chats als Default-Hub.
         // Settings ist nicht mehr die Default-Startansicht — es wird nur noch
         // explizit über Menubar oder Cmd+, geöffnet.

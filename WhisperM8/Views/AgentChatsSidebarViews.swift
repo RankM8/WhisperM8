@@ -17,6 +17,7 @@ struct ProjectChatGroup: View {
     var onSetColor: (UUID, String?) -> Void
     var isRunning: (UUID) -> Bool
     var runtimeStatus: (UUID) -> AgentSessionRuntimeStatus?
+    var isAutoRenaming: (UUID) -> Bool
     var onRenameProjectRequest: (AgentProject) -> Void
     var onSetProjectColor: (UUID, String) -> Void
     var onChooseProjectIcon: (AgentProject) -> Void
@@ -62,6 +63,7 @@ struct ProjectChatGroup: View {
             isSelected: selectedSessionID == session.id,
             isRunning: isRunning(session.id),
             runtimeStatus: runtimeStatus(session.id),
+            isAutoRenaming: isAutoRenaming(session.id),
             onSelect: { onSelectSession(session.id) },
             onClose: { onCloseSession(session) }
         )
@@ -228,6 +230,10 @@ struct SessionListButton: View {
     let isSelected: Bool
     let isRunning: Bool
     let runtimeStatus: AgentSessionRuntimeStatus?
+    /// `true` waehrend der AutoNamer fuer diese Session einen
+    /// `claude -p`-Subprocess laufen hat. UI zeigt Sparkles-Pulse statt
+    /// des normalen Status-Dots.
+    let isAutoRenaming: Bool
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -266,6 +272,10 @@ struct SessionListButton: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Smooth crossfade wenn der AutoNamer den Titel
+                        // austauscht — statt eines harten Pops.
+                        .contentTransition(.opacity)
+                        .animation(.easeInOut(duration: 0.3), value: session.title)
                         .help(session.title)
 
                     trailingIndicator
@@ -301,6 +311,22 @@ struct SessionListButton: View {
 
     @ViewBuilder
     private var statusIndicator: some View {
+        // Auto-Rename hat Vorrang ueber den Runtime-Status: der User soll
+        // wissen warum sich gleich der Titel aendert.
+        if isAutoRenaming {
+            Image(systemName: "sparkles")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.purple.opacity(pulsePhase ? 1.0 : 0.45))
+                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: pulsePhase)
+                .onAppear { pulsePhase = true }
+                .help("Titel wird automatisch generiert …")
+        } else {
+            statusDot
+        }
+    }
+
+    @ViewBuilder
+    private var statusDot: some View {
         let resolved = resolvedStatus
         switch resolved {
         case .working:

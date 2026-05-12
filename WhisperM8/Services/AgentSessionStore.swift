@@ -2,9 +2,11 @@ import Foundation
 
 struct AgentSessionStore {
     private let repository: AgentWorkspaceRepository
+    private let uiStateFileURL: URL
 
-    init(fileURL: URL? = nil) {
+    init(fileURL: URL? = nil, uiStateFileURL: URL? = nil) {
         self.repository = AgentWorkspaceRepository(fileURL: fileURL)
+        self.uiStateFileURL = uiStateFileURL ?? Self.defaultUIStateFileURL()
     }
 
     func loadWorkspace() -> AgentWorkspace {
@@ -13,6 +15,51 @@ struct AgentSessionStore {
 
     func saveWorkspace(_ workspace: AgentWorkspace) throws {
         try repository.save(workspace)
+    }
+
+    // MARK: - UI-State (Tab-Persistenz, Selection, Disclosure)
+
+    /// Pfad fuer das UI-State-Sidecar — neben der Workspace-JSON in
+    /// Application Support. Standalone-File damit Workspace-Schema-Aenderungen
+    /// + UI-State-Aenderungen unabhaengig versioniert werden koennen.
+    static func defaultUIStateFileURL() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("WhisperM8", isDirectory: true)
+            .appendingPathComponent("agent-ui-state.json")
+    }
+
+    /// Liest den UI-State von Disk. Bei fehlendem File: First-Load-Migration
+    /// aus dem aktuellen Workspace, damit die Sidebar nach Deployment nicht
+    /// ploetzlich leer ist. Garbage-Collection laeuft immer, auch bei
+    /// vorhandenem File — entfernt stale UUIDs.
+    func loadUIState() -> AgentUIState {
+        var state: AgentUIState
+        if FileManager.default.fileExists(atPath: uiStateFileURL.path) {
+            do {
+                let data = try Data(contentsOf: uiStateFileURL)
+                state = try JSONDecoder().decode(AgentUIState.self, from: data)
+            } catch {
+                Logger.debug("AgentUIState load failed: \(error.localizedDescription) — falling back to first-load migration")
+                state = AgentUIState.initialMigration(from: loadWorkspace())
+            }
+        } else {
+            state = AgentUIState.initialMigration(from: loadWorkspace())
+        }
+        state.prune(workspace: loadWorkspace())
+        return state
+    }
+
+    /// Atomisches Schreiben des UI-States. Wird vom AgentChatsView nach
+    /// jeder State-Aenderung (debounced) aufgerufen.
+    func saveUIState(_ state: AgentUIState) throws {
+        try FileManager.default.createDirectory(
+            at: uiStateFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(state)
+        try data.write(to: uiStateFileURL, options: .atomic)
     }
 
     func upsertProject(path: String, name: String? = nil, color: String? = nil, createdManually: Bool = false) throws -> AgentProject {

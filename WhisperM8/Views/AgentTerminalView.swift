@@ -2,6 +2,144 @@ import AppKit
 import SwiftTerm
 import SwiftUI
 
+/// `LocalProcessTerminalView`-Subklasse die den Bell-Sound abfaengt.
+/// `scrollWheel` ist in SwiftTerm leider `public override` (nicht `open`) —
+/// daher kann es nicht via Subclass abgefangen werden. Stattdessen nutzt
+/// `TerminalScrollGuard` (siehe unten) einen NSEvent-Monitor.
+final class QuietableTerminalView: LocalProcessTerminalView {
+    override func bell(source: Terminal) {
+        guard AppPreferences.shared.isTerminalBellEnabled else { return }
+        super.bell(source: source)
+    }
+}
+
+/// Faengt Mausrad-Events VOR der Dispatch zur SwiftTerm-View ab.
+///
+/// **Problem 1 — Propagation-Leak:** TUIs wie `claude agents` rendern im
+/// Alternate-Screen-Buffer der per Definition keinen Scrollback hat.
+/// SwiftTerm's Default-`scrollWheel` macht in Alt-Buffer-Mode zwar visuell
+/// nichts, aber das Event kann in unerwartete SwiftUI/NSResponder-Stellen
+/// propagieren (User berichtet: Trackpad-Scroll im `claude agents`-Chat
+/// bewegt die Sidebar/Prompt-History).
+///
+/// **Problem 2 — Stuck im Viewport:** der User kann lange Claude-Antworten
+/// nicht hochscrollen, weil Alt-Buffer = kein Scrollback.
+///
+/// **Strategie:**
+/// 1. Wenn Terminal die scroll-Target-View ist UND wir im Alt-Buffer sind:
+/// 2. Wir senden XTerm-SGR-Mouse-Wheel-Bytes ans PTY (Button 64/65) — das
+///    folgt dem XTerm/iTerm-Standard fuer Wheel-Reporting. Apps wie Claude
+///    Code / Ink koennen darauf reagieren (Scroll der eigenen Viewport).
+/// 3. Wir verschlucken das Original-Event hart (return nil) — keine
+///    Propagation zur Sidebar.
+///
+/// Im normalen Buffer (echter Scrollback): Event durchreichen damit
+/// SwiftTerm's natuerliches Scrollen weiterhin funktioniert.
+@MainActor
+final class TerminalScrollGuard {
+    private weak var terminalView: LocalProcessTerminalView?
+    private var monitor: Any?
+    /// Akkumulator fuer kontinuierliche Trackpad-Deltas — wir feuern erst
+    /// einen SGR-Event pro "Schwelle", damit wir Claude nicht mit
+    /// Mikro-Bytes ueberfluten.
+    private var pendingDeltaY: CGFloat = 0
+    private static let scrollThreshold: CGFloat = 1.0
+
+    init(attachedTo terminalView: LocalProcessTerminalView) {
+        self.terminalView = terminalView
+        self.monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            return self.handle(event)
+        }
+    }
+
+    deinit {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
+
+    /// Liefert `nil` zurueck, wenn das Event verschluckt wurde (Alt-Buffer-Mode).
+    /// Sonst das Original-Event fuer den normalen Dispatch.
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        guard let terminal = terminalView,
+              let window = terminal.window,
+              event.window === window
+        else {
+            return event
+        }
+
+        // Nur greifen wenn das Terminal-View die scroll-Target-View ist —
+        // sonst sollen Sidebar / Tab-Strip ihre eigene Scrolls bekommen.
+        guard isEventTargetingTerminal(event: event, window: window, terminal: terminal) else {
+            return event
+        }
+
+        // Alt-Buffer? Dann XTerm-SGR-Wheel-Bytes ans PTY senden und
+        // Original-Event verschlucken.
+        if terminal.getTerminal().isCurrentBufferAlternate {
+            forwardWheelToTerminal(event: event, terminal: terminal)
+            return nil
+        }
+
+        return event
+    }
+
+    /// Sendet XTerm-SGR-Mouse-Wheel-Sequenzen ans PTY. SwiftTerm's eigene
+    /// Mouse-Reporting-Pipeline reagiert nur auf Click+Drag — Wheel ist
+    /// nicht im Default-Pfad. Wir bauen die Bytes selbst:
+    ///
+    ///   `ESC [ < 64 ; col ; row M`  (Wheel Up, Press)
+    ///   `ESC [ < 65 ; col ; row M`  (Wheel Down, Press)
+    ///
+    /// Spalte/Reihe sind 1-basiert. Wir nehmen die Cursor-Position als
+    /// Approximation — Ink-TUIs ignorieren die Koordinaten ohnehin und
+    /// nutzen nur den Button-Code.
+    ///
+    /// Wir akkumulieren Trackpad-Deltas und feuern erst bei Schwellen-
+    /// Erreichen, damit das PTY nicht mit Mikro-Bytes ueberflutet wird.
+    private func forwardWheelToTerminal(event: NSEvent, terminal: LocalProcessTerminalView) {
+        // Trackpad liefert oft Sub-Linien-Deltas; mit `scrollingDeltaY` (Float)
+        // statt `deltaY` (Int) bleiben wir praeziser.
+        let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY * 10
+        guard delta != 0 else { return }
+
+        pendingDeltaY += delta
+        while abs(pendingDeltaY) >= Self.scrollThreshold {
+            let direction: Int = pendingDeltaY > 0 ? 64 : 65
+            sendWheelByte(button: direction, terminal: terminal)
+            pendingDeltaY -= (pendingDeltaY > 0 ? Self.scrollThreshold : -Self.scrollThreshold)
+        }
+    }
+
+    private func sendWheelByte(button: Int, terminal: LocalProcessTerminalView) {
+        // 1-basierte Koordinaten — die meisten TUIs ignorieren sie bei Wheel.
+        let col = 1
+        let row = 1
+        let press = "\u{1b}[<\(button);\(col);\(row)M"
+        terminal.send(txt: press)
+    }
+
+    /// Wir laufen den Hit-Test im Window-Koordinaten-System um zu pruefen
+    /// ob die scroll-Maus-Position innerhalb des Terminal-NSViews liegt.
+    private func isEventTargetingTerminal(
+        event: NSEvent,
+        window: NSWindow,
+        terminal: LocalProcessTerminalView
+    ) -> Bool {
+        let pointInWindow = event.locationInWindow
+        guard let hitView = window.contentView?.hitTest(pointInWindow) else { return false }
+        // hitView kann das Terminal direkt sein oder eine Subview davon
+        // (z. B. SwiftTerm's CaretView). Wir checken die Parent-Hierarchie.
+        var current: NSView? = hitView
+        while let v = current {
+            if v === terminal { return true }
+            current = v.superview
+        }
+        return false
+    }
+}
+
 @MainActor
 final class AgentTerminalRegistry: ObservableObject {
     @Published private var controllers: [UUID: AgentTerminalController] = [:]
@@ -188,9 +326,10 @@ final class TerminalKeyboardShortcutHandler {
 final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @preconcurrency LocalProcessTerminalViewDelegate {
     let id = UUID()
     let sessionID: UUID
-    let terminal = LocalProcessTerminalView(frame: .zero)
+    let terminal = QuietableTerminalView(frame: .zero)
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
+    private var scrollGuard: TerminalScrollGuard?
 
     @Published private(set) var isRunning = false
     @Published private(set) var hasStarted = false
@@ -240,6 +379,12 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // macOS-Edit-Shortcuts (Option/Command+Backspace, Word-Move, Undo) in
         // Claude-Code-/Codex-/Readline-kompatible Control-Sequences übersetzen.
         keyboardShortcutHandler = TerminalKeyboardShortcutHandler(attachedTo: terminal)
+
+        // Scroll-Guard: blockt Trackpad-Scrolls in Alt-Buffer-Mode (z. B.
+        // `claude agents` TUI) damit das Event nicht in die SwiftUI-Sidebar
+        // bzw. Tab-Strip propagiert. Im normalen Buffer (echter Scrollback)
+        // bleibt das Default-Scroll von SwiftTerm aktiv.
+        scrollGuard = TerminalScrollGuard(attachedTo: terminal)
     }
 
     deinit {

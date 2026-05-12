@@ -205,6 +205,8 @@ struct SettingsView: View {
 
 struct AgentChatsAccessView: View {
     @AppStorage("defaultAgentProvider") private var defaultAgentProviderRaw = "claude"
+    @AppStorage("isAutoChatRenameEnabled") private var isAutoChatRenameEnabled = true
+    @AppStorage("isTerminalBellEnabled") private var isTerminalBellEnabled = true
     @AppStorage("codexExtraArguments") private var codexExtraArguments = ""
     @AppStorage("claudeExtraArguments") private var claudeExtraArguments = ""
 
@@ -240,6 +242,18 @@ struct AgentChatsAccessView: View {
                 .pickerStyle(.segmented)
 
                 Text("Bestimmt, welcher Provider beim 'Neuer Chat'-Button und beim Plus-Knopf eines Projekts genutzt wird. **Claude Agents** öffnet die Multi-Session-Dashboard-View statt eines einzelnen Chats.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Chat-Verhalten") {
+                Toggle("Chats automatisch umbenennen", isOn: $isAutoChatRenameEnabled)
+                Text("Nach dem ersten Turn-Ende wird der Titel via `claude -p` aus dem Transcript abgeleitet. Wenn aus: Default-Titel \"Claude Chat\"/\"Codex Chat\" bleibt bis du selbst umbenennst.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Terminal-Sounds erlauben", isOn: $isTerminalBellEnabled)
+                Text("Manche TUI-Prompts senden ein Bell-Zeichen (`\\a`), das macOS als System-Ton spielt. Wenn aus: Terminal bleibt komplett still.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

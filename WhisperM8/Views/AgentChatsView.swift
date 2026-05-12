@@ -21,6 +21,11 @@ struct AgentChatsView: View {
     /// auf Store + Closures brauchen, die wir vor `body` nicht haben.
     @State private var runtimeWatcher: AgentSessionRuntimeWatcher?
     @State private var autoNamer: AgentSessionAutoNamer?
+    /// Mirror der `autoNamer.inFlight`-Set — wird via NotificationCenter
+    /// aktualisiert, damit SwiftUI Re-Renders triggert. Wir koennen das nicht
+    /// ueber @Observable machen weil autoNamer lazy-init in einem optionalen
+    /// State lebt.
+    @State private var autoRenamingSessionIDs: Set<UUID> = []
     /// Hook-Bridge fuer Real-Time-Detection von SessionStart/SessionEnd via
     /// Claude-Code-Hooks. Event-driven via `DispatchSource` — 0% idle CPU.
     @State private var claudeHookBridge: ClaudeHookBridge?
@@ -30,6 +35,16 @@ struct AgentChatsView: View {
     @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
     @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
     @State private var openTabIDs: Set<UUID> = []
+    /// Pro-Projekt-Erinnerung welcher Tab zuletzt aktiv war. Wird beim
+    /// Projekt-Switch konsultiert um auf den letzten Tab zu springen statt
+    /// auf "den ersten verfuegbaren". Persistiert via AgentUIState.
+    @State private var selectedSessionIDByProject: [UUID: UUID] = [:]
+    /// `true` waehrend wir den UIState aus der Sidecar-Datei laden. Verhindert
+    /// dass die initialen .onChange-Trigger waehrend des Loads zurueck-saven.
+    @State private var isLoadingPersistedUIState = true
+    /// Debounce-Timer fuer Save-Operationen — verhindert Write-Spam bei
+    /// rapid tab-switches.
+    @State private var uiStatePersistTask: Task<Void, Never>?
     @State private var renameTargetID: UUID?
     @State private var renameDraft: String = ""
     @State private var renameProjectTargetID: UUID?
@@ -49,12 +64,9 @@ struct AgentChatsView: View {
     }
 
     private var headerTabs: [AgentChatSession] {
-        projectSessions.filter { session in
-            if session.status == .running || session.status == .pending { return true }
-            if openTabIDs.contains(session.id) { return true }
-            if session.id == selectedSessionID { return true }
-            return false
-        }
+        // projectSessions filtert bereits via openTabIDs/selectedSessionID —
+        // headerTabs ist identisch.
+        projectSessions
     }
 
     private var selectedSession: AgentChatSession? {
@@ -121,7 +133,7 @@ struct AgentChatsView: View {
                     project: selectedProject,
                     session: selectedSession,
                     sessions: projectSessions,
-                    onRefresh: { refreshSessionsInBackground(reason: "inspector") },
+                    onRefresh: { AgentScanCoordinator.shared.requestScan(reason: .manual) },
                     onNewCodexChat: { createSession(provider: .codex) },
                     onNewClaudeChat: { createSession(provider: .claude) },
                     onOpenPHPStorm: openSelectedProjectInPHPStorm
@@ -160,6 +172,7 @@ struct AgentChatsView: View {
         .onAppear {
             setupRuntimeServicesIfNeeded()
             loadWorkspaceFast()
+            loadPersistedUIState()
             syncActiveAgentChat()
             attemptAutoDetectProjectIcons()
         }
@@ -184,9 +197,107 @@ struct AgentChatsView: View {
             // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
             AppState.shared.activeAgentChat = nil
         }
-        .onChange(of: selectedSessionID) { _, _ in syncActiveAgentChat() }
-        .onChange(of: selectedProjectID) { _, _ in syncActiveAgentChat() }
+        .onChange(of: selectedSessionID) { _, newValue in
+            syncActiveAgentChat()
+            // Pro-Projekt-Erinnerung: damit beim naechsten Projekt-Wechsel
+            // der zuletzt benutzte Tab zurueckgeholt wird.
+            if let projectID = selectedProjectID, let sessionID = newValue {
+                selectedSessionIDByProject[projectID] = sessionID
+            }
+            schedulePersistUIState()
+        }
+        .onChange(of: selectedProjectID) { _, _ in
+            syncActiveAgentChat()
+            schedulePersistUIState()
+        }
         .onChange(of: workspace) { _, _ in syncActiveAgentChat() }
+        .onChange(of: openTabIDs) { _, _ in schedulePersistUIState() }
+        .onChange(of: expandedProjectIDs) { _, _ in schedulePersistUIState() }
+        .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanRunningChangedNotification)) { note in
+            if let running = note.userInfo?["running"] as? Bool {
+                isIndexingSessions = running
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentSessionAutoNamer.inFlightDidChangeNotification)) { _ in
+            autoRenamingSessionIDs = autoNamer?.inFlight ?? []
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanDidCompleteNotification)) { _ in
+            // Workspace neu laden — der Coordinator hat moeglicherweise neue
+            // Sessions importiert oder Stale-Running-States gefixt.
+            loadWorkspaceFast()
+            attemptAutoDetectProjectIcons()
+            // Auto-Rename fuer alle generisch-benannten Sessions anstossen.
+            forceAutoNameUntitledSessions()
+        }
+    }
+
+    // MARK: - UI-State Persistenz (Sidecar agent-ui-state.json)
+
+    /// Laedt den persistierten UI-State und populiert die `@State`-Vars.
+    /// Garbage-Collection laeuft im Store (entfernt stale UUIDs).
+    /// First-Load-Migration ebenfalls im Store (populiert aus Workspace
+    /// wenn die Sidecar-Datei fehlt).
+    private func loadPersistedUIState() {
+        let state = store.loadUIState()
+
+        // Aggregierte Set aller offenen Tabs ueber alle Projekte.
+        var aggregatedOpen: Set<UUID> = []
+        for ids in state.openTabIDsByProject.values {
+            aggregatedOpen.formUnion(ids)
+        }
+        openTabIDs = aggregatedOpen
+        selectedSessionIDByProject = state.selectedSessionIDByProject
+        expandedProjectIDs = Set(state.expandedProjectIDs)
+
+        // Project-Level Selection — fallback wenn die persistierte ID nicht
+        // mehr existiert.
+        if let pid = state.selectedProjectID,
+           workspace.projects.contains(where: { $0.id == pid }) {
+            selectedProjectID = pid
+        }
+
+        // Session-Selection: zuerst project-spezifisch, dann global,
+        // sonst lass loadWorkspaceFast den Default setzen.
+        if let pid = selectedProjectID,
+           let sid = state.selectedSessionIDByProject[pid],
+           workspace.sessions.contains(where: { $0.id == sid }) {
+            selectedSessionID = sid
+        }
+
+        isLoadingPersistedUIState = false
+    }
+
+    /// Schedules ein debounced Save (500 ms) damit rapid tab-switches keinen
+    /// Write-Spam verursachen. Beim ersten Load wird kein Save ausgeloest.
+    private func schedulePersistUIState() {
+        guard !isLoadingPersistedUIState else { return }
+        uiStatePersistTask?.cancel()
+        let snapshot = currentUIStateSnapshot()
+        let storeRef = store
+        uiStatePersistTask = Task.detached(priority: .utility) {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            try? storeRef.saveUIState(snapshot)
+        }
+    }
+
+    /// Baut aus den aktuellen @State-Vars einen `AgentUIState`. Verteilt
+    /// `openTabIDs` per Session-ProjektID auf die `openTabIDsByProject`-Map.
+    private func currentUIStateSnapshot() -> AgentUIState {
+        var byProject: [UUID: [UUID]] = [:]
+        // sortierte Reihenfolge: sortIndex / lastActivityAt aus sortedSessions
+        let openSessions = workspace.sessions.filter { openTabIDs.contains($0.id) }
+        let sorted = AgentSessionStore.sortedSessions(openSessions)
+        for session in sorted {
+            byProject[session.projectID, default: []].append(session.id)
+        }
+        return AgentUIState(
+            schemaVersion: 1,
+            openTabIDsByProject: byProject,
+            selectedSessionIDByProject: selectedSessionIDByProject,
+            selectedProjectID: selectedProjectID,
+            expandedProjectIDs: Array(expandedProjectIDs)
+        )
     }
 
     /// Spiegelt die aktuelle Selection (Session + Projekt) in `AppState.activeAgentChat`.
@@ -363,6 +474,7 @@ struct AgentChatsView: View {
                             onSetColor: setSessionColor,
                             isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true },
                             runtimeStatus: { id in runtimeStatusStore.statuses[id] },
+                            isAutoRenaming: { id in autoRenamingSessionIDs.contains(id) },
                             onRenameProjectRequest: { beginRenameProject($0) },
                             onSetProjectColor: setProjectColor,
                             onChooseProjectIcon: { chooseProjectIcon($0) },
@@ -491,12 +603,13 @@ struct AgentChatsView: View {
             .help("Neuen Codex Chat im aktuellen Projekt starten")
 
             Button {
-                refreshSessionsInBackground(reason: "manual")
+                AgentScanCoordinator.shared.requestScan(reason: .manual)
             } label: {
-                SidebarCommandRow(icon: "arrow.triangle.2.circlepath", title: "Sessions scannen")
+                SidebarCommandRow(icon: "arrow.clockwise", title: "Aktualisieren")
             }
             .buttonStyle(SidebarRowButtonStyle())
-            .help("Sessions im Hintergrund neu indizieren")
+            .keyboardShortcut("r", modifiers: .command)
+            .help("Sessions neu einlesen (⌘R)")
 
             Button {
                 addProject()
@@ -829,7 +942,7 @@ struct AgentChatsView: View {
 
     private func refresh() {
         loadWorkspaceFast()
-        refreshSessionsInBackground(reason: "refresh")
+        AgentScanCoordinator.shared.requestScan(reason: .manual)
     }
 
     /// Lazy-init der Runtime-Services. Wird einmal beim ersten `onAppear`
@@ -1179,19 +1292,20 @@ struct AgentChatsView: View {
     }
 
     private func sessions(for project: AgentProject) -> [AgentChatSession] {
-        // Identische Sichtbarkeitsregel wie `headerTabs`: nur Sessions, die im Header
-        // aktiv sind. Sidebar und Header bleiben so 1:1 synchron — kein "Ghost"-Eintrag
-        // einer geschlossenen Session, die oben schon weg ist.
+        // Sichtbarkeit: alle manuell erstellten, nicht-archivierten Sessions
+        // die der User aktiv im Memory hat (openTabIDs) oder gerade selektiert.
+        // status == .running/.pending ist redundant — laufende Sessions sind
+        // per Definition in openTabIDs (werden bei Launch eingefuegt). Wir
+        // muessen nur sicherstellen dass openTabIDs persistent ist (siehe
+        // AgentUIState).
         AgentSessionStore.sortedSessions(
             workspace.sessions.filter { session in
                 guard session.projectID == project.id,
                       session.status != .archived,
                       session.isManuallyCreated
                 else { return false }
-                if session.status == .running || session.status == .pending { return true }
-                if openTabIDs.contains(session.id) { return true }
-                if session.id == selectedSessionID { return true }
-                return false
+                return openTabIDs.contains(session.id)
+                    || session.id == selectedSessionID
             }
         )
     }
@@ -1199,6 +1313,17 @@ struct AgentChatsView: View {
     private func selectProject(_ projectID: UUID) {
         selectedProjectID = projectID
         expandedProjectIDs.insert(projectID)
+
+        // Pro-Projekt-Erinnerung: wenn wir fuer dieses Projekt schon einen
+        // zuletzt benutzten Tab persistiert haben, dahin zurueckspringen
+        // statt automatisch auf "den ersten verfuegbaren".
+        if let lastID = selectedSessionIDByProject[projectID],
+           workspace.sessions.contains(where: { $0.id == lastID && $0.projectID == projectID }) {
+            selectedSessionID = lastID
+            openTabIDs.insert(lastID)
+            return
+        }
+
         let sessions = workspace.sessions
             .filter { $0.projectID == projectID && $0.status != .archived }
             .sorted { $0.lastActivityAt > $1.lastActivityAt }

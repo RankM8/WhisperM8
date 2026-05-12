@@ -301,19 +301,40 @@ struct AgentTitleGenerator {
 /// Triggert beim ersten Turn-End einer Session den Headless-Title-Generator.
 /// Respektiert `AgentChatSession.canAutoRenameTitle` und blockt sich gegen
 /// parallele Re-Entries für dieselbe Session.
+///
+/// Exponiert den aktuellen `inFlight`-Set publik fuer UI-Feedback. State-
+/// Aenderungen werden via NotificationCenter (`inFlightDidChangeNotification`)
+/// gepublisht — die Sidebar haengt sich daran fuer einen Spinner-Indikator.
 @MainActor
 final class AgentSessionAutoNamer {
     private let store: AgentSessionStore
     private let titleGenerator: AgentTitleGenerator
-    private var inFlight: Set<UUID> = []
+    /// Sessions fuer die aktuell ein Auto-Naming-Headless-Call laeuft.
+    private(set) var inFlight: Set<UUID> = [] {
+        didSet {
+            guard oldValue != inFlight else { return }
+            NotificationCenter.default.post(
+                name: Self.inFlightDidChangeNotification,
+                object: nil
+            )
+        }
+    }
     /// IDs, die in dieser App-Session schon einmal (erfolgreich oder erfolglos)
     /// ausgewertet wurden. Verhindert Endlosschleifen, falls die Title-
     /// Generierung permanent fehlschlägt.
     private var alreadyAttempted: Set<UUID> = []
 
+    /// Wird gepostet wenn sich der `inFlight`-Set veraendert. UI bindet darauf
+    /// fuer den Sparkles-Spinner im Sidebar-Tab.
+    static let inFlightDidChangeNotification = Notification.Name("AgentSessionAutoNamer.inFlightDidChange")
+
     init(store: AgentSessionStore, titleGenerator: AgentTitleGenerator = .live) {
         self.store = store
         self.titleGenerator = titleGenerator
+    }
+
+    func isInFlight(_ sessionID: UUID) -> Bool {
+        inFlight.contains(sessionID)
     }
 
     /// Wird vom `AgentSessionRuntimeWatcher` via `onTurnFinished` aufgerufen.
@@ -327,6 +348,7 @@ final class AgentSessionAutoNamer {
         cwd: String,
         onCompletion: ((Result<String, Error>) -> Void)? = nil
     ) {
+        guard AppPreferences.shared.isAutoChatRenameEnabled else { return }
         guard session.canAutoRenameTitle else { return }
         guard session.lastTurnAt == nil else { return }
         guard !alreadyAttempted.contains(session.id) else { return }
@@ -358,6 +380,7 @@ final class AgentSessionAutoNamer {
         cwd: String,
         onCompletion: ((Result<String, Error>) -> Void)? = nil
     ) {
+        guard AppPreferences.shared.isAutoChatRenameEnabled else { return }
         guard session.canAutoRenameTitle else { return }
         guard !inFlight.contains(session.id) else { return }
         guard let externalSessionID = session.externalSessionID, !externalSessionID.isEmpty else {

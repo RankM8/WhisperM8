@@ -180,6 +180,21 @@ struct AppPreferences {
         }
     }
 
+    /// Aktiviert das automatische Umbenennen von neuen Chats nach dem ersten
+    /// Turn-End (via `claude -p`-Subprocess). Default: an. Wenn aus: Title
+    /// bleibt "Claude Chat" / "Codex Chat" bis der User selbst umbenennt.
+    var isAutoChatRenameEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.isAutoChatRenameEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.isAutoChatRenameEnabled) }
+    }
+
+    /// Steuert ob SwiftTerm Terminal-Bell-Sounds (`\a` = 0x07 von Claude/Codex
+    /// bei Permission-Prompts) als macOS-System-Sound ausspielt. Default: an.
+    var isTerminalBellEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.isTerminalBellEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.isTerminalBellEnabled) }
+    }
+
     /// Frei konfigurierbare zusätzliche CLI-Argumente, die an den Codex-Aufruf
     /// vorne (vor `-C <path>`/`-m <model>`/`resume`/...) angehängt werden.
     /// Beispiel: `--ask-for-approval untrusted`. Eingabe via Whitespace-getrennt.
@@ -267,6 +282,8 @@ enum PreferenceKeys {
     static let codexVisualInputMode = "codexVisualInputMode"
     static let agentDefaultProjectPath = "agentDefaultProjectPath"
     static let defaultAgentProvider = "defaultAgentProvider"
+    static let isAutoChatRenameEnabled = "isAutoChatRenameEnabled"
+    static let isTerminalBellEnabled = "isTerminalBellEnabled"
     static let codexExtraArguments = "codexExtraArguments"
     static let claudeExtraArguments = "claudeExtraArguments"
     static let appearanceOverride = "appearanceOverride"
