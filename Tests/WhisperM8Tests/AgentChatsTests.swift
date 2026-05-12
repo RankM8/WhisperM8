@@ -1136,6 +1136,66 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertNil(bytes)
     }
 
+    func testTerminalShortcutShiftEnterChatProfileBackslashContinuation() {
+        // Im normalen Claude-Code-/Codex-Chat soll Shift+Enter als
+        // Backslash-Continuation (`\<CR>`) gesendet werden.
+        let bytesClaude = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.returnKey,
+            modifiers: [.shift],
+            characters: nil,
+            profile: .claudeCodeChat
+        )
+        let bytesCodex = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.returnKey,
+            modifiers: [.shift],
+            characters: nil,
+            profile: .codexChat
+        )
+        XCTAssertEqual(bytesClaude, [0x5c, 0x0d])
+        XCTAssertEqual(bytesCodex, [0x5c, 0x0d])
+    }
+
+    func testTerminalShortcutShiftEnterAgentsViewProfileSendsCsiU() {
+        // `claude agents` hat keine Backslash-Continuation — Shift+Enter
+        // muss als kitty/CSI-u-Sequenz `ESC [ 13 ; 2 u` gesendet werden,
+        // damit das Input-Field einen Soft-Newline einfuegt.
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.returnKey,
+            modifiers: [.shift],
+            characters: nil,
+            profile: .claudeAgentsView
+        )
+        XCTAssertEqual(bytes, [0x1b, 0x5b, 0x31, 0x33, 0x3b, 0x32, 0x75])
+    }
+
+    func testTerminalShortcutPlainEnterIsNotIntercepted() {
+        // Ohne Shift soll Enter durchgereicht werden — sonst killt unser
+        // Mapping den normalen Submit.
+        for profile in [TerminalKeyboardProfile.claudeCodeChat,
+                        .codexChat,
+                        .claudeAgentsView] {
+            let bytes = TerminalShortcut.bytes(
+                keyCode: TerminalShortcut.KeyCode.returnKey,
+                modifiers: [],
+                characters: nil,
+                profile: profile
+            )
+            XCTAssertNil(bytes, "Enter ohne Modifier muss in \(profile) durchgereicht werden")
+        }
+    }
+
+    func testTerminalShortcutDefaultProfileIsClaudeCodeChat() {
+        // Bestandstests rufen `bytes(...)` ohne profile-Argument auf — das
+        // Default muss daher das Chat-Mapping liefern, sonst brechen die
+        // alten Aufrufer.
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.returnKey,
+            modifiers: [.shift],
+            characters: nil
+        )
+        XCTAssertEqual(bytes, [0x5c, 0x0d])
+    }
+
     // MARK: - Login Shell Environment
 
     func testLoginShellEnvironmentMergesUserPathWithFallback() {

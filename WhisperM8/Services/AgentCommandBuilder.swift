@@ -4,6 +4,12 @@ struct AgentLaunchCommand: Equatable {
     var executablePath: String
     var arguments: [String]
     var workingDirectory: String
+    /// Keyboard-Shortcut-Profil fuer den Terminal-Handler. Wird vom Builder
+    /// passend zur Session-Art gesetzt (Codex-Chat, Claude-Code-Chat,
+    /// Claude-Agents-View). Die Agents-View-TUI nutzt eine eigene Eingabe-
+    /// Implementation und braucht andere Byte-Sequenzen (z. B. CSI-u fuer
+    /// Shift+Enter statt Backslash-Continuation).
+    var keyboardProfile: TerminalKeyboardProfile = .claudeCodeChat
 }
 
 enum AgentCommandError: LocalizedError, Equatable {
@@ -115,7 +121,8 @@ struct AgentCommandBuilder {
             return AgentLaunchCommand(
                 executablePath: executable,
                 arguments: arguments,
-                workingDirectory: project.path
+                workingDirectory: project.path,
+                keyboardProfile: .codexChat
             )
         }
 
@@ -136,7 +143,8 @@ struct AgentCommandBuilder {
         return AgentLaunchCommand(
             executablePath: executable,
             arguments: arguments,
-            workingDirectory: project.path
+            workingDirectory: project.path,
+            keyboardProfile: .codexChat
         )
     }
 
@@ -156,7 +164,8 @@ struct AgentCommandBuilder {
             return AgentLaunchCommand(
                 executablePath: executable,
                 arguments: arguments,
-                workingDirectory: project.path
+                workingDirectory: project.path,
+                keyboardProfile: .claudeAgentsView
             )
         }
 
@@ -186,7 +195,8 @@ struct AgentCommandBuilder {
         return AgentLaunchCommand(
             executablePath: executable,
             arguments: arguments,
-            workingDirectory: project.path
+            workingDirectory: project.path,
+            keyboardProfile: .claudeCodeChat
         )
     }
 
