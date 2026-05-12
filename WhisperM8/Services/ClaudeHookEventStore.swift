@@ -7,6 +7,13 @@ struct ClaudeHookEvent: Equatable, Codable {
     enum EventName: String, Codable, Equatable {
         case sessionStart = "SessionStart"
         case sessionEnd = "SessionEnd"
+        /// Vor jedem Tool-Aufruf — wir nutzen das aktuell nur als
+        /// Aktivitaets-Signal („arbeitet"), nicht zum Blockieren.
+        case preToolUse = "PreToolUse"
+        /// Permission-Prompts und andere Notifications. Fuer
+        /// Background-Sessions das wichtigste „needs input"-Signal,
+        /// denn dort gibt es keinen interaktiven Prompt im PTY.
+        case notification = "Notification"
         case other
     }
 

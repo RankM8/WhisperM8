@@ -159,19 +159,29 @@ Im aktuellen Setup wird das **nicht** für Agent View benutzt (`.agentView` skip
 ✅ Codex- und Claude-Sessions je Projekt.
 ✅ **`claude agents` als eigener Tab-Type (Agent View)** — TUI rendert in unserem PTY.
 ✅ JSONL-basierte Transcript-Anzeige nach Session-Ende.
-✅ Hook-Bridge für SessionStart/SessionEnd Events (Claude-Chats).
+✅ Hook-Bridge für SessionStart/SessionEnd/PreToolUse/Notification (Claude-Chats **und** Background-Agents).
 ✅ Resume-Repair, wenn IDs auseinanderlaufen.
 ✅ Auto-Naming und Auto-Summary aus Transcripts.
 ✅ Resource-Monitor.
+✅ **Background-Agent-Dispatching** (Phase 1+2): `+`-Menü → "Neuer Hintergrund-Agent…" → Modal → `claude --bg` → Short-ID parsed → `claude attach <id>` als nativer Tab. Sidebar zeigt "BG"-Pill.
+✅ **Background-Agent-Lifecycle** (Phase 3): Context-Menu mit Logs/Stop/Respawn/Entfernen via `claude logs|stop|respawn|rm <id>`; Logs-Sheet zeigt CLI-Output. Beim Window-Open Health-Check pro Short-ID (`claude logs <id>`) → unbekannte Short-IDs werden lokal archiviert.
+✅ **Hook-Bridge für Background-Agents** (Phase 4): `--settings <path>` wird beim `claude --bg`-Spawn mitgegeben, sodass der Supervisor unsere Events kennt; `PreToolUse` + `Notification` zusätzlich getrackt.
+✅ **"Needs input"-Pulse** (Phase 5): Notification-Hook setzt einen Sidebar-Pulse pro BG-Session; `PreToolUse`/`SessionEnd` clearen ihn wieder.
+✅ **Sub-Agent-Bibliothek** (Phase 5, Read-Only): `+`-Menü → "Sub-Agent-Bibliothek anzeigen…" listet alle `.md`-Agents aus `.claude/agents/` und `~/.claude/agents/` mit Frontmatter-Details.
+✅ **Orphan-Cleanup** (Hotfix): `.backgroundChat`-Sessions mit `status=closed/archived` und leerer/fehlender Short-ID werden beim Workspace-Load entfernt — verhindert "Geist-Tabs" aus früheren Spawn-Fehlschlägen.
+✅ **Präziser Empty-State für Orphans**: BG-Sessions ohne Short-ID zeigen jetzt klar "Hintergrund-Agent unvollständig gespawnt — Tab schließen oder neu starten" statt des irreführenden "Resume oben"-Hinweises.
+✅ **Agent-Chat-Kontext im Prompt** (A): `PromptPackageBuilder` baut beim Recording einen `## Agent Chat Context`-Block mit Provider/Title/Project/Path/ExternalID. Template-Platzhalter `{agentChatTitle}` etc. verfügbar. Klare Logs in `recording_context_snapshot` und `recording_context_committed`.
+✅ **Aktiver-Chat-Header** (B): Dritte Header-Zeile zeigt prominent Session-Title (semibold) + Projekt-Name + Branch + Pfad + Status-Dot — sofortige Orientierung beim Tab-Wechsel.
+✅ **Conversation-Tail** (C1): `AgentChatTailExtractor` liest letzte User+Assistant-Message aus dem JSONL und schiebt sie mit ins Prompt-Paket (max. 600 Chars).
 
-## 11. Was die App noch NICHT kann (im Hinblick auf Agent View)
+## 11. Phase 6 (Roster-Import) — zurückgenommen
 
-❌ Native UI-Ansicht der Background-Sessions, die *im Supervisor-Daemon* hängen — wir sehen sie nur, wenn die `claude agents`-TUI in einem Tab läuft.
-❌ Direktes Dispatching einer Background-Session aus unserer Top-Bar (`claude --bg "<prompt>"`-Pattern).
-❌ Anzeigen der Agent-View-Liste *außerhalb* der TUI (kein eigenes Rendering von `~/.claude/jobs/`).
-❌ Background-Session-Lifecycle-Buttons im UI (`attach`, `logs`, `stop`, `respawn`, `rm`).
-❌ Echtzeit-Status der Background-Sessions in unserer Sidebar (One-Liner-Summary, "Needs input"-Indicator etc.).
-❌ Mehrere Background-Sessions als WhisperM8-Tabs gleichzeitig führen (heute = 1 Tab pro TUI-Instanz).
-❌ Sub-Agent-Library-UI (`/agents`-Pendant).
+Eine frühere Build-Variante hat alle vom Supervisor gehosteten Background-Worker aus `~/.claude/daemon/roster.json` automatisch als `.backgroundChat`-Sessions in die Sidebar importiert (`SupervisorRosterReader` + `AgentSessionStore.importSupervisorWorkers`). Das hat **in der Praxis nicht gut funktioniert** — Sessions tauchten unter unklaren Projekten auf, die Sidebar wurde unübersichtlich, und der `claude agents`-TUI-Tab bleibt für die User-Übersicht ohnehin die offizielle Quelle.
 
-Das sind die Lücken, die wir in [`05-beratung-optionen.md`](05-beratung-optionen.md) bewerten.
+**Rückbau:** `SupervisorRosterReader.swift`, der Import in `AgentSessionStore`, der Sonderfall im `sessions(for:)`-Filter und alle Roster-Tests sind entfernt. Eine Einmal-Migration `removeImportedBackgroundSessions(from:)` räumt die bereits in den Workspace gewanderten Roster-Imports (alle `.backgroundChat`-Sessions mit `createdManually != true`) beim nächsten Workspace-Load weg.
+
+## 12. Was die App heute NICHT macht (Stand nach Rückbau Phase 6)
+
+❌ **Native Liste aller Supervisor-Sessions** in einem dedizierten View — der `claude agents`-TUI-Tab bleibt das Dashboard. WhisperM8 zeigt in der Sidebar nur Sessions, die der User aktiv über `+` → „Neuer Hintergrund-Agent…" gespawnt hat.
+❌ **Eigene One-Line-Summary** pro BG-Session (Haiku-Aufruf wie in Agent View) — Kosten + Komplexität.
+❌ **Sub-Chat-Erkennung in der `claude agents`-TUI** — die TUI rendert intern, WhisperM8 weiß nicht, welche Background-Session der User dort gerade anpeilt. Im Header wird das via `VIEW`-Badge + Tooltip dokumentiert.

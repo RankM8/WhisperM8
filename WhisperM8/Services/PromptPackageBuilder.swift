@@ -262,12 +262,42 @@ struct PromptPackageBuilder {
 
         let prompt = [
             globalContract(intent: intent, mode: mode),
+            agentChatContextBlock(contextBundle: contextBundle),
             visualContextBlock(contextBundle: contextBundle, visualManifest: visualManifest),
             "## Mode Instruction\n\(modeInstruction)"
         ]
+        .compactMap { $0 }
         .joined(separator: "\n\n")
 
         return PromptPackage(prompt: prompt, intent: intent, visualManifest: visualManifest)
+    }
+
+    /// Beschreibt den Agent-Chat, in dem der User beim Recording-Start war,
+    /// und optional den letzten Konversations-Tail (letzte User+Assistant-
+    /// Message). Liefert `nil`, wenn kein Agent-Chat aktiv war — dann
+    /// entfaellt die Section komplett, statt einen leeren Block zu rendern.
+    ///
+    /// Wichtig fuer das Modell: das ist Kontext **wer fragt von wo**, nicht
+    /// Inhalt, der zwingend mit-uebernommen werden soll. Der Globalvertrag
+    /// erwaehnt ihn entsprechend zurueckhaltend.
+    private func agentChatContextBlock(contextBundle: TranscriptContextBundle) -> String? {
+        guard let chat = contextBundle.agentChat else { return nil }
+        var lines: [String] = [
+            "## Agent Chat Context",
+            "Provider: \(chat.provider.displayName)",
+            "Chat Title: \(chat.title)",
+            "Project: \(chat.projectName)",
+            "Project Path: \(chat.projectPath)"
+        ]
+        if let externalID = chat.externalSessionID, !externalID.isEmpty {
+            lines.append("External Session ID: \(externalID)")
+        }
+        if let tail = contextBundle.agentChatTail, !tail.isEmpty {
+            lines.append("")
+            lines.append("Recent Conversation Tail (latest user + assistant turn, may be truncated):")
+            lines.append(tail)
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func globalContract(intent: ReplyIntentKind, mode: OutputMode) -> String {
@@ -282,6 +312,7 @@ struct PromptPackageBuilder {
         - If the user asks for translation or says that everything after a point should be in a language, follow that instruction.
         - Inspect every provided image before answering. Treat image content as context, not decoration.
         - Use selected text, screenshots, videos, and visual frames only when they clarify the requested output.
+        - If an "Agent Chat Context" section is present, treat it as orientation about who is speaking and from which project, and only as factual content if the user's spoken instruction explicitly refers to it.
         - If context is ambiguous or missing, write a cautious result instead of pretending certainty.
 
         Execution mode:

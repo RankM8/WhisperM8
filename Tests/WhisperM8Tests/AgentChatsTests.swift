@@ -203,6 +203,45 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(args, ["--bg", "x"])
     }
 
+    func testBackgroundSpawnArgumentsPrependsSettingsBeforeBg() {
+        // --settings muss VOR --bg stehen, sonst liest Claude die Hook-
+        // Konfiguration nicht ein bevor die Background-Session aufgesetzt
+        // wird.
+        let args = AgentCommandBuilder.backgroundSpawnArguments(
+            initialPrompt: "x",
+            settingsFilePath: "/tmp/hooks.json"
+        )
+        XCTAssertEqual(args, ["--settings", "/tmp/hooks.json", "--bg", "x"])
+    }
+
+    func testBackgroundSpawnArgumentsIgnoresWhitespaceOnlySettingsPath() {
+        // Defensiv: leerer Pfad darf NICHT als `--settings ""` rausgehen,
+        // sonst wuerde Claude einen Parser-Error werfen.
+        let args = AgentCommandBuilder.backgroundSpawnArguments(
+            initialPrompt: "x",
+            settingsFilePath: "   "
+        )
+        XCTAssertEqual(args, ["--bg", "x"])
+    }
+
+    func testBackgroundSpawnArgumentsCombinesSettingsAgentAndExtras() {
+        let args = AgentCommandBuilder.backgroundSpawnArguments(
+            initialPrompt: "review",
+            settingsFilePath: "/tmp/hooks.json",
+            subAgent: "code-reviewer",
+            permissionMode: "acceptEdits",
+            extraArguments: ["--verbose"]
+        )
+        XCTAssertEqual(args, [
+            "--settings", "/tmp/hooks.json",
+            "--bg",
+            "--agent", "code-reviewer",
+            "--permission-mode", "acceptEdits",
+            "--verbose",
+            "review"
+        ])
+    }
+
     func testAgentSessionBackgroundFieldsRoundTripViaJSON() throws {
         let session = AgentChatSession(
             provider: .claude,
@@ -580,6 +619,136 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(workspace.sessions.first?.id, sessionID)
         XCTAssertEqual(workspace.sessions.first?.imagePaths, [])
         XCTAssertEqual(workspace.sessions.first?.hasLaunchedInitialPrompt, false)
+    }
+
+    func testRemoveImportedBackgroundSessionsDropsAutoImportedAgents() {
+        // Sessions, die via createdManually=false als .backgroundChat
+        // angelegt wurden (frueherer Roster-Import, Phase 6), sollen beim
+        // naechsten Workspace-Load wegfliegen. Vom User selbst gespawnte
+        // BG-Agents (createdManually=true) bleiben erhalten.
+        let projectID = UUID()
+        let userOwned = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "Mein eigener BG",
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            createdManually: true,
+            kind: .backgroundChat,
+            backgroundShortID: "self1234"
+        )
+        let imported = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "Importierter BG",
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            createdManually: false,
+            kind: .backgroundChat,
+            backgroundShortID: "imp12345"
+        )
+        let importedWithoutFlag = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "Legacy import (no flag)",
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            createdManually: nil,
+            kind: .backgroundChat,
+            backgroundShortID: "leg12345"
+        )
+        let normalChat = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "Normal chat",
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            createdManually: false
+        )
+
+        var workspace = AgentWorkspace(
+            projects: [],
+            sessions: [userOwned, imported, importedWithoutFlag, normalChat]
+        )
+        AgentSessionStore.removeImportedBackgroundSessions(from: &workspace)
+        let remaining = Set(workspace.sessions.map(\.id))
+        XCTAssertTrue(remaining.contains(userOwned.id))
+        XCTAssertTrue(remaining.contains(normalChat.id), "non-BG-Sessions duerfen nicht angefasst werden")
+        XCTAssertFalse(remaining.contains(imported.id))
+        XCTAssertFalse(remaining.contains(importedWithoutFlag.id))
+    }
+
+    func testRemoveOrphanBackgroundSessionsDropsClosedBgWithoutShortID() {
+        let projectID = UUID()
+        let kept = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "BG with ID",
+            status: .closed,
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            kind: .backgroundChat,
+            backgroundShortID: "abc12345"
+        )
+        let archivedOrphan = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "BG archived orphan",
+            status: .archived,
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            kind: .backgroundChat,
+            backgroundShortID: nil
+        )
+        let closedOrphan = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "BG closed orphan",
+            status: .closed,
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            kind: .backgroundChat,
+            backgroundShortID: ""
+        )
+        let pendingOrphanKept = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "BG pending (spawn maybe still running)",
+            status: .pending,
+            createdAt: Date(),
+            lastActivityAt: Date(),
+            kind: .backgroundChat,
+            backgroundShortID: nil
+        )
+        let normalChatKept = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: projectID,
+            title: "Normal chat (no kind)",
+            status: .closed,
+            createdAt: Date(),
+            lastActivityAt: Date()
+        )
+
+        var workspace = AgentWorkspace(
+            projects: [],
+            sessions: [kept, archivedOrphan, closedOrphan, pendingOrphanKept, normalChatKept]
+        )
+        AgentSessionStore.removeOrphanBackgroundSessions(from: &workspace)
+        let remaining = Set(workspace.sessions.map(\.id))
+        XCTAssertTrue(remaining.contains(kept.id))
+        XCTAssertTrue(remaining.contains(pendingOrphanKept.id))
+        XCTAssertTrue(remaining.contains(normalChatKept.id))
+        XCTAssertFalse(remaining.contains(archivedOrphan.id))
+        XCTAssertFalse(remaining.contains(closedOrphan.id))
     }
 
     func testAgentSessionStoreBacksUpUnreadableWorkspaceBeforeReturningEmpty() throws {
@@ -2578,8 +2747,36 @@ final class AgentChatsTests: XCTestCase {
         let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         XCTAssertNotNil(parsed?["hooks"])
         let hooks = parsed?["hooks"] as? [String: Any]
+        // Alle vier getrackten Events muessen verdrahtet sein — sonst kriegt
+        // die Bridge fuer Background-Agents kein "Needs input"-Signal.
         XCTAssertNotNil(hooks?["SessionStart"])
         XCTAssertNotNil(hooks?["SessionEnd"])
+        XCTAssertNotNil(hooks?["PreToolUse"])
+        XCTAssertNotNil(hooks?["Notification"])
+        XCTAssertEqual(
+            Set(ClaudeHookSettingsBuilder.trackedEventNames),
+            ["SessionStart", "SessionEnd", "PreToolUse", "Notification"]
+        )
+    }
+
+    func testClaudeHookSettingsBuilderUsesSameAppendCommandForAllEvents() throws {
+        // Wir wollen sicherstellen, dass jede Event-Liste denselben
+        // Append-Command nutzt — sonst landen Events in unterschiedlichen
+        // Dateien und der DispatchSource-Reader sieht nur einen Teil.
+        let data = try ClaudeHookSettingsBuilder.serializedSettings(eventFilePath: "/tmp/events.jsonl")
+        let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let hooks = parsed?["hooks"] as? [String: Any] ?? [:]
+        var commands: Set<String> = []
+        for name in ClaudeHookSettingsBuilder.trackedEventNames {
+            let entries = hooks[name] as? [[String: Any]] ?? []
+            for entry in entries {
+                let hookList = entry["hooks"] as? [[String: Any]] ?? []
+                for hook in hookList {
+                    if let cmd = hook["command"] as? String { commands.insert(cmd) }
+                }
+            }
+        }
+        XCTAssertEqual(commands.count, 1, "all events must share the same append command, got \(commands)")
     }
 
     func testClaudeHookSettingsBuilderEscapesQuotesInPath() {
@@ -2602,6 +2799,19 @@ final class AgentChatsTests: XCTestCase {
         let event = ClaudeHookEventStore.parseLine(line)
         XCTAssertEqual(event?.hookEventName, .sessionEnd)
         XCTAssertEqual(event?.reason, "resume")
+    }
+
+    func testClaudeHookEventStoreParsesPreToolUseLine() {
+        let line = "{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"s1\"}"
+        let event = ClaudeHookEventStore.parseLine(line)
+        XCTAssertEqual(event?.hookEventName, .preToolUse)
+        XCTAssertEqual(event?.sessionID, "s1")
+    }
+
+    func testClaudeHookEventStoreParsesNotificationLine() {
+        let line = "{\"hook_event_name\":\"Notification\",\"session_id\":\"s1\"}"
+        let event = ClaudeHookEventStore.parseLine(line)
+        XCTAssertEqual(event?.hookEventName, .notification)
     }
 
     func testClaudeHookEventStoreIgnoresInvalidLine() {

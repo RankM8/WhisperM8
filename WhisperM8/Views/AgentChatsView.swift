@@ -63,6 +63,22 @@ struct AgentChatsView: View {
     /// dem Spawn-Callback. Verhindert dass der Detail-View sofort prepareCommand
     /// fuehrt (was ohne Short-ID failen wuerde).
     @State private var spawningBackgroundSessions: Set<UUID> = []
+    /// Aktive Lifecycle-Aktionen (Logs/Stop/Respawn/Rm) — kennzeichnet die
+    /// Session-ID waehrend des Subprocess-Aufrufs, damit das Context-Menu
+    /// re-entrant-sicher ist.
+    @State private var pendingLifecycleSessions: Set<UUID> = []
+    /// Wenn nicht-nil, zeigen wir das Logs-Sheet fuer diese BG-Session.
+    @State private var pendingBackgroundLogs: BackgroundLogsPresentation?
+    /// `true` solange beim App-Start der Health-Check noch laeuft —
+    /// verhindert mehrfache parallele Laeufe.
+    @State private var hasRunStartupHealthCheck = false
+    /// Session-IDs, fuer die wir ueber einen `Notification`-Hook ein
+    /// "Needs Input"-Signal bekommen haben. Wird vom Notification-Listener
+    /// gepflegt; die Sidebar pulst diese Sessions zusaetzlich zum
+    /// regulaeren Runtime-Status.
+    @State private var awaitingInputSessionIDs: Set<UUID> = []
+    /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
+    @State private var subAgentLibrarySheet: SubAgentLibraryPresentation?
 
     private var selectedProject: AgentProject? {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
@@ -178,6 +194,18 @@ struct AgentChatsView: View {
                 }
             )
         }
+        .sheet(item: $pendingBackgroundLogs) { presentation in
+            BackgroundAgentLogsSheet(
+                presentation: presentation,
+                onClose: { pendingBackgroundLogs = nil }
+            )
+        }
+        .sheet(item: $subAgentLibrarySheet) { presentation in
+            SubAgentLibrarySheet(
+                presentation: presentation,
+                onClose: { subAgentLibrarySheet = nil }
+            )
+        }
         .sheet(item: $pendingAmbiguousRebind) { request in
             AgentSessionAmbiguousRebindPicker(
                 request: request,
@@ -196,6 +224,17 @@ struct AgentChatsView: View {
             loadPersistedUIState()
             syncActiveAgentChat()
             attemptAutoDetectProjectIcons()
+            runBackgroundAgentStartupHealthCheckIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputNotification)) { note in
+            if let id = note.userInfo?["localID"] as? UUID {
+                awaitingInputSessionIDs.insert(id)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputClearedNotification)) { note in
+            if let id = note.userInfo?["localID"] as? UUID {
+                awaitingInputSessionIDs.remove(id)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
             guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
@@ -494,7 +533,16 @@ struct AgentChatsView: View {
                             onRename: renameSession,
                             onSetColor: setSessionColor,
                             isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true },
-                            runtimeStatus: { id in runtimeStatusStore.statuses[id] },
+                            runtimeStatus: { id in
+                                // "Needs input" aus Notification-Hooks
+                                // ueberlagert den Runtime-Watcher-Status —
+                                // gerade bei Background-Sessions ist die
+                                // JSONL nicht immer aussagekraeftig.
+                                if awaitingInputSessionIDs.contains(id) {
+                                    return .awaitingInput
+                                }
+                                return runtimeStatusStore.statuses[id]
+                            },
                             isAutoRenaming: { id in autoRenamingSessionIDs.contains(id) },
                             onRenameProjectRequest: { beginRenameProject($0) },
                             onSetProjectColor: setProjectColor,
@@ -760,6 +808,8 @@ struct AgentChatsView: View {
                     Button("Neuer Claude Agent View") {
                         createSession(provider: .claude, kind: .agentView)
                     }
+                    Divider()
+                    Button("Sub-Agent-Bibliothek anzeigen…") { presentSubAgentLibrary() }
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
@@ -831,43 +881,14 @@ struct AgentChatsView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 5)
 
-            HStack(spacing: 8) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(AgentTheme.textTertiary)
-
-                if let selectedSession {
-                    Text(selectedSession.title)
-                        .font(.system(size: 11))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        .lineLimit(1)
-                } else if let selectedProject {
-                    Text(URL(fileURLWithPath: selectedProject.path).lastPathComponent)
-                        .font(.system(size: 11))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        .lineLimit(1)
-                } else {
-                    Text("Kein Projekt ausgewählt")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AgentTheme.textTertiary)
+            activeChatStatusRow
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(AgentTheme.border)
+                        .frame(height: 1)
                 }
-
-                Spacer()
-
-                if let selectedSession {
-                    Text(selectedSession.runtimeDisplayText)
-                        .font(.system(size: 9, weight: .regular).monospacedDigit())
-                        .foregroundStyle(AgentTheme.textTertiary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 5)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(AgentTheme.border)
-                    .frame(height: 1)
-            }
         }
         .background(AgentTheme.header)
         .overlay(alignment: .bottom) {
@@ -875,6 +896,138 @@ struct AgentChatsView: View {
                 .fill(AgentTheme.border)
                 .frame(height: 1)
         }
+    }
+
+    /// Prominenter „in welchem Chat / welchem Repo bin ich"-Header — dritte
+    /// Header-Zeile ueber dem PTY. Zeigt:
+    /// - Session-Title (semibold) + Sub-Kind-Indikator (BG / VIEW)
+    /// - Projekt-Name + Branch (kleiner, monospaced)
+    /// - Runtime-Info (Provider · Modell · Status) ganz rechts
+    @ViewBuilder
+    private var activeChatStatusRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            statusDot
+
+            VStack(alignment: .leading, spacing: 2) {
+                primaryTitleRow
+                secondaryProjectRow
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let selectedSession {
+                Text(selectedSession.runtimeDisplayText)
+                    .font(.system(size: 10, weight: .regular).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    /// Klein-aber-prominenter Status-Dot links: gruen wenn das PTY laeuft,
+    /// orange bei Needs-Input (Hook-Bridge), grau wenn keine Session da.
+    @ViewBuilder
+    private var statusDot: some View {
+        if let selectedSession {
+            let running = terminalRegistry.controller(for: selectedSession.id)?.isRunning == true
+            let needsInput = awaitingInputSessionIDs.contains(selectedSession.id)
+            let color: Color = {
+                if needsInput { return .orange }
+                if running { return .green }
+                return AgentTheme.textTertiary
+            }()
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+        } else {
+            Circle()
+                .fill(AgentTheme.textTertiary.opacity(0.4))
+                .frame(width: 7, height: 7)
+        }
+    }
+
+    @ViewBuilder
+    private var primaryTitleRow: some View {
+        HStack(spacing: 6) {
+            if let selectedSession {
+                Text(selectedSession.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if selectedSession.isBackgroundChat {
+                    kindBadge("BG", color: .indigo)
+                        .help("Hintergrund-Agent · vom Claude-Supervisor gehostet")
+                    if let shortID = selectedSession.backgroundShortID, !shortID.isEmpty {
+                        Text(shortID)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                            .help("Background-Agent Short-ID")
+                    }
+                } else if selectedSession.isAgentView {
+                    kindBadge("VIEW", color: .orange)
+                        .help("Claude Agents View · Multi-Session-Dashboard. Der aktive Sub-Chat innerhalb der TUI ist von WhisperM8 aus nicht erkennbar.")
+                }
+            } else if let selectedProject {
+                Text(selectedProject.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .lineLimit(1)
+            } else {
+                Text("Kein Chat ausgewählt")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var secondaryProjectRow: some View {
+        if let project = selectedProject {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .font(.system(size: 9))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                Text(project.name)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .lineLimit(1)
+                if let branch = project.lastBranch, !branch.isEmpty {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                    Text(branch)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                        .lineLimit(1)
+                }
+                Text("·")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                Text(project.path)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(project.path)
+            }
+        } else {
+            Color.clear.frame(height: 12)
+        }
+    }
+
+    @ViewBuilder
+    private func kindBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .bold))
+            .tracking(0.04)
+            .foregroundStyle(color)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.30), lineWidth: 0.5)
+            )
+            .fixedSize()
     }
 
     private func selectedSessionHeaderControls(_ session: AgentChatSession) -> some View {
@@ -1013,6 +1166,13 @@ struct AgentChatsView: View {
 
     /// Notification fuer den ambiguous-rebind-Picker (Phase 6).
     static let ambiguousRebindNotification = Notification.Name("AgentChatsView.ambiguousRebind")
+    /// Wird vom Hook-Bridge-Handler bei `Notification`-Events gepostet —
+    /// die View fuegt die `localID` aus `userInfo["localID"]` in
+    /// `awaitingInputSessionIDs` ein.
+    static let backgroundNeedsInputNotification = Notification.Name("AgentChatsView.backgroundNeedsInput")
+    /// Pendant zum oberen — entfernt die localID wieder (z. B. nach
+    /// `.preToolUse` oder `.sessionEnd`).
+    static let backgroundNeedsInputClearedNotification = Notification.Name("AgentChatsView.backgroundNeedsInputCleared")
 
     /// Verarbeitet die User-Wahl im Ambiguous-Picker. `externalID == nil`
     /// bedeutet "Neue Session starten" — wir nullen die externe ID und
@@ -1066,9 +1226,40 @@ struct AgentChatsView: View {
             }
         case .sessionEnd:
             // /resume-Wechsel ist erwartet — naechstes SessionStart wird die
-            // neue ID liefern. Nichts tun ausser Logging.
+            // neue ID liefern. Nichts tun ausser Logging. Ein eventueller
+            // "Needs input"-Pulse wird vom Notification-Listener selbst
+            // bei .preToolUse / SessionStart geclearet — beim Ende ist die
+            // Session ohnehin nicht mehr "awaiting".
             let reason = event.reason ?? "unknown"
             Logger.claudeBinding.info("binding_session_end localID=\(localID.uuidString, privacy: .public) reason=\(reason, privacy: .public)")
+            NotificationCenter.default.post(
+                name: AgentChatsView.backgroundNeedsInputClearedNotification,
+                object: nil,
+                userInfo: ["localID": localID]
+            )
+        case .preToolUse:
+            // Tool-Use bedeutet: die Session arbeitet wieder, also ist ein
+            // "Needs input"-Pulse veraltet. Wir clearen ihn — der naechste
+            // Notification-Event setzt ihn bei Bedarf erneut.
+            Logger.claudeBinding.debug("binding_pretool_use localID=\(localID.uuidString, privacy: .public)")
+            NotificationCenter.default.post(
+                name: AgentChatsView.backgroundNeedsInputClearedNotification,
+                object: nil,
+                userInfo: ["localID": localID]
+            )
+        case .notification:
+            // Wichtiges Signal: Claude druckt Permission-Prompts und andere
+            // Notifications hier hinein. Fuer Background-Sessions ist das
+            // der einzige verlaessliche "Needs input"-Trigger (kein
+            // interaktives PTY). Wir posten eine NotificationCenter-
+            // Notification, die die View in `awaitingInputSessionIDs`
+            // einfuegt — die Sidebar pulst den Status entsprechend.
+            Logger.claudeBinding.info("binding_notification localID=\(localID.uuidString, privacy: .public)")
+            NotificationCenter.default.post(
+                name: AgentChatsView.backgroundNeedsInputNotification,
+                object: nil,
+                userInfo: ["localID": localID]
+            )
         case .other:
             return
         }
@@ -1427,6 +1618,19 @@ struct AgentChatsView: View {
 
     // MARK: - Background Agents (Phase 2)
 
+    /// Oeffnet die Read-Only-Sub-Agent-Bibliothek als Sheet. Listet alle
+    /// Sub-Agents aus `~/.claude/agents/` (User) + `.claude/agents/`
+    /// (Projekt), grupiert nach Scope. Zweck: Discovery — der User sieht,
+    /// was er dem `--agent`-Flag im Dispatch-Modal mitgeben kann.
+    private func presentSubAgentLibrary() {
+        let projectPath = selectedProject?.path
+        let agents = SubAgentDiscovery.discover(projectPath: projectPath)
+        subAgentLibrarySheet = SubAgentLibraryPresentation(
+            projectName: selectedProject?.name,
+            agents: agents
+        )
+    }
+
     /// Oeffnet das Background-Dispatch-Modal fuer das aktuell selektierte
     /// Projekt. Sub-Agent-Discovery laeuft synchron — die Listen sind klein
     /// und es ist FS-cached.
@@ -1473,23 +1677,35 @@ struct AgentChatsView: View {
         selectedSessionID = session.id
         openTabIDs.insert(session.id)
 
-        // 2. Spawn via BackgroundAgentSpawner.
+        // 2. Hook-Bridge vorbereiten — die Background-Session erbt die
+        //    Settings vom Supervisor, also muessen wir `--settings <path>`
+        //    schon beim Spawn-Subprocess setzen, nicht erst beim spaeteren
+        //    `claude attach`. Wenn die Bridge nicht da ist (sehr alter
+        //    State / kein Hook-Setup), spawnen wir ohne Settings — der
+        //    Agent laeuft trotzdem, wir kriegen halt keine Live-Events.
+        let settingsPath = claudeHookBridge?.prepareSettingsFile(localSessionID: session.id)
+
+        // 3. Spawn via BackgroundAgentSpawner.
         let extraArgs = AgentCommandBuilder.parseArguments(AppPreferences.shared.claudeExtraArguments)
         do {
             let result = try await BackgroundAgentSpawner.spawn(
                 initialPrompt: request.prompt,
                 projectPath: project.path,
+                settingsFilePath: settingsPath,
                 subAgent: request.subAgent,
                 permissionMode: request.permissionMode,
                 extraArguments: extraArgs
             )
-            // 3. Short-ID persistieren + Attach triggern.
+            // 4. Short-ID persistieren + Hook-Tracking starten + Attach triggern.
             try store.setBackgroundShortID(localSessionID: session.id, shortID: result.shortID)
             try store.updateSession(id: session.id) { updated in
                 updated.hasLaunchedInitialPrompt = true
             }
             workspace = store.loadWorkspace()
             spawningBackgroundSessions.remove(session.id)
+            if settingsPath != nil {
+                claudeHookBridge?.startTracking(localSessionID: session.id)
+            }
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
         } catch {
             // Spawn fehlgeschlagen — Stub-Session ist nutzlos (kein Attach
@@ -1503,6 +1719,115 @@ struct AgentChatsView: View {
                 selectedSessionID = sessions(for: project).first?.id
             }
             errorMessage = "Hintergrund-Agent konnte nicht gestartet werden: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Background Agents · Phase 3 (Lifecycle)
+
+    /// Oeffnet das Logs-Sheet fuer eine Background-Session. Ruft `claude
+    /// logs <id>` asynchron auf und reicht das Ergebnis ins Sheet weiter —
+    /// das Sheet selbst zeigt einen Spinner, solange wir laden.
+    @MainActor
+    private func showBackgroundLogs(for session: AgentChatSession) {
+        guard let shortID = session.backgroundShortID, !shortID.isEmpty else { return }
+        let presentation = BackgroundLogsPresentation(
+            sessionID: session.id,
+            shortID: shortID,
+            title: session.title,
+            state: .loading
+        )
+        pendingBackgroundLogs = presentation
+        pendingLifecycleSessions.insert(session.id)
+        Task { @MainActor in
+            defer { pendingLifecycleSessions.remove(session.id) }
+            do {
+                let result = try await BackgroundAgentLifecycle.logs(shortID: shortID)
+                // Nur uebernehmen, wenn das Sheet noch fuer dieselbe Short-ID offen ist —
+                // sonst hat der User das Sheet schon geschlossen oder gewechselt.
+                guard pendingBackgroundLogs?.id == presentation.id else { return }
+                let combined = result.stdout + (result.stderr.isEmpty ? "" : "\n[stderr]\n" + result.stderr)
+                pendingBackgroundLogs = presentation.with(state: .loaded(combined))
+            } catch {
+                guard pendingBackgroundLogs?.id == presentation.id else { return }
+                pendingBackgroundLogs = presentation.with(state: .failed(error.localizedDescription))
+            }
+        }
+    }
+
+    /// Fuehrt eine Lifecycle-Aktion auf einer Background-Session aus. Bei
+    /// `.rm` raeumen wir nach Erfolg auch den lokalen State auf (Tab
+    /// schliessen + Session archivieren), bei den anderen Aktionen
+    /// belassen wir die Session in der UI.
+    @MainActor
+    private func performBackgroundLifecycle(
+        _ action: BackgroundAgentLifecycle.Action,
+        on session: AgentChatSession
+    ) {
+        guard let shortID = session.backgroundShortID, !shortID.isEmpty else { return }
+        pendingLifecycleSessions.insert(session.id)
+        Task { @MainActor in
+            defer { pendingLifecycleSessions.remove(session.id) }
+            do {
+                switch action {
+                case .logs:
+                    _ = try await BackgroundAgentLifecycle.logs(shortID: shortID)
+                case .stop:
+                    _ = try await BackgroundAgentLifecycle.stop(shortID: shortID)
+                case .respawn:
+                    _ = try await BackgroundAgentLifecycle.respawn(shortID: shortID)
+                case .rm:
+                    _ = try await BackgroundAgentLifecycle.remove(shortID: shortID)
+                    forgetBackgroundSession(session.id)
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Lokales Cleanup, wenn der User die Session vom Supervisor entfernt
+    /// hat (oder der Health-Check sie als verwaist klassifiziert).
+    /// Terminiert ggf. das PTY, archiviert die Session, schliesst den Tab.
+    @MainActor
+    private func forgetBackgroundSession(_ id: UUID) {
+        if terminalRegistry.controller(for: id)?.isRunning == true {
+            terminalRegistry.terminate(sessionID: id)
+        }
+        try? store.updateSession(id: id) { session in
+            session.status = .archived
+            session.backgroundShortID = nil
+        }
+        workspace = store.loadWorkspace()
+        openTabIDs.remove(id)
+        if selectedSessionID == id {
+            selectedSessionID = projectSessions.first(where: { $0.id != id })?.id
+        }
+    }
+
+    /// Beim Window-Open: pro Short-ID einmal Health-Check fahren. Sessions,
+    /// die der Supervisor nicht mehr kennt, werden lokal archiviert — sonst
+    /// liessen sie sich nicht mehr attachen und blieben als Zombies in der
+    /// Sidebar. Idempotent: laeuft pro Window-Lifetime nur einmal.
+    private func runBackgroundAgentStartupHealthCheckIfNeeded() {
+        guard !hasRunStartupHealthCheck else { return }
+        hasRunStartupHealthCheck = true
+        let candidates: [(UUID, String)] = workspace.sessions.compactMap { session in
+            guard session.isBackgroundChat,
+                  session.status != .archived,
+                  let id = session.backgroundShortID,
+                  !id.isEmpty
+            else { return nil }
+            return (session.id, id)
+        }
+        guard !candidates.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            for (sessionID, shortID) in candidates {
+                let outcome = await BackgroundAgentLifecycle.healthCheck(shortID: shortID)
+                guard outcome == .unknown else { continue }
+                await MainActor.run {
+                    forgetBackgroundSession(sessionID)
+                }
+            }
         }
     }
 
@@ -1700,11 +2025,41 @@ struct AgentChatsView: View {
                     setSessionColor(id: session.id, color: nil)
                 }
             }
+            if session.isBackgroundChat {
+                Divider()
+                backgroundLifecycleMenuItems(session)
+            }
             Divider()
             Button("Schließen", systemImage: "xmark", role: .destructive) {
                 closeHeaderTab(session)
             }
         }
+    }
+
+    /// Lifecycle-Aktionen, die nur fuer `.backgroundChat`-Sessions Sinn
+    /// ergeben. Werden in `sessionManagementMenu` nur fuer Background-Tabs
+    /// eingehaengt. Disabled-Zustand: Aktion laeuft bereits oder Short-ID
+    /// noch nicht bekannt (Spawn pending oder fehlgeschlagen).
+    @ViewBuilder
+    private func backgroundLifecycleMenuItems(_ session: AgentChatSession) -> some View {
+        let hasID = session.hasBackgroundShortID
+        let busy = pendingLifecycleSessions.contains(session.id)
+        Button("Logs anzeigen", systemImage: "doc.text.magnifyingglass") {
+            showBackgroundLogs(for: session)
+        }
+        .disabled(!hasID || busy)
+        Button("Stoppen", systemImage: "stop.circle") {
+            performBackgroundLifecycle(.stop, on: session)
+        }
+        .disabled(!hasID || busy)
+        Button("Respawn", systemImage: "arrow.clockwise.circle") {
+            performBackgroundLifecycle(.respawn, on: session)
+        }
+        .disabled(!hasID || busy)
+        Button("Vom Supervisor entfernen", systemImage: "trash", role: .destructive) {
+            performBackgroundLifecycle(.rm, on: session)
+        }
+        .disabled(!hasID || busy)
     }
 
     private func beginRename(_ session: AgentChatSession) {
@@ -1778,4 +2133,252 @@ struct PendingBackgroundDispatch: Identifiable, Equatable {
     let id = UUID()
     let project: AgentProject
     let subAgents: [SubAgent]
+}
+
+/// State-Snapshot fuer das BG-Logs-Sheet (`claude logs <id>`). Der `id`
+/// dient als Stable-Identity, damit SwiftUI's `.sheet(item:)` das Sheet
+/// nicht bei jedem State-Wechsel neu rebuilded — wir tauschen nur den
+/// `state`-Wert aus.
+struct BackgroundLogsPresentation: Identifiable, Equatable {
+    enum State: Equatable {
+        case loading
+        case loaded(String)
+        case failed(String)
+    }
+
+    let id = UUID()
+    let sessionID: UUID
+    let shortID: String
+    let title: String
+    var state: State
+
+    func with(state newState: State) -> BackgroundLogsPresentation {
+        var copy = self
+        copy.state = newState
+        return copy
+    }
+}
+
+/// Snapshot fuer das Sub-Agent-Library-Sheet — wir kopieren die geladene
+/// Liste rein, damit das Sheet beim Resize / Scrollen nicht jeden Frame
+/// die FS-Discovery erneut faehrt.
+struct SubAgentLibraryPresentation: Identifiable, Equatable {
+    let id = UUID()
+    let projectName: String?
+    let agents: [SubAgent]
+}
+
+/// Read-Only-Liste aller Sub-Agents im aktiven User+Project-Scope.
+/// Zweck: Discovery. Keine Edit-Aktionen — wenn der User editieren will,
+/// macht er das in seinem Editor und re-discovered durch erneutes Oeffnen.
+struct SubAgentLibrarySheet: View {
+    let presentation: SubAgentLibraryPresentation
+    var onClose: () -> Void
+
+    private var grouped: [(scope: SubAgent.Scope, agents: [SubAgent])] {
+        let projectAgents = presentation.agents.filter { $0.scope == .project }
+        let userAgents = presentation.agents.filter { $0.scope == .user }
+        var sections: [(SubAgent.Scope, [SubAgent])] = []
+        if !projectAgents.isEmpty { sections.append((.project, projectAgents)) }
+        if !userAgents.isEmpty { sections.append((.user, userAgents)) }
+        return sections
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "books.vertical")
+                    .foregroundStyle(AgentTheme.textSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sub-Agent-Bibliothek")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AgentTheme.textPrimary)
+                    Text(presentation.projectName.map { "Scope: \($0) + global" } ?? "Scope: global")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
+                Spacer()
+                Text("\(presentation.agents.count) Agents")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+            }
+
+            if presentation.agents.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(grouped, id: \.scope) { section in
+                            sectionView(section.scope, agents: section.agents)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(minHeight: 260, maxHeight: 420)
+            }
+
+            HStack {
+                Spacer()
+                Button("Schließen") { onClose() }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 600)
+        .background(AgentTheme.panel)
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "tray")
+                .font(.system(size: 22))
+                .foregroundStyle(AgentTheme.textTertiary)
+            Text("Keine Sub-Agents gefunden.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Text("Lege Markdown-Files unter ~/.claude/agents/ an oder im Projekt unter .claude/agents/.")
+                .font(.system(size: 11))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
+        .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    @ViewBuilder
+    private func sectionView(_ scope: SubAgent.Scope, agents: [SubAgent]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(scope == .project ? "PROJEKT" : "GLOBAL")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.06)
+                    .foregroundStyle(scope == .project ? .orange : AgentTheme.textTertiary)
+                Text("· \(agents.count)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AgentTheme.textTertiary)
+            }
+            ForEach(agents) { agent in
+                agentRow(agent)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func agentRow(_ agent: SubAgent) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text("@\(agent.name)")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                if agent.isolationWorktree {
+                    Label("worktree", systemImage: "square.stack.3d.up")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.indigo)
+                }
+                if let mode = agent.permissionMode {
+                    Text(mode)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.purple)
+                }
+                if let model = agent.model {
+                    Text(model)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
+                Spacer()
+            }
+            if let desc = agent.description, !desc.isEmpty {
+                Text(desc)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .lineLimit(3)
+            }
+            if agent.hasToolsRestriction, let tools = agent.toolsRaw {
+                Text("Tools: \(tools)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .lineLimit(2)
+            }
+            Text(agent.fileURL.path)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AgentTheme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6).stroke(AgentTheme.border, lineWidth: 1)
+        )
+    }
+}
+
+/// Modaler Sheet, der den Output von `claude logs <short-id>` anzeigt.
+/// Read-only — refresht nicht selbststaendig. Schliesst per Esc oder
+/// "Schliessen"-Button.
+struct BackgroundAgentLogsSheet: View {
+    let presentation: BackgroundLogsPresentation
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .foregroundStyle(AgentTheme.textSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Logs · \(presentation.title)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AgentTheme.textPrimary)
+                    Text("claude logs \(presentation.shortID)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
+                Spacer()
+            }
+
+            Group {
+                switch presentation.state {
+                case .loading:
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Lade Logs …").foregroundStyle(AgentTheme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                case .loaded(let output):
+                    ScrollView {
+                        Text(output.isEmpty ? "(kein Output)" : output)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(AgentTheme.textPrimary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6).stroke(AgentTheme.border, lineWidth: 1)
+                    )
+                    .frame(minHeight: 220, maxHeight: 380)
+                case .failed(let message):
+                    Text(message)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Schließen") { onClose() }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 620)
+        .background(AgentTheme.panel)
+    }
 }

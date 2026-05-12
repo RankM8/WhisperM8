@@ -172,9 +172,12 @@ struct AgentSessionDetailView: View {
             var builder = AgentCommandBuilder()
             // Hook-Bridge nur fuer normale interaktive Claude-Sessions —
             // Agent View ist ein Dashboard, hat keine eigene Session-ID
-            // zum Tracken. Background-Chats erben ihre Settings vom
-            // Supervisor; eigene --settings-Injection waere erst beim
-            // Spawn moeglich (Phase 4).
+            // zum Tracken. Background-Chats werden bereits beim Spawn
+            // (`AgentChatsView.dispatchBackgroundAgent` → `--settings
+            // <path>` an `claude --bg`) mit der Bridge verheiratet — beim
+            // spaeteren `claude attach` darf NICHT erneut eine Bridge
+            // gestartet werden, sonst wuerden zwei DispatchSources auf
+            // dieselbe Event-JSONL laufen.
             let useHookBridge = launchSession.provider == .claude
                 && !launchSession.isAgentView
                 && !launchSession.isBackgroundChat

@@ -55,6 +55,13 @@ struct TranscriptContextBundle: Codable, Equatable {
     /// ein Chat im Agent-Chats-Window ausgewählt ist. Optional, damit alte JSONs
     /// (ohne dieses Feld) weiterhin dekodierbar sind.
     var agentChat: AgentChatContextRef?
+    /// Letzter relevanter Konversations-Ausschnitt der `agentChat`-Session
+    /// (letzte User- + letzte Assistant-Message, ueberschlaegig gekuerzt).
+    /// Wird beim Recording-Start einmalig aus dem JSONL gelesen und mit ins
+    /// Prompt-Paket gegeben, damit das Post-Processing weiss, worum sich
+    /// die laufende Unterhaltung dreht. Bei Sessions ohne `externalSessionID`
+    /// (z. B. `.agentView`-TUI) bleibt der Wert `nil`.
+    var agentChatTail: String?
     var screenshots: [ContextAttachment]
     var annotations: [ContextAttachment]
     var screenClips: [ContextAttachment]
@@ -66,6 +73,7 @@ struct TranscriptContextBundle: Codable, Equatable {
     init(
         selectedText: SelectedContext = .empty,
         agentChat: AgentChatContextRef? = nil,
+        agentChatTail: String? = nil,
         screenshots: [ContextAttachment] = [],
         annotations: [ContextAttachment] = [],
         screenClips: [ContextAttachment] = [],
@@ -76,6 +84,7 @@ struct TranscriptContextBundle: Codable, Equatable {
     ) {
         self.selectedText = selectedText
         self.agentChat = agentChat
+        self.agentChatTail = agentChatTail
         self.screenshots = screenshots
         self.annotations = annotations
         self.screenClips = screenClips
@@ -199,11 +208,13 @@ struct TranscriptContextBundle: Codable, Equatable {
     static func from(
         selectedContext: SelectedContext,
         sourceApp: NSRunningApplication?,
-        agentChat: AgentChatContextRef? = nil
+        agentChat: AgentChatContextRef? = nil,
+        agentChatTail: String? = nil
     ) -> TranscriptContextBundle {
         TranscriptContextBundle(
             selectedText: selectedContext,
             agentChat: agentChat,
+            agentChatTail: agentChatTail,
             sourceAppName: sourceApp?.localizedName ?? selectedContext.sourceAppName,
             sourceBundleIdentifier: sourceApp?.bundleIdentifier ?? selectedContext.sourceBundleIdentifier
         )

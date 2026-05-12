@@ -133,8 +133,19 @@ struct AgentChatTranscriptView: View {
         )
     }
 
+    /// `true` wenn das eine `.backgroundChat`-Session ist, deren Spawn nie
+    /// abgeschlossen wurde (keine Short-ID). Fuer diesen Sonderfall taugt
+    /// der "Resume oben"-Hinweis nicht, weil `claude attach` ohne Short-ID
+    /// nicht laufen kann.
+    private var isOrphanedBackgroundChat: Bool {
+        session.isBackgroundChat && !session.hasBackgroundShortID
+    }
+
     private var bannerTitle: String {
         if isReallyEmpty {
+            if isOrphanedBackgroundChat {
+                return "Hintergrund-Agent unvollständig gespawnt"
+            }
             return transcript == nil
                 ? "Session noch nicht gestartet"
                 : "Konversation ist leer"
@@ -143,6 +154,9 @@ struct AgentChatTranscriptView: View {
     }
 
     private var bannerSubtitle: String {
+        if isOrphanedBackgroundChat && isReallyEmpty {
+            return "Diese Hintergrund-Session hat keine Short-ID — Attach ist nicht möglich. Tab schließen oder neu starten."
+        }
         let resumeHint = "Resume oben startet \(session.provider.displayName) erneut."
         if isReallyEmpty {
             return resumeHint
@@ -158,7 +172,7 @@ struct AgentChatTranscriptView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Spacer()
-            Image(systemName: transcript == nil ? "play.rectangle" : "ellipsis.bubble")
+            Image(systemName: emptyStateIcon)
                 .font(.system(size: 32))
                 .foregroundStyle(AgentTheme.textTertiary)
             Text(emptyStateTitle)
@@ -182,14 +196,25 @@ struct AgentChatTranscriptView: View {
         .padding(.horizontal, 32)
     }
 
+    private var emptyStateIcon: String {
+        if isOrphanedBackgroundChat { return "exclamationmark.triangle" }
+        return transcript == nil ? "play.rectangle" : "ellipsis.bubble"
+    }
+
     private var emptyStateTitle: String {
-        transcript == nil
+        if isOrphanedBackgroundChat {
+            return "Hintergrund-Agent wurde nicht vollständig gestartet"
+        }
+        return transcript == nil
             ? "Diese Session hat noch keine Konversation"
             : "Diese Konversation enthaelt noch keine Nachrichten"
     }
 
     private var emptyStateDetail: String {
-        "Klick **Resume** oben in der Header-Leiste, um \(session.provider.displayName) zu starten und mit dieser Session weiterzumachen."
+        if isOrphanedBackgroundChat {
+            return "Der Spawn dieses Hintergrund-Agents wurde unterbrochen, sodass keine Short-ID gespeichert ist. Schließe den Tab über das Kontextmenü und starte bei Bedarf einen neuen Hintergrund-Agent."
+        }
+        return "Klick **Resume** oben in der Header-Leiste, um \(session.provider.displayName) zu starten und mit dieser Session weiterzumachen."
     }
 
     @ViewBuilder

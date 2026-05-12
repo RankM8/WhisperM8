@@ -65,6 +65,10 @@ enum BackgroundAgentSpawner {
     /// - Parameters:
     ///   - initialPrompt: erster Prompt der dem Agent uebergeben wird
     ///   - projectPath: cwd fuer den Spawn (= Projekt-Ordner)
+    ///   - settingsFilePath: optionaler Pfad zu einer Claude-Settings-JSON.
+    ///     Wird als `--settings <path>` mitgegeben, sodass die vom Supervisor
+    ///     gestartete Background-Session die Hooks aus dieser Datei kennt
+    ///     (z. B. unsere SessionStart/SessionEnd/Notification-Bridge).
     ///   - subAgent: optionaler Sub-Agent-Name fuer `--agent <name>`
     ///   - permissionMode: optionaler `--permission-mode <mode>`
     ///   - extraArguments: weitere CLI-Argumente (z. B. aus User-Preferences)
@@ -74,6 +78,7 @@ enum BackgroundAgentSpawner {
     static func spawn(
         initialPrompt: String,
         projectPath: String,
+        settingsFilePath: String? = nil,
         subAgent: String? = nil,
         permissionMode: String? = nil,
         extraArguments: [String] = [],
@@ -90,6 +95,7 @@ enum BackgroundAgentSpawner {
 
         let arguments = AgentCommandBuilder.backgroundSpawnArguments(
             initialPrompt: initialPrompt,
+            settingsFilePath: settingsFilePath,
             subAgent: subAgent,
             permissionMode: permissionMode,
             extraArguments: extraArguments

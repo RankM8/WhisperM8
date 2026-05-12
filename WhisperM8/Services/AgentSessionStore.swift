@@ -656,11 +656,47 @@ struct AgentSessionStore {
         }
     }
 
+    /// Background-Sessions, deren Spawn nie erfolgreich abgeschlossen wurde
+    /// (kein `backgroundShortID` persistiert) und die mittlerweile beendet
+    /// sind (`closed`/`archived`), sind nicht mehr nutzbar — `claude attach`
+    /// braucht zwingend eine Short-ID. Wir raeumen sie still beim
+    /// Workspace-Load weg.
+    ///
+    /// Bewusst NICHT raeumen, wenn `status == .pending`/`.running`:
+    /// theoretisch koennte ein Spawn gerade laufen (oder die App ist mitten
+    /// im Spawn abgestuerzt). In dem Fall lassen wir die Session da — der
+    /// User kann selbst entscheiden.
+    static func removeOrphanBackgroundSessions(from workspace: inout AgentWorkspace) {
+        workspace.sessions.removeAll { session in
+            session.kind == .backgroundChat
+                && (session.backgroundShortID?.isEmpty != false)
+                && (session.status == .closed || session.status == .archived)
+        }
+    }
+
+    /// Einmal-Migration: in einer frueheren Build-Variante (Phase 6) hat
+    /// WhisperM8 jeden vom Claude-Supervisor gehosteten Background-Worker
+    /// automatisch aus `~/.claude/daemon/roster.json` als
+    /// `.backgroundChat`-Session importiert (mit `createdManually=false`).
+    /// Das hat in der Praxis nicht gut funktioniert und wurde wieder
+    /// zurueckgenommen. Diese Migration entfernt die Geist-Tabs aus dem
+    /// Workspace, damit die Sidebar nicht weiterhin von uns importierte
+    /// Sessions zeigt. Vom User selbst gespawnte BG-Agents
+    /// (`createdManually=true`) bleiben unberuehrt.
+    static func removeImportedBackgroundSessions(from workspace: inout AgentWorkspace) {
+        workspace.sessions.removeAll { session in
+            session.kind == .backgroundChat
+                && session.createdManually != true
+        }
+    }
+
     private static func migratedWorkspace(_ workspace: AgentWorkspace) -> AgentWorkspace {
         var migrated = workspace
         migrated.schemaVersion = AgentWorkspace.currentSchemaVersion
         removeClaudeWorktreeProjectsAndSessions(from: &migrated)
         removeUnresumableClaudeSessions(from: &migrated)
+        removeOrphanBackgroundSessions(from: &migrated)
+        removeImportedBackgroundSessions(from: &migrated)
         return migrated
     }
 

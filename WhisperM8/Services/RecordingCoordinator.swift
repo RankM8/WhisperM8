@@ -71,10 +71,30 @@ final class RecordingCoordinator {
             } else {
                 activeAgentChat = nil
             }
+
+            // Conversation-Tail des aktiven Chats lesen (Phase 6, C1). Wir wollen
+            // wissen, "worum geht's gerade", damit das Post-Processing den
+            // gesprochenen Prompt richtig einordnen kann. JSONL-Read kann ein
+            // paar Hundert KB gross sein — wir laufen aber schon in einem
+            // async-Pfad, das blockiert die UI nicht.
+            let activeAgentChatTail: String? = activeAgentChat.flatMap { ref in
+                AgentChatTailExtractor.extract(for: ref)
+            }
+
+            let sourceAppForBundle = contextSourceApp
             let contextBundle = TranscriptContextBundle.from(
                 selectedContext: selectedContext,
-                sourceApp: contextSourceApp,
-                agentChat: activeAgentChat
+                sourceApp: sourceAppForBundle,
+                agentChat: activeAgentChat,
+                agentChatTail: activeAgentChatTail
+            )
+
+            // Diagnostik: explizit loggen, was wir gerade als Chat-Kontext greifen.
+            // Macht es im `log stream`-Output sofort sichtbar und ist die Quelle
+            // der Wahrheit fuer User-Reports "warum hat der Prompt nicht den
+            // erwarteten Kontext gehabt".
+            Logger.transcription.info(
+                "recording_context_snapshot agentChatPresent=\(activeAgentChat != nil, privacy: .public) provider=\(activeAgentChat?.provider.rawValue ?? "none", privacy: .public) project=\(activeAgentChat?.projectName ?? "none", privacy: .public) externalID=\(activeAgentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(activeAgentChatTail?.count ?? 0, privacy: .public) sourceApp=\(sourceAppForBundle?.bundleIdentifier ?? "unknown", privacy: .public)"
             )
             try await audioRecorder.startRecording()
 
@@ -165,6 +185,11 @@ final class RecordingCoordinator {
         let frozenOutputMode = appState.selectedOutputMode
         let frozenContextBundle = appState.contextBundle
         Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")
+        // Letzte Wahrheit vor dem Transcription-Call: was geht jetzt wirklich
+        // raus? Inkludiert User-Edits aus dem Overlay (z. B. Pill entfernt).
+        Logger.transcription.info(
+            "recording_context_committed agentChatPresent=\(frozenContextBundle.agentChat != nil, privacy: .public) provider=\(frozenContextBundle.agentChat?.provider.rawValue ?? "none", privacy: .public) project=\(frozenContextBundle.agentChat?.projectName ?? "none", privacy: .public) chatTitle=\(frozenContextBundle.agentChat?.title ?? "none", privacy: .public) externalID=\(frozenContextBundle.agentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(frozenContextBundle.agentChatTail?.count ?? 0, privacy: .public) selectedTextChars=\(frozenContextBundle.selectedText.text.count, privacy: .public) attachments=\(frozenContextBundle.attachmentCount, privacy: .public)"
+        )
 
         recordingTimer.stop()
         removeEscKeyMonitor()

@@ -16,6 +16,7 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
         date: Date = Date()
     ) -> String {
         let renderedDate = Self.dateFormatter.string(from: date)
+        let agentChat = contextBundle.agentChat
         return instruction
             .replacingOccurrences(of: "{rawTranscript}", with: rawTranscript)
             .replacingOccurrences(of: "{selectedContext}", with: contextBundle.selectedText.text)
@@ -24,6 +25,14 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
             .replacingOccurrences(of: "{visualInputMode}", with: CodexVisualInputMode.resolve(AppPreferences.shared.codexVisualInputModeRaw).displayName)
             .replacingOccurrences(of: "{attachmentCount}", with: "\(contextBundle.attachmentCount)")
             .replacingOccurrences(of: "{activeApp}", with: contextBundle.sourceAppName ?? contextBundle.selectedText.sourceAppName ?? "")
+            // Agent-Chat-Platzhalter — leere Strings als Default, damit Templates,
+            // die diese Variablen nicht nutzen, unveraendert bleiben.
+            .replacingOccurrences(of: "{agentChatTitle}", with: agentChat?.title ?? "")
+            .replacingOccurrences(of: "{agentChatProject}", with: agentChat?.projectName ?? "")
+            .replacingOccurrences(of: "{agentChatPath}", with: agentChat?.projectPath ?? "")
+            .replacingOccurrences(of: "{agentChatProvider}", with: agentChat?.provider.displayName ?? "")
+            .replacingOccurrences(of: "{agentChatExternalID}", with: agentChat?.externalSessionID ?? "")
+            .replacingOccurrences(of: "{agentChatTail}", with: contextBundle.agentChatTail ?? "")
             .replacingOccurrences(of: "{language}", with: language.isEmpty ? "auto" : language)
             .replacingOccurrences(of: "{date}", with: renderedDate)
     }

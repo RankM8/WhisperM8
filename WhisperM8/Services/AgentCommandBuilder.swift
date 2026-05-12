@@ -233,15 +233,21 @@ struct AgentCommandBuilder {
     /// auf stdout druckt und dann beendet. Wir bauen die Args trotzdem
     /// hier zentral, damit Spawn und Attach in derselben Code-Linie liegen.
     ///
-    /// Reihenfolge: `--bg` muss vor dem Prompt stehen; `--agent` und
+    /// Reihenfolge: `--settings` muss vor `--bg` stehen, damit Claude die
+    /// Hook-Konfiguration vor dem Session-Setup einliest. `--agent` und
     /// `--permission-mode` sind optionale Flags vor dem Prompt.
     static func backgroundSpawnArguments(
         initialPrompt: String,
+        settingsFilePath: String? = nil,
         subAgent: String? = nil,
         permissionMode: String? = nil,
         extraArguments: [String] = []
     ) -> [String] {
-        var args: [String] = ["--bg"]
+        var args: [String] = []
+        if let path = settingsFilePath?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+            args.append(contentsOf: ["--settings", path])
+        }
+        args.append("--bg")
         if let agent = subAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !agent.isEmpty {
             args.append(contentsOf: ["--agent", agent])
         }

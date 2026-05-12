@@ -5,10 +5,26 @@ import Foundation
 /// Sie definiert nur unsere eigenen Hooks — User-Settings und Project-
 /// Settings bleiben unangetastet (Claude mergt additiv).
 enum ClaudeHookSettingsBuilder {
-    /// Baut das Settings-Dict mit `SessionStart`- und `SessionEnd`-Hooks,
-    /// die jeden Event als JSON-Zeile in `eventFilePath` appenden. Wir
-    /// nutzen `(cat ; echo) >> "$path"` — das ist robust gegen Pfade mit
-    /// Leerzeichen und braucht keine externen Tools wie `jq`.
+    /// Hook-Events, die wir per `--settings`-Bridge mittracken. Wir
+    /// registrieren bewusst denselben Append-Command fuer mehrere Events:
+    /// SessionStart/End fuer Lifecycle, PreToolUse fuer "Working"-Pulses,
+    /// Notification fuer "Needs input"-Detection (Claude druckt
+    /// Permission-Prompts ueber den `Notification`-Hook).
+    /// Reihenfolge bestimmt nur die Serialisierung — Anthropic merged
+    /// Hooks ohnehin pro Event-Name.
+    static let trackedEventNames: [String] = [
+        "SessionStart",
+        "SessionEnd",
+        "PreToolUse",
+        "Notification"
+    ]
+
+    /// Baut das Settings-Dict mit Hooks fuer alle `trackedEventNames`, die
+    /// jeden Event als JSON-Zeile in `eventFilePath` appenden. Wir nutzen
+    /// `(cat ; echo) >> "$path"` — robust gegen Pfade mit Leerzeichen,
+    /// keine externen Tools wie `jq`. Background-Sessions setzen das
+    /// beim `--bg`-Spawn (siehe `BackgroundAgentSpawner`), normale
+    /// Chats beim Launch des PTY.
     static func makeSettings(eventFilePath: String) -> [String: Any] {
         let command = appendCommand(eventFilePath: eventFilePath)
         let entry: [String: Any] = [
@@ -20,12 +36,11 @@ enum ClaudeHookSettingsBuilder {
                 ]
             ]
         ]
-        return [
-            "hooks": [
-                "SessionStart": [entry],
-                "SessionEnd": [entry]
-            ]
-        ]
+        var hooks: [String: Any] = [:]
+        for name in trackedEventNames {
+            hooks[name] = [entry]
+        }
+        return ["hooks": hooks]
     }
 
     /// Serialisiert die Settings als utf8-JSON-Daten. Sortierung der Keys

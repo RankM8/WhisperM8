@@ -61,6 +61,18 @@ final class ClaudeHookBridge {
     /// Bereitet einen Launch vor: schreibt die Settings-Datei und gibt
     /// extra-Args fuer den Claude-Command zurueck. Idempotent.
     func prepareLaunch(localSessionID: UUID) -> [String] {
+        guard let path = prepareSettingsFile(localSessionID: localSessionID) else {
+            return []
+        }
+        return ["--settings", path]
+    }
+
+    /// Wie `prepareLaunch`, gibt aber direkt den Settings-Pfad zurueck —
+    /// fuer Aufrufer, die den Pfad selbst in andere Argv-Strukturen einbauen
+    /// (z. B. `claude --settings <path> --bg "<prompt>"` beim
+    /// Background-Spawn). `nil` bei IO-Fehlern; der Caller faellt dann auf
+    /// einen Launch ohne Hook-Bridge zurueck.
+    func prepareSettingsFile(localSessionID: UUID) -> String? {
         let settingsURL = paths.settingsFileURL(localSessionID: localSessionID)
         let eventURL = paths.eventFileURL(localSessionID: localSessionID)
         do {
@@ -78,10 +90,10 @@ final class ClaudeHookBridge {
                 eventFilePath: eventURL.path,
                 to: settingsURL
             )
-            return ["--settings", settingsURL.path]
+            return settingsURL.path
         } catch {
             Logger.claudeBinding.warning("hook_prepare_failed localID=\(localSessionID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-            return []
+            return nil
         }
     }
 
