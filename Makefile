@@ -159,6 +159,16 @@ _bundle:
 	@cp "WhisperM8/Resources/ProviderClaude@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/ProviderCodex.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/ProviderCodex@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
+	@# SwiftPM-generierte Resource-Bundles (z. B. KeyboardShortcuts_KeyboardShortcuts.bundle)
+	@# muessen in Contents/Resources/ liegen, damit `Bundle.module` zur Laufzeit
+	@# Localizables und sonstige Resources der Dependencies findet. Ohne das
+	@# crasht die App beim ersten Zugriff (z. B. KeyboardShortcuts.RecorderCocoa)
+	@# mit einem fatalError in `closure #1 in NSBundle.module`.
+	@for bundle in .build/$(BUILD)/*.bundle; do \
+		if [ -e "$$bundle" ]; then \
+			cp -R "$$bundle" "$(APP_BUNDLE)/Contents/Resources/"; \
+		fi; \
+	done
 	@/usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$(APP_BUNDLE)/Contents/Info.plist" 2>/dev/null || true
 	@/usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string 'AppIcon'" "$(APP_BUNDLE)/Contents/Info.plist"
 	@# Codesign identity: prefer the persistent local-dev cert if it
