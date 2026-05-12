@@ -105,6 +105,15 @@ struct AgentSessionDetailView: View {
             isLoadingTranscript = false
             return
         }
+        // Background-Chats sind erst nach erfolgreichem Spawn an eine JSONL
+        // gebunden — und auch dann ueber die vom Supervisor gewaehlte UUID,
+        // nicht ueber externalSessionID. Transcript-Loading folgt in Phase 3
+        // (per Indexer-Lookup via cwd + lastActivityAt). Bis dahin: skip.
+        guard !session.isBackgroundChat else {
+            cachedTranscript = nil
+            isLoadingTranscript = false
+            return
+        }
         guard let externalID = session.externalSessionID, !externalID.isEmpty else {
             cachedTranscript = nil
             isLoadingTranscript = false
@@ -163,8 +172,12 @@ struct AgentSessionDetailView: View {
             var builder = AgentCommandBuilder()
             // Hook-Bridge nur fuer normale interaktive Claude-Sessions —
             // Agent View ist ein Dashboard, hat keine eigene Session-ID
-            // zum Tracken.
-            let useHookBridge = launchSession.provider == .claude && !launchSession.isAgentView
+            // zum Tracken. Background-Chats erben ihre Settings vom
+            // Supervisor; eigene --settings-Injection waere erst beim
+            // Spawn moeglich (Phase 4).
+            let useHookBridge = launchSession.provider == .claude
+                && !launchSession.isAgentView
+                && !launchSession.isBackgroundChat
             if useHookBridge {
                 let hookArgs = onPrepareClaudeHookArguments(launchSession.id)
                 if !hookArgs.isEmpty {

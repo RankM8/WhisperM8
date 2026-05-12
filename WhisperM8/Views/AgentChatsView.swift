@@ -54,6 +54,16 @@ struct AgentChatsView: View {
     /// Workspace-Reload.
     @State private var iconLookupAttempted: Set<UUID> = []
 
+    /// Wenn nicht-nil, zeigen wir das Background-Dispatch-Modal als Sheet.
+    /// Bindet an ein Snapshot des aktuell selektierten Projekts, damit der
+    /// User waehrend des Modals nicht aus Versehen das Projekt wechselt.
+    @State private var pendingBackgroundDispatch: PendingBackgroundDispatch?
+    /// Local-Session-ID einer Background-Session, die gerade noch spawned —
+    /// die UI zeigt den Tab schon, aber `claude attach` startet erst nach
+    /// dem Spawn-Callback. Verhindert dass der Detail-View sofort prepareCommand
+    /// fuehrt (was ohne Short-ID failen wuerde).
+    @State private var spawningBackgroundSessions: Set<UUID> = []
+
     private var selectedProject: AgentProject? {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
     }
@@ -156,6 +166,17 @@ struct AgentChatsView: View {
             set: { if !$0 { renameProjectTargetID = nil } }
         )) {
             renameProjectSheet
+        }
+        .sheet(item: $pendingBackgroundDispatch) { pending in
+            BackgroundDispatchModal(
+                project: pending.project,
+                availableSubAgents: pending.subAgents,
+                onCancel: { pendingBackgroundDispatch = nil },
+                onDispatch: { request in
+                    pendingBackgroundDispatch = nil
+                    Task { await dispatchBackgroundAgent(in: pending.project, request: request) }
+                }
+            )
         }
         .sheet(item: $pendingAmbiguousRebind) { request in
             AgentSessionAmbiguousRebindPicker(
@@ -732,6 +753,9 @@ struct AgentChatsView: View {
                 Menu {
                     Button("Neuer Codex Chat") { createSession(provider: .codex) }
                     Button("Neuer Claude Chat") { createSession(provider: .claude) }
+                    Divider()
+                    Button("Neuer Hintergrund-Agent…") { presentBackgroundDispatchModal() }
+                        .disabled(selectedProject == nil)
                     Divider()
                     Button("Neuer Claude Agent View") {
                         createSession(provider: .claude, kind: .agentView)
@@ -1401,6 +1425,95 @@ struct AgentChatsView: View {
         }
     }
 
+    // MARK: - Background Agents (Phase 2)
+
+    /// Oeffnet das Background-Dispatch-Modal fuer das aktuell selektierte
+    /// Projekt. Sub-Agent-Discovery laeuft synchron — die Listen sind klein
+    /// und es ist FS-cached.
+    private func presentBackgroundDispatchModal() {
+        guard let project = selectedProject else { return }
+        let subAgents = SubAgentDiscovery.discover(projectPath: project.path)
+        pendingBackgroundDispatch = PendingBackgroundDispatch(
+            project: project,
+            subAgents: subAgents
+        )
+    }
+
+    /// Spawnt einen neuen Background-Agent via `claude --bg`, persistiert die
+    /// Short-ID auf die neu angelegte Session und triggert dann `claude attach`
+    /// als PTY-Tab. Drei Stufen:
+    ///
+    /// 1. Persistieren — Tab erscheint sofort in der Sidebar (mit Pending-State).
+    /// 2. Spawn — Subprocess-Aufruf, parsed Short-ID. Bei Fehler: errorMessage.
+    /// 3. Attach — Short-ID auf Session schreiben + sessionActionRequest senden.
+    @MainActor
+    private func dispatchBackgroundAgent(in project: AgentProject, request: BackgroundDispatchRequest) async {
+        // 1. Stub-Session anlegen (ohne Short-ID), Tab oeffnen.
+        let session: AgentChatSession
+        do {
+            session = try store.createSession(
+                provider: .claude,
+                projectPath: project.path,
+                title: backgroundSessionTitle(for: request),
+                model: AppPreferences.shared.codexPostProcessingModelRaw,
+                reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+                externalSessionID: nil,
+                initialPrompt: request.prompt,
+                shouldLaunchOnOpen: false,
+                kind: .backgroundChat,
+                backgroundSubAgent: request.subAgent,
+                backgroundPermissionMode: request.permissionMode
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        workspace = store.loadWorkspace()
+        spawningBackgroundSessions.insert(session.id)
+        selectedSessionID = session.id
+        openTabIDs.insert(session.id)
+
+        // 2. Spawn via BackgroundAgentSpawner.
+        let extraArgs = AgentCommandBuilder.parseArguments(AppPreferences.shared.claudeExtraArguments)
+        do {
+            let result = try await BackgroundAgentSpawner.spawn(
+                initialPrompt: request.prompt,
+                projectPath: project.path,
+                subAgent: request.subAgent,
+                permissionMode: request.permissionMode,
+                extraArguments: extraArgs
+            )
+            // 3. Short-ID persistieren + Attach triggern.
+            try store.setBackgroundShortID(localSessionID: session.id, shortID: result.shortID)
+            try store.updateSession(id: session.id) { updated in
+                updated.hasLaunchedInitialPrompt = true
+            }
+            workspace = store.loadWorkspace()
+            spawningBackgroundSessions.remove(session.id)
+            sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
+        } catch {
+            // Spawn fehlgeschlagen — Stub-Session bleibt sichtbar damit der
+            // User nicht denkt der Klick ist verpufft, aber wir markieren sie
+            // als errored.
+            spawningBackgroundSessions.remove(session.id)
+            try? store.updateSession(id: session.id) { updated in
+                updated.status = .closed
+            }
+            workspace = store.loadWorkspace()
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Kurzer Titel-Fallback, bis der AutoNamer einen besseren Namen aus dem
+    /// Transcript ableitet. Zeigt direkt den Prompt-Anfang an.
+    private func backgroundSessionTitle(for request: BackgroundDispatchRequest) -> String {
+        let trimmed = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let firstLine = trimmed.split(whereSeparator: { $0.isNewline }).first.map(String.init) ?? trimmed
+        let cap = 60
+        let snippet = firstLine.count > cap ? String(firstLine.prefix(cap - 1)) + "…" : firstLine
+        return snippet.isEmpty ? "Hintergrund-Agent" : snippet
+    }
+
     private func markSession(_ id: UUID, status: AgentChatStatus) {
         do {
             if status == .closed || status == .archived {
@@ -1653,4 +1766,14 @@ struct AgentChatsView: View {
             }
         }
     }
+}
+
+/// Snapshot der Daten, die das Background-Dispatch-Sheet braucht. Wir
+/// kopieren das selektierte Projekt + die zum Zeitpunkt-des-Open gefundenen
+/// Sub-Agents rein, damit das Modal unabhaengig von Workspace-Aenderungen
+/// im Hintergrund bleibt.
+struct PendingBackgroundDispatch: Identifiable, Equatable {
+    let id = UUID()
+    let project: AgentProject
+    let subAgents: [SubAgent]
 }

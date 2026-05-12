@@ -271,12 +271,22 @@ struct SessionListButton: View {
                         .foregroundStyle(isSelected ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
                         // Smooth crossfade wenn der AutoNamer den Titel
                         // austauscht — statt eines harten Pops.
                         .contentTransition(.opacity)
                         .animation(.easeInOut(duration: 0.3), value: session.title)
                         .help(session.title)
+
+                    if session.isBackgroundChat {
+                        kindPill("BG", color: .indigo)
+                            .help("Hintergrund-Agent · vom Claude-Supervisor gehostet")
+                    } else if session.isAgentView {
+                        kindPill("VIEW", color: .orange)
+                            .help("Claude Agents View · Multi-Session-TUI")
+                    }
+
+                    Spacer(minLength: 0)
 
                     trailingIndicator
                         .frame(width: 18, alignment: .trailing)
@@ -369,6 +379,26 @@ struct SessionListButton: View {
         if isSelected { return AgentTheme.selection }
         if isHovered { return AgentTheme.hover }
         return Color.clear
+    }
+
+    /// Kleines Pill-Label rechts neben dem Titel, das die "Sonder-Kind" einer
+    /// Session anzeigt (BG = Background-Agent, VIEW = Claude Agents View).
+    /// Wird nur fuer `.backgroundChat` und `.agentView` gezeigt — normale
+    /// `.chat`-Sessions bleiben minimalistisch.
+    @ViewBuilder
+    private func kindPill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .bold))
+            .tracking(0.04)
+            .foregroundStyle(color)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(color.opacity(0.30), lineWidth: 0.5)
+            )
+            .fixedSize()
     }
 }
 
