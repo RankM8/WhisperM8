@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build only (no run)
+# Compatibility wrapper for the canonical SwiftPM/Makefile build path.
 
 set -e
 
@@ -8,6 +8,6 @@ APP_NAME="WhisperM8"
 
 echo "🔨 Building $APP_NAME..."
 cd "$PROJECT_DIR"
-xcodebuild -scheme "$APP_NAME" -configuration Debug build -quiet
+make build
 
 echo "✅ Build complete"

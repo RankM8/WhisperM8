@@ -9,6 +9,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
     case modes = "Modes"
     case templates = "Templates"
     case testLab = "Test Lab"
+    case agentChats = "Agent Chats"
     case permissions = "Permissions"
     case hotkey = "Hotkey"
     case audio = "Audio"
@@ -16,6 +17,39 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
     case about = "About"
 
     var id: String { rawValue }
+
+    var routeID: String {
+        switch self {
+        case .api:
+            return "api"
+        case .codex:
+            return "codex"
+        case .outputOverview:
+            return "outputOverview"
+        case .modes:
+            return "modes"
+        case .templates:
+            return "templates"
+        case .testLab:
+            return "testLab"
+        case .agentChats:
+            return "agentChats"
+        case .permissions:
+            return "permissions"
+        case .hotkey:
+            return "hotkey"
+        case .audio:
+            return "audio"
+        case .behavior:
+            return "behavior"
+        case .about:
+            return "about"
+        }
+    }
+
+    static func section(routeID: String) -> ControlCenterSection? {
+        allCases.first { $0.routeID == routeID }
+    }
 
     var systemImage: String {
         switch self {
@@ -31,6 +65,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "doc.text"
         case .testLab:
             return "testtube.2"
+        case .agentChats:
+            return "terminal"
         case .permissions:
             return "shield.checkered"
         case .hotkey:
@@ -50,6 +86,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "Accounts"
         case .outputOverview, .modes, .templates, .testLab:
             return "Output"
+        case .agentChats:
+            return "Agents"
         case .permissions, .hotkey, .audio, .behavior:
             return "App"
         case .about:
@@ -60,6 +98,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @StateObject private var windowRequestCenter = WindowRequestCenter.shared
     @State private var selection: ControlCenterSection? = .api
 
     var body: some View {
@@ -75,6 +114,10 @@ struct SettingsView: View {
                     sidebarRow(.modes)
                     sidebarRow(.templates)
                     sidebarRow(.testLab)
+                }
+
+                Section("Agents") {
+                    sidebarRow(.agentChats)
                 }
 
                 Section("App") {
@@ -95,6 +138,25 @@ struct SettingsView: View {
             detailView(for: selection ?? .api)
         }
         .frame(minWidth: 860, minHeight: 620)
+        .onChange(of: selection) { _, newSelection in
+            if newSelection == .agentChats {
+                WindowRequestCenter.shared.request(.agentChats)
+            }
+        }
+        .onAppear {
+            applySettingsRoute(windowRequestCenter.latestRequest)
+        }
+        .onReceive(windowRequestCenter.$latestRequest.compactMap { $0 }) { request in
+            applySettingsRoute(request)
+        }
+    }
+
+    private func applySettingsRoute(_ request: WindowRequest?) {
+        guard let routeID = request?.settingsSectionID,
+              let section = ControlCenterSection.section(routeID: routeID) else {
+            return
+        }
+        selection = section
     }
 
     private func sidebarRow(_ section: ControlCenterSection) -> some View {
@@ -119,6 +181,9 @@ struct SettingsView: View {
             OutputTemplatesView()
         case .testLab:
             OutputTestLabView()
+        case .agentChats:
+            AgentChatsAccessView()
+                .navigationTitle(section.rawValue)
         case .permissions:
             PermissionsSettingsView()
                 .navigationTitle(section.rawValue)
@@ -135,6 +200,85 @@ struct SettingsView: View {
             AboutView()
                 .navigationTitle(section.rawValue)
         }
+    }
+}
+
+struct AgentChatsAccessView: View {
+    @AppStorage("defaultAgentProvider") private var defaultAgentProviderRaw = "claude"
+    @AppStorage("isAutoChatRenameEnabled") private var isAutoChatRenameEnabled = true
+    @AppStorage("isTerminalBellEnabled") private var isTerminalBellEnabled = true
+    @AppStorage("codexExtraArguments") private var codexExtraArguments = ""
+    @AppStorage("claudeExtraArguments") private var claudeExtraArguments = ""
+
+    var body: some View {
+        Form {
+            Section("Agent Workspace") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Agent Chats")
+                            .font(.headline)
+                        Text("Open the Codex and Claude session hub for project chats, resumes, and task follow-up.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        WindowRequestCenter.shared.request(.agentChats)
+                    } label: {
+                        Label("Open Agent Chats", systemImage: "arrow.up.forward.app")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            Section("Standard-Provider") {
+                Picker("Neuer Chat startet mit", selection: $defaultAgentProviderRaw) {
+                    Text("Claude Code").tag("claude")
+                    Text("Claude Agents").tag("claude-agents")
+                    Text("Codex").tag("codex")
+                }
+                .pickerStyle(.segmented)
+
+                Text("Bestimmt, welcher Provider beim 'Neuer Chat'-Button und beim Plus-Knopf eines Projekts genutzt wird. **Claude Agents** öffnet die Multi-Session-Dashboard-View statt eines einzelnen Chats.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Chat-Verhalten") {
+                Toggle("Chats automatisch umbenennen", isOn: $isAutoChatRenameEnabled)
+                Text("Nach dem ersten Turn-Ende wird der Titel via `claude -p` aus dem Transcript abgeleitet. Wenn aus: Default-Titel \"Claude Chat\"/\"Codex Chat\" bleibt bis du selbst umbenennst.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Terminal-Sounds erlauben", isOn: $isTerminalBellEnabled)
+                Text("Manche TUI-Prompts senden ein Bell-Zeichen (`\\a`), das macOS als System-Ton spielt. Wenn aus: Terminal bleibt komplett still.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Claude CLI · Extra-Argumente") {
+                TextField("z. B. --dangerously-skip-permissions", text: $claudeExtraArguments)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+
+                Text("Wird vorne an jeden `claude`-Aufruf angehängt — auch beim Resume bestehender Sessions. Whitespace-getrennt; Quotes erlaubt für Argumente mit Leerzeichen.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Codex CLI · Extra-Argumente") {
+                TextField("z. B. --ask-for-approval untrusted", text: $codexExtraArguments)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+
+                Text("Wird vorne an jeden `codex`-Aufruf angehängt (vor `-C`/`-m`/`resume`). Whitespace-getrennt; Quotes erlaubt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
@@ -541,12 +685,31 @@ struct BehaviorSettingsView: View {
     @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.full.rawValue
     @AppStorage("selectedContextCaptureEnabled") private var selectedContextCaptureEnabled = true
     @AppStorage("visualContextCaptureEnabled") private var visualContextCaptureEnabled = true
-    @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = 3
+    @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = AppPreferences.defaultMaxScreenshotsPerRecording
     @AppStorage("maxScreenRecordingDuration") private var maxScreenRecordingDuration = 30.0
     @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = false
+    @ObservedObject private var themeManager = ThemeManager.shared
 
     var body: some View {
         Form {
+            Section("Erscheinungsbild") {
+                Picker("Theme", selection: Binding(
+                    get: { themeManager.override },
+                    set: { themeManager.setOverride($0) }
+                )) {
+                    ForEach(AppearanceOverride.allCases) { option in
+                        Label(option.displayName, systemImage: option.systemImage)
+                            .tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                Text("\"System\" folgt macOS. Bei \"Hell\" / \"Dunkel\" wird auch Claude Code (über ~/.claude.json → light-ansi / dark-ansi) entsprechend umgestellt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Toggle("Auto-paste after transcription", isOn: $autoPasteEnabled)
 
@@ -568,7 +731,11 @@ struct BehaviorSettingsView: View {
             Section("Visual Context") {
                 Toggle("Allow screenshots and screen clips as context", isOn: $visualContextCaptureEnabled)
 
-                Stepper("Screenshots per recording: \(maxScreenshotsPerRecording)", value: $maxScreenshotsPerRecording, in: 1...6)
+                Stepper(
+                    "Screenshots per recording: \(maxScreenshotsPerRecording)",
+                    value: $maxScreenshotsPerRecording,
+                    in: 1...AppPreferences.maximumScreenshotsPerRecording
+                )
 
                 HStack {
                     Text("Max screen clip")
@@ -631,6 +798,21 @@ struct BehaviorSettingsView: View {
 // MARK: - About View
 
 struct AboutView: View {
+    private var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        switch (version?.isEmpty == false ? version : nil, build?.isEmpty == false ? build : nil) {
+        case let (version?, build?) where version != build:
+            return "Version \(version) (\(build))"
+        case let (version?, _):
+            return "Version \(version)"
+        case (_, let build?):
+            return "Build \(build)"
+        default:
+            return "Version unknown"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Image(nsImage: NSApp.applicationIconImage)
@@ -641,7 +823,7 @@ struct AboutView: View {
             Text("WhisperM8")
                 .font(.title2.bold())
 
-            Text("Version 1.2.0")
+            Text(versionText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

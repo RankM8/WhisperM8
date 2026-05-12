@@ -3,10 +3,14 @@ import Foundation
 struct AppPreferences {
     static var shared = AppPreferences()
 
+    static let defaultMaxScreenshotsPerRecording = 20
+    static let maximumScreenshotsPerRecording = 20
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        migrateScreenshotLimitDefaultIfNeeded()
     }
 
     var selectedProviderRaw: String? {
@@ -52,6 +56,16 @@ struct AppPreferences {
         nonmutating set { setOptionalString(newValue, forKey: Keys.selectedAudioDeviceUID) }
     }
 
+    /// Theme-Override: `system` (default, folgt macOS), `light` oder `dark`.
+    /// Wird vom `ThemeManager` und einem optionalen Settings-Picker gelesen.
+    var appearanceOverride: AppearanceOverride {
+        get {
+            let raw = defaults.string(forKey: Keys.appearanceOverride) ?? AppearanceOverride.system.rawValue
+            return AppearanceOverride(rawValue: raw) ?? .system
+        }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.appearanceOverride) }
+    }
+
     var onboardingCompleted: Bool {
         get { defaults.bool(forKey: Keys.onboardingCompleted) }
         nonmutating set { defaults.set(newValue, forKey: Keys.onboardingCompleted) }
@@ -95,9 +109,12 @@ struct AppPreferences {
     var maxScreenshotsPerRecording: Int {
         get {
             let value = defaults.integer(forKey: Keys.maxScreenshotsPerRecording)
-            return value > 0 ? value : 3
+            guard value > 0 else { return Self.defaultMaxScreenshotsPerRecording }
+            return min(value, Self.maximumScreenshotsPerRecording)
         }
-        nonmutating set { defaults.set(newValue, forKey: Keys.maxScreenshotsPerRecording) }
+        nonmutating set {
+            defaults.set(max(1, min(newValue, Self.maximumScreenshotsPerRecording)), forKey: Keys.maxScreenshotsPerRecording)
+        }
     }
 
     var maxScreenRecordingDuration: TimeInterval {
@@ -128,6 +145,71 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.codexVisualInputMode) }
     }
 
+    var agentDefaultProjectPath: String {
+        get {
+            defaults.string(forKey: Keys.agentDefaultProjectPath)
+                ?? FileManager.default.homeDirectoryForCurrentUser.path
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentDefaultProjectPath) }
+    }
+
+    /// Default-Provider für „Neuer Chat" in der Agent-Chats-Sidebar.
+    /// Werte:
+    /// - "claude" (AgentProvider.claude, Chat-Modus)
+    /// - "codex" (AgentProvider.codex, Chat-Modus)
+    /// - "claude-agents" (AgentProvider.claude, Agent-View-Modus via `claude agents`)
+    /// Backward-kompatibel: alte Workspaces mit nur "claude"/"codex" funktionieren weiter.
+    var defaultAgentProviderRaw: String {
+        get { defaults.string(forKey: Keys.defaultAgentProvider) ?? "claude" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.defaultAgentProvider) }
+    }
+
+    /// Liefert `(provider, kind)` aus `defaultAgentProviderRaw` aufgeloest.
+    /// `kind == nil` bedeutet "Default-Chat" (passt mit `AgentChatSession.kind == nil`,
+    /// das via `effectiveKind` zu `.chat` resolved).
+    var defaultAgentLaunchTarget: (provider: AgentProvider, kind: AgentSessionKind?) {
+        switch defaultAgentProviderRaw {
+        case "codex":
+            return (.codex, nil)
+        case "claude-agents":
+            return (.claude, .agentView)
+        case "claude":
+            return (.claude, nil)
+        default:
+            return (.claude, nil)
+        }
+    }
+
+    /// Aktiviert das automatische Umbenennen von neuen Chats nach dem ersten
+    /// Turn-End (via `claude -p`-Subprocess). Default: an. Wenn aus: Title
+    /// bleibt "Claude Chat" / "Codex Chat" bis der User selbst umbenennt.
+    var isAutoChatRenameEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.isAutoChatRenameEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.isAutoChatRenameEnabled) }
+    }
+
+    /// Steuert ob SwiftTerm Terminal-Bell-Sounds (`\a` = 0x07 von Claude/Codex
+    /// bei Permission-Prompts) als macOS-System-Sound ausspielt. Default: an.
+    var isTerminalBellEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.isTerminalBellEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.isTerminalBellEnabled) }
+    }
+
+    /// Frei konfigurierbare zusätzliche CLI-Argumente, die an den Codex-Aufruf
+    /// vorne (vor `-C <path>`/`-m <model>`/`resume`/...) angehängt werden.
+    /// Beispiel: `--ask-for-approval untrusted`. Eingabe via Whitespace-getrennt.
+    var codexExtraArguments: String {
+        get { defaults.string(forKey: Keys.codexExtraArguments) ?? "" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexExtraArguments) }
+    }
+
+    /// Frei konfigurierbare zusätzliche CLI-Argumente für Claude-Aufrufe.
+    /// Beispiel: `--dangerously-skip-permissions`. Eingabe via Whitespace-getrennt.
+    var claudeExtraArguments: String {
+        get { defaults.string(forKey: Keys.claudeExtraArguments) ?? "" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeExtraArguments) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -156,6 +238,20 @@ struct AppPreferences {
             defaults.removeObject(forKey: key)
         }
     }
+
+    private func migrateScreenshotLimitDefaultIfNeeded() {
+        guard defaults.bool(forKey: Keys.didMigrateMaxScreenshotsPerRecordingTo20) == false else {
+            return
+        }
+
+        let value = defaults.integer(forKey: Keys.maxScreenshotsPerRecording)
+        if value <= 0 || value == 3 {
+            defaults.set(Self.defaultMaxScreenshotsPerRecording, forKey: Keys.maxScreenshotsPerRecording)
+        } else if value > Self.maximumScreenshotsPerRecording {
+            defaults.set(Self.maximumScreenshotsPerRecording, forKey: Keys.maxScreenshotsPerRecording)
+        }
+        defaults.set(true, forKey: Keys.didMigrateMaxScreenshotsPerRecordingTo20)
+    }
 }
 
 enum PreferenceKeys {
@@ -178,11 +274,19 @@ enum PreferenceKeys {
     static let selectedContextCaptureEnabled = "selectedContextCaptureEnabled"
     static let visualContextCaptureEnabled = "visualContextCaptureEnabled"
     static let maxScreenshotsPerRecording = "maxScreenshotsPerRecording"
+    static let didMigrateMaxScreenshotsPerRecordingTo20 = "didMigrateMaxScreenshotsPerRecordingTo20"
     static let maxScreenRecordingDuration = "maxScreenRecordingDuration"
     static let deleteContextFilesAfterProcessing = "deleteContextFilesAfterProcessing"
     static let codexPostProcessingModel = "codexPostProcessingModel"
     static let codexReasoningEffort = "codexReasoningEffort"
     static let codexVisualInputMode = "codexVisualInputMode"
+    static let agentDefaultProjectPath = "agentDefaultProjectPath"
+    static let defaultAgentProvider = "defaultAgentProvider"
+    static let isAutoChatRenameEnabled = "isAutoChatRenameEnabled"
+    static let isTerminalBellEnabled = "isTerminalBellEnabled"
+    static let codexExtraArguments = "codexExtraArguments"
+    static let claudeExtraArguments = "claudeExtraArguments"
+    static let appearanceOverride = "appearanceOverride"
 }
 
 private typealias Keys = PreferenceKeys

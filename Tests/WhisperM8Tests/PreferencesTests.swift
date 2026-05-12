@@ -17,13 +17,27 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.showModePickerInMiniOverlay)
             XCTAssertTrue(preferences.isSelectedContextCaptureEnabled)
             XCTAssertTrue(preferences.isVisualContextCaptureEnabled)
-            XCTAssertEqual(preferences.maxScreenshotsPerRecording, 3)
+            XCTAssertEqual(preferences.maxScreenshotsPerRecording, 20)
             XCTAssertEqual(preferences.maxScreenRecordingDuration, 30)
             XCTAssertFalse(preferences.deleteContextFilesAfterProcessing)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.defaultModel.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.defaultEffort.rawValue)
             XCTAssertEqual(preferences.codexVisualInputModeRaw, CodexVisualInputMode.defaultMode.rawValue)
         }
+    }
+
+    func testMigratesLegacyScreenshotDefaultToTwenty() {
+        let suiteName = "WhisperM8Tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(3, forKey: PreferenceKeys.maxScreenshotsPerRecording)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.maxScreenshotsPerRecording, 20)
     }
 
     func testSavesAndLoadsValues() {
@@ -61,6 +75,30 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.gpt52.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.high.rawValue)
             XCTAssertEqual(preferences.codexVisualInputModeRaw, CodexVisualInputMode.video.rawValue)
+        }
+    }
+
+    func testDefaultAgentLaunchTargetMapsRawValueToProviderAndKind() {
+        withIsolatedPreferences { preferences in
+            // Default ohne user-set value: "claude" → (claude, nil)
+            let defaultTarget = preferences.defaultAgentLaunchTarget
+            XCTAssertEqual(defaultTarget.provider, .claude)
+            XCTAssertNil(defaultTarget.kind)
+
+            // Codex
+            preferences.defaultAgentProviderRaw = "codex"
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.provider, .codex)
+            XCTAssertNil(preferences.defaultAgentLaunchTarget.kind)
+
+            // Claude Agents View — neuer 3-Wege Wert
+            preferences.defaultAgentProviderRaw = "claude-agents"
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.provider, .claude)
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.kind, .agentView)
+
+            // Unbekannter Wert: konservativ auf Claude chat zurueckfallen.
+            preferences.defaultAgentProviderRaw = "garbage-string"
+            XCTAssertEqual(preferences.defaultAgentLaunchTarget.provider, .claude)
+            XCTAssertNil(preferences.defaultAgentLaunchTarget.kind)
         }
     }
 

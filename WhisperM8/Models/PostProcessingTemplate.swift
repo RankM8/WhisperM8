@@ -65,6 +65,7 @@ extension PostProcessingTemplate {
     static let cleanID = "template.clean"
     static let techCleanID = "template.tech-clean"
     static let promptID = "template.prompt"
+    static let chatID = "template.chat"
     static let taskID = "template.task"
     static let emailID = "template.email"
     static let slackID = "template.slack"
@@ -179,6 +180,39 @@ extension PostProcessingTemplate {
                 - Do not invent context that is not in the transcript or visual inputs.
                 - Preserve the user's intent, priority, language, and desired tone.
                 - If the user asks to write in a specific language, make that a requirement in the prompt.
+
+                Language: {language}
+
+                Selected context:
+                {selectedContext}
+
+                Visual context:
+                {visualContextSummary}
+
+                User instruction:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: chatID,
+                name: "Agent chat",
+                description: "Startet einen fortsetzbaren Codex-Chat mit Diktat und Kontext.",
+                instruction: """
+                Start an interactive agent chat from this spoken instruction and captured context.
+
+                Goal:
+                Turn the user's spoken instruction, selected text, screenshots, videos, and visual frames into the first message for a persistent Codex or Claude session.
+
+                Rules:
+                - Preserve the user's actual intent and priority.
+                - Include the relevant selected text and visual context.
+                - Reference screenshots and videos by their manifest labels when they matter.
+                - Make the task actionable for an agent that can continue interactively.
+                - Do not invent facts, files, UI state, links, or decisions.
+                - Ask at most one concise clarification question only if the task cannot safely start.
 
                 Language: {language}
 

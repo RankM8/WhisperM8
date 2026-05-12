@@ -6,6 +6,7 @@ import UserNotifications
 @main
 struct WhisperM8App: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var themeManager = ThemeManager.shared
 
     init() {
         // Single instance check - quit if already running
@@ -15,7 +16,7 @@ struct WhisperM8App: App {
             for app in runningApps where app != NSRunningApplication.current {
                 app.activate()
             }
-            WindowRequestCenter.notifyRunningInstanceToOpenSettings()
+            WindowRequestCenter.notifyRunningInstanceToOpenAgentChats()
             NSApp.terminate(nil)
         }
 
@@ -23,20 +24,48 @@ struct WhisperM8App: App {
     }
 
     var body: some Scene {
+        // Agent-Chats ist die Hauptansicht der App und das erste Window in
+        // dieser Scene-Liste — SwiftUI öffnet das oberste Window beim
+        // Launch, es sei denn der AppDelegate routet was anderes (Onboarding).
+        Window("Agent Chats", id: "agent-chats") {
+            AgentChatsView()
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
+        }
+        .defaultSize(width: 1100, height: 720)
+        .defaultPosition(.center)
+        .windowStyle(.hiddenTitleBar)
+        .commands {
+            CommandMenu("WhisperM8") {
+                Button("Agent Chats") {
+                    WindowRequestCenter.shared.request(.agentChats)
+                }
+                Button("Output & Templates") {
+                    WindowRequestCenter.shared.request(.outputDashboard)
+                }
+                Button("Settings") {
+                    WindowRequestCenter.shared.request(.settings)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
+
         MenuBarExtra {
             MenuBarView()
                 .environment(AppState.shared)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
         } label: {
             MenuBarIcon()
                 .environment(AppState.shared)
-                .background(WindowRequestHandler())
+                .background(AppWindowRequestHost())
         }
         .menuBarExtraStyle(.menu)
 
-        // Control Center Window
+        // Settings-/Control-Center-Window — manuell geöffnet via Menubar oder
+        // Cmd+, , nicht mehr Default-Startansicht.
         Window("WhisperM8", id: "settings") {
             SettingsView()
                 .environment(AppState.shared)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
         .defaultSize(width: 900, height: 640)
         .defaultPosition(.center)
@@ -45,6 +74,7 @@ struct WhisperM8App: App {
         Window("WhisperM8 Setup", id: "onboarding") {
             OnboardingView()
                 .environment(AppState.shared)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
@@ -72,21 +102,54 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Request notification permissions for error alerts
         requestNotificationPermission()
 
-        // Check if onboarding needs to be shown
+        // Claude-Code-Theme einmalig synchron mit unserem aufgelösten
+        // Color-Scheme — falls der User WhisperM8 nach einem manuellen
+        // `/theme dark` in Claude öffnet, ziehen wir das passend nach.
+        Task { @MainActor in
+            ThemeManager.shared.performInitialClaudeThemeSync()
+        }
+
+        // Retention: verwaiste Snapshot- und Hook-Files raeumen. Wird nicht
+        // im UI-Thread blockierend — schreibt nur Logs.
+        Task.detached(priority: .background) {
+            let workspace = AgentSessionStore().loadWorkspace()
+            let liveIDs = Set(workspace.sessions.map(\.id))
+            _ = AgentSessionRetentionService().prune(liveLocalSessionIDs: liveIDs)
+        }
+
+        // Sessions-Scan automatisch: einmal direkt beim Launch, danach bei
+        // jeder Foreground-Reaktivierung (mit 30 s Cooldown). Der ScanCoordinator
+        // installiert seinen eigenen `didBecomeActive`-Observer.
+        AgentScanCoordinator.shared.installLifecycleHooks()
+        AgentScanCoordinator.shared.requestScan(reason: .launch)
+
+        // Routing: Onboarding wenn nötig, sonst Agent-Chats als Default-Hub.
+        // Settings ist nicht mehr die Default-Startansicht — es wird nur noch
+        // explizit über Menubar oder Cmd+, geöffnet.
         if !AppPreferences.shared.onboardingCompleted {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WindowRequestCenter.shared.request(.onboarding)
             }
         } else if !LaunchAtLogin.wasLaunchedAtLogin {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                WindowRequestCenter.shared.request(.settings)
+                WindowRequestCenter.shared.request(.agentChats)
             }
         }
     }
 
+    /// Re-Activate (Klick auf Dock-Icon, wenn die App schon läuft). Wir öffnen
+    /// das Agent-Chats-Window — sei es weil alle Windows zu sind oder weil
+    /// der User explizit zur Hauptansicht zurück will.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        WindowRequestCenter.shared.request(.settings)
+        WindowRequestCenter.shared.request(.agentChats)
         return true
+    }
+
+    /// Halten der App am Leben, wenn der User das letzte Window schließt —
+    /// die Menubar-Funktionen (Hotkey-Recording, Output-Modes) sollen weiter
+    /// funktionieren, auch ohne offenes Hauptfenster.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
     }
 
     private func requestNotificationPermission() {

@@ -11,6 +11,7 @@ final class OutputDashboardTests: XCTestCase {
             OutputMode.rawID,
             OutputMode.cleanID,
             OutputMode.promptID,
+            OutputMode.chatID,
             OutputMode.taskID,
             OutputMode.emailID,
             OutputMode.slackID,
@@ -21,6 +22,7 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(modesByID[OutputMode.whatsappID]?.shortLabel, "WA")
         XCTAssertEqual(modesByID[OutputMode.slackID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.promptID]?.contextPolicy, .auto)
+        XCTAssertEqual(modesByID[OutputMode.chatID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.taskID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.rawID]?.contextPolicy, .off)
         XCTAssertFalse(modesByID[OutputMode.rawID]?.usesPostProcessing ?? true)
@@ -28,6 +30,7 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertFalse(modesByID[OutputMode.rawID]?.pasteVisualAttachments ?? true)
         XCTAssertFalse(modesByID[OutputMode.cleanID]?.pasteVisualAttachments ?? true)
         XCTAssertTrue(modesByID[OutputMode.promptID]?.pasteVisualAttachments ?? false)
+        XCTAssertTrue(modesByID[OutputMode.chatID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.taskID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.emailID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.slackID]?.pasteVisualAttachments ?? false)
@@ -167,9 +170,12 @@ final class OutputDashboardTests: XCTestCase {
     func testBuiltInTemplatesIncludePromptAndTaskModes() {
         let promptTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.promptID }
         let taskTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.taskID }
+        let chatTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.chatID }
 
         XCTAssertEqual(promptTemplate?.name, "Agent prompt")
         XCTAssertTrue(promptTemplate?.instruction.contains("Markdown prompt") == true)
+        XCTAssertEqual(chatTemplate?.name, "Agent chat")
+        XCTAssertTrue(chatTemplate?.instruction.contains("persistent Codex or Claude session") == true)
         XCTAssertEqual(taskTemplate?.name, "Agent task")
         XCTAssertTrue(taskTemplate?.instruction.contains("Execute this task") == true)
         XCTAssertTrue(taskTemplate?.instruction.contains("Do not output a prompt") == true)
@@ -285,6 +291,10 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(
             router.route(rawText: "mach daraus einen prompt", mode: OutputMode.mode(for: OutputMode.promptID), contextBundle: context),
             .promptPackage
+        )
+        XCTAssertEqual(
+            router.route(rawText: "öffne das im chat", mode: OutputMode.mode(for: OutputMode.chatID), contextBundle: context),
+            .agentChat
         )
         XCTAssertEqual(
             router.route(rawText: "recherchiere das kurz", mode: OutputMode.mode(for: OutputMode.taskID), contextBundle: context),
@@ -460,7 +470,10 @@ final class OutputDashboardTests: XCTestCase {
             autoPasteAttachmentsRequested: true,
             pastedAttachmentCount: 1,
             pasteErrors: ["none"],
-            deliveryAttachmentLabels: ["Screenshot 1"]
+            deliveryAttachmentLabels: ["Screenshot 1"],
+            agentProvider: .codex,
+            agentSessionID: "session-1",
+            agentProjectPath: "/tmp/project"
         ))
 
         let recentReports = store.recentReports()
@@ -472,7 +485,87 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(recentReports.first?.pastedAttachmentCount, 1)
         XCTAssertEqual(recentReports.first?.deliveryAttachmentLabels, ["Screenshot 1"])
         XCTAssertEqual(recentReports.first?.pasteErrors, ["none"])
+        XCTAssertEqual(recentReports.first?.agentProvider, .codex)
+        XCTAssertEqual(recentReports.first?.agentSessionID, "session-1")
+        XCTAssertEqual(recentReports.first?.agentProjectPath, "/tmp/project")
         XCTAssertTrue(FileManager.default.fileExists(atPath: recentReports.first?.attachments.first?.storedPath ?? ""))
+    }
+
+    func testTranscriptRunReportStoreCleanupHonorsMaxCount() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8ReportCleanupTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = TranscriptRunReportStore(reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true))
+        let oldest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "oldest"),
+            cleanupPolicy: nil
+        )
+        let middle = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 2), finalTranscript: "middle"),
+            cleanupPolicy: nil
+        )
+        let newest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 3), finalTranscript: "newest"),
+            cleanupPolicy: nil
+        )
+
+        let result = try store.cleanup(policy: .init(maxCount: 2), now: Date(timeIntervalSince1970: 10))
+        let remaining = store.recentReports(limit: 10)
+
+        XCTAssertEqual(result.removedCount, 1)
+        XCTAssertFalse(remaining.contains { $0.id == oldest.id })
+        XCTAssertTrue(remaining.contains { $0.id == middle.id })
+        XCTAssertTrue(remaining.contains { $0.id == newest.id })
+    }
+
+    func testTranscriptRunReportStoreCleanupHonorsMaxAge() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8ReportAgeCleanupTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = TranscriptRunReportStore(reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true))
+        let old = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "old"),
+            cleanupPolicy: nil
+        )
+        let recent = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 9), finalTranscript: "recent"),
+            cleanupPolicy: nil
+        )
+
+        let result = try store.cleanup(policy: .init(maxAge: 5), now: Date(timeIntervalSince1970: 10))
+        let remaining = store.recentReports(limit: 10)
+
+        XCTAssertEqual(result.removedCount, 1)
+        XCTAssertFalse(remaining.contains { $0.id == old.id })
+        XCTAssertTrue(remaining.contains { $0.id == recent.id })
+    }
+
+    func testTranscriptRunReportStoreAppliesCleanupPolicyAfterSave() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8ReportSaveCleanupTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = TranscriptRunReportStore(reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true))
+        let oldest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 1), finalTranscript: "oldest"),
+            cleanupPolicy: nil
+        )
+        let middle = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 2), finalTranscript: "middle"),
+            cleanupPolicy: nil
+        )
+        let newest = try store.save(
+            makeReportDraft(createdAt: Date(timeIntervalSince1970: 3), finalTranscript: "newest"),
+            cleanupPolicy: .init(maxCount: 2)
+        )
+
+        let remaining = store.recentReports(limit: 10)
+
+        XCTAssertFalse(remaining.contains { $0.id == oldest.id })
+        XCTAssertTrue(remaining.contains { $0.id == middle.id })
+        XCTAssertTrue(remaining.contains { $0.id == newest.id })
     }
 }
 
@@ -490,4 +583,25 @@ private func withIsolatedOutputPreferences(_ body: (AppPreferences) throws -> Vo
     }
 
     try body(preferences)
+}
+
+private func makeReportDraft(createdAt: Date, finalTranscript: String) -> TranscriptRunReportDraft {
+    TranscriptRunReportDraft(
+        createdAt: createdAt,
+        status: .succeeded,
+        errorMessage: nil,
+        mode: OutputMode.mode(for: OutputMode.rawID),
+        provider: .openai,
+        transcriptionModel: .openai_gpt4o,
+        language: "de",
+        audioDuration: 1,
+        contextBundle: .empty,
+        renderedPrompt: nil,
+        replyIntent: nil,
+        visualManifest: nil,
+        rawTranscript: "raw",
+        finalTranscript: finalTranscript,
+        copiedToClipboard: true,
+        autoPasteRequested: false
+    )
 }

@@ -1,18 +1,69 @@
 import Foundation
 import AppKit
 
+/// Trackt den aktuell laufenden Codex-Subprocess für externes Cancel
+/// (z. B. Cancel-Button im Recording-Overlay).
+final class CodexProcessRegistry: @unchecked Sendable {
+    static let shared = CodexProcessRegistry()
+
+    private let lock = NSLock()
+    private weak var current: Process?
+    private var cancelledByUser = false
+
+    private init() {}
+
+    func register(_ process: Process) {
+        lock.lock()
+        current = process
+        cancelledByUser = false
+        lock.unlock()
+    }
+
+    func unregister(_ process: Process) {
+        lock.lock()
+        if current === process {
+            current = nil
+        }
+        lock.unlock()
+    }
+
+    /// Bricht einen laufenden Codex-Subprocess auf Anforderung ab (Cancel-Button).
+    @discardableResult
+    func cancel() -> Bool {
+        lock.lock()
+        let process = current
+        cancelledByUser = true
+        lock.unlock()
+        guard let process, process.isRunning else { return false }
+        process.terminate()
+        return true
+    }
+
+    var didCancel: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return cancelledByUser
+    }
+
+    func resetCancelFlag() {
+        lock.lock(); cancelledByUser = false; lock.unlock()
+    }
+}
+
 protocol PostProcessing {
     func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String
 }
 
 enum PostProcessingError: LocalizedError, Equatable {
     case missingTemplate
+    case userCancelled
     case codexUnavailable(String)
 
     var errorDescription: String? {
         switch self {
         case .missingTemplate:
             return "No template is configured for this output mode."
+        case .userCancelled:
+            return "Codex wurde abgebrochen."
         case .codexUnavailable(let message):
             return message
         }
@@ -67,16 +118,20 @@ struct CodexPostProcessor: PostProcessing {
             language: language,
             contextBundle: contextBundle
         )
-        return try await runCodex(prompt: package.prompt, imageURLs: visualInput.imageURLs)
+        return try await runCodex(
+            prompt: package.prompt,
+            imageURLs: visualInput.imageURLs,
+            mode: mode
+        )
     }
 
-    private func runCodex(prompt: String, imageURLs: [URL]) async throws -> String {
+    private func runCodex(prompt: String, imageURLs: [URL], mode: OutputMode) async throws -> String {
         try await Task.detached(priority: .userInitiated) {
-            try performCodexRun(prompt: prompt, imageURLs: imageURLs)
+            try performCodexRun(prompt: prompt, imageURLs: imageURLs, mode: mode)
         }.value
     }
 
-    private func performCodexRun(prompt: String, imageURLs: [URL]) throws -> String {
+    private func performCodexRun(prompt: String, imageURLs: [URL], mode: OutputMode) throws -> String {
         guard let codexPath = CodexStatusProbe().commandPath("codex") else {
             throw PostProcessingError.codexUnavailable("Codex CLI is not installed.")
         }
@@ -88,13 +143,18 @@ struct CodexPostProcessor: PostProcessing {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: codexPath)
-        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        let projectPath = mode.id == OutputMode.taskID ? AppPreferences.shared.agentDefaultProjectPath : nil
+        process.currentDirectoryURL = projectPath.map(URL.init(fileURLWithPath:)) ?? FileManager.default.temporaryDirectory
         process.arguments = CodexInvocation.arguments(
             promptImageURLs: imageURLs,
             outputURL: outputURL,
             model: AppPreferences.shared.codexPostProcessingModelRaw,
-            reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw
+            reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+            isEphemeral: mode.id != OutputMode.taskID,
+            projectPath: projectPath
         )
+        // Korrigierter PATH, falls Codex CLI intern Tools wie `git` aufruft.
+        process.environment = LoginShellEnvironment.shared.processEnvironment()
 
         let inputPipe = Pipe()
         let logPipe = Pipe()
@@ -102,20 +162,47 @@ struct CodexPostProcessor: PostProcessing {
         process.standardOutput = logPipe
         process.standardError = logPipe
 
+        let activityLock = NSLock()
+        var collectedLog = Data()
+        logPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            activityLock.lock()
+            collectedLog.append(chunk)
+            activityLock.unlock()
+        }
+
+        CodexProcessRegistry.shared.resetCancelFlag()
+
         do {
             try process.run()
+            CodexProcessRegistry.shared.register(process)
             if let data = prompt.data(using: .utf8) {
                 inputPipe.fileHandleForWriting.write(data)
             }
             try? inputPipe.fileHandleForWriting.close()
         } catch {
+            logPipe.fileHandleForReading.readabilityHandler = nil
             throw PostProcessingError.codexUnavailable("Failed to start Codex: \(error.localizedDescription)")
         }
 
         process.waitUntilExit()
 
-        let logData = logPipe.fileHandleForReading.readDataToEndOfFile()
+        logPipe.fileHandleForReading.readabilityHandler = nil
+        // Restbytes konsumieren, falls Pipe-Buffer noch was hat.
+        let trailing = (try? logPipe.fileHandleForReading.readToEnd()) ?? Data()
+        activityLock.lock()
+        collectedLog.append(trailing)
+        let logData = collectedLog
+        activityLock.unlock()
         let logOutput = String(data: logData, encoding: .utf8) ?? ""
+
+        let wasCancelledByUser = CodexProcessRegistry.shared.didCancel
+        CodexProcessRegistry.shared.unregister(process)
+
+        if wasCancelledByUser {
+            throw PostProcessingError.userCancelled
+        }
 
         guard process.terminationStatus == 0 else {
             let message = conciseCodexError(from: logOutput)
@@ -250,7 +337,9 @@ enum CodexInvocation {
         promptImageURLs: [URL],
         outputURL: URL,
         model: String,
-        reasoningEffort: String
+        reasoningEffort: String,
+        isEphemeral: Bool = true,
+        projectPath: String? = nil
     ) -> [String] {
         var arguments = [
             "exec",
@@ -258,9 +347,16 @@ enum CodexInvocation {
             "-c", "model_reasoning_effort=\(reasoningEffort)",
             "--sandbox", "read-only",
             "--skip-git-repo-check",
-            "--ephemeral",
             "--output-last-message", outputURL.path,
         ]
+
+        if let projectPath, !projectPath.isEmpty {
+            arguments.append(contentsOf: ["-C", projectPath])
+        }
+
+        if isEphemeral {
+            arguments.append("--ephemeral")
+        }
 
         for imageURL in promptImageURLs {
             arguments.append(contentsOf: ["--image", imageURL.path])
@@ -385,28 +481,12 @@ struct CodexStatusProbe {
 
     func commandPath(_ command: String) -> String? {
         let bundledCodexPath = "/Applications/Codex.app/Contents/Resources/codex"
-        if FileManager.default.isExecutableFile(atPath: bundledCodexPath) {
+        if command == "codex",
+           FileManager.default.isExecutableFile(atPath: bundledCodexPath) {
             return bundledCodexPath
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = [command]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return path?.isEmpty == false ? path : nil
-        } catch {
-            return nil
-        }
+        return AgentCommandBuilder.commandPath(command)
     }
 
     private func run(_ path: String, arguments: [String]) -> String {

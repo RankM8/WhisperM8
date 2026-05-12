@@ -1,0 +1,151 @@
+import Foundation
+
+/// Liefert einen verlässlichen `PATH` für Subprocesses, die WhisperM8 spawned
+/// (Agent-Terminals, Codex-Post-Processing, Hilfs-Calls).
+///
+/// **Hintergrund:** macOS startet GUI-Apps via `launchd` mit minimalem `PATH`
+/// (oft nur Plugin-Bin-Verzeichnisse oder `/usr/bin:/bin` — je nach launchd-Mood).
+/// `~/.zprofile` (das via `brew shellenv` Homebrew & friends einbindet) wird
+/// **nur in Login-Shells** gesourct — `Process()` und `LocalProcessTerminalView.startProcess(...)`
+/// erben dagegen das ENV des Parent-Process. Resultat: in WhisperM8 gestartete
+/// Claude-/Codex-/Bash-Sessions finden weder `git` noch `npm` noch `mise`-shims.
+///
+/// **Lösung:** beim ersten Bedarf **einmalig** eine Login-Shell des Users aufrufen
+/// (`/bin/zsh -l -c 'echo $PATH'`), das Ergebnis cachen und an alle Subprocesses
+/// weiterreichen. Das spiegelt 1:1 die Konfiguration, die der User in Terminal.app
+/// hätte — funktioniert mit Homebrew, mise, asdf, rbenv, custom Shell-Configs.
+///
+/// **Fallback:** wenn der Login-Shell-Call fehlschlägt (z. B. defektes `.zshrc`,
+/// kein `zsh` installiert), nutzen wir eine konservative Hardcoded-Liste, die
+/// sowohl Apple Silicon (`/opt/homebrew`) als auch Intel-Macs (`/usr/local`) und
+/// die System-Pfade abdeckt.
+final class LoginShellEnvironment: @unchecked Sendable {
+    static let shared = LoginShellEnvironment()
+
+    /// Konservativer Fallback-PATH — Reihenfolge bewusst:
+    /// Homebrew vor System-Pfaden, damit User-installierte Tools (git, gh, ...)
+    /// gegenüber der oft veralteten System-Variante gewinnen.
+    static let fallbackPath: String = [
+        "/opt/homebrew/bin",   // Apple Silicon Homebrew
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",      // Intel-Mac Homebrew
+        "/usr/local/sbin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+    ].joined(separator: ":")
+
+    private let lock = NSLock()
+    private var cachedPath: String?
+
+    /// Aufruf-Closure für Tests injizierbar. Default ruft eine echte Login-Shell.
+    let pathLoader: () -> String?
+
+    init(pathLoader: @escaping () -> String? = LoginShellEnvironment.queryLoginShellPath) {
+        self.pathLoader = pathLoader
+    }
+
+    /// Liefert den Login-Shell-PATH (lazy + cached) oder den Hardcoded-Fallback.
+    /// Thread-safe, blockiert kurz beim ersten Call (~50–150 ms für die Shell).
+    var path: String {
+        lock.lock()
+        if let cached = cachedPath {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let resolved = pathLoader()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value: String
+        if let resolved, !resolved.isEmpty {
+            value = mergeWithFallback(resolved)
+        } else {
+            Logger.agentPerformance.info("login_shell_path_query_failed using=fallback")
+            value = Self.fallbackPath
+        }
+
+        lock.lock()
+        cachedPath = value
+        lock.unlock()
+        return value
+    }
+
+    /// Liefert das aktuelle Process-ENV erweitert um den korrigierten PATH und
+    /// die Terminal-Capability-Variablen, die Claude Code (Ink) und Codex CLI
+    /// brauchen, um farbig zu rendern.
+    ///
+    /// Hintergrund: GUI-Apps erben weder `TERM` noch `COLORTERM` von launchd.
+    /// SwiftTerm setzt diese Defaults nur, wenn man `environment: nil` an
+    /// `startProcess` übergibt — wir übergeben aber ein eigenes Env (für PATH),
+    /// also fallen die Defaults weg und Ink rendert monochrom.
+    /// Wir setzen nur, was nicht ohnehin schon vom User-Profil definiert wurde.
+    func processEnvironment(base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+        var env = base
+        env["PATH"] = path
+
+        if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {
+            env["TERM"] = "xterm-256color"
+        }
+        if (env["COLORTERM"]?.isEmpty ?? true) {
+            env["COLORTERM"] = "truecolor"
+        }
+        if (env["CLICOLOR"]?.isEmpty ?? true) {
+            env["CLICOLOR"] = "1"
+        }
+        env.removeValue(forKey: "NO_COLOR")
+        let hasLocale = !(env["LANG"]?.isEmpty ?? true) || !(env["LC_ALL"]?.isEmpty ?? true)
+        if !hasLocale {
+            env["LANG"] = "en_US.UTF-8"
+        }
+        return env
+    }
+
+    /// Gleiche Daten als `[String]` im `KEY=VALUE`-Format — passt zur SwiftTerm-API
+    /// `LocalProcessTerminalView.startProcess(environment:)`.
+    func terminalEnvironmentArray(base: [String: String] = ProcessInfo.processInfo.environment) -> [String] {
+        processEnvironment(base: base).map { "\($0)=\($1)" }
+    }
+
+    /// Mergt den Login-Shell-PATH mit der Fallback-Liste, ohne Duplikate.
+    /// So bleiben User-spezifische Pfade vorne (mise/asdf-shims), aber Standardpfade
+    /// landen am Ende, falls der User-PATH eine Lücke hat.
+    private func mergeWithFallback(_ userPath: String) -> String {
+        var seen = Set<String>()
+        var result: [String] = []
+        let candidates = userPath.split(separator: ":", omittingEmptySubsequences: true)
+            + Self.fallbackPath.split(separator: ":", omittingEmptySubsequences: true)
+        for component in candidates {
+            let str = String(component)
+            if seen.insert(str).inserted {
+                result.append(str)
+            }
+        }
+        return result.joined(separator: ":")
+    }
+
+    /// Standard-Implementation: ruft `/bin/zsh -l -c 'echo $PATH'` auf.
+    /// Bewusst zsh, weil das auf macOS 10.15+ die Default-Shell ist und
+    /// `.zprofile` sourcet, das `brew shellenv` enthält.
+    static func queryLoginShellPath() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-l", "-c", "echo $PATH"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else { return nil }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)
+    }
+}

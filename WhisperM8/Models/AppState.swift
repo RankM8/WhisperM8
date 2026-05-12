@@ -1,5 +1,23 @@
 import SwiftUI
 
+enum RecordingPhase: Equatable {
+    case idle
+    case recording
+    case transcribing
+    case postProcessing
+
+    static func resolve(
+        isRecording: Bool,
+        isTranscribing: Bool,
+        isPostProcessing: Bool
+    ) -> RecordingPhase {
+        if isRecording { return .recording }
+        if isPostProcessing { return .postProcessing }
+        if isTranscribing { return .transcribing }
+        return .idle
+    }
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -24,21 +42,47 @@ final class AppState {
     var lastTranscriptRunReport: TranscriptRunReport?
     var postProcessingStatusText: String?
 
+    /// Aktuell ausgewählter Agent-Chat im Agent-Chats-Window. Wird von dort via
+    /// `onChange/onAppear/onDisappear` gepflegt. `RecordingCoordinator` liest diesen
+    /// Slot beim Start einer Aufnahme und propagiert ihn ins `contextBundle`,
+    /// sodass der Recording-Overlay „Chat" als aktiven Kontext anzeigt.
+    var activeAgentChat: AgentChatContextRef?
+
     @ObservationIgnored
     private var recordingCoordinator: RecordingCoordinator!
 
+    var recordingPhase: RecordingPhase {
+        RecordingPhase.resolve(
+            isRecording: isRecording,
+            isTranscribing: isTranscribing,
+            isPostProcessing: isPostProcessing
+        )
+    }
+
     var menuBarIcon: String {
-        if isRecording { return "mic.fill" }
-        if isPostProcessing { return "sparkles" }
-        if isTranscribing { return "ellipsis.circle" }
-        return "mic"
+        switch recordingPhase {
+        case .recording:
+            return "mic.fill"
+        case .postProcessing:
+            return "sparkles"
+        case .transcribing:
+            return "ellipsis.circle"
+        case .idle:
+            return "mic"
+        }
     }
 
     var statusText: String {
-        if isRecording { return "Recording..." }
-        if isPostProcessing { return postProcessingStatusText ?? "Improving..." }
-        if isTranscribing { return "Transcribing..." }
-        return "Ready"
+        switch recordingPhase {
+        case .recording:
+            return "Recording..."
+        case .postProcessing:
+            return postProcessingStatusText ?? "Improving..."
+        case .transcribing:
+            return "Transcribing..."
+        case .idle:
+            return "Ready"
+        }
     }
 
     func setOutputMode(_ mode: OutputMode) {
@@ -60,6 +104,22 @@ final class AppState {
 
     func cancelRecording() {
         recordingCoordinator.cancelRecording()
+    }
+
+    func cancelPostProcessing() {
+        recordingCoordinator.cancelPostProcessing()
+    }
+
+    func removeAgentChatFromContext() {
+        recordingCoordinator.removeAgentChatFromContext()
+    }
+
+    func removeSelectedTextFromContext() {
+        recordingCoordinator.removeSelectedTextFromContext()
+    }
+
+    func removeAttachmentFromContext(id: UUID) {
+        recordingCoordinator.removeAttachmentFromContext(id: id)
     }
 
     func addContextScreenshot() {

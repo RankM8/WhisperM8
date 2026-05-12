@@ -93,6 +93,10 @@ struct MenuBarView: View {
             WindowRequestCenter.shared.request(.outputDashboard)
         }
 
+        Button("Agent Chats...") {
+            WindowRequestCenter.shared.request(.agentChats)
+        }
+
         Divider()
 
         Button("Quit") {

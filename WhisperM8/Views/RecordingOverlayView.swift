@@ -53,11 +53,27 @@ struct FullRecordingOverlayView: View {
             if !controller.isTranscribing && !controller.isPostProcessing {
                 AudioLevelBars(level: controller.audioLevel)
 
-                CancelRecordingButton(iconSize: 16, action: controller.cancelRecording)
+                CancelRecordingButton(
+                    iconSize: 16,
+                    accessibilityLabel: "Cancel recording",
+                    action: controller.cancelRecording
+                )
             } else {
-                ProgressView()
-                    .scaleEffect(0.6)
-                    .frame(width: 24, height: 20)
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 18, height: 20)
+
+                    if controller.isPostProcessing {
+                        CancelRecordingButton(
+                            iconSize: 16,
+                            accessibilityLabel: "Cancel Codex post-processing",
+                            action: controller.cancelPostProcessing
+                        )
+                        .help("Codex-Post-Processing abbrechen und Raw-Transkript verwenden")
+                    }
+                }
+                .frame(width: controller.isPostProcessing ? 42 : 24, height: 20, alignment: .trailing)
             }
         }
         .padding(.horizontal, 16)
@@ -161,9 +177,21 @@ struct MiniRecordingOverlayView: View {
                     .scaleEffect(0.7)
                     .frame(width: 14, height: 14)
                     .accessibilityLabel(controller.isPostProcessing ? "Improving" : "Transcribing")
+                if controller.isPostProcessing {
+                    CancelRecordingButton(
+                        iconSize: 14,
+                        accessibilityLabel: "Cancel Codex post-processing",
+                        action: controller.cancelPostProcessing
+                    )
+                        .help("Codex-Post-Processing abbrechen")
+                }
             } else {
                 MiniAudioLevelBars(level: controller.audioLevel)
-                CancelRecordingButton(iconSize: 14, action: controller.cancelRecording)
+                CancelRecordingButton(
+                    iconSize: 14,
+                    accessibilityLabel: "Cancel recording",
+                    action: controller.cancelRecording
+                )
             }
         }
         .padding(.horizontal, 10)
@@ -280,12 +308,9 @@ struct ContextMenuContent: View {
     @ObservedObject var controller: OverlayController
 
     var body: some View {
-        if !controller.contextBundle.selectedText.isEmpty {
-            Text("Selected Text")
-            Text(contextPreview)
-        } else {
-            Text("No selected text")
-        }
+        agentChatSection
+        selectedTextSection
+        attachmentsSection
 
         Divider()
 
@@ -297,7 +322,6 @@ struct ContextMenuContent: View {
         .disabled(!isVisualContextEnabled || controller.isScreenClipRecording)
 
         if PermissionService.hasScreenRecordingPermission {
-
             Button {
                 controller.toggleScreenClip()
             } label: {
@@ -313,16 +337,131 @@ struct ContextMenuContent: View {
             }
         }
 
-        Button {
-            controller.clearContext()
-        } label: {
-            Label("Clear Context", systemImage: "trash")
-        }
-        .disabled(controller.contextBundle.isEmpty || controller.isScreenClipRecording)
-
         Divider()
 
-        Text(attachmentSummary)
+        Button(role: .destructive) {
+            controller.clearContext()
+        } label: {
+            Label("Clear All Context", systemImage: "trash")
+        }
+        .disabled(controller.contextBundle.isEmpty || controller.isScreenClipRecording)
+    }
+
+    // MARK: - Section Builders (zeigen pro-Item Delete)
+
+    @ViewBuilder
+    private var agentChatSection: some View {
+        if let chat = controller.contextBundle.agentChat {
+            Section("Chat") {
+                Button {
+                    controller.performContextAction(.removeAgentChat)
+                } label: {
+                    Label("Remove · \(chat.title) (\(chat.projectName))", systemImage: "xmark.circle")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var selectedTextSection: some View {
+        if !controller.contextBundle.selectedText.isEmpty {
+            Section("Text") {
+                Text(selectedTextPreview)
+                    .lineLimit(1)
+                Button {
+                    controller.performContextAction(.removeSelectedText)
+                } label: {
+                    Label("Remove Selected Text", systemImage: "xmark.circle")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var attachmentsSection: some View {
+        let bundle = controller.contextBundle
+        let allAttachments = bundle.allAttachments
+        if !allAttachments.isEmpty {
+            Section("Visuals (\(allAttachments.count))") {
+                ForEach(Array(allAttachments.enumerated()), id: \.element.id) { index, attachment in
+                    Button {
+                        controller.performContextAction(.removeAttachment(id: attachment.id))
+                    } label: {
+                        // SwiftUI Menus rendern `Label`-Icons als kleine Bitmap, wenn man
+                        // `Image(nsImage:)` mit `.renderingMode(.original)` reicht — das
+                        // gibt uns echte Thumbnails statt eines SF-Symbol-Platzhalters.
+                        Label {
+                            Text(attachmentLabel(attachment, index: index))
+                        } icon: {
+                            attachmentIcon(attachment)
+                        }
+                    }
+                    .disabled(controller.isScreenClipRecording)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func attachmentIcon(_ attachment: ContextAttachment) -> some View {
+        if let nsImage = thumbnailImage(for: attachment) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .renderingMode(.original)
+                .interpolation(.medium)
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 22, height: 16)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        } else {
+            Image(systemName: attachmentSymbolName(attachment))
+        }
+    }
+
+    private func thumbnailImage(for attachment: ContextAttachment) -> NSImage? {
+        let url = attachment.thumbnailURL ?? attachment.fileURL
+        // Screen-Clips sind .mov / .mp4 — daraus kein Standbild laden, nur SF-Symbol.
+        if attachment.kind == .screenClip { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
+    private func attachmentSymbolName(_ attachment: ContextAttachment) -> String {
+        switch attachment.kind {
+        case .screenshot: return "photo"
+        case .annotation: return "pencil.tip.crop.circle"
+        case .screenClip: return "film"
+        case .visualFrame: return "rectangle.stack"
+        }
+    }
+
+    private func attachmentLabel(_ attachment: ContextAttachment, index: Int) -> String {
+        let position = index + 1
+        switch attachment.kind {
+        case .screenshot:
+            return "Remove Screenshot #\(position)"
+        case .annotation:
+            if let number = attachment.annotationNumber {
+                return "Remove Annotation \(number)"
+            }
+            return "Remove Annotation #\(position)"
+        case .screenClip:
+            if let duration = attachment.duration {
+                return "Remove Clip #\(position) · \(String(format: "%.1f", duration))s"
+            }
+            return "Remove Clip #\(position)"
+        case .visualFrame:
+            return "Remove Frame #\(position)"
+        }
+    }
+
+    private var selectedTextPreview: String {
+        let text = controller.contextBundle.selectedText.text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.count > 42 {
+            return "\"" + String(text.prefix(42)) + "…\""
+        }
+        return "\"\(text)\""
     }
 
     private var isVisualContextEnabled: Bool {
@@ -335,25 +474,6 @@ struct ContextMenuContent: View {
             && !controller.isScreenClipRecording
     }
 
-    private var contextPreview: String {
-        let text = controller.contextBundle.selectedText.text
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.count > 42 {
-            return String(text.prefix(42)) + "..."
-        }
-        return text
-    }
-
-    private var attachmentSummary: String {
-        if controller.isScreenClipRecording {
-            return "Screen clip recording..."
-        }
-        if controller.contextBundle.isEmpty {
-            return "Copy a macOS screenshot to the clipboard to attach it automatically."
-        }
-        return controller.contextBundle.displaySummary
-    }
 }
 
 struct MiniOutputModeChip: View {
@@ -377,6 +497,7 @@ struct MiniOutputModeChip: View {
 
 struct CancelRecordingButton: View {
     let iconSize: CGFloat
+    var accessibilityLabel: String = "Cancel recording"
     let action: () -> Void
 
     var body: some View {
@@ -389,7 +510,7 @@ struct CancelRecordingButton: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .accessibilityLabel("Cancel recording")
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

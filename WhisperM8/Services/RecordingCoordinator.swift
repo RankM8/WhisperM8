@@ -7,6 +7,9 @@ private struct PostProcessingRunResult {
     var visualManifest: VisualManifest?
     var fallbackStatus: TranscriptRunStatus?
     var errorMessage: String?
+    var agentProvider: AgentProvider?
+    var agentSessionID: String?
+    var agentProjectPath: String?
 }
 
 @MainActor
@@ -59,7 +62,20 @@ final class RecordingCoordinator {
 
         do {
             let selectedContext = await selectedContextService.capture(from: contextSourceApp)
-            let contextBundle = TranscriptContextBundle.from(selectedContext: selectedContext, sourceApp: contextSourceApp)
+            // Auto-Inject des Agent-Chat-Refs nur, wenn WhisperM8 selbst frontmost war
+            // beim Recording-Start. Wenn der User in Cursor/VS Code/Browser arbeitet,
+            // ist der Chat-Kontext irrelevant — wir wollen ihn nicht „aufzwingen".
+            let activeAgentChat: AgentChatContextRef?
+            if contextSourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
+                activeAgentChat = appState.activeAgentChat
+            } else {
+                activeAgentChat = nil
+            }
+            let contextBundle = TranscriptContextBundle.from(
+                selectedContext: selectedContext,
+                sourceApp: contextSourceApp,
+                agentChat: activeAgentChat
+            )
             try await audioRecorder.startRecording()
 
             AudioDuckingManager.shared.duck()
@@ -86,6 +102,9 @@ final class RecordingCoordinator {
                 onCancel: { [weak self] in
                     self?.cancelRecording()
                 },
+                onCancelPostProcessing: { [weak self] in
+                    self?.cancelPostProcessing()
+                },
                 onOutputModeChange: { [weak appState] mode in
                     appState?.setOutputMode(mode)
                 },
@@ -97,6 +116,17 @@ final class RecordingCoordinator {
                 },
                 onClearContext: { [weak self] in
                     self?.clearContextBundle()
+                },
+                onContextAction: { [weak self] action in
+                    guard let self else { return }
+                    switch action {
+                    case .removeAgentChat:
+                        self.removeAgentChatFromContext()
+                    case .removeSelectedText:
+                        self.removeSelectedTextFromContext()
+                    case .removeAttachment(let id):
+                        self.removeAttachmentFromContext(id: id)
+                    }
                 }
             )
 
@@ -186,6 +216,15 @@ final class RecordingCoordinator {
         Logger.debug(" stopRecording completed")
     }
 
+    /// Bricht das laufende Codex-Post-Processing ab. Aufgerufen vom Cancel-Button im Overlay,
+    /// wenn `isPostProcessing == true`. Der `performCodexRun`-Pfad erkennt das Cancel-Flag,
+    /// terminiert den Codex-Prozess und der Coordinator fällt kontrolliert auf Raw zurück.
+    func cancelPostProcessing() {
+        guard let appState, appState.isPostProcessing else { return }
+        _ = CodexProcessRegistry.shared.cancel()
+        appState.postProcessingStatusText = "Abgebrochen…"
+    }
+
     func cancelRecording() {
         guard let appState, appState.isRecording else { return }
 
@@ -249,10 +288,73 @@ final class RecordingCoordinator {
     func clearContextBundle() {
         guard let appState, appState.isRecording, !appState.isScreenClipRecording else { return }
         visualContextCaptureService.cleanup(appState.contextBundle)
-        appState.contextBundle = TranscriptContextBundle.from(selectedContext: .empty, sourceApp: contextSourceApp)
+        // Komplettes Clear inkl. Agent-Chat-Ref — User hat explizit „alles weg" geklickt.
+        appState.contextBundle = TranscriptContextBundle.from(
+            selectedContext: .empty,
+            sourceApp: contextSourceApp,
+            agentChat: nil
+        )
         appState.selectedContext = .empty
         appState.lastContextBundle = nil
         appState.lastSelectedContext = nil
+        overlayController.update(appState: appState)
+    }
+
+    // MARK: - Granulare Kontext-Bearbeitung während des Recordings
+
+    /// Entfernt die Agent-Chat-Referenz aus dem laufenden Recording-Bundle.
+    /// Andere Kontext-Slots (Text, Screenshots) bleiben erhalten.
+    func removeAgentChatFromContext() {
+        guard let appState, appState.isRecording else { return }
+        guard appState.contextBundle.agentChat != nil else { return }
+        appState.contextBundle.agentChat = nil
+        overlayController.update(appState: appState)
+    }
+
+    /// Entfernt nur den ausgewählten Text aus dem laufenden Recording-Bundle.
+    func removeSelectedTextFromContext() {
+        guard let appState, appState.isRecording else { return }
+        guard !appState.contextBundle.selectedText.isEmpty else { return }
+        appState.contextBundle.selectedText = .empty
+        appState.selectedContext = .empty
+        overlayController.update(appState: appState)
+    }
+
+    /// Entfernt einen einzelnen Anhang (Screenshot / Annotation / ScreenClip / VisualFrame)
+    /// aus dem laufenden Recording-Bundle und räumt die zugehörige Datei auf.
+    func removeAttachmentFromContext(id: UUID) {
+        guard let appState, appState.isRecording, !appState.isScreenClipRecording else { return }
+        var bundle = appState.contextBundle
+
+        let removed: ContextAttachment?
+        if let attachment = bundle.screenshots.first(where: { $0.id == id }) {
+            bundle.screenshots.removeAll { $0.id == id }
+            removed = attachment
+        } else if let attachment = bundle.annotations.first(where: { $0.id == id }) {
+            bundle.annotations.removeAll { $0.id == id }
+            removed = attachment
+        } else if let attachment = bundle.screenClips.first(where: { $0.id == id }) {
+            bundle.screenClips.removeAll { $0.id == id }
+            removed = attachment
+        } else if let attachment = bundle.visualFrames.first(where: { $0.id == id }) {
+            bundle.visualFrames.removeAll { $0.id == id }
+            removed = attachment
+        } else {
+            return
+        }
+
+        if let removed {
+            visualContextCaptureService.cleanup(
+                TranscriptContextBundle(
+                    screenshots: bundle.screenshots.contains(where: { $0.id == removed.id }) ? [] : (removed.kind == .screenshot ? [removed] : []),
+                    annotations: removed.kind == .annotation ? [removed] : [],
+                    screenClips: removed.kind == .screenClip ? [removed] : [],
+                    visualFrames: removed.kind == .visualFrame ? [removed] : []
+                )
+            )
+        }
+
+        appState.contextBundle = bundle
         overlayController.update(appState: appState)
     }
 
@@ -301,19 +403,21 @@ final class RecordingCoordinator {
             contextBundle: contextBundle
         )
         let finalText = postProcessingResult.finalText
-        let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled
+        let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled && outputMode.id != OutputMode.chatID
         var deliveryAttachments: [PasteAttachment] = []
         var deliveryErrors: [String] = []
 
-        do {
-            deliveryAttachments = try visualAttachmentDeliveryBuilder.build(
-                contextBundle: contextBundle,
-                mode: outputMode
-            )
-        } catch {
-            let message = "Could not prepare visual attachments for paste: \(error.localizedDescription)"
-            Logger.paste.error("\(message, privacy: .public)")
-            deliveryErrors.append(message)
+        if autoPasteRequested {
+            do {
+                deliveryAttachments = try visualAttachmentDeliveryBuilder.build(
+                    contextBundle: contextBundle,
+                    mode: outputMode
+                )
+            } catch {
+                let message = "Could not prepare visual attachments for paste: \(error.localizedDescription)"
+                Logger.paste.error("\(message, privacy: .public)")
+                deliveryErrors.append(message)
+            }
         }
 
         pasteService.copyToClipboard(finalText)
@@ -351,7 +455,7 @@ final class RecordingCoordinator {
         }
 
         saveRunReport(
-            status: postProcessingResult.errorMessage == nil ? .succeeded : (postProcessingResult.fallbackStatus ?? .rawFallback),
+            status: postProcessingResult.fallbackStatus ?? (postProcessingResult.errorMessage == nil ? .succeeded : .rawFallback),
             errorMessage: postProcessingResult.errorMessage,
             outputMode: outputMode,
             provider: provider,
@@ -370,7 +474,10 @@ final class RecordingCoordinator {
             autoPasteAttachmentsRequested: autoPasteRequested && !deliveryAttachments.isEmpty,
             pastedAttachmentCount: pasteResult.pastedAttachments.count,
             pasteErrors: deliveryErrors,
-            deliveryAttachmentLabels: deliveryAttachments.map(\.label)
+            deliveryAttachmentLabels: deliveryAttachments.map(\.label),
+            agentProvider: postProcessingResult.agentProvider,
+            agentSessionID: postProcessingResult.agentSessionID,
+            agentProjectPath: postProcessingResult.agentProjectPath
         )
 
         try? FileManager.default.removeItem(at: audioURL)
@@ -406,12 +513,34 @@ final class RecordingCoordinator {
         overlayController.update(appState: appState)
 
         do {
+            if mode.id == OutputMode.chatID, let promptPackage {
+                let visualInput = CodexVisualInputSelection(contextBundle: contextBundle)
+                let result = try AgentChatLaunchService().openCodexChat(
+                    title: chatTitle(from: rawText),
+                    prompt: promptPackage.prompt,
+                    imagePaths: visualInput.imageURLs.map(\.path)
+                )
+                appState.isPostProcessing = false
+                appState.postProcessingStatusText = nil
+                overlayController.update(appState: appState)
+                return PostProcessingRunResult(
+                    finalText: "Opened Codex chat: \(result.session.title)",
+                    renderedPrompt: renderedPrompt,
+                    replyIntent: promptPackage.intent,
+                    visualManifest: promptPackage.visualManifest,
+                    agentProvider: .codex,
+                    agentSessionID: result.session.externalSessionID ?? result.session.id.uuidString,
+                    agentProjectPath: result.project.path
+                )
+            }
+
             let processedText = try await postProcessingService.process(
                 rawText: rawText,
                 mode: mode,
                 language: language,
                 contextBundle: contextBundle
             )
+            let agentSession = mode.id == OutputMode.taskID ? latestTaskAgentSession() : nil
             appState.isPostProcessing = false
             appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
@@ -419,12 +548,26 @@ final class RecordingCoordinator {
                 finalText: TextNormalizer.normalizeTranscriptionText(processedText),
                 renderedPrompt: renderedPrompt,
                 replyIntent: promptPackage?.intent,
-                visualManifest: promptPackage?.visualManifest
+                visualManifest: promptPackage?.visualManifest,
+                agentProvider: agentSession?.provider,
+                agentSessionID: agentSession?.externalSessionID,
+                agentProjectPath: agentSession?.projectPath
             )
         } catch {
             appState.isPostProcessing = false
             appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
+
+            if case PostProcessingError.userCancelled = error {
+                Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
+                return PostProcessingRunResult(
+                    finalText: rawText,
+                    renderedPrompt: renderedPrompt,
+                    replyIntent: promptPackage?.intent,
+                    visualManifest: promptPackage?.visualManifest,
+                    fallbackStatus: .rawFallback
+                )
+            }
 
             if AppPreferences.shared.fallbackToRawOnProcessingError {
                 let message = error.localizedDescription
@@ -446,6 +589,28 @@ final class RecordingCoordinator {
             }
 
             throw error
+        }
+    }
+
+    private func chatTitle(from rawText: String) -> String {
+        let trimmed = rawText
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Voice Chat" }
+        return String(trimmed.prefix(52))
+    }
+
+    private func latestTaskAgentSession() -> (provider: AgentProvider, externalSessionID: String?, projectPath: String?)? {
+        let projectPath = AppPreferences.shared.agentDefaultProjectPath
+        do {
+            let store = AgentSessionStore()
+            let indexedSessions = CodexSessionIndexer().indexedSessions(limit: 20)
+            try store.mergeIndexedSessions(indexedSessions)
+            let latest = indexedSessions.first { URL(fileURLWithPath: $0.cwd).standardizedFileURL.path == URL(fileURLWithPath: projectPath).standardizedFileURL.path }
+            return latest.map { ($0.provider, $0.externalSessionID, $0.cwd) }
+        } catch {
+            Logger.debug("Failed to sync task agent session: \(error.localizedDescription)")
+            return nil
         }
     }
 
@@ -490,7 +655,10 @@ final class RecordingCoordinator {
         autoPasteAttachmentsRequested: Bool = false,
         pastedAttachmentCount: Int = 0,
         pasteErrors: [String] = [],
-        deliveryAttachmentLabels: [String] = []
+        deliveryAttachmentLabels: [String] = [],
+        agentProvider: AgentProvider? = nil,
+        agentSessionID: String? = nil,
+        agentProjectPath: String? = nil
     ) {
         let draft = TranscriptRunReportDraft(
             sourceAppName: contextSourceApp?.localizedName,
@@ -514,7 +682,10 @@ final class RecordingCoordinator {
             autoPasteAttachmentsRequested: autoPasteAttachmentsRequested,
             pastedAttachmentCount: pastedAttachmentCount,
             pasteErrors: pasteErrors,
-            deliveryAttachmentLabels: deliveryAttachmentLabels
+            deliveryAttachmentLabels: deliveryAttachmentLabels,
+            agentProvider: agentProvider,
+            agentSessionID: agentSessionID,
+            agentProjectPath: agentProjectPath
         )
 
         do {

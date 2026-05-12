@@ -86,6 +86,10 @@ struct OnboardingView: View {
                 } else {
                     Button("Done") {
                         onboardingCompleted = true
+                        // Direkt in den Agent-Chats-Hub springen — der ist die
+                        // Default-Hauptansicht der App seit dem Wechsel auf
+                        // Dock-App. Settings ist manuell via Menubar erreichbar.
+                        WindowRequestCenter.shared.request(.agentChats)
                         dismiss()
                     }
                     .buttonStyle(.borderedProminent)

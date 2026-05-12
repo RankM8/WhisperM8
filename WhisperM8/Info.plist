@@ -2,9 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Menu bar app without Dock icon -->
+    <!-- Regular Dock app: WhisperM8 keeps its menu bar extra, but the main
+         window also lives in the Dock so it can be pinned, fullscreened,
+         and switched to via Cmd+Tab like any other macOS app. -->
     <key>LSUIElement</key>
-    <true/>
+    <false/>
 
     <!-- Microphone permission -->
     <key>NSMicrophoneUsageDescription</key>
@@ -25,5 +27,36 @@
     <string>1.2.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+
+    <!-- Custom Uniform Type Identifiers für In-App Drag-and-Drop (Sidebar +
+         Tab-Strip Reorder). Ohne Registrierung würde LaunchServices die UTIs
+         nicht kennen und SwiftUI's `.draggable(...)` wäre still ein no-op. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.whisperm8.app.agent-chat-session</string>
+            <key>UTTypeDescription</key>
+            <string>WhisperM8 Agent Chat Session</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict/>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.whisperm8.app.agent-project</string>
+            <key>UTTypeDescription</key>
+            <string>WhisperM8 Agent Project</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict/>
+        </dict>
+    </array>
 </dict>
 </plist>

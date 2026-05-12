@@ -13,6 +13,7 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "1.16.1"),
         .package(url: "https://github.com/sindresorhus/Defaults", from: "8.0.0"),
         .package(url: "https://github.com/sindresorhus/LaunchAtLogin-Modern", from: "1.0.0"),
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.13.0"),
     ],
     targets: [
         .executableTarget(
@@ -21,6 +22,7 @@ let package = Package(
                 "KeyboardShortcuts",
                 "Defaults",
                 .product(name: "LaunchAtLogin", package: "LaunchAtLogin-Modern"),
+                "SwiftTerm",
             ],
             path: "WhisperM8",
             exclude: ["Info.plist", "WhisperM8.entitlements", "Resources/AppIcon.icns"],
@@ -29,6 +31,10 @@ let package = Package(
                 .process("Resources/MenuBarIcon@2x.png"),
                 .process("Resources/AppLogo.png"),
                 .process("Resources/AppLogo@2x.png"),
+                .process("Resources/ProviderClaude.png"),
+                .process("Resources/ProviderClaude@2x.png"),
+                .process("Resources/ProviderCodex.png"),
+                .process("Resources/ProviderCodex@2x.png"),
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
