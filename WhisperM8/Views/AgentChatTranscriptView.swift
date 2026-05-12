@@ -11,6 +11,32 @@ struct AgentChatTranscriptView: View {
     let transcript: AgentChatTranscript
     let session: AgentChatSession
 
+    /// Wie viele Messages initial ueber `ForEach` ausgegeben werden.
+    /// SwiftUI's LazyVStack mit `.defaultScrollAnchor(.bottom)` muss intern
+    /// jede Item-Hoehe vorausberechnen um die Scroll-Position am Ende zu
+    /// landen. Bei >1000 Messages kollabiert dadurch der Main-Thread im
+    /// Initial-Layout-Pass. Wir loesen das mit einem expliziten Window —
+    /// Default 300 Messages, "Earlier"-Button laedt weitere Batches.
+    private static let initialMessageWindow = 300
+    private static let messageBatchIncrement = 300
+
+    @State private var visibleCount: Int = initialMessageWindow
+
+    /// Die tatsaechlich gerenderten Messages — Suffix von `transcript.messages`.
+    private var visibleMessages: ArraySlice<AgentChatMessage> {
+        guard !transcript.messages.isEmpty else { return [] }
+        let start = max(0, transcript.messages.count - visibleCount)
+        return transcript.messages[start..<transcript.messages.count]
+    }
+
+    private var hasMoreEarlier: Bool {
+        visibleMessages.count < transcript.messages.count
+    }
+
+    private var hiddenEarlierCount: Int {
+        max(0, transcript.messages.count - visibleMessages.count)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             statusBanner
@@ -20,7 +46,12 @@ struct AgentChatTranscriptView: View {
             } else {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(transcript.messages) { message in
+                        if hasMoreEarlier {
+                            earlierButton
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+                        }
+                        ForEach(visibleMessages) { message in
                             messageRow(message)
                                 .padding(.horizontal, 16)
                         }
@@ -31,6 +62,38 @@ struct AgentChatTranscriptView: View {
             }
         }
         .background(AgentTheme.background)
+        .onChange(of: transcript.messages.count) { _, _ in
+            // Neuer Transcript geladen → Window zuruecksetzen auf die letzten N.
+            visibleCount = Self.initialMessageWindow
+        }
+    }
+
+    @ViewBuilder
+    private var earlierButton: some View {
+        Button {
+            visibleCount = min(
+                transcript.messages.count,
+                visibleCount + Self.messageBatchIncrement
+            )
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.circle")
+                    .font(.system(size: 12))
+                Text("\(hiddenEarlierCount) frühere Nachrichten laden")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(AgentTheme.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(AgentTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(AgentTheme.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -42,7 +105,7 @@ struct AgentChatTranscriptView: View {
                 Text("Konversation geladen")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AgentTheme.textPrimary)
-                Text("\(transcript.messages.count) Nachrichten · Resume oben startet \(session.provider.displayName) erneut.")
+                Text(bannerSubtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textSecondary)
             }
@@ -57,6 +120,15 @@ struct AgentChatTranscriptView: View {
                 .foregroundStyle(AgentTheme.border),
             alignment: .bottom
         )
+    }
+
+    private var bannerSubtitle: String {
+        let total = transcript.messages.count
+        let resumeHint = "Resume oben startet \(session.provider.displayName) erneut."
+        if hasMoreEarlier {
+            return "\(visibleMessages.count) von \(total) Nachrichten · " + resumeHint
+        }
+        return "\(total) Nachrichten · " + resumeHint
     }
 
     @ViewBuilder
