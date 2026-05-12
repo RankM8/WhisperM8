@@ -186,6 +186,20 @@ final class AgentTerminalRegistry: ObservableObject {
     }
 }
 
+/// Welche TUI laeuft im PTY? Bestimmt die Byte-Sequenzen, die wir fuer
+/// bestimmte Combos schicken (insbesondere Shift+Enter).
+///
+/// - `claudeCodeChat` / `codexChat`: interaktive Chat-TUIs, die Multi-Line-
+///   Input via Backslash-Continuation (`\<CR>`) akzeptieren.
+/// - `claudeAgentsView`: `claude agents` Dashboard mit eigenem Input-Field
+///   ohne Backslash-Konvention. Erwartet die moderne CSI-u-Sequenz fuer
+///   Shift+Enter (`ESC [ 13 ; 2 u`, kitty keyboard protocol).
+enum TerminalKeyboardProfile: Equatable {
+    case claudeCodeChat
+    case codexChat
+    case claudeAgentsView
+}
+
 /// Reine Übersetzungs-Logik von macOS-Tastenkombinationen in die TUI-üblichen
 /// Control-Sequences, wie sie Claude Code, Codex CLI (beide Ink-basiert) und
 /// Readline-Tools erwarten. Window-frei testbar.
@@ -196,6 +210,8 @@ final class AgentTerminalRegistry: ObservableObject {
 /// - `Command+Z` (ohne Shift) → `Ctrl+_` (`0x1f`) — readline-undo
 /// - `Option+←` / `→` → `Esc+B` / `Esc+F` — Wort-Cursorbewegung
 /// - `Command+←` / `→` → `Ctrl+A` / `Ctrl+E` — Zeilenanfang / -ende
+/// - `Shift+Enter` (Chat-Profile) → `\` + `CR` — Backslash-Continuation
+/// - `Shift+Enter` (Agents-View) → `ESC [ 13 ; 2 u` — kitty/CSI-u
 enum TerminalShortcut {
     /// Virtual-Key-Codes (NSEvent.keyCode) der relevanten Tasten.
     enum KeyCode {
@@ -213,7 +229,8 @@ enum TerminalShortcut {
     static func bytes(
         keyCode: UInt16,
         modifiers: NSEvent.ModifierFlags,
-        characters: String?
+        characters: String?,
+        profile: TerminalKeyboardProfile = .claudeCodeChat
     ) -> [UInt8]? {
         let hasOption = modifiers.contains(.option)
         let hasCommand = modifiers.contains(.command)
@@ -251,11 +268,23 @@ enum TerminalShortcut {
                 return [0x1f]   // Ctrl+_ (Readline-undo)
             }
         case KeyCode.returnKey:
-            // Shift+Enter → Backslash-Continuation (`\` + CR), die Claude Code und
-            // Codex CLI als Multi-Line-Input akzeptieren. Ohne diesen Eingriff
-            // sendet SwiftTerm bei Enter und Shift+Enter identisch nur `\r`.
+            // Shift+Enter braucht je nach TUI unterschiedliche Sequenzen.
+            // Ohne Eingriff sendet SwiftTerm bei Enter und Shift+Enter
+            // identisch nur `\r`.
             if hasShift && !hasOption && !hasCommand {
-                return [0x5c, 0x0d]
+                switch profile {
+                case .claudeCodeChat, .codexChat:
+                    // Backslash-Continuation: Claude Code und Codex CLI
+                    // akzeptieren `\<CR>` als Multi-Line-Input.
+                    return [0x5c, 0x0d]
+                case .claudeAgentsView:
+                    // `claude agents` hat ein eigenes Input-Field ohne
+                    // Backslash-Konvention. Es nutzt das kitty keyboard
+                    // protocol (`/terminal-setup` aktiviert es automatisch
+                    // bei Claude Code installs) und erwartet die CSI-u-
+                    // Sequenz `ESC [ 13 ; 2 u` fuer Shift+Enter.
+                    return [0x1b, 0x5b, 0x31, 0x33, 0x3b, 0x32, 0x75]
+                }
             }
         case KeyCode.p:
             // Alt+P → `ESC p` (Meta-P), Claude Codes Model-Switch.
@@ -282,10 +311,15 @@ enum TerminalShortcut {
 @MainActor
 final class TerminalKeyboardShortcutHandler {
     private weak var terminalView: LocalProcessTerminalView?
+    private let profile: TerminalKeyboardProfile
     private var monitor: Any?
 
-    init(attachedTo terminalView: LocalProcessTerminalView) {
+    init(
+        attachedTo terminalView: LocalProcessTerminalView,
+        profile: TerminalKeyboardProfile
+    ) {
         self.terminalView = terminalView
+        self.profile = profile
         self.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             return self.handle(event)
@@ -312,7 +346,8 @@ final class TerminalKeyboardShortcutHandler {
         guard let bytes = TerminalShortcut.bytes(
             keyCode: event.keyCode,
             modifiers: event.modifierFlags,
-            characters: event.charactersIgnoringModifiers
+            characters: event.charactersIgnoringModifiers,
+            profile: profile
         ) else {
             return event
         }
@@ -378,12 +413,19 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
 
         // macOS-Edit-Shortcuts (Option/Command+Backspace, Word-Move, Undo) in
         // Claude-Code-/Codex-/Readline-kompatible Control-Sequences übersetzen.
-        keyboardShortcutHandler = TerminalKeyboardShortcutHandler(attachedTo: terminal)
+        // Profil aus dem Launch-Command — bestimmt z. B. ob Shift+Enter als
+        // Backslash-Continuation (Chat-TUIs) oder als CSI-u (`claude agents`)
+        // an die TUI geht.
+        keyboardShortcutHandler = TerminalKeyboardShortcutHandler(
+            attachedTo: terminal,
+            profile: command.keyboardProfile
+        )
 
         // Scroll-Guard: blockt Trackpad-Scrolls in Alt-Buffer-Mode (z. B.
         // `claude agents` TUI) damit das Event nicht in die SwiftUI-Sidebar
-        // bzw. Tab-Strip propagiert. Im normalen Buffer (echter Scrollback)
-        // bleibt das Default-Scroll von SwiftTerm aktiv.
+        // bzw. Tab-Strip propagiert, und forwardet sie als XTerm-SGR-Wheel-
+        // Bytes an die TUI. Im normalen Buffer (echter Scrollback) bleibt
+        // das Default-Scroll von SwiftTerm aktiv.
         scrollGuard = TerminalScrollGuard(attachedTo: terminal)
     }
 
