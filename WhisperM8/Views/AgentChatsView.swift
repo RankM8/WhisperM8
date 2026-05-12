@@ -1492,15 +1492,17 @@ struct AgentChatsView: View {
             spawningBackgroundSessions.remove(session.id)
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
         } catch {
-            // Spawn fehlgeschlagen — Stub-Session bleibt sichtbar damit der
-            // User nicht denkt der Klick ist verpufft, aber wir markieren sie
-            // als errored.
+            // Spawn fehlgeschlagen — Stub-Session ist nutzlos (kein Attach
+            // moeglich ohne Short-ID), also wieder loeschen statt als
+            // "Session noch nicht gestartet"-Geist liegen lassen.
             spawningBackgroundSessions.remove(session.id)
-            try? store.updateSession(id: session.id) { updated in
-                updated.status = .closed
-            }
+            try? store.deleteSession(id: session.id)
             workspace = store.loadWorkspace()
-            errorMessage = error.localizedDescription
+            openTabIDs.remove(session.id)
+            if selectedSessionID == session.id {
+                selectedSessionID = sessions(for: project).first?.id
+            }
+            errorMessage = "Hintergrund-Agent konnte nicht gestartet werden: \(error.localizedDescription)"
         }
     }
 

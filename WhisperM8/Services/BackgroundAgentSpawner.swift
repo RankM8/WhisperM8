@@ -138,12 +138,16 @@ enum BackgroundAgentSpawner {
     /// - `backgrounded · 7c5dcf5d` (Standard, mit Middle-Dot)
     /// - `backgrounded - 7c5dcf5d` (manche Terminals ohne UTF-8-Dot)
     /// - `backgrounded: 7c5dcf5d` (paranoid)
+    /// - `backgrounded · \x1b[36m7c5dcf5d\x1b[39m` (ANSI-coloured — Claude Code
+    ///   druckt die ID standardmaessig cyan, auch wenn stdout an eine Pipe
+    ///   geht. Wir strippen alle ANSI-Sequences vor dem Token-Split.)
     ///
     /// Die Short-ID ist [0-9a-f]{6,16}. Wir greifen aus Robustheits-Gruenden
     /// die **erste** Zeile, die mit `backgrounded` startet — egal wo sie im
     /// Output erscheint.
     static func parseShortID(from stdout: String) -> String? {
-        for rawLine in stdout.split(whereSeparator: \.isNewline) {
+        let sanitized = stripAnsiEscapes(stdout)
+        for rawLine in sanitized.split(whereSeparator: \.isNewline) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard line.lowercased().hasPrefix("backgrounded") else { continue }
 
@@ -159,6 +163,35 @@ enum BackgroundAgentSpawner {
             }
         }
         return nil
+    }
+
+    /// Entfernt ANSI-CSI-Escape-Sequences (`\x1b[...m`, auch andere CSI-Codes)
+    /// aus einem String. Behandelt nur das CSI-Set (am haeufigsten fuer Farben
+    /// und Cursor-Movement); reicht fuer Claude-Code-Output.
+    static func stripAnsiEscapes(_ raw: String) -> String {
+        var result = ""
+        result.reserveCapacity(raw.count)
+        var iterator = raw.makeIterator()
+        while let ch = iterator.next() {
+            if ch == "\u{1B}" {
+                // Skip the bracket (or other intermediate) and the rest of
+                // the CSI sequence until we hit the final byte (a letter
+                // in the @–~ range, 0x40..0x7E).
+                guard let next = iterator.next() else { break }
+                if next == "[" {
+                    while let term = iterator.next() {
+                        if let scalar = term.unicodeScalars.first,
+                           scalar.value >= 0x40 && scalar.value <= 0x7E {
+                            break
+                        }
+                    }
+                }
+                // Single-character CSI (rare) — already consumed `next`.
+                continue
+            }
+            result.append(ch)
+        }
+        return result
     }
 
     /// `true` wenn der Token ein 6–16-stelliger Lowercase-Hex-String ist.
@@ -204,6 +237,16 @@ struct DefaultProcessRunner: ProcessRunner {
             process.executableURL = URL(fileURLWithPath: executable)
             process.arguments = arguments
             process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
+
+            // Claude Code druckt die "backgrounded · <id>"-Zeile per Default mit
+            // ANSI-Farb-Escapes (Cyan), auch wenn stdout an eine Pipe geht. Wir
+            // setzen `NO_COLOR=1` als Industrie-Standard-Signal (no-color.org),
+            // damit Claude clean printet — der Parser-Fallback `stripAnsiEscapes`
+            // bleibt als Sicherheitsnetz drin.
+            var env = ProcessInfo.processInfo.environment
+            env["NO_COLOR"] = "1"
+            env["CLICOLOR"] = "0"
+            process.environment = env
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()

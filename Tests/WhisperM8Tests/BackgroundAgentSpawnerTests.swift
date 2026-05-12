@@ -6,6 +6,27 @@ final class BackgroundAgentSpawnerTests: XCTestCase {
 
     // MARK: - parseShortID
 
+    func testParseShortIDFromCyanColoredOutput() {
+        // Genau das Format das Claude 2.1.139 wirklich druckt, auch wenn
+        // stdout an eine Pipe geht: die Short-ID ist in cyan (\x1b[36m...\x1b[39m)
+        // eingewickelt, und die Erklaerungszeilen sind dim (\x1b[2m...\x1b[22m).
+        let stdout = "backgrounded · \u{1B}[36m07535129\u{1B}[39m\n" +
+                     "\u{1B}[2m  claude agents             list sessions\u{1B}[22m\n" +
+                     "\u{1B}[2m  claude attach 07535129    open in this terminal\u{1B}[22m\n"
+        XCTAssertEqual(BackgroundAgentSpawner.parseShortID(from: stdout), "07535129")
+    }
+
+    func testStripAnsiEscapesRemovesCsiSequences() {
+        let raw = "backgrounded · \u{1B}[36m7c5dcf5d\u{1B}[39m\n  \u{1B}[2mhint\u{1B}[22m"
+        let stripped = BackgroundAgentSpawner.stripAnsiEscapes(raw)
+        XCTAssertEqual(stripped, "backgrounded · 7c5dcf5d\n  hint")
+    }
+
+    func testStripAnsiEscapesIsNoopForPlainText() {
+        let raw = "no ansi here, just plain · text 1234"
+        XCTAssertEqual(BackgroundAgentSpawner.stripAnsiEscapes(raw), raw)
+    }
+
     func testParseShortIDFromCanonicalOutput() {
         // Standard-Output von `claude --bg` aus der offiziellen Doku.
         let stdout = """

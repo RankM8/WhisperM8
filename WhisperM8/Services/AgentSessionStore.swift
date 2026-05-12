@@ -312,6 +312,21 @@ struct AgentSessionStore {
         try saveWorkspace(workspace)
     }
 
+    /// Loescht eine Session aus dem Workspace. Idempotent — wenn die Session
+    /// nicht existiert, passiert nichts. Wird z. B. aufgerufen wenn ein
+    /// Background-Spawn fehlschlaegt: die Stub-Session ist ohne Short-ID
+    /// nicht attachbar, also weg damit, statt einen "Session noch nicht
+    /// gestartet"-Geist liegen zu lassen.
+    func deleteSession(id: UUID) throws {
+        try mutateWorkspaceIfChanged { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == id }) else {
+                return false
+            }
+            workspace.sessions.remove(at: index)
+            return true
+        }
+    }
+
     func markStaleRunningSessionsClosed(excluding activeSessionIDs: Set<UUID> = []) throws {
         var workspace = loadWorkspace()
         var changed = false
