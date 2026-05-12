@@ -314,6 +314,14 @@ final class TerminalKeyboardShortcutHandler {
     private let profile: TerminalKeyboardProfile
     private var monitor: Any?
 
+    /// Wird bei jedem KeyDown gerufen, der an unsere Terminal-View geht
+    /// (also wenn die View `firstResponder` ist) — unabhaengig davon, ob das
+    /// Event von unserem Shortcut-Handler konsumiert oder von SwiftTerms
+    /// Default-Pfad weiterverarbeitet wird. Dient als „User tut gerade was
+    /// in der TUI"-Signal fuer externe Observer (z. B. den
+    /// `ActiveBackgroundSessionTracker`, der dadurch sofort refreshen kann).
+    var onAnyTerminalKeyDown: (() -> Void)?
+
     init(
         attachedTo terminalView: LocalProcessTerminalView,
         profile: TerminalKeyboardProfile
@@ -342,6 +350,11 @@ final class TerminalKeyboardShortcutHandler {
         else {
             return event
         }
+
+        // Listener feuert unabhaengig davon, ob unser Shortcut-Mapping greift —
+        // SwiftTerm verarbeitet Standardtasten (Pfeil, Enter, Buchstabe) selbst,
+        // wir wollen aber auch DIESE Aktionen als "User-Aktivitaet" wissen.
+        onAnyTerminalKeyDown?()
 
         guard let bytes = TerminalShortcut.bytes(
             keyCode: event.keyCode,
@@ -489,6 +502,15 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         }
         terminal.terminate()
         isRunning = false
+    }
+
+    /// Setzt einen Listener auf jeden User-Tastendruck, der an die Terminal-
+    /// View geht. Wird vom `AgentChatsView` fuer `.agentView`-TUI-Tabs
+    /// benutzt, um den `ActiveBackgroundSessionTracker` sofort zu
+    /// "nudgen", wenn der User in der TUI navigiert/attached — statt nur
+    /// alle paar Sekunden zu pollen. `nil` setzen entfernt den Listener.
+    func setUserKeystrokeListener(_ closure: (() -> Void)?) {
+        keyboardShortcutHandler?.onAnyTerminalKeyDown = closure
     }
 
     /// Macht die `LocalProcessTerminalView` zum Window-`firstResponder`, sodass

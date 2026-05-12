@@ -79,6 +79,10 @@ struct AgentChatsView: View {
     @State private var awaitingInputSessionIDs: Set<UUID> = []
     /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
     @State private var subAgentLibrarySheet: SubAgentLibraryPresentation?
+    /// Live-Tracker fuer die aktive Sub-Session innerhalb eines
+    /// `.agentView`-TUI-Tabs. Polls `~/.claude/jobs/*/state.json` und meldet,
+    /// wo der User gerade tippt / Claude gerade antwortet.
+    @StateObject private var activeBackgroundTracker = ActiveBackgroundSessionTracker()
 
     private var selectedProject: AgentProject? {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
@@ -225,6 +229,7 @@ struct AgentChatsView: View {
             syncActiveAgentChat()
             attemptAutoDetectProjectIcons()
             runBackgroundAgentStartupHealthCheckIfNeeded()
+            updateActiveBackgroundTrackerIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputNotification)) { note in
             if let id = note.userInfo?["localID"] as? UUID {
@@ -254,6 +259,7 @@ struct AgentChatsView: View {
         }
         .onDisappear {
             indexRefreshTask?.cancel()
+            activeBackgroundTracker.stop()
             // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
             AppState.shared.activeAgentChat = nil
         }
@@ -265,6 +271,7 @@ struct AgentChatsView: View {
                 selectedSessionIDByProject[projectID] = sessionID
             }
             schedulePersistUIState()
+            updateActiveBackgroundTrackerIfNeeded()
         }
         .onChange(of: selectedProjectID) { _, _ in
             syncActiveAgentChat()
@@ -358,6 +365,36 @@ struct AgentChatsView: View {
             selectedProjectID: selectedProjectID,
             expandedProjectIDs: Array(expandedProjectIDs)
         )
+    }
+
+    /// Aktiviert den Tracker fuer "in TUI aktive Sub-Session" nur, wenn
+    /// der gerade selektierte Tab ein `.agentView` ist. Sonst lassen wir
+    /// das Polling schlafen, um keine Disk-I/O zu produzieren, wenn der
+    /// User in einem normalen Chat ist.
+    /// Verdrahtet ausserdem den Keystroke-Listener am TUI-Terminal: jeder
+    /// Tastendruck triggert einen sofortigen `nudge()` am Tracker — so
+    /// reagiert die "letzte Aktivitaet"-Anzeige sub-Sekunden-schnell beim
+    /// Navigieren, statt aufs 5-Sekunden-Polling zu warten.
+    private func updateActiveBackgroundTrackerIfNeeded() {
+        // Vorigen Listener (falls vom letzten Tab da) abhaengen.
+        for controller in terminalRegistry.runningControllers {
+            controller.setUserKeystrokeListener(nil)
+        }
+
+        guard selectedSession?.isAgentView == true else {
+            activeBackgroundTracker.stop()
+            return
+        }
+        activeBackgroundTracker.start()
+
+        // Neuen Listener nur am Controller der aktuell selektierten .agentView-
+        // Session anhaengen — andere Controller bleiben unangetastet.
+        if let session = selectedSession,
+           let controller = terminalRegistry.controller(for: session.id) {
+            controller.setUserKeystrokeListener { [weak activeBackgroundTracker] in
+                activeBackgroundTracker?.nudge()
+            }
+        }
     }
 
     /// Spiegelt die aktuelle Selection (Session + Projekt) in `AppState.activeAgentChat`.
@@ -902,6 +939,8 @@ struct AgentChatsView: View {
     /// Header-Zeile ueber dem PTY. Zeigt:
     /// - Session-Title (semibold) + Sub-Kind-Indikator (BG / VIEW)
     /// - Projekt-Name + Branch (kleiner, monospaced)
+    /// - Bei `.agentView`-Tabs zusaetzlich: aktive Sub-Session innerhalb
+    ///   der TUI, live-getrackt ueber `~/.claude/jobs/*/state.json`
     /// - Runtime-Info (Provider · Modell · Status) ganz rechts
     @ViewBuilder
     private var activeChatStatusRow: some View {
@@ -911,6 +950,9 @@ struct AgentChatsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 primaryTitleRow
                 secondaryProjectRow
+                if selectedSession?.isAgentView == true {
+                    tuiActiveSubSessionRow
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -920,6 +962,92 @@ struct AgentChatsView: View {
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
             }
+        }
+    }
+
+    /// Live-Anzeige der Sub-Session, in der zuletzt Aktivitaet passierte —
+    /// nur sichtbar wenn der aktive Tab eine `.agentView`-TUI ist.
+    /// Quelle: `ActiveBackgroundSessionTracker` (5s-Polling +
+    /// Keystroke-Nudge). Wir labeln das explizit als "letzte Aktivitaet"
+    /// und zeigen die relative Zeit dazu — denn wir koennen nicht
+    /// erkennen, welche Row die TUI gerade selektiert hat, sondern nur,
+    /// in welcher Session sich zuletzt etwas geschrieben hat.
+    @ViewBuilder
+    private var tuiActiveSubSessionRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.system(size: 9))
+                .foregroundStyle(.orange.opacity(0.8))
+            if let active = activeBackgroundTracker.currentSession {
+                Text("letzte Aktivität:")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                Text(active.displayName)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text("·")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                Image(systemName: "folder")
+                    .font(.system(size: 9))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                Text(active.projectDisplayName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .lineLimit(1)
+                Text("·")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                Text(active.shortID)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                if let stateLabel = active.state, !stateLabel.isEmpty {
+                    kindBadge(stateLabel.uppercased(), color: stateColor(for: stateLabel))
+                }
+                // Relative-Zeit-Anzeige fuer "vor wie lange". Bindet auf
+                // `currentTimeForRelativeLabels`, damit der Text sich pro
+                // Sekunde aktualisiert ohne den Tracker neu zu pollen.
+                Text("· vor \(relativeDurationLabel(from: active.lastActivityAt))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .help("Zeitpunkt der letzten Schreibaktivität in der JSONL dieser Session. Reine TUI-Navigation ohne Schreiben ist nicht detektierbar.")
+            } else {
+                Text("letzte Aktivität: — keine Schreibaktivität im JSONL-Pool")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .help("Sub-Sessions werden hier sichtbar, sobald Claude in deren JSONL schreibt oder du in der TUI eine Taste drückst. Reines Mit-den-Pfeiltasten-Navigieren reicht nicht — WhisperM8 hat keinen Direktzugriff auf den TUI-internen Fokus.")
+            }
+        }
+    }
+
+    /// Liefert "12s", "3m", "1h 4m" — kurze Beschriftung der Differenz
+    /// zwischen `date` und jetzt. Pure-Funktion fuer einfache Testbarkeit.
+    private func relativeDurationLabel(from date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        if seconds < 1 { return "gerade eben" }
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        let remainingMinutes = minutes - hours * 60
+        return remainingMinutes == 0 ? "\(hours)h" : "\(hours)h \(remainingMinutes)m"
+    }
+
+    /// Hex-Farbe fuer den State-Indikator pro TUI-State.
+    private func stateColor(for state: String) -> Color {
+        switch state.lowercased() {
+        case "working", "running":
+            return .green
+        case "blocked", "needs_input", "awaiting":
+            return .orange
+        case "done", "completed", "succeeded":
+            return AgentTheme.textTertiary
+        case "errored", "failed":
+            return .red
+        default:
+            return AgentTheme.textSecondary
         }
     }
 
