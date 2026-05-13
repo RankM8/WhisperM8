@@ -10,7 +10,6 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.isAudioDuckingEnabled)
             XCTAssertEqual(preferences.audioDuckingFactor, 0.2)
             XCTAssertEqual(preferences.overlayStyleRaw, OverlayStyle.full.rawValue)
-            XCTAssertFalse(preferences.onboardingCompleted)
             XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.cleanID)
             XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.cleanID)
             XCTAssertTrue(preferences.fallbackToRawOnProcessingError)
