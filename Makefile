@@ -1,4 +1,4 @@
-.PHONY: run build install kill clean clean-apps help dmg clean-install dev dev-reinstall dev-skip-onboarding mark-onboarded _install_bundle
+.PHONY: run build install kill clean clean-apps help dmg clean-install dev dev-reinstall _install_bundle
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -14,7 +14,6 @@ help:
 	@echo "                            Preserves: TCC permissions (mic/accessibility/screen),"
 	@echo "                            UserDefaults, Keychain (API keys), Application Support."
 	@echo "  make dev-reinstall     - Alias for 'make dev' (kept for backwards compatibility)."
-	@echo "  make dev-skip-onboarding - Run 'make dev' and force onboardingCompleted=true."
 	@echo ""
 	@echo "  make build             - Build release bundle in project directory only."
 	@echo "  make install           - Build and in-place sync to /Applications."
@@ -64,14 +63,6 @@ dev: kill
 
 # Backwards-compatible alias.
 dev-reinstall: dev
-
-# Force onboardingCompleted=true (useful right after a clean-install).
-mark-onboarded:
-	@echo "✅ Marking onboarding as completed for com.whisperm8.app"
-	@defaults write com.whisperm8.app onboardingCompleted -bool true
-
-dev-skip-onboarding: kill mark-onboarded
-	@$(MAKE) dev
 
 # ------------------------------------------------------------------------------
 # Build / install (without launching)

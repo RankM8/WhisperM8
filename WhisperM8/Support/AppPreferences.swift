@@ -66,11 +66,6 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.appearanceOverride) }
     }
 
-    var onboardingCompleted: Bool {
-        get { defaults.bool(forKey: Keys.onboardingCompleted) }
-        nonmutating set { defaults.set(newValue, forKey: Keys.onboardingCompleted) }
-    }
-
     var isDebugFileLoggingEnabled: Bool {
         get { defaults.bool(forKey: Keys.debugFileLoggingEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.debugFileLoggingEnabled) }
@@ -265,7 +260,6 @@ enum PreferenceKeys {
     static let overlayPositionX = "overlayPositionX"
     static let overlayPositionY = "overlayPositionY"
     static let selectedAudioDeviceUID = "selectedAudioDeviceUID"
-    static let onboardingCompleted = "onboardingCompleted"
     static let debugFileLoggingEnabled = "debugFileLoggingEnabled"
     static let defaultOutputModeID = "defaultOutputModeID"
     static let lastSelectedOutputModeID = "lastSelectedOutputModeID"

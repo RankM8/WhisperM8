@@ -2,6 +2,8 @@ import SwiftUI
 import KeyboardShortcuts
 import LaunchAtLogin
 import UserNotifications
+import AVFoundation
+import ApplicationServices
 
 @main
 struct WhisperM8App: App {
@@ -123,10 +125,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         AgentScanCoordinator.shared.installLifecycleHooks()
         AgentScanCoordinator.shared.requestScan(reason: .launch)
 
-        // Routing: Onboarding wenn nötig, sonst Agent-Chats als Default-Hub.
-        // Settings ist nicht mehr die Default-Startansicht — es wird nur noch
-        // explizit über Menubar oder Cmd+, geöffnet.
-        if !AppPreferences.shared.onboardingCompleted {
+        // Routing: Onboarding nur, wenn die zwei essenziellen System-Permissions
+        // (Mikrofon + Accessibility) noch nicht erteilt sind. Ohne diese ist die
+        // App funktional kaputt — alles andere kann der User aus den Settings
+        // heraus konfigurieren. Den alten `onboardingCompleted`-Flag-Pfad haben
+        // wir bewusst aufgegeben, weil er nur durch den "Done"-Button gesetzt
+        // wurde und beim Schließen des Wizards stehen blieb → Auto-Onboarding
+        // beim nächsten Launch, auch wenn das Setup faktisch abgeschlossen war.
+        let micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let accessibilityGranted = AXIsProcessTrusted()
+        let needsOnboarding = !micGranted || !accessibilityGranted
+
+        if needsOnboarding {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WindowRequestCenter.shared.request(.onboarding)
             }

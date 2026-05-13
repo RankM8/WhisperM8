@@ -7,7 +7,6 @@ import AppKit
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
-    @AppStorage("onboardingCompleted") private var onboardingCompleted = false
 
     @State private var currentStep = 0
     @State private var micPermissionGranted = false
@@ -85,7 +84,6 @@ struct OnboardingView: View {
                     .disabled(!canProceed)
                 } else {
                     Button("Done") {
-                        onboardingCompleted = true
                         // Direkt in den Agent-Chats-Hub springen — der ist die
                         // Default-Hauptansicht der App seit dem Wechsel auf
                         // Dock-App. Settings ist manuell via Menubar erreichbar.
