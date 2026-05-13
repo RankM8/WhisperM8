@@ -1,145 +1,94 @@
 # Audio Ducking Feature
 
-WhisperM8 kann automatisch die Systemlautstärke reduzieren während einer Aufnahme, sodass Hintergrundmusik, Videos und andere Audio-Quellen leiser werden. Nach der Aufnahme wird die ursprüngliche Lautstärke wiederhergestellt.
+WhisperM8 reduziert während einer Aufnahme automatisch die Systemlautstärke und stellt sie nach dem Stop wieder her — auch bei AirPods und anderen Bluetooth-Devices, die ihr eigenes Profile-Switching machen.
 
-## Funktionsweise
+## Verhalten im Überblick
 
-### Grundprinzip
+| Phase | Was passiert mit der Volume |
+|---|---|
+| Vor `beginCapture()` | Original-Volume des aktuellen Default-Output-Devices wird gelesen. |
+| Während Aufnahme | Volume des aktuell aktiven Devices ist auf den Zielwert (Default 20 %) reduziert. |
+| Routing-Wechsel während Aufnahme | Neues Default-Device wird ebenfalls gecaptured und geduckt. Altes Device behält gemerkte Original-Volume. |
+| `endCapture()` (Hotkey-Release) | Alle während der Session berührten Devices werden sofort auf ihre Originals zurückgesetzt. |
+| Settle-Window (2 s) | Routing-Listener bleibt aktiv. Bei verzögertem BT-Reverse-Switch (HFP → A2DP) werden alle Devices nochmal restored. |
+| Transkription / Post-Processing | Volume ist bereits zurück auf Original — nichts mehr geduckt. |
+| App-Quit während Recording | `endCaptureImmediate()` setzt Volume sofort zurück (Sicherheitsnetz). |
 
-1. **Aufnahme startet** → Aktuelle Systemlautstärke wird gespeichert → Lautstärke wird auf Zielwert reduziert
-2. **Während der Aufnahme** → Lautstärke bleibt auf dem niedrigen Zielwert
-3. **Aufnahme endet** → Ursprüngliche Lautstärke wird wiederhergestellt
+## State-Machine
 
-### Technische Details
+```
+.idle ──beginCapture()──► .capturing ──endCapture()──► .restoring ──(2 s timeout)──► .idle
+                              │                            │
+                              └─routing event─┐            └─routing event─► re-restore alle Captures
+                                              ▼
+                              capture new device + duck
+```
 
-Das Feature verwendet die [ISSoundAdditions](https://github.com/InerziaSoft/ISSoundAdditions) Library, die eine Swift-freundliche API für macOS CoreAudio Volume Control bietet.
+## Designprinzipien
 
-**Wichtig:** Es wird die **gesamte Systemlautstärke** geändert, nicht nur einzelne Apps. Dies ist eine Einschränkung von macOS - es gibt keine öffentliche API um die Lautstärke einzelner Anwendungen zu steuern.
+### 1. Pre-Switch-Capture
+`AudioDuckingManager.beginCapture()` wird im `RecordingCoordinator` **vor** `audioRecorder.startRecording()` aufgerufen. Damit lesen wir die Original-Volume des Default-Output-Devices, **bevor** der `AVAudioEngine` den Bluetooth-A2DP→HFP-Profile-Switch anstößt — sonst würden wir die HFP-Volume als „Original" speichern.
+
+### 2. Multi-Device-Capture
+Jedes Device, das während der Session jemals Default-Output war, wird einzeln tracked. Bei AirPods erscheint das HFP-Profil auf vielen Macs als eigene `AudioDeviceID`. Der Routing-Listener fängt diesen Switch ab und captured/duckt das neue Device — beide werden am Ende auf ihre jeweils eigenen Originals restored.
+
+### 3. Routing-Listener statt Time-Reinforce
+Wir lauschen auf `kAudioHardwarePropertyDefaultOutputDevice`. Der frühere Multi-Enforce-Pattern (`duck()`-Calls bei +0.3 / +0.6 / +1.0 / +1.5 s) ist komplett entfernt — er ist im neuen Modell überflüssig und war Quelle von Race-Conditions.
+
+### 4. Settle-Window (2 s)
+Nach `endCapture()` bleibt der Routing-Listener noch 2 Sekunden aktiv. Jeder Routing-Wechsel in diesem Fenster triggert ein erneutes Restore auf alle bekannten Captures. Damit fangen wir verzögerte HFP→A2DP-Reverse-Switches ab, ohne in einen Retry-Loop zu verfallen.
+
+### 5. Keine User-Eingriff-Detection (bewusster Trade-off)
+Wenn der User mitten in der Aufnahme manuell die Volume ändert, wird sie am Ende trotzdem auf Original zurückgesetzt.
+
+**Begründung:** Auf macOS gibt es kein zuverlässiges Signal „User vs System hat Volume geändert". Ein Bluetooth-Profile-Switch erzeugt einen identischen Event wie ein User-Slider-Klick. Das alte Design hat versucht das zu unterscheiden und in der Praxis dauerhaft geduckte AirPods produziert (BT-Routing-Drift wurde als User-Eingriff missinterpretiert → kein Restore → Volume blieb leise bis manueller System-Settings-Eingriff).
+
+**Trade-off:** Wer mitten in der Aufnahme manuell lauter dreht, muss nach dem Stop nochmal nachdrehen. Selten, einklickbar, deutlich weniger schmerzhaft als der vorige Failure-Mode.
 
 ## Einstellungen
 
-Die Audio-Ducking Einstellungen befinden sich unter **Settings → Behavior → Audio Ducking**.
+| UserDefault-Key | Typ | Standard | Bedeutung |
+|---|---|---|---|
+| `audioDuckingEnabled` | Bool | true | Feature aktiviert |
+| `audioDuckingFactor` | Double | 0.2 | Ziel-Lautstärke (0.05 - 0.30) |
 
-### Optionen
-
-| Einstellung | Beschreibung | Standard |
-|-------------|--------------|----------|
-| **Reduce system volume while recording** | Aktiviert/Deaktiviert das Feature | An |
-| **Target volume** | Ziel-Lautstärke während der Aufnahme (5% - 30%) | 20% |
-
-### Verhalten
-
-- Wenn die aktuelle Systemlautstärke **über** dem Zielwert liegt: Lautstärke wird auf Zielwert reduziert
-- Wenn die aktuelle Systemlautstärke **unter** dem Zielwert liegt: Keine Änderung (wird nicht lauter gemacht)
-
-## AirPods / Bluetooth Unterstützung
-
-Bei Verwendung von AirPods oder anderen Bluetooth-Kopfhörern wechselt macOS beim Aufnahmestart vom A2DP-Modus (Musik, hohe Qualität) in den HFP-Modus (Telefon, Mikrofon aktiv). Dieser Wechsel kann die Systemlautstärke kurzzeitig ändern.
-
-### Problemlösung
-
-WhisperM8 verwendet ein **Multi-Enforce Pattern** um mit diesem Verhalten umzugehen:
-
-**Beim Aufnahmestart:**
-- Lautstärke wird sofort auf Zielwert gesetzt
-- Zusätzliche Korrekturen bei 0.3s, 0.6s, 1.0s und 1.5s nach Start
-- Falls die AirPods-Umschaltung die Lautstärke erhöht, wird sie sofort wieder korrigiert
-
-**Beim Aufnahmeende:**
-- Ursprüngliche Lautstärke wird sofort wiederhergestellt
-- Zusätzliche Korrekturen bei 0.3s, 0.6s, 1.0s und 1.5s nach Ende
-- Falls der Wechsel zurück zu A2DP die Lautstärke ändert, wird sie korrigiert
+UI: **Settings → Behavior → Audio Ducking**.
 
 ## Architektur
-
-### Komponenten
 
 ```
 WhisperM8/
 └── Services/
-    └── AudioDuckingManager.swift    # Zentrale Ducking-Logik
+    ├── AudioDuckingManager.swift     # State-Machine, Capture-Logik, Settle-Window
+    └── RecordingCoordinator.swift    # Ruft beginCapture() vor Recorder-Start, endCapture() beim Stop
 ```
 
-### AudioDuckingManager
-
-Singleton-Klasse die das Audio-Ducking verwaltet:
-
-```swift
-@MainActor
-final class AudioDuckingManager {
-    static let shared = AudioDuckingManager()
-
-    // Einstellungen aus UserDefaults
-    var isEnabled: Bool       // "audioDuckingEnabled"
-    var targetVolume: Float   // "audioDuckingFactor"
-
-    // Zustand
-    private var originalVolume: Float?
-    private var isDucked: Bool
-
-    // Hauptmethoden
-    func duck()      // Lautstärke reduzieren
-    func restore()   // Lautstärke wiederherstellen
-}
-```
-
-### Integration in AppState
-
-Die Ducking-Aufrufe sind in `AppState.swift` integriert:
-
-```swift
-// In startRecording():
-AudioDuckingManager.shared.duck()
-// + Re-enforce Task für AirPods
-
-// In stopRecording():
-AudioDuckingManager.shared.restore()
-
-// In cancelRecording():
-AudioDuckingManager.shared.restore()
-```
-
-### UserDefaults Keys
-
-| Key | Typ | Standard | Beschreibung |
-|-----|-----|----------|--------------|
-| `audioDuckingEnabled` | Bool | true | Feature aktiviert |
-| `audioDuckingFactor` | Double | 0.2 | Ziel-Lautstärke (0.05 - 0.30) |
-
-## Dependencies
-
-Das Feature benötigt die **ISSoundAdditions** Library:
-
-```swift
-// Package.swift
-.package(url: "https://github.com/InerziaSoft/ISSoundAdditions", from: "2.0.0")
-```
-
-## Debugging
-
-Audio-Ducking Ereignisse werden im Debug-Log protokolliert:
-
-```bash
-# Live-Logs anzeigen
-log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
-
-# Oder Debug-Log auf Desktop
-cat ~/Desktop/WhisperM8-debug.log | grep -i "ducking"
-```
-
-### Beispiel-Log
-
-```
-[AudioDucking] Ducked: 80% → 20%
-[AudioDucking] Re-enforcing duck: 100% → 20%
-[AudioDucking] restore() called - isDucked=true, originalVolume=Optional(0.8)
-[AudioDucking] Restored to: 80% (actual: 80%)
-[AudioDucking] Re-enforcing restore: 20% → 80%
-```
+`AudioDuckingManager` ist `@MainActor`-isoliert. Die `AudioVolumeControlling`-Protocol-Abstraktion erlaubt deterministische Tests mit dem `AudioWorld`-Fake.
 
 ## Bekannte Einschränkungen
 
-1. **Nur Systemlautstärke**: Per-App Volume Control ist auf macOS nicht möglich
-2. **Kurzer Audio-Spike bei AirPods**: Beim Start kann es einen kurzen (~300ms) lauten Moment geben bevor das Ducking greift
-3. **App-Crash während Aufnahme**: Falls die App während einer Aufnahme abstürzt, bleibt die Lautstärke auf dem reduzierten Wert - manuelles Anpassen erforderlich
-4. **Mehrere Audio-Outputs**: Das Feature arbeitet nur mit dem Standard-Output-Gerät
+1. **Nur Systemlautstärke**: Per-App-Volume-Control gibt es auf macOS nicht als öffentliche API.
+2. **HDMI / Aggregate Devices**: Devices ohne kontrollierbare Volume-Property werden nicht gecaptured und nicht angerührt — kein Crash, kein Restore-Versuch.
+3. **Volume schon ≤ Target**: Ist die aktuelle Volume bereits leiser als der Zielwert, machen wir nichts — und merken uns auch nichts. Verhindert ein „Restore" auf einen falschen Wert.
+4. **Settle-Window-Dauer**: 2 s fest verdrahtet. Bei sehr langsamen Bluetooth-Stacks könnte das knapp sein; bei Bedarf in `AudioDuckingManager.init(settleWindowDuration:)` injizierbar.
+
+## Debugging
+
+```bash
+# Live-Logs
+log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug | grep -i "AudioDucking"
+```
+
+Beispiel-Log einer normalen Session mit AirPods:
+
+```
+[AudioDucking] Captured+ducked AirPods (A2DP): 80% → 20%
+[AudioDucking] Captured+ducked AirPods (HFP): 50% → 20%     ← HFP-Profil als eigenes Device
+[AudioDucking] Restored AirPods (A2DP) to 80%
+[AudioDucking] Restored AirPods (HFP) to 50%
+[AudioDucking] Restored AirPods (A2DP) to 80%                ← settle-window re-restore beim Reverse-Switch
+```
+
+## Tests
+
+`Tests/WhisperM8Tests/AudioDuckingManagerTests.swift` enthält 18 Tests gegen einen `AudioWorld`-Fake, der die für Ducking relevanten macOS-Phänomene modelliert: Default-Output-Wechsel, BT-Profile-Switches, verschwundene Devices, doppelt feuernde Listener. Diese Tests sichern die State-Machine deterministisch ab — manuelle Real-Device-Validierung ergänzt sie.

@@ -2,271 +2,630 @@ import CoreAudio
 import XCTest
 @testable import WhisperM8
 
+/// Tests fuer die neue State-Machine des AudioDuckingManager.
+///
+/// **Konventionen:**
+/// - `beginCapture()` ersetzt das alte `duck()` und MUSS vor dem Recorder-Start gerufen werden.
+/// - `endCapture()` ersetzt das alte `restore()` und startet ein Settle-Window.
+/// - Tests koennen die Settle-Window-Dauer ueber den Init-Parameter steuern.
+/// - `AudioWorld` modelliert die macOS-CoreAudio-Realitaet: mehrere Devices,
+///   Default-Output-Wechsel, BT-Profile-Switches als eigene DeviceIDs,
+///   verschwundene Devices und doppelt feuernde Listener.
 @MainActor
 final class AudioDuckingManagerTests: XCTestCase {
 
-    // MARK: - Existing baseline behaviour
+    // MARK: - 1) Baseline
 
-    func testDuckingRestoresEveryOutputDeviceTouchedDuringRouteChanges() {
+    /// Kanonischer Pfad: ein Device, ducken, restoren — Volume zurueck auf Original.
+    func test_baselineDuckRestore_singleDevice() {
         withIsolatedDuckingPreferences { preferences in
             preferences.isAudioDuckingEnabled = true
             preferences.audioDuckingFactor = 0.2
 
-            let controller = FakeAudioVolumeController(
-                defaultDeviceID: 1,
-                volumes: [
-                    1: 0.8,
-                    2: 0.7
-                ]
-            )
-            let manager = AudioDuckingManager(volumeController: controller)
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
 
-            manager.duck()
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.2, accuracy: 0.001)
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
 
-            controller.defaultDeviceID = 2
-            manager.duck()
-            XCTAssertEqual(controller.volumes[2] ?? -1, 0.2, accuracy: 0.001)
-
-            manager.restore()
-
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.8, accuracy: 0.001)
-            XCTAssertEqual(controller.volumes[2] ?? -1, 0.7, accuracy: 0.001)
-            XCTAssertFalse(manager.hasActiveDuckingSession)
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
         }
     }
 
-    func testDuckingDoesNothingWhenOutputDeviceCannotBeControlled() {
-        withIsolatedDuckingPreferences { preferences in
-            preferences.isAudioDuckingEnabled = true
-
-            let controller = FakeAudioVolumeController(
-                defaultDeviceID: 1,
-                volumes: [1: 0.8],
-                unsupportedDeviceIDs: [1]
-            )
-            let manager = AudioDuckingManager(volumeController: controller)
-
-            manager.duck()
-
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.8, accuracy: 0.001)
-            XCTAssertFalse(manager.hasActiveDuckingSession)
-        }
-    }
-
-    // MARK: - Critical regression tests (the bug user reported)
-
-    /// Wenn der User WAEHREND der Aufnahme die Lautstaerke selbst aendert,
-    /// duerfen wir beim Restore NICHT auf den Original-Wert zurueckspringen.
-    /// Das ist der Hauptfehler des alten Codes gewesen.
-    func testUserVolumeAdjustmentDuringDuckingDisablesRestore() async {
-        await withIsolatedDuckingPreferencesAsync { preferences in
-            preferences.isAudioDuckingEnabled = true
-            preferences.audioDuckingFactor = 0.2
-
-            let controller = FakeAudioVolumeController(
-                defaultDeviceID: 1,
-                volumes: [1: 0.8]
-            )
-            let manager = AudioDuckingManager(volumeController: controller)
-
-            manager.duck()
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.2, accuracy: 0.001)
-
-            // User schraubt manuell hoch — Fake propagiert das ueber den Listener.
-            // Der Listener-Handler ist in eine `Task { @MainActor in ... }`
-            // gewrappt → wir muessen einen kurzen Tick warten, damit die
-            // Task lauft bevor wir restoren.
-            controller.simulateExternalVolumeChange(deviceID: 1, newVolume: 0.5)
-            await Task.yield()
-            // Defensive: noch ein Tick auf jeden Fall.
-            try? await Task.sleep(for: .milliseconds(20))
-
-            manager.restore()
-
-            // Volume bleibt bei 0.5 (user's choice) — keine Rueckkehr zu 0.8.
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.5, accuracy: 0.001)
-            XCTAssertFalse(manager.hasActiveDuckingSession)
-        }
-    }
-
-    /// Wenn der User NACH dem Restore manuell leiser dreht, darf NICHTS
-    /// passieren — vorher hat ein Retry-Loop das auf den Original-Wert
-    /// zurueckgekracht.
-    func testRestoreDoesNotReapplyVolumeAfterUserChangesIt() async {
-        await withIsolatedDuckingPreferencesAsync { preferences in
-            preferences.isAudioDuckingEnabled = true
-            preferences.audioDuckingFactor = 0.2
-
-            let controller = FakeAudioVolumeController(
-                defaultDeviceID: 1,
-                volumes: [1: 0.8]
-            )
-            let manager = AudioDuckingManager(volumeController: controller)
-
-            manager.duck()
-            manager.restore()
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.8, accuracy: 0.001)
-
-            // User dreht jetzt manuell leiser.
-            controller.volumes[1] = 0.3
-
-            // Wir warten 3 Sekunden — frueher haette der Retry-Loop hier
-            // wieder auf 0.8 hochgesprungen.
-            try? await Task.sleep(for: .seconds(3))
-
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.3, accuracy: 0.001,
-                "Restore must be one-shot — no retry loop allowed to fight user adjustments")
-        }
-    }
-
-    /// Wenn das Geraet schon UNTER unserem Target ist, gar nicht ducken —
-    /// sonst wuerde Restore auf einen falschen Wert hochspringen.
-    func testNoDuckingWhenVolumeAlreadyBelowTarget() {
+    /// Wenn Volume bereits ≤ Target: kein Ducking, kein Capture-Eintrag → kein
+    /// fehlerhafter "Restore" der die Volume HOEHER setzen wuerde.
+    func test_volumeAlreadyBelowTarget_noOp() {
         withIsolatedDuckingPreferences { preferences in
             preferences.isAudioDuckingEnabled = true
             preferences.audioDuckingFactor = 0.3
 
-            let controller = FakeAudioVolumeController(
-                defaultDeviceID: 1,
-                volumes: [1: 0.15]
-            )
-            let manager = AudioDuckingManager(volumeController: controller)
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.15)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
 
-            manager.duck()
+            manager.beginCapture()
 
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.15, accuracy: 0.001)
-            XCTAssertFalse(manager.hasActiveDuckingSession)
+            XCTAssertEqual(world.volume(1), 0.15, accuracy: 0.001)
+            #if DEBUG
+            XCTAssertTrue(manager.debug_capturedDeviceIDs.isEmpty,
+                          "No capture entry expected when volume already below target")
+            #endif
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.15, accuracy: 0.001)
         }
     }
 
-    /// Re-Ducken einer schon geduckten Session darf den `originalVolume`
-    /// nicht mit dem Target ueberschreiben — sonst Permanent-Ducking.
-    func testRepeatedDuckPreservesOriginalVolume() {
+    /// Devices ohne kontrollierbare Volume (HDMI/Aggregate): nicht crashen,
+    /// nichts tracken.
+    func test_unsupportedDevice_doesNothing() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+
+            let world = AudioWorld(
+                defaultDeviceID: 1,
+                devices: [1: ("HDMI", 0.8)],
+                unsupported: [1]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001,
+                           "Unsupported device must not have its volume touched")
+            #if DEBUG
+            XCTAssertTrue(manager.debug_capturedDeviceIDs.isEmpty)
+            #endif
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+        }
+    }
+
+    /// Mehrfaches `beginCapture()` ohne dazwischen `endCapture()` darf nicht
+    /// das Original mit dem aktuellen (= geduckten) Wert ueberschreiben.
+    func test_repeatedBeginCapture_isIdempotent() {
         withIsolatedDuckingPreferences { preferences in
             preferences.isAudioDuckingEnabled = true
             preferences.audioDuckingFactor = 0.2
 
-            let controller = FakeAudioVolumeController(
-                defaultDeviceID: 1,
-                volumes: [1: 0.8]
-            )
-            let manager = AudioDuckingManager(volumeController: controller)
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
 
-            manager.duck()
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.2, accuracy: 0.001)
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
 
-            // Erneut ducken — sollte ohne Effekt sein, weil schon geduckt.
-            manager.duck()
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.2, accuracy: 0.001)
+            // Zweiter Aufruf: schon in .capturing → keine Veraenderung am Original.
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
 
-            manager.restore()
-            XCTAssertEqual(controller.volumes[1] ?? -1, 0.8, accuracy: 0.001,
-                "Restore must return to PRE-duck volume, not to our target")
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001,
+                           "Repeat-capture must NOT corrupt original (would restore to ducked value)")
         }
     }
 
-    /// Listener wird beim Restore wieder entfernt — verhindert Memory-Leak
-    /// und vermeidet dass Spaetere User-Aenderungen noch reinkommen.
-    func testRestoreRemovesVolumeListener() {
+    // MARK: - 2) Bluetooth / Routing
+
+    /// Original-Volume MUSS vor dem HFP-Switch erfasst worden sein.
+    /// Wenn der Coordinator beginCapture() vor `audioRecorder.startRecording()`
+    /// ruft, ist das Default-Device noch im A2DP-Mode mit User-Volume 0.8.
+    /// Nach Engine-Start switcht macOS auf HFP-Profil; das aendert nichts mehr
+    /// an unserem bereits gespeicherten Original.
+    func test_originalVolumeCapturedBeforeRecorderStarts_notAfterHFPSwitch() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            // AirPods-A2DP ist Default mit User-Volume 0.8
+            let world = AudioWorld(
+                defaultDeviceID: 100,
+                devices: [
+                    100: ("AirPods (A2DP)", 0.8),
+                    101: ("AirPods (HFP)", 0.4)
+                ]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            // beginCapture VOR dem (simulierten) Recorder-Start
+            manager.beginCapture()
+
+            // Jetzt simuliert macOS den HFP-Switch
+            world.simulateDefaultOutputChange(to: 101)
+
+            manager.endCapture()
+
+            // A2DP wurde mit Original 0.8 gecaptured und restored.
+            XCTAssertEqual(world.volume(100), 0.8, accuracy: 0.001,
+                           "Original A2DP volume must be the pre-switch value, not the HFP value")
+        }
+    }
+
+    /// Routing-Change waehrend Capture: das neue Device wird ebenfalls geduckt.
+    func test_routingChangeDuringCapture_newDeviceAlsoDucked() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 1,
+                devices: [
+                    1: ("Built-in", 0.8),
+                    2: ("USB Headset", 0.7)
+                ]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 1.0)
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+
+            world.simulateDefaultOutputChange(to: 2)
+            // Routing-Listener landet auf MainActor-Task — kurz yielden.
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            XCTAssertEqual(world.volume(2), 0.2, accuracy: 0.001,
+                           "New default device must also be ducked")
+        }
+    }
+
+    /// Routing-Change waehrend Capture: beide Devices werden am Ende restored.
+    func test_routingChangeDuringCapture_oldAndNewDeviceBothRestored() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 1,
+                devices: [
+                    1: ("Built-in", 0.8),
+                    2: ("USB Headset", 0.7)
+                ]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            world.simulateDefaultOutputChange(to: 2)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            manager.endCapture()
+
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001, "Old device restored")
+            XCTAssertEqual(world.volume(2), 0.7, accuracy: 0.001, "New device restored")
+        }
+    }
+
+    /// Realistisches AirPods-Szenario: A2DP- und HFP-Profil haben verschiedene
+    /// DeviceIDs. Beide werden waehrend Session beruehrt und beide werden
+    /// auf ihre jeweiligen Originals zurueckgesetzt.
+    func test_bluetoothProfileSwitch_HFPAndA2DPSeparateDevices_bothRestored() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 100,
+                devices: [
+                    100: ("AirPods (A2DP)", 0.8),
+                    101: ("AirPods (HFP)", 0.5)
+                ]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            // BT-Profile-Switch zu HFP
+            world.simulateDefaultOutputChange(to: 101)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            manager.endCapture()
+
+            XCTAssertEqual(world.volume(100), 0.8, accuracy: 0.001, "A2DP restored to original")
+            XCTAssertEqual(world.volume(101), 0.5, accuracy: 0.001, "HFP restored to original")
+        }
+    }
+
+    // MARK: - 3) End / Settle
+
+    /// `endCapture()` restored sofort alle bekannten Devices — nicht erst nach
+    /// Settle-Window.
+    func test_endCapture_restoresImmediatelyOnAllCapturedDevices() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 1,
+                devices: [1: ("A", 0.8), 2: ("B", 0.6)]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0)
+
+            manager.beginCapture()
+            world.simulateDefaultOutputChange(to: 2)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            manager.endCapture()
+            // Sofort nach endCapture (vor Settle-Ablauf) muss Volume oben sein.
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+            XCTAssertEqual(world.volume(2), 0.6, accuracy: 0.001)
+        }
+    }
+
+    /// Routing-Event INNERHALB des Settle-Windows → Re-Restore aller Devices.
+    /// Simuliert: macOS schaltet von HFP zurueck auf A2DP, und beim Reverse-
+    /// Switch hat der BT-Stack A2DP-Volume manipuliert. Wir korrigieren das.
+    func test_settleWindow_routingChangeAfterEnd_triggersReRestore() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 100,
+                devices: [
+                    100: ("AirPods (A2DP)", 0.8),
+                    101: ("AirPods (HFP)", 0.5)
+                ]
+            )
+            // Settle-Window lang genug, dass wir innerhalb davon agieren koennen.
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 1.0)
+
+            manager.beginCapture()
+            world.simulateDefaultOutputChange(to: 101)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            manager.endCapture()
+            // BT-Stack manipuliert A2DP-Volume nach Hotkey-Release
+            world.setVolumeExternally(deviceID: 100, value: 0.3)
+            // Reverse-Switch zurueck auf A2DP
+            world.simulateDefaultOutputChange(to: 100)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            XCTAssertEqual(world.volume(100), 0.8, accuracy: 0.001,
+                           "Settle-Window must re-apply restore on routing event")
+        }
+    }
+
+    /// Nach Ablauf des Settle-Windows wird der Routing-Listener entfernt und
+    /// `phase` ist wieder `.idle`.
+    func test_settleWindow_expiresAfterDuration_listenersTornDown() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            XCTAssertEqual(world.defaultOutputListenerCount, 1)
+            manager.endCapture()
+
+            // Warten bis Settle-Window abgelaufen
+            try? await Task.sleep(for: .milliseconds(150))
+
+            XCTAssertEqual(world.defaultOutputListenerCount, 0,
+                           "Routing listener must be torn down after settle-window")
+            XCTAssertEqual(manager.phase, .idle)
+        }
+    }
+
+    /// Verspaeteter Routing-Event NACH Ablauf des Settle-Windows: ignoriert,
+    /// keine ungewollten Side-Effects.
+    func test_lateRoutingEventAfterSettle_ignored() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 1,
+                devices: [1: ("A", 0.8), 2: ("B", 0.6)]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            manager.endCapture()
+            try? await Task.sleep(for: .milliseconds(150))
+
+            // Listener ist weg → simulate fire-on-removed-listener: world fires
+            // weiter (im Fake), aber Manager hat kein Token mehr installiert.
+            // Daher wird keine Routing-Funktion getriggert.
+            world.simulateDefaultOutputChange(to: 2)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            // B wurde NICHT geduckt — der Manager ist .idle und reagiert nicht.
+            XCTAssertEqual(world.volume(2), 0.6, accuracy: 0.001)
+            XCTAssertEqual(manager.phase, .idle)
+        }
+    }
+
+    // MARK: - 4) Robustheit
+
+    /// Hammer-Triggern: begin → end → begin → end → ... Keine State-Leaks,
+    /// keine permanent geduckte Volume, kein falsch gespeichertes Original.
+    func test_rapidBeginEndBegin_noStateLeakBetweenSessions() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            // Mittleres Window: nach endCapture noch in .restoring, dann
+            // beginCapture(2) reisst die Settle-Phase ab.
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 1.0)
+
+            // Runde 1
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+
+            // Runde 2 — noch innerhalb Settle-Window
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+
+            // Runde 3 — Settle ausgelaufen lassen, frisch starten
+            try? await Task.sleep(for: .milliseconds(1100))
+            XCTAssertEqual(manager.phase, .idle)
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+        }
+    }
+
+    /// Wenn der Routing-Listener mehrmals fuer den gleichen Switch feuert
+    /// (CoreAudio macht das in der Praxis), bleibt unser State konsistent.
+    func test_duplicateRoutingEventsPerSwitch_idempotent() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 1,
+                devices: [1: ("A", 0.8), 2: ("B", 0.6)]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            world.simulateDefaultOutputChange(to: 2)
+            // Doppelt feuern
+            world.fireDefaultOutputListenersManually()
+            world.fireDefaultOutputListenersManually()
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            manager.endCapture()
+
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+            XCTAssertEqual(world.volume(2), 0.6, accuracy: 0.001,
+                           "Duplicate fires must not corrupt original of device B")
+        }
+    }
+
+    /// Device verschwindet mid-Capture (z. B. AirPods getrennt). Restore-Pfad
+    /// darf nicht crashen und nicht andere Devices in Mitleidenschaft ziehen.
+    func test_deviceDisappearsMidCapture_restoreSafelySkipsIt() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 100,
+                devices: [
+                    100: ("AirPods", 0.8),
+                    1: ("Built-in", 0.6)
+                ]
+            )
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            // AirPods getrennt → fallback auf Built-in
+            world.disconnectDevice(100, newDefault: 1)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+
+            manager.endCapture()
+
+            // Built-in wurde restored
+            XCTAssertEqual(world.volume(1), 0.6, accuracy: 0.001)
+            // AirPods-Operation hat keine Exception geworfen und nichts kaputt gemacht
+            XCTAssertEqual(manager.phase, .restoring,
+                           "Manager is in restoring phase after endCapture")
+        }
+    }
+
+    /// `endCapture()` ohne vorheriges `beginCapture()` ist ein sauberer No-Op.
+    func test_endCaptureWithoutBeginCapture_isNoOp() {
         withIsolatedDuckingPreferences { preferences in
             preferences.isAudioDuckingEnabled = true
 
-            let controller = FakeAudioVolumeController(
-                defaultDeviceID: 1,
-                volumes: [1: 0.8]
-            )
-            let manager = AudioDuckingManager(volumeController: controller)
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
 
-            manager.duck()
-            XCTAssertEqual(controller.activeListenerCount, 1)
+            manager.endCapture()
 
-            manager.restore()
-            XCTAssertEqual(controller.activeListenerCount, 0)
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+            XCTAssertEqual(manager.phase, .idle)
+        }
+    }
+
+    // MARK: - 5) Designtrade-off: KEIN userTookOver
+
+    /// Externe Volume-Aenderung waehrend Capture (egal ob User oder BT-Stack):
+    /// Beim Stop wird auf Original zurueckgesetzt. Bewusster Trade-off — siehe
+    /// Designdoku im AudioDuckingManager.
+    func test_externalVolumeChangeDuringCapture_endStillRestoresToOriginal() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+
+            // "User" oder System aendert Volume mitten in der Aufnahme
+            world.setVolumeExternally(deviceID: 1, value: 0.5)
+            await Task.yield()
+
+            manager.endCapture()
+
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001,
+                           "Bewusster Trade-off: end restores to original even after external change.")
+        }
+    }
+
+    // MARK: - 6) endCaptureImmediate (App-Quit-Pfad)
+
+    /// `endCaptureImmediate()` setzt sofort zurueck und beendet die Session
+    /// ohne Settle-Window — fuer App-Termination.
+    func test_endCaptureImmediate_restoresAndGoesIdle() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0)
+
+            manager.beginCapture()
+            manager.endCaptureImmediate()
+
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+            XCTAssertEqual(manager.phase, .idle)
+            XCTAssertEqual(world.defaultOutputListenerCount, 0)
         }
     }
 }
 
-// MARK: - Fakes
+// MARK: - AudioWorld: Test-Fake fuer macOS-Audio-Verhalten
 
-private final class FakeAudioVolumeController: AudioVolumeControlling {
-    var defaultDeviceID: AudioDeviceID
-    var volumes: [AudioDeviceID: Float]
-    var unsupportedDeviceIDs: Set<AudioDeviceID>
-    private var listeners: [AudioDeviceID: [UUID: () -> Void]] = [:]
+/// Modelliert die fuer das Ducking relevanten Aspekte des CoreAudio-Universums:
+/// - Mehrere Devices mit eigenen Volumes und Namen.
+/// - Wechselbares Default-Output-Device.
+/// - Optional "unsupported" Devices (HDMI/Aggregate, kein Volume-Control).
+/// - "Disappeared" Devices (Bluetooth getrennt).
+/// - Default-Output-Listener mit Fire-Trigger fuer doppelte/spaete Events.
+///
+/// Bewusst NICHT @MainActor — die `AudioVolumeControlling`-Konformitaet darf
+/// keine Actor-Isolation einfuehren. Tests greifen aus @MainActor-Kontext drauf
+/// zu, was fuer XCTest synchron sequentiell ist.
+final class AudioWorld: AudioVolumeControlling, @unchecked Sendable {
+    private(set) var defaultDeviceID: AudioDeviceID
+    private var deviceVolumes: [AudioDeviceID: Float] = [:]
+    private var deviceNames: [AudioDeviceID: String] = [:]
+    private var unsupportedDeviceIDs: Set<AudioDeviceID> = []
+    private var disappearedDeviceIDs: Set<AudioDeviceID> = []
+    private var defaultOutputListeners: [UUID: () -> Void] = [:]
 
     init(
         defaultDeviceID: AudioDeviceID,
-        volumes: [AudioDeviceID: Float],
-        unsupportedDeviceIDs: Set<AudioDeviceID> = []
+        devices: [AudioDeviceID: (name: String, volume: Float)],
+        unsupported: Set<AudioDeviceID> = []
     ) {
         self.defaultDeviceID = defaultDeviceID
-        self.volumes = volumes
-        self.unsupportedDeviceIDs = unsupportedDeviceIDs
+        for (id, info) in devices {
+            self.deviceNames[id] = info.name
+            self.deviceVolumes[id] = info.volume
+        }
+        self.unsupportedDeviceIDs = unsupported
     }
 
-    var activeListenerCount: Int {
-        listeners.values.reduce(0) { $0 + $1.count }
-    }
+    // MARK: AudioVolumeControlling
 
     func defaultOutputDeviceID() throws -> AudioDeviceID {
-        defaultDeviceID
+        if disappearedDeviceIDs.contains(defaultDeviceID) {
+            throw AudioVolumeError.noDevice
+        }
+        return defaultDeviceID
     }
 
     func readVolume(deviceID: AudioDeviceID) throws -> Float {
+        if disappearedDeviceIDs.contains(deviceID) {
+            throw AudioVolumeError.noDevice
+        }
         if unsupportedDeviceIDs.contains(deviceID) {
             throw AudioVolumeError.unsupportedProperty(deviceID)
         }
-        guard let volume = volumes[deviceID] else {
+        guard let volume = deviceVolumes[deviceID] else {
             throw AudioVolumeError.noDevice
         }
         return volume
     }
 
     func setVolume(_ volume: Float, deviceID: AudioDeviceID) throws {
+        if disappearedDeviceIDs.contains(deviceID) {
+            throw AudioVolumeError.noDevice
+        }
         if unsupportedDeviceIDs.contains(deviceID) {
             throw AudioVolumeError.unsupportedProperty(deviceID)
         }
-        volumes[deviceID] = volume
-        // Wir feuern den Listener NICHT bei eigenen setVolume-Calls —
-        // CoreAudio macht das in der Praxis zwar, aber das Suppression-Flag
-        // im Manager filtert das raus. In Tests treiben wir externe
-        // Aenderungen explizit ueber `simulateExternalVolumeChange`.
+        deviceVolumes[deviceID] = volume
     }
 
     func deviceName(deviceID: AudioDeviceID) -> String {
-        "Device \(deviceID)"
+        deviceNames[deviceID] ?? "Device \(deviceID)"
     }
 
-    func addVolumeChangeListener(
-        deviceID: AudioDeviceID,
-        onChange: @escaping () -> Void
-    ) -> Any? {
+    func addDefaultOutputDeviceListener(onChange: @escaping () -> Void) -> Any? {
         let id = UUID()
-        listeners[deviceID, default: [:]][id] = onChange
-        return Token(deviceID: deviceID, id: id)
+        defaultOutputListeners[id] = onChange
+        return Token(id: id)
     }
 
-    func removeVolumeChangeListener(deviceID: AudioDeviceID, token: Any) {
+    func removeDefaultOutputDeviceListener(token: Any) {
         guard let t = token as? Token else { return }
-        listeners[t.deviceID]?.removeValue(forKey: t.id)
-        if listeners[t.deviceID]?.isEmpty == true {
-            listeners.removeValue(forKey: t.deviceID)
+        defaultOutputListeners.removeValue(forKey: t.id)
+    }
+
+    // MARK: Test introspection
+
+    var defaultOutputListenerCount: Int {
+        defaultOutputListeners.count
+    }
+
+    func volume(_ deviceID: AudioDeviceID) -> Float {
+        deviceVolumes[deviceID] ?? -1
+    }
+
+    // MARK: Test triggers
+
+    /// Aendert das Default-Output-Device und feuert die installierten Listener.
+    func simulateDefaultOutputChange(to deviceID: AudioDeviceID) {
+        defaultDeviceID = deviceID
+        fireDefaultOutputListenersManually()
+    }
+
+    /// Simuliert eine externe Volume-Aenderung OHNE dass setVolume aufgerufen wird
+    /// (z. B. User-Slider, BT-Stack, andere App). Feuert KEINEN Listener — wir
+    /// haben bewusst keine per-Device-Volume-Listener mehr im neuen Design.
+    func setVolumeExternally(deviceID: AudioDeviceID, value: Float) {
+        deviceVolumes[deviceID] = value
+    }
+
+    /// Geraet wird getrennt. Default switcht auf `newDefault`.
+    func disconnectDevice(_ deviceID: AudioDeviceID, newDefault: AudioDeviceID) {
+        disappearedDeviceIDs.insert(deviceID)
+        simulateDefaultOutputChange(to: newDefault)
+    }
+
+    /// Doppeltes Listener-Feuern ohne State-Aenderung (modelliert das
+    /// CoreAudio-Verhalten "Listener feuert manchmal mehrfach pro Set").
+    func fireDefaultOutputListenersManually() {
+        for callback in defaultOutputListeners.values {
+            callback()
         }
     }
 
-    /// Test-Helper: simuliert eine externe Volume-Aenderung (User dreht am
-    /// Slider, andere App ruft setVolume) — feuert die installierten Listener.
-    func simulateExternalVolumeChange(deviceID: AudioDeviceID, newVolume: Float) {
-        volumes[deviceID] = newVolume
-        listeners[deviceID]?.values.forEach { $0() }
-    }
-
     private struct Token {
-        let deviceID: AudioDeviceID
         let id: UUID
     }
 }
+
+// MARK: - Preferences helpers
 
 @MainActor
 private func withIsolatedDuckingPreferences(_ body: (AppPreferences) -> Void) {

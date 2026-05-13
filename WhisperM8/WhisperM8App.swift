@@ -152,6 +152,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         return false
     }
 
+    /// Sicherheitsnetz: Falls die App waehrend einer aktiven Ducking-Session
+    /// beendet wird (Cmd+Q oder System-Shutdown), Volume sofort zurueckstellen
+    /// — sonst bleibt das System-Audio leise bis manueller Slider-Eingriff.
+    func applicationWillTerminate(_ notification: Notification) {
+        AudioDuckingManager.shared.endCaptureImmediate()
+    }
+
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error = error {

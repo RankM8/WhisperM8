@@ -96,10 +96,13 @@ final class RecordingCoordinator {
             Logger.transcription.info(
                 "recording_context_snapshot agentChatPresent=\(activeAgentChat != nil, privacy: .public) provider=\(activeAgentChat?.provider.rawValue ?? "none", privacy: .public) project=\(activeAgentChat?.projectName ?? "none", privacy: .public) externalID=\(activeAgentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(activeAgentChatTail?.count ?? 0, privacy: .public) sourceApp=\(sourceAppForBundle?.bundleIdentifier ?? "unknown", privacy: .public)"
             )
+            // Pre-Switch-Capture: Volume MUSS gelesen werden BEVOR der AVAudioEngine
+            // startet, sonst hat macOS bei Bluetooth-Devices bereits den A2DP→HFP-
+            // Profile-Switch angestossen und wir merken uns einen falschen "Original"-Wert.
+            // Routing-Listener im Manager faengt den Switch auf das HFP-Profil
+            // (eigene DeviceID auf manchen Macs) automatisch ab und duckt es ebenfalls.
+            AudioDuckingManager.shared.beginCapture()
             try await audioRecorder.startRecording()
-
-            AudioDuckingManager.shared.duck()
-            scheduleDuckingReinforcement()
 
             recordingStartTime = Date()
             appState.isRecording = true
@@ -199,8 +202,8 @@ final class RecordingCoordinator {
         appState.audioLevel = 0
         recordingStartTime = nil
 
-        Logger.debug("[RecordingCoordinator] Calling AudioDuckingManager.restore()")
-        AudioDuckingManager.shared.restore()
+        Logger.debug("[RecordingCoordinator] Calling AudioDuckingManager.endCapture()")
+        AudioDuckingManager.shared.endCapture()
 
         guard let audioURL else {
             Logger.debug(" ERROR: No audio URL returned from recorder")
@@ -276,7 +279,7 @@ final class RecordingCoordinator {
         Task {
             await visualContextCaptureService.cancelActiveClip()
         }
-        AudioDuckingManager.shared.restore()
+        AudioDuckingManager.shared.endCapture()
         overlayController.hide()
 
         Logger.paste.info("Recording cancelled by user")
@@ -892,16 +895,6 @@ final class RecordingCoordinator {
 
             appState.audioLevel = self.audioRecorder.audioLevel
             self.overlayController.update(appState: appState)
-        }
-    }
-
-    private func scheduleDuckingReinforcement() {
-        Task { @MainActor in
-            for delay in [0.3, 0.6, 1.0, 1.5] {
-                try? await Task.sleep(for: .seconds(delay))
-                guard appState?.isRecording == true else { break }
-                AudioDuckingManager.shared.duck()
-            }
         }
     }
 

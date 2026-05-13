@@ -4,21 +4,26 @@ import Foundation
 
 /// Abstraktion ueber die rohe CoreAudio-API, damit der `AudioDuckingManager`
 /// in Tests gegen einen Fake gefahren werden kann.
+///
+/// **Hinweis zum Listener-Modell:** Wir tracken NUR den Wechsel des
+/// Default-Output-Devices (`kAudioHardwarePropertyDefaultOutputDevice`).
+/// Per-Device-Volume-Listener gibt es bewusst nicht mehr — die Heuristik
+/// "User vs System hat Volume geaendert" ist auf macOS nicht zuverlaessig
+/// (BT-Profile-Switches sehen identisch aus wie User-Slider-Bewegungen).
 protocol AudioVolumeControlling {
     func defaultOutputDeviceID() throws -> AudioDeviceID
     func readVolume(deviceID: AudioDeviceID) throws -> Float
     func setVolume(_ volume: Float, deviceID: AudioDeviceID) throws
     func deviceName(deviceID: AudioDeviceID) -> String
-    /// Installiert einen Listener, der gerufen wird wenn die System-Volume
-    /// fuer `deviceID` sich aendert (egal aus welchem Grund). Liefert ein
-    /// Token-Handle das beim Entfernen wieder verwendet werden muss.
-    /// Returns `nil` wenn der Controller keinen Listener unterstuetzt
-    /// (z. B. im Test-Fake — Tests treiben Volume-Events direkt).
-    func addVolumeChangeListener(
-        deviceID: AudioDeviceID,
+    /// Installiert einen Listener auf den Default-Output-Wechsel des Systems.
+    /// Wird gerufen wann immer macOS das aktive Wiedergabe-Geraet wechselt
+    /// (BT-Connect/Disconnect, manueller Wechsel, BT-Profile-Switch wenn das
+    /// HFP-Profil als eigene DeviceID erscheint).
+    /// Returns `nil` wenn nicht unterstuetzt (Test-Fakes mit eigenem Trigger).
+    func addDefaultOutputDeviceListener(
         onChange: @escaping () -> Void
     ) -> Any?
-    func removeVolumeChangeListener(deviceID: AudioDeviceID, token: Any)
+    func removeDefaultOutputDeviceListener(token: Any)
 }
 
 enum AudioVolumeError: LocalizedError, Equatable {
@@ -41,16 +46,17 @@ enum AudioVolumeError: LocalizedError, Equatable {
     }
 }
 
-/// CoreAudio-Implementation. Nutzt fuer Volume-Read/Write die
-/// `kAudioHardwareServiceDeviceProperty_VirtualMainVolume`-Property — das ist
+/// CoreAudio-Implementation.
+///
+/// Volume-Property: `kAudioHardwareServiceDeviceProperty_VirtualMainVolume` —
 /// formal in `AudioHardwareDeprecated.h` aber funktional die einzige Property
-/// die Multi-Channel-Devices (HDMI, AirPods) korrekt als "System-Volume"
-/// abstrahiert. Die per-Channel-Modernisierung (`kAudioDevicePropertyVolumeScalar`)
+/// die Multi-Channel-Devices (HDMI, AirPods) sauber als "System-Volume"
+/// abstrahiert. Per-Channel-Modernisierung (`kAudioDevicePropertyVolumeScalar`)
 /// erfordert Channel-Enumeration und ist fuer unser Use-Case unnoetig.
 ///
-/// Listener nutzt `AudioObjectAddPropertyListenerBlock` (block-based, modern API,
-/// nicht deprecated) — wird gerufen wann immer die Volume sich aendert: User
-/// dreht am Slider, eine andere App ruft setVolume, Bluetooth-Resync, etc.
+/// Default-Output-Listener nutzt `AudioObjectAddPropertyListenerBlock` (block-
+/// based, modern, nicht deprecated). Wird auf MainQueue zugestellt, damit die
+/// `@MainActor`-Isolation des Managers eingehalten wird.
 struct CoreAudioVolumeController: AudioVolumeControlling {
     func defaultOutputDeviceID() throws -> AudioDeviceID {
         var deviceID = kAudioObjectUnknown
@@ -141,35 +147,48 @@ struct CoreAudioVolumeController: AudioVolumeControlling {
         return "Device \(deviceID)"
     }
 
-    func addVolumeChangeListener(
-        deviceID: AudioDeviceID,
+    func addDefaultOutputDeviceListener(
         onChange: @escaping () -> Void
     ) -> Any? {
-        var address = volumePropertyAddress
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
         let block: AudioObjectPropertyListenerBlock = { _, _ in
             onChange()
         }
-        // Main-Queue: passt zur @MainActor-Isolation des Managers; serielle
-        // Verarbeitung verhindert Race-Conditions beim Lesen/Updaten.
-        let status = AudioObjectAddPropertyListenerBlock(deviceID, &address, DispatchQueue.main, block)
+        let status = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            DispatchQueue.main,
+            block
+        )
         guard status == noErr else {
-            Logger.audio.error("[AudioDucking] Listener install failed status=\(status, privacy: .public)")
+            Logger.audio.error("[AudioDucking] Default-output listener install failed status=\(status, privacy: .public)")
             return nil
         }
-        return ListenerToken(deviceID: deviceID, block: block)
+        return ListenerToken(block: block)
     }
 
-    func removeVolumeChangeListener(deviceID: AudioDeviceID, token: Any) {
+    func removeDefaultOutputDeviceListener(token: Any) {
         guard let listenerToken = token as? ListenerToken else { return }
-        var address = volumePropertyAddress
-        _ = AudioObjectRemovePropertyListenerBlock(listenerToken.deviceID, &address, DispatchQueue.main, listenerToken.block)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        _ = AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            DispatchQueue.main,
+            listenerToken.block
+        )
     }
 
     private final class ListenerToken {
-        let deviceID: AudioDeviceID
         let block: AudioObjectPropertyListenerBlock
-        init(deviceID: AudioDeviceID, block: @escaping AudioObjectPropertyListenerBlock) {
-            self.deviceID = deviceID
+        init(block: @escaping AudioObjectPropertyListenerBlock) {
             self.block = block
         }
     }
@@ -188,47 +207,72 @@ struct CoreAudioVolumeController: AudioVolumeControlling {
 }
 
 /// Reduziert die System-Lautstaerke waehrend einer Aufnahme und stellt sie
-/// am Ende EINMAL wieder her — ohne Retry-Loop, ohne dem User in seine
-/// manuellen Anpassungen reinzufunken.
+/// am Ende deterministisch wieder her — auch bei AirPods und anderen
+/// Bluetooth-Devices, die ihr eigenes Profil-Switching machen.
 ///
-/// **Kritisches Verhalten gegenueber User-Eingriffen:**
-/// Wenn der User WAEHREND der Aufnahme die Lautstaerke selbst aendert (z. B.
-/// im Menubar-Slider), markieren wir die Session als "user took over" und
-/// fuehren beim Stop **keinen Restore** durch — der User hat das letzte Wort.
+/// **Designprinzipien:**
 ///
-/// **Single-shot Restore:**
-/// Beim Stop wird EINMAL `setVolume(originalVolume)` aufgerufen. Frueher gab's
-/// einen 4.2-Sekunden-Retry-Loop, der gegen manuelle Volume-Aenderungen
-/// kaempfte — die haben wir hier bewusst rausgeworfen.
+/// 1. **Pre-Switch-Capture.** Die Original-Volume wird *vor* dem Start des
+///    `AVAudioEngine` gelesen (also vor dem A2DP→HFP-Profile-Switch bei
+///    Bluetooth-Devices). Der Coordinator MUSS `beginCapture()` aufrufen
+///    bevor er den Recorder startet.
+///
+/// 2. **Multi-Device-Capture.** Jedes Device, das waehrend der Session jemals
+///    Default-Output war, wird tracked und am Ende restored. Wenn macOS
+///    waehrend der Aufnahme von AirPods-A2DP auf AirPods-HFP (eigene DeviceID
+///    auf manchen Macs) wechselt, werden beide Devices gecaptured.
+///
+/// 3. **Routing-Listener statt Time-Reinforce.** Wir lauschen auf
+///    `kAudioHardwarePropertyDefaultOutputDevice`-Aenderungen. Kein Polling,
+///    keine Timer-basierten "Reinforce"-Calls.
+///
+/// 4. **2 s Settle-Window nach `endCapture()`.** Faengt verzoegerte
+///    HFP→A2DP-Reverse-Switches ab. Bei Routing-Event innerhalb des Fensters
+///    werden alle bekannten Devices nochmal auf Original gesetzt.
+///
+/// 5. **Keine User-Eingriff-Detection.** Wenn der User mitten in der Aufnahme
+///    manuell die Volume aendert, wird sie am Ende trotzdem auf Original
+///    zurueckgesetzt. Begruendung: auf macOS gibt es kein zuverlaessiges
+///    Signal "User vs System hat Volume geaendert"; ein BT-Profile-Switch
+///    erzeugt einen identischen Event. Das alte Design hat das versucht und
+///    in der Praxis dauerhaft geduckte AirPods produziert — der seltene
+///    "User wollte mitten im Aufnehmen lauter drehen"-Fall (User dreht halt
+///    nochmal nach) ist deutlich weniger schmerzhaft als "Volume bleibt
+///    leise bis manueller Systemeinstellungs-Eingriff".
 @MainActor
 final class AudioDuckingManager {
     static let shared = AudioDuckingManager()
 
-    private struct DuckedDevice {
-        let id: AudioDeviceID
+    enum Phase: Equatable {
+        case idle
+        case capturing
+        case restoring
+    }
+
+    private struct DeviceCapture {
+        let deviceID: AudioDeviceID
         let name: String
         let originalVolume: Float
-        let appliedTargetVolume: Float
-        /// Wenn der User den Slider waehrend des Ducks bewegt, wird das
-        /// hier `true` — und der Restore wird beim Stop UEBERSPRUNGEN.
-        var userTookOver: Bool
-        /// Token fuer den Property-Listener; muss beim Restore unbedingt
-        /// wieder entfernt werden, sonst leaken wir Listener.
-        var listenerToken: Any?
+        var lastAppliedTarget: Float?
     }
 
     private let volumeController: AudioVolumeControlling
-    private var duckedDevices: [AudioDeviceID: DuckedDevice] = [:]
-    /// Flag waehrend unserer eigenen setVolume-Aufrufe — verhindert dass
-    /// unser eigener Volume-Change-Listener uns selbst als "User-Eingriff"
-    /// interpretiert.
-    private var isApplyingOurOwnChange = false
+    private let settleWindowDuration: TimeInterval
+    private(set) var phase: Phase = .idle
+    private var captures: [AudioDeviceID: DeviceCapture] = [:]
+    private var routingListenerToken: Any?
+    private var settleTask: Task<Void, Never>?
+
     /// Toleranz fuer Volume-Vergleiche. CoreAudio quantisiert intern auf
     /// ~ 1/100 Schritten; 0.01 fasst das gut.
     private static let volumeTolerance: Float = 0.01
 
-    init(volumeController: AudioVolumeControlling = CoreAudioVolumeController()) {
+    init(
+        volumeController: AudioVolumeControlling = CoreAudioVolumeController(),
+        settleWindowDuration: TimeInterval = 2.0
+    ) {
         self.volumeController = volumeController
+        self.settleWindowDuration = settleWindowDuration
     }
 
     /// Whether audio ducking is enabled (from UserDefaults).
@@ -242,136 +286,205 @@ final class AudioDuckingManager {
     }
 
     var hasActiveDuckingSession: Bool {
-        !duckedDevices.isEmpty
+        phase != .idle
     }
 
-    /// Reduce current default output volume while recording.
-    func duck() {
+    /// Eintritt in die Capturing-Phase. MUSS vor `audioRecorder.startRecording()`
+    /// aufgerufen werden — sonst capturen wir die Volume erst nach dem
+    /// Bluetooth-Profile-Switch und merken uns einen falschen "Original"-Wert.
+    func beginCapture() {
         guard isEnabled else {
-            Logger.audio.debug("[AudioDucking] Ducking disabled; skipping")
+            Logger.audio.debug("[AudioDucking] Disabled; skipping beginCapture")
+            return
+        }
+
+        switch phase {
+        case .capturing:
+            // Schon aktiv — KEIN teardown, sonst wuerde der frische captureAndDuck
+            // die bereits geduckte Volume als neues "Original" einlesen → Permadown.
+            Logger.audio.debug("[AudioDucking] beginCapture during .capturing — no-op")
+            return
+        case .restoring:
+            // Settle-Window einer vorherigen Session laeuft noch — sauber abbauen,
+            // damit die naechste Session frische Originals captured.
+            Logger.audio.debug("[AudioDucking] beginCapture during .restoring — tearing down settle window")
+            teardown()
+        case .idle:
+            break
+        }
+
+        phase = .capturing
+        installRoutingListener()
+        captureAndDuckCurrentDevice()
+    }
+
+    /// Verlaesst die Capturing-Phase: setzt alle bekannten Devices auf ihre
+    /// Original-Volumes und startet das 2-Sekunden-Settle-Window. Innerhalb
+    /// des Fensters werden Routing-Events weiter abgehoert und triggern ein
+    /// erneutes Restore (faengt HFP→A2DP-Reverse-Switches ab).
+    func endCapture() {
+        guard phase == .capturing else {
+            Logger.audio.debug("[AudioDucking] endCapture called in phase \(String(describing: self.phase), privacy: .public); ignoring")
+            return
+        }
+
+        phase = .restoring
+        restoreAllDevices()
+        startSettleWindow()
+    }
+
+    /// Sofortiger Abbau ohne Settle-Window — fuer App-Quit-Pfade.
+    /// Setzt alle bekannten Devices einmal auf Original und raeumt komplett auf.
+    func endCaptureImmediate() {
+        guard phase != .idle else { return }
+        restoreAllDevices()
+        teardown()
+    }
+
+    // MARK: - Test introspection
+
+    #if DEBUG
+    var debug_capturedDeviceIDs: Set<AudioDeviceID> {
+        Set(captures.keys)
+    }
+
+    func debug_originalVolume(for deviceID: AudioDeviceID) -> Float? {
+        captures[deviceID]?.originalVolume
+    }
+    #endif
+
+    // MARK: - Internals
+
+    private func captureAndDuckCurrentDevice() {
+        do {
+            let deviceID = try volumeController.defaultOutputDeviceID()
+            captureAndDuck(deviceID: deviceID)
+        } catch {
+            Logger.audio.error("[AudioDucking] Could not determine default output device: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func captureAndDuck(deviceID: AudioDeviceID) {
+        // Wenn wir das Geraet schon in der Session beruehrt haben, nur ggf.
+        // nachducken (Volume wurde extern erhoeht) — Original bleibt unveraendert.
+        if let existing = captures[deviceID] {
+            redockIfNeeded(deviceID: deviceID, name: existing.name)
+            return
+        }
+
+        // Erstkontakt mit diesem Device: Volume lesen.
+        let current: Float
+        do {
+            current = try volumeController.readVolume(deviceID: deviceID)
+        } catch {
+            // Geraet hat keine kontrollierbare Volume (HDMI, Aggregate, ...)
+            // oder ist verschwunden. Wir tracken es nicht.
+            Logger.audio.debug("[AudioDucking] Skip capture for device \(deviceID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return
+        }
+
+        let name = volumeController.deviceName(deviceID: deviceID)
+        let target = targetVolume
+
+        guard current > target + Self.volumeTolerance else {
+            // Schon leise genug — nichts tun. Insbesondere KEIN Capture-Eintrag
+            // erzeugen, sonst wuerde Restore spaeter eine eventuell vom User
+            // erhoehte Volume wieder runterdruecken.
+            Logger.audio.debug("[AudioDucking] \(name, privacy: .public) already at/below target (\(self.format(current), privacy: .public)); skipping capture")
             return
         }
 
         do {
-            try duckCurrentOutputDevice()
+            try volumeController.setVolume(target, deviceID: deviceID)
         } catch {
-            Logger.audio.error("[AudioDucking] Duck failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// Restore every output device touched during this recording session —
-    /// single shot, no retries, no fighting with manual user adjustments.
-    func restore() {
-        guard !duckedDevices.isEmpty else {
-            Logger.audio.debug("[AudioDucking] Not ducked; nothing to restore")
+            Logger.audio.error("[AudioDucking] Duck failed for \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return
         }
 
-        let devicesToRestore = duckedDevices
-        duckedDevices.removeAll()
-
-        for device in devicesToRestore.values {
-            // Listener IMMER entfernen, auch wenn wir nichts restoren — sonst
-            // bleibt der Callback aktiv und ruft `handleExternalVolumeChange`
-            // fuer eine nicht mehr existierende Session auf.
-            if let token = device.listenerToken {
-                volumeController.removeVolumeChangeListener(deviceID: device.id, token: token)
-            }
-
-            guard !device.userTookOver else {
-                Logger.audio.debug("[AudioDucking] \(device.name, privacy: .public): user took over — keeping their volume, not restoring")
-                continue
-            }
-
-            do {
-                isApplyingOurOwnChange = true
-                try volumeController.setVolume(device.originalVolume, deviceID: device.id)
-                isApplyingOurOwnChange = false
-                let actual = (try? volumeController.readVolume(deviceID: device.id)) ?? device.originalVolume
-                Logger.audio.debug("[AudioDucking] Restored \(device.name, privacy: .public) to \(self.format(actual), privacy: .public)")
-            } catch {
-                isApplyingOurOwnChange = false
-                Logger.audio.error("[AudioDucking] Restore failed for \(device.name, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
-
-    // MARK: - Internals
-
-    private func duckCurrentOutputDevice() throws {
-        let deviceID = try volumeController.defaultOutputDeviceID()
-        let deviceName = volumeController.deviceName(deviceID: deviceID)
-        let currentVolume = try volumeController.readVolume(deviceID: deviceID)
-
-        // Falls die Lautstaerke schon unter dem Target ist: gar nichts tun.
-        // Wir wollen keinen ungewollten "Restore auf hoeher als jetzt" beim
-        // Stop verursachen.
-        guard currentVolume > targetVolume + Self.volumeTolerance else {
-            if duckedDevices[deviceID] == nil {
-                Logger.audio.debug("[AudioDucking] \(deviceName, privacy: .public) already at/below target: \(self.format(currentVolume), privacy: .public)")
-            }
-            return
-        }
-
-        // Re-Duck eines bereits geduckten Geraets: originalVolume MUSS aus
-        // der bestehenden Session uebernommen werden, sonst speichern wir
-        // unseren eigenen target-Wert als "Original" → permanentes Ducking.
-        let existingOriginal = duckedDevices[deviceID]?.originalVolume
-        let originalVolume = existingOriginal ?? currentVolume
-
-        // Listener installieren BEVOR wir setzen, damit der erste Event
-        // (unser eigener setVolume) korrekt durch isApplyingOurOwnChange
-        // ausgefiltert wird. Wenn schon ein Listener existiert (re-duck),
-        // wiederverwenden statt zwei zu installieren.
-        let listenerToken: Any?
-        if let existing = duckedDevices[deviceID]?.listenerToken {
-            listenerToken = existing
-        } else {
-            listenerToken = volumeController.addVolumeChangeListener(deviceID: deviceID) { [weak self] in
-                Task { @MainActor [weak self] in
-                    self?.handleExternalVolumeChange(deviceID: deviceID)
-                }
-            }
-        }
-
-        isApplyingOurOwnChange = true
-        try volumeController.setVolume(targetVolume, deviceID: deviceID)
-        isApplyingOurOwnChange = false
-
-        let actualVolume = (try? volumeController.readVolume(deviceID: deviceID)) ?? targetVolume
-
-        duckedDevices[deviceID] = DuckedDevice(
-            id: deviceID,
-            name: deviceName,
-            originalVolume: originalVolume,
-            appliedTargetVolume: actualVolume,
-            userTookOver: false,
-            listenerToken: listenerToken
+        captures[deviceID] = DeviceCapture(
+            deviceID: deviceID,
+            name: name,
+            originalVolume: current,
+            lastAppliedTarget: target
         )
-
-        Logger.audio.debug("[AudioDucking] Ducked \(deviceName, privacy: .public): \(self.format(currentVolume), privacy: .public) -> \(self.format(actualVolume), privacy: .public), will restore to \(self.format(originalVolume), privacy: .public)")
+        Logger.audio.debug("[AudioDucking] Captured+ducked \(name, privacy: .public): \(self.format(current), privacy: .public) → \(self.format(target), privacy: .public)")
     }
 
-    /// Wird vom Property-Listener gerufen, wenn die System-Volume sich
-    /// aendert. Vergleichen mit unserem zuletzt gesetzten Target — wenn
-    /// die Aenderung NICHT von uns kommt, hat der User (oder eine andere
-    /// App) den Slider beruehrt → wir markieren `userTookOver` und werden
-    /// am Ende NICHT restoren.
-    private func handleExternalVolumeChange(deviceID: AudioDeviceID) {
-        guard !isApplyingOurOwnChange else { return }
-        guard var device = duckedDevices[deviceID] else { return }
-        guard !device.userTookOver else { return }
+    private func redockIfNeeded(deviceID: AudioDeviceID, name: String) {
+        let target = targetVolume
+        let current: Float
+        do {
+            current = try volumeController.readVolume(deviceID: deviceID)
+        } catch {
+            return
+        }
+        guard current > target + Self.volumeTolerance else { return }
 
-        let newVolume = (try? volumeController.readVolume(deviceID: deviceID)) ?? device.appliedTargetVolume
-        let drift = abs(newVolume - device.appliedTargetVolume)
-        // Wenn die Aenderung innerhalb der Toleranz unseres Targets liegt,
-        // ist das nur das Echo von CoreAudio-Quantisierung oder ein
-        // doppelter Listener — kein User-Eingriff.
-        guard drift > Self.volumeTolerance else { return }
+        do {
+            try volumeController.setVolume(target, deviceID: deviceID)
+            captures[deviceID]?.lastAppliedTarget = target
+            Logger.audio.debug("[AudioDucking] Re-ducked \(name, privacy: .public): \(self.format(current), privacy: .public) → \(self.format(target), privacy: .public)")
+        } catch {
+            Logger.audio.error("[AudioDucking] Re-duck failed for \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
 
-        device.userTookOver = true
-        duckedDevices[deviceID] = device
-        Logger.audio.debug("[AudioDucking] \(device.name, privacy: .public): external volume change detected \(self.format(device.appliedTargetVolume), privacy: .public) -> \(self.format(newVolume), privacy: .public); restore disabled")
+    private func restoreAllDevices() {
+        for capture in captures.values {
+            do {
+                try volumeController.setVolume(capture.originalVolume, deviceID: capture.deviceID)
+                Logger.audio.debug("[AudioDucking] Restored \(capture.name, privacy: .public) to \(self.format(capture.originalVolume), privacy: .public)")
+            } catch {
+                // Device kann inzwischen weg sein — best effort.
+                Logger.audio.debug("[AudioDucking] Restore best-effort failed for \(capture.name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func installRoutingListener() {
+        guard routingListenerToken == nil else { return }
+        routingListenerToken = volumeController.addDefaultOutputDeviceListener { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleRoutingChange()
+            }
+        }
+    }
+
+    private func handleRoutingChange() {
+        switch phase {
+        case .capturing:
+            // Neues Default-Device → ggf. capturen und ducken.
+            captureAndDuckCurrentDevice()
+        case .restoring:
+            // Verzoegerter Routing-Switch (z. B. HFP→A2DP-Reverse). Alle
+            // bekannten Devices nochmal auf Original setzen — idempotent.
+            restoreAllDevices()
+        case .idle:
+            // Spaeter Listener-Fire nach Teardown — sollte nicht passieren,
+            // ist aber unschaedlich.
+            break
+        }
+    }
+
+    private func startSettleWindow() {
+        settleTask?.cancel()
+        let duration = settleWindowDuration
+        settleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            self?.teardown()
+        }
+    }
+
+    private func teardown() {
+        if let token = routingListenerToken {
+            volumeController.removeDefaultOutputDeviceListener(token: token)
+            routingListenerToken = nil
+        }
+        settleTask?.cancel()
+        settleTask = nil
+        captures.removeAll()
+        phase = .idle
     }
 
     private func format(_ volume: Float) -> String {
