@@ -294,7 +294,11 @@ final class AudioDuckingManagerTests: XCTestCase {
             preferences.audioDuckingFactor = 0.2
 
             let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
-            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                settleWindowDuration: 0.05,
+                enforceInterval: 0.02
+            )
 
             manager.beginCapture()
             XCTAssertEqual(world.defaultOutputListenerCount, 1)
@@ -320,7 +324,11 @@ final class AudioDuckingManagerTests: XCTestCase {
                 defaultDeviceID: 1,
                 devices: [1: ("A", 0.8), 2: ("B", 0.6)]
             )
-            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 0.05)
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                settleWindowDuration: 0.05,
+                enforceInterval: 0.02
+            )
 
             manager.beginCapture()
             manager.endCapture()
@@ -449,6 +457,43 @@ final class AudioDuckingManagerTests: XCTestCase {
 
             XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
             XCTAssertEqual(manager.phase, .idle)
+        }
+    }
+
+    // MARK: - 4b) BT-Profile-Drift (kein Routing-Event, aber Volume aendert sich)
+
+    /// **REGRESSION:** Realer Bug, den wir live mit AirPods gesehen haben:
+    /// Der BT-Stack aendert die Volume waehrend Recording auf einen hoeheren
+    /// Wert (z. B. HFP-Mode-Default), OHNE dass die DeviceID wechselt — also
+    /// triggert der Routing-Listener NICHT. Der periodische Enforce-Loop
+    /// muss die Volume wieder auf Target ziehen.
+    func test_externalVolumeRiseDuringCapture_enforceLoopReDucks() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("AirPods", 0.5)])
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                settleWindowDuration: 5.0,
+                enforceInterval: 0.03
+            )
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001, "Initial duck")
+
+            // BT-Stack schiebt Volume hoch — KEIN Routing-Event.
+            world.setVolumeExternally(deviceID: 1, value: 0.63)
+
+            // Warten bis Enforce-Loop mindestens 2x getickt hat.
+            try? await Task.sleep(for: .milliseconds(100))
+
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001,
+                           "Enforce loop must re-duck after external volume rise")
+
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.5, accuracy: 0.001,
+                           "Original (pre-recording) volume is what gets restored")
         }
     }
 

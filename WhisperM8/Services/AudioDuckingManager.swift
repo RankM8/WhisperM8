@@ -258,10 +258,12 @@ final class AudioDuckingManager {
 
     private let volumeController: AudioVolumeControlling
     private let settleWindowDuration: TimeInterval
+    private let enforceInterval: TimeInterval
     private(set) var phase: Phase = .idle
     private var captures: [AudioDeviceID: DeviceCapture] = [:]
     private var routingListenerToken: Any?
     private var settleTask: Task<Void, Never>?
+    private var enforceTask: Task<Void, Never>?
 
     /// Toleranz fuer Volume-Vergleiche. CoreAudio quantisiert intern auf
     /// ~ 1/100 Schritten; 0.01 fasst das gut.
@@ -269,9 +271,11 @@ final class AudioDuckingManager {
 
     init(
         volumeController: AudioVolumeControlling = CoreAudioVolumeController(),
-        settleWindowDuration: TimeInterval = 2.0
+        settleWindowDuration: TimeInterval = 2.0,
+        enforceInterval: TimeInterval = 0.2
     ) {
         self.volumeController = volumeController
+        self.enforceInterval = enforceInterval
         self.settleWindowDuration = settleWindowDuration
     }
 
@@ -293,8 +297,9 @@ final class AudioDuckingManager {
     /// aufgerufen werden — sonst capturen wir die Volume erst nach dem
     /// Bluetooth-Profile-Switch und merken uns einen falschen "Original"-Wert.
     func beginCapture() {
+        Logger.audio.info("[AudioDucking] beginCapture entered: phase=\(String(describing: self.phase), privacy: .public) enabled=\(self.isEnabled, privacy: .public) target=\(self.format(self.targetVolume), privacy: .public)")
         guard isEnabled else {
-            Logger.audio.debug("[AudioDucking] Disabled; skipping beginCapture")
+            Logger.audio.info("[AudioDucking] Disabled; skipping beginCapture")
             return
         }
 
@@ -302,12 +307,12 @@ final class AudioDuckingManager {
         case .capturing:
             // Schon aktiv — KEIN teardown, sonst wuerde der frische captureAndDuck
             // die bereits geduckte Volume als neues "Original" einlesen → Permadown.
-            Logger.audio.debug("[AudioDucking] beginCapture during .capturing — no-op")
+            Logger.audio.info("[AudioDucking] beginCapture during .capturing — no-op")
             return
         case .restoring:
             // Settle-Window einer vorherigen Session laeuft noch — sauber abbauen,
             // damit die naechste Session frische Originals captured.
-            Logger.audio.debug("[AudioDucking] beginCapture during .restoring — tearing down settle window")
+            Logger.audio.info("[AudioDucking] beginCapture during .restoring — tearing down settle window")
             teardown()
         case .idle:
             break
@@ -316,6 +321,7 @@ final class AudioDuckingManager {
         phase = .capturing
         installRoutingListener()
         captureAndDuckCurrentDevice()
+        startCapturingEnforceLoop()
     }
 
     /// Verlaesst die Capturing-Phase: setzt alle bekannten Devices auf ihre
@@ -323,11 +329,14 @@ final class AudioDuckingManager {
     /// des Fensters werden Routing-Events weiter abgehoert und triggern ein
     /// erneutes Restore (faengt HFP→A2DP-Reverse-Switches ab).
     func endCapture() {
+        Logger.audio.info("[AudioDucking] endCapture entered: phase=\(String(describing: self.phase), privacy: .public) capturedDevices=\(self.captures.count, privacy: .public)")
         guard phase == .capturing else {
-            Logger.audio.debug("[AudioDucking] endCapture called in phase \(String(describing: self.phase), privacy: .public); ignoring")
+            Logger.audio.info("[AudioDucking] endCapture called in phase \(String(describing: self.phase), privacy: .public); ignoring")
             return
         }
 
+        enforceTask?.cancel()
+        enforceTask = nil
         phase = .restoring
         restoreAllDevices()
         startSettleWindow()
@@ -379,7 +388,7 @@ final class AudioDuckingManager {
         } catch {
             // Geraet hat keine kontrollierbare Volume (HDMI, Aggregate, ...)
             // oder ist verschwunden. Wir tracken es nicht.
-            Logger.audio.debug("[AudioDucking] Skip capture for device \(deviceID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            Logger.audio.info("[AudioDucking] Skip capture for device \(deviceID, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return
         }
 
@@ -390,7 +399,7 @@ final class AudioDuckingManager {
             // Schon leise genug — nichts tun. Insbesondere KEIN Capture-Eintrag
             // erzeugen, sonst wuerde Restore spaeter eine eventuell vom User
             // erhoehte Volume wieder runterdruecken.
-            Logger.audio.debug("[AudioDucking] \(name, privacy: .public) already at/below target (\(self.format(current), privacy: .public)); skipping capture")
+            Logger.audio.info("[AudioDucking] \(name, privacy: .public) already at/below target (\(self.format(current), privacy: .public)); skipping capture")
             return
         }
 
@@ -407,7 +416,7 @@ final class AudioDuckingManager {
             originalVolume: current,
             lastAppliedTarget: target
         )
-        Logger.audio.debug("[AudioDucking] Captured+ducked \(name, privacy: .public): \(self.format(current), privacy: .public) → \(self.format(target), privacy: .public)")
+        Logger.audio.info("[AudioDucking] Captured+ducked \(name, privacy: .public): \(self.format(current), privacy: .public) → \(self.format(target), privacy: .public)")
     }
 
     private func redockIfNeeded(deviceID: AudioDeviceID, name: String) {
@@ -423,7 +432,10 @@ final class AudioDuckingManager {
         do {
             try volumeController.setVolume(target, deviceID: deviceID)
             captures[deviceID]?.lastAppliedTarget = target
-            Logger.audio.debug("[AudioDucking] Re-ducked \(name, privacy: .public): \(self.format(current), privacy: .public) → \(self.format(target), privacy: .public)")
+            // Periodischer Re-Duck nach BT-Profile-Switch — auf .info, weil das die
+            // Stelle ist an der wir die System-Volume gegen den BT-Stack durchsetzen.
+            // Wenn das auftaucht, hat der Enforce-Loop tatsaechlich was korrigiert.
+            Logger.audio.info("[AudioDucking] Re-ducked \(name, privacy: .public): \(self.format(current), privacy: .public) → \(self.format(target), privacy: .public)")
         } catch {
             Logger.audio.error("[AudioDucking] Re-duck failed for \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
@@ -431,11 +443,15 @@ final class AudioDuckingManager {
 
     private func restoreAllDevices() {
         for capture in captures.values {
+            let preRestore = (try? volumeController.readVolume(deviceID: capture.deviceID)) ?? capture.originalVolume
+            // Wenn die Volume bereits beim Original ist, kein Re-Set noetig —
+            // verhindert Log-Spam waehrend des Settle-Window-Enforce-Loops.
+            guard abs(preRestore - capture.originalVolume) > Self.volumeTolerance else { continue }
+
             do {
                 try volumeController.setVolume(capture.originalVolume, deviceID: capture.deviceID)
-                Logger.audio.debug("[AudioDucking] Restored \(capture.name, privacy: .public) to \(self.format(capture.originalVolume), privacy: .public)")
+                Logger.audio.info("[AudioDucking] Restored \(capture.name, privacy: .public): \(self.format(preRestore), privacy: .public) → \(self.format(capture.originalVolume), privacy: .public)")
             } catch {
-                // Device kann inzwischen weg sein — best effort.
                 Logger.audio.debug("[AudioDucking] Restore best-effort failed for \(capture.name, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
@@ -466,12 +482,41 @@ final class AudioDuckingManager {
         }
     }
 
+    /// Periodisches Re-Ducken waehrend `.capturing`. Notwendig weil Bluetooth-
+    /// Profile-Switches (A2DP↔HFP auf dem GLEICHEN Device) KEIN Default-Output-
+    /// Routing-Event ausloesen — sie aendern aber die Volume-Property. Ohne
+    /// diesen Loop springt die System-Volume nach unserem initialen Duck auf
+    /// die BT-internen Mode-Defaults zurueck.
+    private func startCapturingEnforceLoop() {
+        enforceTask?.cancel()
+        let interval = enforceInterval
+        enforceTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(interval))
+                guard !Task.isCancelled else { return }
+                guard let self, self.phase == .capturing else { return }
+                self.captureAndDuckCurrentDevice()  // idempotent: redockIfNeeded oder neuer Capture
+            }
+        }
+    }
+
+    /// Settle-Window mit periodischem Re-Restore — analoges Argument: ein
+    /// HFP→A2DP-Reverse-Switch nach Recording-Stop kann die Volume aendern
+    /// ohne dass die DeviceID switcht. Wir setzen daher waehrend des Windows
+    /// alle `enforceInterval` Sekunden nochmal auf die Originale.
     private func startSettleWindow() {
         settleTask?.cancel()
         let duration = settleWindowDuration
+        let interval = enforceInterval
         settleTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
-            guard !Task.isCancelled else { return }
+            let stepsRaw = duration / interval
+            let steps = max(1, Int(stepsRaw.rounded(.up)))
+            for _ in 0..<steps {
+                try? await Task.sleep(for: .seconds(interval))
+                guard !Task.isCancelled else { return }
+                guard let self, self.phase == .restoring else { return }
+                self.restoreAllDevices()  // idempotent
+            }
             self?.teardown()
         }
     }
@@ -481,6 +526,8 @@ final class AudioDuckingManager {
             volumeController.removeDefaultOutputDeviceListener(token: token)
             routingListenerToken = nil
         }
+        enforceTask?.cancel()
+        enforceTask = nil
         settleTask?.cancel()
         settleTask = nil
         captures.removeAll()
