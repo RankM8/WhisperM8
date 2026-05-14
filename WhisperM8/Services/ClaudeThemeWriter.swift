@@ -1,22 +1,23 @@
 import Foundation
 import SwiftUI
 
-/// Schreibt den Claude-Code-Theme-Key in `~/.claude.json` synchron mit unserem
-/// `ThemeManager`. Damit folgt Claude Codes interne Render-Palette dem
-/// macOS-Theme bzw. dem User-Override aus WhisperM8.
+/// Schreibt den Claude-Code-Theme-Key in `~/.claude/settings.json` synchron
+/// mit unserem `ThemeManager`. Damit folgt Claude Codes interne Render-
+/// Palette dem macOS-Theme bzw. dem User-Override aus WhisperM8.
 ///
 /// **Wichtige Eigenheiten** (siehe Recherche-Notizen):
 ///
-/// 1. **Datei: `~/.claude.json`, nicht `settings.json`** — Anthropic hat
-///    Issue #6962 als "not planned" geschlossen; der `/theme`-Command
-///    persistiert in den Runtime-State, der auch OAuth-Tokens, MCP-Server
-///    und Projekt-State enthält. Wir mutieren NUR den `theme`-Key.
+/// 1. **Datei: `~/.claude/settings.json`** — ab Claude Code v2.1.x
+///    persistiert `/theme` in `settings.json` (vorher in `~/.claude.json`).
+///    Empirisch verifiziert: Schreiben in `~/.claude.json` wird von neueren
+///    Claude-Versionen ignoriert / sofort wieder entfernt. Falls
+///    `settings.json` noch nicht existiert (frischer User ohne CLI-Login),
+///    legen wir sie minimal mit nur `{ "theme": "..." }` an.
 /// 2. **Anthropic schreibt parallel ohne Locking** (Issue-Cluster #28847,
 ///    #28922, #29217). Wir lesen → mutieren → atomar via `replaceItemAt`
 ///    schreiben. Bei Parse-Fehler **niemals überschreiben** — die Datei
 ///    ist dann gerade mid-write von Claude.
-/// 3. **POSIX 0600** der bestehenden Datei beibehalten (sie enthält
-///    OAuth-Tokens).
+/// 3. **POSIX-Permissions** der bestehenden Datei beibehalten.
 /// 4. **Idempotent**: wenn `theme` schon den Zielwert hat, kein Write.
 /// 5. **Debounced**: schnelle Theme-Toggles erzeugen nur einen Write.
 /// 6. **One-time `.bak`** im App-Support-Verzeichnis, bevor wir das erste
@@ -27,10 +28,15 @@ final class ClaudeThemeWriter {
 
     /// Mapping ColorScheme → von Claude akzeptierter Theme-String.
     ///
-    /// **Dark** → `dark-ansi`: lässt Claude die Host-(SwiftTerm-)Palette
-    /// verwenden. Funktioniert gut, weil unsere Dark-Palette eine
-    /// klassische ANSI-Farbtabelle ist und Claude's UI-Chrome auf dunklem
-    /// Background sauber rendert.
+    /// **Dark** → `dark`: nutzt Claude's eigene Dark-Theme-Farben für
+    /// Input-Box, Status-Pills und Listen-Highlights (z. B. die aktive
+    /// Zeile in `/resume`-Listen oder Commit-Auswahlen). `dark-ansi`
+    /// hat Claude veranlasst, für Highlights `ESC[47m` (white BG) ohne
+    /// expliziten Foreground zu schreiben — der Default-FG im
+    /// Dark-Mode (fast weiß) wurde dann gegen einen weißen BG
+    /// gerendert und war unlesbar. Mit `dark` rendert Claude die
+    /// Highlights in den vorgesehenen abgestuften Grautönen, die
+    /// intern mit korrekt kontrastierendem FG geliefert werden.
     ///
     /// **Light** → `light`: nutzt Claude's eigene Light-Theme-Farben für
     /// Input-Box, Status-Pills und Highlights. `light-ansi` führte dazu,
@@ -42,7 +48,7 @@ final class ClaudeThemeWriter {
     nonisolated static func claudeThemeName(for scheme: ColorScheme) -> String {
         switch scheme {
         case .light: return "light"
-        default:     return "dark-ansi"
+        default:     return "dark"
         }
     }
 
@@ -76,9 +82,26 @@ final class ClaudeThemeWriter {
 
     private func performWrite(target: String) {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: claudeStateURL.path) else {
-            // Frischer User ohne Claude-Code-Login: kein File, kein Schreiben.
-            Logger.agentPerformance.debug("claude_theme_write_skipped reason=no_state_file")
+
+        // settings.json existiert noch nicht: frischer User. Wir legen sie
+        // minimal mit nur dem theme-Key an, damit Claude Code beim ersten
+        // Launch sofort das richtige Theme rendert. Das Parent-Verzeichnis
+        // `~/.claude/` legt Claude bei jedem Start an, ist aber nicht
+        // garantiert wenn der User die CLI noch nie gestartet hat.
+        if !fm.fileExists(atPath: claudeStateURL.path) {
+            let directory = claudeStateURL.deletingLastPathComponent()
+            do {
+                try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+                let seed: [String: Any] = ["theme": target]
+                let seedData = try JSONSerialization.data(
+                    withJSONObject: seed,
+                    options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                )
+                try seedData.write(to: claudeStateURL, options: .atomic)
+                Logger.agentPerformance.info("claude_theme_seeded target=\(target, privacy: .public)")
+            } catch {
+                Logger.agentPerformance.warning("claude_theme_seed_failed error=\(error.localizedDescription, privacy: .public)")
+            }
             return
         }
 
@@ -116,12 +139,12 @@ final class ClaudeThemeWriter {
             return
         }
 
-        // Original-POSIX-Permissions ermitteln (0600 mit OAuth-Tokens).
+        // Original-POSIX-Permissions ermitteln.
         let originalPermissions = (try? fm.attributesOfItem(atPath: claudeStateURL.path))?[.posixPermissions] as? NSNumber
 
         // Temp-File im selben Verzeichnis → echter rename(2), kein Cross-FS-Copy.
         let directory = claudeStateURL.deletingLastPathComponent()
-        let tmpURL = directory.appendingPathComponent(".claude.json.tmp.\(UUID().uuidString)")
+        let tmpURL = directory.appendingPathComponent(".settings.json.tmp.\(UUID().uuidString)")
         do {
             try outData.write(to: tmpURL, options: .atomic)
             if let perms = originalPermissions {
@@ -155,13 +178,14 @@ final class ClaudeThemeWriter {
 
     nonisolated private static func defaultClaudeStateURL() -> URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude.json")
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("settings.json")
     }
 
     nonisolated private static func defaultBackupURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("Backups", isDirectory: true)
-            .appendingPathComponent("claude-state-pre-theme-sync.json")
+            .appendingPathComponent("claude-settings-pre-theme-sync.json")
     }
 }
