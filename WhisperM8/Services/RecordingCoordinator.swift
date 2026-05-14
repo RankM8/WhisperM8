@@ -181,7 +181,7 @@ final class RecordingCoordinator {
         if appState.isScreenClipRecording {
             await stopScreenClipAndAttach()
         }
-        importClipboardScreenshotIfNeeded()
+        observeClipboardChange()
         stopClipboardScreenshotMonitor()
 
         let audioDuration = appState.recordingDuration
@@ -787,9 +787,125 @@ final class RecordingCoordinator {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { return }
-                self?.importClipboardScreenshotIfNeeded()
+                self?.observeClipboardChange()
             }
         }
+    }
+
+    /// Reagiert auf Pasteboard-Aenderungen waehrend des Recordings. Versucht
+    /// erst, einen Screenshot zu greifen (Bilddaten); wenn nichts dabei ist,
+    /// faengt sie kopierten Text ein und haengt ihn an `selectedText` an.
+    /// So landet alles, was der User waehrend des Sprechens kopiert,
+    /// automatisch im Kontext — egal ob Markup oder Text.
+    private func observeClipboardChange() {
+        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
+
+        let pasteboard = NSPasteboard.general
+        let changeCount = pasteboard.changeCount
+        guard changeCount != observedPasteboardChangeCount else { return }
+        observedPasteboardChangeCount = changeCount
+
+        let pasteboardHasImage = pasteboardContainsImage(pasteboard)
+
+        if pasteboardHasImage, AppPreferences.shared.isVisualContextCaptureEnabled {
+            if importClipboardScreenshot(from: pasteboard, changeCount: changeCount) {
+                return
+            }
+        }
+
+        importClipboardText(from: pasteboard)
+    }
+
+    /// Prueft, ob die Zwischenablage einen echten Bildtyp enthaelt. `NSImage(pasteboard:)`
+    /// allein ist zu permissiv — bei reinen Text-Inhalten liefert es manchmal trotzdem
+    /// ein Bild (z. B. wenn Apps RTF mit Style-Info hinterlegen). Wir verlassen uns
+    /// daher auf die deklarierten Pasteboard-Typen.
+    private func pasteboardContainsImage(_ pasteboard: NSPasteboard) -> Bool {
+        let imageTypes: Set<String> = [
+            NSPasteboard.PasteboardType.png.rawValue,
+            NSPasteboard.PasteboardType.tiff.rawValue,
+            "public.png",
+            "public.tiff",
+            "public.jpeg",
+            "public.heic",
+            "public.image",
+            "com.adobe.pdf"
+        ]
+        let types = pasteboard.types?.map(\.rawValue) ?? []
+        return types.contains(where: { imageTypes.contains($0) })
+    }
+
+    @discardableResult
+    private func importClipboardScreenshot(from pasteboard: NSPasteboard, changeCount: Int) -> Bool {
+        guard let appState else { return false }
+        guard appState.contextBundle.screenshots.count < AppPreferences.shared.maxScreenshotsPerRecording else {
+            appState.lastError = "Maximum screenshots for this recording reached."
+            overlayController.update(appState: appState)
+            return false
+        }
+
+        do {
+            guard let screenshot = try visualContextCaptureService.captureClipboardScreenshot(
+                from: pasteboard,
+                changeCount: changeCount,
+                sourceApp: contextSourceApp
+            ) else {
+                return false
+            }
+
+            appState.contextBundle.screenshots.append(screenshot)
+            appState.lastContextBundle = appState.contextBundle
+            appState.lastError = nil
+            overlayController.update(appState: appState)
+            return true
+        } catch {
+            appState.lastError = error.localizedDescription
+            Logger.permission.warning("Clipboard screenshot context failed: \(error.localizedDescription, privacy: .public)")
+            overlayController.update(appState: appState)
+            return false
+        }
+    }
+
+    @discardableResult
+    private func importClipboardText(from pasteboard: NSPasteboard) -> Bool {
+        guard let appState else { return false }
+        guard AppPreferences.shared.isSelectedContextCaptureEnabled else { return false }
+
+        guard let rawText = pasteboard.string(forType: .string),
+              !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        let normalized = TextNormalizer.normalizeTranscriptionText(rawText)
+        guard !normalized.isEmpty else { return false }
+
+        let frontApp = NSWorkspace.shared.frontmostApplication
+        var bundle = appState.contextBundle
+
+        if bundle.selectedText.isEmpty {
+            bundle.selectedText = SelectedContext(
+                text: normalized,
+                sourceAppName: frontApp?.localizedName ?? contextSourceApp?.localizedName,
+                sourceBundleIdentifier: frontApp?.bundleIdentifier ?? contextSourceApp?.bundleIdentifier
+            )
+        } else {
+            if bundle.selectedText.text.contains(normalized) {
+                return false
+            }
+            bundle.selectedText.text += "\n\n" + normalized
+        }
+
+        appState.contextBundle = bundle
+        appState.selectedContext = bundle.selectedText
+        appState.lastContextBundle = bundle
+        appState.lastSelectedContext = bundle.selectedText
+        appState.lastError = nil
+        overlayController.update(appState: appState)
+
+        Logger.transcription.info(
+            "clipboard_text_added_to_context chars=\(normalized.count, privacy: .public) app=\(frontApp?.bundleIdentifier ?? "unknown", privacy: .public)"
+        )
+        return true
     }
 
     private func stopClipboardScreenshotMonitor() {
