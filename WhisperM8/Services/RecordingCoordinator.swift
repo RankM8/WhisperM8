@@ -803,9 +803,14 @@ final class RecordingCoordinator {
         let pasteboard = NSPasteboard.general
         let changeCount = pasteboard.changeCount
         guard changeCount != observedPasteboardChangeCount else { return }
+        let oldChangeCount = observedPasteboardChangeCount
         observedPasteboardChangeCount = changeCount
 
         let pasteboardHasImage = pasteboardContainsImage(pasteboard)
+        let types = (pasteboard.types ?? []).map(\.rawValue).joined(separator: ",")
+        Logger.transcription.info(
+            "clipboard_change_detected oldCount=\(oldChangeCount, privacy: .public) newCount=\(changeCount, privacy: .public) hasImage=\(pasteboardHasImage, privacy: .public) types=\(types, privacy: .public)"
+        )
 
         if pasteboardHasImage, AppPreferences.shared.isVisualContextCaptureEnabled {
             if importClipboardScreenshot(from: pasteboard, changeCount: changeCount) {
@@ -813,7 +818,12 @@ final class RecordingCoordinator {
             }
         }
 
-        importClipboardText(from: pasteboard)
+        let textAdded = importClipboardText(from: pasteboard)
+        if !textAdded {
+            Logger.transcription.info(
+                "clipboard_text_skipped settingEnabled=\(AppPreferences.shared.isSelectedContextCaptureEnabled, privacy: .public) hasString=\(pasteboard.string(forType: .string) != nil, privacy: .public)"
+            )
+        }
     }
 
     /// Prueft, ob die Zwischenablage einen echten Bildtyp enthaelt. `NSImage(pasteboard:)`
