@@ -416,7 +416,9 @@ struct AgentChatsView: View {
             projectName: project.name,
             projectPath: project.path,
             title: session.title,
-            externalSessionID: session.externalSessionID
+            externalSessionID: session.externalSessionID,
+            kind: session.effectiveKind,
+            backgroundShortID: session.backgroundShortID
         )
         if AppState.shared.activeAgentChat != ref {
             AppState.shared.activeAgentChat = ref

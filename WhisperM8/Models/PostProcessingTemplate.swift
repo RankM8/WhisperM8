@@ -198,6 +198,9 @@ extension PostProcessingTemplate {
                 Visual context:
                 {visualContextSummary}
 
+                Active agent chat (last user + assistant turn — empty if none):
+                {agentChatTail}
+
                 User instruction:
                 {rawTranscript}
                 """,
@@ -230,6 +233,9 @@ extension PostProcessingTemplate {
 
                 Visual context:
                 {visualContextSummary}
+
+                Active agent chat (last user + assistant turn — empty if none):
+                {agentChatTail}
 
                 User instruction:
                 {rawTranscript}
@@ -269,6 +275,9 @@ extension PostProcessingTemplate {
 
                 Visual context:
                 {visualContextSummary}
+
+                Active agent chat (last user + assistant turn — empty if none):
+                {agentChatTail}
 
                 User instruction:
                 {rawTranscript}
