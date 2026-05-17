@@ -2516,12 +2516,14 @@ final class AgentChatsTests: XCTestCase {
     }
 
     func testClaudeThemeNameMapping() {
-        // Light → `light` (Claude's eigene Light-Theme-Farben), nicht
-        // `light-ansi`: letzteres rendert UI-Chrome (Input-Box, Status-Pills)
-        // mit ANSI-Indizes, die gegen den weißen Background als schwarze
-        // Bänder erscheinen.
+        // Beide Schemata → Claude's eigene Theme-Farben (`light` / `dark`),
+        // NICHT die `*-ansi`-Varianten. `light-ansi` rendert UI-Chrome
+        // (Input-Box, Status-Pills) mit ANSI-Indizes, die gegen den weißen
+        // Background als schwarze Bänder erscheinen. `dark-ansi` führte
+        // umgekehrt dazu, dass Highlights mit weißem ANSI-BG gegen den
+        // weißen Default-Foreground unlesbar wurden.
         XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .light), "light")
-        XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .dark), "dark-ansi")
+        XCTAssertEqual(ClaudeThemeWriter.claudeThemeName(for: .dark), "dark")
     }
 
     // MARK: - Transcript readers
