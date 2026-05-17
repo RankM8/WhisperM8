@@ -6,10 +6,99 @@ import SwiftUI
 /// `scrollWheel` ist in SwiftTerm leider `public override` (nicht `open`) —
 /// daher kann es nicht via Subclass abgefangen werden. Stattdessen nutzt
 /// `TerminalScrollGuard` (siehe unten) einen NSEvent-Monitor.
+///
+/// **Scroll-Lock waehrend Streaming:** SwiftTerm's `Terminal.userScrolling`-
+/// Flag entscheidet, ob neuer Output `yDisp` (Display-Top) auf `yBase`
+/// (Cursor-Position) zurueckzieht. Das Flag wird aber NUR beim Scrollbar-Drag
+/// gesetzt — beim Trackpad-Wheel-Scroll bleibt es false. Folge: liest der User
+/// gerade aelteren Output, springt die View bei jeder neuen Zeile zurueck
+/// nach unten. Wir machen das selber, indem wir die beiden Delegate-Pfade
+/// trennen: `scrolled(source: Terminal, yDisp:)` feuert nur bei Output
+/// (Terminal.scroll()), `scrolled(source: TerminalView, position:)` feuert
+/// auch bei User-Wheel/Scrollbar. Daraus laesst sich rekonstruieren, wann
+/// der User „weg vom Tail" gegangen ist, und wir korrigieren die
+/// Output-getriebenen Spruenge zurueck zur User-Position.
 final class QuietableTerminalView: LocalProcessTerminalView {
+    /// `true`, solange der User nahe genug am Buffer-Ende ist, dass neuer
+    /// Output sichtbar bleiben soll. Faellt auf `false`, sobald der User
+    /// hochscrollt; wird wieder `true`, sobald er bewusst ans Ende
+    /// zurueckkehrt.
+    private var isFollowingTail: Bool = true
+
+    /// Die Display-Row, an der der User stehen wollte, als er das Tail-
+    /// Following verlassen hat. Nach jedem Output-getriggerten Scroll
+    /// stellen wir sie wieder her.
+    private var preservedYDisp: Int?
+
+    /// Reentry-Guards: `scrollTo(row:)` ruft die TerminalView-Variante von
+    /// `scrolled` rekursiv auf — wir wollen den Status dann NICHT als
+    /// User-Scroll werten.
+    private var isRestoringScroll: Bool = false
+    private var isOutputScrollInFlight: Bool = false
+
+    /// Toleranz: ab `scrollPosition >= bottomThreshold` gilt der User als
+    /// „am Tail". Wir lassen ein bisschen Luft, damit Sub-Pixel-Float-
+    /// Vergleiche nicht jeden Klick als „nicht ganz unten" markieren.
+    private static let bottomThreshold: Double = 0.985
+
     override func bell(source: Terminal) {
         guard AppPreferences.shared.isTerminalBellEnabled else { return }
         super.bell(source: source)
+    }
+
+    /// Wird AUSSCHLIESSLICH vom Output-Pfad (`Terminal.scroll()`) gerufen —
+    /// SwiftTerm hat fuer User-getriggerte Scrolls einen anderen Code-Pfad,
+    /// der diese Variante nicht feuert. Damit ist hier garantiert: jedes
+    /// Eintreffen bedeutet „neue Output-Zeile, yDisp wurde gerade auf yBase
+    /// gezogen". Wenn der User vorher oben stand, korrigieren wir den
+    /// Sprung sofort wieder zurueck.
+    override func scrolled(source terminal: Terminal, yDisp: Int) {
+        isOutputScrollInFlight = true
+        super.scrolled(source: terminal, yDisp: yDisp)
+        isOutputScrollInFlight = false
+
+        // Alt-Buffer (TUI-Modus) hat keinen Scrollback — Auto-Follow ist
+        // die einzige sinnvolle Option. Trackpad-Wheel-Events werden ueber
+        // `TerminalScrollGuard` als XTerm-SGR-Bytes an die TUI weitergegeben.
+        if terminal.isCurrentBufferAlternate {
+            isFollowingTail = true
+            preservedYDisp = nil
+            return
+        }
+
+        guard !isFollowingTail,
+              let preserved = preservedYDisp,
+              preserved < yDisp,
+              !isRestoringScroll
+        else { return }
+
+        // scrollTo(row:) feuert wieder die TerminalView-Variante; ohne den
+        // Reentry-Guard wuerde sie dort die User-Position ueberschreiben.
+        isRestoringScroll = true
+        scrollTo(row: preserved, notifyAccessibility: false)
+        isRestoringScroll = false
+    }
+
+    /// Feuert bei JEDEM Scroll (User UND Output). Wir filtern Output-
+    /// Reentrys ueber die Flags und behandeln nur „echte" User-Aktionen
+    /// (Trackpad-Wheel, Scrollbar-Drag, Page-Up/Down).
+    override func scrolled(source: TerminalView, position: Double) {
+        super.scrolled(source: source, position: position)
+
+        if isRestoringScroll || isOutputScrollInFlight { return }
+        if getTerminal().isCurrentBufferAlternate {
+            isFollowingTail = true
+            preservedYDisp = nil
+            return
+        }
+
+        if position >= Self.bottomThreshold {
+            isFollowingTail = true
+            preservedYDisp = nil
+        } else {
+            isFollowingTail = false
+            preservedYDisp = getTerminal().getTopVisibleRow()
+        }
     }
 }
 
