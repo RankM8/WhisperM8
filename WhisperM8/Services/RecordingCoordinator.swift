@@ -94,7 +94,7 @@ final class RecordingCoordinator {
             // der Wahrheit fuer User-Reports "warum hat der Prompt nicht den
             // erwarteten Kontext gehabt".
             Logger.transcription.info(
-                "recording_context_snapshot agentChatPresent=\(activeAgentChat != nil, privacy: .public) provider=\(activeAgentChat?.provider.rawValue ?? "none", privacy: .public) project=\(activeAgentChat?.projectName ?? "none", privacy: .public) externalID=\(activeAgentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(activeAgentChatTail?.count ?? 0, privacy: .public) sourceApp=\(sourceAppForBundle?.bundleIdentifier ?? "unknown", privacy: .public)"
+                "recording_context_snapshot agentChatPresent=\(activeAgentChat != nil, privacy: .public) provider=\(activeAgentChat?.provider.rawValue ?? "none", privacy: .public) kind=\(activeAgentChat?.effectiveKind.rawValue ?? "none", privacy: .public) project=\(activeAgentChat?.projectName ?? "none", privacy: .public) externalID=\(activeAgentChat?.externalSessionID ?? "none", privacy: .public) backgroundShortID=\(activeAgentChat?.backgroundShortID ?? "none", privacy: .public) tailChars=\(activeAgentChatTail?.count ?? 0, privacy: .public) sourceApp=\(sourceAppForBundle?.bundleIdentifier ?? "unknown", privacy: .public)"
             )
             // Pre-Switch-Capture: Volume MUSS gelesen werden BEVOR der AVAudioEngine
             // startet, sonst hat macOS bei Bluetooth-Devices bereits den A2DP→HFP-

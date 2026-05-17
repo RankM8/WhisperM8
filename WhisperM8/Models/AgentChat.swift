@@ -442,6 +442,20 @@ struct AgentChatContextRef: Codable, Equatable, Hashable {
     let projectPath: String
     let title: String
     let externalSessionID: String?
+    /// Session-Art aus dem Roster. Optional fuer Backwards-Compat mit alten
+    /// JSONs ohne dieses Feld — Default-Interpretation ist `.chat`.
+    /// Wird vom `AgentChatTailExtractor` gebraucht um zwischen normalen
+    /// Chats (JSONL via externalSessionID), Background-Chats (JSONL via
+    /// Supervisor-Lookup) und Agent-View-Dashboards (kein Transcript)
+    /// zu unterscheiden.
+    var kind: AgentSessionKind? = nil
+    /// Vom Supervisor vergebene Short-ID fuer `.backgroundChat`-Sessions.
+    /// Wird via `~/.claude/jobs/<shortID>/state.json` → `linkScanPath`
+    /// in einen JSONL-Pfad aufgeloest. Bei anderen Kinds bleibt das Feld
+    /// `nil`. Optional fuer JSON-Kompatibilitaet.
+    var backgroundShortID: String? = nil
+
+    var effectiveKind: AgentSessionKind { kind ?? .chat }
 }
 
 struct AgentWorkspace: Codable, Equatable {
