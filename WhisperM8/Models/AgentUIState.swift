@@ -26,6 +26,7 @@ struct AgentUIState: Codable, Equatable {
     var selectedProjectID: UUID?
     /// Welche Sidebar-Projekte sind aktuell auf-geklappt (Disclosure).
     var expandedProjectIDs: [UUID]
+    static let maxOpenTabsPerProject = 6
 
     static let empty = AgentUIState(
         schemaVersion: 1,
@@ -80,7 +81,11 @@ struct AgentUIState: Codable, Equatable {
 
         // Pro Projekt: nur lebende Session-IDs behalten, Reihenfolge erhalten
         for (projectID, ids) in openTabIDsByProject {
-            openTabIDsByProject[projectID] = ids.filter { liveSessionIDs.contains($0) }
+            let liveIDs = ids.filter { liveSessionIDs.contains($0) }
+            openTabIDsByProject[projectID] = Self.cappedOpenTabIDs(
+                liveIDs,
+                selectedID: selectedSessionIDByProject[projectID]
+            )
         }
 
         // Selected Session: nur wenn sie noch existiert
@@ -113,8 +118,17 @@ struct AgentUIState: Codable, Equatable {
                 }
                 .sorted { $0.lastActivityAt > $1.lastActivityAt }
             guard !sessions.isEmpty else { continue }
-            state.openTabIDsByProject[project.id] = sessions.map(\.id)
+            state.openTabIDsByProject[project.id] = Array(sessions.prefix(Self.maxOpenTabsPerProject).map(\.id))
         }
         return state
+    }
+
+    private static func cappedOpenTabIDs(_ ids: [UUID], selectedID: UUID?) -> [UUID] {
+        guard ids.count > maxOpenTabsPerProject else { return ids }
+        var capped = Array(ids.prefix(maxOpenTabsPerProject))
+        if let selectedID, ids.contains(selectedID), !capped.contains(selectedID) {
+            capped[maxOpenTabsPerProject - 1] = selectedID
+        }
+        return capped
     }
 }
