@@ -8,6 +8,7 @@ final class AgentChatsTests: XCTestCase {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.extraArgumentsResolver = { _ in [] }
+        builder.codexServiceTierResolver = { .fast }
         let newSession = AgentChatSession(
             provider: .codex,
             projectID: project.id,
@@ -24,6 +25,8 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(newCommand.workingDirectory, project.path)
         XCTAssertTrue(newCommand.arguments.contains("-C"))
         XCTAssertTrue(newCommand.arguments.contains(project.path))
+        XCTAssertTrue(newCommand.arguments.contains("features.fast_mode=true"))
+        XCTAssertTrue(newCommand.arguments.contains("service_tier=fast"))
         XCTAssertTrue(newCommand.arguments.contains("--image"))
         XCTAssertTrue(newCommand.arguments.contains("/tmp/shot.png"))
         XCTAssertEqual(newCommand.arguments.last, "Do the thing")
@@ -38,6 +41,8 @@ final class AgentChatsTests: XCTestCase {
         let resumeCommand = try builder.command(for: resumeSession, project: project)
 
         XCTAssertEqual(resumeCommand.arguments.first, "resume")
+        XCTAssertTrue(resumeCommand.arguments.contains("features.fast_mode=true"))
+        XCTAssertTrue(resumeCommand.arguments.contains("service_tier=fast"))
         XCTAssertTrue(resumeCommand.arguments.contains("abc"))
     }
 
@@ -379,6 +384,7 @@ final class AgentChatsTests: XCTestCase {
         builder.extraArgumentsResolver = { provider in
             provider == .codex ? ["--ask-for-approval", "untrusted"] : []
         }
+        builder.codexServiceTierResolver = { .fast }
 
         let newSession = AgentChatSession(
             provider: .codex,
@@ -404,6 +410,25 @@ final class AgentChatsTests: XCTestCase {
         // `resume` Sub-Command muss als erstes stehen; Extras kommen direkt danach.
         XCTAssertEqual(Array(resumeCommand.arguments.prefix(3)), ["resume", "--ask-for-approval", "untrusted"])
         XCTAssertEqual(resumeCommand.arguments.last, "abc")
+    }
+
+    func testAgentCommandBuilderCanForceStandardCodexServiceTier() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.codexServiceTierResolver = { .standard }
+        let session = AgentChatSession(
+            provider: .codex,
+            projectID: project.id,
+            title: "New",
+            model: "gpt-5.5",
+            reasoningEffort: "medium"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertTrue(command.arguments.contains("service_tier=default"))
+        XCTAssertFalse(command.arguments.contains("service_tier=fast"))
     }
 
     func testCodexSessionIndexerReadsSessionMetadata() throws {

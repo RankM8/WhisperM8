@@ -51,6 +51,10 @@ struct AgentCommandBuilder {
         return Self.parseArguments(raw)
     }
 
+    var codexServiceTierResolver: () -> CodexServiceTier = {
+        CodexServiceTier.resolve(AppPreferences.shared.codexServiceTierRaw)
+    }
+
     /// Parsed eine Whitespace-getrennte Argument-Zeile.
     /// Unterstützt einfache Quotes für Argumente mit Leerzeichen: `--text "hello world"`.
     static func parseArguments(_ raw: String) -> [String] {
@@ -108,6 +112,7 @@ struct AgentCommandBuilder {
         }
 
         let extra = extraArgumentsResolver(.codex)
+        let serviceTierArguments = codexServiceTierResolver().configArguments
 
         if session.hasLaunchedInitialPrompt {
             guard let externalSessionID = session.externalSessionID else {
@@ -119,6 +124,9 @@ struct AgentCommandBuilder {
                 "-C", project.path,
                 "-m", session.model,
                 "-c", "model_reasoning_effort=\(session.reasoningEffort)",
+            ])
+            arguments.append(contentsOf: serviceTierArguments)
+            arguments.append(contentsOf: [
                 externalSessionID
             ])
             return AgentLaunchCommand(
@@ -136,6 +144,7 @@ struct AgentCommandBuilder {
             "-m", session.model,
             "-c", "model_reasoning_effort=\(session.reasoningEffort)"
         ])
+        arguments.append(contentsOf: serviceTierArguments)
         for imagePath in session.imagePaths {
             arguments.append(contentsOf: ["--image", imagePath])
         }

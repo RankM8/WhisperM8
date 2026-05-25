@@ -135,6 +135,11 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.codexReasoningEffort) }
     }
 
+    var codexServiceTierRaw: String {
+        get { defaults.string(forKey: Keys.codexServiceTier) ?? CodexServiceTier.defaultTier.rawValue }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexServiceTier) }
+    }
+
     var codexVisualInputModeRaw: String {
         get { defaults.string(forKey: Keys.codexVisualInputMode) ?? CodexVisualInputMode.defaultMode.rawValue }
         nonmutating set { defaults.set(newValue, forKey: Keys.codexVisualInputMode) }
@@ -273,6 +278,7 @@ enum PreferenceKeys {
     static let deleteContextFilesAfterProcessing = "deleteContextFilesAfterProcessing"
     static let codexPostProcessingModel = "codexPostProcessingModel"
     static let codexReasoningEffort = "codexReasoningEffort"
+    static let codexServiceTier = "codexServiceTier"
     static let codexVisualInputMode = "codexVisualInputMode"
     static let agentDefaultProjectPath = "agentDefaultProjectPath"
     static let defaultAgentProvider = "defaultAgentProvider"

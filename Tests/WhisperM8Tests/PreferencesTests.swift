@@ -21,6 +21,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertFalse(preferences.deleteContextFilesAfterProcessing)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.defaultModel.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.defaultEffort.rawValue)
+            XCTAssertEqual(preferences.codexServiceTierRaw, CodexServiceTier.defaultTier.rawValue)
             XCTAssertEqual(preferences.codexVisualInputModeRaw, CodexVisualInputMode.defaultMode.rawValue)
         }
     }
@@ -56,6 +57,7 @@ final class PreferencesTests: XCTestCase {
             preferences.deleteContextFilesAfterProcessing = false
             preferences.codexPostProcessingModelRaw = CodexPostProcessingModel.gpt52.rawValue
             preferences.codexReasoningEffortRaw = CodexReasoningEffort.high.rawValue
+            preferences.codexServiceTierRaw = CodexServiceTier.standard.rawValue
             preferences.codexVisualInputModeRaw = CodexVisualInputMode.video.rawValue
 
             XCTAssertEqual(preferences.language, "en")
@@ -73,6 +75,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertFalse(preferences.deleteContextFilesAfterProcessing)
             XCTAssertEqual(preferences.codexPostProcessingModelRaw, CodexPostProcessingModel.gpt52.rawValue)
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.high.rawValue)
+            XCTAssertEqual(preferences.codexServiceTierRaw, CodexServiceTier.standard.rawValue)
             XCTAssertEqual(preferences.codexVisualInputModeRaw, CodexVisualInputMode.video.rawValue)
         }
     }

@@ -111,6 +111,7 @@ struct TranscriptRunReportStore {
                     outputURL: outputURL,
                     model: AppPreferences.shared.codexPostProcessingModelRaw,
                     reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+                    serviceTier: AppPreferences.shared.codexServiceTierRaw,
                     isEphemeral: draft.mode.id != OutputMode.taskID,
                     projectPath: draft.mode.id == OutputMode.taskID ? AppPreferences.shared.agentDefaultProjectPath : nil
                 ),

@@ -271,7 +271,24 @@ final class OutputDashboardTests: XCTestCase {
 
         XCTAssertTrue(arguments.contains("--image"))
         XCTAssertTrue(arguments.contains("/tmp/context.png"))
+        XCTAssertTrue(arguments.contains("features.fast_mode=true"))
+        XCTAssertTrue(arguments.contains("service_tier=fast"))
         XCTAssertEqual(arguments.last, "-")
+    }
+
+    func testCodexInvocationCanUseStandardServiceTier() {
+        let outputURL = URL(fileURLWithPath: "/tmp/output.txt")
+
+        let arguments = CodexInvocation.arguments(
+            promptImageURLs: [],
+            outputURL: outputURL,
+            model: "gpt-5.5",
+            reasoningEffort: "medium",
+            serviceTier: CodexServiceTier.standard.rawValue
+        )
+
+        XCTAssertTrue(arguments.contains("service_tier=default"))
+        XCTAssertFalse(arguments.contains("service_tier=fast"))
     }
 
     func testReplyIntentRouterClassifiesModes() {

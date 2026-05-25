@@ -3,6 +3,7 @@ import SwiftUI
 struct CodexSettingsView: View {
     @AppStorage("codexPostProcessingModel") private var selectedModelRaw = CodexPostProcessingModel.defaultModel.rawValue
     @AppStorage("codexReasoningEffort") private var reasoningEffortRaw = CodexReasoningEffort.defaultEffort.rawValue
+    @AppStorage("codexServiceTier") private var serviceTierRaw = CodexServiceTier.defaultTier.rawValue
     @AppStorage("codexVisualInputMode") private var visualInputModeRaw = CodexVisualInputMode.defaultMode.rawValue
     @State private var status = CodexConnectionStatus.unknown
     @State private var codexVersion = "Unknown"
@@ -13,6 +14,10 @@ struct CodexSettingsView: View {
 
     private var selectedReasoningEffort: CodexReasoningEffort {
         CodexReasoningEffort.resolve(reasoningEffortRaw)
+    }
+
+    private var selectedServiceTier: CodexServiceTier {
+        CodexServiceTier.resolve(serviceTierRaw)
     }
 
     private var selectedVisualInputMode: CodexVisualInputMode {
@@ -66,6 +71,16 @@ struct CodexSettingsView: View {
                 }
 
                 Text(selectedReasoningEffort.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Speed", selection: $serviceTierRaw) {
+                    ForEach(CodexServiceTier.allCases) { tier in
+                        Text(tier.displayName).tag(tier.rawValue)
+                    }
+                }
+
+                Text(selectedServiceTier.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

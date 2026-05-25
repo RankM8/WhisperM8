@@ -150,6 +150,7 @@ struct CodexPostProcessor: PostProcessing {
             outputURL: outputURL,
             model: AppPreferences.shared.codexPostProcessingModelRaw,
             reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+            serviceTier: AppPreferences.shared.codexServiceTierRaw,
             isEphemeral: mode.id != OutputMode.taskID,
             projectPath: projectPath
         )
@@ -338,6 +339,7 @@ enum CodexInvocation {
         outputURL: URL,
         model: String,
         reasoningEffort: String,
+        serviceTier: String = CodexServiceTier.defaultTier.rawValue,
         isEphemeral: Bool = true,
         projectPath: String? = nil
     ) -> [String] {
@@ -345,10 +347,13 @@ enum CodexInvocation {
             "exec",
             "-m", model,
             "-c", "model_reasoning_effort=\(reasoningEffort)",
+        ]
+        arguments.append(contentsOf: CodexServiceTier.resolve(serviceTier).configArguments)
+        arguments.append(contentsOf: [
             "--sandbox", "read-only",
             "--skip-git-repo-check",
             "--output-last-message", outputURL.path,
-        ]
+        ])
 
         if let projectPath, !projectPath.isEmpty {
             arguments.append(contentsOf: ["-C", projectPath])
