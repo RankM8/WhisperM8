@@ -291,6 +291,49 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertFalse(arguments.contains("service_tier=fast"))
     }
 
+    func testOutputModeUsesGlobalCodexModelWhenNoOverrideIsSet() {
+        let mode = OutputMode.mode(for: OutputMode.cleanID)
+
+        XCTAssertEqual(
+            mode.resolvedCodexModelRaw(defaultModelRaw: CodexPostProcessingModel.gpt52.rawValue),
+            CodexPostProcessingModel.gpt52.rawValue
+        )
+    }
+
+    func testOutputModeCanOverrideCodexModel() {
+        var mode = OutputMode.mode(for: OutputMode.cleanID)
+        mode.codexModelRawOverride = CodexPostProcessingModel.gpt54.rawValue
+
+        XCTAssertEqual(
+            mode.resolvedCodexModelRaw(defaultModelRaw: CodexPostProcessingModel.gpt52.rawValue),
+            CodexPostProcessingModel.gpt54.rawValue
+        )
+    }
+
+    func testOutputModeLegacyJSONDefaultsToGlobalCodexModel() throws {
+        let json = """
+        {
+          "id": "clean",
+          "name": "Clean",
+          "shortLabel": "Clean",
+          "kind": "builtIn",
+          "templateID": "clean",
+          "isEnabled": true,
+          "isDefault": false,
+          "contextPolicy": "off",
+          "pasteVisualAttachments": false
+        }
+        """
+
+        let mode = try JSONDecoder().decode(OutputMode.self, from: Data(json.utf8))
+
+        XCTAssertNil(mode.codexModelRawOverride)
+        XCTAssertEqual(
+            mode.resolvedCodexModelRaw(defaultModelRaw: CodexPostProcessingModel.gpt52.rawValue),
+            CodexPostProcessingModel.gpt52.rawValue
+        )
+    }
+
     func testReplyIntentRouterClassifiesModes() {
         let router = ReplyIntentRouter()
         let context = TranscriptContextBundle(
@@ -462,12 +505,14 @@ final class OutputDashboardTests: XCTestCase {
         let store = TranscriptRunReportStore(
             reportsDirectory: root.appendingPathComponent("Reports", isDirectory: true)
         )
+        var mode = OutputMode.mode(for: OutputMode.slackID)
+        mode.codexModelRawOverride = CodexPostProcessingModel.gpt54.rawValue
         let report = try store.save(TranscriptRunReportDraft(
             sourceAppName: "Slack",
             sourceBundleIdentifier: "com.tinyspeck.slackmacgap",
             status: .succeeded,
             errorMessage: nil,
-            mode: OutputMode.mode(for: OutputMode.slackID),
+            mode: mode,
             provider: .openai,
             transcriptionModel: .openai_gpt4o,
             language: "de",
@@ -505,6 +550,8 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(recentReports.first?.agentProvider, .codex)
         XCTAssertEqual(recentReports.first?.agentSessionID, "session-1")
         XCTAssertEqual(recentReports.first?.agentProjectPath, "/tmp/project")
+        XCTAssertEqual(recentReports.first?.codex?.model, CodexPostProcessingModel.gpt54.rawValue)
+        XCTAssertTrue(recentReports.first?.codex?.commandPreview.contains(CodexPostProcessingModel.gpt54.rawValue) == true)
         XCTAssertTrue(FileManager.default.fileExists(atPath: recentReports.first?.attachments.first?.storedPath ?? ""))
     }
 

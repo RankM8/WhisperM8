@@ -16,6 +16,9 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
     var isDefault: Bool
     var contextPolicy: ContextCapturePolicy
     var pasteVisualAttachments: Bool
+    /// Optional Codex model override for this mode. `nil` means the global
+    /// Codex post-processing model preference is used.
+    var codexModelRawOverride: String?
 
     var usesPostProcessing: Bool {
         kind != .raw
@@ -30,7 +33,8 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         isEnabled: Bool,
         isDefault: Bool,
         contextPolicy: ContextCapturePolicy = .off,
-        pasteVisualAttachments: Bool? = nil
+        pasteVisualAttachments: Bool? = nil,
+        codexModelRawOverride: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -42,6 +46,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         self.contextPolicy = contextPolicy
         self.pasteVisualAttachments = pasteVisualAttachments
             ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
+        self.codexModelRawOverride = codexModelRawOverride
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -54,6 +59,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         case isDefault
         case contextPolicy
         case pasteVisualAttachments
+        case codexModelRawOverride
     }
 
     init(from decoder: Decoder) throws {
@@ -69,6 +75,15 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
             ?? Self.defaultContextPolicy(for: id)
         pasteVisualAttachments = try container.decodeIfPresent(Bool.self, forKey: .pasteVisualAttachments)
             ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
+        codexModelRawOverride = try container.decodeIfPresent(String.self, forKey: .codexModelRawOverride)
+    }
+
+    func resolvedCodexModelRaw(defaultModelRaw: String = AppPreferences.shared.codexPostProcessingModelRaw) -> String {
+        guard let override = codexModelRawOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !override.isEmpty else {
+            return defaultModelRaw
+        }
+        return override
     }
 }
 

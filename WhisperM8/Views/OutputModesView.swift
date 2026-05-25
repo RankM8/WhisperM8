@@ -10,6 +10,7 @@ struct OutputModesView: View {
     @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.rawID
     @AppStorage("showModePickerInMiniOverlay") private var showModePickerInMiniOverlay = true
     @AppStorage("fallbackToRawOnProcessingError") private var fallbackToRawOnProcessingError = true
+    @AppStorage("codexPostProcessingModel") private var globalCodexModelRaw = CodexPostProcessingModel.defaultModel.rawValue
 
     private var selectedModeIndex: Int? {
         modes.firstIndex { $0.id == selectedModeID }
@@ -166,6 +167,30 @@ struct OutputModesView: View {
                     .foregroundStyle(.secondary)
 
                 if mode.wrappedValue.usesPostProcessing {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Use global Codex model", isOn: useGlobalModelBinding(for: mode))
+
+                        if mode.wrappedValue.codexModelRawOverride == nil {
+                            Text("Uses Codex / ChatGPT default: \(CodexPostProcessingModel.resolve(globalCodexModelRaw).displayName).")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Mode model", selection: modeModelSelection(for: mode)) {
+                                ForEach(CodexPostProcessingModel.allCases) { model in
+                                    Text(model.displayName).tag(model.rawValue)
+                                }
+                            }
+
+                            Text(CodexPostProcessingModel.resolve(mode.wrappedValue.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw)).detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Divider()
+
                     Picker("Selected context", selection: mode.contextPolicy) {
                         ForEach(ContextCapturePolicy.allCases) { policy in
                             Text(policy.displayName).tag(policy)
@@ -218,6 +243,24 @@ struct OutputModesView: View {
         Binding(
             get: { mode.wrappedValue.templateID ?? PostProcessingTemplate.cleanID },
             set: { mode.wrappedValue.templateID = $0 }
+        )
+    }
+
+    private func useGlobalModelBinding(for mode: Binding<OutputMode>) -> Binding<Bool> {
+        Binding(
+            get: { mode.wrappedValue.codexModelRawOverride == nil },
+            set: { useGlobal in
+                mode.wrappedValue.codexModelRawOverride = useGlobal
+                    ? nil
+                    : mode.wrappedValue.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw)
+            }
+        )
+    }
+
+    private func modeModelSelection(for mode: Binding<OutputMode>) -> Binding<String> {
+        Binding(
+            get: { mode.wrappedValue.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw) },
+            set: { mode.wrappedValue.codexModelRawOverride = $0 }
         )
     }
 
@@ -288,7 +331,13 @@ struct OutputModesView: View {
             return "No post-processing"
         }
         let templateName = templates.first { $0.id == mode.templateID }?.name ?? "No template"
-        return "\(mode.shortLabel) · \(templateName)"
+        let modelText: String
+        if let override = mode.codexModelRawOverride, !override.isEmpty {
+            modelText = CodexPostProcessingModel.resolve(override).displayName
+        } else {
+            modelText = "Default model"
+        }
+        return "\(mode.shortLabel) · \(templateName) · \(modelText)"
     }
 
     private func canDisable(_ mode: OutputMode) -> Bool {
