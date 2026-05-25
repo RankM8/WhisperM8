@@ -36,6 +36,7 @@ final class ActiveBackgroundSessionTracker: ObservableObject {
     @Published private(set) var lastRefreshAt: Date?
 
     private var pollTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
     private let pollInterval: TimeInterval
     private let recencyWindow: TimeInterval
     private let jobsDirectoryProvider: () -> URL
@@ -83,6 +84,8 @@ final class ActiveBackgroundSessionTracker: ObservableObject {
         isRunning = false
         pollTask?.cancel()
         pollTask = nil
+        refreshTask?.cancel()
+        refreshTask = nil
         lastNudgeAt = nil
         if currentSession != nil {
             currentSession = nil
@@ -100,15 +103,47 @@ final class ActiveBackgroundSessionTracker: ObservableObject {
             return
         }
         lastNudgeAt = now
-        refresh()
+        requestRefresh()
     }
 
     /// Synchroner Refresh — wird vom Loop wie von `start()` direkt
     /// aufgerufen. Liest alle state.jsons, sucht das juengste, mapped
     /// den cwd auf einen lesbaren Projekt-Namen.
     private func refresh() {
-        let jobs = SupervisorJobReader.readAll(from: jobsDirectoryProvider())
-        let now = Date()
+        requestRefresh()
+    }
+
+    private func requestRefresh() {
+        guard refreshTask == nil else { return }
+        let jobsDirectory = jobsDirectoryProvider()
+        let recencyWindow = recencyWindow
+        refreshTask = Task { @MainActor [weak self] in
+            let result = await Task.detached(priority: .utility) {
+                Self.buildSnapshot(
+                    jobsDirectory: jobsDirectory,
+                    recencyWindow: recencyWindow,
+                    now: Date()
+                )
+            }.value
+
+            guard let self, !Task.isCancelled, self.isRunning else {
+                self?.refreshTask = nil
+                return
+            }
+            if result.currentSession != self.currentSession {
+                self.currentSession = result.currentSession
+            }
+            self.lastRefreshAt = result.lastRefreshAt
+            self.refreshTask = nil
+        }
+    }
+
+    nonisolated private static func buildSnapshot(
+        jobsDirectory: URL,
+        recencyWindow: TimeInterval,
+        now: Date
+    ) -> (currentSession: ActiveSession?, lastRefreshAt: Date) {
+        let jobs = SupervisorJobReader.readAll(from: jobsDirectory)
         let active = SupervisorJobReader.mostRecentlyActive(
             among: jobs,
             within: recencyWindow,
@@ -131,15 +166,12 @@ final class ActiveBackgroundSessionTracker: ObservableObject {
                 lastActivityAt: mtime
             )
         }
-        if mapped != currentSession {
-            currentSession = mapped
-        }
-        lastRefreshAt = now
+        return (mapped, now)
     }
 
     /// Title-Fallback-Kette: `name` aus state.json, sonst gekuerzter
     /// `intent`, sonst die Short-ID.
-    static func displayName(for job: SupervisorJobState) -> String {
+    nonisolated static func displayName(for job: SupervisorJobState) -> String {
         if let name = job.name { return name }
         if let intent = job.intent {
             let trimmed = intent.replacingOccurrences(of: "\n", with: " ")
@@ -153,7 +185,7 @@ final class ActiveBackgroundSessionTracker: ObservableObject {
     /// `/Users/x/repos/heartbeat`                          →  `heartbeat`.
     /// Faellt auf den Last-Path-Component zurueck, wenn keiner der bekannten
     /// Marker matched.
-    static func projectDisplayName(forCwd cwd: String) -> String {
+    nonisolated static func projectDisplayName(forCwd cwd: String) -> String {
         let standardized = URL(fileURLWithPath: cwd).standardizedFileURL.path
         let worktreeMarker = "/.claude/worktrees/"
         if let range = standardized.range(of: worktreeMarker) {

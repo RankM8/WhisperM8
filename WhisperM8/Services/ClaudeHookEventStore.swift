@@ -33,11 +33,15 @@ final class ClaudeHookEventStore {
     private struct Cursor {
         var offset: UInt64 = 0
     }
+    private let lock = NSLock()
     private var cursors: [URL: Cursor] = [:]
 
     /// Liest alle neuen Zeilen seit dem letzten Aufruf. Idempotent: wenn die
     /// Datei nicht existiert oder leer ist, leeres Array.
     func readNewEvents(from url: URL) -> [ClaudeHookEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard FileManager.default.fileExists(atPath: url.path) else {
             return []
         }
@@ -102,6 +106,8 @@ final class ClaudeHookEventStore {
     /// Reset Cursor fuer eine Datei (z. B. wenn die Session beendet ist und
     /// die naechste mit derselben localID einen frischen Stream beginnt).
     func resetCursor(for url: URL) {
+        lock.lock()
+        defer { lock.unlock() }
         cursors.removeValue(forKey: url)
     }
 }

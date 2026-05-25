@@ -43,8 +43,8 @@ final class AgentSessionRuntimeStatusStore: ObservableObject {
 final class AgentSessionRuntimeWatcher {
     /// Tail-Größe pro Poll. Eine Claude-Assistant-Message kann mehrere KB groß
     /// sein (Tool-Use-Blöcke!), daher großzügig dimensioniert.
-    static let tailReadBytes: Int = 64 * 1024
-    static let pollInterval: TimeInterval = 1.5
+    nonisolated static let tailReadBytes: Int = 64 * 1024
+    nonisolated static let pollInterval: TimeInterval = 1.5
 
     weak var statusStore: AgentSessionRuntimeStatusStore?
     /// Wird einmal pro neu erkanntem Turn-End aufgerufen. Empfänger ist
@@ -53,6 +53,7 @@ final class AgentSessionRuntimeWatcher {
     var onTurnFinished: ((UUID) -> Void)?
 
     private var watched: [UUID: WatchedSession] = [:]
+    private var pollingSessionIDs: Set<UUID> = []
     private var pollTimer: Timer?
 
     init(statusStore: AgentSessionRuntimeStatusStore, onTurnFinished: ((UUID) -> Void)? = nil) {
@@ -152,41 +153,45 @@ final class AgentSessionRuntimeWatcher {
     }
 
     private func pollOne(sessionID: UUID) {
-        guard var entry = watched[sessionID] else { return }
+        guard let entry = watched[sessionID],
+              !pollingSessionIDs.contains(sessionID) else { return }
+        pollingSessionIDs.insert(sessionID)
 
-        if entry.transcriptURL == nil {
-            entry.transcriptURL = resolveTranscriptURL(for: entry)
-            watched[sessionID] = entry
-        }
+        Task { @MainActor [weak self] in
+            let snapshot = await Task.detached(priority: .utility) {
+                Self.pollSnapshot(for: entry, now: Date())
+            }.value
 
-        guard let url = entry.transcriptURL,
-              let mtime = fileMTime(at: url),
-              let tail = readTail(at: url, bytes: Self.tailReadBytes) else {
-            // Datei (noch) nicht da — Status auf .working halten, falls noch
-            // gar nichts gesetzt war (Session frisch gestartet).
-            if statusStore?.status(for: sessionID) == nil {
-                statusStore?.setStatus(.working, for: sessionID)
+            guard let self else { return }
+            self.pollingSessionIDs.remove(sessionID)
+            guard var current = self.watched[sessionID] else { return }
+            current.transcriptURL = snapshot.transcriptURL
+
+            guard let decision = snapshot.decision else {
+                self.watched[sessionID] = current
+                if self.statusStore?.status(for: sessionID) == nil {
+                    self.statusStore?.setStatus(.working, for: sessionID)
+                }
+                return
             }
-            return
-        }
 
-        let lastEvent = AgentTranscriptParser.lastEvent(in: tail, provider: entry.provider)
-        let decision = AgentTranscriptStatusDecider.decide(
-            lastEvent: lastEvent,
-            fileMTime: mtime,
-            now: Date(),
-            priorTurnFinishedAt: entry.lastTurnFinishedAt
-        )
-        statusStore?.setStatus(decision.status, for: sessionID)
+            self.statusStore?.setStatus(decision.status, for: sessionID)
 
-        if decision.turnFinished {
-            entry.lastTurnFinishedAt = Date()
-            watched[sessionID] = entry
-            onTurnFinished?(sessionID)
+            if decision.turnFinished {
+                current.lastTurnFinishedAt = Date()
+                self.watched[sessionID] = current
+                self.onTurnFinished?(sessionID)
+            } else {
+                self.watched[sessionID] = current
+            }
         }
     }
 
     private func resolveTranscriptURL(for entry: WatchedSession) -> URL? {
+        Self.resolveTranscriptURL(for: entry)
+    }
+
+    nonisolated private static func resolveTranscriptURL(for entry: WatchedSession) -> URL? {
         guard let externalSessionID = entry.externalSessionID, !externalSessionID.isEmpty else {
             return nil
         }
@@ -199,7 +204,28 @@ final class AgentSessionRuntimeWatcher {
 
     // MARK: - File helpers
 
-    private func fileMTime(at url: URL) -> Date? {
+    nonisolated private static func pollSnapshot(
+        for entry: WatchedSession,
+        now: Date
+    ) -> AgentSessionRuntimePollSnapshot {
+        let transcriptURL = entry.transcriptURL ?? resolveTranscriptURL(for: entry)
+        guard let url = transcriptURL,
+              let mtime = fileMTime(at: url),
+              let tail = readTail(at: url, bytes: tailReadBytes) else {
+            return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: nil)
+        }
+
+        let lastEvent = AgentTranscriptParser.lastEvent(in: tail, provider: entry.provider)
+        let decision = AgentTranscriptStatusDecider.decide(
+            lastEvent: lastEvent,
+            fileMTime: mtime,
+            now: now,
+            priorTurnFinishedAt: entry.lastTurnFinishedAt
+        )
+        return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: decision)
+    }
+
+    nonisolated private static func fileMTime(at url: URL) -> Date? {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else {
             return nil
         }
@@ -209,7 +235,7 @@ final class AgentSessionRuntimeWatcher {
     /// Liest die letzten `bytes` Bytes der Datei als UTF-8-String. Truncation
     /// am Anfang wird durch das Zeilen-Splitting im Parser absorbiert (erste
     /// halbe Zeile ist nicht parsebar → wird übersprungen).
-    private func readTail(at url: URL, bytes: Int) -> String? {
+    nonisolated private static func readTail(at url: URL, bytes: Int) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         do {
@@ -232,4 +258,9 @@ private struct WatchedSession {
     var externalSessionID: String?
     var transcriptURL: URL?
     var lastTurnFinishedAt: Date?
+}
+
+private struct AgentSessionRuntimePollSnapshot {
+    var transcriptURL: URL?
+    var decision: AgentTranscriptStatusDecider.Decision?
 }

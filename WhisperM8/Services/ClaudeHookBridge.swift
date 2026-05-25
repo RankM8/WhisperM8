@@ -19,6 +19,7 @@ final class ClaudeHookBridge {
 
     private let paths: ClaudeHookPaths
     private let silenceTimeout: TimeInterval
+    private let preToolUseDeliveryInterval: TimeInterval
     private let store: ClaudeHookEventStore
     private var entries: [UUID: Entry] = [:]
     private var decisionHandler: DecisionHandler?
@@ -31,6 +32,7 @@ final class ClaudeHookBridge {
         var silenceTimer: Timer?
         var fileDescriptor: Int32 = -1
         var source: DispatchSourceFileSystemObject?
+        var lastDeliveredPreToolUseAt: Date?
 
         init(localSessionID: UUID, eventFileURL: URL, attachedAt: Date) {
             self.localSessionID = localSessionID
@@ -47,10 +49,12 @@ final class ClaudeHookBridge {
 
     init(
         paths: ClaudeHookPaths = ClaudeHookPaths(),
-        silenceTimeout: TimeInterval = 5.0
+        silenceTimeout: TimeInterval = 5.0,
+        preToolUseDeliveryInterval: TimeInterval = 1.0
     ) {
         self.paths = paths
         self.silenceTimeout = silenceTimeout
+        self.preToolUseDeliveryInterval = preToolUseDeliveryInterval
         self.store = ClaudeHookEventStore()
     }
 
@@ -131,7 +135,7 @@ final class ClaudeHookBridge {
         source.setEventHandler { [weak self, weak entry] in
             guard let self, let entry else { return }
             Task { @MainActor in
-                self.handleFileEvent(for: entry)
+                await self.handleFileEvent(for: entry)
             }
         }
         source.setCancelHandler { [weak entry] in
@@ -145,13 +149,18 @@ final class ClaudeHookBridge {
         entry.source = source
 
         // Initialer Drain — falls bereits Events zwischen prepareLaunch und
-        // startTracking eingelaufen sind (selten, aber moeglich).
-        let initialEvents = store.readNewEvents(from: eventURL)
-        if !initialEvents.isEmpty {
+        // startTracking eingelaufen sind (selten, aber moeglich). Das Lesen
+        // passiert off-main, weil Hook-Files bei langen Sessions gross werden
+        // koennen.
+        Task { @MainActor [weak self, weak entry, store] in
+            let initialEvents = await Task.detached(priority: .utility) {
+                store.readNewEvents(from: eventURL)
+            }.value
+            guard let self, let entry, !initialEvents.isEmpty else { return }
             entry.sawFirstEvent = true
+            let now = Date()
             for event in initialEvents {
-                Logger.claudeBinding.info("binding_hook_event_received localID=\(localSessionID.uuidString, privacy: .public) event=\(event.hookEventName.rawValue, privacy: .public) sessionID=\(event.sessionID ?? "nil", privacy: .public)")
-                decisionHandler?(localSessionID, event)
+                self.deliver(event, for: entry, now: now)
             }
         }
 
@@ -190,15 +199,33 @@ final class ClaudeHookBridge {
         entry.silenceTimer?.invalidate()
     }
 
-    private func handleFileEvent(for entry: Entry) {
-        let events = store.readNewEvents(from: entry.eventFileURL)
+    private func handleFileEvent(for entry: Entry) async {
+        let eventURL = entry.eventFileURL
+        let store = self.store
+        let events = await Task.detached(priority: .utility) {
+            store.readNewEvents(from: eventURL)
+        }.value
         guard !events.isEmpty else { return }
         entry.sawFirstEvent = true
         entry.silenceTimer?.invalidate()
         entry.silenceTimer = nil
+        let now = Date()
         for event in events {
-            Logger.claudeBinding.info("binding_hook_event_received localID=\(entry.localSessionID.uuidString, privacy: .public) event=\(event.hookEventName.rawValue, privacy: .public) sessionID=\(event.sessionID ?? "nil", privacy: .public)")
-            decisionHandler?(entry.localSessionID, event)
+            deliver(event, for: entry, now: now)
         }
+    }
+
+    private func deliver(_ event: ClaudeHookEvent, for entry: Entry, now: Date) {
+        if event.hookEventName == .preToolUse {
+            if let last = entry.lastDeliveredPreToolUseAt,
+               now.timeIntervalSince(last) < preToolUseDeliveryInterval {
+                return
+            }
+            entry.lastDeliveredPreToolUseAt = now
+            Logger.claudeBinding.debug("binding_hook_event_received localID=\(entry.localSessionID.uuidString, privacy: .public) event=\(event.hookEventName.rawValue, privacy: .public) sessionID=\(event.sessionID ?? "nil", privacy: .public)")
+        } else {
+            Logger.claudeBinding.info("binding_hook_event_received localID=\(entry.localSessionID.uuidString, privacy: .public) event=\(event.hookEventName.rawValue, privacy: .public) sessionID=\(event.sessionID ?? "nil", privacy: .public)")
+        }
+        decisionHandler?(entry.localSessionID, event)
     }
 }

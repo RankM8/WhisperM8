@@ -6,6 +6,7 @@ struct AgentResourceSummaryButton: View {
     @State private var snapshot = AgentResourceSnapshot.empty
     @State private var isPopoverPresented = false
     @State private var isHovered = false
+    @State private var refreshTask: Task<Void, Never>?
 
     private var shouldPoll: Bool {
         isPopoverPresented || !descriptors.isEmpty
@@ -86,11 +87,14 @@ struct AgentResourceSummaryButton: View {
     }
 
     private func refresh() {
+        guard refreshTask == nil else { return }
         let descriptors = descriptors
-        Task {
+        refreshTask = Task {
             let next = await Task.detached(priority: .utility) {
                 AgentResourceMonitor().snapshot(for: descriptors)
             }.value
+            refreshTask = nil
+            guard !Task.isCancelled else { return }
             snapshot = next
         }
     }
