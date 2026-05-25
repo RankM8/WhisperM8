@@ -19,6 +19,11 @@ import SwiftUI
 /// der User „weg vom Tail" gegangen ist, und wir korrigieren die
 /// Output-getriebenen Spruenge zurueck zur User-Position.
 final class QuietableTerminalView: LocalProcessTerminalView {
+    /// The Agent Chats window is movable by its background because the titlebar
+    /// is hidden. Terminal text selection must never fall through to that
+    /// window-drag behavior.
+    override var mouseDownCanMoveWindow: Bool { false }
+
     /// `true`, solange der User nahe genug am Buffer-Ende ist, dass neuer
     /// Output sichtbar bleiben soll. Faellt auf `false`, sobald der User
     /// hochscrollt; wird wieder `true`, sobald er bewusst ans Ende
@@ -681,6 +686,10 @@ struct AgentTerminalView: NSViewRepresentable {
 /// getrennt.
 final class AgentTerminalContainerView: NSView {
     weak var terminal: LocalProcessTerminalView?
+
+    /// Prevent clicks in the terminal wrapper from moving the hidden-titlebar
+    /// window while the user selects/copies terminal text.
+    override var mouseDownCanMoveWindow: Bool { false }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
