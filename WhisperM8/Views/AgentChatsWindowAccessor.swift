@@ -22,7 +22,7 @@ struct AgentChatsWindowAccessor: NSViewRepresentable {
         window.titleVisibility = .hidden
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarSeparatorStyle = .none
-        window.isMovableByWindowBackground = true
+        window.isMovableByWindowBackground = false
         window.backgroundColor = NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark
