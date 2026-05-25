@@ -151,12 +151,13 @@ _bundle:
 	@cp "WhisperM8/Resources/ProviderCodex.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/ProviderCodex@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@# SwiftPM-generierte Resource-Bundles (z. B. KeyboardShortcuts_KeyboardShortcuts.bundle)
-	@# muessen in Contents/Resources/ liegen, damit `Bundle.module` zur Laufzeit
-	@# Localizables und sonstige Resources der Dependencies findet. Ohne das
-	@# crasht die App beim ersten Zugriff (z. B. KeyboardShortcuts.RecorderCocoa)
-	@# mit einem fatalError in `closure #1 in NSBundle.module`.
+	@# in Contents/Resources/ kopieren - wo macOS-Apps Ressourcen erwarten und
+	@# codesign sie als gesealte Inhalte akzeptiert. Read-only Files vom letzten
+	@# Build vorab loeschen, sonst schlaegt `cp` mit Permission denied fehl.
 	@for bundle in .build/$(BUILD)/*.bundle; do \
 		if [ -e "$$bundle" ]; then \
+			bundle_name=$$(basename "$$bundle"); \
+			rm -rf "$(APP_BUNDLE)/Contents/Resources/$$bundle_name"; \
 			cp -R "$$bundle" "$(APP_BUNDLE)/Contents/Resources/"; \
 		fi; \
 	done
