@@ -238,7 +238,6 @@ struct SessionListButton: View {
     var onClose: () -> Void
 
     @State private var isHovered = false
-    @State private var pulsePhase = false
 
     private static let connectorX: CGFloat = 18
 
@@ -326,9 +325,7 @@ struct SessionListButton: View {
         if isAutoRenaming {
             Image(systemName: "sparkles")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Color.purple.opacity(pulsePhase ? 1.0 : 0.45))
-                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: pulsePhase)
-                .onAppear { pulsePhase = true }
+                .foregroundStyle(Color.purple)
                 .help("Titel wird automatisch generiert …")
         } else {
             statusDot
@@ -343,17 +340,11 @@ struct SessionListButton: View {
             Circle()
                 .fill(Color.green)
                 .frame(width: 5, height: 5)
-                .opacity(pulsePhase ? 1.0 : 0.45)
-                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsePhase)
-                .onAppear { pulsePhase = true }
                 .help("Arbeitet …")
         case .awaitingInput:
             Circle()
                 .fill(Color.orange)
                 .frame(width: 5, height: 5)
-                .opacity(pulsePhase ? 1.0 : 0.4)
-                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulsePhase)
-                .onAppear { pulsePhase = true }
                 .help("Wartet möglicherweise auf User-Input")
         case .idle:
             Circle()
