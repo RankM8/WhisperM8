@@ -11,6 +11,8 @@ struct OutputModesView: View {
     @AppStorage("showModePickerInMiniOverlay") private var showModePickerInMiniOverlay = true
     @AppStorage("fallbackToRawOnProcessingError") private var fallbackToRawOnProcessingError = true
     @AppStorage("codexPostProcessingModel") private var globalCodexModelRaw = CodexPostProcessingModel.defaultModel.rawValue
+    @AppStorage("codexReasoningEffort") private var globalReasoningEffortRaw = CodexReasoningEffort.defaultEffort.rawValue
+    @AppStorage("codexServiceTier") private var globalServiceTierRaw = CodexServiceTier.defaultTier.rawValue
 
     private var selectedModeIndex: Int? {
         modes.firstIndex { $0.id == selectedModeID }
@@ -170,6 +172,10 @@ struct OutputModesView: View {
                     Divider()
 
                     VStack(alignment: .leading, spacing: 8) {
+                        Text("Codex settings")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
                         Toggle("Use global Codex model", isOn: useGlobalModelBinding(for: mode))
 
                         if mode.wrappedValue.codexModelRawOverride == nil {
@@ -184,6 +190,42 @@ struct OutputModesView: View {
                             }
 
                             Text(CodexPostProcessingModel.resolve(mode.wrappedValue.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw)).detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Toggle("Use global Thinking level", isOn: useGlobalReasoningBinding(for: mode))
+
+                        if mode.wrappedValue.codexReasoningEffortRawOverride == nil {
+                            Text("Uses global Thinking: \(CodexReasoningEffort.resolve(globalReasoningEffortRaw).displayName).")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Thinking level", selection: modeReasoningSelection(for: mode)) {
+                                ForEach(CodexReasoningEffort.allCases) { effort in
+                                    Text(effort.displayName).tag(effort.rawValue)
+                                }
+                            }
+
+                            Text(CodexReasoningEffort.resolve(mode.wrappedValue.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw)).detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Toggle("Use global Fast mode", isOn: useGlobalServiceTierBinding(for: mode))
+
+                        if mode.wrappedValue.codexServiceTierRawOverride == nil {
+                            Text("Uses global speed: \(CodexServiceTier.resolve(globalServiceTierRaw).displayName).")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Speed", selection: modeServiceTierSelection(for: mode)) {
+                                ForEach(CodexServiceTier.allCases) { tier in
+                                    Text(tier.displayName).tag(tier.rawValue)
+                                }
+                            }
+
+                            Text(CodexServiceTier.resolve(mode.wrappedValue.resolvedCodexServiceTierRaw(defaultServiceTierRaw: globalServiceTierRaw)).detail)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -264,6 +306,42 @@ struct OutputModesView: View {
         )
     }
 
+    private func useGlobalReasoningBinding(for mode: Binding<OutputMode>) -> Binding<Bool> {
+        Binding(
+            get: { mode.wrappedValue.codexReasoningEffortRawOverride == nil },
+            set: { useGlobal in
+                mode.wrappedValue.codexReasoningEffortRawOverride = useGlobal
+                    ? nil
+                    : mode.wrappedValue.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw)
+            }
+        )
+    }
+
+    private func modeReasoningSelection(for mode: Binding<OutputMode>) -> Binding<String> {
+        Binding(
+            get: { mode.wrappedValue.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw) },
+            set: { mode.wrappedValue.codexReasoningEffortRawOverride = $0 }
+        )
+    }
+
+    private func useGlobalServiceTierBinding(for mode: Binding<OutputMode>) -> Binding<Bool> {
+        Binding(
+            get: { mode.wrappedValue.codexServiceTierRawOverride == nil },
+            set: { useGlobal in
+                mode.wrappedValue.codexServiceTierRawOverride = useGlobal
+                    ? nil
+                    : mode.wrappedValue.resolvedCodexServiceTierRaw(defaultServiceTierRaw: globalServiceTierRaw)
+            }
+        )
+    }
+
+    private func modeServiceTierSelection(for mode: Binding<OutputMode>) -> Binding<String> {
+        Binding(
+            get: { mode.wrappedValue.resolvedCodexServiceTierRaw(defaultServiceTierRaw: globalServiceTierRaw) },
+            set: { mode.wrappedValue.codexServiceTierRawOverride = $0 }
+        )
+    }
+
     private func modeEnabledBinding(for mode: Binding<OutputMode>) -> Binding<Bool> {
         Binding(
             get: { mode.wrappedValue.isEnabled },
@@ -337,7 +415,13 @@ struct OutputModesView: View {
         } else {
             modelText = "Default model"
         }
-        return "\(mode.shortLabel) · \(templateName) · \(modelText)"
+        let speedText: String
+        if let override = mode.codexServiceTierRawOverride, !override.isEmpty {
+            speedText = CodexServiceTier.resolve(override).displayName
+        } else {
+            speedText = "Default speed"
+        }
+        return "\(mode.shortLabel) · \(templateName) · \(modelText) · \(speedText)"
     }
 
     private func canDisable(_ mode: OutputMode) -> Bool {

@@ -149,8 +149,8 @@ struct CodexPostProcessor: PostProcessing {
             promptImageURLs: imageURLs,
             outputURL: outputURL,
             model: mode.resolvedCodexModelRaw(),
-            reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
-            serviceTier: AppPreferences.shared.codexServiceTierRaw,
+            reasoningEffort: mode.resolvedCodexReasoningEffortRaw(),
+            serviceTier: mode.resolvedCodexServiceTierRaw(),
             isEphemeral: mode.id != OutputMode.taskID,
             projectPath: projectPath
         )

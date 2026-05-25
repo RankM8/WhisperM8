@@ -82,6 +82,8 @@ struct OutputModeStore {
                 mode.contextPolicy = .off
                 mode.pasteVisualAttachments = false
                 mode.codexModelRawOverride = nil
+                mode.codexReasoningEffortRawOverride = nil
+                mode.codexServiceTierRawOverride = nil
             }
             if mode.isDefault {
                 mode.isEnabled = true

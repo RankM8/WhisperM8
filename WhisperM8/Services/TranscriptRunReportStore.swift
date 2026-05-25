@@ -103,16 +103,18 @@ struct TranscriptRunReportStore {
         if draft.mode.usesPostProcessing && draft.mode.id != OutputMode.chatID {
             let outputURL = runDirectory.appendingPathComponent("codex-output.txt")
             let resolvedCodexModel = draft.mode.resolvedCodexModelRaw()
+            let resolvedReasoningEffort = draft.mode.resolvedCodexReasoningEffortRaw()
+            let resolvedServiceTier = draft.mode.resolvedCodexServiceTierRaw()
             codex = TranscriptRunReport.CodexSnapshot(
                 model: resolvedCodexModel,
-                reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
+                reasoningEffort: resolvedReasoningEffort,
                 visualInputMode: visualInput.mode.rawValue,
                 commandPreview: CodexInvocation.arguments(
                     promptImageURLs: imageInputPaths.map(URL.init(fileURLWithPath:)),
                     outputURL: outputURL,
                     model: resolvedCodexModel,
-                    reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
-                    serviceTier: AppPreferences.shared.codexServiceTierRaw,
+                    reasoningEffort: resolvedReasoningEffort,
+                    serviceTier: resolvedServiceTier,
                     isEphemeral: draft.mode.id != OutputMode.taskID,
                     projectPath: draft.mode.id == OutputMode.taskID ? AppPreferences.shared.agentDefaultProjectPath : nil
                 ),

@@ -310,6 +310,21 @@ final class OutputDashboardTests: XCTestCase {
         )
     }
 
+    func testOutputModeCanOverrideCodexReasoningAndServiceTier() {
+        var mode = OutputMode.mode(for: OutputMode.cleanID)
+        mode.codexReasoningEffortRawOverride = CodexReasoningEffort.high.rawValue
+        mode.codexServiceTierRawOverride = CodexServiceTier.standard.rawValue
+
+        XCTAssertEqual(
+            mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: CodexReasoningEffort.low.rawValue),
+            CodexReasoningEffort.high.rawValue
+        )
+        XCTAssertEqual(
+            mode.resolvedCodexServiceTierRaw(defaultServiceTierRaw: CodexServiceTier.fast.rawValue),
+            CodexServiceTier.standard.rawValue
+        )
+    }
+
     func testOutputModeLegacyJSONDefaultsToGlobalCodexModel() throws {
         let json = """
         {
@@ -328,9 +343,19 @@ final class OutputDashboardTests: XCTestCase {
         let mode = try JSONDecoder().decode(OutputMode.self, from: Data(json.utf8))
 
         XCTAssertNil(mode.codexModelRawOverride)
+        XCTAssertNil(mode.codexReasoningEffortRawOverride)
+        XCTAssertNil(mode.codexServiceTierRawOverride)
         XCTAssertEqual(
             mode.resolvedCodexModelRaw(defaultModelRaw: CodexPostProcessingModel.gpt52.rawValue),
             CodexPostProcessingModel.gpt52.rawValue
+        )
+        XCTAssertEqual(
+            mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: CodexReasoningEffort.low.rawValue),
+            CodexReasoningEffort.low.rawValue
+        )
+        XCTAssertEqual(
+            mode.resolvedCodexServiceTierRaw(defaultServiceTierRaw: CodexServiceTier.standard.rawValue),
+            CodexServiceTier.standard.rawValue
         )
     }
 
@@ -507,6 +532,8 @@ final class OutputDashboardTests: XCTestCase {
         )
         var mode = OutputMode.mode(for: OutputMode.slackID)
         mode.codexModelRawOverride = CodexPostProcessingModel.gpt54.rawValue
+        mode.codexReasoningEffortRawOverride = CodexReasoningEffort.high.rawValue
+        mode.codexServiceTierRawOverride = CodexServiceTier.standard.rawValue
         let report = try store.save(TranscriptRunReportDraft(
             sourceAppName: "Slack",
             sourceBundleIdentifier: "com.tinyspeck.slackmacgap",
@@ -551,7 +578,11 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(recentReports.first?.agentSessionID, "session-1")
         XCTAssertEqual(recentReports.first?.agentProjectPath, "/tmp/project")
         XCTAssertEqual(recentReports.first?.codex?.model, CodexPostProcessingModel.gpt54.rawValue)
+        XCTAssertEqual(recentReports.first?.codex?.reasoningEffort, CodexReasoningEffort.high.rawValue)
         XCTAssertTrue(recentReports.first?.codex?.commandPreview.contains(CodexPostProcessingModel.gpt54.rawValue) == true)
+        XCTAssertTrue(recentReports.first?.codex?.commandPreview.contains("model_reasoning_effort=high") == true)
+        XCTAssertTrue(recentReports.first?.codex?.commandPreview.contains("service_tier=default") == true)
+        XCTAssertFalse(recentReports.first?.codex?.commandPreview.contains("service_tier=fast") == true)
         XCTAssertTrue(FileManager.default.fileExists(atPath: recentReports.first?.attachments.first?.storedPath ?? ""))
     }
 

@@ -19,6 +19,12 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
     /// Optional Codex model override for this mode. `nil` means the global
     /// Codex post-processing model preference is used.
     var codexModelRawOverride: String?
+    /// Optional Codex reasoning override for this mode. `nil` means the global
+    /// Codex reasoning preference is used.
+    var codexReasoningEffortRawOverride: String?
+    /// Optional Codex service-tier override for this mode. `nil` means the
+    /// global Codex service-tier preference is used.
+    var codexServiceTierRawOverride: String?
 
     var usesPostProcessing: Bool {
         kind != .raw
@@ -34,7 +40,9 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         isDefault: Bool,
         contextPolicy: ContextCapturePolicy = .off,
         pasteVisualAttachments: Bool? = nil,
-        codexModelRawOverride: String? = nil
+        codexModelRawOverride: String? = nil,
+        codexReasoningEffortRawOverride: String? = nil,
+        codexServiceTierRawOverride: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -47,6 +55,8 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         self.pasteVisualAttachments = pasteVisualAttachments
             ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
         self.codexModelRawOverride = codexModelRawOverride
+        self.codexReasoningEffortRawOverride = codexReasoningEffortRawOverride
+        self.codexServiceTierRawOverride = codexServiceTierRawOverride
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -60,6 +70,8 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         case contextPolicy
         case pasteVisualAttachments
         case codexModelRawOverride
+        case codexReasoningEffortRawOverride
+        case codexServiceTierRawOverride
     }
 
     init(from decoder: Decoder) throws {
@@ -76,12 +88,30 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         pasteVisualAttachments = try container.decodeIfPresent(Bool.self, forKey: .pasteVisualAttachments)
             ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
         codexModelRawOverride = try container.decodeIfPresent(String.self, forKey: .codexModelRawOverride)
+        codexReasoningEffortRawOverride = try container.decodeIfPresent(String.self, forKey: .codexReasoningEffortRawOverride)
+        codexServiceTierRawOverride = try container.decodeIfPresent(String.self, forKey: .codexServiceTierRawOverride)
     }
 
     func resolvedCodexModelRaw(defaultModelRaw: String = AppPreferences.shared.codexPostProcessingModelRaw) -> String {
         guard let override = codexModelRawOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
               !override.isEmpty else {
             return defaultModelRaw
+        }
+        return override
+    }
+
+    func resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: String = AppPreferences.shared.codexReasoningEffortRaw) -> String {
+        guard let override = codexReasoningEffortRawOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !override.isEmpty else {
+            return defaultReasoningEffortRaw
+        }
+        return override
+    }
+
+    func resolvedCodexServiceTierRaw(defaultServiceTierRaw: String = AppPreferences.shared.codexServiceTierRaw) -> String {
+        guard let override = codexServiceTierRawOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !override.isEmpty else {
+            return defaultServiceTierRaw
         }
         return override
     }
