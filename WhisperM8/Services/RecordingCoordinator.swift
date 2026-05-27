@@ -157,6 +157,7 @@ final class RecordingCoordinator {
             startDurationTimer()
         } catch {
             appState.lastError = error.localizedDescription
+            AudioDuckingManager.shared.endCaptureImmediate()
             isProcessing = false
         }
     }

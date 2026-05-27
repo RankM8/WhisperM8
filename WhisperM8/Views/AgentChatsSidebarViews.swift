@@ -67,7 +67,6 @@ struct ProjectChatGroup: View {
             onSelect: { onSelectSession(session.id) },
             onClose: { onCloseSession(session) }
         )
-        .draggable(DraggableSession(sessionID: session.id, sourceProjectID: project.id))
         .dropDestination(for: DraggableSession.self) { items, _ in
             guard let dropped = items.first else { return false }
             onSessionDrop(dropped, session.id, project.id)
@@ -173,7 +172,6 @@ struct ProjectChatGroup: View {
         }
         .buttonStyle(.plain)
         .onHover { isHeaderHovered = $0 }
-        .draggable(DraggableProject(projectID: project.id))
         .dropDestination(for: DraggableProject.self) { items, _ in
             guard let dropped = items.first, dropped.projectID != project.id else { return false }
             onProjectDrop(dropped, project.id)

@@ -532,7 +532,7 @@ struct AgentChatsView: View {
             }
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     sidebarCommandRows
                         .padding(.horizontal, 8)
                         .padding(.bottom, 4)

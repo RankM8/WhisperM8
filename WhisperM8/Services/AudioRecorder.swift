@@ -8,6 +8,7 @@ class AudioRecorder {
     private var audioFile: AVAudioFile?
     private var recordingURL: URL?
     private var converter: AVAudioConverter?
+    private let resourceLock = NSLock()
 
     // For automatic device switching in System Default mode
     private var configurationObserver: NSObjectProtocol?
@@ -41,10 +42,12 @@ class AudioRecorder {
         // Reset state
         audioLevel = 0
         recordingURL = nil
-        audioFile = nil
-        converter = nil
+        resourceLock.withLock {
+            audioFile = nil
+            converter = nil
+            buffersWritten = 0
+        }
         isRestarting = false
-        buffersWritten = 0
         lastConfigChangeTime = .distantPast
 
         // Check permission
@@ -111,7 +114,9 @@ class AudioRecorder {
         // Create converter if needed
         if inputFormat.sampleRate != 16000 || inputFormat.channelCount != 1 {
             Logger.debug("[AudioRecorder] Creating audio converter (input differs from target)")
-            converter = AVAudioConverter(from: inputFormat, to: targetFormat)
+            resourceLock.withLock {
+                converter = AVAudioConverter(from: inputFormat, to: targetFormat)
+            }
         } else {
             Logger.debug("[AudioRecorder] No converter needed - formats match")
         }
@@ -130,7 +135,10 @@ class AudioRecorder {
             AVEncoderBitRateKey: 32000
         ]
 
-        audioFile = try AVAudioFile(forWriting: url, settings: settings)
+        let file = try AVAudioFile(forWriting: url, settings: settings)
+        resourceLock.withLock {
+            audioFile = file
+        }
         recordingURL = url
 
         // Install tap for recording + level metering
@@ -166,6 +174,12 @@ class AudioRecorder {
             Logger.debug("[AudioRecorder] Engine started successfully!")
         } catch {
             Logger.debug("[AudioRecorder] ERROR starting engine: \(error)")
+            inputNode.removeTap(onBus: 0)
+            resourceLock.withLock {
+                audioFile = nil
+                converter = nil
+            }
+            recordingURL = nil
             throw error
         }
 
@@ -196,14 +210,14 @@ class AudioRecorder {
             engine.stop()
         }
         engine = nil
-        converter = nil
+        resourceLock.withLock {
+            converter = nil
+            audioFile = nil
+        }
         isRecording = false
         isRestarting = false
         isUsingSystemDefault = false
         audioLevel = 0
-
-        // Close the audio file
-        audioFile = nil
 
         // Save URL and reset
         let url = recordingURL
@@ -316,18 +330,24 @@ class AudioRecorder {
         // 4. Create converter for new format if needed
         if inputFormat.sampleRate != 16000 || inputFormat.channelCount != 1 {
             Logger.debug("[AudioRecorder] Creating converter: \(inputFormat.sampleRate)Hz → 16kHz")
-            converter = AVAudioConverter(from: inputFormat, to: targetFormat)
-            if converter == nil {
+            let newConverter = AVAudioConverter(from: inputFormat, to: targetFormat)
+            resourceLock.withLock {
+                converter = newConverter
+            }
+            if newConverter == nil {
                 Logger.debug("[AudioRecorder] ERROR: Failed to create converter!")
             }
         } else {
-            converter = nil
+            resourceLock.withLock {
+                converter = nil
+            }
             Logger.debug("[AudioRecorder] No converter needed - format matches target")
         }
 
         // 5. Install tap with NEW format (use larger buffer for Bluetooth)
         Logger.debug("[AudioRecorder] Installing tap with new format...")
-        Logger.debug("[AudioRecorder] audioFile is \(self.audioFile == nil ? "NIL" : "valid")")
+        let hasAudioFile = resourceLock.withLock { self.audioFile != nil }
+        Logger.debug("[AudioRecorder] audioFile is \(hasAudioFile ? "valid" : "NIL")")
 
         var newTapCallCount = 0
         let capturedTargetFormat = self.targetFormat
@@ -375,6 +395,7 @@ class AudioRecorder {
     private func calculateLevel(buffer: AVAudioPCMBuffer) -> Float {
         guard let channelData = buffer.floatChannelData?[0] else { return 0 }
         let frames = buffer.frameLength
+        guard frames > 0 else { return 0 }
 
         var sum: Float = 0
         for i in 0..<Int(frames) {
@@ -390,6 +411,12 @@ class AudioRecorder {
     }
 
     private func writeBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
+        resourceLock.withLock {
+            writeBufferLocked(buffer, inputFormat: inputFormat, targetFormat: targetFormat)
+        }
+    }
+
+    private func writeBufferLocked(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
         guard let audioFile else {
             // Log only first time
             if buffersWritten == 0 {
