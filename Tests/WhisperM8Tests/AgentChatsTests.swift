@@ -1628,6 +1628,13 @@ final class AgentChatsTests: XCTestCase {
         for expected in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"] {
             XCTAssertTrue(fallback.contains(expected), "fallbackPath muss \(expected) enthalten")
         }
+        // Regression: der native Claude-Code-Installer legt das Binary unter
+        // ~/.local/bin ab — dieser Pfad landet nur via .zshrc im PATH und
+        // fehlt deshalb in der nicht-interaktiven Login-Shell.
+        XCTAssertTrue(
+            fallback.contains("\(NSHomeDirectory())/.local/bin"),
+            "fallbackPath muss ~/.local/bin enthalten (nativer Claude-Installer)"
+        )
     }
 
     func testTerminalShortcutControlCombosAreNotIntercepted() {

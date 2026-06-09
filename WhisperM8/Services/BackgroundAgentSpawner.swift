@@ -249,7 +249,10 @@ struct DefaultProcessRunner: ProcessRunner {
             // setzen `NO_COLOR=1` als Industrie-Standard-Signal (no-color.org),
             // damit Claude clean printet — der Parser-Fallback `stripAnsiEscapes`
             // bleibt als Sicherheitsnetz drin.
-            var env = ProcessInfo.processInfo.environment
+            // Korrigierter PATH (LoginShellEnvironment), damit Claude intern
+            // gespawnte Tools (git, Hooks, ...) gefunden werden — das rohe
+            // launchd-Env der GUI-App hat nur die System-Pfade.
+            var env = LoginShellEnvironment.shared.processEnvironment()
             env["NO_COLOR"] = "1"
             env["CLICOLOR"] = "0"
             process.environment = env

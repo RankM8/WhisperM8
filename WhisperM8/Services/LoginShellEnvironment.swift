@@ -23,9 +23,17 @@ final class LoginShellEnvironment: @unchecked Sendable {
     static let shared = LoginShellEnvironment()
 
     /// Konservativer Fallback-PATH — Reihenfolge bewusst:
-    /// Homebrew vor System-Pfaden, damit User-installierte Tools (git, gh, ...)
-    /// gegenüber der oft veralteten System-Variante gewinnen.
+    /// User-lokale Verzeichnisse vor Homebrew vor System-Pfaden, damit
+    /// User-installierte Tools (claude, git, gh, ...) gegenüber der oft
+    /// veralteten System-Variante gewinnen.
+    ///
+    /// `~/.local/bin` ist wichtig: der native Claude-Code-Installer legt
+    /// das Binary dort ab, und der Pfad landet typischerweise nur via
+    /// `.zshrc` im PATH — die wird von der nicht-interaktiven Login-Shell
+    /// (`zsh -l -c`) aber nicht gesourct.
     static let fallbackPath: String = [
+        "\(NSHomeDirectory())/.local/bin",  // native Installer (Claude Code, uv, ...)
+        "\(NSHomeDirectory())/bin",
         "/opt/homebrew/bin",   // Apple Silicon Homebrew
         "/opt/homebrew/sbin",
         "/usr/local/bin",      // Intel-Mac Homebrew

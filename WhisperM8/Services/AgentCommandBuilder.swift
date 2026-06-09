@@ -280,7 +280,18 @@ struct AgentCommandBuilder {
             return path
         }
 
-        for directory in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] {
+        // `~/.local/bin` = nativer Claude-Code-Installer, `~/.claude/local` =
+        // Alias-Ziel von `claude install` (migrate-installer). Beide liegen
+        // außerhalb der Brew-/System-Pfade und fehlen im launchd-PATH.
+        let fallbackDirectories = [
+            "\(NSHomeDirectory())/.local/bin",
+            "\(NSHomeDirectory())/.claude/local",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin"
+        ]
+        for directory in fallbackDirectories {
             let path = "\(directory)/\(command)"
             if FileManager.default.isExecutableFile(atPath: path) {
                 AgentCommandPathCache.shared.store(path, for: command)
@@ -297,6 +308,10 @@ struct AgentCommandBuilder {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         process.arguments = [command]
+        // Ohne korrigiertes Env sucht `which` nur im minimalen launchd-PATH
+        // der GUI-App und findet user-installierte CLIs (claude unter
+        // ~/.local/bin, mise-shims, ...) nicht.
+        process.environment = LoginShellEnvironment.shared.processEnvironment()
         let output = Pipe()
         process.standardOutput = output
         process.standardError = Pipe()
