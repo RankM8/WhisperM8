@@ -134,6 +134,23 @@ final class AppState {
         recordingCoordinator.clearContextBundle()
     }
 
+    /// Stoppt alle laufenden Vordergrund-Agent-Chats auf einmal: terminiert
+    /// jedes lebende PTY (graceful Ctrl+C → Kill) und markiert die zugehörigen
+    /// Sessions als `.closed`, damit sie aus der "läuft"-Ansicht verschwinden,
+    /// aber relaunchbar in der Sidebar bleiben. Background-Daemon-Jobs
+    /// (`claude --bg`) haben kein PTY und werden bewusst nicht angefasst.
+    /// Gibt die Anzahl gestoppter Sessions zurück.
+    @discardableResult
+    func stopAllForegroundSessions() -> Int {
+        let stoppedIDs = AgentTerminalRegistry.shared.terminateAll()
+        guard !stoppedIDs.isEmpty else { return 0 }
+        let store = AgentSessionStore()
+        for id in stoppedIDs {
+            try? store.updateSession(id: id) { $0.status = .closed }
+        }
+        return stoppedIDs.count
+    }
+
     var hasAccessibilityPermission: Bool {
         recordingCoordinator.hasAccessibilityPermission
     }

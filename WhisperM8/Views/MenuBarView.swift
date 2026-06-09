@@ -4,6 +4,9 @@ import KeyboardShortcuts
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     @State private var deviceManager = AudioDeviceManager.shared
+    /// Geteilte Registry der laufenden Vordergrund-PTYs — liefert die Anzahl
+    /// für den "Stop all"-Eintrag und triggert dessen Sichtbarkeit.
+    @ObservedObject private var terminalRegistry = AgentTerminalRegistry.shared
 
     var body: some View {
         Group {
@@ -95,6 +98,14 @@ struct MenuBarView: View {
 
         Button("Agent Chats...") {
             WindowRequestCenter.shared.request(.agentChats)
+        }
+
+        let runningCount = terminalRegistry.runningControllers.count
+        if runningCount > 0 {
+            Divider()
+            Button(runningCount == 1 ? "Stop 1 running chat" : "Stop \(runningCount) running chats") {
+                appState.stopAllForegroundSessions()
+            }
         }
 
         Divider()

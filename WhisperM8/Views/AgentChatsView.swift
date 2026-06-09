@@ -13,7 +13,7 @@ struct AgentChatsView: View {
     @State private var indexRefreshTask: Task<Void, Never>?
     @State private var lastIndexStats: [AgentSessionIndexStats] = []
     @State private var sessionActionRequest: AgentSessionActionRequest?
-    @StateObject private var terminalRegistry = AgentTerminalRegistry()
+    @StateObject private var terminalRegistry = AgentTerminalRegistry.shared
     /// Live-Status-Store für die Sidebar-Indikatoren. Wird vom
     /// `AgentSessionRuntimeWatcher` gepflegt, ephemeral (nicht persistiert).
     @StateObject private var runtimeStatusStore = AgentSessionRuntimeStatusStore()

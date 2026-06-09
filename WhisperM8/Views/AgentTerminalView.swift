@@ -236,6 +236,11 @@ final class TerminalScrollGuard {
 
 @MainActor
 final class AgentTerminalRegistry: ObservableObject {
+    /// Geteilte Instanz, damit View-Bäume außerhalb von `AgentChatsView`
+    /// (insbesondere der MenuBarExtra) dieselben laufenden Vordergrund-PTYs
+    /// erreichen — Voraussetzung für ein globales "Stop all".
+    static let shared = AgentTerminalRegistry()
+
     @Published private var controllers: [UUID: AgentTerminalController] = [:]
 
     var activeSessionIDs: Set<UUID> {
@@ -277,6 +282,19 @@ final class AgentTerminalRegistry: ObservableObject {
     func terminate(sessionID: UUID) {
         controllers[sessionID]?.terminate()
         controllers[sessionID] = nil
+    }
+
+    /// Terminiert alle laufenden Vordergrund-PTYs (je Controller graceful:
+    /// 2× Ctrl+C → Kill) und gibt die betroffenen Session-IDs zurück. Iteriert
+    /// über einen Snapshot der IDs, damit das Mutieren von `controllers`
+    /// während des Loops sicher ist.
+    @discardableResult
+    func terminateAll() -> [UUID] {
+        let ids = runningControllers.map(\.sessionID)
+        for id in ids {
+            terminate(sessionID: id)
+        }
+        return ids
     }
 }
 
