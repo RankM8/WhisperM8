@@ -4,74 +4,93 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-WhisperM8 is a native macOS menu bar application for speech-to-text transcription using AI providers (OpenAI Whisper, Groq). Built with Swift 5.9 and SwiftUI, targeting macOS 14+ (Sonoma).
+WhisperM8 is a native macOS app (Swift 5.9, SwiftUI, macOS 14+, pure SwiftPM — no .xcodeproj) with two halves:
+
+1. **Dictation** — hotkey-driven speech-to-text via OpenAI Whisper or Groq, with optional Codex-CLI post-processing and configurable output modes (rewrite, email, Slack, …).
+2. **Agent Chats** — a session manager for Claude Code and Codex CLI: foreground PTY terminals, background agents (`claude --bg`), project organization, live status tracking, and transcript browsing.
+
+Code comments are largely written in German — match that style when editing existing files.
 
 ## Build Commands
 
 ```bash
-make dev          # Recommended: clean build, install to /Applications, launch
+make dev          # Recommended: build, in-place sync to /Applications (preserves TCC permissions), launch
+make run          # Quick debug build, runs from project dir (separate TCC entry)
 make build        # Release build only (creates local .app)
-make run          # Quick debug build for rapid iteration
-make install      # Build + install to /Applications
-make dmg          # Create distributable DMG
-make clean        # Clean build artifacts
-make clean-apps   # Remove all app bundles (fixes Spotlight duplicates)
-make clean-install # Full reset (removes all app data + reinstall)
+make clean-install # Full reset (removes all app data + reinstall) — use to test onboarding/migrations
 make kill         # Kill running instances
+make dmg          # Create distributable DMG
 ```
 
-For development, always use `make dev` to avoid duplicate app versions in Spotlight.
+`make dev` uses `rsync` into the existing bundle on purpose: deleting and recopying the bundle would make macOS TCC revoke mic/accessibility/screen permissions. Run `scripts/setup-codesign-cert.sh` once for a persistent local signing identity (otherwise ad-hoc signing re-prompts TCC on every rebuild).
+
+### Tests
+
+```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+swift test                                    # full suite
+swift test --filter AgentChatsTests           # one test class
+swift test --filter testLoginShellEnvironment # by test-name substring
+```
+
+`DEVELOPER_DIR` must point at the Xcode toolchain (SwiftUI macros); the Makefile sets it automatically, plain `swift build`/`swift test` does not.
+
+Test convention: dependency injection via plain closures and small protocols (e.g. `commandResolver: { _ in "/path" }`, `ProcessRunner` spies) — no DI framework. Most coverage lives in `Tests/WhisperM8Tests/AgentChatsTests.swift`.
 
 ## Debugging
 
-View live logs:
 ```bash
 log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 ```
 
 ## Architecture
 
-The app follows a unidirectional data flow pattern:
+### App shell
+
+Regular Dock app (`LSUIElement=false`) plus a `MenuBarExtra` for recording toggle and quick actions. Scenes in `WhisperM8App.swift`: Agent Chats main window, Settings, Onboarding. Closing the last window does not quit (menu bar extra stays alive). `WindowRequestCenter` routes window-open requests between scenes (e.g. menu bar → Agent Chats).
+
+### Dictation pipeline
 
 ```
-Hotkey Event → AppState → AudioRecorder/TranscriptionService → UI Update
+Hotkey (KeyboardShortcuts) → AppState/RecordingCoordinator → AudioRecorder (AVAudioEngine, M4A 16kHz mono)
+  → context capture (SelectedContextService, screenshots, active agent-chat tail → TranscriptContextBundle)
+  → TranscriptionService (OpenAI/Groq)
+  → optional PostProcessingService (spawns codex CLI with OutputMode + template)
+  → clipboard / auto-paste (PasteService, CGEvent) or routed into an Agent Chat
 ```
 
-### Key Components
+- `Models/AppState.swift` — central `@Observable` state; recording lifecycle, clipboard, active-agent-chat ref
+- `Windows/RecordingPanel.swift` — non-activating NSPanel overlay
+- `Services/PromptPackageBuilder.swift` — assembles transcript + context into the final prompt
+- `Models/OutputMode.swift` / `Services/OutputModeStore.swift` — user-defined output targets; modes can override Codex model/runtime settings
+- `Services/KeychainManager.swift` — API keys
 
-- **WhisperM8App.swift** - Entry point, sets up MenuBarExtra, Settings/Onboarding windows, and global hotkey listeners
-- **Models/AppState.swift** - Central `@Observable` state managing recording lifecycle, transcription coordination, and clipboard operations
-- **Models/TranscriptionProvider.swift** - Provider/model enums with settings migration logic
-- **Services/AudioRecorder.swift** - AVAudioEngine-based recording with real-time audio levels, outputs M4A (16kHz mono AAC)
-- **Services/TranscriptionService.swift** - Protocol-based API clients for OpenAI and Groq transcription endpoints
-- **Services/AudioDuckingManager.swift** - Reduces system volume during recording (see [docs/AUDIO_DUCKING.md](docs/AUDIO_DUCKING.md))
-- **Windows/RecordingPanel.swift** - Non-activating NSPanel overlay with OverlayController managing lifecycle
-- **Services/KeychainManager.swift** - Secure API key storage using macOS Keychain
+### Agent Chats subsystem
 
-### Recording Flow
+The other half of the codebase. Flow: **discovery → persistence → runtime tracking → UI**.
 
-1. Hotkey press → `AppState.startRecording()` → AudioRecorder starts, overlay panel appears
-2. Audio captured via AVAudioEngine tap with RMS level calculation
-3. Hotkey release → `AppState.stopRecording()` → Recording stops, audio sent to transcription API
-4. Result copied to clipboard, optionally auto-pasted via CGEvent to previously active app
+- **Persistence**: `AgentWorkspaceRepository` (projects + sessions, atomic JSON writes) behind the `AgentSessionStore` facade. UI state (open tabs, selection) is a separate sidecar so UI churn never invalidates session data.
+- **Discovery/Indexing**: `AgentScanCoordinator` (singleton, scan on launch/foreground, 30s cooldown) drives `AgentSessionIndexer`, which parses external session JSONL from `~/.claude/projects/<encoded-cwd>/*.jsonl` and `~/.codex/sessions/YYYY/MM/DD/*.jsonl` (mtime+size cache).
+- **Runtime status**: `AgentSessionRuntimeWatcher` polls transcript files (~1.5s) and derives working/awaitingInput/idle; feeds the ephemeral `AgentSessionRuntimeStatusStore` for sidebar indicators and triggers auto-naming (`AgentSessionAutoNamer`).
+- **Foreground chats**: SwiftTerm `LocalProcessTerminalView` PTYs, managed by `AgentTerminalRegistry` (in `Views/AgentTerminalView.swift`). `AgentCommandBuilder` builds argv (claude/codex, resume vs. new session, keyboard profile per TUI type).
+- **Background agents**: spawned via `claude --bg` (`BackgroundAgentSpawner`, parses the short ID from stdout), hosted by the Claude supervisor daemon, attached in a PTY via `claude attach <short-id>`. `SupervisorJobReader` reads `~/.claude/jobs/<short-id>/state.json`; `BackgroundAgentLifecycle` wraps logs/stop/respawn/rm.
+- **Hook bridge** (event-driven, no polling): `ClaudeHookSettingsBuilder` writes a settings JSON with SessionStart/SessionEnd/Notification hooks that append to an event file; launched via `claude --settings <path>`. `ClaudeHookBridge` watches that file with `DispatchSourceFileSystemObject` — this is how WhisperM8 binds external session IDs and detects "needs input".
+- **Transcripts**: `ClaudeTranscriptReader` / `CodexTranscriptReader` parse the provider JSONL into the unified `AgentChatTranscript` model (streamed line-by-line; files can be >50 MB).
 
-### App activation policy
+Key persisted paths: `~/Library/Application Support/WhisperM8/AgentSessions.json` (workspace), `agent-ui-state.json`, `agent-index-cache.json`. Everything under `~/.claude/` and `~/.codex/` is external and read-only (except hook settings files WhisperM8 generates).
 
-WhisperM8 ships as a regular Dock app (`LSUIElement=false`). It still has a `MenuBarExtra` for the recording toggle and quick actions, but the main window (`Agent Chats`) lives in the Dock so it can be pinned, fullscreened, and Cmd+Tab-switched like any other macOS app. `applicationShouldTerminateAfterLastWindowClosed` returns `false` so closing the last window keeps the menu bar extra alive (Cmd+Q still quits explicitly).
+### Subprocess environment (important gotcha)
 
-## Dependencies
+GUI apps get a minimal launchd `PATH`. All subprocess spawning must go through:
 
-Managed via Swift Package Manager (Package.swift):
-- **KeyboardShortcuts** (1.16.1) - Global hotkey detection
-- **Defaults** (8.2.0) - Type-safe UserDefaults
-- **LaunchAtLogin-Modern** (1.1.0) - Launch at startup
-- **ISSoundAdditions** (2.0.0) - System volume control for audio ducking
+- `Services/LoginShellEnvironment.swift` — queries `zsh -l -c 'echo $PATH'` once, merges with a fallback list (includes `~/.local/bin`, where the native Claude Code installer lives), and supplies TERM/COLORTERM so TUIs render in color.
+- `AgentCommandBuilder.commandPath(_:)` — central binary resolution (`which` with corrected env + fallback dirs).
 
-## Build Environment
+Never spawn `claude`/`codex`/shell tools with the raw `ProcessInfo` environment — they won't find user-installed binaries.
 
-Requires Xcode toolchain for SwiftUI Preview macro support:
-```bash
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-```
+## Dependencies (Package.swift)
 
-The Makefile sets this automatically.
+- **KeyboardShortcuts** (exact 1.16.1) — global hotkeys
+- **Defaults** — type-safe UserDefaults
+- **LaunchAtLogin-Modern** — launch at startup
+- **SwiftTerm** — PTY terminal views for Agent Chats
