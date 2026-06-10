@@ -500,8 +500,10 @@ final class AudioDuckingManagerTests: XCTestCase {
             // BT-Stack schiebt Volume hoch — KEIN Routing-Event.
             world.setVolumeExternally(deviceID: 1, value: 0.63)
 
-            // Warten bis Enforce-Loop mindestens 2x getickt hat.
-            try? await Task.sleep(for: .milliseconds(100))
+            // Warten bis der Enforce-Loop re-duckt (Deadline-Polling statt
+            // fixem 100-ms-Sleep — auf geteilten CI-Runnern verrutschen die
+            // Timer-Ticks; im zweiten CI-Lauf genau hier geflaked).
+            await waitUntil { abs(world.volume(1) - 0.2) < 0.001 }
 
             XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001,
                            "Enforce loop must re-duck after external volume rise")
