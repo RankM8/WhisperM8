@@ -17,6 +17,20 @@ final class AgentSessionRuntimeStatusStore: ObservableObject {
         statuses[sessionID]
     }
 
+    /// Per-Item-Publisher für die Sidebar-Rows: emittiert nur Änderungen
+    /// DIESER Session (removeDuplicates filtert fremde Ticks). @Published
+    /// liefert beim Subscriben synchron den aktuellen Wert.
+    ///
+    /// Bewusst Combine statt einer @Observable-Migration des Stores:
+    /// Observation trackt nur property-genau — `statuses` ist EINE Property,
+    /// jede Mutation würde weiterhin alle lesenden Rows invalidieren.
+    func statusPublisher(for sessionID: UUID) -> AnyPublisher<AgentSessionRuntimeStatus?, Never> {
+        $statuses
+            .map { $0[sessionID] }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
+
     func setStatus(_ status: AgentSessionRuntimeStatus, for sessionID: UUID) {
         if statuses[sessionID] == status { return }
         // Signpost-EVENT (kein Intervall): zählt die tatsächlichen

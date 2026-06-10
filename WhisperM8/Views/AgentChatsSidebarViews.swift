@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct ProjectChatGroup: View {
@@ -15,9 +16,13 @@ struct ProjectChatGroup: View {
     var onAutoNameRequest: (AgentChatSession) -> Void
     var onRename: (UUID, String) -> Void
     var onSetColor: (UUID, String?) -> Void
-    var isRunning: (UUID) -> Bool
-    var runtimeStatus: (UUID) -> AgentSessionRuntimeStatus?
-    var isAutoRenaming: (UUID) -> Bool
+    // P4: Wert-Daten statt Closures — Closures werden pro Parent-Render neu
+    // gebaut und verhindern jedes Memoizing; Sets + die stabile
+    // Store-Referenz lassen die Rows per Equatable skippen.
+    let runningSessionIDs: Set<UUID>
+    let statusStore: AgentSessionRuntimeStatusStore
+    let awaitingInputSessionIDs: Set<UUID>
+    let autoRenamingSessionIDs: Set<UUID>
     var onRenameProjectRequest: (AgentProject) -> Void
     var onSetProjectColor: (UUID, String) -> Void
     var onChooseProjectIcon: (AgentProject) -> Void
@@ -38,14 +43,26 @@ struct ProjectChatGroup: View {
         selectedProjectID == project.id
     }
 
+    /// Initiales Row-Limit pro Projekt; die "N weitere anzeigen"-Row hebt es
+    /// an. Lebt pro Projekt-Identity (ForEach-id) und resettet bewusst, wenn
+    /// das Projekt den Suchfilter verlässt oder die Sidebar getoggelt wird
+    /// (View-Identity weg) — akzeptiertes Verhalten.
+    static let defaultVisibleSessionLimit = 20
+    @State private var visibleSessionLimit = ProjectChatGroup.defaultVisibleSessionLimit
+
     var body: some View {
+        let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.projectGroup")
         VStack(alignment: .leading, spacing: 0) {
             groupHeader
 
             if isExpanded && !sessions.isEmpty {
+                let slice = Self.visibleSlice(of: sessions, limit: visibleSessionLimit)
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(sessions.prefix(20)) { session in
+                    ForEach(slice.visible) { session in
                         sessionRow(session)
+                    }
+                    if slice.hiddenCount > 0 {
+                        showMoreRow(hiddenCount: slice.hiddenCount)
                     }
                     Color.clear
                         .frame(height: 8)
@@ -60,17 +77,56 @@ struct ProjectChatGroup: View {
         }
     }
 
+    /// Pure Slice-Logik — testbar. Ersetzt die frühere stille prefix(20)-
+    /// Kappung, bei der Sessions ab Platz 21 kommentarlos unsichtbar waren.
+    static func visibleSlice(
+        of sessions: [AgentChatSession],
+        limit: Int
+    ) -> (visible: ArraySlice<AgentChatSession>, hiddenCount: Int) {
+        let visible = sessions.prefix(max(0, limit))
+        return (visible, sessions.count - visible.count)
+    }
+
+    /// Bewusst KEINE Drag/Drop-Modifier an dieser Row. Der Container bleibt
+    /// nicht-lazy (LazyVStack + .draggable = Mai-2026-Freeze, Fix 60ca683) —
+    /// das initiale Limit hält die Row-Anzahl klein, damit non-lazy
+    /// bezahlbar bleibt.
+    private func showMoreRow(hiddenCount: Int) -> some View {
+        Button {
+            visibleSessionLimit += 50
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.down.circle")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("\(hiddenCount) weitere anzeigen")
+                    .font(.system(size: 11, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(AgentTheme.textTertiary)
+            .padding(.leading, 28)
+            .padding(.trailing, 8)
+            .frame(minHeight: 24, maxHeight: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Weitere Sessions dieses Projekts einblenden")
+    }
+
     @ViewBuilder
     private func sessionRow(_ session: AgentChatSession) -> some View {
         SessionListButton(
             session: session,
             isSelected: selectedSessionID == session.id,
-            isRunning: isRunning(session.id),
-            runtimeStatus: runtimeStatus(session.id),
-            isAutoRenaming: isAutoRenaming(session.id),
+            isRunning: runningSessionIDs.contains(session.id),
+            statusStore: statusStore,
+            isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
+            isAutoRenaming: autoRenamingSessionIDs.contains(session.id),
             onSelect: { onSelectSession(session.id) },
             onClose: { onCloseSession(session) }
         )
+        // .equatable() VOR den Drag-Modifiern — die Modifier-Kette dahinter
+        // bleibt byte-identisch zum reaktivierten Drag&Drop (7e84b7c).
+        .equatable()
         .sidebarDraggable(
             DraggableSession(sessionID: session.id, sourceProjectID: project.id),
             enabled: isDragEnabled
@@ -293,7 +349,15 @@ struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
     let isRunning: Bool
-    let runtimeStatus: AgentSessionRuntimeStatus?
+    /// Stabile Store-Referenz — bewusst KEIN @ObservedObject: Die Row
+    /// subscribt per `onReceive` nur auf den Status IHRER Session
+    /// (statusPublisher), statt bei jedem Tick irgendeiner Session neu zu
+    /// rendern.
+    let statusStore: AgentSessionRuntimeStatusStore
+    /// "Needs Input" aus Notification-Hooks — übersteuert den
+    /// Watcher-Status, gerade bei Background-Sessions ist die JSONL nicht
+    /// immer aussagekräftig.
+    let isAwaitingInput: Bool
     /// `true` waehrend der AutoNamer fuer diese Session einen
     /// `claude -p`-Subprocess laufen hat. UI zeigt Sparkles-Pulse statt
     /// des normalen Status-Dots.
@@ -302,6 +366,9 @@ struct SessionListButton: View {
     var onClose: () -> Void
 
     @State private var isHovered = false
+    /// Live-Status via Per-Item-Publisher; umgeht den Equatable-Skip korrekt
+    /// (Updates kommen über @State, nicht über Parent-Re-Render).
+    @State private var liveStatus: AgentSessionRuntimeStatus?
 
     private static let connectorX: CGFloat = 18
 
@@ -311,6 +378,7 @@ struct SessionListButton: View {
     }
 
     var body: some View {
+        let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.sessionRow")
         Button(action: onSelect) {
             ZStack(alignment: .leading) {
                 Rectangle()
@@ -364,6 +432,7 @@ struct SessionListButton: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
+        .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
     }
 
     @ViewBuilder
@@ -426,7 +495,8 @@ struct SessionListButton: View {
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
-        if let runtimeStatus { return runtimeStatus }
+        if isAwaitingInput { return .awaitingInput }
+        if let liveStatus { return liveStatus }
         return isRunning ? .working : nil
     }
 
@@ -454,6 +524,22 @@ struct SessionListButton: View {
                     .stroke(color.opacity(0.30), lineWidth: 0.5)
             )
             .fixedSize()
+    }
+}
+
+/// WICHTIG (Pflegefalle): Neue darstellungsrelevante Wert-Felder an
+/// `SessionListButton` MÜSSEN hier ergänzt werden, sonst aktualisiert die Row
+/// still nicht (`.equatable()` skippt den Body). Explizit NICHT verglichen:
+/// `statusStore` (stabile Referenz; Live-Updates laufen über
+/// onReceive+@State und umgehen den Skip korrekt) und die Action-Closures
+/// (keine Render-Inputs). Abgesichert durch SessionListButtonEquatableTests.
+extension SessionListButton: Equatable {
+    nonisolated static func == (lhs: SessionListButton, rhs: SessionListButton) -> Bool {
+        lhs.session == rhs.session
+            && lhs.isSelected == rhs.isSelected
+            && lhs.isRunning == rhs.isRunning
+            && lhs.isAwaitingInput == rhs.isAwaitingInput
+            && lhs.isAutoRenaming == rhs.isAutoRenaming
     }
 }
 

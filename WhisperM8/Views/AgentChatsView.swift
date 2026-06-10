@@ -16,7 +16,12 @@ struct AgentChatsView: View {
     @StateObject private var terminalRegistry = AgentTerminalRegistry.shared
     /// Live-Status-Store für die Sidebar-Indikatoren. Wird vom
     /// `AgentSessionRuntimeWatcher` gepflegt, ephemeral (nicht persistiert).
-    @StateObject private var runtimeStatusStore = AgentSessionRuntimeStatusStore()
+    ///
+    /// P4, WICHTIG: bewusst `@State` statt `@StateObject` — Status-Ticks
+    /// dürfen NICHT den gesamten Body invalidieren; die Rows subscriben
+    /// per-Item via `statusPublisher(for:)`. Der Body darf `.statuses`
+    /// deshalb NIE direkt lesen (sonst stale UI ohne Invalidation).
+    @State private var runtimeStatusStore = AgentSessionRuntimeStatusStore()
     /// Lazy-init in `setupRuntimeServicesIfNeeded()`, weil beide Services Refs
     /// auf Store + Closures brauchen, die wir vor `body` nicht haben.
     @State private var runtimeWatcher: AgentSessionRuntimeWatcher?
@@ -109,19 +114,9 @@ struct AgentChatsView: View {
         )
     }
 
-    private var visibleProjects: [AgentProject] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return manualProjects }
-        return manualProjects.filter { project in
-            project.name.localizedCaseInsensitiveContains(query)
-                || project.path.localizedCaseInsensitiveContains(query)
-                || sessions(for: project).contains { session in
-                    session.title.localizedCaseInsensitiveContains(query)
-                        || session.provider.displayName.localizedCaseInsensitiveContains(query)
-                        || (session.groupName?.localizedCaseInsensitiveContains(query) == true)
-                }
-        }
-    }
+    // P4: Die frühere computed-Property `visibleProjects` lebt jetzt als
+    // pure Funktion in `AgentSidebarModelBuilder` und wird in
+    // `hashboardSidebar` einmal pro Body-Eval gebunden.
 
     private var runningResourceDescriptors: [AgentResourceSessionDescriptor] {
         // Quelle: `workspace.sessions` ist `@State` — Updates triggern Re-Render der View
@@ -147,6 +142,7 @@ struct AgentChatsView: View {
     }
 
     var body: some View {
+        let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.chats")
         HStack(spacing: 0) {
             if isSidebarVisible {
                 hashboardSidebar
@@ -532,6 +528,25 @@ struct AgentChatsView: View {
             }
 
             ScrollView {
+                // P4: Sidebar-Modell EINMAL pro Body-Eval bauen (Gruppierung +
+                // Suche in einem Durchlauf) statt sessions(for:) pro Projekt
+                // neu zu filtern und zu sortieren.
+                let sessionsByProject = AgentSidebarModelBuilder.sessionsByProject(
+                    workspaceSessions: workspace.sessions,
+                    openTabIDs: openTabIDs,
+                    selectedSessionID: selectedSessionID
+                )
+                let visibleProjects = AgentSidebarModelBuilder.visibleProjects(
+                    manualProjects: manualProjects,
+                    sessionsByProject: sessionsByProject,
+                    query: searchText
+                )
+                // isRunning-Flips published die Registry nicht selbst; frisch
+                // wird das Set bei jedem Body-Eval (Registry-Inserts/Removes
+                // sind @Published und triggern den). Für Live-Status zählt
+                // ohnehin `liveStatus` in der Row — isRunning ist nur der
+                // Fallback, solange der Watcher noch keinen Status hat.
+                let runningSessionIDs = terminalRegistry.activeSessionIDs
                 VStack(alignment: .leading, spacing: 8) {
                     sidebarCommandRows
                         .padding(.horizontal, 8)
@@ -544,7 +559,7 @@ struct AgentChatsView: View {
                     ForEach(visibleProjects) { project in
                         ProjectChatGroup(
                             project: project,
-                            sessions: sessions(for: project),
+                            sessions: sessionsByProject[project.id] ?? [],
                             isExpanded: expandedProjectIDs.contains(project.id) || !searchText.isEmpty,
                             selectedProjectID: selectedProjectID,
                             selectedSessionID: selectedSessionID,
@@ -571,18 +586,10 @@ struct AgentChatsView: View {
                             onAutoNameRequest: { forceAutoNameSession($0) },
                             onRename: renameSession,
                             onSetColor: setSessionColor,
-                            isRunning: { id in terminalRegistry.controller(for: id)?.isRunning == true },
-                            runtimeStatus: { id in
-                                // "Needs input" aus Notification-Hooks
-                                // ueberlagert den Runtime-Watcher-Status —
-                                // gerade bei Background-Sessions ist die
-                                // JSONL nicht immer aussagekraeftig.
-                                if awaitingInputSessionIDs.contains(id) {
-                                    return .awaitingInput
-                                }
-                                return runtimeStatusStore.statuses[id]
-                            },
-                            isAutoRenaming: { id in autoRenamingSessionIDs.contains(id) },
+                            runningSessionIDs: runningSessionIDs,
+                            statusStore: runtimeStatusStore,
+                            awaitingInputSessionIDs: awaitingInputSessionIDs,
+                            autoRenamingSessionIDs: autoRenamingSessionIDs,
                             onRenameProjectRequest: { beginRenameProject($0) },
                             onSetProjectColor: setProjectColor,
                             onChooseProjectIcon: { chooseProjectIcon($0) },
