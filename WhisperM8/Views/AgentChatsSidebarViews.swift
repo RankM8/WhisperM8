@@ -30,6 +30,10 @@ struct ProjectChatGroup: View {
     @State private var isSessionDragOver = false
     @State private var isProjectDragOver = false
 
+    /// Einmal pro View-Init gelesen statt pro Render — das Flag ist ein
+    /// Escape-Hatch und aendert sich nur via `defaults write` + App-Neustart.
+    private let isDragEnabled = AppPreferences.shared.isAgentSidebarDragEnabled
+
     private var isSelected: Bool {
         selectedProjectID == project.id
     }
@@ -67,6 +71,12 @@ struct ProjectChatGroup: View {
             onSelect: { onSelectSession(session.id) },
             onClose: { onCloseSession(session) }
         )
+        .sidebarDraggable(
+            DraggableSession(sessionID: session.id, sourceProjectID: project.id),
+            enabled: isDragEnabled
+        ) {
+            sessionDragPreview(session)
+        }
         .dropDestination(for: DraggableSession.self) { items, _ in
             guard let dropped = items.first else { return false }
             onSessionDrop(dropped, session.id, project.id)
@@ -172,6 +182,9 @@ struct ProjectChatGroup: View {
         }
         .buttonStyle(.plain)
         .onHover { isHeaderHovered = $0 }
+        .sidebarDraggable(DraggableProject(projectID: project.id), enabled: isDragEnabled) {
+            projectDragPreview
+        }
         .dropDestination(for: DraggableProject.self) { items, _ in
             guard let dropped = items.first, dropped.projectID != project.id else { return false }
             onProjectDrop(dropped, project.id)
@@ -220,6 +233,59 @@ struct ProjectChatGroup: View {
         if isSelected { return AgentTheme.selection }
         if isHeaderHovered { return AgentTheme.hover }
         return Color.clear
+    }
+
+    /// Leichtgewichtiges Drag-Preview statt System-Snapshot der Live-Row.
+    /// Die Rows haben Animationen (`contentTransition`, Hover-States) — beim
+    /// Mai-2026-Haenger war teures Preview-Rendering ein Verdaechtiger, daher
+    /// bekommen Drags hier bewusst eine statische, billige Ansicht.
+    private func sessionDragPreview(_ session: AgentChatSession) -> some View {
+        HStack(spacing: 6) {
+            ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textSecondary)
+            Text(session.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AgentTheme.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(AgentTheme.sidebar, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(AgentTheme.border, lineWidth: 1))
+    }
+
+    private var projectDragPreview: some View {
+        HStack(spacing: 6) {
+            ProjectAvatar(project: project)
+            Text(project.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AgentTheme.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(AgentTheme.sidebar, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(AgentTheme.border, lineWidth: 1))
+    }
+}
+
+extension View {
+    /// Haengt `.draggable(payload, preview:)` nur an, wenn das Escape-Hatch
+    /// `agentSidebarDragEnabled` nicht gezogen wurde (siehe `AppPreferences`).
+    /// Hintergrund: `.draggable` + `LazyVStack` hat im Mai 2026 die ganze App
+    /// eingefroren (gefixt in 60ca683). Der Sidebar-Container ist seitdem ein
+    /// nicht-lazy `VStack` — sollte der Haenger trotzdem zurueckkommen, laesst
+    /// sich das Feature per `defaults write` ohne Rebuild deaktivieren.
+    @ViewBuilder
+    func sidebarDraggable<Payload: Transferable, Preview: View>(
+        _ payload: Payload,
+        enabled: Bool,
+        @ViewBuilder preview: () -> Preview
+    ) -> some View {
+        if enabled {
+            self.draggable(payload, preview: preview)
+        } else {
+            self
+        }
     }
 }
 

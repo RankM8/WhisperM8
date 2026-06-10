@@ -210,6 +210,16 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeExtraArguments) }
     }
 
+    /// Escape-Hatch für Drag & Drop in der Agent-Chats-Sidebar. Der Mai-2026
+    /// Scroll-Haenger (`.draggable` + `LazyVStack`, gefixt in 60ca683) ist
+    /// durch den nicht-lazy `VStack` behoben — falls er in anderer Form
+    /// wieder auftaucht, laesst sich das Drag-Feature ohne Rebuild abschalten:
+    /// `defaults write com.whisperm8.app agentSidebarDragEnabled -bool NO`
+    var isAgentSidebarDragEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentSidebarDragEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentSidebarDragEnabled) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -287,6 +297,7 @@ enum PreferenceKeys {
     static let codexExtraArguments = "codexExtraArguments"
     static let claudeExtraArguments = "claudeExtraArguments"
     static let appearanceOverride = "appearanceOverride"
+    static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
 }
 
 private typealias Keys = PreferenceKeys

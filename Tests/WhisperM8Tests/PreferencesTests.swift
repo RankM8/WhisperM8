@@ -23,6 +23,14 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.codexReasoningEffortRaw, CodexReasoningEffort.defaultEffort.rawValue)
             XCTAssertEqual(preferences.codexServiceTierRaw, CodexServiceTier.defaultTier.rawValue)
             XCTAssertEqual(preferences.codexVisualInputModeRaw, CodexVisualInputMode.defaultMode.rawValue)
+            XCTAssertTrue(preferences.isAgentSidebarDragEnabled)
+        }
+    }
+
+    func testAgentSidebarDragEscapeHatchPersists() {
+        withIsolatedPreferences { preferences in
+            preferences.isAgentSidebarDragEnabled = false
+            XCTAssertFalse(preferences.isAgentSidebarDragEnabled)
         }
     }
 
