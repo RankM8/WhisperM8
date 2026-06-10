@@ -52,14 +52,16 @@ struct AgentSessionStore {
     /// Atomisches Schreiben des UI-States. Wird vom AgentChatsView nach
     /// jeder State-Aenderung (debounced) aufgerufen.
     func saveUIState(_ state: AgentUIState) throws {
-        try FileManager.default.createDirectory(
-            at: uiStateFileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(state)
-        try data.write(to: uiStateFileURL, options: .atomic)
+        try PerfBudgets.saveUIState.withInterval {
+            try FileManager.default.createDirectory(
+                at: uiStateFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(state)
+            try data.write(to: uiStateFileURL, options: .atomic)
+        }
     }
 
     func upsertProject(path: String, name: String? = nil, color: String? = nil, createdManually: Bool = false) throws -> AgentProject {
@@ -728,17 +730,21 @@ struct AgentSessionStore {
     }
 
     private func mutateWorkspace<Result>(_ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
-        var workspace = loadWorkspace()
-        let result = try mutate(&workspace)
-        try saveWorkspace(workspace)
-        return result
+        try PerfBudgets.storeMutate.withInterval {
+            var workspace = loadWorkspace()
+            let result = try mutate(&workspace)
+            try saveWorkspace(workspace)
+            return result
+        }
     }
 
     private func mutateWorkspaceIfChanged(_ mutate: (inout AgentWorkspace) throws -> Bool) throws {
-        var workspace = loadWorkspace()
-        let changed = try mutate(&workspace)
-        if changed {
-            try saveWorkspace(workspace)
+        try PerfBudgets.storeMutate.withInterval {
+            var workspace = loadWorkspace()
+            let changed = try mutate(&workspace)
+            if changed {
+                try saveWorkspace(workspace)
+            }
         }
     }
 }

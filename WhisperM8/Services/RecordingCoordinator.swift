@@ -78,6 +78,11 @@ final class RecordingCoordinator {
 
     func startRecording() async {
         guard let appState, !appState.isRecording, !appState.isTranscribing, !isProcessing else { return }
+        // Budget 400 ms für Hotkey → Aufnahme läuft. Beim allerersten Start
+        // (Mikrofon-Permission-Dialog) reisst das Budget bewusst — genau das
+        // macht die Violation-Logzeile sichtbar.
+        let startToken = PerfBudgets.recordingStart.begin()
+        defer { PerfBudgets.recordingStart.end(startToken) }
 
         isProcessing = true
         recordingTimer.stop()
@@ -85,7 +90,9 @@ final class RecordingCoordinator {
         contextSourceApp = NSWorkspace.shared.frontmostApplication
 
         do {
-            let selectedContext = await selectedContextService.capture(from: contextSourceApp)
+            let selectedContext = await PerfBudgets.contextCapture.withInterval {
+                await selectedContextService.capture(from: contextSourceApp)
+            }
             // Auto-Inject des Agent-Chat-Refs nur, wenn WhisperM8 selbst frontmost war
             // beim Recording-Start. Wenn der User in Cursor/VS Code/Browser arbeitet,
             // ist der Chat-Kontext irrelevant — wir wollen ihn nicht „aufzwingen".
@@ -101,8 +108,10 @@ final class RecordingCoordinator {
             // gesprochenen Prompt richtig einordnen kann. JSONL-Read kann ein
             // paar Hundert KB gross sein — wir laufen aber schon in einem
             // async-Pfad, das blockiert die UI nicht.
-            let activeAgentChatTail: String? = activeAgentChat.flatMap { ref in
-                AgentChatTailExtractor.extract(for: ref)
+            let activeAgentChatTail: String? = PerfBudgets.chatTail.withInterval {
+                activeAgentChat.flatMap { ref in
+                    AgentChatTailExtractor.extract(for: ref)
+                }
             }
 
             let sourceAppForBundle = contextSourceApp
@@ -125,8 +134,10 @@ final class RecordingCoordinator {
             // Profile-Switch angestossen und wir merken uns einen falschen "Original"-Wert.
             // Routing-Listener im Manager faengt den Switch auf das HFP-Profil
             // (eigene DeviceID auf manchen Macs) automatisch ab und duckt es ebenfalls.
-            AudioDuckingManager.shared.beginCapture()
-            try await audioRecorder.startRecording()
+            try await PerfBudgets.engineStart.withInterval {
+                AudioDuckingManager.shared.beginCapture()
+                try await audioRecorder.startRecording()
+            }
 
             recordingStartTime = Date()
             appState.isRecording = true
@@ -203,6 +214,13 @@ final class RecordingCoordinator {
             return
         }
 
+        // Misst Entry → Start der Transkription (Budget 300 ms). Explizites
+        // End vor runCancelableTranscription; das Safety-defer fängt die
+        // Early-Return-Pfade (zu kurze Aufnahme, fehlende Audio-Datei) —
+        // `end` ist idempotent.
+        let stopToken = PerfBudgets.recordingStop.begin()
+        defer { PerfBudgets.recordingStop.end(stopToken) }
+
         if let recordingStartTime {
             let elapsed = Date().timeIntervalSince(recordingStartTime)
             if elapsed < 0.3 {
@@ -256,6 +274,7 @@ final class RecordingCoordinator {
         appState.lastOutputMode = frozenOutputMode
         overlayController.update(appState: appState)
 
+        PerfBudgets.recordingStop.end(stopToken)
         await runCancelableTranscription(
             audioURL: audioURL,
             audioDuration: audioDuration,

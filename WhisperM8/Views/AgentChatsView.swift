@@ -1445,6 +1445,12 @@ struct AgentChatsView: View {
     }
 
     private func loadWorkspaceFast() {
+        PerfBudgets.sidebarWorkspaceLoad.withInterval { loadWorkspaceFastBody() }
+    }
+
+    /// Vom Signpost-Wrapper getrennt, damit die bestehende
+    /// durationMs-Logzeile unverändert bleibt. Läuft auf dem MainActor!
+    private func loadWorkspaceFastBody() {
         let startedAt = Date()
         do {
             try store.markStaleRunningSessionsClosed(excluding: terminalRegistry.activeSessionIDs)
@@ -1482,16 +1488,18 @@ struct AgentChatsView: View {
                 }
             }
             let result = Task.detached(priority: .utility) {
-                let cacheStore = AgentSessionIndexCacheStore()
-                var cache = cacheStore.load()
-                let codex = CodexSessionIndexer().indexedSessionResult(cache: &cache)
-                let claude = ClaudeSessionIndexer().indexedSessionResult(cache: &cache)
-                cacheStore.save(cache)
+                try PerfBudgets.sidebarBackgroundIndex.withInterval {
+                    let cacheStore = AgentSessionIndexCacheStore()
+                    var cache = cacheStore.load()
+                    let codex = CodexSessionIndexer().indexedSessionResult(cache: &cache)
+                    let claude = ClaudeSessionIndexer().indexedSessionResult(cache: &cache)
+                    cacheStore.save(cache)
 
-                let store = AgentSessionStore()
-                try store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
-                try store.mergeIndexedSessions(codex.sessions + claude.sessions)
-                return [codex.stats, claude.stats]
+                    let store = AgentSessionStore()
+                    try store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
+                    try store.mergeIndexedSessions(codex.sessions + claude.sessions)
+                    return [codex.stats, claude.stats]
+                }
             }
 
             guard !Task.isCancelled else { return }

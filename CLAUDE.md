@@ -43,6 +43,18 @@ Test convention: dependency injection via plain closures and small protocols (e.
 log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 ```
 
+### Performance-Signposts
+
+Drei Hot-Paths sind mit `os_signpost`-Intervallen + Budgets instrumentiert
+(`Services/PerformanceSignposts.swift`): Kategorien `perf.recording`
+(Hotkey→Aufnahme 400 ms, Stop→Transkription 300 ms, Kontext-Teilschritte),
+`perf.store` (Mutation 30 ms, Load 15 ms, Save 20 ms) und `perf.sidebar`
+(Workspace-Load 50 ms, Status-Poll 100 ms, plus `sidebar.statusChanged`-Events
+= Re-Render-Trigger). Budget-Überschreitungen erscheinen als
+`perf_budget_exceeded`-Warnungen im `log stream`-Befehl oben; in Instruments
+über das os_signpost-Template auswertbar. Budgets sind Startwerte — bei
+Anpassungen `PerfBudgets` ändern.
+
 ## Architecture
 
 ### App shell

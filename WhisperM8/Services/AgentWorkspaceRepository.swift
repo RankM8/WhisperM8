@@ -8,6 +8,13 @@ struct AgentWorkspaceRepository {
     }
 
     func load(migrate: (AgentWorkspace) -> AgentWorkspace) -> AgentWorkspace {
+        PerfBudgets.storeLoad.withInterval { loadBody(migrate: migrate) }
+    }
+
+    /// Eigentlicher Load — vom Signpost-Wrapper getrennt, damit die
+    /// bestehende durationMs-Logzeile (log-stream-Schnittstelle laut
+    /// CLAUDE.md) unverändert erhalten bleibt.
+    private func loadBody(migrate: (AgentWorkspace) -> AgentWorkspace) -> AgentWorkspace {
         let startedAt = Date()
         defer {
             Logger.agentPerformance.debug("agent_store_load durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000))")
@@ -44,20 +51,22 @@ struct AgentWorkspaceRepository {
     }
 
     func save(_ workspace: AgentWorkspace) throws {
-        let startedAt = Date()
-        defer {
-            Logger.agentPerformance.debug("agent_store_save durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)")
-        }
+        try PerfBudgets.storeSave.withInterval {
+            let startedAt = Date()
+            defer {
+                Logger.agentPerformance.debug("agent_store_save durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)")
+            }
 
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(workspace)
-        try data.write(to: fileURL, options: .atomic)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(workspace)
+            try data.write(to: fileURL, options: .atomic)
+        }
     }
 
     func backup(reason: String) throws {

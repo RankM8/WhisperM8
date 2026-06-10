@@ -19,6 +19,12 @@ final class AgentSessionRuntimeStatusStore: ObservableObject {
 
     func setStatus(_ status: AgentSessionRuntimeStatus, for sessionID: UUID) {
         if statuses[sessionID] == status { return }
+        // Signpost-EVENT (kein Intervall): zählt die tatsächlichen
+        // @Published-Mutationen — also die Re-Render-Trigger der
+        // Sidebar-Rows. Soll: ein Event pro echtem Statuswechsel, null
+        // Events bei stabilem Status (in Instruments als Event-Dichte
+        // ablesbar).
+        PerfSignposts.sidebar.emitEvent("sidebar.statusChanged")
         statuses[sessionID] = status
     }
 
@@ -156,12 +162,17 @@ final class AgentSessionRuntimeWatcher {
         guard let entry = watched[sessionID],
               !pollingSessionIDs.contains(sessionID) else { return }
         pollingSessionIDs.insert(sessionID)
+        // Manuelles Token statt withInterval: Begin und End laufen über die
+        // Task-Grenze. Das End steht VOR dem `guard let self` — das Intervall
+        // muss auch dann schließen, wenn der Watcher inzwischen weg ist.
+        let pollToken = PerfBudgets.sidebarStatusPoll.begin()
 
         Task { @MainActor [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
                 Self.pollSnapshot(for: entry, now: Date())
             }.value
 
+            PerfBudgets.sidebarStatusPoll.end(pollToken)
             guard let self else { return }
             self.pollingSessionIDs.remove(sessionID)
             guard var current = self.watched[sessionID] else { return }
