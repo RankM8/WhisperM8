@@ -1,20 +1,29 @@
 import Foundation
 
 struct AgentSessionStore {
-    private let repository: AgentWorkspaceRepository
+    /// Geteilter In-Memory-Kern (P1): Alle Facade-Kopien mit derselben
+    /// fileURL teilen sich über die Registry dieselbe Store-Instanz —
+    /// Mutationen sind damit prozessweit serialisiert, Reads kommen aus dem
+    /// Speicher.
+    private let workspaceStore: AgentWorkspaceStore
     private let uiStateFileURL: URL
 
     init(fileURL: URL? = nil, uiStateFileURL: URL? = nil) {
-        self.repository = AgentWorkspaceRepository(fileURL: fileURL)
+        self.workspaceStore = AgentWorkspaceStoreRegistry.store(
+            for: fileURL ?? AgentWorkspaceRepository.defaultFileURL()
+        )
         self.uiStateFileURL = uiStateFileURL ?? Self.defaultUIStateFileURL()
     }
 
+    /// Liest den aktuellen Stand aus dem Speicher — seit P1 KEIN Disk-Read
+    /// mehr. Externe Manipulation der JSON nach dem ersten Zugriff ist damit
+    /// unsichtbar (gewollt; es gibt keine externen Schreiber).
     func loadWorkspace() -> AgentWorkspace {
-        repository.load(migrate: Self.migratedWorkspace)
+        workspaceStore.read { $0 }
     }
 
     func saveWorkspace(_ workspace: AgentWorkspace) throws {
-        try repository.save(workspace)
+        try workspaceStore.replace(workspace)
     }
 
     // MARK: - UI-State (Tab-Persistenz, Selection, Disclosure)
@@ -65,11 +74,14 @@ struct AgentSessionStore {
     }
 
     func upsertProject(path: String, name: String? = nil, color: String? = nil, createdManually: Bool = false) throws -> AgentProject {
-        try mutateWorkspace { workspace in
-            let standardizedPath = Self.canonicalProjectPath(path)
+        let standardizedPath = Self.canonicalProjectPath(path)
+        // Git-Lookup VOR der Mutation — die Closure läuft unter dem
+        // prozessweiten Store-Lock, dort darf kein Subprozess laufen.
+        let branch = Self.currentGitBranch(at: standardizedPath)
+        return try mutateWorkspace { workspace in
             if let index = workspace.projects.firstIndex(where: { $0.path == standardizedPath }) {
                 workspace.projects[index].updatedAt = Date()
-                workspace.projects[index].lastBranch = Self.currentGitBranch(at: standardizedPath)
+                workspace.projects[index].lastBranch = branch
                 if createdManually {
                     workspace.projects[index].createdManually = true
                 }
@@ -80,7 +92,7 @@ struct AgentSessionStore {
                 name: name ?? URL(fileURLWithPath: standardizedPath).lastPathComponent,
                 path: standardizedPath,
                 color: color ?? AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
-                lastBranch: Self.currentGitBranch(at: standardizedPath),
+                lastBranch: branch,
                 createdManually: createdManually ? true : nil
             )
             workspace.projects.append(project)
@@ -218,17 +230,13 @@ struct AgentSessionStore {
     /// Drag-and-Drop in der Sidebar — der UI-Layer übergibt die neue
     /// komplette Reihenfolge.
     func reorderProjects(orderedIDs: [UUID]) throws {
-        var workspace = loadWorkspace()
-        var changed = false
-        for (newIndex, projectID) in orderedIDs.enumerated() {
-            guard let idx = workspace.projects.firstIndex(where: { $0.id == projectID }) else { continue }
-            guard workspace.projects[idx].sortIndex != newIndex else { continue }
-            workspace.projects[idx].sortIndex = newIndex
-            workspace.projects[idx].updatedAt = Date()
-            changed = true
-        }
-        if changed {
-            try saveWorkspace(workspace)
+        try mutateWorkspace { workspace in
+            for (newIndex, projectID) in orderedIDs.enumerated() {
+                guard let idx = workspace.projects.firstIndex(where: { $0.id == projectID }) else { continue }
+                guard workspace.projects[idx].sortIndex != newIndex else { continue }
+                workspace.projects[idx].sortIndex = newIndex
+                workspace.projects[idx].updatedAt = Date()
+            }
         }
     }
 
@@ -236,20 +244,16 @@ struct AgentSessionStore {
     /// Projekt anhand der gegebenen Reihenfolge. Andere Projekte bleiben
     /// unangetastet.
     func reorderSessions(in projectID: UUID, orderedIDs: [UUID]) throws {
-        var workspace = loadWorkspace()
-        var changed = false
-        for (newIndex, sessionID) in orderedIDs.enumerated() {
-            guard let idx = workspace.sessions.firstIndex(where: { $0.id == sessionID }),
-                  workspace.sessions[idx].projectID == projectID else {
-                continue
+        try mutateWorkspace { workspace in
+            for (newIndex, sessionID) in orderedIDs.enumerated() {
+                guard let idx = workspace.sessions.firstIndex(where: { $0.id == sessionID }),
+                      workspace.sessions[idx].projectID == projectID else {
+                    continue
+                }
+                guard workspace.sessions[idx].sortIndex != newIndex else { continue }
+                workspace.sessions[idx].sortIndex = newIndex
+                workspace.sessions[idx].lastActivityAt = Date()
             }
-            guard workspace.sessions[idx].sortIndex != newIndex else { continue }
-            workspace.sessions[idx].sortIndex = newIndex
-            workspace.sessions[idx].lastActivityAt = Date()
-            changed = true
-        }
-        if changed {
-            try saveWorkspace(workspace)
         }
     }
 
@@ -261,57 +265,57 @@ struct AgentSessionStore {
         newProjectID: UUID,
         targetIndex: Int? = nil
     ) throws {
-        var workspace = loadWorkspace()
-        guard let sessionIdx = workspace.sessions.firstIndex(where: { $0.id == sessionID }),
-              workspace.projects.contains(where: { $0.id == newProjectID }) else {
-            return
-        }
+        try mutateWorkspace { workspace in
+            guard let sessionIdx = workspace.sessions.firstIndex(where: { $0.id == sessionID }),
+                  workspace.projects.contains(where: { $0.id == newProjectID }) else {
+                return
+            }
 
-        workspace.sessions[sessionIdx].projectID = newProjectID
-        workspace.sessions[sessionIdx].lastActivityAt = Date()
+            workspace.sessions[sessionIdx].projectID = newProjectID
+            workspace.sessions[sessionIdx].lastActivityAt = Date()
 
-        // Neue Sortier-Reihenfolge im Ziel-Projekt aufbauen.
-        let targetSessions = Self.sortedSessions(
-            workspace.sessions.filter { $0.projectID == newProjectID && $0.status != .archived }
-        )
-        var ordered = targetSessions.filter { $0.id != sessionID }
-        let clampedIndex = max(0, min(targetIndex ?? ordered.count, ordered.count))
-        ordered.insert(workspace.sessions[sessionIdx], at: clampedIndex)
+            // Neue Sortier-Reihenfolge im Ziel-Projekt aufbauen.
+            let targetSessions = Self.sortedSessions(
+                workspace.sessions.filter { $0.projectID == newProjectID && $0.status != .archived }
+            )
+            var ordered = targetSessions.filter { $0.id != sessionID }
+            let clampedIndex = max(0, min(targetIndex ?? ordered.count, ordered.count))
+            ordered.insert(workspace.sessions[sessionIdx], at: clampedIndex)
 
-        for (newIndex, session) in ordered.enumerated() {
-            if let idx = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
-                workspace.sessions[idx].sortIndex = newIndex
+            for (newIndex, session) in ordered.enumerated() {
+                if let idx = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
+                    workspace.sessions[idx].sortIndex = newIndex
+                }
             }
         }
-        try saveWorkspace(workspace)
     }
 
     func moveSession(id: UUID, direction: AgentSessionMoveDirection) throws {
-        var workspace = loadWorkspace()
-        guard let current = workspace.sessions.first(where: { $0.id == id }) else { return }
-        let sorted = Self.sortedSessions(
-            workspace.sessions.filter { $0.projectID == current.projectID && $0.status != .archived }
-        )
-        guard let currentSortedIndex = sorted.firstIndex(where: { $0.id == id }) else { return }
+        try mutateWorkspace { workspace in
+            guard let current = workspace.sessions.first(where: { $0.id == id }) else { return }
+            let sorted = Self.sortedSessions(
+                workspace.sessions.filter { $0.projectID == current.projectID && $0.status != .archived }
+            )
+            guard let currentSortedIndex = sorted.firstIndex(where: { $0.id == id }) else { return }
 
-        let targetSortedIndex: Int
-        switch direction {
-        case .up:
-            targetSortedIndex = max(0, currentSortedIndex - 1)
-        case .down:
-            targetSortedIndex = min(sorted.count - 1, currentSortedIndex + 1)
-        }
-        guard targetSortedIndex != currentSortedIndex else { return }
+            let targetSortedIndex: Int
+            switch direction {
+            case .up:
+                targetSortedIndex = max(0, currentSortedIndex - 1)
+            case .down:
+                targetSortedIndex = min(sorted.count - 1, currentSortedIndex + 1)
+            }
+            guard targetSortedIndex != currentSortedIndex else { return }
 
-        var reordered = sorted
-        reordered.swapAt(currentSortedIndex, targetSortedIndex)
-        for (index, session) in reordered.enumerated() {
-            if let workspaceIndex = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
-                workspace.sessions[workspaceIndex].sortIndex = index
-                workspace.sessions[workspaceIndex].lastActivityAt = Date()
+            var reordered = sorted
+            reordered.swapAt(currentSortedIndex, targetSortedIndex)
+            for (index, session) in reordered.enumerated() {
+                if let workspaceIndex = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
+                    workspace.sessions[workspaceIndex].sortIndex = index
+                    workspace.sessions[workspaceIndex].lastActivityAt = Date()
+                }
             }
         }
-        try saveWorkspace(workspace)
     }
 
     /// Loescht eine Session aus dem Workspace. Idempotent — wenn die Session
@@ -330,16 +334,12 @@ struct AgentSessionStore {
     }
 
     func markStaleRunningSessionsClosed(excluding activeSessionIDs: Set<UUID> = []) throws {
-        var workspace = loadWorkspace()
-        var changed = false
-        for index in workspace.sessions.indices where workspace.sessions[index].status == .running {
-            guard workspace.sessions[index].shouldLaunchOnOpen != true else { continue }
-            guard !activeSessionIDs.contains(workspace.sessions[index].id) else { continue }
-            workspace.sessions[index].status = .closed
-            changed = true
-        }
-        if changed {
-            try saveWorkspace(workspace)
+        try mutateWorkspace { workspace in
+            for index in workspace.sessions.indices where workspace.sessions[index].status == .running {
+                guard workspace.sessions[index].shouldLaunchOnOpen != true else { continue }
+                guard !activeSessionIDs.contains(workspace.sessions[index].id) else { continue }
+                workspace.sessions[index].status = .closed
+            }
         }
     }
 
@@ -408,37 +408,37 @@ struct AgentSessionStore {
         indexedSessions: [IndexedAgentSession]
     ) throws -> AgentChatSession? {
         guard !Self.isClaudeWorktreePath(projectPath) else { return nil }
-        var workspace = loadWorkspace()
-        guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
-            return nil
-        }
+        return try mutateWorkspace { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
+                return nil
+            }
 
-        guard workspace.sessions[index].externalSessionID == nil else {
+            guard workspace.sessions[index].externalSessionID == nil else {
+                return workspace.sessions[index]
+            }
+
+            let standardizedPath = Self.canonicalProjectPath(projectPath)
+            let createdAt = workspace.sessions[index].createdAt
+            guard let indexed = indexedSessions
+                .filter({
+                    $0.provider == provider
+                        && !Self.isClaudeWorktreePath($0.cwd)
+                        && Self.canonicalProjectPath($0.cwd) == standardizedPath
+                        && $0.createdAt >= createdAt.addingTimeInterval(-5)
+                })
+                .sorted(by: { $0.lastActivityAt > $1.lastActivityAt })
+                .first
+            else {
+                return nil
+            }
+
+            workspace.sessions[index].externalSessionID = indexed.externalSessionID
+            workspace.sessions[index].lastActivityAt = max(indexed.lastActivityAt, workspace.sessions[index].lastActivityAt)
+            if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
+                workspace.sessions[index].title = indexed.title
+            }
             return workspace.sessions[index]
         }
-
-        let standardizedPath = Self.canonicalProjectPath(projectPath)
-        let createdAt = workspace.sessions[index].createdAt
-        guard let indexed = indexedSessions
-            .filter({
-                $0.provider == provider
-                    && !Self.isClaudeWorktreePath($0.cwd)
-                    && Self.canonicalProjectPath($0.cwd) == standardizedPath
-                    && $0.createdAt >= createdAt.addingTimeInterval(-5)
-            })
-            .sorted(by: { $0.lastActivityAt > $1.lastActivityAt })
-            .first
-        else {
-            return nil
-        }
-
-        workspace.sessions[index].externalSessionID = indexed.externalSessionID
-        workspace.sessions[index].lastActivityAt = max(indexed.lastActivityAt, workspace.sessions[index].lastActivityAt)
-        if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
-            workspace.sessions[index].title = indexed.title
-        }
-        try saveWorkspace(workspace)
-        return workspace.sessions[index]
     }
 
     @discardableResult
@@ -448,122 +448,134 @@ struct AgentSessionStore {
         indexedSessions: [IndexedAgentSession],
         now: Date = Date()
     ) throws -> AgentResumeRepairResult? {
-        var workspace = loadWorkspace()
-        guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
-            return nil
-        }
-
-        let session = workspace.sessions[index]
-        guard session.provider == .claude,
-              session.hasLaunchedInitialPrompt,
-              let currentExternalID = session.externalSessionID,
-              !currentExternalID.isEmpty else {
-            return AgentResumeRepairResult(session: session, outcome: .unchanged)
-        }
-
-        let canonicalProjectPath = Self.canonicalProjectPath(projectPath)
-        let indexedForProject = indexedSessions.filter { indexed in
-            indexed.provider == session.provider
-                && !Self.isClaudeWorktreePath(indexed.cwd)
-                && Self.canonicalProjectPath(indexed.cwd) == canonicalProjectPath
-        }
-
-        if indexedForProject.contains(where: { $0.externalSessionID == currentExternalID }) {
-            return AgentResumeRepairResult(session: session, outcome: .unchanged)
-        }
-
-        if let replacement = Self.bestResumeReplacement(
-            for: session,
-            currentExternalID: currentExternalID,
-            indexedSessions: indexedForProject,
-            now: now
-        ) {
-            workspace.sessions[index].externalSessionID = replacement.externalSessionID
-            workspace.sessions[index].lastActivityAt = max(
-                replacement.lastActivityAt,
-                workspace.sessions[index].lastActivityAt
-            )
-            if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
-                workspace.sessions[index].title = replacement.title
+        try mutateWorkspace { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
+                return nil
             }
-            try saveWorkspace(workspace)
+
+            let session = workspace.sessions[index]
+            guard session.provider == .claude,
+                  session.hasLaunchedInitialPrompt,
+                  let currentExternalID = session.externalSessionID,
+                  !currentExternalID.isEmpty else {
+                return AgentResumeRepairResult(session: session, outcome: .unchanged)
+            }
+
+            let canonicalProjectPath = Self.canonicalProjectPath(projectPath)
+            let indexedForProject = indexedSessions.filter { indexed in
+                indexed.provider == session.provider
+                    && !Self.isClaudeWorktreePath(indexed.cwd)
+                    && Self.canonicalProjectPath(indexed.cwd) == canonicalProjectPath
+            }
+
+            if indexedForProject.contains(where: { $0.externalSessionID == currentExternalID }) {
+                return AgentResumeRepairResult(session: session, outcome: .unchanged)
+            }
+
+            if let replacement = Self.bestResumeReplacement(
+                for: session,
+                currentExternalID: currentExternalID,
+                indexedSessions: indexedForProject,
+                now: now
+            ) {
+                workspace.sessions[index].externalSessionID = replacement.externalSessionID
+                workspace.sessions[index].lastActivityAt = max(
+                    replacement.lastActivityAt,
+                    workspace.sessions[index].lastActivityAt
+                )
+                if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
+                    workspace.sessions[index].title = replacement.title
+                }
+                return AgentResumeRepairResult(
+                    session: workspace.sessions[index],
+                    outcome: .rebound(from: currentExternalID, to: replacement.externalSessionID)
+                )
+            }
+
+            workspace.sessions[index].externalSessionID = nil
+            workspace.sessions[index].hasLaunchedInitialPrompt = false
+            workspace.sessions[index].status = .closed
+            workspace.sessions[index].shouldLaunchOnOpen = false
+            workspace.sessions[index].lastActivityAt = now
             return AgentResumeRepairResult(
                 session: workspace.sessions[index],
-                outcome: .rebound(from: currentExternalID, to: replacement.externalSessionID)
+                outcome: .resetInvalid(currentExternalID)
             )
         }
-
-        workspace.sessions[index].externalSessionID = nil
-        workspace.sessions[index].hasLaunchedInitialPrompt = false
-        workspace.sessions[index].status = .closed
-        workspace.sessions[index].shouldLaunchOnOpen = false
-        workspace.sessions[index].lastActivityAt = now
-        try saveWorkspace(workspace)
-        return AgentResumeRepairResult(
-            session: workspace.sessions[index],
-            outcome: .resetInvalid(currentExternalID)
-        )
     }
 
     func mergeIndexedSessions(_ indexedSessions: [IndexedAgentSession]) throws {
-        var workspace = loadWorkspace()
-        Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
-        Self.removeUnresumableClaudeSessions(from: &workspace)
-        for indexed in indexedSessions {
-            guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
-            let projectPath = Self.canonicalProjectPath(indexed.cwd)
-            let project: AgentProject
-            if let existingProject = workspace.projects.first(where: { $0.path == projectPath }) {
-                project = existingProject
-            } else {
-                project = AgentProject(
-                    name: URL(fileURLWithPath: projectPath).lastPathComponent,
-                    path: projectPath,
-                    color: AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
-                    lastBranch: Self.currentGitBranch(at: projectPath)
-                )
-                workspace.projects.append(project)
-            }
-
-            if let index = workspace.sessions.firstIndex(where: { $0.provider == indexed.provider && $0.externalSessionID == indexed.externalSessionID }) {
-                workspace.sessions[index].projectID = project.id
-                workspace.sessions[index].lastActivityAt = indexed.lastActivityAt
-                if workspace.sessions[index].title.isEmpty {
-                    workspace.sessions[index].title = indexed.title
-                }
-            } else if let index = workspace.sessions.firstIndex(where: {
-                $0.provider == indexed.provider
-                    && $0.externalSessionID == nil
-                    && $0.projectID == project.id
-                    && $0.hasLaunchedInitialPrompt
-                    && $0.createdAt <= indexed.createdAt.addingTimeInterval(5)
-                    && indexed.createdAt >= $0.createdAt.addingTimeInterval(-5)
-            }) {
-                workspace.sessions[index].externalSessionID = indexed.externalSessionID
-                workspace.sessions[index].lastActivityAt = max(indexed.lastActivityAt, workspace.sessions[index].lastActivityAt)
-                if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
-                    workspace.sessions[index].title = indexed.title
-                }
-            } else {
-                workspace.sessions.append(
-                    AgentChatSession(
-                        provider: indexed.provider,
-                        projectID: project.id,
-                        externalSessionID: indexed.externalSessionID,
-                        title: indexed.title,
-                        model: indexed.model ?? AppPreferences.shared.codexPostProcessingModelRaw,
-                        reasoningEffort: indexed.reasoningEffort ?? AppPreferences.shared.codexReasoningEffortRaw,
-                        status: .closed,
-                        hasLaunchedInitialPrompt: true,
-                        createdAt: indexed.createdAt,
-                        lastActivityAt: indexed.lastActivityAt
-                    )
-                )
+        // Git-Lookups VOR der Mutation (kein Subprozess unter dem Store-Lock):
+        // Branches nur für Pfade berechnen, zu denen noch kein Projekt
+        // existiert. TOCTOU ist harmlos — taucht das Projekt zwischenzeitlich
+        // auf, bleibt der vorberechnete Branch einfach ungenutzt.
+        let knownPaths = Set(loadWorkspace().projects.map(\.path))
+        var branchByPath: [String: String?] = [:]
+        for indexed in indexedSessions where !Self.isClaudeWorktreePath(indexed.cwd) {
+            let path = Self.canonicalProjectPath(indexed.cwd)
+            if !knownPaths.contains(path), branchByPath.index(forKey: path) == nil {
+                branchByPath[path] = Self.currentGitBranch(at: path)
             }
         }
-        Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
-        Self.removeUnresumableClaudeSessions(from: &workspace)
-        try saveWorkspace(workspace)
+
+        try mutateWorkspace { workspace in
+            Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
+            Self.removeUnresumableClaudeSessions(from: &workspace)
+            for indexed in indexedSessions {
+                guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
+                let projectPath = Self.canonicalProjectPath(indexed.cwd)
+                let project: AgentProject
+                if let existingProject = workspace.projects.first(where: { $0.path == projectPath }) {
+                    project = existingProject
+                } else {
+                    project = AgentProject(
+                        name: URL(fileURLWithPath: projectPath).lastPathComponent,
+                        path: projectPath,
+                        color: AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
+                        lastBranch: branchByPath[projectPath] ?? nil
+                    )
+                    workspace.projects.append(project)
+                }
+
+                if let index = workspace.sessions.firstIndex(where: { $0.provider == indexed.provider && $0.externalSessionID == indexed.externalSessionID }) {
+                    workspace.sessions[index].projectID = project.id
+                    workspace.sessions[index].lastActivityAt = indexed.lastActivityAt
+                    if workspace.sessions[index].title.isEmpty {
+                        workspace.sessions[index].title = indexed.title
+                    }
+                } else if let index = workspace.sessions.firstIndex(where: {
+                    $0.provider == indexed.provider
+                        && $0.externalSessionID == nil
+                        && $0.projectID == project.id
+                        && $0.hasLaunchedInitialPrompt
+                        && $0.createdAt <= indexed.createdAt.addingTimeInterval(5)
+                        && indexed.createdAt >= $0.createdAt.addingTimeInterval(-5)
+                }) {
+                    workspace.sessions[index].externalSessionID = indexed.externalSessionID
+                    workspace.sessions[index].lastActivityAt = max(indexed.lastActivityAt, workspace.sessions[index].lastActivityAt)
+                    if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
+                        workspace.sessions[index].title = indexed.title
+                    }
+                } else {
+                    workspace.sessions.append(
+                        AgentChatSession(
+                            provider: indexed.provider,
+                            projectID: project.id,
+                            externalSessionID: indexed.externalSessionID,
+                            title: indexed.title,
+                            model: indexed.model ?? AppPreferences.shared.codexPostProcessingModelRaw,
+                            reasoningEffort: indexed.reasoningEffort ?? AppPreferences.shared.codexReasoningEffortRaw,
+                            status: .closed,
+                            hasLaunchedInitialPrompt: true,
+                            createdAt: indexed.createdAt,
+                            lastActivityAt: indexed.lastActivityAt
+                        )
+                    )
+                }
+            }
+            Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
+            Self.removeUnresumableClaudeSessions(from: &workspace)
+        }
     }
 
     static func sortedSessions(_ sessions: [AgentChatSession]) -> [AgentChatSession] {
@@ -692,7 +704,9 @@ struct AgentSessionStore {
         }
     }
 
-    private static func migratedWorkspace(_ workspace: AgentWorkspace) -> AgentWorkspace {
+    /// Internal (statt private), weil die `AgentWorkspaceStoreRegistry` die
+    /// Migration in den Initial-Load des Kerns injiziert.
+    static func migratedWorkspace(_ workspace: AgentWorkspace) -> AgentWorkspace {
         var migrated = workspace
         migrated.schemaVersion = AgentWorkspace.currentSchemaVersion
         removeClaudeWorktreeProjectsAndSessions(from: &migrated)
@@ -729,22 +743,18 @@ struct AgentSessionStore {
         }.first
     }
 
+    /// P1: Beide Primitive laufen über den serialisierten In-Memory-Kern.
+    /// Persistiert wird Equatable-diff-gated — das frühere `changed`-Flag
+    /// von `mutateWorkspaceIfChanged` ist damit nur noch advisory.
     private func mutateWorkspace<Result>(_ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
         try PerfBudgets.storeMutate.withInterval {
-            var workspace = loadWorkspace()
-            let result = try mutate(&workspace)
-            try saveWorkspace(workspace)
-            return result
+            try workspaceStore.mutate(mutate)
         }
     }
 
     private func mutateWorkspaceIfChanged(_ mutate: (inout AgentWorkspace) throws -> Bool) throws {
         try PerfBudgets.storeMutate.withInterval {
-            var workspace = loadWorkspace()
-            let changed = try mutate(&workspace)
-            if changed {
-                try saveWorkspace(workspace)
-            }
+            _ = try workspaceStore.mutate(mutate)
         }
     }
 }
