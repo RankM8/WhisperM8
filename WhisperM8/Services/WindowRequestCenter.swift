@@ -9,8 +9,12 @@ enum WindowRequest: String, Equatable {
 
     var targetWindowID: String {
         switch self {
-        case .settings, .outputDashboard:
+        case .settings:
             return "settings"
+        case .outputDashboard:
+            // P8: zeigt jetzt das echte Reports-Dashboard-Window statt der
+            // Settings-Sektion "Output Overview".
+            return rawValue
         case .agentChats:
             return rawValue
         case .onboarding:
@@ -22,9 +26,7 @@ enum WindowRequest: String, Equatable {
         switch self {
         case .settings:
             return "api"
-        case .outputDashboard:
-            return "outputOverview"
-        case .agentChats, .onboarding:
+        case .outputDashboard, .agentChats, .onboarding:
             return nil
         }
     }

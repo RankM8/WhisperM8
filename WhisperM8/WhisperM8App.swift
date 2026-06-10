@@ -72,6 +72,17 @@ struct WhisperM8App: App {
         .defaultSize(width: 900, height: 640)
         .defaultPosition(.center)
 
+        // P8: Reports-Dashboard (Transcript-Run-Reports). War fertig gebaut,
+        // aber nirgends instanziiert — der Menü-Eintrag landete bisher in
+        // den Settings statt im Dashboard.
+        Window("Output Reports", id: "output-dashboard") {
+            OutputDashboardView()
+                .environment(AppState.shared)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
+        }
+        .defaultSize(width: 980, height: 680)
+        .defaultPosition(.center)
+
         // Onboarding window
         Window("WhisperM8 Setup", id: "onboarding") {
             OnboardingView()

@@ -30,8 +30,19 @@ make build
 
 # Re-sign with Developer ID when configured. Otherwise keep the ad-hoc signature.
 if [[ -n "${DEVELOPER_ID_APPLICATION}" ]]; then
-    echo "2. Signing app with Developer ID..."
-    codesign --force --deep --options runtime --timestamp \
+    echo "2. Signing app with Developer ID (inside-out)..."
+    # P8: Inside-out-Signing statt deprecated `--deep` — erst eingebettete
+    # Frameworks/Helper (sobald vorhanden, z. B. Sparkle-XPC-Services), dann
+    # das Bundle selbst. `--deep` überschreibt Entitlements eingebetteter
+    # Binaries und ist von Apple offiziell abgekündigt.
+    find "${APP_BUNDLE}/Contents/Frameworks" -depth \( -name "*.framework" -o -name "*.dylib" -o -name "*.xpc" -o -name "*.app" \) -print0 2>/dev/null \
+        | while IFS= read -r -d '' nested; do
+            codesign --force --options runtime --timestamp \
+                --preserve-metadata=entitlements \
+                --sign "${DEVELOPER_ID_APPLICATION}" \
+                "${nested}"
+        done
+    codesign --force --options runtime --timestamp \
         --entitlements "${ENTITLEMENTS}" \
         --sign "${DEVELOPER_ID_APPLICATION}" \
         "${APP_BUNDLE}"
