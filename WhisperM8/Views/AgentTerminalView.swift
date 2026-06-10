@@ -24,6 +24,23 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     /// window-drag behavior.
     override var mouseDownCanMoveWindow: Bool { false }
 
+    /// P6 S5: SwiftTerms Metal-GPU-Renderer als Opt-in (Default: aus).
+    /// Einmal pro Prozess gelesen — Umschalten erfordert App-Neustart.
+    private static let metalRendererOptIn = AppPreferences.shared.isAgentTerminalMetalRendererEnabled
+
+    /// Aktivierung erst, wenn die View im Window hängt — in makeNSView ist
+    /// der Container noch fensterlos und die MTKView hätte keine Surface.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard Self.metalRendererOptIn, window != nil, !isUsingMetalRenderer else { return }
+        do {
+            try setUseMetal(true)
+            Logger.agentPerformance.info("terminal_metal_renderer_enabled")
+        } catch {
+            Logger.agentPerformance.warning("terminal_metal_renderer_failed error=\(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// `true`, solange der User nahe genug am Buffer-Ende ist, dass neuer
     /// Output sichtbar bleiben soll. Faellt auf `false`, sobald der User
     /// hochscrollt; wird wieder `true`, sobald er bewusst ans Ende
@@ -144,6 +161,15 @@ final class TerminalScrollGuard {
         self.monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self else { return event }
             return self.handle(event)
+        }
+    }
+
+    /// P6 S4: Expliziter Abbau — Controller beendeter Prozesse leben für den
+    /// Scrollback weiter, ihre app-weiten Monitore sollen das nicht.
+    func detach() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
         }
     }
 
@@ -446,6 +472,14 @@ final class TerminalKeyboardShortcutHandler {
         }
     }
 
+    /// P6 S4: Expliziter Abbau — siehe TerminalScrollGuard.detach().
+    func detach() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
     deinit {
         if let monitor {
             NSEvent.removeMonitor(monitor)
@@ -614,6 +648,19 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         }
         terminal.terminate()
         isRunning = false
+        releaseEventMonitors()
+    }
+
+    /// P6 S4: Die app-weiten NSEvent-Monitore (Keyboard-Shortcuts +
+    /// Scroll-Guard) werden beim Prozess-Ende abgebaut. Der Controller lebt
+    /// fuer den Scrollback weiter — aber ein totes PTY braucht weder
+    /// Shortcut-Mapping noch Alt-Buffer-Scroll-Forwarding, und vorher lief
+    /// jedes Event der App durch die Monitore ALLER jemals beendeten Tabs.
+    private func releaseEventMonitors() {
+        keyboardShortcutHandler?.detach()
+        keyboardShortcutHandler = nil
+        scrollGuard?.detach()
+        scrollGuard = nil
     }
 
     /// Setzt einen Listener auf jeden User-Tastendruck, der an die Terminal-
@@ -647,6 +694,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         Task { @MainActor in
             self.exitCode = exitCode
             self.isRunning = false
+            self.releaseEventMonitors()
             self.onTerminated(exitCode)
         }
     }

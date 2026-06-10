@@ -210,6 +210,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeExtraArguments) }
     }
 
+    /// Opt-in für SwiftTerms Metal-GPU-Renderer (P6, Default: aus — erst
+    /// benchmarken, die CPU-Parser-Gewinne aus SwiftTerm 1.9–1.11 sind
+    /// bereits ohne Metal enthalten). Einschalten:
+    /// `defaults write com.whisperm8.app agentTerminalMetalEnabled -bool YES`
+    var isAgentTerminalMetalRendererEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.agentTerminalMetalEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentTerminalMetalEnabled) }
+    }
+
     /// Kill-Switch für das event-getriebene Transcript-Watching (P2). Bei
     /// Problemen ohne Rebuild zurück zum reinen 1,5-s-Polling:
     /// `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`
@@ -307,6 +316,7 @@ enum PreferenceKeys {
     static let appearanceOverride = "appearanceOverride"
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
+    static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
 }
 
 private typealias Keys = PreferenceKeys
