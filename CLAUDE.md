@@ -29,13 +29,13 @@ make dmg          # Create distributable DMG
 ```bash
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 swift test                                    # full suite
-swift test --filter AgentChatsTests           # one test class
+swift test --filter AgentSessionStoreTests    # one test class
 swift test --filter testLoginShellEnvironment # by test-name substring
 ```
 
 `DEVELOPER_DIR` must point at the Xcode toolchain (SwiftUI macros); the Makefile sets it automatically, plain `swift build`/`swift test` does not.
 
-Test convention: dependency injection via plain closures and small protocols (e.g. `commandResolver: { _ in "/path" }`, `ProcessRunner` spies) — no DI framework. Most coverage lives in `Tests/WhisperM8Tests/AgentChatsTests.swift`.
+Test convention: dependency injection via plain closures and small protocols (e.g. `commandResolver: { _ in "/path" }`, `ProcessRunner` spies) — no DI framework. Agent-Chats coverage is split across thematic files in `Tests/WhisperM8Tests/` (e.g. `AgentSessionStoreTests.swift`, `AgentCommandBuilderTests.swift`); shared helpers live in `AgentTestSupport.swift`.
 
 ## Debugging
 
