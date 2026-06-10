@@ -210,6 +210,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeExtraArguments) }
     }
 
+    /// Kill-Switch für das event-getriebene Transcript-Watching (P2). Bei
+    /// Problemen ohne Rebuild zurück zum reinen 1,5-s-Polling:
+    /// `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`
+    var isAgentEventDrivenWatchEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentEventDrivenWatchEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentEventDrivenWatchEnabled) }
+    }
+
     /// Escape-Hatch für Drag & Drop in der Agent-Chats-Sidebar. Der Mai-2026
     /// Scroll-Haenger (`.draggable` + `LazyVStack`, gefixt in 60ca683) ist
     /// durch den nicht-lazy `VStack` behoben — falls er in anderer Form
@@ -298,6 +306,7 @@ enum PreferenceKeys {
     static let claudeExtraArguments = "claudeExtraArguments"
     static let appearanceOverride = "appearanceOverride"
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
+    static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
 }
 
 private typealias Keys = PreferenceKeys

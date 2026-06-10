@@ -124,6 +124,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // installiert seinen eigenen `didBecomeActive`-Observer.
         AgentScanCoordinator.shared.installLifecycleHooks()
         AgentScanCoordinator.shared.requestScan(reason: .launch)
+        // P2: FSEvents auf ~/.claude/projects + ~/.codex/sessions — extern
+        // gestartete Sessions tauchen damit nach Sekunden auf statt erst beim
+        // nächsten Foreground-Scan.
+        AgentDirectoryEventMonitor.shared.start()
 
         // Routing: Onboarding nur, wenn die zwei essenziellen System-Permissions
         // (Mikrofon + Accessibility) noch nicht erteilt sind. Ohne diese ist die

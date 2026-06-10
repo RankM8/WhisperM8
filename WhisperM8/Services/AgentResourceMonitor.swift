@@ -176,9 +176,15 @@ struct AgentResourceMonitor {
         return parseProcessSamples(output)
     }
 
-    static func currentTotalMemoryBytes() -> Int64? {
+    /// hw.memsize ändert sich zur Laufzeit nie — einmal lesen, dann aus dem
+    /// Cache (P2 S5: halbiert die Forks pro Refresh).
+    private static let cachedTotalMemoryBytes: Int64? = {
         let output = runProcess(executable: "/usr/sbin/sysctl", arguments: ["-n", "hw.memsize"])
         return Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
+    }()
+
+    static func currentTotalMemoryBytes() -> Int64? {
+        cachedTotalMemoryBytes
     }
 
     /// Forkt einen Subprocess und sammelt stdout. Wichtig: erst stdout

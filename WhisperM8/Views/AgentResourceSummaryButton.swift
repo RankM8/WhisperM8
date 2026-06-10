@@ -7,16 +7,20 @@ struct AgentResourceSummaryButton: View {
     @State private var isPopoverPresented = false
     @State private var isHovered = false
     @State private var refreshTask: Task<Void, Never>?
+    /// P2 S5: Bei inaktivem Fenster pausiert das Badge-Polling komplett —
+    /// die .task-Loop terminiert, statt im Hintergrund zu schlafen-und-forken.
+    @Environment(\.controlActiveState) private var controlActiveState
 
     private var shouldPoll: Bool {
-        isPopoverPresented || !descriptors.isEmpty
+        guard controlActiveState != .inactive else { return false }
+        return isPopoverPresented || !descriptors.isEmpty
     }
 
     private var pollingKey: String {
         let processKey = descriptors
             .map { "\($0.id.uuidString):\($0.rootProcessID ?? 0)" }
             .joined(separator: ",")
-        return "\(shouldPoll)-\(processKey)"
+        return "\(shouldPoll)-\(processKey)-\(controlActiveState != .inactive)"
     }
 
     var body: some View {
@@ -59,15 +63,14 @@ struct AgentResourceSummaryButton: View {
             }
 
             // Schnelles Refresh nur wenn der Popover offen ist — der User
-            // schaut aktiv hin. Bei geschlossenem Popover reicht ein
-            // langsamerer Refresh (Badge zeigt nur Counter + Total).
-            // Reduziert die /bin/ps-Forks von 30 → 12 pro Minute wenn nur
-            // das Badge gerendert wird.
+            // schaut aktiv hin. Badge-Betrieb: 10 s reichen für Counter +
+            // Total. Mit der Inaktiv-Pause oben: ≤6 /bin/ps-Forks pro Minute
+            // im Badge-Betrieb, 0 bei inaktivem Fenster (vorher 12-30/min).
             while !Task.isCancelled {
                 refresh()
                 let interval: Duration = isPopoverPresented
                     ? .seconds(2)
-                    : .seconds(5)
+                    : .seconds(10)
                 try? await Task.sleep(for: interval)
             }
         }

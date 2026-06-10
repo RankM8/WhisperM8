@@ -32,11 +32,15 @@ final class AgentScanCoordinator {
         case foreground    // didBecomeActive
         case manual        // User-Klick auf "Aktualisieren"
         case afterCreate   // nach createSession (optional)
+        case fsEvent       // FSEvents-Trigger: neue Transcript-Dateien (P2)
     }
 
     private var inFlight = false
     private var lastCompletedAt: Date?
     private let cooldown: TimeInterval = 30
+    /// Kürzerer Cooldown für FSEvents-Trigger — die sind bereits 5 s
+    /// debounced und zeigen ECHTE neue Dateien an.
+    private let fsEventCooldown: TimeInterval = 10
     private var lifecycleObservers: [NSObjectProtocol] = []
 
     /// P1 S5: Liefert die Session-IDs mit lebendem PTY. Früher schloss der
@@ -78,7 +82,8 @@ final class AgentScanCoordinator {
         }
         if reason != .manual, let last = lastCompletedAt {
             let elapsed = Date().timeIntervalSince(last)
-            if elapsed < cooldown {
+            let limit = reason == .fsEvent ? fsEventCooldown : cooldown
+            if elapsed < limit {
                 Logger.agentPerformance.debug("agent_scan_skipped reason=\(reason.rawValue, privacy: .public) cause=cooldown elapsed=\(Int(elapsed))s")
                 return
             }

@@ -57,14 +57,35 @@ final class AgentSessionRuntimeStatusStore: ObservableObject {
 /// triggert er den Auto-Naming-Pfad via `onTurnFinished`.
 ///
 /// Bewusst kein FSEventStream: Pollen mit ~1.5 s Intervall reicht für die
-/// Sidebar-UX vollkommen aus, ist deutlich einfacher zu implementieren und
-/// vermeidet das gesamte Coalescing-/Subdir-Watch-Verhalten von FSEvents.
+/// P2: Event-getrieben mit Poll-Fallback. Pro aktiver Transcript-Datei hängt
+/// eine vnode-`FileEventSource` (Write/Extend → sofortiger, debounced Poll;
+/// Delete/Rename → Re-Arm beim nächsten Tick). Der 1,5-s-Timer bleibt mit
+/// drei Restaufgaben: URL-Resolution für Sessions ohne Datei, zeitbasierte
+/// Status-Eskalation (stat-first: 1 stat()-Syscall statt 64-KB-Read) und
+/// mtime-Fallback für verpasste Kernel-Events.
+///
+/// Bewusst vnode-Sources statt FSEvents für den Status: FSEvents coalesced
+/// und beobachtet Subtrees — für die punktgenaue Datei-Beobachtung hier wäre
+/// beides schädlich (der Scan-Trigger `AgentDirectoryEventMonitor` will
+/// genau das und nutzt FSEvents). Kill-Switch ohne Rebuild:
+/// `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`.
 @MainActor
 final class AgentSessionRuntimeWatcher {
     /// Tail-Größe pro Poll. Eine Claude-Assistant-Message kann mehrere KB groß
     /// sein (Tool-Use-Blöcke!), daher großzügig dimensioniert.
     nonisolated static let tailReadBytes: Int = 64 * 1024
     nonisolated static let pollInterval: TimeInterval = 1.5
+    /// Coalescing-Fenster für vnode-Events — JSONL-Appends kommen in Bursts,
+    /// ein Read pro Burst reicht.
+    nonisolated static let eventDebounce: Duration = .milliseconds(180)
+    /// Codex-URL-Resolution ist ein rekursiver ~/.codex/sessions-Walk —
+    /// bei fehlender Datei nur jeden 4. Tick erneut versuchen.
+    nonisolated static let resolveCooldownTicks = 3
+
+    /// Pfade aller aktuell live-gewatchten Transcripts — der FSEvents-
+    /// Scan-Trigger filtert sie heraus (aktive In-App-Sessions schreiben
+    /// sekündlich und würden sonst dauerhaft Scans auslösen).
+    static private(set) var sharedWatchedTranscriptPaths: Set<String> = []
 
     weak var statusStore: AgentSessionRuntimeStatusStore?
     /// Wird einmal pro neu erkanntem Turn-End aufgerufen. Empfänger ist
@@ -74,6 +95,15 @@ final class AgentSessionRuntimeWatcher {
 
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
+    /// Trailing-Edge: kam während eines laufenden Polls ein vnode-Event,
+    /// wird die Session nach Abschluss SOFORT erneut gepollt — Events dürfen
+    /// nicht verworfen werden (das alte Set-Verhalten hätte sie gedroppt).
+    private var pendingRepoll: Set<UUID> = []
+    /// Coalescing für geplante Event-Polls (ein Task pro Burst).
+    private var scheduledEventPolls: Set<UUID> = []
+    private var eventSources: [UUID: FileEventSource] = [:]
+    /// Einmal pro Init gelesen — Kill-Switch wirkt nach App-Neustart.
+    private let eventDrivenEnabled = AppPreferences.shared.isAgentEventDrivenWatchEnabled
     private var pollTimer: Timer?
 
     init(statusStore: AgentSessionRuntimeStatusStore, onTurnFinished: ((UUID) -> Void)? = nil) {
@@ -112,7 +142,9 @@ final class AgentSessionRuntimeWatcher {
         if entry.transcriptURL == nil {
             entry.transcriptURL = resolveTranscriptURL(for: entry)
         }
+        entry.generation += 1
         watched[sessionID] = entry
+        attachEventSourceIfPossible(sessionID: sessionID)
         ensureTimer()
 
         // Sofortiger Tick, damit der Status nicht erst nach `pollInterval`
@@ -121,6 +153,7 @@ final class AgentSessionRuntimeWatcher {
     }
 
     func unwatch(sessionID: UUID) {
+        detachEventSource(sessionID: sessionID)
         watched.removeValue(forKey: sessionID)
         statusStore?.clear(sessionID: sessionID)
         if watched.isEmpty {
@@ -132,7 +165,12 @@ final class AgentSessionRuntimeWatcher {
         guard var entry = watched[sessionID] else { return }
         entry.externalSessionID = externalSessionID
         entry.transcriptURL = resolveTranscriptURL(for: entry)
+        entry.lastStat = nil
+        entry.cachedLastEvent = nil
+        entry.generation += 1
         watched[sessionID] = entry
+        detachEventSource(sessionID: sessionID)
+        attachEventSourceIfPossible(sessionID: sessionID)
         pollOne(sessionID: sessionID)
     }
 
@@ -142,9 +180,70 @@ final class AgentSessionRuntimeWatcher {
     func markTerminated(sessionID: UUID, exitCode: Int32?) {
         let status: AgentSessionRuntimeStatus = (exitCode ?? 0) != 0 ? .errored : .stopped
         statusStore?.setStatus(status, for: sessionID)
+        detachEventSource(sessionID: sessionID)
         watched.removeValue(forKey: sessionID)
         if watched.isEmpty {
             stopTimer()
+        }
+    }
+
+    // MARK: - vnode-Event-Sources (P2)
+
+    private func attachEventSourceIfPossible(sessionID: UUID) {
+        guard eventDrivenEnabled,
+              eventSources[sessionID] == nil,
+              let url = watched[sessionID]?.transcriptURL else { return }
+
+        let source = FileEventSource(url: url)
+        source.onChange = { [weak self] in
+            self?.scheduleEventPoll(sessionID: sessionID)
+        }
+        source.onFileGone = { [weak self] in
+            // Delete/Rename (z. B. Atomic-Rewrite): Source ist weg, Cache
+            // nullen — der nächste Timer-Tick re-resolved und re-attacht.
+            guard let self, var entry = self.watched[sessionID] else { return }
+            entry.transcriptURL = nil
+            entry.lastStat = nil
+            entry.cachedLastEvent = nil
+            entry.generation += 1
+            self.watched[sessionID] = entry
+            self.detachEventSource(sessionID: sessionID)
+        }
+
+        if source.start() {
+            eventSources[sessionID] = source
+            Self.sharedWatchedTranscriptPaths.insert(url.path)
+        }
+        // Schlägt start() fehl (FD-Limit o. ä.), bleibt die Session ohne
+        // Source auf dem klassischen Timer-Poll — der Fallback lebt immer.
+    }
+
+    private func detachEventSource(sessionID: UUID) {
+        guard let source = eventSources.removeValue(forKey: sessionID) else { return }
+        if let url = watched[sessionID]?.transcriptURL {
+            Self.sharedWatchedTranscriptPaths.remove(url.path)
+        }
+        source.stop()
+        // Pfad-Set defensiv neu aufbauen, falls die URL oben schon genullt war.
+        Self.sharedWatchedTranscriptPaths = Set(
+            eventSources.keys.compactMap { watched[$0]?.transcriptURL?.path }
+        )
+    }
+
+    /// Debounced Poll nach vnode-Event: ein Read pro Burst; läuft ein Poll
+    /// bereits, wird via `pendingRepoll` nachgefasst statt gedroppt.
+    private func scheduleEventPoll(sessionID: UUID) {
+        if pollingSessionIDs.contains(sessionID) {
+            pendingRepoll.insert(sessionID)
+            return
+        }
+        guard !scheduledEventPolls.contains(sessionID) else { return }
+        scheduledEventPolls.insert(sessionID)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.eventDebounce)
+            guard let self else { return }
+            self.scheduledEventPolls.remove(sessionID)
+            self.pollOne(sessionID: sessionID)
         }
     }
 
@@ -173,24 +272,55 @@ final class AgentSessionRuntimeWatcher {
     }
 
     private func pollOne(sessionID: UUID) {
-        guard let entry = watched[sessionID],
+        guard var entry = watched[sessionID],
               !pollingSessionIDs.contains(sessionID) else { return }
+
+        // Codex-URL-Resolution drosseln: der rekursive ~/.codex-Walk muss
+        // bei fehlender Datei nicht alle 1,5 s laufen.
+        if entry.transcriptURL == nil, entry.provider == .codex {
+            if entry.resolveCooldown > 0 {
+                entry.resolveCooldown -= 1
+                watched[sessionID] = entry
+                return
+            }
+        }
+
         pollingSessionIDs.insert(sessionID)
         // Manuelles Token statt withInterval: Begin und End laufen über die
         // Task-Grenze. Das End steht VOR dem `guard let self` — das Intervall
         // muss auch dann schließen, wenn der Watcher inzwischen weg ist.
         let pollToken = PerfBudgets.sidebarStatusPoll.begin()
+        let snapshotEntry = entry
+        let snapshotGeneration = entry.generation
 
         Task { @MainActor [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
-                Self.pollSnapshot(for: entry, now: Date())
+                Self.pollSnapshot(for: snapshotEntry, now: Date())
             }.value
 
             PerfBudgets.sidebarStatusPoll.end(pollToken)
             guard let self else { return }
             self.pollingSessionIDs.remove(sessionID)
+            defer {
+                // Trailing-Edge: kam während des Polls ein vnode-Event,
+                // sofort nachfassen.
+                if self.pendingRepoll.remove(sessionID) != nil {
+                    self.pollOne(sessionID: sessionID)
+                }
+            }
             guard var current = self.watched[sessionID] else { return }
+
+            // Generation-Guard: hat sich der Eintrag während des Polls
+            // geändert (neue externalSessionID, File-Gone-Reset), darf der
+            // veraltete Snapshot keinen Cache zurückschreiben.
+            guard current.generation == snapshotGeneration else { return }
+
             current.transcriptURL = snapshot.transcriptURL
+            current.lastStat = snapshot.stat
+            current.cachedLastEvent = snapshot.lastEvent
+            if snapshot.transcriptURL == nil, current.provider == .codex {
+                current.resolveCooldown = Self.resolveCooldownTicks
+            }
 
             guard let decision = snapshot.decision else {
                 self.watched[sessionID] = current
@@ -208,6 +338,11 @@ final class AgentSessionRuntimeWatcher {
                 self.onTurnFinished?(sessionID)
             } else {
                 self.watched[sessionID] = current
+            }
+
+            // URL erstmals aufgelöst → Event-Source nachrüsten.
+            if snapshot.transcriptURL != nil {
+                self.attachEventSourceIfPossible(sessionID: sessionID)
             }
         }
     }
@@ -235,26 +370,53 @@ final class AgentSessionRuntimeWatcher {
     ) -> AgentSessionRuntimePollSnapshot {
         let transcriptURL = entry.transcriptURL ?? resolveTranscriptURL(for: entry)
         guard let url = transcriptURL,
-              let mtime = fileMTime(at: url),
-              let tail = readTail(at: url, bytes: tailReadBytes) else {
-            return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: nil)
+              let stat = fileStat(at: url) else {
+            return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: nil, stat: nil, lastEvent: nil)
+        }
+
+        // Stat-first (P2 S1): Datei unverändert → KEIN 64-KB-Read; die
+        // zeitbasierten Eskalationen (8 s/30 s im Decider) werden mit dem
+        // gecachten letzten Event re-evaluiert. I/O pro Tick = 1 stat().
+        if let lastStat = entry.lastStat, lastStat == stat {
+            let decision = AgentTranscriptStatusDecider.decide(
+                lastEvent: entry.cachedLastEvent,
+                fileMTime: stat.mtime,
+                now: now,
+                priorTurnFinishedAt: entry.lastTurnFinishedAt
+            )
+            return AgentSessionRuntimePollSnapshot(
+                transcriptURL: url,
+                decision: decision,
+                stat: stat,
+                lastEvent: entry.cachedLastEvent
+            )
+        }
+
+        guard let tail = readTail(at: url, bytes: tailReadBytes) else {
+            return AgentSessionRuntimePollSnapshot(transcriptURL: url, decision: nil, stat: nil, lastEvent: nil)
         }
 
         let lastEvent = AgentTranscriptParser.lastEvent(in: tail, provider: entry.provider)
         let decision = AgentTranscriptStatusDecider.decide(
             lastEvent: lastEvent,
-            fileMTime: mtime,
+            fileMTime: stat.mtime,
             now: now,
             priorTurnFinishedAt: entry.lastTurnFinishedAt
         )
-        return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: decision)
+        return AgentSessionRuntimePollSnapshot(
+            transcriptURL: url,
+            decision: decision,
+            stat: stat,
+            lastEvent: lastEvent
+        )
     }
 
-    nonisolated private static func fileMTime(at url: URL) -> Date? {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+    nonisolated private static func fileStat(at url: URL) -> AgentTranscriptFileStat? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let mtime = attrs[.modificationDate] as? Date else {
             return nil
         }
-        return attrs[.modificationDate] as? Date
+        return AgentTranscriptFileStat(mtime: mtime, size: (attrs[.size] as? Int) ?? 0)
     }
 
     /// Liest die letzten `bytes` Bytes der Datei als UTF-8-String. Truncation
@@ -276,6 +438,11 @@ final class AgentSessionRuntimeWatcher {
     }
 }
 
+struct AgentTranscriptFileStat: Equatable {
+    var mtime: Date
+    var size: Int
+}
+
 private struct WatchedSession {
     let id: UUID
     var provider: AgentProvider
@@ -283,9 +450,21 @@ private struct WatchedSession {
     var externalSessionID: String?
     var transcriptURL: URL?
     var lastTurnFinishedAt: Date?
+    /// Stat-first-Cache (P2): mtime+size des letzten Reads + das geparste
+    /// letzte Event. Unveränderter Stat → kein erneuter Tail-Read.
+    var lastStat: AgentTranscriptFileStat?
+    var cachedLastEvent: AgentTranscriptEvent?
+    /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
+    var resolveCooldown: Int = 0
+    /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
+    /// gestartet wurden, dürfen den Cache nicht überschreiben.
+    var generation: Int = 0
 }
 
 private struct AgentSessionRuntimePollSnapshot {
     var transcriptURL: URL?
     var decision: AgentTranscriptStatusDecider.Decision?
+    /// Stat + geparstes Event zum Zurückschreiben in den WatchedSession-Cache.
+    var stat: AgentTranscriptFileStat?
+    var lastEvent: AgentTranscriptEvent?
 }
