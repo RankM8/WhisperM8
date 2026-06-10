@@ -27,8 +27,10 @@ final class WindowAndOverlayTests: XCTestCase {
         XCTAssertEqual(WindowRequest.settings.targetWindowID, "settings")
         XCTAssertEqual(WindowRequest.settings.settingsSectionID, "api")
 
-        XCTAssertEqual(WindowRequest.outputDashboard.targetWindowID, "settings")
-        XCTAssertEqual(WindowRequest.outputDashboard.settingsSectionID, "outputOverview")
+        // P8: Reports öffnen jetzt das echte Dashboard-Window statt der
+        // Settings-Sektion "Output Overview".
+        XCTAssertEqual(WindowRequest.outputDashboard.targetWindowID, "output-dashboard")
+        XCTAssertNil(WindowRequest.outputDashboard.settingsSectionID)
 
         XCTAssertEqual(WindowRequest.agentChats.targetWindowID, "agent-chats")
         XCTAssertNil(WindowRequest.agentChats.settingsSectionID)
