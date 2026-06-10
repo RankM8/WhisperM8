@@ -1,0 +1,62 @@
+# CI für WhisperM8: Debug-Tests + Release-Build auf jedem Push/PR.
+#
+# Xcode-Strategie (bewusst, siehe docs/strategie/2026-06-10-refactor-plan.md P7):
+# Wir bauen mit der Default-Toolchain des macos-26-Images — das ist die Version,
+# die auch lokal läuft (Xcode 26.x / Swift 6.2+). /Applications/Xcode.app ist
+# auf den GitHub-Images der stabile Symlink auf die Default-Version; der
+# Diagnose-Step macht Image-Rotationen sofort im Log sichtbar.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pendant zur DEVELOPER_DIR-Pflicht im Makefile: `swift test` braucht die
+  # volle Xcode-Toolchain (SwiftUI-Macros), die CommandLineTools reichen nicht.
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain-Diagnose
+        run: xcodebuild -version && swift --version
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-test-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-test-${{ runner.os }}-
+      # Build und Test getrennt, damit Build- vs. Test-Fehler im UI
+      # unterscheidbar sind. Kein --parallel: Singleton-State (z. B.
+      # AppPreferences.shared) erst unter serieller Ausführung beobachten.
+      - name: Build (inkl. Tests)
+        run: swift build --build-tests
+      - name: Tests
+        run: swift test --skip-build
+
+  release-build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain-Diagnose
+        run: xcodebuild -version && swift --version
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-release-${{ runner.os }}-
+      # Der Pfad, den `make dev` nutzt — Release kann unabhängig vom
+      # Debug-Testbuild brechen (Optimizer).
+      - name: Release-Build
+        run: swift build -c release
