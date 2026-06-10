@@ -2255,22 +2255,6 @@ final class AgentChatsTests: XCTestCase {
         XCTAssertEqual(project.resolvedIconURL?.lastPathComponent, "logo.png")
     }
 
-    // MARK: - Helpers
-
-    private func makeTempProjectDirectory() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("WhisperM8ProjectTests-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
-    private func makeTempStoreURL() -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("WhisperM8Tests-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("AgentSessions.json")
-    }
-
     // MARK: - Drag-and-drop reordering
 
     func testReorderProjectsAssignsSequentialSortIndices() throws {
