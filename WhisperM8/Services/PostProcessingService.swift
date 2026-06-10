@@ -89,13 +89,18 @@ struct MockPostProcessor: PostProcessing {
 struct CodexPostProcessor: PostProcessing {
     private let templateStore: PostProcessingTemplateStore
     private let promptPackageBuilder: PromptPackageBuilder
+    /// Hot-Path nutzt den TTL-Cache; die Settings-UI probt weiterhin direkt
+    /// (immer frische Anzeige). Closure-DI für Tests.
+    private let statusProvider: () -> CodexConnectionStatus
 
     init(
         templateStore: PostProcessingTemplateStore = PostProcessingTemplateStore(),
-        promptPackageBuilder: PromptPackageBuilder = PromptPackageBuilder()
+        promptPackageBuilder: PromptPackageBuilder = PromptPackageBuilder(),
+        statusProvider: @escaping () -> CodexConnectionStatus = { CodexStatusCache.shared.status() }
     ) {
         self.templateStore = templateStore
         self.promptPackageBuilder = promptPackageBuilder
+        self.statusProvider = statusProvider
     }
 
     func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
@@ -103,7 +108,7 @@ struct CodexPostProcessor: PostProcessing {
             throw PostProcessingError.missingTemplate
         }
 
-        let status = CodexStatusProbe().status()
+        let status = statusProvider()
         guard status.isReadyForNonInteractiveProcessing else {
             throw PostProcessingError.codexUnavailable(
                 "Codex post-processing is not ready. Raw transcript was used instead."
@@ -207,6 +212,11 @@ struct CodexPostProcessor: PostProcessing {
 
         guard process.terminationStatus == 0 else {
             let message = conciseCodexError(from: logOutput)
+            // Scheiterte der Lauf an fehlender Anmeldung, war der gecachte
+            // .signedIn-Status stale — nächster Lauf probt frisch.
+            if logOutput.lowercased().contains("not logged in") {
+                CodexStatusCache.shared.invalidate()
+            }
             throw PostProcessingError.codexUnavailable(message)
         }
 

@@ -43,6 +43,11 @@ struct SelectedContextService {
         guard let pid = app?.processIdentifier else { return nil }
 
         let appElement = AXUIElementCreateApplication(pid)
+        // Haengt die Ziel-App, blockiert das synchrone AX-IPC sonst bis zum
+        // Default-Timeout (mehrere Sekunden). Seit P5 laeuft das Capture
+        // parallel zum sichtbaren Overlay — ein eingefrorener MainActor waere
+        // sofort sichtbar. 0,5 s sind grosszuegig fuer gesunde Apps.
+        AXUIElementSetMessagingTimeout(appElement, 0.5)
         var focusedValue: CFTypeRef?
         let focusedStatus = AXUIElementCopyAttributeValue(
             appElement,

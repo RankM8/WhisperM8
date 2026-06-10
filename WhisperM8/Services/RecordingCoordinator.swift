@@ -42,6 +42,12 @@ final class RecordingCoordinator {
     private var screenClipLimitTask: Task<Void, Never>?
     private var clipboardScreenshotTask: Task<Void, Never>?
     private var observedPasteboardChangeCount = NSPasteboard.general.changeCount
+    /// P5: paralleler Kontext-Capture-Task (Selected-Text + Agent-Chat-Tail),
+    /// laeuft NACH dem Aufnahmestart und reicht den Kontext nach.
+    private var contextCaptureTask: Task<Void, Never>?
+    /// `true`, wenn der User waehrend des laufenden Captures den Kontext im
+    /// Overlay geleert hat — der Merge darf dann nichts nachreichen.
+    private var userClearedContextDuringCapture = false
     private let failedRecordingsStore: FailedRecordingsStore
     /// Laufender Transkriptions-Call als cancelbarer Task. `cancelTranscription()`
     /// (Overlay-Button/ESC) cancelt ihn; URLSession bricht den Upload dann ab.
@@ -84,51 +90,29 @@ final class RecordingCoordinator {
         let startToken = PerfBudgets.recordingStart.begin()
         defer { PerfBudgets.recordingStart.end(startToken) }
 
+        let hotkeyAt = Date()
         isProcessing = true
         recordingTimer.stop()
         overlayController.hide()
         contextSourceApp = NSWorkspace.shared.frontmostApplication
 
+        // Auto-Inject des Agent-Chat-Refs nur, wenn WhisperM8 selbst frontmost war
+        // beim Recording-Start. Wenn der User in Cursor/VS Code/Browser arbeitet,
+        // ist der Chat-Kontext irrelevant — wir wollen ihn nicht „aufzwingen".
+        let activeAgentChat: AgentChatContextRef?
+        if contextSourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
+            activeAgentChat = appState.activeAgentChat
+        } else {
+            activeAgentChat = nil
+        }
+
         do {
-            let selectedContext = await PerfBudgets.contextCapture.withInterval {
-                await selectedContextService.capture(from: contextSourceApp)
-            }
-            // Auto-Inject des Agent-Chat-Refs nur, wenn WhisperM8 selbst frontmost war
-            // beim Recording-Start. Wenn der User in Cursor/VS Code/Browser arbeitet,
-            // ist der Chat-Kontext irrelevant — wir wollen ihn nicht „aufzwingen".
-            let activeAgentChat: AgentChatContextRef?
-            if contextSourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
-                activeAgentChat = appState.activeAgentChat
-            } else {
-                activeAgentChat = nil
-            }
-
-            // Conversation-Tail des aktiven Chats lesen (Phase 6, C1). Wir wollen
-            // wissen, "worum geht's gerade", damit das Post-Processing den
-            // gesprochenen Prompt richtig einordnen kann. JSONL-Read kann ein
-            // paar Hundert KB gross sein — wir laufen aber schon in einem
-            // async-Pfad, das blockiert die UI nicht.
-            let activeAgentChatTail: String? = PerfBudgets.chatTail.withInterval {
-                activeAgentChat.flatMap { ref in
-                    AgentChatTailExtractor.extract(for: ref)
-                }
-            }
-
-            let sourceAppForBundle = contextSourceApp
-            let contextBundle = TranscriptContextBundle.from(
-                selectedContext: selectedContext,
-                sourceApp: sourceAppForBundle,
-                agentChat: activeAgentChat,
-                agentChatTail: activeAgentChatTail
-            )
-
-            // Diagnostik: explizit loggen, was wir gerade als Chat-Kontext greifen.
-            // Macht es im `log stream`-Output sofort sichtbar und ist die Quelle
-            // der Wahrheit fuer User-Reports "warum hat der Prompt nicht den
-            // erwarteten Kontext gehabt".
-            Logger.transcription.info(
-                "recording_context_snapshot agentChatPresent=\(activeAgentChat != nil, privacy: .public) provider=\(activeAgentChat?.provider.rawValue ?? "none", privacy: .public) kind=\(activeAgentChat?.effectiveKind.rawValue ?? "none", privacy: .public) project=\(activeAgentChat?.projectName ?? "none", privacy: .public) externalID=\(activeAgentChat?.externalSessionID ?? "none", privacy: .public) backgroundShortID=\(activeAgentChat?.backgroundShortID ?? "none", privacy: .public) tailChars=\(activeAgentChatTail?.count ?? 0, privacy: .public) sourceApp=\(sourceAppForBundle?.bundleIdentifier ?? "unknown", privacy: .public)"
-            )
+            // P5: Aufnahme SOFORT starten. Selected-Text-Capture (~240 ms
+            // Clipboard-Sleeps im Fallback) und Agent-Chat-Tail (JSONL-Read)
+            // laufen danach als paralleler Task und werden nachgereicht —
+            // vorher lagen sie komplett VOR dem Recorder-Start und haben die
+            // ersten Silben des Diktats gekostet.
+            //
             // Pre-Switch-Capture: Volume MUSS gelesen werden BEVOR der AVAudioEngine
             // startet, sonst hat macOS bei Bluetooth-Devices bereits den A2DP→HFP-
             // Profile-Switch angestossen und wir merken uns einen falschen "Original"-Wert.
@@ -138,32 +122,137 @@ final class RecordingCoordinator {
                 AudioDuckingManager.shared.beginCapture()
                 try await audioRecorder.startRecording()
             }
-
-            recordingStartTime = Date()
-            appState.isRecording = true
-            appState.recordingDuration = 0
-            appState.audioLevel = 0
-            appState.lastError = nil
-            appState.isPostProcessing = false
-            appState.postProcessingStatusText = nil
-            appState.selectedOutputMode = OutputMode.defaultMode()
-            appState.selectedContext = selectedContext
-            appState.lastSelectedContext = selectedContext.isEmpty ? nil : selectedContext
-            appState.contextBundle = contextBundle
-            appState.lastContextBundle = contextBundle.isEmpty ? nil : contextBundle
-            appState.isScreenClipRecording = false
-            isProcessing = false
-            startClipboardScreenshotMonitor()
-
-            presentOverlay(appState: appState)
-
-            setupEscKeyMonitor()
-            startDurationTimer()
         } catch {
             appState.lastError = error.localizedDescription
             AudioDuckingManager.shared.endCaptureImmediate()
             isProcessing = false
+            return
         }
+
+        Logger.transcription.info(
+            "recording_start_latency ms=\(Int(Date().timeIntervalSince(hotkeyAt) * 1000), privacy: .public)"
+        )
+
+        recordingStartTime = Date()
+        appState.isRecording = true
+        appState.recordingDuration = 0
+        appState.audioLevel = 0
+        appState.lastError = nil
+        appState.isPostProcessing = false
+        appState.postProcessingStatusText = nil
+        appState.selectedOutputMode = OutputMode.defaultMode()
+        appState.selectedContext = .empty
+        appState.lastSelectedContext = nil
+        // Start-Bundle enthaelt nur das synchron Verfuegbare (sourceApp +
+        // Agent-Chat-Ref); selectedText und Tail reicht der Capture-Task nach.
+        appState.contextBundle = TranscriptContextBundle.from(
+            selectedContext: .empty,
+            sourceApp: contextSourceApp,
+            agentChat: activeAgentChat
+        )
+        appState.lastContextBundle = nil
+        appState.isScreenClipRecording = false
+        userClearedContextDuringCapture = false
+        isProcessing = false
+
+        presentOverlay(appState: appState)
+        setupEscKeyMonitor()
+        startDurationTimer()
+
+        startContextCapture(
+            appState: appState,
+            sourceApp: contextSourceApp,
+            agentChat: activeAgentChat
+        )
+    }
+
+    /// P5: Kontext-Capture laeuft NACH dem Aufnahmestart parallel. Der Merge
+    /// am Ende respektiert User-Edits, die waehrenddessen im Overlay passiert
+    /// sind (Pill entfernt, Kontext geleert).
+    private func startContextCapture(
+        appState: AppState,
+        sourceApp: NSRunningApplication?,
+        agentChat: AgentChatContextRef?
+    ) {
+        contextCaptureTask?.cancel()
+        contextCaptureTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let selectedContext = await PerfBudgets.contextCapture.withInterval {
+                await self.selectedContextService.capture(from: sourceApp)
+            }
+            // JSONL-Tail OFF-MAIN lesen — Transcript-Dateien koennen >50 MB
+            // gross sein; der alte Kommentar "blockiert die UI nicht" war
+            // falsch, extract ist eine synchrone File-I/O-Funktion.
+            let tail: String?
+            if let agentChat {
+                tail = await Task.detached(priority: .userInitiated) {
+                    PerfBudgets.chatTail.withInterval {
+                        AgentChatTailExtractor.extract(for: agentChat)
+                    }
+                }.value
+            } else {
+                tail = nil
+            }
+
+            guard !Task.isCancelled else { return }
+            self.finishContextCapture(
+                appState: appState,
+                selectedContext: selectedContext,
+                tail: tail
+            )
+            self.contextCaptureTask = nil
+        }
+    }
+
+    private func finishContextCapture(
+        appState: AppState,
+        selectedContext: SelectedContext,
+        tail: String?
+    ) {
+        guard appState.isRecording else { return }
+
+        let merged = ContextCaptureMerge.apply(
+            captured: selectedContext,
+            tail: tail,
+            into: appState.contextBundle,
+            userClearedSelectedText: userClearedContextDuringCapture
+        )
+        appState.contextBundle = merged
+        appState.selectedContext = merged.selectedText
+        appState.lastContextBundle = merged.isEmpty ? nil : merged
+        appState.lastSelectedContext = merged.selectedText.isEmpty ? nil : merged.selectedText
+
+        // Diagnostik: explizit loggen, was wir als Chat-Kontext gegriffen
+        // haben — Quelle der Wahrheit fuer User-Reports "warum hatte der
+        // Prompt nicht den erwarteten Kontext".
+        Logger.transcription.info(
+            "recording_context_snapshot agentChatPresent=\(merged.agentChat != nil, privacy: .public) provider=\(merged.agentChat?.provider.rawValue ?? "none", privacy: .public) project=\(merged.agentChat?.projectName ?? "none", privacy: .public) externalID=\(merged.agentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(merged.agentChatTail?.count ?? 0, privacy: .public) selectedTextChars=\(merged.selectedText.text.count, privacy: .public) sourceApp=\(self.contextSourceApp?.bundleIdentifier ?? "unknown", privacy: .public)"
+        )
+        overlayController.update(appState: appState)
+
+        // Pasteboard-Resync: Das Capture erzeugt im Clipboard-Fallback eigene
+        // changeCount-Bumps (Cmd+C + Snapshot-Restore). Resync, damit der
+        // 500-ms-Monitor sie nicht als User-Kopie importiert. Bekannte
+        // Restluecke (existierte auch vorher): eine echte User-Kopie im
+        // Capture-Fenster wird mit verschluckt.
+        observedPasteboardChangeCount = NSPasteboard.general.changeCount
+        startClipboardScreenshotMonitor()
+    }
+
+    /// Stop wartet (begrenzt) auf den parallelen Capture-Task, damit kurze
+    /// Diktate ihren Kontext trotzdem bekommen. Muss VOR dem finalen
+    /// Clipboard-Sweep laufen — sonst importiert der Sweep den temporaeren
+    /// Cmd+C-/Restore-Inhalt des Captures als User-Kontext.
+    private func waitForContextCapture(timeout: TimeInterval) async {
+        guard contextCaptureTask != nil else { return }
+        let deadline = Date().addingTimeInterval(timeout)
+        while contextCaptureTask != nil, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        // Timeout: Capture haengt (z. B. JSONL auf langsamem Volume) — der
+        // Lauf geht ohne den nachgereichten Kontext raus.
+        contextCaptureTask?.cancel()
+        contextCaptureTask = nil
     }
 
     /// Zeigt das Recording-Overlay mit dem vollständigen Callback-Wiring.
@@ -224,7 +313,12 @@ final class RecordingCoordinator {
         if let recordingStartTime {
             let elapsed = Date().timeIntervalSince(recordingStartTime)
             if elapsed < 0.3 {
-                Logger.debug(" Recording too short: \(elapsed)s")
+                // P5: Seit dem Sofort-Start landet ein versehentlicher
+                // Doppel-Tap des Hotkeys hier. Frueher lief die Aufnahme dann
+                // stillschweigend weiter ("Geister-Aufnahme") — jetzt wird
+                // sie verworfen, was der User-Intention entspricht.
+                Logger.debug(" Recording too short: \(elapsed)s — discarding")
+                cancelRecording()
                 return
             }
         }
@@ -233,6 +327,10 @@ final class RecordingCoordinator {
         if appState.isScreenClipRecording {
             await stopScreenClipAndAttach()
         }
+        // VOR dem finalen Clipboard-Sweep auf den Capture-Task warten —
+        // sonst importiert der Sweep dessen Cmd+C-/Restore-Pasteboard-Bumps
+        // als User-Kontext (und kurze Diktate verloeren ihren Kontext).
+        await waitForContextCapture(timeout: 1.0)
         observeClipboardChange()
         stopClipboardScreenshotMonitor()
 
@@ -401,6 +499,8 @@ final class RecordingCoordinator {
         stopClipboardScreenshotMonitor()
         screenClipLimitTask?.cancel()
         screenClipLimitTask = nil
+        contextCaptureTask?.cancel()
+        contextCaptureTask = nil
 
         let audioURL = audioRecorder.stopRecording()
         if let audioURL {
@@ -455,6 +555,7 @@ final class RecordingCoordinator {
 
     func clearContextBundle() {
         guard let appState, appState.isRecording, !appState.isScreenClipRecording else { return }
+        userClearedContextDuringCapture = true
         visualContextCaptureService.cleanup(appState.contextBundle)
         // Komplettes Clear inkl. Agent-Chat-Ref — User hat explizit „alles weg" geklickt.
         appState.contextBundle = TranscriptContextBundle.from(
@@ -482,6 +583,7 @@ final class RecordingCoordinator {
     /// Entfernt nur den ausgewählten Text aus dem laufenden Recording-Bundle.
     func removeSelectedTextFromContext() {
         guard let appState, appState.isRecording else { return }
+        userClearedContextDuringCapture = true
         guard !appState.contextBundle.selectedText.isEmpty else { return }
         appState.contextBundle.selectedText = .empty
         appState.selectedContext = .empty

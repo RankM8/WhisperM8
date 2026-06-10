@@ -196,6 +196,7 @@ class OverlayController: ObservableObject {
     private var panel: RecordingPanel?
     private var hostingView: NSHostingView<RecordingOverlayView>?
     private var previousApp: NSRunningApplication?
+    private var modesObserver: NSObjectProtocol?
     private var onCancel: (() -> Void)?
     private var onCancelTranscription: (() -> Void)?
     private var onCancelPostProcessing: (() -> Void)?
@@ -277,9 +278,27 @@ class OverlayController: ObservableObject {
         panel.orderFront(nil)
         self.panel = panel
         self.hostingView = hostingView
+
+        // Event-getriebener Mode-Reload statt Tick-Polling. show() ruft oben
+        // hide() auf, das den alten Observer entfernt — re-entrantes show()
+        // (z. B. Transkriptions-Retry) registriert also nie doppelt.
+        modesObserver = NotificationCenter.default.addObserver(
+            forName: OutputModeStore.modesDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.outputModes = OutputMode.enabledBuiltInModes
+            }
+        }
     }
 
     func hide() {
+        if let modesObserver {
+            NotificationCenter.default.removeObserver(modesObserver)
+            self.modesObserver = nil
+        }
         if let origin = panel?.frame.origin {
             OverlayPositionStore.savePosition(origin)
         }
@@ -334,23 +353,39 @@ class OverlayController: ObservableObject {
     }
 
     func update(appState: AppState) {
-        // Only update properties - view stays the same, SwiftUI handles animations
+        // Only update properties - view stays the same, SwiftUI handles animations.
+        //
+        // Tick-Diät: update() läuft im 100-ms-Timer. Volatile Felder werden
+        // direkt gesetzt; alles andere nur bei echter Änderung, damit der
+        // 10-Hz-Tick keinen objectWillChange-Churn im SwiftUI-Overlay erzeugt.
+        // Der frühere OutputModeStore-Disk-Load pro Tick ist doppelt entschärft:
+        // enabledBuiltInModes ist seit dem Stat-Cache billig, und der Guard
+        // verhindert das Publish.
         self.audioLevel = appState.audioLevel
         self.duration = appState.recordingDuration
-        self.isTranscribing = appState.isTranscribing
-        self.isPostProcessing = appState.isPostProcessing
-        self.selectedOutputMode = appState.selectedOutputMode
-        self.outputModes = OutputMode.enabledBuiltInModes
-        self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
-        self.selectedContext = appState.selectedContext
-        self.contextBundle = appState.contextBundle
-        self.isScreenClipRecording = appState.isScreenClipRecording
-        self.postProcessingStatusText = appState.postProcessingStatusText
+        setIfChanged(\.isTranscribing, to: appState.isTranscribing)
+        setIfChanged(\.isPostProcessing, to: appState.isPostProcessing)
+        setIfChanged(\.selectedOutputMode, to: appState.selectedOutputMode)
+        setIfChanged(\.outputModes, to: OutputMode.enabledBuiltInModes)
+        setIfChanged(\.showModePickerInMiniOverlay, to: AppPreferences.shared.showModePickerInMiniOverlay)
+        setIfChanged(\.selectedContext, to: appState.selectedContext)
+        setIfChanged(\.contextBundle, to: appState.contextBundle)
+        setIfChanged(\.isScreenClipRecording, to: appState.isScreenClipRecording)
+        setIfChanged(\.postProcessingStatusText, to: appState.postProcessingStatusText)
 
         let latestStyle = OverlayPositionStore.loadStyle()
         if latestStyle != overlayStyle {
             overlayStyle = latestStyle
             applyCurrentStyleToPanel()
+        }
+    }
+
+    private func setIfChanged<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<OverlayController, Value>,
+        to newValue: Value
+    ) {
+        if self[keyPath: keyPath] != newValue {
+            self[keyPath: keyPath] = newValue
         }
     }
 
