@@ -144,26 +144,39 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeout
 
-        let audioData: Data
+        // Größen-Check über Datei-Attribute statt Voll-Load — die Audio-Daten
+        // werden für den Upload nie komplett in den Speicher geladen.
+        let fileSize: Int
         do {
-            audioData = try Data(contentsOf: audioURL)
+            let attributes = try FileManager.default.attributesOfItem(atPath: audioURL.path)
+            fileSize = (attributes[.size] as? Int) ?? 0
         } catch {
-            Logger.debug("ERROR reading audio file: \(error)")
+            Logger.debug("ERROR reading audio file attributes: \(error)")
             throw error
         }
 
-        let fileSizeMB = Double(audioData.count) / (1024 * 1024)
+        let fileSizeMB = Double(fileSize) / (1024 * 1024)
         Logger.debug("- File size: \(String(format: "%.2f", fileSizeMB)) MB")
 
-        if audioData.count > config.maxFileSizeBytes {
+        if fileSize > config.maxFileSizeBytes {
             Logger.debug("ERROR: File too large!")
             throw TranscriptionError.fileTooLarge(sizeMB: fileSizeMB)
         }
 
-        let body = MultipartFormDataBuilder.buildAudioTranscriptionBody(
+        // Multipart-Body in eine Temp-Datei streamen und via
+        // `upload(for:fromFile:)` hochladen: URLSession liest die Datei dann
+        // selbst gepuffert, statt dass wir Audio + Body doppelt im RAM halten.
+        let bodyFileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisperm8-upload-\(UUID().uuidString).tmp")
+        // defer VOR dem Writer-Call registrieren: Wirft der Writer mittendrin
+        // (z. B. Platte voll bei der Chunk-Copy), darf die teilgeschriebene
+        // Body-Datei nicht liegen bleiben.
+        defer { try? FileManager.default.removeItem(at: bodyFileURL) }
+        try MultipartFormDataFileWriter.writeAudioTranscriptionBody(
+            to: bodyFileURL,
             boundary: boundary,
             model: config.model,
-            audioData: audioData,
+            audioFileURL: audioURL,
             filename: audioURL.lastPathComponent,
             language: language
         )
@@ -171,8 +184,14 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
         Logger.debug("Uploading to \(config.name)... (timeout: \(Int(timeout))s)")
         let startTime = Date()
 
+        // Pro Call eine Session mit passendem Timeout; ohne Invalidate würde
+        // jede davon bis zum App-Ende weiterleben.
         let session = createLongTimeoutSession(timeout: timeout)
-        let (data, response) = try await session.upload(for: request, from: body)
+        defer { session.finishTasksAndInvalidate() }
+        // Der async-Upload ist kooperativ cancelbar: Wird der umgebende Task
+        // gecancelt (Cancel-Button/ESC während "Transcribing…"), bricht
+        // URLSession den Request ab und wirft `URLError(.cancelled)`.
+        let (data, response) = try await session.upload(for: request, fromFile: bodyFileURL)
 
         let elapsed = Date().timeIntervalSince(startTime)
         Logger.debug("Response received in \(String(format: "%.1f", elapsed))s")
@@ -213,35 +232,54 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
 
 // MARK: - Shared Helpers
 
-struct MultipartFormDataBuilder {
-    static func buildAudioTranscriptionBody(
+/// Schreibt den multipart/form-data-Body in eine Datei, ohne die Audio-Daten
+/// komplett in den Speicher zu laden (Chunk-Copy in 1-MiB-Schritten). Das
+/// Envelope-Format ist identisch zum früheren In-Memory-Builder.
+struct MultipartFormDataFileWriter {
+    static func writeAudioTranscriptionBody(
+        to destinationURL: URL,
         boundary: String,
         model: String,
-        audioData: Data,
+        audioFileURL: URL,
         filename: String,
         language: String?
-    ) -> Data {
-        var body = Data()
-
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(model)\r\n".data(using: .utf8)!)
-
-        if let language = language, !language.isEmpty {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(language)\r\n".data(using: .utf8)!)
+    ) throws {
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: destinationURL)
+        guard fileManager.createFile(atPath: destinationURL.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
         }
 
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
-        body.append(audioData)
-        body.append("\r\n".data(using: .utf8)!)
+        let output = try FileHandle(forWritingTo: destinationURL)
+        defer { try? output.close() }
 
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        var prefix = Data()
+        prefix.append(Data("--\(boundary)\r\n".utf8))
+        prefix.append(Data("Content-Disposition: form-data; name=\"model\"\r\n\r\n".utf8))
+        prefix.append(Data("\(model)\r\n".utf8))
 
-        return body
+        if let language, !language.isEmpty {
+            prefix.append(Data("--\(boundary)\r\n".utf8))
+            prefix.append(Data("Content-Disposition: form-data; name=\"language\"\r\n\r\n".utf8))
+            prefix.append(Data("\(language)\r\n".utf8))
+        }
+
+        prefix.append(Data("--\(boundary)\r\n".utf8))
+        prefix.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+        prefix.append(Data("Content-Type: audio/m4a\r\n\r\n".utf8))
+        try output.write(contentsOf: prefix)
+
+        let input = try FileHandle(forReadingFrom: audioFileURL)
+        defer { try? input.close() }
+        while true {
+            // autoreleasepool hält den Speicher flach: `read(upToCount:)`
+            // liefert autoreleased NSData-Puffer.
+            let chunk = try autoreleasepool { try input.read(upToCount: 1024 * 1024) }
+            guard let chunk, !chunk.isEmpty else { break }
+            try output.write(contentsOf: chunk)
+        }
+
+        try output.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
     }
 }
 

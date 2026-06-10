@@ -12,6 +12,16 @@ private struct PostProcessingRunResult {
     var agentProjectPath: String?
 }
 
+/// Eingefrorener Zustand eines fehlgeschlagenen Transkriptions-Laufs.
+/// Hält alles fest, was ein Retry braucht, um exakt denselben Lauf
+/// (gleicher Output-Mode, gleicher Kontext) erneut zu starten.
+private struct PendingTranscriptionRetry {
+    var recording: FailedRecording
+    var audioDuration: TimeInterval
+    var outputMode: OutputMode
+    var contextBundle: TranscriptContextBundle
+}
+
 @MainActor
 final class RecordingCoordinator {
     private weak var appState: AppState?
@@ -32,13 +42,26 @@ final class RecordingCoordinator {
     private var screenClipLimitTask: Task<Void, Never>?
     private var clipboardScreenshotTask: Task<Void, Never>?
     private var observedPasteboardChangeCount = NSPasteboard.general.changeCount
+    private let failedRecordingsStore: FailedRecordingsStore
+    /// Laufender Transkriptions-Call als cancelbarer Task. `cancelTranscription()`
+    /// (Overlay-Button/ESC) cancelt ihn; URLSession bricht den Upload dann ab.
+    private var transcriptionTask: Task<Void, Error>?
+    /// `true`, sobald die Transkriptions-Response eingetroffen ist und die
+    /// Delivery läuft (Clipboard/Auto-Paste). Ein Cancel darf dann nichts
+    /// mehr abbrechen — ein gesetztes Cancel-Flag würde die `Task.sleep`-
+    /// Delays im PasteService kollabieren lassen und das CGEvent-Timing
+    /// zerstören.
+    private var isDeliveringTranscription = false
+    /// Letzter fehlgeschlagener Lauf — Grundlage für "Erneut versuchen".
+    private var pendingRetry: PendingTranscriptionRetry?
 
     init(
         appState: AppState,
         postProcessingService: PostProcessingService = PostProcessingService(),
         selectedContextService: SelectedContextService = SelectedContextService(),
         visualContextCaptureService: VisualContextCaptureService? = nil,
-        reportStore: TranscriptRunReportStore = TranscriptRunReportStore()
+        reportStore: TranscriptRunReportStore = TranscriptRunReportStore(),
+        failedRecordingsStore: FailedRecordingsStore = FailedRecordingsStore()
     ) {
         self.appState = appState
         self.audioRecorder = AudioRecorder()
@@ -50,6 +73,7 @@ final class RecordingCoordinator {
         self.visualContextCaptureService = visualContextCaptureService ?? VisualContextCaptureService()
         self.visualAttachmentDeliveryBuilder = VisualAttachmentDeliveryBuilder()
         self.reportStore = reportStore
+        self.failedRecordingsStore = failedRecordingsStore
     }
 
     func startRecording() async {
@@ -120,38 +144,7 @@ final class RecordingCoordinator {
             isProcessing = false
             startClipboardScreenshotMonitor()
 
-            overlayController.show(
-                appState: appState,
-                onCancel: { [weak self] in
-                    self?.cancelRecording()
-                },
-                onCancelPostProcessing: { [weak self] in
-                    self?.cancelPostProcessing()
-                },
-                onOutputModeChange: { [weak appState] mode in
-                    appState?.setOutputMode(mode)
-                },
-                onAddScreenshot: { [weak self] in
-                    self?.addContextScreenshot()
-                },
-                onToggleScreenClip: { [weak self] in
-                    self?.toggleScreenClip()
-                },
-                onClearContext: { [weak self] in
-                    self?.clearContextBundle()
-                },
-                onContextAction: { [weak self] action in
-                    guard let self else { return }
-                    switch action {
-                    case .removeAgentChat:
-                        self.removeAgentChatFromContext()
-                    case .removeSelectedText:
-                        self.removeSelectedTextFromContext()
-                    case .removeAttachment(let id):
-                        self.removeAttachmentFromContext(id: id)
-                    }
-                }
-            )
+            presentOverlay(appState: appState)
 
             setupEscKeyMonitor()
             startDurationTimer()
@@ -160,6 +153,46 @@ final class RecordingCoordinator {
             AudioDuckingManager.shared.endCaptureImmediate()
             isProcessing = false
         }
+    }
+
+    /// Zeigt das Recording-Overlay mit dem vollständigen Callback-Wiring.
+    /// Geteilt zwischen `startRecording()` und `retryPendingTranscription()`.
+    private func presentOverlay(appState: AppState) {
+        overlayController.show(
+            appState: appState,
+            onCancel: { [weak self] in
+                self?.cancelRecording()
+            },
+            onCancelTranscription: { [weak self] in
+                self?.cancelTranscription()
+            },
+            onCancelPostProcessing: { [weak self] in
+                self?.cancelPostProcessing()
+            },
+            onOutputModeChange: { [weak appState] mode in
+                appState?.setOutputMode(mode)
+            },
+            onAddScreenshot: { [weak self] in
+                self?.addContextScreenshot()
+            },
+            onToggleScreenClip: { [weak self] in
+                self?.toggleScreenClip()
+            },
+            onClearContext: { [weak self] in
+                self?.clearContextBundle()
+            },
+            onContextAction: { [weak self] action in
+                guard let self else { return }
+                switch action {
+                case .removeAgentChat:
+                    self.removeAgentChatFromContext()
+                case .removeSelectedText:
+                    self.removeSelectedTextFromContext()
+                case .removeAttachment(let id):
+                    self.removeAttachmentFromContext(id: id)
+                }
+            }
+        )
     }
 
     func stopRecording() async {
@@ -196,7 +229,9 @@ final class RecordingCoordinator {
         )
 
         recordingTimer.stop()
-        removeEscKeyMonitor()
+        // ESC-Monitor bleibt bewusst aktiv: Er bricht jetzt auch die
+        // Transcribing-Phase ab (siehe `setupEscKeyMonitor`). Entfernt wird
+        // er erst, wenn der Transkriptions-Task durch ist.
 
         let audioURL = audioRecorder.stopRecording()
         appState.isRecording = false
@@ -208,6 +243,7 @@ final class RecordingCoordinator {
 
         guard let audioURL else {
             Logger.debug(" ERROR: No audio URL returned from recorder")
+            removeEscKeyMonitor()
             overlayController.hide()
             isProcessing = false
             showErrorAlert(title: "Recording Error", message: "No audio file was created.")
@@ -220,20 +256,13 @@ final class RecordingCoordinator {
         appState.lastOutputMode = frozenOutputMode
         overlayController.update(appState: appState)
 
-        do {
-            try await transcribeAndDeliver(
-                audioURL: audioURL,
-                audioDuration: audioDuration,
-                outputMode: frozenOutputMode,
-                contextBundle: frozenContextBundle
-            )
-        } catch let urlError as URLError {
-            handleTranscriptionFailure(audioURL: audioURL, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
-        } catch let transcriptionError as TranscriptionError {
-            handleTranscriptionFailure(audioURL: audioURL, message: transcriptionError.errorDescription ?? "Unknown error", logPrefix: "TRANSCRIPTION ERROR")
-        } catch {
-            handleTranscriptionFailure(audioURL: audioURL, message: error.localizedDescription, logPrefix: "UNKNOWN ERROR: \(type(of: error))")
-        }
+        await runCancelableTranscription(
+            audioURL: audioURL,
+            audioDuration: audioDuration,
+            outputMode: frozenOutputMode,
+            contextBundle: frozenContextBundle
+        )
+        removeEscKeyMonitor()
 
         appState.isTranscribing = false
         appState.isPostProcessing = false
@@ -252,6 +281,97 @@ final class RecordingCoordinator {
         guard let appState, appState.isPostProcessing else { return }
         _ = CodexProcessRegistry.shared.cancel()
         appState.postProcessingStatusText = "Abgebrochen…"
+    }
+
+    /// Bricht den laufenden Transkriptions-Upload ab (Overlay-Button oder ESC
+    /// während "Transcribing…"). Die Aufnahme geht dabei nicht verloren —
+    /// der Abbruch-Pfad sichert sie in den FailedRecordings-Ordner.
+    /// Sobald die Response da ist (`isDeliveringTranscription`), ist der
+    /// Abbruch ein No-Op: Die Delivery darf nicht mehr gestört werden.
+    func cancelTranscription() {
+        guard let appState, appState.isTranscribing, !isDeliveringTranscription else { return }
+        Logger.transcription.info("Cancelling in-flight transcription")
+        transcriptionTask?.cancel()
+    }
+
+    /// Führt `transcribeAndDeliver` als cancelbaren Task aus und übersetzt das
+    /// Ergebnis in Erfolgs-/Fehler-/Abbruch-Pfade. Die Aufnahme wird bei JEDEM
+    /// Misserfolg aufbewahrt — gelöscht wird sie nur im Erfolgsfall (durch
+    /// `transcribeAndDeliver` selbst) oder später durch die Aufräum-Policy
+    /// des Stores.
+    private func runCancelableTranscription(
+        audioURL: URL,
+        audioDuration: TimeInterval,
+        outputMode: OutputMode,
+        contextBundle: TranscriptContextBundle
+    ) async {
+        isDeliveringTranscription = false
+        let task = Task {
+            try await self.transcribeAndDeliver(
+                audioURL: audioURL,
+                audioDuration: audioDuration,
+                outputMode: outputMode,
+                contextBundle: contextBundle
+            )
+        }
+        transcriptionTask = task
+
+        let result = await task.result
+        // Task-Slot VOR den Fehler-Handlern freigeben: Solange der modale
+        // Fehler-Alert offen ist, darf der ESC-Monitor ESC nicht mehr
+        // schlucken (sein Guard prüft `transcriptionTask != nil`).
+        transcriptionTask = nil
+
+        switch result {
+        case .success:
+            // Erfolg: War das ein Retry aus dem Store, den Sidecar mit
+            // abräumen (die Audio-Datei hat transcribeAndDeliver bereits
+            // gelöscht).
+            if let pending = pendingRetry, pending.recording.audioURL == audioURL {
+                failedRecordingsStore.remove(pending.recording)
+                pendingRetry = nil
+            }
+        case .failure(is CancellationError):
+            handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle)
+        case .failure(let urlError as URLError) where urlError.code == .cancelled:
+            handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle)
+        case .failure(let urlError as URLError):
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
+        case .failure(let transcriptionError as TranscriptionError):
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: transcriptionError.errorDescription ?? "Unknown error", logPrefix: "TRANSCRIPTION ERROR")
+        case .failure(let error):
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: error.localizedDescription, logPrefix: "UNKNOWN ERROR: \(type(of: error))")
+        }
+    }
+
+    /// Startet den letzten fehlgeschlagenen Lauf erneut — mit derselben
+    /// gesicherten Aufnahme, demselben Output-Mode und demselben
+    /// Kontext-Bundle. Ausgelöst vom "Erneut versuchen"-Button des
+    /// Fehler-Alerts.
+    func retryPendingTranscription() async {
+        guard let appState, let pending = pendingRetry else { return }
+        guard !appState.isRecording, !appState.isTranscribing, !isProcessing else { return }
+
+        isProcessing = true
+        appState.lastError = nil
+        appState.isTranscribing = true
+        appState.lastOutputMode = pending.outputMode
+        presentOverlay(appState: appState)
+        overlayController.update(appState: appState)
+        setupEscKeyMonitor()
+
+        await runCancelableTranscription(
+            audioURL: pending.recording.audioURL,
+            audioDuration: pending.audioDuration,
+            outputMode: pending.outputMode,
+            contextBundle: pending.contextBundle
+        )
+        removeEscKeyMonitor()
+
+        appState.isTranscribing = false
+        appState.isPostProcessing = false
+        appState.postProcessingStatusText = nil
+        isProcessing = false
     }
 
     func cancelRecording() {
@@ -418,6 +538,15 @@ final class RecordingCoordinator {
             language: language.isEmpty ? nil : language,
             audioDuration: audioDuration
         )
+
+        // Später Abbruch (Cancel/ESC exakt beim Eintreffen der Response) soll
+        // sauber im Preserve-Pfad landen statt mit gesetztem Cancel-Flag in
+        // die Delivery zu laufen — dort würde `Task.sleep` im PasteService
+        // alle Paste-Delays auf 0 kollabieren lassen (Cmd+V-Race).
+        try Task.checkCancellation()
+        // Ab hier ist die Response da: Ein Cancel darf nichts mehr abbrechen.
+        isDeliveringTranscription = true
+
         let normalizedRawText = TextNormalizer.normalizeTranscriptionText(rawText)
 
         Logger.debug(" Transcription SUCCESS! Raw length: \(rawText.count), normalized length: \(normalizedRawText.count)")
@@ -724,12 +853,110 @@ final class RecordingCoordinator {
         }
     }
 
-    private func handleTranscriptionFailure(audioURL: URL, message: String, logPrefix: String) {
+    /// Misserfolg-Pfad: Aufnahme aufbewahren (nie löschen!) und Retry anbieten.
+    /// Vor diesem Fix wurde die M4A hier sofort gelöscht — ein Netz-Timeout
+    /// nach einem langen Diktat war damit unwiederbringlicher Datenverlust.
+    private func handleTranscriptionFailure(
+        audioURL: URL,
+        audioDuration: TimeInterval,
+        outputMode: OutputMode,
+        contextBundle: TranscriptContextBundle,
+        message: String,
+        logPrefix: String
+    ) {
         appState?.lastError = message
         Logger.debug(" \(logPrefix): \(message)")
         overlayController.hide()
-        try? FileManager.default.removeItem(at: audioURL)
-        showErrorAlert(title: "Transcription Failed", message: message)
+
+        let preserved = preserveRecording(
+            audioURL: audioURL,
+            audioDuration: audioDuration,
+            outputMode: outputMode,
+            contextBundle: contextBundle,
+            errorMessage: message
+        )
+
+        let wantsRetry = showTranscriptionFailureAlert(message: message, canRetry: preserved)
+        if wantsRetry {
+            // Eigener Task statt direktem Call: Der Aufrufer (stopRecording/
+            // retryPendingTranscription) muss erst seinen State-Cleanup
+            // beenden, bevor der Retry die Guards passieren kann.
+            Task { @MainActor [weak self] in
+                await self?.retryPendingTranscription()
+            }
+        }
+    }
+
+    /// User-Abbruch während "Transcribing…": kein Fehler-Alert, aber die
+    /// Aufnahme wird trotzdem gesichert — ein versehentliches ESC darf kein
+    /// Diktat kosten.
+    private func handleTranscriptionCancelled(
+        audioURL: URL,
+        audioDuration: TimeInterval,
+        outputMode: OutputMode,
+        contextBundle: TranscriptContextBundle
+    ) {
+        Logger.transcription.info("Transcription aborted by user; preserving recording")
+        appState?.lastError = nil
+        overlayController.hide()
+        preserveRecording(
+            audioURL: audioURL,
+            audioDuration: audioDuration,
+            outputMode: outputMode,
+            contextBundle: contextBundle,
+            errorMessage: "Vom Benutzer abgebrochen"
+        )
+    }
+
+    /// Verschiebt die Aufnahme in den FailedRecordings-Store und merkt sich
+    /// den Lauf für "Erneut versuchen". Schlägt selbst das Sichern fehl,
+    /// bleibt die Datei wenigstens unangetastet im tmp-Verzeichnis liegen.
+    @discardableResult
+    private func preserveRecording(
+        audioURL: URL,
+        audioDuration: TimeInterval,
+        outputMode: OutputMode,
+        contextBundle: TranscriptContextBundle,
+        errorMessage: String
+    ) -> Bool {
+        do {
+            let recording = try failedRecordingsStore.preserve(
+                audioURL: audioURL,
+                audioDuration: audioDuration,
+                language: AppPreferences.shared.language,
+                errorMessage: errorMessage
+            )
+            pendingRetry = PendingTranscriptionRetry(
+                recording: recording,
+                audioDuration: audioDuration,
+                outputMode: outputMode,
+                contextBundle: contextBundle
+            )
+            Logger.transcription.info("Recording preserved at \(recording.audioURL.path, privacy: .public)")
+            return true
+        } catch {
+            Logger.transcription.error("Failed to preserve recording: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// Fehler-Alert mit Retry-Option. Gibt `true` zurück, wenn der User
+    /// "Erneut versuchen" gewählt hat.
+    private func showTranscriptionFailureAlert(message: String, canRetry: Bool) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Transcription Failed"
+        alert.alertStyle = .warning
+        if canRetry {
+            alert.informativeText = message + "\n\nDie Aufnahme wurde gesichert und kann erneut transkribiert werden."
+            alert.addButton(withTitle: "Erneut versuchen")
+            alert.addButton(withTitle: "Schließen")
+            return alert.runModal() == .alertFirstButtonReturn
+        } else {
+            alert.informativeText = message
+            alert.addButton(withTitle: "OK")
+            _ = alert.runModal()
+            return false
+        }
     }
 
     private func startScreenClip() async {
@@ -995,6 +1222,17 @@ final class RecordingCoordinator {
             if event.keyCode == 53, self.appState?.isRecording == true {
                 Task { @MainActor in
                     self.cancelRecording()
+                }
+                return nil
+            }
+
+            // ESC während "Transcribing…" bricht den Upload ab; die Aufnahme
+            // landet gesichert im FailedRecordings-Ordner. Der Task-Check
+            // verhindert, dass ESC geschluckt wird, wenn kein Upload mehr
+            // läuft (z. B. während der modale Fehler-Alert offen ist).
+            if event.keyCode == 53, self.appState?.isTranscribing == true, self.transcriptionTask != nil {
+                Task { @MainActor in
+                    self.cancelTranscription()
                 }
                 return nil
             }

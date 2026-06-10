@@ -71,9 +71,16 @@ struct FullRecordingOverlayView: View {
                             action: controller.cancelPostProcessing
                         )
                         .help("Codex-Post-Processing abbrechen und Raw-Transkript verwenden")
+                    } else if controller.isTranscribing {
+                        CancelRecordingButton(
+                            iconSize: 16,
+                            accessibilityLabel: "Cancel transcription",
+                            action: controller.cancelTranscription
+                        )
+                        .help("Transkription abbrechen — die Aufnahme bleibt gesichert")
                     }
                 }
-                .frame(width: controller.isPostProcessing ? 42 : 24, height: 20, alignment: .trailing)
+                .frame(width: 42, height: 20, alignment: .trailing)
             }
         }
         .padding(.horizontal, 16)
@@ -184,6 +191,13 @@ struct MiniRecordingOverlayView: View {
                         action: controller.cancelPostProcessing
                     )
                         .help("Codex-Post-Processing abbrechen")
+                } else {
+                    CancelRecordingButton(
+                        iconSize: 14,
+                        accessibilityLabel: "Cancel transcription",
+                        action: controller.cancelTranscription
+                    )
+                        .help("Transkription abbrechen — die Aufnahme bleibt gesichert")
                 }
             } else {
                 MiniAudioLevelBars(level: controller.audioLevel)

@@ -197,6 +197,7 @@ class OverlayController: ObservableObject {
     private var hostingView: NSHostingView<RecordingOverlayView>?
     private var previousApp: NSRunningApplication?
     private var onCancel: (() -> Void)?
+    private var onCancelTranscription: (() -> Void)?
     private var onCancelPostProcessing: (() -> Void)?
     private var onOutputModeChange: ((OutputMode) -> Void)?
     private var onAddScreenshot: (() -> Void)?
@@ -220,6 +221,7 @@ class OverlayController: ObservableObject {
     func show(
         appState: AppState,
         onCancel: @escaping () -> Void,
+        onCancelTranscription: @escaping () -> Void,
         onCancelPostProcessing: @escaping () -> Void,
         onOutputModeChange: @escaping (OutputMode) -> Void,
         onAddScreenshot: @escaping () -> Void,
@@ -233,6 +235,7 @@ class OverlayController: ObservableObject {
 
         hide()  // Cleanup any existing panel first
         self.onCancel = onCancel
+        self.onCancelTranscription = onCancelTranscription
         self.onCancelPostProcessing = onCancelPostProcessing
         self.onOutputModeChange = onOutputModeChange
         self.onAddScreenshot = onAddScreenshot
@@ -284,6 +287,7 @@ class OverlayController: ObservableObject {
         panel = nil
         hostingView = nil
         onCancel = nil
+        onCancelTranscription = nil
         onCancelPostProcessing = nil
         onOutputModeChange = nil
         onAddScreenshot = nil
@@ -298,6 +302,10 @@ class OverlayController: ObservableObject {
 
     func cancelRecording() {
         onCancel?()
+    }
+
+    func cancelTranscription() {
+        onCancelTranscription?()
     }
 
     func cancelPostProcessing() {
