@@ -286,6 +286,20 @@ final class AudioDuckingManagerTests: XCTestCase {
         }
     }
 
+    /// Pollt eine Bedingung bis zur Deadline statt fixer Sleeps — auf
+    /// geteilten CI-Runnern unter Last verrutschen sonst die Settle-Timings
+    /// (genau so im ersten CI-Lauf passiert).
+    private func waitUntil(
+        timeout: TimeInterval = 2.0,
+        _ condition: () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     /// Nach Ablauf des Settle-Windows wird der Routing-Listener entfernt und
     /// `phase` ist wieder `.idle`.
     func test_settleWindow_expiresAfterDuration_listenersTornDown() async {
@@ -304,8 +318,8 @@ final class AudioDuckingManagerTests: XCTestCase {
             XCTAssertEqual(world.defaultOutputListenerCount, 1)
             manager.endCapture()
 
-            // Warten bis Settle-Window abgelaufen
-            try? await Task.sleep(for: .milliseconds(150))
+            // Warten bis Settle-Window abgelaufen (Deadline-Polling, CI-robust)
+            await waitUntil { world.defaultOutputListenerCount == 0 && manager.phase == .idle }
 
             XCTAssertEqual(world.defaultOutputListenerCount, 0,
                            "Routing listener must be torn down after settle-window")
@@ -332,7 +346,7 @@ final class AudioDuckingManagerTests: XCTestCase {
 
             manager.beginCapture()
             manager.endCapture()
-            try? await Task.sleep(for: .milliseconds(150))
+            await waitUntil { manager.phase == .idle }
 
             // Listener ist weg → simulate fire-on-removed-listener: world fires
             // weiter (im Fake), aber Manager hat kein Token mehr installiert.
@@ -374,7 +388,8 @@ final class AudioDuckingManagerTests: XCTestCase {
             XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
 
             // Runde 3 — Settle ausgelaufen lassen, frisch starten
-            try? await Task.sleep(for: .milliseconds(1100))
+            // (Deadline-Polling statt 1100-ms-Sleep mit nur 10 % Marge)
+            await waitUntil(timeout: 3.0) { manager.phase == .idle }
             XCTAssertEqual(manager.phase, .idle)
 
             manager.beginCapture()
