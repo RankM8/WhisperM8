@@ -23,11 +23,13 @@ import Foundation
 enum ClaudeTranscriptReader {
 
     /// Liefert den erwarteten JSONL-Pfad fuer eine (cwd, sessionID)-Kombi.
-    /// Encoding-Regel: jeder Slash im CWD wird zu `-`. Beispiel:
-    /// `/Users/foo/repos/whisperm8` → `-Users-foo-repos-whisperm8`.
+    /// Encoding via `AgentTranscriptLocator.encodeClaudeCwd` (P3 S1 — vorher
+    /// wurde hier nur `/`→`-` ersetzt; Pfade mit `.`/`_`/Leerzeichen landeten
+    /// damit in einem anderen Verzeichnisnamen als dem, den Claude wirklich
+    /// schreibt). Worktree-Stripping via canonicalProjectPath bleibt erhalten.
     static func transcriptURL(forCwd cwd: String, sessionID: String) -> URL {
         let canonical = AgentSessionStore.canonicalProjectPath(cwd)
-        let encoded = canonical.replacingOccurrences(of: "/", with: "-")
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(canonical)
         return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude", isDirectory: true)
             .appendingPathComponent("projects", isDirectory: true)
@@ -67,6 +69,27 @@ enum ClaudeTranscriptReader {
 
         Logger.terminalSnapshot.debug("claude_transcript_read url=\(fileURL.lastPathComponent, privacy: .public) lines=\(lineNumber) messages=\(messages.count) skipped=\(skipped)")
 
+        return AgentChatTranscript(messages: messages, isLiveSourcePossible: true)
+    }
+
+    /// P3 S6: Bounded Tail-Read — parst nur die letzten `tailBytes` statt der
+    /// ganzen Datei (Transcripts können >50 MB groß sein). Für Konsumenten,
+    /// die nur das Gesprächsende brauchen (Diktat-Kontext-Tail).
+    static func readTail(cwd: String, sessionID: String, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript? {
+        let url = transcriptURL(forCwd: cwd, sessionID: sessionID)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return readTail(fileURL: url, tailBytes: tailBytes)
+    }
+
+    static func readTail(fileURL: URL, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript {
+        let messages = TranscriptTailReader.tailLines(fileURL: fileURL, tailBytes: tailBytes)
+            .compactMap { line -> AgentChatMessage? in
+                guard let data = line.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    return nil
+                }
+                return parseEntry(obj)
+            }
         return AgentChatTranscript(messages: messages, isLiveSourcePossible: true)
     }
 
@@ -206,6 +229,33 @@ enum ClaudeTranscriptReader {
 /// Streaming-Reader, der eine Datei zeilenweise liefert — ohne den ganzen
 /// Inhalt auf einmal in den Heap zu laden. Wichtig fuer mehrstellige MB
 /// JSONL-Files.
+/// P3 S6: Liefert die letzten `tailBytes` einer Datei als vollständige
+/// Zeilen. Die erste, ggf. angeschnittene Zeile wird verworfen — gleicher
+/// Absorb-Ansatz wie beim Runtime-Watcher-Tail-Read.
+enum TranscriptTailReader {
+    static let defaultTailBytes: Int = 256 * 1024
+
+    static func tailLines(fileURL: URL, tailBytes: Int) -> [String] {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return [] }
+        defer { try? handle.close() }
+        do {
+            let size = try handle.seekToEnd()
+            let offset = UInt64(max(0, Int64(size) - Int64(tailBytes)))
+            try handle.seek(toOffset: offset)
+            let data = handle.readData(ofLength: tailBytes)
+            var lines = String(decoding: data, as: UTF8.self)
+                .split(omittingEmptySubsequences: true) { $0.isNewline }
+                .map(String.init)
+            if offset > 0, !lines.isEmpty {
+                lines.removeFirst()
+            }
+            return lines
+        } catch {
+            return []
+        }
+    }
+}
+
 struct LineStream: Sequence, IteratorProtocol {
     private let handle: FileHandle?
     private var buffer = Data()

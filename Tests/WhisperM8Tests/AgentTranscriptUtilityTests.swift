@@ -53,34 +53,4 @@ final class AgentTranscriptUtilityTests: XCTestCase {
     }
 
     // MARK: - Summary excerpt + parser
-
-    func testBuildExtendedKeepsFirstAndLastMessagesWithMarker() {
-        var lines: [String] = []
-        for i in 1...30 {
-            let role = i.isMultiple(of: 2) ? "assistant" : "user"
-            let content = "msg-\(i)"
-            if role == "assistant" {
-                lines.append(#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"\#(content)"}],"stop_reason":"end_turn"}}"#)
-            } else {
-                lines.append(#"{"type":"user","message":{"role":"user","content":"\#(content)"}}"#)
-            }
-        }
-        let text = lines.joined(separator: "\n")
-        let result = AgentTranscriptExcerpt.buildExtended(fromText: text, provider: .claude)
-
-        XCTAssertTrue(result.contains("msg-1"), "Anfangs-Messages müssen erhalten bleiben")
-        XCTAssertTrue(result.contains("msg-30"), "Ende-Messages müssen erhalten bleiben")
-        XCTAssertTrue(result.contains("trimmed for brevity"), "Truncation-Marker erwartet bei > 24 Messages")
-    }
-
-    func testBuildExtendedShortSessionContainsAllMessages() {
-        let lines = [
-            #"{"type":"user","message":{"role":"user","content":"hi"}}"#,
-            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hello"}],"stop_reason":"end_turn"}}"#
-        ]
-        let result = AgentTranscriptExcerpt.buildExtended(fromText: lines.joined(separator: "\n"), provider: .claude)
-        XCTAssertTrue(result.contains("hi"))
-        XCTAssertTrue(result.contains("hello"))
-        XCTAssertFalse(result.contains("trimmed"))
-    }
 }

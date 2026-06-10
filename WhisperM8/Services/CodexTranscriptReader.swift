@@ -78,6 +78,24 @@ enum CodexTranscriptReader {
         return AgentChatTranscript(messages: messages, isLiveSourcePossible: true)
     }
 
+    /// P3 S6: Bounded Tail-Read — siehe ClaudeTranscriptReader.readTail.
+    static func readTail(sessionID: String, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript? {
+        guard let url = transcriptURL(forSessionID: sessionID) else { return nil }
+        return readTail(fileURL: url, tailBytes: tailBytes)
+    }
+
+    static func readTail(fileURL: URL, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript {
+        let messages = TranscriptTailReader.tailLines(fileURL: fileURL, tailBytes: tailBytes)
+            .compactMap { line -> AgentChatMessage? in
+                guard let data = line.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    return nil
+                }
+                return parseEntry(obj)
+            }
+        return AgentChatTranscript(messages: messages, isLiveSourcePossible: true)
+    }
+
     /// Parst eine JSONL-Zeile zur `AgentChatMessage`, falls's ein anzeigbarer
     /// Eintrag ist.
     static func parseEntry(_ obj: [String: Any]) -> AgentChatMessage? {

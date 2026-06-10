@@ -41,98 +41,17 @@ enum AgentTranscriptExcerpt {
         return entries.joined(separator: "\n")
     }
 
+    /// P3 S3: Bounded Head-Read statt Voll-Load — der Excerpt bricht ohnehin
+    /// nach `maxMessages` ab, Transcripts können aber >50 MB groß sein. Die
+    /// ggf. abgeschnittene letzte Zeile ist nicht parsebar und wird vom
+    /// Parser übersprungen (gleiches Absorb-Muster wie beim Tail-Read).
+    static let headReadBytes: Int = 512 * 1024
+
     static func build(from url: URL, provider: AgentProvider) throws -> String {
-        let text = try String(contentsOf: url, encoding: .utf8)
-        return build(fromText: text, provider: provider)
-    }
-
-    // MARK: - Extended excerpt for full session summary
-
-    /// Wie `build`, aber mit höheren Limits und so gewichtet, dass sowohl der
-    /// **Anfang** der Session (Aufgabe / Kontext) als auch das **Ende**
-    /// (letzter Stand / offene Punkte) drin sind. Beide Hälften werden auf je
-    /// `summaryHalfMaxMessages` Nachrichten gekürzt; bei kurzen Sessions
-    /// überlappen sie und werden dedupliziert.
-    static let summaryMaxCharacters: Int = 8000
-    static let summaryHalfMaxMessages: Int = 12
-    static let summarySnippetCharLimit: Int = 600
-
-    static func buildExtended(fromText text: String, provider: AgentProvider) -> String {
-        let lines = text.split(omittingEmptySubsequences: true) { $0.isNewline }
-        let allLines = lines.map(String.init)
-
-        let parsed: [(String, AgentTranscriptEvent)] = allLines.compactMap { line in
-            guard let event = AgentTranscriptParser.parseLine(line, provider: provider) else {
-                return nil
-            }
-            switch event {
-            case .userMessage, .assistantMessageStopped:
-                return (line, event)
-            default:
-                return nil
-            }
-        }
-
-        guard !parsed.isEmpty else { return "" }
-
-        // Indices: erste N + letzte N, mit Deduplizierung wenn die Listen sich überlappen.
-        let halfCount = summaryHalfMaxMessages
-        let totalCount = parsed.count
-        let firstSlice = Array(parsed.prefix(halfCount))
-        let lastSlice: [(String, AgentTranscriptEvent)] = totalCount <= halfCount * 2
-            ? []
-            : Array(parsed.suffix(halfCount))
-        let truncatedMiddle = totalCount > halfCount * 2
-
-        var entries: [String] = []
-        var totalChars = 0
-
-        for (line, event) in firstSlice {
-            if let formatted = formattedEntry(line: line, event: event, provider: provider) {
-                entries.append(formatted)
-                totalChars += formatted.count
-                if totalChars >= summaryMaxCharacters { break }
-            }
-        }
-
-        if truncatedMiddle && totalChars < summaryMaxCharacters {
-            let dropCount = totalCount - firstSlice.count - lastSlice.count
-            entries.append("…[\(dropCount) message(s) trimmed for brevity]…")
-        }
-
-        for (line, event) in lastSlice {
-            if let formatted = formattedEntry(line: line, event: event, provider: provider) {
-                entries.append(formatted)
-                totalChars += formatted.count
-                if totalChars >= summaryMaxCharacters { break }
-            }
-        }
-
-        return entries.joined(separator: "\n")
-    }
-
-    static func buildExtended(from url: URL, provider: AgentProvider) throws -> String {
-        let text = try String(contentsOf: url, encoding: .utf8)
-        return buildExtended(fromText: text, provider: provider)
-    }
-
-    private static func formattedEntry(
-        line: String,
-        event: AgentTranscriptEvent,
-        provider: AgentProvider
-    ) -> String? {
-        let role: String
-        switch event {
-        case .userMessage: role = "User"
-        case .assistantMessageStopped: role = "Assistant"
-        default: return nil
-        }
-        guard let body = extractMessageText(line: line, provider: provider) else { return nil }
-        let cleaned = body
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else { return nil }
-        return "\(role): \(String(cleaned.prefix(summarySnippetCharLimit)))"
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let data = handle.readData(ofLength: headReadBytes)
+        return build(fromText: String(decoding: data, as: UTF8.self), provider: provider)
     }
 
     private static func extractMessageText(line: String, provider: AgentProvider) -> String? {
@@ -429,15 +348,19 @@ final class AgentSessionAutoNamer {
                 }
             }
             do {
-                guard let url = AgentTranscriptLocator.locate(
-                    provider: provider,
-                    externalSessionID: externalSessionID,
-                    cwd: cwd
-                ) else {
-                    onCompletion?(.failure(AgentTitleGeneratorError.emptyOutput))
-                    return
-                }
-                let excerpt = try AgentTranscriptExcerpt.build(from: url, provider: provider)
+                // P3 S3: Locate (rekursiver Codex-Walk) + Excerpt-Build
+                // (File-I/O) laufen OFF-MAIN — das `Task {}` hier erbt sonst
+                // die MainActor-Isolation der Klasse und blockiert die UI.
+                let excerpt = try await Task.detached(priority: .utility) {
+                    guard let url = AgentTranscriptLocator.locate(
+                        provider: provider,
+                        externalSessionID: externalSessionID,
+                        cwd: cwd
+                    ) else {
+                        throw AgentTitleGeneratorError.emptyOutput
+                    }
+                    return try AgentTranscriptExcerpt.build(from: url, provider: provider)
+                }.value
                 guard !excerpt.isEmpty else {
                     onCompletion?(.failure(AgentTitleGeneratorError.emptyOutput))
                     return

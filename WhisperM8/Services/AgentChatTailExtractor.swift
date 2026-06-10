@@ -66,12 +66,14 @@ enum AgentChatTailExtractor {
         guard let externalID = ref.externalSessionID, !externalID.isEmpty else {
             return nil
         }
+        // P3 S6: Tail-Read statt Voll-Parse — fuer die ~600 Zeichen Kontext
+        // reicht das Dateiende, Transcripts koennen >50 MB gross sein.
         let transcript: AgentChatTranscript?
         switch ref.provider {
         case .claude:
-            transcript = ClaudeTranscriptReader.read(cwd: ref.projectPath, sessionID: externalID)
+            transcript = ClaudeTranscriptReader.readTail(cwd: ref.projectPath, sessionID: externalID)
         case .codex:
-            transcript = CodexTranscriptReader.read(sessionID: externalID)
+            transcript = CodexTranscriptReader.readTail(sessionID: externalID)
         }
         guard let transcript, !transcript.messages.isEmpty else { return nil }
         return summarize(messages: transcript.messages, maxCharacters: maxCharacters)
@@ -100,7 +102,7 @@ enum AgentChatTailExtractor {
         else {
             return nil
         }
-        let transcript = ClaudeTranscriptReader.read(fileURL: URL(fileURLWithPath: linkScanPath))
+        let transcript = ClaudeTranscriptReader.readTail(fileURL: URL(fileURLWithPath: linkScanPath))
         guard !transcript.messages.isEmpty else { return nil }
         return summarize(messages: transcript.messages, maxCharacters: maxCharacters)
     }
@@ -137,7 +139,7 @@ enum AgentChatTailExtractor {
         guard let linkScanPath = active.linkScanPath, !linkScanPath.isEmpty else {
             return nil
         }
-        let transcript = ClaudeTranscriptReader.read(fileURL: URL(fileURLWithPath: linkScanPath))
+        let transcript = ClaudeTranscriptReader.readTail(fileURL: URL(fileURLWithPath: linkScanPath))
         guard !transcript.messages.isEmpty else { return nil }
         return summarize(messages: transcript.messages, maxCharacters: maxCharacters)
     }

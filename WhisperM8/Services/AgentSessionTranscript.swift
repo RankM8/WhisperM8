@@ -252,9 +252,25 @@ enum AgentTranscriptLocator {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    /// P3 S4: Einmal gefundene Codex-Pfade sind stabil (Dateien wandern
+    /// nicht) — der Cache erspart den rekursiven Walk bei jedem Lookup.
+    /// Negative Ergebnisse werden bewusst NICHT gecacht: die Datei kann
+    /// jederzeit erscheinen. NSCache ist thread-safe (Lookups laufen auch
+    /// aus Detached-Tasks).
+    private static let codexPathCache = NSCache<NSString, NSURL>()
+
     /// Codex schreibt unter `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<sessionID>.jsonl`.
     /// Wir scannen rekursiv nach dem File, dessen Name die Session-ID enthält.
     private static func locateCodex(externalSessionID: String) -> URL? {
+        let cacheKey = externalSessionID as NSString
+        if let cached = codexPathCache.object(forKey: cacheKey) {
+            let url = cached as URL
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+            codexPathCache.removeObject(forKey: cacheKey)
+        }
+
         let sessionsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex")
             .appendingPathComponent("sessions")
@@ -268,6 +284,7 @@ enum AgentTranscriptLocator {
         for case let url as URL in enumerator {
             if url.pathExtension == "jsonl"
                 && url.lastPathComponent.contains(externalSessionID) {
+                codexPathCache.setObject(url as NSURL, forKey: cacheKey)
                 return url
             }
         }
