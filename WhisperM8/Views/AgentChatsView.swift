@@ -3,7 +3,11 @@ import SwiftUI
 
 struct AgentChatsView: View {
     @State private var store = AgentSessionStore()
-    @State private var workspace = AgentWorkspace.empty
+    /// P1 S6: Live-Projektion des Workspace-Stands. Facade-Mutationen
+    /// spiegeln sich hier automatisch — die früheren ~24 manuellen
+    /// `workspace = store.loadWorkspace()`-Reloads entfallen.
+    @State private var workspaceModel = AgentWorkspaceUIModel.shared
+    private var workspace: AgentWorkspace { workspaceModel.workspace }
     @State private var selectedProjectID: UUID?
     @State private var selectedSessionID: UUID?
     @State private var expandedProjectIDs: Set<UUID> = []
@@ -273,7 +277,12 @@ struct AgentChatsView: View {
             syncActiveAgentChat()
             schedulePersistUIState()
         }
-        .onChange(of: workspace) { _, _ in syncActiveAgentChat() }
+        .onChange(of: workspace) { _, _ in
+            syncActiveAgentChat()
+            // P1 S6: Selektion darf nach Mutationen (z. B. deleteSession aus
+            // dem Spawn-Fehlerpfad) nie auf Gelöschtes zeigen.
+            reconcileSelection()
+        }
         .onChange(of: openTabIDs) { _, _ in schedulePersistUIState() }
         .onChange(of: expandedProjectIDs) { _, _ in schedulePersistUIState() }
         .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanRunningChangedNotification)) { note in
@@ -1457,6 +1466,9 @@ struct AgentChatsView: View {
 
     /// Vom Signpost-Wrapper getrennt, damit die bestehende
     /// durationMs-Logzeile unverändert bleibt. Läuft auf dem MainActor!
+    /// P1 S6: lädt nichts mehr manuell — der Workspace kommt live aus der
+    /// `AgentWorkspaceUIModel`-Projektion; hier bleiben nur Stale-Cleanup
+    /// und Selection-Fixup.
     private func loadWorkspaceFastBody() {
         let startedAt = Date()
         do {
@@ -1465,8 +1477,14 @@ struct AgentChatsView: View {
             errorMessage = error.localizedDescription
         }
 
-        workspace = store.loadWorkspace()
+        reconcileSelection()
+        Logger.agentPerformance.debug("agent_chats_fast_load durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)")
+    }
 
+    /// Selection-/Expansion-Fixup nach Workspace-Änderungen: Selektion darf
+    /// nie auf gelöschte Projekte/Sessions zeigen. Ändert nur dann etwas,
+    /// wenn die aktuelle Selektion ungültig geworden ist.
+    private func reconcileSelection() {
         if selectedProjectID == nil || !workspace.projects.contains(where: { $0.id == selectedProjectID }) {
             selectedProjectID = workspace.projects.first?.id
         }
@@ -1479,7 +1497,6 @@ struct AgentChatsView: View {
         if selectedSessionID == nil || !projectSessions.contains(where: { $0.id == selectedSessionID }) {
             selectedSessionID = projectSessions.first?.id
         }
-        Logger.agentPerformance.debug("agent_chats_fast_load durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)")
     }
 
     private func refreshSessionsInBackground(reason: String) {
@@ -1494,26 +1511,27 @@ struct AgentChatsView: View {
                     isIndexingSessions = false
                 }
             }
+            // P1 S5: Detached-Block macht nur noch das reine Indexing
+            // (JSONL-Parsing off-main); der Merge läuft danach auf dem
+            // MainActor über die Facade.
             let result = Task.detached(priority: .utility) {
-                try PerfBudgets.sidebarBackgroundIndex.withInterval {
+                PerfBudgets.sidebarBackgroundIndex.withInterval {
                     let cacheStore = AgentSessionIndexCacheStore()
                     var cache = cacheStore.load()
                     let codex = CodexSessionIndexer().indexedSessionResult(cache: &cache)
                     let claude = ClaudeSessionIndexer().indexedSessionResult(cache: &cache)
                     cacheStore.save(cache)
-
-                    let store = AgentSessionStore()
-                    try store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
-                    try store.mergeIndexedSessions(codex.sessions + claude.sessions)
-                    return [codex.stats, claude.stats]
+                    return (sessions: codex.sessions + claude.sessions, stats: [codex.stats, claude.stats])
                 }
             }
 
             guard !Task.isCancelled else { return }
             do {
-                let stats = try await result.value
+                let indexResult = await result.value
                 guard !Task.isCancelled else { return }
-                lastIndexStats = stats
+                try store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
+                try store.mergeIndexedSessions(indexResult.sessions)
+                lastIndexStats = indexResult.stats
                 loadWorkspaceFast()
                 // Manuelles Sessions-Scannen ist auch der natürliche Trigger,
                 // um *alle* generisch benannten Sessions nachträglich vom
@@ -1551,7 +1569,6 @@ struct AgentChatsView: View {
         case .reorder(let projectID, let orderedIDs):
             do {
                 try store.reorderSessions(in: projectID, orderedIDs: orderedIDs)
-                workspace = store.loadWorkspace()
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -1562,7 +1579,6 @@ struct AgentChatsView: View {
                     newProjectID: newProjectID,
                     targetIndex: targetIndex
                 )
-                workspace = store.loadWorkspace()
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -1585,7 +1601,6 @@ struct AgentChatsView: View {
         guard case .reorder(let orderedIDs) = plan else { return }
         do {
             try store.reorderProjects(orderedIDs: orderedIDs)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1602,13 +1617,9 @@ struct AgentChatsView: View {
         guard let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
             return
         }
-        autoNamer.forceGenerateTitle(session: session, cwd: project.path) { [store] result in
-            if case .success = result {
-                Task { @MainActor in
-                    workspace = store.loadWorkspace()
-                }
-            }
-        }
+        // P1 S6: Kein manuelles Reload mehr noetig — der AutoNamer schreibt
+        // ueber die Facade, die Workspace-Projektion aktualisiert die UI.
+        autoNamer.forceGenerateTitle(session: session, cwd: project.path) { _ in }
     }
 
     /// Geht durch alle nicht-archivierten Sessions, die noch einen generischen
@@ -1630,13 +1641,7 @@ struct AgentChatsView: View {
         guard !candidates.isEmpty else { return }
 
         for entry in candidates {
-            autoNamer.forceGenerateTitle(session: entry.session, cwd: entry.project.path) { [store] result in
-                if case .success = result {
-                    Task { @MainActor in
-                        workspace = store.loadWorkspace()
-                    }
-                }
-            }
+            autoNamer.forceGenerateTitle(session: entry.session, cwd: entry.project.path) { _ in }
         }
     }
 
@@ -1716,7 +1721,6 @@ struct AgentChatsView: View {
         if panel.runModal() == .OK, let url = panel.url {
             do {
                 let project = try store.upsertProject(path: url.path, createdManually: true)
-                workspace = store.loadWorkspace()
                 selectedProjectID = project.id
                 selectedSessionID = sessions(for: project).first?.id
                 expandedProjectIDs.insert(project.id)
@@ -1752,7 +1756,6 @@ struct AgentChatsView: View {
                 shouldLaunchOnOpen: true,
                 kind: kind
             )
-            workspace = store.loadWorkspace()
             selectedSessionID = session.id
             openTabIDs.insert(session.id)
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
@@ -1817,7 +1820,6 @@ struct AgentChatsView: View {
             errorMessage = error.localizedDescription
             return
         }
-        workspace = store.loadWorkspace()
         spawningBackgroundSessions.insert(session.id)
         selectedSessionID = session.id
         openTabIDs.insert(session.id)
@@ -1846,7 +1848,6 @@ struct AgentChatsView: View {
             try store.updateSession(id: session.id) { updated in
                 updated.hasLaunchedInitialPrompt = true
             }
-            workspace = store.loadWorkspace()
             spawningBackgroundSessions.remove(session.id)
             if settingsPath != nil {
                 claudeHookBridge?.startTracking(localSessionID: session.id)
@@ -1858,7 +1859,6 @@ struct AgentChatsView: View {
             // "Session noch nicht gestartet"-Geist liegen lassen.
             spawningBackgroundSessions.remove(session.id)
             try? store.deleteSession(id: session.id)
-            workspace = store.loadWorkspace()
             openTabIDs.remove(session.id)
             if selectedSessionID == session.id {
                 selectedSessionID = sessions(for: project).first?.id
@@ -1942,7 +1942,6 @@ struct AgentChatsView: View {
             session.status = .archived
             session.backgroundShortID = nil
         }
-        workspace = store.loadWorkspace()
         openTabIDs.remove(id)
         if selectedSessionID == id {
             selectedSessionID = projectSessions.first(where: { $0.id != id })?.id
@@ -1994,7 +1993,6 @@ struct AgentChatsView: View {
             try store.updateSession(id: id) { session in
                 session.status = status
             }
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2008,7 +2006,6 @@ struct AgentChatsView: View {
     private func renameSession(id: UUID, title: String) {
         do {
             try store.renameSession(id: id, title: title)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2017,7 +2014,6 @@ struct AgentChatsView: View {
     private func setSessionGroup(id: UUID, groupName: String?) {
         do {
             try store.setSessionGroup(id: id, groupName: groupName)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2026,7 +2022,6 @@ struct AgentChatsView: View {
     private func setSessionColor(id: UUID, color: String?) {
         do {
             try store.setSessionColor(id: id, color: color)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2042,7 +2037,6 @@ struct AgentChatsView: View {
     private func renameProject(id: UUID, name: String) {
         do {
             try store.renameProject(id: id, name: name)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2051,7 +2045,6 @@ struct AgentChatsView: View {
     private func setProjectColor(id: UUID, color: String) {
         do {
             try store.setProjectColor(id: id, color: color)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2071,7 +2064,6 @@ struct AgentChatsView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try store.setProjectCustomIcon(id: project.id, absolutePath: url.path)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2083,7 +2075,6 @@ struct AgentChatsView: View {
         do {
             try store.clearProjectIcon(id: project.id)
             iconLookupAttempted.remove(project.id)
-            workspace = store.loadWorkspace()
             attemptAutoDetectProjectIcons()
         } catch {
             errorMessage = error.localizedDescription
@@ -2094,7 +2085,6 @@ struct AgentChatsView: View {
         do {
             try store.clearProjectIcon(id: id)
             iconLookupAttempted.insert(id)  // nicht direkt re-resolven
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2129,7 +2119,6 @@ struct AgentChatsView: View {
                 }
             }
             await MainActor.run {
-                workspace = store.loadWorkspace()
             }
         }
     }
@@ -2137,7 +2126,6 @@ struct AgentChatsView: View {
     private func moveSession(id: UUID, direction: AgentSessionMoveDirection) {
         do {
             try store.moveSession(id: id, direction: direction)
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2223,7 +2211,6 @@ struct AgentChatsView: View {
 
         do {
             try store.updateSession(id: session.id) { $0.status = .archived }
-            workspace = store.loadWorkspace()
         } catch {
             errorMessage = error.localizedDescription
         }

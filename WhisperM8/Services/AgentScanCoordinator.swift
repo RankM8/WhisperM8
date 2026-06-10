@@ -39,6 +39,13 @@ final class AgentScanCoordinator {
     private let cooldown: TimeInterval = 30
     private var lifecycleObservers: [NSObjectProtocol] = []
 
+    /// P1 S5: Liefert die Session-IDs mit lebendem PTY. Früher schloss der
+    /// Scan mit leerer Menge — und konnte damit live laufende Sessions auf
+    /// `.closed` flippen. Closure-DI für Tests.
+    var activeSessionIDsProvider: @MainActor () -> Set<UUID> = {
+        AgentTerminalRegistry.shared.activeSessionIDs
+    }
+
     private init() {}
 
     /// Registriert die App-Lifecycle-Hooks. Idempotent — kann mehrmals
@@ -87,8 +94,11 @@ final class AgentScanCoordinator {
             userInfo: ["running": true, "reason": reason.rawValue]
         )
         let startedAt = Date()
-        let activeSessionIDs: Set<UUID> = [] // wird vom Caller via afterScanCompleted erweitert, hier conservative leer
 
+        // P1 S5: Der Detached-Block macht nur noch das reine Indexing
+        // (JSONL-Parsing off-main); der Merge läuft danach auf dem MainActor
+        // über die Facade — mit der ECHTEN Active-Menge statt einer leeren
+        // (vorher konnten live laufende Sessions auf .closed flippen).
         Task.detached(priority: .utility) { [reason] in
             let cacheStore = AgentSessionIndexCacheStore()
             var cache = cacheStore.load()
@@ -96,13 +106,15 @@ final class AgentScanCoordinator {
             let claude = ClaudeSessionIndexer().indexedSessionResult(cache: &cache)
             cacheStore.save(cache)
 
-            let store = AgentSessionStore()
-            try? store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
-            try? store.mergeIndexedSessions(codex.sessions + claude.sessions)
-            let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            Logger.agentPerformance.info("agent_scan_completed reason=\(reason.rawValue, privacy: .public) durationMs=\(durationMs) codex=\(codex.stats.scannedFiles) claude=\(claude.stats.scannedFiles)")
             await MainActor.run {
-                AgentScanCoordinator.shared.markScanCompleted()
+                let coordinator = AgentScanCoordinator.shared
+                let activeSessionIDs = coordinator.activeSessionIDsProvider()
+                let store = AgentSessionStore()
+                try? store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
+                try? store.mergeIndexedSessions(codex.sessions + claude.sessions)
+                let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                Logger.agentPerformance.info("agent_scan_completed reason=\(reason.rawValue, privacy: .public) durationMs=\(durationMs) codex=\(codex.stats.scannedFiles) claude=\(claude.stats.scannedFiles)")
+                coordinator.markScanCompleted()
             }
         }
     }

@@ -171,6 +171,37 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     }
 }
 
+/// Dünne MainActor-Projektion des Workspace-Stands für SwiftUI (P1 S6).
+/// Ersetzt die früheren ~24 manuellen `workspace = store.loadWorkspace()`-
+/// Reloads in `AgentChatsView`: Jede Facade-Mutation meldet den neuen Stand
+/// über `onWorkspaceChanged`, die @Observable-Property invalidiert genau die
+/// lesenden Views.
+@MainActor
+@Observable
+final class AgentWorkspaceUIModel {
+    static let shared = AgentWorkspaceUIModel()
+
+    private(set) var workspace: AgentWorkspace
+
+    init(store: AgentWorkspaceStore = AgentWorkspaceStoreRegistry.store(for: AgentWorkspaceRepository.defaultFileURL())) {
+        self.workspace = store.read { $0 }
+        store.onWorkspaceChanged = { [weak self] newValue in
+            if Thread.isMainThread {
+                // Mutationen vom MainActor (der Normalfall seit P1 S5)
+                // spiegeln sich SYNCHRON — die UI sieht ihre eigene Änderung
+                // sofort, ohne einen Runloop-Hop.
+                MainActor.assumeIsolated {
+                    self?.workspace = newValue
+                }
+            } else {
+                Task { @MainActor in
+                    self?.workspace = newValue
+                }
+            }
+        }
+    }
+}
+
 /// Liefert pro Datei-Pfad genau EINE Store-Instanz — damit teilen sich alle
 /// ad-hoc erzeugten `AgentSessionStore`-Facade-Kopien (UI, Scan, AutoNamer,
 /// RecordingCoordinator, …) denselben serialisierten Kern.
