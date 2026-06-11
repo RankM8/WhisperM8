@@ -1,0 +1,1221 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperM8 · Agent Chats — Redesign-Prototyp</title>
+<style>
+/* ============================================================
+   WhisperM8 Agent Chats — Redesign-Prototyp v1
+   Konzept: globale Tab-Bar (flach, Repo-Badge), Gepinnt-Sektion,
+   Apple-like Flächen-Elevation statt Borders, Dark + Light.
+   ============================================================ */
+
+:root, :root[data-theme="dark"] {
+  --bg-stage:        #0b0b0d;
+  --bg-stage-glow:   #141418;
+  --bg-window:       #1d1d20;
+  --bg-sidebar:      #19191c;
+  --bg-content:      #1d1d20;
+  --bg-terminal:     #131316;
+  --bg-raised:       #2a2a2f;
+  --bg-inset:        #232327;
+  --bg-hover:        rgba(255,255,255,.055);
+  --bg-active:       rgba(255,255,255,.10);
+  --bg-selection:    rgba(255,255,255,.09);
+  --text-1:          rgba(255,255,255,.92);
+  --text-2:          rgba(255,255,255,.55);
+  --text-3:          rgba(255,255,255,.34);
+  --accent:          #0a84ff;
+  --green:           #32d74b;
+  --orange:          #ff9f0a;
+  --red:             #ff453a;
+  --indigo:          #7d7aff;
+  --purple:          #bf5af2;
+  --hairline:        rgba(255,255,255,.055);
+  --shadow-window:   0 30px 90px rgba(0,0,0,.6), 0 4px 20px rgba(0,0,0,.4);
+  --shadow-raised:   0 1px 3px rgba(0,0,0,.35);
+  --shadow-menu:     0 12px 40px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.3);
+  --term-text:       #d6d6dc;
+  --badge-text:      #fff;
+}
+:root[data-theme="light"] {
+  --bg-stage:        #d9d9df;
+  --bg-stage-glow:   #ececf1;
+  --bg-window:       #f4f4f6;
+  --bg-sidebar:      #ebebee;
+  --bg-content:      #f4f4f6;
+  --bg-terminal:     #ffffff;
+  --bg-raised:       #ffffff;
+  --bg-inset:        #e4e4e8;
+  --bg-hover:        rgba(0,0,0,.05);
+  --bg-active:       rgba(0,0,0,.09);
+  --bg-selection:    rgba(0,0,0,.07);
+  --text-1:          rgba(0,0,0,.88);
+  --text-2:          rgba(0,0,0,.52);
+  --text-3:          rgba(0,0,0,.33);
+  --hairline:        rgba(0,0,0,.07);
+  --shadow-window:   0 30px 80px rgba(40,40,60,.28), 0 4px 18px rgba(40,40,60,.14);
+  --shadow-raised:   0 1px 3px rgba(0,0,0,.12);
+  --shadow-menu:     0 12px 40px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.10);
+  --term-text:       #2b2b30;
+  --badge-text:      #fff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: radial-gradient(1200px 700px at 50% -10%, var(--bg-stage-glow), var(--bg-stage));
+  color: var(--text-1);
+  font-size: 12px;
+  overflow: hidden;
+  user-select: none;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input { font: inherit; color: var(--text-1); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 4px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---------- Prototyp-Leiste (nicht Teil der App) ---------- */
+.proto-toolbar {
+  position: fixed; inset: 0 0 auto 0; height: 44px; z-index: 50;
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  color: var(--text-2); font-size: 11px;
+}
+.proto-toolbar .pt-title { font-weight: 600; color: var(--text-1); letter-spacing: .2px; }
+.proto-toolbar .pt-hint { color: var(--text-3); }
+.proto-toolbar .pt-spacer { flex: 1; }
+.pt-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 99px; font-size: 11px; font-weight: 500;
+  background: var(--bg-hover); color: var(--text-1); transition: background .15s;
+}
+.pt-btn:hover { background: var(--bg-active); }
+.pt-btn.primary { background: var(--accent); color: #fff; }
+
+/* ---------- Bühne + Fenster ---------- */
+.stage {
+  position: absolute; inset: 44px 0 0 0;
+  display: flex; align-items: center; justify-content: center; padding: 10px 18px 22px;
+}
+.window {
+  position: relative;
+  width: min(1480px, 100%); height: 100%;
+  background: var(--bg-window);
+  border-radius: 12px; overflow: hidden;
+  box-shadow: var(--shadow-window);
+  display: flex;
+}
+
+/* Ampel-Knöpfe (Overlay, unabhängig von Sidebar) */
+.traffic { position: absolute; top: 14px; left: 14px; display: flex; gap: 8px; z-index: 10; }
+.traffic span { width: 12px; height: 12px; border-radius: 50%; }
+.traffic .r { background: #ff5f57; } .traffic .y { background: #febc2e; } .traffic .g { background: #28c840; }
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: 264px; flex: none; display: flex; flex-direction: column;
+  background: var(--bg-sidebar); padding-top: 40px;
+  transition: margin-left .18s ease;
+}
+.window.no-sidebar .sidebar { margin-left: -264px; }
+.window.no-sidebar .tabstrip { padding-left: 84px; }
+
+.side-top { padding: 0 10px 8px; display: flex; flex-direction: column; gap: 8px; }
+.side-resources {
+  position: absolute; top: 12px; left: 78px; display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--text-3); font-family: "SF Mono", ui-monospace, Menlo, monospace;
+}
+.side-resources .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+
+.side-cmdrow { display: flex; gap: 6px; }
+.btn-newchat {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; border-radius: 7px; font-weight: 600; font-size: 12px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent); transition: background .15s;
+}
+.btn-newchat:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+.btn-icon {
+  width: 28px; height: 28px; flex: none; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-2); transition: background .15s, color .15s;
+}
+.btn-icon:hover { background: var(--bg-hover); color: var(--text-1); }
+.btn-icon svg { width: 14px; height: 14px; }
+
+.side-filter {
+  display: flex; align-items: center; gap: 6px; height: 26px;
+  padding: 0 8px; border-radius: 7px; background: var(--bg-inset);
+}
+.side-filter svg { width: 11px; height: 11px; color: var(--text-3); flex: none; }
+.side-filter input {
+  flex: 1; background: none; border: none; outline: none; font-size: 11.5px;
+}
+.side-filter input::placeholder { color: var(--text-3); }
+.side-filter .clear { display: none; color: var(--text-3); font-size: 12px; line-height: 1; }
+.side-filter.has-text .clear { display: block; }
+
+.side-scan {
+  display: none; align-items: center; gap: 6px; padding: 2px 14px 6px;
+  font-size: 10px; color: var(--text-3);
+}
+.side-scan.on { display: flex; }
+.side-scan .spinner {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid var(--text-3); border-top-color: transparent;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.side-scroll { flex: 1; overflow-y: auto; padding: 2px 8px 10px; }
+
+.side-section-label {
+  display: flex; align-items: center; gap: 5px;
+  padding: 10px 6px 4px; font-size: 10px; font-weight: 600;
+  letter-spacing: .6px; text-transform: uppercase; color: var(--text-3);
+}
+.side-section-label svg { width: 9px; height: 9px; }
+
+/* Gepinnte Chats */
+.pin-row {
+  display: flex; align-items: center; gap: 7px; height: 28px;
+  padding: 0 7px; border-radius: 7px; cursor: default;
+}
+.pin-row:hover { background: var(--bg-hover); }
+.pin-row.selected { background: var(--bg-selection); }
+.pin-row .title { flex: 1; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pin-row.selected .title { font-weight: 600; }
+
+/* Repo-Badge (Mini-Avatar) */
+.repo-badge {
+  width: 16px; height: 16px; flex: none; border-radius: 4.5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 700; color: var(--badge-text);
+}
+.repo-badge.sm { width: 13px; height: 13px; font-size: 8px; border-radius: 3.5px; }
+
+/* Projekt-Gruppen */
+.proj-header {
+  display: flex; align-items: center; gap: 6px; height: 32px;
+  padding: 0 7px; border-radius: 7px; cursor: default; margin-top: 1px;
+}
+.proj-header:hover { background: var(--bg-hover); }
+.proj-header .chev { width: 12px; height: 12px; flex: none; color: var(--text-3); transition: transform .15s; }
+.proj-header.expanded .chev { transform: rotate(90deg); }
+.proj-header .name { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-header .branch {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 9.5px;
+  color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+}
+.proj-header .count { font-size: 10px; color: var(--text-3); flex: none; }
+.proj-header .add { opacity: 0; width: 18px; height: 18px; border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); flex: none; }
+.proj-header:hover .add { opacity: 1; }
+.proj-header .add:hover { background: var(--bg-active); }
+.proj-header .add svg { width: 10px; height: 10px; }
+
+.session-row {
+  display: flex; align-items: center; gap: 7px; height: 26px;
+  padding: 0 7px 0 24px; border-radius: 6px; cursor: default; position: relative;
+}
+.session-row:hover { background: var(--bg-hover); }
+.session-row.selected { background: var(--bg-selection); }
+.session-row.selected::before {
+  content: ""; position: absolute; left: 11px; top: 50%;
+  transform: translateY(-50%); width: 2.5px; height: 13px;
+  border-radius: 1.25px; background: var(--row-accent, var(--accent));
+}
+.session-row:not(.open) .glyph { opacity: .55; }
+.session-row .glyph { width: 11px; height: 11px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.session-row .glyph svg { width: 10px; height: 10px; }
+.session-row .cdot { width: 7px; height: 7px; border-radius: 50%; }
+.session-row .title { flex: 1; font-size: 11.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-row.open .title { color: var(--text-1); }
+.session-row.selected .title { font-weight: 600; color: var(--text-1); }
+.session-row .trailing { width: 16px; flex: none; display: flex; align-items: center; justify-content: center; }
+.session-row .close-x { display: none; width: 16px; height: 16px; border-radius: 4px;
+  align-items: center; justify-content: center; color: var(--text-2); }
+.session-row .close-x svg { width: 8px; height: 8px; }
+.session-row:hover .close-x { display: inline-flex; }
+.session-row:hover .statusdot { display: none; }
+.session-row .close-x:hover { background: var(--bg-active); color: var(--text-1); }
+
+.kind-badge {
+  flex: none; font-size: 8px; font-weight: 700; letter-spacing: .4px;
+  padding: 1.5px 4px; border-radius: 4px;
+}
+.kind-badge.bg   { color: var(--indigo); background: color-mix(in srgb, var(--indigo) 16%, transparent); }
+.kind-badge.view { color: var(--orange); background: color-mix(in srgb, var(--orange) 16%, transparent); }
+
+.statusdot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.statusdot.working  { background: var(--green); animation: pulse 1.8s ease-in-out infinite; }
+.statusdot.awaiting { background: var(--orange); }
+.statusdot.idle     { background: var(--green); opacity: .4; }
+.statusdot.autonaming { background: var(--purple); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+
+.more-row {
+  display: flex; align-items: center; gap: 6px; height: 24px;
+  padding: 0 7px 0 24px; border-radius: 6px; color: var(--text-3); font-size: 10.5px;
+}
+.more-row:hover { background: var(--bg-hover); color: var(--text-2); }
+.more-row svg { width: 10px; height: 10px; }
+
+.side-footer {
+  display: flex; align-items: center; gap: 2px; padding: 8px 10px;
+}
+.side-footer .grow { flex: 1; }
+
+/* ---------- Hauptbereich ---------- */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-content); }
+
+/* Globale Tab-Bar */
+.tabstrip {
+  height: 44px; flex: none; display: flex; align-items: center; gap: 4px;
+  padding: 0 10px; transition: padding-left .18s ease;
+}
+.tabs-scroll {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 3px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.tabs-scroll::-webkit-scrollbar { display: none; }
+.tab {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  height: 28px; max-width: 200px; min-width: 110px;
+  padding: 0 8px; border-radius: 7px; cursor: default;
+  color: var(--text-2); transition: background .12s;
+}
+.tab:hover { background: var(--bg-hover); }
+.tab.active { background: var(--bg-raised); color: var(--text-1); box-shadow: var(--shadow-raised); }
+.tab.tinted { background: color-mix(in srgb, var(--tab-tint) 11%, transparent); }
+.tab.tinted:hover { background: color-mix(in srgb, var(--tab-tint) 17%, transparent); }
+.tab.tinted.active { background: color-mix(in srgb, var(--tab-tint) 24%, var(--bg-raised)); }
+.tab .title { flex: 1; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab.active .title { font-weight: 600; }
+.tab .close-x { display: none; width: 15px; height: 15px; border-radius: 4px;
+  align-items: center; justify-content: center; flex: none; color: var(--text-2); }
+.tab .close-x svg { width: 7.5px; height: 7.5px; }
+.tab:hover .close-x, .tab.active .close-x { display: inline-flex; }
+.tab:hover .statusdot, .tab.active .statusdot { display: none; }
+.tab .close-x:hover { background: var(--bg-active); color: var(--text-1); }
+.tab.dragover { box-shadow: inset 2px 0 0 var(--accent); }
+
+/* ---------- Session-Header (eine ruhige Zeile statt zwei Chrome-Bänder) ---------- */
+.chrome {
+  flex: none; display: flex; align-items: center; gap: 14px;
+  padding: 8px 16px 12px;
+}
+.chrome .meta { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 9px; }
+.chrome .bigdot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex: none; }
+.chrome .lines { min-width: 0; }
+.chrome .l1 { display: flex; align-items: center; gap: 7px; }
+.chrome .l1 .title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chrome .l2 {
+  display: flex; align-items: center; gap: 6px; margin-top: 2px;
+  font-size: 10px; color: var(--text-3);
+}
+.chrome .l2 svg { width: 9px; height: 9px; }
+.chrome .l2 .mono { font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+.chrome .controls { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.chrome .ctlrow { display: flex; align-items: center; gap: 6px; }
+.chrome .runtime { font-size: 9.5px; color: var(--text-3); font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+
+.btn-soft {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px;
+  border-radius: 7px; font-size: 11.5px; font-weight: 500;
+  background: var(--bg-inset); color: var(--text-1); transition: background .15s;
+}
+.btn-soft:hover { background: var(--bg-active); }
+.btn-soft svg { width: 10px; height: 10px; }
+.btn-soft.primary { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-weight: 600; }
+.btn-soft.primary:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+
+/* ---------- Terminal ---------- */
+.content { flex: 1; min-height: 0; display: flex; padding: 0 10px 10px; }
+.term-wrap {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  background: var(--bg-terminal); border-radius: 10px; overflow: hidden;
+}
+.term {
+  flex: 1; overflow-y: auto; padding: 18px 20px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11.5px; line-height: 1.65; color: var(--term-text);
+  user-select: text;
+}
+.term .t-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 9px; }
+.term .t-dot.g { background: var(--green); }
+.term .t-row { margin-top: 10px; }
+.term .t-row:first-child { margin-top: 0; }
+.term .t-out { color: var(--text-3); padding-left: 16px; white-space: pre-wrap; }
+.term .t-text { margin-top: 12px; white-space: pre-wrap; }
+.term .t-hl { color: var(--accent); }
+.term .t-dim { color: var(--text-3); }
+.term .t-user {
+  margin-top: 14px; padding: 8px 12px; border-radius: 8px;
+  background: var(--bg-hover); color: var(--text-2);
+}
+.term-input { flex: none; padding: 0 14px 12px; }
+.term-prompt {
+  display: flex; align-items: center; gap: 9px; min-height: 38px;
+  padding: 0 13px; border-radius: 9px; background: var(--bg-inset);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11.5px;
+}
+.term-prompt .caret { color: var(--accent); font-weight: 700; }
+.term-prompt .ph { color: var(--text-3); }
+.term-statusline {
+  display: flex; gap: 10px; padding: 7px 4px 0;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 9.5px; color: var(--text-3);
+}
+.term-statusline .warn { color: var(--orange); }
+
+.empty-state {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; color: var(--text-3); background: var(--bg-terminal); border-radius: 10px;
+}
+.empty-state svg { width: 34px; height: 34px; }
+.empty-state .h { font-size: 14px; font-weight: 600; color: var(--text-2); }
+
+/* ---------- Inspector ---------- */
+.inspector {
+  width: 280px; flex: none; display: none; flex-direction: column; gap: 8px;
+  background: var(--bg-sidebar); padding: 48px 12px 12px; overflow-y: auto;
+}
+.window.with-inspector .inspector { display: flex; }
+.insp-card { background: var(--bg-hover); border-radius: 10px; padding: 11px 12px; }
+.insp-card .ct { font-size: 9.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
+.insp-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2.5px 0; font-size: 11px; }
+.insp-row .k { color: var(--text-2); }
+.insp-row .v { color: var(--text-1); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.insp-row .v.mono { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 10px; }
+.insp-row .pos { color: var(--green); } .insp-row .neg { color: var(--red); }
+.insp-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.insp-actions .btn-soft { height: 24px; font-size: 10.5px; padding: 0 9px; }
+
+/* ---------- Kontextmenü ---------- */
+.ctxmenu {
+  position: fixed; z-index: 100; min-width: 200px;
+  background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
+  backdrop-filter: blur(20px);
+  border-radius: 9px; padding: 4px; box-shadow: var(--shadow-menu);
+  display: none;
+}
+.ctxmenu.open { display: block; }
+.ctx-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 5px 9px; border-radius: 6px; font-size: 12px; text-align: left;
+}
+.ctx-item:hover { background: var(--accent); color: #fff; }
+.ctx-item.danger { color: var(--red); }
+.ctx-item.danger:hover { background: var(--red); color: #fff; }
+.ctx-item.disabled { color: var(--text-3); pointer-events: none; }
+.ctx-item svg { width: 12px; height: 12px; flex: none; }
+.ctx-sep { height: 1px; background: var(--hairline); margin: 4px 8px; }
+.ctx-label { padding: 5px 9px 2px; font-size: 10px; color: var(--text-3); }
+.ctx-swatches { display: flex; gap: 6px; padding: 4px 9px 6px; }
+.ctx-swatches span { width: 15px; height: 15px; border-radius: 50%; cursor: pointer; }
+.ctx-swatches span:hover { transform: scale(1.2); }
+.ctx-swatches .reset { background: var(--bg-inset); position: relative; }
+.ctx-swatches .reset::after { content: ""; position: absolute; inset: 6px 1px auto 1px; height: 1.5px; background: var(--red); transform: rotate(-45deg); }
+
+/* ---------- Sheet (Umbenennen) ---------- */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.35);
+  display: none; align-items: center; justify-content: center;
+}
+.sheet-backdrop.open { display: flex; }
+.sheet {
+  width: 380px; background: var(--bg-raised); border-radius: 13px;
+  box-shadow: var(--shadow-menu); padding: 18px;
+}
+.sheet h3 { font-size: 13px; margin-bottom: 12px; }
+.sheet input {
+  width: 100%; height: 30px; border-radius: 7px; border: none; outline: none;
+  background: var(--bg-inset); padding: 0 10px; font-size: 12.5px;
+}
+.sheet input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+.sheet .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+/* ---------- Checkliste ---------- */
+.checklist {
+  position: fixed; top: 44px; right: 0; bottom: 0; width: 400px; z-index: 60;
+  background: var(--bg-window); box-shadow: var(--shadow-menu);
+  transform: translateX(100%); transition: transform .22s ease;
+  display: flex; flex-direction: column;
+}
+.checklist.open { transform: translateX(0); }
+.cl-head { padding: 16px 18px 10px; }
+.cl-head h2 { font-size: 14px; }
+.cl-head .cl-progress { margin-top: 6px; font-size: 11px; color: var(--text-2); }
+.cl-bar { margin-top: 7px; height: 4px; border-radius: 2px; background: var(--bg-inset); overflow: hidden; }
+.cl-bar i { display: block; height: 100%; width: 0; background: var(--green); border-radius: 2px; transition: width .2s; }
+.cl-body { flex: 1; overflow-y: auto; padding: 4px 18px 20px; }
+.cl-group { margin-top: 14px; }
+.cl-group h4 { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--text-3); padding-bottom: 5px; }
+.cl-item { display: flex; gap: 9px; padding: 5px 0; align-items: flex-start; cursor: pointer; }
+.cl-item input { margin-top: 2px; accent-color: var(--green); }
+.cl-item .t { font-size: 12px; }
+.cl-item .n { font-size: 10.5px; color: var(--text-3); margin-top: 1px; }
+.cl-item.checked .t { color: var(--text-3); text-decoration: line-through; }
+.cl-item .new-flag { display: inline-block; margin-left: 5px; font-size: 8.5px; font-weight: 700; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 1px 4px; border-radius: 3px; vertical-align: 1px; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; bottom: 26px; left: 50%; transform: translate(-50%, 16px); z-index: 110;
+  background: var(--bg-raised); color: var(--text-1); font-size: 12px;
+  padding: 9px 16px; border-radius: 99px; box-shadow: var(--shadow-menu);
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+
+<div class="proto-toolbar">
+  <span class="pt-title">WhisperM8 · Agent Chats — Redesign-Prototyp v1</span>
+  <span class="pt-hint">Rechtsklick auf Chats, Projekte und Tabs öffnet die Kontextmenüs · ⌥1–9 wechselt Tabs</span>
+  <span class="pt-spacer"></span>
+  <button class="pt-btn" id="btn-theme">◐ Dark / Light</button>
+  <button class="pt-btn primary" id="btn-checklist">Funktions-Checkliste</button>
+</div>
+
+<div class="stage">
+  <div class="window" id="window">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="side-resources"><span class="dot"></span><span id="res-text">3 aktiv · 1.0 GB</span></div>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="side-top">
+        <div class="side-cmdrow">
+          <button class="btn-newchat" id="btn-new" title="Neuen Chat im aktuellen Projekt starten">＋&nbsp;Neuer Chat</button>
+          <button class="btn-icon" id="btn-refresh" title="Sessions neu einlesen (⌘R)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5v3h-3"/></svg></button>
+          <button class="btn-icon" id="btn-addproj" title="Projekt hinzufügen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1.5 4.5a2 2 0 0 1 2-2h2.6l1.4 1.8h5a2 2 0 0 1 2 2v5.2a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/><path d="M8 7v4M6 9h4"/></svg></button>
+        </div>
+        <div class="side-filter" id="filterbox">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+          <input id="filter" type="text" placeholder="Filter…" spellcheck="false">
+          <button class="clear" id="filter-clear">✕</button>
+        </div>
+      </div>
+      <div class="side-scan" id="scanlabel"><span class="spinner"></span> Sessions werden gescannt</div>
+      <div class="side-scroll">
+        <div id="side-pinned"></div>
+        <div id="side-groups"></div>
+      </div>
+      <div class="side-footer">
+        <button class="btn-icon" title="Einstellungen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.7M8 12.5v1.7M14.2 8h-1.7M3.5 8H1.8M12.4 3.6l-1.2 1.2M4.8 11.2l-1.2 1.2M12.4 12.4l-1.2-1.2M4.8 4.8 3.6 3.6"/></svg></button>
+        <button class="btn-icon" title="Hilfe & Onboarding"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M6.2 6.2A1.9 1.9 0 1 1 8 9v1"/><circle cx="8" cy="12" r=".4" fill="currentColor"/></svg></button>
+        <span class="grow"></span>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="tabstrip" id="tabstrip">
+        <button class="btn-icon" id="btn-sidebar" title="Sidebar ein-/ausblenden"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2.4"/><path d="M6 2.8v10.4"/></svg></button>
+        <div class="tabs-scroll" id="tabs"></div>
+        <button class="btn-icon" id="btn-plus" title="Neuer Chat / Agent"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg></button>
+        <button class="btn-icon" id="btn-inspector" title="Details ein-/ausblenden"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2.4"/><path d="M10 2.8v10.4"/></svg></button>
+      </div>
+      <div class="chrome" id="chrome"></div>
+      <div class="content" id="content"></div>
+    </div>
+
+    <aside class="inspector" id="inspector"></aside>
+  </div>
+</div>
+
+<aside class="checklist" id="checklist">
+  <div class="cl-head">
+    <h2>Funktions-Checkliste · Code-Inventar</h2>
+    <div class="cl-progress" id="cl-progress">0 von 0 geprüft</div>
+    <div class="cl-bar"><i id="cl-bar"></i></div>
+  </div>
+  <div class="cl-body" id="cl-body"></div>
+</aside>
+
+<div class="ctxmenu" id="ctxmenu"></div>
+<div class="sheet-backdrop" id="sheet-backdrop">
+  <div class="sheet">
+    <h3 id="sheet-title">Chat umbenennen</h3>
+    <input id="sheet-input" type="text" spellcheck="false">
+    <div class="row">
+      <button class="btn-soft" id="sheet-cancel">Abbrechen</button>
+      <button class="btn-soft primary" id="sheet-save">Sichern</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= Daten ================= */
+const ICONS = {
+  claude: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.2 4.1L13 3.5l-2.6 3.3L14.5 8l-4.1 1.2L13 12.5l-3.8-1.6L8 15l-1.2-4.1L3 12.5l2.6-3.3L1.5 8l4.1-1.2L3 3.5l3.8 1.6z"/></svg>',
+  codex:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5 9.6 6.4 14.5 8 9.6 9.6 8 14.5 6.4 9.6 1.5 8l4.9-1.6z"/></svg>',
+  pin:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.5 2 14 6.5l-3 .8-2.5 4.2-1.5-1.5L2.8 14 2 13.2 6 9l-1.5-1.5L8.7 5z"/></svg>',
+  pencil: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m11.2 2.3 2.5 2.5L5.5 13H3v-2.5z"/></svg>',
+  sparkles:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 2.5 7 5.5 10 6.5 7 7.5 6 10.5 5 7.5 2 6.5 5 5.5zM12 9l.7 1.8L14.5 11.5l-1.8.7L12 14l-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
+  x:      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m3.5 3.5 9 9M12.5 3.5l-9 9"/></svg>',
+  chev:   '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>',
+  plus:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>',
+  folder: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 4.5a2 2 0 0 1 2-2h2.6l1.4 1.8h5a2 2 0 0 1 2 2v5.2a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/></svg>',
+  branch: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4.5" cy="3.5" r="1.8"/><circle cx="4.5" cy="12.5" r="1.8"/><circle cx="11.5" cy="6" r="1.8"/><path d="M4.5 5.3v5.4M11.5 7.8c0 2.5-3.5 2-5.5 2.7"/></svg>',
+  term:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="m4.5 6 2 2-2 2M8.5 10.5h3"/></svg>',
+  down:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 5v6M5.5 8.5 8 11l2.5-2.5"/></svg>',
+};
+const PALETTE = ['#32D74B','#FF9F0A','#0A84FF','#BF5AF2','#FF453A','#64D2FF','#FFD60A','#AC8E68'];
+
+let sid = 0;
+function s(title, provider, status, kind, color) {
+  return { id: 'x' + (++sid), title, provider, status: status || null, kind: kind || null, color: color || null };
+}
+const PROJECTS = [
+  { id:'p-akquise', name:'akquise-ai-shadow', branch:'main', color:'#FF9F0A', path:'~/repos/akquise-ai-shadow', sessions:[
+      s('Puls-Animation für Angebots-Stempel verbessern','claude','working'),
+      s('Aktualisierung von CLAUDE.md','claude','idle'),
+      s('Dev-Restart über trafficm8-edge','claude','idle'),
+      s('Branch-Pull-Status','claude',null),
+      s('Branch aktuell nach git pull','claude',null),
+      s('Claude Chat','claude',null),
+      s('[Tool: bash]','codex',null),
+  ]},
+  { id:'p-listm8', name:'ListM8', branch:'feat/trafficm8-edge-setup', color:'#FFD60A', path:'~/repos/listm8', sessions:[
+      s('Git-Pull mit Rebase auf dev','claude','awaiting'),
+      s('Claude Chat','claude',null),
+      s("I'll help you with this task",'claude','idle'),
+      s('[Tool: Skill]','codex',null),
+      s('ListM8 Custom Attributes Liste','claude',null,null,'#64D2FF'),
+      s('OutScraper Export-Status prüfen','claude','working','bg'),
+  ]},
+  { id:'p-whisperm8', name:'whisperm8', branch:'main', color:'#0A84FF', path:'~/repos/whisperm8', sessions:[
+      s('Layout-Redesign Agent Chats','claude','working'),
+      s('Dictation-Regression Fix','claude','idle'),
+      s('Local-STT Spike (FluidAudio)','claude',null),
+      s('CI Ducking-Test härten','codex',null),
+      s('Release-Notes 1.4','codex','idle'),
+  ]},
+  { id:'p-hb-master', name:'heartbeat-master', branch:'feature/sales-analyse', color:'#BF5AF2', path:'~/repos/heartbeat-master', sessions:[
+      s('Heartbeat Master System Status','claude','working','bg'),
+  ]},
+  { id:'p-repos', name:'repos', branch:'local', color:'#FF453A', path:'~/repos', sessions:[
+      s('Repo-Inventur','claude',null),
+  ]},
+  { id:'p-trafficm8', name:'TrafficM8', branch:'main', color:'#32D74B', path:'~/repos/trafficm8', sessions:[
+      s('Docker-Compose Repository-Setup','claude','awaiting'),
+  ]},
+  { id:'p-heartbeat', name:'heartbeat', branch:'main', color:'#64D2FF', path:'~/repos/heartbeat', sessions:[
+      s('Astro-Setup für Vibe-Coder','claude','idle'),
+      s('Google Kalender MCP Installation','claude',null),
+      s('TAB-Bericht kürzen und speichern','claude','idle',null,'#BF5AF2'),
+      s('Sales-Auswertung Q2','claude','working','view'),
+      s('Claude Chat','codex',null),
+      s('Onboarding-Flow Texte','claude',null),
+      s('Pricing-Seite Varianten','claude',null),
+      s('Newsletter-Setup','codex',null),
+  ]},
+];
+
+function findSession(id) {
+  for (const p of PROJECTS) { const x = p.sessions.find(s => s.id === id); if (x) return { session: x, project: p }; }
+  return null;
+}
+const byTitle = (pid, t) => PROJECTS.find(p => p.id === pid).sessions.find(s => s.title === t).id;
+
+/* ================= UI-State (entspricht agent-ui-state.json v2) ================= */
+const state = {
+  openTabs: [
+    byTitle('p-akquise','Puls-Animation für Angebots-Stempel verbessern'),
+    byTitle('p-whisperm8','Layout-Redesign Agent Chats'),
+    byTitle('p-listm8','Git-Pull mit Rebase auf dev'),
+    byTitle('p-trafficm8','Docker-Compose Repository-Setup'),
+    byTitle('p-heartbeat','TAB-Bericht kürzen und speichern'),
+  ],
+  selected: null,
+  pinned: [
+    byTitle('p-whisperm8','Layout-Redesign Agent Chats'),
+    byTitle('p-listm8','Git-Pull mit Rebase auf dev'),
+  ],
+  selectedProject: 'p-akquise',
+  collapsed: {},
+  moreExpanded: {},
+  filter: '',
+};
+state.selected = state.openTabs[0];
+const SESSION_LIMIT = 6;
+
+/* ================= Helpers ================= */
+const $ = id => document.getElementById(id);
+const esc = t => t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+function badge(p, sm) { return `<span class="repo-badge${sm ? ' sm' : ''}" style="background:${p.color}" title="${esc(p.name)}">${esc(p.name[0].toUpperCase())}</span>`; }
+function statusDot(st) {
+  if (!st) return '';
+  const cls = { working:'working', awaiting:'awaiting', idle:'idle', autonaming:'autonaming' }[st] || '';
+  const tip = { working:'arbeitet', awaiting:'wartet auf Eingabe', idle:'bereit', autonaming:'Titel wird generiert' }[st] || '';
+  return `<span class="statusdot ${cls}" title="${tip}"></span>`;
+}
+function glyph(sess) {
+  if (sess.color) return `<span class="cdot" style="background:${sess.color}"></span>`;
+  const col = sess.provider === 'claude' ? 'var(--orange)' : 'var(--text-2)';
+  return `<span style="color:${col};display:inline-flex">${ICONS[sess.provider]}</span>`;
+}
+function kindBadge(sess) {
+  if (sess.kind === 'bg') return '<span class="kind-badge bg">BG</span>';
+  if (sess.kind === 'view') return '<span class="kind-badge view">VIEW</span>';
+  return '';
+}
+
+/* ================= Rendering ================= */
+function renderSidebar() {
+  // Gepinnt
+  const pinnedRows = state.pinned.map(id => {
+    const f = findSession(id); if (!f) return '';
+    const sel = state.selected === id ? ' selected' : '';
+    return `<div class="pin-row${sel}" data-open="${id}" data-ctx="pinned" data-id="${id}">
+      ${badge(f.project)}<span class="title">${esc(f.session.title)}</span>${statusDot(f.session.status)}
+    </div>`;
+  }).join('');
+  $('side-pinned').innerHTML = state.pinned.length
+    ? `<div class="side-section-label">${ICONS.pin} Gepinnt</div>${pinnedRows}` : '';
+
+  // Projekte
+  const q = state.filter.trim().toLowerCase();
+  const groups = PROJECTS.map(p => {
+    let sessions = p.sessions.filter(s => !state.pinned.includes(s.id));
+    if (q) sessions = sessions.filter(s => s.title.toLowerCase().includes(q));
+    if (q && sessions.length === 0) return '';
+    const expanded = q ? true : !state.collapsed[p.id];
+    let rows = '';
+    if (expanded) {
+      let visible = sessions;
+      let moreCount = 0;
+      if (!q && !state.moreExpanded[p.id] && sessions.length > SESSION_LIMIT) {
+        visible = sessions.slice(0, SESSION_LIMIT);
+        moreCount = sessions.length - SESSION_LIMIT;
+      }
+      rows = visible.map(sess => {
+        const sel = state.selected === sess.id ? ' selected' : '';
+        const open = state.openTabs.includes(sess.id) ? ' open' : '';
+        return `<div class="session-row${sel}${open}" style="--row-accent:${p.color}" data-open="${sess.id}" data-ctx="session" data-id="${sess.id}">
+          <span class="glyph">${glyph(sess)}</span>
+          <span class="title">${esc(sess.title)}</span>
+          ${kindBadge(sess)}
+          <span class="trailing">${statusDot(sess.status)}<button class="close-x" data-closesession="${sess.id}" title="Schließen">${ICONS.x}</button></span>
+        </div>`;
+      }).join('');
+      if (moreCount > 0) rows += `<div class="more-row" data-more="${p.id}">${ICONS.down} ${moreCount} weitere anzeigen</div>`;
+    }
+    return `<div class="proj-header${expanded ? ' expanded' : ''}" data-proj="${p.id}" data-ctx="project" data-id="${p.id}">
+        ${ICONS.chev}
+        <span class="repo-badge" style="background:${p.color}">${esc(p.name[0].toUpperCase())}</span>
+        <span class="name">${esc(p.name)}</span>
+        <span class="branch">${esc(p.branch)}</span>
+        <span class="count">${p.sessions.length}</span>
+        <button class="add" data-newin="${p.id}" title="Neuer Chat in ${esc(p.name)}">${ICONS.plus}</button>
+      </div>${rows}`;
+  }).join('');
+  $('side-groups').innerHTML = `<div class="side-section-label">Chats</div>` + groups;
+}
+
+function renderTabs() {
+  $('tabs').innerHTML = state.openTabs.map(id => {
+    const f = findSession(id); if (!f) return '';
+    const active = state.selected === id ? ' active' : '';
+    const tinted = f.session.color ? ' tinted' : '';
+    const style = f.session.color ? ` style="--tab-tint:${f.session.color}"` : '';
+    return `<div class="tab${active}${tinted}"${style} draggable="true" data-tab="${id}" data-ctx="tab" data-id="${id}" title="${esc(f.session.title)} — ${esc(f.project.name)}">
+      ${badge(f.project, true)}
+      <span class="title">${esc(f.session.title)}</span>
+      ${statusDot(f.session.status)}
+      <button class="close-x" data-closetab="${id}" title="Tab schließen">${ICONS.x}</button>
+    </div>`;
+  }).join('');
+  const sel = document.querySelector('.tab.active');
+  if (sel) sel.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+}
+
+function renderChrome() {
+  const f = state.selected ? findSession(state.selected) : null;
+  if (!f) { $('chrome').innerHTML = ''; return; }
+  const { session, project } = f;
+  const running = !!session.status;
+  const dotColor = session.status === 'awaiting' ? 'var(--orange)' : running ? 'var(--green)' : 'var(--text-3)';
+  const provName = session.provider === 'claude' ? 'Claude' : 'Codex';
+  const model = session.provider === 'claude' ? 'claude-fable-5' : 'gpt-5.3-codex';
+  const stText = session.status === 'awaiting' ? 'blocked' : session.status === 'working' ? 'working' : running ? 'idle' : 'stopped';
+  $('chrome').innerHTML = `
+    <div class="meta">
+      <span class="bigdot" style="background:${dotColor}"></span>
+      <div class="lines">
+        <div class="l1"><span class="title">${esc(session.title)}</span>${kindBadge(session)}</div>
+        <div class="l2">
+          ${ICONS.folder}<span>${esc(project.name)}</span>
+          ${ICONS.branch}<span class="mono">${esc(project.branch)}</span>
+          <span>·</span><span class="mono">${esc(project.path)}</span>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="ctlrow">
+        <button class="btn-soft" data-newprovider="claude" title="Neuen Claude Chat in ${esc(project.name)} öffnen">${ICONS.plus} Claude</button>
+        <button class="btn-soft" data-newprovider="codex" title="Neuen Codex Chat in ${esc(project.name)} öffnen">${ICONS.plus} Codex</button>
+        <button class="btn-soft primary" id="btn-restart">${running ? 'Restart' : 'Start / Resume'}</button>
+        <button class="btn-soft" id="btn-sessionmenu" title="Session-Menü">…</button>
+        <button class="btn-soft" id="btn-ide" title="Im IDE öffnen">PhpStorm</button>
+      </div>
+      <span class="runtime">${provName} · ${model} · ${stText}</span>
+    </div>`;
+}
+
+function renderContent() {
+  const f = state.selected ? findSession(state.selected) : null;
+  if (!f) {
+    $('content').innerHTML = `<div class="empty-state">${ICONS.term}<div class="h">Kein Agent Chat</div><div>Wähle links einen Chat oder starte einen neuen.</div></div>`;
+    return;
+  }
+  const { session, project } = f;
+  const prov = session.provider === 'claude' ? 'Claude' : 'Codex';
+  $('content').innerHTML = `
+  <div class="term-wrap">
+    <div class="term">
+      <div class="t-row"><span class="t-dot g"></span>Bash(git status --short &amp;&amp; git log --oneline -3)</div>
+      <div class="t-out">⎿  M WhisperM8/Views/AgentChatsView.swift
+   a65c514 Fix dictation regression: a hotkey tap cancelled its own recording
+   c0c7c43 Make kill actually kill app-launched instances</div>
+      <div class="t-text">Verstanden — <span class="t-hl">${esc(session.title)}</span> in <span class="t-hl">${esc(project.name)}</span>. Ich prüfe zuerst den Ist-Zustand, bevor ich etwas ändere:</div>
+      <div class="t-row"><span class="t-dot g"></span>Bash(swift test --filter AgentSessionStoreTests 2>&amp;1 | tail -3)</div>
+      <div class="t-out">⎿  Test Suite 'AgentSessionStoreTests' passed.
+   Executed 24 tests, with 0 failures (0 unexpected)</div>
+      <div class="t-text t-dim">✱ Churned for 1m 12s</div>
+      <div class="t-user">weiter im review, zeig mir die änderungen am tab-modell</div>
+    </div>
+    <div class="term-input">
+      <div class="term-prompt"><span class="caret">❯</span><span class="ph">Nachricht an ${prov} … (⇧⏎ für mehrzeilig)</span></div>
+      <div class="term-statusline">
+        <span>${esc(project.name)} → . git:(${esc(project.branch)})</span>
+        <span>[Fable 5]</span><span>44%/5h</span>
+        <span class="warn">▸▸ bypass permissions on (shift+tab to cycle)</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderInspector() {
+  const f = state.selected ? findSession(state.selected) : null;
+  const p = f ? f.project : PROJECTS.find(x => x.id === state.selectedProject);
+  $('inspector').innerHTML = `
+    <div class="insp-card"><div class="ct">Recording Context</div>
+      <div class="insp-row"><span class="k">Aktiver Chat</span><span class="v">${f ? esc(f.session.title) : '—'}</span></div>
+      <div class="insp-row"><span class="k">Provider</span><span class="v">${f ? (f.session.provider === 'claude' ? 'Claude' : 'Codex') : '—'}</span></div>
+      <div class="insp-row"><span class="k">Status</span><span class="v">${f && f.session.status ? f.session.status : 'gestoppt'}</span></div>
+    </div>
+    <div class="insp-card"><div class="ct">Branch</div>
+      <div class="insp-row"><span class="k">Projekt</span><span class="v">${esc(p.name)}</span></div>
+      <div class="insp-row"><span class="k">Branch</span><span class="v mono">${esc(p.branch)}</span></div>
+      <div class="insp-row"><span class="k">Pfad</span><span class="v mono">${esc(p.path)}</span></div>
+    </div>
+    <div class="insp-card"><div class="ct">Changes</div>
+      <div class="insp-row"><span class="k">Geändert</span><span class="v">3 Dateien</span></div>
+      <div class="insp-row"><span class="k">Diff</span><span class="v"><span class="pos">+128</span> <span class="neg">−42</span></span></div>
+    </div>
+    <div class="insp-card"><div class="ct">Git Actions</div>
+      <div class="insp-actions">
+        <button class="btn-soft" data-toast="Git-Status — im Prototyp nicht nachgebaut">Status prüfen</button>
+        <button class="btn-soft" data-toast="Neuer Codex Chat">Neuer Codex</button>
+        <button class="btn-soft" data-toast="Neuer Claude Chat">Neuer Claude</button>
+      </div>
+    </div>
+    <div class="insp-card"><div class="ct">Arbeitsumgebung</div>
+      <div class="insp-row"><span class="k">IDE</span><span class="v">PhpStorm öffnen</span></div>
+      <div class="insp-row"><span class="k">Terminal-Renderer</span><span class="v">Metal</span></div>
+    </div>
+    <div class="insp-card"><div class="ct">Artefakte &amp; Quellen</div>
+      <div class="insp-row"><span class="k">Chats im Projekt</span><span class="v">${p.sessions.length}</span></div>
+      <div class="insp-row"><span class="k">Screenshots</span><span class="v">2</span></div>
+      <div class="insp-row"><span class="k">Modell</span><span class="v mono">claude-fable-5</span></div>
+    </div>`;
+}
+
+function renderAll() { renderSidebar(); renderTabs(); renderChrome(); renderContent(); renderInspector(); }
+
+/* ================= Aktionen ================= */
+function openSession(id) {
+  if (!state.openTabs.includes(id)) state.openTabs.push(id);
+  state.selected = id;
+  const f = findSession(id);
+  if (f) state.selectedProject = f.project.id;
+  renderAll();
+}
+function selectTab(id) { state.selected = id; const f = findSession(id); if (f) state.selectedProject = f.project.id; renderAll(); }
+function closeTab(id) {
+  const i = state.openTabs.indexOf(id);
+  if (i < 0) return;
+  state.openTabs.splice(i, 1);
+  if (state.selected === id) state.selected = state.openTabs[Math.min(i, state.openTabs.length - 1)] || null;
+  renderAll();
+}
+function pinSession(id) { if (!state.pinned.includes(id)) state.pinned.push(id); renderAll(); }
+function unpinSession(id) { state.pinned = state.pinned.filter(x => x !== id); renderAll(); }
+function setColor(id, color) { const f = findSession(id); if (f) { f.session.color = color; renderAll(); } }
+function autoName(id) {
+  const f = findSession(id); if (!f) return;
+  const prev = f.session.status;
+  f.session.status = 'autonaming'; renderAll();
+  setTimeout(() => { f.session.title = 'Tab-Modell global umbauen (auto)'; f.session.status = prev; renderAll(); }, 1400);
+}
+function newChat(projectId, provider) {
+  const p = PROJECTS.find(x => x.id === (projectId || state.selectedProject)) || PROJECTS[0];
+  const sess = s('Neuer ' + (provider === 'codex' ? 'Codex' : 'Claude') + ' Chat', provider || 'claude', 'idle');
+  p.sessions.unshift(sess);
+  openSession(sess.id);
+}
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ================= Kontextmenüs ================= */
+const ctx = $('ctxmenu');
+function showMenu(items, x, y) {
+  ctx.innerHTML = items.map(it => {
+    if (it === '-') return '<div class="ctx-sep"></div>';
+    if (it.swatches) {
+      return `<div class="ctx-label">${it.label}</div><div class="ctx-swatches">` +
+        PALETTE.map(c => `<span style="background:${c}" data-swatch="${c}"></span>`).join('') +
+        `<span class="reset" data-swatch="" title="Provider-Farbe verwenden"></span></div>`;
+    }
+    return `<button class="ctx-item${it.danger ? ' danger' : ''}${it.disabled ? ' disabled' : ''}" data-mi="${it.key}">${it.icon || ''}${it.label}</button>`;
+  }).join('');
+  ctx.classList.add('open');
+  const r = ctx.getBoundingClientRect();
+  ctx.style.left = Math.min(x, innerWidth - r.width - 12) + 'px';
+  ctx.style.top  = Math.min(y, innerHeight - r.height - 12) + 'px';
+}
+function hideMenu() { ctx.classList.remove('open'); ctx._actions = null; }
+
+function sessionMenu(id, kind, x, y) {
+  const pinned = state.pinned.includes(id);
+  const items = [
+    { key:'rename', label:'Umbenennen…', icon: ICONS.pencil },
+    { key:'autoname', label:'Titel automatisch generieren', icon: ICONS.sparkles },
+    '-',
+    { key:'pin', label: pinned ? 'Loslösen' : 'Anpinnen', icon: ICONS.pin },
+    '-',
+    { label:'Tab-Farbe', swatches: true },
+    '-',
+    { key:'close', label: kind === 'tab' ? 'Tab schließen' : 'Schließen', danger: true, icon: ICONS.x },
+  ];
+  showMenu(items, x, y);
+  ctx._actions = mi => {
+    if (mi === 'rename') openSheet(id);
+    if (mi === 'autoname') autoName(id);
+    if (mi === 'pin') pinned ? unpinSession(id) : pinSession(id);
+    if (mi === 'close') (kind === 'tab') ? closeTab(id) : (closeTab(id), toast('Chat geschlossen (Session bleibt im Verlauf)'));
+  };
+  ctx._swatch = c => setColor(id, c || null);
+}
+function projectMenu(id, x, y) {
+  showMenu([
+    { key:'rename', label:'Umbenennen…', icon: ICONS.pencil },
+    { key:'newchat', label:'Neuer Chat', icon: ICONS.plus },
+    '-',
+    { label:'Projekt-Farbe', swatches: true },
+    '-',
+    { key:'icon', label:'Icon wählen…' },
+    { key:'autoicon', label:'Auto-Icon erkennen', icon: ICONS.sparkles },
+    { key:'removeicon', label:'Icon entfernen', danger: true },
+  ], x, y);
+  ctx._actions = mi => {
+    if (mi === 'newchat') newChat(id, 'claude');
+    else if (mi === 'rename') toast('Projekt umbenennen — wie Chat-Rename-Sheet');
+    else toast('Im Prototyp nicht nachgebaut — wird 1:1 übernommen');
+  };
+  ctx._swatch = c => { const p = PROJECTS.find(x => x.id === id); if (p && c) { p.color = c; renderAll(); } };
+}
+function plusMenu(x, y) {
+  showMenu([
+    { key:'codex', label:'Neuer Codex Chat', icon: ICONS.codex },
+    { key:'claude', label:'Neuer Claude Chat', icon: ICONS.claude },
+    '-',
+    { key:'bg', label:'Hintergrund-Agent…' },
+    '-',
+    { key:'view', label:'Claude Agent View' },
+    '-',
+    { key:'lib', label:'Sub-Agent-Bibliothek…' },
+  ], x, y);
+  ctx._actions = mi => {
+    if (mi === 'codex' || mi === 'claude') newChat(null, mi);
+    else toast('Modal unverändert übernommen (Dispatch / Agent View / Bibliothek)');
+  };
+}
+function sessionHeaderMenu(x, y) {
+  const id = state.selected; if (!id) return;
+  const running = !!findSession(id).session.status;
+  showMenu([
+    { key:'restart', label: running ? 'Restart' : 'Start / Resume' },
+    { key:'rename', label:'Umbenennen…', icon: ICONS.pencil },
+    { key:'autoname', label:'Titel automatisch generieren', icon: ICONS.sparkles },
+    '-',
+    { label:'Tab-Farbe', swatches: true },
+    '-',
+    { key:'close', label:'Schließen', danger: true, icon: ICONS.x },
+  ], x, y);
+  ctx._actions = mi => {
+    if (mi === 'restart') toast('Session wird neu gestartet …');
+    if (mi === 'rename') openSheet(id);
+    if (mi === 'autoname') autoName(id);
+    if (mi === 'close') closeTab(id);
+  };
+  ctx._swatch = c => setColor(id, c || null);
+}
+
+/* ================= Sheet ================= */
+let sheetTarget = null;
+function openSheet(id) {
+  sheetTarget = id;
+  const f = findSession(id);
+  $('sheet-input').value = f ? f.session.title : '';
+  $('sheet-backdrop').classList.add('open');
+  setTimeout(() => { $('sheet-input').focus(); $('sheet-input').select(); }, 30);
+}
+function closeSheet() { $('sheet-backdrop').classList.remove('open'); sheetTarget = null; }
+function saveSheet() {
+  const v = $('sheet-input').value.trim();
+  if (v && sheetTarget) { const f = findSession(sheetTarget); if (f) f.session.title = v; }
+  closeSheet(); renderAll();
+}
+
+/* ================= Checkliste ================= */
+const CHECKLIST = [
+  { g: 'Sidebar', items: [
+    ['Gepinnt-Sektion mit Repo-Badge', 'Chats projektübergreifend oben anpinnen; Pin/Unpin per Kontextmenü', true],
+    ['Neuer Chat', 'Primär-Button oben; Ziel = ausgewähltes Projekt'],
+    ['Aktualisieren (⌘R)', 'Icon-Button neben „Neuer Chat“; zeigt „Sessions werden gescannt“'],
+    ['Projekt hinzufügen', 'Icon-Button (Ordner+)'],
+    ['Filter-Feld', 'Live-Filter über Session-Titel, Clear-Button, expandiert alle Projekte'],
+    ['Projekt-Header', 'Chevron, Repo-Badge (ProjectAvatar), Name, Branch (mono), Zähler, Hover-„+“'],
+    ['Projekt-Kontextmenü', 'Umbenennen, Farbe (8er-Palette), Icon wählen / Auto-Icon / Icon entfernen'],
+    ['Session-Zeile', 'Provider-Glyph bzw. Farb-Dot, Titel, BG/VIEW-Badge, Status, Hover-X; Auswahl = genau eine Pill + Projektfarb-Akzent im Einzug, offene Chats heller als geschlossene'],
+    ['Session-Kontextmenü', 'Umbenennen, Auto-Titel, Anpinnen (NEU), Tab-Farbe, Schließen'],
+    ['„N weitere anzeigen“', 'Paging ab 20 Sessions (Prototyp: ab 6, siehe heartbeat)'],
+    ['Drag & Drop Sessions/Projekte', 'Verschieben & Reorder — im Prototyp nur für Tabs gebaut, Verhalten bleibt'],
+    ['Ressourcen-Anzeige', 'Laufende Sessions + CPU/RAM oben neben Ampel'],
+    ['Footer: Einstellungen + Hilfe', 'Unten links, unverändert'],
+    ['Empty State „Noch keine Projekte“', 'Übernommen, im Prototyp nicht gezeigt'],
+  ]},
+  { g: 'Globale Tab-Bar', items: [
+    ['Tabs global statt pro Projekt', 'Tabs aus allen Projekten in einer Reihe; ui-state v2: openTabIDs global geordnet', true],
+    ['Repo-Badge pro Tab', 'Mini-Avatar zeigt Projektzugehörigkeit', true],
+    ['Status-Dot im Tab', 'working (pulsierend) / awaiting (orange) / idle (gedimmt)'],
+    ['Tab schließen', 'X bei Hover/aktiv; Selektion springt zum Nachbarn'],
+    ['Tab-Reorder per Drag', 'HTML5-Drag im Prototyp funktionsfähig'],
+    ['Tab-Kontextmenü', 'Umbenennen, Auto-Titel, Anpinnen, Tab-Farbe, Schließen'],
+    ['„+“-Menü', 'Codex / Claude / Hintergrund-Agent… / Agent View / Sub-Agent-Bibliothek'],
+    ['Sidebar- & Inspector-Toggle', 'Links bzw. rechts außen in der Tab-Bar'],
+    ['Tab-Wechsel ⌘1–9', 'Im Prototyp ⌥1–9 (Browser belegt ⌘); App nutzt ⌘1–9', true],
+    ['Tab-Limit', 'Empfehlung: global 12 statt 6/Projekt, mit Scroll — zu entscheiden', true],
+  ]},
+  { g: 'Session-Header', items: [
+    ['Status-Punkt', 'Orange bei needsInput (Hook-Bridge), grün laufend, grau gestoppt'],
+    ['Titel + Kind-Badge', 'BG (indigo) / VIEW (orange) + Short-ID'],
+    ['Projekt · Branch · Pfad', 'Zweite Zeile, mono für Branch/Pfad'],
+    ['Sub-Session-Aktivität (Agent View)', '„letzte Aktivität: …“ — übernommen, im Prototyp nicht gezeigt'],
+    ['＋ Claude / ＋ Codex Buttons', 'Ersetzen den alten Provider-Umschalter: Klick öffnet direkt einen neuen Tab im aktuellen Projekt', true],
+    ['Start / Restart / Resume', 'Primär-Button rechts'],
+    ['„…“-Menü', 'Restart, Umbenennen, Auto-Titel, Tab-Farbe, Schließen'],
+    ['PhpStorm-Button', 'Öffnet Repo im IDE'],
+    ['Runtime-Text', 'Provider · Modell · Status (mono, rechts)'],
+    ['Zahnrad → Inspector', 'Ersetzt durch Inspector-Toggle rechts oben in der Tab-Bar', true],
+  ]},
+  { g: 'Content-Bereich', items: [
+    ['PTY-Terminal bleibt (SwiftTerm)', 'Kein eigener Chat-Renderer — claude/codex CLI laufen 1:1 im Terminal weiter; alle Shortcuts unverändert (⌥⌫, ⌘⌫, ⌘Z, ⌥←/→, ⌘←/→, ⇧⏎, ⌥P)'],
+    ['Scroll-Guard & Scroll-Lock', 'TUI-Wheel-Übersetzung + User-Scroll-Erhalt, unverändert'],
+    ['Transcript-Fallback', 'Lazy-Loading (300er-Batches), Banner, Empty States — unverändert'],
+    ['Empty State „Kein Agent Chat“', 'Im Prototyp: alle Tabs schließen'],
+  ]},
+  { g: 'Inspector', items: [
+    ['6 Karten', 'Recording Context, Branch, Changes, Git Actions, Arbeitsumgebung, Artefakte'],
+    ['Git-Diff-Zahlen', '+grün / −rot'],
+  ]},
+  { g: 'Sheets & Modals (1:1 übernehmen)', items: [
+    ['Rename-Sheet', 'Im Prototyp klickbar (Kontextmenü → Umbenennen…)'],
+    ['Background-Dispatch-Modal', 'Prompt, Permission-Mode, Sub-Agent-Grid, ⌘⏎'],
+    ['Background-Logs-Sheet', 'Streaming-Logs'],
+    ['Sub-Agent-Library-Sheet', 'Bibliothek'],
+    ['Ambiguous-Rebind-Picker', 'Resume-Konflikt-Auswahl'],
+  ]},
+  { g: 'Datenmodell & Persistenz', items: [
+    ['agent-ui-state.json v2', 'openTabIDs: [UUID] global geordnet + pinnedSessionIDs: [UUID] + selectedSessionID', true],
+    ['Migration v1 → v2', 'openTabIDsByProject flach klappen in Projekt-Reihenfolge; Selektion übernehmen', true],
+    ['Pruning & Debounce', 'Stale-UUID-GC und 500ms-Save bleiben unverändert'],
+    ['Selektion entkoppelt', 'selectedSessionID global; selectedProjectID nur noch Kontext (Inspector, Neuer Chat)', true],
+  ]},
+];
+function renderChecklist() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('wm8-redesign-cl') || '{}'); } catch (e) {}
+  let idx = 0;
+  $('cl-body').innerHTML = CHECKLIST.map(group => `
+    <div class="cl-group"><h4>${group.g}</h4>` +
+    group.items.map(it => {
+      const id = 'cl' + (idx++);
+      const checked = saved[id] ? ' checked' : '';
+      return `<label class="cl-item${checked ? ' checked' : ''}"><input type="checkbox" data-cl="${id}"${checked ? ' checked' : ''}>
+        <span><span class="t">${it[0]}${it[2] ? '<span class="new-flag">NEU</span>' : ''}</span><div class="n">${it[1]}</div></span></label>`;
+    }).join('') + '</div>'
+  ).join('');
+  updateClProgress();
+}
+function updateClProgress() {
+  const boxes = document.querySelectorAll('[data-cl]');
+  const done = [...boxes].filter(b => b.checked).length;
+  $('cl-progress').textContent = `${done} von ${boxes.length} geprüft`;
+  $('cl-bar').style.width = (boxes.length ? (done / boxes.length * 100) : 0) + '%';
+}
+
+/* ================= Events ================= */
+document.addEventListener('click', e => {
+  // Kontextmenü-Klicks
+  const mi = e.target.closest('[data-mi]');
+  if (mi && ctx._actions) { const a = ctx._actions; hideMenu(); a(mi.dataset.mi); return; }
+  const sw = e.target.closest('[data-swatch]');
+  if (sw && ctx._swatch) { const f = ctx._swatch; hideMenu(); f(sw.dataset.swatch); return; }
+  if (!e.target.closest('.ctxmenu')) hideMenu();
+
+  const closeS = e.target.closest('[data-closesession]');
+  if (closeS) { e.stopPropagation(); closeTab(closeS.dataset.closesession); return; }
+  const closeT = e.target.closest('[data-closetab]');
+  if (closeT) { e.stopPropagation(); closeTab(closeT.dataset.closetab); return; }
+  const newIn = e.target.closest('[data-newin]');
+  if (newIn) { e.stopPropagation(); newChat(newIn.dataset.newin, 'claude'); return; }
+
+  const open = e.target.closest('[data-open]');
+  if (open) { openSession(open.dataset.open); return; }
+  const tab = e.target.closest('[data-tab]');
+  if (tab) { selectTab(tab.dataset.tab); return; }
+  const proj = e.target.closest('[data-proj]');
+  if (proj) {
+    const id = proj.dataset.proj;
+    state.selectedProject = id;
+    state.collapsed[id] = !state.collapsed[id];
+    renderAll(); return;
+  }
+  const more = e.target.closest('[data-more]');
+  if (more) { state.moreExpanded[more.dataset.more] = true; renderSidebar(); return; }
+
+  const tst = e.target.closest('[data-toast]');
+  if (tst) { toast(tst.dataset.toast); return; }
+  if (e.target.closest('#btn-restart')) { toast('Session wird neu gestartet …'); return; }
+  if (e.target.closest('#btn-ide')) { toast('Öffnet Repo in PhpStorm'); return; }
+  if (e.target.closest('#btn-sessionmenu')) {
+    const r = e.target.closest('#btn-sessionmenu').getBoundingClientRect();
+    sessionHeaderMenu(r.right - 200, r.bottom + 6); e.stopPropagation(); return;
+  }
+  const np = e.target.closest('[data-newprovider]');
+  if (np) { newChat(null, np.dataset.newprovider); return; }
+});
+
+document.addEventListener('contextmenu', e => {
+  const el = e.target.closest('[data-ctx]');
+  if (!el) { hideMenu(); return; }
+  e.preventDefault();
+  const kind = el.dataset.ctx, id = el.dataset.id;
+  if (kind === 'session' || kind === 'pinned') sessionMenu(id, 'row', e.clientX, e.clientY);
+  if (kind === 'tab') sessionMenu(id, 'tab', e.clientX, e.clientY);
+  if (kind === 'project') projectMenu(id, e.clientX, e.clientY);
+});
+
+/* Filter */
+$('filter').addEventListener('input', e => {
+  state.filter = e.target.value;
+  $('filterbox').classList.toggle('has-text', !!state.filter);
+  renderSidebar();
+});
+$('filter-clear').addEventListener('click', () => {
+  state.filter = ''; $('filter').value = ''; $('filterbox').classList.remove('has-text'); renderSidebar();
+});
+
+/* Toolbar / Chrome-Buttons */
+$('btn-new').addEventListener('click', () => newChat(null, 'claude'));
+$('btn-refresh').addEventListener('click', () => {
+  $('scanlabel').classList.add('on');
+  setTimeout(() => $('scanlabel').classList.remove('on'), 1800);
+});
+$('btn-addproj').addEventListener('click', () => toast('Projekt-Picker (NSOpenPanel) — unverändert übernommen'));
+$('btn-sidebar').addEventListener('click', () => $('window').classList.toggle('no-sidebar'));
+$('btn-inspector').addEventListener('click', () => $('window').classList.toggle('with-inspector'));
+$('btn-plus').addEventListener('click', e => {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  plusMenu(r.left - 80, r.bottom + 6);
+});
+$('btn-theme').addEventListener('click', () => {
+  const r = document.documentElement;
+  r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+});
+$('btn-checklist').addEventListener('click', () => $('checklist').classList.toggle('open'));
+
+/* Sheet */
+$('sheet-cancel').addEventListener('click', closeSheet);
+$('sheet-save').addEventListener('click', saveSheet);
+$('sheet-backdrop').addEventListener('click', e => { if (e.target === $('sheet-backdrop')) closeSheet(); });
+$('sheet-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveSheet();
+  if (e.key === 'Escape') closeSheet();
+});
+
+/* Checkliste */
+$('cl-body').addEventListener('change', e => {
+  const box = e.target.closest('[data-cl]');
+  if (!box) return;
+  box.closest('.cl-item').classList.toggle('checked', box.checked);
+  const saved = {};
+  document.querySelectorAll('[data-cl]').forEach(b => { if (b.checked) saved[b.dataset.cl] = 1; });
+  localStorage.setItem('wm8-redesign-cl', JSON.stringify(saved));
+  updateClProgress();
+});
+
+/* Tastatur: ⌥/⌘ + 1–9 für Tab-Wechsel, Esc schließt Overlays */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { hideMenu(); closeSheet(); $('checklist').classList.remove('open'); return; }
+  if ((e.altKey || e.metaKey) && e.code && e.code.startsWith('Digit')) {
+    const n = parseInt(e.code.slice(5), 10);
+    if (n >= 1 && n <= state.openTabs.length) { e.preventDefault(); selectTab(state.openTabs[n - 1]); }
+  }
+});
+
+/* Tab-Drag-Reorder */
+let dragId = null;
+$('tabs').addEventListener('dragstart', e => {
+  const t = e.target.closest('[data-tab]');
+  if (t) { dragId = t.dataset.tab; e.dataTransfer.effectAllowed = 'move'; }
+});
+$('tabs').addEventListener('dragover', e => {
+  const t = e.target.closest('[data-tab]');
+  if (t && dragId && t.dataset.tab !== dragId) { e.preventDefault(); t.classList.add('dragover'); }
+});
+$('tabs').addEventListener('dragleave', e => {
+  const t = e.target.closest('[data-tab]'); if (t) t.classList.remove('dragover');
+});
+$('tabs').addEventListener('drop', e => {
+  const t = e.target.closest('[data-tab]');
+  if (!t || !dragId) return;
+  e.preventDefault();
+  const from = state.openTabs.indexOf(dragId), to = state.openTabs.indexOf(t.dataset.tab);
+  if (from >= 0 && to >= 0) { state.openTabs.splice(to, 0, state.openTabs.splice(from, 1)[0]); renderTabs(); }
+  dragId = null;
+});
+$('tabs').addEventListener('dragend', () => {
+  dragId = null; document.querySelectorAll('.tab.dragover').forEach(t => t.classList.remove('dragover'));
+});
+
+/* Init */
+renderAll();
+renderChecklist();
+</script>
+</body>
+</html>
