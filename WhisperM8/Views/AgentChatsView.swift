@@ -177,8 +177,6 @@ struct AgentChatsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if isInspectorVisible {
-                Divider()
-
                 ProjectDetailPanel(
                     project: selectedProject,
                     session: selectedSession,
@@ -642,11 +640,6 @@ struct AgentChatsView: View {
             sidebarFooter
         }
         .background(AgentTheme.sidebar)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(AgentTheme.border)
-                .frame(width: 1)
-        }
     }
 
     /// Kleines Uppercase-Label über einer Sidebar-Sektion („Gepinnt", „Chats").
@@ -772,11 +765,6 @@ struct AgentChatsView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(AgentTheme.border)
-                .frame(height: 1)
-        }
     }
 
     private var defaultAgentProvider: AgentProvider {
@@ -896,18 +884,18 @@ struct AgentChatsView: View {
                     isSidebarVisible.toggle()
                 }
 
-                Text("Chat")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                    .padding(.leading, 2)
-
                 if !headerTabs.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
+                        let runningSessionIDs = terminalRegistry.activeSessionIDs
                         HStack(spacing: 4) {
                             ForEach(headerTabs) { session in
                                 ChatTabButton(
                                     session: session,
+                                    project: workspace.projects.first { $0.id == session.projectID },
                                     isSelected: session.id == selectedSession?.id,
+                                    isRunning: runningSessionIDs.contains(session.id),
+                                    statusStore: runtimeStatusStore,
+                                    isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
                                     onSelect: {
                                         selectedSessionID = session.id
                                     },
@@ -959,8 +947,7 @@ struct AgentChatsView: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(AgentTheme.textSecondary)
                         .frame(width: 22, height: 22)
-                        .background(AgentTheme.control.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(AgentTheme.border, lineWidth: 1))
+                        .background(AgentTheme.control.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -983,18 +970,6 @@ struct AgentChatsView: View {
             .frame(height: 28)
 
             HStack(spacing: 12) {
-                Button {
-                    isInspectorVisible.toggle()
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AgentTheme.textTertiary)
-                        .frame(width: 18, height: 18)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Session-Einstellungen")
-
                 // Kein „Umschalter" mehr: ein Klick öffnet direkt einen
                 // neuen Tab mit diesem Provider im Kontext-Projekt — eine
                 // laufende Session lässt sich ohnehin nicht umschalten.
@@ -1027,18 +1002,8 @@ struct AgentChatsView: View {
             activeChatStatusRow
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(AgentTheme.border)
-                        .frame(height: 1)
-                }
         }
         .background(AgentTheme.header)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(AgentTheme.border)
-                .frame(height: 1)
-        }
     }
 
     /// Prominenter „in welchem Chat / welchem Repo bin ich"-Header — dritte
@@ -1317,11 +1282,10 @@ struct AgentChatsView: View {
                     Text(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start" : "Resume"))
                         .font(.system(size: 11, weight: .medium))
                 }
-                .foregroundStyle(AgentTheme.textSecondary)
-                .padding(.horizontal, 9)
+                .foregroundStyle(AgentTheme.textPrimary)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 4))
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(AgentTheme.border, lineWidth: 1))
+                .background(AgentTheme.control.opacity(0.55), in: RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
 

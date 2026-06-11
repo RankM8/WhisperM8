@@ -1,48 +1,27 @@
 import AppKit
 import SwiftUI
 
-struct ProviderTab: View {
-    let provider: AgentProvider
-    let isActive: Bool
-    var action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                ProviderIcon(
-                    provider: provider,
-                    size: 12,
-                    tint: isActive ? AgentTheme.textPrimary : AgentTheme.textTertiary
-                )
-                Text(provider.displayName)
-                    .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textSecondary)
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 22)
-            .background(background, in: RoundedRectangle(cornerRadius: 3))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-    }
-
-    private var background: Color {
-        if isActive { return AgentTheme.tabSelected }
-        if isHovered { return AgentTheme.surface }
-        return Color.clear
-    }
-}
-
+/// Tab der globalen Tab-Bar. Trägt ein Repo-Badge (ProjectAvatar) zur
+/// Projektzuordnung — die Tabs sind projektübergreifend gemischt. Eine
+/// gesetzte Custom-Farbe tönt den GANZEN Tab dezent (inaktiv schwach,
+/// aktiv kräftiger ins Tab-Grau gemischt) statt nur einen Farbstreifen
+/// zu zeigen. Keine Border — der aktive Tab hebt sich über die Fläche ab.
 struct ChatTabButton: View {
     let session: AgentChatSession
+    /// Projekt der Session fürs Repo-Badge. `nil` (Workspace-Inkonsistenz)
+    /// fällt auf das Provider-Icon zurück.
+    let project: AgentProject?
     let isSelected: Bool
+    let isRunning: Bool
+    /// Stabile Store-Referenz — Live-Status via Per-Item-Publisher,
+    /// gleiche Mechanik wie `SessionListButton`.
+    let statusStore: AgentSessionRuntimeStatusStore
+    let isAwaitingInput: Bool
     var onSelect: () -> Void
     var onClose: () -> Void
 
     @State private var isHovered = false
+    @State private var liveStatus: AgentSessionRuntimeStatus?
 
     private var customColor: Color? {
         guard let hex = session.color, !hex.isEmpty else { return nil }
@@ -52,10 +31,9 @@ struct ChatTabButton: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 6) {
-                if let customColor {
-                    Rectangle()
-                        .fill(customColor.opacity(isSelected ? 0.85 : 0.55))
-                        .frame(width: 3, height: 14)
+                if let project {
+                    ProjectAvatar(project: project, size: 13)
+                        .help(project.name)
                 } else {
                     ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
                 }
@@ -69,18 +47,23 @@ struct ChatTabButton: View {
                 trailingIndicator
                     .frame(width: 18, alignment: .trailing)
             }
-            .padding(.horizontal, 7)
-            .frame(minWidth: 90, maxWidth: 200, minHeight: 22, maxHeight: 22)
-            .background(tabBackground, in: RoundedRectangle(cornerRadius: 3))
-            .overlay(
-                RoundedRectangle(cornerRadius: 3)
-                    .stroke(borderColor, lineWidth: 1)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 3))
+            .padding(.horizontal, 8)
+            .frame(minWidth: 100, maxWidth: 200, minHeight: 24, maxHeight: 24)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6).fill(tabBackground)
+                    if let customColor {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(customColor.opacity(tintOpacity))
+                    }
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
+        .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
     }
 
     @ViewBuilder
@@ -94,18 +77,32 @@ struct ChatTabButton: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
                 .help("Tab schließen")
-        } else if session.status == .running {
-            Circle()
-                .fill(AgentTheme.textTertiary)
-                .frame(width: 4, height: 4)
-        } else if session.status != .archived {
-            Text(session.status.displayName)
-                .font(.system(size: 9))
-                .foregroundStyle(AgentTheme.textTertiary)
-                .lineLimit(1)
         } else {
-            Color.clear.frame(width: 1, height: 1)
+            switch resolvedStatus {
+            case .working:
+                Circle().fill(Color.green).frame(width: 5, height: 5)
+                    .help("Arbeitet …")
+            case .awaitingInput:
+                Circle().fill(Color.orange).frame(width: 5, height: 5)
+                    .help("Wartet möglicherweise auf User-Input")
+            case .idle:
+                Circle().fill(Color.green.opacity(0.55)).frame(width: 5, height: 5)
+                    .help("Bereit")
+            case .errored:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.red.opacity(0.8))
+                    .help("Mit Fehler beendet")
+            case .stopped, .none:
+                Color.clear.frame(width: 1, height: 1)
+            }
         }
+    }
+
+    private var resolvedStatus: AgentSessionRuntimeStatus? {
+        if isAwaitingInput { return .awaitingInput }
+        if let liveStatus { return liveStatus }
+        return isRunning ? .working : nil
     }
 
     private var tabBackground: Color {
@@ -114,8 +111,10 @@ struct ChatTabButton: View {
         return Color.clear
     }
 
-    private var borderColor: Color {
-        isSelected ? AgentTheme.borderStrong : AgentTheme.border
+    private var tintOpacity: Double {
+        if isSelected { return 0.24 }
+        if isHovered { return 0.17 }
+        return 0.11
     }
 }
 
