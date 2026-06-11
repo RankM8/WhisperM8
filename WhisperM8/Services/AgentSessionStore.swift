@@ -39,8 +39,9 @@ struct AgentSessionStore {
 
     /// Liest den UI-State von Disk. Bei fehlendem File: First-Load-Migration
     /// aus dem aktuellen Workspace, damit die Sidebar nach Deployment nicht
-    /// ploetzlich leer ist. Garbage-Collection laeuft immer, auch bei
-    /// vorhandenem File — entfernt stale UUIDs.
+    /// ploetzlich leer ist. v1-Dateien werden auf das globale v2-Tab-Schema
+    /// migriert. Garbage-Collection laeuft immer, auch bei vorhandenem
+    /// File — entfernt stale UUIDs.
     func loadUIState() -> AgentUIState {
         var state: AgentUIState
         if FileManager.default.fileExists(atPath: uiStateFileURL.path) {
@@ -54,6 +55,7 @@ struct AgentSessionStore {
         } else {
             state = AgentUIState.initialMigration(from: loadWorkspace())
         }
+        state.migrateToV2IfNeeded(workspace: loadWorkspace())
         state.prune(workspace: loadWorkspace())
         return state
     }

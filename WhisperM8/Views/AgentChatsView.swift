@@ -43,11 +43,12 @@ struct AgentChatsView: View {
     @State private var pendingAmbiguousRebind: AmbiguousRebindRequest?
     @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
     @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
-    @State private var openTabIDs: Set<UUID> = []
-    /// Pro-Projekt-Erinnerung welcher Tab zuletzt aktiv war. Wird beim
-    /// Projekt-Switch konsultiert um auf den letzten Tab zu springen statt
-    /// auf "den ersten verfuegbaren". Persistiert via AgentUIState.
-    @State private var selectedSessionIDByProject: [UUID: UUID] = [:]
+    /// Offene Tabs der globalen Tab-Bar in Anzeige-Reihenfolge —
+    /// projektübergreifend (UI-State Schema v2). Persistiert via AgentUIState.
+    @State private var openTabIDs: [UUID] = []
+    /// In der Sidebar angepinnte Chats (Pin-Reihenfolge). Gepinnte Sessions
+    /// erscheinen exklusiv in der „Gepinnt"-Sektion. Persistiert.
+    @State private var pinnedSessionIDs: [UUID] = []
     /// `true` waehrend wir den UIState aus der Sidecar-Datei laden. Verhindert
     /// dass die initialen .onChange-Trigger waehrend des Loads zurueck-saven.
     @State private var isLoadingPersistedUIState = true
@@ -97,19 +98,38 @@ struct AgentChatsView: View {
         workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
     }
 
+    /// Sessions des Kontext-Projekts — nur noch Datenquelle für den
+    /// Inspector. Die Tab-Bar ist global (`headerTabs`).
     private var projectSessions: [AgentChatSession] {
         guard let selectedProject else { return [] }
-        return sessions(for: selectedProject)
+        return AgentSessionStore.sortedSessions(
+            workspace.sessions.filter {
+                $0.projectID == selectedProject.id
+                    && $0.status != .archived
+                    && $0.isManuallyCreated
+            }
+        )
     }
 
+    /// Globale Tab-Bar: alle offenen Tabs über alle Projekte, in der
+    /// Reihenfolge von `openTabIDs`.
     private var headerTabs: [AgentChatSession] {
-        // projectSessions filtert bereits via openTabIDs/selectedSessionID —
-        // headerTabs ist identisch.
-        projectSessions
+        let byID = Dictionary(workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return openTabIDs.compactMap { byID[$0] }.filter { $0.status != .archived }
     }
 
     private var selectedSession: AgentChatSession? {
-        projectSessions.first { $0.id == selectedSessionID } ?? projectSessions.first
+        guard let selectedSessionID else { return headerTabs.first }
+        return workspace.sessions.first { $0.id == selectedSessionID && $0.status != .archived }
+            ?? headerTabs.first
+    }
+
+    /// Projekt der selektierten Session — kann kurzzeitig vom
+    /// Kontext-Projekt abweichen, bis `selectedProjectID` der Selektion
+    /// gefolgt ist (onChange).
+    private var selectedSessionProject: AgentProject? {
+        guard let selectedSession else { return nil }
+        return workspace.projects.first { $0.id == selectedSession.projectID }
     }
 
     private var manualProjects: [AgentProject] {
@@ -265,10 +285,11 @@ struct AgentChatsView: View {
         }
         .onChange(of: selectedSessionID) { _, newValue in
             syncActiveAgentChat()
-            // Pro-Projekt-Erinnerung: damit beim naechsten Projekt-Wechsel
-            // der zuletzt benutzte Tab zurueckgeholt wird.
-            if let projectID = selectedProjectID, let sessionID = newValue {
-                selectedSessionIDByProject[projectID] = sessionID
+            // Kontext-Projekt folgt der Selektion — Tabs sind global, das
+            // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
+            if let sessionID = newValue,
+               let session = workspace.sessions.first(where: { $0.id == sessionID }) {
+                selectedProjectID = session.projectID
             }
             schedulePersistUIState()
             updateActiveBackgroundTrackerIfNeeded()
@@ -284,6 +305,7 @@ struct AgentChatsView: View {
             reconcileSelection()
         }
         .onChange(of: openTabIDs) { _, _ in schedulePersistUIState() }
+        .onChange(of: pinnedSessionIDs) { _, _ in schedulePersistUIState() }
         .onChange(of: expandedProjectIDs) { _, _ in schedulePersistUIState() }
         .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanRunningChangedNotification)) { note in
             if let running = note.userInfo?["running"] as? Bool {
@@ -312,28 +334,20 @@ struct AgentChatsView: View {
     private func loadPersistedUIState() {
         let state = store.loadUIState()
 
-        // Aggregierte Set aller offenen Tabs ueber alle Projekte.
-        var aggregatedOpen: Set<UUID> = []
-        for ids in state.openTabIDsByProject.values {
-            aggregatedOpen.formUnion(ids)
-        }
-        openTabIDs = aggregatedOpen
-        selectedSessionIDByProject = state.selectedSessionIDByProject
+        openTabIDs = state.openTabIDs
+        pinnedSessionIDs = state.pinnedSessionIDs
         expandedProjectIDs = Set(state.expandedProjectIDs)
 
-        // Project-Level Selection — fallback wenn die persistierte ID nicht
-        // mehr existiert.
-        if let pid = state.selectedProjectID,
-           workspace.projects.contains(where: { $0.id == pid }) {
-            selectedProjectID = pid
-        }
-
-        // Session-Selection: zuerst project-spezifisch, dann global,
-        // sonst lass loadWorkspaceFast den Default setzen.
-        if let pid = selectedProjectID,
-           let sid = state.selectedSessionIDByProject[pid],
-           workspace.sessions.contains(where: { $0.id == sid }) {
+        // Session-Selection global; das Kontext-Projekt folgt der Session.
+        // Fallback: persistiertes Projekt, sonst lässt loadWorkspaceFast
+        // den Default setzen.
+        if let sid = state.selectedSessionID,
+           let session = workspace.sessions.first(where: { $0.id == sid && $0.status != .archived }) {
             selectedSessionID = sid
+            selectedProjectID = session.projectID
+        } else if let pid = state.selectedProjectID,
+                  workspace.projects.contains(where: { $0.id == pid }) {
+            selectedProjectID = pid
         }
 
         isLoadingPersistedUIState = false
@@ -353,20 +367,13 @@ struct AgentChatsView: View {
         }
     }
 
-    /// Baut aus den aktuellen @State-Vars einen `AgentUIState`. Verteilt
-    /// `openTabIDs` per Session-ProjektID auf die `openTabIDsByProject`-Map.
+    /// Baut aus den aktuellen @State-Vars einen `AgentUIState` (Schema v2).
+    /// Die Tab-Reihenfolge ist bereits die Anzeige-Reihenfolge der Bar.
     private func currentUIStateSnapshot() -> AgentUIState {
-        var byProject: [UUID: [UUID]] = [:]
-        // sortierte Reihenfolge: sortIndex / lastActivityAt aus sortedSessions
-        let openSessions = workspace.sessions.filter { openTabIDs.contains($0.id) }
-        let sorted = AgentSessionStore.sortedSessions(openSessions)
-        for session in sorted {
-            byProject[session.projectID, default: []].append(session.id)
-        }
-        return AgentUIState(
-            schemaVersion: 1,
-            openTabIDsByProject: byProject,
-            selectedSessionIDByProject: selectedSessionIDByProject,
+        AgentUIState(
+            openTabIDs: openTabIDs,
+            pinnedSessionIDs: pinnedSessionIDs,
+            selectedSessionID: selectedSessionID,
             selectedProjectID: selectedProjectID,
             expandedProjectIDs: Array(expandedProjectIDs)
         )
@@ -542,7 +549,7 @@ struct AgentChatsView: View {
                 // neu zu filtern und zu sortieren.
                 let sessionsByProject = AgentSidebarModelBuilder.sessionsByProject(
                     workspaceSessions: workspace.sessions,
-                    openTabIDs: openTabIDs,
+                    openTabIDs: Set(openTabIDs),
                     selectedSessionID: selectedSessionID
                 )
                 let visibleProjects = AgentSidebarModelBuilder.visibleProjects(
@@ -581,8 +588,8 @@ struct AgentChatsView: View {
                             onSelectSession: { sessionID in
                                 selectedProjectID = project.id
                                 expandedProjectIDs.insert(project.id)
+                                openTab(sessionID)
                                 selectedSessionID = sessionID
-                                openTabIDs.insert(sessionID)
                                 AppPreferences.shared.agentDefaultProjectPath = project.path
                             },
                             onNewChat: {
@@ -590,7 +597,7 @@ struct AgentChatsView: View {
                                 expandedProjectIDs.insert(project.id)
                                 createDefaultSession()
                             },
-                            onCloseSession: { closeHeaderTab($0) },
+                            onCloseSession: { archiveSession($0) },
                             onRenameRequest: { beginRename($0) },
                             onAutoNameRequest: { forceAutoNameSession($0) },
                             onRename: renameSession,
@@ -771,9 +778,9 @@ struct AgentChatsView: View {
         VStack(spacing: 0) {
             projectChatStrip
 
-            if let selectedProject, let selectedSession {
+            if let selectedSession, let project = selectedSessionProject {
                 AgentSessionDetailView(
-                    project: selectedProject,
+                    project: project,
                     session: selectedSession,
                     terminalRegistry: terminalRegistry,
                     actionRequest: sessionActionRequest,
@@ -832,23 +839,35 @@ struct AgentChatsView: View {
                                     session: session,
                                     isSelected: session.id == selectedSession?.id,
                                     onSelect: {
-                                        openTabIDs.insert(session.id)
                                         selectedSessionID = session.id
                                     },
                                     onClose: {
-                                        closeHeaderTab(session)
+                                        closeTab(session)
                                     }
                                 )
                                 .draggable(DraggableSession(sessionID: session.id, sourceProjectID: session.projectID))
                                 .dropDestination(for: DraggableSession.self) { items, _ in
                                     guard let dropped = items.first else { return false }
-                                    dropSession(dropped, in: session.projectID, beforeSessionID: session.id)
+                                    // Tab-Reorder = reine Anzeige-Reihenfolge der
+                                    // globalen Bar — unabhängig vom Store-sortIndex.
+                                    dropTab(dropped, before: session.id)
                                     return true
                                 }
                                 .contextMenu {
                                     sessionManagementMenu(session)
                                 }
                             }
+                        }
+                    }
+                    .background {
+                        // Unsichtbare Shortcut-Anker: ⌘1–⌘9 springen auf
+                        // Tab 1–9 der globalen Tab-Bar.
+                        ForEach(Array(headerTabs.prefix(9).enumerated()), id: \.element.id) { index, session in
+                            Button("") { selectedSessionID = session.id }
+                                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                                .frame(width: 0, height: 0)
+                                .opacity(0)
+                                .accessibilityHidden(true)
                         }
                     }
                 }
@@ -906,12 +925,11 @@ struct AgentChatsView: View {
                 .buttonStyle(.plain)
                 .help("Session-Einstellungen")
 
-                ProviderTab(provider: .claude, isActive: selectedSession?.provider == .claude) {
-                    switchSelectedProvider(to: .claude)
-                }
-                ProviderTab(provider: .codex, isActive: selectedSession?.provider == .codex) {
-                    switchSelectedProvider(to: .codex)
-                }
+                // Kein „Umschalter" mehr: ein Klick öffnet direkt einen
+                // neuen Tab mit diesem Provider im Kontext-Projekt — eine
+                // laufende Session lässt sich ohnehin nicht umschalten.
+                newChatButton(provider: .claude)
+                newChatButton(provider: .codex)
 
                 if let selectedSession {
                     selectedSessionHeaderControls(selectedSession)
@@ -1128,7 +1146,7 @@ struct AgentChatsView: View {
 
     @ViewBuilder
     private var secondaryProjectRow: some View {
-        if let project = selectedProject {
+        if let project = selectedSessionProject ?? selectedProject {
             HStack(spacing: 6) {
                 Image(systemName: "folder")
                     .font(.system(size: 9))
@@ -1174,6 +1192,30 @@ struct AgentChatsView: View {
                 RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.30), lineWidth: 0.5)
             )
             .fixedSize()
+    }
+
+    /// „＋ Claude" / „＋ Codex" — öffnet direkt einen neuen Tab mit diesem
+    /// Provider im Kontext-Projekt (ersetzt den früheren Provider-Umschalter).
+    private func newChatButton(provider: AgentProvider) -> some View {
+        Button {
+            createSession(provider: provider)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 8, weight: .bold))
+                ProviderIcon(provider: provider, size: 11, tint: AgentTheme.textSecondary)
+                Text(provider.displayName)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(AgentTheme.textSecondary)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(AgentTheme.control.opacity(0.55), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(selectedProject == nil)
+        .help("Neuen \(provider.displayName) Chat in \(selectedProject?.name ?? "—") öffnen")
     }
 
     private func selectedSessionHeaderControls(_ session: AgentChatSession) -> some View {
@@ -1246,8 +1288,11 @@ struct AgentChatsView: View {
                     }
                 }
                 Divider()
-                Button("Schließen", systemImage: "xmark", role: .destructive) {
-                    closeHeaderTab(session)
+                Button("Tab schließen", systemImage: "xmark.square") {
+                    closeTab(session)
+                }
+                Button("Chat schließen", systemImage: "xmark", role: .destructive) {
+                    archiveSession(session)
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -1485,6 +1530,16 @@ struct AgentChatsView: View {
     /// nie auf gelöschte Projekte/Sessions zeigen. Ändert nur dann etwas,
     /// wenn die aktuelle Selektion ungültig geworden ist.
     private func reconcileSelection() {
+        // Tote/archivierte Sessions aus Tab-Bar und Pins entfernen
+        // (z. B. nach deleteSession aus dem Spawn-Fehlerpfad).
+        let liveIDs = Set(workspace.sessions.filter { $0.status != .archived }.map(\.id))
+        if openTabIDs.contains(where: { !liveIDs.contains($0) }) {
+            openTabIDs.removeAll { !liveIDs.contains($0) }
+        }
+        if pinnedSessionIDs.contains(where: { !liveIDs.contains($0) }) {
+            pinnedSessionIDs.removeAll { !liveIDs.contains($0) }
+        }
+
         if selectedProjectID == nil || !workspace.projects.contains(where: { $0.id == selectedProjectID }) {
             selectedProjectID = workspace.projects.first?.id
         }
@@ -1494,8 +1549,8 @@ struct AgentChatsView: View {
         if let selectedProjectID {
             expandedProjectIDs.insert(selectedProjectID)
         }
-        if selectedSessionID == nil || !projectSessions.contains(where: { $0.id == selectedSessionID }) {
-            selectedSessionID = projectSessions.first?.id
+        if selectedSessionID == nil || !liveIDs.contains(selectedSessionID!) {
+            selectedSessionID = openTabIDs.first
         }
     }
 
@@ -1656,48 +1711,12 @@ struct AgentChatsView: View {
             || normalized.hasSuffix(" Chat")
     }
 
-    private func sessions(for project: AgentProject) -> [AgentChatSession] {
-        // Sichtbarkeit: alle manuell erstellten, nicht-archivierten Sessions
-        // die der User aktiv im Memory hat (openTabIDs) oder gerade selektiert.
-        // status == .running/.pending ist redundant — laufende Sessions sind
-        // per Definition in openTabIDs (werden bei Launch eingefuegt). Wir
-        // muessen nur sicherstellen dass openTabIDs persistent ist (siehe
-        // AgentUIState).
-        AgentSessionStore.sortedSessions(
-            workspace.sessions.filter { session in
-                guard session.projectID == project.id,
-                      session.status != .archived,
-                      session.isManuallyCreated
-                else { return false }
-                return openTabIDs.contains(session.id)
-                    || session.id == selectedSessionID
-            }
-        )
-    }
-
+    /// Projekt-Klick setzt nur noch den Kontext (Ziel für „Neuer Chat",
+    /// Inspector) — die globale Tab-Bar und die Selektion bleiben
+    /// unangetastet.
     private func selectProject(_ projectID: UUID) {
         selectedProjectID = projectID
         expandedProjectIDs.insert(projectID)
-
-        // Pro-Projekt-Erinnerung: wenn wir fuer dieses Projekt schon einen
-        // zuletzt benutzten Tab persistiert haben, dahin zurueckspringen
-        // statt automatisch auf "den ersten verfuegbaren".
-        if let lastID = selectedSessionIDByProject[projectID],
-           workspace.sessions.contains(where: { $0.id == lastID && $0.projectID == projectID }) {
-            selectedSessionID = lastID
-            openTabIDs.insert(lastID)
-            return
-        }
-
-        let sessions = workspace.sessions
-            .filter { $0.projectID == projectID && $0.status != .archived }
-            .sorted { $0.lastActivityAt > $1.lastActivityAt }
-        if let firstID = sessions.first?.id {
-            selectedSessionID = firstID
-            openTabIDs.insert(firstID)
-        } else {
-            selectedSessionID = nil
-        }
         if let project = workspace.projects.first(where: { $0.id == projectID }) {
             AppPreferences.shared.agentDefaultProjectPath = project.path
         }
@@ -1722,7 +1741,6 @@ struct AgentChatsView: View {
             do {
                 let project = try store.upsertProject(path: url.path, createdManually: true)
                 selectedProjectID = project.id
-                selectedSessionID = sessions(for: project).first?.id
                 expandedProjectIDs.insert(project.id)
                 AppPreferences.shared.agentDefaultProjectPath = project.path
             } catch {
@@ -1756,8 +1774,8 @@ struct AgentChatsView: View {
                 shouldLaunchOnOpen: true,
                 kind: kind
             )
+            openTab(session.id)
             selectedSessionID = session.id
-            openTabIDs.insert(session.id)
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
         } catch {
             errorMessage = error.localizedDescription
@@ -1821,8 +1839,8 @@ struct AgentChatsView: View {
             return
         }
         spawningBackgroundSessions.insert(session.id)
+        openTab(session.id)
         selectedSessionID = session.id
-        openTabIDs.insert(session.id)
 
         // 2. Hook-Bridge vorbereiten — die Background-Session erbt die
         //    Settings vom Supervisor, also muessen wir `--settings <path>`
@@ -1859,9 +1877,9 @@ struct AgentChatsView: View {
             // "Session noch nicht gestartet"-Geist liegen lassen.
             spawningBackgroundSessions.remove(session.id)
             try? store.deleteSession(id: session.id)
-            openTabIDs.remove(session.id)
+            openTabIDs.removeAll { $0 == session.id }
             if selectedSessionID == session.id {
-                selectedSessionID = sessions(for: project).first?.id
+                selectedSessionID = openTabIDs.first
             }
             errorMessage = "Hintergrund-Agent konnte nicht gestartet werden: \(error.localizedDescription)"
         }
@@ -1942,9 +1960,10 @@ struct AgentChatsView: View {
             session.status = .archived
             session.backgroundShortID = nil
         }
-        openTabIDs.remove(id)
+        openTabIDs.removeAll { $0 == id }
+        pinnedSessionIDs.removeAll { $0 == id }
         if selectedSessionID == id {
-            selectedSessionID = projectSessions.first(where: { $0.id != id })?.id
+            selectedSessionID = openTabIDs.first
         }
     }
 
@@ -2134,6 +2153,10 @@ struct AgentChatsView: View {
     @ViewBuilder
     private func sessionManagementMenu(_ session: AgentChatSession) -> some View {
         Group {
+            Button("Tab schließen", systemImage: "xmark.square") {
+                closeTab(session)
+            }
+            Divider()
             Button("Umbenennen…", systemImage: "pencil") {
                 beginRename(session)
             }
@@ -2163,8 +2186,8 @@ struct AgentChatsView: View {
                 backgroundLifecycleMenuItems(session)
             }
             Divider()
-            Button("Schließen", systemImage: "xmark", role: .destructive) {
-                closeHeaderTab(session)
+            Button("Chat schließen", systemImage: "xmark", role: .destructive) {
+                archiveSession(session)
             }
         }
     }
@@ -2200,11 +2223,36 @@ struct AgentChatsView: View {
         renameDraft = session.title
     }
 
-    private func closeHeaderTab(_ session: AgentChatSession) {
-        // X-Klick auf Tab/Sidebar = Chat vollständig schließen.
-        // Terminal terminieren (falls läuft) und Session archivieren – dadurch verschwindet
-        // sie aus Header UND Sidebar (beide nutzen denselben `status != .archived` Filter).
-        // Daten bleiben in der Workspace-Datei erhalten, nichts geht verloren.
+    /// Öffnet einen Tab in der globalen Bar (ans Ende), falls noch nicht
+    /// offen. Kein Persistenz-Cap zur Laufzeit — die Bar scrollt; gekappt
+    /// wird beim nächsten Load (`AgentUIState.prune`).
+    private func openTab(_ id: UUID) {
+        guard !openTabIDs.contains(id) else { return }
+        openTabIDs.append(id)
+    }
+
+    /// Schließt nur den TAB — die Session bleibt in der Sidebar erhalten
+    /// und ein laufendes PTY läuft weiter (Status bleibt über den
+    /// Sidebar-Dot sichtbar; erneutes Öffnen attached an denselben
+    /// Terminal-Controller inkl. Scrollback).
+    private func closeTab(_ session: AgentChatSession) {
+        guard let index = openTabIDs.firstIndex(of: session.id) else {
+            if selectedSessionID == session.id { selectedSessionID = openTabIDs.first }
+            return
+        }
+        openTabIDs.remove(at: index)
+        if selectedSessionID == session.id {
+            // Nachbar-Tab selektieren (gleiche Position, sonst letzter).
+            selectedSessionID = openTabIDs.indices.contains(index)
+                ? openTabIDs[index]
+                : openTabIDs.last
+        }
+    }
+
+    /// Chat vollständig schließen: Terminal terminieren (falls läuft) und
+    /// Session archivieren — dadurch verschwindet sie aus Tab-Bar UND
+    /// Sidebar. Daten bleiben in der Workspace-Datei erhalten.
+    private func archiveSession(_ session: AgentChatSession) {
         if terminalRegistry.controller(for: session.id)?.isRunning == true {
             terminalRegistry.terminate(sessionID: session.id)
         }
@@ -2215,29 +2263,21 @@ struct AgentChatsView: View {
             errorMessage = error.localizedDescription
         }
 
-        openTabIDs.remove(session.id)
-
-        if selectedSessionID == session.id {
-            // Nächste verfügbare Session im selben Projekt wählen (oder nil, wenn keine).
-            let remaining = workspace.sessions.filter { other in
-                other.id != session.id &&
-                other.projectID == session.projectID &&
-                other.status != .archived &&
-                other.isManuallyCreated &&
-                (other.status == .running || other.status == .pending || openTabIDs.contains(other.id))
-            }
-            selectedSessionID = remaining.first?.id
-        }
+        pinnedSessionIDs.removeAll { $0 == session.id }
+        closeTab(session)
     }
 
-    private func switchSelectedProvider(to provider: AgentProvider) {
-        guard let project = selectedProject else { return }
-        if let match = projectSessions.first(where: { $0.provider == provider }) {
-            selectedSessionID = match.id
-        } else {
-            createSession(provider: provider)
+    /// Reordert die globale Tab-Bar: `dropped` landet vor `targetID`.
+    /// Kommt der Drag aus der Sidebar (Session ohne offenen Tab), wird der
+    /// Tab an der Drop-Position geöffnet.
+    private func dropTab(_ dropped: DraggableSession, before targetID: UUID) {
+        let id = dropped.sessionID
+        guard id != targetID else { return }
+        if let from = openTabIDs.firstIndex(of: id) {
+            openTabIDs.remove(at: from)
         }
-        AppPreferences.shared.agentDefaultProjectPath = project.path
+        let insertAt = openTabIDs.firstIndex(of: targetID) ?? openTabIDs.endIndex
+        openTabIDs.insert(id, at: insertAt)
     }
 
     private func openSelectedProjectInPHPStorm() {
