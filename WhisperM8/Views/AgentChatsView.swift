@@ -545,18 +545,23 @@ struct AgentChatsView: View {
 
             ScrollView {
                 // P4: Sidebar-Modell EINMAL pro Body-Eval bauen (Gruppierung +
-                // Suche in einem Durchlauf) statt sessions(for:) pro Projekt
-                // neu zu filtern und zu sortieren.
+                // Suche in einem Durchlauf) statt pro Projekt neu zu filtern
+                // und zu sortieren.
+                let openTabIDSet = Set(openTabIDs)
                 let sessionsByProject = AgentSidebarModelBuilder.sessionsByProject(
                     workspaceSessions: workspace.sessions,
-                    openTabIDs: Set(openTabIDs),
-                    selectedSessionID: selectedSessionID
+                    pinnedSessionIDs: Set(pinnedSessionIDs)
                 )
                 let visibleProjects = AgentSidebarModelBuilder.visibleProjects(
                     manualProjects: manualProjects,
                     sessionsByProject: sessionsByProject,
                     query: searchText
                 )
+                let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                let visiblePinned = AgentSidebarModelBuilder.pinnedSessions(
+                    workspaceSessions: workspace.sessions,
+                    pinnedSessionIDs: pinnedSessionIDs
+                ).filter { trimmedQuery.isEmpty || $0.title.localizedCaseInsensitiveContains(trimmedQuery) }
                 // isRunning-Flips published die Registry nicht selbst; frisch
                 // wird das Set bei jedem Body-Eval (Registry-Inserts/Removes
                 // sind @Published und triggern den). Für Live-Status zählt
@@ -572,13 +577,21 @@ struct AgentChatsView: View {
                         sidebarEmptyState
                     }
 
+                    if !visiblePinned.isEmpty {
+                        sidebarSectionLabel("Gepinnt", systemImage: "pin")
+                        ForEach(visiblePinned) { session in
+                            pinnedRow(session, runningSessionIDs: runningSessionIDs)
+                        }
+                        sidebarSectionLabel("Chats")
+                    }
+
                     ForEach(visibleProjects) { project in
                         ProjectChatGroup(
                             project: project,
                             sessions: sessionsByProject[project.id] ?? [],
                             isExpanded: expandedProjectIDs.contains(project.id) || !searchText.isEmpty,
-                            selectedProjectID: selectedProjectID,
                             selectedSessionID: selectedSessionID,
+                            openTabIDs: openTabIDSet,
                             onSelectProject: {
                                 selectProject(project.id)
                             },
@@ -598,6 +611,7 @@ struct AgentChatsView: View {
                                 createDefaultSession()
                             },
                             onCloseSession: { archiveSession($0) },
+                            onPinSession: { pinSession($0) },
                             onRenameRequest: { beginRename($0) },
                             onAutoNameRequest: { forceAutoNameSession($0) },
                             onRename: renameSession,
@@ -632,6 +646,62 @@ struct AgentChatsView: View {
             Rectangle()
                 .fill(AgentTheme.border)
                 .frame(width: 1)
+        }
+    }
+
+    /// Kleines Uppercase-Label über einer Sidebar-Sektion („Gepinnt", „Chats").
+    private func sidebarSectionLabel(_ text: String, systemImage: String? = nil) -> some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 8, weight: .bold))
+            }
+            Text(text.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .tracking(0.6)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(AgentTheme.textTertiary)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+    }
+
+    /// Zeile der Gepinnt-Sektion inkl. Kontextmenü (Loslösen, Umbenennen,
+    /// Auto-Titel, Farbe, Schließen). Gepinnte Chats sind projektübergreifend —
+    /// das Repo-Badge stellt die Zuordnung her.
+    @ViewBuilder
+    private func pinnedRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>) -> some View {
+        PinnedSessionRow(
+            session: session,
+            project: workspace.projects.first { $0.id == session.projectID },
+            isSelected: selectedSessionID == session.id,
+            isRunning: runningSessionIDs.contains(session.id),
+            statusStore: runtimeStatusStore,
+            isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
+            onSelect: {
+                openTab(session.id)
+                selectedSessionID = session.id
+            },
+            onClose: { archiveSession(session) }
+        )
+        .contextMenu {
+            Button("Loslösen", systemImage: "pin.slash") {
+                unpinSession(session.id)
+            }
+            Divider()
+            Button("Umbenennen…", systemImage: "pencil") {
+                beginRename(session)
+            }
+            Button("Titel automatisch generieren", systemImage: "sparkles") {
+                forceAutoNameSession(session)
+            }
+            .disabled(session.externalSessionID == nil)
+            tabColorMenu(for: session)
+            Divider()
+            Button("Chat schließen", systemImage: "xmark", role: .destructive) {
+                archiveSession(session)
+            }
         }
     }
 
@@ -1270,23 +1340,13 @@ struct AgentChatsView: View {
                 }
                 .disabled(session.externalSessionID == nil)
                 Divider()
-                Menu("Tab-Farbe") {
-                    ForEach(AgentChatColor.palette, id: \.self) { color in
-                        Button {
-                            setSessionColor(id: session.id, color: color)
-                        } label: {
-                            Label {
-                                Text(AgentChatColorName.label(for: color))
-                            } icon: {
-                                Image(nsImage: colorSwatchImage(hex: color))
-                            }
-                        }
-                    }
-                    Divider()
-                    Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
-                        setSessionColor(id: session.id, color: nil)
-                    }
+                Button(
+                    pinnedSessionIDs.contains(session.id) ? "Loslösen" : "Anpinnen",
+                    systemImage: pinnedSessionIDs.contains(session.id) ? "pin.slash" : "pin"
+                ) {
+                    togglePin(session.id)
                 }
+                tabColorMenu(for: session)
                 Divider()
                 Button("Tab schließen", systemImage: "xmark.square") {
                     closeTab(session)
@@ -2046,6 +2106,43 @@ struct AgentChatsView: View {
         }
     }
 
+    /// Wiederverwendetes „Tab-Farbe"-Submenu (8er-Palette + Provider-Reset).
+    @ViewBuilder
+    private func tabColorMenu(for session: AgentChatSession) -> some View {
+        Menu("Tab-Farbe") {
+            ForEach(AgentChatColor.palette, id: \.self) { color in
+                Button {
+                    setSessionColor(id: session.id, color: color)
+                } label: {
+                    Label {
+                        Text(AgentChatColorName.label(for: color))
+                    } icon: {
+                        Image(nsImage: colorSwatchImage(hex: color))
+                    }
+                }
+            }
+            Divider()
+            Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
+                setSessionColor(id: session.id, color: nil)
+            }
+        }
+    }
+
+    // MARK: - Pinning
+
+    private func pinSession(_ id: UUID) {
+        guard !pinnedSessionIDs.contains(id) else { return }
+        pinnedSessionIDs.append(id)
+    }
+
+    private func unpinSession(_ id: UUID) {
+        pinnedSessionIDs.removeAll { $0 == id }
+    }
+
+    private func togglePin(_ id: UUID) {
+        pinnedSessionIDs.contains(id) ? unpinSession(id) : pinSession(id)
+    }
+
     // MARK: - Project metadata actions
 
     private func beginRenameProject(_ project: AgentProject) {
@@ -2164,23 +2261,14 @@ struct AgentChatsView: View {
                 forceAutoNameSession(session)
             }
             .disabled(session.externalSessionID == nil)
-            Menu("Tab-Farbe") {
-                ForEach(AgentChatColor.palette, id: \.self) { color in
-                    Button {
-                        setSessionColor(id: session.id, color: color)
-                    } label: {
-                        Label {
-                            Text(AgentChatColorName.label(for: color))
-                        } icon: {
-                            Image(nsImage: colorSwatchImage(hex: color))
-                        }
-                    }
-                }
-                Divider()
-                Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
-                    setSessionColor(id: session.id, color: nil)
-                }
+            Divider()
+            Button(
+                pinnedSessionIDs.contains(session.id) ? "Loslösen" : "Anpinnen",
+                systemImage: pinnedSessionIDs.contains(session.id) ? "pin.slash" : "pin"
+            ) {
+                togglePin(session.id)
             }
+            tabColorMenu(for: session)
             if session.isBackgroundChat {
                 Divider()
                 backgroundLifecycleMenuItems(session)

@@ -87,6 +87,8 @@ final class SessionListButtonEquatableTests: XCTestCase {
     private func makeButton(
         session: AgentChatSession,
         isSelected: Bool = false,
+        isOpenTab: Bool = false,
+        accentColorHex: String? = nil,
         isRunning: Bool = false,
         isAwaitingInput: Bool = false,
         isAutoRenaming: Bool = false,
@@ -95,6 +97,8 @@ final class SessionListButtonEquatableTests: XCTestCase {
         SessionListButton(
             session: session,
             isSelected: isSelected,
+            isOpenTab: isOpenTab,
+            accentColorHex: accentColorHex,
             isRunning: isRunning,
             statusStore: store ?? AgentSessionRuntimeStatusStore(),
             isAwaitingInput: isAwaitingInput,
@@ -120,6 +124,8 @@ final class SessionListButtonEquatableTests: XCTestCase {
         renamed.title = "Anderer Titel"
         XCTAssertNotEqual(base, makeButton(session: renamed))
         XCTAssertNotEqual(base, makeButton(session: session, isSelected: true))
+        XCTAssertNotEqual(base, makeButton(session: session, isOpenTab: true))
+        XCTAssertNotEqual(base, makeButton(session: session, accentColorHex: "#FF9F0A"))
         XCTAssertNotEqual(base, makeButton(session: session, isRunning: true))
         XCTAssertNotEqual(base, makeButton(session: session, isAwaitingInput: true))
         XCTAssertNotEqual(base, makeButton(session: session, isAutoRenaming: true))
@@ -129,26 +135,25 @@ final class SessionListButtonEquatableTests: XCTestCase {
 // MARK: - Sidebar-Modell-Builder (P4 S4)
 
 final class AgentSidebarModelBuilderTests: XCTestCase {
-    func testGroupingFiltersArchivedNonManualAndClosedTabs() {
+    func testGroupingShowsAllManualSessionsExceptArchivedImportedAndPinned() {
         let projectID = UUID()
         let open = makeSidebarSession(projectID: projectID, title: "Offen")
+        let closedTab = makeSidebarSession(projectID: projectID, title: "Zu, aber Bestand")
         let archived = makeSidebarSession(projectID: projectID, title: "Archiv", status: .archived)
         let notManual = makeSidebarSession(projectID: projectID, title: "Import", createdManually: nil)
-        let closedTab = makeSidebarSession(projectID: projectID, title: "Zu")
-        let selectedButClosed = makeSidebarSession(projectID: projectID, title: "Selektiert")
+        let pinned = makeSidebarSession(projectID: projectID, title: "Gepinnt")
 
         let grouped = AgentSidebarModelBuilder.sessionsByProject(
-            workspaceSessions: [open, archived, notManual, closedTab, selectedButClosed],
-            openTabIDs: [open.id, archived.id, notManual.id],
-            selectedSessionID: selectedButClosed.id
+            workspaceSessions: [open, closedTab, archived, notManual, pinned],
+            pinnedSessionIDs: [pinned.id]
         )
 
         let titles = (grouped[projectID] ?? []).map(\.title)
         XCTAssertTrue(titles.contains("Offen"))
-        XCTAssertTrue(titles.contains("Selektiert"), "Selektierte Session ist auch ohne offenen Tab sichtbar")
+        XCTAssertTrue(titles.contains("Zu, aber Bestand"), "Sidebar = Chat-Liste: auch Sessions ohne offenen Tab sichtbar")
         XCTAssertFalse(titles.contains("Archiv"))
         XCTAssertFalse(titles.contains("Import"))
-        XCTAssertFalse(titles.contains("Zu"))
+        XCTAssertFalse(titles.contains("Gepinnt"), "Gepinnte Sessions erscheinen exklusiv in der Gepinnt-Sektion")
     }
 
     func testGroupingSortsLikeAgentSessionStore() {
@@ -158,8 +163,7 @@ final class AgentSidebarModelBuilderTests: XCTestCase {
 
         let grouped = AgentSidebarModelBuilder.sessionsByProject(
             workspaceSessions: [older, newer],
-            openTabIDs: [older.id, newer.id],
-            selectedSessionID: nil
+            pinnedSessionIDs: []
         )
 
         XCTAssertEqual(
@@ -167,6 +171,20 @@ final class AgentSidebarModelBuilderTests: XCTestCase {
             AgentSessionStore.sortedSessions([older, newer]).map(\.title),
             "Sortierung muss identisch zu AgentSessionStore.sortedSessions sein"
         )
+    }
+
+    func testPinnedSessionsKeepPinOrderAndDropArchivedAndUnknown() {
+        let projectID = UUID()
+        let first = makeSidebarSession(projectID: projectID, title: "Erster Pin")
+        let second = makeSidebarSession(projectID: projectID, title: "Zweiter Pin")
+        let archived = makeSidebarSession(projectID: projectID, title: "Archiv", status: .archived)
+
+        let pinned = AgentSidebarModelBuilder.pinnedSessions(
+            workspaceSessions: [second, first, archived],
+            pinnedSessionIDs: [first.id, archived.id, UUID(), second.id]
+        )
+
+        XCTAssertEqual(pinned.map(\.title), ["Erster Pin", "Zweiter Pin"], "Pin-Reihenfolge, nicht Workspace-Reihenfolge")
     }
 
     func testSearchMatchesProjectAndSessionFields() {

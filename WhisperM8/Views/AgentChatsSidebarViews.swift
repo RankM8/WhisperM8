@@ -5,13 +5,16 @@ struct ProjectChatGroup: View {
     let project: AgentProject
     let sessions: [AgentChatSession]
     let isExpanded: Bool
-    let selectedProjectID: UUID?
     let selectedSessionID: UUID?
+    /// Sessions mit offenem Tab in der globalen Bar — werden heller
+    /// dargestellt als geschlossene (Sidebar = Bestand, Tabs = aktiv).
+    let openTabIDs: Set<UUID>
     var onSelectProject: () -> Void
     var onToggleExpanded: () -> Void
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
     var onCloseSession: (AgentChatSession) -> Void
+    var onPinSession: (UUID) -> Void
     var onRenameRequest: (AgentChatSession) -> Void
     var onAutoNameRequest: (AgentChatSession) -> Void
     var onRename: (UUID, String) -> Void
@@ -38,10 +41,6 @@ struct ProjectChatGroup: View {
     /// Einmal pro View-Init gelesen statt pro Render — das Flag ist ein
     /// Escape-Hatch und aendert sich nur via `defaults write` + App-Neustart.
     private let isDragEnabled = AppPreferences.shared.isAgentSidebarDragEnabled
-
-    private var isSelected: Bool {
-        selectedProjectID == project.id
-    }
 
     /// Initiales Row-Limit pro Projekt; die "N weitere anzeigen"-Row hebt es
     /// an. Lebt pro Projekt-Identity (ForEach-id) und resettet bewusst, wenn
@@ -117,6 +116,8 @@ struct ProjectChatGroup: View {
         SessionListButton(
             session: session,
             isSelected: selectedSessionID == session.id,
+            isOpenTab: openTabIDs.contains(session.id),
+            accentColorHex: project.color,
             isRunning: runningSessionIDs.contains(session.id),
             statusStore: statusStore,
             isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
@@ -146,6 +147,11 @@ struct ProjectChatGroup: View {
                 onAutoNameRequest(session)
             }
             .disabled(session.externalSessionID == nil)
+            Divider()
+            Button("Anpinnen", systemImage: "pin") {
+                onPinSession(session.id)
+            }
+            Divider()
             Menu("Tab-Farbe") {
                 ForEach(AgentChatColor.palette, id: \.self) { color in
                     Button {
@@ -229,11 +235,13 @@ struct ProjectChatGroup: View {
             .padding(.leading, 8)
             .padding(.trailing, 8)
             .frame(minHeight: 36, maxHeight: 36)
-            .background(headerBackground.overlay(
-                isSessionDragOver || isProjectDragOver
-                    ? AgentTheme.selection.opacity(0.5)
-                    : Color.clear
-            ))
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSessionDragOver || isProjectDragOver
+                        ? AgentTheme.selection
+                        : headerBackground)
+            )
+            .padding(.horizontal, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -285,8 +293,9 @@ struct ProjectChatGroup: View {
         }
     }
 
+    /// Projekt-Header werden nicht mehr als „selektiert" hervorgehoben —
+    /// genau EINE Markierung in der Sidebar: die aktive Chat-Zeile.
     private var headerBackground: Color {
-        if isSelected { return AgentTheme.selection }
         if isHeaderHovered { return AgentTheme.hover }
         return Color.clear
     }
@@ -348,6 +357,13 @@ extension View {
 struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
+    /// `true` wenn der Chat gerade als Tab in der globalen Bar offen ist —
+    /// offene Chats erscheinen heller als geschlossene (Sidebar = Bestand,
+    /// Tab-Bar = aktive Auswahl).
+    let isOpenTab: Bool
+    /// Projektfarbe (Hex) für den Auswahl-Akzent im Einzug — ersetzt die
+    /// frühere Connector-Linie.
+    let accentColorHex: String?
     let isRunning: Bool
     /// Stabile Store-Referenz — bewusst KEIN @ObservedObject: Die Row
     /// subscribt per `onReceive` nur auf den Status IHRER Session
@@ -370,8 +386,6 @@ struct SessionListButton: View {
     /// (Updates kommen über @State, nicht über Parent-Re-Render).
     @State private var liveStatus: AgentSessionRuntimeStatus?
 
-    private static let connectorX: CGFloat = 18
-
     private var customColor: Color? {
         guard let hex = session.color, !hex.isEmpty else { return nil }
         return Color(hex: hex)
@@ -381,25 +395,31 @@ struct SessionListButton: View {
         let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.sessionRow")
         Button(action: onSelect) {
             ZStack(alignment: .leading) {
-                Rectangle()
-                    .fill(isSelected ? AgentTheme.connectorActive : AgentTheme.connector)
-                    .frame(width: 1)
-                    .frame(maxHeight: .infinity)
-                    .padding(.leading, Self.connectorX)
+                // Auswahl-Akzent in Projektfarbe im Einzug — genau eine
+                // Markierung statt der gestapelten Boxen + Connector-Linie.
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 1.25)
+                        .fill(accentColor)
+                        .frame(width: 2.5, height: 13)
+                        .padding(.leading, 14)
+                }
 
                 HStack(spacing: 8) {
-                    if let customColor {
-                        Circle()
-                            .fill(customColor.opacity(isSelected ? 0.95 : 0.7))
-                            .frame(width: 6, height: 6)
-                    } else {
-                        ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
-                            .frame(width: 11, alignment: .center)
+                    Group {
+                        if let customColor {
+                            Circle()
+                                .fill(customColor.opacity(isSelected ? 0.95 : 0.7))
+                                .frame(width: 6, height: 6)
+                        } else {
+                            ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
+                                .frame(width: 11, alignment: .center)
+                        }
                     }
+                    .opacity(isOpenTab || isSelected ? 1 : 0.55)
 
                     Text(session.title)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                        .foregroundStyle(titleColor)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .layoutPriority(1)
@@ -426,13 +446,25 @@ struct SessionListButton: View {
                 .padding(.trailing, 8)
             }
             .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 26, alignment: .leading)
-            .background(rowBackground)
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
+    }
+
+    private var accentColor: Color {
+        guard let accentColorHex, !accentColorHex.isEmpty else {
+            return AgentTheme.textSecondary
+        }
+        return Color(hex: accentColorHex)
+    }
+
+    private var titleColor: Color {
+        (isSelected || isOpenTab) ? AgentTheme.textPrimary : AgentTheme.textSecondary
     }
 
     @ViewBuilder
@@ -537,9 +569,108 @@ extension SessionListButton: Equatable {
     nonisolated static func == (lhs: SessionListButton, rhs: SessionListButton) -> Bool {
         lhs.session == rhs.session
             && lhs.isSelected == rhs.isSelected
+            && lhs.isOpenTab == rhs.isOpenTab
+            && lhs.accentColorHex == rhs.accentColorHex
             && lhs.isRunning == rhs.isRunning
             && lhs.isAwaitingInput == rhs.isAwaitingInput
             && lhs.isAutoRenaming == rhs.isAutoRenaming
+    }
+}
+
+/// Zeile der „Gepinnt"-Sektion: Repo-Badge (ProjectAvatar) statt
+/// Provider-Icon, damit die Projektzugehörigkeit projektübergreifend auf
+/// einen Blick erkennbar ist. Verhalten sonst wie `SessionListButton`.
+struct PinnedSessionRow: View {
+    let session: AgentChatSession
+    let project: AgentProject?
+    let isSelected: Bool
+    let isRunning: Bool
+    let statusStore: AgentSessionRuntimeStatusStore
+    let isAwaitingInput: Bool
+    var onSelect: () -> Void
+    var onClose: () -> Void
+
+    @State private var isHovered = false
+    @State private var liveStatus: AgentSessionRuntimeStatus?
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 8) {
+                if let project {
+                    ProjectAvatar(project: project, size: 14)
+                        .help(project.name)
+                } else {
+                    ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
+                        .frame(width: 14, alignment: .center)
+                }
+
+                Text(session.title)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(session.title)
+
+                Spacer(minLength: 0)
+
+                trailingIndicator
+                    .frame(width: 18, alignment: .trailing)
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
+    }
+
+    @ViewBuilder
+    private var trailingIndicator: some View {
+        if isHovered {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(AgentTheme.textSecondary)
+                .frame(width: 16, height: 16)
+                .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                .contentShape(Rectangle())
+                .onTapGesture { onClose() }
+                .help("Chat schließen")
+        } else {
+            switch resolvedStatus {
+            case .working:
+                Circle().fill(Color.green).frame(width: 5, height: 5)
+                    .help("Arbeitet …")
+            case .awaitingInput:
+                Circle().fill(Color.orange).frame(width: 5, height: 5)
+                    .help("Wartet möglicherweise auf User-Input")
+            case .idle:
+                Circle().fill(Color.green.opacity(0.55)).frame(width: 5, height: 5)
+                    .help("Bereit")
+            case .errored:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.red.opacity(0.8))
+                    .help("Mit Fehler beendet")
+            case .stopped, .none:
+                Color.clear.frame(width: 1, height: 1)
+            }
+        }
+    }
+
+    private var resolvedStatus: AgentSessionRuntimeStatus? {
+        if isAwaitingInput { return .awaitingInput }
+        if let liveStatus { return liveStatus }
+        return isRunning ? .working : nil
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return AgentTheme.selection }
+        if isHovered { return AgentTheme.hover }
+        return Color.clear
     }
 }
 
