@@ -97,8 +97,15 @@ _install_bundle:
 	@# einem in-place rsync nicht aktiv. `-f` zwingt Re-Registrierung.
 	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$(INSTALLED_APP)" 2>/dev/null || true
 
+# pkill -x matcht app-gestartete Instanzen auf manchen Systemen NICHT
+# (Prozessname != "$(APP_NAME)") — eine ueberlebende Alt-Instanz blockiert
+# dann den Single-Instance-Check und die frisch deployte App beendet sich
+# sofort wieder. Daher zusaetzlich PID-Lookup ueber den vollen Binary-Pfad.
 kill:
 	@pkill -x $(APP_NAME) 2>/dev/null || true
+	@for pid in $$(ps -axo pid,comm | awk '$$2 ~ /$(APP_NAME).app\/Contents\/MacOS\/$(APP_NAME)$$/ {print $$1}'); do \
+		kill $$pid 2>/dev/null || true; \
+	done
 
 clean:
 	@echo "Cleaning build artifacts..."
