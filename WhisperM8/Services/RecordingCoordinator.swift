@@ -313,12 +313,15 @@ final class RecordingCoordinator {
         if let recordingStartTime {
             let elapsed = Date().timeIntervalSince(recordingStartTime)
             if elapsed < 0.3 {
-                // P5: Seit dem Sofort-Start landet ein versehentlicher
-                // Doppel-Tap des Hotkeys hier. Frueher lief die Aufnahme dann
-                // stillschweigend weiter ("Geister-Aufnahme") — jetzt wird
-                // sie verworfen, was der User-Intention entspricht.
-                Logger.debug(" Recording too short: \(elapsed)s — discarding")
-                cancelRecording()
+                // WICHTIG, nicht "verbessern": Der Hotkey ist KeyDown=Start /
+                // KeyUp=Stop verdrahtet. Ein kurzer TAP feuert Start und
+                // ~100 ms spaeter diesen Stop — der fruehe Stop MUSS ignoriert
+                // werden (Aufnahme laeuft weiter), sonst ist Tap-Diktieren
+                // unmoeglich: Genau das hat der "Doppel-Tap verwerfen"-Ansatz
+                // (cancelRecording hier) am 10.06. kaputt gemacht — Overlay
+                // erschien kurz und verschwand sofort wieder. Tap-Semantik:
+                // Tap startet, naechster Tap (KeyUp nach >0,3 s) stoppt.
+                Logger.debug(" Stop within \(elapsed)s ignored (tap-to-toggle)")
                 return
             }
         }
