@@ -43,6 +43,9 @@ struct AgentChatsView: View {
     @State private var pendingAmbiguousRebind: AmbiguousRebindRequest?
     @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
     @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
+    /// Gemerktes Ziel für „Projekt öffnen in …" (Default PhpStorm, Finder
+    /// wählbar). Die Wahl im Menü setzt den neuen Default.
+    @AppStorage("agentProjectOpenTarget") private var projectOpenTargetRaw = ProjectOpenTarget.phpStorm.rawValue
     /// Offene Tabs der globalen Tab-Bar in Anzeige-Reihenfolge —
     /// projektübergreifend (UI-State Schema v2). Persistiert via AgentUIState.
     @State private var openTabIDs: [UUID] = []
@@ -1046,22 +1049,37 @@ struct AgentChatsView: View {
                 if let selectedSession {
                     selectedSessionHeaderControls(selectedSession)
                 }
-                if selectedProject != nil {
-                    Button {
-                        openSelectedProjectInPHPStorm()
+                if let project = selectedProject {
+                    Menu {
+                        ForEach(ProjectOpenTarget.allCases, id: \.self) { target in
+                            Button {
+                                // Wahl als neuen Default merken + sofort öffnen.
+                                projectOpenTargetRaw = target.rawValue
+                                openProject(project, in: target)
+                            } label: {
+                                Label("In \(target.label) öffnen", systemImage: target.systemImage)
+                            }
+                        }
                     } label: {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        Image(systemName: projectOpenTarget.systemImage)
                             .font(.system(size: 11))
                             .foregroundStyle(AgentTheme.textTertiary)
                             .frame(width: 18, height: 18)
                             .contentShape(Rectangle())
+                    } primaryAction: {
+                        openProject(project, in: projectOpenTarget)
                     }
-                    .buttonStyle(.plain)
-                    .help("PHPStorm öffnen")
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("In \(projectOpenTarget.label) öffnen · Pfeil für Auswahl")
                 }
             }
             .fixedSize()
         }
+    }
+
+    private var projectOpenTarget: ProjectOpenTarget {
+        ProjectOpenTarget(rawValue: projectOpenTargetRaw) ?? .phpStorm
     }
 
     /// Live-Anzeige der Sub-Session, in der zuletzt Aktivitaet passierte —
@@ -2463,12 +2481,50 @@ struct AgentChatsView: View {
         openTabIDs.insert(id, at: insertAt)
     }
 
+    /// Wird vom Inspector-Button („PHPStorm öffnen") genutzt.
     private func openSelectedProjectInPHPStorm() {
         guard let selectedProject else { return }
+        openProject(selectedProject, in: .phpStorm)
+    }
+
+    /// Öffnet das Projektverzeichnis im gewählten Ziel.
+    private func openProject(_ project: AgentProject, in target: ProjectOpenTarget) {
+        switch target {
+        case .finder:
+            NSWorkspace.shared.open(URL(fileURLWithPath: project.path))
+        case .phpStorm:
+            openInPhpStorm(path: project.path)
+        }
+    }
+
+    /// Öffnet/fokussiert das Projekt in PhpStorm. Startet bewusst das
+    /// gebündelte JetBrains-CLI-Binary mit dem Pfad statt `NSWorkspace.open`:
+    /// Bei mehreren offenen PhpStorm-Projekten holt der macOS-open-Mechanismus
+    /// nur die App nach vorne (zeigt das zuletzt benutzte Fenster), während
+    /// das Binary die laufende Instanz anweist, GENAU dieses Projekt zu öffnen
+    /// bzw. dessen Fenster zu fokussieren.
+    private func openInPhpStorm(path: String) {
+        let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.jetbrains.PhpStorm")
+            ?? URL(fileURLWithPath: "/Applications/PhpStorm.app")
+        let binaryURL = appURL.appendingPathComponent("Contents/MacOS/phpstorm")
+
+        if FileManager.default.isExecutableFile(atPath: binaryURL.path) {
+            let process = Process()
+            process.executableURL = binaryURL
+            process.arguments = [path]
+            do {
+                try process.run()
+                return
+            } catch {
+                // Fällt unten auf den macOS-open-Weg zurück.
+            }
+        }
+
+        // Fallback: App da, aber Binary-Start ging nicht.
         let configuration = NSWorkspace.OpenConfiguration()
         NSWorkspace.shared.open(
-            [URL(fileURLWithPath: selectedProject.path)],
-            withApplicationAt: URL(fileURLWithPath: "/Applications/PhpStorm.app"),
+            [URL(fileURLWithPath: path)],
+            withApplicationAt: appURL,
             configuration: configuration
         ) { app, error in
             if app == nil || error != nil {
@@ -2476,6 +2532,27 @@ struct AgentChatsView: View {
                     errorMessage = error?.localizedDescription ?? "PhpStorm konnte nicht geöffnet werden."
                 }
             }
+        }
+    }
+}
+
+/// Ziel für „Projekt öffnen in …" — Default PhpStorm, Finder wählbar.
+/// Die Wahl im Menü wird als neuer Default gemerkt (`agentProjectOpenTarget`).
+enum ProjectOpenTarget: String, CaseIterable {
+    case phpStorm
+    case finder
+
+    var label: String {
+        switch self {
+        case .phpStorm: return "PhpStorm"
+        case .finder: return "Finder"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .phpStorm: return "chevron.left.forwardslash.chevron.right"
+        case .finder: return "folder"
         }
     }
 }
