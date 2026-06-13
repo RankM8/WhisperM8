@@ -569,6 +569,14 @@ struct AgentChatsView: View {
                     .padding(.bottom, 4)
             }
 
+            // Fest verankert: Befehle (Neuer Chat / Aktualisieren / Projekt
+            // hinzufügen) + Filter scrollen NICHT mit — nur die Chat-Liste
+            // darunter scrollt.
+            sidebarCommandRows
+                .padding(.horizontal, 8)
+                .padding(.top, 2)
+                .padding(.bottom, 6)
+
             ScrollView {
                 // P4: Sidebar-Modell EINMAL pro Body-Eval bauen (Gruppierung +
                 // Suche in einem Durchlauf) statt pro Projekt neu zu filtern
@@ -595,10 +603,6 @@ struct AgentChatsView: View {
                 // Fallback, solange der Watcher noch keinen Status hat.
                 let runningSessionIDs = terminalRegistry.activeSessionIDs
                 VStack(alignment: .leading, spacing: 8) {
-                    sidebarCommandRows
-                        .padding(.horizontal, 8)
-                        .padding(.bottom, 4)
-
                     if visibleProjects.isEmpty && searchText.isEmpty {
                         sidebarEmptyState
                     }
