@@ -201,7 +201,10 @@ struct AgentChatsView: View {
                 .frame(width: 292)
             }
         }
-        .frame(minWidth: 920, minHeight: 700)
+        // Bewusst KEINE feste Mindestgröße mehr — der User soll das Fenster
+        // so klein ziehen können, wie er will. Die einzige Untergrenze ist
+        // jetzt der natürliche Platzbedarf des Inhalts (fixe Sidebar/Inspector
+        // lassen sich per Toggle ausblenden, um noch kleiner zu werden).
         .background(AgentTheme.background)
         .background(AgentChatsWindowAccessor(onResolve: { hostWindow = $0 }))
         .ignoresSafeArea(.all, edges: .top)
