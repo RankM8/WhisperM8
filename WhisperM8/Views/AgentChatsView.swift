@@ -316,8 +316,20 @@ struct AgentChatsView: View {
         .onChange(of: pinnedSessionIDs) { _, _ in schedulePersistUIState() }
         .onChange(of: expandedProjectIDs) { _, _ in schedulePersistUIState() }
         .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanRunningChangedNotification)) { note in
-            if let running = note.userInfo?["running"] as? Bool {
-                isIndexingSessions = running
+            guard let running = note.userInfo?["running"] as? Bool else { return }
+            if running {
+                // Spinner nur bei bewusst ausgelösten Scans: User-Refresh
+                // (.manual) und App-Start (.launch). Die stillen
+                // Hintergrund-Scans (.foreground bei Cmd-Tab, .fsEvent bei
+                // externen Transcript-Writes) laufen unsichtbar — sonst
+                // flackert das Label im Sekundentakt, obwohl es nichts zu
+                // melden gibt.
+                let reason = note.userInfo?["reason"] as? String
+                isIndexingSessions = reason == AgentScanCoordinator.Reason.manual.rawValue
+                    || reason == AgentScanCoordinator.Reason.launch.rawValue
+            } else {
+                // Abschluss räumt den Spinner immer ab, egal welcher Scan lief.
+                isIndexingSessions = false
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentSessionAutoNamer.inFlightDidChangeNotification)) { _ in
