@@ -60,6 +60,54 @@ extension View {
     }
 }
 
+/// Behandelt Doppelklicks in der oberen Leiste wie eine native Titelleiste:
+/// ein Doppelklick führt die System-Aktion aus (Zoom „auf den Bildschirm
+/// erweitern" / Minimieren / Nichts — je nach Systemeinstellung „Doppelklick
+/// auf Titelleiste"). Nötig, weil `hiddenTitleBar` + `fullSizeContentView`
+/// die native Titelleisten-Region mit unserem Tab-Strip überdecken, sodass
+/// macOS den Doppelklick dort nicht mehr selbst auswertet.
+///
+/// Der hitTest-Trick (wie beim MiddleClickCatcher): nur für Doppelklick-
+/// Events gibt die View `self` zurück — Einzelklicks, Drags (Tab-Reorder),
+/// Mittelklicks und Scroll fallen an die darunterliegenden Controls durch.
+private final class TitleBarDoubleClickNSView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let event = NSApp.currentEvent else { return nil }
+        switch event.type {
+        case .leftMouseDown, .leftMouseUp:
+            return event.clickCount == 2 ? self : nil
+        default:
+            return nil
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.clickCount == 2, let window else { return }
+        Self.performSystemDoubleClickAction(on: window)
+    }
+
+    /// Spiegelt das native Verhalten: liest die globale Einstellung
+    /// „Doppelklick auf Titelleiste" (NSGlobalDomain) und führt die passende
+    /// Aktion aus. Default „Maximize" = Zoom, falls der Key nicht gesetzt ist.
+    static func performSystemDoubleClickAction(on window: NSWindow) {
+        let action = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
+        switch action {
+        case "Minimize":
+            window.miniaturize(nil)
+        case "None":
+            break
+        default:
+            // „Maximize" = Zoom auf den sichtbaren Bildschirm (kein Vollbild).
+            window.zoom(nil)
+        }
+    }
+}
+
+struct TitleBarDoubleClickZone: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { TitleBarDoubleClickNSView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 /// Tab der globalen Tab-Bar. Trägt ein Repo-Badge (ProjectAvatar) zur
 /// Projektzuordnung — die Tabs sind projektübergreifend gemischt. Eine
 /// gesetzte Custom-Farbe tönt den GANZEN Tab dezent (inaktiv schwach,

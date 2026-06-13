@@ -201,6 +201,16 @@ struct AgentChatsView: View {
         .background(AgentTheme.background)
         .background(AgentChatsWindowAccessor(onResolve: { hostWindow = $0 }))
         .ignoresSafeArea(.all, edges: .top)
+        // Doppelklick auf die oberste Leiste = Fenster zoomen (Standard-macOS-
+        // Titelleisten-Verhalten), das durch hiddenTitleBar/fullSizeContentView
+        // sonst verloren geht. Liegt ÜBER den Top-Controls, fängt aber nur
+        // Doppelklicks ab — Einzelklicks/Drags fallen durch (siehe hitTest).
+        .overlay(alignment: .top) {
+            TitleBarDoubleClickZone()
+                .frame(maxWidth: .infinity)
+                .frame(height: 28)
+                .ignoresSafeArea(.all, edges: .top)
+        }
         .sheet(isPresented: Binding(
             get: { renameTargetID != nil },
             set: { if !$0 { renameTargetID = nil } }
