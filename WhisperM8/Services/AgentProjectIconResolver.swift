@@ -22,8 +22,11 @@ enum AgentProjectIconResolver {
     /// Icons aller Projekte ohne manuell gewähltes Icon (siehe
     /// `AgentChatsView.migrateIconDetectionIfNeeded`). v2 = browser-artiger
     /// Resolver (Manifest + bewerteter Scan); v3 = Tiefen-Grenze gegen
-    /// fremde, tief vergrabene Assets (Juni 2026).
-    static let version = 3
+    /// fremde, tief vergrabene Assets; v4 = tiefenbegrenzter Walk + Schnellpfad
+    /// (direkte Probe der Web-Root-Orte je Repo-/Monorepo-Ebene), damit große
+    /// Repos wie ListM8 (Symfony api/ + client/public) schnell & korrekt ein
+    /// Icon bekommen (Juni 2026).
+    static let version = 4
 
     /// Verzeichnisse, die wir beim rekursiven Scan überspringen (Build-Caches,
     /// Dependencies). `dist`/`build`/`out` bleiben drin — manche Repos legen
@@ -43,8 +46,12 @@ enum AgentProjectIconResolver {
     /// `nil` → farbige Initiale statt falschem Icon.
     private static let minimumScore = 80
 
-    private static let maxScannedEntries = 8000
-    private static let maxScanDepth = 7
+    private static let maxScannedEntries = 20000
+    /// Der Walk steigt nur bis Tiefe 3 ab — genau die Grenze, ab der ein
+    /// Pfad ohnehin kein Kandidat mehr ist (siehe Score-Tiefen-Grenze). So
+    /// verschwendet er kein Budget in tiefen Quell-/Test-Bäumen (api/src/…)
+    /// und erreicht sicher flache Icon-Ordner wie `client/public/`.
+    private static let maxScanDepth = 4
 
     /// Findet ein Icon in `projectPath`. Liefert den **relativen** Pfad zum
     /// Projekt-Root, sodass der Wert direkt in `AgentProject.iconRelativePath`
@@ -52,6 +59,13 @@ enum AgentProjectIconResolver {
     static func findIconRelativePath(in projectPath: String) -> String? {
         let projectURL = URL(fileURLWithPath: projectPath)
         guard isDirectory(at: projectURL) else { return nil }
+
+        // Schnellpfad: häufige Web-Root-Orte (auch je erster Unterordner-Ebene
+        // für Monorepos / client/) direkt per fileExists prüfen — meist <20 ms
+        // statt eines Sekunden langen rekursiven Walks in großen Repos.
+        if let quick = quickProbe(projectURL: projectURL) {
+            return quick
+        }
 
         let collected = collectCandidates(in: projectURL)
 
@@ -64,14 +78,86 @@ enum AgentProjectIconResolver {
         }
 
         // 2. Bewerteter Datei-Scan über alle gefundenen Bilder.
-        let scored = collected.images.compactMap { url -> (path: String, score: Int)? in
-            let relative = relativePath(of: url, relativeTo: projectURL)
-            let score = score(forImageRelativePath: relative)
-            return score >= minimumScore ? (relative, score) : nil
+        return bestScored(images: collected.images, projectURL: projectURL)
+    }
+
+    // MARK: - Schnellpfad
+
+    /// Häufige Favicon-Namen für die direkte fileExists-Probe.
+    private static let commonIconFilenames: [String] = [
+        "favicon.ico", "favicon.svg", "favicon.png",
+        "favicon-512x512.png", "favicon-256x256.png", "favicon-192x192.png", "favicon-32x32.png",
+        "apple-touch-icon.png", "apple-touch-icon-precomposed.png", "apple-icon.png",
+        "android-chrome-512x512.png", "android-chrome-192x192.png",
+        "android-icon-192x192.png", "mstile-150x150.png",
+        "icon.png", "icon.svg", "icon-512.png", "icon-512x512.png",
+        "logo.png", "logo.svg",
+    ]
+
+    /// Web-Root-Unterordner, in denen Favicons üblicherweise liegen — relativ
+    /// zu jeder Basis (Repo-Root + erste Unterordner-Ebene).
+    private static let webRootSubdirectories: [String] = [
+        "", "public", "static", "dist", "build", "out", "app", "src/app",
+        "assets", "www", "web", "site", "wwwroot",
+    ]
+
+    private static let manifestFilenames: [String] = [
+        "site.webmanifest", "manifest.json", "manifest.webmanifest",
+    ]
+
+    /// Prüft die häufigen Web-Root-Orte direkt (ohne Verzeichnis-Walk). Deckt
+    /// Standard-Layouts und einfache Monorepos (client/, frontend/, podomedica/
+    /// …) ab. Liefert `nil`, wenn dort nichts liegt → dann übernimmt der
+    /// rekursive Scan die ungewöhnlichen Fälle (verschachtelte Icon-Ordner).
+    static func quickProbe(projectURL: URL) -> String? {
+        let fm = FileManager.default
+        var baseDirs: [URL] = [projectURL]
+        if let subs = try? fm.contentsOfDirectory(
+            at: projectURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            for sub in subs {
+                let isDir = (try? sub.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                if isDir, !prunedDirectories.contains(sub.lastPathComponent) {
+                    baseDirs.append(sub)
+                }
+            }
         }
-        // Höchster Score gewinnt; bei Gleichstand der lexikografisch erste
-        // (deterministisch für Tests).
-        return scored
+
+        var manifests: [URL] = []
+        var imageCandidates: [URL] = []
+        for base in baseDirs {
+            for subdir in webRootSubdirectories {
+                let dir = subdir.isEmpty ? base : base.appendingPathComponent(subdir)
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { continue }
+                for name in manifestFilenames {
+                    let m = dir.appendingPathComponent(name)
+                    if fm.fileExists(atPath: m.path) { manifests.append(m) }
+                }
+                for name in commonIconFilenames {
+                    let f = dir.appendingPathComponent(name)
+                    if fm.fileExists(atPath: f.path) { imageCandidates.append(f) }
+                }
+            }
+        }
+
+        if let fromManifest = bestManifestIcon(manifests: manifests, projectURL: projectURL) {
+            return fromManifest
+        }
+        return bestScored(images: imageCandidates, projectURL: projectURL)
+    }
+
+    /// Höchstbewertetes Bild ≥ `minimumScore`; bei Gleichstand lexikografisch
+    /// erstes (deterministisch). Geteilt von Schnellpfad und Voll-Scan.
+    private static func bestScored(images: [URL], projectURL: URL) -> String? {
+        images
+            .compactMap { url -> (path: String, score: Int)? in
+                let relative = relativePath(of: url, relativeTo: projectURL)
+                let score = score(forImageRelativePath: relative)
+                return score >= minimumScore ? (relative, score) : nil
+            }
             .sorted { $0.score != $1.score ? $0.score > $1.score : $0.path < $1.path }
             .first?.path
     }
@@ -252,6 +338,7 @@ enum AgentProjectIconResolver {
         var manifests: [URL] = []
         var images: [URL] = []
         var count = 0
+        let projectDepth = projectURL.standardizedFileURL.pathComponents.count
 
         for case let url as URL in enumerator {
             count += 1
@@ -259,7 +346,8 @@ enum AgentProjectIconResolver {
 
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             if isDirectory {
-                if prunedDirectories.contains(url.lastPathComponent) || enumerator.level > maxScanDepth {
+                let depth = url.standardizedFileURL.pathComponents.count - projectDepth
+                if prunedDirectories.contains(url.lastPathComponent) || depth >= maxScanDepth {
                     enumerator.skipDescendants()
                 }
                 continue
