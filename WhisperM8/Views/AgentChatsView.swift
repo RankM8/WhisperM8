@@ -1007,39 +1007,9 @@ struct AgentChatsView: View {
             .padding(.horizontal, 8)
             .frame(height: 28)
 
-            HStack(spacing: 12) {
-                // Kein „Umschalter" mehr: ein Klick öffnet direkt einen
-                // neuen Tab mit diesem Provider im Kontext-Projekt — eine
-                // laufende Session lässt sich ohnehin nicht umschalten.
-                newChatButton(provider: .claude)
-                newChatButton(provider: .codex)
-
-                if let selectedSession {
-                    selectedSessionHeaderControls(selectedSession)
-                }
-
-                Spacer()
-
-                if selectedProject != nil {
-                    Button {
-                        openSelectedProjectInPHPStorm()
-                    } label: {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .font(.system(size: 11))
-                            .foregroundStyle(AgentTheme.textTertiary)
-                            .frame(width: 18, height: 18)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("PHPStorm öffnen")
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 5)
-
             activeChatStatusRow
                 .padding(.horizontal, 14)
-                .padding(.vertical, 6)
+                .padding(.vertical, 7)
         }
         .background(AgentTheme.header)
     }
@@ -1065,12 +1035,32 @@ struct AgentChatsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let selectedSession {
-                Text(selectedSession.runtimeDisplayText)
-                    .font(.system(size: 10, weight: .regular).monospacedDigit())
-                    .foregroundStyle(AgentTheme.textTertiary)
-                    .lineLimit(1)
+            // Rechts in den freien Platz: die früher eigene Header-Zeile —
+            // „+ Claude" / „+ Codex", die Session-Aktionen (Runtime · Restart ·
+            // …-Menü) und der IDE-Opener. `fixedSize` hält die Controls auf
+            // ihrer natürlichen Breite, sodass stattdessen der Projektpfad
+            // links gekürzt wird.
+            HStack(spacing: 8) {
+                newChatButton(provider: .claude)
+                newChatButton(provider: .codex)
+                if let selectedSession {
+                    selectedSessionHeaderControls(selectedSession)
+                }
+                if selectedProject != nil {
+                    Button {
+                        openSelectedProjectInPHPStorm()
+                    } label: {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                            .font(.system(size: 11))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                            .frame(width: 18, height: 18)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("PHPStorm öffnen")
+                }
             }
+            .fixedSize()
         }
     }
 
