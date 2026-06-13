@@ -57,6 +57,10 @@ struct AgentChatsView: View {
     /// `onAppear` installiert, in `onDisappear` abgebaut. `Any?` weil
     /// `addLocalMonitorForEvents` ein opaques Token zurückgibt.
     @State private var closeTabKeyMonitor: Any?
+    /// Lokaler `leftMouseDown`-Monitor für „Doppelklick auf die oberste Leiste
+    /// = Fenster zoomen". Ersetzt das native Titelleisten-Verhalten, das durch
+    /// hiddenTitleBar/fullSizeContentView verloren geht.
+    @State private var titleBarZoomMonitor: Any?
     /// `true` waehrend wir den UIState aus der Sidecar-Datei laden. Verhindert
     /// dass die initialen .onChange-Trigger waehrend des Loads zurueck-saven.
     @State private var isLoadingPersistedUIState = true
@@ -201,16 +205,6 @@ struct AgentChatsView: View {
         .background(AgentTheme.background)
         .background(AgentChatsWindowAccessor(onResolve: { hostWindow = $0 }))
         .ignoresSafeArea(.all, edges: .top)
-        // Doppelklick auf die oberste Leiste = Fenster zoomen (Standard-macOS-
-        // Titelleisten-Verhalten), das durch hiddenTitleBar/fullSizeContentView
-        // sonst verloren geht. Liegt ÜBER den Top-Controls, fängt aber nur
-        // Doppelklicks ab — Einzelklicks/Drags fallen durch (siehe hitTest).
-        .overlay(alignment: .top) {
-            TitleBarDoubleClickZone()
-                .frame(maxWidth: .infinity)
-                .frame(height: 28)
-                .ignoresSafeArea(.all, edges: .top)
-        }
         .sheet(isPresented: Binding(
             get: { renameTargetID != nil },
             set: { if !$0 { renameTargetID = nil } }
@@ -267,6 +261,7 @@ struct AgentChatsView: View {
             runBackgroundAgentStartupHealthCheckIfNeeded()
             updateActiveBackgroundTrackerIfNeeded()
             installCloseTabShortcutIfNeeded()
+            installTitleBarZoomHandlerIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputNotification)) { note in
             if let id = note.userInfo?["localID"] as? UUID {
@@ -298,6 +293,7 @@ struct AgentChatsView: View {
             indexRefreshTask?.cancel()
             activeBackgroundTracker.stop()
             removeCloseTabShortcut()
+            removeTitleBarZoomHandler()
             // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
             AppState.shared.activeAgentChat = nil
         }
@@ -2390,6 +2386,43 @@ struct AgentChatsView: View {
               event.charactersIgnoringModifiers == "w" else { return event }
         guard let session = selectedSession else { return event }
         closeTab(session)
+        return nil
+    }
+
+    // MARK: - Doppelklick auf die oberste Leiste = Fenster zoomen
+
+    private func installTitleBarZoomHandlerIfNeeded() {
+        guard titleBarZoomMonitor == nil else { return }
+        titleBarZoomMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            handleTitleBarDoubleClick(event)
+        }
+    }
+
+    private func removeTitleBarZoomHandler() {
+        if let titleBarZoomMonitor {
+            NSEvent.removeMonitor(titleBarZoomMonitor)
+            self.titleBarZoomMonitor = nil
+        }
+    }
+
+    /// Doppelklick ins oberste 28px-Band des Agent-Chats-Fensters zoomt das
+    /// Fenster (Standard-Titelleisten-Verhalten). Wir nutzen einen lokalen
+    /// Maus-Monitor statt eines SwiftUI-Overlays, weil das Overlay die
+    /// Doppelklicks über dem Tab-Strip nicht zuverlässig abfängt — der Monitor
+    /// sieht das Event vor allem SwiftUI-Hit-Testing (gleiche Technik wie der
+    /// Cmd-W-Monitor). Greift nur bei `clickCount == 2`, lässt die Traffic-
+    /// Lights links (x < 80) in Ruhe und konsumiert nur den Zweitklick.
+    private func handleTitleBarDoubleClick(_ event: NSEvent) -> NSEvent? {
+        guard event.clickCount == 2,
+              let window = hostWindow,
+              event.window === window,
+              let contentView = window.contentView else { return event }
+        let topZone: CGFloat = 28
+        let trafficLightWidth: CGFloat = 80
+        let location = event.locationInWindow
+        guard location.y >= contentView.bounds.height - topZone,
+              location.x >= trafficLightWidth else { return event }
+        TitleBarZoom.performSystemDoubleClickAction(on: window)
         return nil
     }
 
