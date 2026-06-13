@@ -260,6 +260,7 @@ struct AgentChatsView: View {
             loadWorkspaceFast()
             loadPersistedUIState()
             syncActiveAgentChat()
+            migrateIconDetectionIfNeeded()
             attemptAutoDetectProjectIcons()
             runBackgroundAgentStartupHealthCheckIfNeeded()
             updateActiveBackgroundTrackerIfNeeded()
@@ -2207,13 +2208,39 @@ struct AgentChatsView: View {
         }
     }
 
+    /// Einmalige Migration nach Resolver-Verbesserungen: setzt den
+    /// Auto-Lookup für alle Projekte OHNE manuell gewähltes Icon zurück,
+    /// damit der verbesserte Resolver (`AgentProjectIconResolver.version`)
+    /// beim folgenden `attemptAutoDetectProjectIcons()` erneut greift.
+    /// Ohne das blieben Projekte, die der alte Resolver schon einmal (oft
+    /// erfolglos) gescannt hat, dauerhaft ohne Icon. User-gewählte Icons
+    /// (`customIconAbsolutePath`) bleiben unangetastet.
+    private func migrateIconDetectionIfNeeded() {
+        let key = "agentIconResolverVersion"
+        let applied = UserDefaults.standard.integer(forKey: key)
+        guard applied < AgentProjectIconResolver.version else { return }
+        for project in workspace.projects {
+            guard project.customIconAbsolutePath?.isEmpty ?? true else { continue }
+            try? store.updateProject(id: project.id) { project in
+                project.iconRelativePath = nil
+                project.iconAutoLookupAttempted = nil
+            }
+        }
+        iconLookupAttempted.removeAll()
+        UserDefaults.standard.set(AgentProjectIconResolver.version, forKey: key)
+    }
+
     /// Iteriert über alle Projekte und scannt deren Repos asynchron nach Icons,
     /// sofern noch kein Lookup gemacht wurde. Bewusst lazy: nur Projekte, deren
     /// `iconAutoLookupAttempted != true` und die in dieser App-Session noch
     /// nicht gescannt wurden.
     private func attemptAutoDetectProjectIcons() {
         let candidates = workspace.projects.filter { project in
-            !iconLookupAttempted.contains(project.id)
+            // Nur manuell hinzugefügte Projekte werden in der Sidebar gezeigt —
+            // auto-importierte Pseudo-Projekte (versehentliche cwds wie Home/
+            // Downloads) gar nicht erst scannen.
+            project.isManuallyAdded
+                && !iconLookupAttempted.contains(project.id)
                 && project.iconAutoLookupAttempted != true
                 && (project.customIconAbsolutePath?.isEmpty ?? true)
                 && (project.iconRelativePath?.isEmpty ?? true)
