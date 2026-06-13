@@ -1,6 +1,65 @@
 import AppKit
 import SwiftUI
 
+/// Fängt Mittelklick (Mausrad-Klick) auf der überlagerten View ab, ohne
+/// Links-/Rechtsklicks oder Drags zu blockieren. Der Trick: `hitTest` gibt
+/// nur für `otherMouse`-Events (Button 2 = Mitte) `self` zurück, sonst
+/// `nil` — das Event fällt dann an die darunterliegende SwiftUI-View durch
+/// (Klick zum Auswählen, Drag zum Umsortieren, Rechtsklick-Kontextmenü, X).
+private final class MiddleClickNSView: NSView {
+    var onMiddleClick: () -> Void = {}
+
+    /// Auch der aktivierende Mittelklick auf einem nicht-fokussierten Fenster
+    /// soll als echter Klick zählen — sonst aktiviert der erste Mittelklick nur
+    /// das Fenster und das `otherMouseUp` geht verloren (Tab schließt erst beim
+    /// zweiten Klick).
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        event?.type == .otherMouseDown && event?.buttonNumber == 2
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let event = NSApp.currentEvent else { return nil }
+        switch event.type {
+        case .otherMouseDown, .otherMouseUp:
+            return event.buttonNumber == 2 ? self : nil
+        default:
+            return nil
+        }
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        // Down beanspruchen, damit das zugehörige Up hier ankommt.
+        guard event.buttonNumber == 2 else { super.otherMouseDown(with: event); return }
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseUp(with: event); return }
+        onMiddleClick()
+    }
+}
+
+struct MiddleClickCatcher: NSViewRepresentable {
+    var onMiddleClick: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = MiddleClickNSView()
+        view.onMiddleClick = onMiddleClick
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? MiddleClickNSView)?.onMiddleClick = onMiddleClick
+    }
+}
+
+extension View {
+    /// Schließt-per-Mittelklick & Co.: legt einen transparenten Catcher über
+    /// die View, der ausschließlich Mittelklicks behandelt.
+    func onMiddleClick(_ action: @escaping () -> Void) -> some View {
+        overlay(MiddleClickCatcher(onMiddleClick: action))
+    }
+}
+
 /// Tab der globalen Tab-Bar. Trägt ein Repo-Badge (ProjectAvatar) zur
 /// Projektzuordnung — die Tabs sind projektübergreifend gemischt. Eine
 /// gesetzte Custom-Farbe tönt den GANZEN Tab dezent (inaktiv schwach,

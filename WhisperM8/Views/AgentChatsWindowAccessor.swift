@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 
 struct AgentChatsWindowAccessor: NSViewRepresentable {
+    /// Wird mit dem aufgelösten NSWindow gerufen, sobald die View im Fenster
+    /// hängt — z. B. damit die View einen fensterscoped Cmd-W-Monitor
+    /// installieren kann.
+    var onResolve: ((NSWindow) -> Void)? = nil
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
@@ -29,5 +34,6 @@ struct AgentChatsWindowAccessor: NSViewRepresentable {
                 ? NSColor(srgbRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
                 : NSColor.white
         }
+        onResolve?(window)
     }
 }

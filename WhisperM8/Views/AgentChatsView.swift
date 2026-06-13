@@ -49,6 +49,14 @@ struct AgentChatsView: View {
     /// In der Sidebar angepinnte Chats (Pin-Reihenfolge). Gepinnte Sessions
     /// erscheinen exklusiv in der „Gepinnt"-Sektion. Persistiert.
     @State private var pinnedSessionIDs: [UUID] = []
+    /// Das NSWindow des Agent-Chats-Fensters — vom `AgentChatsWindowAccessor`
+    /// aufgelöst. Dient als Scope-Anker für den Cmd-W-Monitor (nur Events
+    /// dieses Fensters schließen Tabs; Settings/Onboarding bleiben unberührt).
+    @State private var hostWindow: NSWindow?
+    /// Lokaler `keyDown`-Monitor für „Tab schließen" (Cmd-W). Wird in
+    /// `onAppear` installiert, in `onDisappear` abgebaut. `Any?` weil
+    /// `addLocalMonitorForEvents` ein opaques Token zurückgibt.
+    @State private var closeTabKeyMonitor: Any?
     /// `true` waehrend wir den UIState aus der Sidecar-Datei laden. Verhindert
     /// dass die initialen .onChange-Trigger waehrend des Loads zurueck-saven.
     @State private var isLoadingPersistedUIState = true
@@ -191,7 +199,7 @@ struct AgentChatsView: View {
         }
         .frame(minWidth: 920, minHeight: 700)
         .background(AgentTheme.background)
-        .background(AgentChatsWindowAccessor())
+        .background(AgentChatsWindowAccessor(onResolve: { hostWindow = $0 }))
         .ignoresSafeArea(.all, edges: .top)
         .sheet(isPresented: Binding(
             get: { renameTargetID != nil },
@@ -248,6 +256,7 @@ struct AgentChatsView: View {
             attemptAutoDetectProjectIcons()
             runBackgroundAgentStartupHealthCheckIfNeeded()
             updateActiveBackgroundTrackerIfNeeded()
+            installCloseTabShortcutIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputNotification)) { note in
             if let id = note.userInfo?["localID"] as? UUID {
@@ -278,6 +287,7 @@ struct AgentChatsView: View {
         .onDisappear {
             indexRefreshTask?.cancel()
             activeBackgroundTracker.stop()
+            removeCloseTabShortcut()
             // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
             AppState.shared.activeAgentChat = nil
         }
@@ -903,6 +913,8 @@ struct AgentChatsView: View {
                                         closeTab(session)
                                     }
                                 )
+                                // Mittelklick (Mausrad) schließt den Tab — wie im Browser.
+                                .onMiddleClick { closeTab(session) }
                                 .draggable(DraggableSession(sessionID: session.id, sourceProjectID: session.projectID))
                                 .dropDestination(for: DraggableSession.self) { items, _ in
                                     guard let dropped = items.first else { return false }
@@ -2317,6 +2329,46 @@ struct AgentChatsView: View {
 
         pinnedSessionIDs.removeAll { $0 == session.id }
         closeTab(session)
+    }
+
+    // MARK: - Cmd-W (Tab schließen)
+
+    /// Installiert den lokalen `keyDown`-Monitor für Cmd-W. Idempotent —
+    /// bei wiederholtem `onAppear` passiert nichts. Wir nutzen bewusst einen
+    /// NSEvent-Monitor statt eines SwiftUI-Menü-Commands: Der Monitor fängt
+    /// das Event ab, BEVOR es das Terminal (SwiftTerm-`keyDown`) oder das
+    /// AppKit-Menü („Fenster schließen") erreicht — Cmd-W schließt damit
+    /// auch dann den Tab, wenn der Fokus im Terminal liegt. Belegt durch den
+    /// bestehenden `TerminalKeyboardShortcutHandler`, der so Cmd-Z/Cmd-⌫
+    /// abfängt.
+    private func installCloseTabShortcutIfNeeded() {
+        guard closeTabKeyMonitor == nil else { return }
+        closeTabKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handleCloseTabShortcut(event)
+        }
+    }
+
+    private func removeCloseTabShortcut() {
+        if let closeTabKeyMonitor {
+            NSEvent.removeMonitor(closeTabKeyMonitor)
+            self.closeTabKeyMonitor = nil
+        }
+    }
+
+    /// Verarbeitet Cmd-W. Gibt `nil` zurück, wenn das Event konsumiert wurde
+    /// (Tab geschlossen), sonst das Original-Event für die normale Pipeline.
+    /// Bewusst nur für das Agent-Chats-Fenster (`event.window === hostWindow`):
+    /// In Settings/Onboarding und über Sheets bleibt Cmd-W das System-„Schließen".
+    /// Ohne offenen Tab fällt Cmd-W ebenfalls durch → das Fenster schließt
+    /// sich wie gewohnt (Browser-Verhalten: letzter Tab zu → Fenster zu).
+    private func handleCloseTabShortcut(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow else { return event }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == .command,
+              event.charactersIgnoringModifiers == "w" else { return event }
+        guard let session = selectedSession else { return event }
+        closeTab(session)
+        return nil
     }
 
     /// Reordert die globale Tab-Bar: `dropped` landet vor `targetID`.
