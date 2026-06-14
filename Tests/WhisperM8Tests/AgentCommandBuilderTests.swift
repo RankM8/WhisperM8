@@ -82,6 +82,45 @@ final class AgentCommandBuilderTests: XCTestCase {
         XCTAssertEqual(command.workingDirectory, project.path)
     }
 
+    func testAgentCommandBuilderForksFromSourceWhenForkIDSetAndExternalIDUnbound() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        // Frischer Fork: eigene ID noch nicht gebunden, Quelle gesetzt.
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: nil,
+            title: "Chat (Fork)",
+            hasLaunchedInitialPrompt: false,
+            forkSourceSessionID: "SOURCE-1111"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--resume", "SOURCE-1111", "--fork-session"])
+    }
+
+    func testAgentCommandBuilderResumesOwnIDAfterForkBoundAndDoesNotReFork() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        // Nach dem Launch hat der SessionStart-Hook die neue Fork-ID gebunden.
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "FORK-2222",
+            title: "Chat (Fork)",
+            hasLaunchedInitialPrompt: true,
+            forkSourceSessionID: "SOURCE-1111"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--resume", "FORK-2222"])
+        XCTAssertFalse(command.arguments.contains("--fork-session"), "Restart darf nicht erneut forken")
+    }
+
     func testAgentCommandBuilderProducesAgentsSubcommandForAgentViewSession() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })

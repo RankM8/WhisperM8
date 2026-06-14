@@ -15,6 +15,7 @@ struct ProjectChatGroup: View {
     var onNewChat: () -> Void
     var onCloseSession: (AgentChatSession) -> Void
     var onPinSession: (UUID) -> Void
+    var onForkSession: (AgentChatSession) -> Void
     var onRenameRequest: (AgentChatSession) -> Void
     var onAutoNameRequest: (AgentChatSession) -> Void
     var onRename: (UUID, String) -> Void
@@ -147,6 +148,11 @@ struct ProjectChatGroup: View {
                 onAutoNameRequest(session)
             }
             .disabled(session.externalSessionID == nil)
+            if session.isForkable {
+                Button("Forken", systemImage: "arrow.triangle.branch") {
+                    onForkSession(session)
+                }
+            }
             Divider()
             Button("Anpinnen", systemImage: "pin") {
                 onPinSession(session.id)

@@ -254,6 +254,12 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// `bypassPermissions`), den wir beim Spawn als `--permission-mode <mode>`
     /// mitgeben. `nil` = `defaultMode` aus den Settings des cwds.
     var backgroundPermissionMode: String?
+    /// Quell-Session-ID (Claude) eines Forks. Solange die eigene
+    /// `externalSessionID` noch nicht gebunden ist, startet die Session als
+    /// `claude --resume <forkSourceSessionID> --fork-session` — sie übernimmt
+    /// den Stand der Quelle und zweigt in eine NEUE Session-ID ab (die der
+    /// SessionStart-Hook bindet). `nil` für normale Sessions.
+    var forkSourceSessionID: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -281,6 +287,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case backgroundShortID
         case backgroundSubAgent
         case backgroundPermissionMode
+        case forkSourceSessionID
     }
 
     init(
@@ -308,7 +315,8 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         kind: AgentSessionKind? = nil,
         backgroundShortID: String? = nil,
         backgroundSubAgent: String? = nil,
-        backgroundPermissionMode: String? = nil
+        backgroundPermissionMode: String? = nil,
+        forkSourceSessionID: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -335,6 +343,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.backgroundShortID = backgroundShortID
         self.backgroundSubAgent = backgroundSubAgent
         self.backgroundPermissionMode = backgroundPermissionMode
+        self.forkSourceSessionID = forkSourceSessionID
     }
 
     init(from decoder: Decoder) throws {
@@ -366,9 +375,19 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         backgroundShortID = try container.decodeIfPresent(String.self, forKey: .backgroundShortID)
         backgroundSubAgent = try container.decodeIfPresent(String.self, forKey: .backgroundSubAgent)
         backgroundPermissionMode = try container.decodeIfPresent(String.self, forKey: .backgroundPermissionMode)
+        forkSourceSessionID = try container.decodeIfPresent(String.self, forKey: .forkSourceSessionID)
     }
 
     var isManuallyCreated: Bool { createdManually == true }
+
+    /// `true` wenn diese Session forkbar ist: ein normaler Claude-Chat mit
+    /// bereits gebundener Session-ID (Resume-Quelle vorhanden). Background-
+    /// Agents, Agent Views und Codex-Chats sind nicht forkbar.
+    var isForkable: Bool {
+        provider == .claude
+            && effectiveKind == .chat
+            && (externalSessionID.map { !$0.isEmpty } ?? false)
+    }
 
     /// Effektive Session-Art. Legacy-Sessions ohne `kind`-Feld werden als
     /// `.chat` interpretiert (vor Einfuehrung von Agent View war das die

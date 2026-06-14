@@ -360,7 +360,8 @@ struct AgentSessionStore {
         kind: AgentSessionKind? = nil,
         backgroundShortID: String? = nil,
         backgroundSubAgent: String? = nil,
-        backgroundPermissionMode: String? = nil
+        backgroundPermissionMode: String? = nil,
+        forkSourceSessionID: String? = nil
     ) throws -> AgentChatSession {
         let project = try upsertProject(path: projectPath, createdManually: createdManually)
         let session = AgentChatSession(
@@ -377,7 +378,8 @@ struct AgentSessionStore {
             kind: kind,
             backgroundShortID: backgroundShortID,
             backgroundSubAgent: backgroundSubAgent,
-            backgroundPermissionMode: backgroundPermissionMode
+            backgroundPermissionMode: backgroundPermissionMode,
+            forkSourceSessionID: forkSourceSessionID
         )
         return try upsertSession(session)
     }

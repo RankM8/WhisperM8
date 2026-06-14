@@ -649,6 +649,7 @@ struct AgentChatsView: View {
                             },
                             onCloseSession: { archiveSession($0) },
                             onPinSession: { pinSession($0) },
+                            onForkSession: { forkSession($0) },
                             onRenameRequest: { beginRename($0) },
                             onAutoNameRequest: { forceAutoNameSession($0) },
                             onRename: renameSession,
@@ -729,6 +730,7 @@ struct AgentChatsView: View {
                 forceAutoNameSession(session)
             }
             .disabled(session.externalSessionID == nil)
+            forkMenuItem(session)
             tabColorMenu(for: session)
             Divider()
             Button("Chat schließen", systemImage: "xmark", role: .destructive) {
@@ -1349,6 +1351,7 @@ struct AgentChatsView: View {
                     forceAutoNameSession(session)
                 }
                 .disabled(session.externalSessionID == nil)
+                forkMenuItem(session)
                 Divider()
                 Button(
                     pinnedSessionIDs.contains(session.id) ? "Loslösen" : "Anpinnen",
@@ -1852,6 +1855,66 @@ struct AgentChatsView: View {
         }
     }
 
+    // MARK: - Fork (Claude Code)
+
+    /// Forkt einen Claude-Chat: legt einen neuen Tab an und startet ihn als
+    /// `claude --resume <quelle> --fork-session` — übernimmt den kompletten
+    /// Stand der Quelle, zweigt aber in eine eigene Session-ID ab. Das
+    /// Original läuft unverändert weiter. Die neue Fork-Session-ID bindet
+    /// der SessionStart-Hook automatisch (siehe handleClaudeHookEvent).
+    private func forkSession(_ source: AgentChatSession) {
+        guard source.isForkable,
+              let sourceExternalID = source.externalSessionID,
+              let project = workspace.projects.first(where: { $0.id == source.projectID }) else {
+            return
+        }
+        do {
+            let forked = try store.createSession(
+                provider: .claude,
+                projectPath: project.path,
+                title: forkTitle(for: source.title),
+                externalSessionID: nil, // wird nach Launch via Hook gebunden
+                shouldLaunchOnOpen: true,
+                kind: .chat,
+                forkSourceSessionID: sourceExternalID
+            )
+            // Farbe der Quelle erben, damit Fork und Original visuell
+            // zusammengehören.
+            if let color = source.color, !color.isEmpty {
+                try? store.setSessionColor(id: forked.id, color: color)
+            }
+            openTab(forked.id)
+            selectedSessionID = forked.id
+            sessionActionRequest = AgentSessionActionRequest(sessionID: forked.id, kind: .start)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// "Foo" → "Foo (Fork)", "Foo (Fork)" → "Foo (Fork 2)", … — fortlaufend.
+    private func forkTitle(for base: String) -> String {
+        let trimmed = base.trimmingCharacters(in: .whitespaces)
+        if let range = trimmed.range(of: #" \(Fork( \d+)?\)$"#, options: .regularExpression) {
+            let stem = String(trimmed[..<range.lowerBound])
+            let suffix = trimmed[range]
+            let current = suffix.range(of: #"\d+"#, options: .regularExpression)
+                .flatMap { Int(suffix[$0]) } ?? 1
+            return "\(stem) (Fork \(current + 1))"
+        }
+        return "\(trimmed) (Fork)"
+    }
+
+    /// Gemeinsamer „Forken"-Menüeintrag — nur für forkbare Claude-Chats
+    /// sichtbar (sonst leer). Wird in allen Chat-Kontextmenüs eingehängt.
+    @ViewBuilder
+    private func forkMenuItem(_ session: AgentChatSession) -> some View {
+        if session.isForkable {
+            Button("Forken", systemImage: "arrow.triangle.branch") {
+                forkSession(session)
+            }
+        }
+    }
+
     // MARK: - Background Agents (Phase 2)
 
     /// Oeffnet die Read-Only-Sub-Agent-Bibliothek als Sheet. Listet alle
@@ -2297,6 +2360,7 @@ struct AgentChatsView: View {
                 forceAutoNameSession(session)
             }
             .disabled(session.externalSessionID == nil)
+            forkMenuItem(session)
             Divider()
             Button(
                 pinnedSessionIDs.contains(session.id) ? "Loslösen" : "Anpinnen",

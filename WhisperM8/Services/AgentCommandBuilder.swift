@@ -213,7 +213,15 @@ struct AgentCommandBuilder {
         // damit sie auch beim Resume durchgehen.
         arguments.append(contentsOf: extraArgumentsResolver(.claude))
 
-        if session.hasLaunchedInitialPrompt {
+        if let forkSource = session.forkSourceSessionID, !forkSource.isEmpty,
+           (session.externalSessionID?.isEmpty ?? true) {
+            // Fork: vom Stand der Quell-Session resumen, aber in eine NEUE
+            // Session-ID abzweigen (Original bleibt unangetastet). Greift nur
+            // solange die eigene ID noch nicht gebunden ist — sobald der
+            // SessionStart-Hook `externalSessionID` gesetzt hat, läuft der
+            // Resume über die neue Fork-ID (Pfad unten).
+            arguments.append(contentsOf: ["--resume", forkSource, "--fork-session"])
+        } else if session.hasLaunchedInitialPrompt {
             guard let externalSessionID = session.externalSessionID else {
                 throw AgentCommandError.missingExternalSessionID(session.title)
             }
