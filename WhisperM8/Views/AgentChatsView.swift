@@ -74,6 +74,8 @@ struct AgentChatsView: View {
     @State private var renameDraft: String = ""
     @State private var renameProjectTargetID: UUID?
     @State private var renameProjectDraft: String = ""
+    /// Projekt, für das gerade der Lösch-Bestätigungsdialog offen ist.
+    @State private var projectPendingDeletion: AgentProject?
     /// Projekte, für die wir in dieser App-Session schon einen Auto-Icon-Lookup
     /// gestartet haben — verhindert wiederholte Filesystem-Scans bei jedem
     /// Workspace-Reload.
@@ -222,6 +224,22 @@ struct AgentChatsView: View {
             set: { if !$0 { renameProjectTargetID = nil } }
         )) {
             renameProjectSheet
+        }
+        .confirmationDialog(
+            "Projekt löschen?",
+            isPresented: Binding(
+                get: { projectPendingDeletion != nil },
+                set: { if !$0 { projectPendingDeletion = nil } }
+            ),
+            presenting: projectPendingDeletion
+        ) { project in
+            Button("Löschen: \(project.name)", role: .destructive) {
+                deleteProject(project)
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { project in
+            let count = workspace.sessions.filter { $0.projectID == project.id }.count
+            Text("Entfernt das Projekt und seine \(count) \(count == 1 ? "Chat" : "Chats") aus WhisperM8. Das Repo auf der Festplatte und die Claude/Codex-Transcripts bleiben unangetastet.")
         }
         .sheet(item: $pendingBackgroundDispatch) { pending in
             BackgroundDispatchModal(
@@ -663,6 +681,7 @@ struct AgentChatsView: View {
                             onChooseProjectIcon: { chooseProjectIcon($0) },
                             onAutoDetectProjectIcon: { reAutoDetectProjectIcon($0) },
                             onClearProjectIcon: { clearProjectIcon($0) },
+                            onDeleteProject: { projectPendingDeletion = $0 },
                             onSessionDrop: { dropped, beforeID, targetProjectID in
                                 dropSession(dropped, in: targetProjectID, beforeSessionID: beforeID)
                             },
@@ -2217,6 +2236,36 @@ struct AgentChatsView: View {
     }
 
     // MARK: - Project metadata actions
+
+    /// Löscht ein Projekt (nach Bestätigung): beendet laufende Terminals
+    /// seiner Sessions, entfernt Projekt + Sessions aus dem Workspace und
+    /// räumt den UI-State (offene Tabs, Pins, Selektion) auf. Repo und
+    /// externe Transcripts auf der Platte bleiben unangetastet.
+    private func deleteProject(_ project: AgentProject) {
+        let sessionIDs = Set(
+            workspace.sessions.filter { $0.projectID == project.id }.map(\.id)
+        )
+        for id in sessionIDs where terminalRegistry.controller(for: id)?.isRunning == true {
+            terminalRegistry.terminate(sessionID: id)
+        }
+        do {
+            try store.deleteProject(id: project.id)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        openTabIDs.removeAll { sessionIDs.contains($0) }
+        pinnedSessionIDs.removeAll { sessionIDs.contains($0) }
+        expandedProjectIDs.remove(project.id)
+        iconLookupAttempted.remove(project.id)
+        if let selected = selectedSessionID, sessionIDs.contains(selected) {
+            selectedSessionID = openTabIDs.first
+        }
+        if selectedProjectID == project.id {
+            selectedProjectID = workspace.projects.first?.id
+        }
+        projectPendingDeletion = nil
+    }
 
     private func beginRenameProject(_ project: AgentProject) {
         renameProjectTargetID = project.id

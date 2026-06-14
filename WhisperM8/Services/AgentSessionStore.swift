@@ -335,6 +335,23 @@ struct AgentSessionStore {
         }
     }
 
+    /// Entfernt ein Projekt samt all seiner Sessions aus dem Workspace.
+    /// Bewusst NUR der WhisperM8-Workspace-Eintrag — das Repo auf der
+    /// Festplatte und die externen Claude/Codex-Transcripts (`~/.claude`,
+    /// `~/.codex`) bleiben unangetastet. Re-Importe durch spätere Scans
+    /// landen als auto-importierte (nicht-manuelle) Sessions und tauchen
+    /// daher nicht wieder in der Sidebar auf.
+    func deleteProject(id: UUID) throws {
+        try mutateWorkspaceIfChanged { workspace in
+            let hasProject = workspace.projects.contains { $0.id == id }
+            let hasSessions = workspace.sessions.contains { $0.projectID == id }
+            guard hasProject || hasSessions else { return false }
+            workspace.sessions.removeAll { $0.projectID == id }
+            workspace.projects.removeAll { $0.id == id }
+            return true
+        }
+    }
+
     func markStaleRunningSessionsClosed(excluding activeSessionIDs: Set<UUID> = []) throws {
         try mutateWorkspace { workspace in
             for index in workspace.sessions.indices where workspace.sessions[index].status == .running {

@@ -258,6 +258,31 @@ final class AgentSessionStoreTests: XCTestCase {
         XCTAssertNil(sessions.last { $0.id == first.id }?.groupName)
     }
 
+    func testDeleteProjectRemovesProjectAndItsSessionsOnly() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8DeleteProject-\(UUID().uuidString)")
+            .appendingPathExtension("json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let pathA = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjA-\(UUID().uuidString)").path
+        let pathB = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjB-\(UUID().uuidString)").path
+
+        let a1 = try store.createSession(provider: .claude, projectPath: pathA, title: "A1")
+        _ = try store.createSession(provider: .claude, projectPath: pathA, title: "A2")
+        let b1 = try store.createSession(provider: .codex, projectPath: pathB, title: "B1")
+        let projectA = a1.projectID
+
+        try store.deleteProject(id: projectA)
+
+        let workspace = store.loadWorkspace()
+        XCTAssertFalse(workspace.projects.contains { $0.id == projectA }, "Projekt A entfernt")
+        XCTAssertTrue(workspace.projects.contains { $0.id == b1.projectID }, "Projekt B bleibt")
+        XCTAssertEqual(workspace.sessions.map(\.id), [b1.id], "nur die Session von Projekt B bleibt übrig")
+    }
+
     func testAgentSessionStoreClosesStaleRunningMetadataWithoutLaunching() throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8AgentStale-\(UUID().uuidString)")

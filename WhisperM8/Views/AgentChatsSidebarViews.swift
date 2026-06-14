@@ -32,6 +32,7 @@ struct ProjectChatGroup: View {
     var onChooseProjectIcon: (AgentProject) -> Void
     var onAutoDetectProjectIcon: (AgentProject) -> Void
     var onClearProjectIcon: (UUID) -> Void
+    var onDeleteProject: (AgentProject) -> Void
     var onSessionDrop: (DraggableSession, _ beforeSessionID: UUID?, _ targetProjectID: UUID) -> Void
     var onProjectDrop: (DraggableProject, _ beforeProjectID: UUID?) -> Void
 
@@ -295,6 +296,10 @@ struct ProjectChatGroup: View {
                 Button("Icon entfernen", systemImage: "xmark.circle", role: .destructive) {
                     onClearProjectIcon(project.id)
                 }
+            }
+            Divider()
+            Button("Projekt löschen…", systemImage: "trash", role: .destructive) {
+                onDeleteProject(project)
             }
         }
     }
