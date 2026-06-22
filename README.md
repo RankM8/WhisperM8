@@ -27,7 +27,21 @@
 
 ## Installation
 
-### Build from Source (current supported path)
+### Homebrew (recommended)
+
+```bash
+brew install --cask rankm8/tap/whisperm8
+```
+
+(Equivalent: `brew tap rankm8/tap && brew install --cask whisperm8`.)
+
+Updates: `brew upgrade --cask whisperm8`.
+
+> WhisperM8 is distributed self-signed (no Apple Developer ID / notarization).
+> The cask automatically removes the Gatekeeper quarantine attribute on install,
+> so the app launches without a manual override.
+
+### Build from Source
 
 ```bash
 git clone https://github.com/RankM8/whisperm8.git
@@ -38,6 +52,16 @@ make install
 **Requirements:**
 - macOS 14 (Sonoma) or later
 - Xcode Command Line Tools (`xcode-select --install`)
+
+### Direct DMG download
+
+Grab the latest `.dmg` from [Releases](https://github.com/RankM8/WhisperM8/releases),
+drag WhisperM8 into Applications, then clear the quarantine flag (the Homebrew
+cask does this for you):
+
+```bash
+xattr -dr com.apple.quarantine /Applications/WhisperM8.app
+```
 
 ## Setup
 
@@ -104,6 +128,22 @@ make clean-install
 ```
 
 This removes all app data and reinstalls fresh. You'll need to reconfigure permissions and settings.
+
+### Releasing
+
+Releases are automated via `.github/workflows/release.yml` (triggered on a `v*`
+tag):
+
+1. Bump `CFBundleShortVersionString` / `CFBundleVersion` in `WhisperM8/Info.plist`.
+2. `git tag vX.Y.Z && git push --tags`.
+
+The pipeline builds the ad-hoc DMG, creates a GitHub Release with the asset, and
+updates the Homebrew cask in [`RankM8/homebrew-tap`](https://github.com/RankM8/homebrew-tap)
+(version + sha256). The tag must match the Info.plist version or the build fails.
+
+> One-time setup: the `homebrew-tap` repo must exist (public), and a
+> `TAP_GITHUB_TOKEN` secret (PAT with `Contents: write` on the tap) must be set
+> in this repo's Actions secrets so CI can push the updated cask.
 
 ## Documentation
 

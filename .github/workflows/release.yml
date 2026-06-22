@@ -1,0 +1,96 @@
+# Release-Pipeline für WhisperM8: baut bei einem Tag-Push (`vX.Y.Z`) ein
+# ad-hoc-signiertes DMG, erstellt ein GitHub Release samt Asset und aktualisiert
+# die Homebrew-Cask im Tap-Repo `RankM8/homebrew-tap`.
+#
+# Bewusst self-signed (kein Apple Developer Program): ohne gesetzte
+# DEVELOPER_ID_APPLICATION-Env baut scripts/build-dmg.sh ein ad-hoc-Bundle und
+# überspringt Notarisierung. Auf dem Runner existiert kein lokales Dev-Cert, das
+# DMG hat also keine maschinenspezifische Signatur-Abhängigkeit. Die
+# Gatekeeper-Quarantine entfernt die Cask beim Install per postflight.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  # Wie in ci.yml: swift braucht die volle Xcode-Toolchain (SwiftUI-Macros).
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      contents: write # GitHub Release im eigenen Repo erstellen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain-Diagnose
+        run: xcodebuild -version && swift --version
+
+      # Info.plist ist der einzige Source-of-Truth fürs Versioning. Stimmt der
+      # Tag nicht mit CFBundleShortVersionString überein, brechen wir ab — sonst
+      # zeigt die Cask-URL auf ein Asset, das nicht zur gebauten Version passt.
+      - name: Version-Konsistenz prüfen
+        id: version
+        run: |
+          PLIST_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" WhisperM8/Info.plist)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Info.plist: ${PLIST_VERSION}, Tag: ${TAG_VERSION}"
+          if [[ "${PLIST_VERSION}" != "${TAG_VERSION}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} passt nicht zu Info.plist-Version ${PLIST_VERSION}. Bitte CFBundleShortVersionString bumpen."
+            exit 1
+          fi
+          echo "version=${PLIST_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-release-${{ runner.os }}-
+
+      - name: DMG bauen (ad-hoc)
+        run: make dmg
+
+      - name: SHA256 berechnen
+        id: sha
+        run: |
+          DMG="dist/WhisperM8-${{ steps.version.outputs.version }}.dmg"
+          SHA=$(shasum -a 256 "${DMG}" | awk '{print $1}')
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Asset: ${DMG} (sha256 ${SHA})"
+
+      - name: GitHub Release + Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/WhisperM8-${{ steps.version.outputs.version }}.dmg
+          generate_release_notes: true
+
+      # Cross-Repo-Push braucht einen PAT mit Contents:write auf homebrew-tap.
+      # Das Standard-GITHUB_TOKEN darf nur ins eigene Repo schreiben.
+      - name: Tap-Repo auschecken
+        uses: actions/checkout@v4
+        with:
+          repository: RankM8/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Cask aktualisieren & pushen
+        run: |
+          scripts/update-cask.sh \
+            "${{ steps.version.outputs.version }}" \
+            "${{ steps.sha.outputs.sha256 }}" \
+            "homebrew-tap/Casks/whisperm8.rb"
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/whisperm8.rb
+          if git diff --cached --quiet; then
+            echo "Cask unverändert — nichts zu committen."
+          else
+            git commit -m "whisperm8 ${{ steps.version.outputs.version }}"
+            git push
+          fi
