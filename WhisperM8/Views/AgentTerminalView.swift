@@ -347,7 +347,9 @@ enum TerminalKeyboardProfile: Equatable {
 /// - `Command+Backspace` → `Ctrl+U` (`0x15`) — unix-line-discard
 /// - `Command+Z` (ohne Shift) → `Ctrl+_` (`0x1f`) — readline-undo
 /// - `Option+←` / `→` → `Esc+B` / `Esc+F` — Wort-Cursorbewegung
-/// - `Command+←` / `→` → `Ctrl+A` / `Ctrl+E` — Zeilenanfang / -ende
+/// - `Command+←` / `→` (ohne Option) → `Ctrl+A` / `Ctrl+E` — Zeilenanfang / -ende
+///   (`Command+Option+←` / `→` wird bewusst durchgereicht — der Agent-Chats-
+///   Window-Monitor nutzt es für den Tab-Wechsel)
 /// - `Shift+Enter` (Chat-Profile) → `\` + `CR` — Backslash-Continuation
 /// - `Shift+Enter` (Agents-View) → `ESC [ 13 ; 2 u` — kitty/CSI-u
 enum TerminalShortcut {
@@ -395,10 +397,14 @@ enum TerminalShortcut {
             if hasCommand { return [0x15] }                  // Ctrl+U
         case KeyCode.leftArrow:
             if hasOption && !hasCommand { return [0x1b, 0x62] }  // Esc+B
-            if hasCommand { return [0x01] }                       // Ctrl+A
+            // Nur reines Cmd+← → Ctrl+A. Cmd+Option+← bleibt frei für den
+            // Tab-Wechsel (vom Agent-Chats-Window-Monitor abgefangen).
+            if hasCommand && !hasOption { return [0x01] }         // Ctrl+A
         case KeyCode.rightArrow:
             if hasOption && !hasCommand { return [0x1b, 0x66] }  // Esc+F
-            if hasCommand { return [0x05] }                       // Ctrl+E
+            // Nur reines Cmd+→ → Ctrl+E. Cmd+Option+→ bleibt frei für den
+            // Tab-Wechsel (vom Agent-Chats-Window-Monitor abgefangen).
+            if hasCommand && !hasOption { return [0x05] }         // Ctrl+E
         case KeyCode.z:
             // Cmd+Shift+Z (Redo) bewusst durchreichen — Readline kennt kein Redo.
             if hasCommand && !hasShift,

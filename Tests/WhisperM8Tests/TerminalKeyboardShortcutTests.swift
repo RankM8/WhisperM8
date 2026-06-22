@@ -72,6 +72,23 @@ final class TerminalKeyboardShortcutTests: XCTestCase {
         XCTAssertEqual(rightBytes, [0x05]) // Ctrl+E
     }
 
+    func testTerminalShortcutCommandOptionArrowsAreNotIntercepted() {
+        // ⌘⌥←/→ ist für den Tab-Wechsel im Agent-Chats-Fenster reserviert —
+        // der Terminal-Handler darf die Kombi NICHT verschlucken (sonst greift
+        // der Window-Monitor nie). Reines ⌘←/→ (Zeilen-Nav) und reines ⌥←/→
+        // (Wort-Nav) bleiben davon unberührt (eigene Tests oben).
+        XCTAssertNil(TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.leftArrow,
+            modifiers: [.command, .option],
+            characters: nil
+        ))
+        XCTAssertNil(TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.rightArrow,
+            modifiers: [.command, .option],
+            characters: nil
+        ))
+    }
+
     func testTerminalShortcutPlainBackspaceIsNotIntercepted() {
         // Ohne Modifier soll SwiftTerms Default greifen (sendet 0x7f).
         let bytes = TerminalShortcut.bytes(
