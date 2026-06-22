@@ -1,4 +1,4 @@
-.PHONY: run build install kill clean clean-apps help dmg clean-install dev dev-reinstall _install_bundle
+.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall _install_bundle
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -17,6 +17,7 @@ help:
 	@echo ""
 	@echo "  make build             - Build release bundle in project directory only."
 	@echo "  make install           - Build and in-place sync to /Applications."
+	@echo "  make install-cli       - Symlink ~/.local/bin/whisperm8 → installed app binary."
 	@echo "  make run               - Quick debug build, run from project directory (TCC isolated)."
 	@echo ""
 	@echo "  make kill              - Kill running instances."
@@ -86,6 +87,19 @@ run: kill
 install: kill build
 	@$(MAKE) _install_bundle
 	@echo "Installed: $(INSTALLED_APP)"
+
+# ------------------------------------------------------------------------------
+# CLI-Symlink: ~/.local/bin/whisperm8 → App-Binary im Bundle.
+# Die App legt diesen Symlink beim Start ohnehin automatisch an
+# (CLISymlinkInstaller); dieses Target ist die manuelle Variante.
+# Da der Symlink auf dasselbe signierte Binary zeigt, nutzt die CLI denselben
+# Keychain-Eintrag wie die App (kein erneuter Prompt).
+# ------------------------------------------------------------------------------
+install-cli:
+	@mkdir -p "$(HOME)/.local/bin"
+	@ln -sf "$(INSTALLED_APP)/Contents/MacOS/$(APP_NAME)" "$(HOME)/.local/bin/whisperm8"
+	@echo "✅ CLI verlinkt: $(HOME)/.local/bin/whisperm8 → $(INSTALLED_APP)/Contents/MacOS/$(APP_NAME)"
+	@echo "   Stelle sicher, dass ~/.local/bin im PATH ist (claude findet die CLI dann automatisch)."
 
 _install_bundle:
 	@echo "📦 Syncing into $(INSTALLED_APP) (preserving TCC + settings)..."

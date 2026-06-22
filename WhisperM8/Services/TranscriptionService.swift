@@ -130,6 +130,83 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
     }
 
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval? = nil) async throws -> String {
+        // Bestehender Diktat-Pfad: response_format wird bewusst NICHT gesetzt
+        // (Provider-Default = json mit `{text}`), damit das Verhalten 1:1 bleibt.
+        let data = try await uploadTranscription(
+            audioURL: audioURL,
+            language: language,
+            responseFormat: nil,
+            audioDuration: audioDuration
+        )
+
+        let result: TranscriptionResponse
+        do {
+            result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+        } catch {
+            let responseText = String(data: data, encoding: .utf8) ?? "Unable to decode"
+            Logger.debug("ERROR decoding response: \(error)")
+            Logger.debug("Raw response: \(responseText.prefix(500))")
+            throw error
+        }
+
+        Logger.debug("SUCCESS! Text length: \(result.text.count) characters")
+        return result.text
+    }
+
+    /// CLI-Pfad: fordert je nach gewünschtem Ausgabeformat Segmente an
+    /// (`verbose_json`) und liefert Text + Timestamps zurück. Whisper-Modelle
+    /// liefern Segmente; `gpt-4o-transcribe` kann nur `json`/`text`.
+    func transcribeDetailed(
+        audioURL: URL,
+        language: String?,
+        responseFormat: TranscriptionResponseFormat,
+        audioDuration: TimeInterval? = nil
+    ) async throws -> DetailedTranscription {
+        let data = try await uploadTranscription(
+            audioURL: audioURL,
+            language: language,
+            responseFormat: responseFormat,
+            audioDuration: audioDuration
+        )
+
+        switch responseFormat {
+        case .verboseJSON:
+            let verbose: VerboseTranscriptionResponse
+            do {
+                verbose = try JSONDecoder().decode(VerboseTranscriptionResponse.self, from: data)
+            } catch {
+                let responseText = String(data: data, encoding: .utf8) ?? "Unable to decode"
+                Logger.debug("ERROR decoding verbose response: \(error)")
+                Logger.debug("Raw response: \(responseText.prefix(500))")
+                throw error
+            }
+            return DetailedTranscription(
+                text: verbose.text,
+                segments: (verbose.segments ?? []).map {
+                    TranscriptionSegment(start: $0.start, end: $0.end, text: $0.text)
+                },
+                language: verbose.language,
+                duration: verbose.duration
+            )
+        case .json:
+            let result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+            return DetailedTranscription(text: result.text, segments: [], language: nil, duration: nil)
+        case .text, .srt, .vtt:
+            // Provider liefert hier den fertigen Body (Plaintext bzw. SRT/VTT);
+            // wir reichen ihn als `text` durch, ohne Segmente.
+            let body = String(data: data, encoding: .utf8) ?? ""
+            return DetailedTranscription(text: body, segments: [], language: nil, duration: nil)
+        }
+    }
+
+    /// Gemeinsamer HTTP-Upload für Diktat- und CLI-Pfad. Liefert den rohen
+    /// 200-Response-Body; die Dekodierung übernimmt der jeweilige Aufrufer.
+    private func uploadTranscription(
+        audioURL: URL,
+        language: String?,
+        responseFormat: TranscriptionResponseFormat?,
+        audioDuration: TimeInterval?
+    ) async throws -> Data {
         let boundary = UUID().uuidString
         let timeout = calculateTimeout(for: audioDuration)
 
@@ -178,7 +255,8 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
             model: config.model,
             audioFileURL: audioURL,
             filename: audioURL.lastPathComponent,
-            language: language
+            language: language,
+            responseFormat: responseFormat?.rawValue
         )
 
         Logger.debug("Uploading to \(config.name)... (timeout: \(Int(timeout))s)")
@@ -209,18 +287,7 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
             throw TranscriptionError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
         }
 
-        let result: TranscriptionResponse
-        do {
-            result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
-        } catch {
-            let responseText = String(data: data, encoding: .utf8) ?? "Unable to decode"
-            Logger.debug("ERROR decoding response: \(error)")
-            Logger.debug("Raw response: \(responseText.prefix(500))")
-            throw error
-        }
-
-        Logger.debug("SUCCESS! Text length: \(result.text.count) characters")
-        return result.text
+        return data
     }
 
     private func sanitizedErrorBody(_ data: Data) -> String {
@@ -242,7 +309,8 @@ struct MultipartFormDataFileWriter {
         model: String,
         audioFileURL: URL,
         filename: String,
-        language: String?
+        language: String?,
+        responseFormat: String? = nil
     ) throws {
         let fileManager = FileManager.default
         try? fileManager.removeItem(at: destinationURL)
@@ -264,6 +332,14 @@ struct MultipartFormDataFileWriter {
             prefix.append(Data("\(language)\r\n".utf8))
         }
 
+        // `response_format` wird nur gesetzt, wenn explizit angefordert (CLI-Pfad).
+        // Der Diktat-Pfad übergibt nil → Provider-Default (json) → Body unverändert.
+        if let responseFormat, !responseFormat.isEmpty {
+            prefix.append(Data("--\(boundary)\r\n".utf8))
+            prefix.append(Data("Content-Disposition: form-data; name=\"response_format\"\r\n\r\n".utf8))
+            prefix.append(Data("\(responseFormat)\r\n".utf8))
+        }
+
         prefix.append(Data("--\(boundary)\r\n".utf8))
         prefix.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
         prefix.append(Data("Content-Type: audio/m4a\r\n\r\n".utf8))
@@ -283,7 +359,7 @@ struct MultipartFormDataFileWriter {
     }
 }
 
-struct ProviderConfig {
+struct ProviderConfig: Sendable {
     let name: String
     let endpoint: URL
     let model: String
@@ -312,6 +388,47 @@ struct ProviderConfig {
 
 struct TranscriptionResponse: Codable {
     let text: String
+}
+
+// MARK: - Detailed Transcription (CLI: Timestamps + Formate)
+
+/// Gewünschtes API-`response_format`. Der CLI-Pfad nutzt `verbose_json` für
+/// Segmente (Whisper-Modelle) bzw. `json` für `gpt-4o-transcribe`.
+enum TranscriptionResponseFormat: String {
+    case json
+    case text
+    case verboseJSON = "verbose_json"
+    case srt
+    case vtt
+}
+
+/// Ein Transkript-Segment mit Sekunden-Timestamps (für SRT/VTT/JSON).
+struct TranscriptionSegment: Equatable, Codable, Sendable {
+    var start: Double
+    var end: Double
+    var text: String
+}
+
+/// Reichhaltiges Transkriptions-Ergebnis: Volltext plus (falls vom Modell
+/// geliefert) Segmente, erkannte Sprache und Audio-Dauer.
+struct DetailedTranscription: Equatable, Sendable {
+    var text: String
+    var segments: [TranscriptionSegment]
+    var language: String?
+    var duration: Double?
+}
+
+/// Dekodiert die `verbose_json`-Antwort von OpenAI/Groq.
+struct VerboseTranscriptionResponse: Decodable {
+    struct Segment: Decodable {
+        let start: Double
+        let end: Double
+        let text: String
+    }
+    let text: String
+    let language: String?
+    let duration: Double?
+    let segments: [Segment]?
 }
 
 // MARK: - Errors

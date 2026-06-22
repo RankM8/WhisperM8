@@ -5,7 +5,9 @@ import UserNotifications
 import AVFoundation
 import ApplicationServices
 
-@main
+// `@main` liegt bewusst NICHT hier, sondern auf `WhisperM8EntryPoint`
+// (CLI/CLIEntryPoint.swift): das Binary multiplext zwischen CLI- und GUI-Modus.
+// `WhisperM8App.main()` wird vom Dispatcher für den GUI-Pfad aufgerufen.
 struct WhisperM8App: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var themeManager = ThemeManager.shared
@@ -128,6 +130,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             let workspace = AgentSessionStore().loadWorkspace()
             let liveIDs = Set(workspace.sessions.map(\.id))
             _ = AgentSessionRetentionService().prune(liveLocalSessionIDs: liveIDs)
+        }
+
+        // CLI-Symlink (~/.local/bin/whisperm8) idempotent anlegen, damit
+        // `whisperm8 transcribe …` aus Claude Code / Terminal sofort verfügbar
+        // ist und denselben Keychain-Eintrag wie die App nutzt.
+        Task.detached(priority: .background) {
+            CLISymlinkInstaller.installIfNeeded()
         }
 
         // Sessions-Scan automatisch: einmal direkt beim Launch, danach bei
