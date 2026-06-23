@@ -27,6 +27,8 @@ struct ProjectChatGroup: View {
     let statusStore: AgentSessionRuntimeStatusStore
     let awaitingInputSessionIDs: Set<UUID>
     let autoRenamingSessionIDs: Set<UUID>
+    /// IDs abgeschlossener Sessions, deren Transkript fehlt — ausgegraut.
+    var missingTranscriptSessionIDs: Set<UUID> = []
     var onRenameProjectRequest: (AgentProject) -> Void
     var onSetProjectColor: (UUID, String) -> Void
     var onChooseProjectIcon: (AgentProject) -> Void
@@ -124,6 +126,7 @@ struct ProjectChatGroup: View {
             statusStore: statusStore,
             isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
             isAutoRenaming: autoRenamingSessionIDs.contains(session.id),
+            isMissingTranscript: missingTranscriptSessionIDs.contains(session.id),
             onSelect: { onSelectSession(session.id) },
             onClose: { onCloseSession(session) }
         )
@@ -389,6 +392,10 @@ struct SessionListButton: View {
     /// `claude -p`-Subprocess laufen hat. UI zeigt Sparkles-Pulse statt
     /// des normalen Status-Dots.
     let isAutoRenaming: Bool
+    /// `true` wenn das Transkript dieser (abgeschlossenen) Session nicht mehr
+    /// auf der Platte liegt — „toter Zeiger" (z.B. von Claudes 30-Tage-Cleanup
+    /// gelöscht). Row wird ausgegraut + bekommt einen Hinweis; nicht resumebar.
+    var isMissingTranscript: Bool = false
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -475,7 +482,8 @@ struct SessionListButton: View {
     }
 
     private var titleColor: Color {
-        (isSelected || isOpenTab) ? AgentTheme.textPrimary : AgentTheme.textSecondary
+        if isMissingTranscript { return AgentTheme.textTertiary }
+        return (isSelected || isOpenTab) ? AgentTheme.textPrimary : AgentTheme.textSecondary
     }
 
     @ViewBuilder
@@ -489,6 +497,11 @@ struct SessionListButton: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
                 .help("Chat schließen")
+        } else if isMissingTranscript {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .help("Transkript von Claude gelöscht – nicht mehr resumebar")
         } else {
             statusIndicator
         }
@@ -585,6 +598,7 @@ extension SessionListButton: Equatable {
             && lhs.isRunning == rhs.isRunning
             && lhs.isAwaitingInput == rhs.isAwaitingInput
             && lhs.isAutoRenaming == rhs.isAutoRenaming
+            && lhs.isMissingTranscript == rhs.isMissingTranscript
     }
 }
 
@@ -598,6 +612,9 @@ struct PinnedSessionRow: View {
     let isRunning: Bool
     let statusStore: AgentSessionRuntimeStatusStore
     let isAwaitingInput: Bool
+    /// `true` wenn das Transkript dieser Session nicht mehr auf der Platte
+    /// liegt — toter Zeiger, ausgegraut + Hinweis (siehe `SessionListButton`).
+    var isMissingTranscript: Bool = false
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -617,10 +634,10 @@ struct PinnedSessionRow: View {
 
                 Text(session.title)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(AgentTheme.textPrimary)
+                    .foregroundStyle(isMissingTranscript ? AgentTheme.textTertiary : AgentTheme.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .help(session.title)
+                    .help(isMissingTranscript ? "Transkript von Claude gelöscht – nicht mehr resumebar" : session.title)
 
                 Spacer(minLength: 0)
 
@@ -650,6 +667,11 @@ struct PinnedSessionRow: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
                 .help("Chat schließen")
+        } else if isMissingTranscript {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .help("Transkript von Claude gelöscht – nicht mehr resumebar")
         } else {
             switch resolvedStatus {
             case .working:

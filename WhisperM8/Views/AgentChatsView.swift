@@ -79,6 +79,17 @@ struct AgentChatsView: View {
     /// In der Sidebar angepinnte Chats (Pin-Reihenfolge). Gepinnte Sessions
     /// erscheinen exklusiv in der „Gepinnt"-Sektion. Persistiert.
     @State private var pinnedSessionIDs: [UUID] = []
+    /// Welche Chats die Sidebar zeigt (Aktiv·Zuletzt·Alle). Default `.active`
+    /// hält die Liste klein; `@AppStorage` persistiert fensterweit ohne
+    /// Schema-Migration. Die Suche überstimmt den Scope (siehe `effectiveScope`).
+    @AppStorage("agentSidebarScope") private var sidebarScope: SidebarScope = .active
+    /// Anordnung der Chat-Liste (gruppiert nach Projekt vs. flach/zeitlich).
+    @AppStorage("agentSidebarLayout") private var sidebarLayout: SidebarLayout = .grouped
+    /// IDs abgeschlossener Sessions, deren Transkript nicht mehr auf der Platte
+    /// liegt („tote Zeiger"). Off-main berechnet (`refreshMissingTranscripts`),
+    /// driftet die Sidebar zum Ausgrauen + Hinweis. Ephemeral, nicht persistiert.
+    @State private var missingTranscriptIDs: Set<UUID> = []
+    @State private var missingTranscriptTask: Task<Void, Never>?
     /// Das NSWindow des Agent-Chats-Fensters — vom `AgentChatsWindowAccessor`
     /// aufgelöst. Dient als Scope-Anker für den Cmd-W-Monitor (nur Events
     /// dieses Fensters schließen Tabs; Settings/Onboarding bleiben unberührt).
@@ -109,6 +120,11 @@ struct AgentChatsView: View {
     /// Bump-Trigger: erhöht sich pro Mausrad-Rasterung, der ScrollViewReader
     /// scrollt daraufhin zu `stripWheelAnchorID`.
     @State private var stripWheelTick: Int = 0
+    /// `true` während die Maus über dem Tab-Strip schwebt. Gating für den
+    /// Mausrad-Monitor — robust statt fragiler Koordinaten-Umrechnung
+    /// (AppKit `locationInWindow` ↔ SwiftUI-Frame brach im Fenstermodus durch
+    /// den Titelleisten-Versatz). `.onHover` ist in beiden Modi identisch.
+    @State private var isHoveringTabStrip = false
     /// Sichtbare Breite des Tab-Strip-ScrollViews + Gesamtbreite seines Inhalts.
     /// Differenz > 0 ⇒ Überlauf ⇒ Chevron-Overflow-Menü einblenden.
     @State private var stripViewportWidth: CGFloat = 0
@@ -661,34 +677,53 @@ struct AgentChatsView: View {
                 .padding(.top, 2)
                 .padding(.bottom, 6)
 
+            sidebarScopeBar
+
             ScrollView {
                 // P4: Sidebar-Modell EINMAL pro Body-Eval bauen (Gruppierung +
                 // Suche in einem Durchlauf) statt pro Projekt neu zu filtern
                 // und zu sortieren.
                 let openTabIDSet = Set(openTabIDs)
-                let sessionsByProject = AgentSidebarModelBuilder.sessionsByProject(
-                    workspaceSessions: workspace.sessions,
-                    pinnedSessionIDs: Set(pinnedSessionIDs)
-                )
-                let visibleProjects = AgentSidebarModelBuilder.visibleProjects(
-                    manualProjects: manualProjects,
-                    sessionsByProject: sessionsByProject,
-                    query: searchText
-                )
-                let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                let visiblePinned = AgentSidebarModelBuilder.pinnedSessions(
-                    workspaceSessions: workspace.sessions,
-                    pinnedSessionIDs: pinnedSessionIDs
-                ).filter { trimmedQuery.isEmpty || $0.title.localizedCaseInsensitiveContains(trimmedQuery) }
                 // isRunning-Flips published die Registry nicht selbst; frisch
                 // wird das Set bei jedem Body-Eval (Registry-Inserts/Removes
                 // sind @Published und triggern den). Für Live-Status zählt
                 // ohnehin `liveStatus` in der Row — isRunning ist nur der
                 // Fallback, solange der Watcher noch keinen Status hat.
                 let runningSessionIDs = terminalRegistry.activeSessionIDs
+                let scopeFilter = makeScopeFilter(
+                    openTabIDs: openTabIDSet,
+                    runningSessionIDs: runningSessionIDs
+                )
+                let sessionsByProject = AgentSidebarModelBuilder.sessionsByProject(
+                    workspaceSessions: workspace.sessions,
+                    pinnedSessionIDs: Set(pinnedSessionIDs),
+                    scope: scopeFilter
+                )
+                // Im gefilterten Scope leere Projektgruppen ausblenden — sonst
+                // stünden in „Aktiv" lauter Projekte ohne Zeilen. In `.all` (und
+                // bei leerer Suche) bleiben alle Projekte sichtbar, damit man in
+                // ein leeres Projekt hinein einen Chat anlegen kann.
+                let visibleProjects = AgentSidebarModelBuilder.visibleProjects(
+                    manualProjects: manualProjects,
+                    sessionsByProject: sessionsByProject,
+                    query: searchText
+                ).filter { effectiveScope == .all || !(sessionsByProject[$0.id] ?? []).isEmpty }
+                let flatSessions = AgentSidebarModelBuilder.flatSessions(
+                    workspaceSessions: workspace.sessions,
+                    pinnedSessionIDs: Set(pinnedSessionIDs),
+                    scope: scopeFilter
+                )
+                let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                let visiblePinned = AgentSidebarModelBuilder.pinnedSessions(
+                    workspaceSessions: workspace.sessions,
+                    pinnedSessionIDs: pinnedSessionIDs
+                ).filter { trimmedQuery.isEmpty || $0.title.localizedCaseInsensitiveContains(trimmedQuery) }
+                let chatListIsEmpty = (sidebarLayout == .flat ? flatSessions.isEmpty : visibleProjects.isEmpty)
                 VStack(alignment: .leading, spacing: 8) {
-                    if visibleProjects.isEmpty && searchText.isEmpty {
+                    if manualProjects.isEmpty {
                         sidebarEmptyState
+                    } else if chatListIsEmpty && visiblePinned.isEmpty {
+                        scopeEmptyHint
                     }
 
                     if !visiblePinned.isEmpty {
@@ -696,9 +731,16 @@ struct AgentChatsView: View {
                         ForEach(visiblePinned) { session in
                             pinnedRow(session, runningSessionIDs: runningSessionIDs)
                         }
-                        sidebarSectionLabel("Chats")
+                        if !chatListIsEmpty {
+                            sidebarSectionLabel("Chats")
+                        }
                     }
 
+                    if sidebarLayout == .flat {
+                        ForEach(flatSessions) { session in
+                            flatRow(session, runningSessionIDs: runningSessionIDs)
+                        }
+                    } else {
                     ForEach(visibleProjects) { project in
                         ProjectChatGroup(
                             project: project,
@@ -735,6 +777,7 @@ struct AgentChatsView: View {
                             statusStore: runtimeStatusStore,
                             awaitingInputSessionIDs: awaitingInputSessionIDs,
                             autoRenamingSessionIDs: autoRenamingSessionIDs,
+                            missingTranscriptSessionIDs: missingTranscriptIDs,
                             onRenameProjectRequest: { beginRenameProject($0) },
                             onSetProjectColor: setProjectColor,
                             onChooseProjectIcon: { chooseProjectIcon($0) },
@@ -749,6 +792,7 @@ struct AgentChatsView: View {
                             }
                         )
                     }
+                    }
                 }
                 .padding(.vertical, 6)
             }
@@ -758,6 +802,8 @@ struct AgentChatsView: View {
             sidebarFooter
         }
         .background(AgentTheme.sidebar)
+        .onAppear { refreshMissingTranscripts() }
+        .onChange(of: workspace.sessions.count) { _, _ in refreshMissingTranscripts() }
     }
 
     /// Kleines Uppercase-Label über einer Sidebar-Sektion („Gepinnt", „Chats").
@@ -790,6 +836,7 @@ struct AgentChatsView: View {
             isRunning: runningSessionIDs.contains(session.id),
             statusStore: runtimeStatusStore,
             isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
+            isMissingTranscript: missingTranscriptIDs.contains(session.id),
             onSelect: {
                 openTab(session.id)
                 selectedSessionID = session.id
@@ -815,6 +862,77 @@ struct AgentChatsView: View {
                 archiveSession(session)
             }
         }
+    }
+
+    /// Zeile der flachen (ungruppierten) Ansicht: Repo-Badge + Titel + Status
+    /// (`PinnedSessionRow` wiederverwendet, da projektübergreifend). Kontextmenü
+    /// wie eine normale Chat-Zeile, nur „Anpinnen" statt „Loslösen".
+    @ViewBuilder
+    private func flatRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>) -> some View {
+        PinnedSessionRow(
+            session: session,
+            project: workspace.projects.first { $0.id == session.projectID },
+            isSelected: selectedSessionID == session.id,
+            isRunning: runningSessionIDs.contains(session.id),
+            statusStore: runtimeStatusStore,
+            isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
+            isMissingTranscript: missingTranscriptIDs.contains(session.id),
+            onSelect: {
+                selectedProjectID = session.projectID
+                openTab(session.id)
+                selectedSessionID = session.id
+            },
+            onClose: { archiveSession(session) }
+        )
+        .contextMenu {
+            Button("Umbenennen…", systemImage: "pencil") {
+                beginRename(session)
+            }
+            Button("Titel automatisch generieren", systemImage: "sparkles") {
+                forceAutoNameSession(session)
+            }
+            .disabled(session.externalSessionID == nil)
+            forkMenuItem(session)
+            Divider()
+            Button("Anpinnen", systemImage: "pin") {
+                pinSession(session.id)
+            }
+            tabColorMenu(for: session)
+            Divider()
+            Button("Chat schließen", systemImage: "xmark", role: .destructive) {
+                archiveSession(session)
+            }
+        }
+    }
+
+    /// Hinweis, wenn der aktive Scope (Aktiv/Zuletzt) keine Chats zeigt, es aber
+    /// Projekte/Chats gibt — damit sich nichts „verloren" anfühlt: ein Klick
+    /// zurück auf „Alle".
+    private var scopeEmptyHint: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(sidebarScope == .active ? "Keine aktiven Chats" : "Keine Chats im Zeitraum")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Text("Laufende, offene und gepinnte Chats erscheinen hier. Ältere findest du unter „Alle“.")
+                .font(.system(size: 11))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                sidebarScope = .all
+            } label: {
+                Text("Alle Chats zeigen")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(AgentTheme.border, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
     }
 
     private var sidebarEmptyState: some View {
@@ -951,6 +1069,130 @@ struct AgentChatsView: View {
         }
     }
 
+    /// Effektiver Scope: die Suche überstimmt den Scope-Filter — tippt der
+    /// User etwas, wird IMMER über alle Chats gesucht, egal welcher Filter
+    /// gewählt ist (sonst „warum finde ich meinen Chat nicht").
+    private var effectiveScope: SidebarScope {
+        searchText.trimmingCharacters(in: .whitespaces).isEmpty ? sidebarScope : .all
+    }
+
+    /// Baut den auswertbaren Filter aus dem effektiven Scope + Live-Inputs.
+    private func makeScopeFilter(openTabIDs: Set<UUID>, runningSessionIDs: Set<UUID>) -> SidebarScopeFilter {
+        SidebarScopeFilter(
+            scope: effectiveScope,
+            runningSessionIDs: runningSessionIDs,
+            openTabIDs: openTabIDs,
+            now: Date(),
+            recentWindow: SidebarScopeFilter.defaultRecentWindow
+        )
+    }
+
+    /// Berechnet die „toten Zeiger" (Transkript fehlt auf der Platte) off-main
+    /// und schreibt sie in `missingTranscriptIDs`. Debounced (300 ms), damit
+    /// Workspace-Reload-Bursts keinen FS-Scan-Spam auslösen. Snapshot der
+    /// Inputs läuft auf Main, der FS-Scan im Hintergrund.
+    private func refreshMissingTranscripts() {
+        let sessions = workspace.sessions
+        let projectPathByID = Dictionary(
+            workspace.projects.map { ($0.id, $0.path) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let runningIDs = terminalRegistry.activeSessionIDs
+        missingTranscriptTask?.cancel()
+        missingTranscriptTask = Task.detached(priority: .utility) {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            let missing = AgentTranscriptPresence.missingTranscriptSessionIDs(
+                sessions: sessions,
+                projectPathByID: projectPathByID,
+                runningSessionIDs: runningIDs
+            )
+            guard !Task.isCancelled else { return }
+            await MainActor.run { missingTranscriptIDs = missing }
+        }
+    }
+
+    /// Scope-Umschalter (Aktiv·Zuletzt·Alle) + Layout-Toggle (gruppiert·flach)
+    /// + „N von M sichtbar"-Hinweis. Fest verankert über der Chat-Liste,
+    /// scrollt also nicht mit.
+    private var sidebarScopeBar: some View {
+        let counts = AgentSidebarModelBuilder.scopeCounts(
+            workspaceSessions: workspace.sessions,
+            pinnedSessionIDs: Set(pinnedSessionIDs),
+            runningSessionIDs: terminalRegistry.activeSessionIDs,
+            openTabIDs: Set(openTabIDs),
+            now: Date()
+        )
+        let visibleCount: Int = {
+            switch sidebarScope {
+            case .active: return counts.active
+            case .recent: return counts.recent
+            case .all: return counts.all
+            }
+        }()
+        let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        return VStack(spacing: 5) {
+            HStack(spacing: 6) {
+                Picker("", selection: $sidebarScope) {
+                    ForEach(SidebarScope.allCases) { scope in
+                        Text(scope.label).tag(scope)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .disabled(searching)
+                .help(searching ? "Suche zeigt alle Chats" : "Welche Chats die Liste zeigt")
+
+                Button {
+                    sidebarLayout = (sidebarLayout == .grouped ? .flat : .grouped)
+                } label: {
+                    Image(systemName: sidebarLayout.toggleIcon)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .frame(width: 26, height: 20)
+                        .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 5))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(sidebarLayout == .grouped
+                    ? "Flach anzeigen (nach Aktivität sortiert)"
+                    : "Nach Projekt gruppieren")
+            }
+
+            if searching {
+                captionRow(text: "Suche zeigt alle Chats", action: nil, actionLabel: nil)
+            } else if sidebarScope != .all {
+                captionRow(
+                    text: "\(visibleCount) von \(counts.all) Chats",
+                    action: { sidebarScope = .all },
+                    actionLabel: "Alle zeigen"
+                )
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 6)
+    }
+
+    @ViewBuilder
+    private func captionRow(text: String, action: (() -> Void)?, actionLabel: String?) -> some View {
+        HStack(spacing: 4) {
+            Text(text)
+                .font(.system(size: 10))
+                .foregroundStyle(AgentTheme.textTertiary)
+            Spacer(minLength: 0)
+            if let action, let actionLabel {
+                Button(action: action) {
+                    Text(actionLabel)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .help("Filter aufheben — alle Chats zeigen")
+            }
+        }
+    }
+
     private var mainWorkspace: some View {
         VStack(spacing: 0) {
             projectChatStrip
@@ -1072,6 +1314,9 @@ struct AgentChatsView: View {
                             stripFrameInWindow = frame
                             stripViewportWidth = frame.width
                         }
+                        // Hover-Gating für den Mausrad-Monitor — robust in
+                        // Fenster- UND Vollbildmodus (kein Koordinaten-Hit-Test).
+                        .onHover { isHoveringTabStrip = $0 }
                         // Bei Tab-Wechsel (⌘⌥←/→, ⌘1–⌘9, Sidebar) den aktiven Tab
                         // in Sicht scrollen, falls die Bar überläuft. Hält außerdem
                         // den Mausrad-Anker an der Selektion, damit das Rad danach
@@ -2814,18 +3059,16 @@ struct AgentChatsView: View {
     /// System-„natürliches Scrollen" steckt bereits im Vorzeichen von `delta`.
     private func handleTabStripScroll(_ event: NSEvent) -> NSEvent? {
         let tabs = headerTabs
-        guard let window = hostWindow,
+        // Gating per Hover-Flag statt Koordinaten-Hit-Test: nur Events
+        // konsumieren, während die Maus über dem Strip schwebt. Echtes Mausrad
+        // (`hasPreciseScrollingDeltas == false`) übersetzen wir in Tab-Schritte;
+        // Trackpad reichen wir durch, damit dessen native horizontale Geste
+        // glatt bleibt. Sidebar/Terminal werden nie gekapert.
+        guard isHoveringTabStrip,
+              let window = hostWindow,
               event.window === window,
-              let contentView = window.contentView,
               !tabs.isEmpty,
-              stripFrameInWindow != .zero,
               !event.hasPreciseScrollingDeltas else { return event }
-
-        let topZone: CGFloat = 28
-        let location = event.locationInWindow
-        guard location.y >= contentView.bounds.height - topZone,
-              location.x >= stripFrameInWindow.minX,
-              location.x <= stripFrameInWindow.maxX else { return event }
 
         let delta = event.deltaY != 0 ? event.deltaY : event.deltaX
         guard delta != 0 else { return nil }

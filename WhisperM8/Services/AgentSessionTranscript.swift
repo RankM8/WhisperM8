@@ -291,3 +291,75 @@ enum AgentTranscriptLocator {
         return nil
     }
 }
+
+/// Ermittelt „tote Zeiger" — abgeschlossene Chats, deren Transkript-JSONL nicht
+/// mehr auf der Platte liegt (z.B. von Claudes eigenem 30-Tage-Cleanup
+/// gelöscht). Die Sidebar graut solche Einträge aus + labelt sie, statt sie
+/// stillschweigend zu verstecken oder als resumebar darzustellen.
+///
+/// Bewusst KONSERVATIV: nur abgeschlossene (`closed`/`archived`), bereits
+/// gestartete Sessions mit gebundener `externalSessionID` werden geprüft.
+/// Frische/ungebundene/laufende Sessions sind nie „tot" — ihre Datei kann
+/// jederzeit noch erscheinen. So markieren wir niemals fälschlich einen
+/// echten Chat als gelöscht.
+enum AgentTranscriptPresence {
+    static func missingTranscriptSessionIDs(
+        sessions: [AgentChatSession],
+        projectPathByID: [UUID: String],
+        runningSessionIDs: Set<UUID>
+    ) -> Set<UUID> {
+        let presentCodexIDs = presentCodexSessionIDs()
+        var missing = Set<UUID>()
+        for session in sessions {
+            guard session.isManuallyCreated,
+                  session.status == .closed || session.status == .archived,
+                  session.hasLaunchedInitialPrompt,
+                  !runningSessionIDs.contains(session.id),
+                  let ext = session.externalSessionID, !ext.isEmpty,
+                  let cwd = projectPathByID[session.projectID]
+            else { continue }
+
+            switch session.provider {
+            case .claude:
+                // Direkter fileExists-Check — günstig.
+                if AgentTranscriptLocator.locate(provider: .claude, externalSessionID: ext, cwd: cwd) == nil {
+                    missing.insert(session.id)
+                }
+            case .codex:
+                // Über den EINEN Verzeichnis-Scan auflösen statt pro Session
+                // rekursiv zu walken.
+                if !presentCodexIDs.contains(ext.lowercased()) {
+                    missing.insert(session.id)
+                }
+            }
+        }
+        return missing
+    }
+
+    /// Set aller Codex-Session-IDs, deren JSONL aktuell auf der Platte liegt —
+    /// EIN rekursiver Walk über `~/.codex/sessions`. Codex-Dateien heißen
+    /// `rollout-<ts>-<uuid>.jsonl`; die ID sind die letzten 36 Zeichen des Stems.
+    private static func presentCodexSessionIDs() -> Set<String> {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex")
+            .appendingPathComponent("sessions")
+        guard FileManager.default.fileExists(atPath: dir.path),
+              let enumerator = FileManager.default.enumerator(
+                at: dir,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+              )
+        else { return [] }
+
+        var ids = Set<String>()
+        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+            let stem = url.deletingPathExtension().lastPathComponent
+            guard stem.count >= 36 else { continue }
+            let candidate = String(stem.suffix(36)).lowercased()
+            if UUID(uuidString: candidate) != nil {
+                ids.insert(candidate)
+            }
+        }
+        return ids
+    }
+}

@@ -92,6 +92,7 @@ final class SessionListButtonEquatableTests: XCTestCase {
         isRunning: Bool = false,
         isAwaitingInput: Bool = false,
         isAutoRenaming: Bool = false,
+        isMissingTranscript: Bool = false,
         store: AgentSessionRuntimeStatusStore? = nil
     ) -> SessionListButton {
         SessionListButton(
@@ -103,6 +104,7 @@ final class SessionListButtonEquatableTests: XCTestCase {
             statusStore: store ?? AgentSessionRuntimeStatusStore(),
             isAwaitingInput: isAwaitingInput,
             isAutoRenaming: isAutoRenaming,
+            isMissingTranscript: isMissingTranscript,
             onSelect: {},
             onClose: {}
         )
@@ -129,6 +131,7 @@ final class SessionListButtonEquatableTests: XCTestCase {
         XCTAssertNotEqual(base, makeButton(session: session, isRunning: true))
         XCTAssertNotEqual(base, makeButton(session: session, isAwaitingInput: true))
         XCTAssertNotEqual(base, makeButton(session: session, isAutoRenaming: true))
+        XCTAssertNotEqual(base, makeButton(session: session, isMissingTranscript: true))
     }
 }
 
@@ -240,5 +243,85 @@ final class SidebarVisibleSliceTests: XCTestCase {
         let result = ProjectChatGroup.visibleSlice(of: makeSessions(20), limit: 20)
         XCTAssertEqual(result.visible.count, 20)
         XCTAssertEqual(result.hiddenCount, 0)
+    }
+}
+
+// MARK: - Scope-Filter (Aktiv·Zuletzt·Alle) + Flach-Layout
+
+final class SidebarScopeFilterTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+    private let projectID = UUID()
+
+    private func filter(_ scope: SidebarScope, running: Set<UUID> = [], openTabs: Set<UUID> = []) -> SidebarScopeFilter {
+        SidebarScopeFilter(
+            scope: scope,
+            runningSessionIDs: running,
+            openTabIDs: openTabs,
+            now: now,
+            recentWindow: 7 * 24 * 3600
+        )
+    }
+
+    func testActiveScopeShowsRunningOpenTabsOnly() {
+        let running = makeSidebarSession(projectID: projectID, title: "Läuft")
+        let openTab = makeSidebarSession(projectID: projectID, title: "Offen")
+        let old = makeSidebarSession(projectID: projectID, title: "Alt", lastActivityAt: now.addingTimeInterval(-30 * 24 * 3600))
+
+        let f = filter(.active, running: [running.id], openTabs: [openTab.id])
+        XCTAssertTrue(f.matches(running))
+        XCTAssertTrue(f.matches(openTab))
+        XCTAssertFalse(f.matches(old), "Alte, weder laufende noch offene Chats fallen in Aktiv raus")
+    }
+
+    func testRecentScopeAddsRecentlyActive() {
+        let recent = makeSidebarSession(projectID: projectID, title: "Neulich", lastActivityAt: now.addingTimeInterval(-2 * 24 * 3600))
+        let old = makeSidebarSession(projectID: projectID, title: "Alt", lastActivityAt: now.addingTimeInterval(-30 * 24 * 3600))
+
+        let f = filter(.recent)
+        XCTAssertTrue(f.matches(recent), "Innerhalb des 7-Tage-Fensters → in Zuletzt")
+        XCTAssertFalse(f.matches(old), "Außerhalb des Fensters → nicht in Zuletzt")
+    }
+
+    func testRunningAlwaysVisibleEvenWhenOld() {
+        let oldButRunning = makeSidebarSession(projectID: projectID, title: "Alt aber läuft", lastActivityAt: now.addingTimeInterval(-90 * 24 * 3600))
+        XCTAssertTrue(filter(.active, running: [oldButRunning.id]).matches(oldButRunning))
+        XCTAssertTrue(filter(.recent, running: [oldButRunning.id]).matches(oldButRunning))
+        XCTAssertTrue(filter(.all).matches(oldButRunning))
+    }
+
+    func testAllScopeShowsEverything() {
+        let old = makeSidebarSession(projectID: projectID, title: "Uralt", lastActivityAt: Date(timeIntervalSince1970: 0))
+        XCTAssertTrue(filter(.all).matches(old))
+    }
+
+    func testFlatSessionsAreRecencySortedAndScopeFiltered() {
+        let a = makeSidebarSession(projectID: projectID, title: "A", lastActivityAt: now.addingTimeInterval(-1 * 24 * 3600))
+        let b = makeSidebarSession(projectID: UUID(), title: "B", lastActivityAt: now)
+        let old = makeSidebarSession(projectID: projectID, title: "Alt", lastActivityAt: now.addingTimeInterval(-30 * 24 * 3600))
+
+        let flat = AgentSidebarModelBuilder.flatSessions(
+            workspaceSessions: [a, b, old],
+            pinnedSessionIDs: [],
+            scope: filter(.recent)
+        )
+        XCTAssertEqual(flat.map(\.title), ["B", "A"], "Recency-Sort absteigend, Alt raus (außerhalb Fenster)")
+    }
+
+    func testScopeCountsMatchFilters() {
+        let running = makeSidebarSession(projectID: projectID, title: "Läuft", lastActivityAt: now.addingTimeInterval(-90 * 24 * 3600))
+        let recent = makeSidebarSession(projectID: projectID, title: "Neulich", lastActivityAt: now.addingTimeInterval(-2 * 24 * 3600))
+        let old = makeSidebarSession(projectID: projectID, title: "Alt", lastActivityAt: now.addingTimeInterval(-30 * 24 * 3600))
+
+        let counts = AgentSidebarModelBuilder.scopeCounts(
+            workspaceSessions: [running, recent, old],
+            pinnedSessionIDs: [],
+            runningSessionIDs: [running.id],
+            openTabIDs: [],
+            now: now,
+            recentWindow: 7 * 24 * 3600
+        )
+        XCTAssertEqual(counts.active, 1, "nur die laufende")
+        XCTAssertEqual(counts.recent, 2, "laufende + kürzlich aktive")
+        XCTAssertEqual(counts.all, 3, "alle nicht-archivierten manuellen")
     }
 }
