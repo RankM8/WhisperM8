@@ -6,6 +6,40 @@ Dieses Dokument hält fest, **wie Claude Code CLI Sessions persistiert und resum
 WhisperM8-Chats „verschwanden"** (Symptom: „No conversation found" / „noch keine Konversation",
 Fork unmöglich) und **welcher Fix** implementiert wurde.
 
+## ⚠️ DIE WURZEL (verifiziert 2026-06-24) — `CLAUDE_CODE_*`-Env-Leakage
+
+Nach langer Suche durch Inspektion der **echten Prozess-Umgebung** (`ps eww <pid>`) gefunden:
+WhisperM8 wird oft aus einem **Claude-Code-Kontext** gestartet (`make dev`/`open` aus einer
+laufenden Claude-Session, oder ein Terminal mit aktivem `claude`). Dabei **erbt** es die
+Variablen, die Claude Code in sein Prozess-Environment schreibt — u. a.:
+
+```
+CLAUDE_CODE_CHILD_SESSION=1
+CLAUDE_CODE_SESSION_ID=<parent-session>
+CLAUDE_CODE_ENTRYPOINT=claude-desktop
+```
+
+`LoginShellEnvironment.processEnvironment` nutzte `ProcessInfo.processInfo.environment` als Basis
+und reichte **alles** an gespawnte `claude`-Prozesse weiter. Claude sah `CLAUDE_CODE_CHILD_SESSION=1`
++ eine fremde `SESSION_ID` und behandelte sich als **verschachtelte Child-Session** → schrieb
+**bewusst kein eigenes Transkript** nach `~/.claude/projects/<cwd>/<id>.jsonl`. Ergebnis: voller
+Turn (SessionStart→UserPromptSubmit→Stop), aber **keine `.jsonl`** → später „No conversation
+found" / „kein Name" / nicht forkbar — **egal welche Session-ID**. Das erklärt restlos, warum auch
+**lange** Chats von Anfang an nichts persistierten.
+
+**Fix (`LoginShellEnvironment.processEnvironment`):** alle geerbten `CLAUDE_CODE_*`- (und
+`CLAUDECODE`-) Variablen entfernen, bevor das ENV an einen Agenten geht. Jeder gespawnte `claude`
+ist damit eine **saubere Top-Level-Session**. Alle Spawn-Pfade (PTY-Terminal, BackgroundAgent,
+AutoNamer, PostProcessing) laufen über diese Funktion → ein zentraler Fix.
+
+**Live verifiziert:** nach dem Fix haben neu gespawnte `claude`-Prozesse 0 `CLAUDE_CODE_*`-Treffer;
+ein „hallo"-Testchat in marketing-rankm8 schrieb sofort ein frisches `<id>.jsonl` (mit „hallo"),
+bekam einen Auto-Namen und ist resumebar.
+
+> Einordnung: Das Vorab-`--session-id` (→ Weg B) und die fehlende Transkript-Prüfung vor `--resume`
+> (→ §6-Garantie) waren **verschärfende Faktoren / fehlende Netze**, aber **nicht** die Wurzel.
+> Die Wurzel ist diese Env-Leakage. Alle drei Fixes zusammen machen das Resume robust.
+
 ## Quellen
 - Offizielle Claude-Code-Doku: [CLI-Reference](https://code.claude.com/docs/en/cli-reference),
   [Sessions](https://code.claude.com/docs/en/sessions)

@@ -90,6 +90,23 @@ final class LoginShellEnvironment: @unchecked Sendable {
     /// Wir setzen nur, was nicht ohnehin schon vom User-Profil definiert wurde.
     func processEnvironment(base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
         var env = base
+
+        // WURZEL-FIX: geerbte `CLAUDE_CODE_*`-Variablen entfernen, BEVOR wir das
+        // ENV an einen gespawnten Agenten weiterreichen. Wird WhisperM8 selbst aus
+        // einem Claude-Code-Kontext gestartet (z. B. `make dev`/`open` aus einer
+        // laufenden Claude-Session, oder ein Terminal mit aktivem `claude`), erbt es
+        // u. a. `CLAUDE_CODE_CHILD_SESSION=1` + `CLAUDE_CODE_SESSION_ID=<parent>` +
+        // `CLAUDE_CODE_ENTRYPOINT`. Reichen wir das an einen frisch gestarteten
+        // `claude` weiter, hält der sich für eine VERSCHACHTELTE Child-Session und
+        // schreibt KEIN eigenes Transkript nach ~/.claude/projects/<cwd>/<id>.jsonl
+        // → spätere `--resume` ergeben „No conversation found", der Chat wirkt
+        // „verschwunden". Jeder von uns gestartete Agent muss eine saubere
+        // Top-Level-Session sein. Siehe
+        // docs/agent-chats-redesign/03-claude-code-cli-session-verhalten.md
+        for key in env.keys where key.hasPrefix("CLAUDE_CODE_") || key == "CLAUDECODE" {
+            env.removeValue(forKey: key)
+        }
+
         env["PATH"] = path
 
         if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {

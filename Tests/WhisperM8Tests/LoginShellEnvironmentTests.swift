@@ -114,4 +114,29 @@ final class LoginShellEnvironmentTests: XCTestCase {
             "fallbackPath muss ~/.local/bin enthalten (nativer Claude-Installer)"
         )
     }
+
+    func testStripsInheritedClaudeCodeEnvSoSpawnedSessionsAreTopLevel() {
+        // WURZEL-Regression: Wird WhisperM8 aus einem Claude-Code-Kontext gestartet,
+        // erbt es CLAUDE_CODE_CHILD_SESSION=1 + CLAUDE_CODE_SESSION_ID=<parent>.
+        // Diese dürfen NICHT an gespawnte Agenten durchgereicht werden — sonst hält
+        // sich der `claude` für eine verschachtelte Child-Session und persistiert
+        // KEIN eigenes Transkript ("No conversation found" beim Resume).
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let envDict = env.processEnvironment(base: [
+            "CLAUDE_CODE_CHILD_SESSION": "1",
+            "CLAUDE_CODE_SESSION_ID": "c8c80b0f-c61e-4efa-812c-c4760f72c073",
+            "CLAUDE_CODE_ENTRYPOINT": "claude-desktop",
+            "CLAUDE_CODE_OAUTH_SCOPES": "user:inference",
+            "CLAUDECODE": "1",
+            "HOME": "/Users/test"
+        ])
+        XCTAssertNil(envDict["CLAUDE_CODE_CHILD_SESSION"])
+        XCTAssertNil(envDict["CLAUDE_CODE_SESSION_ID"])
+        XCTAssertNil(envDict["CLAUDE_CODE_ENTRYPOINT"])
+        XCTAssertNil(envDict["CLAUDE_CODE_OAUTH_SCOPES"])
+        XCTAssertNil(envDict["CLAUDECODE"])
+        // Nicht-CLAUDE-Variablen bleiben unangetastet.
+        XCTAssertEqual(envDict["HOME"], "/Users/test")
+        XCTAssertTrue(envDict["PATH"]?.contains("/usr/bin") ?? false)
+    }
 }
