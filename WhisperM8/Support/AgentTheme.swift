@@ -126,6 +126,13 @@ enum AgentTheme {
         light: Color(hex: "#d6473d"),
         dark: Color(hex: "#e5594f")
     )
+    /// Aktives Segment im Scope-Umschalter. Bewusst heller als der
+    /// `control`-Track in BEIDEN Modi (dark 0.235 > control 0.140;
+    /// light weiß > control 0.920), damit die Auswahl sauber heraussticht.
+    static let segmentActive = Color.dynamic(
+        light: Color(red: 1.0, green: 1.0, blue: 1.0),
+        dark: Color(red: 0.235, green: 0.238, blue: 0.247)
+    )
 }
 
 extension Color {

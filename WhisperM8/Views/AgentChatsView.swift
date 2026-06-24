@@ -169,6 +169,9 @@ struct AgentChatsView: View {
     /// gepflegt; die Sidebar pulst diese Sessions zusaetzlich zum
     /// regulaeren Runtime-Status.
     @State private var awaitingInputSessionIDs: Set<UUID> = []
+    /// Drossel für den Fertig-Ton (Stop-Hook): kein zweiter Ton innerhalb von
+    /// 2 s, falls mehrere Sessions kurz hintereinander stoppen.
+    @State private var lastStopSoundAt: Date?
     /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
     @State private var subAgentLibrarySheet: SubAgentLibraryPresentation?
     /// Live-Tracker fuer die aktive Sub-Session innerhalb eines
@@ -371,6 +374,13 @@ struct AgentChatsView: View {
             if let id = note.userInfo?["localID"] as? UUID {
                 awaitingInputSessionIDs.remove(id)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.agentDidStopNotification)) { note in
+            guard let id = note.userInfo?["localID"] as? UUID else { return }
+            // Turn fertig (Stop-Hook): sofort idle — schneller + robuster als
+            // der 1,5-s-Transkript-Poll, und deckt Background-Agents ab.
+            runtimeStatusStore.setStatus(.idle, for: id)
+            playAgentStopSoundIfEnabled()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
             guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
@@ -673,7 +683,6 @@ struct AgentChatsView: View {
             // hinzufügen) + Filter scrollen NICHT mit — nur die Chat-Liste
             // darunter scrollt.
             sidebarCommandRows
-                .padding(.horizontal, 8)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
 
@@ -819,7 +828,7 @@ struct AgentChatsView: View {
             Spacer(minLength: 0)
         }
         .foregroundStyle(AgentTheme.textTertiary)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 2)
     }
@@ -1020,7 +1029,8 @@ struct AgentChatsView: View {
     private var sidebarCommandRows: some View {
         VStack(spacing: 8) {
             HStack(spacing: 6) {
-                // Primäraktion: prominenter Indigo-Gradient-Button.
+                // Primäraktion: dezent grau statt Farbakzent — lenkt beim
+                // Arbeiten nicht ab; Indigo bleibt der Auswahl vorbehalten.
                 Button {
                     createDefaultSession()
                 } label: {
@@ -1032,14 +1042,8 @@ struct AgentChatsView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 30)
-                    .foregroundStyle(.white)
-                    .background(
-                        LinearGradient(
-                            colors: [AgentTheme.accent, AgentTheme.accentStrong],
-                            startPoint: .top, endPoint: .bottom
-                        ),
-                        in: RoundedRectangle(cornerRadius: 8)
-                    )
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
                     .opacity(selectedProject == nil ? 0.5 : 1)
                     .contentShape(Rectangle())
                 }
@@ -1056,7 +1060,7 @@ struct AgentChatsView: View {
                     addProject()
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
 
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass")
@@ -1077,9 +1081,9 @@ struct AgentChatsView: View {
                 }
             }
             .padding(.horizontal, 9)
-            .frame(height: 30)
+            .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30)
             .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
             .padding(.bottom, 2)
         }
     }
@@ -1164,15 +1168,37 @@ struct AgentChatsView: View {
         let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
         return VStack(spacing: 5) {
             HStack(spacing: 6) {
-                Picker("", selection: $sidebarScope) {
+                // Eigener Segmented-Control: der native Picker(.segmented)
+                // expandiert auf macOS NICHT auf volle Breite — das darunter
+                // liegende NSSegmentedControl behält seine intrinsische Größe,
+                // `.frame(maxWidth:.infinity)` wird ignoriert. Eigene Buttons
+                // mit maxWidth füllen die Breite zuverlässig (wie im Entwurf,
+                // wo `.seg button { flex: 1 }` galt).
+                HStack(spacing: 2) {
                     ForEach(SidebarScope.allCases) { scope in
-                        Text(scope.label).tag(scope)
+                        let isOn = sidebarScope == scope
+                        Button { sidebarScope = scope } label: {
+                            Text(scope.label)
+                                .font(.system(size: 11, weight: isOn ? .semibold : .medium))
+                                .foregroundStyle(isOn ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                                .frame(maxWidth: .infinity, minHeight: 22)
+                                .background {
+                                    if isOn {
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(AgentTheme.segmentActive)
+                                            .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
+                .padding(2)
+                .frame(maxWidth: .infinity)
+                .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
                 .disabled(searching)
+                .opacity(searching ? 0.55 : 1)
                 .help(searching ? "Suche zeigt alle Chats" : "Welche Chats die Liste zeigt")
 
                 Button {
@@ -1181,8 +1207,8 @@ struct AgentChatsView: View {
                     Image(systemName: sidebarLayout.toggleIcon)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(AgentTheme.textSecondary)
-                        .frame(width: 26, height: 20)
-                        .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 5))
+                        .frame(width: 30, height: 26)
+                        .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 7))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1201,7 +1227,7 @@ struct AgentChatsView: View {
                 )
             }
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 8)
         .padding(.bottom, 6)
     }
 
@@ -1864,6 +1890,10 @@ struct AgentChatsView: View {
     /// Pendant zum oberen — entfernt die localID wieder (z. B. nach
     /// `.preToolUse` oder `.sessionEnd`).
     static let backgroundNeedsInputClearedNotification = Notification.Name("AgentChatsView.backgroundNeedsInputCleared")
+    /// Gepostet vom `Stop`-Hook — die View setzt die Session sofort auf `.idle`
+    /// (zuverlaessiger als der Transkript-Poll) und spielt optional den
+    /// Fertig-Ton.
+    static let agentDidStopNotification = Notification.Name("AgentChatsView.agentDidStop")
 
     /// Verarbeitet die User-Wahl im Ambiguous-Picker. `externalID == nil`
     /// bedeutet "Neue Session starten" — wir nullen die externe ID und
@@ -1928,13 +1958,29 @@ struct AgentChatsView: View {
                 object: nil,
                 userInfo: ["localID": localID]
             )
-        case .preToolUse:
-            // Tool-Use bedeutet: die Session arbeitet wieder, also ist ein
-            // "Needs input"-Pulse veraltet. Wir clearen ihn — der naechste
-            // Notification-Event setzt ihn bei Bedarf erneut.
-            Logger.claudeBinding.debug("binding_pretool_use localID=\(localID.uuidString, privacy: .public)")
+        case .userPromptSubmit, .preToolUse, .postToolUse:
+            // Aktivitaet: User hat einen Prompt geschickt, oder ein Tool
+            // startet/ist fertig → die Session arbeitet, ein "Needs input"-
+            // Pulse ist veraltet. Wir clearen ihn; der naechste Notification-
+            // Event setzt ihn bei Bedarf erneut.
+            Logger.claudeBinding.debug("binding_activity localID=\(localID.uuidString, privacy: .public) event=\(event.hookEventName.rawValue, privacy: .public)")
             NotificationCenter.default.post(
                 name: AgentChatsView.backgroundNeedsInputClearedNotification,
+                object: nil,
+                userInfo: ["localID": localID]
+            )
+        case .stop:
+            // Turn fertig → zuverlaessiges "idle" (auch fuer Background-Agents
+            // ohne aussagekraeftiges Transkript) + optionaler Ton. Ein
+            // eventueller "Needs input"-Pulse ist hinfaellig.
+            Logger.claudeBinding.info("binding_stop localID=\(localID.uuidString, privacy: .public)")
+            NotificationCenter.default.post(
+                name: AgentChatsView.backgroundNeedsInputClearedNotification,
+                object: nil,
+                userInfo: ["localID": localID]
+            )
+            NotificationCenter.default.post(
+                name: AgentChatsView.agentDidStopNotification,
                 object: nil,
                 userInfo: ["localID": localID]
             )
@@ -1974,6 +2020,17 @@ struct AgentChatsView: View {
             cwd: project.path,
             priorTurnFinishedAt: session.lastTurnAt
         )
+    }
+
+    /// Spielt den optionalen Fertig-Ton (Stop-Hook), gedrosselt gegen
+    /// Mehrfach-Stops (max. 1 Ton / 2 s). Lautlos, wenn in den Einstellungen
+    /// deaktiviert (`AppPreferences.isAgentStopSoundEnabled`).
+    private func playAgentStopSoundIfEnabled() {
+        guard AppPreferences.shared.isAgentStopSoundEnabled else { return }
+        let now = Date()
+        if let last = lastStopSoundAt, now.timeIntervalSince(last) < 2 { return }
+        lastStopSoundAt = now
+        NSSound(named: "Glass")?.play()
     }
 
     /// Triggert beim turn-finished-Signal des Watchers das Persistieren des

@@ -207,6 +207,7 @@ struct AgentChatsAccessView: View {
     @AppStorage("defaultAgentProvider") private var defaultAgentProviderRaw = "claude"
     @AppStorage("isAutoChatRenameEnabled") private var isAutoChatRenameEnabled = true
     @AppStorage("isTerminalBellEnabled") private var isTerminalBellEnabled = true
+    @AppStorage("agentStopSoundEnabled") private var isAgentStopSoundEnabled = true
     @AppStorage("codexExtraArguments") private var codexExtraArguments = ""
     @AppStorage("claudeExtraArguments") private var claudeExtraArguments = ""
 
@@ -254,6 +255,11 @@ struct AgentChatsAccessView: View {
 
                 Toggle("Terminal-Sounds erlauben", isOn: $isTerminalBellEnabled)
                 Text("Manche TUI-Prompts senden ein Bell-Zeichen (`\\a`), das macOS als System-Ton spielt. Wenn aus: Terminal bleibt komplett still.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Ton, wenn ein Agent fertig ist", isOn: $isAgentStopSoundEnabled)
+                Text("Spielt einen kurzen Ton, sobald Claude/Codex einen Turn beendet (über den Stop-Hook) — praktisch, um nebenbei mitzubekommen, dass ein Agent auf dich wartet.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -216,7 +216,11 @@ final class ClaudeHookBridge {
     }
 
     private func deliver(_ event: ClaudeHookEvent, for entry: Entry, now: Date) {
-        if event.hookEventName == .preToolUse {
+        // Pre-/PostToolUse koennen schnell aufeinander folgen (viele Tools) —
+        // gemeinsam drosseln (geteilter Timestamp), damit weder Event- noch
+        // Log-Spam entsteht. Die seltenen Events (UserPromptSubmit/Notification/
+        // Stop/Lifecycle) kommen immer ungedrosselt durch.
+        if event.hookEventName == .preToolUse || event.hookEventName == .postToolUse {
             if let last = entry.lastDeliveredPreToolUseAt,
                now.timeIntervalSince(last) < preToolUseDeliveryInterval {
                 return

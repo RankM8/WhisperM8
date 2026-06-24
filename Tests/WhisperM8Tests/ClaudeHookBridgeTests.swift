@@ -10,15 +10,19 @@ final class ClaudeHookBridgeTests: XCTestCase {
         let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         XCTAssertNotNil(parsed?["hooks"])
         let hooks = parsed?["hooks"] as? [String: Any]
-        // Alle vier getrackten Events muessen verdrahtet sein — sonst kriegt
-        // die Bridge fuer Background-Agents kein "Needs input"-Signal.
+        // Alle getrackten Events muessen verdrahtet sein — sonst fehlen der
+        // Bridge Signale fuer working/idle/"needs input".
         XCTAssertNotNil(hooks?["SessionStart"])
         XCTAssertNotNil(hooks?["SessionEnd"])
+        XCTAssertNotNil(hooks?["UserPromptSubmit"])
         XCTAssertNotNil(hooks?["PreToolUse"])
+        XCTAssertNotNil(hooks?["PostToolUse"])
         XCTAssertNotNil(hooks?["Notification"])
+        XCTAssertNotNil(hooks?["Stop"])
         XCTAssertEqual(
             Set(ClaudeHookSettingsBuilder.trackedEventNames),
-            ["SessionStart", "SessionEnd", "PreToolUse", "Notification"]
+            ["SessionStart", "SessionEnd", "UserPromptSubmit",
+             "PreToolUse", "PostToolUse", "Notification", "Stop"]
         )
     }
 
@@ -75,6 +79,23 @@ final class ClaudeHookBridgeTests: XCTestCase {
         let line = "{\"hook_event_name\":\"Notification\",\"session_id\":\"s1\"}"
         let event = ClaudeHookEventStore.parseLine(line)
         XCTAssertEqual(event?.hookEventName, .notification)
+    }
+
+    func testClaudeHookEventStoreParsesActivityAndStopEvents() {
+        // Neue Status-Hooks: UserPromptSubmit/PostToolUse („arbeitet"/clear)
+        // und Stop („idle" + Ton).
+        XCTAssertEqual(
+            ClaudeHookEventStore.parseLine("{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s1\"}")?.hookEventName,
+            .userPromptSubmit
+        )
+        XCTAssertEqual(
+            ClaudeHookEventStore.parseLine("{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"s1\"}")?.hookEventName,
+            .postToolUse
+        )
+        XCTAssertEqual(
+            ClaudeHookEventStore.parseLine("{\"hook_event_name\":\"Stop\",\"session_id\":\"s1\"}")?.hookEventName,
+            .stop
+        )
     }
 
     func testClaudeHookEventStoreIgnoresInvalidLine() {

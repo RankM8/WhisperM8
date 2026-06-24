@@ -5,18 +5,23 @@ import Foundation
 /// Sie definiert nur unsere eigenen Hooks — User-Settings und Project-
 /// Settings bleiben unangetastet (Claude mergt additiv).
 enum ClaudeHookSettingsBuilder {
-    /// Hook-Events, die wir per `--settings`-Bridge mittracken. Wir
-    /// registrieren bewusst denselben Append-Command fuer mehrere Events:
-    /// SessionStart/End fuer Lifecycle, PreToolUse fuer "Working"-Pulses,
-    /// Notification fuer "Needs input"-Detection (Claude druckt
-    /// Permission-Prompts ueber den `Notification`-Hook).
+    /// Hook-Events, die wir per `--settings`-Bridge mittracken. Derselbe
+    /// Append-Command fuer alle Events:
+    /// - SessionStart/End       → Lifecycle (externe ID binden, Ende)
+    /// - UserPromptSubmit       → Turn-Start ("arbeitet", clear "needs input")
+    /// - PreToolUse/PostToolUse → Aktivitaet ("arbeitet", clear "needs input")
+    /// - Notification           → "Needs input" (Permission-/Idle-Prompt)
+    /// - Stop                   → Turn fertig ("idle" + optionaler Ton)
     /// Reihenfolge bestimmt nur die Serialisierung — Anthropic merged
     /// Hooks ohnehin pro Event-Name.
     static let trackedEventNames: [String] = [
         "SessionStart",
         "SessionEnd",
+        "UserPromptSubmit",
         "PreToolUse",
-        "Notification"
+        "PostToolUse",
+        "Notification",
+        "Stop"
     ]
 
     /// Baut das Settings-Dict mit Hooks fuer alle `trackedEventNames`, die

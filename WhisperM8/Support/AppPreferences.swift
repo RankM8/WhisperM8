@@ -237,6 +237,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentSidebarDragEnabled) }
     }
 
+    /// Spielt einen kurzen Ton, sobald ein Agent seinen Turn beendet
+    /// (`Stop`-Hook). Default an; abschaltbar in den Einstellungen oder via
+    /// `defaults write com.whisperm8.app agentStopSoundEnabled -bool NO`.
+    var isAgentStopSoundEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentStopSoundEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentStopSoundEnabled) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -317,6 +325,7 @@ enum PreferenceKeys {
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
+    static let agentStopSoundEnabled = "agentStopSoundEnabled"
 }
 
 private typealias Keys = PreferenceKeys

@@ -154,10 +154,6 @@ enum AgentTranscriptStatusDecider {
         var turnFinished: Bool
     }
 
-    /// Schwellwert: ab wann gilt ein offener Tool-Use als „wartet auf User-Input"
-    /// (Permission-Prompt-Heuristik).
-    static let awaitingInputAfterSeconds: TimeInterval = 8
-
     /// Schwellwert: ab wann gilt eine ruhige Session ohne erkannten Stop als idle.
     static let idleAfterSeconds: TimeInterval = 30
 
@@ -196,9 +192,11 @@ enum AgentTranscriptStatusDecider {
             return Decision(status: .idle, turnFinished: turnFinished)
 
         case .assistantMessageOngoing:
-            if secondsSinceWrite > awaitingInputAfterSeconds {
-                return Decision(status: .awaitingInput, turnFinished: false)
-            }
+            // Laufende Assistant-Antwort = arbeitet. Früher wurde nach 8 s
+            // Stille fälschlich auf .awaitingInput eskaliert — das verwechselte
+            // langes Arbeiten (langer Tool-/Reasoning-Schritt, der nichts ins
+            // JSONL schreibt) mit Warten auf Permission. „Braucht Handlung"
+            // kommt jetzt ausschließlich vom Notification-Hook.
             return Decision(status: .working, turnFinished: false)
 
         case .toolResult:

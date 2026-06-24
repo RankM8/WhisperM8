@@ -114,18 +114,21 @@ final class AgentTranscriptStatusTests: XCTestCase {
         XCTAssertFalse(decision.turnFinished, "Älteres oder gleiches Stop-Event darf nicht als neuer Turn melden")
     }
 
-    func testStatusDeciderEscalatesOngoingToAwaitingInputAfterTimeout() {
+    func testStatusDeciderTreatsLongRunningOngoingAsWorking() {
+        // Langer Tool-/Reasoning-Schritt schreibt nichts ins JSONL → bleibt
+        // „arbeitet". awaitingInput kommt nur noch vom Notification-Hook,
+        // nicht mehr aus einer Stille-Heuristik (die langes Arbeiten mit
+        // Permission-Warten verwechselte).
         let now = Date()
         let event: AgentTranscriptEvent = .assistantMessageOngoing(timestamp: now)
-        // mtime liegt weiter zurück als der Heuristik-Schwellwert
-        let mtime = now.addingTimeInterval(-(AgentTranscriptStatusDecider.awaitingInputAfterSeconds + 1))
+        let mtime = now.addingTimeInterval(-120)
         let decision = AgentTranscriptStatusDecider.decide(
             lastEvent: event,
             fileMTime: mtime,
             now: now,
             priorTurnFinishedAt: nil
         )
-        XCTAssertEqual(decision.status, .awaitingInput)
+        XCTAssertEqual(decision.status, .working)
     }
 
     func testStatusDeciderTreatsRecentOngoingAsWorking() {

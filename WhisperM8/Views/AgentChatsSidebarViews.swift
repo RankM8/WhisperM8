@@ -248,7 +248,7 @@ struct ProjectChatGroup: View {
                         ? AgentTheme.selection
                         : headerBackground)
             )
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -462,7 +462,7 @@ struct SessionListButton: View {
             }
             .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 26, alignment: .leading)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -619,7 +619,7 @@ struct PinnedSessionRow: View {
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
