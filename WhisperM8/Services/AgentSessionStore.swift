@@ -398,7 +398,13 @@ struct AgentSessionStore {
             backgroundPermissionMode: backgroundPermissionMode,
             forkSourceSessionID: forkSourceSessionID
         )
-        return try upsertSession(session)
+        let stored = try upsertSession(session)
+        // Crash-safe: strukturelle Erstellung SOFORT persistieren statt auf den
+        // 0,5-s-Debounce zu warten — sonst Verlust bei Crash/Force-Quit/kill im
+        // Zeitfenster. Siehe docs/agent-chats-redesign/01-chat-persistenz-datenverlust.md
+        Logger.agentStore.notice("session_created id=\(stored.id.uuidString, privacy: .public) provider=\(provider.rawValue, privacy: .public)")
+        workspaceStore.flush(reason: "create")
+        return stored
     }
 
     /// Setzt die vom Supervisor zurueckgegebene Short-ID nachtraeglich auf
@@ -729,11 +735,18 @@ struct AgentSessionStore {
     /// Migration in den Initial-Load des Kerns injiziert.
     static func migratedWorkspace(_ workspace: AgentWorkspace) -> AgentWorkspace {
         var migrated = workspace
+        let beforeCount = migrated.sessions.count
         migrated.schemaVersion = AgentWorkspace.currentSchemaVersion
         removeClaudeWorktreeProjectsAndSessions(from: &migrated)
         removeUnresumableClaudeSessions(from: &migrated)
         removeOrphanBackgroundSessions(from: &migrated)
         removeImportedBackgroundSessions(from: &migrated)
+        // Datenverlust-Diagnose: jedes Entfernen sichtbar machen. Läuft als
+        // `normalize` bei jeder Mutation — loggt nur, wenn wirklich etwas wegfällt.
+        let removed = beforeCount - migrated.sessions.count
+        if removed > 0 {
+            Logger.agentStore.notice("agent_store_pruned removed=\(removed) before=\(beforeCount) after=\(migrated.sessions.count)")
+        }
         return migrated
     }
 

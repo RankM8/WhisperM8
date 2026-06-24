@@ -45,6 +45,7 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     private var pendingFlush: DispatchWorkItem?
     private var dirty = false
     private var terminateObserver: NSObjectProtocol?
+    private var resignObserver: NSObjectProtocol?
 
     /// Wird nach jeder effektiven Mutation mit dem neuen Stand gerufen
     /// (außerhalb des Locks). Konsument: `AgentWorkspaceUIModel`.
@@ -68,7 +69,18 @@ final class AgentWorkspaceStore: @unchecked Sendable {
                 object: nil,
                 queue: nil
             ) { [weak self] _ in
-                self?.flush()
+                self?.flush(reason: "terminate")
+            }
+
+            // Sicherheitsnetz gegen nicht-graceful Quit: Force-Quit/Crash kündigt
+            // sich oft durch Fokusverlust an. Bei Resign-Active gepufferte
+            // Änderungen sofort sichern (flush ist No-op, wenn nichts dirty ist).
+            resignObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                self?.flush(reason: "resign")
             }
         }
     }
@@ -76,6 +88,9 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     deinit {
         if let terminateObserver {
             NotificationCenter.default.removeObserver(terminateObserver)
+        }
+        if let resignObserver {
+            NotificationCenter.default.removeObserver(resignObserver)
         }
     }
 
@@ -124,8 +139,10 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     }
 
     /// Erzwingt das sofortige Schreiben gepufferter Änderungen (debounced-
-    /// Policy). Für .immediate ein No-op.
-    func flush() {
+    /// Policy). Für .immediate ein No-op. `reason` nur für Telemetrie
+    /// (Datenverlust-Diagnose): "debounce" (Timer), "terminate" (App-Ende),
+    /// "create"/"delete" (strukturelle Mutation, crash-safe sofort).
+    func flush(reason: String = "debounce") {
         lock.lock()
         pendingFlush?.cancel()
         pendingFlush = nil
@@ -138,8 +155,15 @@ final class AgentWorkspaceStore: @unchecked Sendable {
 
         do {
             try persist(workspace)
+            // Häufige Debounce-Flushes leise (.info), strukturelle/terminale
+            // Flushes sichtbar (.notice) — Letztere sind der Datenverlust-Beweis.
+            if reason == "debounce" {
+                Logger.agentStore.info("agent_store_flushed reason=debounce sessions=\(workspace.sessions.count)")
+            } else {
+                Logger.agentStore.notice("agent_store_flushed reason=\(reason, privacy: .public) sessions=\(workspace.sessions.count)")
+            }
         } catch {
-            Logger.agentPerformance.error("agent_store_flush_failed error=\(error.localizedDescription, privacy: .public)")
+            Logger.agentStore.error("agent_store_flush_failed reason=\(reason, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             lock.lock()
             dirty = true
             lock.unlock()
@@ -152,6 +176,7 @@ final class AgentWorkspaceStore: @unchecked Sendable {
         if let canonical { return canonical }
         let loaded = loadInitial()
         canonical = loaded
+        Logger.agentStore.notice("agent_store_loaded sessions=\(loaded.sessions.count)")
         return loaded
     }
 

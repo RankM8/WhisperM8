@@ -11,6 +11,10 @@ enum Logger {
     static let audio = os.Logger(subsystem: subsystem, category: "Audio")
     static let debugLog = os.Logger(subsystem: subsystem, category: "Debug")
     static let agentPerformance = os.Logger(subsystem: subsystem, category: "AgentPerformance")
+    /// Persistenz-Telemetrie der Agent-Workspace-Datei (Datenverlust-Diagnose):
+    /// Session-Erstellung, Flush, Load, Pruning. Filter im `log stream` mit
+    /// `category == "agent.store"`.
+    static let agentStore = os.Logger(subsystem: subsystem, category: "agent.store")
     static let terminalSnapshot = os.Logger(subsystem: subsystem, category: "terminal.snapshot")
     static let claudeBinding = os.Logger(subsystem: subsystem, category: "claude.binding")
     static let claudeRecovery = os.Logger(subsystem: subsystem, category: "claude.recovery")
