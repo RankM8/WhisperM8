@@ -724,3 +724,17 @@ struct SidebarRowButtonStyle: ButtonStyle {
         return Color.clear
     }
 }
+
+/// Hover-/Press-Hintergrund für Zeilen in Popovers (z. B. Projekt-Picker des
+/// „Neuer Chat"-Split-Buttons). Wie `SidebarRowButtonStyle`, aber ohne Einzug —
+/// die Popover-Zeilen sollen über die volle Breite hovern.
+struct PopoverRowButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(isHovered || configuration.isPressed ? AgentTheme.hover : Color.clear)
+            .onHover { isHovered = $0 }
+            .animation(.easeOut(duration: 0.1), value: isHovered)
+    }
+}

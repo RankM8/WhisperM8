@@ -172,6 +172,9 @@ struct AgentChatsView: View {
     /// Drossel für den Fertig-Ton (Stop-Hook): kein zweiter Ton innerhalb von
     /// 2 s, falls mehrere Sessions kurz hintereinander stoppen.
     @State private var lastStopSoundAt: Date?
+    /// Popover des „Neuer Chat"-Split-Buttons (▾): Ziel-Projekt wählen/suchen.
+    @State private var showNewChatProjectPicker = false
+    @State private var newChatProjectQuery = ""
     /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
     @State private var subAgentLibrarySheet: SubAgentLibraryPresentation?
     /// Live-Tracker fuer die aktive Sub-Session innerhalb eines
@@ -1029,36 +1032,12 @@ struct AgentChatsView: View {
     private var sidebarCommandRows: some View {
         VStack(spacing: 8) {
             HStack(spacing: 6) {
-                // Primäraktion: dezent grau statt Farbakzent — lenkt beim
-                // Arbeiten nicht ab; Indigo bleibt der Auswahl vorbehalten.
-                Button {
-                    createDefaultSession()
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "square.stack.3d.up")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Neuer Chat")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 30)
-                    .foregroundStyle(AgentTheme.textPrimary)
-                    .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
-                    .opacity(selectedProject == nil ? 0.5 : 1)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(selectedProject == nil)
-                .help("Neuen Chat im aktuellen Projekt starten")
+                newChatSplitButton
 
                 sidebarIconButton(icon: "arrow.clockwise", help: "Sessions neu einlesen (⌘R)") {
                     AgentScanCoordinator.shared.requestScan(reason: .manual)
                 }
                 .keyboardShortcut("r", modifiers: .command)
-
-                sidebarIconButton(icon: "folder.badge.plus", help: "Ordner als Projekt hinzufügen") {
-                    addProject()
-                }
             }
             .padding(.horizontal, 8)
 
@@ -1089,7 +1068,7 @@ struct AgentChatsView: View {
     }
 
     /// Kompakter 30×30 Icon-Button für sekundäre Sidebar-Aktionen
-    /// (Aktualisieren, Projekt hinzufügen) neben dem primären „Neuer Chat".
+    /// (Aktualisieren) neben dem primären „Neuer Chat".
     @ViewBuilder
     private func sidebarIconButton(icon: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -1102,6 +1081,148 @@ struct AgentChatsView: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+
+    /// „Neuer Chat" als Split-Button: links startet sofort im aktuellen
+    /// Zielprojekt (Badge sichtbar → man sieht, wo der Chat landet), der
+    /// ▾-Teil rechts öffnet ein durchsuchbares Dropdown zum Wählen eines
+    /// anderen Projekts oder zum Hinzufügen eines neuen.
+    private var newChatSplitButton: some View {
+        HStack(spacing: 0) {
+            Button {
+                createDefaultSession()
+            } label: {
+                HStack(spacing: 7) {
+                    if let project = selectedProject {
+                        ProjectAvatar(project: project, size: 15)
+                    } else {
+                        Image(systemName: "square.stack.3d.up")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    Text("Neuer Chat")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(AgentTheme.textPrimary)
+                .opacity(selectedProject == nil ? 0.5 : 1)
+                .frame(maxWidth: .infinity)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(selectedProject == nil)
+            .help(selectedProject.map { "Neuer Chat in \($0.name)" } ?? "Erst ein Projekt hinzufügen")
+
+            Divider().frame(height: 16)
+
+            Button {
+                showNewChatProjectPicker.toggle()
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .frame(width: 28, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Projekt für neuen Chat wählen oder hinzufügen")
+            .popover(isPresented: $showNewChatProjectPicker, arrowEdge: .bottom) {
+                newChatProjectPicker
+            }
+        }
+        .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Durchsuchbares Dropdown des Split-Buttons: alle Projekte (Badge + Name +
+    /// Branch), das aktuelle Ziel markiert, plus „Projekt hinzufügen…".
+    private var newChatProjectPicker: some View {
+        let query = newChatProjectQuery.trimmingCharacters(in: .whitespaces)
+        let projects = query.isEmpty
+            ? manualProjects
+            : manualProjects.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        return VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                TextField("Projekt suchen…", text: $newChatProjectQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 36)
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 1) {
+                    ForEach(projects) { project in
+                        Button {
+                            startNewChat(in: project)
+                        } label: {
+                            HStack(spacing: 8) {
+                                ProjectAvatar(project: project, size: 16)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(project.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AgentTheme.textPrimary)
+                                        .lineLimit(1)
+                                    Text(project.lastBranch ?? project.path)
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(AgentTheme.textTertiary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                                Spacer(minLength: 0)
+                                if project.id == selectedProjectID {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(AgentTheme.accent)
+                                }
+                            }
+                            .padding(.horizontal, 11)
+                            .frame(height: 36)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PopoverRowButtonStyle())
+                    }
+                    if projects.isEmpty {
+                        Text(query.isEmpty ? "Noch keine Projekte" : "Kein Projekt gefunden")
+                            .font(.system(size: 11))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(maxHeight: 260)
+
+            Divider()
+
+            Button {
+                showNewChatProjectPicker = false
+                if let project = addProject() {
+                    startNewChat(in: project)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 12))
+                        .frame(width: 16)
+                    Text("Projekt hinzufügen…")
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(AgentTheme.textSecondary)
+                .padding(.horizontal, 11)
+                .frame(height: 38)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PopoverRowButtonStyle())
+        }
+        .frame(width: 270)
+        .background(AgentTheme.panel)
     }
 
     /// Effektiver Scope: die Suche überstimmt den Scope-Filter — tippt der
@@ -2287,23 +2408,36 @@ struct AgentChatsView: View {
         }
     }
 
-    private func addProject() {
+    @discardableResult
+    private func addProject() -> AgentProject? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Add Project"
 
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                let project = try store.upsertProject(path: url.path, createdManually: true)
-                selectedProjectID = project.id
-                expandedProjectIDs.insert(project.id)
-                AppPreferences.shared.agentDefaultProjectPath = project.path
-            } catch {
-                errorMessage = error.localizedDescription
-            }
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        do {
+            let project = try store.upsertProject(path: url.path, createdManually: true)
+            selectedProjectID = project.id
+            expandedProjectIDs.insert(project.id)
+            AppPreferences.shared.agentDefaultProjectPath = project.path
+            return project
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
         }
+    }
+
+    /// Startet einen neuen Chat in einem explizit gewählten Projekt (aus dem
+    /// „Neuer Chat"-Dropdown): macht es zum aktuellen Ziel und öffnet den Chat.
+    private func startNewChat(in project: AgentProject) {
+        showNewChatProjectPicker = false
+        newChatProjectQuery = ""
+        selectedProjectID = project.id
+        expandedProjectIDs.insert(project.id)
+        AppPreferences.shared.agentDefaultProjectPath = project.path
+        createDefaultSession()
     }
 
     private func createSession(provider: AgentProvider, kind: AgentSessionKind? = nil) {
