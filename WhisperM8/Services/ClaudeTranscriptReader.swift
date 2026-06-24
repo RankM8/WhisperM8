@@ -37,6 +37,19 @@ enum ClaudeTranscriptReader {
             .appendingPathComponent("\(sessionID).jsonl", isDirectory: false)
     }
 
+    /// `true` nur wenn für (cwd, sessionID) ein **resumebares** Transkript auf
+    /// der Platte liegt — also die `<id>.jsonl`-DATEI. Ein gleichnamiges
+    /// `<id>/`-VERZEICHNIS (Subagent-/Workflow-Begleitdaten, das Claude bei
+    /// workflow-/subagent-lastigen Sessions anlegt) zählt bewusst NICHT:
+    /// `claude --resume` braucht die JSONL, nicht das Begleitverzeichnis.
+    /// Grundlage für die „nie --resume ohne Transkript"-Garantie beim Launch.
+    static func transcriptExists(forCwd cwd: String, sessionID: String) -> Bool {
+        let url = transcriptURL(forCwd: cwd, sessionID: sessionID)
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+        return exists && !isDirectory.boolValue
+    }
+
     /// Liest das Transcript fuer eine (cwd, sessionID)-Kombi. Liefert `nil`
     /// wenn die Datei nicht existiert; wirft NICHT bei kaputten Zeilen — die
     /// werden uebersprungen und geloggt.

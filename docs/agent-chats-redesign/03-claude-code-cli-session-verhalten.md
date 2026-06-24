@@ -1,0 +1,110 @@
+# Claude Code CLI: Session-Persistenz & Resume — Verhalten, Diagnose, Fix
+
+Stand: 2026-06-24 · Referenz-Dokument (Recherche + autoritative Doku + Fix)
+
+Dieses Dokument hält fest, **wie Claude Code CLI Sessions persistiert und resumed**, **warum
+WhisperM8-Chats „verschwanden"** (Symptom: „No conversation found" / „noch keine Konversation",
+Fork unmöglich) und **welcher Fix** implementiert wurde.
+
+## Quellen
+- Offizielle Claude-Code-Doku: [CLI-Reference](https://code.claude.com/docs/en/cli-reference),
+  [Sessions](https://code.claude.com/docs/en/sessions)
+- Vergleichs-Wrapper (funktioniert mit langen Sessions): [Superset](https://github.com/superset-sh/superset)
+- Empirische Forensik am lokalen `~/.claude/projects/` + `log`-Telemetrie (siehe unten)
+
+## 1. Ist Claude Code open-source? Nein.
+Claude Code wird als **minifiziertes npm-Paket** (`@anthropic-ai/claude-code`) ausgeliefert — kein
+lesbarer Quellcode. Man kann den minifizierten JS-Blob inspizieren, aber autoritativ ist die Doku.
+Konsequenz: Wir dürfen uns **nicht** auf Implementierungs-Annahmen verlassen, sondern auf
+dokumentiertes Verhalten + Beobachtung der real geschriebenen Dateien.
+
+## 2. Wo & wann persistiert Claude eine Session
+- **Pfad:** `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl` (append-only Transkript).
+  `<encoded-cwd>` = absoluter cwd, jedes Nicht-Alphanumerische → `-` (führender `/` → führendes `-`).
+- **Zeitpunkt:** Das Transkript wird **beim ersten echten Turn** angelegt und **kontinuierlich**
+  fortgeschrieben — **nicht** beim bloßen interaktiven Start. Eine gestartete, aber nie benutzte
+  Session schreibt **keine** JSONL → ist **nicht** resumebar.
+- **Begleit-Verzeichnis:** Zusätzlich legt Claude bei subagent-/workflow-lastigen Sessions ein
+  **`<session-id>/`-Verzeichnis** an (`subagents/`, `workflows/`, `journal.jsonl`, …). **Wichtig:**
+  Dieses Verzeichnis ist **nicht** das resumebare Transkript — `claude --resume` braucht die
+  `<id>.jsonl`-DATEI.
+- **Resume-Scope:** `claude --resume <id>` sucht **nur im aktuellen cwd + dessen Git-Worktrees**
+  (laut Doku). Falscher cwd → „No conversation found".
+- **Cleanup:** `cleanupPeriodDays` (Default **30 Tage**) löscht alte Transkripte. Bei uns nicht
+  gesetzt → nicht ursächlich für frische Verluste.
+
+## 3. Relevante Flags (Doku-Auszug)
+| Flag | Bedeutung | Relevanz |
+|---|---|---|
+| `--session-id <uuid>` | Nutzt eine **vorgegebene** UUID für die Session (muss valide UUID sein) | WhisperM8s bisheriger Ansatz |
+| `--resume`, `-r <id>` | Resumed per ID/Name; ID-Lookup **nur im aktuellen Projekt + Worktrees** | schlägt fehl ohne Transkript |
+| `--continue`, `-c` | Lädt die **neueste** Konversation im cwd (ID-frei) | robuste Alternative |
+| `--fork-session` | Bei Resume eine **neue** ID statt der originalen | Fork braucht gültige Quelle |
+| `--no-session-persistence` | Keine Persistenz — **nur Print-Mode** (`-p`) | bei uns NICHT genutzt |
+| `--bg` | Startet als Background-Agent, gibt Session-ID aus | Background-Pfad |
+
+## 4. Die Wurzel: WhisperM8 vertraut einer vorgegebenen ID — Superset bindet an die reale Datei
+
+| | Superset (funktioniert) | WhisperM8 (failte) |
+|---|---|---|
+| Session-ID | lässt **Claude** die ID vergeben, **liest** sie aus der `.jsonl` auf Platte | **generiert UUID vorab**, erzwingt sie via `--session-id` |
+| Bindung | bindet an das **real existierende** Transkript | committet **optimistisch** auf die Vorab-ID |
+| Resume | `claude --resume <reale-id>` | `claude --resume <vorab-id>` — evtl. **nie geschrieben** |
+
+WhisperM8 markierte einen Chat als „resumebar" (`hasLaunchedInitialPrompt=true`) **sofort beim
+PTY-Start** und committete auf die Vorab-`externalSessionID`, **ohne** zu prüfen, ob Claude je ein
+Transkript dort schrieb. Brach die Bindung an Claudes reale ID (per SessionStart-Hook) ab oder
+schrieb Claude unter einer anderen ID/gar nicht, blieb ein **toter Zeiger**.
+
+## 5. Empirische Belege (marketing-rankm8 / headless-woo)
+- **Korrelation (lückenlos):** Jeder Chat **mit** Auto-Namen hatte ein Transkript und war
+  resumebar; jeder generische „Claude Chat" hatte **kein** Transkript und failte. Beides folgt aus
+  derselben Wurzel: *gibt es ein reales Transkript?*
+- **`f218f1bd` (langer Chat, headless-woo):** komplettes Begleit-Verzeichnis
+  (`subagents/`, `workflows/wf_…`, `journal.jsonl` — der Chat lief lange!), aber **keine
+  `f218f1bd.jsonl`** und in keinem Zeitfenster ein Haupt-Transkript. → Persistenz beim Start
+  umgelenkt/ausgeblieben, **nicht** „kein Turn".
+- **`318fb6d4`:** **0** SessionStart-Hook-Events in 12 h → nie an Claudes reale ID gebunden.
+- **Ausgeschlossen:** `cleanupPeriodDays` (Default 30 d), MCP-Hang (`listm8` antwortet in 0,28 s),
+  Symlinks, persistenz-feindliche Flags (nur `--dangerously-skip-permissions` gesetzt), Pruning
+  (manuelle Chats sind durch `createdManually` + `externalSessionID` doppelt geschützt).
+
+## 6. Der Fix (implementiert)
+**Prinzip (Superset-konform): Nie `--resume <id>` ohne real existierendes Transkript.**
+
+- **`ClaudeTranscriptReader.transcriptExists(forCwd:sessionID:)`** — prüft die `<id>.jsonl`-**Datei**
+  (ein gleichnamiges `<id>/`-Verzeichnis zählt bewusst **nicht**).
+- **`AgentSessionDetailView.repairedSessionForLaunch()`** — Final-Garantie nach dem Repair:
+  Wenn die Session resumen würde (`hasLaunchedInitialPrompt` + `externalSessionID`), das Transkript
+  aber **nicht real existiert** (auch wenn der Indexer es per **Cache** noch meldet → Outcome
+  `.unchanged`), wird stattdessen eine **frische** Session im selben Tab gestartet
+  (`externalSessionID=nil`, `hasLaunchedInitialPrompt=false`). Claude vergibt eine neue ID, die
+  `bindExternalSessionIDWhenAvailable()` danach an das **real geschriebene** Transkript bindet.
+- **Telemetrie** (`category == "claude.binding"`): `resume_rebound`, `resume_reset_invalid`,
+  `resume_guard_fresh_start` (`.notice`) machen jede Entscheidung sichtbar.
+
+Damit kann „No conversation found" beim Öffnen eines Chats nicht mehr auftreten — im schlimmsten
+Fall startet der Tab frisch (statt in eine Sackgasse zu laufen).
+
+**Wichtig / ehrlich:** Bereits verlorene Chats hatten **nie** ein persistiertes Transkript — es
+gibt dort **nichts wiederherzustellen**. Der Fix verhindert es ab sofort.
+
+## 7. Diagnose-Befehle
+```bash
+# Welche Resume-Entscheidung trifft WhisperM8?
+/usr/bin/log show --last 1h --predicate 'subsystem == "com.whisperm8.app" AND category == "claude.binding"' --info | grep resume_
+
+# Hat eine Session ein reales Transkript?
+ls -la ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
+
+# Persistenz der Chat-Liste selbst (Datenverlust-Telemetrie)
+/usr/bin/log show --last 1h --predicate 'subsystem == "com.whisperm8.app" AND category == "agent.store"'
+```
+
+## 8. Offene Folge-Verbesserungen (robuster machen)
+1. **Neue Chats Superset-Stil:** statt Vorab-`--session-id` Claude die ID vergeben lassen und an
+   die neueste real geschriebene `.jsonl` im cwd binden (entkoppelt von Hook-Timing).
+2. **`hasLaunchedInitialPrompt` erst setzen, wenn ein Transkript existiert** (nicht beim bloßen
+   PTY-Start) — beseitigt „resumebar"-False-Positives an der Wurzel.
+3. **`--continue`-Fallback** als Alternative zum ID-basierten Resume im richtigen cwd.
+4. Tote „Claude Chat ohne Transkript"-Einträge optional automatisch aufräumen/markieren.

@@ -219,11 +219,7 @@ struct AgentSessionDetailView: View {
         // bereits an der erwarteten Stelle liegt, gilt die ID als valide —
         // kein Scan ueber 2000+ Files noetig. Das ist der 99%-Fall und
         // verhindert den 2-Sekunden-UI-Block beim Resume-Klick.
-        let expectedTranscript = ClaudeTranscriptReader.transcriptURL(
-            forCwd: project.path,
-            sessionID: externalID
-        )
-        if FileManager.default.fileExists(atPath: expectedTranscript.path) {
+        if ClaudeTranscriptReader.transcriptExists(forCwd: project.path, sessionID: externalID) {
             return session
         }
 
@@ -232,27 +228,51 @@ struct AgentSessionDetailView: View {
         // wurde manuell geloescht. Erst jetzt machen wir den teuren
         // Indexer-Scan ueber alle Projekte und versuchen einen Repair.
         let indexedSessions = ClaudeSessionIndexer().indexedSessions(limit: 500)
-        guard let repair = try store.repairResumeStateBeforeLaunch(
+        let repair = try store.repairResumeStateBeforeLaunch(
             localSessionID: session.id,
             projectPath: project.path,
             indexedSessions: indexedSessions
-        ) else {
-            return session
+        )
+
+        if let repair {
+            switch repair.outcome {
+            case .unchanged:
+                break
+            case .rebound(let oldID, let newID):
+                Logger.claudeBinding.notice("resume_rebound localID=\(session.id.uuidString, privacy: .public) old=\(oldID, privacy: .public) new=\(newID, privacy: .public)")
+                onExternalSessionIDBound(session.id)
+                onStateChanged()
+            case .resetInvalid(let oldID):
+                Logger.claudeBinding.notice("resume_reset_invalid localID=\(session.id.uuidString, privacy: .public) old=\(oldID, privacy: .public)")
+                onStateChanged()
+            }
         }
 
-        switch repair.outcome {
-        case .unchanged:
-            break
-        case .rebound(let oldID, let newID):
-            Logger.debug("Rebound Claude resume ID \(oldID) -> \(newID)")
-            onExternalSessionIDBound(session.id)
+        // FINAL-GARANTIE (Superset-Prinzip): NIEMALS `claude --resume <id>` ohne
+        // real existierendes Transkript. Der Indexer kann per mtime/size-Cache
+        // eine laengst geloeschte ODER nie geschriebene ID noch als gueltig
+        // melden (-> Repair-Outcome `.unchanged`) — wir vertrauen nur der echten
+        // `<id>.jsonl`-Datei. Fehlt sie, wird statt "No conversation found" eine
+        // FRISCHE Session im selben Tab gestartet (extID/launched zuruecksetzen,
+        // Claude vergibt eine neue ID, die `bindExternalSessionIDWhenAvailable`
+        // danach an das real geschriebene Transkript bindet).
+        let candidate = repair?.session ?? session
+        if candidate.hasLaunchedInitialPrompt,
+           let ext = candidate.externalSessionID, !ext.isEmpty,
+           !ClaudeTranscriptReader.transcriptExists(forCwd: project.path, sessionID: ext) {
+            Logger.claudeBinding.notice("resume_guard_fresh_start localID=\(session.id.uuidString, privacy: .public) deadID=\(ext, privacy: .public)")
+            try? store.updateSession(id: session.id) { updated in
+                updated.externalSessionID = nil
+                updated.hasLaunchedInitialPrompt = false
+            }
             onStateChanged()
-        case .resetInvalid(let oldID):
-            Logger.debug("Reset invalid Claude resume ID \(oldID); starting a fresh terminal session in the existing tab")
-            onStateChanged()
+            var fresh = candidate
+            fresh.externalSessionID = nil
+            fresh.hasLaunchedInitialPrompt = false
+            return fresh
         }
 
-        return repair.session
+        return candidate
     }
 
     private func restartTerminal() {

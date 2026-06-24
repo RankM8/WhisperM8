@@ -12,7 +12,11 @@ Stand: 2026-06-24 · Priorität: **höchste**
   (`AgentWorkspaceStore`) gegen Force-Quit/Crash. 424 Tests grün; `testFlushWritesImmediately`
   deckt den Mechanismus.
 - ⬜ **Phase 3 (Backup-Netz):** offen.
-- ⬜ **Phase 4 (Resume-Symptom):** offen.
+- ✅ **Phase 4 (Resume-Symptom „No conversation found"):** Ursache gefunden + gefixt — WhisperM8
+  vertraute einer vorab vergebenen `--session-id`, ohne zu prüfen, ob Claude je ein Transkript
+  schrieb. Fix: „nie `--resume` ohne reales Transkript" (Garantie in `repairedSessionForLaunch`
+  + `ClaudeTranscriptReader.transcriptExists`). **Vollständige Analyse + Claude-CLI-Verhalten:
+  siehe [03-claude-code-cli-session-verhalten.md](03-claude-code-cli-session-verhalten.md).**
 - Verifikation: nach Neustart `agent_store_loaded sessions=638`, kein `agent_store_pruned`,
   User-Chat („Jira-Chat fortsetzen…") erhalten.
 

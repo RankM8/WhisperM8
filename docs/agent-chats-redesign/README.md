@@ -7,8 +7,9 @@ Robustheit). Stand: 2026-06-24.
 
 | # | Dokument | Thema | Status |
 |---|----------|-------|--------|
-| 1 | [01-chat-persistenz-datenverlust.md](01-chat-persistenz-datenverlust.md) | **Datenverlust beheben** — frisch erstellte Chats verschwinden / sind nicht resumebar | Plan, **kritisch, zuerst** |
-| 2 | [02-sidebar-feinschliff.md](02-sidebar-feinschliff.md) | Sidebar-Ausrichtung, grauer „Neuer Chat"-Button, korrekte Status-Indikatoren (Hooks), optionaler Ton | Freigegeben, **zurückgestellt** hinter #1 |
+| 1 | [01-chat-persistenz-datenverlust.md](01-chat-persistenz-datenverlust.md) | **Datenverlust beheben** — frisch erstellte Chats verschwinden / sind nicht resumebar | Phase 0–2 + 4 umgesetzt |
+| 3 | [03-claude-code-cli-session-verhalten.md](03-claude-code-cli-session-verhalten.md) | **Claude-Code-CLI-Session-Verhalten** — Persistenz/Resume autoritativ + Superset-Vergleich + „nie --resume ohne Transkript"-Fix | Referenz + Fix |
+| 2 | [02-sidebar-feinschliff.md](02-sidebar-feinschliff.md) | Sidebar-Ausrichtung, grauer „Neuer Chat"-Button, korrekte Status-Indikatoren (Hooks), optionaler Ton | Freigegeben, **zurückgestellt** |
 
 ## Reihenfolge & Begründung
 
