@@ -719,7 +719,7 @@ struct AgentChatsView: View {
                     pinnedSessionIDs: pinnedSessionIDs
                 ).filter { trimmedQuery.isEmpty || $0.title.localizedCaseInsensitiveContains(trimmedQuery) }
                 let chatListIsEmpty = (sidebarLayout == .flat ? flatSessions.isEmpty : visibleProjects.isEmpty)
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
                     if manualProjects.isEmpty {
                         sidebarEmptyState
                     } else if chatListIsEmpty && visiblePinned.isEmpty {
@@ -1018,55 +1018,86 @@ struct AgentChatsView: View {
     }
 
     private var sidebarCommandRows: some View {
-        VStack(spacing: 1) {
-            Button {
-                createDefaultSession()
-            } label: {
-                SidebarCommandRow(icon: "square.stack.3d.up", title: "Neuer Chat", isActive: selectedProject != nil)
-            }
-            .buttonStyle(SidebarRowButtonStyle())
-            .disabled(selectedProject == nil)
-            .help("Neuen Codex Chat im aktuellen Projekt starten")
-
-            Button {
-                AgentScanCoordinator.shared.requestScan(reason: .manual)
-            } label: {
-                SidebarCommandRow(icon: "arrow.clockwise", title: "Aktualisieren")
-            }
-            .buttonStyle(SidebarRowButtonStyle())
-            .keyboardShortcut("r", modifiers: .command)
-            .help("Sessions neu einlesen (⌘R)")
-
-            Button {
-                addProject()
-            } label: {
-                SidebarCommandRow(icon: "plus", title: "Projekt hinzufügen", trailingIcon: "folder.badge.plus")
-            }
-            .buttonStyle(SidebarRowButtonStyle())
-            .help("Ordner als Projekt hinzufügen")
-
+        VStack(spacing: 8) {
             HStack(spacing: 6) {
+                // Primäraktion: prominenter Indigo-Gradient-Button.
+                Button {
+                    createDefaultSession()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "square.stack.3d.up")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Neuer Chat")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+                    .foregroundStyle(.white)
+                    .background(
+                        LinearGradient(
+                            colors: [AgentTheme.accent, AgentTheme.accentStrong],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+                    .opacity(selectedProject == nil ? 0.5 : 1)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedProject == nil)
+                .help("Neuen Chat im aktuellen Projekt starten")
+
+                sidebarIconButton(icon: "arrow.clockwise", help: "Sessions neu einlesen (⌘R)") {
+                    AgentScanCoordinator.shared.requestScan(reason: .manual)
+                }
+                .keyboardShortcut("r", modifiers: .command)
+
+                sidebarIconButton(icon: "folder.badge.plus", help: "Ordner als Projekt hinzufügen") {
+                    addProject()
+                }
+            }
+            .padding(.horizontal, 10)
+
+            HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textTertiary)
                 TextField("Filter…", text: $searchText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 11))
+                    .font(.system(size: 11.5))
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(AgentTheme.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 8)
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 10)
             .padding(.bottom, 2)
         }
+    }
+
+    /// Kompakter 30×30 Icon-Button für sekundäre Sidebar-Aktionen
+    /// (Aktualisieren, Projekt hinzufügen) neben dem primären „Neuer Chat".
+    @ViewBuilder
+    private func sidebarIconButton(icon: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AgentTheme.textSecondary)
+                .frame(width: 30, height: 30)
+                .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 
     /// Effektiver Scope: die Suche überstimmt den Scope-Filter — tippt der

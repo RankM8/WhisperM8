@@ -91,6 +91,41 @@ enum AgentTheme {
         light: Color(red: 0.78, green: 0.22, blue: 0.22),
         dark: Color(red: 0.95, green: 0.40, blue: 0.40)
     )
+
+    // MARK: - Linear-Akzent (Indigo) + Status
+    // Markenakzent für Auswahl, primären „Neuer Chat"-Button und Fokus.
+    // Dark etwas aufgehellt für Kontrast auf dunklen Flächen.
+    static let accent = Color.dynamic(
+        light: Color(hex: "#5e6ad2"),
+        dark: Color(hex: "#7c84e8")
+    )
+    static let accentStrong = Color.dynamic(
+        light: Color(hex: "#4b56c0"),
+        dark: Color(hex: "#5e6ad2")
+    )
+    /// Hintergrund der ausgewählten Zeile (Indigo-Tint).
+    static let accentTint = Color.dynamic(
+        light: Color(hex: "#5e6ad2").opacity(0.13),
+        dark: Color(hex: "#7c84e8").opacity(0.16)
+    )
+    /// Sehr dezenter Indigo-/Amber-Tint (z.B. wartende Zeile, Hover auf Auswahl).
+    static let accentTintSoft = Color.dynamic(
+        light: Color(hex: "#5e6ad2").opacity(0.07),
+        dark: Color(hex: "#7c84e8").opacity(0.09)
+    )
+    /// Status-Indikatorfarben (zentral statt hartkodiert in den Rows).
+    static let statusWorking = Color.dynamic(
+        light: Color(hex: "#3fa873"),
+        dark: Color(hex: "#4cc38a")
+    )
+    static let statusAwaiting = Color.dynamic(
+        light: Color(hex: "#c9962a"),
+        dark: Color(hex: "#e9b949")
+    )
+    static let statusError = Color.dynamic(
+        light: Color(hex: "#d6473d"),
+        dark: Color(hex: "#e5594f")
+    )
 }
 
 extension Color {

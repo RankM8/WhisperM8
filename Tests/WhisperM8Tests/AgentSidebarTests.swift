@@ -325,3 +325,27 @@ final class SidebarScopeFilterTests: XCTestCase {
         XCTAssertEqual(counts.all, 3, "alle nicht-archivierten manuellen")
     }
 }
+
+// MARK: - „Zuletzt aktiv"-Formatierung (Sidebar-Zeilen)
+
+final class SidebarRelativeTimeTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    private func label(secondsAgo: TimeInterval) -> String {
+        SidebarRelativeTime.short(now.addingTimeInterval(-secondsAgo), now: now)
+    }
+
+    func testFormatsAcrossUnits() {
+        XCTAssertEqual(label(secondsAgo: 5), "jetzt")
+        XCTAssertEqual(label(secondsAgo: 59), "jetzt")
+        XCTAssertEqual(label(secondsAgo: 60), "1m")
+        XCTAssertEqual(label(secondsAgo: 45 * 60), "45m")
+        XCTAssertEqual(label(secondsAgo: 60 * 60), "1h")
+        XCTAssertEqual(label(secondsAgo: 5 * 3600), "5h")
+        XCTAssertEqual(label(secondsAgo: 24 * 3600), "1d")
+        XCTAssertEqual(label(secondsAgo: 3 * 24 * 3600), "3d")
+        XCTAssertEqual(label(secondsAgo: 7 * 24 * 3600), "1w")
+        XCTAssertEqual(label(secondsAgo: 21 * 24 * 3600), "3w")
+        XCTAssertEqual(label(secondsAgo: 60 * 24 * 3600), "2mo")
+    }
+}

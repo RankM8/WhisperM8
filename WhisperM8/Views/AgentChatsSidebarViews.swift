@@ -202,31 +202,24 @@ struct ProjectChatGroup: View {
 
                 ProjectAvatar(project: project)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(project.name)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AgentTheme.textPrimary)
+                // Einzeilig wie im Entwurf: Name · Branch · Count nebeneinander
+                // — kompakter und im selben vertikalen Rhythmus wie die Zeilen.
+                Text(project.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+
+                HStack(spacing: 3) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 8))
+                    Text(project.lastBranch ?? "local")
+                        .font(.system(size: 9.5))
                         .lineLimit(1)
-                        .truncationMode(.tail)
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 8))
-                            .foregroundStyle(AgentTheme.textTertiary)
-                        Text(project.lastBranch ?? "local")
-                            .font(.system(size: 10))
-                            .foregroundStyle(AgentTheme.textTertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if !sessions.isEmpty {
-                            Text("·")
-                                .font(.system(size: 10))
-                                .foregroundStyle(AgentTheme.textTertiary)
-                            Text("\(sessions.count)")
-                                .font(.system(size: 10, weight: .medium).monospacedDigit())
-                                .foregroundStyle(AgentTheme.textTertiary)
-                        }
-                    }
+                        .truncationMode(.middle)
                 }
+                .foregroundStyle(AgentTheme.textTertiary)
 
                 Spacer(minLength: 6)
 
@@ -240,11 +233,15 @@ struct ProjectChatGroup: View {
                     }
                     .buttonStyle(.plain)
                     .help("Neuen Codex Chat im Projekt starten")
+                } else if !sessions.isEmpty {
+                    Text("\(sessions.count)")
+                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .foregroundStyle(AgentTheme.textTertiary)
                 }
             }
             .padding(.leading, 8)
             .padding(.trailing, 8)
-            .frame(minHeight: 36, maxHeight: 36)
+            .frame(minHeight: 30, maxHeight: 30)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isSessionDragOver || isProjectDragOver
@@ -413,11 +410,11 @@ struct SessionListButton: View {
         let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.sessionRow")
         Button(action: onSelect) {
             ZStack(alignment: .leading) {
-                // Auswahl-Akzent in Projektfarbe im Einzug — genau eine
-                // Markierung statt der gestapelten Boxen + Connector-Linie.
+                // Auswahl-Akzent (Indigo) im Einzug — genau eine Markierung,
+                // einheitlich mit dem Indigo-Selektions-Hintergrund.
                 if isSelected {
                     RoundedRectangle(cornerRadius: 1.25)
-                        .fill(accentColor)
+                        .fill(AgentTheme.accent)
                         .frame(width: 2.5, height: 13)
                         .padding(.leading, 14)
                 }
@@ -458,7 +455,7 @@ struct SessionListButton: View {
                     Spacer(minLength: 0)
 
                     trailingIndicator
-                        .frame(width: 18, alignment: .trailing)
+                        .frame(minWidth: 28, alignment: .trailing)
                 }
                 .padding(.leading, 28)
                 .padding(.trailing, 8)
@@ -472,13 +469,6 @@ struct SessionListButton: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
-    }
-
-    private var accentColor: Color {
-        guard let accentColorHex, !accentColorHex.isEmpty else {
-            return AgentTheme.textSecondary
-        }
-        return Color(hex: accentColorHex)
     }
 
     private var titleColor: Color {
@@ -509,44 +499,24 @@ struct SessionListButton: View {
 
     @ViewBuilder
     private var statusIndicator: some View {
-        // Auto-Rename hat Vorrang ueber den Runtime-Status: der User soll
-        // wissen warum sich gleich der Titel aendert.
+        // Auto-Rename hat Vorrang über den Runtime-Status: der User soll
+        // wissen warum sich gleich der Titel ändert.
         if isAutoRenaming {
             Image(systemName: "sparkles")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Color.purple)
+                .foregroundStyle(AgentTheme.accent)
                 .help("Titel wird automatisch generiert …")
         } else {
-            statusDot
-        }
-    }
-
-    @ViewBuilder
-    private var statusDot: some View {
-        let resolved = resolvedStatus
-        switch resolved {
-        case .working:
-            Circle()
-                .fill(Color.green)
-                .frame(width: 5, height: 5)
-                .help("Arbeitet …")
-        case .awaitingInput:
-            Circle()
-                .fill(Color.orange)
-                .frame(width: 5, height: 5)
-                .help("Wartet möglicherweise auf User-Input")
-        case .idle:
-            Circle()
-                .fill(Color.green.opacity(0.55))
-                .frame(width: 5, height: 5)
-                .help("Bereit")
-        case .errored:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Color.red.opacity(0.8))
-                .help("Mit Fehler beendet")
-        case .stopped, .none:
-            Color.clear.frame(width: 1, height: 1)
+            switch resolvedStatus {
+            case .working, .awaitingInput, .idle, .errored:
+                AgentStatusIndicator(status: resolvedStatus)
+            case .stopped, .none:
+                // Kein Live-Status → „zuletzt aktiv" statt Indikator.
+                Text(SidebarRelativeTime.short(session.lastActivityAt))
+                    .font(.system(size: 9.5))
+                    .monospacedDigit()
+                    .foregroundStyle(AgentTheme.textTertiary)
+            }
         }
     }
 
@@ -557,8 +527,10 @@ struct SessionListButton: View {
     }
 
     private var rowBackground: Color {
-        if isSelected { return AgentTheme.selection }
+        if isSelected { return AgentTheme.accentTint }
         if isHovered { return AgentTheme.hover }
+        // Wartende Zeile dezent ambern hervorheben („wartet auf dich").
+        if resolvedStatus == .awaitingInput { return AgentTheme.statusAwaiting.opacity(0.09) }
         return Color.clear
     }
 
@@ -642,7 +614,7 @@ struct PinnedSessionRow: View {
                 Spacer(minLength: 0)
 
                 trailingIndicator
-                    .frame(width: 18, alignment: .trailing)
+                    .frame(minWidth: 28, alignment: .trailing)
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
@@ -674,22 +646,14 @@ struct PinnedSessionRow: View {
                 .help("Transkript von Claude gelöscht – nicht mehr resumebar")
         } else {
             switch resolvedStatus {
-            case .working:
-                Circle().fill(Color.green).frame(width: 5, height: 5)
-                    .help("Arbeitet …")
-            case .awaitingInput:
-                Circle().fill(Color.orange).frame(width: 5, height: 5)
-                    .help("Wartet möglicherweise auf User-Input")
-            case .idle:
-                Circle().fill(Color.green.opacity(0.55)).frame(width: 5, height: 5)
-                    .help("Bereit")
-            case .errored:
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color.red.opacity(0.8))
-                    .help("Mit Fehler beendet")
+            case .working, .awaitingInput, .idle, .errored:
+                AgentStatusIndicator(status: resolvedStatus)
             case .stopped, .none:
-                Color.clear.frame(width: 1, height: 1)
+                // Kein Live-Status → „zuletzt aktiv" statt Indikator.
+                Text(SidebarRelativeTime.short(session.lastActivityAt))
+                    .font(.system(size: 9.5))
+                    .monospacedDigit()
+                    .foregroundStyle(AgentTheme.textTertiary)
             }
         }
     }
@@ -701,8 +665,9 @@ struct PinnedSessionRow: View {
     }
 
     private var rowBackground: Color {
-        if isSelected { return AgentTheme.selection }
+        if isSelected { return AgentTheme.accentTint }
         if isHovered { return AgentTheme.hover }
+        if resolvedStatus == .awaitingInput { return AgentTheme.statusAwaiting.opacity(0.09) }
         return Color.clear
     }
 }

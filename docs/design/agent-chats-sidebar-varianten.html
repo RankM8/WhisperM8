@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperM8 · Sidebar-Varianten — Vergleich</title>
+<style>
+/* ============================================================
+   WhisperM8 Agent Chats — Sidebar-Varianten zum Vergleich
+   Tokens 1:1 aus agent-chats-redesign-prototype.html.
+   Fokus: 5 Ansätze nebeneinander, jeder mit Drag-Resize.
+   ============================================================ */
+:root, :root[data-theme="dark"] {
+  --bg-stage:#0b0b0d; --bg-stage-glow:#141418;
+  --bg-window:#1d1d20; --bg-sidebar:#19191c; --bg-content:#1d1d20; --bg-terminal:#131316;
+  --bg-raised:#2a2a2f; --bg-inset:#232327;
+  --bg-hover:rgba(255,255,255,.055); --bg-active:rgba(255,255,255,.10); --bg-selection:rgba(255,255,255,.09);
+  --text-1:rgba(255,255,255,.92); --text-2:rgba(255,255,255,.55); --text-3:rgba(255,255,255,.34);
+  --accent:#0a84ff; --green:#32d74b; --orange:#ff9f0a; --red:#ff453a; --indigo:#7d7aff; --purple:#bf5af2;
+  --hairline:rgba(255,255,255,.06);
+  --shadow-window:0 30px 90px rgba(0,0,0,.6),0 4px 20px rgba(0,0,0,.4);
+  --shadow-raised:0 1px 3px rgba(0,0,0,.35);
+  --term-text:#d6d6dc; --badge-text:#fff;
+}
+:root[data-theme="light"] {
+  --bg-stage:#d9d9df; --bg-stage-glow:#ececf1;
+  --bg-window:#f4f4f6; --bg-sidebar:#ebebee; --bg-content:#f4f4f6; --bg-terminal:#ffffff;
+  --bg-raised:#ffffff; --bg-inset:#e4e4e8;
+  --bg-hover:rgba(0,0,0,.05); --bg-active:rgba(0,0,0,.09); --bg-selection:rgba(0,0,0,.07);
+  --text-1:rgba(0,0,0,.88); --text-2:rgba(0,0,0,.52); --text-3:rgba(0,0,0,.33);
+  --hairline:rgba(0,0,0,.08);
+  --shadow-window:0 30px 80px rgba(40,40,60,.28),0 4px 18px rgba(40,40,60,.14);
+  --shadow-raised:0 1px 3px rgba(0,0,0,.12);
+  --term-text:#2b2b30; --badge-text:#fff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  background:radial-gradient(1400px 800px at 50% -10%,var(--bg-stage-glow),var(--bg-stage));
+  color:var(--text-1); font-size:12px; min-height:100%;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input{font:inherit;color:var(--text-1)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--bg-active);border-radius:5px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+
+/* ---------- Kopf ---------- */
+.page-head{
+  position:sticky; top:0; z-index:40;
+  display:flex; align-items:center; gap:16px; padding:14px 26px;
+  background:color-mix(in srgb,var(--bg-stage) 80%,transparent); backdrop-filter:blur(18px);
+  border-bottom:1px solid var(--hairline);
+}
+.page-head h1{font-size:14px;font-weight:700;letter-spacing:-.2px}
+.page-head .sub{font-size:11px;color:var(--text-3)}
+.page-head .grow{flex:1}
+.head-hint{
+  display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-2);
+  background:var(--bg-hover);padding:6px 11px;border-radius:99px;
+}
+.head-hint svg{width:13px;height:13px;color:var(--accent)}
+.pill-btn{
+  display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:99px;
+  font-size:11px;font-weight:600;background:var(--bg-hover);color:var(--text-1);transition:background .15s;
+}
+.pill-btn:hover{background:var(--bg-active)}
+
+/* ---------- Galerie ---------- */
+.gallery{
+  display:flex; flex-wrap:wrap; gap:22px; align-items:flex-start;
+  padding:24px 26px 80px;
+}
+.variant{
+  display:flex; flex-direction:column; gap:0;
+  background:var(--bg-window); border-radius:14px; overflow:hidden;
+  box-shadow:var(--shadow-window);
+}
+.variant-head{display:flex;align-items:center;gap:11px;padding:13px 15px 12px}
+.vh-num{
+  width:22px;height:22px;flex:none;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent);
+}
+.vh-name{font-size:12.5px;font-weight:700;letter-spacing:-.1px}
+.vh-pitch{font-size:10.5px;color:var(--text-3);margin-top:1px;line-height:1.35;max-width:330px}
+
+/* das Fenster-Mockup: Sidebar + angedeuteter Content */
+.frame{
+  display:flex; height:540px; margin:0 12px 12px; border-radius:10px; overflow:hidden;
+  background:var(--bg-content); position:relative;
+}
+.sidebar{
+  position:relative; flex:none; display:flex; flex-direction:column;
+  background:var(--bg-sidebar); width:264px; min-width:200px; max-width:480px;
+}
+.resizer{
+  position:absolute; top:0; right:-3px; bottom:0; width:8px; z-index:5; cursor:col-resize;
+}
+.resizer::after{
+  content:""; position:absolute; top:0; bottom:0; right:3px; width:1px; background:var(--hairline);
+  transition:background .12s, width .12s;
+}
+.resizer:hover::after, .resizer.dragging::after{ width:2px; right:2.5px; background:var(--accent); }
+.width-badge{
+  position:absolute; top:8px; right:8px; z-index:6;
+  font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:10px; font-weight:600;
+  background:var(--accent); color:#fff; padding:3px 7px; border-radius:6px;
+  opacity:0; transform:translateY(-3px); transition:opacity .15s, transform .15s; pointer-events:none;
+}
+.width-badge.show{opacity:1;transform:translateY(0)}
+
+.content-stub{
+  flex:1; min-width:140px; display:flex; flex-direction:column; background:var(--bg-content);
+  border-left:1px solid var(--hairline);
+}
+.stub-tabs{display:flex;align-items:center;gap:4px;height:40px;padding:0 10px}
+.stub-tab{display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:7px;color:var(--text-3);font-size:11px;white-space:nowrap}
+.stub-tab.active{background:var(--bg-raised);color:var(--text-1);box-shadow:var(--shadow-raised)}
+.stub-tab .d{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.stub-term{flex:1;margin:0 10px 10px;border-radius:9px;background:var(--bg-terminal);padding:14px 15px;
+  font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.7;color:var(--term-text);overflow:hidden}
+.stub-term .dim{color:var(--text-3)}
+.stub-term .hl{color:var(--accent)}
+.stub-term .g{color:var(--green)}
+
+/* ---------- gemeinsame Sidebar-Bausteine ---------- */
+.s-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+.repo-badge{
+  width:16px;height:16px;flex:none;border-radius:4.5px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:9.5px;font-weight:700;color:var(--badge-text);
+}
+.sec-label{
+  display:flex;align-items:center;gap:5px;padding:10px 12px 4px;
+  font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-3);
+}
+.sec-label svg{width:9px;height:9px}
+.statusdot{width:6px;height:6px;border-radius:50%;flex:none}
+.statusdot.working{background:var(--green);animation:pulse 1.8s ease-in-out infinite}
+.statusdot.awaiting{background:var(--orange)}
+.statusdot.idle{background:var(--green);opacity:.42}
+@keyframes pulse{50%{opacity:.35}}
+.ago{font-size:9.5px;color:var(--text-3);flex:none;font-variant-numeric:tabular-nums}
+
+/* Provider-Glyph */
+.glyph{width:11px;height:11px;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.glyph svg{width:10px;height:10px}
+.cdot{width:7px;height:7px;border-radius:50%;flex:none}
+
+/* Toolbar-Bausteine */
+.s-top{display:flex;flex-direction:column;gap:8px;padding:10px 10px 6px}
+.btn-new{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:7px;height:30px;border-radius:8px;
+  font-weight:600;font-size:12px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);
+  transition:background .15s;
+}
+.btn-new:hover{background:color-mix(in srgb,var(--accent) 26%,transparent)}
+.btn-new svg{width:13px;height:13px}
+.icon-btn{width:30px;height:30px;flex:none;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--text-2);transition:background .15s,color .15s}
+.icon-btn:hover{background:var(--bg-hover);color:var(--text-1)}
+.icon-btn svg{width:14px;height:14px}
+.s-filter{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:8px;background:var(--bg-inset)}
+.s-filter svg{width:11px;height:11px;color:var(--text-3);flex:none}
+.s-filter input{flex:1;background:none;border:none;outline:none;font-size:11.5px;min-width:0}
+.s-filter input::placeholder{color:var(--text-3)}
+.seg{display:flex;background:var(--bg-inset);border-radius:8px;padding:2px;gap:1px}
+.seg button{flex:1;padding:4px 0;border-radius:6px;font-size:10.5px;font-weight:500;color:var(--text-2)}
+.seg button.on{background:var(--bg-raised);color:var(--text-1);font-weight:600;box-shadow:var(--shadow-raised)}
+.scope-caption{display:flex;align-items:center;justify-content:space-between;padding:6px 13px 2px;font-size:10px;color:var(--text-3)}
+.scope-caption a{color:var(--accent);cursor:pointer}
+
+/* Projekt-Header (gruppiert) */
+.proj{display:flex;align-items:center;gap:7px;height:32px;padding:0 10px;border-radius:7px;margin:1px 7px;cursor:default}
+.proj:hover{background:var(--bg-hover)}
+.proj .chev{width:11px;height:11px;flex:none;color:var(--text-3);transition:transform .15s}
+.proj.open .chev{transform:rotate(90deg)}
+.proj .name{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj .branch{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--text-3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj .count{font-size:10px;color:var(--text-3);flex:none}
+
+/* Chat-Zeile */
+.row{display:flex;align-items:center;gap:8px;height:27px;padding:0 10px 0 27px;border-radius:6px;margin:0 7px;position:relative;cursor:default}
+.row:hover{background:var(--bg-hover)}
+.row.selected{background:var(--bg-selection)}
+.row.selected::before{content:"";position:absolute;left:15px;top:50%;transform:translateY(-50%);width:2.5px;height:14px;border-radius:1.25px;background:var(--row-accent,var(--accent))}
+.row .title{flex:1;font-size:11.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row.open .title{color:var(--text-1)}
+.row.selected .title{font-weight:600;color:var(--text-1)}
+.pin-row{display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;border-radius:7px;margin:0 7px;cursor:default}
+.pin-row:hover{background:var(--bg-hover)}
+.pin-row.selected{background:var(--bg-selection)}
+.pin-row .title{flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.s-foot{display:flex;align-items:center;gap:3px;padding:7px 10px;border-top:1px solid var(--hairline)}
+.s-foot .grow{flex:1}
+.res-line{display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--text-3);font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.res-line .d{width:5px;height:5px;border-radius:50%;background:var(--green)}
+
+/* ===== V2 Smart-Sektionen: Sub-Labels ===== */
+.sub-label{display:flex;align-items:center;gap:6px;padding:7px 10px 2px 22px;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-3)}
+.sub-label .dot{width:5px;height:5px;border-radius:50%}
+.sub-label.active .txt{color:var(--green)}
+.sub-label .spacer{flex:1}
+.sub-label.clickable{cursor:pointer;border-radius:5px;margin:0 7px}
+.sub-label.clickable:hover{background:var(--bg-hover)}
+.sub-label .achev{width:9px;height:9px;color:var(--text-3);transition:transform .15s}
+.sub-label.expanded .achev{transform:rotate(90deg)}
+.row.arch .glyph,.row.arch .title{opacity:.55}
+.row.arch:hover .glyph,.row.arch:hover .title{opacity:.85}
+
+/* ===== V3 Kompakt ===== */
+.v3 .row{height:23px;gap:7px}
+.v3 .proj{height:27px}
+.v3 .row .title{font-size:11px}
+.v3 .sec-label{padding-top:7px}
+
+/* ===== V4 Rail + Liste ===== */
+.rail-wrap{display:flex;height:100%}
+.rail{width:52px;flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0;background:color-mix(in srgb,var(--bg-stage) 40%,var(--bg-sidebar));border-right:1px solid var(--hairline)}
+.rail-badge{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--badge-text);position:relative;cursor:default;transition:transform .12s}
+.rail-badge:hover{transform:scale(1.06)}
+.rail-badge.active{box-shadow:0 0 0 2px var(--bg-sidebar),0 0 0 4px var(--accent)}
+.rail-badge .rb-status{position:absolute;right:-1px;top:-1px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg-sidebar)}
+.rail-sep{width:24px;height:1px;background:var(--hairline);margin:2px 0}
+.rail-add{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--text-2);background:var(--bg-hover)}
+.rail-add:hover{background:var(--bg-active);color:var(--text-1)}
+.rail-add svg{width:15px;height:15px}
+.rail-list{flex:1;display:flex;flex-direction:column;min-width:0}
+.rail-list-head{padding:13px 13px 8px;display:flex;align-items:center;gap:8px}
+.rail-list-head .name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-list-head .branch{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--text-3)}
+
+/* ===== V5 Luftig ===== */
+.v5 .repo-badge{width:20px;height:20px;border-radius:6px;font-size:11px}
+.v5 .proj{height:38px;gap:9px}
+.v5 .row{height:32px;padding-left:30px}
+.v5 .row .title{font-size:12px}
+.v5 .sec-label{padding:14px 14px 6px;letter-spacing:.8px}
+.v5 .s-top{gap:10px;padding:12px 12px 8px}
+
+.legend{display:flex;flex-wrap:wrap;gap:10px;padding:0 26px 50px;max-width:1100px}
+.legend .lg{display:flex;gap:9px;align-items:flex-start;background:var(--bg-hover);border-radius:10px;padding:10px 13px;font-size:11px;line-height:1.5;flex:1;min-width:240px}
+.legend .lg b{color:var(--text-1)}
+.legend .lg span{color:var(--text-2)}
+.legend .lg .k{flex:none;width:18px;height:18px;border-radius:6px;background:var(--bg-active);color:var(--text-1);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div>
+    <h1>WhisperM8 · Sidebar-Varianten</h1>
+    <div class="sub">5 Ansätze in derselben Design-Sprache — nebeneinander vergleichen</div>
+  </div>
+  <span class="grow"></span>
+  <div class="head-hint">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 4 2 7l3 3M11 4l3 3-3 3M9 2 7 14"/></svg>
+    Zieh an der rechten Kante jeder Sidebar · Doppelklick = zurücksetzen
+  </div>
+  <button class="pill-btn" id="theme">◐ Dark / Light</button>
+</div>
+
+<div class="gallery" id="gallery"></div>
+
+<div class="legend">
+  <div class="lg"><span class="k">1</span><span><b>Refined</b> — dein Status quo, entrümpelt. Seltene Aktionen werden Icons, eine klare Primäraktion, ruhigerer Rhythmus.</span></div>
+  <div class="lg"><span class="k">2</span><span><b>Smart-Sektionen</b> — pro Projekt Aktiv·Zuletzt·Archiv. Löst die „79 Chats"-Flut, ohne etwas zu verlieren.</span></div>
+  <div class="lg"><span class="k">3</span><span><b>Kompakt</b> — maximale Dichte für Power-User. Doppelt so viele Chats sichtbar, minimaler Header.</span></div>
+  <div class="lg"><span class="k">4</span><span><b>Rail + Liste</b> — Projekte als Icon-Spalte, Liste zeigt nur das aktive Projekt. Skaliert auf beliebig viele Projekte.</span></div>
+  <div class="lg"><span class="k">5</span><span><b>Luftig</b> — großzügig &amp; ruhig. Größere Badges, mehr Weißraum, für Fokus statt Übersicht.</span></div>
+</div>
+
+<script>
+/* ================= Daten (aus dem Screenshot + realistische Ergänzung) ================= */
+const ICONS = {
+  claude:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.2 4.1L13 3.5l-2.6 3.3L14.5 8l-4.1 1.2L13 12.5l-3.8-1.6L8 15l-1.2-4.1L3 12.5l2.6-3.3L1.5 8l4.1-1.2L3 3.5l3.8 1.6z"/></svg>',
+  codex:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5 9.6 6.4 14.5 8 9.6 9.6 8 14.5 6.4 9.6 1.5 8l4.9-1.6z"/></svg>',
+  pin:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.5 2 14 6.5l-3 .8-2.5 4.2-1.5-1.5L2.8 14 2 13.2 6 9l-1.5-1.5L8.7 5z"/></svg>',
+  chev:'<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>',
+  achev:'<svg class="achev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>',
+  plus:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>',
+  refresh:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5v3h-3"/></svg>',
+  folderplus:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1.5 4.5a2 2 0 0 1 2-2h2.6l1.4 1.8h5a2 2 0 0 1 2 2v5.2a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/><path d="M8 7v4M6 9h4"/></svg>',
+  search:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>',
+  gear:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.7M8 12.5v1.7M14.2 8h-1.7M3.5 8H1.8M12.4 3.6l-1.2 1.2M4.8 11.2l-1.2 1.2M12.4 12.4l-1.2-1.2M4.8 4.8 3.6 3.6"/></svg>',
+};
+const MIN=1, H=60, D=1440, W=10080;
+let sid=0;
+const s=(title,provider,ago,opts={})=>({id:'x'+(++sid),title,provider,ago,status:opts.status||null,color:opts.color||null,selected:!!opts.selected});
+
+const PINNED=[ {id:'pin1',title:'Steuer 2024 Slack-Suche',badge:'S',color:'#36C5F0',status:null,ago:3*D} ];
+const PROJECTS=[
+  {id:'p-list',name:'ListM8',branch:'develop',color:'#E8B84B',sessions:[
+    s('OutScraper Export-Status prüfen','claude',8*MIN,{status:'working'}),
+    s('Lead-Liste Filter-Logik','claude',5*H),
+    s('Symfony InputBag 400 Fix','codex',26*H),
+    s('Custom Attributes Liste','claude',4*D,{color:'#64D2FF'}),
+    s('Smart-View Bug-Hunt','claude',9*D),
+    s('Keycloak Realm-Import','claude',22*D),
+    s('Erste Architektur-Skizze','codex',7*W),
+  ]},
+  {id:'p-mkt',name:'marketing-rankm8',branch:'main',color:'#A06BE0',sessions:[
+    s('Fitagon Kundenordner-Analyse','claude',90*MIN),
+    s('Keyword-Cluster Q3','claude',2*D),
+    s('GSC-Snapshot Auswertung','codex',12*D),
+  ]},
+  {id:'p-woo',name:'headless-woo',branch:'main',color:'#1c1c1f',badge:'▲',sessions:[
+    s('Header-Klickbarkeit für Shop-Karten','claude',5*MIN,{selected:true}),
+    s('SEO-Stack-Audit: aktueller Stand','claude',40*MIN,{status:'idle'}),
+    s('Add-to-Cart-Performance entschärfen','claude',75*MIN,{status:'idle'}),
+    s('Shop-Seite Hero überarbeiten','claude',6*H),
+    s('Checkout-Flow Spike','codex',3*D),
+  ]},
+  {id:'p-wm8',name:'whisperm8',branch:'terminal-ux-fixes',color:'#0A84FF',sessions:[
+    s('Sidebar-Redesign Varianten','claude',2*MIN,{status:'working'}),
+    s('SwiftTerm-Fork Scroll-Lock','claude',10*H),
+    s('Dictation-Regression Fix','codex',5*D),
+  ]},
+  {id:'p-hb',name:'heartbeat-master',branch:'feature/sales',color:'#FF9F0A',sessions:[
+    s('Sales-Auswertung Q2','claude',30*H,{status:'awaiting'}),
+    s('Lead-Scoring Query','claude',18*D),
+  ]},
+];
+
+/* ================= Helpers ================= */
+const esc=t=>(''+t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function badgeHTML(o,cls){
+  const label = o.badge || (o.name||o.title)[0].toUpperCase();
+  return `<span class="repo-badge ${cls||''}" style="background:${o.color}">${esc(label)}</span>`;
+}
+function glyphHTML(sess){
+  if(sess.color) return `<span class="cdot" style="background:${sess.color}"></span>`;
+  const col=sess.provider==='claude'?'var(--orange)':'var(--text-2)';
+  return `<span class="glyph" style="color:${col}">${ICONS[sess.provider]}</span>`;
+}
+function dotHTML(st){ return st?`<span class="statusdot ${st}"></span>`:''; }
+function ago(m){
+  if(m<60) return 'jetzt';
+  if(m<D) return Math.round(m/H)+'h';
+  if(m<W) return Math.round(m/D)+'d';
+  if(m<W*4) return Math.round(m/W)+'w';
+  return Math.round(m/(W*4.345))+'mo';
+}
+const selected = { id:'x'+1 /* placeholder, set below */ };
+// finde die als selected markierte Session
+(function(){ for(const p of PROJECTS) for(const x of p.sessions) if(x.selected) selected.id=x.id; })();
+
+/* ================= Sidebar-Renderer ================= */
+function topBar({compact, scope}={}){
+  const seg = scope ? `<div class="seg"><button class="on">Aktiv</button><button>Zuletzt</button><button>Alle</button></div>` : '';
+  if(compact){
+    return `<div class="s-top">
+      <div style="display:flex;gap:6px">
+        <button class="btn-new">${ICONS.plus} Neuer Chat</button>
+        <button class="icon-btn" title="Aktualisieren">${ICONS.refresh}</button>
+      </div>
+      <div class="s-filter">${ICONS.search}<input placeholder="Filter…"></div>
+    </div>`;
+  }
+  return `<div class="s-top">
+    <div style="display:flex;gap:6px">
+      <button class="btn-new">${ICONS.plus} Neuer Chat</button>
+      <button class="icon-btn" title="Aktualisieren">${ICONS.refresh}</button>
+      <button class="icon-btn" title="Projekt hinzufügen">${ICONS.folderplus}</button>
+    </div>
+    <div class="s-filter">${ICONS.search}<input placeholder="Filter…"></div>
+    ${seg}
+  </div>`;
+}
+function pinnedSection(){
+  return `<div class="sec-label">${ICONS.pin} Gepinnt</div>` +
+    PINNED.map(p=>{
+      const sel=selected.id===p.id?' selected':'';
+      return `<div class="pin-row${sel}" data-sel="${p.id}">${badgeHTML(p)}<span class="title">${esc(p.title)}</span>${dotHTML(p.status)}</div>`;
+    }).join('');
+}
+function projHeader(p,open,cls){
+  return `<div class="proj${open?' open':''} ${cls||''}" data-proj="${p.id}">
+    ${ICONS.chev}${badgeHTML(p)}<span class="name">${esc(p.name)}</span>
+    <span class="branch">${esc(p.branch)}</span><span class="count">${p.sessions.length}</span></div>`;
+}
+function rowHTML(x,p,{arch,showAgo}={}){
+  const sel=selected.id===x.id?' selected':'';
+  const open=x.ago<2*D?' open':'';
+  const trail = x.status ? dotHTML(x.status) : (showAgo?`<span class="ago">${ago(x.ago)}</span>`:'');
+  return `<div class="row${sel}${open}${arch?' arch':''}" style="--row-accent:${p.color}" data-sel="${x.id}">
+    ${glyphHTML(x)}<span class="title">${esc(x.title)}</span>${trail}</div>`;
+}
+function footer(){
+  return `<div class="s-foot">
+    <button class="icon-btn" title="Einstellungen">${ICONS.gear}</button>
+    <span class="grow"></span>
+    <span class="res-line"><span class="d"></span>3 aktiv · 1.1 GB</span>
+  </div>`;
+}
+
+/* ---- V1 Refined ---- */
+function renderV1(state){
+  let h = topBar({scope:true});
+  h += `<div class="scope-caption"><span>6 von 79 Chats</span><a>Alle zeigen</a></div>`;
+  h += `<div class="s-scroll">`;
+  h += pinnedSection();
+  h += `<div class="sec-label">Chats</div>`;
+  for(const p of PROJECTS){
+    const open=!state.collapsed[p.id];
+    h += projHeader(p,open);
+    if(open) p.sessions.forEach(x=>h+=rowHTML(x,p,{showAgo:false}));
+  }
+  h += `</div>` + footer();
+  return h;
+}
+
+/* ---- V2 Smart-Sektionen ---- */
+function classify(p,threshold){
+  const sorted=[...p.sessions].sort((a,b)=>a.ago-b.ago);
+  const active=[],recent=[],arch=[];
+  for(const x of sorted){
+    if(x.status==='working'||x.status==='awaiting'){active.push(x);continue;}
+    if(x.ago>threshold){arch.push(x);continue;}
+    recent.push(x);
+  }
+  return {active,recent,arch};
+}
+function renderV2(state){
+  const threshold=14*D;
+  let h = topBar({});
+  h += `<div class="s-scroll">`;
+  h += pinnedSection();
+  h += `<div class="sec-label">Chats</div>`;
+  for(const p of PROJECTS){
+    const open=!state.collapsed[p.id];
+    h += projHeader(p,open);
+    if(!open) continue;
+    const {active,recent,arch}=classify(p,threshold);
+    if(active.length){
+      h+=`<div class="sub-label active"><span class="dot" style="background:var(--green)"></span><span class="txt">Aktiv</span></div>`;
+      active.forEach(x=>h+=rowHTML(x,p));
+    }
+    h+=`<div class="sub-label"><span class="txt">Zuletzt</span></div>`;
+    recent.forEach(x=>h+=rowHTML(x,p,{showAgo:true}));
+    if(arch.length){
+      const aOpen=!!state.archOpen[p.id];
+      h+=`<div class="sub-label clickable${aOpen?' expanded':''}" data-arch="${p.id}">${ICONS.achev}<span class="txt">Archiv</span><span class="spacer"></span><span style="color:var(--text-3)">${arch.length}</span></div>`;
+      if(aOpen) arch.forEach(x=>h+=rowHTML(x,p,{arch:true,showAgo:true}));
+    }
+  }
+  h += `</div>` + footer();
+  return h;
+}
+
+/* ---- V3 Kompakt ---- */
+function renderV3(state){
+  let h = topBar({compact:true});
+  h += `<div class="s-scroll">`;
+  h += pinnedSection();
+  for(const p of PROJECTS){
+    const open=!state.collapsed[p.id];
+    h += projHeader(p,open);
+    if(open) p.sessions.forEach(x=>h+=rowHTML(x,p,{showAgo:false}));
+  }
+  h += `</div>` + footer();
+  return h;
+}
+
+/* ---- V4 Rail + Liste ---- */
+function renderV4(state){
+  const activeProj = PROJECTS.find(p=>p.id===state.railProj) || PROJECTS[2];
+  const railBadges = PROJECTS.map(p=>{
+    const act=p.id===activeProj.id?' active':'';
+    const working=p.sessions.find(x=>x.status==='working'||x.status==='awaiting');
+    const st = working ? `<span class="rb-status" style="background:${working.status==='awaiting'?'var(--orange)':'var(--green)'}"></span>`:'';
+    return `<div class="rail-badge${act}" style="background:${p.color}" data-rail="${p.id}" title="${esc(p.name)}">${esc(p.badge||p.name[0].toUpperCase())}${st}</div>`;
+  }).join('');
+  const pinBadge = PINNED.map(p=>`<div class="rail-badge" style="background:${p.color}" title="${esc(p.title)}">${esc(p.badge)}</div>`).join('');
+  let list = `<div class="rail-list-head">${badgeHTML(activeProj)}<span class="name">${esc(activeProj.name)}</span><span class="branch">${esc(activeProj.branch)}</span></div>`;
+  list += `<div class="s-scroll">`;
+  activeProj.sessions.forEach(x=>list+=rowHTML(x,activeProj,{showAgo:true}));
+  list += `</div>`;
+  return `<div class="rail-wrap">
+    <div class="rail">
+      ${pinBadge}<div class="rail-sep"></div>${railBadges}
+      <div class="rail-sep"></div><button class="rail-add" title="Projekt hinzufügen">${ICONS.plus}</button>
+    </div>
+    <div class="rail-list">${list}${footer()}</div>
+  </div>`;
+}
+
+/* ---- V5 Luftig ---- */
+function renderV5(state){
+  let h = topBar({});
+  h += `<div class="s-scroll">`;
+  h += pinnedSection();
+  h += `<div class="sec-label">Chats</div>`;
+  for(const p of PROJECTS){
+    const open=!state.collapsed[p.id];
+    h += projHeader(p,open);
+    if(open) p.sessions.forEach(x=>h+=rowHTML(x,p,{showAgo:false}));
+  }
+  h += `</div>` + footer();
+  return h;
+}
+
+/* ================= Galerie-Aufbau ================= */
+const VARIANTS=[
+  {id:'v1',name:'Refined',pitch:'Status quo, entrümpelt: seltene Aktionen als Icons, klare Primäraktion, ruhiger Rhythmus.',def:264,render:renderV1,cls:''},
+  {id:'v2',name:'Smart-Sektionen',pitch:'Pro Projekt: Aktiv · Zuletzt · Archiv (N). Bändigt 79 Chats, ohne etwas zu verlieren.',def:286,render:renderV2,cls:''},
+  {id:'v3',name:'Kompakt',pitch:'Maximale Dichte. Doppelt so viele Chats sichtbar, minimaler Header — für Power-User.',def:248,render:renderV3,cls:'v3'},
+  {id:'v4',name:'Rail + Liste',pitch:'Projekte als Icon-Spalte, Liste zeigt nur das aktive Projekt. Skaliert auf beliebig viele Projekte.',def:320,render:renderV4,cls:''},
+  {id:'v5',name:'Luftig',pitch:'Großzügig & ruhig: größere Badges, mehr Weißraum — Fokus statt maximale Übersicht.',def:300,render:renderV5,cls:''},
+];
+const STATE={};
+VARIANTS.forEach((v,i)=>STATE[v.id]={collapsed:{},archOpen:{},railProj:'p-woo'});
+
+const stub = `
+  <div class="content-stub">
+    <div class="stub-tabs">
+      <div class="stub-tab active"><span class="d"></span>Header-Klickbarkeit</div>
+      <div class="stub-tab">SEO-Stack-Audit</div>
+    </div>
+    <div class="stub-term">
+      <div class="g">● Bash(git status --short)</div>
+      <div class="dim">⎿ M WhisperM8/Views/AgentChatsView.swift</div>
+      <div style="margin-top:8px">Verstanden — ich prüfe die <span class="hl">Header-Klickbarkeit</span> der Shop-Karten…</div>
+      <div class="dim" style="margin-top:8px">✱ Churned for 1m 12s</div>
+    </div>
+  </div>`;
+
+function buildGallery(){
+  const g=document.getElementById('gallery');
+  g.innerHTML = VARIANTS.map((v,i)=>`
+    <div class="variant" data-variant="${v.id}">
+      <div class="variant-head">
+        <span class="vh-num">${i+1}</span>
+        <div><div class="vh-name">${v.name}</div><div class="vh-pitch">${v.pitch}</div></div>
+      </div>
+      <div class="frame">
+        <div class="sidebar ${v.cls}" data-sb="${v.id}" data-def="${v.def}" style="width:${getW(v)}px">
+          <div class="sb-inner" style="display:flex;flex-direction:column;height:100%"></div>
+          <div class="width-badge" data-wb="${v.id}"></div>
+          <div class="resizer" data-rz="${v.id}"></div>
+        </div>
+        ${stub}
+      </div>
+    </div>`).join('');
+  VARIANTS.forEach(v=>paint(v.id));
+  wireResizers();
+}
+function getW(v){ const saved=localStorage.getItem('sbw-'+v.id); return saved?+saved:v.def; }
+function paint(vid){
+  const v=VARIANTS.find(x=>x.id===vid);
+  const host=document.querySelector(`[data-sb="${vid}"] .sb-inner`);
+  host.innerHTML=v.render(STATE[vid]);
+}
+
+/* ================= Resize ================= */
+function wireResizers(){
+  document.querySelectorAll('.resizer').forEach(rz=>{
+    const vid=rz.dataset.rz;
+    const sb=document.querySelector(`[data-sb="${vid}"]`);
+    const wb=document.querySelector(`[data-wb="${vid}"]`);
+    let startX,startW;
+    const onMove=e=>{
+      const dx=e.clientX-startX;
+      const w=Math.max(200,Math.min(480,Math.round(startW+dx)));
+      sb.style.width=w+'px';
+      wb.textContent=w+' px';
+    };
+    const onUp=()=>{
+      document.removeEventListener('pointermove',onMove);
+      document.removeEventListener('pointerup',onUp);
+      rz.classList.remove('dragging');
+      document.body.style.cursor='';
+      wb.classList.remove('show');
+      localStorage.setItem('sbw-'+vid, parseInt(sb.style.width));
+    };
+    rz.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      startX=e.clientX; startW=sb.offsetWidth;
+      rz.classList.add('dragging'); wb.classList.add('show'); wb.textContent=startW+' px';
+      document.body.style.cursor='col-resize';
+      document.addEventListener('pointermove',onMove);
+      document.addEventListener('pointerup',onUp);
+    });
+    rz.addEventListener('dblclick',()=>{
+      const v=VARIANTS.find(x=>x.id===vid);
+      sb.style.width=v.def+'px';
+      localStorage.removeItem('sbw-'+vid);
+      wb.textContent=v.def+' px'; wb.classList.add('show');
+      setTimeout(()=>wb.classList.remove('show'),700);
+    });
+  });
+}
+
+/* ================= Interaktion ================= */
+document.addEventListener('click',e=>{
+  const proj=e.target.closest('[data-proj]');
+  if(proj){ const vid=hostVariant(proj); STATE[vid].collapsed[proj.dataset.proj]=!STATE[vid].collapsed[proj.dataset.proj]; paint(vid); return; }
+  const arch=e.target.closest('[data-arch]');
+  if(arch){ const vid=hostVariant(arch); STATE[vid].archOpen[arch.dataset.arch]=!STATE[vid].archOpen[arch.dataset.arch]; paint(vid); return; }
+  const rail=e.target.closest('[data-rail]');
+  if(rail){ const vid=hostVariant(rail); STATE[vid].railProj=rail.dataset.rail; paint(vid); return; }
+  const sel=e.target.closest('[data-sel]');
+  if(sel){ selected.id=sel.dataset.sel; VARIANTS.forEach(v=>paint(v.id)); return; }
+});
+function hostVariant(el){ return el.closest('[data-variant]').dataset.variant; }
+
+document.getElementById('theme').addEventListener('click',()=>{
+  const r=document.documentElement;
+  r.dataset.theme = r.dataset.theme==='dark'?'light':'dark';
+  localStorage.setItem('theme',r.dataset.theme);
+});
+if(localStorage.getItem('theme')) document.documentElement.dataset.theme=localStorage.getItem('theme');
+
+buildGallery();
+</script>
+</body>
+</html>
