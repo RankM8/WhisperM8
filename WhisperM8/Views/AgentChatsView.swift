@@ -2449,12 +2449,12 @@ struct AgentChatsView: View {
             let title = isAgentView
                 ? "Agent View"
                 : "\(provider.displayName) Chat"
-            // Vorbereitete externe Session-ID nur fuer normale Claude-Chats —
-            // damit unsere Hook-Bridge die JSONL findet. Codex und Agent View
-            // generieren ihre IDs intern.
-            let externalSessionID: String? = (provider == .claude && !isAgentView)
-                ? UUID().uuidString.lowercased()
-                : nil
+            // Weg B (Superset-Prinzip): KEINE Vorab-Session-ID mehr. Claude
+            // vergibt die ID selbst — wie Codex/Agent View. Der SessionStart-Hook
+            // + Indexer-Merge binden die REALE, von Claude geschriebene ID nach.
+            // Ein erzwungenes `--session-id` war die Wurzel der „No conversation
+            // found"-Fehler (Claude persistierte nicht zuverlässig darunter).
+            let externalSessionID: String? = nil
             let session = try store.createSession(
                 provider: provider,
                 projectPath: selectedProject.path,

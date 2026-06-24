@@ -101,10 +101,70 @@ ls -la ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
 /usr/bin/log show --last 1h --predicate 'subsystem == "com.whisperm8.app" AND category == "agent.store"'
 ```
 
-## 8. Offene Folge-Verbesserungen (robuster machen)
-1. **Neue Chats Superset-Stil:** statt Vorab-`--session-id` Claude die ID vergeben lassen und an
-   die neueste real geschriebene `.jsonl` im cwd binden (entkoppelt von Hook-Timing).
-2. **`hasLaunchedInitialPrompt` erst setzen, wenn ein Transkript existiert** (nicht beim bloßen
-   PTY-Start) — beseitigt „resumebar"-False-Positives an der Wurzel.
-3. **`--continue`-Fallback** als Alternative zum ID-basierten Resume im richtigen cwd.
-4. Tote „Claude Chat ohne Transkript"-Einträge optional automatisch aufräumen/markieren.
+## 8. Superset-Tiefenanalyse (code-verifiziert, Clone @ 28245a0, 2026-06-24)
+
+Vollständige Code-Analyse des Superset-Monorepos (TypeScript/Electron). **Kernbefund: Superset
+verwendet `--resume`, `--session-id`, `--continue`, `--fork-session` NIRGENDS — 0 Treffer.**
+
+**Wie Superset Claude startet** (`packages/shared/src/builtin-terminal-agents.ts`):
+`command: "claude --dangerously-skip-permissions"` — ohne ID, als `initialCommand` in eine
+**Login-Shell** (PTY spawnt die Shell, nicht `claude` direkt). Prompt per Heredoc, voll
+interaktive TUI (kein `-p`/`stream-json`).
+
+**Persistenz = Prozess-Überleben, nicht Resume:** Die ganze Wiederaufnahme steckt im
+**detached PTY-Daemon** (`packages/pty-daemon/`, `DaemonSupervisor.ts`). Der Daemon wird
+detached + `unref()`'d gespawnt und überlebt App-/host-service-Neustarts. Beim Start wird der
+**lebende Prozess adoptiert** (`terminal.ts` adopt-or-respawn: `adoptOnly:true` → bei Erfolg
+lebende Shell + Ringpuffer behalten; sonst frische Shell respawnen — **nie** `claude --resume`).
+64-KB-Ringpuffer-Replay zeichnet den Screen neu.
+
+**Persistiert wird** (SQLite, `schema.ts`): nur `terminalId` (Supersets eigene UUID) +
+`workspaceId` + `status`. **Weder Agent-Typ noch Kommando noch Claudes Session-ID.** Durable
+Handle = `terminalId` + lebender OS-Prozess. Claudes echte ID wird nur **ephemer** aus dem
+Hook-Payload (`session_id`) gelesen (für Status/Notify), nie auf Platte geschrieben.
+
+**Hooks:** Merge in `~/.claude/settings.json` (nicht `--settings`), nur für
+Completion-Sounds/Status (SessionStart/Stop/PostToolUse/…). Identität über Env
+`SUPERSET_TERMINAL_ID`, nicht über Claudes ID.
+
+**cwd:** roher git-Worktree-Pfad, keine Symlink-Auflösung.
+
+### Konsequenz / die eigentliche Wurzel
+WhisperM8 stirbt der PTY-Prozess beim App-Quit (SwiftTerm im App-Prozess) → Wiederaufnahme NUR
+über `claude --resume <id>` möglich → hängt zwingend daran, dass Claude unter der **erzwungenen**
+ID ein Transkript schreibt → fragil. **Superset hat diese Fehlerklasse gar nicht**, weil es den
+Prozess am Leben hält und nie resumed.
+
+## 9. Zwei Wege nach vorn
+
+**Weg A — Prozess-Persistenz (Superset-Modell, große Änderung):** langlebiger Helper/Daemon, der
+die PTYs (claude/codex) detached über App-Neustarts hält; Wiederaufnahme = reattach an den
+lebenden Prozess + Ringpuffer-Replay. `claude --resume` wird überflüssig. Beseitigt die ganze
+Fehlerklasse, ist aber ein Architektur-Umbau (Daemon, Adoption, IPC) und ändert nichts an
+Force-Quit-Datenverlust *innerhalb* einer Session.
+
+**Weg B — Korrektes Resume (gezielt, kleiner):** Claude die ID **selbst vergeben** lassen (kein
+Vorab-`--session-id`), die **hook-bestätigte** reale `session_id` als maßgeblich binden, und einen
+Chat erst als „resumebar" markieren, **wenn `<id>.jsonl` real existiert** (nicht beim PTY-Start).
+`--resume` nur mit dieser verifizierten ID; sonst frischer Start (bereits via Garantie aus §6
+abgesichert). Bleibt im aktuellen SwiftTerm-Modell.
+
+**Empfehlung:** Weg B als nächster Schritt (behebt die Resume-Wurzel ohne Architektur-Umbau);
+Weg A als optionale spätere „Killer-Feature"-Investition (Sessions überleben App-Neustart wie bei
+Superset).
+
+### Konkrete B-Schritte
+1. ✅ **Vorab-`--session-id` entfernt** — `createSession` setzt `externalSessionID=nil`,
+   `claude` startet ohne ID (`AgentChatsView.createSession`).
+2. ✅ **`--session-id`-Zweig + Throw entfernt** (`AgentCommandBuilder.claudeCommand`): Resume nur
+   noch mit real gebundener ID, sonst frischer Start. Die reale ID bindet der SessionStart-Hook
+   (`handleClaudeHookEvent`) bzw. der Indexer-Merge nach.
+3. ✅ **§6-Garantie bleibt das Netz:** nie `--resume` ohne real existierendes `<id>.jsonl`.
+4. ⬜ `--continue`-Fallback im richtigen cwd erwägen (optional).
+5. ⬜ Tote „Claude Chat ohne Transkript"-Einträge automatisch aufräumen/markieren (optional).
+6. ⬜ Offen für später: `hasLaunchedInitialPrompt` erst setzen, wenn ein Transkript existiert
+   (würde „resumebar"-False-Positives an der Wurzel beseitigen; bewusst klein gehalten, da das
+   Flag an mehreren Stellen load-bearing ist).
+
+### Weg A (Prozess-Daemon) — bewusst auf später verschoben
+Vom User priorisiert: erst B (umgesetzt), A als separate spätere Investition.

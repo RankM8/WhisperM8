@@ -64,7 +64,11 @@ final class AgentCommandBuilderTests: XCTestCase {
         XCTAssertEqual(command.workingDirectory, project.path)
     }
 
-    func testAgentCommandBuilderBuildsClaudeNewSessionWithStableSessionID() throws {
+    func testAgentCommandBuilderBuildsClaudeNewSessionFreshWithoutSessionID() throws {
+        // Weg B (Superset-Prinzip): Neue Claude-Sessions starten OHNE
+        // `--session-id`. Claude vergibt die ID selbst; SessionStart-Hook +
+        // Indexer-Merge binden die reale ID nach. Eine vor dem ersten Launch
+        // gesetzte externalSessionID wird NICHT mehr erzwungen.
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.extraArgumentsResolver = { _ in [] }
@@ -78,7 +82,8 @@ final class AgentCommandBuilderTests: XCTestCase {
         let command = try builder.command(for: session, project: project)
 
         XCTAssertEqual(command.executablePath, "/usr/local/bin/claude")
-        XCTAssertEqual(command.arguments, ["--session-id", "4D8F1E1D-7B4B-4F0B-9B6E-1552E2E827AA"])
+        XCTAssertFalse(command.arguments.contains("--session-id"), "Weg B vergibt keine Vorab-ID")
+        XCTAssertFalse(command.arguments.contains("--resume"), "nicht-gelaunchte Session resumed nicht")
         XCTAssertEqual(command.workingDirectory, project.path)
     }
 

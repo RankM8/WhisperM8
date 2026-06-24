@@ -221,14 +221,18 @@ struct AgentCommandBuilder {
             // SessionStart-Hook `externalSessionID` gesetzt hat, läuft der
             // Resume über die neue Fork-ID (Pfad unten).
             arguments.append(contentsOf: ["--resume", forkSource, "--fork-session"])
-        } else if session.hasLaunchedInitialPrompt {
-            guard let externalSessionID = session.externalSessionID else {
-                throw AgentCommandError.missingExternalSessionID(session.title)
-            }
+        } else if session.hasLaunchedInitialPrompt,
+                  let externalSessionID = session.externalSessionID,
+                  !externalSessionID.isEmpty {
+            // Resume NUR mit einer real von Claude vergebenen, gebundenen ID.
             arguments.append(contentsOf: ["--resume", externalSessionID])
-        } else if let externalSessionID = session.externalSessionID {
-            arguments.append(contentsOf: ["--session-id", externalSessionID])
         }
+        // Sonst: frischer Start OHNE `--session-id`. Claude vergibt die Session-
+        // ID selbst; SessionStart-Hook + Indexer-Merge binden die REALE, von
+        // Claude geschriebene ID nach (Weg B / Superset-Prinzip). Ein erzwungenes
+        // `--session-id` war die Wurzel der „No conversation found"-Fehler —
+        // Claude persistierte nicht zuverlässig unter der vorgegebenen ID, und
+        // beim Resume zeigte die ID dann ins Leere.
 
         if !session.hasLaunchedInitialPrompt,
            let initialPrompt = session.initialPrompt,
