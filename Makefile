@@ -57,6 +57,8 @@ dev: kill
 	@echo "🔄 Building $(APP_NAME) (release)..."
 	@rm -rf "$(APP_BUNDLE)"
 	@swift build -c release
+	@scripts/patch-resource-accessors.sh release
+	@swift build -c release
 	@$(MAKE) _bundle BUILD=release
 	@$(MAKE) _install_bundle
 	@echo "✅ Updated $(INSTALLED_APP)"
@@ -70,6 +72,8 @@ dev-reinstall: dev
 # ------------------------------------------------------------------------------
 build:
 	@echo "Building release..."
+	@swift build -c release
+	@scripts/patch-resource-accessors.sh release
 	@swift build -c release
 	@$(MAKE) _bundle BUILD=release
 	@echo "Done: $(APP_BUNDLE)"
@@ -173,7 +177,9 @@ _bundle:
 	@cp "WhisperM8/Resources/ProviderCodex@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@# SwiftPM-generierte Resource-Bundles (z. B. KeyboardShortcuts_KeyboardShortcuts.bundle)
 	@# in Contents/Resources/ kopieren - wo macOS-Apps Ressourcen erwarten und
-	@# codesign sie als gesealte Inhalte akzeptiert. Read-only Files vom letzten
+	@# codesign sie als gesealte Inhalte akzeptiert. Damit `Bundle.module` sie hier
+	@# auch findet, wird der generierte Accessor von scripts/patch-resource-accessors.sh
+	@# auf resourceURL gepatcht (siehe dev/build). Read-only Files vom letzten
 	@# Build vorab loeschen, sonst schlaegt `cp` mit Permission denied fehl.
 	@for bundle in .build/$(BUILD)/*.bundle; do \
 		if [ -e "$$bundle" ]; then \
