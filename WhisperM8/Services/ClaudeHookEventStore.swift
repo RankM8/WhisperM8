@@ -15,9 +15,14 @@ struct ClaudeHookEvent: Equatable, Codable {
         /// Nach jedem Tool-Aufruf — Aktivitaets-Signal („arbeitet"); clear
         /// „needs input", sobald Claude nach bestaetigter Permission weitermacht.
         case postToolUse = "PostToolUse"
-        /// Permission-Prompts und andere Notifications. Fuer
-        /// Background-Sessions das wichtigste „needs input"-Signal,
-        /// denn dort gibt es keinen interaktiven Prompt im PTY.
+        /// Echte Erlaubnis-Anfrage (Permission-Dialog) — „braucht Handlung".
+        /// Claudes dedizierter Hook, feuert NUR beim echten Dialog (nicht beim
+        /// 60-s-Idle-Ping). Ersetzt `Notification` als awaiting-Quelle.
+        case permissionRequest = "PermissionRequest"
+        /// Generische Notification (permission_prompt / idle_prompt / auth /…).
+        /// Wird NICHT mehr registriert; defensiv behalten — falls aus einer
+        /// fremden settings.json doch eine kommt, loest sie KEIN „needs input"
+        /// aus (sonst markierte idle_prompt fertige Chats faelschlich).
         case notification = "Notification"
         /// Claude hat den Turn beendet — „idle" + optionaler Ton.
         case stop = "Stop"

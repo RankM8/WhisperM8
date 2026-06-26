@@ -10,7 +10,11 @@ enum ClaudeHookSettingsBuilder {
     /// - SessionStart/End       → Lifecycle (externe ID binden, Ende)
     /// - UserPromptSubmit       → Turn-Start ("arbeitet", clear "needs input")
     /// - PreToolUse/PostToolUse → Aktivitaet ("arbeitet", clear "needs input")
-    /// - Notification           → "Needs input" (Permission-/Idle-Prompt)
+    /// - PermissionRequest      → echte Erlaubnis-Anfrage = "braucht Handlung".
+    ///   BEWUSST NICHT `Notification`: das feuert auch fuer `idle_prompt`
+    ///   (60-s-Stille) und markierte sonst alle fertigen Chats faelschlich
+    ///   "wartend". `PermissionRequest` ist Claudes dedizierter Hook, der nur
+    ///   beim echten Permission-Dialog feuert (vgl. Superset).
     /// - Stop                   → Turn fertig ("idle" + optionaler Ton)
     /// Reihenfolge bestimmt nur die Serialisierung — Anthropic merged
     /// Hooks ohnehin pro Event-Name.
@@ -20,7 +24,7 @@ enum ClaudeHookSettingsBuilder {
         "UserPromptSubmit",
         "PreToolUse",
         "PostToolUse",
-        "Notification",
+        "PermissionRequest",
         "Stop"
     ]
 

@@ -2105,16 +2105,26 @@ struct AgentChatsView: View {
                 object: nil,
                 userInfo: ["localID": localID]
             )
-        case .notification:
-            // Wichtiges Signal: Claude druckt Permission-Prompts und andere
-            // Notifications hier hinein. Fuer Background-Sessions ist das
-            // der einzige verlaessliche "Needs input"-Trigger (kein
-            // interaktives PTY). Wir posten eine NotificationCenter-
-            // Notification, die die View in `awaitingInputSessionIDs`
-            // einfuegt — die Sidebar pulst den Status entsprechend.
-            Logger.claudeBinding.info("binding_notification localID=\(localID.uuidString, privacy: .public)")
+        case .permissionRequest:
+            // Echte Erlaubnis-Anfrage (Permission-Dialog) → "braucht Handlung".
+            // Claudes dedizierter Hook, feuert NUR beim echten Dialog — die
+            // saubere awaiting-Quelle statt des frueheren Notification-Hooks
+            // (der auch idle_prompts schickte und fertige Chats faelschlich
+            // markierte). Clear erfolgt ueber PostToolUse/Stop.
+            Logger.claudeBinding.info("binding_permission_request localID=\(localID.uuidString, privacy: .public)")
             NotificationCenter.default.post(
                 name: AgentChatsView.backgroundNeedsInputNotification,
+                object: nil,
+                userInfo: ["localID": localID]
+            )
+        case .notification:
+            // Defensiv: Notification wird nicht mehr registriert. Falls doch
+            // eine kommt (fremde settings.json), NICHT als awaiting werten —
+            // ein idle_prompt wuerde sonst fertige Chats orange markieren.
+            // Stattdessen einen evtl. veralteten awaiting-Pulse clearen.
+            Logger.claudeBinding.debug("binding_notification_ignored localID=\(localID.uuidString, privacy: .public)")
+            NotificationCenter.default.post(
+                name: AgentChatsView.backgroundNeedsInputClearedNotification,
                 object: nil,
                 userInfo: ["localID": localID]
             )

@@ -529,8 +529,6 @@ struct SessionListButton: View {
     private var rowBackground: Color {
         if isSelected { return AgentTheme.accentTint }
         if isHovered { return AgentTheme.hover }
-        // Wartende Zeile dezent ambern hervorheben („wartet auf dich").
-        if resolvedStatus == .awaitingInput { return AgentTheme.statusAwaiting.opacity(0.09) }
         return Color.clear
     }
 
@@ -667,7 +665,6 @@ struct PinnedSessionRow: View {
     private var rowBackground: Color {
         if isSelected { return AgentTheme.accentTint }
         if isHovered { return AgentTheme.hover }
-        if resolvedStatus == .awaitingInput { return AgentTheme.statusAwaiting.opacity(0.09) }
         return Color.clear
     }
 }
