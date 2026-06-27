@@ -1,3 +1,12 @@
+---
+description: End-User-Anleitung für WhisperM8 (Installation, Diktat, Agent Chats, Settings)
+description_long: |
+  Ausführlicher Nutzer-Leitfaden: Installation/Permissions, Diktat-Workflow
+  (Hotkey, Output-Modes, Auto-Paste), Agent Chats und Settings. Zielgruppe sind
+  Endnutzer; technische Architektur steht in ARCHITECTURE.md.
+updated: 2026-06-27
+---
+
 # WhisperM8 - User Guide
 
 ## Quick Start

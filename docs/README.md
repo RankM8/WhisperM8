@@ -1,3 +1,12 @@
+---
+description: Projekt-README — Überblick, Quick Start, Features und Build von WhisperM8
+description_long: |
+  Einstiegspunkt der WhisperM8-Dokumentation: Kurzbeschreibung der nativen
+  macOS-Diktier-App (OpenAI Whisper / Groq), Quick Start, Feature-Liste und
+  Install-/Build-Hinweise. Verweist auf USER_GUIDE.md und die Detail-Docs.
+updated: 2026-06-27
+---
+
 # WhisperM8
 
 Native macOS dictation app with OpenAI Whisper / Groq transcription.

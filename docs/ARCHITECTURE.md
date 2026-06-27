@@ -1,3 +1,12 @@
+---
+description: Architektur- & Entwickler-Übersicht von WhisperM8 (High-Level-Diagramme)
+description_long: |
+  Entwickler-orientierte Architektur-Übersicht: App-Shell (MenuBarExtra, Scenes),
+  AppState, Diktat-Pipeline und Agent-Chats auf High-Level-Ebene mit ASCII-Diagrammen.
+  Datei-genaue Details + Refactoring-Stand: CLAUDE.md bzw. docs/refactor/REFACTORING-AUDIT.md.
+updated: 2026-06-27
+---
+
 # WhisperM8 - Architektur & Entwickler-Dokumentation
 
 ## Übersicht

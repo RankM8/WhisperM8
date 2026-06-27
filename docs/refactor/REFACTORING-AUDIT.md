@@ -48,7 +48,7 @@ updated: 2026-06-27
 
 _Hinweis: Die Wartbarkeits-Noten oben sind der **Ausgangsbefund** des Audits. Nach Phase 1 (nächster Abschnitt) sind mehrere God-Files gesplittet/verschlankt — die dortigen strukturellen Findings sind adressiert, die tieferen (ViewModel-Extraktion, Test-Seams) bleiben offen._
 
-## Status (Stand 2026-06-27): Phase 1 abgeschlossen ✅
+## Status (Stand 2026-06-27): Phase 1 + Phase-2-Splits + Phase-3-Start (in `main`) ✅
 
 **Phase 1 (Quick Wins) ist umgesetzt** — Branch `feat/agent-chats-multiwindow`, **15 Commits**
 (ein Commit pro Item), durchgängig **447 Tests grün** nach jedem Schritt, Netto **−85 LOC**,
@@ -121,6 +121,19 @@ Ebenso gesplittet: **`RecordingCoordinator`** (God-Service, Note 2/5) — **1385
 Die Methode trägt auch für **Klassen** und **file-private Typen** (`PostProcessingRunResult`/`PendingTranscriptionRetry` → `internal`).
 
 **Methode bewährt:** Extension rausziehen → `swift build` listet die zu hebenden `private`-Member/-Typen → gezielt heben (macOS-`sed`: Trennklasse `[ :=]` statt `\b`). **Noch offen in Phase 2:** `Views/`-Ordnergliederung, `AgentTerminalView`-/`RecordingOverlayView`-Splits, Rest-Quick-Wins (AgentUIStateStore, AgentGitBranchReader, OnboardingView-Permission-Dedup); danach Phase 3 (Test-Seams).
+
+## Phase 3 — Fortschritt (Start)
+
+Begonnen 2026-06-27: erste Test-Seams — fragile, bisher ungetestete **reine Logik** extrahiert und mit Unit-Tests abgedeckt (Verhalten 1:1):
+
+| Seam | Quelle | Tests |
+|---|---|---|
+| `AudioLevelMeter` | `AudioRecorder.calculateLevel` (RMS-Pegel, ohne AVAudioEngine testbar) | 7 |
+| `CodexErrorSummary` | `CodexPostProcessor.conciseCodexError` (Meldungs-Priorisierung) | 5 |
+
+**447 → 459 Tests.** Noch offen (die großen Seams, in Risiko-Reihenfolge): ProcessRunner-Injektion für `CodexPostProcessor`/`CodexStatusProbe`, `TranscriptionService`-URLSession-Stub, `AudioRecorder`-Format/Restart-Entscheidung als pure Funktion, `AgentSessionRuntimeWatcher`-Glue (stat/tail/url-Resolver), `RecordingCoordinator`-DI (`transcribeAndDeliver`/Cancel/Retry/Fallback), `AgentChatsViewModel`-Extraktion.
+
+> **Integration:** Phase 1 + Phase-2-Splits (AgentChatsView + RecordingCoordinator) + Phase-3-Start sind in **`main`** (2026-06-27; PR [#9](https://github.com/RankM8/WhisperM8/pull/9) gemergt, #10/#11 per Fast-Forward integriert). 459 Tests grün, `make dev` + Fenster-Check ohne Regression.
 
 ## Empfohlene Roadmap
 
