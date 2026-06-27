@@ -103,7 +103,7 @@ class AudioRecorder {
         Logger.debug("[AudioRecorder] Input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
 
         // Create converter if needed
-        if inputFormat.sampleRate != 16000 || inputFormat.channelCount != 1 {
+        if AudioFormatDecision.needsConversion(from: inputFormat, to: targetFormat) {
             Logger.debug("[AudioRecorder] Creating audio converter (input differs from target)")
             resourceLock.withLock {
                 converter = AVAudioConverter(from: inputFormat, to: targetFormat)
@@ -288,7 +288,7 @@ class AudioRecorder {
         }
 
         // 4. Create converter for new format if needed
-        if inputFormat.sampleRate != 16000 || inputFormat.channelCount != 1 {
+        if AudioFormatDecision.needsConversion(from: inputFormat, to: targetFormat) {
             Logger.debug("[AudioRecorder] Creating converter: \(inputFormat.sampleRate)Hz → 16kHz")
             let newConverter = AVAudioConverter(from: inputFormat, to: targetFormat)
             resourceLock.withLock {
