@@ -52,7 +52,7 @@ struct AgentChatsView: View {
         get { windowStore.selectedProject(in: windowID) }
         nonmutating set { windowStore.setSelectedProject(newValue, in: windowID) }
     }
-    private var selectedSessionID: UUID? {
+    var selectedSessionID: UUID? {
         get { windowStore.selectedSession(in: windowID) }
         nonmutating set { windowStore.setSelectedSession(newValue, in: windowID) }
     }
@@ -117,20 +117,20 @@ struct AgentChatsView: View {
     /// Das NSWindow des Agent-Chats-Fensters — vom `AgentChatsWindowAccessor`
     /// aufgelöst. Dient als Scope-Anker für den Cmd-W-Monitor (nur Events
     /// dieses Fensters schließen Tabs; Settings/Onboarding bleiben unberührt).
-    @State private var hostWindow: NSWindow?
+    @State var hostWindow: NSWindow?
     /// Lokaler `keyDown`-Monitor für „Tab schließen" (Cmd-W). Wird in
     /// `onAppear` installiert, in `onDisappear` abgebaut. `Any?` weil
     /// `addLocalMonitorForEvents` ein opaques Token zurückgibt.
-    @State private var closeTabKeyMonitor: Any?
+    @State var closeTabKeyMonitor: Any?
     /// Lokaler `leftMouseDown`-Monitor für „Doppelklick auf die oberste Leiste
     /// = Fenster zoomen". Ersetzt das native Titelleisten-Verhalten, das durch
     /// hiddenTitleBar/fullSizeContentView verloren geht.
-    @State private var titleBarZoomMonitor: Any?
+    @State var titleBarZoomMonitor: Any?
     /// Lokaler `scrollWheel`-Monitor: übersetzt vertikales Mausrad über dem
     /// Tab-Strip in horizontales (tab-weises) Scrollen. SwiftUI scrollt einen
     /// `ScrollView(.horizontal)` nicht per Mausrad — Trackpad-Gesten bleiben
     /// unangetastet (siehe `handleTabStripScroll`).
-    @State private var tabStripScrollMonitor: Any?
+    @State var tabStripScrollMonitor: Any?
     /// Frame des Tab-Strips im benannten Window-Coordinate-Space
     /// (`windowCoordinateSpaceName`). Dient dem Scroll-Monitor als X-Spanne
     /// fürs Hit-Test-Gating. Bewusst window-relativ statt `.global`, damit der
@@ -140,15 +140,15 @@ struct AgentChatsView: View {
     /// „Anker"-Session, an die das Mausrad den Strip scrollt (führender Tab).
     /// Als UUID (nicht Index) gespeichert, damit die Identität über Reorder und
     /// Tab-Close stabil bleibt — kein veralteter Index, kein Out-of-Range.
-    @State private var stripWheelAnchorID: UUID?
+    @State var stripWheelAnchorID: UUID?
     /// Bump-Trigger: erhöht sich pro Mausrad-Rasterung, der ScrollViewReader
     /// scrollt daraufhin zu `stripWheelAnchorID`.
-    @State private var stripWheelTick: Int = 0
+    @State var stripWheelTick: Int = 0
     /// `true` während die Maus über dem Tab-Strip schwebt. Gating für den
     /// Mausrad-Monitor — robust statt fragiler Koordinaten-Umrechnung
     /// (AppKit `locationInWindow` ↔ SwiftUI-Frame brach im Fenstermodus durch
     /// den Titelleisten-Versatz). `.onHover` ist in beiden Modi identisch.
-    @State private var isHoveringTabStrip = false
+    @State var isHoveringTabStrip = false
     /// Sichtbare Breite des Tab-Strip-ScrollViews + Gesamtbreite seines Inhalts.
     /// Differenz > 0 ⇒ Überlauf ⇒ Chevron-Overflow-Menü einblenden.
     @State private var stripViewportWidth: CGFloat = 0
@@ -219,12 +219,12 @@ struct AgentChatsView: View {
 
     /// Globale Tab-Bar: alle offenen Tabs über alle Projekte, in der
     /// Reihenfolge von `openTabIDs`.
-    private var headerTabs: [AgentChatSession] {
+    var headerTabs: [AgentChatSession] {
         let byID = Dictionary(workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         return openTabIDs.compactMap { byID[$0] }.filter { $0.status != .archived }
     }
 
-    private var selectedSession: AgentChatSession? {
+    var selectedSession: AgentChatSession? {
         guard let selectedSessionID else { return headerTabs.first }
         return workspace.sessions.first { $0.id == selectedSessionID && $0.status != .archived }
             ?? headerTabs.first
@@ -3090,22 +3090,11 @@ struct AgentChatsView: View {
         openTabIDs.append(id)
     }
 
-    /// Wechselt zum benachbarten Tab (vor/zurück) mit Wrap-around. Quelle ist
-    /// `headerTabs` (sichtbare, nicht-archivierte Tabs in Anzeige-Reihenfolge) —
-    /// konsistent mit den ⌘1–⌘9-Sprüngen. Das Setzen von `selectedSessionID`
-    /// triggert die bestehende UIState-Persistenz via `onChange`.
-    private func selectAdjacentTab(_ direction: Int) {
-        let order = headerTabs.map(\.id)
-        if let next = adjacentTabID(in: order, current: selectedSessionID, direction: direction) {
-            selectedSessionID = next
-        }
-    }
-
     /// Schließt nur den TAB — die Session bleibt in der Sidebar erhalten
     /// und ein laufendes PTY läuft weiter (Status bleibt über den
     /// Sidebar-Dot sichtbar; erneutes Öffnen attached an denselben
     /// Terminal-Controller inkl. Scrollback).
-    private func closeTab(_ session: AgentChatSession) {
+    func closeTab(_ session: AgentChatSession) {
         guard let index = openTabIDs.firstIndex(of: session.id) else {
             if selectedSessionID == session.id { selectedSessionID = openTabIDs.first }
             return
@@ -3135,179 +3124,6 @@ struct AgentChatsView: View {
 
         pinnedSessionIDs.removeAll { $0 == session.id }
         closeTab(session)
-    }
-
-    // MARK: - Cmd-W (Tab schließen)
-
-    /// Installiert den lokalen `keyDown`-Monitor für Cmd-W. Idempotent —
-    /// bei wiederholtem `onAppear` passiert nichts. Wir nutzen bewusst einen
-    /// NSEvent-Monitor statt eines SwiftUI-Menü-Commands: Der Monitor fängt
-    /// das Event ab, BEVOR es das Terminal (SwiftTerm-`keyDown`) oder das
-    /// AppKit-Menü („Fenster schließen") erreicht — Cmd-W schließt damit
-    /// auch dann den Tab, wenn der Fokus im Terminal liegt. Belegt durch den
-    /// bestehenden `TerminalKeyboardShortcutHandler`, der so Cmd-Z/Cmd-⌫
-    /// abfängt.
-    private func installCloseTabShortcutIfNeeded() {
-        guard closeTabKeyMonitor == nil else { return }
-        closeTabKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Erst Tab-Wechsel (⌘⌥←/→) prüfen — bei Treffer ist `event` konsumiert
-            // (nil). Sonst durchreichen an die Cmd-W-Prüfung.
-            guard let event = handleTabNavShortcut(event) else { return nil }
-            return handleCloseTabShortcut(event)
-        }
-    }
-
-    private func removeCloseTabShortcut() {
-        if let closeTabKeyMonitor {
-            NSEvent.removeMonitor(closeTabKeyMonitor)
-            self.closeTabKeyMonitor = nil
-        }
-    }
-
-    /// Verarbeitet Cmd-W. Gibt `nil` zurück, wenn das Event konsumiert wurde
-    /// (Tab geschlossen), sonst das Original-Event für die normale Pipeline.
-    /// Bewusst nur für das Agent-Chats-Fenster (`event.window === hostWindow`):
-    /// In Settings/Onboarding und über Sheets bleibt Cmd-W das System-„Schließen".
-    /// Ohne offenen Tab fällt Cmd-W ebenfalls durch → das Fenster schließt
-    /// sich wie gewohnt (Browser-Verhalten: letzter Tab zu → Fenster zu).
-    private func handleCloseTabShortcut(_ event: NSEvent) -> NSEvent? {
-        guard let hostWindow, event.window === hostWindow else { return event }
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard modifiers == .command,
-              event.charactersIgnoringModifiers == "w" else { return event }
-        guard let session = selectedSession else { return event }
-        closeTab(session)
-        return nil
-    }
-
-    /// Verarbeitet ⌘⌥← / ⌘⌥→ (vorheriger/nächster Tab, mit Wrap-around). Gibt
-    /// `nil` zurück, wenn das Event konsumiert wurde, sonst das Original-Event.
-    /// Gleiche Window-Gating-Semantik wie Cmd-W: nur Events des Agent-Chats-
-    /// Fensters. Der Terminal-Handler reicht ⌘⌥-Pfeile durch (siehe
-    /// `TerminalShortcut.bytes`), deshalb fängt dieser Monitor sie zuverlässig
-    /// ab — auch wenn der Fokus im Terminal liegt.
-    private func handleTabNavShortcut(_ event: NSEvent) -> NSEvent? {
-        guard let hostWindow, event.window === hostWindow else { return event }
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard modifiers == [.command, .option] else { return event }
-        switch event.keyCode {
-        case TerminalShortcut.KeyCode.leftArrow:
-            selectAdjacentTab(-1)
-            return nil
-        case TerminalShortcut.KeyCode.rightArrow:
-            selectAdjacentTab(+1)
-            return nil
-        default:
-            return event
-        }
-    }
-
-    // MARK: - Titelleisten-Maus: Doppelklick-Zoom
-
-    private func installTitleBarZoomHandlerIfNeeded() {
-        guard titleBarZoomMonitor == nil else { return }
-        titleBarZoomMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            handleTitleBarMouse(event)
-        }
-    }
-
-    private func removeTitleBarZoomHandler() {
-        if let titleBarZoomMonitor {
-            NSEvent.removeMonitor(titleBarZoomMonitor)
-            self.titleBarZoomMonitor = nil
-        }
-    }
-
-    /// Doppelklick im freien Titelleisten-Band → System-Zoom. Lokaler Monitor,
-    /// weil `hiddenTitleBar` + `fullSizeContentView` die native Titelleiste durch
-    /// den Tab-Strip ersetzen und macOS den Doppelklick dort nicht mehr selbst
-    /// auswertet.
-    ///
-    /// Das Fenster-Dragging läuft NICHT hier, sondern über ein hover-gesteuertes
-    /// `isMovable`-Toggle (siehe `.onChange(of: isHoveringTabStrip)` am Body):
-    /// über dem Tab-Strip AUS (Tab-Drag/Reorder), auf freien Flächen AN (natives
-    /// Fenster-Verschieben). Schon beim Hover gesetzt — nicht erst beim mouseDown,
-    /// was vorher zu „Tab-Drag zieht doch das Fenster" führte.
-    private func handleTitleBarMouse(_ event: NSEvent) -> NSEvent? {
-        guard event.clickCount == 2,
-              let window = hostWindow,
-              event.window === window,
-              let contentView = window.contentView else { return event }
-
-        let topZone: CGFloat = 28
-        let trafficLightWidth: CGFloat = 80
-        let location = event.locationInWindow
-        let inTopBand = location.y >= contentView.bounds.height - topZone
-
-        // Nur im freien Band: nicht über den Tabs, nicht über den Ampel-Buttons.
-        if inTopBand, location.x >= trafficLightWidth, !isHoveringTabStrip {
-            TitleBarZoom.performSystemDoubleClickAction(on: window)
-            return nil
-        }
-        return event
-    }
-
-    // MARK: - Mausrad-Scroll für den Tab-Strip
-
-    /// Installiert den lokalen `scrollWheel`-Monitor. Idempotent. Wir nutzen —
-    /// wie beim Cmd-W- und Zoom-Monitor — bewusst einen NSEvent-Monitor, weil
-    /// SwiftUI einen `ScrollView(.horizontal)` nicht per vertikalem Mausrad
-    /// scrollt.
-    private func installTabStripScrollMonitorIfNeeded() {
-        guard tabStripScrollMonitor == nil else { return }
-        tabStripScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            handleTabStripScroll(event)
-        }
-    }
-
-    private func removeTabStripScrollMonitor() {
-        if let tabStripScrollMonitor {
-            NSEvent.removeMonitor(tabStripScrollMonitor)
-            self.tabStripScrollMonitor = nil
-        }
-    }
-
-    /// Übersetzt vertikales Mausrad über dem Tab-Strip in tab-weises
-    /// horizontales Scrollen. Gibt `nil` zurück, wenn das Event konsumiert wurde.
-    ///
-    /// Gating (sonst Event durchreichen):
-    /// - nur dieses Fenster, nur das oberste 28px-Band, nur innerhalb der
-    ///   gemessenen X-Spanne des Strips → Sidebar/Terminal werden nie gekapert;
-    /// - nur „echtes" Mausrad (`hasPreciseScrollingDeltas == false`); Trackpad
-    ///   reichen wir durch, damit dessen native horizontale Geste glatt bleibt.
-    ///
-    /// Eine Rasterung = ein Tab. `delta > 0` (Rad hoch, gleiche Konvention wie
-    /// `TerminalScrollGuard`) → ein Tab nach links, sonst nach rechts. Das
-    /// System-„natürliches Scrollen" steckt bereits im Vorzeichen von `delta`.
-    private func handleTabStripScroll(_ event: NSEvent) -> NSEvent? {
-        let tabs = headerTabs
-        // Gating per Hover-Flag statt Koordinaten-Hit-Test: nur Events
-        // konsumieren, während die Maus über dem Strip schwebt. Echtes Mausrad
-        // (`hasPreciseScrollingDeltas == false`) übersetzen wir in Tab-Schritte;
-        // Trackpad reichen wir durch, damit dessen native horizontale Geste
-        // glatt bleibt. Sidebar/Terminal werden nie gekapert.
-        guard isHoveringTabStrip,
-              let window = hostWindow,
-              event.window === window,
-              !tabs.isEmpty,
-              !event.hasPreciseScrollingDeltas else { return event }
-
-        let delta = event.deltaY != 0 ? event.deltaY : event.deltaX
-        guard delta != 0 else { return nil }
-
-        // Anker als UUID auflösen (stabil über Reorder/Close); Fallback auf die
-        // Selektion, sonst den ersten Tab. Index immer frisch gegen `tabs`
-        // berechnen → kein Out-of-Range.
-        let baseID = stripWheelAnchorID ?? selectedSessionID
-        let currentIndex = baseID.flatMap { id in tabs.firstIndex(where: { $0.id == id }) } ?? 0
-        let step = delta > 0 ? -1 : 1
-        let newIndex = min(max(currentIndex + step, 0), tabs.count - 1)
-        let newID = tabs[newIndex].id
-        if newID != stripWheelAnchorID {
-            stripWheelAnchorID = newID
-            stripWheelTick &+= 1
-        }
-        return nil
     }
 
     /// Reordert die globale Tab-Bar: `dropped` landet vor `targetID`.
