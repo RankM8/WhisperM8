@@ -675,17 +675,14 @@ struct AgentSessionStore {
         }
     }
 
+    // Forwarder auf AgentProjectPath (Logik dort) — haelt bestehende
+    // Aufrufstellen `AgentSessionStore.canonicalProjectPath(...)` stabil.
     static func canonicalProjectPath(_ path: String) -> String {
-        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
-        let marker = "/.claude/worktrees/"
-        guard let range = standardizedPath.range(of: marker) else {
-            return standardizedPath
-        }
-        return String(standardizedPath[..<range.lowerBound])
+        AgentProjectPath.canonicalProjectPath(path)
     }
 
     static func isClaudeWorktreePath(_ path: String) -> Bool {
-        URL(fileURLWithPath: path).standardizedFileURL.path.contains("/.claude/worktrees/")
+        AgentProjectPath.isClaudeWorktreePath(path)
     }
 
     private static func removeClaudeWorktreeProjectsAndSessions(from workspace: inout AgentWorkspace) {
