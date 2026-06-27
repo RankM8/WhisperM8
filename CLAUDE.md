@@ -46,7 +46,7 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 ### Performance-Signposts
 
 Drei Hot-Paths sind mit `os_signpost`-Intervallen + Budgets instrumentiert
-(`Services/PerformanceSignposts.swift`): Kategorien `perf.recording`
+(`Services/Shared/PerformanceSignposts.swift`): Kategorien `perf.recording`
 (Hotkey→Aufnahme 400 ms, Stop→Transkription 300 ms, Kontext-Teilschritte),
 `perf.store` (Mutation 30 ms, Load 15 ms, Save 20 ms) und `perf.sidebar`
 (Workspace-Load 50 ms, Status-Poll 100 ms, plus `sidebar.statusChanged`-Events
@@ -56,6 +56,19 @@ Drei Hot-Paths sind mit `os_signpost`-Intervallen + Budgets instrumentiert
 Anpassungen `PerfBudgets` ändern.
 
 ## Architecture
+
+### Code organization
+
+`Services/` is split into three subfolders (Phase-1 refactor, 2026-06-27):
+`Services/Dictation/` (audio, transcription, post-processing, recording, visual context),
+`Services/AgentChats/` (session store/indexer, runtime watcher, background agents, hooks,
+transcript readers, `AgentProjectPath`), and `Services/Shared/` (Logger,
+LoginShellEnvironment, PerformanceSignposts, PermissionService, KeychainManager,
+FileEventSource, WindowRequestCenter, CLISymlinkInstaller). SwiftPM discovers sources
+recursively, so moving files between these folders is build-neutral. The same pass split
+several god-files into per-type files (SettingsView → `Views/Settings/`, PostProcessingService,
+TranscriptionService, AgentSessionIndexer) and pulled AgentChatsView's NSEvent monitors into
+`Views/AgentChatsView+Shortcuts.swift`. Full roadmap + status: `docs/refactor/REFACTORING-AUDIT.md`.
 
 ### App shell
 
@@ -73,9 +86,9 @@ Hotkey (KeyboardShortcuts) → AppState/RecordingCoordinator → AudioRecorder (
 
 - `Models/AppState.swift` — central `@Observable` state; recording lifecycle, clipboard, active-agent-chat ref
 - `Windows/RecordingPanel.swift` — non-activating NSPanel overlay
-- `Services/PromptPackageBuilder.swift` — assembles transcript + context into the final prompt
-- `Models/OutputMode.swift` / `Services/OutputModeStore.swift` — user-defined output targets; modes can override Codex model/runtime settings
-- `Services/KeychainManager.swift` — API keys
+- `Services/Dictation/PromptPackageBuilder.swift` — assembles transcript + context into the final prompt
+- `Models/OutputMode.swift` / `Services/Dictation/OutputModeStore.swift` — user-defined output targets; modes can override Codex model/runtime settings
+- `Services/Shared/KeychainManager.swift` — API keys
 
 ### Agent Chats subsystem
 
@@ -95,7 +108,7 @@ Key persisted paths: `~/Library/Application Support/WhisperM8/AgentSessions.json
 
 GUI apps get a minimal launchd `PATH`. All subprocess spawning must go through:
 
-- `Services/LoginShellEnvironment.swift` — queries `zsh -l -c 'echo $PATH'` once, merges with a fallback list (includes `~/.local/bin`, where the native Claude Code installer lives), and supplies TERM/COLORTERM so TUIs render in color.
+- `Services/Shared/LoginShellEnvironment.swift` — queries `zsh -l -c 'echo $PATH'` once, merges with a fallback list (includes `~/.local/bin`, where the native Claude Code installer lives), and supplies TERM/COLORTERM so TUIs render in color.
 - `AgentCommandBuilder.commandPath(_:)` — central binary resolution (`which` with corrected env + fallback dirs).
 
 Never spawn `claude`/`codex`/shell tools with the raw `ProcessInfo` environment — they won't find user-installed binaries.

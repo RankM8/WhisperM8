@@ -5,7 +5,7 @@ description_long: |
   eigener Tab-Leiste, Tab-Detach in neue Fenster, Cross-Window-Moves und der
   AgentWindowStore als Single Source of Truth. Beschreibt Komponenten,
   Datenfluss, Invarianten und Persistenz. Architektur-Tiefe in ARCHITECTURE.md.
-updated: 2026-06-27 14:10
+updated: 2026-06-27 17:00
 ---
 
 # Agent Chats – Multi-Window
@@ -19,12 +19,13 @@ Tab-Zustand lebt in einem einzigen, beobachtbaren Store.
 
 | Komponente | Datei | Rolle |
 |------------|-------|-------|
-| `AgentWindowStore` | `WhisperM8/Services/AgentWindowStore.swift` | Single Source of Truth für Fenster-/Tab-State über alle Fenster (`@MainActor @Observable`, `.shared`) |
+| `AgentWindowStore` | `WhisperM8/Services/AgentChats/AgentWindowStore.swift` | Single Source of Truth für Fenster-/Tab-State über alle Fenster (`@MainActor @Observable`, `.shared`) |
 | `AgentUIState` | `WhisperM8/Models/AgentUIState.swift` | Persistiertes Modell (Schema v3), Invarianten + Migration |
 | `AgentChatWindowState` | `WhisperM8/Models/AgentUIState.swift` | Ein Fenster: `openTabIDs`, Selektion, `isPrimary` |
 | `AgentChatsView` | `WhisperM8/Views/AgentChatsView.swift` | View pro Fenster; liest/schreibt über Store-Bridges |
+| `AgentChatsView+Shortcuts` | `WhisperM8/Views/AgentChatsView+Shortcuts.swift` | NSEvent-Monitore als `extension` (Cmd-W, ⌘⌥-Tab-Nav, Titlebar-Zoom, Tab-Strip-Scroll) — Phase-1-Refactor |
 | Scenes | `WhisperM8/WhisperM8App.swift` | Primär-`Window` + Sekundär-`WindowGroup` |
-| Restore | `WhisperM8/Services/WindowRequestCenter.swift` | Öffnet Sekundärfenster beim Launch |
+| Restore | `WhisperM8/Services/Shared/WindowRequestCenter.swift` | Öffnet Sekundärfenster beim Launch |
 | Drag/Drop | `WhisperM8/Views/AgentDragDropTypes.swift` | `DraggableSession` mit `sourceWindowID` |
 | Fenster-Chrome | `WhisperM8/Views/AgentChatsWindowAccessor.swift`, `AgentChatChromeViews.swift` | `isRestorable=false`, `WindowDragExclusionView` |
 
@@ -86,7 +87,8 @@ Erzwungen bei jeder Mutation (`AgentUIState.normalizedWindows`):
   natives `WindowDragGesture` — das ist macOS 15+, Projekt-Target ist macOS 14).
 - Die Tab-Strip-**Event-Monitore** (Mausrad-Scroll, Cmd-W-Schliessen,
   Doppelklick-Zoom) sind weitgehend **vorbestehend** und nicht Teil des
-  Multi-Window-Umbaus; Details in `AgentChatsView.swift`.
+  Multi-Window-Umbaus; seit dem Phase-1-Refactor liegen sie als `extension`
+  in `AgentChatsView+Shortcuts.swift` (aus `AgentChatsView.swift` ausgelagert).
 
 ## Verwandte Dokumentation
 
