@@ -68,7 +68,11 @@ FileEventSource, WindowRequestCenter, CLISymlinkInstaller). SwiftPM discovers so
 recursively, so moving files between these folders is build-neutral. The same pass split
 several god-files into per-type files (SettingsView → `Views/Settings/`, PostProcessingService,
 TranscriptionService, AgentSessionIndexer) and pulled AgentChatsView's NSEvent monitors into
-`Views/AgentChatsView+Shortcuts.swift`. Full roadmap + status: `docs/refactor/REFACTORING-AUDIT.md`.
+`Views/AgentChatsView+Shortcuts.swift`. A follow-up pass (Phase 2) decomposed `AgentChatsView`
+further into thematic `extension` files (`+BackgroundAgents`, `+RuntimeServices`,
+`+SessionLifecycle`, `+ProjectManagement`, `+Tabs`, `+DragDrop`), shrinking the main view from
+~3684 to ~2426 LOC (logic methods are `internal` so the extensions in sibling files can reach
+them). Full roadmap + status: `docs/refactor/REFACTORING-AUDIT.md`.
 
 ### App shell
 

@@ -91,6 +91,27 @@ Zusätzlich (Folge-Wunsch, kein Audit-Item): **Projekt-Header in der Sidebar per
 4. **Facade + Forwarder hält Aufrufstellen stabil** (A8) — dasselbe Muster trägt AgentUIStateStore/AgentGitBranchReader ohne Aufrufer-Änderungen.
 5. **`AgentChatsView` bleibt mit 3500 LOC der größte Hebel.** B1 löste nur die ~184 Monitor-Zeilen; der Kern (≈80 Business-Logik-Methoden) braucht erst den thematischen Split, dann die ViewModel-Extraktion (siehe Testbarkeit-Analyse).
 
+## Phase 2 — Fortschritt (AgentChatsView-Split)
+
+Begonnen 2026-06-27: `AgentChatsView` (God-View, Note 2/5) per `extension`-Dateien entlastet —
+**3684 → 2426 LOC (−31 %)**, 6 thematische Extensions, je 1 Commit, 447 Tests nach jedem grün,
+reiner Move (genutzte Member auf `internal` gehoben, sonst unverändert):
+
+| Extension | Inhalt |
+|---|---|
+| `+BackgroundAgents` | Dispatch (claude --bg), Sub-Agent-Bibliothek, Logs, Lifecycle, Healthcheck |
+| `+RuntimeServices` | Workspace-Load, Index-Refresh, Watcher/AutoNamer-Setup, Reconcile, Stop-Sound |
+| `+SessionLifecycle` | Chat erstellen/forken/umbenennen/färben/pinnen + Session-Menüs |
+| `+ProjectManagement` | Projekt wählen/hinzufügen/löschen/umbenennen + Icon-Handling |
+| `+Tabs` | Tab öffnen/schließen, archivieren, Reorder/Detach |
+| `+DragDrop` | Sidebar-Reorder (Session inkl. Cross-Project, Projekt) |
+
+(plus `+Shortcuts` aus Phase 1). In der Hauptdatei bleiben View-Body + View-Builder + wenige
+kleine Logik-Methoden. **Methode bewährt:** Extension rausziehen → `swift build` listet die zu
+hebenden `private`-Member → gezielt heben. **Noch offen in Phase 2:** `Views/`-Ordnergliederung,
+RecordingCoordinator-/AgentTerminalView-/RecordingOverlayView-Splits, Rest-Quick-Wins
+(AgentUIStateStore, AgentGitBranchReader, OnboardingView-Permission-Dedup); danach Phase 3 (Test-Seams).
+
 ## Empfohlene Roadmap
 
 Phase 1 ist abgeschlossen (oben). Die folgenden Wellen sind nach den Umsetzungs-Erkenntnissen
