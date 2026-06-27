@@ -106,9 +106,24 @@ final class AgentSessionRuntimeWatcher {
     private let eventDrivenEnabled = AppPreferences.shared.isAgentEventDrivenWatchEnabled
     private var pollTimer: Timer?
 
-    init(statusStore: AgentSessionRuntimeStatusStore, onTurnFinished: ((UUID) -> Void)? = nil) {
+    // Phase-3-Test-Seams: Datei-IO als @Sendable-Closures (laufen off-main in
+    // Task.detached). Defaults = die echten static-Helfer → Verhalten 1:1.
+    private let statProvider: @Sendable (URL) -> AgentTranscriptFileStat?
+    private let tailProvider: @Sendable (URL, Int) -> String?
+    private let urlResolver: @Sendable (WatchedSession) -> URL?
+
+    init(
+        statusStore: AgentSessionRuntimeStatusStore,
+        onTurnFinished: ((UUID) -> Void)? = nil,
+        statProvider: @escaping @Sendable (URL) -> AgentTranscriptFileStat? = { AgentSessionRuntimeWatcher.fileStat(at: $0) },
+        tailProvider: @escaping @Sendable (URL, Int) -> String? = { AgentSessionRuntimeWatcher.readTail(at: $0, bytes: $1) },
+        urlResolver: @escaping @Sendable (WatchedSession) -> URL? = { AgentSessionRuntimeWatcher.resolveTranscriptURL(for: $0) }
+    ) {
         self.statusStore = statusStore
         self.onTurnFinished = onTurnFinished
+        self.statProvider = statProvider
+        self.tailProvider = tailProvider
+        self.urlResolver = urlResolver
     }
 
     deinit {
@@ -292,10 +307,19 @@ final class AgentSessionRuntimeWatcher {
         let pollToken = PerfBudgets.sidebarStatusPoll.begin()
         let snapshotEntry = entry
         let snapshotGeneration = entry.generation
+        let statProvider = self.statProvider
+        let tailProvider = self.tailProvider
+        let urlResolver = self.urlResolver
 
         Task { @MainActor [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
-                Self.pollSnapshot(for: snapshotEntry, now: Date())
+                Self.pollSnapshot(
+                    for: snapshotEntry,
+                    now: Date(),
+                    statProvider: statProvider,
+                    tailProvider: tailProvider,
+                    urlResolver: urlResolver
+                )
             }.value
 
             PerfBudgets.sidebarStatusPoll.end(pollToken)
@@ -364,13 +388,16 @@ final class AgentSessionRuntimeWatcher {
 
     // MARK: - File helpers
 
-    nonisolated private static func pollSnapshot(
+    nonisolated static func pollSnapshot(
         for entry: WatchedSession,
-        now: Date
+        now: Date,
+        statProvider: @Sendable (URL) -> AgentTranscriptFileStat?,
+        tailProvider: @Sendable (URL, Int) -> String?,
+        urlResolver: @Sendable (WatchedSession) -> URL?
     ) -> AgentSessionRuntimePollSnapshot {
-        let transcriptURL = entry.transcriptURL ?? resolveTranscriptURL(for: entry)
+        let transcriptURL = entry.transcriptURL ?? urlResolver(entry)
         guard let url = transcriptURL,
-              let stat = fileStat(at: url) else {
+              let stat = statProvider(url) else {
             return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: nil, stat: nil, lastEvent: nil)
         }
 
@@ -392,7 +419,7 @@ final class AgentSessionRuntimeWatcher {
             )
         }
 
-        guard let tail = readTail(at: url, bytes: tailReadBytes) else {
+        guard let tail = tailProvider(url, tailReadBytes) else {
             return AgentSessionRuntimePollSnapshot(transcriptURL: url, decision: nil, stat: nil, lastEvent: nil)
         }
 
@@ -443,7 +470,7 @@ struct AgentTranscriptFileStat: Equatable {
     var size: Int
 }
 
-private struct WatchedSession {
+struct WatchedSession {
     let id: UUID
     var provider: AgentProvider
     var cwd: String
@@ -461,7 +488,7 @@ private struct WatchedSession {
     var generation: Int = 0
 }
 
-private struct AgentSessionRuntimePollSnapshot {
+struct AgentSessionRuntimePollSnapshot {
     var transcriptURL: URL?
     var decision: AgentTranscriptStatusDecider.Decision?
     /// Stat + geparstes Event zum Zurückschreiben in den WatchedSession-Cache.
