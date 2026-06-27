@@ -14,13 +14,11 @@ extension RecordingCoordinator {
     ) async throws {
         guard let appState else { return }
 
-        TranscriptionSettings.migrateIfNeeded()
-
-        let provider = TranscriptionSettings.loadProvider()
-        let model = TranscriptionSettings.loadModel()
+        let provider = providerResolver()
+        let model = modelResolver()
         Logger.debug("Using provider: \(provider.rawValue), model: \(model.rawValue)")
 
-        guard let apiKey = KeychainManager.load(key: provider.keychainKey), !apiKey.isEmpty else {
+        guard let apiKey = apiKeyResolver(provider), !apiKey.isEmpty else {
             Logger.debug("ERROR: No API key found for \(provider.keychainKey)")
             throw TranscriptionError.missingAPIKey
         }
@@ -29,7 +27,7 @@ extension RecordingCoordinator {
         let language = AppPreferences.shared.language
         Logger.debug(" Language: \(language)")
 
-        let service = provider.createService(apiKey: apiKey, model: model)
+        let service = transcriberFactory(provider, model, apiKey)
         Logger.debug(" Starting transcription...")
 
         let rawText = try await service.transcribe(
@@ -172,7 +170,7 @@ extension RecordingCoordinator {
         do {
             if mode.id == OutputMode.chatID, let promptPackage {
                 let visualInput = CodexVisualInputSelection(contextBundle: contextBundle)
-                let result = try AgentChatLaunchService().openCodexChat(
+                let result = try agentChatLauncherFactory().openCodexChat(
                     title: chatTitle(from: rawText),
                     prompt: promptPackage.prompt,
                     imagePaths: visualInput.imageURLs.map(\.path)

@@ -61,13 +61,32 @@ final class RecordingCoordinator {
     /// Letzter fehlgeschlagener Lauf — Grundlage für "Erneut versuchen".
     var pendingRetry: PendingTranscriptionRetry?
 
+    // Phase-3-Test-Seams: Diktat-Abhängigkeiten als Resolver-Closures.
+    // Defaults = bisherige Statics → Produktionsverhalten unverändert; Tests
+    // injizieren Fakes (kein Keychain/Settings/Netzwerk im Test).
+    let providerResolver: () -> TranscriptionProvider
+    let modelResolver: () -> TranscriptionModel
+    let apiKeyResolver: (TranscriptionProvider) -> String?
+    let transcriberFactory: (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol
+    let agentChatLauncherFactory: () -> AgentChatLaunchService
+
     init(
         appState: AppState,
         postProcessingService: PostProcessingService = PostProcessingService(),
         selectedContextService: SelectedContextService = SelectedContextService(),
         visualContextCaptureService: VisualContextCaptureService? = nil,
         reportStore: TranscriptRunReportStore = TranscriptRunReportStore(),
-        failedRecordingsStore: FailedRecordingsStore = FailedRecordingsStore()
+        failedRecordingsStore: FailedRecordingsStore = FailedRecordingsStore(),
+        providerResolver: @escaping () -> TranscriptionProvider = {
+            TranscriptionSettings.migrateIfNeeded()
+            return TranscriptionSettings.loadProvider()
+        },
+        modelResolver: @escaping () -> TranscriptionModel = { TranscriptionSettings.loadModel() },
+        apiKeyResolver: @escaping (TranscriptionProvider) -> String? = { KeychainManager.load(key: $0.keychainKey) },
+        transcriberFactory: @escaping (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol = { provider, model, apiKey in
+            provider.createService(apiKey: apiKey, model: model)
+        },
+        agentChatLauncherFactory: @escaping () -> AgentChatLaunchService = { AgentChatLaunchService() }
     ) {
         self.appState = appState
         self.audioRecorder = AudioRecorder()
@@ -80,6 +99,11 @@ final class RecordingCoordinator {
         self.visualAttachmentDeliveryBuilder = VisualAttachmentDeliveryBuilder()
         self.reportStore = reportStore
         self.failedRecordingsStore = failedRecordingsStore
+        self.providerResolver = providerResolver
+        self.modelResolver = modelResolver
+        self.apiKeyResolver = apiKeyResolver
+        self.transcriberFactory = transcriberFactory
+        self.agentChatLauncherFactory = agentChatLauncherFactory
     }
 
     func startRecording() async {
