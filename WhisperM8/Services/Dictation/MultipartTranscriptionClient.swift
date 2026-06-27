@@ -37,10 +37,18 @@ private func createLongTimeoutSession(timeout: TimeInterval) -> URLSession {
 final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
     private let apiKey: String
     private let config: ProviderConfig
+    /// Phase-3-Test-Seam: Default erzeugt die echte Long-Timeout-Session;
+    /// Tests reichen eine URLProtocol-gestubte Session herein.
+    private let sessionProvider: (TimeInterval) -> URLSession
 
-    init(apiKey: String, config: ProviderConfig) {
+    init(
+        apiKey: String,
+        config: ProviderConfig,
+        sessionProvider: @escaping (TimeInterval) -> URLSession = { createLongTimeoutSession(timeout: $0) }
+    ) {
         self.apiKey = apiKey
         self.config = config
+        self.sessionProvider = sessionProvider
     }
 
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval? = nil) async throws -> String {
@@ -178,7 +186,7 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
 
         // Pro Call eine Session mit passendem Timeout; ohne Invalidate würde
         // jede davon bis zum App-Ende weiterleben.
-        let session = createLongTimeoutSession(timeout: timeout)
+        let session = sessionProvider(timeout)
         defer { session.finishTasksAndInvalidate() }
         // Der async-Upload ist kooperativ cancelbar: Wird der umgebende Task
         // gecancelt (Cancel-Button/ESC während "Transcribing…"), bricht
