@@ -191,8 +191,8 @@ struct AgentChatsView: View {
     /// 2 s, falls mehrere Sessions kurz hintereinander stoppen.
     @State var lastStopSoundAt: Date?
     /// Popover des „Neuer Chat"-Split-Buttons (▾): Ziel-Projekt wählen/suchen.
-    @State private var showNewChatProjectPicker = false
-    @State private var newChatProjectQuery = ""
+    @State var showNewChatProjectPicker = false
+    @State var newChatProjectQuery = ""
     /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
     @State var subAgentLibrarySheet: SubAgentLibraryPresentation?
     /// Live-Tracker fuer die aktive Sub-Session innerhalb eines
@@ -1008,7 +1008,7 @@ struct AgentChatsView: View {
         AppPreferences.shared.defaultAgentLaunchTarget.kind
     }
 
-    private func createDefaultSession() {
+    func createDefaultSession() {
         let target = AppPreferences.shared.defaultAgentLaunchTarget
         createSession(provider: target.provider, kind: target.kind)
     }
@@ -2110,189 +2110,6 @@ struct AgentChatsView: View {
             errorMessage = error.localizedDescription
             return nil
         }
-    }
-
-    /// Startet einen neuen Chat in einem explizit gewählten Projekt (aus dem
-    /// „Neuer Chat"-Dropdown): macht es zum aktuellen Ziel und öffnet den Chat.
-    private func startNewChat(in project: AgentProject) {
-        showNewChatProjectPicker = false
-        newChatProjectQuery = ""
-        selectedProjectID = project.id
-        expandedProjectIDs.insert(project.id)
-        AppPreferences.shared.agentDefaultProjectPath = project.path
-        createDefaultSession()
-    }
-
-    private func createSession(provider: AgentProvider, kind: AgentSessionKind? = nil) {
-        guard let selectedProject else { return }
-        do {
-            // Agent View hat keine externe Session-ID (es ist ein Dashboard
-            // ueber viele Sessions). Auch der Titel ist anders.
-            let isAgentView = kind == .agentView
-            let title = isAgentView
-                ? "Agent View"
-                : "\(provider.displayName) Chat"
-            // Weg B (Superset-Prinzip): KEINE Vorab-Session-ID mehr. Claude
-            // vergibt die ID selbst — wie Codex/Agent View. Der SessionStart-Hook
-            // + Indexer-Merge binden die REALE, von Claude geschriebene ID nach.
-            // Ein erzwungenes `--session-id` war die Wurzel der „No conversation
-            // found"-Fehler (Claude persistierte nicht zuverlässig darunter).
-            let externalSessionID: String? = nil
-            let session = try store.createSession(
-                provider: provider,
-                projectPath: selectedProject.path,
-                title: title,
-                model: AppPreferences.shared.codexPostProcessingModelRaw,
-                reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
-                externalSessionID: externalSessionID,
-                shouldLaunchOnOpen: true,
-                kind: kind
-            )
-            openTab(session.id)
-            selectedSessionID = session.id
-            sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    // MARK: - Fork (Claude Code)
-
-    /// Forkt einen Claude-Chat: legt einen neuen Tab an und startet ihn als
-    /// `claude --resume <quelle> --fork-session` — übernimmt den kompletten
-    /// Stand der Quelle, zweigt aber in eine eigene Session-ID ab. Das
-    /// Original läuft unverändert weiter. Die neue Fork-Session-ID bindet
-    /// der SessionStart-Hook automatisch (siehe handleClaudeHookEvent).
-    private func forkSession(_ source: AgentChatSession) {
-        guard source.isForkable,
-              let sourceExternalID = source.externalSessionID,
-              let project = workspace.projects.first(where: { $0.id == source.projectID }) else {
-            return
-        }
-        do {
-            let forked = try store.createSession(
-                provider: .claude,
-                projectPath: project.path,
-                title: forkTitle(for: source.title),
-                externalSessionID: nil, // wird nach Launch via Hook gebunden
-                shouldLaunchOnOpen: true,
-                kind: .chat,
-                forkSourceSessionID: sourceExternalID
-            )
-            // Farbe der Quelle erben, damit Fork und Original visuell
-            // zusammengehören.
-            if let color = source.color, !color.isEmpty {
-                try? store.setSessionColor(id: forked.id, color: color)
-            }
-            openTab(forked.id)
-            selectedSessionID = forked.id
-            sessionActionRequest = AgentSessionActionRequest(sessionID: forked.id, kind: .start)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    /// "Foo" → "Foo (Fork)", "Foo (Fork)" → "Foo (Fork 2)", … — fortlaufend.
-    private func forkTitle(for base: String) -> String {
-        let trimmed = base.trimmingCharacters(in: .whitespaces)
-        if let range = trimmed.range(of: #" \(Fork( \d+)?\)$"#, options: .regularExpression) {
-            let stem = String(trimmed[..<range.lowerBound])
-            let suffix = trimmed[range]
-            let current = suffix.range(of: #"\d+"#, options: .regularExpression)
-                .flatMap { Int(suffix[$0]) } ?? 1
-            return "\(stem) (Fork \(current + 1))"
-        }
-        return "\(trimmed) (Fork)"
-    }
-
-    /// Gemeinsamer „Forken"-Menüeintrag — nur für forkbare Claude-Chats
-    /// sichtbar (sonst leer). Wird in allen Chat-Kontextmenüs eingehängt.
-    @ViewBuilder
-    private func forkMenuItem(_ session: AgentChatSession) -> some View {
-        if session.isForkable {
-            Button("Forken", systemImage: "arrow.triangle.branch") {
-                forkSession(session)
-            }
-        }
-    }
-
-    private func markSession(_ id: UUID, status: AgentChatStatus) {
-        do {
-            if status == .closed || status == .archived {
-                terminalRegistry.terminate(sessionID: id)
-            }
-            try store.updateSession(id: id) { session in
-                session.status = status
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func relaunch(_ id: UUID) {
-        markSession(id, status: .pending)
-        selectedSessionID = id
-    }
-
-    private func renameSession(id: UUID, title: String) {
-        do {
-            try store.renameSession(id: id, title: title)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func setSessionGroup(id: UUID, groupName: String?) {
-        do {
-            try store.setSessionGroup(id: id, groupName: groupName)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func setSessionColor(id: UUID, color: String?) {
-        do {
-            try store.setSessionColor(id: id, color: color)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    /// Wiederverwendetes „Tab-Farbe"-Submenu (8er-Palette + Provider-Reset).
-    @ViewBuilder
-    private func tabColorMenu(for session: AgentChatSession) -> some View {
-        Menu("Tab-Farbe") {
-            ForEach(AgentChatColor.palette, id: \.self) { color in
-                Button {
-                    setSessionColor(id: session.id, color: color)
-                } label: {
-                    Label {
-                        Text(AgentChatColorName.label(for: color))
-                    } icon: {
-                        Image(nsImage: colorSwatchImage(hex: color))
-                    }
-                }
-            }
-            Divider()
-            Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
-                setSessionColor(id: session.id, color: nil)
-            }
-        }
-    }
-
-    // MARK: - Pinning
-
-    private func pinSession(_ id: UUID) {
-        guard !pinnedSessionIDs.contains(id) else { return }
-        pinnedSessionIDs.append(id)
-    }
-
-    private func unpinSession(_ id: UUID) {
-        pinnedSessionIDs.removeAll { $0 == id }
-    }
-
-    private func togglePin(_ id: UUID) {
-        pinnedSessionIDs.contains(id) ? unpinSession(id) : pinSession(id)
     }
 
     // MARK: - Project metadata actions
