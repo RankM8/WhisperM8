@@ -15,7 +15,7 @@ struct PostProcessingRunResult {
 /// Eingefrorener Zustand eines fehlgeschlagenen Transkriptions-Laufs.
 /// Hält alles fest, was ein Retry braucht, um exakt denselben Lauf
 /// (gleicher Output-Mode, gleicher Kontext) erneut zu starten.
-private struct PendingTranscriptionRetry {
+struct PendingTranscriptionRetry {
     var recording: FailedRecording
     var audioDuration: TimeInterval
     var outputMode: OutputMode
@@ -48,7 +48,7 @@ final class RecordingCoordinator {
     /// `true`, wenn der User waehrend des laufenden Captures den Kontext im
     /// Overlay geleert hat — der Merge darf dann nichts nachreichen.
     private var userClearedContextDuringCapture = false
-    private let failedRecordingsStore: FailedRecordingsStore
+    let failedRecordingsStore: FailedRecordingsStore
     /// Laufender Transkriptions-Call als cancelbarer Task. `cancelTranscription()`
     /// (Overlay-Button/ESC) cancelt ihn; URLSession bricht den Upload dann ab.
     private var transcriptionTask: Task<Void, Error>?
@@ -59,7 +59,7 @@ final class RecordingCoordinator {
     /// zerstören.
     var isDeliveringTranscription = false
     /// Letzter fehlgeschlagener Lauf — Grundlage für "Erneut versuchen".
-    private var pendingRetry: PendingTranscriptionRetry?
+    var pendingRetry: PendingTranscriptionRetry?
 
     init(
         appState: AppState,
@@ -629,112 +629,6 @@ final class RecordingCoordinator {
 
         appState.contextBundle = bundle
         overlayController.update(appState: appState)
-    }
-
-    /// Misserfolg-Pfad: Aufnahme aufbewahren (nie löschen!) und Retry anbieten.
-    /// Vor diesem Fix wurde die M4A hier sofort gelöscht — ein Netz-Timeout
-    /// nach einem langen Diktat war damit unwiederbringlicher Datenverlust.
-    private func handleTranscriptionFailure(
-        audioURL: URL,
-        audioDuration: TimeInterval,
-        outputMode: OutputMode,
-        contextBundle: TranscriptContextBundle,
-        message: String,
-        logPrefix: String
-    ) {
-        appState?.lastError = message
-        Logger.debug(" \(logPrefix): \(message)")
-        overlayController.hide()
-
-        let preserved = preserveRecording(
-            audioURL: audioURL,
-            audioDuration: audioDuration,
-            outputMode: outputMode,
-            contextBundle: contextBundle,
-            errorMessage: message
-        )
-
-        let wantsRetry = showTranscriptionFailureAlert(message: message, canRetry: preserved)
-        if wantsRetry {
-            // Eigener Task statt direktem Call: Der Aufrufer (stopRecording/
-            // retryPendingTranscription) muss erst seinen State-Cleanup
-            // beenden, bevor der Retry die Guards passieren kann.
-            Task { @MainActor [weak self] in
-                await self?.retryPendingTranscription()
-            }
-        }
-    }
-
-    /// User-Abbruch während "Transcribing…": kein Fehler-Alert, aber die
-    /// Aufnahme wird trotzdem gesichert — ein versehentliches ESC darf kein
-    /// Diktat kosten.
-    private func handleTranscriptionCancelled(
-        audioURL: URL,
-        audioDuration: TimeInterval,
-        outputMode: OutputMode,
-        contextBundle: TranscriptContextBundle
-    ) {
-        Logger.transcription.info("Transcription aborted by user; preserving recording")
-        appState?.lastError = nil
-        overlayController.hide()
-        preserveRecording(
-            audioURL: audioURL,
-            audioDuration: audioDuration,
-            outputMode: outputMode,
-            contextBundle: contextBundle,
-            errorMessage: "Vom Benutzer abgebrochen"
-        )
-    }
-
-    /// Verschiebt die Aufnahme in den FailedRecordings-Store und merkt sich
-    /// den Lauf für "Erneut versuchen". Schlägt selbst das Sichern fehl,
-    /// bleibt die Datei wenigstens unangetastet im tmp-Verzeichnis liegen.
-    @discardableResult
-    private func preserveRecording(
-        audioURL: URL,
-        audioDuration: TimeInterval,
-        outputMode: OutputMode,
-        contextBundle: TranscriptContextBundle,
-        errorMessage: String
-    ) -> Bool {
-        do {
-            let recording = try failedRecordingsStore.preserve(
-                audioURL: audioURL,
-                audioDuration: audioDuration,
-                language: AppPreferences.shared.language,
-                errorMessage: errorMessage
-            )
-            pendingRetry = PendingTranscriptionRetry(
-                recording: recording,
-                audioDuration: audioDuration,
-                outputMode: outputMode,
-                contextBundle: contextBundle
-            )
-            Logger.transcription.info("Recording preserved at \(recording.audioURL.path, privacy: .public)")
-            return true
-        } catch {
-            Logger.transcription.error("Failed to preserve recording: \(error.localizedDescription, privacy: .public)")
-            return false
-        }
-    }
-
-    /// Fehler-Alert mit Retry-Option. Gibt `true` zurück, wenn der User
-    /// "Erneut versuchen" gewählt hat.
-    private func showTranscriptionFailureAlert(message: String, canRetry: Bool) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Transcription Failed"
-        alert.alertStyle = .warning
-        if canRetry {
-            alert.informativeText = message + "\n\nDie Aufnahme wurde gesichert und kann erneut transkribiert werden."
-            alert.addButton(withTitle: "Erneut versuchen")
-            alert.addButton(withTitle: "Schließen")
-            return alert.runModal() == .alertFirstButtonReturn
-        } else {
-            alert.informativeText = message
-            alert.addButton(withTitle: "OK")
-            _ = alert.runModal()
-            return false
-        }
     }
 
     private func networkErrorMessage(for urlError: URLError) -> String {
