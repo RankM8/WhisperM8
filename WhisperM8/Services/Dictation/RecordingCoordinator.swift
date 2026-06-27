@@ -25,19 +25,19 @@ struct PendingTranscriptionRetry {
 @MainActor
 final class RecordingCoordinator {
     weak var appState: AppState?
-    private let audioRecorder: AudioRecorder
+    let audioRecorder: AudioRecorder
     let overlayController: OverlayController
     let pasteService: PasteService
-    private let recordingTimer: RecordingTimer
+    let recordingTimer: RecordingTimer
     let postProcessingService: PostProcessingService
     private let selectedContextService: SelectedContextService
     let visualContextCaptureService: VisualContextCaptureService
     let visualAttachmentDeliveryBuilder: VisualAttachmentDeliveryBuilder
     let reportStore: TranscriptRunReportStore
 
-    private var recordingStartTime: Date?
+    var recordingStartTime: Date?
     private var isProcessing = false
-    private var escKeyMonitor: Any?
+    var escKeyMonitor: Any?
     var contextSourceApp: NSRunningApplication?
     var screenClipLimitTask: Task<Void, Never>?
     var clipboardScreenshotTask: Task<Void, Never>?
@@ -51,7 +51,7 @@ final class RecordingCoordinator {
     let failedRecordingsStore: FailedRecordingsStore
     /// Laufender Transkriptions-Call als cancelbarer Task. `cancelTranscription()`
     /// (Overlay-Button/ESC) cancelt ihn; URLSession bricht den Upload dann ab.
-    private var transcriptionTask: Task<Void, Error>?
+    var transcriptionTask: Task<Void, Error>?
     /// `true`, sobald die Transkriptions-Response eingetroffen ist und die
     /// Delivery läuft (Clipboard/Auto-Paste). Ein Cancel darf dann nichts
     /// mehr abbrechen — ein gesetztes Cancel-Flag würde die `Task.sleep`-
@@ -631,90 +631,4 @@ final class RecordingCoordinator {
         overlayController.update(appState: appState)
     }
 
-    private func networkErrorMessage(for urlError: URLError) -> String {
-        switch urlError.code {
-        case .timedOut:
-            return "Request timed out. The server took too long to respond."
-        case .notConnectedToInternet:
-            return "No internet connection."
-        case .networkConnectionLost:
-            return "Network connection was lost."
-        case .cannotConnectToHost:
-            return "Cannot connect to server."
-        default:
-            return "Network error: \(urlError.localizedDescription)"
-        }
-    }
-
-    private func showErrorAlert(title: String, message: String) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
-
-    private func setupEscKeyMonitor() {
-        removeEscKeyMonitor()
-
-        escKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-
-            if event.keyCode == 53, self.appState?.isRecording == true {
-                Task { @MainActor in
-                    self.cancelRecording()
-                }
-                return nil
-            }
-
-            // ESC während "Transcribing…" bricht den Upload ab; die Aufnahme
-            // landet gesichert im FailedRecordings-Ordner. Der Task-Check
-            // verhindert, dass ESC geschluckt wird, wenn kein Upload mehr
-            // läuft (z. B. während der modale Fehler-Alert offen ist).
-            if event.keyCode == 53, self.appState?.isTranscribing == true, self.transcriptionTask != nil {
-                Task { @MainActor in
-                    self.cancelTranscription()
-                }
-                return nil
-            }
-
-            return event
-        }
-    }
-
-    private func removeEscKeyMonitor() {
-        if let escKeyMonitor {
-            NSEvent.removeMonitor(escKeyMonitor)
-            self.escKeyMonitor = nil
-        }
-    }
-
-    private func startDurationTimer() {
-        recordingTimer.start { [weak self] in
-            guard let self, let appState = self.appState else { return }
-
-            if let recordingStartTime = self.recordingStartTime {
-                appState.recordingDuration = Date().timeIntervalSince(recordingStartTime)
-            } else {
-                appState.recordingDuration = 0
-            }
-
-            appState.audioLevel = self.audioRecorder.audioLevel
-            self.overlayController.update(appState: appState)
-        }
-    }
-
-    private func logAudioFileAttributes(_ audioURL: URL) {
-        Logger.debug(" Audio file: \(audioURL.path)")
-
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: audioURL.path)
-            let fileSize = attributes[.size] as? Int64 ?? 0
-            let fileSizeMB = Double(fileSize) / (1024 * 1024)
-            Logger.debug(" Audio file size: \(String(format: "%.2f", fileSizeMB)) MB")
-        } catch {
-            Logger.debug(" WARNING: Could not get file attributes: \(error)")
-        }
-    }
 }
