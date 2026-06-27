@@ -387,20 +387,11 @@ class AudioRecorder {
 
     private func calculateLevel(buffer: AVAudioPCMBuffer) -> Float {
         guard let channelData = buffer.floatChannelData?[0] else { return 0 }
-        let frames = buffer.frameLength
+        let frames = Int(buffer.frameLength)
         guard frames > 0 else { return 0 }
-
-        var sum: Float = 0
-        for i in 0..<Int(frames) {
-            let sample = channelData[i]
-            sum += sample * sample
-        }
-
-        // RMS calculation
-        let rms = sqrt(sum / Float(frames))
-
-        // Normalize to 0-1 range (adjust multiplier for sensitivity)
-        return min(rms * 3.0, 1.0)
+        return AudioLevelMeter.normalized(
+            samples: UnsafeBufferPointer(start: channelData, count: frames)
+        )
     }
 
     private func writeBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
