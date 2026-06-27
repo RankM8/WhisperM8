@@ -128,27 +128,15 @@ extension AgentChatsView {
     }
 
     func renameSession(id: UUID, title: String) {
-        do {
-            try store.renameSession(id: id, title: title)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        if let error = viewModel.renameSession(id: id, title: title) { errorMessage = error }
     }
 
     func setSessionGroup(id: UUID, groupName: String?) {
-        do {
-            try store.setSessionGroup(id: id, groupName: groupName)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        if let error = viewModel.setSessionGroup(id: id, groupName: groupName) { errorMessage = error }
     }
 
     func setSessionColor(id: UUID, color: String?) {
-        do {
-            try store.setSessionColor(id: id, color: color)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        if let error = viewModel.setSessionColor(id: id, color: color) { errorMessage = error }
     }
 
     /// Wiederverwendetes „Tab-Farbe"-Submenu (8er-Palette + Provider-Reset).

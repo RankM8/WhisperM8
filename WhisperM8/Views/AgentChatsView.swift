@@ -37,6 +37,10 @@ struct AgentChatsView: View {
     /// `workspace = store.loadWorkspace()`-Reloads entfallen.
     @State private var workspaceModel = AgentWorkspaceUIModel.shared
     var workspace: AgentWorkspace { workspaceModel.workspace }
+
+    /// Phase-3 (S7-A): testbare Store-Aktionen. Zustandslos → on-demand erzeugt.
+    /// internal, damit die Extensions (Session/Project-Lifecycle) es nutzen.
+    var viewModel: AgentChatsViewModel { AgentChatsViewModel(store: store) }
     // MARK: - Fenster-/Tab-State (Single Source of Truth: AgentWindowStore)
     // Diese fuenf Properties sind Bridges auf den GETEILTEN Store: der Getter
     // liest den Slice DIESES Fensters, der Setter schreibt ueber Store-Mutationen

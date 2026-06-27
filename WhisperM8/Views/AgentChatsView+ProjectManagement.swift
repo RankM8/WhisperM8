@@ -85,19 +85,11 @@ extension AgentChatsView {
     }
 
     func renameProject(id: UUID, name: String) {
-        do {
-            try store.renameProject(id: id, name: name)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        if let error = viewModel.renameProject(id: id, name: name) { errorMessage = error }
     }
 
     func setProjectColor(id: UUID, color: String) {
-        do {
-            try store.setProjectColor(id: id, color: color)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        if let error = viewModel.setProjectColor(id: id, color: color) { errorMessage = error }
     }
 
     /// Öffnet einen NSOpenPanel und speichert den absoluten Pfad als
