@@ -38,51 +38,17 @@ struct OutputModesView: View {
 
                         VStack(spacing: 0) {
                             ForEach($modes) { $mode in
-                                Button {
-                                    selectedModeID = mode.id
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        Circle()
-                                            .fill(mode.isEnabled ? Color.green : Color.secondary.opacity(0.35))
-                                            .frame(width: 8, height: 8)
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(mode.name)
-                                                .font(.body.weight(.semibold))
-                                            Text(modeSummary(mode))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-
-                                        Spacer()
-
-                                        Toggle("Enabled", isOn: modeEnabledBinding(for: $mode))
-                                            .labelsHidden()
-                                            .toggleStyle(.switch)
-                                            .controlSize(.small)
-                                            .disabled(!canDisable(mode))
-                                            .help(modeToggleHelp(mode))
-
-                                        if mode.id == defaultOutputModeID {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundStyle(.green)
-                                        }
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(mode.id == selectedModeID ? Color.accentColor.opacity(0.18) : Color.clear)
+                                OutputModeRow(
+                                    mode: mode,
+                                    isSelected: mode.id == selectedModeID,
+                                    isDefault: mode.id == defaultOutputModeID,
+                                    summary: modeSummary(mode),
+                                    isEnabled: modeEnabledBinding(for: $mode),
+                                    canToggle: canDisable(mode),
+                                    toggleHelp: modeToggleHelp(mode),
+                                    showDivider: mode.id != modes.last?.id,
+                                    onSelect: { selectedModeID = mode.id }
                                 )
-
-                                if mode.id != modes.last?.id {
-                                    Divider()
-                                        .padding(.leading, 30)
-                                }
                             }
                         }
                         .padding(8)
