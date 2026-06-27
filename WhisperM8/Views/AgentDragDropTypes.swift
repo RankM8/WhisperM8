@@ -17,6 +17,13 @@ import UniformTypeIdentifiers
 struct DraggableSession: Codable, Transferable {
     let sessionID: UUID
     let sourceProjectID: UUID
+    let sourceWindowID: UUID?
+
+    init(sessionID: UUID, sourceProjectID: UUID, sourceWindowID: UUID? = nil) {
+        self.sessionID = sessionID
+        self.sourceProjectID = sourceProjectID
+        self.sourceWindowID = sourceWindowID
+    }
 
     static var transferRepresentation: some TransferRepresentation {
         CodableRepresentation(contentType: .agentChatSession)

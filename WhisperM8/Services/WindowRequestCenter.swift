@@ -7,6 +7,8 @@ enum WindowRequest: String, Equatable {
     case outputDashboard = "output-dashboard"
     case agentChats = "agent-chats"
 
+    static let agentChatWindowGroupID = "agent-chat-window"
+
     var targetWindowID: String {
         switch self {
         case .settings:
@@ -16,6 +18,9 @@ enum WindowRequest: String, Equatable {
             // Settings-Sektion "Output Overview".
             return rawValue
         case .agentChats:
+            // Primaerfenster ist eine Single-`Window`-Scene (nicht die
+            // UUID-WindowGroup) — die kann sich beim Launch/Reopen nicht
+            // duplizieren. Die WindowGroup-ID ist nur fuer Sekundaerfenster.
             return rawValue
         case .onboarding:
             return rawValue
@@ -95,14 +100,33 @@ final class WindowRequestCenter: ObservableObject {
 struct WindowRequestHandler: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var requestCenter = WindowRequestCenter.shared
+    @State private var didRestoreAgentChatWindows = false
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
+            .onAppear {
+                restoreAgentChatWindowsIfNeeded()
+            }
             .onReceive(requestCenter.$latestRequest.compactMap { $0 }) { request in
+                // Alle Ziele sind Single-`Window`-Scenes (inkl. Agent-Chats
+                // Primaerfenster) → ohne value oeffnen/fokussieren.
                 openWindow(id: request.targetWindowID)
                 WindowActivationService.activateApp()
             }
+    }
+
+    /// Stellt persistierte Sekundaerfenster (abgeloeste Tabs) beim Launch
+    /// wieder her. Das Primaerfenster oeffnet SwiftUI als erste Scene selbst —
+    /// hier werden NUR die Nicht-Primaerfenster der WindowGroup geoeffnet.
+    private func restoreAgentChatWindowsIfNeeded() {
+        guard !didRestoreAgentChatWindows else { return }
+        didRestoreAgentChatWindows = true
+        // Sekundaerfenster live aus dem Store (Single Source of Truth) — das
+        // Primaerfenster oeffnet SwiftUI als erste Scene selbst.
+        for windowID in AgentWindowStore.shared.secondaryWindowIDs {
+            openWindow(id: WindowRequest.agentChatWindowGroupID, value: windowID)
+        }
     }
 }
 

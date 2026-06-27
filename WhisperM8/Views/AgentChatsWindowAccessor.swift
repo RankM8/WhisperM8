@@ -28,6 +28,13 @@ struct AgentChatsWindowAccessor: NSViewRepresentable {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarSeparatorStyle = .none
         window.isMovableByWindowBackground = false
+        // macOS/SwiftUI-Fenster-Restoration AUS: Die WindowGroup wuerde sonst
+        // Sekundaerfenster frueherer Sessions eigenmaechtig wiederherstellen —
+        // zusaetzlich zu unserem Store-basierten Restore. Das fuehrte zu sich
+        // aufstapelnden Duplikaten bei jedem Launch. AgentWindowStore ist die
+        // EINZIGE Restore-Autoritaet. (Auf macOS 15+ waere das
+        // `restorationBehavior(.disabled)`; isRestorable ist der macOS-14-Weg.)
+        window.isRestorable = false
         window.backgroundColor = NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark

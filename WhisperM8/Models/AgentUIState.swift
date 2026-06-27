@@ -8,14 +8,34 @@ import Foundation
 /// - Reihenfolge der Tabs (Array statt Set) bleibt erhalten
 /// - Future-Proof: bei einem Workspace-Export wandert der UI-State mit
 ///
-/// Schema v2 (Layout-Redesign Juni 2026): Tabs sind GLOBAL über alle
-/// Projekte — ein geordnetes Array statt der v1-Pro-Projekt-Maps. Dazu
-/// `pinnedSessionIDs` für die „Gepinnt"-Sektion der Sidebar. v1-Dateien
-/// werden in `migrateToV2IfNeeded(workspace:)` verlustfrei geflattet.
+/// Schema v3 (Multi-Window Juni 2026): Tabs leben in Fenstergruppen. v2-Dateien
+/// mit globaler `openTabIDs`-Liste werden in ein Primaerfenster migriert.
+struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
+    var id: UUID
+    var openTabIDs: [UUID]
+    var selectedSessionID: UUID?
+    var selectedProjectID: UUID?
+    var isPrimary: Bool
+
+    init(
+        id: UUID = UUID(),
+        openTabIDs: [UUID] = [],
+        selectedSessionID: UUID? = nil,
+        selectedProjectID: UUID? = nil,
+        isPrimary: Bool = false
+    ) {
+        self.id = id
+        self.openTabIDs = openTabIDs
+        self.selectedSessionID = selectedSessionID
+        self.selectedProjectID = selectedProjectID
+        self.isPrimary = isPrimary
+    }
+}
+
 struct AgentUIState: Codable, Equatable {
     var schemaVersion: Int
-    /// Offene Tabs in Anzeige-Reihenfolge der globalen Tab-Bar —
-    /// projektübergreifend, die View entscheidet nichts mehr um.
+    /// v2-Altbestand: globale Tab-Liste. Wird fuer die v3-Migration gelesen
+    /// und als Kompatibilitaets-Spiegel geschrieben.
     var openTabIDs: [UUID]
     /// In der Sidebar angepinnte Chats (Reihenfolge = Pin-Reihenfolge).
     /// Gepinnte Sessions erscheinen exklusiv in der Gepinnt-Sektion,
@@ -28,6 +48,10 @@ struct AgentUIState: Codable, Equatable {
     var selectedProjectID: UUID?
     /// Welche Sidebar-Projekte sind aktuell auf-geklappt (Disclosure).
     var expandedProjectIDs: [UUID]
+    /// Persistierte Agent-Chat-Fenster mit eigener Tab-Reihenfolge.
+    var windows: [AgentChatWindowState]
+    /// Primaerfenster fuer Dock-/Menubar-Reopen und alte Single-Window-Flows.
+    var primaryWindowID: UUID
 
     /// v1-Altbestand — wird nur noch dekodiert (Input für die Migration),
     /// nie mehr encodiert. Nach `migrateToV2IfNeeded` immer leer.
@@ -38,7 +62,7 @@ struct AgentUIState: Codable, Equatable {
     /// bei der Migration — zur Laufzeit darf die Bar mehr Tabs zeigen
     /// (sie scrollt), beim nächsten Load wird gekappt.
     static let maxOpenTabs = 12
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     static let empty = AgentUIState()
 
@@ -49,6 +73,8 @@ struct AgentUIState: Codable, Equatable {
         case selectedSessionID
         case selectedProjectID
         case expandedProjectIDs
+        case windows
+        case primaryWindowID
         // v1-Keys, nur fürs Decoding
         case openTabIDsByProject
         case selectedSessionIDByProject
@@ -61,15 +87,32 @@ struct AgentUIState: Codable, Equatable {
         selectedSessionID: UUID? = nil,
         selectedProjectID: UUID? = nil,
         expandedProjectIDs: [UUID] = [],
+        windows: [AgentChatWindowState] = [],
+        primaryWindowID: UUID? = nil,
         legacyOpenTabIDsByProject: [UUID: [UUID]] = [:],
         legacySelectedSessionIDByProject: [UUID: UUID] = [:]
     ) {
+        let resolvedPrimaryWindowID = primaryWindowID ?? windows.first(where: \.isPrimary)?.id ?? UUID()
         self.schemaVersion = schemaVersion
         self.openTabIDs = openTabIDs
         self.pinnedSessionIDs = pinnedSessionIDs
         self.selectedSessionID = selectedSessionID
         self.selectedProjectID = selectedProjectID
         self.expandedProjectIDs = expandedProjectIDs
+        self.primaryWindowID = resolvedPrimaryWindowID
+        if windows.isEmpty {
+            self.windows = [
+                AgentChatWindowState(
+                    id: resolvedPrimaryWindowID,
+                    openTabIDs: openTabIDs,
+                    selectedSessionID: selectedSessionID,
+                    selectedProjectID: selectedProjectID,
+                    isPrimary: true
+                )
+            ]
+        } else {
+            self.windows = Self.normalizedWindows(windows, primaryWindowID: resolvedPrimaryWindowID)
+        }
         self.legacyOpenTabIDsByProject = legacyOpenTabIDsByProject
         self.legacySelectedSessionIDByProject = legacySelectedSessionIDByProject
     }
@@ -82,6 +125,10 @@ struct AgentUIState: Codable, Equatable {
         selectedSessionID = try c.decodeIfPresent(UUID.self, forKey: .selectedSessionID)
         selectedProjectID = try c.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
         expandedProjectIDs = try c.decodeIfPresent([UUID].self, forKey: .expandedProjectIDs) ?? []
+        windows = try c.decodeIfPresent([AgentChatWindowState].self, forKey: .windows) ?? []
+        primaryWindowID = try c.decodeIfPresent(UUID.self, forKey: .primaryWindowID)
+            ?? windows.first(where: \.isPrimary)?.id
+            ?? UUID()
         legacyOpenTabIDsByProject = try c.decodeIfPresent([UUID: [UUID]].self, forKey: .openTabIDsByProject) ?? [:]
         legacySelectedSessionIDByProject = try c.decodeIfPresent([UUID: UUID].self, forKey: .selectedSessionIDByProject) ?? [:]
     }
@@ -94,6 +141,8 @@ struct AgentUIState: Codable, Equatable {
         try c.encodeIfPresent(selectedSessionID, forKey: .selectedSessionID)
         try c.encodeIfPresent(selectedProjectID, forKey: .selectedProjectID)
         try c.encode(expandedProjectIDs, forKey: .expandedProjectIDs)
+        try c.encode(windows, forKey: .windows)
+        try c.encode(primaryWindowID, forKey: .primaryWindowID)
         // v1-Felder werden bewusst nicht mehr geschrieben.
     }
 
@@ -104,33 +153,51 @@ struct AgentUIState: Codable, Equatable {
     /// aus der Pro-Projekt-Erinnerung des selektierten Projekts übernommen.
     mutating func migrateToV2IfNeeded(workspace: AgentWorkspace) {
         guard schemaVersion < Self.currentSchemaVersion else {
+            windows = Self.normalizedWindows(windows, primaryWindowID: primaryWindowID)
+            syncLegacyWindowMirror()
             legacyOpenTabIDsByProject = [:]
             legacySelectedSessionIDByProject = [:]
             return
         }
 
-        var flattened: [UUID] = []
-        let knownProjectIDs = Set(workspace.projects.map(\.id))
-        for project in AgentSessionStore.sortedProjects(workspace.projects) {
-            flattened.append(contentsOf: legacyOpenTabIDsByProject[project.id] ?? [])
-        }
-        // Tabs von Projekten, die der Workspace nicht (mehr) kennt,
-        // deterministisch hinten anhängen — prune() räumt tote IDs weg.
-        for (projectID, ids) in legacyOpenTabIDsByProject
-            .sorted(by: { $0.key.uuidString < $1.key.uuidString })
-            where !knownProjectIDs.contains(projectID) {
-            flattened.append(contentsOf: ids)
-        }
-        openTabIDs = Self.deduplicated(flattened)
+        if schemaVersion < 2 {
+            var flattened: [UUID] = []
+            let knownProjectIDs = Set(workspace.projects.map(\.id))
+            for project in AgentSessionStore.sortedProjects(workspace.projects) {
+                flattened.append(contentsOf: legacyOpenTabIDsByProject[project.id] ?? [])
+            }
+            // Tabs von Projekten, die der Workspace nicht (mehr) kennt,
+            // deterministisch hinten anhängen — prune() räumt tote IDs weg.
+            for (projectID, ids) in legacyOpenTabIDsByProject
+                .sorted(by: { $0.key.uuidString < $1.key.uuidString })
+                where !knownProjectIDs.contains(projectID) {
+                flattened.append(contentsOf: ids)
+            }
+            openTabIDs = Self.deduplicated(flattened)
 
-        if selectedSessionID == nil {
-            if let pid = selectedProjectID, let sid = legacySelectedSessionIDByProject[pid] {
-                selectedSessionID = sid
-            } else {
-                selectedSessionID = openTabIDs.first
+            if selectedSessionID == nil {
+                if let pid = selectedProjectID, let sid = legacySelectedSessionIDByProject[pid] {
+                    selectedSessionID = sid
+                } else {
+                    selectedSessionID = openTabIDs.first
+                }
             }
         }
 
+        if schemaVersion < 3 || windows.isEmpty {
+            primaryWindowID = windows.first(where: \.isPrimary)?.id ?? primaryWindowID
+            windows = [
+                AgentChatWindowState(
+                    id: primaryWindowID,
+                    openTabIDs: openTabIDs,
+                    selectedSessionID: selectedSessionID,
+                    selectedProjectID: selectedProjectID,
+                    isPrimary: true
+                )
+            ]
+        }
+        windows = Self.normalizedWindows(windows, primaryWindowID: primaryWindowID)
+        syncLegacyWindowMirror()
         schemaVersion = Self.currentSchemaVersion
         legacyOpenTabIDsByProject = [:]
         legacySelectedSessionIDByProject = [:]
@@ -149,6 +216,33 @@ struct AgentUIState: Codable, Equatable {
             Self.deduplicated(openTabIDs.filter { liveSessionIDs.contains($0) }),
             selectedID: selectedSessionID
         )
+        windows = Self.normalizedWindows(windows, primaryWindowID: primaryWindowID).map { window in
+            var copy = window
+            copy.openTabIDs = Self.cappedOpenTabIDs(
+                Self.deduplicated(copy.openTabIDs.filter { liveSessionIDs.contains($0) }),
+                selectedID: copy.selectedSessionID
+            )
+            if let sid = copy.selectedSessionID, !liveSessionIDs.contains(sid) {
+                copy.selectedSessionID = copy.openTabIDs.first
+            }
+            if let pid = copy.selectedProjectID, !liveProjectIDs.contains(pid) {
+                copy.selectedProjectID = nil
+            }
+            return copy
+        }.filter { $0.isPrimary || !$0.openTabIDs.isEmpty }
+        if windows.first(where: { $0.id == primaryWindowID }) == nil {
+            windows.insert(
+                AgentChatWindowState(
+                    id: primaryWindowID,
+                    openTabIDs: openTabIDs,
+                    selectedSessionID: selectedSessionID,
+                    selectedProjectID: selectedProjectID,
+                    isPrimary: true
+                ),
+                at: 0
+            )
+        }
+        windows = Self.normalizedWindows(windows, primaryWindowID: primaryWindowID)
         pinnedSessionIDs = Self.deduplicated(
             pinnedSessionIDs.filter { liveSessionIDs.contains($0) }
         )
@@ -160,6 +254,7 @@ struct AgentUIState: Codable, Equatable {
             selectedProjectID = nil
         }
         expandedProjectIDs = expandedProjectIDs.filter { liveProjectIDs.contains($0) }
+        syncLegacyWindowMirror()
     }
 
     /// First-Load-Migration: wenn der Sidecar fehlt und wir aus einem
@@ -179,7 +274,60 @@ struct AgentUIState: Codable, Equatable {
             state.openTabIDs.append(contentsOf: sessions.prefix(3).map(\.id))
         }
         state.openTabIDs = Array(state.openTabIDs.prefix(maxOpenTabs))
+        state.windows = [
+            AgentChatWindowState(
+                id: state.primaryWindowID,
+                openTabIDs: state.openTabIDs,
+                selectedSessionID: state.openTabIDs.first,
+                selectedProjectID: nil,
+                isPrimary: true
+            )
+        ]
+        state.selectedSessionID = state.openTabIDs.first
         return state
+    }
+
+    func windowState(for id: UUID) -> AgentChatWindowState {
+        windows.first { $0.id == id }
+            ?? AgentChatWindowState(id: id, isPrimary: id == primaryWindowID)
+    }
+
+    mutating func upsertWindow(_ window: AgentChatWindowState) {
+        if let index = windows.firstIndex(where: { $0.id == window.id }) {
+            windows[index] = window
+        } else {
+            windows.append(window)
+        }
+        windows = Self.normalizedWindows(windows, primaryWindowID: primaryWindowID)
+        syncLegacyWindowMirror()
+    }
+
+    mutating func removeWindowIfEmpty(_ id: UUID) {
+        guard id != primaryWindowID,
+              let window = windows.first(where: { $0.id == id }),
+              window.openTabIDs.isEmpty else { return }
+        windows.removeAll { $0.id == id }
+    }
+
+    mutating func moveTabToNewWindow(sessionID: UUID, sourceWindowID: UUID, newWindowID: UUID) {
+        moveTab(sessionID: sessionID, from: sourceWindowID, to: newWindowID, before: nil)
+    }
+
+    mutating func moveTab(sessionID: UUID, from sourceWindowID: UUID, to targetWindowID: UUID, before targetID: UUID?) {
+        for index in windows.indices {
+            windows[index].openTabIDs.removeAll { $0 == sessionID }
+            if windows[index].selectedSessionID == sessionID {
+                windows[index].selectedSessionID = windows[index].openTabIDs.first
+            }
+        }
+        var target = windowState(for: targetWindowID)
+        target.openTabIDs.removeAll { $0 == sessionID }
+        let insertAt = targetID.flatMap { target.openTabIDs.firstIndex(of: $0) } ?? target.openTabIDs.endIndex
+        target.openTabIDs.insert(sessionID, at: insertAt)
+        target.selectedSessionID = sessionID
+        upsertWindow(target)
+        removeWindowIfEmpty(sourceWindowID)
+        syncLegacyWindowMirror()
     }
 
     /// Reihenfolge-erhaltendes Dedupe — doppelte Tab-IDs würden die
@@ -196,5 +344,46 @@ struct AgentUIState: Codable, Equatable {
             capped[maxOpenTabs - 1] = selectedID
         }
         return capped
+    }
+
+    private mutating func syncLegacyWindowMirror() {
+        let primary = windowState(for: primaryWindowID)
+        openTabIDs = primary.openTabIDs
+        selectedSessionID = primary.selectedSessionID
+        selectedProjectID = primary.selectedProjectID
+    }
+
+    private static func normalizedWindows(
+        _ windows: [AgentChatWindowState],
+        primaryWindowID: UUID
+    ) -> [AgentChatWindowState] {
+        // 1. Doppelte Fenster-IDs entfernen, Primaerfenster garantieren.
+        var seenWindowIDs = Set<UUID>()
+        var normalized = windows.filter { seenWindowIDs.insert($0.id).inserted }
+        if normalized.first(where: { $0.id == primaryWindowID }) == nil {
+            normalized.insert(AgentChatWindowState(id: primaryWindowID, isPrimary: true), at: 0)
+        }
+        // 2. Primaerfenster zuerst — diese Reihenfolge bestimmt die
+        //    Dedup-Prioritaet in Schritt 3.
+        normalized.sort { lhs, rhs in
+            if lhs.id == primaryWindowID { return true }
+            if rhs.id == primaryWindowID { return false }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+        // 3. isPrimary setzen, Tabs INNERHALB jedes Fensters deduplizieren und
+        //    dann GLOBAL: jede Session lebt in genau EINEM Fenster (das in der
+        //    Reihenfolge fruehere gewinnt → Primaer hat Vorrang). Verhindert,
+        //    dass derselbe Chat gleichzeitig in zwei Fenstern auftaucht.
+        var claimedTabs = Set<UUID>()
+        for index in normalized.indices {
+            normalized[index].isPrimary = normalized[index].id == primaryWindowID
+            normalized[index].openTabIDs = deduplicated(normalized[index].openTabIDs)
+                .filter { claimedTabs.insert($0).inserted }
+            if let selected = normalized[index].selectedSessionID,
+               !normalized[index].openTabIDs.contains(selected) {
+                normalized[index].selectedSessionID = normalized[index].openTabIDs.first
+            }
+        }
+        return normalized
     }
 }

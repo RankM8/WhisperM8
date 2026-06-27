@@ -60,6 +60,20 @@ extension View {
     }
 }
 
+private final class WindowDragExclusionNSView: NSView {
+    override var mouseDownCanMoveWindow: Bool { false }
+}
+
+struct WindowDragExclusionView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = WindowDragExclusionNSView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 /// Spiegelt das native Titelleisten-Verhalten beim Doppelklick: liest die
 /// globale Einstellung „Doppelklick auf Titelleiste" (NSGlobalDomain) und
 /// führt die passende Aktion aus. Default „Maximize" = Zoom, falls der Key

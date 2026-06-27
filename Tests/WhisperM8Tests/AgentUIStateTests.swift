@@ -163,7 +163,9 @@ final class AgentUIStateTests: XCTestCase {
 
         XCTAssertEqual(state.openTabIDs, [live])
         XCTAssertEqual(state.pinnedSessionIDs, [live])
-        XCTAssertNil(state.selectedSessionID)
+        XCTAssertEqual(state.selectedSessionID, live)
+        XCTAssertEqual(state.windows.first?.openTabIDs, [live])
+        XCTAssertEqual(state.windows.first?.selectedSessionID, live)
         XCTAssertNil(state.selectedProjectID)
         XCTAssertEqual(state.expandedProjectIDs, [pid])
     }
@@ -182,6 +184,202 @@ final class AgentUIStateTests: XCTestCase {
 
         XCTAssertEqual(state.openTabIDs.count, AgentUIState.maxOpenTabs)
         XCTAssertTrue(state.openTabIDs.contains(selected), "Selektierter Tab überlebt die Kappung")
+        XCTAssertEqual(state.windows.first?.openTabIDs.count, AgentUIState.maxOpenTabs)
+        XCTAssertTrue(state.windows.first?.openTabIDs.contains(selected) == true)
+    }
+
+    func testMoveTabToNewWindowRemovesItFromSourceAndCreatesTarget() {
+        let sourceWindowID = UUID()
+        let targetWindowID = UUID()
+        let first = UUID()
+        let moved = UUID()
+        var state = AgentUIState(
+            openTabIDs: [first, moved],
+            selectedSessionID: moved,
+            windows: [
+                AgentChatWindowState(
+                    id: sourceWindowID,
+                    openTabIDs: [first, moved],
+                    selectedSessionID: moved,
+                    isPrimary: true
+                )
+            ],
+            primaryWindowID: sourceWindowID
+        )
+
+        state.moveTabToNewWindow(sessionID: moved, sourceWindowID: sourceWindowID, newWindowID: targetWindowID)
+
+        XCTAssertEqual(state.windowState(for: sourceWindowID).openTabIDs, [first])
+        XCTAssertEqual(state.windowState(for: sourceWindowID).selectedSessionID, first)
+        XCTAssertEqual(state.windowState(for: targetWindowID).openTabIDs, [moved])
+        XCTAssertEqual(state.windowState(for: targetWindowID).selectedSessionID, moved)
+    }
+
+    func testMovingLastTabOutOfSecondaryWindowRemovesSecondaryWindow() {
+        let primaryWindowID = UUID()
+        let secondaryWindowID = UUID()
+        let targetWindowID = UUID()
+        let primaryTab = UUID()
+        let moved = UUID()
+        var state = AgentUIState(
+            windows: [
+                AgentChatWindowState(id: primaryWindowID, openTabIDs: [primaryTab], selectedSessionID: primaryTab, isPrimary: true),
+                AgentChatWindowState(id: secondaryWindowID, openTabIDs: [moved], selectedSessionID: moved)
+            ],
+            primaryWindowID: primaryWindowID
+        )
+
+        state.moveTab(sessionID: moved, from: secondaryWindowID, to: targetWindowID, before: nil)
+
+        XCTAssertNotNil(state.windows.first { $0.id == primaryWindowID })
+        XCTAssertNil(state.windows.first { $0.id == secondaryWindowID })
+        XCTAssertEqual(state.windowState(for: targetWindowID).openTabIDs, [moved])
+    }
+
+    // MARK: - Multi-Window-Invarianten (Schema v3)
+
+    /// Kerninvariante gegen „derselbe Chat in zwei Fenstern": Nach Normalisierung
+    /// lebt jede Session in genau EINEM Fenster (Primaer hat Vorrang).
+    func testSameSessionLivesInOnlyOneWindow() {
+        let primaryID = UUID()
+        let secondaryID = UUID()
+        let shared = UUID()
+        let primaryOnly = UUID()
+        // Bewusst inkonsistent: `shared` in BEIDEN Fenstern. Der init ruft
+        // normalizedWindows → muss das Duplikat aufloesen.
+        let state = AgentUIState(
+            windows: [
+                AgentChatWindowState(id: primaryID, openTabIDs: [primaryOnly, shared], selectedSessionID: shared, isPrimary: true),
+                AgentChatWindowState(id: secondaryID, openTabIDs: [shared], selectedSessionID: shared)
+            ],
+            primaryWindowID: primaryID
+        )
+
+        let allTabs = state.windows.flatMap(\.openTabIDs)
+        XCTAssertEqual(allTabs.count, Set(allTabs).count, "Keine Session darf in zwei Fenstern liegen")
+        XCTAssertTrue(state.windowState(for: primaryID).openTabIDs.contains(shared), "Primaer behaelt die geteilte Session")
+        XCTAssertFalse(state.windowState(for: secondaryID).openTabIDs.contains(shared), "Sekundaer verliert das Duplikat")
+        XCTAssertNil(state.windowState(for: secondaryID).selectedSessionID, "verwaiste Selektion faellt auf nil")
+    }
+
+    /// v2-Datei (globale openTabIDs, keine windows) wird verlustfrei in EIN
+    /// Primaerfenster migriert.
+    func testV2StateMigratesIntoSinglePrimaryWindow() throws {
+        let pid = UUID()
+        let t1 = UUID(); let t2 = UUID()
+        let workspace = makeWorkspace(
+            projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
+            sessions: [makeSession(id: t1, projectID: pid), makeSession(id: t2, projectID: pid)]
+        )
+        let v2JSON = """
+        {
+          "schemaVersion": 2,
+          "openTabIDs": ["\(t1.uuidString)", "\(t2.uuidString)"],
+          "pinnedSessionIDs": [],
+          "selectedSessionID": "\(t2.uuidString)",
+          "expandedProjectIDs": []
+        }
+        """
+        var state = try JSONDecoder().decode(AgentUIState.self, from: v2JSON.data(using: .utf8)!)
+        state.migrateToV2IfNeeded(workspace: workspace)
+
+        XCTAssertEqual(state.schemaVersion, AgentUIState.currentSchemaVersion)
+        XCTAssertEqual(state.windows.count, 1, "genau ein Primaerfenster nach v2→v3")
+        let primary = state.windowState(for: state.primaryWindowID)
+        XCTAssertTrue(primary.isPrimary)
+        XCTAssertEqual(primary.openTabIDs, [t1, t2])
+        XCTAssertEqual(primary.selectedSessionID, t2)
+    }
+
+    /// Tab in ein BESTEHENDES anderes Fenster verschieben (nicht „neues").
+    func testMoveTabIntoExistingWindowAppendsAndEmptiesSource() {
+        let primaryID = UUID(); let secondaryID = UUID()
+        let a = UUID(); let b = UUID(); let c = UUID()
+        var state = AgentUIState(
+            windows: [
+                AgentChatWindowState(id: primaryID, openTabIDs: [a, b], selectedSessionID: a, isPrimary: true),
+                AgentChatWindowState(id: secondaryID, openTabIDs: [c], selectedSessionID: c)
+            ],
+            primaryWindowID: primaryID
+        )
+        state.moveTab(sessionID: c, from: secondaryID, to: primaryID, before: nil)
+
+        XCTAssertEqual(state.windowState(for: primaryID).openTabIDs, [a, b, c])
+        XCTAssertEqual(state.windowState(for: primaryID).selectedSessionID, c)
+        XCTAssertNil(state.windows.first { $0.id == secondaryID }, "leeres Quell-Sekundaerfenster wird entfernt")
+    }
+
+    /// Reorder innerhalb desselben Fensters über `before`.
+    func testMoveTabReordersBeforeTargetWithinSameWindow() {
+        let primaryID = UUID()
+        let a = UUID(); let b = UUID(); let c = UUID()
+        var state = AgentUIState(
+            windows: [AgentChatWindowState(id: primaryID, openTabIDs: [a, b, c], selectedSessionID: a, isPrimary: true)],
+            primaryWindowID: primaryID
+        )
+        state.moveTab(sessionID: c, from: primaryID, to: primaryID, before: a)
+        XCTAssertEqual(state.windowState(for: primaryID).openTabIDs, [c, a, b])
+    }
+
+    /// prune entfernt leere/tote Sekundaerfenster, behaelt aber das Primaerfenster.
+    func testPruneRemovesEmptyAndDeadSecondaryWindowsKeepsPrimary() {
+        let pid = UUID()
+        let live = UUID(); let dead = UUID()
+        let workspace = makeWorkspace(
+            projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
+            sessions: [makeSession(id: live, projectID: pid)] // `dead` fehlt bewusst
+        )
+        let primaryID = UUID(); let emptySecID = UUID(); let deadSecID = UUID()
+        var state = AgentUIState(
+            windows: [
+                AgentChatWindowState(id: primaryID, openTabIDs: [live], selectedSessionID: live, isPrimary: true),
+                AgentChatWindowState(id: emptySecID, openTabIDs: [], selectedSessionID: nil),
+                AgentChatWindowState(id: deadSecID, openTabIDs: [dead], selectedSessionID: dead)
+            ],
+            primaryWindowID: primaryID
+        )
+        state.prune(workspace: workspace)
+
+        XCTAssertNotNil(state.windows.first { $0.id == primaryID }, "Primaerfenster bleibt")
+        XCTAssertNil(state.windows.first { $0.id == emptySecID }, "leeres Sekundaerfenster gepruned")
+        XCTAssertNil(state.windows.first { $0.id == deadSecID }, "Sekundaerfenster mit nur toten Tabs gepruned")
+        XCTAssertEqual(state.windowState(for: primaryID).openTabIDs, [live])
+    }
+
+    /// Das Primaerfenster überlebt prune auch dann, wenn es leer ist (sonst
+    /// haette die App nach dem Schliessen aller Tabs kein Fenster mehr).
+    func testPruneKeepsEmptyPrimaryWindow() {
+        let pid = UUID()
+        let live = UUID()
+        let workspace = makeWorkspace(
+            projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
+            sessions: [makeSession(id: live, projectID: pid)]
+        )
+        let primaryID = UUID()
+        var state = AgentUIState(
+            windows: [AgentChatWindowState(id: primaryID, openTabIDs: [], selectedSessionID: nil, isPrimary: true)],
+            primaryWindowID: primaryID
+        )
+        state.prune(workspace: workspace)
+        XCTAssertNotNil(state.windows.first { $0.id == primaryID })
+        XCTAssertTrue(state.windowState(for: primaryID).isPrimary)
+    }
+
+    /// Genau ein Fenster ist isPrimary, und es entspricht primaryWindowID.
+    func testExactlyOnePrimaryWindowMatchesPrimaryID() {
+        let primaryID = UUID(); let secondaryID = UUID()
+        let a = UUID(); let b = UUID()
+        let state = AgentUIState(
+            windows: [
+                // bewusst falsch geflaggt — Normalisierung muss korrigieren
+                AgentChatWindowState(id: primaryID, openTabIDs: [a], selectedSessionID: a, isPrimary: false),
+                AgentChatWindowState(id: secondaryID, openTabIDs: [b], selectedSessionID: b, isPrimary: true)
+            ],
+            primaryWindowID: primaryID
+        )
+        XCTAssertEqual(state.windows.filter(\.isPrimary).count, 1, "genau ein Primaerfenster")
+        XCTAssertTrue(state.windowState(for: primaryID).isPrimary)
+        XCTAssertFalse(state.windowState(for: secondaryID).isPrimary)
     }
 
     // MARK: - First-Load-Migration

@@ -56,9 +56,10 @@ help:
 dev: kill
 	@echo "🔄 Building $(APP_NAME) (release)..."
 	@rm -rf "$(APP_BUNDLE)"
+	@find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true
 	@swift build -c release
 	@scripts/patch-resource-accessors.sh release
-	@swift build -c release
+	@swift build -c release --disable-sandbox
 	@$(MAKE) _bundle BUILD=release
 	@$(MAKE) _install_bundle
 	@echo "✅ Updated $(INSTALLED_APP)"
@@ -72,9 +73,10 @@ dev-reinstall: dev
 # ------------------------------------------------------------------------------
 build:
 	@echo "Building release..."
+	@find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true
 	@swift build -c release
 	@scripts/patch-resource-accessors.sh release
-	@swift build -c release
+	@swift build -c release --disable-sandbox
 	@$(MAKE) _bundle BUILD=release
 	@echo "Done: $(APP_BUNDLE)"
 

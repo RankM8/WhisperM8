@@ -28,11 +28,13 @@ struct WhisperM8App: App {
     }
 
     var body: some Scene {
-        // Agent-Chats ist die Hauptansicht der App und das erste Window in
-        // dieser Scene-Liste — SwiftUI öffnet das oberste Window beim
-        // Launch, es sei denn der AppDelegate routet was anderes (Onboarding).
-        Window("Agent Chats", id: "agent-chats") {
-            AgentChatsView()
+        // Agent-Chats-Primaerfenster: bewusst eine Single-`Window`-Scene als
+        // ERSTE Scene. SwiftUI oeffnet sie beim Launch automatisch (sofern der
+        // AppDelegate nicht Onboarding routet) — und eine `Window`-Scene kann
+        // sich, anders als eine WindowGroup, niemals duplizieren. Das war die
+        // Ursache des Doppelfenster-Bugs beim Wechsel auf Multi-Window.
+        Window("Agent Chats", id: WindowRequest.agentChats.targetWindowID) {
+            AgentChatsPrimaryWindowRoot()
                 .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
         .defaultSize(width: 1100, height: 720)
@@ -52,6 +54,18 @@ struct WhisperM8App: App {
                 .keyboardShortcut(",", modifiers: .command)
             }
         }
+
+        // Agent-Chats-Sekundaerfenster (abgeloeste Tabs). Als NICHT-erste
+        // Scene oeffnet SwiftUI hier beim Launch KEIN Fenster automatisch —
+        // ein Sekundaerfenster entsteht nur durch openWindow(id:value:) aus
+        // dem Detach- bzw. Restore-Pfad.
+        WindowGroup("Agent Chat Window", id: WindowRequest.agentChatWindowGroupID, for: UUID.self) { $windowID in
+            AgentChatsSecondaryWindowRoot(windowID: $windowID)
+                .preferredColorScheme(themeManager.override.preferredColorScheme)
+        }
+        .defaultSize(width: 1100, height: 720)
+        .defaultPosition(.center)
+        .windowStyle(.hiddenTitleBar)
 
         MenuBarExtra {
             MenuBarView()
@@ -110,6 +124,70 @@ struct WhisperM8App: App {
     }
 }
 
+/// Root des Primaerfensters. Loest die primaryWindowID einmalig auf — bewusst
+/// OHNE Binding: die `Window`-Scene hat keinen praesentierten Wert, und genau
+/// das fruehere Zurueckschreiben eines nil→UUID-Bindings einer WindowGroup
+/// erzeugte das Doppelfenster.
+private struct AgentChatsPrimaryWindowRoot: View {
+    @State private var windowID: UUID?
+
+    var body: some View {
+        Group {
+            if let windowID {
+                AgentChatsView(windowID: windowID)
+            } else {
+                ProgressView()
+                    .frame(minWidth: 640, minHeight: 420)
+                    .task { resolveIfNeeded() }
+            }
+        }
+    }
+
+    @MainActor
+    private func resolveIfNeeded() {
+        guard windowID == nil else { return }
+        // Live aus dem Store (Single Source of Truth), nicht von Platte —
+        // sonst koennte eine noch nicht geschriebene primaryWindowID divergieren.
+        windowID = AgentWindowStore.shared.primaryWindowID
+    }
+}
+
+/// Root eines Sekundaerfensters (abgeloester Tab). Bekommt seine ID als
+/// praesentierten WindowGroup-Wert. Kommt ausnahmsweise kein Wert an (etwa ein
+/// leeres Auto-Fenster), schliesst es sich selbst, statt das Primaerfenster zu
+/// duplizieren.
+private struct AgentChatsSecondaryWindowRoot: View {
+    @Binding var windowID: UUID?
+    @State private var resolvedWindowID: UUID?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Group {
+            if let resolvedWindowID {
+                AgentChatsView(windowID: resolvedWindowID)
+            } else {
+                ProgressView()
+                    .frame(minWidth: 640, minHeight: 420)
+                    .task { resolveIfNeeded() }
+            }
+        }
+    }
+
+    @MainActor
+    private func resolveIfNeeded() {
+        guard resolvedWindowID == nil else { return }
+        // Nur Fenster aufbauen, die der Store wirklich kennt. Ein Sekundaer-
+        // fenster ohne ID oder ohne Store-Eintrag ist ein verwaistes Restore-
+        // Artefakt (oder ein leeres Auto-Fenster) → sofort schliessen, statt
+        // ein Geister-/Duplikat-Fenster zu rendern.
+        guard let id = windowID, AgentWindowStore.shared.hasWindow(id) else {
+            dismiss()
+            return
+        }
+        resolvedWindowID = id
+    }
+}
+
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
@@ -164,18 +242,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WindowRequestCenter.shared.request(.onboarding)
             }
-        } else if !LaunchAtLogin.wasLaunchedAtLogin {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                WindowRequestCenter.shared.request(.agentChats)
-            }
         }
     }
 
-    /// Re-Activate (Klick auf Dock-Icon, wenn die App schon läuft). Wir öffnen
-    /// das Agent-Chats-Window — sei es weil alle Windows zu sind oder weil
-    /// der User explizit zur Hauptansicht zurück will.
+    /// Re-Activate (Klick auf Dock-Icon, wenn die App schon läuft). Nur wenn
+    /// KEIN sichtbares Fenster mehr offen ist, oeffnen wir das Primaerfenster
+    /// neu. Sind bereits Fenster da (`flag == true`), bringt AppKit die App
+    /// selbst nach vorn — ein zusaetzliches openWindow wuerde sonst ein
+    /// Duplikat des Primaerfensters erzeugen.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        WindowRequestCenter.shared.request(.agentChats)
+        if !flag {
+            WindowRequestCenter.shared.request(.agentChats)
+        }
         return true
     }
 
@@ -191,6 +269,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// — sonst bleibt das System-Audio leise bis manueller Slider-Eingriff.
     func applicationWillTerminate(_ notification: Notification) {
         AudioDuckingManager.shared.endCaptureImmediate()
+        // Letzten (debounced) Fenster-/Tab-State noch festschreiben.
+        MainActor.assumeIsolated { AgentWindowStore.shared.flush() }
     }
 
     private func requestNotificationPermission() {

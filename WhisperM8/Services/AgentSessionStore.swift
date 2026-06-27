@@ -43,20 +43,38 @@ struct AgentSessionStore {
     /// migriert. Garbage-Collection laeuft immer, auch bei vorhandenem
     /// File — entfernt stale UUIDs.
     func loadUIState() -> AgentUIState {
+        // Workspace nur EINMAL lesen: migrate + prune brauchen denselben
+        // Stand. (loadWorkspace() ist seit P1 In-Memory, aber kopiert den
+        // Workspace-Struct unter Lock — 3x war unnötig.)
+        let workspace = loadWorkspace()
         var state: AgentUIState
+        var needsPersist = false
         if FileManager.default.fileExists(atPath: uiStateFileURL.path) {
             do {
                 let data = try Data(contentsOf: uiStateFileURL)
                 state = try JSONDecoder().decode(AgentUIState.self, from: data)
             } catch {
                 Logger.debug("AgentUIState load failed: \(error.localizedDescription) — falling back to first-load migration")
-                state = AgentUIState.initialMigration(from: loadWorkspace())
+                state = AgentUIState.initialMigration(from: workspace)
+                needsPersist = true
             }
         } else {
-            state = AgentUIState.initialMigration(from: loadWorkspace())
+            state = AgentUIState.initialMigration(from: workspace)
+            needsPersist = true
         }
-        state.migrateToV2IfNeeded(workspace: loadWorkspace())
-        state.prune(workspace: loadWorkspace())
+        // Eine noch nicht migrierte Datei (bzw. ein fehlender Sidecar) erzeugt
+        // bei JEDEM Decode eine frische primaryWindowID. Würde das nicht sofort
+        // persistiert, sähe jeder weitere loadUIState()-Aufruf eine andere
+        // Primaerfenster-ID → divergierende Fenster-Identitaeten. Daher die
+        // Migration einmalig festschreiben.
+        if state.schemaVersion < AgentUIState.currentSchemaVersion {
+            needsPersist = true
+        }
+        state.migrateToV2IfNeeded(workspace: workspace)
+        state.prune(workspace: workspace)
+        if needsPersist {
+            try? saveUIState(state)
+        }
         return state
     }
 

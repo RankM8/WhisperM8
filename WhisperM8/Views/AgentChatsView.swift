@@ -29,15 +29,45 @@ struct AgentChatsView: View {
     /// Tab-Strip misst seine Frame darin fürs Mausrad-Hit-Test-Gating.
     private static let windowCoordinateSpaceName = "agentChatsWindow"
 
+    let windowID: UUID
+    @Environment(\.openWindow) private var openWindow
     @State private var store = AgentSessionStore()
     /// P1 S6: Live-Projektion des Workspace-Stands. Facade-Mutationen
     /// spiegeln sich hier automatisch — die früheren ~24 manuellen
     /// `workspace = store.loadWorkspace()`-Reloads entfallen.
     @State private var workspaceModel = AgentWorkspaceUIModel.shared
     private var workspace: AgentWorkspace { workspaceModel.workspace }
-    @State private var selectedProjectID: UUID?
-    @State private var selectedSessionID: UUID?
-    @State private var expandedProjectIDs: Set<UUID> = []
+    // MARK: - Fenster-/Tab-State (Single Source of Truth: AgentWindowStore)
+    // Diese fuenf Properties sind Bridges auf den GETEILTEN Store: der Getter
+    // liest den Slice DIESES Fensters, der Setter schreibt ueber Store-Mutationen
+    // (die alle Invarianten + Persistenz erledigen). Kein Pro-View-@State, kein
+    // NotificationCenter-Sync, kein Disk-Roundtrip mehr — der Zustand existiert
+    // nur einmal im Store. `.append/.removeAll/.insert` an diesen Properties
+    // funktionieren via Swifts get→modify→set über den `nonmutating set`.
+    // @State (nicht let), damit SwiftUIs Observation-Tracking zuverlässig
+    // greift: Reads über die Bridges unten lassen die View bei Store-Mutationen
+    // (auch aus ANDEREN Fenstern) neu rendern.
+    @State private var windowStore = AgentWindowStore.shared
+    private var selectedProjectID: UUID? {
+        get { windowStore.selectedProject(in: windowID) }
+        nonmutating set { windowStore.setSelectedProject(newValue, in: windowID) }
+    }
+    private var selectedSessionID: UUID? {
+        get { windowStore.selectedSession(in: windowID) }
+        nonmutating set { windowStore.setSelectedSession(newValue, in: windowID) }
+    }
+    private var expandedProjectIDs: Set<UUID> {
+        get { Set(windowStore.expandedProjectIDs) }
+        nonmutating set { windowStore.setExpandedProjectIDs(Array(newValue)) }
+    }
+    private var openTabIDs: [UUID] {
+        get { windowStore.openTabIDs(in: windowID) }
+        nonmutating set { windowStore.setOpenTabIDs(newValue, in: windowID) }
+    }
+    private var pinnedSessionIDs: [UUID] {
+        get { windowStore.pinnedSessionIDs }
+        nonmutating set { windowStore.setPinnedSessionIDs(newValue) }
+    }
     @State private var searchText = ""
     @State private var errorMessage: String?
     @State private var isIndexingSessions = false
@@ -73,12 +103,6 @@ struct AgentChatsView: View {
     /// Gemerktes Ziel für „Projekt öffnen in …" (Default PhpStorm, Finder
     /// wählbar). Die Wahl im Menü setzt den neuen Default.
     @AppStorage("agentProjectOpenTarget") private var projectOpenTargetRaw = ProjectOpenTarget.phpStorm.rawValue
-    /// Offene Tabs der globalen Tab-Bar in Anzeige-Reihenfolge —
-    /// projektübergreifend (UI-State Schema v2). Persistiert via AgentUIState.
-    @State private var openTabIDs: [UUID] = []
-    /// In der Sidebar angepinnte Chats (Pin-Reihenfolge). Gepinnte Sessions
-    /// erscheinen exklusiv in der „Gepinnt"-Sektion. Persistiert.
-    @State private var pinnedSessionIDs: [UUID] = []
     /// Welche Chats die Sidebar zeigt (Aktiv·Zuletzt·Alle). Default `.active`
     /// hält die Liste klein; `@AppStorage` persistiert fensterweit ohne
     /// Schema-Migration. Die Suche überstimmt den Scope (siehe `effectiveScope`).
@@ -129,12 +153,6 @@ struct AgentChatsView: View {
     /// Differenz > 0 ⇒ Überlauf ⇒ Chevron-Overflow-Menü einblenden.
     @State private var stripViewportWidth: CGFloat = 0
     @State private var stripContentWidth: CGFloat = 0
-    /// `true` waehrend wir den UIState aus der Sidecar-Datei laden. Verhindert
-    /// dass die initialen .onChange-Trigger waehrend des Loads zurueck-saven.
-    @State private var isLoadingPersistedUIState = true
-    /// Debounce-Timer fuer Save-Operationen — verhindert Write-Spam bei
-    /// rapid tab-switches.
-    @State private var uiStatePersistTask: Task<Void, Never>?
     @State private var renameTargetID: UUID?
     @State private var renameDraft: String = ""
     @State private var renameProjectTargetID: UUID?
@@ -358,7 +376,10 @@ struct AgentChatsView: View {
         .onAppear {
             setupRuntimeServicesIfNeeded()
             loadWorkspaceFast()
-            loadPersistedUIState()
+            // Fenster-/Tab-State kommt live aus AgentWindowStore (SSoT) — kein
+            // Laden in lokalen @State mehr. Nur Selektion gegen den (gerade
+            // geladenen) Workspace bereinigen.
+            reconcileSelection()
             syncActiveAgentChat()
             migrateIconDetectionIfNeeded()
             attemptAutoDetectProjectIcons()
@@ -414,16 +435,15 @@ struct AgentChatsView: View {
             syncActiveAgentChat()
             // Kontext-Projekt folgt der Selektion — Tabs sind global, das
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
+            // (Persistenz erledigt der Store automatisch bei jeder Mutation.)
             if let sessionID = newValue,
                let session = workspace.sessions.first(where: { $0.id == sessionID }) {
                 selectedProjectID = session.projectID
             }
-            schedulePersistUIState()
             updateActiveBackgroundTrackerIfNeeded()
         }
         .onChange(of: selectedProjectID) { _, _ in
             syncActiveAgentChat()
-            schedulePersistUIState()
         }
         .onChange(of: workspace) { _, _ in
             syncActiveAgentChat()
@@ -431,9 +451,16 @@ struct AgentChatsView: View {
             // dem Spawn-Fehlerpfad) nie auf Gelöschtes zeigen.
             reconcileSelection()
         }
-        .onChange(of: openTabIDs) { _, _ in schedulePersistUIState() }
-        .onChange(of: pinnedSessionIDs) { _, _ in schedulePersistUIState() }
-        .onChange(of: expandedProjectIDs) { _, _ in schedulePersistUIState() }
+        .onChange(of: openTabIDs) { _, _ in
+            closeWindowIfEmptyAndSecondary()
+        }
+        .onChange(of: isHoveringTabStrip) { _, hovering in
+            // Window-Drag hover-gesteuert: über dem Tab-Strip AUS (Klick/Drag
+            // bewegt den Tab, nicht das Fenster), auf freien Flächen AN. Setzen
+            // schon beim Hover — nicht erst beim mouseDown — umgeht das frühere
+            // Timing-Problem, bei dem ein Tab-Drag doch das Fenster zog.
+            hostWindow?.isMovable = !hovering
+        }
         .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanRunningChangedNotification)) { note in
             guard let running = note.userInfo?["running"] as? Bool else { return }
             if running {
@@ -466,56 +493,13 @@ struct AgentChatsView: View {
 
     // MARK: - UI-State Persistenz (Sidecar agent-ui-state.json)
 
-    /// Laedt den persistierten UI-State und populiert die `@State`-Vars.
-    /// Garbage-Collection laeuft im Store (entfernt stale UUIDs).
-    /// First-Load-Migration ebenfalls im Store (populiert aus Workspace
-    /// wenn die Sidecar-Datei fehlt).
-    private func loadPersistedUIState() {
-        let state = store.loadUIState()
-
-        openTabIDs = state.openTabIDs
-        pinnedSessionIDs = state.pinnedSessionIDs
-        expandedProjectIDs = Set(state.expandedProjectIDs)
-
-        // Session-Selection global; das Kontext-Projekt folgt der Session.
-        // Fallback: persistiertes Projekt, sonst lässt loadWorkspaceFast
-        // den Default setzen.
-        if let sid = state.selectedSessionID,
-           let session = workspace.sessions.first(where: { $0.id == sid && $0.status != .archived }) {
-            selectedSessionID = sid
-            selectedProjectID = session.projectID
-        } else if let pid = state.selectedProjectID,
-                  workspace.projects.contains(where: { $0.id == pid }) {
-            selectedProjectID = pid
-        }
-
-        isLoadingPersistedUIState = false
-    }
-
-    /// Schedules ein debounced Save (500 ms) damit rapid tab-switches keinen
-    /// Write-Spam verursachen. Beim ersten Load wird kein Save ausgeloest.
-    private func schedulePersistUIState() {
-        guard !isLoadingPersistedUIState else { return }
-        uiStatePersistTask?.cancel()
-        let snapshot = currentUIStateSnapshot()
-        let storeRef = store
-        uiStatePersistTask = Task.detached(priority: .utility) {
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            try? storeRef.saveUIState(snapshot)
-        }
-    }
-
-    /// Baut aus den aktuellen @State-Vars einen `AgentUIState` (Schema v2).
-    /// Die Tab-Reihenfolge ist bereits die Anzeige-Reihenfolge der Bar.
-    private func currentUIStateSnapshot() -> AgentUIState {
-        AgentUIState(
-            openTabIDs: openTabIDs,
-            pinnedSessionIDs: pinnedSessionIDs,
-            selectedSessionID: selectedSessionID,
-            selectedProjectID: selectedProjectID,
-            expandedProjectIDs: Array(expandedProjectIDs)
-        )
+    /// Schliesst dieses Fenster, wenn es zu einem leeren Sekundaerfenster
+    /// geworden ist (letzter Tab raus/verschoben). Der Store entfernt den
+    /// State-Eintrag; das NSWindow wird async geschlossen — nie im Stack einer
+    /// laufenden Geste, sonst zieht es die View unter dem Handler weg.
+    private func closeWindowIfEmptyAndSecondary() {
+        guard windowStore.removeWindowIfEmpty(windowID) else { return }
+        DispatchQueue.main.async { hostWindow?.performClose(nil) }
     }
 
     /// Aktiviert den Tracker fuer "in TUI aktive Sub-Session" nur, wenn
@@ -1414,8 +1398,15 @@ struct AgentChatsView: View {
 
     private var projectChatStrip: some View {
         VStack(spacing: 0) {
+            // Tabs sitzen in der Titelzone (oberste ~28px), browserähnlich neben
+            // den Ampel-Buttons. Window-Drag wird hover-gesteuert ausgeschaltet,
+            // sobald die Maus über dem Tab-Strip schwebt (siehe
+            // `.onChange(of: isHoveringTabStrip)` am Body) — so zieht ein Klick/
+            // Drag auf einem Tab nie das Fenster, während freie Flächen (links/
+            // Lücken) das Fenster weiterhin verschieben.
             HStack(spacing: 6) {
                 if !isSidebarVisible {
+                    // Platz für die Ampel-Buttons, wenn die Sidebar aus ist.
                     Spacer().frame(width: 70)
                 }
 
@@ -1445,18 +1436,36 @@ struct AgentChatsView: View {
                                     )
                                     // Mittelklick (Mausrad) schließt den Tab — wie im Browser.
                                     .onMiddleClick { closeTab(session) }
-                                    .draggable(DraggableSession(sessionID: session.id, sourceProjectID: session.projectID))
+                                    .draggable(DraggableSession(
+                                        sessionID: session.id,
+                                        sourceProjectID: session.projectID,
+                                        sourceWindowID: windowID
+                                    ))
                                     .dropDestination(for: DraggableSession.self) { items, _ in
                                         guard let dropped = items.first else { return false }
-                                        // Tab-Reorder = reine Anzeige-Reihenfolge der
-                                        // globalen Bar — unabhängig vom Store-sortIndex.
+                                        // Tab-Reorder/-Move = reine Anzeige-Reihenfolge
+                                        // des Ziel-Fensters — unabhängig vom Store-sortIndex.
                                         dropTab(dropped, before: session.id)
                                         return true
                                     }
+                                    .simultaneousGesture(
+                                        DragGesture(minimumDistance: 20)
+                                            .onEnded { value in
+                                                if shouldDetachTab(for: value) {
+                                                    moveTabToNewWindow(session)
+                                                }
+                                            }
+                                    )
                                     .contextMenu {
                                         sessionManagementMenu(session)
                                     }
                                 }
+                            }
+                            .background(WindowDragExclusionView())
+                            .dropDestination(for: DraggableSession.self) { items, _ in
+                                guard let dropped = items.first else { return false }
+                                dropTabAtEnd(dropped)
+                                return true
                             }
                             // Gesamtbreite des Inhalts → Überlauf-Erkennung fürs Chevron.
                             .background(
@@ -3020,6 +3029,10 @@ struct AgentChatsView: View {
             .disabled(session.externalSessionID == nil)
             forkMenuItem(session)
             Divider()
+            Button("In neues Fenster verschieben", systemImage: "macwindow.badge.plus") {
+                moveTabToNewWindow(session)
+            }
+            Divider()
             Button(
                 pinnedSessionIDs.contains(session.id) ? "Loslösen" : "Anpinnen",
                 systemImage: pinnedSessionIDs.contains(session.id) ? "pin.slash" : "pin"
@@ -3189,11 +3202,11 @@ struct AgentChatsView: View {
         }
     }
 
-    // MARK: - Titelleisten-Maus: Tab-Drag schützen + Doppelklick-Zoom
+    // MARK: - Titelleisten-Maus: Doppelklick-Zoom
 
     private func installTitleBarZoomHandlerIfNeeded() {
         guard titleBarZoomMonitor == nil else { return }
-        titleBarZoomMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { event in
+        titleBarZoomMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
             handleTitleBarMouse(event)
         }
     }
@@ -3203,34 +3216,21 @@ struct AgentChatsView: View {
             NSEvent.removeMonitor(titleBarZoomMonitor)
             self.titleBarZoomMonitor = nil
         }
-        // Sicherheitsnetz: nie unbewegbar zurücklassen.
-        if let hostWindow, !hostWindow.isMovable { hostWindow.isMovable = true }
     }
 
-    /// Verarbeitet Maus-Events im obersten Titelleisten-Band. Lokaler Monitor,
+    /// Doppelklick im freien Titelleisten-Band → System-Zoom. Lokaler Monitor,
     /// weil `hiddenTitleBar` + `fullSizeContentView` die native Titelleiste durch
-    /// den Tab-Strip ersetzen. Zwei Aufgaben:
+    /// den Tab-Strip ersetzen und macOS den Doppelklick dort nicht mehr selbst
+    /// auswertet.
     ///
-    /// 1. **Tab-Drag statt Fenster-Drag (Fenstermodus):** Der obere ~28px-Bereich
-    ///    ist AppKit-Titelleisten-Drag-Region; die NSScrollView hinter dem
-    ///    Tab-Strip liefert `mouseDownCanMoveWindow == true`, weshalb ein Drag auf
-    ///    einem Tab das Fenster bewegt statt zu reordern (im Vollbild ist das
-    ///    Fenster unbewegbar → dort klappt es). Fix: Beginnt ein `leftMouseDown`
-    ///    ÜBER dem Tab-Strip, machen wir das Fenster für die Geste unbewegbar
-    ///    (`isMovable = false`) und reichen das Event durch — SwiftUIs
-    ///    `.draggable` bekommt den Reorder. `leftMouseUp` stellt die Bewegbarkeit
-    ///    wieder her. Auf freien Header-Flächen bleibt `isMovable == true` → dort
-    ///    bewegt der Drag weiterhin das Fenster (browserähnlich).
-    /// 2. **Doppelklick-Zoom:** nur im freien Band (x ≥ 80, NICHT über den Tabs).
+    /// Das Fenster-Dragging läuft NICHT hier, sondern über ein hover-gesteuertes
+    /// `isMovable`-Toggle (siehe `.onChange(of: isHoveringTabStrip)` am Body):
+    /// über dem Tab-Strip AUS (Tab-Drag/Reorder), auf freien Flächen AN (natives
+    /// Fenster-Verschieben). Schon beim Hover gesetzt — nicht erst beim mouseDown,
+    /// was vorher zu „Tab-Drag zieht doch das Fenster" führte.
     private func handleTitleBarMouse(_ event: NSEvent) -> NSEvent? {
-        // Bewegbarkeit immer am Gesten-Ende wiederherstellen — egal wo der
-        // mouseUp landet, damit das Fenster nie „klebt".
-        if event.type == .leftMouseUp {
-            if let window = hostWindow, !window.isMovable { window.isMovable = true }
-            return event
-        }
-
-        guard let window = hostWindow,
+        guard event.clickCount == 2,
+              let window = hostWindow,
               event.window === window,
               let contentView = window.contentView else { return event }
 
@@ -3238,21 +3238,11 @@ struct AgentChatsView: View {
         let trafficLightWidth: CGFloat = 80
         let location = event.locationInWindow
         let inTopBand = location.y >= contentView.bounds.height - topZone
-        let overStrip = inTopBand
-            && stripFrameInWindow != .zero
-            && location.x >= stripFrameInWindow.minX
-            && location.x <= stripFrameInWindow.maxX
 
-        // Doppelklick im freien Titelleistenband (nicht über den Tabs) → Zoom.
-        if event.clickCount == 2, inTopBand, location.x >= trafficLightWidth, !overStrip {
+        // Nur im freien Band: nicht über den Tabs, nicht über den Ampel-Buttons.
+        if inTopBand, location.x >= trafficLightWidth, !isHoveringTabStrip {
             TitleBarZoom.performSystemDoubleClickAction(on: window)
             return nil
-        }
-
-        // Drag-Start über den Tabs → Fenster temporär unbewegbar machen, damit
-        // der Tab-Reorder (SwiftUI .draggable) greift statt das Fenster zu ziehen.
-        if overStrip {
-            window.isMovable = false
         }
         return event
     }
@@ -3326,11 +3316,37 @@ struct AgentChatsView: View {
     private func dropTab(_ dropped: DraggableSession, before targetID: UUID) {
         let id = dropped.sessionID
         guard id != targetID else { return }
-        if let from = openTabIDs.firstIndex(of: id) {
-            openTabIDs.remove(at: from)
+        // Cross-Window-Move ODER lokaler Reorder/Sidebar-Open — der Store
+        // erledigt beides (moveTab fuegt nicht-offene Tabs an der Drop-Position
+        // ein und selektiert sie). Persistenz + Invarianten inklusive.
+        let source = dropped.sourceWindowID ?? windowID
+        windowStore.moveTab(id, from: source, to: windowID, before: targetID)
+    }
+
+    private func dropTabAtEnd(_ dropped: DraggableSession) {
+        let id = dropped.sessionID
+        let source = dropped.sourceWindowID ?? windowID
+        windowStore.moveTab(id, from: source, to: windowID, before: nil)
+    }
+
+    private func shouldDetachTab(for value: DragGesture.Value) -> Bool {
+        // Detach nur bei klar vertikalem Herausziehen aus der Leiste — so
+        // kollidiert die Geste nicht mit dem horizontalen Reorder (.draggable),
+        // der sonst fälschlich ein neues Fenster aufmachte.
+        abs(value.translation.height) > 60 && abs(value.translation.width) < 44
+    }
+
+    private func moveTabToNewWindow(_ session: AgentChatSession) {
+        // Tab muss in DIESEM Fenster offen sein — sonst (z. B. Detach-Geste
+        // feuerte nach einem bereits erfolgten Cross-Window-Drop) nichts tun.
+        guard openTabIDs.contains(session.id) else { return }
+        let newWindowID = windowStore.detachToNewWindow(session.id, from: windowID)
+        // Fenster-Erzeugung aus dem synchronen Gesten-Stack lösen: openWindow
+        // direkt in DragGesture.onEnded kann SwiftUI/AppKit beim Aufbau der
+        // neuen Scene destabilisieren (beobachteter Detach-Crash).
+        DispatchQueue.main.async {
+            openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
         }
-        let insertAt = openTabIDs.firstIndex(of: targetID) ?? openTabIDs.endIndex
-        openTabIDs.insert(id, at: insertAt)
     }
 
     /// Wird vom Inspector-Button („PHPStorm öffnen") genutzt.

@@ -32,8 +32,11 @@ final class WindowAndOverlayTests: XCTestCase {
         XCTAssertEqual(WindowRequest.outputDashboard.targetWindowID, "output-dashboard")
         XCTAssertNil(WindowRequest.outputDashboard.settingsSectionID)
 
+        // Primaerfenster = eigene Single-`Window`-Scene; die WindowGroup-ID
+        // ist davon getrennt und gilt nur fuer abgeloeste Sekundaerfenster.
         XCTAssertEqual(WindowRequest.agentChats.targetWindowID, "agent-chats")
         XCTAssertNil(WindowRequest.agentChats.settingsSectionID)
+        XCTAssertEqual(WindowRequest.agentChatWindowGroupID, "agent-chat-window")
     }
 
     func testAgentDragDropUTIsMatchInfoPlistDeclarations() throws {
