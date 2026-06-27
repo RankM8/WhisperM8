@@ -1198,7 +1198,11 @@ final class RecordingCoordinator {
     }
 
     @discardableResult
-    private func importClipboardScreenshot(from pasteboard: NSPasteboard, changeCount: Int) -> Bool {
+    /// Gemeinsamer Rumpf von `importClipboardScreenshot` und
+    /// `importClipboardScreenshotIfNeeded`: Quota-Pruefung, Capture und Append
+    /// in das Context-Bundle. Die unterschiedlichen Vorbedingungen
+    /// (Guards/Polling) liegen bewusst in den Aufrufern.
+    private func appendClipboardScreenshot(from pasteboard: NSPasteboard, changeCount: Int) -> Bool {
         guard let appState else { return false }
         guard appState.contextBundle.screenshots.count < AppPreferences.shared.maxScreenshotsPerRecording else {
             appState.lastError = "Maximum screenshots for this recording reached."
@@ -1226,6 +1230,10 @@ final class RecordingCoordinator {
             overlayController.update(appState: appState)
             return false
         }
+    }
+
+    private func importClipboardScreenshot(from pasteboard: NSPasteboard, changeCount: Int) -> Bool {
+        appendClipboardScreenshot(from: pasteboard, changeCount: changeCount)
     }
 
     @discardableResult
@@ -1285,32 +1293,7 @@ final class RecordingCoordinator {
         guard force || changeCount != observedPasteboardChangeCount else { return false }
         observedPasteboardChangeCount = changeCount
 
-        guard appState.contextBundle.screenshots.count < AppPreferences.shared.maxScreenshotsPerRecording else {
-            appState.lastError = "Maximum screenshots for this recording reached."
-            overlayController.update(appState: appState)
-            return false
-        }
-
-        do {
-            guard let screenshot = try visualContextCaptureService.captureClipboardScreenshot(
-                from: pasteboard,
-                changeCount: changeCount,
-                sourceApp: contextSourceApp
-            ) else {
-                return false
-            }
-
-            appState.contextBundle.screenshots.append(screenshot)
-            appState.lastContextBundle = appState.contextBundle
-            appState.lastError = nil
-            overlayController.update(appState: appState)
-            return true
-        } catch {
-            appState.lastError = error.localizedDescription
-            Logger.permission.warning("Clipboard screenshot context failed: \(error.localizedDescription, privacy: .public)")
-            overlayController.update(appState: appState)
-            return false
-        }
+        return appendClipboardScreenshot(from: pasteboard, changeCount: changeCount)
     }
 
     private func networkErrorMessage(for urlError: URLError) -> String {
