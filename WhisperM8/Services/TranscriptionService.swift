@@ -6,17 +6,6 @@ protocol TranscriptionServiceProtocol {
     func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval?) async throws -> String
 }
 
-protocol Transcribing {
-    func transcribe(audioURL: URL, request: TranscriptionRequest) async throws -> String
-}
-
-struct TranscriptionRequest: Equatable {
-    let provider: TranscriptionProvider
-    let model: TranscriptionModel
-    let language: String?
-    let audioDuration: TimeInterval?
-}
-
 // MARK: - Timeout Calculation
 
 /// Calculate appropriate timeout based on audio duration
