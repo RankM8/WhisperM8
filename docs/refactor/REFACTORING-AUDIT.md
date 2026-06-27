@@ -91,7 +91,7 @@ Zusätzlich (Folge-Wunsch, kein Audit-Item): **Projekt-Header in der Sidebar per
 4. **Facade + Forwarder hält Aufrufstellen stabil** (A8) — dasselbe Muster trägt AgentUIStateStore/AgentGitBranchReader ohne Aufrufer-Änderungen.
 5. **`AgentChatsView` bleibt mit 3500 LOC der größte Hebel.** B1 löste nur die ~184 Monitor-Zeilen; der Kern (≈80 Business-Logik-Methoden) braucht erst den thematischen Split, dann die ViewModel-Extraktion (siehe Testbarkeit-Analyse).
 
-## Phase 2 — Fortschritt (AgentChatsView-Split)
+## Phase 2 — Fortschritt
 
 Begonnen 2026-06-27: `AgentChatsView` (God-View, Note 2/5) per `extension`-Dateien entlastet —
 **3684 → 2426 LOC (−31 %)**, 6 thematische Extensions, je 1 Commit, 447 Tests nach jedem grün,
@@ -106,11 +106,21 @@ reiner Move (genutzte Member auf `internal` gehoben, sonst unverändert):
 | `+Tabs` | Tab öffnen/schließen, archivieren, Reorder/Detach |
 | `+DragDrop` | Sidebar-Reorder (Session inkl. Cross-Project, Projekt) |
 
-(plus `+Shortcuts` aus Phase 1). In der Hauptdatei bleiben View-Body + View-Builder + wenige
-kleine Logik-Methoden. **Methode bewährt:** Extension rausziehen → `swift build` listet die zu
-hebenden `private`-Member → gezielt heben. **Noch offen in Phase 2:** `Views/`-Ordnergliederung,
-RecordingCoordinator-/AgentTerminalView-/RecordingOverlayView-Splits, Rest-Quick-Wins
-(AgentUIStateStore, AgentGitBranchReader, OnboardingView-Permission-Dedup); danach Phase 3 (Test-Seams).
+(plus `+Shortcuts` aus Phase 1). In der Hauptdatei bleiben View-Body + View-Builder + wenige kleine Logik-Methoden.
+
+Ebenso gesplittet: **`RecordingCoordinator`** (God-Service, Note 2/5) — **1385 → 450 LOC (−68 %)**, 5 Extensions, je 1 Commit, 447 Tests grün:
+
+| Extension | Inhalt |
+|---|---|
+| `+Transcription` | Whisper/Groq-Call, Codex-Post-Processing, Routing, Run-Report (`saveRunReport`) |
+| `+Clipboard` | Screen-Clip-Aufnahme + Clipboard-Screenshot/Text-Übernahme |
+| `+Failure` | Transkription fehlgeschlagen/abgebrochen, Aufnahme bewahren, Retry-Alert |
+| `+UI` | Fehler-Alert, Netzwerk-Fehlertexte, ESC-Monitor, Dauer-Timer, Audio-Logging |
+| `+Context` | Paralleles Kontext-Capture + Overlay-Edit-Aktionen |
+
+Die Methode trägt auch für **Klassen** und **file-private Typen** (`PostProcessingRunResult`/`PendingTranscriptionRetry` → `internal`).
+
+**Methode bewährt:** Extension rausziehen → `swift build` listet die zu hebenden `private`-Member/-Typen → gezielt heben (macOS-`sed`: Trennklasse `[ :=]` statt `\b`). **Noch offen in Phase 2:** `Views/`-Ordnergliederung, `AgentTerminalView`-/`RecordingOverlayView`-Splits, Rest-Quick-Wins (AgentUIStateStore, AgentGitBranchReader, OnboardingView-Permission-Dedup); danach Phase 3 (Test-Seams).
 
 ## Empfohlene Roadmap
 

@@ -71,8 +71,10 @@ TranscriptionService, AgentSessionIndexer) and pulled AgentChatsView's NSEvent m
 `Views/AgentChatsView+Shortcuts.swift`. A follow-up pass (Phase 2) decomposed `AgentChatsView`
 further into thematic `extension` files (`+BackgroundAgents`, `+RuntimeServices`,
 `+SessionLifecycle`, `+ProjectManagement`, `+Tabs`, `+DragDrop`), shrinking the main view from
-~3684 to ~2426 LOC (logic methods are `internal` so the extensions in sibling files can reach
-them). Full roadmap + status: `docs/refactor/REFACTORING-AUDIT.md`.
+~3684 to ~2426 LOC. The same `extension`-per-concern technique split `RecordingCoordinator`
+(1385 → 450 LOC) into `+Transcription`/`+Clipboard`/`+Failure`/`+UI`/`+Context`. (Moved logic
+methods/types are `internal` so sibling-file extensions can reach them.) Full roadmap + status:
+`docs/refactor/REFACTORING-AUDIT.md`.
 
 ### App shell
 
