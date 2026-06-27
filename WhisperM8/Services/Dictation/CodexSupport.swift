@@ -147,16 +147,29 @@ enum CodexConnectionStatus: Equatable {
 }
 
 struct CodexStatusProbe {
+    private let commandResolver: (String) -> String?
+    private let commandRunner: (String, [String]) -> String
+
+    /// Closures sind Phase-3-Test-Seams: Default = echte CLI-Auflösung/-Ausführung,
+    /// in Tests durch Fakes ersetzbar (Status-Parsing ohne echtes `codex`-Binary).
+    init(
+        commandResolver: @escaping (String) -> String? = { CodexStatusProbe.resolveCommandPath($0) },
+        commandRunner: @escaping (String, [String]) -> String = { CodexStatusProbe.runProcess($0, arguments: $1) }
+    ) {
+        self.commandResolver = commandResolver
+        self.commandRunner = commandRunner
+    }
+
     func version() -> String {
-        guard let codexPath = commandPath("codex") else { return "Not installed" }
-        return run(codexPath, arguments: ["--version"])
+        guard let codexPath = commandResolver("codex") else { return "Not installed" }
+        return commandRunner(codexPath, ["--version"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func status() -> CodexConnectionStatus {
-        guard let codexPath = commandPath("codex") else { return .notInstalled }
+        guard let codexPath = commandResolver("codex") else { return .notInstalled }
 
-        let output = run(codexPath, arguments: ["login", "status"])
+        let output = commandRunner(codexPath, ["login", "status"])
         let lowercasedOutput = output.lowercased()
 
         if lowercasedOutput.contains("logged in using chatgpt") {
@@ -173,7 +186,7 @@ struct CodexStatusProbe {
     }
 
     func openLoginInTerminal() {
-        guard let codexPath = commandPath("codex") else {
+        guard let codexPath = commandResolver("codex") else {
             NSWorkspace.shared.open(URL(string: "https://help.openai.com/en/articles/11381614-codex-cli-and-sign-in-withgpt")!)
             return
         }
@@ -201,6 +214,10 @@ struct CodexStatusProbe {
     }
 
     func commandPath(_ command: String) -> String? {
+        commandResolver(command)
+    }
+
+    static func resolveCommandPath(_ command: String) -> String? {
         let bundledCodexPath = "/Applications/Codex.app/Contents/Resources/codex"
         if command == "codex",
            FileManager.default.isExecutableFile(atPath: bundledCodexPath) {
@@ -210,7 +227,7 @@ struct CodexStatusProbe {
         return AgentCommandBuilder.commandPath(command)
     }
 
-    private func run(_ path: String, arguments: [String]) -> String {
+    private static func runProcess(_ path: String, arguments: [String]) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
