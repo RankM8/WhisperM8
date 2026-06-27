@@ -2408,15 +2408,16 @@ struct AgentChatsView: View {
             || normalized.hasSuffix(" Chat")
     }
 
-    /// Projekt-Klick setzt nur noch den Kontext (Ziel für „Neuer Chat",
-    /// Inspector) — die globale Tab-Bar und die Selektion bleiben
-    /// unangetastet.
+    /// Projekt-Klick setzt den Kontext (Ziel für „Neuer Chat", Inspector) und
+    /// klappt das Projekt auf bzw. zu (Standard-Disclosure-Verhalten — Klick auf
+    /// die ganze Header-Zeile öffnet/schließt). Die globale Tab-Bar und die
+    /// Session-Selektion bleiben unangetastet.
     private func selectProject(_ projectID: UUID) {
         selectedProjectID = projectID
-        expandedProjectIDs.insert(projectID)
         if let project = workspace.projects.first(where: { $0.id == projectID }) {
             AppPreferences.shared.agentDefaultProjectPath = project.path
         }
+        toggleProject(projectID)
     }
 
     private func toggleProject(_ projectID: UUID) {
