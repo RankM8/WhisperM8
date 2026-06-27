@@ -89,16 +89,7 @@ class AudioRecorder {
 
         // Get the actual device being used
         if let audioUnit = inputNode.audioUnit {
-            var currentDeviceID: AudioDeviceID = 0
-            var propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
-            let status = AudioUnitGetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &currentDeviceID,
-                &propertySize
-            )
+            let (currentDeviceID, status) = currentEngineDeviceID(audioUnit)
             if status == noErr {
                 let deviceName = deviceManager.availableDevices.first { $0.id == currentDeviceID }?.name ?? "Unknown"
                 Logger.debug("[AudioRecorder] Engine actually using device: \(currentDeviceID) (\(deviceName))")
@@ -289,16 +280,7 @@ class AudioRecorder {
 
         // Log what device we're now using
         if let audioUnit = inputNode.audioUnit {
-            var currentDeviceID: AudioDeviceID = 0
-            var propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
-            let status = AudioUnitGetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &currentDeviceID,
-                &propertySize
-            )
+            let (currentDeviceID, status) = currentEngineDeviceID(audioUnit)
             if status == noErr {
                 let deviceName = AudioDeviceManager.shared.availableDevices.first { $0.id == currentDeviceID }?.name ?? "Unknown"
                 Logger.debug("[AudioRecorder] Engine using device: \(currentDeviceID) (\(deviceName))")
@@ -384,6 +366,23 @@ class AudioRecorder {
 
             self.writeBuffer(buffer, inputFormat: inputFormat, targetFormat: capturedTargetFormat)
         }
+    }
+
+    /// Fragt die DeviceID ab, die das AudioUnit aktuell als Input nutzt.
+    /// Gemeinsamer CoreAudio-Boilerplate beider Aufrufer; das Logging und die
+    /// Aufloesung des Geraetenamens bleiben bewusst beim jeweiligen Aufrufer.
+    private func currentEngineDeviceID(_ audioUnit: AudioUnit) -> (deviceID: AudioDeviceID, status: OSStatus) {
+        var currentDeviceID: AudioDeviceID = 0
+        var propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioUnitGetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &currentDeviceID,
+            &propertySize
+        )
+        return (currentDeviceID, status)
     }
 
     private func calculateLevel(buffer: AVAudioPCMBuffer) -> Float {
