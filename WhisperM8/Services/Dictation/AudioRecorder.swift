@@ -144,29 +144,7 @@ class AudioRecorder {
         // Install tap for recording + level metering
         // Use larger buffer size (4096) for better Bluetooth compatibility
         Logger.debug("[AudioRecorder] Installing tap on inputNode...")
-        var tapCallCount = 0
-        let capturedTargetFormat = self.targetFormat
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-
-            tapCallCount += 1
-            if tapCallCount == 1 {
-                Logger.debug("[AudioRecorder] TAP: First callback received! frameLength=\(buffer.frameLength)")
-            } else if tapCallCount == 10 {
-                Logger.debug("[AudioRecorder] TAP: 10 callbacks received")
-            } else if tapCallCount == 100 {
-                Logger.debug("[AudioRecorder] TAP: 100 callbacks received")
-            }
-
-            // Calculate audio level
-            let level = self.calculateLevel(buffer: buffer)
-            Task { @MainActor in
-                self.audioLevel = level
-            }
-
-            // Write to file (with conversion if needed)
-            self.writeBuffer(buffer, inputFormat: inputFormat, targetFormat: capturedTargetFormat)
-        }
+        installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "TAP", logHundredthCallback: true)
 
         Logger.debug("[AudioRecorder] Starting engine...")
         do {
@@ -349,25 +327,7 @@ class AudioRecorder {
         let hasAudioFile = resourceLock.withLock { self.audioFile != nil }
         Logger.debug("[AudioRecorder] audioFile is \(hasAudioFile ? "valid" : "NIL")")
 
-        var newTapCallCount = 0
-        let capturedTargetFormat = self.targetFormat
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self = self else { return }
-
-            newTapCallCount += 1
-            if newTapCallCount == 1 {
-                Logger.debug("[AudioRecorder] NEW TAP: First callback! frameLength=\(buffer.frameLength)")
-            } else if newTapCallCount == 10 {
-                Logger.debug("[AudioRecorder] NEW TAP: 10 callbacks received")
-            }
-
-            let level = self.calculateLevel(buffer: buffer)
-            Task { @MainActor in
-                self.audioLevel = level
-            }
-
-            self.writeBuffer(buffer, inputFormat: inputFormat, targetFormat: capturedTargetFormat)
-        }
+        installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "NEW TAP", logHundredthCallback: false)
 
         // 6. Restart the engine
         Logger.debug("[AudioRecorder] Restarting engine...")
@@ -391,6 +351,40 @@ class AudioRecorder {
     }
 
     // MARK: - Audio Processing
+
+    /// Installiert den Aufnahme-Tap auf `inputNode`: gedrosseltes Callback-Logging,
+    /// Pegelmessung und Schreiben in die Datei. `label` unterscheidet die Log-Zeilen
+    /// der beiden Aufrufer ("TAP" beim Erststart, "NEW TAP" beim Format-Reinstall).
+    /// `logHundredthCallback` bewahrt das bisherige Verhalten: nur der Erststart
+    /// loggt zusaetzlich den 100. Callback.
+    private func installRecordingTap(
+        on inputNode: AVAudioInputNode,
+        inputFormat: AVAudioFormat,
+        label: String,
+        logHundredthCallback: Bool
+    ) {
+        var tapCallCount = 0
+        let capturedTargetFormat = self.targetFormat
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+
+            tapCallCount += 1
+            if tapCallCount == 1 {
+                Logger.debug("[AudioRecorder] \(label): First callback received! frameLength=\(buffer.frameLength)")
+            } else if tapCallCount == 10 {
+                Logger.debug("[AudioRecorder] \(label): 10 callbacks received")
+            } else if logHundredthCallback, tapCallCount == 100 {
+                Logger.debug("[AudioRecorder] \(label): 100 callbacks received")
+            }
+
+            let level = self.calculateLevel(buffer: buffer)
+            Task { @MainActor in
+                self.audioLevel = level
+            }
+
+            self.writeBuffer(buffer, inputFormat: inputFormat, targetFormat: capturedTargetFormat)
+        }
+    }
 
     private func calculateLevel(buffer: AVAudioPCMBuffer) -> Float {
         guard let channelData = buffer.floatChannelData?[0] else { return 0 }
