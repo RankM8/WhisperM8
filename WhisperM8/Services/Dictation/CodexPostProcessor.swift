@@ -125,7 +125,7 @@ struct CodexPostProcessor: PostProcessing {
         }
 
         guard process.terminationStatus == 0 else {
-            let message = conciseCodexError(from: logOutput)
+            let message = CodexErrorSummary.concise(from: logOutput)
             // Scheiterte der Lauf an fehlender Anmeldung, war der gecachte
             // .signedIn-Status stale — nächster Lauf probt frisch.
             if logOutput.lowercased().contains("not logged in") {
@@ -143,19 +143,4 @@ struct CodexPostProcessor: PostProcessing {
         return output
     }
 
-    private func conciseCodexError(from output: String) -> String {
-        if output.contains("requires a newer version of Codex") {
-            return "Codex CLI needs an update before post-processing can run."
-        }
-        if output.lowercased().contains("not logged in") {
-            return "Codex is not signed in with ChatGPT."
-        }
-        if let lastLine = output
-            .split(separator: "\n")
-            .map(String.init)
-            .last(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
-            return lastLine
-        }
-        return "Codex post-processing failed."
-    }
 }
