@@ -98,7 +98,8 @@ struct AgentChatsView: View {
     /// Etappe-0 Tab-Drag: gemessene Tab-Frames (Inhalts-Space) + aktueller
     /// Einfüge-Index während eines Drags (ephemer, nicht persistiert).
     @State private var tabFrames: [UUID: CGRect] = [:]
-    @State private var tabInsertionIndex: Int?
+    /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
+    @State var tabInsertionIndex: Int?
 
     /// Multi-Select der Tab-Leiste (ephemer, pro Fenster): leer = Einzel-Auswahl,
     /// sonst ≥ 2 IDs inkl. aktivem Tab. internal, da `handleTabClick` in +Tabs liegt.
@@ -147,6 +148,11 @@ struct AgentChatsView: View {
     /// `ScrollView(.horizontal)` nicht per Mausrad — Trackpad-Gesten bleiben
     /// unangetastet (siehe `handleTabStripScroll`).
     @State var tabStripScrollMonitor: Any?
+    /// Lokaler `leftMouseUp`-Monitor: setzt die Tab-Einfügelinie beim Loslassen
+    /// zurück. `.draggable` cancelt die parallele DragGesture (kein `onEnded`)
+    /// und `DropDelegate.dropExited`/`performDrop` feuern bei Cancel/Außerhalb-
+    /// Drop nicht zuverlässig — mouseUp ist der einzige verlässliche Geber.
+    @State var tabDragEndMonitor: Any?
     /// Frame des Tab-Strips im benannten Window-Coordinate-Space
     /// (`windowCoordinateSpaceName`). Dient dem Scroll-Monitor als X-Spanne
     /// fürs Hit-Test-Gating. Bewusst window-relativ statt `.global`, damit der
@@ -404,6 +410,7 @@ struct AgentChatsView: View {
             installCloseTabShortcutIfNeeded()
             installTitleBarZoomHandlerIfNeeded()
             installTabStripScrollMonitorIfNeeded()
+            installTabDragEndMonitorIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputNotification)) { note in
             if let id = note.userInfo?["localID"] as? UUID {
@@ -444,6 +451,7 @@ struct AgentChatsView: View {
             removeCloseTabShortcut()
             removeTitleBarZoomHandler()
             removeTabStripScrollMonitor()
+            removeTabDragEndMonitor()
             // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
             AppState.shared.activeAgentChat = nil
         }
@@ -1518,7 +1526,17 @@ struct AgentChatsView: View {
                                 frames: tabFrames,
                                 insertionIndex: $tabInsertionIndex,
                                 onMove: { dropped, beforeID in
-                                    if let beforeID {
+                                    // Multi-Drag: ist das gezogene Tab Teil der Auswahl, wird die
+                                    // ganze Gruppe (in Anzeige-Reihenfolge) als Block einsortiert —
+                                    // vorerst nur same-window (Cross-Window-Gruppe = Folgeschritt).
+                                    let group = multiSelection.contains(dropped.sessionID)
+                                        ? openTabIDs.filter { multiSelection.contains($0) }
+                                        : []
+                                    let sameWindow = (dropped.sourceWindowID ?? windowID) == windowID
+                                    if sameWindow, group.count > 1 {
+                                        let newOrder = TabGroupReorder.newOrder(openTabIDs, moving: Set(group), before: beforeID)
+                                        windowStore.setOpenTabIDs(newOrder, in: windowID)
+                                    } else if let beforeID {
                                         dropTab(dropped, before: beforeID)
                                     } else {
                                         dropTabAtEnd(dropped)

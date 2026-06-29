@@ -38,6 +38,27 @@ enum TabReorderGeometry {
     }
 }
 
+// MARK: - Gruppen-Reorder (Multi-Tab-Drag)
+
+/// Reine, testbare Reorder-Logik für einen Multi-Select-Drag: die `group`
+/// wird als zusammenhängender Block vor `beforeID` (nil = ans Ende) einsortiert
+/// und behält ihre aktuelle Relativ-Reihenfolge. Cross-Window-Gruppen sind
+/// bewusst NICHT hier (Caller fällt für die auf Einzel-`moveTab` zurück).
+enum TabGroupReorder {
+    static func newOrder(_ order: [UUID], moving group: Set<UUID>, before beforeID: UUID?) -> [UUID] {
+        let moved = order.filter { group.contains($0) }
+        guard moved.count > 1 else { return order }                 // Einzel → Caller nutzt moveTab
+        if let beforeID, group.contains(beforeID) { return order }  // Drop auf eigenes Mitglied = No-op
+        let rest = order.filter { !group.contains($0) }
+        guard let beforeID, let idx = rest.firstIndex(of: beforeID) else {
+            return rest + moved
+        }
+        var result = rest
+        result.insert(contentsOf: moved, at: idx)
+        return result
+    }
+}
+
 // MARK: - Frame-Messung pro Tab
 
 /// Sammelt die Frames aller Tabs (Tab-ID → Rect im Inhalts-Space).

@@ -190,4 +190,26 @@ extension AgentChatsView {
         }
         return nil
     }
+
+    // MARK: - Drag-Ende: Einfügelinie zurücksetzen
+
+    /// Lokaler `leftMouseUp`-Monitor. Setzt `tabInsertionIndex` beim Loslassen
+    /// der Maustaste zurück — der einzige verlässliche „Drag vorbei"-Geber, weil
+    /// `.draggable` die parallele `DragGesture` cancelt (kein `onEnded`) und
+    /// `DropDelegate.dropExited`/`performDrop` bei Cancel/Außerhalb-Drop nicht
+    /// zuverlässig feuern. Reines Beobachten — das Event läuft unverändert weiter.
+    func installTabDragEndMonitorIfNeeded() {
+        guard tabDragEndMonitor == nil else { return }
+        tabDragEndMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+            if tabInsertionIndex != nil { tabInsertionIndex = nil }
+            return event
+        }
+    }
+
+    func removeTabDragEndMonitor() {
+        if let tabDragEndMonitor {
+            NSEvent.removeMonitor(tabDragEndMonitor)
+            self.tabDragEndMonitor = nil
+        }
+    }
 }
