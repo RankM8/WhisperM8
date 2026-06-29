@@ -101,6 +101,8 @@ struct AgentChatsView: View {
     /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
     /// dauerhaft oben Platz belegen.
     @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
+    /// Tear-off: die Detach-Drop-Zone (Content) ist gerade Drop-Ziel.
+    @State private var detachZoneTargeted = false
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
 
@@ -757,7 +759,7 @@ struct AgentChatsView: View {
                         pinnedSectionHeader(count: visiblePinned.count)
                         if !pinnedSectionCollapsed {
                             ForEach(visiblePinned) { session in
-                                pinnedRow(session, runningSessionIDs: runningSessionIDs)
+                                pinnedRow(session, runningSessionIDs: runningSessionIDs, order: visiblePinned.map(\.id))
                             }
                         }
                         if !chatListIsEmpty {
@@ -767,7 +769,7 @@ struct AgentChatsView: View {
 
                     if sidebarLayout == .flat {
                         ForEach(flatSessions) { session in
-                            flatRow(session, runningSessionIDs: runningSessionIDs)
+                            flatRow(session, runningSessionIDs: runningSessionIDs, order: flatSessions.map(\.id))
                         }
                     } else {
                     ForEach(visibleProjects) { project in
@@ -890,7 +892,7 @@ struct AgentChatsView: View {
     /// Auto-Titel, Farbe, Schließen). Gepinnte Chats sind projektübergreifend —
     /// das Repo-Badge stellt die Zuordnung her.
     @ViewBuilder
-    private func pinnedRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>) -> some View {
+    private func pinnedRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>, order: [UUID]) -> some View {
         PinnedSessionRow(
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
@@ -901,8 +903,10 @@ struct AgentChatsView: View {
             isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
             onSelect: {
-                openTab(session.id)
-                selectedSessionID = session.id
+                handleSidebarRowClick(session.id, order: order) {
+                    openTab(session.id)
+                    selectedSessionID = session.id
+                }
             },
             onClose: { archiveSession(session) }
         )
@@ -931,7 +935,7 @@ struct AgentChatsView: View {
     /// (`PinnedSessionRow` wiederverwendet, da projektübergreifend). Kontextmenü
     /// wie eine normale Chat-Zeile, nur „Anpinnen" statt „Loslösen".
     @ViewBuilder
-    private func flatRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>) -> some View {
+    private func flatRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>, order: [UUID]) -> some View {
         PinnedSessionRow(
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
@@ -942,9 +946,11 @@ struct AgentChatsView: View {
             isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
             onSelect: {
-                selectedProjectID = session.projectID
-                openTab(session.id)
-                selectedSessionID = session.id
+                handleSidebarRowClick(session.id, order: order) {
+                    selectedProjectID = session.projectID
+                    openTab(session.id)
+                    selectedSessionID = session.id
+                }
             },
             onClose: { archiveSession(session) }
         )
@@ -1456,12 +1462,45 @@ struct AgentChatsView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
                 .background(AgentTheme.background)
+                // Tear-off: Tab/Gruppe in den Content ziehen → neues Fenster.
+                // Eigene Drop-Zone (nur Content, NICHT der Strip → kein Konflikt
+                // mit Reorder), zuverlässig über das Drop-System + Indikator.
+                .dropDestination(for: DraggableSession.self) { items, _ in
+                    guard let dropped = items.first else { return false }
+                    detachDroppedToNewWindow(dropped)
+                    return true
+                } isTargeted: { detachZoneTargeted = $0 }
+                .overlay {
+                    if detachZoneTargeted { detachDropBanner }
+                }
+                .animation(.easeOut(duration: 0.12), value: detachZoneTargeted)
             } else {
                 ContentUnavailableView("Kein Agent Chat", systemImage: "terminal")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(AgentTheme.background)
+    }
+
+    /// Banner-Indikator, der während eines Tab-Drags über dem Content erscheint
+    /// („Loslassen → neues Fenster").
+    private var detachDropBanner: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(AgentTheme.accent.opacity(0.12))
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(AgentTheme.accent.opacity(0.7), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            Label("Loslassen für neues Fenster", systemImage: "macwindow.badge.plus")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AgentTheme.accent)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AgentTheme.background, in: Capsule())
+                .overlay(Capsule().strokeBorder(AgentTheme.border, lineWidth: 1))
+        }
+        .padding(14)
+        .allowsHitTesting(false)
+        .transition(.opacity)
     }
 
     private var projectChatStrip: some View {
@@ -1516,19 +1555,6 @@ struct AgentChatsView: View {
                                             extraCount: max(0, tabDragGroup(for: session).count - 1)
                                         )
                                     }
-                                    .simultaneousGesture(
-                                        DragGesture(minimumDistance: 20)
-                                            .onEnded { value in
-                                                // Drag vorbei (Drop, Cancel ODER außerhalb der
-                                                // Drop-Zone losgelassen). dropExited/performDrop
-                                                // feuern dabei NICHT zuverlässig (SwiftUI-Bug) →
-                                                // die Einfügelinie hier sicher zurücksetzen.
-                                                tabInsertionIndex = nil
-                                                if shouldDetachTab(for: value) {
-                                                    moveTabToNewWindow(session)
-                                                }
-                                            }
-                                    )
                                     .contextMenu {
                                         sessionManagementMenu(session)
                                     }

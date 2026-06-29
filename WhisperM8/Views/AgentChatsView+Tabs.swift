@@ -43,6 +43,21 @@ extension AgentChatsView {
         }
     }
 
+    /// Wie `handleSidebarSessionClick`, aber für Zeilen ohne festes Projekt
+    /// (gepinnt/flach): Cmd toggelt, Shift wählt einen Bereich in `order`,
+    /// normaler Klick führt `plainClick` aus + leert die Auswahl.
+    func handleSidebarRowClick(_ sessionID: UUID, order: [UUID], plainClick: () -> Void) {
+        let mods = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mods.contains(.command) {
+            multiSelection = TabSelectionResolver.commandClick(sessionID, active: selectedSessionID, selection: multiSelection).selection
+        } else if mods.contains(.shift) {
+            multiSelection = TabSelectionResolver.shiftClick(sessionID, anchor: selectedSessionID, order: order).selection
+        } else {
+            plainClick()
+            multiSelection = []
+        }
+    }
+
     /// Die mitzuziehende Gruppe für den Drag von `session`: alle ausgewählten
     /// OFFENEN Tabs in Anzeige-Reihenfolge, falls `session` Teil der Auswahl ist;
     /// sonst leer (Einzel-Drag).
@@ -147,6 +162,26 @@ extension AgentChatsView {
             windowStore.moveTab(id, from: windowID, to: newWindowID, before: nil)
         }
         multiSelection = []
+        DispatchQueue.main.async {
+            openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
+        }
+    }
+
+    /// Tear-off-Drop: erzeugt EIN neues Fenster mit der gezogenen Session bzw.
+    /// (wenn sie Teil der Quell-Auswahl ist) der ganzen Gruppe. Liest die Auswahl
+    /// LIVE aus dem Quell-Fenster (robust, kein Payload-Round-Trip).
+    func detachDroppedToNewWindow(_ dropped: DraggableSession) {
+        let source = dropped.sourceWindowID ?? windowID
+        let sel = windowStore.multiSelection(in: source)
+        let group = (sel.count > 1 && sel.contains(dropped.sessionID))
+            ? windowStore.openTabIDs(in: source).filter { sel.contains($0) }
+            : [dropped.sessionID]
+        guard let first = group.first, windowStore.openTabIDs(in: source).contains(first) else { return }
+        let newWindowID = windowStore.detachToNewWindow(first, from: source)
+        for id in group.dropFirst() {
+            windowStore.moveTab(id, from: source, to: newWindowID, before: nil)
+        }
+        windowStore.setMultiSelection([], in: source)
         DispatchQueue.main.async {
             openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
         }
