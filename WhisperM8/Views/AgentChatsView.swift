@@ -99,6 +99,10 @@ struct AgentChatsView: View {
     /// Einfüge-Index während eines Drags (ephemer, nicht persistiert).
     @State private var tabFrames: [UUID: CGRect] = [:]
     @State private var tabInsertionIndex: Int?
+
+    /// Multi-Select der Tab-Leiste (ephemer, pro Fenster): leer = Einzel-Auswahl,
+    /// sonst ≥ 2 IDs inkl. aktivem Tab. internal, da `handleTabClick` in +Tabs liegt.
+    @State var multiSelection: Set<UUID> = []
     /// Mirror der `autoNamer.inFlight`-Set — wird via NotificationCenter
     /// aktualisiert, damit SwiftUI Re-Renders triggert. Wir koennen das nicht
     /// ueber @Observable machen weil autoNamer lazy-init in einem optionalen
@@ -1436,11 +1440,12 @@ struct AgentChatsView: View {
                                         session: session,
                                         project: workspace.projects.first { $0.id == session.projectID },
                                         isSelected: session.id == selectedSession?.id,
+                                        isMultiSelected: multiSelection.contains(session.id),
                                         isRunning: runningSessionIDs.contains(session.id),
                                         statusStore: runtimeStatusStore,
                                         isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
                                         onSelect: {
-                                            selectedSessionID = session.id
+                                            handleTabClick(session.id)
                                         },
                                         onClose: {
                                             closeTab(session)
@@ -1484,6 +1489,10 @@ struct AgentChatsView: View {
                             }
                             .coordinateSpace(.named(Self.tabStripContentSpace))
                             .onPreferenceChange(TabFramePreferenceKey.self) { tabFrames = $0 }
+                            // Stale IDs aus der Multi-Auswahl entfernen, wenn sich die offenen Tabs ändern.
+                            .onChange(of: headerTabs.map(\.id)) { _, ids in
+                                multiSelection.formIntersection(Set(ids))
+                            }
                             // Einfüge-Linie an der Drop-Position (zwischen den Tabs).
                             .overlay(alignment: .leading) {
                                 if let index = tabInsertionIndex,

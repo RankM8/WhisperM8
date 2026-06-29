@@ -107,6 +107,10 @@ struct ChatTabButton: View {
     /// fällt auf das Provider-Icon zurück.
     let project: AgentProject?
     let isSelected: Bool
+    /// Teil einer Mehrfach-Auswahl (Cmd/Shift-Klick) — Akzent-Ring zusätzlich
+    /// zum aktiven (`isSelected`) Tab. Bewusst ein Bool (nicht das Set) → die
+    /// `.equatable()`-Optimierung der Rows bleibt wirksam.
+    let isMultiSelected: Bool
     let isRunning: Bool
     /// Stabile Store-Referenz — Live-Status via Per-Item-Publisher,
     /// gleiche Mechanik wie `SessionListButton`.
@@ -150,6 +154,15 @@ struct ChatTabButton: View {
                     if let customColor {
                         RoundedRectangle(cornerRadius: 6)
                             .fill(customColor.opacity(tintOpacity))
+                    }
+                    if isMultiSelected {
+                        // Nicht-aktive Gruppen-Tabs dezent tönen …
+                        if !isSelected {
+                            RoundedRectangle(cornerRadius: 6).fill(AgentTheme.accentTint.opacity(0.5))
+                        }
+                        // … und alle Gruppen-Tabs mit Akzent-Ring umranden.
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 1.5)
                     }
                 }
             }

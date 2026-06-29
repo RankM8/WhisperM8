@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Tab-Verwaltung der AgentChatsView: Tab oeffnen/schliessen, Chat
@@ -5,6 +6,23 @@ import SwiftUI
 /// und Tab in neues Fenster abloesen. Aus AgentChatsView.swift ausgelagert
 /// (Phase-2-Split).
 extension AgentChatsView {
+    /// Tab-Klick mit Modifier-Semantik (Browser-/Finder-artig): Cmd toggelt,
+    /// Shift wählt einen Bereich, sonst Einzel-Auswahl. `selectedSessionID`
+    /// bleibt der aktive (angezeigte) Tab; `multiSelection` hält die Gruppe.
+    func handleTabClick(_ id: UUID) {
+        let mods = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let outcome: TabSelectionOutcome
+        if mods.contains(.command) {
+            outcome = TabSelectionResolver.commandClick(id, active: selectedSessionID, selection: multiSelection)
+        } else if mods.contains(.shift) {
+            outcome = TabSelectionResolver.shiftClick(id, anchor: selectedSessionID, order: headerTabs.map(\.id))
+        } else {
+            outcome = TabSelectionResolver.click(id)
+        }
+        selectedSessionID = outcome.active
+        multiSelection = outcome.selection
+    }
+
     /// Öffnet einen Tab in der globalen Bar (ans Ende), falls noch nicht
     /// offen. Kein Persistenz-Cap zur Laufzeit — die Bar scrollt; gekappt
     /// wird beim nächsten Load (`AgentUIState.prune`).
