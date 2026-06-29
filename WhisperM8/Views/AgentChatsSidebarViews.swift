@@ -41,6 +41,10 @@ struct ProjectChatGroup: View {
     @State private var isHeaderHovered = false
     @State private var isSessionDragOver = false
     @State private var isProjectDragOver = false
+    /// Sidebar-Drop-Indikator: Session-Row, über der die Einfügelinie steht
+    /// (= „landet vor dieser Zeile"), bzw. der Append-Footer am Projektende.
+    @State private var dropTargetedSessionID: UUID?
+    @State private var isFooterDropTargeted = false
 
     /// Einmal pro View-Init gelesen statt pro Render — das Flag ist ein
     /// Escape-Hatch und aendert sich nur via `defaults write` + App-Neustart.
@@ -70,11 +74,22 @@ struct ProjectChatGroup: View {
                     Color.clear
                         .frame(height: 8)
                         .contentShape(Rectangle())
+                        .overlay(alignment: .top) {
+                            if isFooterDropTargeted {
+                                Capsule()
+                                    .fill(AgentTheme.accent)
+                                    .frame(height: 2)
+                                    .padding(.horizontal, 8)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                         .dropDestination(for: DraggableSession.self) { items, _ in
+                            isFooterDropTargeted = false
                             guard let dropped = items.first else { return false }
                             onSessionDrop(dropped, nil, project.id)
                             return true
-                        }
+                        } isTargeted: { isFooterDropTargeted = $0 }
+                        .animation(.easeOut(duration: 0.1), value: isFooterDropTargeted)
                 }
             }
         }
@@ -140,10 +155,28 @@ struct ProjectChatGroup: View {
             sessionDragPreview(session)
         }
         .dropDestination(for: DraggableSession.self) { items, _ in
+            dropTargetedSessionID = nil
             guard let dropped = items.first else { return false }
             onSessionDrop(dropped, session.id, project.id)
             return true
+        } isTargeted: { targeted in
+            if targeted {
+                dropTargetedSessionID = session.id
+            } else if dropTargetedSessionID == session.id {
+                dropTargetedSessionID = nil
+            }
         }
+        // Einfügelinie „landet vor dieser Zeile" — analog zur Tab-Leiste.
+        .overlay(alignment: .top) {
+            if dropTargetedSessionID == session.id {
+                Capsule()
+                    .fill(AgentTheme.accent)
+                    .frame(height: 2)
+                    .padding(.horizontal, 8)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: 0.1), value: dropTargetedSessionID)
         .contextMenu {
             Button("Umbenennen…", systemImage: "pencil") {
                 onRenameRequest(session)
