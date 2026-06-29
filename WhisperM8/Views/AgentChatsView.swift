@@ -28,6 +28,9 @@ struct AgentChatsView: View {
     /// Benannter Coordinate-Space am Body-Root (window-relativ) — der
     /// Tab-Strip misst seine Frame darin fürs Mausrad-Hit-Test-Gating.
     private static let windowCoordinateSpaceName = "agentChatsWindow"
+    /// Inhalts-Koordinatenraum der Tab-Leiste — Frame-Messung UND Drop-Location
+    /// liegen darin (scroll-sicher, kein `.global`/`.local`-Mismatch).
+    private static let tabStripContentSpace = "tabStripContent"
 
     let windowID: UUID
     @Environment(\.openWindow) var openWindow
@@ -91,6 +94,11 @@ struct AgentChatsView: View {
     /// auf Store + Closures brauchen, die wir vor `body` nicht haben.
     @State var runtimeWatcher: AgentSessionRuntimeWatcher?
     @State var autoNamer: AgentSessionAutoNamer?
+
+    /// Etappe-0 Tab-Drag: gemessene Tab-Frames (Inhalts-Space) + aktueller
+    /// Einfüge-Index während eines Drags (ephemer, nicht persistiert).
+    @State private var tabFrames: [UUID: CGRect] = [:]
+    @State private var tabInsertionIndex: Int?
     /// Mirror der `autoNamer.inFlight`-Set — wird via NotificationCenter
     /// aktualisiert, damit SwiftUI Re-Renders triggert. Wir koennen das nicht
     /// ueber @Observable machen weil autoNamer lazy-init in einem optionalen
@@ -1444,13 +1452,8 @@ struct AgentChatsView: View {
                                         sessionID: session.id,
                                         sourceProjectID: session.projectID,
                                         sourceWindowID: windowID
-                                    ))
-                                    .dropDestination(for: DraggableSession.self) { items, _ in
-                                        guard let dropped = items.first else { return false }
-                                        // Tab-Reorder/-Move = reine Anzeige-Reihenfolge
-                                        // des Ziel-Fensters — unabhängig vom Store-sortIndex.
-                                        dropTab(dropped, before: session.id)
-                                        return true
+                                    )) {
+                                        TabDragPreview(title: session.title)
                                     }
                                     .simultaneousGesture(
                                         DragGesture(minimumDistance: 20)
@@ -1463,14 +1466,51 @@ struct AgentChatsView: View {
                                     .contextMenu {
                                         sessionManagementMenu(session)
                                     }
+                                    // Tab-Frame im Inhalts-Space messen → Einfüge-Linie.
+                                    .background(
+                                        GeometryReader { geo in
+                                            Color.clear.preference(
+                                                key: TabFramePreferenceKey.self,
+                                                value: [session.id: geo.frame(in: .named(Self.tabStripContentSpace))]
+                                            )
+                                        }
+                                    )
                                 }
                             }
-                            .background(WindowDragExclusionView())
-                            .dropDestination(for: DraggableSession.self) { items, _ in
-                                guard let dropped = items.first else { return false }
-                                dropTabAtEnd(dropped)
-                                return true
+                            .coordinateSpace(.named(Self.tabStripContentSpace))
+                            .onPreferenceChange(TabFramePreferenceKey.self) { tabFrames = $0 }
+                            // Einfüge-Linie an der Drop-Position (zwischen den Tabs).
+                            .overlay(alignment: .leading) {
+                                if let index = tabInsertionIndex,
+                                   let x = TabReorderGeometry.insertionX(
+                                    forIndex: index,
+                                    orderedIDs: headerTabs.map(\.id),
+                                    frames: tabFrames,
+                                    spacing: 4
+                                   ) {
+                                    TabInsertionIndicator()
+                                        .offset(x: x - 1.25)
+                                        .allowsHitTesting(false)
+                                }
                             }
+                            .animation(.easeOut(duration: 0.1), value: tabInsertionIndex)
+                            .background(WindowDragExclusionView())
+                            // Reorder/Move + Cross-Window: EIN DropDelegate für die
+                            // ganze Leiste → kontinuierliche Einfüge-Position (Linie)
+                            // und Move-Semantik (kein Copy-„+"). Cross-Window/Sidebar-
+                            // Open laufen weiter über windowStore.moveTab in dropTab.
+                            .onDrop(of: [.agentChatSession], delegate: TabReorderDropDelegate(
+                                orderedIDs: headerTabs.map(\.id),
+                                frames: tabFrames,
+                                insertionIndex: $tabInsertionIndex,
+                                onMove: { dropped, beforeID in
+                                    if let beforeID {
+                                        dropTab(dropped, before: beforeID)
+                                    } else {
+                                        dropTabAtEnd(dropped)
+                                    }
+                                }
+                            ))
                             // Gesamtbreite des Inhalts → Überlauf-Erkennung fürs Chevron.
                             .background(
                                 GeometryReader { geo in
