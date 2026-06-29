@@ -6,6 +6,8 @@ struct ProjectChatGroup: View {
     let sessions: [AgentChatSession]
     let isExpanded: Bool
     let selectedSessionID: UUID?
+    /// Mehrfach-Auswahl (geteilt mit der Tab-Leiste) — Cmd/Shift-Klick.
+    let multiSelection: Set<UUID>
     /// Sessions mit offenem Tab in der globalen Bar — werden heller
     /// dargestellt als geschlossene (Sidebar = Bestand, Tabs = aktiv).
     let openTabIDs: Set<UUID>
@@ -135,6 +137,7 @@ struct ProjectChatGroup: View {
         SessionListButton(
             session: session,
             isSelected: selectedSessionID == session.id,
+            isMultiSelected: multiSelection.contains(session.id),
             isOpenTab: openTabIDs.contains(session.id),
             accentColorHex: project.color,
             isRunning: runningSessionIDs.contains(session.id),
@@ -401,6 +404,9 @@ extension View {
 struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
+    /// Teil einer Mehrfach-Auswahl (Cmd/Shift-Klick) — Akzent-Ring zusätzlich
+    /// zur aktiven (`isSelected`) Zeile.
+    var isMultiSelected: Bool = false
     /// `true` wenn der Chat gerade als Tab in der globalen Bar offen ist —
     /// offene Chats erscheinen heller als geschlossene (Sidebar = Bestand,
     /// Tab-Bar = aktive Auswahl).
@@ -495,6 +501,12 @@ struct SessionListButton: View {
             }
             .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 26, alignment: .leading)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                if isMultiSelected {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 1.5)
+                }
+            }
             .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }

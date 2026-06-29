@@ -767,6 +767,7 @@ struct AgentChatsView: View {
                             sessions: sessionsByProject[project.id] ?? [],
                             isExpanded: expandedProjectIDs.contains(project.id) || !searchText.isEmpty,
                             selectedSessionID: selectedSessionID,
+                            multiSelection: multiSelection,
                             openTabIDs: openTabIDSet,
                             onSelectProject: {
                                 selectProject(project.id)
@@ -775,11 +776,11 @@ struct AgentChatsView: View {
                                 toggleProject(project.id)
                             },
                             onSelectSession: { sessionID in
-                                selectedProjectID = project.id
-                                expandedProjectIDs.insert(project.id)
-                                openTab(sessionID)
-                                selectedSessionID = sessionID
-                                AppPreferences.shared.agentDefaultProjectPath = project.path
+                                handleSidebarSessionClick(
+                                    sessionID,
+                                    project: project,
+                                    orderedSessionIDs: (sessionsByProject[project.id] ?? []).map(\.id)
+                                )
                             },
                             onNewChat: {
                                 selectedProjectID = project.id
@@ -1498,8 +1499,10 @@ struct AgentChatsView: View {
                             .coordinateSpace(.named(Self.tabStripContentSpace))
                             .onPreferenceChange(TabFramePreferenceKey.self) { tabFrames = $0 }
                             // Stale IDs aus der Multi-Auswahl entfernen, wenn sich die offenen Tabs ändern.
-                            .onChange(of: headerTabs.map(\.id)) { _, ids in
-                                multiSelection.formIntersection(Set(ids))
+                            .onChange(of: headerTabs.map(\.id)) { _, _ in
+                                // Gegen ALLE Sessions prunen (nicht nur offene Tabs) — die
+                                // Multi-Auswahl gilt auch für Sidebar-Sessions ohne offenen Tab.
+                                multiSelection.formIntersection(Set(workspace.sessions.map(\.id)))
                             }
                             // Einfüge-Linie an der Drop-Position (zwischen den Tabs).
                             .overlay(alignment: .leading) {

@@ -23,6 +23,26 @@ extension AgentChatsView {
         multiSelection = outcome.selection
     }
 
+    /// Sidebar-Klick mit Modifier-Semantik: Cmd toggelt / Shift wählt einen
+    /// Bereich (innerhalb des Projekts) in `multiSelection` — OHNE Tab zu öffnen
+    /// oder den aktiven Tab zu wechseln (reine Auswahl für Gruppen-Aktionen).
+    /// Normaler Klick = bisheriges Verhalten (öffnen + aktiv + Einzel-Auswahl).
+    func handleSidebarSessionClick(_ sessionID: UUID, project: AgentProject, orderedSessionIDs: [UUID]) {
+        let mods = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mods.contains(.command) {
+            multiSelection = TabSelectionResolver.commandClick(sessionID, active: selectedSessionID, selection: multiSelection).selection
+        } else if mods.contains(.shift) {
+            multiSelection = TabSelectionResolver.shiftClick(sessionID, anchor: selectedSessionID, order: orderedSessionIDs).selection
+        } else {
+            selectedProjectID = project.id
+            expandedProjectIDs.insert(project.id)
+            openTab(sessionID)
+            selectedSessionID = sessionID
+            multiSelection = []
+            AppPreferences.shared.agentDefaultProjectPath = project.path
+        }
+    }
+
     /// Öffnet einen Tab in der globalen Bar (ans Ende), falls noch nicht
     /// offen. Kein Persistenz-Cap zur Laufzeit — die Bar scrollt; gekappt
     /// wird beim nächsten Load (`AgentUIState.prune`).
