@@ -1458,6 +1458,11 @@ struct AgentChatsView: View {
                                     .simultaneousGesture(
                                         DragGesture(minimumDistance: 20)
                                             .onEnded { value in
+                                                // Drag vorbei (Drop, Cancel ODER außerhalb der
+                                                // Drop-Zone losgelassen). dropExited/performDrop
+                                                // feuern dabei NICHT zuverlässig (SwiftUI-Bug) →
+                                                // die Einfügelinie hier sicher zurücksetzen.
+                                                tabInsertionIndex = nil
                                                 if shouldDetachTab(for: value) {
                                                     moveTabToNewWindow(session)
                                                 }
