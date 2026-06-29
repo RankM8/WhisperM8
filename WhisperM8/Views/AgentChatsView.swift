@@ -2117,8 +2117,13 @@ struct AgentChatsView: View {
             .disabled(session.externalSessionID == nil)
             forkMenuItem(session)
             Divider()
-            Button("In neues Fenster verschieben", systemImage: "macwindow.badge.plus") {
-                moveTabToNewWindow(session)
+            Button(
+                multiSelection.contains(session.id) && multiSelection.count > 1
+                    ? "\(multiSelection.count) Tabs in neues Fenster"
+                    : "In neues Fenster verschieben",
+                systemImage: "macwindow.badge.plus"
+            ) {
+                moveSelectionToNewWindow(session)
             }
             Divider()
             Button(

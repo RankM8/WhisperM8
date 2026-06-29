@@ -614,6 +614,7 @@ extension SessionListButton: Equatable {
             && lhs.isAwaitingInput == rhs.isAwaitingInput
             && lhs.isAutoRenaming == rhs.isAutoRenaming
             && lhs.isMissingTranscript == rhs.isMissingTranscript
+            && lhs.isMultiSelected == rhs.isMultiSelected
     }
 }
 

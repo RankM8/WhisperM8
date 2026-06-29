@@ -125,4 +125,23 @@ extension AgentChatsView {
             openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
         }
     }
+
+    /// Multi-select-bewusstes „in neues Fenster": ist `session` Teil der
+    /// Auswahl, wandert die GANZE Gruppe (Anzeige-Reihenfolge erhalten) in EIN
+    /// neues Fenster. Der erste Tab eröffnet das Fenster, die restlichen werden
+    /// hineinverschoben. PTYs bleiben (Registry ist sessionID-basiert).
+    func moveSelectionToNewWindow(_ session: AgentChatSession) {
+        let group = multiSelection.contains(session.id)
+            ? openTabIDs.filter { multiSelection.contains($0) }
+            : [session.id]
+        guard let first = group.first, openTabIDs.contains(first) else { return }
+        let newWindowID = windowStore.detachToNewWindow(first, from: windowID)
+        for id in group.dropFirst() where openTabIDs.contains(id) {
+            windowStore.moveTab(id, from: windowID, to: newWindowID, before: nil)
+        }
+        multiSelection = []
+        DispatchQueue.main.async {
+            openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
+        }
+    }
 }
