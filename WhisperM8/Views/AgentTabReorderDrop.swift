@@ -129,21 +129,32 @@ struct TabInsertionIndicator: View {
 }
 
 /// Schlanke, opake Drag-Vorschau (kein Material → kein Schwarz-Render-Bug auf
-/// macOS). Bewusst nur der Titel, damit der Snapshot robust ist.
+/// macOS). Bei Multi-Drag zeigt ein „+N"-Badge die Gruppengröße.
 struct TabDragPreview: View {
     let title: String
+    var extraCount: Int = 0
 
     var body: some View {
-        Text(title)
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(AgentTheme.textPrimary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .frame(maxWidth: 200)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(AgentTheme.border, lineWidth: 1))
-            .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AgentTheme.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if extraCount > 0 {
+                Text("+\(extraCount)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(AgentTheme.accent, in: Capsule())
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(maxWidth: 220)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(AgentTheme.border, lineWidth: 1))
+        .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
     }
 }

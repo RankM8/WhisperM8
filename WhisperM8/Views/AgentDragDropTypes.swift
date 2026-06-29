@@ -18,11 +18,17 @@ struct DraggableSession: Codable, Transferable {
     let sessionID: UUID
     let sourceProjectID: UUID
     let sourceWindowID: UUID?
+    /// Bei Multi-Select-Drag: alle mitgezogenen Session-IDs in Anzeige-
+    /// Reihenfolge. So verschiebt ein Drop in EIN ANDERES Fenster die ganze
+    /// Gruppe (das Ziel-Fenster kennt die Quell-Auswahl sonst nicht). Leer =
+    /// Einzel-Drag; same-window-Reorder nutzt es ebenfalls.
+    let groupSessionIDs: [UUID]
 
-    init(sessionID: UUID, sourceProjectID: UUID, sourceWindowID: UUID? = nil) {
+    init(sessionID: UUID, sourceProjectID: UUID, sourceWindowID: UUID? = nil, groupSessionIDs: [UUID] = []) {
         self.sessionID = sessionID
         self.sourceProjectID = sourceProjectID
         self.sourceWindowID = sourceWindowID
+        self.groupSessionIDs = groupSessionIDs
     }
 
     static var transferRepresentation: some TransferRepresentation {

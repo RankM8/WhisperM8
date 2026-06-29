@@ -43,6 +43,13 @@ extension AgentChatsView {
         }
     }
 
+    /// Die mitzuziehende Gruppe für den Drag von `session`: alle ausgewählten
+    /// OFFENEN Tabs in Anzeige-Reihenfolge, falls `session` Teil der Auswahl ist;
+    /// sonst leer (Einzel-Drag).
+    func tabDragGroup(for session: AgentChatSession) -> [UUID] {
+        multiSelection.contains(session.id) ? openTabIDs.filter { multiSelection.contains($0) } : []
+    }
+
     /// Öffnet einen Tab in der globalen Bar (ans Ende), falls noch nicht
     /// offen. Kein Persistenz-Cap zur Laufzeit — die Bar scrollt; gekappt
     /// wird beim nächsten Load (`AgentUIState.prune`).

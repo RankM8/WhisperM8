@@ -1465,9 +1465,13 @@ struct AgentChatsView: View {
                                     .draggable(DraggableSession(
                                         sessionID: session.id,
                                         sourceProjectID: session.projectID,
-                                        sourceWindowID: windowID
+                                        sourceWindowID: windowID,
+                                        groupSessionIDs: tabDragGroup(for: session)
                                     )) {
-                                        TabDragPreview(title: session.title)
+                                        TabDragPreview(
+                                            title: session.title,
+                                            extraCount: max(0, tabDragGroup(for: session).count - 1)
+                                        )
                                     }
                                     .simultaneousGesture(
                                         DragGesture(minimumDistance: 20)
@@ -1529,20 +1533,25 @@ struct AgentChatsView: View {
                                 frames: tabFrames,
                                 insertionIndex: $tabInsertionIndex,
                                 onMove: { dropped, beforeID in
-                                    // Multi-Drag: ist das gezogene Tab Teil der Auswahl, wird die
-                                    // ganze Gruppe (in Anzeige-Reihenfolge) als Block einsortiert —
-                                    // vorerst nur same-window (Cross-Window-Gruppe = Folgeschritt).
-                                    let group = multiSelection.contains(dropped.sessionID)
-                                        ? openTabIDs.filter { multiSelection.contains($0) }
-                                        : []
-                                    let sameWindow = (dropped.sourceWindowID ?? windowID) == windowID
-                                    if sameWindow, group.count > 1 {
-                                        let newOrder = TabGroupReorder.newOrder(openTabIDs, moving: Set(group), before: beforeID)
-                                        windowStore.setOpenTabIDs(newOrder, in: windowID)
-                                    } else if let beforeID {
-                                        dropTab(dropped, before: beforeID)
+                                    // Gruppe kommt aus dem PAYLOAD (Quell-Auswahl) — so kennt auch
+                                    // ein ANDERES Fenster die ganze Gruppe (cross-window).
+                                    let group = dropped.groupSessionIDs.count > 1 ? dropped.groupSessionIDs : [dropped.sessionID]
+                                    let source = dropped.sourceWindowID ?? windowID
+                                    if source == windowID {
+                                        // Same-window: Gruppe als Block reordern bzw. Einzel.
+                                        if group.count > 1 {
+                                            let newOrder = TabGroupReorder.newOrder(openTabIDs, moving: Set(group), before: beforeID)
+                                            windowStore.setOpenTabIDs(newOrder, in: windowID)
+                                        } else if let beforeID {
+                                            dropTab(dropped, before: beforeID)
+                                        } else {
+                                            dropTabAtEnd(dropped)
+                                        }
                                     } else {
-                                        dropTabAtEnd(dropped)
+                                        // Cross-window: ganze Gruppe (Reihenfolge erhalten) hierher holen.
+                                        for id in group {
+                                            windowStore.moveTab(id, from: source, to: windowID, before: beforeID)
+                                        }
                                     }
                                 }
                             ))
