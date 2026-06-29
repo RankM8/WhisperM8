@@ -796,13 +796,13 @@ struct AgentChatsView: View {
                                 expandedProjectIDs.insert(project.id)
                                 createDefaultSession()
                             },
-                            onCloseSession: { archiveSession($0) },
-                            onPinSession: { pinSession($0) },
+                            onCloseSession: { archiveSelection(forID: $0.id) },
+                            onPinSession: { togglePinSelection(forID: $0) },
                             onForkSession: { forkSession($0) },
                             onRenameRequest: { beginRename($0) },
                             onAutoNameRequest: { forceAutoNameSession($0) },
                             onRename: renameSession,
-                            onSetColor: setSessionColor,
+                            onSetColor: { setColorForSelection(forID: $0, color: $1) },
                             runningSessionIDs: runningSessionIDs,
                             statusStore: runtimeStatusStore,
                             awaitingInputSessionIDs: awaitingInputSessionIDs,
@@ -907,8 +907,8 @@ struct AgentChatsView: View {
             onClose: { archiveSession(session) }
         )
         .contextMenu {
-            Button("Loslösen", systemImage: "pin.slash") {
-                unpinSession(session.id)
+            Button(pinLabel(for: session), systemImage: "pin.slash") {
+                togglePinSelection(session)
             }
             Divider()
             Button("Umbenennen…", systemImage: "pencil") {
@@ -921,8 +921,8 @@ struct AgentChatsView: View {
             forkMenuItem(session)
             tabColorMenu(for: session)
             Divider()
-            Button("Chat schließen", systemImage: "xmark", role: .destructive) {
-                archiveSession(session)
+            Button(bulkLabel("Chat schließen", "%d Chats schließen", for: session), systemImage: "xmark", role: .destructive) {
+                archiveSelection(session)
             }
         }
     }
@@ -958,13 +958,13 @@ struct AgentChatsView: View {
             .disabled(session.externalSessionID == nil)
             forkMenuItem(session)
             Divider()
-            Button("Anpinnen", systemImage: "pin") {
-                pinSession(session.id)
+            Button(pinLabel(for: session), systemImage: "pin") {
+                togglePinSelection(session)
             }
             tabColorMenu(for: session)
             Divider()
-            Button("Chat schließen", systemImage: "xmark", role: .destructive) {
-                archiveSession(session)
+            Button(bulkLabel("Chat schließen", "%d Chats schließen", for: session), systemImage: "xmark", role: .destructive) {
+                archiveSelection(session)
             }
         }
     }

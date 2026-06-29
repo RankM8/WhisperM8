@@ -132,6 +132,12 @@ struct ProjectChatGroup: View {
         .help("Weitere Sessions dieses Projekts einblenden")
     }
 
+    /// Anzahl der Sessions, auf die eine Bulk-Aktion wirken würde (die Auswahl,
+    /// wenn `session` Teil davon ist, sonst 1) — für die „N"-Menü-Labels.
+    private func bulkCount(_ session: AgentChatSession) -> Int {
+        multiSelection.contains(session.id) && multiSelection.count > 1 ? multiSelection.count : 1
+    }
+
     @ViewBuilder
     private func sessionRow(_ session: AgentChatSession) -> some View {
         SessionListButton(
@@ -194,11 +200,11 @@ struct ProjectChatGroup: View {
                 }
             }
             Divider()
-            Button("Anpinnen", systemImage: "pin") {
+            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) anpinnen" : "Anpinnen", systemImage: "pin") {
                 onPinSession(session.id)
             }
             Divider()
-            Menu("Tab-Farbe") {
+            Menu(bulkCount(session) > 1 ? "Farbe für \(bulkCount(session)) Tabs" : "Tab-Farbe") {
                 ForEach(AgentChatColor.palette, id: \.self) { color in
                     Button {
                         onSetColor(session.id, color)
@@ -216,7 +222,7 @@ struct ProjectChatGroup: View {
                 }
             }
             Divider()
-            Button("Schließen", systemImage: "xmark", role: .destructive) {
+            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) schließen" : "Schließen", systemImage: "xmark", role: .destructive) {
                 onCloseSession(session)
             }
         }
