@@ -142,10 +142,10 @@ extension AgentChatsView {
     /// Wiederverwendetes „Tab-Farbe"-Submenu (8er-Palette + Provider-Reset).
     @ViewBuilder
     func tabColorMenu(for session: AgentChatSession) -> some View {
-        Menu("Tab-Farbe") {
+        Menu(bulkLabel("Tab-Farbe", "Farbe für %d Tabs", for: session)) {
             ForEach(AgentChatColor.palette, id: \.self) { color in
                 Button {
-                    setSessionColor(id: session.id, color: color)
+                    setColorForSelection(session, color: color)
                 } label: {
                     Label {
                         Text(AgentChatColorName.label(for: color))
@@ -156,7 +156,7 @@ extension AgentChatsView {
             }
             Divider()
             Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
-                setSessionColor(id: session.id, color: nil)
+                setColorForSelection(session, color: nil)
             }
         }
     }

@@ -1553,6 +1553,8 @@ struct AgentChatsView: View {
                                             windowStore.moveTab(id, from: source, to: windowID, before: beforeID)
                                         }
                                     }
+                                    // Einzel-Drag (kein Gruppen-Tab) verwirft die Auswahl (Chrome/Finder).
+                                    if group.count <= 1 { multiSelection = [] }
                                 }
                             ))
                             // Gesamtbreite des Inhalts → Überlauf-Erkennung fürs Chevron.
@@ -2113,8 +2115,8 @@ struct AgentChatsView: View {
     @ViewBuilder
     private func sessionManagementMenu(_ session: AgentChatSession) -> some View {
         Group {
-            Button("Tab schließen", systemImage: "xmark.square") {
-                closeTab(session)
+            Button(bulkLabel("Tab schließen", "%d Tabs schließen", for: session), systemImage: "xmark.square") {
+                closeTabsInSelection(session)
             }
             Divider()
             Button("Umbenennen…", systemImage: "pencil") {
@@ -2136,10 +2138,10 @@ struct AgentChatsView: View {
             }
             Divider()
             Button(
-                pinnedSessionIDs.contains(session.id) ? "Loslösen" : "Anpinnen",
+                pinLabel(for: session),
                 systemImage: pinnedSessionIDs.contains(session.id) ? "pin.slash" : "pin"
             ) {
-                togglePin(session.id)
+                togglePinSelection(session)
             }
             tabColorMenu(for: session)
             if session.isBackgroundChat {
@@ -2147,8 +2149,8 @@ struct AgentChatsView: View {
                 backgroundLifecycleMenuItems(session)
             }
             Divider()
-            Button("Chat schließen", systemImage: "xmark", role: .destructive) {
-                archiveSession(session)
+            Button(bulkLabel("Chat schließen", "%d Chats schließen", for: session), systemImage: "xmark", role: .destructive) {
+                archiveSelection(session)
             }
         }
     }

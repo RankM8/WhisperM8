@@ -15,6 +15,7 @@ extension AgentChatsView {
         let order = headerTabs.map(\.id)
         if let next = adjacentTabID(in: order, current: selectedSessionID, direction: direction) {
             selectedSessionID = next
+            multiSelection = []
         }
     }
 
