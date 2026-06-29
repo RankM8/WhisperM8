@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 
 /// Tab-Verwaltung der AgentChatsView: Tab oeffnen/schliessen, Chat
-/// archivieren, Tab-Reorder per Drag (dropTab/dropTabAtEnd/shouldDetachTab)
-/// und Tab in neues Fenster abloesen. Aus AgentChatsView.swift ausgelagert
-/// (Phase-2-Split).
+/// archivieren, Tab-Reorder per Drag (dropTab/dropTabAtEnd), Multi-Select +
+/// Tear-off (moveSelectionToNewWindow/detachDroppedToNewWindow). Aus
+/// AgentChatsView.swift ausgelagert (Phase-2-Split).
 extension AgentChatsView {
     /// Tab-Klick mit Modifier-Semantik (Browser-/Finder-artig): Cmd toggelt,
     /// Shift wählt einen Bereich, sonst Einzel-Auswahl. `selectedSessionID`
@@ -78,6 +78,8 @@ extension AgentChatsView {
     /// Sidebar-Dot sichtbar; erneutes Öffnen attached an denselben
     /// Terminal-Controller inkl. Scrollback).
     func closeTab(_ session: AgentChatSession) {
+        // Geschlossener Tab darf nicht in der Mehrfach-Auswahl zurückbleiben.
+        multiSelection.remove(session.id)
         guard let index = openTabIDs.firstIndex(of: session.id) else {
             if selectedSessionID == session.id { selectedSessionID = openTabIDs.first }
             return
@@ -126,26 +128,6 @@ extension AgentChatsView {
         let id = dropped.sessionID
         let source = dropped.sourceWindowID ?? windowID
         windowStore.moveTab(id, from: source, to: windowID, before: nil)
-    }
-
-    func shouldDetachTab(for value: DragGesture.Value) -> Bool {
-        // Detach nur bei klar vertikalem Herausziehen aus der Leiste — so
-        // kollidiert die Geste nicht mit dem horizontalen Reorder (.draggable),
-        // der sonst fälschlich ein neues Fenster aufmachte.
-        abs(value.translation.height) > 60 && abs(value.translation.width) < 44
-    }
-
-    func moveTabToNewWindow(_ session: AgentChatSession) {
-        // Tab muss in DIESEM Fenster offen sein — sonst (z. B. Detach-Geste
-        // feuerte nach einem bereits erfolgten Cross-Window-Drop) nichts tun.
-        guard openTabIDs.contains(session.id) else { return }
-        let newWindowID = windowStore.detachToNewWindow(session.id, from: windowID)
-        // Fenster-Erzeugung aus dem synchronen Gesten-Stack lösen: openWindow
-        // direkt in DragGesture.onEnded kann SwiftUI/AppKit beim Aufbau der
-        // neuen Scene destabilisieren (beobachteter Detach-Crash).
-        DispatchQueue.main.async {
-            openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
-        }
     }
 
     /// Multi-select-bewusstes „in neues Fenster": ist `session` Teil der

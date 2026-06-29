@@ -27,8 +27,8 @@ extension AgentChatsView {
         guard group.count > 1 else {
             return pinnedSessionIDs.contains(id) ? "Loslösen" : "Anpinnen"
         }
-        let allPinned = group.allSatisfy { pinnedSessionIDs.contains($0) }
-        return allPinned ? "\(group.count) lösen" : "\(group.count) anpinnen"
+        let unpin = TabSelectionResolver.shouldUnpinGroup(group, pinned: Set(pinnedSessionIDs))
+        return unpin ? "\(group.count) lösen" : "\(group.count) anpinnen"
     }
 
     private func sessions(in ids: [UUID]) -> [AgentChatSession] {
@@ -51,9 +51,9 @@ extension AgentChatsView {
     func togglePinSelection(forID id: UUID) {
         let group = actionGroup(forID: id)
         guard group.count > 1 else { togglePin(id); return }
-        let allPinned = group.allSatisfy { pinnedSessionIDs.contains($0) }
+        let unpin = TabSelectionResolver.shouldUnpinGroup(group, pinned: Set(pinnedSessionIDs))
         for gid in group {
-            if allPinned {
+            if unpin {
                 unpinSession(gid)
             } else if !pinnedSessionIDs.contains(gid) {
                 pinSession(gid)

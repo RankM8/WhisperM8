@@ -43,4 +43,10 @@ enum TabSelectionResolver {
         let range = Set(order[min(ai, bi)...max(ai, bi)])
         return TabSelectionOutcome(active: id, selection: range.count <= 1 ? [] : range)
     }
+
+    /// Bulk-Pin-Normalisierung: alle Gruppen-Mitglieder gepinnt → alle lösen
+    /// (true), sonst alle anpinnen (false). Leere Gruppe → false.
+    static func shouldUnpinGroup(_ group: [UUID], pinned: Set<UUID>) -> Bool {
+        !group.isEmpty && group.allSatisfy { pinned.contains($0) }
+    }
 }

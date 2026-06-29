@@ -1547,8 +1547,7 @@ struct AgentChatsView: View {
                                     .draggable(DraggableSession(
                                         sessionID: session.id,
                                         sourceProjectID: session.projectID,
-                                        sourceWindowID: windowID,
-                                        groupSessionIDs: tabDragGroup(for: session)
+                                        sourceWindowID: windowID
                                     )) {
                                         TabDragPreview(
                                             title: session.title,

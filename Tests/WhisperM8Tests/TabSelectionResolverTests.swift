@@ -62,4 +62,11 @@ final class TabSelectionResolverTests: XCTestCase {
         XCTAssertEqual(r.active, c)
         XCTAssertTrue(r.selection.isEmpty)
     }
+
+    func testShouldUnpinGroupNormalization() {
+        XCTAssertTrue(TabSelectionResolver.shouldUnpinGroup([a, b], pinned: [a, b, c]))  // alle gepinnt → lösen
+        XCTAssertFalse(TabSelectionResolver.shouldUnpinGroup([a, b], pinned: [a]))       // gemischt → anpinnen
+        XCTAssertFalse(TabSelectionResolver.shouldUnpinGroup([a, b], pinned: []))        // keiner → anpinnen
+        XCTAssertFalse(TabSelectionResolver.shouldUnpinGroup([], pinned: [a]))           // leer → false
+    }
 }
