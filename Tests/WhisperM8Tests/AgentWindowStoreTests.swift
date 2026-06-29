@@ -165,4 +165,34 @@ final class AgentWindowStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.openTabIDs(in: reloaded.primaryWindowID), [a],
                        "Tab ueberlebt Persistenz-Roundtrip")
     }
+
+    // MARK: - Multi-Select (ephemer, pro Fenster)
+
+    func testMultiSelectionIsPerWindowAndClearable() {
+        let store = makeStore()
+        let w1 = store.primaryWindowID
+        let w2 = UUID()
+        let a = UUID(), b = UUID()
+
+        XCTAssertTrue(store.multiSelection(in: w1).isEmpty)
+
+        store.setMultiSelection([a, b], in: w1)
+        XCTAssertEqual(store.multiSelection(in: w1), [a, b])
+        XCTAssertTrue(store.multiSelection(in: w2).isEmpty, "Auswahl ist pro Fenster isoliert")
+
+        store.setMultiSelection([], in: w1)
+        XCTAssertTrue(store.multiSelection(in: w1).isEmpty, "leere Menge raeumt den Eintrag auf")
+    }
+
+    func testMultiSelectionIsNotPersisted() {
+        let wsURL = tempURL("ws")
+        let uiURL = tempURL("ui")
+        let store = AgentWindowStore(persistence: AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL))
+        store.setMultiSelection([UUID(), UUID()], in: store.primaryWindowID)
+        store.flush()
+
+        let reloaded = AgentWindowStore(persistence: AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL))
+        XCTAssertTrue(reloaded.multiSelection(in: reloaded.primaryWindowID).isEmpty,
+                      "Multi-Auswahl ist ephemer und ueberlebt keinen Roundtrip")
+    }
 }

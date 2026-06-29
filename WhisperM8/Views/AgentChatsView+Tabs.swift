@@ -1,10 +1,70 @@
+import AppKit
 import SwiftUI
 
 /// Tab-Verwaltung der AgentChatsView: Tab oeffnen/schliessen, Chat
-/// archivieren, Tab-Reorder per Drag (dropTab/dropTabAtEnd/shouldDetachTab)
-/// und Tab in neues Fenster abloesen. Aus AgentChatsView.swift ausgelagert
-/// (Phase-2-Split).
+/// archivieren, Tab-Reorder per Drag (dropTab/dropTabAtEnd), Multi-Select +
+/// Tear-off (moveSelectionToNewWindow/detachDroppedToNewWindow). Aus
+/// AgentChatsView.swift ausgelagert (Phase-2-Split).
 extension AgentChatsView {
+    /// Tab-Klick mit Modifier-Semantik (Browser-/Finder-artig): Cmd toggelt,
+    /// Shift wählt einen Bereich, sonst Einzel-Auswahl. `selectedSessionID`
+    /// bleibt der aktive (angezeigte) Tab; `multiSelection` hält die Gruppe.
+    func handleTabClick(_ id: UUID) {
+        let mods = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let outcome: TabSelectionOutcome
+        if mods.contains(.command) {
+            outcome = TabSelectionResolver.commandClick(id, active: selectedSessionID, selection: multiSelection)
+        } else if mods.contains(.shift) {
+            outcome = TabSelectionResolver.shiftClick(id, anchor: selectedSessionID, order: headerTabs.map(\.id))
+        } else {
+            outcome = TabSelectionResolver.click(id)
+        }
+        selectedSessionID = outcome.active
+        multiSelection = outcome.selection
+    }
+
+    /// Sidebar-Klick mit Modifier-Semantik: Cmd toggelt / Shift wählt einen
+    /// Bereich (innerhalb des Projekts) in `multiSelection` — OHNE Tab zu öffnen
+    /// oder den aktiven Tab zu wechseln (reine Auswahl für Gruppen-Aktionen).
+    /// Normaler Klick = bisheriges Verhalten (öffnen + aktiv + Einzel-Auswahl).
+    func handleSidebarSessionClick(_ sessionID: UUID, project: AgentProject, orderedSessionIDs: [UUID]) {
+        let mods = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mods.contains(.command) {
+            multiSelection = TabSelectionResolver.commandClick(sessionID, active: selectedSessionID, selection: multiSelection).selection
+        } else if mods.contains(.shift) {
+            multiSelection = TabSelectionResolver.shiftClick(sessionID, anchor: selectedSessionID, order: orderedSessionIDs).selection
+        } else {
+            selectedProjectID = project.id
+            expandedProjectIDs.insert(project.id)
+            openTab(sessionID)
+            selectedSessionID = sessionID
+            multiSelection = []
+            AppPreferences.shared.agentDefaultProjectPath = project.path
+        }
+    }
+
+    /// Wie `handleSidebarSessionClick`, aber für Zeilen ohne festes Projekt
+    /// (gepinnt/flach): Cmd toggelt, Shift wählt einen Bereich in `order`,
+    /// normaler Klick führt `plainClick` aus + leert die Auswahl.
+    func handleSidebarRowClick(_ sessionID: UUID, order: [UUID], plainClick: () -> Void) {
+        let mods = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mods.contains(.command) {
+            multiSelection = TabSelectionResolver.commandClick(sessionID, active: selectedSessionID, selection: multiSelection).selection
+        } else if mods.contains(.shift) {
+            multiSelection = TabSelectionResolver.shiftClick(sessionID, anchor: selectedSessionID, order: order).selection
+        } else {
+            plainClick()
+            multiSelection = []
+        }
+    }
+
+    /// Die mitzuziehende Gruppe für den Drag von `session`: alle ausgewählten
+    /// OFFENEN Tabs in Anzeige-Reihenfolge, falls `session` Teil der Auswahl ist;
+    /// sonst leer (Einzel-Drag).
+    func tabDragGroup(for session: AgentChatSession) -> [UUID] {
+        multiSelection.contains(session.id) ? openTabIDs.filter { multiSelection.contains($0) } : []
+    }
+
     /// Öffnet einen Tab in der globalen Bar (ans Ende), falls noch nicht
     /// offen. Kein Persistenz-Cap zur Laufzeit — die Bar scrollt; gekappt
     /// wird beim nächsten Load (`AgentUIState.prune`).
@@ -18,6 +78,8 @@ extension AgentChatsView {
     /// Sidebar-Dot sichtbar; erneutes Öffnen attached an denselben
     /// Terminal-Controller inkl. Scrollback).
     func closeTab(_ session: AgentChatSession) {
+        // Geschlossener Tab darf nicht in der Mehrfach-Auswahl zurückbleiben.
+        multiSelection.remove(session.id)
         guard let index = openTabIDs.firstIndex(of: session.id) else {
             if selectedSessionID == session.id { selectedSessionID = openTabIDs.first }
             return
@@ -68,21 +130,40 @@ extension AgentChatsView {
         windowStore.moveTab(id, from: source, to: windowID, before: nil)
     }
 
-    func shouldDetachTab(for value: DragGesture.Value) -> Bool {
-        // Detach nur bei klar vertikalem Herausziehen aus der Leiste — so
-        // kollidiert die Geste nicht mit dem horizontalen Reorder (.draggable),
-        // der sonst fälschlich ein neues Fenster aufmachte.
-        abs(value.translation.height) > 60 && abs(value.translation.width) < 44
+    /// Multi-select-bewusstes „in neues Fenster": ist `session` Teil der
+    /// Auswahl, wandert die GANZE Gruppe (Anzeige-Reihenfolge erhalten) in EIN
+    /// neues Fenster. Der erste Tab eröffnet das Fenster, die restlichen werden
+    /// hineinverschoben. PTYs bleiben (Registry ist sessionID-basiert).
+    func moveSelectionToNewWindow(_ session: AgentChatSession) {
+        let group = multiSelection.contains(session.id)
+            ? openTabIDs.filter { multiSelection.contains($0) }
+            : [session.id]
+        guard let first = group.first, openTabIDs.contains(first) else { return }
+        let newWindowID = windowStore.detachToNewWindow(first, from: windowID)
+        for id in group.dropFirst() where openTabIDs.contains(id) {
+            windowStore.moveTab(id, from: windowID, to: newWindowID, before: nil)
+        }
+        multiSelection = []
+        DispatchQueue.main.async {
+            openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
+        }
     }
 
-    func moveTabToNewWindow(_ session: AgentChatSession) {
-        // Tab muss in DIESEM Fenster offen sein — sonst (z. B. Detach-Geste
-        // feuerte nach einem bereits erfolgten Cross-Window-Drop) nichts tun.
-        guard openTabIDs.contains(session.id) else { return }
-        let newWindowID = windowStore.detachToNewWindow(session.id, from: windowID)
-        // Fenster-Erzeugung aus dem synchronen Gesten-Stack lösen: openWindow
-        // direkt in DragGesture.onEnded kann SwiftUI/AppKit beim Aufbau der
-        // neuen Scene destabilisieren (beobachteter Detach-Crash).
+    /// Tear-off-Drop: erzeugt EIN neues Fenster mit der gezogenen Session bzw.
+    /// (wenn sie Teil der Quell-Auswahl ist) der ganzen Gruppe. Liest die Auswahl
+    /// LIVE aus dem Quell-Fenster (robust, kein Payload-Round-Trip).
+    func detachDroppedToNewWindow(_ dropped: DraggableSession) {
+        let source = dropped.sourceWindowID ?? windowID
+        let sel = windowStore.multiSelection(in: source)
+        let group = (sel.count > 1 && sel.contains(dropped.sessionID))
+            ? windowStore.openTabIDs(in: source).filter { sel.contains($0) }
+            : [dropped.sessionID]
+        guard let first = group.first, windowStore.openTabIDs(in: source).contains(first) else { return }
+        let newWindowID = windowStore.detachToNewWindow(first, from: source)
+        for id in group.dropFirst() {
+            windowStore.moveTab(id, from: source, to: newWindowID, before: nil)
+        }
+        windowStore.setMultiSelection([], in: source)
         DispatchQueue.main.async {
             openWindow(id: WindowRequest.agentChatWindowGroupID, value: newWindowID)
         }

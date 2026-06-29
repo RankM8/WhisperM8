@@ -6,6 +6,8 @@ struct ProjectChatGroup: View {
     let sessions: [AgentChatSession]
     let isExpanded: Bool
     let selectedSessionID: UUID?
+    /// Mehrfach-Auswahl (geteilt mit der Tab-Leiste) — Cmd/Shift-Klick.
+    let multiSelection: Set<UUID>
     /// Sessions mit offenem Tab in der globalen Bar — werden heller
     /// dargestellt als geschlossene (Sidebar = Bestand, Tabs = aktiv).
     let openTabIDs: Set<UUID>
@@ -41,6 +43,10 @@ struct ProjectChatGroup: View {
     @State private var isHeaderHovered = false
     @State private var isSessionDragOver = false
     @State private var isProjectDragOver = false
+    /// Sidebar-Drop-Indikator: Session-Row, über der die Einfügelinie steht
+    /// (= „landet vor dieser Zeile"), bzw. der Append-Footer am Projektende.
+    @State private var dropTargetedSessionID: UUID?
+    @State private var isFooterDropTargeted = false
 
     /// Einmal pro View-Init gelesen statt pro Render — das Flag ist ein
     /// Escape-Hatch und aendert sich nur via `defaults write` + App-Neustart.
@@ -70,11 +76,22 @@ struct ProjectChatGroup: View {
                     Color.clear
                         .frame(height: 8)
                         .contentShape(Rectangle())
+                        .overlay(alignment: .top) {
+                            if isFooterDropTargeted {
+                                Capsule()
+                                    .fill(AgentTheme.accent)
+                                    .frame(height: 2)
+                                    .padding(.horizontal, 8)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                         .dropDestination(for: DraggableSession.self) { items, _ in
+                            isFooterDropTargeted = false
                             guard let dropped = items.first else { return false }
                             onSessionDrop(dropped, nil, project.id)
                             return true
-                        }
+                        } isTargeted: { isFooterDropTargeted = $0 }
+                        .animation(.easeOut(duration: 0.1), value: isFooterDropTargeted)
                 }
             }
         }
@@ -115,11 +132,18 @@ struct ProjectChatGroup: View {
         .help("Weitere Sessions dieses Projekts einblenden")
     }
 
+    /// Anzahl der Sessions, auf die eine Bulk-Aktion wirken würde (die Auswahl,
+    /// wenn `session` Teil davon ist, sonst 1) — für die „N"-Menü-Labels.
+    private func bulkCount(_ session: AgentChatSession) -> Int {
+        multiSelection.contains(session.id) && multiSelection.count > 1 ? multiSelection.count : 1
+    }
+
     @ViewBuilder
     private func sessionRow(_ session: AgentChatSession) -> some View {
         SessionListButton(
             session: session,
             isSelected: selectedSessionID == session.id,
+            isMultiSelected: multiSelection.contains(session.id),
             isOpenTab: openTabIDs.contains(session.id),
             accentColorHex: project.color,
             isRunning: runningSessionIDs.contains(session.id),
@@ -140,10 +164,28 @@ struct ProjectChatGroup: View {
             sessionDragPreview(session)
         }
         .dropDestination(for: DraggableSession.self) { items, _ in
+            dropTargetedSessionID = nil
             guard let dropped = items.first else { return false }
             onSessionDrop(dropped, session.id, project.id)
             return true
+        } isTargeted: { targeted in
+            if targeted {
+                dropTargetedSessionID = session.id
+            } else if dropTargetedSessionID == session.id {
+                dropTargetedSessionID = nil
+            }
         }
+        // Einfügelinie „landet vor dieser Zeile" — analog zur Tab-Leiste.
+        .overlay(alignment: .top) {
+            if dropTargetedSessionID == session.id {
+                Capsule()
+                    .fill(AgentTheme.accent)
+                    .frame(height: 2)
+                    .padding(.horizontal, 8)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: 0.1), value: dropTargetedSessionID)
         .contextMenu {
             Button("Umbenennen…", systemImage: "pencil") {
                 onRenameRequest(session)
@@ -158,11 +200,11 @@ struct ProjectChatGroup: View {
                 }
             }
             Divider()
-            Button("Anpinnen", systemImage: "pin") {
+            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) anpinnen" : "Anpinnen", systemImage: "pin") {
                 onPinSession(session.id)
             }
             Divider()
-            Menu("Tab-Farbe") {
+            Menu(bulkCount(session) > 1 ? "Farbe für \(bulkCount(session)) Tabs" : "Tab-Farbe") {
                 ForEach(AgentChatColor.palette, id: \.self) { color in
                     Button {
                         onSetColor(session.id, color)
@@ -180,7 +222,7 @@ struct ProjectChatGroup: View {
                 }
             }
             Divider()
-            Button("Schließen", systemImage: "xmark", role: .destructive) {
+            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) schließen" : "Schließen", systemImage: "xmark", role: .destructive) {
                 onCloseSession(session)
             }
         }
@@ -368,6 +410,9 @@ extension View {
 struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
+    /// Teil einer Mehrfach-Auswahl (Cmd/Shift-Klick) — Akzent-Ring zusätzlich
+    /// zur aktiven (`isSelected`) Zeile.
+    var isMultiSelected: Bool = false
     /// `true` wenn der Chat gerade als Tab in der globalen Bar offen ist —
     /// offene Chats erscheinen heller als geschlossene (Sidebar = Bestand,
     /// Tab-Bar = aktive Auswahl).
@@ -462,6 +507,12 @@ struct SessionListButton: View {
             }
             .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 26, alignment: .leading)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                if isMultiSelected {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 1.5)
+                }
+            }
             .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
@@ -569,6 +620,7 @@ extension SessionListButton: Equatable {
             && lhs.isAwaitingInput == rhs.isAwaitingInput
             && lhs.isAutoRenaming == rhs.isAutoRenaming
             && lhs.isMissingTranscript == rhs.isMissingTranscript
+            && lhs.isMultiSelected == rhs.isMultiSelected
     }
 }
 
@@ -579,6 +631,7 @@ struct PinnedSessionRow: View {
     let session: AgentChatSession
     let project: AgentProject?
     let isSelected: Bool
+    var isMultiSelected: Bool = false
     let isRunning: Bool
     let statusStore: AgentSessionRuntimeStatusStore
     let isAwaitingInput: Bool
@@ -617,6 +670,12 @@ struct PinnedSessionRow: View {
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                if isMultiSelected {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 1.5)
+                }
+            }
             .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }

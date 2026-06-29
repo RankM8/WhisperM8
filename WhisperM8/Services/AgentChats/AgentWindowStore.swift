@@ -24,6 +24,10 @@ final class AgentWindowStore {
     /// hierauf reaktiv; geschrieben wird nur ueber die Mutations-Methoden.
     private(set) var state: AgentUIState
 
+    /// Ephemere Multi-Auswahl pro Fenster (NICHT persistiert) — im Store, damit
+    /// ein Cross-Window-Drop die Quell-Auswahl LIVE lesen und danach leeren kann.
+    private var multiSelectionByWindow: [UUID: Set<UUID>] = [:]
+
     @ObservationIgnored private let persistence: AgentSessionStore
     @ObservationIgnored private var saveTask: Task<Void, Never>?
 
@@ -55,6 +59,12 @@ final class AgentWindowStore {
 
     func openTabIDs(in windowID: UUID) -> [UUID] { window(for: windowID).openTabIDs }
     func selectedSession(in windowID: UUID) -> UUID? { window(for: windowID).selectedSessionID }
+
+    /// Ephemere Multi-Auswahl (kein Persist). Leere Menge räumt den Eintrag auf.
+    func multiSelection(in windowID: UUID) -> Set<UUID> { multiSelectionByWindow[windowID] ?? [] }
+    func setMultiSelection(_ ids: Set<UUID>, in windowID: UUID) {
+        multiSelectionByWindow[windowID] = ids.isEmpty ? nil : ids
+    }
     func selectedProject(in windowID: UUID) -> UUID? { window(for: windowID).selectedProjectID }
 
     /// IDs aller Sekundaerfenster (alles ausser dem Primaerfenster) — fuer den
