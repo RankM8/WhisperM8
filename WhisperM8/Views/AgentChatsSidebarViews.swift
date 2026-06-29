@@ -625,6 +625,7 @@ struct PinnedSessionRow: View {
     let session: AgentChatSession
     let project: AgentProject?
     let isSelected: Bool
+    var isMultiSelected: Bool = false
     let isRunning: Bool
     let statusStore: AgentSessionRuntimeStatusStore
     let isAwaitingInput: Bool
@@ -663,6 +664,12 @@ struct PinnedSessionRow: View {
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                if isMultiSelected {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 1.5)
+                }
+            }
             .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }

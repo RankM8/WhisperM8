@@ -98,12 +98,19 @@ struct AgentChatsView: View {
     /// Etappe-0 Tab-Drag: gemessene Tab-Frames (Inhalts-Space) + aktueller
     /// Einfüge-Index während eines Drags (ephemer, nicht persistiert).
     @State private var tabFrames: [UUID: CGRect] = [:]
+    /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
+    /// dauerhaft oben Platz belegen.
+    @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
 
-    /// Multi-Select der Tab-Leiste (ephemer, pro Fenster): leer = Einzel-Auswahl,
-    /// sonst ≥ 2 IDs inkl. aktivem Tab. internal, da `handleTabClick` in +Tabs liegt.
-    @State var multiSelection: Set<UUID> = []
+    /// Multi-Select pro Fenster — Bridge in den AgentWindowStore (ephemer, nicht
+    /// persistiert), damit ein Cross-Window-Drop die Quell-Auswahl live sieht und
+    /// danach leeren kann. internal, da Extensions (+Tabs/+BulkActions) es nutzen.
+    var multiSelection: Set<UUID> {
+        get { windowStore.multiSelection(in: windowID) }
+        nonmutating set { windowStore.setMultiSelection(newValue, in: windowID) }
+    }
     /// Mirror der `autoNamer.inFlight`-Set — wird via NotificationCenter
     /// aktualisiert, damit SwiftUI Re-Renders triggert. Wir koennen das nicht
     /// ueber @Observable machen weil autoNamer lazy-init in einem optionalen
@@ -747,9 +754,11 @@ struct AgentChatsView: View {
                     }
 
                     if !visiblePinned.isEmpty {
-                        sidebarSectionLabel("Gepinnt", systemImage: "pin")
-                        ForEach(visiblePinned) { session in
-                            pinnedRow(session, runningSessionIDs: runningSessionIDs)
+                        pinnedSectionHeader(count: visiblePinned.count)
+                        if !pinnedSectionCollapsed {
+                            ForEach(visiblePinned) { session in
+                                pinnedRow(session, runningSessionIDs: runningSessionIDs)
+                            }
                         }
                         if !chatListIsEmpty {
                             sidebarSectionLabel("Chats")
@@ -845,6 +854,38 @@ struct AgentChatsView: View {
         .padding(.bottom, 2)
     }
 
+    /// Klappbarer „Gepinnt"-Header (Chevron + Anzahl) — blendet die gepinnten
+    /// Zeilen ein/aus, damit sie nicht dauerhaft oben Platz belegen. Zustand
+    /// via @AppStorage persistiert.
+    private func pinnedSectionHeader(count: Int) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { pinnedSectionCollapsed.toggle() }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .rotationEffect(.degrees(pinnedSectionCollapsed ? 0 : 90))
+                Image(systemName: "pin")
+                    .font(.system(size: 8, weight: .bold))
+                Text("GEPINNT")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.6)
+                if pinnedSectionCollapsed {
+                    Text("\(count)")
+                        .font(.system(size: 9, weight: .bold).monospacedDigit())
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(AgentTheme.textTertiary)
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(pinnedSectionCollapsed ? "Gepinnte einblenden" : "Gepinnte ausblenden")
+    }
+
     /// Zeile der Gepinnt-Sektion inkl. Kontextmenü (Loslösen, Umbenennen,
     /// Auto-Titel, Farbe, Schließen). Gepinnte Chats sind projektübergreifend —
     /// das Repo-Badge stellt die Zuordnung her.
@@ -854,6 +895,7 @@ struct AgentChatsView: View {
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
             isSelected: selectedSessionID == session.id,
+            isMultiSelected: multiSelection.contains(session.id),
             isRunning: runningSessionIDs.contains(session.id),
             statusStore: runtimeStatusStore,
             isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
@@ -894,6 +936,7 @@ struct AgentChatsView: View {
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
             isSelected: selectedSessionID == session.id,
+            isMultiSelected: multiSelection.contains(session.id),
             isRunning: runningSessionIDs.contains(session.id),
             statusStore: runtimeStatusStore,
             isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
@@ -1533,10 +1576,13 @@ struct AgentChatsView: View {
                                 frames: tabFrames,
                                 insertionIndex: $tabInsertionIndex,
                                 onMove: { dropped, beforeID in
-                                    // Gruppe kommt aus dem PAYLOAD (Quell-Auswahl) — so kennt auch
-                                    // ein ANDERES Fenster die ganze Gruppe (cross-window).
-                                    let group = dropped.groupSessionIDs.count > 1 ? dropped.groupSessionIDs : [dropped.sessionID]
                                     let source = dropped.sourceWindowID ?? windowID
+                                    // Gruppe aus der LIVE-Auswahl des QUELL-Fensters (robust, ohne
+                                    // Payload-Round-Trip) — fixt cross-window.
+                                    let sourceSel = windowStore.multiSelection(in: source)
+                                    let group = (sourceSel.count > 1 && sourceSel.contains(dropped.sessionID))
+                                        ? windowStore.openTabIDs(in: source).filter { sourceSel.contains($0) }
+                                        : [dropped.sessionID]
                                     if source == windowID {
                                         // Same-window: Gruppe als Block reordern bzw. Einzel.
                                         if group.count > 1 {
@@ -1552,6 +1598,7 @@ struct AgentChatsView: View {
                                         for id in group {
                                             windowStore.moveTab(id, from: source, to: windowID, before: beforeID)
                                         }
+                                        windowStore.setMultiSelection([], in: source)  // Quell-Auswahl aufräumen
                                     }
                                     // Einzel-Drag (kein Gruppen-Tab) verwirft die Auswahl (Chrome/Finder).
                                     if group.count <= 1 { multiSelection = [] }
