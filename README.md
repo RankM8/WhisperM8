@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Native macOS dictation app with AI-powered transcription</strong>
+  <strong>Native macOS app: AI-powered dictation + a tabbed session manager for Claude Code &amp; Codex CLI</strong>
 </p>
 
 <p align="center">
@@ -18,24 +18,44 @@
 
 ## Features
 
-- **Toggle Recording** — Press hotkey to start, press again to stop and transcribe
-- **Auto-Paste** — Transcribed text automatically pasted into active app (optional)
+WhisperM8 has two halves that share one app.
+
+### 🎙️ Dictation
+
+- **Toggle Recording** — Press a hotkey to start, press again to stop and transcribe
+- **Auto-Paste** — Transcribed text is automatically pasted into the active app (optional)
 - **Dual Provider Support** — Choose between OpenAI Whisper or Groq
-- **Menu Bar App** — Runs quietly in your menu bar
-- **Real-time Feedback** — Visual recording indicator with audio levels
-- **Secure** — API keys stored in macOS Keychain
+- **Visual Context** — Optionally attach a screenshot (`screencapture -i`) as context for AI post-processing
+- **Output Modes** — Rewrite, email, Slack, … with optional Codex-CLI post-processing
+- **Menu Bar App** — Runs quietly in your menu bar; API keys stored in the macOS Keychain
+
+### 🤖 Agent Chats
+
+A session manager for **Claude Code** and **Codex CLI**:
+
+- **Chrome-like tabs** — Full PTY terminals in tabs with multi-select (Cmd/Shift-click), drag & drop reordering, and tear-off into a new window
+- **Clickable links** — Cmd-click a path in the terminal to open it: code/Markdown → PhpStorm, other files → default app, folders → Finder; Cmd+Alt reveals in Finder
+- **Background agents** — Spawn and attach `claude --bg` agents
+- **Live status & organization** — Per-session working / awaiting-input / idle status, project grouping, pinning, and color tags
+- **Transcript browsing** — Read closed Claude/Codex sessions inside the app
 
 ## Installation
 
 ### Homebrew (recommended)
 
+Install:
+
 ```bash
 brew install --cask rankm8/tap/whisperm8
 ```
 
-(Equivalent: `brew tap rankm8/tap && brew install --cask whisperm8`.)
+Update to the latest version:
 
-Updates: `brew upgrade --cask whisperm8`.
+```bash
+brew upgrade --cask whisperm8
+```
+
+(Equivalent install: `brew tap rankm8/tap && brew install --cask whisperm8`.)
 
 > WhisperM8 is distributed self-signed (no Apple Developer ID / notarization).
 > The cask automatically removes the Gatekeeper quarantine attribute on install,
