@@ -202,6 +202,7 @@ class OverlayController: ObservableObject {
     private var onCancelPostProcessing: (() -> Void)?
     private var onOutputModeChange: ((OutputMode) -> Void)?
     private var onAddScreenshot: (() -> Void)?
+    private var onCaptureScreenshot: (() -> Void)?
     private var onToggleScreenClip: (() -> Void)?
     private var onClearContext: (() -> Void)?
     /// Vereinte Schiene für granulare Kontext-Bearbeitung pro Item.
@@ -226,6 +227,7 @@ class OverlayController: ObservableObject {
         onCancelPostProcessing: @escaping () -> Void,
         onOutputModeChange: @escaping (OutputMode) -> Void,
         onAddScreenshot: @escaping () -> Void,
+        onCaptureScreenshot: @escaping () -> Void,
         onToggleScreenClip: @escaping () -> Void,
         onClearContext: @escaping () -> Void,
         onContextAction: @escaping (ContextAction) -> Void
@@ -240,6 +242,7 @@ class OverlayController: ObservableObject {
         self.onCancelPostProcessing = onCancelPostProcessing
         self.onOutputModeChange = onOutputModeChange
         self.onAddScreenshot = onAddScreenshot
+        self.onCaptureScreenshot = onCaptureScreenshot
         self.onToggleScreenClip = onToggleScreenClip
         self.onClearContext = onClearContext
         self.onContextAction = onContextAction
@@ -310,6 +313,7 @@ class OverlayController: ObservableObject {
         onCancelPostProcessing = nil
         onOutputModeChange = nil
         onAddScreenshot = nil
+        onCaptureScreenshot = nil
         onToggleScreenClip = nil
         onClearContext = nil
         onContextAction = nil
@@ -338,6 +342,10 @@ class OverlayController: ObservableObject {
 
     func addScreenshot() {
         onAddScreenshot?()
+    }
+
+    func captureScreenshot() {
+        onCaptureScreenshot?()
     }
 
     func toggleScreenClip() {

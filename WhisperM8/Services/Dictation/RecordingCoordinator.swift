@@ -210,6 +210,9 @@ final class RecordingCoordinator {
             onAddScreenshot: { [weak self] in
                 self?.addContextScreenshot()
             },
+            onCaptureScreenshot: { [weak self] in
+                self?.captureInteractiveScreenshot()
+            },
             onToggleScreenClip: { [weak self] in
                 self?.toggleScreenClip()
             },

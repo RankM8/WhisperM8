@@ -36,8 +36,69 @@ final class VisualContextCaptureService {
     private var activeClipSession: ScreenClipCapturing?
     private var activeClipStartDate: Date?
 
+    /// Injizierbarer Runner fuer die native Bereichsauswahl. Default ruft das
+    /// System-Binary `/usr/sbin/screencapture -i` auf. Tests ersetzen den Runner,
+    /// weil das interaktive Subprocess selbst nicht unit-testbar ist (analog zur
+    /// DI-via-Closure-Konvention im Repo).
+    var interactiveScreenshotRunner: @Sendable (_ outputURL: URL) async -> Bool
+        = { await VisualContextCaptureService.runInteractiveScreenCapture($0) }
+
     var isRecordingClip: Bool {
         activeClipSession != nil
+    }
+
+    /// Startet die native macOS-Bereichsauswahl (Fadenkreuz) und liefert ein
+    /// Screenshot-Attachment. Gibt `nil` zurueck, wenn der User die Auswahl
+    /// abbricht (ESC) — im Gegensatz zu `captureClipboardScreenshot` nimmt das
+    /// hier einen NEUEN Screenshot auf, statt das Clipboard zu lesen.
+    func captureInteractiveScreenshot(sourceApp: NSRunningApplication?) async throws -> ContextAttachment? {
+        guard AppPreferences.shared.isVisualContextCaptureEnabled else {
+            throw VisualContextCaptureError.disabled
+        }
+
+        let fileURL = try contextDirectory()
+            .appendingPathComponent("InteractiveScreenshot-\(UUID().uuidString)")
+            .appendingPathExtension("png")
+
+        let didCapture = await interactiveScreenshotRunner(fileURL)
+
+        // Abbruch (ESC) oder leere Auswahl: screencapture schreibt keine bzw. eine
+        // leere Datei. Aufraeumen und still zurueck — kein Fehler-Toast.
+        let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int) ?? nil
+        guard didCapture, FileManager.default.fileExists(atPath: fileURL.path), (size ?? 0) > 0 else {
+            try? FileManager.default.removeItem(at: fileURL)
+            return nil
+        }
+
+        return ContextAttachment(
+            kind: .screenshot,
+            fileURL: fileURL,
+            thumbnailURL: fileURL,
+            sourceAppName: sourceApp?.localizedName ?? "Screenshot"
+        )
+    }
+
+    /// Default-Runner: ruft `/usr/sbin/screencapture -i <file>` auf und wartet auf
+    /// Beendigung. `-i` = interaktive Auswahl (Region aufziehen, Leertaste =
+    /// Fenstermodus, ESC = Abbruch). Schreibt direkt in die Datei statt ins
+    /// Clipboard, damit die Zwischenablage des Users unangetastet bleibt und der
+    /// 500-ms-Clipboard-Monitor nichts doppelt importiert. Kein LoginShellEnvironment
+    /// noetig — absoluter System-Pfad, kein PATH-Lookup.
+    nonisolated private static func runInteractiveScreenCapture(_ outputURL: URL) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = ["-i", outputURL.path]
+            process.terminationHandler = { proc in
+                continuation.resume(returning: proc.terminationStatus == 0)
+            }
+            do {
+                try process.run()
+            } catch {
+                Logger.permission.warning("screencapture launch failed: \(error.localizedDescription, privacy: .public)")
+                continuation.resume(returning: false)
+            }
+        }
     }
 
     func captureClipboardScreenshot(
