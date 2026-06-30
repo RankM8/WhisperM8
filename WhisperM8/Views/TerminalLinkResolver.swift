@@ -28,7 +28,9 @@ enum TerminalLinkResolver {
     enum Action: Equatable {
         /// http/https/mailto/ssh/… → an den Standard-Handler (Browser/Mail).
         case openWeb(URL)
-        /// Existierende Datei → mit der passenden Standard-App öffnen.
+        /// Code-/Text-/Markdown-Datei → im Editor (PhpStorm) öffnen.
+        case openInEditor(URL)
+        /// Sonstige Datei (Bild, PDF, Archiv, …) → mit der Standard-App öffnen.
         case openFile(URL)
         /// Existierender Ordner → im Finder öffnen.
         case openFolder(URL)
@@ -114,8 +116,33 @@ enum TerminalLinkResolver {
     private static func action(forPath path: String, isDirectory: Bool, revealInFinder: Bool) -> Action {
         let url = URL(fileURLWithPath: path)
         if revealInFinder { return .revealInFinder(url) }
-        return isDirectory ? .openFolder(url) : .openFile(url)
+        if isDirectory { return .openFolder(url) }
+        return isEditorFile(url) ? .openInEditor(url) : .openFile(url)
     }
+
+    /// Heuristik: Code/Text/Markdown gehört in den Editor (PhpStorm), Medien/
+    /// Archive/Office/Binaries in die Standard-App. Unbekannte oder fehlende
+    /// Endungen (Makefile, Dockerfile, LICENSE, Dotfiles wie `.gitignore`) gelten
+    /// im Coding-Kontext als Text ⇒ Editor.
+    static func isEditorFile(_ url: URL) -> Bool {
+        !nonEditorExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    private static let nonEditorExtensions: Set<String> = [
+        // Bilder
+        "png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp", "heic", "heif", "icns", "ico",
+        // Design / PDF
+        "pdf", "sketch", "fig", "psd", "ai", "xd",
+        // Audio / Video
+        "mov", "mp4", "m4v", "avi", "mkv", "webm", "mp3", "wav", "aiff", "aif", "flac", "m4a", "aac", "ogg",
+        // Archive / Pakete / Binaries
+        "zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "dmg", "pkg", "app", "ipa", "jar", "war",
+        "exe", "dll", "so", "dylib", "o", "a", "class", "wasm", "bin",
+        // Office
+        "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pages", "numbers", "key",
+        // Fonts
+        "woff", "woff2", "ttf", "otf", "eot",
+    ]
 
     /// `~`-Expansion + Auflösung relativer Pfade gegen `workingDirectory`, danach
     /// Normalisierung (`..`/`.` auflösen). `nil` ⇒ relativ ohne Basis.

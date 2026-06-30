@@ -530,6 +530,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
     private var scrollGuard: TerminalScrollGuard?
+    /// Ersetzt SwiftTerms internen `terminalDelegate`, um Link-Klicks abzufangen
+    /// (siehe `AgentTerminalLinkInterceptor`). Stark gehalten, weil
+    /// `terminalDelegate` `weak` ist.
+    private var linkInterceptor: AgentTerminalLinkInterceptor?
 
     @Published private(set) var isRunning = false
     @Published private(set) var hasStarted = false
@@ -556,6 +560,16 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         self.onTerminated = onTerminated
         super.init()
         terminal.processDelegate = self
+
+        // SwiftTerm reicht `requestOpenLink` NICHT an den processDelegate weiter
+        // (und es ist nicht überschreibbar). Daher den terminalDelegate durch
+        // einen Proxy ersetzen, der nur Link-Klicks abfängt und sonst alles an
+        // die Basis weiterreicht.
+        let interceptor = AgentTerminalLinkInterceptor(base: terminal) { [weak self] link, params in
+            self?.handleOpenLink(link: link, params: params)
+        }
+        terminal.terminalDelegate = interceptor
+        linkInterceptor = interceptor
 
         // Initial-Theme an die aktuelle ColorScheme koppeln. Wird bei jedem
         // macOS-Erscheinungsbild-Wechsel oder User-Override-Toggle aktualisiert.
@@ -696,15 +710,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
-    /// Cmd-Klick auf einen erkannten Link/Pfad im Terminal. SwiftTerms
-    /// Default-Implementierung würde den rohen String durch `URL(string:) +
-    /// NSWorkspace.open` schicken — was bei schemelosen Dateipfaden mit `-50`
-    /// (paramErr) scheitert und bei Leerzeichen/Umlauten still nichts tut. Wir
-    /// routen stattdessen sauber (`TerminalLinkResolver`): Browser-Links bleiben
-    /// Browser-Links, Dateien öffnen mit der Standard-App, Ordner im Finder,
-    /// fehlende Ziele bekommen eine klare Meldung. **Cmd+Alt** zeigt das Ziel
-    /// nur im Finder, statt es zu öffnen.
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+    /// Behandelt einen Link-/Pfad-Klick aus dem Terminal (geroutet über den
+    /// `AgentTerminalLinkInterceptor`, weil SwiftTerm `requestOpenLink` nicht an
+    /// den `processDelegate` weiterreicht). Statt SwiftTerms `URL(string:) +
+    /// NSWorkspace.open`-Default (das bei Dateipfaden mit `-50` scheitert) routen
+    /// wir sauber über den `TerminalLinkResolver`: Web→Browser,
+    /// Code/Markdown→PhpStorm, sonstige Datei→Standard-App, Ordner→Finder,
+    /// fehlend→klare Meldung. **Cmd+Alt** zeigt das Ziel nur im Finder.
+    func handleOpenLink(link: String, params: [String: String]) {
         let revealInFinder = NSEvent.modifierFlags.contains(.option)
         let action = TerminalLinkResolver.resolve(
             link: link,
@@ -721,9 +734,15 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
 
     private func perform(_ action: TerminalLinkResolver.Action) {
         switch action {
+        case .openInEditor(let url):
+            // Code/Markdown → PhpStorm (fokussiert das exakte Fenster); fehlt
+            // PhpStorm, auf die Standard-App ausweichen.
+            if !PhpStormLauncher.open(path: url.path) {
+                NSWorkspace.shared.open(url)
+            }
         case .openWeb(let url), .openFile(let url), .openFolder(let url):
-            // Datei → Standard-App, Ordner → Finder, Web → Browser: alles über
-            // denselben sauberen Open-Pfad (im Gegensatz zu SwiftTerms `URL(string:)`).
+            // Web → Browser, sonstige Datei → Standard-App, Ordner → Finder:
+            // sauberer Open-Pfad (im Gegensatz zu SwiftTerms `URL(string:)`).
             NSWorkspace.shared.open(url)
         case .revealInFinder(let url):
             NSWorkspace.shared.activateFileViewerSelecting([url])
