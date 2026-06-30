@@ -115,7 +115,7 @@ struct VisualContextActionButtons: View {
     var body: some View {
         HStack(spacing: 6) {
             Button {
-                controller.addScreenshot()
+                controller.captureScreenshot()
             } label: {
                 Image(systemName: "camera.viewfinder")
                     .font(.system(size: 12, weight: .semibold))
@@ -128,8 +128,8 @@ struct VisualContextActionButtons: View {
             .buttonStyle(.plain)
             .foregroundStyle(isVisualContextEnabled ? Color.green : Color.secondary.opacity(0.7))
             .disabled(!isVisualContextEnabled || controller.isTranscribing || controller.isPostProcessing || controller.isScreenClipRecording)
-            .help(isVisualContextEnabled ? "Import the current clipboard screenshot" : "Visual context capture is disabled")
-            .accessibilityLabel("Import clipboard screenshot context")
+            .help(isVisualContextEnabled ? "Take a screenshot (select an area)" : "Visual context capture is disabled")
+            .accessibilityLabel("Take a screenshot to add as context")
 
             Button {
                 if PermissionService.hasScreenRecordingPermission {
@@ -329,9 +329,16 @@ struct ContextMenuContent: View {
         Divider()
 
         Button {
+            controller.captureScreenshot()
+        } label: {
+            Label("Take Screenshot (Select Area)", systemImage: "camera.viewfinder")
+        }
+        .disabled(!isVisualContextEnabled || controller.isScreenClipRecording)
+
+        Button {
             controller.addScreenshot()
         } label: {
-            Label("Import Clipboard Screenshot", systemImage: "camera.viewfinder")
+            Label("Import Clipboard Screenshot", systemImage: "doc.on.clipboard")
         }
         .disabled(!isVisualContextEnabled || controller.isScreenClipRecording)
 

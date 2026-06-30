@@ -103,6 +103,43 @@ extension RecordingCoordinator {
         }
     }
 
+    /// Startet die native macOS-Bereichsauswahl und haengt den aufgenommenen
+    /// Screenshot als Kontext an. Im Gegensatz zu `addContextScreenshot()`
+    /// (Clipboard-Import) nimmt das hier einen NEUEN Screenshot auf — beliebig oft
+    /// wiederholbar.
+    func captureInteractiveScreenshot() {
+        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing, !appState.isScreenClipRecording else { return }
+        guard AppPreferences.shared.isVisualContextCaptureEnabled else { return }
+        guard appState.contextBundle.screenshots.count < AppPreferences.shared.maxScreenshotsPerRecording else {
+            appState.lastError = "Maximum screenshots for this recording reached."
+            overlayController.update(appState: appState)
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                guard let screenshot = try await self.visualContextCaptureService.captureInteractiveScreenshot(
+                    sourceApp: self.contextSourceApp
+                ) else {
+                    return  // User-Abbruch (ESC) — keine Fehlermeldung.
+                }
+                // Aufnahme koennte waehrend der Auswahl gestoppt worden sein.
+                guard let appState = self.appState, appState.isRecording else { return }
+                appState.contextBundle.screenshots.append(screenshot)
+                appState.lastContextBundle = appState.contextBundle
+                appState.lastError = nil
+                self.overlayController.update(appState: appState)
+            } catch {
+                self.appState?.lastError = error.localizedDescription
+                Logger.permission.warning("Interactive screenshot context failed: \(error.localizedDescription, privacy: .public)")
+                if let appState = self.appState {
+                    self.overlayController.update(appState: appState)
+                }
+            }
+        }
+    }
+
     func toggleScreenClip() {
         guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
 
