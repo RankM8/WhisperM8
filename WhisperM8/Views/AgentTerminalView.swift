@@ -696,6 +696,60 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
+    /// Cmd-Klick auf einen erkannten Link/Pfad im Terminal. SwiftTerms
+    /// Default-Implementierung würde den rohen String durch `URL(string:) +
+    /// NSWorkspace.open` schicken — was bei schemelosen Dateipfaden mit `-50`
+    /// (paramErr) scheitert und bei Leerzeichen/Umlauten still nichts tut. Wir
+    /// routen stattdessen sauber (`TerminalLinkResolver`): Browser-Links bleiben
+    /// Browser-Links, Dateien öffnen mit der Standard-App, Ordner im Finder,
+    /// fehlende Ziele bekommen eine klare Meldung. **Cmd+Alt** zeigt das Ziel
+    /// nur im Finder, statt es zu öffnen.
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        let revealInFinder = NSEvent.modifierFlags.contains(.option)
+        let action = TerminalLinkResolver.resolve(
+            link: link,
+            workingDirectory: command.workingDirectory,
+            revealInFinder: revealInFinder,
+            fileStatus: { path in
+                var isDir: ObjCBool = false
+                let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDir)
+                return TerminalLinkResolver.FileStatus(exists: exists, isDirectory: isDir.boolValue)
+            }
+        )
+        perform(action)
+    }
+
+    private func perform(_ action: TerminalLinkResolver.Action) {
+        switch action {
+        case .openWeb(let url), .openFile(let url), .openFolder(let url):
+            // Datei → Standard-App, Ordner → Finder, Web → Browser: alles über
+            // denselben sauberen Open-Pfad (im Gegensatz zu SwiftTerms `URL(string:)`).
+            NSWorkspace.shared.open(url)
+        case .revealInFinder(let url):
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        case .notFound(let path):
+            Logger.terminalSnapshot.debug("terminal_link_not_found path=\(path, privacy: .public)")
+            Self.presentLinkAlert(
+                title: "Datei nicht gefunden",
+                message: "Das verlinkte Ziel existiert nicht (mehr):\n\(path)"
+            )
+        case .reject(let reason):
+            // Bewusste Ablehnung (leerer/relativer-ohne-Basis/kaputter Link) —
+            // kein Modal, nur Telemetrie.
+            Logger.terminalSnapshot.debug("terminal_link_rejected reason=\(reason, privacy: .public)")
+        }
+    }
+
+    /// Klare, eigene Fehlermeldung statt des kryptischen Finder-`-50`-Dialogs.
+    private static func presentLinkAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         Task { @MainActor in
             self.exitCode = exitCode
