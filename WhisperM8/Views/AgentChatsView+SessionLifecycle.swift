@@ -16,6 +16,15 @@ extension AgentChatsView {
         createDefaultSession()
     }
 
+    /// Enter im „Neuer Chat"-Suchfeld: öffnet den aktuell per Tastatur
+    /// hervorgehobenen Ordner. No-op bei leerer Ergebnisliste (kein falsches
+    /// Verhalten). `startNewChat` schließt Popover + setzt den Chat-Kontext.
+    func confirmHighlightedNewChatProject(_ projects: [AgentProject]) {
+        guard let id = newChatHighlightedProjectID,
+              let project = projects.first(where: { $0.id == id }) else { return }
+        startNewChat(in: project)
+    }
+
     func createSession(provider: AgentProvider, kind: AgentSessionKind? = nil) {
         guard let selectedProject else { return }
         do {

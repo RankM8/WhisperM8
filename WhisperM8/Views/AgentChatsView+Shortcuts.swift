@@ -32,8 +32,10 @@ extension AgentChatsView {
     func installCloseTabShortcutIfNeeded() {
         guard closeTabKeyMonitor == nil else { return }
         closeTabKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Erst Tab-Wechsel (⌘⌥←/→) prüfen — bei Treffer ist `event` konsumiert
-            // (nil). Sonst durchreichen an die Cmd-W-Prüfung.
+            // Reihenfolge: ⌘N (Picker öffnen) → ⌘⌥←/→ (Tab-Wechsel) → ⌘W
+            // (Tab schließen). Jeder Schritt gibt bei Treffer `nil` zurück
+            // (Event konsumiert), sonst das Event weiter an den nächsten.
+            guard let event = handleNewChatShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
             return handleCloseTabShortcut(event)
         }
@@ -59,6 +61,21 @@ extension AgentChatsView {
               event.charactersIgnoringModifiers == "w" else { return event }
         guard let session = selectedSession else { return event }
         closeTab(session)
+        return nil
+    }
+
+    /// Verarbeitet ⌘N: öffnet das durchsuchbare „Neuer Chat"-Projekt-Popover
+    /// mit Autofokus im Suchfeld (der Picker aktiviert per `onAppear` das erste
+    /// Ergebnis → tippen → `Enter`). Bewusst nur öffnen (nicht togglen) —
+    /// Schließen macht `Esc` im Picker. Gleiche Window-Gating-Semantik wie
+    /// Cmd-W: nur Events des Agent-Chats-Fensters, damit ⌘N in Settings/
+    /// Onboarding nichts auslöst. Greift auch bei fokussiertem Terminal-Tab.
+    private func handleNewChatShortcut(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow else { return event }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == .command,
+              event.charactersIgnoringModifiers == "n" else { return event }
+        showNewChatProjectPicker = true
         return nil
     }
 

@@ -224,6 +224,11 @@ struct AgentChatsView: View {
     /// Popover des „Neuer Chat"-Split-Buttons (▾): Ziel-Projekt wählen/suchen.
     @State var showNewChatProjectPicker = false
     @State var newChatProjectQuery = ""
+    /// Per Tastatur hervorgehobenes Ergebnis im „Neuer Chat"-Picker (aktive
+    /// Auswahl). `nil` = kein Highlight (leere Ergebnisliste → `Enter` = No-op).
+    @State var newChatHighlightedProjectID: UUID?
+    /// Fokus des Suchfelds im „Neuer Chat"-Picker — für Autofokus beim Öffnen.
+    @FocusState private var newChatSearchFocused: Bool
     /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
     @State var subAgentLibrarySheet: SubAgentLibraryPresentation?
     /// Live-Tracker fuer die aktive Sub-Session innerhalb eines
@@ -1164,6 +1169,19 @@ struct AgentChatsView: View {
                 .opacity(selectedProject == nil ? 0.5 : 1)
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
+                // Dezenter Keycap-Hinweis: ⌘N öffnet den durchsuchbaren Picker.
+                // Als Trailing-Overlay, damit „Neuer Chat" zentriert bleibt.
+                .overlay(alignment: .trailing) {
+                    Text("⌘N")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1.5)
+                        .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 4))
+                        .opacity(selectedProject == nil ? 0.5 : 1)
+                        .padding(.trailing, 8)
+                        .allowsHitTesting(false)
+                }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1182,7 +1200,7 @@ struct AgentChatsView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Projekt für neuen Chat wählen oder hinzufügen")
+            .help("Projekt für neuen Chat wählen oder hinzufügen (⌘N)")
             .popover(isPresented: $showNewChatProjectPicker, arrowEdge: .bottom) {
                 newChatProjectPicker
             }
@@ -1198,6 +1216,7 @@ struct AgentChatsView: View {
         let projects = query.isEmpty
             ? manualProjects
             : manualProjects.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        let projectIDs = projects.map(\.id)
         return VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
@@ -1206,6 +1225,9 @@ struct AgentChatsView: View {
                 TextField("Projekt suchen…", text: $newChatProjectQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
+                    .focused($newChatSearchFocused)
+                    .accessibilityLabel("Projekt suchen")
+                    .onSubmit { confirmHighlightedNewChatProject(projects) }
             }
             .padding(.horizontal, 11)
             .frame(height: 36)
@@ -1240,9 +1262,12 @@ struct AgentChatsView: View {
                             }
                             .padding(.horizontal, 11)
                             .frame(height: 36)
+                            .background(project.id == newChatHighlightedProjectID ? AgentTheme.hover : Color.clear)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(PopoverRowButtonStyle())
+                        .accessibilityAddTraits(project.id == newChatHighlightedProjectID ? .isSelected : [])
+                        .onHover { if $0 { newChatHighlightedProjectID = project.id } }
                     }
                     if projects.isEmpty {
                         Text(query.isEmpty ? "Noch keine Projekte" : "Kein Projekt gefunden")
@@ -1281,6 +1306,28 @@ struct AgentChatsView: View {
         }
         .frame(width: 270)
         .background(AgentTheme.panel)
+        // Pfeiltasten bubblen aus dem fokussierten (einzeiligen) Suchfeld hoch:
+        // Up/Down navigieren die Ergebnisse, Left/Right bleiben Cursor im Feld.
+        .onKeyPress(.downArrow) {
+            newChatHighlightedProjectID = ProjectPickerKeyboard.move(from: newChatHighlightedProjectID, in: projectIDs, direction: 1)
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            newChatHighlightedProjectID = ProjectPickerKeyboard.move(from: newChatHighlightedProjectID, in: projectIDs, direction: -1)
+            return .handled
+        }
+        .onKeyPress(.escape) {
+            showNewChatProjectPicker = false
+            return .handled
+        }
+        // Filterwechsel: Highlight auf gültige Auswahl bzw. erstes Ergebnis setzen.
+        .onChange(of: newChatProjectQuery) {
+            newChatHighlightedProjectID = ProjectPickerKeyboard.normalize(newChatHighlightedProjectID, in: projectIDs)
+        }
+        .onAppear {
+            newChatSearchFocused = true
+            newChatHighlightedProjectID = projectIDs.first
+        }
     }
 
     /// Effektiver Scope: die Suche überstimmt den Scope-Filter — tippt der
