@@ -42,6 +42,29 @@ final class TerminalKeyboardShortcutTests: XCTestCase {
         XCTAssertNil(bytes)
     }
 
+    func testTerminalShortcutCommandArrowsMapToLineStartEnd() {
+        // Reines ⌘← / ⌘→ bleibt Zeilenanfang/-ende (Ctrl+A / Ctrl+E).
+        XCTAssertEqual(
+            TerminalShortcut.bytes(keyCode: TerminalShortcut.KeyCode.leftArrow, modifiers: [.command], characters: nil),
+            [0x01]
+        )
+        XCTAssertEqual(
+            TerminalShortcut.bytes(keyCode: TerminalShortcut.KeyCode.rightArrow, modifiers: [.command], characters: nil),
+            [0x05]
+        )
+    }
+
+    func testTerminalShortcutCommandShiftArrowsArePassedThroughForTabSwitch() {
+        // ⌘⇧←/→ (Safari-Tab-Wechsel) darf NICHT als Ctrl+A/E geschluckt werden,
+        // sondern muss durchfallen, damit der Agent-Chats-Monitor den Tab wechselt.
+        XCTAssertNil(
+            TerminalShortcut.bytes(keyCode: TerminalShortcut.KeyCode.leftArrow, modifiers: [.command, .shift], characters: nil)
+        )
+        XCTAssertNil(
+            TerminalShortcut.bytes(keyCode: TerminalShortcut.KeyCode.rightArrow, modifiers: [.command, .shift], characters: nil)
+        )
+    }
+
     func testTerminalShortcutOptionArrowsMapToWordMovement() {
         let leftBytes = TerminalShortcut.bytes(
             keyCode: TerminalShortcut.KeyCode.leftArrow,

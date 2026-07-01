@@ -397,14 +397,14 @@ enum TerminalShortcut {
             if hasCommand { return [0x15] }                  // Ctrl+U
         case KeyCode.leftArrow:
             if hasOption && !hasCommand { return [0x1b, 0x62] }  // Esc+B
-            // Nur reines Cmd+← → Ctrl+A. Cmd+Option+← bleibt frei für den
-            // Tab-Wechsel (vom Agent-Chats-Window-Monitor abgefangen).
-            if hasCommand && !hasOption { return [0x01] }         // Ctrl+A
+            // Nur reines Cmd+← → Ctrl+A. Cmd+Option+← (Chrome) und Cmd+Shift+←
+            // (Safari) bleiben frei für den Tab-Wechsel (Agent-Chats-Monitor).
+            if hasCommand && !hasOption && !hasShift { return [0x01] }  // Ctrl+A
         case KeyCode.rightArrow:
             if hasOption && !hasCommand { return [0x1b, 0x66] }  // Esc+F
-            // Nur reines Cmd+→ → Ctrl+E. Cmd+Option+→ bleibt frei für den
-            // Tab-Wechsel (vom Agent-Chats-Window-Monitor abgefangen).
-            if hasCommand && !hasOption { return [0x05] }         // Ctrl+E
+            // Nur reines Cmd+→ → Ctrl+E. Cmd+Option+→ (Chrome) und Cmd+Shift+→
+            // (Safari) bleiben frei für den Tab-Wechsel (Agent-Chats-Monitor).
+            if hasCommand && !hasOption && !hasShift { return [0x05] }  // Ctrl+E
         case KeyCode.z:
             // Cmd+Shift+Z (Redo) bewusst durchreichen — Readline kennt kein Redo.
             if hasCommand && !hasShift,

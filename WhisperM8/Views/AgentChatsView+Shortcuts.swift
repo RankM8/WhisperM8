@@ -79,26 +79,21 @@ extension AgentChatsView {
         return nil
     }
 
-    /// Verarbeitet ⌘⌥← / ⌘⌥→ (vorheriger/nächster Tab, mit Wrap-around). Gibt
-    /// `nil` zurück, wenn das Event konsumiert wurde, sonst das Original-Event.
-    /// Gleiche Window-Gating-Semantik wie Cmd-W: nur Events des Agent-Chats-
-    /// Fensters. Der Terminal-Handler reicht ⌘⌥-Pfeile durch (siehe
-    /// `TerminalShortcut.bytes`), deshalb fängt dieser Monitor sie zuverlässig
-    /// ab — auch wenn der Fokus im Terminal liegt.
+    /// Verarbeitet ⌘⌥←/→ (Chrome) und ⌘⇧←/→ (Safari) als vorheriger/nächster
+    /// Tab (mit Wrap-around). Gibt `nil` zurück, wenn das Event konsumiert wurde,
+    /// sonst das Original-Event. Gleiche Window-Gating-Semantik wie Cmd-W: nur
+    /// Events des Agent-Chats-Fensters. Die Modifier-/KeyCode-Logik liegt im
+    /// reinen, unit-getesteten `TabNavShortcut` (robust gegen die
+    /// `.function`/`.numericPad`-Flags auf Pfeiltasten). Der Terminal-Handler
+    /// reicht beide Chords durch (siehe `TerminalShortcut.bytes`), deshalb greift
+    /// dieser Monitor auch bei Fokus im Terminal.
     private func handleTabNavShortcut(_ event: NSEvent) -> NSEvent? {
         guard let hostWindow, event.window === hostWindow else { return event }
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard modifiers == [.command, .option] else { return event }
-        switch event.keyCode {
-        case TerminalShortcut.KeyCode.leftArrow:
-            selectAdjacentTab(-1)
-            return nil
-        case TerminalShortcut.KeyCode.rightArrow:
-            selectAdjacentTab(+1)
-            return nil
-        default:
+        guard let direction = TabNavShortcut.direction(keyCode: event.keyCode, modifiers: event.modifierFlags) else {
             return event
         }
+        selectAdjacentTab(direction)
+        return nil
     }
 
     // MARK: - Titelleisten-Maus: Doppelklick-Zoom
