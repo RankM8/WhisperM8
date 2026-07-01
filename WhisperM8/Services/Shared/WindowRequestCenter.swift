@@ -3,20 +3,18 @@ import SwiftUI
 
 enum WindowRequest: String, Equatable {
     case settings
+    /// Öffnet das Settings-Fenster direkt in der Output-Sektion (Overview mit
+    /// Default Output, Codex-Status und History-Einstieg).
+    case settingsOutput = "settings-output"
     case onboarding
-    case outputDashboard = "output-dashboard"
     case agentChats = "agent-chats"
 
     static let agentChatWindowGroupID = "agent-chat-window"
 
     var targetWindowID: String {
         switch self {
-        case .settings:
+        case .settings, .settingsOutput:
             return "settings"
-        case .outputDashboard:
-            // P8: zeigt jetzt das echte Reports-Dashboard-Window statt der
-            // Settings-Sektion "Output Overview".
-            return rawValue
         case .agentChats:
             // Primaerfenster ist eine Single-`Window`-Scene (nicht die
             // UUID-WindowGroup) — die kann sich beim Launch/Reopen nicht
@@ -31,7 +29,9 @@ enum WindowRequest: String, Equatable {
         switch self {
         case .settings:
             return "api"
-        case .outputDashboard, .agentChats, .onboarding:
+        case .settingsOutput:
+            return "outputOverview"
+        case .agentChats, .onboarding:
             return nil
         }
     }

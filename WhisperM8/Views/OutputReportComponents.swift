@@ -48,11 +48,22 @@ struct ReportTextBlock: View {
     let title: String
     let text: String?
 
+    private var copyableText: String? {
+        guard let text, !text.isEmpty else { return nil }
+        return text
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if let copyableText {
+                    CopyToClipboardButton(text: copyableText)
+                }
+            }
             Text(text?.isEmpty == false ? text! : "None")
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
@@ -60,6 +71,31 @@ struct ReportTextBlock: View {
                 .padding(10)
                 .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         }
+    }
+}
+
+/// Kleiner Copy-Button mit kurzer „Copied"-Bestätigung. Ergänzt die
+/// Textauswahl, damit Raw/Final zuverlässig per Klick in die Zwischenablage
+/// gehen (Textauswahl bleibt zusätzlich aktiv).
+struct CopyToClipboardButton: View {
+    let text: String
+    @State private var didCopy = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            didCopy = true
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                didCopy = false
+            }
+        } label: {
+            Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        .help("Copy to clipboard")
     }
 }
 

@@ -45,8 +45,8 @@ struct WhisperM8App: App {
                 Button("Agent Chats") {
                     WindowRequestCenter.shared.request(.agentChats)
                 }
-                Button("Output & Templates") {
-                    WindowRequestCenter.shared.request(.outputDashboard)
+                Button("Output & History") {
+                    WindowRequestCenter.shared.request(.settingsOutput)
                 }
                 Button("Settings") {
                     WindowRequestCenter.shared.request(.settings)
@@ -86,17 +86,6 @@ struct WhisperM8App: App {
                 .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
         .defaultSize(width: 900, height: 640)
-        .defaultPosition(.center)
-
-        // P8: Reports-Dashboard (Transcript-Run-Reports). War fertig gebaut,
-        // aber nirgends instanziiert — der Menü-Eintrag landete bisher in
-        // den Settings statt im Dashboard.
-        Window("Output Reports", id: "output-dashboard") {
-            OutputDashboardView()
-                .environment(AppState.shared)
-                .preferredColorScheme(themeManager.override.preferredColorScheme)
-        }
-        .defaultSize(width: 980, height: 680)
         .defaultPosition(.center)
 
         // Onboarding window

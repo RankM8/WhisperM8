@@ -92,8 +92,8 @@ struct MenuBarView: View {
         }
         .keyboardShortcut(",", modifiers: .command)
 
-        Button("Output & Templates...") {
-            WindowRequestCenter.shared.request(.outputDashboard)
+        Button("Output & History...") {
+            WindowRequestCenter.shared.request(.settingsOutput)
         }
 
         Button("Agent Chats...") {

@@ -18,19 +18,11 @@ final class WindowAndOverlayTests: XCTestCase {
 
         center.request(.onboarding)
         XCTAssertEqual(center.latestRequest, .onboarding)
-
-        center.request(.outputDashboard)
-        XCTAssertEqual(center.latestRequest, .outputDashboard)
     }
 
     func testWindowRequestsExposeExplicitRoutingTargets() {
         XCTAssertEqual(WindowRequest.settings.targetWindowID, "settings")
         XCTAssertEqual(WindowRequest.settings.settingsSectionID, "api")
-
-        // P8: Reports öffnen jetzt das echte Dashboard-Window statt der
-        // Settings-Sektion "Output Overview".
-        XCTAssertEqual(WindowRequest.outputDashboard.targetWindowID, "output-dashboard")
-        XCTAssertNil(WindowRequest.outputDashboard.settingsSectionID)
 
         // Primaerfenster = eigene Single-`Window`-Scene; die WindowGroup-ID
         // ist davon getrennt und gilt nur fuer abgeloeste Sekundaerfenster.

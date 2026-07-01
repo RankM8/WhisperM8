@@ -6,6 +6,9 @@ struct OutputOverviewView: View {
     @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.cleanID
     @State private var codexStatus = CodexConnectionStatus.unknown
 
+    /// Springt in den History-Reiter; optional mit vorselektiertem Report.
+    var onOpenHistory: (UUID?) -> Void = { _ in }
+
     var body: some View {
         Form {
             Section("Default Output") {
@@ -40,10 +43,20 @@ struct OutputOverviewView: View {
             }
 
             Section("Last Output") {
-                LastOutputPreview(title: "Report", text: appState.lastTranscriptRunReport?.title)
-                LastOutputPreview(title: "Context", text: lastContextText)
-                LastOutputPreview(title: "Raw", text: appState.lastRawTranscription)
-                LastOutputPreview(title: "Final", text: appState.lastFinalTranscription ?? appState.lastTranscription)
+                if let report = appState.lastTranscriptRunReport {
+                    LastOutputCard(report: report) {
+                        onOpenHistory(report.id)
+                    }
+                } else if let raw = appState.lastRawTranscription, !raw.isEmpty {
+                    // Fallback, falls noch kein persistierter Report vorliegt.
+                    LastOutputPreview(title: "Raw", text: raw)
+                    LastOutputPreview(title: "Final", text: appState.lastFinalTranscription ?? appState.lastTranscription)
+                    Button("Open History") { onOpenHistory(nil) }
+                } else {
+                    Text("No output yet")
+                        .foregroundStyle(.secondary)
+                    Button("Open History") { onOpenHistory(nil) }
+                }
             }
         }
         .formStyle(.grouped)
@@ -52,21 +65,47 @@ struct OutputOverviewView: View {
             codexStatus = CodexStatusProbe().status()
         }
     }
+}
 
-    private var lastContextText: String? {
-        guard let bundle = appState.lastContextBundle ?? appState.lastSelectedContext.map({ TranscriptContextBundle(selectedText: $0) }),
-              !bundle.isEmpty else {
-            return nil
-        }
+/// Kompakte Karte für den zuletzt erzeugten Output. Zeigt Kerninfos +
+/// eine gekürzte Vorschau und verlinkt in den vollständigen History-Reiter.
+private struct LastOutputCard: View {
+    let report: TranscriptRunReport
+    var onOpenInHistory: () -> Void
 
-        var parts: [String] = []
-        if !bundle.selectedText.isEmpty {
-            parts.append(bundle.selectedText.text)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(report.title)
+                    .font(.body.weight(.semibold))
+                Spacer()
+                Text(report.createdAt, format: .dateTime.hour().minute())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(report.status.displayText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(report.shortSummary)
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack {
+                Spacer()
+                Button {
+                    onOpenInHistory()
+                } label: {
+                    Label("Open in History", systemImage: "arrow.right")
+                }
+                .buttonStyle(.borderless)
+            }
         }
-        if !bundle.visualContextSummary.isEmpty {
-            parts.append(bundle.visualContextSummary)
-        }
-        return parts.joined(separator: "\n\n")
+        .padding(.vertical, 4)
     }
 }
 

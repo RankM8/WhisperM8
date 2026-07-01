@@ -4,6 +4,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
     case api = "Transcription API"
     case codex = "Codex / ChatGPT"
     case outputOverview = "Output Overview"
+    case history = "History"
     case modes = "Modes"
     case templates = "Templates"
     case testLab = "Test Lab"
@@ -24,6 +25,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "codex"
         case .outputOverview:
             return "outputOverview"
+        case .history:
+            return "history"
         case .modes:
             return "modes"
         case .templates:
@@ -57,6 +60,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "sparkles"
         case .outputOverview:
             return "rectangle.grid.2x2"
+        case .history:
+            return "clock.arrow.circlepath"
         case .modes:
             return "slider.horizontal.3"
         case .templates:
@@ -82,7 +87,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
         switch self {
         case .api, .codex:
             return "Accounts"
-        case .outputOverview, .modes, .templates, .testLab:
+        case .outputOverview, .history, .modes, .templates, .testLab:
             return "Output"
         case .agentChats:
             return "Agents"
@@ -98,6 +103,8 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @StateObject private var windowRequestCenter = WindowRequestCenter.shared
     @State private var selection: ControlCenterSection? = .api
+    /// Report, den die History beim Öffnen aus der Overview vorselektieren soll.
+    @State private var historyPreselectID: UUID?
 
     var body: some View {
         NavigationSplitView {
@@ -109,6 +116,7 @@ struct SettingsView: View {
 
                 Section("Output") {
                     sidebarRow(.outputOverview)
+                    sidebarRow(.history)
                     sidebarRow(.modes)
                     sidebarRow(.templates)
                     sidebarRow(.testLab)
@@ -171,8 +179,13 @@ struct SettingsView: View {
         case .codex:
             CodexSettingsView()
         case .outputOverview:
-            OutputOverviewView()
-                .environment(appState)
+            OutputOverviewView(onOpenHistory: { reportID in
+                historyPreselectID = reportID
+                selection = .history
+            })
+            .environment(appState)
+        case .history:
+            OutputHistoryView(preselectReportID: historyPreselectID)
         case .modes:
             OutputModesView()
         case .templates:
