@@ -18,6 +18,30 @@ struct OutputModesView: View {
         modes.firstIndex { $0.id == selectedModeID }
     }
 
+    /// Codex-Enrichment im aktuellen Nutzungsprofil verfügbar? Steuert die
+    /// locked-Darstellung der Codex-abhängigen Modi.
+    private var enrichmentAvailable: Bool {
+        AppPreferences.shared.usageProfile.wantsCodexEnrichment
+    }
+
+    private var enrichmentLockedBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "lock.fill")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("AI enrichment is off")
+                    .font(.caption.weight(.semibold))
+                Text("Clean, Email, Slack and other modes need Codex. Switch to an enrichment profile in Behavior → Usage to unlock them. Raw dictation stays available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -36,6 +60,10 @@ struct OutputModesView: View {
                             .help("Create custom mode")
                         }
 
+                        if !enrichmentAvailable {
+                            enrichmentLockedBanner
+                        }
+
                         VStack(spacing: 0) {
                             ForEach($modes) { $mode in
                                 OutputModeRow(
@@ -47,6 +75,7 @@ struct OutputModesView: View {
                                     canToggle: canDisable(mode),
                                     toggleHelp: modeToggleHelp(mode),
                                     showDivider: mode.id != modes.last?.id,
+                                    isLocked: !enrichmentAvailable && mode.isCodexDependent,
                                     onSelect: { selectedModeID = mode.id }
                                 )
                             }

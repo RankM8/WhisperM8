@@ -213,7 +213,7 @@ class OverlayController: ObservableObject {
     @Published var isPostProcessing: Bool = false
     @Published var overlayStyle: OverlayStyle = .full
     @Published var selectedOutputMode: OutputMode = OutputMode.defaultMode()
-    @Published var outputModes: [OutputMode] = OutputMode.enabledBuiltInModes
+    @Published var outputModes: [OutputMode] = OutputMode.availableBuiltInModes()
     @Published var showModePickerInMiniOverlay: Bool = true
     @Published var selectedContext: SelectedContext = .empty
     @Published var contextBundle: TranscriptContextBundle = .empty
@@ -253,7 +253,7 @@ class OverlayController: ObservableObject {
         self.isTranscribing = appState.isTranscribing
         self.isPostProcessing = appState.isPostProcessing
         self.selectedOutputMode = appState.selectedOutputMode
-        self.outputModes = OutputMode.enabledBuiltInModes
+        self.outputModes = OutputMode.availableBuiltInModes()
         self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
         self.selectedContext = appState.selectedContext
         self.contextBundle = appState.contextBundle
@@ -292,7 +292,7 @@ class OverlayController: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.outputModes = OutputMode.enabledBuiltInModes
+                self.outputModes = OutputMode.availableBuiltInModes()
             }
         }
     }
@@ -367,14 +367,14 @@ class OverlayController: ObservableObject {
         // direkt gesetzt; alles andere nur bei echter Änderung, damit der
         // 10-Hz-Tick keinen objectWillChange-Churn im SwiftUI-Overlay erzeugt.
         // Der frühere OutputModeStore-Disk-Load pro Tick ist doppelt entschärft:
-        // enabledBuiltInModes ist seit dem Stat-Cache billig, und der Guard
-        // verhindert das Publish.
+        // availableBuiltInModes (profilgefiltertes enabledBuiltInModes) ist seit
+        // dem Stat-Cache billig, und der Guard verhindert das Publish.
         self.audioLevel = appState.audioLevel
         self.duration = appState.recordingDuration
         setIfChanged(\.isTranscribing, to: appState.isTranscribing)
         setIfChanged(\.isPostProcessing, to: appState.isPostProcessing)
         setIfChanged(\.selectedOutputMode, to: appState.selectedOutputMode)
-        setIfChanged(\.outputModes, to: OutputMode.enabledBuiltInModes)
+        setIfChanged(\.outputModes, to: OutputMode.availableBuiltInModes())
         setIfChanged(\.showModePickerInMiniOverlay, to: AppPreferences.shared.showModePickerInMiniOverlay)
         setIfChanged(\.selectedContext, to: appState.selectedContext)
         setIfChanged(\.contextBundle, to: appState.contextBundle)

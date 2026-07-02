@@ -30,6 +30,12 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         kind != .raw
     }
 
+    /// Modus benötigt Codex-Enrichment (Post-Processing). Alle Modi außer Raw.
+    /// Alias für Lesbarkeit an den Profil-/Verfügbarkeits-Aufrufstellen.
+    var isCodexDependent: Bool {
+        usesPostProcessing
+    }
+
     init(
         id: String,
         name: String,
@@ -228,12 +234,30 @@ extension OutputMode {
         OutputModeStore().mode(for: id)
     }
 
-    static func defaultMode() -> OutputMode {
-        OutputModeStore().mode(for: AppPreferences.shared.defaultOutputModeID)
+    static func defaultMode(profile: AppUsageProfile = AppPreferences.shared.usageProfile) -> OutputMode {
+        let resolved = OutputModeStore().mode(for: AppPreferences.shared.defaultOutputModeID)
+        // Ohne Enrichment (Dictation-only) darf niemals ein Codex-Modus aktiv sein —
+        // die gespeicherte Präferenz bleibt erhalten (für spätere Freischaltung), effektiv
+        // wird aber auf Raw zurückgefallen.
+        if !profile.wantsCodexEnrichment && resolved.isCodexDependent {
+            return OutputModeStore().mode(for: OutputMode.rawID)
+        }
+        return resolved
     }
 
     static var enabledBuiltInModes: [OutputMode] {
         OutputModeStore().enabledModes
+    }
+
+    /// Im Aufnahme-Overlay tatsächlich wählbare Modi — profilabhängig. Ohne Enrichment
+    /// (Dictation-only) bleiben nur die Codex-freien Modi (Raw), damit der Hot-Path sauber
+    /// bleibt (Discoverability der Codex-Modi passiert stattdessen in Settings/Onboarding).
+    static func availableBuiltInModes(profile: AppUsageProfile = AppPreferences.shared.usageProfile) -> [OutputMode] {
+        let enabled = enabledBuiltInModes
+        guard profile.wantsCodexEnrichment else {
+            return enabled.filter { !$0.isCodexDependent }
+        }
+        return enabled
     }
 
     static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {

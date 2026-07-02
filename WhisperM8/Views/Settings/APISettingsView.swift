@@ -1,52 +1,37 @@
 import SwiftUI
 
 struct APISettingsView: View {
-    @AppStorage("selectedProvider") private var selectedProviderRaw = TranscriptionProvider.openai.rawValue
-    @AppStorage("selectedModel") private var selectedModelRaw = TranscriptionModel.openai_gpt4o.rawValue
+    @AppStorage("selectedProvider") private var selectedProviderRaw = TranscriptionProvider.groq.rawValue
+    @AppStorage("selectedModel") private var selectedModelRaw = TranscriptionModel.groq_whisper_v3.rawValue
     @AppStorage("language") private var language = "de"
     @State private var apiKey = ""
     @State private var apiKeyAvailable = false
-    @State private var showingAPIKey = false
 
     private var provider: TranscriptionProvider {
-        TranscriptionProvider(rawValue: selectedProviderRaw) ?? .openai
+        TranscriptionProvider(rawValue: selectedProviderRaw) ?? .groq
+    }
+
+    /// Brücke zwischen dem persistierten `@AppStorage`-Rohwert und dem geteilten Picker,
+    /// der mit `TranscriptionProvider` arbeitet. Der Setter durchläuft dieselbe
+    /// Side-Effect-Logik wie zuvor (`handleProviderChange`).
+    private var providerBinding: Binding<TranscriptionProvider> {
+        Binding(
+            get: { provider },
+            set: { handleProviderChange(to: $0) }
+        )
     }
 
     var body: some View {
         Form {
             // Provider & API Key
             Section {
-                Picker("Provider", selection: $selectedProviderRaw) {
-                    ForEach(TranscriptionProvider.allCases, id: \.rawValue) { p in
-                        Text(p.displayName).tag(p.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: selectedProviderRaw) { _, newValue in
-                    let newProvider = TranscriptionProvider(rawValue: newValue) ?? .openai
-                    apiKey = ""
-                    apiKeyAvailable = KeychainManager.exists(key: newProvider.keychainKey)
-                    if let currentModel = TranscriptionModel(rawValue: selectedModelRaw),
-                       currentModel.provider != newProvider {
-                        selectedModelRaw = newProvider.defaultModel.rawValue
-                    }
-                }
+                TranscriptionProviderPicker(provider: providerBinding)
 
-                HStack {
-                    FocusableTextField(
-                        text: $apiKey,
-                        placeholder: apiKeyAvailable ? "Saved \(provider.displayName) API key" : "\(provider.displayName) API key...",
-                        isSecure: !showingAPIKey
-                    )
-                    .frame(height: 22)
-
-                    Button {
-                        showingAPIKey.toggle()
-                    } label: {
-                        Image(systemName: showingAPIKey ? "eye.slash" : "eye")
-                    }
-                    .buttonStyle(.borderless)
-                }
+                MaskedAPIKeyField(
+                    text: $apiKey,
+                    hasSavedKey: apiKeyAvailable,
+                    providerName: provider.displayName
+                )
                 .onChange(of: apiKey) { _, newValue in
                     if newValue.isEmpty {
                         return
@@ -59,9 +44,7 @@ struct APISettingsView: View {
                     .font(.caption)
 
                 if apiKeyAvailable && apiKey.isEmpty {
-                    Label("API key is saved in Keychain", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
+                    TranscriptionKeychainStatusLabel()
                 }
             }
 
@@ -100,10 +83,23 @@ struct APISettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             TranscriptionSettings.migrateIfNeeded()
-            selectedProviderRaw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.openai.rawValue
-            selectedModelRaw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.openai_gpt4o.rawValue
+            selectedProviderRaw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.groq.rawValue
+            selectedModelRaw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.groq_whisper_v3.rawValue
             apiKey = ""
             apiKeyAvailable = KeychainManager.exists(key: provider.keychainKey)
         }
+    }
+
+    /// Provider-Wechsel: getippten Key verwerfen, Keychain-Verfügbarkeit neu prüfen,
+    /// Modell auf Provider-Default wechseln wenn nötig, Rohwert persistieren.
+    /// Verhalten 1:1 wie zuvor im inline-`onChange`.
+    private func handleProviderChange(to newProvider: TranscriptionProvider) {
+        apiKey = ""
+        apiKeyAvailable = KeychainManager.exists(key: newProvider.keychainKey)
+        if let currentModel = TranscriptionModel(rawValue: selectedModelRaw),
+           currentModel.provider != newProvider {
+            selectedModelRaw = newProvider.defaultModel.rawValue
+        }
+        selectedProviderRaw = newProvider.rawValue
     }
 }

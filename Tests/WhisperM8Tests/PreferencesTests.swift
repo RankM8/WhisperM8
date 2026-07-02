@@ -124,6 +124,86 @@ final class PreferencesTests: XCTestCase {
         }
     }
 
+    func testCleanInstallDefaultsToGroq() {
+        withIsolatedPreferences { preferences in
+            // Frische Installation: weder Provider noch Modell gesetzt.
+            preferences.selectedProviderRaw = nil
+            preferences.selectedModelRaw = nil
+
+            TranscriptionSettings.migrateIfNeeded()
+
+            XCTAssertEqual(TranscriptionSettings.loadProvider(), .groq)
+            XCTAssertEqual(TranscriptionSettings.loadModel(), .groq_whisper_v3)
+        }
+    }
+
+    func testExistingOpenAIUserIsPreservedOnMigration() {
+        withIsolatedPreferences { preferences in
+            // Bestandsnutzer mit altem OpenAI-Wert, noch kein neues Modell.
+            preferences.selectedProviderRaw = "openai_gpt4o"
+            preferences.selectedModelRaw = nil
+
+            TranscriptionSettings.migrateIfNeeded()
+
+            XCTAssertEqual(TranscriptionSettings.loadProvider(), .openai)
+            XCTAssertEqual(TranscriptionSettings.loadModel(), .openai_gpt4o)
+        }
+    }
+
+    func testLoadDefaultsFallBackToGroqWhenUnset() {
+        withIsolatedPreferences { preferences in
+            preferences.selectedProviderRaw = nil
+            preferences.selectedModelRaw = nil
+
+            XCTAssertEqual(TranscriptionSettings.loadProvider(), .groq)
+            XCTAssertEqual(TranscriptionSettings.loadModel(), .groq_whisper_v3)
+        }
+    }
+
+    func testUsageProfileDefaultsToFullForExistingUsers() {
+        withIsolatedPreferences { preferences in
+            // Kein Profil gesetzt (Bestandsnutzer / frischer Zustand) → .full = heutiges Verhalten.
+            XCTAssertEqual(preferences.usageProfile, .full)
+        }
+    }
+
+    func testUsageProfilePersistsSelection() {
+        withIsolatedPreferences { preferences in
+            preferences.usageProfile = .dictationRaw
+            XCTAssertEqual(preferences.usageProfile, .dictationRaw)
+
+            preferences.usageProfile = .dictationEnrichment
+            XCTAssertEqual(preferences.usageProfile, .dictationEnrichment)
+        }
+    }
+
+    func testUsageProfileDerivedFlags() {
+        XCTAssertFalse(AppUsageProfile.dictationRaw.wantsCodexEnrichment)
+        XCTAssertFalse(AppUsageProfile.dictationRaw.wantsAgentChats)
+        XCTAssertEqual(AppUsageProfile.dictationRaw.activationPolicy, .accessory)
+
+        XCTAssertTrue(AppUsageProfile.dictationEnrichment.wantsCodexEnrichment)
+        XCTAssertFalse(AppUsageProfile.dictationEnrichment.wantsAgentChats)
+        XCTAssertEqual(AppUsageProfile.dictationEnrichment.activationPolicy, .accessory)
+
+        XCTAssertTrue(AppUsageProfile.full.wantsCodexEnrichment)
+        XCTAssertTrue(AppUsageProfile.full.wantsAgentChats)
+        XCTAssertEqual(AppUsageProfile.full.activationPolicy, .regular)
+
+        XCTAssertEqual(AppUsageProfile.defaultProfile, .full)
+    }
+
+    func testProviderDisplayOrderAndRecommendation() {
+        XCTAssertEqual(TranscriptionProvider.displayOrder, [.groq, .openai])
+        XCTAssertEqual(TranscriptionProvider.recommended, .groq)
+        XCTAssertTrue(TranscriptionProvider.groq.isRecommended)
+        XCTAssertFalse(TranscriptionProvider.openai.isRecommended)
+        XCTAssertEqual(TranscriptionProvider.groq.recommendationBadge, "Free API key")
+        XCTAssertNil(TranscriptionProvider.openai.recommendationBadge)
+        XCTAssertNotNil(TranscriptionProvider.groq.recommendationHint)
+        XCTAssertNil(TranscriptionProvider.openai.recommendationHint)
+    }
+
     func testSaveModelAlsoUpdatesProvider() {
         withIsolatedPreferences { _ in
             TranscriptionSettings.saveModel(.groq_whisper_v3_turbo)

@@ -52,6 +52,12 @@ final class WindowRequestCenter: ObservableObject {
 
     @Published private(set) var latestRequest: WindowRequest?
 
+    /// Ob das Agent-Chats-Primärfenster angezeigt werden darf. In den Menüleisten-Profilen
+    /// (`AppUsageProfile` ohne Agent Chats) wird der automatische Launch-Open unterdrückt;
+    /// ein expliziter `.agentChats`-Request (Menüleiste, Onboarding-„Done", Profilwechsel)
+    /// hebt das auf. Voll-Profil startet mit `true`.
+    @Published var allowsAgentChatsPrimaryWindow: Bool = AppPreferences.shared.usageProfile.wantsAgentChats
+
     private var distributedObserver: NSObjectProtocol?
 
     private init() {
@@ -75,6 +81,11 @@ final class WindowRequestCenter: ObservableObject {
     }
 
     func request(_ request: WindowRequest) {
+        // Ein expliziter Agent-Chats-Wunsch gibt das Primärfenster frei (auch in
+        // Menüleisten-Profilen, z. B. via Menüleisten-Eintrag oder Profilwechsel).
+        if request == .agentChats {
+            allowsAgentChatsPrimaryWindow = true
+        }
         latestRequest = request
         NotificationCenter.default.post(name: Self.localNotificationName, object: request.rawValue)
     }
@@ -122,6 +133,10 @@ struct WindowRequestHandler: View {
     private func restoreAgentChatWindowsIfNeeded() {
         guard !didRestoreAgentChatWindows else { return }
         didRestoreAgentChatWindows = true
+        // In Menüleisten-Profilen (Dictation-only / Enrichment) werden keine
+        // Agent-Chats-Fenster wiederhergestellt — genau wie das Primärfenster
+        // unterdrückt wird. Erst ein expliziter Aufruf öffnet Agent Chats.
+        guard AppPreferences.shared.usageProfile.wantsAgentChats else { return }
         // Sekundaerfenster live aus dem Store (Single Source of Truth) — das
         // Primaerfenster oeffnet SwiftUI als erste Scene selbst.
         for windowID in AgentWindowStore.shared.secondaryWindowIDs {

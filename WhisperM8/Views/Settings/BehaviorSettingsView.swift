@@ -12,9 +12,26 @@ struct BehaviorSettingsView: View {
     @AppStorage("maxScreenRecordingDuration") private var maxScreenRecordingDuration = 30.0
     @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = false
     @ObservedObject private var themeManager = ThemeManager.shared
+    @Environment(\.dismissWindow) private var dismissWindow
+    @State private var usageProfile: AppUsageProfile = AppPreferences.shared.usageProfile
 
     var body: some View {
         Form {
+            Section("Usage") {
+                Picker("Profile", selection: $usageProfile) {
+                    ForEach(AppUsageProfile.allCases, id: \.self) { profile in
+                        Text(profile.displayName).tag(profile)
+                    }
+                }
+                .onChange(of: usageProfile) { _, newValue in
+                    applyProfileChange(newValue)
+                }
+
+                Text(usageProfile.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Erscheinungsbild") {
                 Picker("Theme", selection: Binding(
                     get: { themeManager.override },
@@ -115,5 +132,22 @@ struct BehaviorSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            // Falls das Profil anderswo geändert wurde, den Picker synchron halten.
+            usageProfile = AppPreferences.shared.usageProfile
+        }
+    }
+
+    /// Profilwechsel live anwenden: Pref + Aktivierungs-Policy (Dock/Menüleiste) +
+    /// Agent-Chats-Fenster öffnen bzw. schließen.
+    private func applyProfileChange(_ profile: AppUsageProfile) {
+        AppProfileActivator.apply(profile)
+        if profile.wantsAgentChats {
+            WindowRequestCenter.shared.request(.agentChats)
+        } else {
+            // Primär- UND Sekundärfenster (abgelöste Tabs) schließen — der Store-State
+            // bleibt erhalten, ein Rückwechsel stellt alles wieder her.
+            AppProfileActivator.closeAgentChatWindows(using: dismissWindow)
+        }
     }
 }

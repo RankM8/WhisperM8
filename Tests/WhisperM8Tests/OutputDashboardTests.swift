@@ -76,6 +76,31 @@ final class OutputDashboardTests: XCTestCase {
         }
     }
 
+    func testDictationRawProfileOnlyOffersNonCodexModes() {
+        withIsolatedOutputPreferences { _ in
+            let raw = OutputMode.availableBuiltInModes(profile: .dictationRaw)
+            XCTAssertFalse(raw.isEmpty)
+            XCTAssertTrue(raw.allSatisfy { !$0.isCodexDependent })
+            XCTAssertTrue(raw.contains { $0.id == OutputMode.rawID })
+
+            let full = OutputMode.availableBuiltInModes(profile: .full)
+            XCTAssertTrue(full.contains { $0.isCodexDependent })
+        }
+    }
+
+    func testDefaultModeFallsBackToRawWithoutEnrichment() {
+        withIsolatedOutputPreferences { preferences in
+            preferences.defaultOutputModeID = OutputMode.slackID
+
+            // Ohne Enrichment fällt der aktive Modus auf Raw zurück…
+            XCTAssertEqual(OutputMode.defaultMode(profile: .dictationRaw).id, OutputMode.rawID)
+            // …die gespeicherte Präferenz bleibt aber erhalten (für spätere Freischaltung).
+            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.slackID)
+            // Mit Enrichment bleibt der gewählte Codex-Modus aktiv.
+            XCTAssertEqual(OutputMode.defaultMode(profile: .full).id, OutputMode.slackID)
+        }
+    }
+
     func testOutputModeStoreSavesModeOverrides() throws {
         try withIsolatedOutputPreferences { preferences in
             preferences.defaultOutputModeID = OutputMode.cleanID

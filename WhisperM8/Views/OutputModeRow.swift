@@ -15,6 +15,9 @@ struct OutputModeRow: View {
     let canToggle: Bool
     let toggleHelp: String
     let showDivider: Bool
+    /// Modus ist Codex-abhängig, aber Enrichment ist im aktuellen Profil aus →
+    /// ausgegraut + Schloss statt Toggle. Rein visuell/informativ.
+    var isLocked: Bool = false
     let onSelect: () -> Void
 
     var body: some View {
@@ -23,13 +26,13 @@ struct OutputModeRow: View {
         } label: {
             HStack(spacing: 10) {
                 Circle()
-                    .fill(mode.isEnabled ? Color.green : Color.secondary.opacity(0.35))
+                    .fill(indicatorColor)
                     .frame(width: 8, height: 8)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mode.name)
                         .font(.body.weight(.semibold))
-                    Text(summary)
+                    Text(isLocked ? "Needs AI enrichment (Codex)" : summary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -37,12 +40,19 @@ struct OutputModeRow: View {
 
                 Spacer()
 
-                Toggle("Enabled", isOn: $isEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .disabled(!canToggle)
-                    .help(toggleHelp)
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help("Enable an AI-enrichment profile to unlock this mode.")
+                } else {
+                    Toggle("Enabled", isOn: $isEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .disabled(!canToggle)
+                        .help(toggleHelp)
+                }
 
                 if isDefault {
                     Image(systemName: "checkmark.circle.fill")
@@ -52,6 +62,7 @@ struct OutputModeRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .contentShape(Rectangle())
+            .opacity(isLocked ? 0.55 : 1)
         }
         .buttonStyle(.plain)
         .background(
@@ -63,5 +74,10 @@ struct OutputModeRow: View {
             Divider()
                 .padding(.leading, 30)
         }
+    }
+
+    private var indicatorColor: Color {
+        if isLocked { return Color.secondary.opacity(0.25) }
+        return mode.isEnabled ? Color.green : Color.secondary.opacity(0.35)
     }
 }

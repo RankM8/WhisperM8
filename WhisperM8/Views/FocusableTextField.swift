@@ -26,6 +26,11 @@ struct FocusableTextField: NSViewRepresentable {
         if nsView.stringValue != text {
             nsView.stringValue = text
         }
+        // Placeholder mitführen — er ist dynamisch (z. B. maskierte Dots bei
+        // gespeichertem Key, Provider-Name), makeNSView allein reicht nicht.
+        if nsView.placeholderString != placeholder {
+            nsView.placeholderString = placeholder
+        }
         // Force the window to be key so text field can receive input
         DispatchQueue.main.async {
             nsView.window?.makeKey()

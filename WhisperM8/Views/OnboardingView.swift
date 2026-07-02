@@ -4,30 +4,59 @@ import AVFoundation
 import ApplicationServices
 import AppKit
 
+/// Ein logischer Onboarding-Schritt. Die konkrete Reihenfolge ergibt sich profilabhängig
+/// (der Codex-Schritt entfällt für reine Diktat-Profile).
+enum OnboardingStep {
+    case welcome
+    case profile
+    case permissions
+    case hotkey
+    case apiKey
+    case codex
+    case test
+}
+
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissWindow) private var dismissWindow
     @Environment(AppState.self) private var appState
 
-    @State private var currentStep = 0
+    @State private var currentStepIndex = 0
+    @State private var selectedProfile: AppUsageProfile = AppPreferences.shared.usageProfile
     @State private var micPermissionGranted = false
     @State private var accessibilityGranted = false
     @State private var hotkeySet = false
     @State private var apiKey = ""
     @State private var apiKeyAvailable = false
-    @State private var selectedProvider = TranscriptionProvider.openai
-    @State private var selectedModel = TranscriptionModel.openai_gpt4o
+    @State private var selectedProvider = TranscriptionProvider.groq
+    @State private var selectedModel = TranscriptionModel.groq_whisper_v3
     @State private var testResult: String?
     @State private var isTestingRecording = false
 
-    private let totalSteps = 5
+    /// Profilabhängige Schrittfolge. Der Codex-Schritt erscheint nur, wenn das gewählte
+    /// Profil Enrichment nutzt (Dictation+Enrichment / Full).
+    private var steps: [OnboardingStep] {
+        var result: [OnboardingStep] = [.welcome, .profile, .permissions, .hotkey, .apiKey]
+        if selectedProfile.wantsCodexEnrichment {
+            result.append(.codex)
+        }
+        result.append(.test)
+        return result
+    }
+
+    private var currentStep: OnboardingStep {
+        let steps = steps
+        let index = min(max(currentStepIndex, 0), steps.count - 1)
+        return steps[index]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // Progress indicator
             HStack(spacing: 8) {
-                ForEach(0..<totalSteps, id: \.self) { step in
+                ForEach(steps.indices, id: \.self) { index in
                     Circle()
-                        .fill(step <= currentStep ? Color.accentColor : Color.gray.opacity(0.3))
+                        .fill(index <= currentStepIndex ? Color.accentColor : Color.gray.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
             }
@@ -35,32 +64,7 @@ struct OnboardingView: View {
 
             // Content
             Group {
-                switch currentStep {
-                case 0:
-                    WelcomeStep()
-                case 1:
-                    PermissionsStep(
-                        micGranted: $micPermissionGranted,
-                        accessibilityGranted: $accessibilityGranted
-                    )
-                case 2:
-                    HotkeyStep(hotkeySet: $hotkeySet)
-                case 3:
-                    APIKeyStep(
-                        apiKey: $apiKey,
-                        apiKeyAvailable: $apiKeyAvailable,
-                        selectedProvider: $selectedProvider,
-                        selectedModel: $selectedModel
-                    )
-                case 4:
-                    TestStep(
-                        testResult: $testResult,
-                        isTestingRecording: $isTestingRecording
-                    )
-                    .environment(appState)
-                default:
-                    WelcomeStep()
-                }
+                stepView(for: currentStep)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -68,27 +72,23 @@ struct OnboardingView: View {
 
             // Navigation
             HStack {
-                if currentStep > 0 {
+                if currentStepIndex > 0 {
                     Button("Back") {
-                        withAnimation { currentStep -= 1 }
+                        withAnimation { currentStepIndex -= 1 }
                     }
                 }
 
                 Spacer()
 
-                if currentStep < totalSteps - 1 {
+                if currentStepIndex < steps.count - 1 {
                     Button("Next") {
-                        withAnimation { currentStep += 1 }
+                        withAnimation { currentStepIndex += 1 }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canProceed)
                 } else {
                     Button("Done") {
-                        // Direkt in den Agent-Chats-Hub springen — der ist die
-                        // Default-Hauptansicht der App seit dem Wechsel auf
-                        // Dock-App. Settings ist manuell via Menubar erreichbar.
-                        WindowRequestCenter.shared.request(.agentChats)
-                        dismiss()
+                        finishOnboarding()
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canFinish)
@@ -99,15 +99,64 @@ struct OnboardingView: View {
         .frame(width: 520, height: 560)
     }
 
+    @ViewBuilder
+    private func stepView(for step: OnboardingStep) -> some View {
+        switch step {
+        case .welcome:
+            WelcomeStep()
+        case .profile:
+            ProfileStep(selectedProfile: $selectedProfile)
+        case .permissions:
+            PermissionsStep(
+                micGranted: $micPermissionGranted,
+                accessibilityGranted: $accessibilityGranted
+            )
+        case .hotkey:
+            HotkeyStep(hotkeySet: $hotkeySet)
+        case .apiKey:
+            APIKeyStep(
+                apiKey: $apiKey,
+                apiKeyAvailable: $apiKeyAvailable,
+                selectedProvider: $selectedProvider,
+                selectedModel: $selectedModel
+            )
+        case .codex:
+            CodexConnectStep()
+        case .test:
+            TestStep(
+                testResult: $testResult,
+                isTestingRecording: $isTestingRecording
+            )
+            .environment(appState)
+        }
+    }
+
+    private func finishOnboarding() {
+        // Profil anwenden: persistieren, Aktivierungs-Policy setzen, Fenster-Freigabe.
+        AppProfileActivator.apply(selectedProfile)
+
+        if selectedProfile.wantsAgentChats {
+            // Voll-Profil: in den Agent-Chats-Hub springen (bisheriges Verhalten).
+            WindowRequestCenter.shared.request(.agentChats)
+        } else {
+            // Menüleisten-Profile: keine Agent-Chats-Fenster. Falls beim Launch welche
+            // aufgegangen sind (Default-Profil war .full), Primär- und Sekundärfenster
+            // schließen.
+            AppProfileActivator.closeAgentChatWindows(using: dismissWindow)
+        }
+        dismiss()
+    }
+
     private var canProceed: Bool {
         switch currentStep {
-        case 1:
+        case .permissions:
             return micPermissionGranted && accessibilityGranted
-        case 2:
+        case .hotkey:
             return hotkeySet
-        case 3:
+        case .apiKey:
             return !apiKey.isEmpty || apiKeyAvailable
         default:
+            // Welcome, Profil (Default gewählt), Codex (optional), Test.
             return true
         }
     }
@@ -162,6 +211,138 @@ struct FeatureRow: View {
                 .foregroundStyle(.blue)
             Text(text)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Profile Step
+
+/// Nutzungsprofil-Auswahl (3 Presets). Bestimmt, wie die App danach läuft
+/// (Menüleisten-Utility vs. Dock-App) und welche Modi verfügbar sind.
+struct ProfileStep: View {
+    @Binding var selectedProfile: AppUsageProfile
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "person.crop.circle.badge.checkmark")
+                .font(.system(size: 48))
+                .foregroundStyle(.blue)
+
+            Text("How will you use WhisperM8?")
+                .font(.title)
+                .fontWeight(.bold)
+
+            Text("You can change this later in Settings.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 12) {
+                ForEach(AppUsageProfile.allCases, id: \.self) { profile in
+                    ProfileOptionCard(
+                        profile: profile,
+                        isSelected: selectedProfile == profile
+                    ) {
+                        selectedProfile = profile
+                        // Wahl sofort persistieren, damit sie beim Wizard-Abbruch nicht
+                        // verloren geht (die Aktivierungs-Policy wird erst bei „Done"
+                        // umgeschaltet).
+                        AppPreferences.shared.usageProfile = profile
+                    }
+                }
+            }
+        }
+        .padding(32)
+    }
+}
+
+private struct ProfileOptionCard: View {
+    let profile: AppUsageProfile
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .font(.title3)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(profile.displayName)
+                        .font(.headline)
+                    Text(profile.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(isSelected ? Color.accentColor.opacity(0.6) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Codex Connect Step (optional)
+
+/// Optionaler Schritt für Enrichment-/Voll-Profile: Codex (ChatGPT) verbinden. Immer
+/// überspringbar — die Modi funktionieren später auch, sobald Codex verbunden ist, und
+/// ohne Codex bleibt der Raw-Fallback.
+struct CodexConnectStep: View {
+    @State private var status = CodexConnectionStatus.unknown
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 48))
+                .foregroundStyle(status == .signedIn ? .green : .blue)
+
+            Text("Connect Codex (optional)")
+                .font(.title)
+                .fontWeight(.bold)
+
+            Text("AI enrichment modes (Clean, Email, Slack …) use the Codex CLI with your ChatGPT login. This is optional — you can skip it now and connect later in Settings.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack {
+                Text("Status")
+                Spacer()
+                Text(status.displayText)
+                    .foregroundStyle(status == .signedIn ? .green : .secondary)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
+
+            HStack {
+                Button(status == .signedIn ? "Reconnect ChatGPT" : "Sign in with ChatGPT") {
+                    CodexStatusProbe().openLoginInTerminal()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Check Again") {
+                    status = CodexStatusProbe().status()
+                }
+            }
+
+            Text("You can continue without connecting — without Codex, only Raw dictation runs; enrichment modes fall back to Raw.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(32)
+        .onAppear {
+            status = CodexStatusProbe().status()
         }
     }
 }
@@ -397,18 +578,18 @@ struct APIKeyStep: View {
     @Binding var selectedProvider: TranscriptionProvider
     @Binding var selectedModel: TranscriptionModel
 
-    @State private var showingAPIKey = false
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "gearshape.2")
-                .font(.system(size: 50))
-                .foregroundStyle(.blue)
+        ScrollView {
+            VStack(spacing: 16) {
+                Image(systemName: "gearshape.2")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.blue)
 
-            Text("Configuration")
-                .font(.title)
-                .fontWeight(.bold)
+                Text("Configuration")
+                    .font(.title)
+                    .fontWeight(.bold)
 
             // Provider & API Key Section
             VStack(spacing: 12) {
@@ -416,44 +597,13 @@ struct APIKeyStep: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Picker("Provider", selection: $selectedProvider) {
-                    ForEach(TranscriptionProvider.allCases, id: \.self) { provider in
-                        Text(provider.displayName).tag(provider)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: selectedProvider) { oldValue, newValue in
-                    // Save current key if not empty and switching to different keychain
-                    if !apiKey.isEmpty && oldValue.keychainKey != newValue.keychainKey {
-                        KeychainManager.save(key: oldValue.keychainKey, value: apiKey)
-                    }
-                    apiKey = ""
-                    apiKeyAvailable = KeychainManager.exists(key: newValue.keychainKey)
-                    // Switch to default model if current doesn't match provider
-                    if selectedModel.provider != newValue {
-                        selectedModel = newValue.defaultModel
-                    }
-                    TranscriptionSettings.saveProvider(newValue)
-                }
+                TranscriptionProviderPicker(provider: providerBinding)
 
-                HStack {
-                    if showingAPIKey {
-                        TextField("API Key", text: $apiKey)
-                    .textFieldStyle(.roundedBorder)
-                    .help(apiKeyAvailable ? "\(selectedProvider.displayName) API key is already saved" : "Enter a \(selectedProvider.displayName) API key")
-                } else {
-                    SecureField(apiKeyAvailable ? "Saved API key" : "API Key", text: $apiKey)
-                        .textFieldStyle(.roundedBorder)
-                        .help(apiKeyAvailable ? "\(selectedProvider.displayName) API key is already saved" : "Enter a \(selectedProvider.displayName) API key")
-                }
-
-                    Button {
-                        showingAPIKey.toggle()
-                    } label: {
-                        Image(systemName: showingAPIKey ? "eye.slash" : "eye")
-                    }
-                    .buttonStyle(.borderless)
-                }
+                MaskedAPIKeyField(
+                    text: $apiKey,
+                    hasSavedKey: apiKeyAvailable,
+                    providerName: selectedProvider.displayName
+                )
                 .onChange(of: apiKey) { _, newValue in
                     if newValue.isEmpty {
                         return
@@ -466,9 +616,7 @@ struct APIKeyStep: View {
                     .font(.caption)
 
                 if apiKeyAvailable && apiKey.isEmpty {
-                    Label("API key is saved in Keychain", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
+                    TranscriptionKeychainStatusLabel()
                 }
             }
             .padding()
@@ -533,8 +681,9 @@ struct APIKeyStep: View {
             }
             .padding()
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
+            }
+            .padding(24)
         }
-        .padding(24)
         .onAppear {
             // Migrate if needed
             TranscriptionSettings.migrateIfNeeded()
@@ -543,6 +692,30 @@ struct APIKeyStep: View {
             apiKey = ""
             apiKeyAvailable = KeychainManager.exists(key: selectedProvider.keychainKey)
         }
+    }
+
+    /// Brücke für den geteilten Picker; Setter behält die bisherige Side-Effect-Logik
+    /// (Key sichern/leeren, Keychain prüfen, Modell wechseln, Provider persistieren).
+    private var providerBinding: Binding<TranscriptionProvider> {
+        Binding(
+            get: { selectedProvider },
+            set: { handleProviderChange(to: $0) }
+        )
+    }
+
+    private func handleProviderChange(to newProvider: TranscriptionProvider) {
+        let oldProvider = selectedProvider
+        // Getippten Key sichern, falls Provider gewechselt wird und etwas eingegeben wurde.
+        if !apiKey.isEmpty && oldProvider.keychainKey != newProvider.keychainKey {
+            KeychainManager.save(key: oldProvider.keychainKey, value: apiKey)
+        }
+        selectedProvider = newProvider
+        apiKey = ""
+        apiKeyAvailable = KeychainManager.exists(key: newProvider.keychainKey)
+        if selectedModel.provider != newProvider {
+            selectedModel = newProvider.defaultModel
+        }
+        TranscriptionSettings.saveProvider(newProvider)
     }
 }
 

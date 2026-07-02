@@ -24,11 +24,32 @@ final class WindowAndOverlayTests: XCTestCase {
         XCTAssertEqual(WindowRequest.settings.targetWindowID, "settings")
         XCTAssertEqual(WindowRequest.settings.settingsSectionID, "api")
 
+        // Deep-Link in die Output-Sektion der Settings (Menüleiste/App-Menü).
+        XCTAssertEqual(WindowRequest.settingsOutput.targetWindowID, "settings")
+        XCTAssertEqual(WindowRequest.settingsOutput.settingsSectionID, "outputOverview")
+
         // Primaerfenster = eigene Single-`Window`-Scene; die WindowGroup-ID
         // ist davon getrennt und gilt nur fuer abgeloeste Sekundaerfenster.
         XCTAssertEqual(WindowRequest.agentChats.targetWindowID, "agent-chats")
         XCTAssertNil(WindowRequest.agentChats.settingsSectionID)
         XCTAssertEqual(WindowRequest.agentChatWindowGroupID, "agent-chat-window")
+    }
+
+    func testExplicitAgentChatsRequestUnlocksPrimaryWindow() {
+        let center = WindowRequestCenter.shared
+        let original = center.allowsAgentChatsPrimaryWindow
+        defer { center.allowsAgentChatsPrimaryWindow = original }
+
+        // Menüleisten-Profil-Zustand simulieren: Primärfenster gesperrt.
+        center.allowsAgentChatsPrimaryWindow = false
+
+        // Ein Nicht-Agent-Chats-Request lässt die Sperre unangetastet…
+        center.request(.settings)
+        XCTAssertFalse(center.allowsAgentChatsPrimaryWindow)
+
+        // …ein expliziter Agent-Chats-Wunsch (Menüleiste, Profilwechsel) gibt frei.
+        center.request(.agentChats)
+        XCTAssertTrue(center.allowsAgentChatsPrimaryWindow)
     }
 
     func testAgentDragDropUTIsMatchInfoPlistDeclarations() throws {

@@ -6,11 +6,34 @@ enum TranscriptionProvider: String, CaseIterable, Codable {
     case openai
     case groq
 
+    /// Anzeige-/Auswahlreihenfolge in Pickern: Groq zuerst (empfohlen, kostenloser
+    /// API-Key), OpenAI als Alternative. Bewusst getrennt von `allCases`, damit die
+    /// Enum-Reihenfolge (und damit versteckte Abhängigkeiten) unangetastet bleibt.
+    static let displayOrder: [TranscriptionProvider] = [.groq, .openai]
+
+    /// Empfohlener Default-Provider für neue Nutzer (kostenloser Key, für Personal Use
+    /// ausreichend).
+    static let recommended: TranscriptionProvider = .groq
+
     var displayName: String {
         switch self {
         case .openai: return "OpenAI"
         case .groq: return "Groq"
         }
+    }
+
+    var isRecommended: Bool { self == Self.recommended }
+
+    /// Kleine, zurückhaltende Badge — nur für den empfohlenen Provider.
+    var recommendationBadge: String? {
+        isRecommended ? "Free API key" : nil
+    }
+
+    /// Kurze, sachliche Empfehlungszeile — nur für den empfohlenen Provider.
+    var recommendationHint: String? {
+        isRecommended
+            ? "Recommended for personal use. Free key available; low-cost if you exceed free limits."
+            : nil
     }
 
     var keychainKey: String {
@@ -111,8 +134,15 @@ struct TranscriptionSettings {
             return  // Already migrated
         }
 
-        // Read old provider value
-        let oldProviderRaw = preferences.selectedProviderRaw ?? "openai_gpt4o"
+        // Clean install: noch nie ein Provider gespeichert → empfohlener Default (Groq,
+        // kostenloser Key). Nur echte Erstinstallationen landen hier; Bestandsnutzer haben
+        // `selectedProviderRaw` gesetzt und durchlaufen unten das Legacy-Mapping.
+        guard let oldProviderRaw = preferences.selectedProviderRaw else {
+            preferences.selectedProviderRaw = TranscriptionProvider.groq.rawValue
+            preferences.selectedModelRaw = TranscriptionModel.groq_whisper_v3.rawValue
+            Logger.debug("Clean install: defaulting transcription to Groq / whisper-large-v3")
+            return
+        }
 
         // Map old values to new provider + model
         let (newProvider, newModel): (TranscriptionProvider, TranscriptionModel)
@@ -140,16 +170,17 @@ struct TranscriptionSettings {
         Logger.debug("Migrated settings: \(oldProviderRaw) -> provider=\(newProvider.rawValue), model=\(newModel.rawValue)")
     }
 
-    /// Load current provider from UserDefaults
+    /// Load current provider from UserDefaults. Fallback = empfohlener Default (Groq),
+    /// falls noch nichts gesetzt/migriert wurde.
     static func loadProvider() -> TranscriptionProvider {
-        let raw = AppPreferences.shared.selectedProviderRaw ?? "openai"
-        return TranscriptionProvider(rawValue: raw) ?? .openai
+        let raw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.groq.rawValue
+        return TranscriptionProvider(rawValue: raw) ?? .groq
     }
 
-    /// Load current model from UserDefaults
+    /// Load current model from UserDefaults. Fallback = Groq-Default-Modell.
     static func loadModel() -> TranscriptionModel {
-        let raw = AppPreferences.shared.selectedModelRaw ?? "gpt-4o-transcribe"
-        return TranscriptionModel(rawValue: raw) ?? .openai_gpt4o
+        let raw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.groq_whisper_v3.rawValue
+        return TranscriptionModel(rawValue: raw) ?? .groq_whisper_v3
     }
 
     /// Save provider and update model if needed

@@ -119,14 +119,18 @@ struct WhisperM8App: App {
 /// erzeugte das Doppelfenster.
 private struct AgentChatsPrimaryWindowRoot: View {
     @State private var windowID: UUID?
+    @State private var didEvaluateGate = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
             if let windowID {
                 AgentChatsView(windowID: windowID)
             } else {
-                ProgressView()
-                    .frame(minWidth: 640, minHeight: 420)
+                // Kein sichtbarer ProgressView, bis das Profil-Gate entschieden hat —
+                // in Menüleisten-Profilen soll hier gar kein Fenster aufblitzen.
+                Color.clear
+                    .frame(minWidth: 1, minHeight: 1)
                     .task { resolveIfNeeded() }
             }
         }
@@ -134,7 +138,17 @@ private struct AgentChatsPrimaryWindowRoot: View {
 
     @MainActor
     private func resolveIfNeeded() {
-        guard windowID == nil else { return }
+        guard !didEvaluateGate else { return }
+        didEvaluateGate = true
+
+        // Menüleisten-Profile (Dictation-only / Enrichment): das automatisch geöffnete
+        // Primärfenster nicht anzeigen. Ein expliziter `.agentChats`-Request gibt es via
+        // `allowsAgentChatsPrimaryWindow` frei (Menüleiste, Profilwechsel).
+        guard WindowRequestCenter.shared.allowsAgentChatsPrimaryWindow else {
+            dismiss()
+            return
+        }
+
         // Live aus dem Store (Single Source of Truth), nicht von Platte —
         // sonst koennte eine noch nicht geschriebene primaryWindowID divergieren.
         windowID = AgentWindowStore.shared.primaryWindowID
@@ -180,6 +194,25 @@ private struct AgentChatsSecondaryWindowRoot: View {
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    /// Onboarding nötig, wenn eine der zwei essenziellen System-Permissions
+    /// (Mikrofon + Accessibility) fehlt. Bewusst permission-basiert statt Flag —
+    /// siehe Kommentar in `applicationDidFinishLaunching`.
+    private var needsOnboarding: Bool {
+        let micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let accessibilityGranted = AXIsProcessTrusted()
+        return !micGranted || !accessibilityGranted
+    }
+
+    /// Aktivierungs-Policy so früh wie möglich setzen (vor dem ersten Fenster), damit
+    /// Menüleisten-Profile ohne Dock-Icon-Flackern starten. Während des Onboardings und
+    /// im Voll-Profil bleibt es eine reguläre Dock-App.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Onboarding immer als reguläre App (fokussierbares Setup-Fenster). Sonst richtet
+        // sich die Policy nach dem Profil: Voll = Dock-App, sonst reine Menüleisten-App.
+        let wantsDock = needsOnboarding || AppPreferences.shared.usageProfile.wantsAgentChats
+        NSApp.setActivationPolicy(wantsDock ? .regular : .accessory)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Request notification permissions for error alerts
         requestNotificationPermission()
@@ -223,10 +256,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // wir bewusst aufgegeben, weil er nur durch den "Done"-Button gesetzt
         // wurde und beim Schließen des Wizards stehen blieb → Auto-Onboarding
         // beim nächsten Launch, auch wenn das Setup faktisch abgeschlossen war.
-        let micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        let accessibilityGranted = AXIsProcessTrusted()
-        let needsOnboarding = !micGranted || !accessibilityGranted
-
         if needsOnboarding {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WindowRequestCenter.shared.request(.onboarding)
@@ -240,7 +269,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// selbst nach vorn — ein zusaetzliches openWindow wuerde sonst ein
     /// Duplikat des Primaerfensters erzeugen.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
+        // Nur im Voll-Profil das Agent-Chats-Primärfenster auf Reopen neu öffnen.
+        // Menüleisten-Profile haben ohnehin kein Dock-Icon; Agent Chats bleibt dort ein
+        // bewusster, manueller Aufruf über die Menüleiste.
+        if !flag && AppPreferences.shared.usageProfile.wantsAgentChats {
             WindowRequestCenter.shared.request(.agentChats)
         }
         return true

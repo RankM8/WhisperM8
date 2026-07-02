@@ -18,6 +18,16 @@ struct AppPreferences {
         nonmutating set { setOptionalString(newValue, forKey: Keys.selectedProvider) }
     }
 
+    /// Nutzungsprofil (Dictation-only / Enrichment / Full). Default = `.full`, damit
+    /// Bestandsnutzer ohne gesetztes Profil das heutige Verhalten behalten.
+    var usageProfile: AppUsageProfile {
+        get {
+            let raw = defaults.string(forKey: Keys.usageProfile) ?? AppUsageProfile.defaultProfile.rawValue
+            return AppUsageProfile(rawValue: raw) ?? .full
+        }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.usageProfile) }
+    }
+
     var selectedModelRaw: String? {
         get { defaults.string(forKey: Keys.selectedModel) }
         nonmutating set { setOptionalString(newValue, forKey: Keys.selectedModel) }
@@ -292,6 +302,7 @@ struct AppPreferences {
 enum PreferenceKeys {
     static let selectedProvider = "selectedProvider"
     static let selectedModel = "selectedModel"
+    static let usageProfile = "usageProfile"
     static let language = "language"
     static let autoPasteEnabled = "autoPasteEnabled"
     static let audioDuckingEnabled = "audioDuckingEnabled"
