@@ -123,6 +123,129 @@ final class AgentWindowStoreTests: XCTestCase {
         XCTAssertNotNil(store.state.windows.first { $0.id == w })
     }
 
+    // MARK: - Fenster-Lifecycle (Close-Tracking)
+
+    func testRemoveWindowRemovesSecondaryWithTabs() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let a = UUID(); let b = UUID()
+        store.openTab(a, in: w); store.openTab(b, in: w)
+        let newW = store.detachToNewWindow(b, from: w)
+
+        XCTAssertTrue(store.removeWindow(newW), "Sekundaerfenster MIT Tabs wird entfernt")
+        XCTAssertNil(store.state.windows.first { $0.id == newW })
+        XCTAssertEqual(store.openTabIDs(in: w), [a], "Primaerfenster bleibt unberuehrt")
+    }
+
+    func testRemoveWindowProtectsPrimaryAndUnknownIDs() {
+        let store = makeStore()
+        let a = UUID()
+        store.openTab(a, in: store.primaryWindowID)
+        XCTAssertFalse(store.removeWindow(store.primaryWindowID), "Primaerfenster ist geschuetzt")
+        XCTAssertEqual(store.openTabIDs(in: store.primaryWindowID), [a])
+        XCTAssertFalse(store.removeWindow(UUID()), "unbekannte ID ist ein No-op")
+    }
+
+    func testHandleWindowWillCloseRemovesSecondaryWindow() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let a = UUID()
+        store.openTab(a, in: w)
+        let newW = store.detachToNewWindow(a, from: w)
+        store.handleWindowWillClose(newW)
+        XCTAssertNil(store.state.windows.first { $0.id == newW },
+                     "User-Close raeumt Fenster + Tabs aus dem State")
+    }
+
+    func testHandleWindowWillCloseKeepsPrimary() {
+        let store = makeStore()
+        let a = UUID()
+        store.openTab(a, in: store.primaryWindowID)
+        store.handleWindowWillClose(store.primaryWindowID)
+        XCTAssertEqual(store.openTabIDs(in: store.primaryWindowID), [a],
+                       "Primaer-Close laesst die Tabs fuer den Dock-Reopen stehen")
+    }
+
+    func testSuspendedCloseTrackingKeepsWindowForRestore() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let a = UUID()
+        store.openTab(a, in: w)
+        let newW = store.detachToNewWindow(a, from: w)
+
+        store.suspendCloseTracking()
+        store.handleWindowWillClose(newW)
+        XCTAssertNotNil(store.state.windows.first { $0.id == newW },
+                        "Quit-/Profilwechsel-Close entfernt nichts — der Launch-Restore braucht den Eintrag")
+
+        store.resumeCloseTracking()
+        store.handleWindowWillClose(newW)
+        XCTAssertNil(store.state.windows.first { $0.id == newW },
+                     "nach Resume zaehlt ein Close wieder als User-Aktion")
+    }
+
+    /// Kern-Repro des Doppelfenster-Bugs: X-Close → Quit → Relaunch darf das
+    /// geschlossene Fenster NICHT wiederherstellen.
+    func testRemovedWindowDoesNotSurviveReload() throws {
+        let uiURL = tempURL("ui")
+        let wsURL = tempURL("ws")
+        let pid = UUID(); let a = UUID(); let b = UUID()
+        let persistence = AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL)
+        var sessionA = AgentChatSession(
+            id: a, provider: .claude, projectID: pid, title: "A",
+            lastActivityAt: Date(timeIntervalSince1970: 1), createdManually: true
+        )
+        sessionA.status = .closed
+        var sessionB = AgentChatSession(
+            id: b, provider: .claude, projectID: pid, title: "B",
+            lastActivityAt: Date(timeIntervalSince1970: 2), createdManually: true
+        )
+        sessionB.status = .closed
+        try persistence.saveWorkspace(
+            AgentWorkspace(
+                projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
+                sessions: [sessionA, sessionB]
+            )
+        )
+
+        let store = AgentWindowStore(persistence: persistence)
+        store.openTab(a, in: store.primaryWindowID)
+        store.openTab(b, in: store.primaryWindowID)
+        let newW = store.detachToNewWindow(b, from: store.primaryWindowID)
+        store.handleWindowWillClose(newW) // User schliesst das Sekundaerfenster
+        store.flush()
+
+        let reloaded = AgentWindowStore(
+            persistence: AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL)
+        )
+        XCTAssertTrue(reloaded.secondaryWindowIDs.isEmpty,
+                      "per X geschlossenes Fenster wird beim Launch NICHT wiederhergestellt")
+        XCTAssertEqual(reloaded.openTabIDs(in: reloaded.primaryWindowID), [a],
+                       "Primaer-Tabs ueberleben; die Tabs des geschlossenen Fensters sind zu")
+    }
+
+    // MARK: - Kein Create-on-mutate
+
+    func testMutationsOnUnknownWindowAreNoOps() {
+        let store = makeStore()
+        let ghost = UUID()
+        store.openTab(UUID(), in: ghost)
+        store.setSelectedProject(UUID(), in: ghost)
+        store.setOpenTabIDs([UUID()], in: ghost)
+        XCTAssertFalse(store.hasWindow(ghost),
+                       "Nachzuegler-Mutationen wiederbeleben kein entferntes/unbekanntes Fenster")
+        XCTAssertEqual(store.state.windows.count, 1, "nur das Primaerfenster existiert")
+    }
+
+    func testMoveTabToUnknownTargetIsNoOp() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let a = UUID()
+        store.openTab(a, in: w)
+        store.moveTab(a, from: w, to: UUID(), before: nil)
+        XCTAssertEqual(store.openTabIDs(in: w), [a], "kein Tab-Verlust in ein Geisterfenster")
+    }
+
     // MARK: - Globaler State
 
     func testTogglePin() {

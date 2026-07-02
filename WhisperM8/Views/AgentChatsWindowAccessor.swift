@@ -6,22 +6,32 @@ struct AgentChatsWindowAccessor: NSViewRepresentable {
     /// hängt — z. B. damit die View einen fensterscoped Cmd-W-Monitor
     /// installieren kann.
     var onResolve: ((NSWindow) -> Void)? = nil
+    /// Feuert bei `NSWindow.willCloseNotification` des aufgelösten Fensters
+    /// (Main-Thread, einmal pro Close). Ob das Close user-initiiert war
+    /// (rotes X, Fenstermenü) oder programmatisch (App-Quit, Profilwechsel),
+    /// entscheidet der Empfänger — `AgentWindowStore.handleWindowWillClose`
+    /// via Suspend-Flag.
+    var onWillClose: (() -> Void)? = nil
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        let coordinator = context.coordinator
         DispatchQueue.main.async {
-            configure(view.window)
+            configure(view.window, coordinator: coordinator)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        let coordinator = context.coordinator
         DispatchQueue.main.async {
-            configure(nsView.window)
+            configure(nsView.window, coordinator: coordinator)
         }
     }
 
-    private func configure(_ window: NSWindow?) {
+    private func configure(_ window: NSWindow?, coordinator: Coordinator) {
         guard let window else { return }
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -41,6 +51,37 @@ struct AgentChatsWindowAccessor: NSViewRepresentable {
                 ? NSColor(srgbRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
                 : NSColor.white
         }
+        if let onWillClose {
+            coordinator.observeWillClose(of: window, handler: onWillClose)
+        }
         onResolve?(window)
+    }
+
+    /// Hält den willClose-Observer über Re-Configures hinweg (`updateNSView`
+    /// feuert mehrfach mit demselben Fenster — ohne Coordinator würde jeder
+    /// Durchlauf einen weiteren Observer stapeln) und baut ihn bei
+    /// Fensterwechsel oder View-Abbau ab.
+    final class Coordinator {
+        private var observedWindow: NSWindow?
+        private var observer: NSObjectProtocol?
+
+        func observeWillClose(of window: NSWindow, handler: @escaping () -> Void) {
+            guard observedWindow !== window else { return }
+            removeObserver()
+            observedWindow = window
+            observer = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { _ in handler() }
+        }
+
+        private func removeObserver() {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            observedWindow = nil
+        }
+
+        deinit { removeObserver() }
     }
 }

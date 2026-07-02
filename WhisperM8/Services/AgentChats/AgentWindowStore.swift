@@ -125,13 +125,19 @@ final class AgentWindowStore {
     }
 
     /// Reorder innerhalb desselben Fensters: `sessionID` landet vor `targetID`
-    /// (oder ans Ende, wenn `targetID == nil`).
+    /// (oder ans Ende, wenn `targetID == nil`). No-op fuer unbekannte Fenster
+    /// (siehe `updateWindow` — kein Create-on-mutate).
     func reorderTab(_ sessionID: UUID, before targetID: UUID?, in windowID: UUID) {
+        guard hasWindow(windowID) else { return }
         mutate { $0.moveTab(sessionID: sessionID, from: windowID, to: windowID, before: targetID) }
     }
 
-    /// Verschiebt einen Tab in ein anderes (bestehendes) Fenster.
+    /// Verschiebt einen Tab in ein anderes (bestehendes) Fenster. Das Ziel
+    /// muss existieren — sonst wuerde der `windowState(for:)`-Fallback in
+    /// `AgentUIState.moveTab` ein Geisterfenster ohne NSWindow erzeugen.
+    /// Neue Fenster entstehen ausschliesslich ueber `detachToNewWindow`.
     func moveTab(_ sessionID: UUID, from sourceWindowID: UUID, to targetWindowID: UUID, before targetID: UUID?) {
+        guard hasWindow(targetWindowID) else { return }
         mutate { $0.moveTab(sessionID: sessionID, from: sourceWindowID, to: targetWindowID, before: targetID) }
     }
 
@@ -159,6 +165,46 @@ final class AgentWindowStore {
         return true
     }
 
+    // MARK: - Fenster-Lifecycle (Close-Tracking)
+
+    /// `true`, solange Fenster-Closes NICHT als User-Aktion gewertet werden
+    /// sollen (App-Quit, Profilwechsel). Ephemer, nie persistiert.
+    @ObservationIgnored private(set) var isCloseTrackingSuspended = false
+
+    /// Programmatisches Fenster-Schliessen beginnt (App-Quit, Profilwechsel):
+    /// `handleWindowWillClose` entfernt ab jetzt KEINE Fenster mehr aus dem
+    /// State — genau dadurch ueberleben offene Fenster den Neustart bzw. den
+    /// Rueckwechsel des Profils.
+    func suspendCloseTracking() { isCloseTrackingSuspended = true }
+
+    /// User-Close-Tracking wieder aktivieren (nach dem Profilwechsel-Close;
+    /// beim App-Quit bleibt es bis zum Prozess-Ende suspendiert).
+    func resumeCloseTracking() { isCloseTrackingSuspended = false }
+
+    /// Entfernt ein Sekundaerfenster MITSAMT seiner Tabs aus dem State —
+    /// Chrome-Semantik fuer „User schliesst das Fenster" (rotes X, ⌘W ohne
+    /// Tabs, Fenstermenue). Die Sessions bleiben im Workspace/der Sidebar
+    /// erhalten; laufende PTYs laufen weiter (Registry ist sessionID-basiert).
+    /// No-op fuer das Primaerfenster und unbekannte IDs.
+    @discardableResult
+    func removeWindow(_ windowID: UUID) -> Bool {
+        guard windowID != state.primaryWindowID,
+              state.windows.contains(where: { $0.id == windowID }) else { return false }
+        mutate { $0.removeWindow(windowID) }
+        multiSelectionByWindow[windowID] = nil
+        return true
+    }
+
+    /// Einstiegspunkt fuer `NSWindow.willCloseNotification` (via
+    /// `AgentChatsWindowAccessor.onWillClose`): Nur ein USER-Close raeumt das
+    /// Fenster aus dem State — waehrend Quit/Profilwechsel (suspended) bleibt
+    /// der State unangetastet, damit der Launch-Restore die Fenster
+    /// wiederherstellen kann.
+    func handleWindowWillClose(_ windowID: UUID) {
+        guard !isCloseTrackingSuspended else { return }
+        removeWindow(windowID)
+    }
+
     // MARK: - Globale Mutationen
 
     func setPinnedSessionIDs(_ ids: [UUID]) {
@@ -183,9 +229,17 @@ final class AgentWindowStore {
 
     /// Garbage-Collection gegen den aktuellen Workspace (tote Session-/Projekt-
     /// IDs raus, leere Sekundaerfenster weg). Vom UI nach Workspace-Aenderungen
-    /// aufgerufen.
+    /// aufgerufen (`onChange(of: workspace)` in AgentChatsView). Diff-gated:
+    /// ohne effektive Aenderung kein State-Write — sonst wuerde jeder
+    /// Workspace-Tick alle Fenster re-rendern und leere Saves schedulen.
+    /// Bewusst OHNE Tab-Cap (`capTabs: false`): zur Laufzeit darf die Bar
+    /// mehr als `maxOpenTabs` zeigen, gekappt wird nur beim Load.
     func prune(workspace: AgentWorkspace) {
-        mutate { $0.prune(workspace: workspace) }
+        var pruned = state
+        pruned.prune(workspace: workspace, capTabs: false)
+        guard pruned != state else { return }
+        state = pruned
+        scheduleSave()
     }
 
     /// Erzwingt sofortiges Persistieren (z. B. vor App-Terminierung).
@@ -198,7 +252,16 @@ final class AgentWindowStore {
 
     /// Modifiziert genau ein Fenster und schreibt es zurueck (`upsertWindow`
     /// normalisiert danach alle Invarianten).
+    ///
+    /// Kein Create-on-mutate: Mutationen auf Fenster, die der Store nicht
+    /// (mehr) kennt, sind No-ops. Nachzuegler einer View, deren Fenster gerade
+    /// geschlossen/entfernt wurde (onChange/reconcileSelection feuern beim
+    /// Teardown noch), wuerden das Fenster sonst als Geist wiederbeleben —
+    /// beim naechsten Launch stuende es wieder da. Neue Fenster entstehen
+    /// ausschliesslich ueber `detachToNewWindow` (und die Primaerfenster-
+    /// Garantie in `normalizedWindows`).
     private func updateWindow(_ id: UUID, _ transform: (inout AgentChatWindowState) -> Void) {
+        guard hasWindow(id) else { return }
         var window = state.windowState(for: id)
         transform(&window)
         mutate { $0.upsertWindow(window) }

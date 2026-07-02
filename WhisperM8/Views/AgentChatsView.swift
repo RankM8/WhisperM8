@@ -343,7 +343,14 @@ struct AgentChatsView: View {
         // jetzt der natürliche Platzbedarf des Inhalts (fixe Sidebar/Inspector
         // lassen sich per Toggle ausblenden, um noch kleiner zu werden).
         .background(AgentTheme.background)
-        .background(AgentChatsWindowAccessor(onResolve: { hostWindow = $0 }))
+        .background(AgentChatsWindowAccessor(
+            onResolve: { hostWindow = $0 },
+            // User schliesst das Fenster (rotes X, Fenstermenue, ⌘W ohne
+            // Tabs) → Fenster + Tabs aus dem Store, sonst stellt der
+            // Launch-Restore es beim naechsten Start wieder her. Quit/
+            // Profilwechsel sind via suspendCloseTracking ausgenommen.
+            onWillClose: { windowStore.handleWindowWillClose(windowID) }
+        ))
         .coordinateSpace(.named(Self.windowCoordinateSpaceName))
         .ignoresSafeArea(.all, edges: .top)
         .sheet(isPresented: Binding(
@@ -485,6 +492,11 @@ struct AgentChatsView: View {
         }
         .onChange(of: workspace) { _, _ in
             syncActiveAgentChat()
+            // Globale GC gegen den frischen Workspace: tote Session-IDs auch
+            // aus Fenstern raeumen, die gerade NICHT gerendert sind (per X
+            // geschlossene Fenster haben keinen reconcileSelection-Lauf mehr).
+            // Diff-gated — ohne effektive Aenderung kein Save/Re-Render.
+            windowStore.prune(workspace: workspace)
             // P1 S6: Selektion darf nach Mutationen (z. B. deleteSession aus
             // dem Spawn-Fehlerpfad) nie auf Gelöschtes zeigen.
             reconcileSelection()
@@ -535,9 +547,20 @@ struct AgentChatsView: View {
     /// geworden ist (letzter Tab raus/verschoben). Der Store entfernt den
     /// State-Eintrag; das NSWindow wird async geschlossen — nie im Stack einer
     /// laufenden Geste, sonst zieht es die View unter dem Handler weg.
+    ///
+    /// Der Store-Eintrag kann hier bereits fehlen (Laufzeit-`prune` oder
+    /// willClose-Removal haben ihn entfernt) — das leere NSWindow muss
+    /// trotzdem zu. `removeWindowIfEmpty` ist dann ein No-op; der
+    /// `isVisible`-Guard verhindert ein Doppel-Close, wenn wir aus dem
+    /// willClose-Teardown heraus getriggert wurden (Fenster schliesst bereits).
     private func closeWindowIfEmptyAndSecondary() {
-        guard windowStore.removeWindowIfEmpty(windowID) else { return }
-        DispatchQueue.main.async { hostWindow?.performClose(nil) }
+        guard windowID != windowStore.primaryWindowID,
+              openTabIDs.isEmpty else { return }
+        windowStore.removeWindowIfEmpty(windowID)
+        DispatchQueue.main.async {
+            guard let hostWindow, hostWindow.isVisible else { return }
+            hostWindow.performClose(nil)
+        }
     }
 
     /// Aktiviert den Tracker fuer "in TUI aktive Sub-Session" nur, wenn

@@ -285,6 +285,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         return false
     }
 
+    /// Quit-Erkennung fuers Fenster-Close-Tracking: Beim Terminate raeumt
+    /// AppKit alle Fenster ab — ob deren `willClose` dabei feuert, ist
+    /// versionsabhaengig undokumentiert. Das Suspend-Flag wird hier gesetzt,
+    /// weil `applicationShouldTerminate` der FRUEHESTE Terminate-Hook ist
+    /// (vor jedem Fenster-Teardown): Quit-Closes duerfen die Sekundaerfenster
+    /// nicht aus dem Store werfen, sonst waere der Launch-Restore nach jedem
+    /// Neustart leer. Nie zurueckgenommen — der Prozess endet.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated { AgentWindowStore.shared.suspendCloseTracking() }
+        return .terminateNow
+    }
+
     /// Sicherheitsnetz: Falls die App waehrend einer aktiven Ducking-Session
     /// beendet wird (Cmd+Q oder System-Shutdown), Volume sofort zurueckstellen
     /// — sonst bleibt das System-Audio leise bis manueller Slider-Eingriff.

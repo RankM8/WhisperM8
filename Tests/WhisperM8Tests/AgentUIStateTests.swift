@@ -188,6 +188,29 @@ final class AgentUIStateTests: XCTestCase {
         XCTAssertTrue(state.windows.first?.openTabIDs.contains(selected) == true)
     }
 
+    func testPruneWithoutCapKeepsAllLiveTabs() {
+        let pid = UUID()
+        let sessions = (0..<(AgentUIState.maxOpenTabs + 3)).map { _ in makeSession(projectID: pid) }
+        let workspace = makeWorkspace(
+            projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
+            sessions: sessions
+        )
+        let base = AgentUIState(
+            openTabIDs: sessions.map(\.id),
+            selectedSessionID: sessions.last?.id
+        )
+
+        var runtime = base
+        runtime.prune(workspace: workspace, capTabs: false)
+        XCTAssertEqual(runtime.openTabIDs.count, sessions.count,
+                       "Laufzeit-GC (capTabs: false) kappt die Bar nicht")
+
+        var load = base
+        load.prune(workspace: workspace) // Default = Load-Pfad
+        XCTAssertEqual(load.openTabIDs.count, AgentUIState.maxOpenTabs,
+                       "Load-Pfad kappt weiterhin auf maxOpenTabs")
+    }
+
     func testMoveTabToNewWindowRemovesItFromSourceAndCreatesTarget() {
         let sourceWindowID = UUID()
         let targetWindowID = UUID()
@@ -380,6 +403,26 @@ final class AgentUIStateTests: XCTestCase {
         XCTAssertEqual(state.windows.filter(\.isPrimary).count, 1, "genau ein Primaerfenster")
         XCTAssertTrue(state.windowState(for: primaryID).isPrimary)
         XCTAssertFalse(state.windowState(for: secondaryID).isPrimary)
+    }
+
+    func testRemoveWindowRemovesSecondaryWithTabsButProtectsPrimary() {
+        let primaryID = UUID(); let secondaryID = UUID()
+        let a = UUID(); let b = UUID()
+        var state = AgentUIState(
+            windows: [
+                AgentChatWindowState(id: primaryID, openTabIDs: [a], isPrimary: true),
+                AgentChatWindowState(id: secondaryID, openTabIDs: [b]),
+            ],
+            primaryWindowID: primaryID
+        )
+
+        state.removeWindow(secondaryID)
+        XCTAssertNil(state.windows.first { $0.id == secondaryID },
+                     "Sekundaerfenster verschwindet mitsamt Tabs")
+
+        state.removeWindow(primaryID)
+        XCTAssertEqual(state.windows.first { $0.id == primaryID }?.openTabIDs, [a],
+                       "Primaerfenster ist geschuetzt, Tabs bleiben")
     }
 
     // MARK: - First-Load-Migration

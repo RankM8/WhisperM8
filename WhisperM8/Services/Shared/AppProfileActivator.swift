@@ -22,9 +22,22 @@ enum AppProfileActivator {
     /// Sekundärfenster zurücklassen. Der Store-State (offene Tabs) bleibt erhalten,
     /// sodass ein Rückwechsel zu „Full" alles wiederherstellt.
     static func closeAgentChatWindows(using dismissWindow: DismissWindowAction) {
+        let store = AgentWindowStore.shared
+        // Programmatisches Schliessen: das willClose-Tracking wuerde die Fenster
+        // sonst als „vom User geschlossen" werten und aus dem Store werfen — der
+        // Rueckwechsel zu „Full" soll sie aber wiederherstellen. dismissWindow
+        // schliesst die NSWindows u. U. erst in einem spaeteren Runloop-Zyklus,
+        // deshalb Resume verzoegert statt synchron. Die Kollisionsflaeche ist
+        // praktisch null: direkt nach dem Wechsel existiert kein Agent-Fenster
+        // mehr, das der User in diesem Zeitfenster manuell schliessen koennte.
+        store.suspendCloseTracking()
         dismissWindow(id: WindowRequest.agentChats.targetWindowID)
-        for windowID in AgentWindowStore.shared.secondaryWindowIDs {
+        for windowID in store.secondaryWindowIDs {
             dismissWindow(id: WindowRequest.agentChatWindowGroupID, value: windowID)
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            store.resumeCloseTracking()
         }
     }
 }

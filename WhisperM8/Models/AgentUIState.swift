@@ -208,20 +208,23 @@ struct AgentUIState: Codable, Equatable {
     /// stale UUIDs (z. B. nach manuellem Workspace-Delete) keine Geister-
     /// Tabs in der UI hinterlassen. Kappt außerdem die globale Tab-Liste
     /// auf `maxOpenTabs` (selektierter Tab überlebt die Kappung).
-    mutating func prune(workspace: AgentWorkspace) {
+    /// `capTabs: false` fuer den Laufzeit-Aufruf (AgentWindowStore.prune) —
+    /// zur Laufzeit darf die Bar mehr Tabs zeigen (sie scrollt), gekappt
+    /// wird nur beim Load.
+    mutating func prune(workspace: AgentWorkspace, capTabs: Bool = true) {
         let liveProjectIDs = Set(workspace.projects.map(\.id))
         let liveSessionIDs = Set(workspace.sessions.map(\.id))
 
-        openTabIDs = Self.cappedOpenTabIDs(
-            Self.deduplicated(openTabIDs.filter { liveSessionIDs.contains($0) }),
-            selectedID: selectedSessionID
-        )
+        let cleanedGlobal = Self.deduplicated(openTabIDs.filter { liveSessionIDs.contains($0) })
+        openTabIDs = capTabs
+            ? Self.cappedOpenTabIDs(cleanedGlobal, selectedID: selectedSessionID)
+            : cleanedGlobal
         windows = Self.normalizedWindows(windows, primaryWindowID: primaryWindowID).map { window in
             var copy = window
-            copy.openTabIDs = Self.cappedOpenTabIDs(
-                Self.deduplicated(copy.openTabIDs.filter { liveSessionIDs.contains($0) }),
-                selectedID: copy.selectedSessionID
-            )
+            let cleaned = Self.deduplicated(copy.openTabIDs.filter { liveSessionIDs.contains($0) })
+            copy.openTabIDs = capTabs
+                ? Self.cappedOpenTabIDs(cleaned, selectedID: copy.selectedSessionID)
+                : cleaned
             if let sid = copy.selectedSessionID, !liveSessionIDs.contains(sid) {
                 copy.selectedSessionID = copy.openTabIDs.first
             }
@@ -306,6 +309,15 @@ struct AgentUIState: Codable, Equatable {
         guard id != primaryWindowID,
               let window = windows.first(where: { $0.id == id }),
               window.openTabIDs.isEmpty else { return }
+        windows.removeAll { $0.id == id }
+    }
+
+    /// Entfernt ein Sekundaerfenster MITSAMT seiner Tabs — Chrome-Semantik
+    /// fuer „User schliesst das Fenster". Die Sessions bleiben im Workspace
+    /// (Sidebar) erhalten. Das Primaerfenster ist geschuetzt: dessen Tabs
+    /// muessen den Dock-Reopen ueberleben.
+    mutating func removeWindow(_ id: UUID) {
+        guard id != primaryWindowID else { return }
         windows.removeAll { $0.id == id }
     }
 
