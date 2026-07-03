@@ -1130,6 +1130,11 @@ struct AgentChatsView: View {
     }
 
     private var sidebarFooter: some View {
+        // Kein eigenes horizontales Padding links: `SidebarRowButtonStyle`
+        // bringt die 8 pt Außenkante bereits mit — das frühere Doppel-Padding
+        // (8 außen + 8 Style + 10 innen) schob die Settings-Pill 8–10 pt
+        // rechts vom Raster der oberen Sidebar-Elemente (Projekt-Header und
+        // Filter-Feld starten bei 8 pt, Inhalt bei 16–17 pt).
         HStack(spacing: 4) {
             Button {
                 WindowRequestCenter.shared.request(.settings)
@@ -1143,12 +1148,14 @@ struct AgentChatsView: View {
                     Spacer()
                 }
                 .foregroundStyle(AgentTheme.textSecondary)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 7)
                 .contentShape(Rectangle())
             }
             .buttonStyle(SidebarRowButtonStyle())
             .help("Einstellungen öffnen")
+
+            SidebarUpdateBadge()
 
             Button {
                 WindowRequestCenter.shared.request(.onboarding)
@@ -1162,7 +1169,7 @@ struct AgentChatsView: View {
             .buttonStyle(.plain)
             .help("Onboarding / Hilfe öffnen")
         }
-        .padding(.horizontal, 8)
+        .padding(.trailing, 8)
         .padding(.vertical, 7)
     }
 

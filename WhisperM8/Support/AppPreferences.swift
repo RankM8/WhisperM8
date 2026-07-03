@@ -285,6 +285,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentAwaitingNotificationEnabled) }
     }
 
+    /// Automatischer Update-Check gegen die GitHub-Releases (Start + 24 h).
+    /// Kill-Switch ohne Rebuild:
+    /// `defaults write com.whisperm8.app updateCheckEnabled -bool NO`
+    var isUpdateCheckEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.updateCheckEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.updateCheckEnabled) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -371,6 +379,7 @@ enum PreferenceKeys {
     static let claudeHooksEnabled = "claudeHooksEnabled"
     static let agentStopNotificationEnabled = "agentStopNotificationEnabled"
     static let agentAwaitingNotificationEnabled = "agentAwaitingNotificationEnabled"
+    static let updateCheckEnabled = "updateCheckEnabled"
 }
 
 private typealias Keys = PreferenceKeys

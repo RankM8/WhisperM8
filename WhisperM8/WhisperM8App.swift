@@ -220,6 +220,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         UNUserNotificationCenter.current().delegate = self
         requestNotificationPermission()
 
+        // Update-Check gegen GitHub Releases (verzögert + alle 24 h). Zeigt
+        // nur ein Footer-Badge mit dem brew-Befehl — kein Selbst-Update.
+        Task { @MainActor in
+            AppUpdateChecker.shared.scheduleAutomaticChecks()
+        }
+
         // Claude-Code-Theme einmalig synchron mit unserem aufgelösten
         // Color-Scheme — falls der User WhisperM8 nach einem manuellen
         // `/theme dark` in Claude öffnet, ziehen wir das passend nach.

@@ -37,6 +37,10 @@ struct AboutView: View {
 
             Divider()
 
+            AboutUpdateSection()
+
+            Divider()
+
             Link("Built by 360WebManager", destination: URL(string: "https://360web-manager.com/")!)
                 .font(.caption)
         }
