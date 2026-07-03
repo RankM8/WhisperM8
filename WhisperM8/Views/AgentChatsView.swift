@@ -31,6 +31,9 @@ struct AgentChatsView: View {
     /// Inhalts-Koordinatenraum der Tab-Leiste — Frame-Messung UND Drop-Location
     /// liegen darin (scroll-sicher, kein `.global`/`.local`-Mismatch).
     private static let tabStripContentSpace = "tabStripContent"
+    /// Festbreite des rechten Inspectors (ProjectDetailPanel) — geht auch in
+    /// die Sidebar-Max-Breite ein (`SidebarWidthResolver.maxWidth`).
+    private static let inspectorPanelWidth: CGFloat = 292
 
     let windowID: UUID
     @Environment(\.openWindow) var openWindow
@@ -135,6 +138,20 @@ struct AgentChatsView: View {
     @AppStorage("agentSidebarScope") private var sidebarScope: SidebarScope = .active
     /// Anordnung der Chat-Liste (gruppiert nach Projekt vs. flach/zeitlich).
     @AppStorage("agentSidebarLayout") private var sidebarLayout: SidebarLayout = .grouped
+    /// Persistierter "Wunschwert" der Sidebar-Breite — global ueber alle
+    /// Fenster (wie Scope/Layout), bewusst NICHT @SceneStorage: dessen
+    /// Persistenz haengt an der macOS-State-Restoration, die wir mit
+    /// `isRestorable = false` abgeschaltet haben. Angewendet wird nie der
+    /// Rohwert, sondern `SidebarWidthResolver.effectiveWidth` gegen die
+    /// aktuelle Fensterbreite — ein alter grosser Wert kann kleine Fenster
+    /// daher nicht kaputt layouten.
+    @AppStorage("agentSidebarWidth") private var storedSidebarWidth: Double = Double(SidebarWidthResolver.defaultWidth)
+    /// Effektive Breite beim Drag-Beginn — Basis, auf die die kumulative
+    /// Gesten-Translation addiert wird. `nil` ausserhalb eines Drags.
+    @State private var sidebarDragBaseWidth: CGFloat?
+    /// Live-Breite waehrend eines aktiven Handle-Drags (ephemer, nicht
+    /// persistiert — Commit erst beim Loslassen in `commitSidebarDrag`).
+    @State private var sidebarLiveWidth: CGFloat?
     /// IDs abgeschlossener Sessions, deren Transkript nicht mehr auf der Platte
     /// liegt („tote Zeiger"). Off-main berechnet (`refreshMissingTranscripts`),
     /// driftet die Sidebar zum Ausgrauen + Hinweis. Ephemeral, nicht persistiert.
@@ -316,31 +333,57 @@ struct AgentChatsView: View {
 
     var body: some View {
         let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.chats")
-        HStack(spacing: 0) {
-            if isSidebarVisible {
-                hashboardSidebar
-                    .frame(width: 276)
-            }
+        // GeometryReader liefert die Fensterbreite fuers Sidebar-Clamping —
+        // er nimmt exakt die Flaeche ein, die vorher der HStack fuellte
+        // (greedy), alle nachfolgenden Modifier verhalten sich unveraendert.
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                if isSidebarVisible {
+                    hashboardSidebar
+                        .frame(width: currentSidebarWidth(windowWidth: geo.size.width))
+                        .overlay(alignment: .trailing) {
+                            SidebarResizeHandle(
+                                onDragChanged: { translation in
+                                    handleSidebarDrag(translation: translation, windowWidth: geo.size.width)
+                                },
+                                onDragEnded: commitSidebarDrag,
+                                onDoubleClick: resetSidebarWidth,
+                                // Fenster-Drag waehrend des Hovers aus — wie
+                                // beim Tab-Strip (`isHoveringTabStrip`), sonst
+                                // zieht ein Drag im Titelzonen-Band das Fenster.
+                                onHoverChanged: { hovering in hostWindow?.isMovable = !hovering }
+                            )
+                            // Haelftig ueber den Content ragen (9pt-Zone, 4.5
+                            // je Seite), ohne das Layout zu verschieben.
+                            .offset(x: 4.5)
+                        }
+                        // Der Overlay-Ueberhang muss Hits VOR mainWorkspace
+                        // bekommen — spaetere HStack-Geschwister laegen sonst
+                        // im Hit-Test darueber.
+                        .zIndex(1)
+                }
 
-            mainWorkspace
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                mainWorkspace
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if isInspectorVisible {
-                ProjectDetailPanel(
-                    project: selectedProject,
-                    session: selectedSession,
-                    sessions: projectSessions,
-                    onRefresh: { AgentScanCoordinator.shared.requestScan(reason: .manual) },
-                    onNewCodexChat: { createSession(provider: .codex) },
-                    onNewClaudeChat: { createSession(provider: .claude) },
-                    onOpenPHPStorm: openSelectedProjectInPHPStorm
-                )
-                .frame(width: 292)
+                if isInspectorVisible {
+                    ProjectDetailPanel(
+                        project: selectedProject,
+                        session: selectedSession,
+                        sessions: projectSessions,
+                        onRefresh: { AgentScanCoordinator.shared.requestScan(reason: .manual) },
+                        onNewCodexChat: { createSession(provider: .codex) },
+                        onNewClaudeChat: { createSession(provider: .claude) },
+                        onOpenPHPStorm: openSelectedProjectInPHPStorm
+                    )
+                    .frame(width: Self.inspectorPanelWidth)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         // Bewusst KEINE feste Mindestgröße mehr — der User soll das Fenster
         // so klein ziehen können, wie er will. Die einzige Untergrenze ist
-        // jetzt der natürliche Platzbedarf des Inhalts (fixe Sidebar/Inspector
+        // jetzt der natürliche Platzbedarf des Inhalts (Sidebar/Inspector
         // lassen sich per Toggle ausblenden, um noch kleiner zu werden).
         .background(AgentTheme.background)
         .background(AgentChatsWindowAccessor(
@@ -561,6 +604,59 @@ struct AgentChatsView: View {
             guard let hostWindow, hostWindow.isVisible else { return }
             hostWindow.performClose(nil)
         }
+    }
+
+    // MARK: - Sidebar-Breite (Drag-Resize)
+
+    /// Inspector-Anteil, der in die Sidebar-Obergrenze eingeht — nur wenn er
+    /// gerade sichtbar ist.
+    private var activeInspectorWidth: CGFloat {
+        isInspectorVisible ? Self.inspectorPanelWidth : 0
+    }
+
+    /// Die zu layoutende Sidebar-Breite: waehrend eines Drags der Live-Wert,
+    /// sonst der persistierte Wunschwert — beide immer frisch gegen die
+    /// aktuelle Fensterbreite geclampt (Resize/Fullscreen/kleine Fenster
+    /// brauchen so kein Event-Handling).
+    private func currentSidebarWidth(windowWidth: CGFloat) -> CGFloat {
+        if let live = sidebarLiveWidth { return live }
+        return SidebarWidthResolver.effectiveWidth(
+            stored: CGFloat(storedSidebarWidth),
+            windowWidth: windowWidth,
+            inspectorWidth: activeInspectorWidth
+        )
+    }
+
+    /// Drag-Tick vom Handle: beim ersten Tick die Basis (aktuelle effektive
+    /// Breite) einfrieren, dann Basis + kumulative Translation clampen.
+    private func handleSidebarDrag(translation: CGFloat, windowWidth: CGFloat) {
+        if sidebarDragBaseWidth == nil {
+            sidebarDragBaseWidth = currentSidebarWidth(windowWidth: windowWidth)
+        }
+        guard let base = sidebarDragBaseWidth else { return }
+        sidebarLiveWidth = SidebarWidthResolver.widthDuringDrag(
+            startWidth: base,
+            translation: translation,
+            windowWidth: windowWidth,
+            inspectorWidth: activeInspectorWidth
+        )
+    }
+
+    /// Drag-Ende: den (bereits geclampten) Endwert EINMAL persistieren —
+    /// kein Write pro Tick.
+    private func commitSidebarDrag() {
+        if let final = sidebarLiveWidth {
+            storedSidebarWidth = Double(final)
+        }
+        sidebarDragBaseWidth = nil
+        sidebarLiveWidth = nil
+    }
+
+    /// Doppelklick aufs Handle: zurueck auf die Standardbreite.
+    private func resetSidebarWidth() {
+        storedSidebarWidth = Double(SidebarWidthResolver.defaultWidth)
+        sidebarDragBaseWidth = nil
+        sidebarLiveWidth = nil
     }
 
     /// Aktiviert den Tracker fuer "in TUI aktive Sub-Session" nur, wenn
