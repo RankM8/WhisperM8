@@ -37,6 +37,17 @@ enum WindowRequest: String, Equatable {
     }
 }
 
+/// Fokus-Wunsch auf einen konkreten Agent-Chat (z. B. Klick auf eine
+/// macOS-Notification). `requestID` macht wiederholte Wünsche auf dieselbe
+/// Session unterscheidbar (Publisher-Dedup).
+struct AgentSessionFocusRequest: Equatable {
+    let requestID: UUID
+    let sessionID: UUID
+    /// Ziel-Fenster (bereits aufgelöst): Fenster mit offenem Tab, sonst Primär.
+    let windowID: UUID
+    let isPrimaryWindow: Bool
+}
+
 @MainActor
 final class WindowRequestCenter: ObservableObject {
     static let shared = WindowRequestCenter()
@@ -51,6 +62,11 @@ final class WindowRequestCenter: ObservableObject {
     static let localNotificationName = Notification.Name("WindowRequestCenter.request")
 
     @Published private(set) var latestRequest: WindowRequest?
+    /// Letzter Session-Fokus-Wunsch (Notification-Klick). Der
+    /// `WindowRequestHandler` öffnet/fokussiert daraufhin das Ziel-Fenster;
+    /// Tab + Selektion sind zu diesem Zeitpunkt bereits im `AgentWindowStore`
+    /// gesetzt (SSoT — die Views folgen von selbst).
+    @Published private(set) var sessionFocusRequest: AgentSessionFocusRequest?
 
     /// Ob das Agent-Chats-Primärfenster angezeigt werden darf. In den Menüleisten-Profilen
     /// (`AppUsageProfile` ohne Agent Chats) wird der automatische Launch-Open unterdrückt;
@@ -90,6 +106,27 @@ final class WindowRequestCenter: ObservableObject {
         NotificationCenter.default.post(name: Self.localNotificationName, object: request.rawValue)
     }
 
+    /// Bringt den Chat `sessionID` in den Vordergrund: Ziel ist das Fenster,
+    /// das ihn bereits als Tab zeigt, sonst das Primärfenster (Tab wird dort
+    /// geöffnet + selektiert). Einstieg für den Notification-Klick.
+    func requestSessionFocus(sessionID: UUID) {
+        let windowStore = AgentWindowStore.shared
+        let targetWindowID = windowStore.windowID(containingTab: sessionID)
+            ?? windowStore.primaryWindowID
+        let isPrimary = targetWindowID == windowStore.primaryWindowID
+        if isPrimary {
+            allowsAgentChatsPrimaryWindow = true
+        }
+        // Tab + Selektion im SSoT setzen — idempotent, die Fenster folgen.
+        windowStore.openTab(sessionID, in: targetWindowID, select: true)
+        sessionFocusRequest = AgentSessionFocusRequest(
+            requestID: UUID(),
+            sessionID: sessionID,
+            windowID: targetWindowID,
+            isPrimaryWindow: isPrimary
+        )
+    }
+
     func resetForTesting() {
         latestRequest = nil
     }
@@ -123,6 +160,16 @@ struct WindowRequestHandler: View {
                 // Alle Ziele sind Single-`Window`-Scenes (inkl. Agent-Chats
                 // Primaerfenster) → ohne value oeffnen/fokussieren.
                 openWindow(id: request.targetWindowID)
+                WindowActivationService.activateApp()
+            }
+            .onReceive(requestCenter.$sessionFocusRequest.compactMap { $0 }.removeDuplicates()) { request in
+                // Notification-Klick: Ziel-Fenster öffnen bzw. fokussieren —
+                // Tab/Selektion stehen bereits im AgentWindowStore.
+                if request.isPrimaryWindow {
+                    openWindow(id: WindowRequest.agentChats.targetWindowID)
+                } else {
+                    openWindow(id: WindowRequest.agentChatWindowGroupID, value: request.windowID)
+                }
                 WindowActivationService.activateApp()
             }
     }

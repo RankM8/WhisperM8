@@ -255,6 +255,36 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentStopSoundEnabled) }
     }
 
+    /// Name des System-Sounds für den Agent-Fertig-Ton (Dateien aus
+    /// `/System/Library/Sounds`). Default „Glass" — das bisherige, fest
+    /// verdrahtete Verhalten.
+    var agentStopSoundName: String {
+        get { defaults.string(forKey: Keys.agentStopSoundName) ?? "Glass" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentStopSoundName) }
+    }
+
+    /// Master-Schalter für die Claude-Code-Hook-Bridge (Session-Status via
+    /// `--settings`-Injection). Aus → Launch ohne Hook-Args, Status kommt nur
+    /// noch aus dem Transcript-Watcher.
+    var isClaudeHooksEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.claudeHooksEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeHooksEnabled) }
+    }
+
+    /// macOS-Notification, wenn ein Agent seinen Turn beendet. Bewusst auch
+    /// bei App im Vordergrund (willPresent zeigt Banner).
+    var isAgentStopNotificationEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentStopNotificationEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentStopNotificationEnabled) }
+    }
+
+    /// macOS-Notification, wenn ein Agent auf eine User-Entscheidung wartet
+    /// (Permission-Dialog, Frage, Plan-Freigabe).
+    var isAgentAwaitingNotificationEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentAwaitingNotificationEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentAwaitingNotificationEnabled) }
+    }
+
     func objectExists(for key: String) -> Bool {
         defaults.object(forKey: key) != nil
     }
@@ -337,6 +367,10 @@ enum PreferenceKeys {
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
     static let agentStopSoundEnabled = "agentStopSoundEnabled"
+    static let agentStopSoundName = "agentStopSoundName"
+    static let claudeHooksEnabled = "claudeHooksEnabled"
+    static let agentStopNotificationEnabled = "agentStopNotificationEnabled"
+    static let agentAwaitingNotificationEnabled = "agentAwaitingNotificationEnabled"
 }
 
 private typealias Keys = PreferenceKeys

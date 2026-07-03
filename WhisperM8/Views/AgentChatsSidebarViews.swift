@@ -25,9 +25,7 @@ struct ProjectChatGroup: View {
     // P4: Wert-Daten statt Closures — Closures werden pro Parent-Render neu
     // gebaut und verhindern jedes Memoizing; Sets + die stabile
     // Store-Referenz lassen die Rows per Equatable skippen.
-    let runningSessionIDs: Set<UUID>
     let statusStore: AgentSessionRuntimeStatusStore
-    let awaitingInputSessionIDs: Set<UUID>
     let autoRenamingSessionIDs: Set<UUID>
     /// IDs abgeschlossener Sessions, deren Transkript fehlt — ausgegraut.
     var missingTranscriptSessionIDs: Set<UUID> = []
@@ -146,9 +144,7 @@ struct ProjectChatGroup: View {
             isMultiSelected: multiSelection.contains(session.id),
             isOpenTab: openTabIDs.contains(session.id),
             accentColorHex: project.color,
-            isRunning: runningSessionIDs.contains(session.id),
             statusStore: statusStore,
-            isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
             isAutoRenaming: autoRenamingSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptSessionIDs.contains(session.id),
             onSelect: { onSelectSession(session.id) },
@@ -420,16 +416,13 @@ struct SessionListButton: View {
     /// Projektfarbe (Hex) für den Auswahl-Akzent im Einzug — ersetzt die
     /// frühere Connector-Linie.
     let accentColorHex: String?
-    let isRunning: Bool
     /// Stabile Store-Referenz — bewusst KEIN @ObservedObject: Die Row
     /// subscribt per `onReceive` nur auf den Status IHRER Session
     /// (statusPublisher), statt bei jedem Tick irgendeiner Session neu zu
-    /// rendern.
+    /// rendern. Der Status (inkl. awaitingInput) kommt vollständig aus dem
+    /// `AgentSessionStatusCoordinator` — kein Fallback mehr auf „PTY läuft"
+    /// (der ließ frische Chats ohne Prompt fälschlich pulsieren).
     let statusStore: AgentSessionRuntimeStatusStore
-    /// "Needs Input" aus Notification-Hooks — übersteuert den
-    /// Watcher-Status, gerade bei Background-Sessions ist die JSONL nicht
-    /// immer aussagekräftig.
-    let isAwaitingInput: Bool
     /// `true` waehrend der AutoNamer fuer diese Session einen
     /// `claude -p`-Subprocess laufen hat. UI zeigt Sparkles-Pulse statt
     /// des normalen Status-Dots.
@@ -572,9 +565,7 @@ struct SessionListButton: View {
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
-        if isAwaitingInput { return .awaitingInput }
-        if let liveStatus { return liveStatus }
-        return isRunning ? .working : nil
+        liveStatus
     }
 
     private var rowBackground: Color {
@@ -616,8 +607,6 @@ extension SessionListButton: Equatable {
             && lhs.isSelected == rhs.isSelected
             && lhs.isOpenTab == rhs.isOpenTab
             && lhs.accentColorHex == rhs.accentColorHex
-            && lhs.isRunning == rhs.isRunning
-            && lhs.isAwaitingInput == rhs.isAwaitingInput
             && lhs.isAutoRenaming == rhs.isAutoRenaming
             && lhs.isMissingTranscript == rhs.isMissingTranscript
             && lhs.isMultiSelected == rhs.isMultiSelected
@@ -632,9 +621,7 @@ struct PinnedSessionRow: View {
     let project: AgentProject?
     let isSelected: Bool
     var isMultiSelected: Bool = false
-    let isRunning: Bool
     let statusStore: AgentSessionRuntimeStatusStore
-    let isAwaitingInput: Bool
     /// `true` wenn das Transkript dieser Session nicht mehr auf der Platte
     /// liegt — toter Zeiger, ausgegraut + Hinweis (siehe `SessionListButton`).
     var isMissingTranscript: Bool = false
@@ -716,9 +703,7 @@ struct PinnedSessionRow: View {
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
-        if isAwaitingInput { return .awaitingInput }
-        if let liveStatus { return liveStatus }
-        return isRunning ? .working : nil
+        liveStatus
     }
 
     private var rowBackground: Color {

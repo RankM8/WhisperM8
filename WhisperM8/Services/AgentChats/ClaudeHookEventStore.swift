@@ -35,6 +35,10 @@ struct ClaudeHookEvent: Equatable, Codable {
     var cwd: String?
     /// Bei SessionEnd: `"resume"` signalisiert interaktiven /resume-Wechsel.
     var reason: String?
+    /// Bei Pre-/PostToolUse: Name des Tools. `AskUserQuestion`/`ExitPlanMode`
+    /// bedeuten „Claude wartet auf eine User-Entscheidung" (siehe
+    /// `AgentSessionStateMachine.awaitingKind(forToolName:)`).
+    var toolName: String?
     var rawJSON: String
 }
 
@@ -111,6 +115,7 @@ final class ClaudeHookEventStore {
             transcriptPath: object["transcript_path"] as? String,
             cwd: object["cwd"] as? String,
             reason: object["reason"] as? String,
+            toolName: object["tool_name"] as? String,
             rawJSON: line
         )
     }

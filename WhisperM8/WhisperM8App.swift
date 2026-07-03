@@ -214,7 +214,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Request notification permissions for error alerts
+        // Agent-Notifications: Delegate VOR der Permission-Anfrage setzen,
+        // damit Banner auch im Vordergrund erscheinen und Klicks zum
+        // richtigen Chat routen (siehe UNUserNotificationCenterDelegate unten).
+        UNUserNotificationCenter.current().delegate = self
         requestNotificationPermission()
 
         // Claude-Code-Theme einmalig synchron mit unserem aufgelösten
@@ -312,6 +315,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 Logger.transcription.error("Notification permission error: \(error.localizedDescription)")
             }
         }
+    }
+}
+
+// MARK: - Agent-Notifications (Stop-/Rückfrage-Banner + Klick-Routing)
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// Banner auch zeigen, wenn WhisperM8 im Vordergrund ist — bewusst so
+    /// gewollt: der User arbeitet oft in einem anderen Chat/Fenster derselben
+    /// App, während ein Agent fertig wird.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list])
+    }
+
+    /// Klick auf die Notification → zugehörigen Chat fokussieren (richtiges
+    /// Fenster + Tab, siehe `WindowRequestCenter.requestSessionFocus`).
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let raw = userInfo[UNAgentUserNotificationPoster.localSessionIDUserInfoKey] as? String,
+           let sessionID = UUID(uuidString: raw) {
+            Task { @MainActor in
+                WindowRequestCenter.shared.requestSessionFocus(sessionID: sessionID)
+            }
+        }
+        completionHandler()
     }
 }
 

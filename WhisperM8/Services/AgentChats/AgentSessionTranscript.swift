@@ -163,14 +163,17 @@ enum AgentTranscriptStatusDecider {
     /// - Parameter priorTurnFinishedAt: Zeitstempel des letzten als-fertig-markierten
     ///   Turns. Wenn das aktuelle Stop-Event älter oder gleich diesem Zeitstempel
     ///   ist, melden wir `turnFinished = false` (Re-Detection wird unterdrückt).
+    /// - Returns: `nil`, wenn kein parsebares Event vorliegt — „keine Meinung".
+    ///   Früher galt das als `.working`; genau das ließ frisch geöffnete Chats
+    ///   ohne Prompt dauerhaft als „arbeitet" pulsieren.
     static func decide(
         lastEvent: AgentTranscriptEvent?,
         fileMTime: Date?,
         now: Date,
         priorTurnFinishedAt: Date?
-    ) -> Decision {
+    ) -> Decision? {
         guard let event = lastEvent else {
-            return Decision(status: .working, turnFinished: false)
+            return nil
         }
 
         let mtime = fileMTime ?? now

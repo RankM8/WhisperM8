@@ -89,8 +89,6 @@ final class SessionListButtonEquatableTests: XCTestCase {
         isSelected: Bool = false,
         isOpenTab: Bool = false,
         accentColorHex: String? = nil,
-        isRunning: Bool = false,
-        isAwaitingInput: Bool = false,
         isAutoRenaming: Bool = false,
         isMissingTranscript: Bool = false,
         isMultiSelected: Bool = false,
@@ -102,9 +100,7 @@ final class SessionListButtonEquatableTests: XCTestCase {
             isMultiSelected: isMultiSelected,
             isOpenTab: isOpenTab,
             accentColorHex: accentColorHex,
-            isRunning: isRunning,
             statusStore: store ?? AgentSessionRuntimeStatusStore(),
-            isAwaitingInput: isAwaitingInput,
             isAutoRenaming: isAutoRenaming,
             isMissingTranscript: isMissingTranscript,
             onSelect: {},
@@ -130,8 +126,6 @@ final class SessionListButtonEquatableTests: XCTestCase {
         XCTAssertNotEqual(base, makeButton(session: session, isSelected: true))
         XCTAssertNotEqual(base, makeButton(session: session, isOpenTab: true))
         XCTAssertNotEqual(base, makeButton(session: session, accentColorHex: "#FF9F0A"))
-        XCTAssertNotEqual(base, makeButton(session: session, isRunning: true))
-        XCTAssertNotEqual(base, makeButton(session: session, isAwaitingInput: true))
         XCTAssertNotEqual(base, makeButton(session: session, isAutoRenaming: true))
         XCTAssertNotEqual(base, makeButton(session: session, isMissingTranscript: true))
         XCTAssertNotEqual(base, makeButton(session: session, isMultiSelected: true))

@@ -73,6 +73,17 @@ final class AgentWindowStore {
         state.windows.map(\.id).filter { $0 != state.primaryWindowID }
     }
 
+    /// Fenster, das `sessionID` bereits als Tab offen hat (Primaerfenster
+    /// zuerst). `nil`, wenn kein Fenster den Chat zeigt — fuers
+    /// Notification-Klick-Routing: vorhandenes Fenster fokussieren statt den
+    /// Tab in ein anderes zu ziehen.
+    func windowID(containingTab sessionID: UUID) -> UUID? {
+        if openTabIDs(in: primaryWindowID).contains(sessionID) {
+            return primaryWindowID
+        }
+        return secondaryWindowIDs.first { openTabIDs(in: $0).contains(sessionID) }
+    }
+
     // MARK: - Tab-Mutationen (pro Fenster)
 
     /// Oeffnet `sessionID` als Tab im angegebenen Fenster (idempotent) und

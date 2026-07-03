@@ -15,7 +15,8 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
     private func entry(
         transcriptURL: URL?,
         lastStat: AgentTranscriptFileStat? = nil,
-        externalSessionID: String? = "ext-1"
+        externalSessionID: String? = "ext-1",
+        cachedLastEvent: AgentTranscriptEvent? = nil
     ) -> WatchedSession {
         WatchedSession(
             id: UUID(),
@@ -25,7 +26,7 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
             transcriptURL: transcriptURL,
             lastTurnFinishedAt: nil,
             lastStat: lastStat,
-            cachedLastEvent: nil
+            cachedLastEvent: cachedLastEvent
         )
     }
 
@@ -47,7 +48,11 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
         let stat = AgentTranscriptFileStat(mtime: Date(timeIntervalSince1970: 1000), size: 50)
         let tailFlag = Flag()
         let snapshot = AgentSessionRuntimeWatcher.pollSnapshot(
-            for: entry(transcriptURL: url, lastStat: stat),
+            for: entry(
+                transcriptURL: url,
+                lastStat: stat,
+                cachedLastEvent: .userMessage(timestamp: Date(timeIntervalSince1970: 999))
+            ),
             now: Date(),
             statProvider: { _ in stat },          // identisch zu lastStat
             tailProvider: { _, _ in tailFlag.value = true; return "" },
@@ -55,7 +60,7 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
         )
         XCTAssertFalse(tailFlag.value, "Stat-first: unveränderter Stat -> kein 64-KB-Tail-Read")
         XCTAssertEqual(snapshot.stat, stat)
-        XCTAssertNotNil(snapshot.decision)
+        XCTAssertEqual(snapshot.decision?.status, .working, "Decision kommt aus dem gecachten Event, ohne Read")
     }
 
     func testChangedStatTriggersTailRead() {

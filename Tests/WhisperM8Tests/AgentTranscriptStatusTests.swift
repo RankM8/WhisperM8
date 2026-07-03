@@ -82,8 +82,8 @@ final class AgentTranscriptStatusTests: XCTestCase {
             now: now,
             priorTurnFinishedAt: nil
         )
-        XCTAssertEqual(decision.status, .working)
-        XCTAssertFalse(decision.turnFinished)
+        XCTAssertEqual(decision?.status, .working)
+        XCTAssertEqual(decision?.turnFinished, false)
     }
 
     func testStatusDeciderReportsIdleAndTurnFinishedAfterStop() {
@@ -96,8 +96,8 @@ final class AgentTranscriptStatusTests: XCTestCase {
             now: now,
             priorTurnFinishedAt: nil
         )
-        XCTAssertEqual(decision.status, .idle)
-        XCTAssertTrue(decision.turnFinished, "Erstes Stop-Event muss als turnFinished melden")
+        XCTAssertEqual(decision?.status, .idle)
+        XCTAssertEqual(decision?.turnFinished, true, "Erstes Stop-Event muss als turnFinished melden")
     }
 
     func testStatusDeciderSuppressesTurnFinishedReDetection() {
@@ -110,8 +110,8 @@ final class AgentTranscriptStatusTests: XCTestCase {
             now: now,
             priorTurnFinishedAt: stoppedAt.addingTimeInterval(1)
         )
-        XCTAssertEqual(decision.status, .idle)
-        XCTAssertFalse(decision.turnFinished, "Älteres oder gleiches Stop-Event darf nicht als neuer Turn melden")
+        XCTAssertEqual(decision?.status, .idle)
+        XCTAssertEqual(decision?.turnFinished, false, "Älteres oder gleiches Stop-Event darf nicht als neuer Turn melden")
     }
 
     func testStatusDeciderTreatsLongRunningOngoingAsWorking() {
@@ -128,7 +128,7 @@ final class AgentTranscriptStatusTests: XCTestCase {
             now: now,
             priorTurnFinishedAt: nil
         )
-        XCTAssertEqual(decision.status, .working)
+        XCTAssertEqual(decision?.status, .working)
     }
 
     func testStatusDeciderTreatsRecentOngoingAsWorking() {
@@ -140,17 +140,19 @@ final class AgentTranscriptStatusTests: XCTestCase {
             now: now,
             priorTurnFinishedAt: nil
         )
-        XCTAssertEqual(decision.status, .working)
+        XCTAssertEqual(decision?.status, .working)
     }
 
-    func testStatusDeciderHandlesEmptyTranscriptAsWorking() {
-        // Frisch gestartete Session: Datei noch leer / unparseable.
+    func testStatusDeciderHasNoOpinionOnEmptyTranscript() {
+        // Frisch gestartete Session: Datei noch leer / unparseable → KEINE
+        // Meinung. Der frühere `.working`-Default ließ neue Chats ohne
+        // Prompt dauerhaft als „arbeitet" pulsieren.
         let decision = AgentTranscriptStatusDecider.decide(
             lastEvent: nil,
             fileMTime: Date(),
             now: Date(),
             priorTurnFinishedAt: nil
         )
-        XCTAssertEqual(decision.status, .working)
+        XCTAssertNil(decision)
     }
 }

@@ -10,61 +10,19 @@ extension AgentChatsView {
         AgentScanCoordinator.shared.requestScan(reason: .manual)
     }
 
-    /// Lazy-init der Runtime-Services. Wird einmal beim ersten `onAppear`
-    /// aufgerufen — verträgt aber Re-Calls, weil sie sich mit `nil`-Check
-    /// schützen. Wir können das nicht im `init()` machen, weil
-    /// `runtimeStatusStore` ein `@StateObject` ist und vor `body` noch nicht
-    /// instanziiert ist.
+    /// Bindet die View an die app-weiten Runtime-Services. Status-Ableitung,
+    /// Hook-Bridge und Watcher leben im `AgentSessionStatusCoordinator`
+    /// (Singleton) — Fenster sind reine Konsumenten. Dadurch zeigen alle
+    /// Fenster denselben Status und ein Fenster-Schließen reißt das Tracking
+    /// nicht mehr ab.
     func setupRuntimeServicesIfNeeded() {
         if autoNamer == nil {
-            autoNamer = AgentSessionAutoNamer(store: store)
-        }
-        if runtimeWatcher == nil {
-            let store = self.store
-            let statusStore = runtimeStatusStore
-            let watcher = AgentSessionRuntimeWatcher(statusStore: statusStore) { [weak autoNamer] sessionID in
-                AgentChatsView.handleTurnFinished(
-                    sessionID: sessionID,
-                    store: store,
-                    autoNamer: autoNamer
-                ) {
-                    // Wir können hier kein `self` capturen (wäre stale beim
-                    // mehrfachen Watcher-Init); der Workspace-Reload passiert
-                    // beim nächsten `loadWorkspaceFast`-Tick (Indexer-Refresh
-                    // bzw. UI-Reload).
-                }
-            }
-            runtimeWatcher = watcher
-        }
-        if claudeHookBridge == nil {
-            let store = self.store
-            let registry = terminalRegistry
-            let bridge = ClaudeHookBridge()
-            bridge.setDecisionHandler { localID, event in
-                AgentChatsView.handleClaudeHookEvent(
-                    localID: localID,
-                    event: event,
-                    store: store,
-                    terminalRegistry: registry
-                )
-            }
-            claudeHookBridge = bridge
+            autoNamer = AgentSessionStatusCoordinator.shared.autoNamer
         }
     }
 
     /// Notification fuer den ambiguous-rebind-Picker (Phase 6).
     static let ambiguousRebindNotification = Notification.Name("AgentChatsView.ambiguousRebind")
-    /// Wird vom Hook-Bridge-Handler bei `Notification`-Events gepostet —
-    /// die View fuegt die `localID` aus `userInfo["localID"]` in
-    /// `awaitingInputSessionIDs` ein.
-    static let backgroundNeedsInputNotification = Notification.Name("AgentChatsView.backgroundNeedsInput")
-    /// Pendant zum oberen — entfernt die localID wieder (z. B. nach
-    /// `.preToolUse` oder `.sessionEnd`).
-    static let backgroundNeedsInputClearedNotification = Notification.Name("AgentChatsView.backgroundNeedsInputCleared")
-    /// Gepostet vom `Stop`-Hook — die View setzt die Session sofort auf `.idle`
-    /// (zuverlaessiger als der Transkript-Poll) und spielt optional den
-    /// Fertig-Ton.
-    static let agentDidStopNotification = Notification.Name("AgentChatsView.agentDidStop")
 
     /// Verarbeitet die User-Wahl im Ambiguous-Picker. `externalID == nil`
     /// bedeutet "Neue Session starten" — wir nullen die externe ID und
@@ -87,159 +45,6 @@ extension AgentChatsView {
             loadWorkspaceFast()
         } catch {
             Logger.claudeRecovery.warning("recovery_user_chose_failed localID=\(request.localSessionID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// Hook-Event-Handler: bei `SessionStart` mit nicht-leerer `session_id`
-    /// updaten wir die externalSessionID; bei `SessionEnd(reason: "resume")`
-    /// machen wir uns mental "darauf bereit, dass eine neue ID kommt" —
-    /// behalten aber die alte ID bis das naechste SessionStart-Event kommt.
-    private static func handleClaudeHookEvent(
-        localID: UUID,
-        event: ClaudeHookEvent,
-        store: AgentSessionStore,
-        terminalRegistry: AgentTerminalRegistry
-    ) {
-        switch event.hookEventName {
-        case .sessionStart:
-            guard let newID = event.sessionID, !newID.isEmpty else { return }
-            do {
-                try store.updateSession(id: localID) { session in
-                    let old = session.externalSessionID
-                    guard old != newID else { return }
-                    session.externalSessionID = newID
-                    Logger.claudeBinding.info("binding_launch_id_set localID=\(localID.uuidString, privacy: .public) old=\(old ?? "nil", privacy: .public) new=\(newID, privacy: .public)")
-                }
-                Task { @MainActor in
-                    terminalRegistry.controller(for: localID)?.updateExternalSessionID(newID)
-                }
-            } catch {
-                Logger.claudeBinding.warning("binding_launch_set_failed localID=\(localID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-            }
-        case .sessionEnd:
-            // /resume-Wechsel ist erwartet — naechstes SessionStart wird die
-            // neue ID liefern. Nichts tun ausser Logging. Ein eventueller
-            // "Needs input"-Pulse wird vom Notification-Listener selbst
-            // bei .preToolUse / SessionStart geclearet — beim Ende ist die
-            // Session ohnehin nicht mehr "awaiting".
-            let reason = event.reason ?? "unknown"
-            Logger.claudeBinding.info("binding_session_end localID=\(localID.uuidString, privacy: .public) reason=\(reason, privacy: .public)")
-            NotificationCenter.default.post(
-                name: AgentChatsView.backgroundNeedsInputClearedNotification,
-                object: nil,
-                userInfo: ["localID": localID]
-            )
-        case .userPromptSubmit, .preToolUse, .postToolUse:
-            // Aktivitaet: User hat einen Prompt geschickt, oder ein Tool
-            // startet/ist fertig → die Session arbeitet, ein "Needs input"-
-            // Pulse ist veraltet. Wir clearen ihn; der naechste Notification-
-            // Event setzt ihn bei Bedarf erneut.
-            Logger.claudeBinding.debug("binding_activity localID=\(localID.uuidString, privacy: .public) event=\(event.hookEventName.rawValue, privacy: .public)")
-            NotificationCenter.default.post(
-                name: AgentChatsView.backgroundNeedsInputClearedNotification,
-                object: nil,
-                userInfo: ["localID": localID]
-            )
-        case .stop:
-            // Turn fertig → zuverlaessiges "idle" (auch fuer Background-Agents
-            // ohne aussagekraeftiges Transkript) + optionaler Ton. Ein
-            // eventueller "Needs input"-Pulse ist hinfaellig.
-            Logger.claudeBinding.info("binding_stop localID=\(localID.uuidString, privacy: .public)")
-            NotificationCenter.default.post(
-                name: AgentChatsView.backgroundNeedsInputClearedNotification,
-                object: nil,
-                userInfo: ["localID": localID]
-            )
-            NotificationCenter.default.post(
-                name: AgentChatsView.agentDidStopNotification,
-                object: nil,
-                userInfo: ["localID": localID]
-            )
-        case .permissionRequest:
-            // Echte Erlaubnis-Anfrage (Permission-Dialog) → "braucht Handlung".
-            // Claudes dedizierter Hook, feuert NUR beim echten Dialog — die
-            // saubere awaiting-Quelle statt des frueheren Notification-Hooks
-            // (der auch idle_prompts schickte und fertige Chats faelschlich
-            // markierte). Clear erfolgt ueber PostToolUse/Stop.
-            Logger.claudeBinding.info("binding_permission_request localID=\(localID.uuidString, privacy: .public)")
-            NotificationCenter.default.post(
-                name: AgentChatsView.backgroundNeedsInputNotification,
-                object: nil,
-                userInfo: ["localID": localID]
-            )
-        case .notification:
-            // Defensiv: Notification wird nicht mehr registriert. Falls doch
-            // eine kommt (fremde settings.json), NICHT als awaiting werten —
-            // ein idle_prompt wuerde sonst fertige Chats orange markieren.
-            // Stattdessen einen evtl. veralteten awaiting-Pulse clearen.
-            Logger.claudeBinding.debug("binding_notification_ignored localID=\(localID.uuidString, privacy: .public)")
-            NotificationCenter.default.post(
-                name: AgentChatsView.backgroundNeedsInputClearedNotification,
-                object: nil,
-                userInfo: ["localID": localID]
-            )
-        case .other:
-            return
-        }
-    }
-
-    /// Hängt den Watcher an eine laufende Session — entweder direkt nach
-    /// `markLaunched` (externalSessionID kann noch fehlen) oder nach
-    /// `bindExternalSessionIDWhenAvailable` (jetzt mit valider ID).
-    /// Idempotent: bei wiederholtem Aufruf updated der Watcher die ID intern.
-    func attachWatcher(sessionID: UUID) {
-        guard let watcher = runtimeWatcher else { return }
-        let workspace = store.loadWorkspace()
-        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
-              let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
-            return
-        }
-        watcher.watch(
-            sessionID: session.id,
-            provider: session.provider,
-            externalSessionID: session.externalSessionID,
-            cwd: project.path,
-            priorTurnFinishedAt: session.lastTurnAt
-        )
-    }
-
-    /// Spielt den optionalen Fertig-Ton (Stop-Hook), gedrosselt gegen
-    /// Mehrfach-Stops (max. 1 Ton / 2 s). Lautlos, wenn in den Einstellungen
-    /// deaktiviert (`AppPreferences.isAgentStopSoundEnabled`).
-    func playAgentStopSoundIfEnabled() {
-        guard AppPreferences.shared.isAgentStopSoundEnabled else { return }
-        let now = Date()
-        if let last = lastStopSoundAt, now.timeIntervalSince(last) < 2 { return }
-        lastStopSoundAt = now
-        NSSound(named: "Glass")?.play()
-    }
-
-    /// Triggert beim turn-finished-Signal des Watchers das Persistieren des
-    /// `lastTurnAt`-Stempels und den Auto-Namer. Bewusst static, damit der
-    /// Closure beim Watcher-Init kein View-`self` festhält.
-    private static func handleTurnFinished(
-        sessionID: UUID,
-        store: AgentSessionStore,
-        autoNamer: AgentSessionAutoNamer?,
-        onCompletion: @escaping () -> Void
-    ) {
-        let workspace = store.loadWorkspace()
-        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
-              let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
-            return
-        }
-
-        // Auto-Namer mit Snapshot starten (lastTurnAt ist hier noch nil) —
-        // der `recordTurnEnded` läuft direkt danach und beeinflusst diesen
-        // Snapshot nicht mehr.
-        autoNamer?.handleTurnFinished(session: session, cwd: project.path) { _ in
-            Task { @MainActor in onCompletion() }
-        }
-
-        do {
-            try store.recordTurnEnded(id: sessionID)
-        } catch {
-            Logger.debug("Failed to record turn ended: \(error.localizedDescription)")
         }
     }
 

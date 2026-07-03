@@ -85,17 +85,19 @@ struct AgentChatsView: View {
     @State var lastIndexStats: [AgentSessionIndexStats] = []
     @State var sessionActionRequest: AgentSessionActionRequest?
     @StateObject var terminalRegistry = AgentTerminalRegistry.shared
-    /// Live-Status-Store für die Sidebar-Indikatoren. Wird vom
-    /// `AgentSessionRuntimeWatcher` gepflegt, ephemeral (nicht persistiert).
+    /// Live-Status-Store für die Sidebar-Indikatoren — die app-weite Instanz
+    /// des `AgentSessionStatusCoordinator` (alle Fenster sehen denselben
+    /// Status; Tracking überlebt Fenster-Schließen).
     ///
-    /// P4, WICHTIG: bewusst `@State` statt `@StateObject` — Status-Ticks
-    /// dürfen NICHT den gesamten Body invalidieren; die Rows subscriben
-    /// per-Item via `statusPublisher(for:)`. Der Body darf `.statuses`
-    /// deshalb NIE direkt lesen (sonst stale UI ohne Invalidation).
-    @State var runtimeStatusStore = AgentSessionRuntimeStatusStore()
-    /// Lazy-init in `setupRuntimeServicesIfNeeded()`, weil beide Services Refs
-    /// auf Store + Closures brauchen, die wir vor `body` nicht haben.
-    @State var runtimeWatcher: AgentSessionRuntimeWatcher?
+    /// P4, WICHTIG: bewusst KEIN `@StateObject` — Status-Ticks dürfen NICHT
+    /// den gesamten Body invalidieren; die Rows subscriben per-Item via
+    /// `statusPublisher(for:)`. Der Body darf `.statuses` deshalb NIE direkt
+    /// lesen (sonst stale UI ohne Invalidation).
+    var runtimeStatusStore: AgentSessionRuntimeStatusStore {
+        AgentSessionStatusCoordinator.shared.statusStore
+    }
+    /// Referenz auf den app-weiten Auto-Namer (Koordinator) — lazy in
+    /// `setupRuntimeServicesIfNeeded()` gesetzt.
     @State var autoNamer: AgentSessionAutoNamer?
 
     /// Etappe-0 Tab-Drag: gemessene Tab-Frames (Inhalts-Space) + aktueller
@@ -121,9 +123,6 @@ struct AgentChatsView: View {
     /// ueber @Observable machen weil autoNamer lazy-init in einem optionalen
     /// State lebt.
     @State private var autoRenamingSessionIDs: Set<UUID> = []
-    /// Hook-Bridge fuer Real-Time-Detection von SessionStart/SessionEnd via
-    /// Claude-Code-Hooks. Event-driven via `DispatchSource` — 0% idle CPU.
-    @State var claudeHookBridge: ClaudeHookBridge?
     /// Pending ambiguous-rebind-Picker. `nil` solange keine
     /// Mehrdeutigkeit erkannt wurde.
     @State private var pendingAmbiguousRebind: AmbiguousRebindRequest?
@@ -230,14 +229,6 @@ struct AgentChatsView: View {
     /// `true` solange beim App-Start der Health-Check noch laeuft —
     /// verhindert mehrfache parallele Laeufe.
     @State var hasRunStartupHealthCheck = false
-    /// Session-IDs, fuer die wir ueber einen `Notification`-Hook ein
-    /// "Needs Input"-Signal bekommen haben. Wird vom Notification-Listener
-    /// gepflegt; die Sidebar pulst diese Sessions zusaetzlich zum
-    /// regulaeren Runtime-Status.
-    @State private var awaitingInputSessionIDs: Set<UUID> = []
-    /// Drossel für den Fertig-Ton (Stop-Hook): kein zweiter Ton innerhalb von
-    /// 2 s, falls mehrere Sessions kurz hintereinander stoppen.
-    @State var lastStopSoundAt: Date?
     /// Popover des „Neuer Chat"-Split-Buttons (▾): Ziel-Projekt wählen/suchen.
     @State var showNewChatProjectPicker = false
     @State var newChatProjectQuery = ""
@@ -475,23 +466,6 @@ struct AgentChatsView: View {
             installTitleBarZoomHandlerIfNeeded()
             installTabStripScrollMonitorIfNeeded()
             installTabDragEndMonitorIfNeeded()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputNotification)) { note in
-            if let id = note.userInfo?["localID"] as? UUID {
-                awaitingInputSessionIDs.insert(id)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.backgroundNeedsInputClearedNotification)) { note in
-            if let id = note.userInfo?["localID"] as? UUID {
-                awaitingInputSessionIDs.remove(id)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.agentDidStopNotification)) { note in
-            guard let id = note.userInfo?["localID"] as? UUID else { return }
-            // Turn fertig (Stop-Hook): sofort idle — schneller + robuster als
-            // der 1,5-s-Transkript-Poll, und deckt Background-Agents ab.
-            runtimeStatusStore.setStatus(.idle, for: id)
-            playAgentStopSoundIfEnabled()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
             guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
@@ -839,9 +813,9 @@ struct AgentChatsView: View {
                 let openTabIDSet = Set(openTabIDs)
                 // isRunning-Flips published die Registry nicht selbst; frisch
                 // wird das Set bei jedem Body-Eval (Registry-Inserts/Removes
-                // sind @Published und triggern den). Für Live-Status zählt
-                // ohnehin `liveStatus` in der Row — isRunning ist nur der
-                // Fallback, solange der Watcher noch keinen Status hat.
+                // sind @Published und triggern den). Nur noch für den
+                // Scope-Filter („Aktiv") — der Row-Status kommt vollständig
+                // aus dem Status-Koordinator.
                 let runningSessionIDs = terminalRegistry.activeSessionIDs
                 let scopeFilter = makeScopeFilter(
                     openTabIDs: openTabIDSet,
@@ -883,7 +857,7 @@ struct AgentChatsView: View {
                         pinnedSectionHeader(count: visiblePinned.count)
                         if !pinnedSectionCollapsed {
                             ForEach(visiblePinned) { session in
-                                pinnedRow(session, runningSessionIDs: runningSessionIDs, order: visiblePinned.map(\.id))
+                                pinnedRow(session, order: visiblePinned.map(\.id))
                             }
                         }
                         if !chatListIsEmpty {
@@ -893,7 +867,7 @@ struct AgentChatsView: View {
 
                     if sidebarLayout == .flat {
                         ForEach(flatSessions) { session in
-                            flatRow(session, runningSessionIDs: runningSessionIDs, order: flatSessions.map(\.id))
+                            flatRow(session, order: flatSessions.map(\.id))
                         }
                     } else {
                     ForEach(visibleProjects) { project in
@@ -929,9 +903,7 @@ struct AgentChatsView: View {
                             onAutoNameRequest: { forceAutoNameSession($0) },
                             onRename: renameSession,
                             onSetColor: { setColorForSelection(forID: $0, color: $1) },
-                            runningSessionIDs: runningSessionIDs,
                             statusStore: runtimeStatusStore,
-                            awaitingInputSessionIDs: awaitingInputSessionIDs,
                             autoRenamingSessionIDs: autoRenamingSessionIDs,
                             missingTranscriptSessionIDs: missingTranscriptIDs,
                             onRenameProjectRequest: { beginRenameProject($0) },
@@ -1016,15 +988,13 @@ struct AgentChatsView: View {
     /// Auto-Titel, Farbe, Schließen). Gepinnte Chats sind projektübergreifend —
     /// das Repo-Badge stellt die Zuordnung her.
     @ViewBuilder
-    private func pinnedRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>, order: [UUID]) -> some View {
+    private func pinnedRow(_ session: AgentChatSession, order: [UUID]) -> some View {
         PinnedSessionRow(
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
             isSelected: selectedSessionID == session.id,
             isMultiSelected: multiSelection.contains(session.id),
-            isRunning: runningSessionIDs.contains(session.id),
             statusStore: runtimeStatusStore,
-            isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
             onSelect: {
                 handleSidebarRowClick(session.id, order: order) {
@@ -1059,15 +1029,13 @@ struct AgentChatsView: View {
     /// (`PinnedSessionRow` wiederverwendet, da projektübergreifend). Kontextmenü
     /// wie eine normale Chat-Zeile, nur „Anpinnen" statt „Loslösen".
     @ViewBuilder
-    private func flatRow(_ session: AgentChatSession, runningSessionIDs: Set<UUID>, order: [UUID]) -> some View {
+    private func flatRow(_ session: AgentChatSession, order: [UUID]) -> some View {
         PinnedSessionRow(
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
             isSelected: selectedSessionID == session.id,
             isMultiSelected: multiSelection.contains(session.id),
-            isRunning: runningSessionIDs.contains(session.id),
             statusStore: runtimeStatusStore,
-            isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
             onSelect: {
                 handleSidebarRowClick(session.id, order: order) {
@@ -1607,20 +1575,19 @@ struct AgentChatsView: View {
                     actionRequest: sessionActionRequest,
                     onStateChanged: loadWorkspaceFast,
                     onSessionLaunched: { sessionID in
-                        attachWatcher(sessionID: sessionID)
+                        AgentSessionStatusCoordinator.shared.sessionLaunched(sessionID: sessionID)
                     },
                     onSessionTerminated: { sessionID, exitCode in
-                        runtimeWatcher?.markTerminated(sessionID: sessionID, exitCode: exitCode)
-                        claudeHookBridge?.stopTracking(localSessionID: sessionID)
+                        AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: sessionID, exitCode: exitCode)
                     },
                     onExternalSessionIDBound: { sessionID in
-                        attachWatcher(sessionID: sessionID)
+                        AgentSessionStatusCoordinator.shared.externalSessionIDBound(sessionID: sessionID)
                     },
                     onPrepareClaudeHookArguments: { sessionID in
-                        claudeHookBridge?.prepareLaunch(localSessionID: sessionID) ?? []
+                        AgentSessionStatusCoordinator.shared.prepareLaunchArguments(localSessionID: sessionID)
                     },
                     onClaudeHookLaunched: { sessionID in
-                        claudeHookBridge?.startTracking(localSessionID: sessionID)
+                        AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: sessionID)
                     }
                 )
                 .id(selectedSession.id)
@@ -1690,7 +1657,6 @@ struct AgentChatsView: View {
                 if !headerTabs.isEmpty {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
-                            let runningSessionIDs = terminalRegistry.activeSessionIDs
                             HStack(spacing: 4) {
                                 ForEach(headerTabs) { session in
                                     ChatTabButton(
@@ -1698,9 +1664,7 @@ struct AgentChatsView: View {
                                         project: workspace.projects.first { $0.id == session.projectID },
                                         isSelected: session.id == selectedSession?.id,
                                         isMultiSelected: multiSelection.contains(session.id),
-                                        isRunning: runningSessionIDs.contains(session.id),
                                         statusStore: runtimeStatusStore,
-                                        isAwaitingInput: awaitingInputSessionIDs.contains(session.id),
                                         onSelect: {
                                             handleTabClick(session.id)
                                         },
@@ -2082,20 +2046,15 @@ struct AgentChatsView: View {
     }
 
     /// Klein-aber-prominenter Status-Dot links: gruen wenn das PTY laeuft,
-    /// orange bei Needs-Input (Hook-Bridge), grau wenn keine Session da.
+    /// orange bei Needs-Input (Status-Koordinator), grau wenn keine Session da.
     @ViewBuilder
     private var statusDot: some View {
         if let selectedSession {
-            let running = terminalRegistry.controller(for: selectedSession.id)?.isRunning == true
-            let needsInput = awaitingInputSessionIDs.contains(selectedSession.id)
-            let color: Color = {
-                if needsInput { return .orange }
-                if running { return .green }
-                return AgentTheme.textTertiary
-            }()
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
+            SessionLiveStatusDot(
+                sessionID: selectedSession.id,
+                isProcessRunning: terminalRegistry.controller(for: selectedSession.id)?.isRunning == true,
+                statusStore: runtimeStatusStore
+            )
         } else {
             Circle()
                 .fill(AgentTheme.textTertiary.opacity(0.4))

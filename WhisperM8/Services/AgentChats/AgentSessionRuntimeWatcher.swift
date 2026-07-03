@@ -87,11 +87,13 @@ final class AgentSessionRuntimeWatcher {
     /// sekündlich und würden sonst dauerhaft Scans auslösen).
     static private(set) var sharedWatchedTranscriptPaths: Set<String> = []
 
-    weak var statusStore: AgentSessionRuntimeStatusStore?
-    /// Wird einmal pro neu erkanntem Turn-End aufgerufen. Empfänger ist
-    /// `AgentChatsView`, das daraufhin `lastTurnAt` schreibt und ggf. den
-    /// Auto-Namer anstößt.
-    var onTurnFinished: ((UUID) -> Void)?
+    /// Meldet jede Transcript-Entscheidung an den Koordinator — der Watcher
+    /// schreibt selbst KEINEN Status mehr. `decision.turnFinished == true`
+    /// signalisiert ein frisch erkanntes Turn-Ende (Auto-Naming/`lastTurnAt`).
+    /// Kein Callback bei „keine Meinung" (fehlende Datei / kein Event) — der
+    /// frühere `.working`-Default an dieser Stelle war der Kern des
+    /// „neuer Chat pulsiert"-Bugs.
+    var onDecision: ((UUID, AgentTranscriptStatusDecider.Decision) -> Void)?
 
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
@@ -113,14 +115,12 @@ final class AgentSessionRuntimeWatcher {
     private let urlResolver: @Sendable (WatchedSession) -> URL?
 
     init(
-        statusStore: AgentSessionRuntimeStatusStore,
-        onTurnFinished: ((UUID) -> Void)? = nil,
+        onDecision: ((UUID, AgentTranscriptStatusDecider.Decision) -> Void)? = nil,
         statProvider: @escaping @Sendable (URL) -> AgentTranscriptFileStat? = { AgentSessionRuntimeWatcher.fileStat(at: $0) },
         tailProvider: @escaping @Sendable (URL, Int) -> String? = { AgentSessionRuntimeWatcher.readTail(at: $0, bytes: $1) },
         urlResolver: @escaping @Sendable (WatchedSession) -> URL? = { AgentSessionRuntimeWatcher.resolveTranscriptURL(for: $0) }
     ) {
-        self.statusStore = statusStore
-        self.onTurnFinished = onTurnFinished
+        self.onDecision = onDecision
         self.statProvider = statProvider
         self.tailProvider = tailProvider
         self.urlResolver = urlResolver
@@ -170,7 +170,6 @@ final class AgentSessionRuntimeWatcher {
     func unwatch(sessionID: UUID) {
         detachEventSource(sessionID: sessionID)
         watched.removeValue(forKey: sessionID)
-        statusStore?.clear(sessionID: sessionID)
         if watched.isEmpty {
             stopTimer()
         }
@@ -189,12 +188,10 @@ final class AgentSessionRuntimeWatcher {
         pollOne(sessionID: sessionID)
     }
 
-    /// Manuell als „beendet" markieren — z. B. wenn der Subprocess via
-    /// `processTerminated` exited. Schreibt direkt den finalen Status, ohne auf
-    /// das nächste Poll-Tick zu warten.
-    func markTerminated(sessionID: UUID, exitCode: Int32?) {
-        let status: AgentSessionRuntimeStatus = (exitCode ?? 0) != 0 ? .errored : .stopped
-        statusStore?.setStatus(status, for: sessionID)
+    /// Beendet das Tracking nach Prozessende. Den finalen Status
+    /// (`stopped`/`errored`) setzt der `AgentSessionStatusCoordinator` über
+    /// die State-Machine — hier passiert nur noch Ressourcen-Cleanup.
+    func markTerminated(sessionID: UUID) {
         detachEventSource(sessionID: sessionID)
         watched.removeValue(forKey: sessionID)
         if watched.isEmpty {
@@ -347,22 +344,19 @@ final class AgentSessionRuntimeWatcher {
             }
 
             guard let decision = snapshot.decision else {
+                // Keine Meinung (Datei fehlt / kein parsebares Event) → KEIN
+                // Status-Write. Früher wurde hier `.working` geraten — dadurch
+                // pulsierte jeder frisch geöffnete Chat ohne Prompt dauerhaft
+                // als „arbeitet".
                 self.watched[sessionID] = current
-                if self.statusStore?.status(for: sessionID) == nil {
-                    self.statusStore?.setStatus(.working, for: sessionID)
-                }
                 return
             }
 
-            self.statusStore?.setStatus(decision.status, for: sessionID)
-
             if decision.turnFinished {
                 current.lastTurnFinishedAt = Date()
-                self.watched[sessionID] = current
-                self.onTurnFinished?(sessionID)
-            } else {
-                self.watched[sessionID] = current
             }
+            self.watched[sessionID] = current
+            self.onDecision?(sessionID, decision)
 
             // URL erstmals aufgelöst → Event-Source nachrüsten.
             if snapshot.transcriptURL != nil {

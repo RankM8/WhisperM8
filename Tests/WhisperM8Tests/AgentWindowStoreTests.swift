@@ -37,6 +37,22 @@ final class AgentWindowStoreTests: XCTestCase {
         XCTAssertEqual(store.openTabIDs(in: w), [s], "kein Duplikat beim erneuten Oeffnen")
     }
 
+    func testWindowIDContainingTabFindsPrimaryAndSecondary() {
+        let store = makeStore()
+        let primary = store.primaryWindowID
+        let inPrimary = UUID()
+        let inSecondary = UUID()
+        let unknown = UUID()
+        store.openTab(inPrimary, in: primary)
+        store.openTab(inSecondary, in: primary)
+        // Sekundaerfenster entstehen ausschliesslich per Tear-off.
+        let secondary = store.detachToNewWindow(inSecondary, from: primary)
+
+        XCTAssertEqual(store.windowID(containingTab: inPrimary), primary)
+        XCTAssertEqual(store.windowID(containingTab: inSecondary), secondary)
+        XCTAssertNil(store.windowID(containingTab: unknown), "unbekannte Session gehoert keinem Fenster")
+    }
+
     func testCloseTabMovesSelectionToPreviousTab() {
         let store = makeStore()
         let w = store.primaryWindowID

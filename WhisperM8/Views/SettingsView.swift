@@ -9,6 +9,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
     case templates = "Templates"
     case testLab = "Test Lab"
     case agentChats = "Agent Chats"
+    case claudeCode = "Claude Code"
     case permissions = "Permissions"
     case hotkey = "Hotkey"
     case audio = "Audio"
@@ -36,6 +37,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "testLab"
         case .agentChats:
             return "agentChats"
+        case .claudeCode:
+            return "claudeCode"
         case .permissions:
             return "permissions"
         case .hotkey:
@@ -73,6 +76,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "testtube.2"
         case .agentChats:
             return "terminal"
+        case .claudeCode:
+            return "bolt.horizontal.circle"
         case .permissions:
             return "shield.checkered"
         case .hotkey:
@@ -94,7 +99,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "Accounts"
         case .outputOverview, .history, .modes, .templates, .testLab:
             return "Output"
-        case .agentChats:
+        case .agentChats, .claudeCode:
             return "Agents"
         case .permissions, .hotkey, .audio, .behavior, .cli:
             return "App"
@@ -129,6 +134,7 @@ struct SettingsView: View {
 
                 Section("Agents") {
                     sidebarRow(.agentChats)
+                    sidebarRow(.claudeCode)
                 }
 
                 Section("App") {
@@ -200,6 +206,9 @@ struct SettingsView: View {
             OutputTestLabView()
         case .agentChats:
             AgentChatsAccessView()
+                .navigationTitle(section.rawValue)
+        case .claudeCode:
+            ClaudeCodeSettingsView()
                 .navigationTitle(section.rawValue)
         case .permissions:
             PermissionsSettingsView()

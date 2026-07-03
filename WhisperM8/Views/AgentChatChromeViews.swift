@@ -111,11 +111,10 @@ struct ChatTabButton: View {
     /// zum aktiven (`isSelected`) Tab. Bewusst ein Bool (nicht das Set) → die
     /// `.equatable()`-Optimierung der Rows bleibt wirksam.
     let isMultiSelected: Bool
-    let isRunning: Bool
     /// Stabile Store-Referenz — Live-Status via Per-Item-Publisher,
-    /// gleiche Mechanik wie `SessionListButton`.
+    /// gleiche Mechanik wie `SessionListButton`. Der Status (inkl.
+    /// awaitingInput) kommt vollständig aus dem Koordinator.
     let statusStore: AgentSessionRuntimeStatusStore
-    let isAwaitingInput: Bool
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -208,9 +207,7 @@ struct ChatTabButton: View {
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
-        if isAwaitingInput { return .awaitingInput }
-        if let liveStatus { return liveStatus }
-        return isRunning ? .working : nil
+        liveStatus
     }
 
     private var tabBackground: Color {
@@ -380,5 +377,30 @@ struct HeaderIconButton: View {
         if isActive { return AgentTheme.selection }
         if isHovered { return AgentTheme.surface }
         return AgentTheme.headerTab
+    }
+}
+
+/// Kleiner Live-Status-Dot für die selektierte Session (Topbar). Eigene
+/// Komponente mit Per-Item-Subscription, damit Status-Änderungen die Farbe
+/// zuverlässig invalidieren (der Parent-Body darf `.statuses` nicht lesen).
+struct SessionLiveStatusDot: View {
+    let sessionID: UUID
+    /// PTY-Prozess läuft (Terminal offen) — grün, solange kein needs-input.
+    let isProcessRunning: Bool
+    let statusStore: AgentSessionRuntimeStatusStore
+
+    @State private var liveStatus: AgentSessionRuntimeStatus?
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .onReceive(statusStore.statusPublisher(for: sessionID)) { liveStatus = $0 }
+    }
+
+    private var color: Color {
+        if liveStatus == .awaitingInput { return .orange }
+        if isProcessRunning { return .green }
+        return AgentTheme.textTertiary
     }
 }

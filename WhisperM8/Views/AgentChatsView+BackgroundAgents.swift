@@ -68,10 +68,9 @@ extension AgentChatsView {
         // 2. Hook-Bridge vorbereiten — die Background-Session erbt die
         //    Settings vom Supervisor, also muessen wir `--settings <path>`
         //    schon beim Spawn-Subprocess setzen, nicht erst beim spaeteren
-        //    `claude attach`. Wenn die Bridge nicht da ist (sehr alter
-        //    State / kein Hook-Setup), spawnen wir ohne Settings — der
-        //    Agent laeuft trotzdem, wir kriegen halt keine Live-Events.
-        let settingsPath = claudeHookBridge?.prepareSettingsFile(localSessionID: session.id)
+        //    `claude attach`. `nil` (Hooks deaktiviert / IO-Fehler) → Spawn
+        //    ohne Settings — der Agent laeuft trotzdem, nur ohne Live-Events.
+        let settingsPath = AgentSessionStatusCoordinator.shared.prepareBackgroundSettingsFile(localSessionID: session.id)
 
         // 3. Spawn via BackgroundAgentSpawner.
         let extraArgs = AgentCommandBuilder.parseArguments(AppPreferences.shared.claudeExtraArguments)
@@ -91,7 +90,7 @@ extension AgentChatsView {
             }
             spawningBackgroundSessions.remove(session.id)
             if settingsPath != nil {
-                claudeHookBridge?.startTracking(localSessionID: session.id)
+                AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: session.id)
             }
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
         } catch {
