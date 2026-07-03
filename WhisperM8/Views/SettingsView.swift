@@ -101,10 +101,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "Output"
         case .agentChats, .claudeCode:
             return "Agents"
-        case .permissions, .hotkey, .audio, .behavior, .cli:
+        case .permissions, .hotkey, .audio, .behavior, .cli, .about:
             return "App"
-        case .about:
-            return "About"
         }
     }
 }
@@ -143,9 +141,6 @@ struct SettingsView: View {
                     sidebarRow(.audio)
                     sidebarRow(.behavior)
                     sidebarRow(.cli)
-                }
-
-                Section("About") {
                     sidebarRow(.about)
                 }
             }
@@ -155,7 +150,10 @@ struct SettingsView: View {
         } detail: {
             detailView(for: selection ?? .api)
         }
-        .frame(minWidth: 860, minHeight: 620)
+        // minHeight so, dass alle Sidebar-Einträge ohne Scrollen passen —
+        // eine zur Selektion gescrollte Sidebar schiebt die oberen Einträge
+        // hinter die Titelleiste und wirkt „zerbrochen".
+        .frame(minWidth: 860, minHeight: 690)
         .onChange(of: selection) { _, newSelection in
             if newSelection == .agentChats {
                 WindowRequestCenter.shared.request(.agentChats)
