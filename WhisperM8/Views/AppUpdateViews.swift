@@ -77,6 +77,13 @@ struct AppUpdateDetailsView: View {
 }
 
 /// Kopierbare Terminal-Befehlszeile mit eigenem Copy-Feedback pro Box.
+///
+/// WICHTIG (Crash-Falle): Diese Box lebt u. a. in einem `.popover`. Der
+/// Copy-Feedback-Swap darf die Content-Größe NICHT (animiert) ändern —
+/// `NSPopover` startet sonst eine animierte Fenster-Resize
+/// (`PopoverHostingView.updateAnimatedWindowSize` → `NSMoveHelper`) und
+/// segfaultet (EXC_BAD_ACCESS, reproduziert 2026-07-03). Deshalb: festes
+/// Icon-Frame und bewusst KEIN `withAnimation`.
 struct CopyableCommandBox: View {
     let command: String
 
@@ -94,13 +101,14 @@ struct CopyableCommandBox: View {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.setString(command, forType: .string)
-                withAnimation { didCopy = true }
+                didCopy = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    withAnimation { didCopy = false }
+                    didCopy = false
                 }
             } label: {
                 Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
                     .foregroundStyle(didCopy ? .green : .secondary)
+                    .frame(width: 16, height: 16)
             }
             .buttonStyle(.borderless)
             .help("Befehl kopieren")

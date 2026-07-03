@@ -127,7 +127,16 @@ final class AppUpdateChecker: ObservableObject {
     }
 
     private func performCheck() async {
-        state = .checking
+        // Beim Re-Check nicht von .available auf .checking downgraden: das
+        // ließe den Footer-Badge (samt evtl. offenem Popover) kurz
+        // verschwinden — Popover-Teardown mitten in der Interaktion ist
+        // exakt der NSPopover-Crash-Vektor. Das Endergebnis überschreibt
+        // den Zustand ohnehin.
+        if case .available = state {
+            // Zustand behalten, nur neu auswerten.
+        } else {
+            state = .checking
+        }
         defer { lastCheckedAt = Date() }
 
         guard let rawCurrent = currentVersionProvider(),
