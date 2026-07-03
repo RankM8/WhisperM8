@@ -27,6 +27,7 @@ WhisperM8 has two halves that share one app.
 - **Dual Provider Support** — Choose between OpenAI Whisper or Groq
 - **Visual Context** — Optionally attach a screenshot (`screencapture -i`) as context for AI post-processing
 - **Output Modes** — Rewrite, email, Slack, … with optional Codex-CLI post-processing
+- **`whisperm8` CLI** — Transcribe audio/video files from the terminal (or let your AI agent do it — see [CLI](#cli-whisperm8))
 - **Menu Bar App** — Runs quietly in your menu bar; API keys stored in the macOS Keychain
 
 ### 🤖 Agent Chats
@@ -100,6 +101,21 @@ xattr -dr com.apple.quarantine /Applications/WhisperM8.app
 5. Text appears automatically (or is copied to clipboard)
 
 **Cancel Recording:** Click the X button in the overlay or press ESC.
+
+## CLI: `whisperm8`
+
+The app installs a command-line companion at `~/.local/bin/whisperm8` (a symlink to the app binary, refreshed on every launch). It transcribes audio **and video** files using the same API key the app stores in the Keychain — no separate login.
+
+```bash
+whisperm8 transcribe recording.m4a                     # audio → text (stdout)
+whisperm8 transcribe talk.mp4 -f srt -o talk.srt       # video → subtitles
+whisperm8 transcribe call.mp3 --mode clean -o call.txt # + post-processing mode
+whisperm8 transcribe workshop.mp4 --dry-run            # duration + cost estimate
+```
+
+Formats: `txt`, `json`, `srt`, `vtt` · providers: Groq (default) and OpenAI · long files are chunked at silence boundaries and stitched back together automatically. Run `whisperm8 --help` for all options.
+
+**Agent skill:** Settings → *CLI & Skill* provides an agent skill (SKILL.md) that teaches Claude Code, Claude.ai, or ChatGPT how to drive the CLI — one click installs it to `~/.claude/skills/`, or copy/save it for other assistants. Source of truth: [WhisperM8/Resources/whisperm8-cli-skill.md](WhisperM8/Resources/whisperm8-cli-skill.md).
 
 ## API Providers
 

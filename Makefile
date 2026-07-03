@@ -177,6 +177,7 @@ _bundle:
 	@cp "WhisperM8/Resources/ProviderClaude@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/ProviderCodex.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/ProviderCodex@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
+	@cp "WhisperM8/Resources/whisperm8-cli-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@# SwiftPM-generierte Resource-Bundles (z. B. KeyboardShortcuts_KeyboardShortcuts.bundle)
 	@# in Contents/Resources/ kopieren - wo macOS-Apps Ressourcen erwarten und
 	@# codesign sie als gesealte Inhalte akzeptiert. Damit `Bundle.module` sie hier

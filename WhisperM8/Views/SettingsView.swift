@@ -13,6 +13,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
     case hotkey = "Hotkey"
     case audio = "Audio"
     case behavior = "Behavior"
+    case cli = "CLI & Skill"
     case about = "About"
 
     var id: String { rawValue }
@@ -43,6 +44,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "audio"
         case .behavior:
             return "behavior"
+        case .cli:
+            return "cli"
         case .about:
             return "about"
         }
@@ -78,6 +81,8 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "waveform"
         case .behavior:
             return "gearshape"
+        case .cli:
+            return "terminal.fill"
         case .about:
             return "info.circle"
         }
@@ -91,7 +96,7 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
             return "Output"
         case .agentChats:
             return "Agents"
-        case .permissions, .hotkey, .audio, .behavior:
+        case .permissions, .hotkey, .audio, .behavior, .cli:
             return "App"
         case .about:
             return "About"
@@ -131,6 +136,7 @@ struct SettingsView: View {
                     sidebarRow(.hotkey)
                     sidebarRow(.audio)
                     sidebarRow(.behavior)
+                    sidebarRow(.cli)
                 }
 
                 Section("About") {
@@ -206,6 +212,9 @@ struct SettingsView: View {
                 .navigationTitle(section.rawValue)
         case .behavior:
             BehaviorSettingsView()
+                .navigationTitle(section.rawValue)
+        case .cli:
+            CLISettingsView()
                 .navigationTitle(section.rawValue)
         case .about:
             AboutView()
