@@ -125,7 +125,7 @@ struct AboutUpdateSection: View {
     @ObservedObject private var checker = AppUpdateChecker.shared
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             switch checker.state {
             case .unknown:
                 checkButton("Nach Updates suchen")

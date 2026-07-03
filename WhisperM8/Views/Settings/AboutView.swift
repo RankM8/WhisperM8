@@ -16,35 +16,50 @@ struct AboutView: View {
         }
     }
 
+    // WICHTIG (Layout-Falle): Wie ALLE Settings-Detail-Seiten eine Form —
+    // der frühere zentrierte Plain-VStack (`maxHeight: .infinity`) überlief
+    // bei knapper Fensterhöhe unclipped nach OBEN über die Titelleiste,
+    // die daraufhin fürs ganze Fenster kollabierte und auch die Sidebar
+    // hinter die Ampel-Buttons schob (reproduziert 2026-07-03, nur auf
+    // dieser Seite). Eine Form scrollt statt zu überlaufen.
     var body: some View {
-        VStack(spacing: 16) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 64, height: 64)
+        Form {
+            Section {
+                VStack(spacing: 10) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 64, height: 64)
 
-            Text("WhisperM8")
-                .font(.title2.bold())
+                    Text("WhisperM8")
+                        .font(.title2.bold())
 
-            Text(versionText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                    Text(versionText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-            Text("Native macOS dictation with AI transcription")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                    Text("Native macOS dictation with AI transcription")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
 
-            Divider()
+            Section("Updates") {
+                AboutUpdateSection()
+            }
 
-            AboutUpdateSection()
-
-            Divider()
-
-            Link("Built by 360WebManager", destination: URL(string: "https://360web-manager.com/")!)
-                .font(.caption)
+            Section {
+                HStack {
+                    Spacer()
+                    Link("Built by 360WebManager", destination: URL(string: "https://360web-manager.com/")!)
+                        .font(.caption)
+                    Spacer()
+                }
+            }
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .formStyle(.grouped)
     }
 }
