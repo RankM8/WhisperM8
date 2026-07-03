@@ -116,44 +116,28 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Section("Accounts") {
-                    sidebarRow(.api)
-                    sidebarRow(.codex)
+            // Bewusst KEINE `List(selection:)`: deren NSTableView scrollte
+            // beim Öffnen automatisch zur Selektion — mit kaputtem Offset
+            // (Liste komplett nach oben hinausgeschoben, Leerraum darunter;
+            // reproduziert 2026-07-03 mit selektiertem „About"). Ein
+            // statischer VStack im ScrollView kennt kein Auto-Scrolling und
+            // startet immer oben.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    sidebarSection("Accounts", items: [.api, .codex])
+                    sidebarSection("Output", items: [.outputOverview, .history, .modes, .templates, .testLab])
+                    sidebarSection("Agents", items: [.agentChats, .claudeCode])
+                    sidebarSection("App", items: [.permissions, .hotkey, .audio, .behavior, .cli, .about])
                 }
-
-                Section("Output") {
-                    sidebarRow(.outputOverview)
-                    sidebarRow(.history)
-                    sidebarRow(.modes)
-                    sidebarRow(.templates)
-                    sidebarRow(.testLab)
-                }
-
-                Section("Agents") {
-                    sidebarRow(.agentChats)
-                    sidebarRow(.claudeCode)
-                }
-
-                Section("App") {
-                    sidebarRow(.permissions)
-                    sidebarRow(.hotkey)
-                    sidebarRow(.audio)
-                    sidebarRow(.behavior)
-                    sidebarRow(.cli)
-                    sidebarRow(.about)
-                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 10)
             }
-            .listStyle(.sidebar)
             .navigationTitle("WhisperM8")
             .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 260)
         } detail: {
             detailView(for: selection ?? .api)
         }
-        // minHeight so, dass alle Sidebar-Einträge ohne Scrollen passen —
-        // eine zur Selektion gescrollte Sidebar schiebt die oberen Einträge
-        // hinter die Titelleiste und wirkt „zerbrochen".
-        .frame(minWidth: 860, minHeight: 690)
+        .frame(minWidth: 860, minHeight: 620)
         .onChange(of: selection) { _, newSelection in
             if newSelection == .agentChats {
                 WindowRequestCenter.shared.request(.agentChats)
@@ -175,9 +159,43 @@ struct SettingsView: View {
         selection = section
     }
 
+    private func sidebarSection(_ title: String, items: [ControlCenterSection]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 2)
+            ForEach(items) { section in
+                sidebarRow(section)
+            }
+        }
+    }
+
     private func sidebarRow(_ section: ControlCenterSection) -> some View {
-        Label(section.rawValue, systemImage: section.systemImage)
-            .tag(section)
+        let isSelected = selection == section
+        return Button {
+            selection = section
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: section.systemImage)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 18)
+                Text(section.rawValue)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 28)
+            .contentShape(Rectangle())
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? Color.accentColor : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
