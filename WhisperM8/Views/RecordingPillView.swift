@@ -78,7 +78,7 @@ struct RecordingPillView: View {
             // Kontext ist Inhalt, keine Deko: vorhandener Kontext bleibt in der
             // Aufnahme-Phase auch ohne Hover sichtbar — die Pill wächst dafür.
             if isExpanded || (phase == .recording && !controller.contextBundle.isEmpty) {
-                PillContextChip(controller: controller, isExpanded: isExpanded)
+                PillContextChip(controller: controller)
                     .padding(.trailing, 5)
                     .transition(.opacity)
             }
@@ -352,28 +352,53 @@ private struct PillOutputModeChip: View {
 
 private struct PillContextChip: View {
     @ObservedObject var controller: OverlayController
-    /// Expandiert zeigt der Chip die informative Aufzählung
-    /// („Text + 2 Shots"), kollabiert nur das Ein-Wort-Kürzel.
-    let isExpanded: Bool
 
     var body: some View {
         Menu {
             ContextMenuContent(controller: controller)
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: iconName)
-                    .font(.system(size: 10, weight: .semibold))
-                    .opacity(hasContext ? 0.9 : 0.7)
+            HStack(spacing: 4) {
+                if controller.isScreenClipRecording {
+                    // Laufender Screen-Clip: rotes Record-Icon vorne im Chip
+                    // (das Blinken übernimmt der Clip-Button rechts).
+                    Image(systemName: "record.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(OverlayPalette.clip)
+                }
 
-                Text(isExpanded ? controller.contextBundle.displaySummary : controller.contextBundle.compactSummary)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
+                if segments.isEmpty {
+                    Image(systemName: "text.badge.xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .opacity(0.7)
+                    Text("No Ctx")
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                } else {
+                    // Icon-Segmente mit „+" verbunden — Chat, Text, Shots,
+                    // Marks, Clips getrennt erkennbar, Anzahl ab 2 Stück;
+                    // wird nie truncated (User-Entscheidung Variante B).
+                    ForEach(Array(segments.enumerated()), id: \.element.systemImage) { index, segment in
+                        if index > 0 {
+                            Text("+")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color.primary.opacity(0.35))
+                        }
+                        HStack(spacing: 2.5) {
+                            Image(systemName: segment.systemImage)
+                                .font(.system(size: 11, weight: .semibold))
+                            if let count = segment.count {
+                                Text("\(count)")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .monospacedDigit()
+                            }
+                        }
+                        .accessibilityLabel(segment.accessibilityLabel)
+                    }
+                }
             }
             .foregroundStyle(hasContext ? OverlayPalette.recording : Color.secondary.opacity(0.75))
             .padding(.horizontal, 10)
             .frame(height: PillMetrics.chipHeight)
-            // Kein .frame(maxWidth:) — siehe Mode-Chip: natürliche Breite,
-            // Truncation übernimmt der Pill-Deckel.
             .background {
                 Capsule().fill(Color.primary.opacity(0.08))
             }
@@ -385,15 +410,9 @@ private struct PillContextChip: View {
         .accessibilityLabel(helpText)
     }
 
-    private var hasContext: Bool { !controller.contextBundle.isEmpty }
+    private var segments: [ContextChipSegment] { controller.contextBundle.chipSegments }
 
-    private var iconName: String {
-        if controller.isScreenClipRecording { return "record.circle" }
-        if !controller.contextBundle.screenshots.isEmpty || !controller.contextBundle.screenClips.isEmpty {
-            return "photo.on.rectangle"
-        }
-        return controller.contextBundle.selectedText.isEmpty ? "text.badge.xmark" : "text.viewfinder"
-    }
+    private var hasContext: Bool { !controller.contextBundle.isEmpty }
 
     private var helpText: String {
         if controller.contextBundle.isEmpty {

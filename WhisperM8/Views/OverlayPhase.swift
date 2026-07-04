@@ -120,6 +120,61 @@ enum OverlayPalette {
     }
 }
 
+// MARK: - Kontext-Chip-Segmente
+
+/// Ein Segment der Kontext-Anzeige: Icon + optionale Anzahl (nur bei > 1).
+/// Der Chip zeigt die Segmente mit „+" verbunden — Chat, Text, Shots, Marks,
+/// Clips sind so auf einen Blick getrennt erkennbar, ohne dass je ein
+/// Text-String truncated (User-Entscheidung: Variante „Icon-Segmente").
+struct ContextChipSegment: Equatable {
+    var systemImage: String
+    var count: Int?
+    var accessibilityLabel: String
+}
+
+extension TranscriptContextBundle {
+    /// Segmente in stabiler Reihenfolge; leer ⇔ `isEmpty` (dann zeigt der
+    /// Chip das „No Ctx"-Label). visualFrames erscheinen bewusst nicht —
+    /// sie sind Begleitmaterial der Clips (wie in `displaySummary`).
+    var chipSegments: [ContextChipSegment] {
+        var segments: [ContextChipSegment] = []
+
+        if agentChat != nil {
+            segments.append(ContextChipSegment(
+                systemImage: "bubble.left", count: nil, accessibilityLabel: "Chat context"
+            ))
+        }
+        if !selectedText.isEmpty {
+            segments.append(ContextChipSegment(
+                systemImage: "text.quote", count: nil, accessibilityLabel: "Text context"
+            ))
+        }
+        if !screenshots.isEmpty {
+            segments.append(ContextChipSegment(
+                systemImage: "photo.on.rectangle",
+                count: screenshots.count > 1 ? screenshots.count : nil,
+                accessibilityLabel: "\(screenshots.count) screenshot(s)"
+            ))
+        }
+        if !annotations.isEmpty {
+            segments.append(ContextChipSegment(
+                systemImage: "pencil.tip.crop.circle",
+                count: annotations.count > 1 ? annotations.count : nil,
+                accessibilityLabel: "\(annotations.count) annotation(s)"
+            ))
+        }
+        if !screenClips.isEmpty {
+            segments.append(ContextChipSegment(
+                systemImage: "film",
+                count: screenClips.count > 1 ? screenClips.count : nil,
+                accessibilityLabel: "\(screenClips.count) screen clip(s)"
+            ))
+        }
+
+        return segments
+    }
+}
+
 // MARK: - Timer-Formatierung
 
 /// Formatiert die Aufnahmedauer als mm:ss — pur & getestet; der Clock-Layer

@@ -216,4 +216,49 @@ final class OverlayPhaseTests: XCTestCase {
         XCTAssertEqual(OverlayClockFormatter.format(3599), "59:59")
         XCTAssertEqual(OverlayClockFormatter.format(-5), "00:00")
     }
+
+    // MARK: - Kontext-Chip-Segmente (Variante B: Icons + Zahlen, „+"-verbunden)
+
+    func testChipSegmentsEmptyBundleHasNoSegments() {
+        XCTAssertTrue(TranscriptContextBundle.empty.chipSegments.isEmpty)
+    }
+
+    func testChipSegmentsShowCountsOnlyAboveOne() {
+        var bundle = TranscriptContextBundle.empty
+        bundle.selectedText = SelectedContext(
+            text: "Kopierter Ausschnitt", sourceAppName: nil, sourceBundleIdentifier: nil
+        )
+        bundle.screenshots = [
+            ContextAttachment(kind: .screenshot, fileURL: URL(fileURLWithPath: "/tmp/a.png")),
+            ContextAttachment(kind: .screenshot, fileURL: URL(fileURLWithPath: "/tmp/b.png")),
+            ContextAttachment(kind: .screenshot, fileURL: URL(fileURLWithPath: "/tmp/c.png")),
+        ]
+
+        let segments = bundle.chipSegments
+
+        XCTAssertEqual(segments.map(\.systemImage), ["text.quote", "photo.on.rectangle"])
+        // Text ohne Zahl, Screenshots mit Anzahl (3).
+        XCTAssertNil(segments[0].count)
+        XCTAssertEqual(segments[1].count, 3)
+
+        // Ein einzelner Screenshot kommt ohne Zahl.
+        bundle.screenshots = [ContextAttachment(kind: .screenshot, fileURL: URL(fileURLWithPath: "/tmp/a.png"))]
+        XCTAssertNil(bundle.chipSegments.last?.count)
+    }
+
+    func testChipSegmentsKeepStableOrderChatFirst() {
+        var bundle = TranscriptContextBundle.empty
+        bundle.screenClips = [ContextAttachment(kind: .screenClip, fileURL: URL(fileURLWithPath: "/tmp/c.mov"))]
+        bundle.agentChat = AgentChatContextRef(
+            sessionID: UUID(),
+            provider: .claude,
+            projectName: "Projekt",
+            projectPath: "/tmp",
+            title: "Chat",
+            externalSessionID: nil
+        )
+
+        // Chat immer vorn, Clips hinten — unabhängig von der Setz-Reihenfolge.
+        XCTAssertEqual(bundle.chipSegments.map(\.systemImage), ["bubble.left", "film"])
+    }
 }
