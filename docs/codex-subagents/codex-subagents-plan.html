@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex-Subagents · WhisperM8 Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,800;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35);
+  --ink-soft: oklch(0.42 0.02 35);
+  --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78);
+  --paper-2: oklch(0.945 0.012 72);
+  --paper-3: oklch(0.910 0.015 70);
+  --line: oklch(0.80 0.02 70);
+  --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28);
+  --accent-soft: oklch(0.92 0.06 30);
+  --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145);
+  --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235);
+  --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75);
+  --amber-soft: oklch(0.94 0.06 80);
+  --serif: 'Fraunces', Georgia, serif;
+  --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* WhisperM8 App-Mockup-Palette (dunkle macOS-App, Mint-Akzent) */
+  --wm-bg: #151517;
+  --wm-sidebar: #1B1B1E;
+  --wm-card: #222226;
+  --wm-card-2: #29292E;
+  --wm-border: #333338;
+  --wm-border-soft: #2A2A2F;
+  --wm-text: #ECECEE;
+  --wm-text-soft: #A8A8B0;
+  --wm-text-mute: #6E6E78;
+  --wm-mint: #4ADE96;
+  --wm-mint-soft: rgba(74,222,150,0.14);
+  --wm-amber: #E7B155;
+  --wm-amber-soft: rgba(231,177,85,0.14);
+  --wm-red: #E76F5B;
+  --wm-red-soft: rgba(231,111,91,0.14);
+  --wm-blue: #6CA8E8;
+  --wm-blue-soft: rgba(108,168,232,0.14);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--sans); font-size: 16px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased; font-feature-settings: "ss01", "cv02";
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+a { color: inherit; }
+code {
+  font-family: var(--mono); font-size: 0.85em;
+  background: var(--paper-2); border: 1px solid var(--line-soft);
+  border-radius: 4px; padding: 1px 5px;
+}
+b { font-weight: 600; }
+
+/* ── Nav ─────────────────────────────── */
+nav.top {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line-soft);
+}
+nav.top .inner {
+  max-width: 1180px; margin: 0 auto; padding: 14px 32px;
+  display: flex; align-items: center; gap: 22px;
+}
+nav.top .brand { font-family: var(--serif); font-weight: 600; font-size: 17px; text-decoration: none; white-space: nowrap; }
+nav.top .brand em { color: var(--accent); font-style: italic; }
+nav.top .links { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; }
+nav.top .links::-webkit-scrollbar { display: none; }
+nav.top .links a {
+  text-decoration: none; font-size: 13px; font-weight: 500; color: var(--ink-soft);
+  padding: 5px 10px; border-radius: 6px; white-space: nowrap;
+}
+nav.top .links a:hover { background: var(--paper-2); color: var(--ink); }
+nav.top .links a.active { background: var(--ink); color: var(--paper); }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); white-space: nowrap; }
+@media (max-width: 900px) { nav.top .stamp { display: none; } }
+
+/* ── Hero ────────────────────────────── */
+header.hero { padding: 90px 0 64px; border-bottom: 1px solid var(--line-soft); }
+header.hero .kicker {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+}
+header.hero h1 {
+  font-family: var(--serif); font-weight: 300; font-optical-sizing: auto;
+  font-size: clamp(48px, 7vw, 92px); line-height: 1.02; letter-spacing: -0.03em;
+  margin: 0 0 26px;
+}
+header.hero h1 em { font-style: italic; color: var(--accent); }
+header.hero .lede {
+  font-family: var(--serif); font-style: italic; font-weight: 300;
+  font-size: clamp(18px, 2.2vw, 25px); line-height: 1.45; color: var(--ink-soft);
+  max-width: 820px; margin: 0 0 44px;
+}
+.meta-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  border-top: 1px solid var(--line-soft); padding-top: 24px;
+}
+@media (max-width: 820px) { .meta-grid { grid-template-columns: 1fr 1fr; } }
+.meta-grid .cell .k {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-mute); margin-bottom: 6px;
+}
+.meta-grid .cell .v { font-size: 15px; font-weight: 500; }
+.meta-grid .cell .v small { display: block; font-weight: 400; color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
+
+/* ── Sections ────────────────────────── */
+section { padding: 76px 0; border-bottom: 1px solid var(--line-soft); }
+.section-head { margin-bottom: 42px; max-width: 860px; }
+.section-head .idx {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 12px;
+}
+.section-head h2 {
+  font-family: var(--serif); font-weight: 300; font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 16px;
+}
+.section-head h2 em { font-style: italic; color: var(--accent); }
+.section-head p { color: var(--ink-soft); font-size: 16px; margin: 0; }
+
+/* ── Split-Callout ───────────────────── */
+.split-callout { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 860px) { .split-callout { grid-template-columns: 1fr; } }
+.split-callout .col { border-radius: 14px; padding: 26px 24px; color: var(--paper); }
+.split-callout .col.a { background: color-mix(in oklch, var(--ink) 88%, var(--accent)); }
+.split-callout .col.b { background: color-mix(in oklch, var(--ink) 88%, var(--ocean)); }
+.split-callout .col.c { background: color-mix(in oklch, var(--ink) 88%, var(--moss)); }
+.split-callout .col .t {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; opacity: 0.65; margin-bottom: 12px;
+}
+.split-callout .col h3 {
+  font-family: var(--serif); font-weight: 400; font-size: 23px;
+  margin: 0 0 12px; letter-spacing: -0.01em;
+}
+.split-callout .col h3 em { font-style: italic; opacity: 0.85; }
+.split-callout .col p { font-size: 14px; opacity: 0.82; margin: 0 0 14px; line-height: 1.5; }
+.split-callout .col ul { margin: 0; padding: 0; list-style: none; }
+.split-callout .col li {
+  font-size: 13px; opacity: 0.78; padding: 6px 0 6px 16px;
+  position: relative; border-top: 1px dashed rgba(255,255,255,0.18);
+}
+.split-callout .col li::before { content: "›"; position: absolute; left: 0; opacity: 0.7; }
+
+/* ── Flow-Chain ──────────────────────── */
+.flow-layout { display: grid; grid-template-columns: 1fr 300px; gap: 32px; align-items: start; }
+@media (max-width: 900px) { .flow-layout { grid-template-columns: 1fr; } }
+.flow-chain { display: flex; flex-direction: column; }
+.flow-node {
+  border-radius: 12px; padding: 18px 22px; position: relative;
+}
+.flow-node .nt {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; margin-bottom: 5px; opacity: 0.7;
+}
+.flow-node h4 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin: 0 0 4px; }
+.flow-node p { font-size: 13.5px; margin: 0; opacity: 0.85; line-height: 1.5; }
+.flow-node.input { border: 1.5px dashed var(--accent); background: var(--accent-soft); color: var(--accent-deep); }
+.flow-node.process { background: var(--ocean); color: white; }
+.flow-node.output { background: var(--moss); color: white; }
+.flow-node.neutral { background: var(--paper-2); border: 1px solid var(--line); color: var(--ink); }
+.flow-arrow {
+  margin-left: 34px; padding: 10px 0 10px 18px;
+  border-left: 2px dashed var(--line); position: relative;
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-mute);
+}
+.flow-arrow::after {
+  content: "▼"; position: absolute; left: -6.5px; bottom: -4px;
+  font-size: 10px; color: var(--ink-mute);
+}
+.flow-aside {
+  background: var(--paper-2); border: 1px solid var(--line-soft);
+  border-radius: 14px; padding: 24px; position: sticky; top: 90px;
+}
+.flow-aside .t {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-mute); margin-bottom: 10px;
+}
+.flow-aside h4 { font-family: var(--serif); font-weight: 500; font-size: 19px; margin: 0 0 10px; }
+.flow-aside h4 em { font-style: italic; color: var(--accent); }
+.flow-aside p { font-size: 13.5px; color: var(--ink-soft); margin: 0 0 10px; }
+.flow-aside ul { margin: 0; padding: 0; list-style: none; }
+.flow-aside li { font-size: 13px; color: var(--ink-soft); padding: 6px 0 6px 15px; position: relative; border-top: 1px dashed var(--line-soft); }
+.flow-aside li::before { content: "›"; position: absolute; left: 0; color: var(--accent); }
+
+/* ── CLI-Command Table ───────────────── */
+.cmd-table { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.cmd-row {
+  display: grid; grid-template-columns: 330px 1fr; border-top: 1px solid var(--line-soft);
+  background: white;
+}
+.cmd-row:first-child { border-top: 0; }
+@media (max-width: 780px) { .cmd-row { grid-template-columns: 1fr; } }
+.cmd-row .cmd {
+  font-family: var(--mono); font-size: 12.5px; padding: 16px 20px;
+  background: var(--paper-2); color: var(--accent-deep); font-weight: 500;
+  border-right: 1px solid var(--line-soft); line-height: 1.6;
+}
+.cmd-row .desc { padding: 16px 20px; font-size: 14px; color: var(--ink-soft); }
+.cmd-row .desc b { color: var(--ink); }
+
+/* ── Data-Shape ──────────────────────── */
+.data-shape {
+  background: oklch(0.20 0.015 260); color: oklch(0.88 0.01 260);
+  border-radius: 14px; padding: 24px 28px; font-family: var(--mono);
+  font-size: 12.5px; line-height: 1.75; overflow-x: auto; white-space: pre;
+}
+.data-shape .comment { color: oklch(0.68 0.09 145); }
+.data-shape .key { color: oklch(0.80 0.09 75); }
+.data-shape .str { color: oklch(0.78 0.09 145); }
+.data-shape .num { color: oklch(0.75 0.12 300); }
+.data-shape .flag { color: oklch(0.75 0.10 235); }
+.shape-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-mute); margin: 26px 0 10px;
+}
+.shape-label:first-child { margin-top: 0; }
+
+/* ── States-Grid ─────────────────────── */
+.states-grid { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.states-grid .row {
+  display: grid; grid-template-columns: 240px 1fr;
+  border-top: 1px solid var(--line-soft); background: white;
+}
+.states-grid .row:first-child { border-top: 0; }
+@media (max-width: 720px) { .states-grid .row { grid-template-columns: 1fr; } }
+.states-grid .state-name {
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  padding: 15px 20px; background: var(--paper-2); color: var(--ink);
+  border-right: 1px solid var(--line-soft);
+}
+.states-grid .state-desc { padding: 15px 20px; font-size: 14px; color: var(--ink-soft); }
+.states-grid .state-desc b { color: var(--ink); }
+
+/* ── Mockups ─────────────────────────── */
+.mockup-block { margin-top: 52px; }
+.mockup-block:first-of-type { margin-top: 24px; }
+.mockup-label { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.mockup-label .l {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+  color: var(--accent); text-transform: uppercase;
+}
+.mockup-label h3 {
+  font-family: var(--serif); font-weight: 400; font-size: clamp(22px, 2.8vw, 29px);
+  margin: 0; letter-spacing: -0.01em;
+}
+.mockup-label h3 em { font-style: italic; color: var(--accent); }
+.mockup-label .path-pill {
+  font-family: var(--mono); font-size: 11px; background: var(--paper-2);
+  border: 1px solid var(--line-soft); border-radius: 20px; padding: 3px 12px; color: var(--ink-mute);
+}
+.mockup-block .notes {
+  font-family: var(--serif); font-style: italic; font-size: 16px;
+  color: var(--ink-soft); margin: 6px 0 22px; max-width: 780px;
+}
+
+.app-frame {
+  background: var(--wm-bg); border: 1px solid #3A3A40; border-radius: 16px;
+  box-shadow: 0 30px 60px -30px rgba(10,10,12,0.55), 0 8px 24px -12px rgba(10,10,12,0.35);
+  overflow: hidden; font-family: var(--sans); color: var(--wm-text);
+  font-size: 13px; line-height: 1.5;
+}
+.app-frame * { box-sizing: border-box; }
+.app-chrome {
+  background: #202024; padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--wm-border-soft);
+}
+.app-chrome .dots { display: flex; gap: 6px; }
+.app-chrome .dots span { width: 11px; height: 11px; border-radius: 50%; }
+.app-chrome .dots span:nth-child(1) { background: #F88B7A; }
+.app-chrome .dots span:nth-child(2) { background: #F1C453; }
+.app-chrome .dots span:nth-child(3) { background: #5BC881; }
+.app-chrome .win-title {
+  flex: 1; text-align: center; font-size: 12px; color: var(--wm-text-mute); font-weight: 500;
+}
+.app-shell { display: grid; grid-template-columns: 250px 1fr; min-height: 640px; }
+@media (max-width: 860px) { .app-shell { grid-template-columns: 1fr; } }
+
+.wm-sidebar { background: var(--wm-sidebar); border-right: 1px solid var(--wm-border-soft); padding: 14px 10px; }
+.wm-side-title {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--wm-text-mute); padding: 10px 10px 6px;
+}
+.wm-row {
+  display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px;
+  font-size: 12.5px; color: var(--wm-text-soft); position: relative;
+}
+.wm-row.sel { background: var(--wm-card-2); color: var(--wm-text); }
+.wm-row .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.wm-row .dot.working { background: var(--wm-mint); box-shadow: 0 0 6px rgba(74,222,150,0.6); }
+.wm-row .dot.done { background: var(--wm-blue); }
+.wm-row .dot.idle { background: #55555E; }
+.wm-row .dot.failed { background: var(--wm-red); }
+.wm-row .dot.awaiting { background: var(--wm-amber); box-shadow: 0 0 6px rgba(231,177,85,0.6); }
+.wm-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-row .glyph { font-size: 11px; opacity: 0.85; flex-shrink: 0; width: 15px; text-align: center; }
+.wm-row .chip {
+  font-family: var(--mono); font-size: 9.5px; padding: 1.5px 7px; border-radius: 10px;
+  background: var(--wm-mint-soft); color: var(--wm-mint); flex-shrink: 0;
+}
+.wm-row .chip.amber { background: var(--wm-amber-soft); color: var(--wm-amber); }
+.wm-row.sub { margin-left: 20px; border-left: 1px solid var(--wm-border); border-radius: 0 8px 8px 0; }
+.wm-row.sub.sel { background: var(--wm-card-2); }
+.wm-badge {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  border: 1px solid var(--wm-border); border-radius: 4px; padding: 1px 5px;
+  color: var(--wm-text-mute); flex-shrink: 0;
+}
+
+.wm-main { display: flex; flex-direction: column; min-width: 0; }
+.wm-detail-head {
+  display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+  border-bottom: 1px solid var(--wm-border-soft); background: #19191C;
+}
+.wm-detail-head h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--wm-text); flex: 1; }
+.wm-detail-head h4 small { display: block; font-weight: 400; font-size: 11px; color: var(--wm-text-mute); font-family: var(--mono); margin-top: 2px; }
+.wm-pill {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; padding: 3px 11px;
+  border-radius: 12px; font-weight: 500;
+}
+.wm-pill.running { background: var(--wm-mint-soft); color: var(--wm-mint); }
+.wm-pill.done { background: var(--wm-blue-soft); color: var(--wm-blue); }
+.wm-pill.taken { background: var(--wm-amber-soft); color: var(--wm-amber); }
+.wm-btn {
+  font-size: 11.5px; font-weight: 500; padding: 5px 13px; border-radius: 7px;
+  background: var(--wm-card-2); border: 1px solid var(--wm-border); color: var(--wm-text-soft);
+}
+.wm-btn.primary { background: var(--wm-mint-soft); border-color: rgba(74,222,150,0.3); color: var(--wm-mint); }
+
+.wm-stream { flex: 1; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.wm-result-card {
+  background: var(--wm-card); border: 1px solid rgba(108,168,232,0.35); border-radius: 12px;
+  padding: 14px 16px;
+}
+.wm-result-card .rt {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--wm-blue); margin-bottom: 7px; display: flex; justify-content: space-between; align-items: center;
+}
+.wm-result-card .rt .actions { display: flex; gap: 8px; }
+.wm-result-card .rt .actions span {
+  font-size: 10px; color: var(--wm-text-soft); border: 1px solid var(--wm-border);
+  border-radius: 5px; padding: 2px 8px; letter-spacing: 0; text-transform: none;
+}
+.wm-result-card p { margin: 0 0 8px; font-size: 12.5px; color: var(--wm-text); }
+.wm-result-card .facts { display: flex; gap: 14px; flex-wrap: wrap; }
+.wm-result-card .facts span { font-family: var(--mono); font-size: 10.5px; color: var(--wm-text-soft); }
+.wm-result-card .facts b { color: var(--wm-mint); font-weight: 500; }
+
+.wm-msg { display: flex; flex-direction: column; gap: 3px; max-width: 92%; }
+.wm-msg .who { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wm-text-mute); }
+.wm-msg .body {
+  background: var(--wm-card); border: 1px solid var(--wm-border-soft); border-radius: 10px;
+  padding: 10px 13px; font-size: 12.5px; color: var(--wm-text-soft);
+}
+.wm-msg.user { align-self: flex-end; align-items: flex-end; }
+.wm-msg.user .body { background: var(--wm-card-2); color: var(--wm-text); }
+.wm-tool {
+  display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 11px;
+  color: var(--wm-text-mute); padding: 5px 13px; background: rgba(255,255,255,0.025);
+  border-radius: 8px; border: 1px dashed var(--wm-border-soft);
+}
+.wm-tool .ok { color: var(--wm-mint); }
+.wm-composer { padding: 14px 20px; border-top: 1px solid var(--wm-border-soft); background: #19191C; }
+.wm-composer .inner {
+  display: flex; align-items: center; gap: 10px; background: var(--wm-card);
+  border: 1px solid var(--wm-border); border-radius: 10px; padding: 9px 14px;
+}
+.wm-composer .inner span { flex: 1; font-size: 12.5px; color: var(--wm-text-mute); }
+.wm-composer .send {
+  width: 26px; height: 26px; border-radius: 7px; background: var(--wm-mint);
+  color: #10241A; display: grid; place-items: center; font-size: 13px; font-weight: 700;
+}
+.wm-composer.disabled .inner { opacity: 0.45; }
+.wm-composer .hint { font-family: var(--mono); font-size: 10px; color: var(--wm-amber); margin-top: 8px; }
+
+/* ── Annotations ─────────────────────── */
+.annotations { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+@media (max-width: 780px) { .annotations { grid-template-columns: 1fr; } }
+.anno-box { background: white; border: 1px solid var(--line-soft); border-radius: 12px; padding: 18px 20px; }
+.anno-box.full { grid-column: 1 / -1; }
+.anno-box .tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+  color: var(--accent); text-transform: uppercase;
+}
+.anno-box h4 { font-family: var(--serif); font-weight: 500; font-size: 16px; margin: 8px 0 10px; }
+.anno-box ul { margin: 0; padding: 0; list-style: none; }
+.anno-box li { font-size: 13.5px; color: var(--ink-soft); padding: 5px 0 5px 15px; position: relative; }
+.anno-box li::before { content: "›"; position: absolute; left: 0; color: var(--accent); }
+.anno-box li b { color: var(--ink); }
+
+/* ── State-Compare ───────────────────── */
+.state-compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 24px; }
+@media (max-width: 860px) { .state-compare { grid-template-columns: 1fr; } }
+.state-mini { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.state-mini .state-tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--accent); display: block; margin-bottom: 10px;
+}
+.state-mini h4 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin: 0 0 6px; }
+.state-mini .when { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); margin-bottom: 12px; }
+.state-mini ul { margin: 0; padding: 0; list-style: none; }
+.state-mini li { font-size: 13px; color: var(--ink-soft); padding: 5px 0 5px 16px; position: relative; border-top: 1px dashed var(--line-soft); }
+.state-mini li::before { content: "✓"; position: absolute; left: 0; color: var(--moss); font-size: 11px; }
+.state-mini li.off { color: var(--ink-mute); }
+.state-mini li.off::before { content: "—"; color: var(--ink-mute); }
+
+/* ── Sprint-List ─────────────────────── */
+.sprint-list { display: flex; flex-direction: column; gap: 14px; }
+.sprint {
+  background: white; border: 1px solid var(--line); border-radius: 14px;
+  padding: 24px 26px; display: grid; grid-template-columns: 190px 1fr; gap: 24px;
+}
+@media (max-width: 780px) { .sprint { grid-template-columns: 1fr; gap: 12px; } }
+.sprint .s-head .s-num {
+  font-family: var(--serif); font-style: italic; font-size: 30px; color: var(--accent); line-height: 1;
+}
+.sprint .s-head h3 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin: 8px 0 6px; }
+.sprint .s-head .s-goal { font-size: 12.5px; color: var(--ink-mute); font-style: italic; font-family: var(--serif); }
+.sprint .s-body .s-outcome {
+  font-size: 14px; color: var(--ink); margin: 0 0 14px; padding: 10px 14px;
+  background: var(--moss-soft); border-radius: 8px; border-left: 3px solid var(--moss);
+}
+.sprint .s-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 680px) { .sprint .s-cols { grid-template-columns: 1fr; } }
+.sprint .s-col .sc-t {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-mute); margin-bottom: 8px;
+}
+.sprint .s-col ul { margin: 0; padding: 0; list-style: none; }
+.sprint .s-col li { font-size: 13px; color: var(--ink-soft); padding: 4px 0 4px 15px; position: relative; }
+.sprint .s-col li::before { content: "›"; position: absolute; left: 0; color: var(--accent); }
+.sprint .s-col li code { font-size: 11.5px; }
+
+/* ── Compact-List (offene Fragen) ────── */
+.compact-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.compact-list .item {
+  display: flex; align-items: baseline; gap: 16px; padding: 18px 22px;
+  border-top: 1px solid var(--line-soft); background: white;
+}
+.compact-list .item:first-child { border-top: 0; }
+.compact-list .q { flex: 1; font-size: 14.5px; }
+.compact-list .q b { display: block; font-family: var(--serif); font-weight: 500; font-size: 17px; margin-bottom: 4px; }
+.compact-list .q span { color: var(--ink-soft); font-size: 13.5px; }
+.tag-pill {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 12px; border-radius: 14px; white-space: nowrap; flex-shrink: 0;
+}
+.tag-pill.decided { background: var(--moss-soft); color: var(--moss); }
+.tag-pill.open { background: var(--amber-soft); color: oklch(0.5 0.12 75); }
+.tag-pill.risk { background: var(--accent-soft); color: var(--accent-deep); }
+
+/* ── Footer ──────────────────────────── */
+footer { padding: 60px 0 80px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-mute); font-size: 15px; }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <a class="brand" href="#top">Codex-<em>Subagents</em></a>
+    <div class="links">
+      <a href="#konzept">Konzept</a>
+      <a href="#architektur">Architektur</a>
+      <a href="#cli">CLI</a>
+      <a href="#lifecycle">Lifecycle & Daten</a>
+      <a href="#ux">UX / App</a>
+      <a href="#claude">Claude-Integration</a>
+      <a href="#plan">Implementierungsplan</a>
+      <a href="#risiken">Risiken</a>
+      <a href="#fragen">Offene Fragen</a>
+    </div>
+    <span class="stamp">2026-07-04 · Rev 1</span>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="kicker">WhisperM8 · Konzept + Implementierungsplan</div>
+    <h1>Codex als <em>Subagent</em> — WhisperM8 wird der Supervisor.</h1>
+    <p class="lede">
+      Codex hat kein <code style="font-size:0.7em">--bg</code>, keinen Daemon, kein Attach. Also bauen wir die
+      Supervisor-Schicht selbst — ins <b>whisperm8-CLI</b>. Claude Code spawnt Codex-Jobs per Bash,
+      bekommt strukturierte Reports zurück, und du siehst jeden Subagent-Chat live in der App —
+      inklusive Übernahme als vollwertiger interaktiver Chat.
+    </p>
+    <div class="meta-grid">
+      <div class="cell"><div class="k">Scope</div><div class="v">CLI-Supervisor + App-Integration<small>4 Vertical Slices</small></div></div>
+      <div class="cell"><div class="k">Status</div><div class="v">Konzept-Review<small>Entscheidungen aus Chat 2026-07-04</small></div></div>
+      <div class="cell"><div class="k">Fundament</div><div class="v">codex exec --json<small>+ resume, Sandbox, Output-Schema</small></div></div>
+      <div class="cell"><div class="k">Bezug</div><div class="v">Jarvis-Supervisor-Plan<small>JarvisCodexClient = Spezialfall hiervon</small></div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════ 01 KONZEPT ═══════════════ -->
+<section id="konzept">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">01 · Konzept</div>
+      <h2>Drei Codex-Welten, <em>eine</em> Session-Substanz.</h2>
+      <p>
+        Ein Codex-Subagent ist ein headless <code>codex exec</code>-Lauf mit Auftrag, Working Directory,
+        Sandbox-Level und Lebenszyklus. Er ist <b>kein</b> Ersatz für interaktive Codex-Chats — aber weil
+        <code>codex exec</code> seine Sessions als ganz normale Rollout-JSONLs in <code>~/.codex/sessions/</code>
+        persistiert, sind alle drei Welten unten dieselbe Session-Art. Das ist der Trick, der die
+        Übernahme in einen interaktiven Chat trivial macht.
+      </p>
+    </div>
+
+    <div class="split-callout">
+      <div class="col a">
+        <div class="t">Bestand · bleibt unverändert</div>
+        <h3>Interaktive <em>Chats</em></h3>
+        <p>PTY + SwiftTerm-TUI, wie heute. Vom User gestartet und bedient.</p>
+        <ul>
+          <li>AgentCommandBuilder baut argv (new / resume)</li>
+          <li>Runtime-Watcher liest Status aus Rollout-JSONL</li>
+          <li>Approval-Modi interaktiv, wie vom User konfiguriert</li>
+        </ul>
+      </div>
+      <div class="col b">
+        <div class="t">Neu · dieses Projekt</div>
+        <h3>Subagent-<em>Jobs</em></h3>
+        <p>Headless, vom whisperm8-CLI superviselt. Gestartet von Claude Code, dir oder später Jarvis.</p>
+        <ul>
+          <li><code>codex exec --json</code>, ein Turn pro Aufruf</li>
+          <li>Folge-Turns via <code>codex exec resume</code></li>
+          <li>Report-Vertrag per <code>--output-schema</code></li>
+          <li>Zustand im Job-Verzeichnis, App beobachtet nur</li>
+        </ul>
+      </div>
+      <div class="col c">
+        <div class="t">Später · konsumiert die Jobs</div>
+        <h3>Jarvis-<em>Analysen</em></h3>
+        <p>Der JarvisCodexClient aus dem Supervisor-Plan ist ein Spezialfall: ein synchroner Read-only-Job.</p>
+        <ul>
+          <li>Nutzt dieselbe Spawn-/Parse-Maschine</li>
+          <li>Sandbox read-only, Strict-JSON-Vertrag</li>
+          <li>Slice 1 hier validiert Jarvis' Kernannahme mit</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">Use-Cases</span>
+        <h4>Wer spawnt Subagents, und wofür?</h4>
+        <ul>
+          <li><b>Claude Code delegiert</b>: Second-Opinion-Review, parallele Teilaufgabe, Cross-Model-Verifikation — per <code>whisperm8 agent run</code> aus dem laufenden Chat</li>
+          <li><b>Du direkt</b>: „Neuer Codex-Subagent in diesem Projekt" aus der App oder vom Terminal</li>
+          <li><b>Jarvis</b>: Tier-2-Analysen über dieselbe Maschine (v2 des Jarvis-Plans)</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Leitplanken · beschlossen</span>
+        <h4>Entscheidungen aus dem Beratungs-Chat</h4>
+        <ul>
+          <li><b>Worktrees sind Opt-in</b> (<code>--worktree</code>), Default ist In-place im Repo</li>
+          <li><b>Committen ja, Pushen nein</b> als Default — Push nur via explizitem <code>--allow-network</code></li>
+          <li><b>Subagent-Chats sind voll verwendbar</b>: Read-only-View + Composer, Übernahme als interaktiver Chat via <code>codex resume</code></li>
+          <li><b>Nutzungs-Parität zu nativen Claude-Subagents</b>: Prompt rein → Report raus → Parent benachrichtigt</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 02 ARCHITEKTUR ═══════════════ -->
+<section id="architektur">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">02 · Architektur & Datenfluss</div>
+      <h2>Das CLI superviselt, <em>die App beobachtet.</em></h2>
+      <p>
+        Kernentscheidung: <b>Variante B</b> — das whisperm8-Binary forkt sich selbst in einen detachten
+        Supervisor-Modus (das <code>CLIModeDetector</code>-Muster gibt das her). Kein IPC zur App nötig,
+        Subagents laufen auch ohne laufende App. Die App konsumiert das Job-Verzeichnis über FSEvents —
+        exakt die Rollenverteilung, die sie heute schon gegenüber <code>~/.claude/jobs/</code> einnimmt.
+      </p>
+    </div>
+
+    <div class="flow-layout">
+      <div class="flow-chain">
+        <div class="flow-node input">
+          <div class="nt">Auslöser</div>
+          <h4>Claude Code · User · Jarvis</h4>
+          <p><code>whisperm8 agent run --wait --json --parent $CLAUDE_SESSION_ID "Implementiere X, teste, committe bei grün"</code></p>
+        </div>
+        <div class="flow-arrow">argv → CLIModeDetector erkennt „agent" → CLI-Modus</div>
+        <div class="flow-node process">
+          <div class="nt">whisperm8 CLI · Frontend-Prozess</div>
+          <h4>agent run — Job anlegen & Supervisor forken</h4>
+          <p>Short-ID generieren, Job-Verzeichnis + <code>state.json</code> (spawning) schreiben, detachten Supervisor-Prozess starten (<code>whisperm8 agent-supervise &lt;id&gt;</code>, setsid). Bei <code>--wait</code>: auf <code>state.json</code>-Übergang warten, Report auf stdout. Sonst: Short-ID ausgeben, exit 0.</p>
+        </div>
+        <div class="flow-arrow">posix_spawn · LoginShellEnvironment · commandPath("codex")</div>
+        <div class="flow-node process">
+          <div class="nt">whisperm8 CLI · Supervisor-Prozess (detacht)</div>
+          <h4>agent-supervise — besitzt den Codex-Prozess</h4>
+          <p>Startet <code>codex exec --json --sandbox workspace-write --ask-for-approval never --cd &lt;repo&gt; --output-schema report.json -</code> (Prompt via stdin). Streamt JSONL-Events nach <code>events.jsonl</code>, parst <code>thread.started</code> → codexThreadID, schreibt State-Übergänge + PID in <code>state.json</code>, extrahiert finale Message nach <code>last-message.txt</code>.</p>
+        </div>
+        <div class="flow-arrow">JSONL-Events · turn.completed / turn.failed</div>
+        <div class="flow-node neutral">
+          <div class="nt">Kontrakt auf Disk</div>
+          <h4>Job-Verzeichnis <code style="font-size:12px">~/Library/Application Support/WhisperM8/agent-jobs/&lt;short-id&gt;/</code></h4>
+          <p><code>state.json</code> (State-Machine + Metadaten) · <code>events.jsonl</code> (roher Event-Stream, append-only) · <code>last-message.txt</code> (Report des letzten Turns). Spiegelt bewusst die <code>~/.claude/jobs/</code>-Welt von SupervisorJobReader.</p>
+        </div>
+        <div class="flow-arrow">FSEvents auf agent-jobs/ (Muster: AgentDirectoryEventMonitor)</div>
+        <div class="flow-node output">
+          <div class="nt">WhisperM8 App · reiner Beobachter</div>
+          <h4>Sidebar · Subagent-Detail-View · Übernahme</h4>
+          <p>AgentJobDirectoryMonitor entdeckt Jobs, Sidebar zeigt sie unter Parent-Session, Detail-View rendert Transcript live, Composer sendet Folge-Turns über <code>agent send</code>. „Interaktiv übernehmen" öffnet PTY-Tab via <code>codex resume &lt;thread-id&gt;</code>.</p>
+        </div>
+        <div class="flow-arrow">--wait / Background-Bash-Task endet → Harness re-invoked Claude</div>
+        <div class="flow-node output">
+          <div class="nt">Rückkanal</div>
+          <h4>Strukturierter Report an Claude Code</h4>
+          <p>Schema-validiertes JSON: <code>{status, summary, filesChanged, commits, testsRun, openQuestions}</code>. Claude wertet aus, reviewt ggf. den Branch, steuert per <code>agent send</code> nach.</p>
+        </div>
+      </div>
+
+      <aside class="flow-aside">
+        <div class="t">Querschnitt</div>
+        <h4><code style="font-size:14px">~/.codex/sessions/</code> als <em>gemeinsames Substrat</em></h4>
+        <p>
+          Jeder Subagent-Turn landet zusätzlich als reguläres Rollout-JSONL in Codex' eigenem
+          Session-Store. Dadurch greift die bestehende Maschinerie ohne Änderung:
+        </p>
+        <ul>
+          <li><b>CodexTranscriptReader</b> parst das Transcript für die Detail-View</li>
+          <li><b>AgentSessionIndexer</b> findet die Session beim Scan</li>
+          <li><b>AgentSessionRuntimeWatcher</b> kann das Rollout-File beobachten</li>
+          <li><b>codex resume &lt;id&gt;</b> öffnet sie interaktiv — der Übernahme-Pfad</li>
+        </ul>
+        <p style="margin-top:12px;">
+          <b>Konsequenz:</b> kein <code>--ephemeral</code> verwenden — die Persistenz ist Feature, nicht Nebeneffekt.
+        </p>
+      </aside>
+    </div>
+
+    <div class="annotations" style="margin-top: 32px;">
+      <div class="anno-box">
+        <span class="tag">Warum nicht Variante A / C?</span>
+        <h4>Verworfene Alternativen</h4>
+        <ul>
+          <li><b>A — App spawnt, CLI als IPC-Client:</b> es gibt heute bewusst kein IPC (CLI ist App-unabhängig), und Subagents müssen auch ohne laufende App funktionieren</li>
+          <li><b>C — launchd-Jobs:</b> robust, aber Plist-Management + Cleanup sind überdimensioniert für Jobs mit Minuten-Lebensdauer</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Bekannte Gotchas · gelten auch hier</span>
+        <h4>Aus CLAUDE.md übernommen</h4>
+        <ul>
+          <li>Spawn <b>ausschließlich</b> über <code>LoginShellEnvironment</code> + <code>AgentCommandBuilder.commandPath("codex")</code> — GUI/CLI-PATH ist minimal</li>
+          <li><code>NO_COLOR=1</code> / <code>CLICOLOR=0</code> setzen (Muster: BackgroundAgentSpawner)</li>
+          <li>Neue Subcommands in den <code>CLIModeDetector</code> eintragen (argv[1]-Erkennung), sonst startet die GUI</li>
+          <li>Store-Mutation-Closures dürfen keine Subprozesse ausführen — Job-Lookups vorher hoisten</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 03 CLI ═══════════════ -->
+<section id="cli">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">03 · CLI-Spezifikation</div>
+      <h2>Die Oberfläche, die <em>Claude Code</em> bedient.</h2>
+      <p>
+        Provider-agnostisch benannt (<code>agent</code>, nicht <code>codex</code>) — v1 kennt nur Codex,
+        aber <code>--provider claude</code> kann später an <code>claude --bg</code> durchreichen, und Claude
+        Code hätte eine einheitliche Verwaltungsschicht für beide. Jeder Befehl hat <code>--json</code>
+        für maschinenlesbare Ausgabe; Exit-Codes sind Teil des Vertrags.
+      </p>
+    </div>
+
+    <div class="cmd-table">
+      <div class="cmd-row">
+        <div class="cmd">agent run [flags] "&lt;prompt&gt;"</div>
+        <div class="desc"><b>Job starten.</b> Ohne <code>--wait</code>: gibt sofort <code>{shortId}</code> aus (async). Mit <code>--wait</code>: blockiert bis Turn-Ende, gibt vollen Report aus. Flags: <code>--cd &lt;dir&gt;</code> (Default: cwd), <code>--model</code>, <code>--effort</code>, <code>--sandbox read-only|workspace-write</code> (Default: workspace-write), <code>--worktree</code> (Opt-in: Job in frischem Git-Worktree), <code>--allow-network</code> (Opt-in: erlaubt u.a. git push), <code>--parent &lt;session-id&gt;</code> (Verknüpfung zur spawnnenden Claude-Session), <code>--json</code>.</div>
+      </div>
+      <div class="cmd-row">
+        <div class="cmd">agent send &lt;short-id&gt; [--wait] "&lt;prompt&gt;"</div>
+        <div class="desc"><b>Folge-Turn.</b> Intern <code>codex exec resume &lt;codexThreadID&gt;</code>, wieder über den Supervisor. Verweigert mit Exit 3, wenn Job <code>running</code> (Turn läuft schon) oder <code>takenOver</code> ist.</div>
+      </div>
+      <div class="cmd-row">
+        <div class="cmd">agent list [--json]</div>
+        <div class="desc"><b>Alle Jobs</b> mit shortId, State, Intent (gekürzt), cwd, Alter. Räumt dabei verwaiste Jobs auf (PID-Liveness-Check, siehe Lifecycle).</div>
+      </div>
+      <div class="cmd-row">
+        <div class="cmd">agent status &lt;short-id&gt; [--json]</div>
+        <div class="desc"><b>Zustand eines Jobs</b> — State, codexThreadID, Turn-Zähler, letzter Report (falls done). Das Polling-Primitive für Claude Code.</div>
+      </div>
+      <div class="cmd-row">
+        <div class="cmd">agent logs &lt;short-id&gt; [--tail N]</div>
+        <div class="desc"><b>Zwischenstände.</b> Menschenlesbares Rendering der letzten Events aus <code>events.jsonl</code> (Agent-Messages, Tool-Calls kompakt). Für „was macht der gerade?" mitten im Lauf.</div>
+      </div>
+      <div class="cmd-row">
+        <div class="cmd">agent stop &lt;short-id&gt;</div>
+        <div class="desc"><b>Laufenden Turn abbrechen.</b> SIGTERM an den Codex-Prozess (via Supervisor-PID), State → <code>stopped</code>. Die Codex-Session bleibt resumierbar.</div>
+      </div>
+      <div class="cmd-row">
+        <div class="cmd">agent rm &lt;short-id&gt;</div>
+        <div class="desc"><b>Job entfernen.</b> Löscht das Job-Verzeichnis (+ Worktree, falls von uns angelegt und clean — sonst Warnung + Exit 4). Die Codex-Session in <code>~/.codex/sessions/</code> bleibt unangetastet.</div>
+      </div>
+    </div>
+
+    <div class="shape-label">Ausgabe · agent run --wait --json (Exit 0 = done, 2 = failed)</div>
+    <div class="data-shape">{
+  <span class="key">"shortId"</span>: <span class="str">"a3f81c2e"</span>,
+  <span class="key">"state"</span>: <span class="str">"done"</span>,
+  <span class="key">"codexThreadID"</span>: <span class="str">"0197f3a2-8c41-7e02-b5d1-9a4e6c2f8b10"</span>,
+  <span class="key">"turns"</span>: <span class="num">1</span>,
+  <span class="key">"report"</span>: {                          <span class="comment">// schema-validiert, siehe Sektion 04</span>
+    <span class="key">"status"</span>: <span class="str">"success"</span>,
+    <span class="key">"summary"</span>: <span class="str">"OutputModeStore-Migration implementiert, 14 Tests grün, committed."</span>,
+    <span class="key">"filesChanged"</span>: [<span class="str">"WhisperM8/Services/Dictation/OutputModeStore.swift"</span>],
+    <span class="key">"commits"</span>: [{ <span class="key">"sha"</span>: <span class="str">"9c2e1af"</span>, <span class="key">"message"</span>: <span class="str">"feat(modes): Migration v2→v3"</span> }],
+    <span class="key">"testsRun"</span>: { <span class="key">"command"</span>: <span class="str">"swift test --filter OutputMode"</span>, <span class="key">"passed"</span>: <span class="flag">true</span> },
+    <span class="key">"openQuestions"</span>: []
+  },
+  <span class="key">"worktree"</span>: <span class="flag">null</span>                       <span class="comment">// oder { path, branch } bei --worktree</span>
+}</div>
+
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">Exit-Codes · Teil des Vertrags</span>
+        <h4>Damit Claude ohne Text-Parsing entscheiden kann</h4>
+        <ul>
+          <li><b>0</b> — ok / Job done</li>
+          <li><b>1</b> — Usage-Fehler (unbekanntes Flag, fehlende ID)</li>
+          <li><b>2</b> — Job failed (turn.failed, Codex-Fehler, Report sagt failure)</li>
+          <li><b>3</b> — Zustandskonflikt (send auf running/takenOver)</li>
+          <li><b>4</b> — Umgebungsproblem (codex-Binary fehlt, Worktree dirty, …)</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Sicherheits-Defaults</span>
+        <h4>Headless heißt: keine Approval-Hänger</h4>
+        <ul>
+          <li><b><code>--ask-for-approval never</code></b> immer — ein Subagent, der auf Approval wartet, ist headless wertlos</li>
+          <li><b><code>--sandbox workspace-write</code></b> Default — arbeiten + committen ja, Netzwerk nein</li>
+          <li><b>git push</b> scheitert an der Sandbox — genau richtig; <code>--allow-network</code> setzt die Codex-Config-Option explizit</li>
+          <li><b>read-only</b> für reine Analyse-/Review-Jobs (und Jarvis)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 04 LIFECYCLE & DATEN ═══════════════ -->
+<section id="lifecycle">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">04 · Job-Lifecycle & Datenmodell</div>
+      <h2>Eine kleine State-Machine, <em>ehrlich auf Disk.</em></h2>
+      <p>
+        <code>state.json</code> ist die einzige Quelle der Wahrheit über einen Job. Jeder Übergang wird
+        atomar geschrieben (temp + rename). Weil der Supervisor ein normaler Prozess ist, der sterben
+        kann (Neustart, Crash), enthält der State die PID — und jeder Leser validiert Liveness, bevor
+        er <code>running</code> glaubt.
+      </p>
+    </div>
+
+    <div class="states-grid">
+      <div class="row"><div class="state-name">spawning</div><div class="state-desc">Frontend hat das Job-Verzeichnis angelegt, Supervisor startet gerade. Kurzlebig; hängt der State hier &gt;30s ohne lebende PID → als <code>failed</code> behandeln.</div></div>
+      <div class="row"><div class="state-name">running</div><div class="state-desc">Codex-Turn läuft. <b>Nur gültig, wenn die Supervisor-PID lebt</b> (kill -0). Tote PID + running = <code>orphaned</code> → Leser korrigiert auf <code>failed</code> mit Grund „supervisor died".</div></div>
+      <div class="row"><div class="state-name">done</div><div class="state-desc">Turn regulär beendet (<code>turn.completed</code>), Report in <code>last-message.txt</code> validiert. Job ist per <code>agent send</code> fortsetzbar → geht dann wieder auf <code>running</code>.</div></div>
+      <div class="row"><div class="state-name">failed</div><div class="state-desc"><code>turn.failed</code>, Schema-Validierung des Reports fehlgeschlagen, oder Supervisor-Tod. <code>failureReason</code> im State. Auch failed-Jobs sind resumierbar (send startet neuen Turn auf der Session).</div></div>
+      <div class="row"><div class="state-name">stopped</div><div class="state-desc">Per <code>agent stop</code> oder App-UI abgebrochen. Codex-Session bleibt intakt und resumierbar.</div></div>
+      <div class="row"><div class="state-name">takenOver</div><div class="state-desc">Du hast den Job als interaktiven Chat übernommen (PTY via <code>codex resume</code>). Der Supervisor zieht sich <b>dauerhaft</b> zurück: <code>send</code> verweigert (Exit 3), Composer in der App deaktiviert. Exklusivität verhindert verschränkte Historien. Rückweg („wieder headless") ist bewusst v2.</div></div>
+    </div>
+
+    <div class="shape-label">state.json · Kontrakt zwischen CLI-Supervisor und App</div>
+    <div class="data-shape">{
+  <span class="key">"version"</span>: <span class="num">1</span>,
+  <span class="key">"shortId"</span>: <span class="str">"a3f81c2e"</span>,
+  <span class="key">"provider"</span>: <span class="str">"codex"</span>,
+  <span class="key">"state"</span>: <span class="str">"running"</span>,
+  <span class="key">"intent"</span>: <span class="str">"Implementiere X, teste, committe bei grün"</span>,
+  <span class="key">"cwd"</span>: <span class="str">"/Users/giulianocosta/repos/whisperm8"</span>,
+  <span class="key">"codexThreadID"</span>: <span class="str">"0197f3a2-…"</span>,        <span class="comment">// aus thread.started; null bis Turn 1 startet</span>
+  <span class="key">"parentSessionID"</span>: <span class="str">"c71d…"</span>,             <span class="comment">// Claude-Session, die gespawnt hat (optional)</span>
+  <span class="key">"supervisorPid"</span>: <span class="num">48213</span>,                  <span class="comment">// Liveness-Anker</span>
+  <span class="key">"turns"</span>: <span class="num">1</span>,
+  <span class="key">"sandbox"</span>: <span class="str">"workspace-write"</span>,
+  <span class="key">"worktree"</span>: <span class="flag">null</span>,                       <span class="comment">// oder { "path": "…", "branch": "subagent/a3f81c2e" }</span>
+  <span class="key">"failureReason"</span>: <span class="flag">null</span>,
+  <span class="key">"createdAt"</span>: <span class="str">"2026-07-04T14:02:11Z"</span>,
+  <span class="key">"updatedAt"</span>: <span class="str">"2026-07-04T14:06:48Z"</span>
+}</div>
+
+    <div class="shape-label">Report-Schema · via codex exec --output-schema erzwungen</div>
+    <div class="data-shape"><span class="comment">// Der Subagent MUSS seinen letzten Turn mit diesem JSON beenden — Codex validiert selbst.</span>
+{
+  <span class="key">"status"</span>: <span class="str">"success | partial | failure"</span>,
+  <span class="key">"summary"</span>: <span class="str">"string — 2-5 Sätze, was getan wurde und was offen ist"</span>,
+  <span class="key">"filesChanged"</span>: [<span class="str">"string"</span>],
+  <span class="key">"commits"</span>: [{ <span class="key">"sha"</span>: <span class="str">"string"</span>, <span class="key">"message"</span>: <span class="str">"string"</span> }],
+  <span class="key">"testsRun"</span>: { <span class="key">"command"</span>: <span class="str">"string"</span>, <span class="key">"passed"</span>: <span class="flag">boolean</span> } <span class="comment">// oder null</span>,
+  <span class="key">"openQuestions"</span>: [<span class="str">"string"</span>]
+}</div>
+
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">Konvention</span>
+        <h4>Warum ein eigenes Verzeichnis, nicht ~/.claude/jobs?</h4>
+        <ul>
+          <li><code>~/.claude/</code> und <code>~/.codex/</code> gelten im Projekt als <b>extern und read-only</b> — das bleibt so</li>
+          <li>Unser Job-Verzeichnis lebt im eigenen App-Support-Ordner neben <code>AgentSessions.json</code></li>
+          <li>Struktur spiegelt bewusst <code>SupervisorJobReader</code>s Welt — ein neuer <code>AgentJobReader</code> ist fast 1:1 danach modellierbar</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Turn-Semantik</span>
+        <h4>Ein Turn = ein codex-exec-Prozess</h4>
+        <ul>
+          <li>Zwischen Turns läuft <b>kein</b> Prozess — der Job ist „idle auf Disk", nur State + Session existieren</li>
+          <li><code>agent send</code> startet einen frischen Supervisor für den Resume-Turn</li>
+          <li>Das macht Jobs robust gegen Neustarts: nichts Langlebiges muss überleben</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 05 UX ═══════════════ -->
+<section id="ux">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">05 · UX in der App</div>
+      <h2>Subagents als <em>Kinder</em> ihrer Session — voll inspizierbar.</h2>
+      <p>
+        Kein PTY heißt: keine Terminal-Tab-Ansicht. Stattdessen eine Read-only-Transcript-View mit
+        Composer — fühlt sich an wie ein Chat, obwohl jeder Turn unter der Haube ein
+        <code>codex exec resume</code> ist. Und wenn du wirklich reinwillst: ein Klick macht daraus
+        einen normalen interaktiven Codex-Chat.
+      </p>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label">
+        <span class="l">Mockup A</span>
+        <h3>Sidebar + <em>Subagent-Detail-View</em></h3>
+        <span class="path-pill">Agent Chats · Job done, ungelesen</span>
+      </div>
+      <p class="notes">
+        Subagents hängen eingerückt unter der Claude-Session, die sie gespawnt hat (parentSessionID).
+        Die Eltern-Row trägt einen Zähler-Chip, solange Kinder laufen. Die Detail-View führt mit der
+        Ergebnis-Karte — das ist der Statusbericht, nicht das Transcript.
+      </p>
+      <div class="app-frame">
+        <div class="app-chrome">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <div class="win-title">WhisperM8 — Agent Chats</div>
+        </div>
+        <div class="app-shell">
+          <aside class="wm-sidebar">
+            <div class="wm-side-title">whisperm8</div>
+            <div class="wm-row"><span class="dot working"></span><span class="glyph">✳</span><span class="name">Overlay-Redesign Kern</span><span class="chip">2 ⚙</span></div>
+            <div class="wm-row sub sel"><span class="dot done"></span><span class="glyph">◇</span><span class="name">Review OutputModeStore</span><span class="wm-badge">Sub</span></div>
+            <div class="wm-row sub"><span class="dot working"></span><span class="glyph">◇</span><span class="name">Migration v2→v3 Tests</span><span class="wm-badge">Sub</span></div>
+            <div class="wm-row"><span class="dot idle"></span><span class="glyph">✳</span><span class="name">Hook-Bridge Refactor</span></div>
+            <div class="wm-row"><span class="dot awaiting"></span><span class="glyph">◇</span><span class="name">Codex: Waveform-Shader</span></div>
+            <div class="wm-side-title" style="margin-top:12px;">rankm8</div>
+            <div class="wm-row"><span class="dot idle"></span><span class="glyph">✳</span><span class="name">SEO-Audit Pipeline</span></div>
+            <div class="wm-row sub"><span class="dot failed"></span><span class="glyph">◇</span><span class="name">Keyword-Cluster-Job</span><span class="wm-badge">Sub</span></div>
+          </aside>
+          <main class="wm-main">
+            <div class="wm-detail-head">
+              <h4>Review OutputModeStore<small>a3f81c2e · codex · gespawnt von „Overlay-Redesign Kern" · Turn 1</small></h4>
+              <span class="wm-pill done">DONE · UNGELESEN</span>
+              <span class="wm-btn">Logs</span>
+              <span class="wm-btn primary">Interaktiv übernehmen</span>
+            </div>
+            <div class="wm-stream">
+              <div class="wm-result-card">
+                <div class="rt">Ergebnis · Report<span class="actions"><span>Kopieren</span><span>→ In Claude-Chat einfügen</span></span></div>
+                <p>Migration implementiert, 14 Tests grün, committed. Ein Randfall (leere Legacy-Modes) ist als offene Frage markiert.</p>
+                <div class="facts">
+                  <span>status <b>success</b></span>
+                  <span>commits <b>1</b> · 9c2e1af</span>
+                  <span>tests <b>passed</b></span>
+                  <span>files <b>3</b></span>
+                </div>
+              </div>
+              <div class="wm-msg user">
+                <span class="who">Prompt · Turn 1</span>
+                <div class="body">Implementiere die OutputModeStore-Migration v2→v3, führe die gefilterten Tests aus, committe bei grün mit Conventional-Commit-Message.</div>
+              </div>
+              <div class="wm-tool"><span class="ok">✓</span> shell · swift test --filter OutputModeStoreTests <span style="margin-left:auto;">14 passed · 6.2s</span></div>
+              <div class="wm-tool"><span class="ok">✓</span> apply_patch · OutputModeStore.swift <span style="margin-left:auto;">+82 −14</span></div>
+              <div class="wm-tool"><span class="ok">✓</span> shell · git commit -m "feat(modes): Migration v2→v3" <span style="margin-left:auto;">9c2e1af</span></div>
+              <div class="wm-msg">
+                <span class="who">Codex · final</span>
+                <div class="body">Migration abgeschlossen. Legacy-Modes ohne Template werden auf den Default gemappt — bitte prüfen, ob das gewünscht ist (siehe openQuestions im Report).</div>
+              </div>
+            </div>
+            <div class="wm-composer">
+              <div class="inner"><span>Folge-Turn senden — startet codex exec resume …</span><span class="send">→</span></div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="annotations">
+        <div class="anno-box">
+          <span class="tag">States · Sidebar-Row</span>
+          <h4>Schlankeres Zustandsmodell als Chats</h4>
+          <ul>
+            <li><b>Mint pulsierend</b> = running (Turn läuft)</li>
+            <li><b>Blau</b> = done mit ungelesenem Report — derselbe „schau mich an"-Moment wie bei fertigen Chats; füttert später Jarvis' Attention-Sorting</li>
+            <li><b>Rot</b> = failed, <b>grau</b> = stopped/gelesen</li>
+            <li><b>Kein awaitingInput</b> — approval never macht den Zustand unmöglich; taucht er doch auf, ist es ein Bug</li>
+          </ul>
+        </div>
+        <div class="anno-box">
+          <span class="tag">Interactions</span>
+          <h4>Alles über bestehende Muster</h4>
+          <ul>
+            <li><b>Composer → agent send</b>: UI ruft dieselbe CLI-Logik auf (geteilter Code, kein Shell-out aus der App nötig)</li>
+            <li><b>„→ In Claude-Chat einfügen"</b>: Report als Prompt in die Parent-Session routen — die Diktier-Pipeline hat die Maschinerie (Prompt-Routing in aktive Chats) bereits</li>
+            <li><b>Kontextmenü</b>: Logs, Stop, Übernehmen, Entfernen — analog Background-Agent-Menü</li>
+            <li><b>Zähler-Chip an Parent-Row</b> („2 ⚙"): Klick expandiert die Kinder</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label">
+        <span class="l">Mockup B</span>
+        <h3>Der <em>Übernahme</em>-Moment</h3>
+        <span class="path-pill">running → takenOver → normaler Chat</span>
+      </div>
+      <p class="notes">
+        Exklusivität ist die eine harte Regel: nie gleichzeitig Supervisor-Resume und interaktives TUI
+        auf derselben Session. Die Übernahme ist deshalb ein expliziter, dauerhafter Zustandswechsel.
+      </p>
+      <div class="state-compare">
+        <div class="state-mini">
+          <span class="state-tag">State 1 · Headless</span>
+          <h4>Subagent-View</h4>
+          <div class="when">state: <code>done</code></div>
+          <ul>
+            <li>Transcript live aus events.jsonl / Rollout-JSONL</li>
+            <li>Composer aktiv → agent send</li>
+            <li>Button „Interaktiv übernehmen" sichtbar</li>
+            <li class="off">Kein PTY, kein TUI</li>
+          </ul>
+        </div>
+        <div class="state-mini">
+          <span class="state-tag">State 2 · Übergabe</span>
+          <h4>Klick auf „Übernehmen"</h4>
+          <div class="when">state: <code>done → takenOver</code></div>
+          <ul>
+            <li>state.json wird auf takenOver gesetzt (App schreibt, CLI respektiert)</li>
+            <li>Composer deaktiviert + Hinweis „Als interaktiver Chat übernommen"</li>
+            <li>PTY-Tab öffnet mit <code>codex resume &lt;thread-id&gt;</code> — AgentCommandBuilder.codexCommand() baut das heute schon</li>
+            <li class="off">agent send verweigert ab jetzt (Exit 3)</li>
+          </ul>
+        </div>
+        <div class="state-mini">
+          <span class="state-tag">State 3 · Interaktiv</span>
+          <h4>Normaler Codex-Chat</h4>
+          <div class="when">reguläre Session in der Sidebar</div>
+          <ul>
+            <li>Volle Historie des Subagent-Laufs im TUI</li>
+            <li>Tabs, Pinning, Auto-Naming, Status-Tracking — alles wie gewohnt</li>
+            <li>Interaktive Approval-Einstellungen gelten wieder (gewünscht: du bist ja jetzt dran)</li>
+            <li class="off">Rückweg „wieder headless" = bewusst v2</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 06 CLAUDE-INTEGRATION ═══════════════ -->
+<section id="claude">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">06 · Claude-Code-Integration</div>
+      <h2>Nutzungs-Parität zu <em>nativen Subagents</em> — und zwei Extras.</h2>
+      <p>
+        Ein nativer Subagent ist aus Nutzungssicht: Prompt rein → isolierte Arbeit → Report zurück →
+        Parent benachrichtigt. Genau das liefert die CLI-Schicht — die Benachrichtigung erledigt Claude
+        Codes eigenes Harness, wenn der Aufruf als Background-Bash-Task läuft. Extra 1: laufende Jobs
+        sind per <code>send</code> nachsteuerbar. Extra 2: du siehst jeden Subagent-Chat vollständig in der App.
+      </p>
+    </div>
+
+    <div class="shape-label">Nutzungsmuster aus Claude Codes Sicht</div>
+    <div class="data-shape"><span class="comment"># Kurz (&lt; ~2 Min erwartete Laufzeit): synchron</span>
+whisperm8 agent run --wait --json --parent <span class="flag">$CLAUDE_SESSION_ID</span> \
+  <span class="str">"Reviewe den Diff auf main gegen HEAD~3 auf Regressionen. Nur Analyse."</span> \
+  --sandbox read-only
+
+<span class="comment"># Lang: als Background-Task starten — das Harness meldet sich, wenn der Prozess endet.</span>
+<span class="comment"># (Claude nutzt run_in_background; kein Polling-Loop nötig.)</span>
+whisperm8 agent run --wait --json --worktree --parent <span class="flag">$CLAUDE_SESSION_ID</span> \
+  <span class="str">"Implementiere X, führe die Tests aus, committe bei grün."</span>
+
+<span class="comment"># Zwischenstand prüfen / nachsteuern, während der Turn läuft bzw. danach</span>
+whisperm8 agent logs a3f81c2e --tail 20
+whisperm8 agent send a3f81c2e --wait --json <span class="str">"Klärung: mappe Legacy-Modes NICHT auf den Default, wirf stattdessen."</span></div>
+
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">Skill-Definition</span>
+        <h4>Damit Claude das Werkzeug richtig benutzt</h4>
+        <ul>
+          <li>Skill oder Custom-Agent im Repo (<code>.claude/skills/codex-subagent/</code> o.ä.) beschreibt die Befehle, Exit-Codes und das Report-Schema</li>
+          <li>Regeln darin: <b>--parent immer setzen</b>; ab erwarteter Laufzeit &gt;2 Min Background-Weg statt synchronem --wait; bei schreibenden Aufgaben, während Claude selbst editiert, <b>--worktree empfehlen</b> (bleibt aber Opt-in)</li>
+          <li>Bei langlaufenden Jobs: nicht blind warten — <code>logs --tail</code> prüfen, ggf. <code>send</code></li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Ehrliche Lücken vs. native Subagents</span>
+        <h4>Bewusst akzeptiert bzw. adressiert</h4>
+        <ul>
+          <li><b>Getrennte Regel-Universen:</b> Codex liest AGENTS.md + ~/.codex/config.toml, nicht CLAUDE.md. Gegenmittel: CLI injiziert Konventions-Präambel in den Prompt (aus CLAUDE.md generiert) und/oder AGENTS.md im Repo pflegen — sonst weichen Codex-Commits stilistisch ab (z.B. deutsche Kommentare)</li>
+          <li><b>Kein Streaming in Claudes Kontext:</b> Zwischenstände nur via logs — für Task-Delegation unerheblich, Endbericht zählt</li>
+          <li><b>MCP-Bridge</b> (Jobs als echte Tools): sauberere Evolution, aber v2 — Bash + JSON-CLI funktioniert sofort und ist trivial zu debuggen</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 07 IMPLEMENTIERUNGSPLAN ═══════════════ -->
+<section id="plan">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">07 · Implementierungsplan</div>
+      <h2>Vier Slices, <em>jede liefert</em> eigenständigen Wert.</h2>
+      <p>
+        Im Geist des Jarvis-Plans: kein Infrastruktur-Pyramidenbau. Slice 1 beweist die riskanteste
+        Annahme (Event-Format + Thread-ID-Extraktion) nach Tagen, nicht Wochen. Test-Konvention wie
+        im Repo: DI via Closures + ProcessRunner-Spies, Fixture-JSONLs, kein DI-Framework.
+      </p>
+    </div>
+
+    <div class="sprint-list">
+      <div class="sprint">
+        <div class="s-head">
+          <div class="s-num">S1</div>
+          <h3>Synchroner Run</h3>
+          <div class="s-goal">Claude kann Codex ab sofort als synchronen Subagent nutzen</div>
+        </div>
+        <div class="s-body">
+          <p class="s-outcome"><b>Outcome:</b> <code>whisperm8 agent run --wait --json</code> funktioniert end-to-end — ohne Detach, ohne Job-Verzeichnis. Validiert nebenbei Jarvis' Kernannahme (Codex-headless-Qualität).</p>
+          <div class="s-cols">
+            <div class="s-col">
+              <div class="sc-t">Neue Dateien / Typen</div>
+              <ul>
+                <li><code>CLI/AgentCLICommand.swift</code> — Subcommand-Parsing (run + Flags), Erweiterung von <code>CLIArguments</code></li>
+                <li><code>Services/AgentChats/CodexExecEventParser.swift</code> — JSONL-Events (thread.started, item.*, turn.completed/failed) → typisierte Enums</li>
+                <li><code>Services/AgentChats/CodexExecRunner.swift</code> — Prozess-Start (stdin-Prompt, --json, --output-schema, Sandbox-Flags), Event-Stream-Konsum</li>
+                <li><code>Resources/codex-report-schema.json</code> — Report-Vertrag (Achtung: Package.swift UND Makefile-_bundle-cp!)</li>
+                <li><code>CLIModeDetector</code>: „agent" als CLI-Keyword</li>
+              </ul>
+            </div>
+            <div class="s-col">
+              <div class="sc-t">Tests & Risiko-Abbau</div>
+              <ul>
+                <li><code>CodexExecEventParserTests</code> mit Fixture-JSONL aus echtem Lauf — <b>das</b> Risiko-Ticket: Format-Stabilität + Thread-ID</li>
+                <li><code>AgentCLIArgumentsTests</code> — Flag-Matrix, Exit-Codes</li>
+                <li><code>CodexExecRunnerTests</code> mit ProcessRunner-Spy (Muster: BackgroundAgentSpawner-Tests)</li>
+                <li>Manuell: Report-Schema-Erzwingung gegen echtes codex prüfen</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sprint">
+        <div class="s-head">
+          <div class="s-num">S2</div>
+          <h3>Detach + Job-Verwaltung</h3>
+          <div class="s-goal">Jobs überleben den Aufrufer, volle Verwaltung per CLI</div>
+        </div>
+        <div class="s-body">
+          <p class="s-outcome"><b>Outcome:</b> Async-Spawn mit detachtem Supervisor; <code>list / status / logs / stop / rm / send</code> komplett. Das Job-Verzeichnis ist der stabile Kontrakt für Slice 3.</p>
+          <div class="s-cols">
+            <div class="s-col">
+              <div class="sc-t">Neue Dateien / Typen</div>
+              <ul>
+                <li><code>Services/AgentChats/AgentJobState.swift</code> — State-Machine + Codable state.json (atomar via temp+rename)</li>
+                <li><code>Services/AgentChats/AgentJobStore.swift</code> — Verzeichnis-Layout, Liveness-Check (kill -0), Orphan-Korrektur</li>
+                <li><code>CLI/AgentSuperviseCommand.swift</code> — interner Modus <code>agent-supervise &lt;id&gt;</code>: besitzt codex exec, schreibt Events + State-Übergänge</li>
+                <li>Detach-Mechanik im Frontend: posix_spawn + setsid, stdout/stderr → Job-Verzeichnis</li>
+                <li><code>send</code> = Resume-Turn über frischen Supervisor</li>
+              </ul>
+            </div>
+            <div class="s-col">
+              <div class="sc-t">Tests & Risiko-Abbau</div>
+              <ul>
+                <li><code>AgentJobStoreTests</code> — State-Übergänge, Orphan-Erkennung (tote PID), atomares Schreiben</li>
+                <li><code>AgentJobLifecycleTests</code> — send-Verweigerung bei running/takenOver (Exit 3)</li>
+                <li>Manuell: Mac-Neustart mitten im Job → Leser korrigiert running→failed sauber</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sprint">
+        <div class="s-head">
+          <div class="s-num">S3</div>
+          <h3>App-Integration</h3>
+          <div class="s-goal">Subagents sichtbar, lesbar, steuerbar, übernehmbar</div>
+        </div>
+        <div class="s-body">
+          <p class="s-outcome"><b>Outcome:</b> Sidebar zeigt Jobs unter ihrer Parent-Session, Detail-View mit Ergebnis-Karte + Live-Transcript + Composer, „Interaktiv übernehmen" öffnet PTY-Tab.</p>
+          <div class="s-cols">
+            <div class="s-col">
+              <div class="sc-t">Neue Dateien / Typen</div>
+              <ul>
+                <li><code>Services/AgentChats/AgentJobDirectoryMonitor.swift</code> — FSEvents auf agent-jobs/ (Muster: AgentDirectoryEventMonitor)</li>
+                <li>Workspace-Anbindung: Jobs als Session-Einträge mit <code>kind: .subagentJob</code> (Mutation-Closures ohne Subprozesse!)</li>
+                <li><code>Views/SubagentDetailView.swift</code> — Ergebnis-Karte, Transcript (via CodexTranscriptReader aufs Rollout-JSONL), Composer</li>
+                <li>Sidebar: Einrückung unter Parent, Zähler-Chip, Status-Dots über bestehenden <code>statusPublisher(for:)</code>-Pfad</li>
+                <li>Übernahme: state→takenOver schreiben + Tab mit <code>codexCommand()</code>-Resume öffnen</li>
+              </ul>
+            </div>
+            <div class="s-col">
+              <div class="sc-t">Tests & Risiko-Abbau</div>
+              <ul>
+                <li>Pure Logik testen: Job→Session-Projektion, Attention-Zustand (done+ungelesen), Übernahme-Zustandswechsel</li>
+                <li>Drag/Menü-Interaktionen: manuelle QA (wie bei Tabs dokumentiert)</li>
+                <li>Perf: Signpost-Budget für Job-Scan analog perf.sidebar</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sprint">
+        <div class="s-head">
+          <div class="s-num">S4</div>
+          <h3>Delegations-Politur</h3>
+          <div class="s-goal">Der native-Subagent-Feel wird komplett</div>
+        </div>
+        <div class="s-body">
+          <p class="s-outcome"><b>Outcome:</b> Parent-Verknüpfung end-to-end, Worktree-Flag, Konventions-Präambel, Skill für Claude Code, Notifications, „Report → in Claude-Chat einfügen".</p>
+          <div class="s-cols">
+            <div class="s-col">
+              <div class="sc-t">Inhalte</div>
+              <ul>
+                <li><code>--worktree</code>: Worktree anlegen (Branch <code>subagent/&lt;id&gt;</code>), rm räumt clean Worktrees ab</li>
+                <li><code>--parent</code> ↔ Sidebar-Hierarchie + Report-Routing in die Parent-Session (Diktier-Prompt-Routing wiederverwenden)</li>
+                <li>Konventions-Präambel aus CLAUDE.md in den Prompt injizieren</li>
+                <li>Skill-Doku <code>.claude/skills/codex-subagent/</code> mit Regeln (parent, worktree-Empfehlung, Background-Weg)</li>
+                <li>Notification bei done/failed (dezent, wie Chat-Fertigmeldung)</li>
+              </ul>
+            </div>
+            <div class="s-col">
+              <div class="sc-t">Danach / v2-Kandidaten</div>
+              <ul>
+                <li>MCP-Bridge (Jobs als Tools statt Bash)</li>
+                <li>Rückweg takenOver → headless</li>
+                <li><code>--provider claude</code> als Durchreiche an claude --bg</li>
+                <li>Jarvis-Andocken (Reports über fertige Subagents in die Inbox)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 08 RISIKEN ═══════════════ -->
+<section id="risiken">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">08 · Risiken & Edge-Cases</div>
+      <h2>Was schiefgehen kann — <em>und was wir dagegen tun.</em></h2>
+    </div>
+
+    <div class="states-grid">
+      <div class="row"><div class="state-name">Event-Format-Drift</div><div class="state-desc"><b>Größtes Risiko.</b> <code>codex exec --json</code>-Events + Thread-ID-Extraktion sind das Fundament der Resume-Mechanik. Abbau: Slice 1 zuerst, Fixture-Tests aus echten Läufen, Parser tolerant (unbekannte Event-Typen überspringen, nie crashen), Codex-Versionscheck beim Spawn loggen.</div></div>
+      <div class="row"><div class="state-name">Supervisor stirbt</div><div class="state-desc">Neustart/Crash → state.json sagt running, niemand lebt. Abbau: supervisorPid + Liveness-Check in <b>jedem</b> Leser (CLI list/status UND App-Monitor), Korrektur auf failed mit Grund. Muster existiert: healthCheck in BackgroundAgentLifecycle.</div></div>
+      <div class="row"><div class="state-name">Parallel-Edits im selben Tree</div><div class="state-desc">Claude und Subagent editieren gleichzeitig in-place → Konflikte, vermischte Commits. Abbau: Worktree bleibt Opt-in (beschlossen), aber die Skill-Anleitung empfiehlt es für schreibende Jobs, während Claude selbst editiert. Rest ist bewusstes Restrisiko — wie bei nativen Subagents auch.</div></div>
+      <div class="row"><div class="state-name">Report-Schema verletzt</div><div class="state-desc">Codex validiert via --output-schema selbst; falls doch Müll ankommt (Fence-Wrapping etc.): Fence-toleranter Parser (wie im Jarvis-Plan vorgesehen), sonst state=failed mit rohem Text in last-message.txt — nie stillschweigend verwerfen.</div></div>
+      <div class="row"><div class="state-name">Doppelte Sichtbarkeit</div><div class="state-desc">Der Session-Scan (AgentScanCoordinator) findet die Codex-Session des Jobs auch in ~/.codex/sessions/ → Gefahr: gleiche Session zweimal in der Sidebar. Abbau: Indexer dedupliziert gegen codexThreadIDs aktiver Jobs; erst nach rm erscheint sie ggf. als normale externe Session.</div></div>
+      <div class="row"><div class="state-name">send-Kollisionen</div><div class="state-desc">Zwei send-Aufrufe (oder App-Composer + CLI) gleichzeitig → zwei Resume-Turns auf einer Session. Abbau: state=running als Lock (Exit 3), Übergang spawning→running atomar; der Composer disabled sich auf running.</div></div>
+      <div class="row"><div class="state-name">Bash-Timeout bei --wait</div><div class="state-desc">Claude Codes Bash-Tool killt lange synchrone Aufrufe (Default ~2 Min). Abbau: Skill-Regel — ab erwarteter Laufzeit &gt;2 Min als Background-Task starten; das Harness benachrichtigt bei Prozessende von selbst.</div></div>
+      <div class="row"><div class="state-name">Sandbox überrascht</div><div class="state-desc">git push, npm install etc. scheitern still an der Netzwerk-Sandbox → verwirrender Report. Abbau: Prompt-Präambel weist Codex an, Sandbox-Blocker explizit als openQuestion zu melden; --allow-network dokumentiert.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 09 OFFENE FRAGEN ═══════════════ -->
+<section id="fragen">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="idx">09 · Offene Fragen</div>
+      <h2>Vor Slice 1 zu klären — <em>oder bewusst zu vertagen.</em></h2>
+    </div>
+
+    <div class="compact-list">
+      <div class="item">
+        <div class="q"><b>Worktree-Default</b><span>Beschlossen: Opt-in via --worktree, Default in-place. Skill-Anleitung empfiehlt Worktree bei schreibenden Jobs parallel zu Claude.</span></div>
+        <span class="tag-pill decided">Entschieden</span>
+      </div>
+      <div class="item">
+        <div class="q"><b>Übernahme & Rückweg</b><span>Beschlossen: takenOver ist dauerhaft und exklusiv; „wieder headless" ist v2.</span></div>
+        <span class="tag-pill decided">Entschieden</span>
+      </div>
+      <div class="item">
+        <div class="q"><b>Namensraum des Subcommands</b><span>Vorschlag: whisperm8 agent … (provider-agnostisch). Alternative: whisperm8 codex …. Betrifft Skill-Doku + zukünftige claude-Durchreiche.</span></div>
+        <span class="tag-pill open">Offen</span>
+      </div>
+      <div class="item">
+        <div class="q"><b>Report-Schema-Umfang</b><span>Reichen status/summary/filesChanged/commits/testsRun/openQuestions — oder brauchen wir z.B. diffStat, Dauer, Kosten-Metadaten fürs Board?</span></div>
+        <span class="tag-pill open">Offen</span>
+      </div>
+      <div class="item">
+        <div class="q"><b>Konventions-Präambel</b><span>Aus CLAUDE.md generieren (welcher Ausschnitt?), eigene Datei (AGENTS-PREAMBLE.md?), oder auf AGENTS.md im Repo setzen? Betrifft Commit-Stil (deutsche Kommentare!).</span></div>
+        <span class="tag-pill open">Offen</span>
+      </div>
+      <div class="item">
+        <div class="q"><b>Subagents in AgentSessions.json?</b><span>Jobs als vollwertige Workspace-Sessions (kind .subagentJob) vs. eigener ephemerer Store neben dem Workspace. Vorschlag: Workspace-Eintrag, weil Tabs/Pinning/Bulk-Actions dann gratis sind — aber Persistenz-Diff-Gating beachten.</span></div>
+        <span class="tag-pill open">Offen</span>
+      </div>
+      <div class="item">
+        <div class="q"><b>codex exec Format-Pinning</b><span>Sollen wir eine minimale Codex-Version erzwingen (Versionscheck beim Spawn) und bei Major-Sprüngen warnen, statt still zu degradieren?</span></div>
+        <span class="tag-pill risk">Risiko-Frage</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="sig">Codex-Subagents · WhisperM8 · Konzept-Rev 1, 2026-07-04 — eine Datei, wie gewünscht. Entscheidungen aus dem Beratungs-Chat sind als „Entschieden" markiert; der Rest wartet auf dein Review.</p>
+  </div>
+</footer>
+
+<script>
+const links = document.querySelectorAll('nav.top .links a');
+const sections = [...links].map(a => document.querySelector(a.getAttribute('href')));
+const spy = () => {
+  let current = 0;
+  sections.forEach((s, i) => { if (s && s.getBoundingClientRect().top < 120) current = i; });
+  links.forEach((a, i) => a.classList.toggle('active', i === current));
+};
+document.addEventListener('scroll', spy, { passive: true });
+spy();
+</script>
+</body>
+</html>
