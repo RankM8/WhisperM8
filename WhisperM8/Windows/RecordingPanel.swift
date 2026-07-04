@@ -200,6 +200,8 @@ class OverlayController: ObservableObject {
     private var onCancel: (() -> Void)?
     private var onCancelTranscription: (() -> Void)?
     private var onCancelPostProcessing: (() -> Void)?
+    /// ✓-Button: Aufnahme beenden & transkribieren — derselbe Pfad wie der Hotkey-Stop.
+    private var onStopAndTranscribe: (() -> Void)?
     private var onOutputModeChange: ((OutputMode) -> Void)?
     private var onAddScreenshot: (() -> Void)?
     private var onCaptureScreenshot: (() -> Void)?
@@ -215,6 +217,7 @@ class OverlayController: ObservableObject {
     @Published var selectedOutputMode: OutputMode = OutputMode.defaultMode()
     @Published var outputModes: [OutputMode] = OutputMode.availableBuiltInModes()
     @Published var showModePickerInMiniOverlay: Bool = true
+    @Published var showConfirmButton: Bool = true
     @Published var selectedContext: SelectedContext = .empty
     @Published var contextBundle: TranscriptContextBundle = .empty
     @Published var isScreenClipRecording: Bool = false
@@ -225,6 +228,7 @@ class OverlayController: ObservableObject {
         onCancel: @escaping () -> Void,
         onCancelTranscription: @escaping () -> Void,
         onCancelPostProcessing: @escaping () -> Void,
+        onStopAndTranscribe: @escaping () -> Void,
         onOutputModeChange: @escaping (OutputMode) -> Void,
         onAddScreenshot: @escaping () -> Void,
         onCaptureScreenshot: @escaping () -> Void,
@@ -240,6 +244,7 @@ class OverlayController: ObservableObject {
         self.onCancel = onCancel
         self.onCancelTranscription = onCancelTranscription
         self.onCancelPostProcessing = onCancelPostProcessing
+        self.onStopAndTranscribe = onStopAndTranscribe
         self.onOutputModeChange = onOutputModeChange
         self.onAddScreenshot = onAddScreenshot
         self.onCaptureScreenshot = onCaptureScreenshot
@@ -255,6 +260,7 @@ class OverlayController: ObservableObject {
         self.selectedOutputMode = appState.selectedOutputMode
         self.outputModes = OutputMode.availableBuiltInModes()
         self.showModePickerInMiniOverlay = AppPreferences.shared.showModePickerInMiniOverlay
+        self.showConfirmButton = AppPreferences.shared.showConfirmButtonInOverlay
         self.selectedContext = appState.selectedContext
         self.contextBundle = appState.contextBundle
         self.isScreenClipRecording = appState.isScreenClipRecording
@@ -311,6 +317,7 @@ class OverlayController: ObservableObject {
         onCancel = nil
         onCancelTranscription = nil
         onCancelPostProcessing = nil
+        onStopAndTranscribe = nil
         onOutputModeChange = nil
         onAddScreenshot = nil
         onCaptureScreenshot = nil
@@ -333,6 +340,11 @@ class OverlayController: ObservableObject {
 
     func cancelPostProcessing() {
         onCancelPostProcessing?()
+    }
+
+    /// ✓: Aufnahme beenden & transkribieren (nur in der Recording-Phase sichtbar).
+    func stopAndTranscribe() {
+        onStopAndTranscribe?()
     }
 
     func setOutputMode(_ mode: OutputMode) {
@@ -376,6 +388,7 @@ class OverlayController: ObservableObject {
         setIfChanged(\.selectedOutputMode, to: appState.selectedOutputMode)
         setIfChanged(\.outputModes, to: OutputMode.availableBuiltInModes())
         setIfChanged(\.showModePickerInMiniOverlay, to: AppPreferences.shared.showModePickerInMiniOverlay)
+        setIfChanged(\.showConfirmButton, to: AppPreferences.shared.showConfirmButtonInOverlay)
         setIfChanged(\.selectedContext, to: appState.selectedContext)
         setIfChanged(\.contextBundle, to: appState.contextBundle)
         setIfChanged(\.isScreenClipRecording, to: appState.isScreenClipRecording)

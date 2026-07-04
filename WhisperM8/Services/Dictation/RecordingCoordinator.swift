@@ -204,6 +204,12 @@ final class RecordingCoordinator {
             onCancelPostProcessing: { [weak self] in
                 self?.cancelPostProcessing()
             },
+            onStopAndTranscribe: { [weak self] in
+                // Exakt der Hotkey-Stop-Pfad — inklusive Tap-Schutz und
+                // Guards in stopRecording() selbst.
+                guard let self else { return }
+                Task { await self.stopRecording() }
+            },
             onOutputModeChange: { [weak appState] mode in
                 appState?.setOutputMode(mode)
             },

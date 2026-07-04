@@ -101,6 +101,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.showModePickerInMiniOverlay) }
     }
 
+    /// ✓-Button in der Recording-Pill: beendet die Aufnahme und transkribiert
+    /// (derselbe Pfad wie der Hotkey-Stop). Abschaltbar für Hotkey-Puristen.
+    var showConfirmButtonInOverlay: Bool {
+        get { boolWithDefault(true, forKey: Keys.showConfirmButtonInOverlay) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.showConfirmButtonInOverlay) }
+    }
+
     var isSelectedContextCaptureEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.selectedContextCaptureEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.selectedContextCaptureEnabled) }
@@ -354,6 +361,7 @@ enum PreferenceKeys {
     static let lastSelectedOutputModeID = "lastSelectedOutputModeID"
     static let fallbackToRawOnProcessingError = "fallbackToRawOnProcessingError"
     static let showModePickerInMiniOverlay = "showModePickerInMiniOverlay"
+    static let showConfirmButtonInOverlay = "showConfirmButtonInOverlay"
     static let selectedContextCaptureEnabled = "selectedContextCaptureEnabled"
     static let visualContextCaptureEnabled = "visualContextCaptureEnabled"
     static let maxScreenshotsPerRecording = "maxScreenshotsPerRecording"

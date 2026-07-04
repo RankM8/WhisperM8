@@ -6,6 +6,7 @@ struct BehaviorSettingsView: View {
     @AppStorage("audioDuckingEnabled") private var audioDuckingEnabled = true
     @AppStorage("audioDuckingFactor") private var audioDuckingFactor = 0.2
     @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.full.rawValue
+    @AppStorage("showConfirmButtonInOverlay") private var showConfirmButtonInOverlay = true
     @AppStorage("selectedContextCaptureEnabled") private var selectedContextCaptureEnabled = true
     @AppStorage("visualContextCaptureEnabled") private var visualContextCaptureEnabled = true
     @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = AppPreferences.defaultMaxScreenshotsPerRecording
@@ -118,11 +119,17 @@ struct BehaviorSettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
+                Toggle("Show Confirm Button (✓)", isOn: $showConfirmButtonInOverlay)
+
+                Text("The ✓ button stops the recording and starts transcription — same as the hotkey.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Button("Reset Overlay Position") {
                     OverlayPositionStore.clearPosition()
                 }
 
-                Text("Overlay is draggable and remembers its position.")
+                Text("The pill is draggable anywhere and remembers its position. Double-click an empty spot to send it back to the default position.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
