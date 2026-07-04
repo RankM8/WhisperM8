@@ -93,22 +93,62 @@ extension AgentChatsView {
         }
     }
 
-    /// Chat vollständig schließen: Terminal terminieren (falls läuft) und
-    /// Session archivieren — dadurch verschwindet sie aus Tab-Bar UND
-    /// Sidebar. Daten bleiben in der Workspace-Datei erhalten.
+    /// Einstiegspunkt aller „Archivieren"-Aktionen (einzeln + Bulk): läuft in
+    /// der Gruppe mindestens ein Terminal, fragt ein confirmationDialog nach
+    /// (Terminieren ist die einzige irreversible Nebenwirkung) — sonst wird
+    /// direkt archiviert.
+    func requestArchive(_ sessions: [AgentChatSession]) {
+        let hasRunning = sessions.contains {
+            terminalRegistry.controller(for: $0.id)?.isRunning == true
+        }
+        if hasRunning {
+            sessionsPendingArchive = sessions
+        } else {
+            commitArchive(sessions)
+        }
+    }
+
+    /// Führt die Archivierung aus (direkt oder nach Dialog-Bestätigung).
+    /// Der Auswahl-Reset lebt bewusst HIER und nicht in `archiveSelection` —
+    /// bei „Abbrechen" im Dialog bleibt die Mehrfach-Auswahl erhalten.
+    func commitArchive(_ sessions: [AgentChatSession]) {
+        sessions.forEach { archiveSession($0) }
+        multiSelection = []
+    }
+
+    /// Chat archivieren: Terminal terminieren (falls läuft), Status + Zeitstempel
+    /// über den Store setzen — dadurch verschwindet die Session aus Tab-Bar UND
+    /// Sidebar, bleibt aber im Archiv-Sheet wiederherstellbar.
     func archiveSession(_ session: AgentChatSession) {
         if terminalRegistry.controller(for: session.id)?.isRunning == true {
             terminalRegistry.terminate(sessionID: session.id)
         }
 
         do {
-            try store.updateSession(id: session.id) { $0.status = .archived }
+            try store.archiveSession(id: session.id)
         } catch {
             errorMessage = error.localizedDescription
         }
 
         pinnedSessionIDs.removeAll { $0 == session.id }
         closeTab(session)
+    }
+
+    /// „Wiederherstellen" aus dem Archiv-Sheet: Session zurück auf `.closed`,
+    /// Sheet zu, Projekt selektieren/aufklappen, Tab öffnen + aktivieren
+    /// (analog flatRow-onSelect).
+    func restoreArchivedSession(_ session: AgentChatSession) {
+        do {
+            try store.restoreSession(id: session.id)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        archiveSheetPresented = false
+        selectedProjectID = session.projectID
+        expandedProjectIDs.insert(session.projectID)
+        openTab(session.id)
+        selectedSessionID = session.id
     }
 
     /// Reordert die globale Tab-Bar: `dropped` landet vor `targetID`.

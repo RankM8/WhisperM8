@@ -218,7 +218,7 @@ struct ProjectChatGroup: View {
                 }
             }
             Divider()
-            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) schließen" : "Schließen", systemImage: "xmark", role: .destructive) {
+            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) archivieren" : "Archivieren", systemImage: "archivebox") {
                 onCloseSession(session)
             }
         }
@@ -530,7 +530,7 @@ struct SessionListButton: View {
                 .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
-                .help("Chat schließen")
+                .help("Archivieren")
         } else if isMissingTranscript {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10, weight: .medium))
@@ -682,7 +682,7 @@ struct PinnedSessionRow: View {
                 .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
-                .help("Chat schließen")
+                .help("Archivieren")
         } else if isMissingTranscript {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10, weight: .medium))

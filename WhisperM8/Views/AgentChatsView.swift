@@ -206,6 +206,11 @@ struct AgentChatsView: View {
     @State var renameProjectDraft: String = ""
     /// Projekt, für das gerade der Lösch-Bestätigungsdialog offen ist.
     @State var projectPendingDeletion: AgentProject?
+    /// Sessions, für die gerade der Archivieren-Bestätigungsdialog offen ist
+    /// (nur gesetzt, wenn mindestens ein Terminal der Gruppe läuft).
+    @State var sessionsPendingArchive: [AgentChatSession]?
+    /// `true` solange das Archiv-Sheet (Footer-Button) offen ist.
+    @State var archiveSheetPresented = false
     /// Projekte, für die wir in dieser App-Session schon einen Auto-Icon-Lookup
     /// gestartet haben — verhindert wiederholte Filesystem-Scans bei jedem
     /// Workspace-Reload.
@@ -414,6 +419,27 @@ struct AgentChatsView: View {
         } message: { project in
             let count = workspace.sessions.filter { $0.projectID == project.id }.count
             Text("Entfernt das Projekt und seine \(count) \(count == 1 ? "Chat" : "Chats") aus WhisperM8. Das Repo auf der Festplatte und die Claude/Codex-Transcripts bleiben unangetastet.")
+        }
+        .confirmationDialog(
+            "Chat archivieren?",
+            isPresented: Binding(
+                get: { sessionsPendingArchive != nil },
+                set: { if !$0 { sessionsPendingArchive = nil } }
+            ),
+            presenting: sessionsPendingArchive
+        ) { sessions in
+            Button(sessions.count == 1 ? "Archivieren" : "\(sessions.count) Chats archivieren") {
+                commitArchive(sessions)
+                sessionsPendingArchive = nil
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { sessions in
+            let running = sessions.filter {
+                terminalRegistry.controller(for: $0.id)?.isRunning == true
+            }.count
+            Text(sessions.count == 1
+                ? "Der Chat läuft noch — beim Archivieren wird das Terminal beendet. Der Chat bleibt im Archiv erhalten und lässt sich wiederherstellen."
+                : "\(running) von \(sessions.count) Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen.")
         }
         .sheet(item: $pendingBackgroundDispatch) { pending in
             BackgroundDispatchModal(
@@ -985,7 +1011,7 @@ struct AgentChatsView: View {
     }
 
     /// Zeile der Gepinnt-Sektion inkl. Kontextmenü (Loslösen, Umbenennen,
-    /// Auto-Titel, Farbe, Schließen). Gepinnte Chats sind projektübergreifend —
+    /// Auto-Titel, Farbe, Archivieren). Gepinnte Chats sind projektübergreifend —
     /// das Repo-Badge stellt die Zuordnung her.
     @ViewBuilder
     private func pinnedRow(_ session: AgentChatSession, order: [UUID]) -> some View {
@@ -1002,7 +1028,7 @@ struct AgentChatsView: View {
                     selectedSessionID = session.id
                 }
             },
-            onClose: { archiveSession(session) }
+            onClose: { requestArchive([session]) }
         )
         .contextMenu {
             Button(pinLabel(for: session), systemImage: "pin.slash") {
@@ -1019,7 +1045,7 @@ struct AgentChatsView: View {
             forkMenuItem(session)
             tabColorMenu(for: session)
             Divider()
-            Button(bulkLabel("Chat schließen", "%d Chats schließen", for: session), systemImage: "xmark", role: .destructive) {
+            Button(bulkLabel("Archivieren", "%d Chats archivieren", for: session), systemImage: "archivebox") {
                 archiveSelection(session)
             }
         }
@@ -1044,7 +1070,7 @@ struct AgentChatsView: View {
                     selectedSessionID = session.id
                 }
             },
-            onClose: { archiveSession(session) }
+            onClose: { requestArchive([session]) }
         )
         .contextMenu {
             Button("Umbenennen…", systemImage: "pencil") {
@@ -1061,7 +1087,7 @@ struct AgentChatsView: View {
             }
             tabColorMenu(for: session)
             Divider()
-            Button(bulkLabel("Chat schließen", "%d Chats schließen", for: session), systemImage: "xmark", role: .destructive) {
+            Button(bulkLabel("Archivieren", "%d Chats archivieren", for: session), systemImage: "archivebox") {
                 archiveSelection(session)
             }
         }
@@ -2241,8 +2267,8 @@ struct AgentChatsView: View {
                 Button("Tab schließen", systemImage: "xmark.square") {
                     closeTab(session)
                 }
-                Button("Chat schließen", systemImage: "xmark", role: .destructive) {
-                    archiveSession(session)
+                Button("Archivieren", systemImage: "archivebox") {
+                    requestArchive([session])
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -2353,7 +2379,7 @@ struct AgentChatsView: View {
                 backgroundLifecycleMenuItems(session)
             }
             Divider()
-            Button(bulkLabel("Chat schließen", "%d Chats schließen", for: session), systemImage: "xmark", role: .destructive) {
+            Button(bulkLabel("Archivieren", "%d Chats archivieren", for: session), systemImage: "archivebox") {
                 archiveSelection(session)
             }
         }

@@ -180,6 +180,7 @@ extension AgentChatsView {
         }
         try? store.updateSession(id: id) { session in
             session.status = .archived
+            session.archivedAt = Date()
             session.backgroundShortID = nil
         }
         openTabIDs.removeAll { $0 == id }

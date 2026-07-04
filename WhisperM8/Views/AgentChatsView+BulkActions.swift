@@ -41,10 +41,12 @@ extension AgentChatsView {
         multiSelection = []
     }
 
-    /// „Chat schließen" (archivieren) für die Gruppe.
+    /// „Archivieren" für die Gruppe. Läuft über `requestArchive`, das bei
+    /// laufenden Terminals einen Bestätigungsdialog vorschaltet — der
+    /// Auswahl-Reset passiert erst in `commitArchive` (Abbrechen behält die
+    /// Mehrfach-Auswahl).
     func archiveSelection(forID id: UUID) {
-        sessions(in: actionGroup(forID: id)).forEach { archiveSession($0) }
-        multiSelection = []
+        requestArchive(sessions(in: actionGroup(forID: id)))
     }
 
     /// Pin/Unpin für die Gruppe — normalisiert. Auswahl bleibt erhalten.
