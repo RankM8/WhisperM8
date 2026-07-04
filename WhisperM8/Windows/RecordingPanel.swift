@@ -498,6 +498,13 @@ class OverlayController: ObservableObject {
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = .clear
 
+        // Die Pill ist IMMER dunkel (fast schwarz, wie Agent-Chats im Dark
+        // Mode) — unabhängig vom System-Theme: helle Schrift auf dunklem Glas
+        // ist auf jedem Wallpaper am besten lesbar. Erzwungenes darkAqua
+        // schaltet Material, .primary/.secondary und die OverlayPalette
+        // konsistent auf ihre Dark-Varianten.
+        hostingView.appearance = NSAppearance(named: .darkAqua)
+
         // Referenzen VOR contentView/orderFront setzen — der erste
         // Geometry-Report aus SwiftUI darf nicht an nil-Guards verpuffen.
         self.panel = panel

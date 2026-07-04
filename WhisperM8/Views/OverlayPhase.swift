@@ -98,6 +98,12 @@ enum OverlayPalette {
         dark: NSColor(red: 1.00, green: 0.42, blue: 0.42, alpha: 1)     // #FF6B6B
     )
 
+    /// Dunkle Glas-Tönung der Pill (#13161B) — über dem Material, drückt es
+    /// Richtung Fast-Schwarz (Prototyp: rgba(19,22,27,.86)). Die Pill rendert
+    /// via erzwungenem darkAqua immer dunkel, unabhängig vom System-Theme.
+    static let glassTint = Color(red: 19.0 / 255.0, green: 22.0 / 255.0, blue: 27.0 / 255.0)
+        .opacity(0.55)
+
     static func tint(for phase: OverlayPhase) -> Color {
         switch phase {
         case .recording: return recording

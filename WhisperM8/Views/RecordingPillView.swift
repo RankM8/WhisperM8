@@ -114,14 +114,17 @@ struct RecordingPillView: View {
         .padding(.horizontal, PillMetrics.horizontalPadding)
         .frame(height: PillMetrics.height)
         .background {
+            // Dunkles Glas wie im Prototyp (rgba(19,22,27,.86)): Material
+            // liefert den Blur, die Tönung drückt es Richtung Fast-Schwarz.
             Capsule()
                 .fill(.thinMaterial)
+                .overlay(Capsule().fill(OverlayPalette.glassTint))
                 .overlay(
                     Capsule()
-                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
                 )
         }
-        .shadow(color: .black.opacity(0.22), radius: 9, x: 0, y: 2)
+        .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 3)
         .animation(reduceMotion ? nil : .pill, value: isExpanded)
         .animation(reduceMotion ? nil : .pill, value: phase)
         .animation(reduceMotion ? nil : .pill, value: controller.contextBundle.isEmpty)
