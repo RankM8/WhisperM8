@@ -32,6 +32,8 @@ struct RecordingOverlayView: View {
             return .trailing
         case .leading:
             return .leading
+        case .center:
+            return .center
         }
     }
 }

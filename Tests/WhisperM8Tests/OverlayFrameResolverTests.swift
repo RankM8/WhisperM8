@@ -80,6 +80,22 @@ final class OverlayFrameResolverTests: XCTestCase {
 
     // MARK: - Default-Anker
 
+    func testCenteredDefaultResolutionPutsPanelMiddleBottom() {
+        let resolution = OverlayFrameResolver.centeredDefaultResolution(visibleFrame: visibleFrame)
+
+        XCTAssertEqual(resolution.alignment, .center)
+        // Panel horizontal mittig …
+        XCTAssertEqual(
+            resolution.panelOrigin.x + OverlayFrameResolver.panelSize.width / 2,
+            visibleFrame.midX
+        )
+        // … und die Pill-Unterkante auf dem Standard-Offset.
+        XCTAssertEqual(
+            resolution.panelOrigin.y + OverlayFrameResolver.contentMargin,
+            visibleFrame.minY + OverlayFrameResolver.defaultBottomOffset
+        )
+    }
+
     func testDefaultAnchorCentersEstimatedPillWidth() {
         let anchor = OverlayFrameResolver.defaultAnchor(
             estimatedPillWidth: 200,

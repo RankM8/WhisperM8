@@ -38,64 +38,20 @@ struct RecordingPillView: View {
         controller.overlayStyle == .full || controller.isHoverExpanded
     }
 
+    private var isFullStyle: Bool { controller.overlayStyle == .full }
+
     var body: some View {
+        // Zwei Anordnungen, ein Prinzip:
+        // - Full (permanent expandiert): klassische Anatomie, Kern links außen.
+        // - Mini: ALLE Hover-Zusätze (Grip/Kamera/Clip) klappen LINKS außen
+        //   auf; der kollabierte Block ist rechts verankert und in beiden
+        //   Zuständen identisch — nichts rutscht beim Expandieren unter der
+        //   Maus weg (z. B. der Mode-Chip, den man gerade anklicken wollte).
         HStack(spacing: 0) {
-            if isExpanded {
-                PillGrip()
-                    .transition(.opacity)
-            }
-
-            // Bewusst KEIN Status-Text neben dem Kern (auch nicht bei
-            // Transcribing/Improving): abgeschnittene Labels und der
-            // Breiten-Tanz beim Phasenwechsel stören mehr, als der Text
-            // nützt — die Bewegungsart + Farbe des Kerns trägt den Zustand,
-            // der Tooltip liefert die Details (z. B. „Building prompt…").
-            PillCoreView(
-                levelModel: controller.levelModel,
-                phase: phase,
-                isClipping: controller.isScreenClipRecording,
-                reduceMotion: reduceMotion
-            )
-            .padding(.leading, isExpanded ? 0 : 2)
-            .help(phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) ?? "Recording")
-
-            if isExpanded || phase == .recording {
-                PillClockView(clockModel: controller.clockModel)
-                    .transition(.opacity)
-            }
-
-            if isExpanded || (controller.showModePickerInMiniOverlay && phase == .recording) {
-                PillOutputModeChip(
-                    modes: controller.outputModes,
-                    selectedMode: controller.selectedOutputMode,
-                    isDisabled: phase.isBusy,
-                    action: controller.setOutputMode
-                )
-                .padding(.trailing, 5)
-                .transition(.opacity)
-            }
-
-            // Kontext ist Inhalt, keine Deko: vorhandener Kontext bleibt in der
-            // Aufnahme-Phase auch ohne Hover sichtbar — die Pill wächst dafür.
-            if isExpanded || (phase == .recording && !controller.contextBundle.isEmpty) {
-                PillContextChip(controller: controller)
-                    .padding(.trailing, 5)
-                    .transition(.opacity)
-            }
-
-            if isExpanded {
-                PillVisualContextButtons(controller: controller)
-                    .transition(.opacity)
-            } else if controller.isScreenClipRecording {
-                // Läuft ein Screen-Clip, bleibt das Stop-Icon auch kollabiert
-                // erreichbar — sonst müsste man zum Stoppen erst hovern.
-                PillScreenClipButton(controller: controller)
-                    .transition(.opacity)
-            }
-
-            if isExpanded {
-                PillSeparator()
-                    .transition(.opacity)
+            if isFullStyle {
+                fullLayout
+            } else {
+                miniLayout
             }
 
             if phase == .recording && controller.showConfirmButton {
@@ -128,6 +84,96 @@ struct RecordingPillView: View {
         .animation(reduceMotion ? nil : .pill, value: controller.overlayStyle)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(phase.accessibilityLabel)
+    }
+
+    // Bewusst KEIN Status-Text neben dem Kern (auch nicht bei
+    // Transcribing/Improving): abgeschnittene Labels und der Breiten-Tanz
+    // beim Phasenwechsel stören mehr, als der Text nützt — die Bewegungsart
+    // + Farbe des Kerns trägt den Zustand, der Tooltip die Details.
+    private var coreView: some View {
+        PillCoreView(
+            levelModel: controller.levelModel,
+            phase: phase,
+            isClipping: controller.isScreenClipRecording,
+            reduceMotion: reduceMotion
+        )
+        .help(phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) ?? "Recording")
+    }
+
+    private var modeChip: some View {
+        PillOutputModeChip(
+            modes: controller.outputModes,
+            selectedMode: controller.selectedOutputMode,
+            isDisabled: phase.isBusy,
+            action: controller.setOutputMode
+        )
+    }
+
+    /// Full: klassische Anatomie, permanent expandiert.
+    @ViewBuilder
+    private var fullLayout: some View {
+        PillGrip()
+
+        coreView
+
+        PillClockView(clockModel: controller.clockModel)
+
+        modeChip
+            .padding(.trailing, 5)
+
+        PillContextChip(controller: controller)
+            .padding(.trailing, 5)
+
+        PillVisualContextButtons(controller: controller)
+
+        PillSeparator()
+    }
+
+    /// Mini: Der kollabierte Block [Kern·Timer·Mode·Ctx·✓·✕] ist rechts
+    /// verankert und in beiden Zuständen identisch — die Hover-Zusätze
+    /// (Grip, Kamera, Clip) klappen ausschließlich LINKS außen auf. Dadurch
+    /// steht jedes bereits sichtbare Element beim Expandieren pixelgenau
+    /// still (kein Wegrutschen des Mode-Chips unter der Maus).
+    @ViewBuilder
+    private var miniLayout: some View {
+        if isExpanded {
+            PillGrip()
+                .transition(.opacity)
+            PillCameraButton(controller: controller)
+                .transition(.opacity)
+        }
+
+        // Läuft ein Screen-Clip, bleibt das Stop-Icon auch kollabiert
+        // erreichbar — sonst müsste man zum Stoppen erst hovern.
+        if isExpanded || controller.isScreenClipRecording {
+            PillScreenClipButton(controller: controller)
+                .padding(.trailing, 2)
+                .transition(.opacity)
+        }
+
+        coreView
+            .padding(.leading, isExpanded ? 0 : 2)
+
+        // Timer ist in Mini IMMER sichtbar (auch busy): kompakteste Info,
+        // und er hält den Block über alle Zustände formstabil.
+        PillClockView(clockModel: controller.clockModel)
+
+        // Pref an: Chip permanent (busy disabled) — stabil. Pref aus: nur
+        // im Hover; er ERSCHEINT dann links neben ✓/✕, nichts rutscht weg.
+        if controller.showModePickerInMiniOverlay || isExpanded {
+            modeChip
+                .padding(.trailing, 5)
+                .transition(.opacity)
+        }
+
+        // Kontext ist Inhalt, keine Deko: mit Inhalt in BEIDEN Zuständen
+        // sichtbar (formstabil). Der leere „No Ctx"-Chip entfällt in Mini —
+        // er würde beim Expandieren den Mode-Chip verschieben.
+        if !controller.contextBundle.isEmpty {
+            PillContextChip(controller: controller)
+                .padding(.trailing, 5)
+                .transition(.opacity)
+        }
     }
 }
 
@@ -451,22 +497,31 @@ private struct PillVisualContextButtons: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            Button {
-                controller.captureScreenshot()
-            } label: {
-                Image(systemName: "camera.viewfinder")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(isVisualContextEnabled ? Color.secondary : Color.secondary.opacity(0.45))
-            .disabled(!isVisualContextEnabled || controller.phase.isBusy || controller.isScreenClipRecording)
-            .help(isVisualContextEnabled ? "Take a screenshot (select an area)" : "Visual context capture is disabled")
-            .accessibilityLabel("Take a screenshot to add as context")
-
+            PillCameraButton(controller: controller)
             PillScreenClipButton(controller: controller)
         }
+    }
+}
+
+/// Interaktiver Bereichs-Screenshot — eigenständig, damit Mini ihn in die
+/// links aufklappende Hover-Gruppe stecken kann.
+private struct PillCameraButton: View {
+    @ObservedObject var controller: OverlayController
+
+    var body: some View {
+        Button {
+            controller.captureScreenshot()
+        } label: {
+            Image(systemName: "camera.viewfinder")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isVisualContextEnabled ? Color.secondary : Color.secondary.opacity(0.45))
+        .disabled(!isVisualContextEnabled || controller.phase.isBusy || controller.isScreenClipRecording)
+        .help(isVisualContextEnabled ? "Take a screenshot (select an area)" : "Visual context capture is disabled")
+        .accessibilityLabel("Take a screenshot to add as context")
     }
 
     private var isVisualContextEnabled: Bool {

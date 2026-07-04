@@ -20,10 +20,13 @@ struct PillAnchor: Equatable {
 
 /// Wachstumsrichtung der Pill innerhalb des (fixen) Panels.
 enum PillAlignment: Equatable {
-    /// Rechte Kante fix, Pill wächst nach links (Standard).
+    /// Rechte Kante fix, Pill wächst nach links (Custom-Position, Mini-Default).
     case trailing
     /// Linke Kante fix, Pill wächst nach rechts (Spiegel-Fall an der linken Kante).
     case leading
+    /// Mittig fix, Pill wächst symmetrisch in beide Richtungen
+    /// (Full-Default: kein „links wachsen + nachrücken" mehr).
+    case center
 }
 
 // MARK: - Frame-Resolver
@@ -83,6 +86,20 @@ enum OverlayFrameResolver {
         return Resolution(
             panelOrigin: NSPoint(x: minX - contentMargin, y: panelY),
             alignment: .leading
+        )
+    }
+
+    /// Default-Resolution mit Center-Anker (Full-Style): Panel mittig auf dem
+    /// Screen, Pill zentriert darin — SwiftUI hält sie damit von selbst in
+    /// der Mitte, jede Breitenänderung wächst symmetrisch. Keine
+    /// Breiten-Schätzung, keine Nachzentrierung nötig.
+    static func centeredDefaultResolution(visibleFrame: NSRect) -> Resolution {
+        Resolution(
+            panelOrigin: NSPoint(
+                x: visibleFrame.midX - panelSize.width / 2,
+                y: visibleFrame.minY + defaultBottomOffset - contentMargin
+            ),
+            alignment: .center
         )
     }
 

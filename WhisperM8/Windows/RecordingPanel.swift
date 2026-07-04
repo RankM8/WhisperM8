@@ -107,9 +107,20 @@ struct OverlayPositionStore {
         return anchor
     }
 
-    static func defaultResolution(for style: OverlayStyle, on screen: NSScreen) -> OverlayFrameResolver.Resolution {
+    /// Default-Position je Stil: Full = Center-Anker (wächst symmetrisch,
+    /// SwiftUI zentriert selbst); Mini = Rechts-Anker (nur der hält beim
+    /// Hover-Expand die Buttons unter dem Cursor still). `pillWidth` erlaubt,
+    /// die ECHTE gemessene Breite statt der Schätzung zu zentrieren.
+    static func defaultResolution(
+        for style: OverlayStyle,
+        on screen: NSScreen,
+        pillWidth: CGFloat? = nil
+    ) -> OverlayFrameResolver.Resolution {
+        if style == .full {
+            return OverlayFrameResolver.centeredDefaultResolution(visibleFrame: screen.visibleFrame)
+        }
         let anchor = OverlayFrameResolver.defaultAnchor(
-            estimatedPillWidth: style.estimatedPillWidth,
+            estimatedPillWidth: pillWidth ?? style.estimatedPillWidth,
             visibleFrame: screen.visibleFrame
         )
         return OverlayFrameResolver.resolve(anchor: anchor, visibleFrame: screen.visibleFrame)
@@ -479,6 +490,9 @@ class OverlayController: ObservableObject {
         panel.onMoveAnchor = { [weak self] anchor in
             guard let self, !self.isResettingPosition else { return }
             self.hasCustomPosition = true
+            // Ein Drag im Center-Anker (Full-Default) behält den Center für
+            // den Rest der Session (kein Umschalt-Glitch mid-flight); ab dem
+            // nächsten show() gilt der gespeicherte Anker → Kanten-Anker.
             OverlayPositionStore.saveAnchor(anchor)
         }
 
@@ -698,8 +712,9 @@ class OverlayController: ObservableObject {
 
         // Ohne Custom-Position: nach dem ersten ECHTEN Layout einmalig exakt
         // zentrieren (die Default-Position basierte auf einer Schätzbreite).
-        // Läuft vor dem ersten sichtbaren Frame — kein wahrnehmbarer Sprung.
-        if !hasCustomPosition, !didPreciseCenter,
+        // Nur beim Kanten-Anker (Mini) — der Center-Anker zentriert per
+        // Layout von selbst. Läuft vor dem ersten sichtbaren Frame.
+        if !hasCustomPosition, !didPreciseCenter, pillAlignment != .center,
            let screen = panel.screen ?? OverlayPositionStore.activeScreen {
             didPreciseCenter = true
             let anchor = OverlayFrameResolver.defaultAnchor(
@@ -727,10 +742,10 @@ class OverlayController: ObservableObject {
             }
         }
 
-        // Die Default-Position hält sich selbst zentriert (debounced,
-        // animiert, nie während Hover) — z. B. nach Doppelklick-Reset mit
-        // expandierter Breite oder wenn der Kontext-Chip erscheint.
-        if !hasCustomPosition {
+        // Kanten-Anker an der Default-Position (Mini) hält sich debounced
+        // zentriert (nie während Hover). Der Center-Anker (Full) braucht
+        // das nicht — er wächst symmetrisch und bleibt von selbst mittig.
+        if !hasCustomPosition, pillAlignment != .center {
             scheduleDefaultRecenter()
         }
     }
@@ -819,11 +834,11 @@ class OverlayController: ObservableObject {
         hasCustomPosition = false
 
         let pillWidth = panel.pillFrameInPanel.width
-        let anchor = OverlayFrameResolver.defaultAnchor(
-            estimatedPillWidth: pillWidth > 0 ? pillWidth : overlayStyle.estimatedPillWidth,
-            visibleFrame: screen.visibleFrame
+        let resolution = OverlayPositionStore.defaultResolution(
+            for: overlayStyle,
+            on: screen,
+            pillWidth: pillWidth > 0 ? pillWidth : nil
         )
-        let resolution = OverlayFrameResolver.resolve(anchor: anchor, visibleFrame: screen.visibleFrame)
 
         isResettingPosition = true
         pillAlignment = resolution.alignment
