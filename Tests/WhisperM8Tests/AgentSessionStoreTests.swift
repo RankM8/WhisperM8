@@ -646,4 +646,188 @@ final class AgentSessionStoreTests: XCTestCase {
         XCTAssertEqual(loaded.sessions.first?.id, resumable.id)
         XCTAssertEqual(store.loadWorkspace().sessions.count, 1)
     }
+
+    // MARK: - Archivieren / Wiederherstellen
+
+    func testArchiveSessionSetsStatusAndArchivedAt() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Zu archivieren"
+        )
+
+        try store.archiveSession(id: session.id)
+
+        let archived = store.loadWorkspace().sessions.first
+        XCTAssertEqual(archived?.status, .archived)
+        XCTAssertNotNil(archived?.archivedAt)
+    }
+
+    func testRestoreSessionSetsClosedAndClearsArchivedAt() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Zu restaurieren"
+        )
+        try store.archiveSession(id: session.id)
+
+        try store.restoreSession(id: session.id)
+
+        let restored = store.loadWorkspace().sessions.first
+        XCTAssertEqual(restored?.status, .closed)
+        XCTAssertNil(restored?.archivedAt)
+    }
+
+    func testRestoreSessionBumpsLastActivityAt() throws {
+        // Dokumentiert die bewusste `updateSession`-Nebenwirkung: die
+        // wiederhergestellte Session soll sofort im „Zuletzt"-Scope auftauchen.
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        var session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Alt"
+        )
+        session.status = .archived
+        session.archivedAt = Date(timeIntervalSince1970: 100)
+        session.lastActivityAt = Date(timeIntervalSince1970: 100)
+        _ = try store.upsertSession(session)
+
+        try store.restoreSession(id: session.id)
+
+        let restored = store.loadWorkspace().sessions.first
+        XCTAssertNotNil(restored?.lastActivityAt)
+        XCTAssertGreaterThan(restored!.lastActivityAt, Date(timeIntervalSince1970: 100))
+    }
+
+    func testRestoreSessionKeepsCreatedManuallyFlag() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let session = try store.createSession(
+            provider: .claude,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Manuell erstellt"
+        )
+        XCTAssertEqual(store.loadWorkspace().sessions.first?.isManuallyCreated, true)
+
+        try store.archiveSession(id: session.id)
+        try store.restoreSession(id: session.id)
+
+        XCTAssertEqual(store.loadWorkspace().sessions.first?.isManuallyCreated, true)
+    }
+
+    func testDecodeLegacyWorkspaceWithoutArchivedAt() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let projectID = UUID()
+        let sessionID = UUID()
+        try """
+        {
+          "projects": [
+            {
+              "id": "\(projectID.uuidString)",
+              "name": "Legacy Repo",
+              "path": "/tmp/legacy-repo",
+              "color": "#0A84FF",
+              "createdAt": "2026-05-09T12:00:00Z",
+              "updatedAt": "2026-05-09T12:00:00Z"
+            }
+          ],
+          "sessions": [
+            {
+              "id": "\(sessionID.uuidString)",
+              "provider": "codex",
+              "projectID": "\(projectID.uuidString)",
+              "title": "Codex Chat",
+              "model": "gpt-5.5",
+              "reasoningEffort": "medium",
+              "status": "archived",
+              "createdManually": true,
+              "createdAt": "2026-05-09T12:00:00Z",
+              "lastActivityAt": "2026-05-09T12:00:00Z"
+            }
+          ]
+        }
+        """.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let workspace = AgentSessionStore(fileURL: fileURL).loadWorkspace()
+
+        XCTAssertEqual(workspace.sessions.first?.id, sessionID)
+        XCTAssertEqual(workspace.sessions.first?.status, .archived)
+        XCTAssertNil(workspace.sessions.first?.archivedAt)
+    }
+
+    func testArchivedAtRoundTripsThroughPersistence() throws {
+        // Registry teilt In-Memory-Instanzen pro URL — für den echten
+        // Disk-Roundtrip wird die geschriebene Datei direkt dekodiert.
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Persistiert"
+        )
+        try store.archiveSession(id: session.id)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let onDisk = try decoder.decode(AgentWorkspace.self, from: Data(contentsOf: fileURL))
+
+        XCTAssertEqual(onDisk.sessions.first?.status, .archived)
+        XCTAssertNotNil(onDisk.sessions.first?.archivedAt)
+    }
+
+    func testMergeIndexedSessionsKeepsArchivedStatusAndTimestamp() throws {
+        // Re-Scan-Absicherung: der Indexer darf archivierte Sessions nicht
+        // reanimieren — Status und Archiv-Zeitstempel bleiben erhalten.
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let projectPath = FileManager.default.temporaryDirectory.path
+        let store = AgentSessionStore(fileURL: fileURL)
+        var session = try store.createSession(
+            provider: .codex,
+            projectPath: projectPath,
+            title: "Archiviert"
+        )
+        session.externalSessionID = "ext-archived-1"
+        session.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(session)
+        try store.archiveSession(id: session.id)
+        let archivedAtBefore = store.loadWorkspace().sessions.first?.archivedAt
+        XCTAssertNotNil(archivedAtBefore)
+
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .codex,
+                externalSessionID: "ext-archived-1",
+                cwd: projectPath,
+                title: "Frischer Scan-Titel",
+                model: "gpt-5.5",
+                reasoningEffort: "medium",
+                createdAt: Date(),
+                lastActivityAt: Date().addingTimeInterval(60)
+            )
+        ])
+
+        let merged = store.loadWorkspace().sessions.first
+        XCTAssertEqual(merged?.status, .archived)
+        XCTAssertEqual(merged?.archivedAt, archivedAtBefore)
+        XCTAssertEqual(store.loadWorkspace().sessions.count, 1, "Merge darf keine Duplikat-Session anlegen")
+    }
 }
