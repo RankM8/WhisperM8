@@ -406,6 +406,12 @@ class OverlayController: ObservableObject {
     private var hasCustomPosition = false
     private var didPreciseCenter = false
     private var isResettingPosition = false
+    /// Nachzentrieren ist NUR kurz nach dem Doppelklick-Reset erlaubt (die
+    /// Mini-Pill kommt dort hover-expandiert an und soll nach dem Collapse
+    /// exakt mittig landen). Organische Breitenänderungen (Kontext kommt
+    /// dazu) lassen die Pill liegen — User-Feedback: das Nachrücken um ein
+    /// paar Pixel mitten in der Transkription stört mehr als der Drift.
+    private var allowRecenterUntil = Date.distantPast
     /// Offene PILL-Menüs (Mode/Kontext) halten die Mini-Pill expandiert.
     /// Nur Menüs, deren Tracking mit der Maus über der Pill begann — die
     /// Notifications sind app-global und würden sonst jedes Menübar-/
@@ -742,10 +748,9 @@ class OverlayController: ObservableObject {
             }
         }
 
-        // Kanten-Anker an der Default-Position (Mini) hält sich debounced
-        // zentriert (nie während Hover). Der Center-Anker (Full) braucht
-        // das nicht — er wächst symmetrisch und bleibt von selbst mittig.
-        if !hasCustomPosition, pillAlignment != .center {
+        // Nachzentrieren nur im Reset-Fenster (s. allowRecenterUntil) —
+        // organische Breitenänderungen verschieben die Pill nicht mehr.
+        if !hasCustomPosition, pillAlignment != .center, Date() < allowRecenterUntil {
             scheduleDefaultRecenter()
         }
     }
@@ -843,7 +848,11 @@ class OverlayController: ObservableObject {
         isResettingPosition = true
         pillAlignment = resolution.alignment
         panel.animateOrigin(to: resolution.panelOrigin) { [weak self] in
-            self?.isResettingPosition = false
+            guard let self else { return }
+            self.isResettingPosition = false
+            // Kurzes Fenster fürs exakte Nachzentrieren nach dem Collapse
+            // (Mini kommt hover-expandiert an der Default-Position an).
+            self.allowRecenterUntil = Date().addingTimeInterval(2.0)
         }
     }
 
