@@ -266,6 +266,18 @@ struct AgentChatsView: View {
         )
     }
 
+    /// Archivierte, manuell erstellte Sessions — geteilte Datengrundlage für
+    /// Footer-Badge UND Archiv-Sheet (sonst driftet der Tooltip-Count).
+    /// BG-Sessions ohne Short-ID sind nicht wiederherstellbar (attach
+    /// unmöglich) und werden ausgeblendet.
+    var archivedSessionsForSheet: [AgentChatSession] {
+        workspace.sessions.filter {
+            $0.status == .archived
+                && $0.isManuallyCreated
+                && !($0.isBackgroundChat && ($0.backgroundShortID?.isEmpty != false))
+        }
+    }
+
     /// Globale Tab-Bar: alle offenen Tabs über alle Projekte, in der
     /// Reihenfolge von `openTabIDs`.
     var headerTabs: [AgentChatSession] {
@@ -440,6 +452,14 @@ struct AgentChatsView: View {
             Text(sessions.count == 1
                 ? "Der Chat läuft noch — beim Archivieren wird das Terminal beendet. Der Chat bleibt im Archiv erhalten und lässt sich wiederherstellen."
                 : "\(running) von \(sessions.count) Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen.")
+        }
+        .sheet(isPresented: $archiveSheetPresented) {
+            AgentArchiveSheet(
+                sessions: archivedSessionsForSheet,
+                projects: workspace.projects,
+                onRestore: { restoreArchivedSession($0) },
+                onClose: { archiveSheetPresented = false }
+            )
         }
         .sheet(item: $pendingBackgroundDispatch) { pending in
             BackgroundDispatchModal(
@@ -1182,6 +1202,18 @@ struct AgentChatsView: View {
             .help("Einstellungen öffnen")
 
             SidebarUpdateBadge()
+
+            Button {
+                archiveSheetPresented = true
+            } label: {
+                Image(systemName: "archivebox")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Archiv (\(archivedSessionsForSheet.count))")
 
             Button {
                 WindowRequestCenter.shared.request(.onboarding)
