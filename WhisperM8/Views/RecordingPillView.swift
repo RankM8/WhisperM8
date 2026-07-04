@@ -174,7 +174,13 @@ struct PillCoreView: View {
 
     var body: some View {
         Group {
-            if reduceMotion {
+            if phase == .recording {
+                // Aufnahme: KEINE Eigenbewegung — die Bars folgen ausschließlich
+                // dem echten Audio-Level (Stille = ruhige flache Linie). Deko-
+                // Atmen würde das Kern-Konzept „Bewegung = Signal" kaputtmachen.
+                bars { index, _ in recordingBarState(index: index) }
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: levelModel.level)
+            } else if reduceMotion {
                 // Statische Silhouette — bleibt ohne Bewegung lesbar.
                 bars { index, _ in staticBarState(index: index) }
             } else {
@@ -227,7 +233,7 @@ struct PillCoreView: View {
     private func barState(index: Int, time: TimeInterval) -> BarState {
         switch phase {
         case .recording:
-            return recordingBarState(index: index, time: time)
+            return recordingBarState(index: index)
         case .transcribing:
             return transcribingBarState(index: index, time: time)
         case .improving:
@@ -235,18 +241,15 @@ struct PillCoreView: View {
         }
     }
 
-    /// Aufnahme: Bars atmen leicht und schlagen mit dem echten Audio-Level aus.
-    private func recordingBarState(index: Int, time: TimeInterval) -> BarState {
-        // Pro Bar eine eigene Atem-Phase, damit die Silhouette organisch wirkt.
-        let breathePhases: [Double] = [0.9, 0.6, 0.2, 0.7, 0.4]
-        let breathe = (sin((time / 1.15 + breathePhases[index]) * 2 * .pi) + 1) / 2  // 0…1
-
+    /// Aufnahme: rein level-getrieben, keine Zeitkomponente — bei Stille
+    /// steht eine ruhige flache Linie, nur echte Sprache schlägt aus.
+    private func recordingBarState(index: Int) -> BarState {
         let level = pow(CGFloat(max(0, min(levelModel.level, 1))), 0.6)
         let boosts: [CGFloat] = [0.6, 0.85, 1.05, 0.85, 0.6]  // Mitte betont
         let levelLift = min(1, level * boosts[index])
 
-        let base: CGFloat = 5 + CGFloat(breathe) * 2.5
-        let height = min(16, base + levelLift * 9)
+        let base: CGFloat = 5
+        let height = min(16, base + levelLift * 11)
         return BarState(height: height, opacity: 0.75 + 0.25 * Double(levelLift))
     }
 
@@ -270,8 +273,9 @@ struct PillCoreView: View {
     private func staticBarState(index: Int) -> BarState {
         switch phase {
         case .recording:
-            let heights: [CGFloat] = [7, 13, 9, 14, 6]
-            return BarState(height: heights[index], opacity: 0.9)
+            // Nicht erreichbar (Recording ist immer level-getrieben) —
+            // konsistent zur Ruhelinie, falls sich die Verzweigung ändert.
+            return BarState(height: 5, opacity: 0.75)
         case .transcribing:
             return BarState(height: 10, opacity: 1)
         case .improving:
