@@ -35,6 +35,11 @@ enum ProcessAncestry {
     /// Läuft die Eltern-Kette hoch und liefert die PID des ersten Vorfahren
     /// mit dem gegebenen Prozessnamen. `maxDepth` als Endlosschleifen-Schutz
     /// (PID-Zyklen gibt es nicht, aber defensiv bleiben).
+    ///
+    /// ACHTUNG: Namens-Matching ist fragil — p_comm hängt vom Exec-Pfad ab
+    /// (der native Claude-Installer linkt z.B. auf ein Binary namens
+    /// "2.1.201", npm-Installs laufen als "node"). Fürs Parent-Matching
+    /// deshalb `ancestorChain` verwenden; das hier bleibt als Best-Guess.
     static func findAncestor(
         named target: String,
         from pid: Int32 = ProcessInfo.processInfo.processIdentifier,
@@ -51,5 +56,25 @@ enum ProcessAncestry {
             current = parent.pid
         }
         return nil
+    }
+
+    /// Alle Vorfahren-PIDs (ohne die Start-PID selbst, aufsteigend zur
+    /// Wurzel, ohne launchd/PID 1). NAMENSUNABHÄNGIG — die App matcht
+    /// irgendeine dieser PIDs gegen die shellPids ihrer PTY-Sessions: die
+    /// PID des Chat-Prozesses ist zwangsläufig in der Kette, egal ob er
+    /// "claude", "node" oder "2.1.201" heißt.
+    static func ancestorChain(
+        from pid: Int32 = ProcessInfo.processInfo.processIdentifier,
+        maxDepth: Int = 24,
+        infoProvider: (Int32) -> ProcessInfoEntry? = { ProcessAncestry.info(for: $0) }
+    ) -> [Int32] {
+        var chain: [Int32] = []
+        var current = pid
+        for _ in 0..<maxDepth {
+            guard let entry = infoProvider(current), entry.ppid > 1 else { break }
+            chain.append(entry.ppid)
+            current = entry.ppid
+        }
+        return chain
     }
 }

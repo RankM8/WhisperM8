@@ -52,6 +52,11 @@ struct AgentJobState: Codable, Equatable {
     /// shellPids ihrer laufenden PTY-Sessions. PID-Reuse: nur relevant,
     /// solange der Chat läuft — akzeptierte Heuristik.
     var parentProcessID: Int32?
+    /// ALLE Vorfahren-PIDs des Spawn-Aufrufs (aufsteigend). Namensunabhängige
+    /// Ergänzung zu `parentProcessID`: p_comm ist unzuverlässig (native
+    /// Installer-Binaries heißen "2.1.201", npm-Installs "node") — die App
+    /// matcht stattdessen irgendeine Ketten-PID gegen ihre PTY-shellPids.
+    var parentProcessAncestry: [Int32]?
     /// Liveness-Anker: Leser validieren mit kill(pid, 0), bevor sie
     /// `running` glauben. (PID-Reuse ist eine dokumentierte Limitation.)
     var supervisorPid: Int32?
@@ -88,6 +93,7 @@ struct AgentJobState: Codable, Equatable {
         self.codexThreadID = nil
         self.parentSessionID = parentSessionID
         self.parentProcessID = nil
+        self.parentProcessAncestry = nil
         self.supervisorPid = nil
         self.turns = 0
         self.sandbox = sandbox.rawValue

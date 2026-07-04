@@ -104,13 +104,17 @@ final class AgentJobWorkspaceSync {
         lastPhaseByShortId = Dictionary(uniqueKeysWithValues: jobs.map { ($0.shortId, $0.state) })
 
         // 2b. Parent-Auflösung per Prozess-Abstammung: Jobs ohne explizites
-        //     --parent tragen die PID ihres `claude`-Vorfahren — die matchen
-        //     wir gegen die shellPids der laufenden PTY-Sessions und lösen
-        //     sie zur Claude-externalSessionID auf (persistiert der Merge).
-        //     Läuft der Parent-Chat nicht (mehr), bleibt es beim
-        //     Projekt-Fallback — beim nächsten Sync wird erneut versucht.
+        //     --parent tragen ihre Vorfahren-PID-Kette — irgendeine davon
+        //     matchen wir gegen die shellPids der laufenden PTY-Sessions
+        //     (namensunabhängig: der Chat-Prozess ist zwangsläufig in der
+        //     Kette) und lösen sie zur Claude-externalSessionID auf
+        //     (persistiert der Merge). Läuft der Parent-Chat nicht (mehr),
+        //     bleibt es beim Projekt-Fallback — nächster Sync versucht's neu.
         var resolvedParents: [String: String] = [:]
-        let unresolvedJobs = jobs.filter { $0.parentSessionID == nil && $0.parentProcessID != nil }
+        let unresolvedJobs = jobs.filter {
+            $0.parentSessionID == nil
+                && ($0.parentProcessID != nil || !($0.parentProcessAncestry ?? []).isEmpty)
+        }
         if !unresolvedJobs.isEmpty {
             var sessionIDByPid: [Int32: UUID] = [:]
             for controller in AgentTerminalRegistry.shared.runningControllers {
@@ -122,8 +126,14 @@ final class AgentJobWorkspaceSync {
                 let preWorkspace = store.loadWorkspace()
                 let sessionByID = Dictionary(uniqueKeysWithValues: preWorkspace.sessions.map { ($0.id, $0) })
                 for job in unresolvedJobs {
-                    guard let pid = job.parentProcessID,
-                          let parentLocalID = sessionIDByPid[pid],
+                    // Benannter Best-Guess zuerst, dann die Kette von unten
+                    // nach oben (die NÄCHSTE PTY-Session gewinnt, falls
+                    // Chats verschachtelt laufen).
+                    var candidates: [Int32] = []
+                    if let pid = job.parentProcessID { candidates.append(pid) }
+                    candidates.append(contentsOf: job.parentProcessAncestry ?? [])
+                    guard let matchedPid = candidates.first(where: { sessionIDByPid[$0] != nil }),
+                          let parentLocalID = sessionIDByPid[matchedPid],
                           let parent = sessionByID[parentLocalID],
                           !parent.isSubagentJob,
                           let externalID = parent.externalSessionID,

@@ -85,10 +85,14 @@ enum AgentRunCLI {
         initial.model = options.model
         initial.effort = options.effort
         initial.allowNetwork = options.allowNetwork
-        // Parent-Fallback ohne --parent: den `claude`-Vorfahren im eigenen
-        // Prozessbaum merken — die App ordnet den Job darüber dem spawnenden
-        // Chat zu (Claude Code exportiert keine Session-ID in die Bash-Env).
+        // Parent-Fallback ohne --parent: die komplette Vorfahren-PID-Kette
+        // merken — die App matcht irgendeine davon gegen die shellPids ihrer
+        // PTY-Sessions und ordnet den Job dem spawnenden Chat zu (Claude Code
+        // exportiert keine Session-ID in die Bash-Env; Prozessnamen sind
+        // unzuverlässig — das native Binary heißt z.B. "2.1.201").
         if options.parentSessionID == nil {
+            let chain = ProcessAncestry.ancestorChain()
+            initial.parentProcessAncestry = chain.isEmpty ? nil : chain
             initial.parentProcessID = ProcessAncestry.findAncestor(named: "claude")
         }
 
