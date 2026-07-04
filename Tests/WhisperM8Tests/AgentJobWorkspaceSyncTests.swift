@@ -45,6 +45,78 @@ final class AgentJobWorkspaceSyncTests: XCTestCase {
         return job
     }
 
+    // MARK: - PID-aufgelöste Parents (Prozess-Abstammungs-Fallback)
+
+    /// Ohne --parent, aber mit vom Sync aufgelöster PID-Zuordnung: die
+    /// Session bekommt Parent + dessen Projekt wie beim expliziten Flag.
+    func testCreateUsesResolvedParentWhenExplicitParentMissing() throws {
+        let parent = try store.createSession(
+            provider: .claude,
+            projectPath: "/tmp/parent-project",
+            title: "Parent-Chat",
+            externalSessionID: "claude-ext-9"
+        )
+
+        let job = makeJob(cwd: "/tmp/anderswo", parentSessionID: nil)
+        try store.mergeSubagentJobs(
+            [job],
+            resolvedParentExternalByShortId: [job.shortId: "claude-ext-9"]
+        )
+
+        let created = store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }
+        XCTAssertEqual(created?.subagentParentSessionID, "claude-ext-9")
+        XCTAssertEqual(created?.projectID, parent.projectID)
+    }
+
+    /// Nachträgliche Zuordnung: der Job existierte schon parentlos (Chat war
+    /// z.B. noch nicht gebunden) — ein späterer Sync mit Auflösung trägt den
+    /// Parent nach, überschreibt aber nie einen vorhandenen.
+    func testResolvedParentIsBackfilledButNeverOverwrites() throws {
+        _ = try store.createSession(
+            provider: .claude,
+            projectPath: "/tmp/parent-project",
+            title: "Parent-Chat",
+            externalSessionID: "claude-ext-9"
+        )
+
+        let job = makeJob(parentSessionID: nil)
+        try store.mergeSubagentJobs([job])
+        XCTAssertNil(store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }?.subagentParentSessionID)
+
+        // Zweiter Sync löst die PID auf → Backfill.
+        try store.mergeSubagentJobs([job], resolvedParentExternalByShortId: [job.shortId: "claude-ext-9"])
+        XCTAssertEqual(
+            store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }?.subagentParentSessionID,
+            "claude-ext-9"
+        )
+
+        // Dritter Sync mit ANDERER Auflösung darf nicht überschreiben.
+        try store.mergeSubagentJobs([job], resolvedParentExternalByShortId: [job.shortId: "claude-ext-anders"])
+        XCTAssertEqual(
+            store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }?.subagentParentSessionID,
+            "claude-ext-9"
+        )
+    }
+
+    /// Explizites --parent gewinnt gegen die PID-Auflösung.
+    func testExplicitParentWinsOverResolvedParent() throws {
+        _ = try store.createSession(
+            provider: .claude,
+            projectPath: "/tmp/parent-project",
+            title: "Parent-Chat",
+            externalSessionID: "claude-ext-explizit"
+        )
+        let job = makeJob(parentSessionID: "claude-ext-explizit")
+        try store.mergeSubagentJobs(
+            [job],
+            resolvedParentExternalByShortId: [job.shortId: "claude-ext-pid"]
+        )
+        XCTAssertEqual(
+            store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }?.subagentParentSessionID,
+            "claude-ext-explizit"
+        )
+    }
+
     // MARK: - Anlegen
 
     func testCreateAssignsParentProjectViaParentSessionID() throws {

@@ -261,6 +261,26 @@ final class AgentWindowStore {
         mutate { $0.unreadSubagentSessionIDs.removeAll { $0 == sessionID } }
     }
 
+    // MARK: - Subagent-Kinder: Auf-/Einklappen (ephemer)
+
+    /// Parents, deren Subagent-Kinder in der Sidebar AUSGEKLAPPT sind.
+    /// Bewusst NICHT persistiert (kein `state`-Feld): Default ist bei jedem
+    /// App-Start eingeklappt — die Kinder sind Detail, der Parent-Chip zeigt,
+    /// dass es sie gibt.
+    var expandedSubagentParentIDs: Set<UUID> = []
+
+    func isSubagentChildrenExpanded(_ parentID: UUID) -> Bool {
+        expandedSubagentParentIDs.contains(parentID)
+    }
+
+    func toggleSubagentChildren(_ parentID: UUID) {
+        if expandedSubagentParentIDs.contains(parentID) {
+            expandedSubagentParentIDs.remove(parentID)
+        } else {
+            expandedSubagentParentIDs.insert(parentID)
+        }
+    }
+
     // MARK: - Wartung
 
     /// Garbage-Collection gegen den aktuellen Workspace (tote Session-/Projekt-

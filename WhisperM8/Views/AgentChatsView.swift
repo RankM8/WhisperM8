@@ -980,6 +980,8 @@ struct AgentChatsView: View {
                             subagentChildrenByParent: subagentChildren.byParentLocalID,
                             runningSubagentCountByParent: jobRuntimeModel.runningCountByParentSessionID,
                             unreadSubagentSessionIDs: windowStore.unreadSubagentSessionIDs,
+                            expandedSubagentParentIDs: windowStore.expandedSubagentParentIDs,
+                            onToggleSubagentChildren: { windowStore.toggleSubagentChildren($0) },
                             onRenameProjectRequest: { beginRenameProject($0) },
                             onSetProjectColor: setProjectColor,
                             onChooseProjectIcon: { chooseProjectIcon($0) },

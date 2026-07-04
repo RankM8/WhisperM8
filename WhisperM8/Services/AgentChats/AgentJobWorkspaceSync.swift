@@ -103,9 +103,43 @@ final class AgentJobWorkspaceSync {
         }
         lastPhaseByShortId = Dictionary(uniqueKeysWithValues: jobs.map { ($0.shortId, $0.state) })
 
+        // 2b. Parent-Auflösung per Prozess-Abstammung: Jobs ohne explizites
+        //     --parent tragen die PID ihres `claude`-Vorfahren — die matchen
+        //     wir gegen die shellPids der laufenden PTY-Sessions und lösen
+        //     sie zur Claude-externalSessionID auf (persistiert der Merge).
+        //     Läuft der Parent-Chat nicht (mehr), bleibt es beim
+        //     Projekt-Fallback — beim nächsten Sync wird erneut versucht.
+        var resolvedParents: [String: String] = [:]
+        let unresolvedJobs = jobs.filter { $0.parentSessionID == nil && $0.parentProcessID != nil }
+        if !unresolvedJobs.isEmpty {
+            var sessionIDByPid: [Int32: UUID] = [:]
+            for controller in AgentTerminalRegistry.shared.runningControllers {
+                if let pid = controller.processID {
+                    sessionIDByPid[pid] = controller.sessionID
+                }
+            }
+            if !sessionIDByPid.isEmpty {
+                let preWorkspace = store.loadWorkspace()
+                let sessionByID = Dictionary(uniqueKeysWithValues: preWorkspace.sessions.map { ($0.id, $0) })
+                for job in unresolvedJobs {
+                    guard let pid = job.parentProcessID,
+                          let parentLocalID = sessionIDByPid[pid],
+                          let parent = sessionByID[parentLocalID],
+                          !parent.isSubagentJob,
+                          let externalID = parent.externalSessionID,
+                          !externalID.isEmpty else { continue }
+                    resolvedParents[job.shortId] = externalID
+                }
+            }
+        }
+
         // 3. Workspace-Merge (idempotent, diff-gated persistiert).
         do {
-            try store.mergeSubagentJobs(jobs, activityBumpShortIds: bumpShortIds)
+            try store.mergeSubagentJobs(
+                jobs,
+                activityBumpShortIds: bumpShortIds,
+                resolvedParentExternalByShortId: resolvedParents
+            )
         } catch {
             Logger.agentStore.warning("subagent_sync_merge_failed error=\(error.localizedDescription, privacy: .public)")
         }

@@ -664,9 +664,14 @@ struct AgentSessionStore {
     /// - `activityBumpShortIds`: Jobs mit Phasen-Übergang seit dem letzten
     ///   Sync — NUR für die wird `lastActivityAt` gebumpt (deterministisch auf
     ///   `job.updatedAt`, kein `Date()` pro Tick).
+    /// - `resolvedParentExternalByShortId`: vom Sync per PID-Abstammung
+    ///   aufgelöste Parents (Claude-externalSessionID) für Jobs OHNE
+    ///   explizites `--parent` — wird beim Anlegen genutzt und bei bekannten
+    ///   Sessions nachgetragen, solange dort noch kein Parent steht.
     func mergeSubagentJobs(
         _ jobs: [AgentJobState],
-        activityBumpShortIds: Set<String> = []
+        activityBumpShortIds: Set<String> = [],
+        resolvedParentExternalByShortId: [String: String] = [:]
     ) throws {
         // Branch-Lookups VOR der Mutation (kein Subprozess unter dem
         // Store-Lock) — nur für Fallback-Projekte, die es noch nicht gibt.
@@ -694,11 +699,20 @@ struct AgentSessionStore {
 
             for job in jobs {
                 let effectiveCwd = job.worktree?.path ?? job.cwd
+                // Explizites --parent gewinnt; sonst die PID-Auflösung.
+                let parentExternalID = job.parentSessionID
+                    ?? resolvedParentExternalByShortId[job.shortId]
                 if let index = workspace.sessions.firstIndex(where: { $0.subagentJobShortID == job.shortId }) {
                     // Bekannter Job → nur ECHTE Änderungen schreiben.
                     if workspace.sessions[index].externalSessionID == nil,
                        let threadID = job.codexThreadID {
                         workspace.sessions[index].externalSessionID = threadID
+                    }
+                    // Nachträgliche Parent-Zuordnung (Job lief schon, bevor
+                    // die PID aufgelöst werden konnte) — nie überschreiben.
+                    if workspace.sessions[index].subagentParentSessionID == nil,
+                       let parentExternalID {
+                        workspace.sessions[index].subagentParentSessionID = parentExternalID
                     }
                     if workspace.sessions[index].subagentCwd != effectiveCwd {
                         workspace.sessions[index].subagentCwd = effectiveCwd
@@ -719,7 +733,7 @@ struct AgentSessionStore {
                     // Muster mergeIndexedSessions — upsertProject wäre unterm
                     // Lock ein Deadlock).
                     let projectID: UUID
-                    if let parentExtID = job.parentSessionID,
+                    if let parentExtID = parentExternalID,
                        let parent = workspace.sessions.first(where: {
                            !$0.isSubagentJob && $0.externalSessionID == parentExtID
                        }) {
@@ -755,7 +769,7 @@ struct AgentSessionStore {
                             createdManually: true,
                             kind: .subagentJob,
                             subagentJobShortID: job.shortId,
-                            subagentParentSessionID: job.parentSessionID,
+                            subagentParentSessionID: parentExternalID,
                             subagentCwd: effectiveCwd
                         )
                     )

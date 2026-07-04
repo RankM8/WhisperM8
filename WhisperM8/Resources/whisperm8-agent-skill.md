@@ -54,7 +54,7 @@ whisperm8 agent help                             # Hilfetext
 | `--allow-network` | Netzwerk in der Sandbox (u.a. `git push`, Paketinstallationen). Default aus — vorher den User fragen. |
 | `--model <name>` | Codex-Modell-Override. |
 | `--effort <level>` | `model_reasoning_effort`-Override (z.B. low/medium/high). |
-| `--parent <session-id>` | Deine Claude-Session-ID — verknüpft den Job in der App-Sidebar mit deinem Chat. Immer setzen, wenn verfügbar (`$CLAUDE_SESSION_ID`). |
+| `--parent <session-id>` | Claude-Session-ID des spawnenden Chats — nur nötig, wenn du eine echte ID kennst. OHNE das Flag ordnet WhisperM8 den Job automatisch über den Prozessbaum dem Chat zu, in dem du läufst (`$CLAUDE_SESSION_ID` existiert NICHT als Env-Variable — nicht verwenden). |
 
 ## Exit-Codes (verbindlich — kein Text-Parsing nötig)
 
@@ -109,7 +109,10 @@ whisperm8 agent help                             # Hilfetext
 
 ## Arbeitsregeln
 
-1. **`--parent $CLAUDE_SESSION_ID` immer setzen** (wenn vorhanden).
+1. **Parent-Zuordnung ist automatisch:** Läufst du in einem
+   WhisperM8-Chat, erkennt das CLI den spawnenden Chat über den
+   Prozessbaum — kein `--parent` nötig. (`$CLAUDE_SESSION_ID` ist als
+   Env-Variable LEER — niemals darauf verlassen.)
 2. **Kurz (< ~2 Min erwartet):** direkt `run --wait --json`.
 3. **Länger:** `run --wait --json` als **Background-Bash-Task** starten
    (run_in_background) — das Harness meldet sich beim Prozessende von
@@ -138,11 +141,11 @@ whisperm8 agent help                             # Hilfetext
 
 ```bash
 # 1) Second-Opinion-Review, synchron
-whisperm8 agent run --wait --json --sandbox read-only --parent $CLAUDE_SESSION_ID \
+whisperm8 agent run --wait --json --sandbox read-only \
   "Reviewe den Diff von HEAD~3..HEAD auf Regressionen, Races und API-Brüche. Nur Analyse, keine Edits."
 
 # 2) Parallele Implementierung, isoliert (als Background-Task starten!)
-whisperm8 agent run --wait --json --worktree --parent $CLAUDE_SESSION_ID \
+whisperm8 agent run --wait --json --worktree \
   "Implementiere <X> in <Datei>. Verifiziere mit 'swift test --filter <Y>'. Committe bei grün (Conventional Commit, deutsche Beschreibung)."
 
 # 3) Fire-and-forget mit späterem Abholen

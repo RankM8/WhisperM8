@@ -36,6 +36,10 @@ struct ProjectChatGroup: View {
     var runningSubagentCountByParent: [UUID: Int] = [:]
     /// Subagent-Sessions mit ungelesenem Ergebnis — blauer Dot.
     var unreadSubagentSessionIDs: Set<UUID> = []
+    /// Parents mit AUSGEKLAPPTEN Subagent-Kindern (Default: eingeklappt;
+    /// ephemer im AgentWindowStore).
+    var expandedSubagentParentIDs: Set<UUID> = []
+    var onToggleSubagentChildren: (UUID) -> Void = { _ in }
     var onRenameProjectRequest: (AgentProject) -> Void
     var onSetProjectColor: (UUID, String) -> Void
     var onChooseProjectIcon: (AgentProject) -> Void
@@ -76,8 +80,16 @@ struct ProjectChatGroup: View {
                         sessionRow(session)
                         // Subagent-Kinder direkt unter der Parent-Row —
                         // eingerückt, ohne Drag&Drop, reduziertes Menü.
-                        ForEach(subagentChildrenByParent[session.id] ?? []) { child in
-                            subagentChildRow(child)
+                        // Standardmäßig EINGEKLAPPT (Toggle-Chip an der
+                        // Parent-Row); ein selektiertes Kind hält die Gruppe
+                        // implizit offen (z.B. nach Notification-Klick).
+                        let children = subagentChildrenByParent[session.id] ?? []
+                        if !children.isEmpty,
+                           expandedSubagentParentIDs.contains(session.id)
+                            || children.contains(where: { $0.id == selectedSessionID }) {
+                            ForEach(children) { child in
+                                subagentChildRow(child)
+                            }
                         }
                     }
                     if slice.hiddenCount > 0 {
@@ -191,8 +203,11 @@ struct ProjectChatGroup: View {
             isMissingTranscript: missingTranscriptSessionIDs.contains(session.id),
             isUnreadSubagentResult: unreadSubagentSessionIDs.contains(session.id),
             runningChildCount: runningSubagentCountByParent[session.id] ?? 0,
+            childCount: subagentChildrenByParent[session.id]?.count ?? 0,
+            isChildrenExpanded: expandedSubagentParentIDs.contains(session.id),
             onSelect: { onSelectSession(session.id) },
-            onClose: { onCloseSession(session) }
+            onClose: { onCloseSession(session) },
+            onToggleChildren: { onToggleSubagentChildren(session.id) }
         )
         // .equatable() VOR den Drag-Modifiern — die Modifier-Kette dahinter
         // bleibt byte-identisch zum reaktivierten Drag&Drop (7e84b7c).
@@ -485,11 +500,19 @@ struct SessionListButton: View {
     /// Ungelesenes Subagent-Ergebnis (running→done/failed, noch nicht
     /// geöffnet): blauer Dot statt des grauen Idle-Punkts.
     var isUnreadSubagentResult: Bool = false
-    /// Anzahl aktuell LAUFENDER Subagent-Kinder dieser Session — Zähler-Chip
-    /// an der Parent-Row, solange > 0.
+    /// Anzahl aktuell LAUFENDER Subagent-Kinder dieser Session — färbt den
+    /// Toggle-Chip aktiv (Teal-Dot), solange > 0.
     var runningChildCount: Int = 0
+    /// Gesamtzahl der Subagent-Kinder — der Toggle-Chip erscheint, sobald es
+    /// welche gibt (Kinder sind standardmäßig eingeklappt).
+    var childCount: Int = 0
+    /// Sind die Kinder gerade ausgeklappt? Steuert das Chevron im Chip.
+    var isChildrenExpanded: Bool = false
     var onSelect: () -> Void
     var onClose: () -> Void
+    /// Klick auf den Kinder-Chip (Auf-/Einklappen). Closures sind — wie
+    /// onSelect/onClose — bewusst NICHT Teil des Equatable-Vergleichs.
+    var onToggleChildren: (() -> Void)?
 
     @State private var isHovered = false
     /// Live-Status via Per-Item-Publisher; umgeht den Equatable-Skip korrekt
@@ -550,8 +573,8 @@ struct SessionListButton: View {
                             .help("Codex-Subagent · superviselt vom whisperm8-CLI")
                     }
 
-                    if runningChildCount > 0 {
-                        runningChildrenChip
+                    if childCount > 0 {
+                        subagentChildrenChip
                     }
 
                     Spacer(minLength: 0)
@@ -636,26 +659,35 @@ struct SessionListButton: View {
         }
     }
 
-    /// Zähler-Chip an der Parent-Row: „N SUB" in Teal, solange mindestens
-    /// ein Subagent-Kind aktiv (spawning/running) ist.
-    private var runningChildrenChip: some View {
-        HStack(spacing: 2) {
-            Circle()
-                .fill(Color.teal)
-                .frame(width: 4, height: 4)
-            Text("\(runningChildCount)")
+    /// Toggle-Chip an der Parent-Row: klappt die (standardmäßig
+    /// eingeklappten) Subagent-Kinder auf/zu. Chevron zeigt den Zustand,
+    /// der Teal-Dot pulst nur, solange mindestens ein Kind aktiv ist.
+    private var subagentChildrenChip: some View {
+        HStack(spacing: 3) {
+            Image(systemName: isChildrenExpanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 6.5, weight: .bold))
+            if runningChildCount > 0 {
+                Circle()
+                    .fill(Color.teal)
+                    .frame(width: 4, height: 4)
+            }
+            Text("\(childCount)")
                 .font(.system(size: 8, weight: .bold).monospacedDigit())
         }
         .foregroundStyle(Color.teal)
         .padding(.horizontal, 4)
-        .padding(.vertical, 1)
+        .padding(.vertical, 1.5)
         .background(Color.teal.opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
         .overlay(
             RoundedRectangle(cornerRadius: 3)
                 .stroke(Color.teal.opacity(0.30), lineWidth: 0.5)
         )
         .fixedSize()
-        .help("\(runningChildCount) Subagent\(runningChildCount == 1 ? "" : "s") arbeiten gerade")
+        .contentShape(Rectangle())
+        .onTapGesture { onToggleChildren?() }
+        .help(runningChildCount > 0
+            ? "\(childCount) Subagent\(childCount == 1 ? "" : "s") (\(runningChildCount) aktiv) — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")"
+            : "\(childCount) Subagent\(childCount == 1 ? "" : "s") — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")")
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
@@ -709,6 +741,8 @@ extension SessionListButton: Equatable {
             && lhs.indentAsSubagent == rhs.indentAsSubagent
             && lhs.isUnreadSubagentResult == rhs.isUnreadSubagentResult
             && lhs.runningChildCount == rhs.runningChildCount
+            && lhs.childCount == rhs.childCount
+            && lhs.isChildrenExpanded == rhs.isChildrenExpanded
     }
 }
 

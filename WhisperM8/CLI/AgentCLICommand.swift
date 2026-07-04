@@ -85,6 +85,12 @@ enum AgentRunCLI {
         initial.model = options.model
         initial.effort = options.effort
         initial.allowNetwork = options.allowNetwork
+        // Parent-Fallback ohne --parent: den `claude`-Vorfahren im eigenen
+        // Prozessbaum merken — die App ordnet den Job darüber dem spawnenden
+        // Chat zu (Claude Code exportiert keine Session-ID in die Bash-Env).
+        if options.parentSessionID == nil {
+            initial.parentProcessID = ProcessAncestry.findAncestor(named: "claude")
+        }
 
         do {
             try store.createJob(initial: initial)

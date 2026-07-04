@@ -46,6 +46,12 @@ struct AgentJobState: Codable, Equatable {
     var codexThreadID: String?
     /// Claude-Session, die den Job gespawnt hat (`--parent`).
     var parentSessionID: String?
+    /// PID des `claude`-Vorfahren im Prozessbaum des Spawn-Aufrufs — Fallback
+    /// für die Parent-Zuordnung, wenn `--parent` fehlt (Claude Code exportiert
+    /// keine Session-ID in die Bash-Umgebung). Die App matcht sie gegen die
+    /// shellPids ihrer laufenden PTY-Sessions. PID-Reuse: nur relevant,
+    /// solange der Chat läuft — akzeptierte Heuristik.
+    var parentProcessID: Int32?
     /// Liveness-Anker: Leser validieren mit kill(pid, 0), bevor sie
     /// `running` glauben. (PID-Reuse ist eine dokumentierte Limitation.)
     var supervisorPid: Int32?
@@ -81,6 +87,7 @@ struct AgentJobState: Codable, Equatable {
         self.cwd = cwd
         self.codexThreadID = nil
         self.parentSessionID = parentSessionID
+        self.parentProcessID = nil
         self.supervisorPid = nil
         self.turns = 0
         self.sandbox = sandbox.rawValue
