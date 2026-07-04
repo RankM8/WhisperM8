@@ -67,13 +67,15 @@ extension RecordingCoordinator {
         }
     }
 
-    /// Reagiert auf Pasteboard-Aenderungen waehrend des Recordings. Versucht
-    /// erst, einen Screenshot zu greifen (Bilddaten); wenn nichts dabei ist,
-    /// faengt sie kopierten Text ein und haengt ihn an `selectedText` an.
-    /// So landet alles, was der User waehrend des Sprechens kopiert,
-    /// automatisch im Kontext — egal ob Markup oder Text.
+    /// Reagiert auf Pasteboard-Aenderungen waehrend des Recordings UND der
+    /// Verarbeitung. Versucht erst, einen Screenshot zu greifen (Bilddaten);
+    /// wenn nichts dabei ist, faengt sie kopierten Text ein und haengt ihn an
+    /// `selectedText` an. So landet alles, was der User waehrend des Sprechens
+    /// ODER waehrend Transcribing/Improving kopiert, automatisch im Kontext —
+    /// das Post-Processing liest das Live-Bundle (processTranscriptIfNeeded).
     func observeClipboardChange() {
-        guard let appState, appState.isRecording, !appState.isTranscribing, !appState.isPostProcessing else { return }
+        guard let appState,
+              appState.isRecording || appState.isTranscribing || appState.isPostProcessing else { return }
 
         let pasteboard = NSPasteboard.general
         let changeCount = pasteboard.changeCount

@@ -153,6 +153,15 @@ extension RecordingCoordinator {
             return PostProcessingRunResult(finalText: rawText)
         }
 
+        // Letzter Sweep + Live-Bundle statt des beim Stop eingefrorenen:
+        // Kopien WÄHREND der Transkription (der 500-ms-Monitor läuft weiter)
+        // fließen so noch in den Prompt ein. Overlay-Edits sind in den
+        // Busy-Phasen gesperrt — das Live-Bundle ist also stets ein Superset
+        // des eingefrorenen. Leeres Live-Bundle = Retry-Pfad (appState wurde
+        // nach dem Erstlauf geleert) → dort gilt das mitgegebene Bundle.
+        observeClipboardChange()
+        let contextBundle = appState.contextBundle.isEmpty ? contextBundle : appState.contextBundle
+
         let allowedContextBundle = postProcessingService.allowedContextBundle(for: mode, capturedContext: contextBundle)
         let promptPackage = postProcessingService.promptPackage(
             rawText: rawText,

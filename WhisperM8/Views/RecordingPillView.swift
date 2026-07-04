@@ -84,7 +84,7 @@ struct RecordingPillView: View {
             // Kontext ist Inhalt, keine Deko: vorhandener Kontext bleibt in der
             // Aufnahme-Phase auch ohne Hover sichtbar — die Pill wächst dafür.
             if isExpanded || (phase == .recording && !controller.contextBundle.isEmpty) {
-                PillContextChip(controller: controller)
+                PillContextChip(controller: controller, isExpanded: isExpanded)
                     .padding(.trailing, 5)
                     .transition(.opacity)
             }
@@ -335,7 +335,10 @@ private struct PillOutputModeChip: View {
             .foregroundStyle(isDisabled ? Color.secondary.opacity(0.7) : Color.primary)
             .padding(.horizontal, 10)
             .frame(height: PillMetrics.chipHeight)
-            .frame(minWidth: 52, maxWidth: 110)
+            // Bewusst KEIN .frame(min/maxWidth:): der würde auf das Angebot
+            // expandieren statt auf Inhaltsbreite — der Chip wäre immer
+            // maximal breit. Text nimmt seine ideale Breite; bei echtem
+            // Platzmangel truncated lineLimit(1) am 560-pt-Pill-Deckel.
             .background {
                 Capsule().fill(Color.primary.opacity(0.08))
             }
@@ -352,6 +355,9 @@ private struct PillOutputModeChip: View {
 
 private struct PillContextChip: View {
     @ObservedObject var controller: OverlayController
+    /// Expandiert zeigt der Chip die informative Aufzählung
+    /// („Text + 2 Shots"), kollabiert nur das Ein-Wort-Kürzel.
+    let isExpanded: Bool
 
     var body: some View {
         Menu {
@@ -362,14 +368,15 @@ private struct PillContextChip: View {
                     .font(.system(size: 10, weight: .semibold))
                     .opacity(hasContext ? 0.9 : 0.7)
 
-                Text(controller.contextBundle.compactSummary)
+                Text(isExpanded ? controller.contextBundle.displaySummary : controller.contextBundle.compactSummary)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
             }
             .foregroundStyle(hasContext ? OverlayPalette.recording : Color.secondary.opacity(0.75))
             .padding(.horizontal, 10)
             .frame(height: PillMetrics.chipHeight)
-            .frame(maxWidth: 150)
+            // Kein .frame(maxWidth:) — siehe Mode-Chip: natürliche Breite,
+            // Truncation übernimmt der Pill-Deckel.
             .background {
                 Capsule().fill(Color.primary.opacity(0.08))
             }

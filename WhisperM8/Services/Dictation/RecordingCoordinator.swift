@@ -279,7 +279,10 @@ final class RecordingCoordinator {
         // als User-Kontext (und kurze Diktate verloeren ihren Kontext).
         await waitForContextCapture(timeout: 1.0)
         observeClipboardChange()
-        stopClipboardScreenshotMonitor()
+        // Der Monitor läuft bewusst WEITER: was der User während
+        // Transcribing/Improving kopiert, landet noch im Live-Bundle und
+        // fließt ins Post-Processing ein (processTranscriptIfNeeded liest
+        // das Live-Bundle). Gestoppt wird am Ende der Pipeline unten.
 
         let audioDuration = appState.recordingDuration
         let frozenOutputMode = appState.selectedOutputMode
@@ -307,6 +310,7 @@ final class RecordingCoordinator {
         guard let audioURL else {
             Logger.debug(" ERROR: No audio URL returned from recorder")
             removeEscKeyMonitor()
+            stopClipboardScreenshotMonitor()
             overlayController.hide()
             isProcessing = false
             showErrorAlert(title: "Recording Error", message: "No audio file was created.")
@@ -327,6 +331,7 @@ final class RecordingCoordinator {
             contextBundle: frozenContextBundle
         )
         removeEscKeyMonitor()
+        stopClipboardScreenshotMonitor()
 
         appState.isTranscribing = false
         appState.isPostProcessing = false
