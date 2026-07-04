@@ -7,6 +7,10 @@ struct AgentSessionUserNotification: Equatable {
     enum Kind: Equatable {
         case turnCompleted
         case inputRequested(AwaitingInputKind)
+        /// Codex-Subagent-Job fertig (Report liegt vor).
+        case subagentCompleted
+        /// Codex-Subagent-Job fehlgeschlagen.
+        case subagentFailed
     }
 
     var kind: Kind
@@ -22,6 +26,10 @@ struct AgentSessionUserNotification: Equatable {
             return "Agent ist fertig und wartet auf dich."
         case .inputRequested(let reason):
             return "Agent \(reason.notificationLabel)."
+        case .subagentCompleted:
+            return "Subagent ist fertig — Report liegt vor."
+        case .subagentFailed:
+            return "Subagent ist fehlgeschlagen."
         }
     }
 }

@@ -455,4 +455,36 @@ final class AgentUIStateTests: XCTestCase {
         XCTAssertEqual(state.openTabIDs, [manualNew, manualOld, other])
         // Importierte (createdManually=nil) und archivierte werden nicht migriert
     }
+
+    // MARK: - Subagent-Unread (Slice 3)
+
+    func testUnreadSubagentSessionIDsRoundTripViaJSON() throws {
+        let unread = [UUID(), UUID()]
+        let original = AgentUIState(unreadSubagentSessionIDs: unread)
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AgentUIState.self, from: encoded)
+        XCTAssertEqual(decoded.unreadSubagentSessionIDs, unread)
+    }
+
+    func testUnreadSubagentSessionIDsDefaultToEmptyForLegacyJSON() throws {
+        // Bestehende Sidecar-Files ohne das Feld — decodeIfPresent, KEIN
+        // schemaVersion-Bump.
+        let decoded = try JSONDecoder().decode(AgentUIState.self, from: Data("{}".utf8))
+        XCTAssertTrue(decoded.unreadSubagentSessionIDs.isEmpty)
+    }
+
+    func testPruneRemovesStaleAndDuplicateUnreadIDs() {
+        let pid = UUID()
+        let live = UUID()
+        let stale = UUID()
+        let workspace = makeWorkspace(
+            projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
+            sessions: [makeSession(id: live, projectID: pid)]
+        )
+
+        var state = AgentUIState(unreadSubagentSessionIDs: [stale, live, live])
+        state.prune(workspace: workspace)
+
+        XCTAssertEqual(state.unreadSubagentSessionIDs, [live])
+    }
 }

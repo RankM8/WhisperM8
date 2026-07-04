@@ -29,6 +29,13 @@ struct ProjectChatGroup: View {
     let autoRenamingSessionIDs: Set<UUID>
     /// IDs abgeschlossener Sessions, deren Transkript fehlt — ausgegraut.
     var missingTranscriptSessionIDs: Set<UUID> = []
+    /// Subagent-Kinder pro Parent-Row (lokale Session-ID) — rendern
+    /// eingerückt direkt unter der Parent-Zeile, ohne Drag&Drop.
+    var subagentChildrenByParent: [UUID: [AgentChatSession]] = [:]
+    /// Anzahl AKTIVER Subagent-Kinder pro Parent — Zähler-Chip.
+    var runningSubagentCountByParent: [UUID: Int] = [:]
+    /// Subagent-Sessions mit ungelesenem Ergebnis — blauer Dot.
+    var unreadSubagentSessionIDs: Set<UUID> = []
     var onRenameProjectRequest: (AgentProject) -> Void
     var onSetProjectColor: (UUID, String) -> Void
     var onChooseProjectIcon: (AgentProject) -> Void
@@ -67,6 +74,11 @@ struct ProjectChatGroup: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(slice.visible) { session in
                         sessionRow(session)
+                        // Subagent-Kinder direkt unter der Parent-Row —
+                        // eingerückt, ohne Drag&Drop, reduziertes Menü.
+                        ForEach(subagentChildrenByParent[session.id] ?? []) { child in
+                            subagentChildRow(child)
+                        }
                     }
                     if slice.hiddenCount > 0 {
                         showMoreRow(hiddenCount: slice.hiddenCount)
@@ -136,6 +148,36 @@ struct ProjectChatGroup: View {
         multiSelection.contains(session.id) && multiSelection.count > 1 ? multiSelection.count : 1
     }
 
+    /// Eingerückte Kind-Zeile eines Subagent-Jobs. Bewusst OHNE Drag&Drop
+    /// (Kinder kleben an ihrem Parent) und mit reduziertem Kontextmenü.
+    @ViewBuilder
+    private func subagentChildRow(_ child: AgentChatSession) -> some View {
+        SessionListButton(
+            session: child,
+            isSelected: selectedSessionID == child.id,
+            isMultiSelected: false,
+            isOpenTab: openTabIDs.contains(child.id),
+            accentColorHex: project.color,
+            statusStore: statusStore,
+            isAutoRenaming: false,
+            isMissingTranscript: false,
+            indentAsSubagent: true,
+            isUnreadSubagentResult: unreadSubagentSessionIDs.contains(child.id),
+            onSelect: { onSelectSession(child.id) },
+            onClose: { onCloseSession(child) }
+        )
+        .equatable()
+        .contextMenu {
+            Button("Umbenennen…", systemImage: "pencil") {
+                onRenameRequest(child)
+            }
+            Divider()
+            Button("Archivieren", systemImage: "archivebox") {
+                onCloseSession(child)
+            }
+        }
+    }
+
     @ViewBuilder
     private func sessionRow(_ session: AgentChatSession) -> some View {
         SessionListButton(
@@ -147,6 +189,8 @@ struct ProjectChatGroup: View {
             statusStore: statusStore,
             isAutoRenaming: autoRenamingSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptSessionIDs.contains(session.id),
+            isUnreadSubagentResult: unreadSubagentSessionIDs.contains(session.id),
+            runningChildCount: runningSubagentCountByParent[session.id] ?? 0,
             onSelect: { onSelectSession(session.id) },
             onClose: { onCloseSession(session) }
         )
@@ -435,6 +479,15 @@ struct SessionListButton: View {
     /// Archiv-Modus der Sidebar nutzt dieselbe Row mit „Wiederherstellen".
     var closeIcon: String = "xmark"
     var closeHelp: String = "Archivieren"
+    /// Subagent-Kind unter seiner Parent-Row: stärkerer Einzug (44 statt 28)
+    /// + SUB-Pill. Kinder haben kein Drag&Drop (macht der Aufrufer).
+    var indentAsSubagent: Bool = false
+    /// Ungelesenes Subagent-Ergebnis (running→done/failed, noch nicht
+    /// geöffnet): blauer Dot statt des grauen Idle-Punkts.
+    var isUnreadSubagentResult: Bool = false
+    /// Anzahl aktuell LAUFENDER Subagent-Kinder dieser Session — Zähler-Chip
+    /// an der Parent-Row, solange > 0.
+    var runningChildCount: Int = 0
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -492,6 +545,13 @@ struct SessionListButton: View {
                     } else if session.isAgentView {
                         kindPill("VIEW", color: .orange)
                             .help("Claude Agents View · Multi-Session-TUI")
+                    } else if session.isSubagentJob {
+                        kindPill("SUB", color: .teal)
+                            .help("Codex-Subagent · superviselt vom whisperm8-CLI")
+                    }
+
+                    if runningChildCount > 0 {
+                        runningChildrenChip
                     }
 
                     Spacer(minLength: 0)
@@ -499,7 +559,7 @@ struct SessionListButton: View {
                     trailingIndicator
                         .frame(minWidth: 28, alignment: .trailing)
                 }
-                .padding(.leading, 28)
+                .padding(.leading, indentAsSubagent ? 44 : 28)
                 .padding(.trailing, 8)
             }
             .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 26, alignment: .leading)
@@ -554,6 +614,14 @@ struct SessionListButton: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(AgentTheme.accent)
                 .help("Titel wird automatisch generiert …")
+        } else if isUnreadSubagentResult, resolvedStatus == .idle || resolvedStatus == nil {
+            // Fertiger Subagent-Job mit ungelesenem Ergebnis: blauer Dot
+            // statt des grauen Idle-Punkts (View-Wissen — kein eigener
+            // RuntimeStatus-Fall).
+            Circle()
+                .fill(Color.blue)
+                .frame(width: 7, height: 7)
+                .help("Neues Subagent-Ergebnis — noch nicht angesehen")
         } else {
             switch resolvedStatus {
             case .working, .awaitingInput, .idle, .errored:
@@ -566,6 +634,28 @@ struct SessionListButton: View {
                     .foregroundStyle(AgentTheme.textTertiary)
             }
         }
+    }
+
+    /// Zähler-Chip an der Parent-Row: „N SUB" in Teal, solange mindestens
+    /// ein Subagent-Kind aktiv (spawning/running) ist.
+    private var runningChildrenChip: some View {
+        HStack(spacing: 2) {
+            Circle()
+                .fill(Color.teal)
+                .frame(width: 4, height: 4)
+            Text("\(runningChildCount)")
+                .font(.system(size: 8, weight: .bold).monospacedDigit())
+        }
+        .foregroundStyle(Color.teal)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 1)
+        .background(Color.teal.opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
+        .overlay(
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(Color.teal.opacity(0.30), lineWidth: 0.5)
+        )
+        .fixedSize()
+        .help("\(runningChildCount) Subagent\(runningChildCount == 1 ? "" : "s") arbeiten gerade")
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
@@ -616,6 +706,9 @@ extension SessionListButton: Equatable {
             && lhs.isMultiSelected == rhs.isMultiSelected
             && lhs.closeIcon == rhs.closeIcon
             && lhs.closeHelp == rhs.closeHelp
+            && lhs.indentAsSubagent == rhs.indentAsSubagent
+            && lhs.isUnreadSubagentResult == rhs.isUnreadSubagentResult
+            && lhs.runningChildCount == rhs.runningChildCount
     }
 }
 

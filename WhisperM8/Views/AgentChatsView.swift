@@ -99,6 +99,10 @@ struct AgentChatsView: View {
     /// Referenz auf den app-weiten Auto-Namer (Koordinator) — lazy in
     /// `setupRuntimeServicesIfNeeded()` gesetzt.
     @State var autoNamer: AgentSessionAutoNamer?
+    /// Laufzeit-Projektion der Subagent-Jobs (Snapshots, Zähler, Übernahmen).
+    /// @State-Bridge auf das Singleton, damit Observation-Tracking greift
+    /// (Muster `windowStore`). internal, da +Subagents es nutzt.
+    @State var jobRuntimeModel = AgentJobRuntimeModel.shared
 
     /// Etappe-0 Tab-Drag: gemessene Tab-Frames (Inhalts-Space) + aktueller
     /// Einfüge-Index während eines Drags (ephemer, nicht persistiert).
@@ -544,6 +548,11 @@ struct AgentChatsView: View {
                let session = workspace.sessions.first(where: { $0.id == sessionID }) {
                 selectedProjectID = session.projectID
             }
+            // Subagent-Ergebnis gilt mit der Selektion als gelesen (No-op
+            // für alles, was nicht als unread markiert ist).
+            if let sessionID = newValue {
+                windowStore.clearSubagentUnread(sessionID)
+            }
             updateActiveBackgroundTrackerIfNeeded()
         }
         .onChange(of: selectedProjectID) { _, _ in
@@ -865,7 +874,18 @@ struct AgentChatsView: View {
                 // sind @Published und triggern den). Nur noch für den
                 // Scope-Filter („Aktiv") — der Row-Status kommt vollständig
                 // aus dem Status-Koordinator.
+                // Subagent-Kinder: unter Parent-Rows gruppiert; laufende Jobs
+                // halten ihre Parent-Row in jedem Scope sichtbar (sonst
+                // verschwände ein arbeitender Subagent im „Aktiv"-Filter).
+                let subagentChildren = AgentSidebarModelBuilder.subagentChildren(
+                    workspaceSessions: workspace.sessions
+                )
+                let subagentChildIDs = Set(
+                    subagentChildren.byParentLocalID.values.flatMap { $0 }.map(\.id)
+                )
                 let runningSessionIDs = terminalRegistry.activeSessionIDs
+                    .union(jobRuntimeModel.runningCountByParentSessionID.filter { $0.value > 0 }.keys)
+                    .union(jobRuntimeModel.activeSubagentSessionIDs)
                 let scopeFilter = makeScopeFilter(
                     openTabIDs: openTabIDSet,
                     runningSessionIDs: runningSessionIDs
@@ -873,7 +893,8 @@ struct AgentChatsView: View {
                 let sessionsByProject = AgentSidebarModelBuilder.sessionsByProject(
                     workspaceSessions: workspace.sessions,
                     pinnedSessionIDs: Set(pinnedSessionIDs),
-                    scope: scopeFilter
+                    scope: scopeFilter,
+                    subagentChildIDs: subagentChildIDs
                 )
                 // Im gefilterten Scope leere Projektgruppen ausblenden — sonst
                 // stünden in „Aktiv" lauter Projekte ohne Zeilen. In `.all` (und
@@ -887,7 +908,8 @@ struct AgentChatsView: View {
                 let flatSessions = AgentSidebarModelBuilder.flatSessions(
                     workspaceSessions: workspace.sessions,
                     pinnedSessionIDs: Set(pinnedSessionIDs),
-                    scope: scopeFilter
+                    scope: scopeFilter,
+                    subagentChildIDs: subagentChildIDs
                 )
                 let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
                 let visiblePinned = AgentSidebarModelBuilder.pinnedSessions(
@@ -955,6 +977,9 @@ struct AgentChatsView: View {
                             statusStore: runtimeStatusStore,
                             autoRenamingSessionIDs: autoRenamingSessionIDs,
                             missingTranscriptSessionIDs: missingTranscriptIDs,
+                            subagentChildrenByParent: subagentChildren.byParentLocalID,
+                            runningSubagentCountByParent: jobRuntimeModel.runningCountByParentSessionID,
+                            unreadSubagentSessionIDs: windowStore.unreadSubagentSessionIDs,
                             onRenameProjectRequest: { beginRenameProject($0) },
                             onSetProjectColor: setProjectColor,
                             onChooseProjectIcon: { chooseProjectIcon($0) },
@@ -1641,28 +1666,43 @@ struct AgentChatsView: View {
             projectChatStrip
 
             if let selectedSession, let project = selectedSessionProject {
-                AgentSessionDetailView(
-                    project: project,
-                    session: selectedSession,
-                    terminalRegistry: terminalRegistry,
-                    actionRequest: sessionActionRequest,
-                    onStateChanged: loadWorkspaceFast,
-                    onSessionLaunched: { sessionID in
-                        AgentSessionStatusCoordinator.shared.sessionLaunched(sessionID: sessionID)
-                    },
-                    onSessionTerminated: { sessionID, exitCode in
-                        AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: sessionID, exitCode: exitCode)
-                    },
-                    onExternalSessionIDBound: { sessionID in
-                        AgentSessionStatusCoordinator.shared.externalSessionIDBound(sessionID: sessionID)
-                    },
-                    onPrepareClaudeHookArguments: { sessionID in
-                        AgentSessionStatusCoordinator.shared.prepareLaunchArguments(localSessionID: sessionID)
-                    },
-                    onClaudeHookLaunched: { sessionID in
-                        AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: sessionID)
+                Group {
+                    // Subagent-Jobs rendern die Job-Detail-View (Report +
+                    // Live-Transcript + Composer) — bis zur Übernahme, dann
+                    // übernimmt der normale PTY-Pfad (AgentSessionDetailView).
+                    if selectedSession.isSubagentJob && !jobRuntimeModel.isTakenOver(selectedSession.id) {
+                        SubagentJobDetailView(
+                            session: selectedSession,
+                            project: project,
+                            jobRuntimeModel: jobRuntimeModel,
+                            onTakeOver: { takeOverSubagentJob(selectedSession) },
+                            onAppearClearUnread: { windowStore.clearSubagentUnread(selectedSession.id) }
+                        )
+                    } else {
+                        AgentSessionDetailView(
+                            project: project,
+                            session: selectedSession,
+                            terminalRegistry: terminalRegistry,
+                            actionRequest: sessionActionRequest,
+                            onStateChanged: loadWorkspaceFast,
+                            onSessionLaunched: { sessionID in
+                                AgentSessionStatusCoordinator.shared.sessionLaunched(sessionID: sessionID)
+                            },
+                            onSessionTerminated: { sessionID, exitCode in
+                                AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: sessionID, exitCode: exitCode)
+                            },
+                            onExternalSessionIDBound: { sessionID in
+                                AgentSessionStatusCoordinator.shared.externalSessionIDBound(sessionID: sessionID)
+                            },
+                            onPrepareClaudeHookArguments: { sessionID in
+                                AgentSessionStatusCoordinator.shared.prepareLaunchArguments(localSessionID: sessionID)
+                            },
+                            onClaudeHookLaunched: { sessionID in
+                                AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: sessionID)
+                            }
+                        )
                     }
-                )
+                }
                 .id(selectedSession.id)
                 .padding(.top, 14)
                 .padding(.horizontal, 14)

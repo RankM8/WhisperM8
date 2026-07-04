@@ -155,6 +155,32 @@ final class AgentSessionStatusCoordinator {
         states[sessionID]
     }
 
+    // MARK: - Subagent-Jobs (state.json als Quelle)
+
+    /// Status-Mapping für `.subagentJob`-Sessions. Die laufen NICHT durch
+    /// RuntimeWatcher/Transcript-Heuristik — state.json des Supervisors ist
+    /// präziser. Die Methode lebt bewusst HIER (Single-Writer-Invariante:
+    /// nur der Koordinator schreibt in den `statusStore`), umgeht aber die
+    /// PTY-State-Machine — Jobs haben keinen Prozess-Lebenszyklus in dieser
+    /// App. Keine neuen `AgentSessionRuntimeStatus`-Fälle: „done+ungelesen =
+    /// blau" ist View-Wissen (Kind + Unread), `awaitingInput` ist bei
+    /// `--ask-for-approval never` by construction unmöglich.
+    func updateSubagentJobStatus(sessionID: UUID, state: AgentJobState.State) {
+        switch state {
+        case .spawning, .running:
+            statusStore.setStatus(.working, for: sessionID)
+        case .failed:
+            statusStore.setStatus(.errored, for: sessionID)
+        case .done:
+            statusStore.setStatus(.idle, for: sessionID)
+        case .stopped:
+            statusStore.setStatus(.stopped, for: sessionID)
+        case .takenOver:
+            // Ab jetzt übernimmt der normale PTY-Status-Pfad.
+            statusStore.clear(sessionID: sessionID)
+        }
+    }
+
     // MARK: - Signal-Quellen
 
     /// Hook-Event aus der Bridge. `SessionStart` bindet zusätzlich die
@@ -246,6 +272,15 @@ final class AgentSessionStatusCoordinator {
                 postNotification(kind: .inputRequested(reason), sessionID: sessionID)
             }
         }
+    }
+
+    /// Notification für einen abgeschlossenen Subagent-Turn (done/failed).
+    /// Wird vom `AgentJobWorkspaceSync` bei ECHTEN Phasen-Übergängen
+    /// aufgerufen — nie beim initialen Einlesen. Respektiert dieselbe
+    /// Präferenz wie die Chat-Fertigmeldung; lautlos (kein Sound-Pfad).
+    func postSubagentNotification(sessionID: UUID, failed: Bool) {
+        guard loadPreferences().stopNotificationEnabled else { return }
+        postNotification(kind: failed ? .subagentFailed : .subagentCompleted, sessionID: sessionID)
     }
 
     private func postNotification(kind: AgentSessionUserNotification.Kind, sessionID: UUID) {

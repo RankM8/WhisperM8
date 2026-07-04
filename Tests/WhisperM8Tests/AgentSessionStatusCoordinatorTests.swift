@@ -383,4 +383,37 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         coordinator.handleHookEvent(localID: session.id, event: end)
         XCTAssertEqual(coordinator.statusStore.status(for: session.id), .stopped)
     }
+
+    // MARK: Subagent-Jobs (state.json → statusStore)
+
+    func testSubagentJobStatusMapsAllPhases() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .spawning)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .running)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .done)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle)
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .failed)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .errored)
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .stopped)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .stopped)
+    }
+
+    func testSubagentJobTakenOverClearsStatus() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .running)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+
+        // Übernahme: der Job-Status verschwindet — ab jetzt schreibt nur
+        // noch der normale PTY-Pfad in den Store.
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .takenOver)
+        XCTAssertNil(coordinator.statusStore.status(for: sessionID))
+    }
 }

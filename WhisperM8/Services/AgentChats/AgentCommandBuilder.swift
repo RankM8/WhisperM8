@@ -113,6 +113,9 @@ struct AgentCommandBuilder {
 
         let extra = extraArgumentsResolver(.codex)
         let serviceTierArguments = codexServiceTierResolver().configArguments
+        // Subagent-Jobs hängen am Parent-PROJEKT, arbeiten aber ggf. in
+        // einem eigenen cwd (Worktree) — Resume/Übernahme muss dort laufen.
+        let workingDirectory = session.subagentCwd ?? project.path
 
         if session.hasLaunchedInitialPrompt {
             guard let externalSessionID = session.externalSessionID else {
@@ -121,7 +124,7 @@ struct AgentCommandBuilder {
             var arguments: [String] = ["resume"]
             arguments.append(contentsOf: extra)
             arguments.append(contentsOf: [
-                "-C", project.path,
+                "-C", workingDirectory,
                 "-m", session.model,
                 "-c", "model_reasoning_effort=\(session.reasoningEffort)",
             ])
@@ -132,7 +135,7 @@ struct AgentCommandBuilder {
             return AgentLaunchCommand(
                 executablePath: executable,
                 arguments: arguments,
-                workingDirectory: project.path,
+                workingDirectory: workingDirectory,
                 keyboardProfile: .codexChat
             )
         }

@@ -544,6 +544,16 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         return pid > 0 ? pid : nil
     }
 
+    /// Injiziert Text in die laufende TUI, als hätte der User ihn getippt —
+    /// bewusst OHNE abschließendes Enter (wie beim Finder-Datei-Drop): der
+    /// User sieht den Text im Composer und schickt ihn selbst ab. Genutzt
+    /// vom Subagent-Report-Routing („Report → in Claude-Chat einfügen";
+    /// Protokoll `PromptRoutableTerminal`).
+    func sendUserText(_ text: String) {
+        guard isRunning else { return }
+        terminal.send(txt: text)
+    }
+
     private var onLaunched: () -> Void
     private var onTerminated: (Int32?) -> Void
     private var themeObserver: NSObjectProtocol?

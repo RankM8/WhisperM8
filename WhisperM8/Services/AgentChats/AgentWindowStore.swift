@@ -236,6 +236,31 @@ final class AgentWindowStore {
         mutate { $0.expandedProjectIDs = ids }
     }
 
+    // MARK: - Subagent-Unread (global, gelesen ist gelesen)
+
+    /// Ungelesene Subagent-Ergebnisse als Set — Row-Input der Sidebar.
+    var unreadSubagentSessionIDs: Set<UUID> {
+        Set(state.unreadSubagentSessionIDs)
+    }
+
+    func isSubagentUnread(_ sessionID: UUID) -> Bool {
+        state.unreadSubagentSessionIDs.contains(sessionID)
+    }
+
+    /// Vom `AgentJobWorkspaceSync` beim Übergang running→done/failed gesetzt.
+    /// Diff-gated: erneutes Markieren derselben Session ist ein No-op (kein
+    /// Save-Churn).
+    func markSubagentUnread(_ sessionID: UUID) {
+        guard !state.unreadSubagentSessionIDs.contains(sessionID) else { return }
+        mutate { $0.unreadSubagentSessionIDs.append(sessionID) }
+    }
+
+    /// Geleert bei Tab-Selektion bzw. beim Öffnen der Job-Detail-View.
+    func clearSubagentUnread(_ sessionID: UUID) {
+        guard state.unreadSubagentSessionIDs.contains(sessionID) else { return }
+        mutate { $0.unreadSubagentSessionIDs.removeAll { $0 == sessionID } }
+    }
+
     // MARK: - Wartung
 
     /// Garbage-Collection gegen den aktuellen Workspace (tote Session-/Projekt-

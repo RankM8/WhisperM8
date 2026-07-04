@@ -587,8 +587,19 @@ struct AgentSessionStore {
         try mutateWorkspace { workspace in
             Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
             Self.removeUnresumableClaudeSessions(from: &workspace)
+            // Subagent-Jobs besitzen ihre Codex-Session exklusiv: der Scan
+            // findet deren Rollout-JSONL auch in ~/.codex/sessions und würde
+            // sie sonst duplizieren oder aufs Job-cwd-Projekt umhängen.
+            // Bewusst ALLE .subagentJob-Sessions (nicht nur aktive) — auch
+            // nach Übernahme/rm-Zwischenzuständen bleibt die Zuordnung.
+            let subagentThreadIDs = Set(
+                workspace.sessions
+                    .filter { $0.isSubagentJob }
+                    .compactMap(\.externalSessionID)
+            )
             for indexed in indexedSessions {
                 guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
+                guard !subagentThreadIDs.contains(indexed.externalSessionID) else { continue }
                 let projectPath = Self.canonicalProjectPath(indexed.cwd)
                 let project: AgentProject
                 if let existingProject = workspace.projects.first(where: { $0.path == projectPath }) {
@@ -642,6 +653,125 @@ struct AgentSessionStore {
             Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
             Self.removeUnresumableClaudeSessions(from: &workspace)
         }
+    }
+
+    /// Spiegelt die Subagent-Jobs (state.json-Snapshots aus `agent-jobs/`) in
+    /// den Workspace — Gegenstück zu `mergeIndexedSessions`, gerufen vom
+    /// `AgentJobWorkspaceSync`. Muss IDEMPOTENT sein: der Sync läuft bei jedem
+    /// FSEvent; ein Lauf ohne echte Änderung darf den Workspace nicht anfassen
+    /// (sonst persisted der Debounce dauernd und die Sidebar re-rendert).
+    ///
+    /// - `activityBumpShortIds`: Jobs mit Phasen-Übergang seit dem letzten
+    ///   Sync — NUR für die wird `lastActivityAt` gebumpt (deterministisch auf
+    ///   `job.updatedAt`, kein `Date()` pro Tick).
+    func mergeSubagentJobs(
+        _ jobs: [AgentJobState],
+        activityBumpShortIds: Set<String> = []
+    ) throws {
+        // Branch-Lookups VOR der Mutation (kein Subprozess unter dem
+        // Store-Lock) — nur für Fallback-Projekte, die es noch nicht gibt.
+        let knownPaths = Set(loadWorkspace().projects.map(\.path))
+        var branchByPath: [String: String?] = [:]
+        for job in jobs {
+            let path = Self.canonicalProjectPath(job.cwd)
+            if !knownPaths.contains(path), branchByPath.index(forKey: path) == nil {
+                branchByPath[path] = Self.currentGitBranch(at: path)
+            }
+        }
+
+        try mutateWorkspace { workspace in
+            let jobShortIds = Set(jobs.map(\.shortId))
+
+            // 1. Verschwundene Job-Verzeichnisse (`agent rm`): Short-ID nilen,
+            //    die Session bleibt — der Indexer darf die Codex-Session
+            //    danach normal adoptieren (Dedupe-Set greift nicht mehr).
+            for index in workspace.sessions.indices {
+                guard workspace.sessions[index].isSubagentJob,
+                      let shortId = workspace.sessions[index].subagentJobShortID,
+                      !jobShortIds.contains(shortId) else { continue }
+                workspace.sessions[index].subagentJobShortID = nil
+            }
+
+            for job in jobs {
+                let effectiveCwd = job.worktree?.path ?? job.cwd
+                if let index = workspace.sessions.firstIndex(where: { $0.subagentJobShortID == job.shortId }) {
+                    // Bekannter Job → nur ECHTE Änderungen schreiben.
+                    if workspace.sessions[index].externalSessionID == nil,
+                       let threadID = job.codexThreadID {
+                        workspace.sessions[index].externalSessionID = threadID
+                    }
+                    if workspace.sessions[index].subagentCwd != effectiveCwd {
+                        workspace.sessions[index].subagentCwd = effectiveCwd
+                    }
+                    if workspace.sessions[index].title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        workspace.sessions[index].title = Self.subagentSessionTitle(from: job.intent)
+                    }
+                    if activityBumpShortIds.contains(job.shortId) {
+                        workspace.sessions[index].lastActivityAt = max(
+                            job.updatedAt,
+                            workspace.sessions[index].lastActivityAt
+                        )
+                    }
+                } else {
+                    // Unbekannter Job → Session anlegen. Projekt-Zuordnung:
+                    // Parent-Session (Claude-externalSessionID) → deren
+                    // Projekt; Fallback: Projekt fürs Job-cwd (find-or-create,
+                    // Muster mergeIndexedSessions — upsertProject wäre unterm
+                    // Lock ein Deadlock).
+                    let projectID: UUID
+                    if let parentExtID = job.parentSessionID,
+                       let parent = workspace.sessions.first(where: {
+                           !$0.isSubagentJob && $0.externalSessionID == parentExtID
+                       }) {
+                        projectID = parent.projectID
+                    } else {
+                        let path = Self.canonicalProjectPath(job.cwd)
+                        if let existing = workspace.projects.first(where: { $0.path == path }) {
+                            projectID = existing.id
+                        } else {
+                            let project = AgentProject(
+                                name: URL(fileURLWithPath: path).lastPathComponent,
+                                path: path,
+                                color: AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
+                                lastBranch: branchByPath[path] ?? nil
+                            )
+                            workspace.projects.append(project)
+                            projectID = project.id
+                        }
+                    }
+                    workspace.sessions.append(
+                        AgentChatSession(
+                            provider: .codex,
+                            projectID: projectID,
+                            externalSessionID: job.codexThreadID,
+                            title: Self.subagentSessionTitle(from: job.intent),
+                            status: .closed,
+                            // Resume-Pfad ohne Sonderfall (Übernahme):
+                            hasLaunchedInitialPrompt: true,
+                            createdAt: job.createdAt,
+                            lastActivityAt: job.updatedAt,
+                            // SONST UNSICHTBAR — die Sidebar filtert auf
+                            // isManuallyCreated:
+                            createdManually: true,
+                            kind: .subagentJob,
+                            subagentJobShortID: job.shortId,
+                            subagentParentSessionID: job.parentSessionID,
+                            subagentCwd: effectiveCwd
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /// Sidebar-Titel aus dem Job-Intent: erste Zeile, auf 60 Zeichen gekürzt.
+    /// Pure + testbar (Muster `backgroundSessionTitle`).
+    static func subagentSessionTitle(from intent: String) -> String {
+        let trimmed = intent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let firstLine = trimmed.split(whereSeparator: { $0.isNewline }).first.map(String.init) ?? trimmed
+        let cap = 60
+        let snippet = firstLine.count > cap ? String(firstLine.prefix(cap - 1)) + "…" : firstLine
+        return snippet.isEmpty ? "Subagent-Job" : snippet
     }
 
     static func sortedSessions(_ sessions: [AgentChatSession]) -> [AgentChatSession] {

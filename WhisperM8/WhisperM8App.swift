@@ -257,6 +257,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // gestartete Sessions tauchen damit nach Sekunden auf statt erst beim
         // nächsten Foreground-Scan.
         AgentDirectoryEventMonitor.shared.start()
+        // Subagent-Jobs (whisperm8-CLI-Supervisor): FSEvents auf agent-jobs/
+        // + Launch/Foreground-Sync — spiegelt Jobs als .subagentJob-Sessions
+        // in den Workspace und pflegt Status/Zähler/Unread.
+        AgentJobWorkspaceSync.shared.start()
 
         // Routing: Onboarding nur, wenn die zwei essenziellen System-Permissions
         // (Mikrofon + Accessibility) noch nicht erteilt sind. Ohne diese ist die

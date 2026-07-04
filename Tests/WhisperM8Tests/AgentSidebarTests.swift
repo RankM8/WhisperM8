@@ -92,6 +92,9 @@ final class SessionListButtonEquatableTests: XCTestCase {
         isAutoRenaming: Bool = false,
         isMissingTranscript: Bool = false,
         isMultiSelected: Bool = false,
+        indentAsSubagent: Bool = false,
+        isUnreadSubagentResult: Bool = false,
+        runningChildCount: Int = 0,
         store: AgentSessionRuntimeStatusStore? = nil
     ) -> SessionListButton {
         SessionListButton(
@@ -103,6 +106,9 @@ final class SessionListButtonEquatableTests: XCTestCase {
             statusStore: store ?? AgentSessionRuntimeStatusStore(),
             isAutoRenaming: isAutoRenaming,
             isMissingTranscript: isMissingTranscript,
+            indentAsSubagent: indentAsSubagent,
+            isUnreadSubagentResult: isUnreadSubagentResult,
+            runningChildCount: runningChildCount,
             onSelect: {},
             onClose: {}
         )
@@ -129,6 +135,11 @@ final class SessionListButtonEquatableTests: XCTestCase {
         XCTAssertNotEqual(base, makeButton(session: session, isAutoRenaming: true))
         XCTAssertNotEqual(base, makeButton(session: session, isMissingTranscript: true))
         XCTAssertNotEqual(base, makeButton(session: session, isMultiSelected: true))
+        // Subagent-Felder (Slice 3) — Pflegefalle: neue darstellungsrelevante
+        // Felder MÜSSEN das `==` brechen, sonst bleiben Rows stale.
+        XCTAssertNotEqual(base, makeButton(session: session, indentAsSubagent: true))
+        XCTAssertNotEqual(base, makeButton(session: session, isUnreadSubagentResult: true))
+        XCTAssertNotEqual(base, makeButton(session: session, runningChildCount: 2))
     }
 }
 
@@ -320,6 +331,122 @@ final class SidebarScopeFilterTests: XCTestCase {
         XCTAssertEqual(counts.active, 1, "nur die laufende")
         XCTAssertEqual(counts.recent, 2, "laufende + kürzlich aktive")
         XCTAssertEqual(counts.all, 3, "alle nicht-archivierten manuellen")
+    }
+}
+
+// MARK: - Subagent-Kinder (Slice 3)
+
+final class AgentSidebarSubagentChildrenTests: XCTestCase {
+    private let projectID = UUID()
+
+    private func makeSubagentSession(
+        title: String = "Subagent",
+        parentExternalID: String?,
+        status: AgentChatStatus = .closed
+    ) -> AgentChatSession {
+        var session = AgentChatSession(
+            provider: .codex,
+            projectID: projectID,
+            externalSessionID: "thread-\(UUID().uuidString)",
+            title: title,
+            createdAt: Date(timeIntervalSince1970: 500),
+            lastActivityAt: Date(timeIntervalSince1970: 1_000),
+            createdManually: true,
+            kind: .subagentJob,
+            subagentJobShortID: "a1b2c3d4",
+            subagentParentSessionID: parentExternalID
+        )
+        session.status = status
+        return session
+    }
+
+    private func makeParent(externalID: String?) -> AgentChatSession {
+        var session = makeSidebarSession(projectID: projectID, title: "Parent")
+        session.externalSessionID = externalID
+        return session
+    }
+
+    func testSubagentChildrenGroupsByParent() {
+        let parent = makeParent(externalID: "claude-ext-1")
+        let childA = makeSubagentSession(title: "Kind A", parentExternalID: "claude-ext-1")
+        let childB = makeSubagentSession(title: "Kind B", parentExternalID: "claude-ext-1")
+
+        let result = AgentSidebarModelBuilder.subagentChildren(
+            workspaceSessions: [parent, childA, childB]
+        )
+        XCTAssertEqual(result.byParentLocalID[parent.id]?.count, 2)
+        XCTAssertTrue(result.orphans.isEmpty)
+    }
+
+    func testOrphanFallbackWhenParentMissingOrHidden() {
+        let archivedParent = {
+            var session = makeSidebarSession(projectID: projectID, title: "Archiv", status: .archived)
+            session.externalSessionID = "claude-archiviert"
+            return session
+        }()
+        let noParent = makeSubagentSession(title: "Ohne Parent", parentExternalID: nil)
+        let unknownParent = makeSubagentSession(title: "Parent unbekannt", parentExternalID: "gibts-nicht")
+        let hiddenParentChild = makeSubagentSession(title: "Parent archiviert", parentExternalID: "claude-archiviert")
+
+        let result = AgentSidebarModelBuilder.subagentChildren(
+            workspaceSessions: [archivedParent, noParent, unknownParent, hiddenParentChild]
+        )
+        XCTAssertTrue(result.byParentLocalID.isEmpty)
+        XCTAssertEqual(
+            Set(result.orphans.map(\.title)),
+            ["Ohne Parent", "Parent unbekannt", "Parent archiviert"],
+            "Kinder ohne sichtbaren Parent fallen als normale Rows zurück"
+        )
+    }
+
+    func testArchivedChildrenAreExcluded() {
+        let parent = makeParent(externalID: "claude-ext-1")
+        let archived = makeSubagentSession(title: "Weg", parentExternalID: "claude-ext-1", status: .archived)
+
+        let result = AgentSidebarModelBuilder.subagentChildren(
+            workspaceSessions: [parent, archived]
+        )
+        XCTAssertNil(result.byParentLocalID[parent.id])
+        XCTAssertTrue(result.orphans.isEmpty)
+    }
+
+    func testMainListsExcludeChildrenButKeepOrphans() {
+        let parent = makeParent(externalID: "claude-ext-1")
+        let child = makeSubagentSession(title: "Kind", parentExternalID: "claude-ext-1")
+        let orphan = makeSubagentSession(title: "Orphan", parentExternalID: nil)
+
+        let children = AgentSidebarModelBuilder.subagentChildren(
+            workspaceSessions: [parent, child, orphan]
+        )
+        let childIDs = Set(children.byParentLocalID.values.flatMap { $0 }.map(\.id))
+
+        let grouped = AgentSidebarModelBuilder.sessionsByProject(
+            workspaceSessions: [parent, child, orphan],
+            pinnedSessionIDs: [],
+            subagentChildIDs: childIDs
+        )
+        XCTAssertEqual(
+            Set((grouped[projectID] ?? []).map(\.title)),
+            ["Parent", "Orphan"],
+            "Kinder raus aus der Hauptliste, Orphans bleiben als normale Rows"
+        )
+
+        let flat = AgentSidebarModelBuilder.flatSessions(
+            workspaceSessions: [parent, child, orphan],
+            pinnedSessionIDs: [],
+            subagentChildIDs: childIDs
+        )
+        XCTAssertEqual(Set(flat.map(\.title)), ["Parent", "Orphan"])
+
+        let counts = AgentSidebarModelBuilder.scopeCounts(
+            workspaceSessions: [parent, child, orphan],
+            pinnedSessionIDs: [],
+            runningSessionIDs: [],
+            openTabIDs: [],
+            now: Date(timeIntervalSince1970: 1_000),
+            subagentChildIDs: childIDs
+        )
+        XCTAssertEqual(counts.all, 2, "Kinder zählen nicht in die Scope-Zähler")
     }
 }
 

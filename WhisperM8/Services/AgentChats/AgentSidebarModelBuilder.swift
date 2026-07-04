@@ -89,21 +89,62 @@ struct AgentSidebarModelBuilder {
     /// Auswahl" oben, die Sidebar der Bestand). Gepinnte Sessions wandern
     /// exklusiv in die Gepinnt-Sektion und fallen hier raus.
     /// Sortierung pro Projekt wie `AgentSessionStore.sortedSessions`.
+    /// Subagent-Kinder mit auflösbarem Parent werden aus der Hauptliste
+    /// herausgehalten (`subagentChildIDs`) — sie rendern eingerückt unter
+    /// ihrer Parent-Row. Orphans (Parent weg/archiviert) bleiben drin und
+    /// fallen als normale Rows ins Projekt zurück.
     static func sessionsByProject(
         workspaceSessions: [AgentChatSession],
         pinnedSessionIDs: Set<UUID>,
-        scope: SidebarScopeFilter = .all
+        scope: SidebarScopeFilter = .all,
+        subagentChildIDs: Set<UUID> = []
     ) -> [UUID: [AgentChatSession]] {
         var grouped: [UUID: [AgentChatSession]] = [:]
         for session in workspaceSessions {
             guard session.status != .archived,
                   session.isManuallyCreated,
                   !pinnedSessionIDs.contains(session.id),
+                  !subagentChildIDs.contains(session.id),
                   scope.matches(session)
             else { continue }
             grouped[session.projectID, default: []].append(session)
         }
         return grouped.mapValues { AgentSessionStore.sortedSessions($0) }
+    }
+
+    /// Gruppiert `.subagentJob`-Sessions unter ihre Parent-Session (Match:
+    /// `subagentParentSessionID` == Claude-`externalSessionID` des Parents).
+    /// Kinder ohne auffindbaren, sichtbaren Parent (Parent archiviert, nie
+    /// importiert, `--parent` fehlte) landen in `orphans` und werden von den
+    /// Hauptlisten als normale Rows gerendert. Pure + testbar.
+    static func subagentChildren(
+        workspaceSessions: [AgentChatSession]
+    ) -> (byParentLocalID: [UUID: [AgentChatSession]], orphans: [AgentChatSession]) {
+        // Nur Parents, deren Row überhaupt rendert (manuell + nicht
+        // archiviert) — sonst hinge das Kind unerreichbar unter einer
+        // unsichtbaren Zeile.
+        var parentIDByExternalID: [String: UUID] = [:]
+        for session in workspaceSessions {
+            guard !session.isSubagentJob,
+                  session.isManuallyCreated,
+                  session.status != .archived,
+                  let externalID = session.externalSessionID, !externalID.isEmpty
+            else { continue }
+            parentIDByExternalID[externalID] = session.id
+        }
+
+        var byParent: [UUID: [AgentChatSession]] = [:]
+        var orphans: [AgentChatSession] = []
+        for session in workspaceSessions {
+            guard session.isSubagentJob, session.status != .archived else { continue }
+            if let parentExtID = session.subagentParentSessionID,
+               let parentID = parentIDByExternalID[parentExtID] {
+                byParent[parentID, default: []].append(session)
+            } else {
+                orphans.append(session)
+            }
+        }
+        return (byParent.mapValues { AgentSessionStore.sortedSessions($0) }, orphans)
     }
 
     /// Flache, projektübergreifende Chat-Liste für das `.flat`-Layout —
@@ -113,13 +154,15 @@ struct AgentSidebarModelBuilder {
     static func flatSessions(
         workspaceSessions: [AgentChatSession],
         pinnedSessionIDs: Set<UUID>,
-        scope: SidebarScopeFilter = .all
+        scope: SidebarScopeFilter = .all,
+        subagentChildIDs: Set<UUID> = []
     ) -> [AgentChatSession] {
         workspaceSessions
             .filter {
                 $0.status != .archived
                     && $0.isManuallyCreated
                     && !pinnedSessionIDs.contains($0.id)
+                    && !subagentChildIDs.contains($0.id)
                     && scope.matches($0)
             }
             .sorted { $0.lastActivityAt > $1.lastActivityAt }
@@ -134,7 +177,8 @@ struct AgentSidebarModelBuilder {
         runningSessionIDs: Set<UUID>,
         openTabIDs: Set<UUID>,
         now: Date,
-        recentWindow: TimeInterval = SidebarScopeFilter.defaultRecentWindow
+        recentWindow: TimeInterval = SidebarScopeFilter.defaultRecentWindow,
+        subagentChildIDs: Set<UUID> = []
     ) -> (active: Int, recent: Int, all: Int) {
         var active = 0
         var recent = 0
@@ -143,7 +187,8 @@ struct AgentSidebarModelBuilder {
         for session in workspaceSessions {
             guard session.status != .archived,
                   session.isManuallyCreated,
-                  !pinnedSessionIDs.contains(session.id)
+                  !pinnedSessionIDs.contains(session.id),
+                  !subagentChildIDs.contains(session.id)
             else { continue }
             all += 1
             let isActive = runningSessionIDs.contains(session.id)

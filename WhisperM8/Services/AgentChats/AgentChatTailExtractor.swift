@@ -54,6 +54,11 @@ enum AgentChatTailExtractor {
             return extractFromBackgroundChat(ref: ref, maxCharacters: maxCharacters)
         case .agentView:
             return extractFromAgentView(ref: ref, maxCharacters: maxCharacters)
+        case .subagentJob:
+            // Subagent-Jobs persistieren als normale Codex-Sessions —
+            // derselbe Tail-Read wie beim Chat (externalSessionID =
+            // codexThreadID des Jobs).
+            return extractFromChat(ref: ref, maxCharacters: maxCharacters)
         }
     }
 

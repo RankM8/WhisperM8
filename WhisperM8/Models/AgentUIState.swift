@@ -48,6 +48,11 @@ struct AgentUIState: Codable, Equatable {
     var selectedProjectID: UUID?
     /// Welche Sidebar-Projekte sind aktuell auf-geklappt (Disclosure).
     var expandedProjectIDs: [UUID]
+    /// Subagent-Jobs mit ungelesenem Ergebnis (running→done/failed, noch
+    /// nicht geöffnet). Global — gelesen ist gelesen, egal in welchem
+    /// Fenster. `decodeIfPresent` mit Default `[]`, KEIN schemaVersion-Bump:
+    /// ältere Builds ignorieren das Feld einfach.
+    var unreadSubagentSessionIDs: [UUID]
     /// Persistierte Agent-Chat-Fenster mit eigener Tab-Reihenfolge.
     var windows: [AgentChatWindowState]
     /// Primaerfenster fuer Dock-/Menubar-Reopen und alte Single-Window-Flows.
@@ -73,6 +78,7 @@ struct AgentUIState: Codable, Equatable {
         case selectedSessionID
         case selectedProjectID
         case expandedProjectIDs
+        case unreadSubagentSessionIDs
         case windows
         case primaryWindowID
         // v1-Keys, nur fürs Decoding
@@ -87,6 +93,7 @@ struct AgentUIState: Codable, Equatable {
         selectedSessionID: UUID? = nil,
         selectedProjectID: UUID? = nil,
         expandedProjectIDs: [UUID] = [],
+        unreadSubagentSessionIDs: [UUID] = [],
         windows: [AgentChatWindowState] = [],
         primaryWindowID: UUID? = nil,
         legacyOpenTabIDsByProject: [UUID: [UUID]] = [:],
@@ -99,6 +106,7 @@ struct AgentUIState: Codable, Equatable {
         self.selectedSessionID = selectedSessionID
         self.selectedProjectID = selectedProjectID
         self.expandedProjectIDs = expandedProjectIDs
+        self.unreadSubagentSessionIDs = unreadSubagentSessionIDs
         self.primaryWindowID = resolvedPrimaryWindowID
         if windows.isEmpty {
             self.windows = [
@@ -125,6 +133,7 @@ struct AgentUIState: Codable, Equatable {
         selectedSessionID = try c.decodeIfPresent(UUID.self, forKey: .selectedSessionID)
         selectedProjectID = try c.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
         expandedProjectIDs = try c.decodeIfPresent([UUID].self, forKey: .expandedProjectIDs) ?? []
+        unreadSubagentSessionIDs = try c.decodeIfPresent([UUID].self, forKey: .unreadSubagentSessionIDs) ?? []
         windows = try c.decodeIfPresent([AgentChatWindowState].self, forKey: .windows) ?? []
         primaryWindowID = try c.decodeIfPresent(UUID.self, forKey: .primaryWindowID)
             ?? windows.first(where: \.isPrimary)?.id
@@ -141,6 +150,7 @@ struct AgentUIState: Codable, Equatable {
         try c.encodeIfPresent(selectedSessionID, forKey: .selectedSessionID)
         try c.encodeIfPresent(selectedProjectID, forKey: .selectedProjectID)
         try c.encode(expandedProjectIDs, forKey: .expandedProjectIDs)
+        try c.encode(unreadSubagentSessionIDs, forKey: .unreadSubagentSessionIDs)
         try c.encode(windows, forKey: .windows)
         try c.encode(primaryWindowID, forKey: .primaryWindowID)
         // v1-Felder werden bewusst nicht mehr geschrieben.
@@ -248,6 +258,9 @@ struct AgentUIState: Codable, Equatable {
         windows = Self.normalizedWindows(windows, primaryWindowID: primaryWindowID)
         pinnedSessionIDs = Self.deduplicated(
             pinnedSessionIDs.filter { liveSessionIDs.contains($0) }
+        )
+        unreadSubagentSessionIDs = Self.deduplicated(
+            unreadSubagentSessionIDs.filter { liveSessionIDs.contains($0) }
         )
 
         if let sid = selectedSessionID, !liveSessionIDs.contains(sid) {
