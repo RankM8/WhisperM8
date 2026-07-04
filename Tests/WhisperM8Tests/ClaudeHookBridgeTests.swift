@@ -115,6 +115,30 @@ final class ClaudeHookBridgeTests: XCTestCase {
         XCTAssertNil(ClaudeHookEventStore.parseLine(""))
     }
 
+    func testThrottleExemptsAwaitingRelevantPreToolUse() {
+        // Pre-/PostToolUse teilen sich ein Drosselfenster — aber PreToolUse
+        // mit AskUserQuestion/ExitPlanMode ist die EINZIGE Quelle für
+        // „Claude hat eine Frage / wartet auf Plan-Freigabe" und darf dort
+        // niemals verworfen werden (sonst pulsiert der Chat „arbeitet",
+        // während er auf den User wartet).
+        func event(_ name: ClaudeHookEvent.EventName, tool: String? = nil) -> ClaudeHookEvent {
+            ClaudeHookEvent(hookEventName: name, sessionID: "s1", transcriptPath: nil, cwd: nil, reason: nil, toolName: tool, rawJSON: "{}")
+        }
+
+        XCTAssertTrue(ClaudeHookBridge.isThrottledToolEvent(event(.preToolUse, tool: "Bash")))
+        XCTAssertTrue(ClaudeHookBridge.isThrottledToolEvent(event(.postToolUse, tool: "Bash")))
+        XCTAssertTrue(ClaudeHookBridge.isThrottledToolEvent(event(.preToolUse, tool: nil)))
+
+        XCTAssertFalse(ClaudeHookBridge.isThrottledToolEvent(event(.preToolUse, tool: "AskUserQuestion")))
+        XCTAssertFalse(ClaudeHookBridge.isThrottledToolEvent(event(.preToolUse, tool: "ExitPlanMode")))
+
+        // Seltene Events bleiben grundsätzlich ungedrosselt.
+        XCTAssertFalse(ClaudeHookBridge.isThrottledToolEvent(event(.stop)))
+        XCTAssertFalse(ClaudeHookBridge.isThrottledToolEvent(event(.permissionRequest)))
+        XCTAssertFalse(ClaudeHookBridge.isThrottledToolEvent(event(.userPromptSubmit)))
+        XCTAssertFalse(ClaudeHookBridge.isThrottledToolEvent(event(.postToolUseFailure, tool: "Bash")))
+    }
+
     func testClaudeHookEventStoreTailReadsIncrementally() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("hook-tail-\(UUID().uuidString).jsonl")

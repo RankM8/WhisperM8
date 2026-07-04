@@ -60,6 +60,13 @@ final class AgentSessionStatusCoordinator {
     private(set) var states: [UUID: AgentSessionLifecycleState] = [:]
     private var notificationThrottle = AgentNotificationThrottle()
     private var launchGraceTasks: [UUID: Task<Void, Never>] = [:]
+    /// Sessions, deren Hook-Bridge nachweislich Events liefert. Für sie sind
+    /// die Hooks die alleinige Statusquelle: Transcript-Heuristiken werden
+    /// ignoriert (Ausnahme: `turnAborted`, weil der Stop-Hook bei
+    /// ESC-Interrupts nicht feuert). Vorher durfte der 1,5-s-Transcript-Poll
+    /// Hook-Zustände überschreiben — mit den heutigen Claude-JSONL-Zeilentypen
+    /// stufte das arbeitende Chats laufend fälschlich auf idle herab.
+    private var hookLiveSessions: Set<UUID> = []
 
     init(
         store: AgentSessionStore = AgentSessionStore(),
@@ -109,8 +116,12 @@ final class AgentSessionStatusCoordinator {
     }
 
     /// Prozess (PTY/Spawn) wurde gestartet: Zustand `launching`, Transcript-
-    /// Watch anhängen, Grace-Timer für stumme Hooks armieren.
+    /// Watch anhängen, Grace-Timer für stumme Hooks armieren. Die Hook-
+    /// Lebendigkeit wird zurückgesetzt — die neue Prozessinstanz muss erst
+    /// wieder beweisen, dass ihre Hooks feuern (Hooks können pro Launch
+    /// deaktiviert sein).
     func sessionLaunched(sessionID: UUID) {
+        hookLiveSessions.remove(sessionID)
         apply(.processLaunched, to: sessionID)
         attachWatch(sessionID: sessionID)
         scheduleLaunchGrace(sessionID: sessionID)
@@ -123,6 +134,17 @@ final class AgentSessionStatusCoordinator {
 
     func sessionTerminated(sessionID: UUID, exitCode: Int32?) {
         cancelLaunchGrace(sessionID: sessionID)
+
+        // Background-Agents: Der PTY ist nur ein `claude attach`-Fenster in
+        // den Supervisor-Job — sein Exit beendet NICHT den Agenten. Hook-
+        // Stream und Transcript-Watch laufen weiter; das echte Ende meldet
+        // der `SessionEnd`-Hook (Reducer → `.stopped`). Vorher setzte der
+        // Attach-Exit laufende BG-Agents fälschlich auf „beendet".
+        if isBackgroundSession(sessionID) {
+            return
+        }
+
+        hookLiveSessions.remove(sessionID)
         apply(.processTerminated(exitCode: exitCode), to: sessionID)
         watcher.markTerminated(sessionID: sessionID)
         hookBridge.stopTracking(localSessionID: sessionID)
@@ -137,8 +159,10 @@ final class AgentSessionStatusCoordinator {
 
     /// Hook-Event aus der Bridge. `SessionStart` bindet zusätzlich die
     /// externe Session-ID an die lokale Session (bisher in
-    /// `AgentChatsView.handleClaudeHookEvent`).
+    /// `AgentChatsView.handleClaudeHookEvent`). Jedes Event markiert die
+    /// Session als hook-live — ab dann sind Hooks die alleinige Statusquelle.
     func handleHookEvent(localID: UUID, event: ClaudeHookEvent) {
+        hookLiveSessions.insert(localID)
         if event.hookEventName == .sessionStart {
             bindExternalSessionID(localID: localID, event: event)
         }
@@ -148,20 +172,41 @@ final class AgentSessionStatusCoordinator {
         }
         guard let signal = AgentSessionSignal(hookEvent: event) else { return }
         apply(signal, to: localID)
+
+        // Background-Agents haben keinen PTY: ihr Prozessende IST das
+        // `SessionEnd` (Reducer → `.stopped`). Transcript-Watch beenden;
+        // die Hook-Bridge bleibt bewusst dran — falls der Reducer je einen
+        // In-Place-Reason falsch einschätzt, belebt das nächste
+        // `SessionStart`/`UserPromptSubmit` die Session wieder.
+        if event.hookEventName == .sessionEnd,
+           states[localID] == .stopped,
+           isBackgroundSession(localID) {
+            watcher.markTerminated(sessionID: localID)
+        }
     }
 
-    /// Transcript-Watcher-Entscheidung. `turnFinished` stößt zusätzlich das
-    /// bestehende Bookkeeping an (Auto-Naming + `lastTurnAt`) — bewusst am
-    /// Decider-Pfad belassen: erst wenn das Transkript das Turn-Ende zeigt,
-    /// ist es vollständig genug für den Auto-Namer.
+    /// Transcript-Watcher-Entscheidung.
+    ///
+    /// Statusmeinungen (working/idle) zählen NUR für Sessions ohne lebendige
+    /// Hook-Bridge (Codex, extern gestartete Claude-Läufe, Hooks deaktiviert).
+    /// Für hook-live Sessions ist das Transkript zu unscharf (Meta-Zeilen,
+    /// Schreib-Lag, stille Tool-Läufe) — nur zwei Fakten kommen durch:
+    /// - `turnAborted` (ESC-Interrupt): der Stop-Hook feuert dabei nicht.
+    /// - `turnFinished`-Bookkeeping (Auto-Naming + `lastTurnAt`): bewusst am
+    ///   Decider-Pfad belassen — erst wenn das Transkript das Turn-Ende
+    ///   zeigt, ist es vollständig genug für den Auto-Namer.
     func handleTranscriptDecision(sessionID: UUID, decision: AgentTranscriptStatusDecider.Decision) {
-        switch decision.status {
-        case .idle:
-            apply(.transcriptIdle(turnFinished: decision.turnFinished), to: sessionID)
-        case .working, .awaitingInput:
-            apply(.transcriptActivity, to: sessionID)
-        case .stopped, .errored:
-            return // liefert der Decider nicht — defensiv ignorieren
+        if decision.turnAborted {
+            apply(.turnAborted, to: sessionID)
+        } else if !hookLiveSessions.contains(sessionID) {
+            switch decision.status {
+            case .idle:
+                apply(.transcriptIdle(turnFinished: decision.turnFinished), to: sessionID)
+            case .working, .awaitingInput:
+                apply(.transcriptActivity, to: sessionID)
+            case .stopped, .errored:
+                break // liefert der Decider nicht — defensiv ignorieren
+            }
         }
         if decision.turnFinished {
             performTurnFinishedBookkeeping(sessionID: sessionID)
@@ -215,6 +260,12 @@ final class AgentSessionStatusCoordinator {
         )
         guard notificationThrottle.shouldPost(notification, now: Date()) else { return }
         notificationPoster.post(notification)
+    }
+
+    private func isBackgroundSession(_ sessionID: UUID) -> Bool {
+        store.loadWorkspace().sessions
+            .first(where: { $0.id == sessionID })?
+            .isBackgroundChat ?? false
     }
 
     // MARK: - Watch/Binding-Helfer

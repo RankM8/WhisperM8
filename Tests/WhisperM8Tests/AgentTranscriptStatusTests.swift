@@ -164,12 +164,12 @@ final class AgentTranscriptStatusTests: XCTestCase {
 
     func testStatusDeciderTreatsLongRunningOngoingAsWorking() {
         // Langer Tool-/Reasoning-Schritt schreibt nichts ins JSONL → bleibt
-        // „arbeitet". awaitingInput kommt nur noch vom Notification-Hook,
-        // nicht mehr aus einer Stille-Heuristik (die langes Arbeiten mit
-        // Permission-Warten verwechselte).
+        // innerhalb des Stall-Fensters „arbeitet". awaitingInput kommt nur
+        // noch vom Hook, nicht mehr aus einer Stille-Heuristik (die langes
+        // Arbeiten mit Permission-Warten verwechselte).
         let now = Date()
         let event: AgentTranscriptEvent = .assistantMessageOngoing(timestamp: now)
-        let mtime = now.addingTimeInterval(-120)
+        let mtime = now.addingTimeInterval(-AgentTranscriptStatusDecider.workingStallSeconds)
         let decision = AgentTranscriptStatusDecider.decide(
             lastEvent: event,
             fileMTime: mtime,
@@ -177,6 +177,89 @@ final class AgentTranscriptStatusTests: XCTestCase {
             priorTurnFinishedAt: nil
         )
         XCTAssertEqual(decision?.status, .working)
+    }
+
+    func testStatusDeciderDowngradesStalledActivityToIdle() {
+        // Sicherheitsnetz: „Aktivität", deren Datei seit über
+        // `workingStallSeconds` unangetastet ist, ist keine Arbeit mehr —
+        // typisch nach Interrupt ohne Marker-Zeile, Netz-/API-Abbruch oder
+        // Crash. Ohne dieses Netz pulsierte der Chat für immer grün.
+        let now = Date()
+        let staleMTime = now.addingTimeInterval(-(AgentTranscriptStatusDecider.workingStallSeconds + 1))
+        let staleEvents: [AgentTranscriptEvent] = [
+            .userMessage(timestamp: staleMTime),
+            .toolResult(timestamp: staleMTime),
+            .assistantMessageOngoing(timestamp: staleMTime),
+            .assistantMessageStopped(timestamp: staleMTime, stopReason: "tool_use")
+        ]
+        for event in staleEvents {
+            let decision = AgentTranscriptStatusDecider.decide(
+                lastEvent: event,
+                fileMTime: staleMTime,
+                now: now,
+                priorTurnFinishedAt: nil
+            )
+            XCTAssertEqual(decision?.status, .idle, "\(event) muss nach Stall-Fenster idle melden")
+            XCTAssertEqual(decision?.turnFinished, false, "Stall ist kein Turn-Ende — keine Notification")
+        }
+    }
+
+    func testTranscriptParserSkipsMetaLinesInTailScan() {
+        // Claude schreibt nach der semantischen Zeile häufig Meta-Zeilen
+        // (mode/last-prompt/queue-operation/attachment/…). Die dürfen den
+        // Status nicht bestimmen — der Scan muss rückwärts bis zur letzten
+        // semantischen Zeile laufen (hier: assistant mit tool_use = arbeitet).
+        let tail = #"{"type":"assistant","message":{"stop_reason":"tool_use","content":[]}}"# + "\n"
+            + #"{"type":"queue-operation","operation":"dequeue"}"# + "\n"
+            + #"{"type":"mode","mode":"default","sessionId":"abc"}"# + "\n"
+            + #"{"type":"last-prompt","prompt":"x"}"# + "\n"
+            + #"{"type":"attachment","attachment":{}}"# + "\n"
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .claude)
+        guard case .assistantMessageStopped(_, let reason) = event else {
+            return XCTFail("Erwartete die assistant-Zeile hinter den Meta-Zeilen, bekam \(String(describing: event))")
+        }
+        XCTAssertEqual(reason, "tool_use")
+    }
+
+    func testTranscriptParserReturnsNilForMetaOnlyTail() {
+        // Nur Meta im Tail → keine Meinung (nil), statt über die
+        // mtime-Heuristik einen Status zu raten.
+        let tail = #"{"type":"mode","mode":"default"}"# + "\n"
+            + #"{"type":"summary","summary":"t"}"# + "\n"
+            + #"{"type":"system","content":"x"}"# + "\n"
+        XCTAssertNil(AgentTranscriptParser.lastEvent(in: tail, provider: .claude))
+    }
+
+    func testTranscriptParserDetectsUserInterrupt() {
+        // ESC-Abbruch: Claude schreibt eine user-Zeile mit dem
+        // Interrupt-Marker. Sie ist das GEGENTEIL eines Turn-Starts.
+        let line = #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#
+        guard case .turnInterrupted = AgentTranscriptParser.parseLine(line, provider: .claude) else {
+            return XCTFail("Interrupt-Marker muss .turnInterrupted liefern")
+        }
+
+        let toolVariant = #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}"#
+        guard case .turnInterrupted = AgentTranscriptParser.parseLine(toolVariant, provider: .claude) else {
+            return XCTFail("Tool-Use-Variante des Markers muss .turnInterrupted liefern")
+        }
+
+        let stringVariant = #"{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"}}"#
+        guard case .turnInterrupted = AgentTranscriptParser.parseLine(stringVariant, provider: .claude) else {
+            return XCTFail("String-Content-Variante muss .turnInterrupted liefern")
+        }
+    }
+
+    func testStatusDeciderReportsAbortForInterrupt() {
+        let now = Date()
+        let decision = AgentTranscriptStatusDecider.decide(
+            lastEvent: .turnInterrupted(timestamp: now),
+            fileMTime: now,
+            now: now,
+            priorTurnFinishedAt: nil
+        )
+        XCTAssertEqual(decision?.status, .idle)
+        XCTAssertEqual(decision?.turnAborted, true)
+        XCTAssertEqual(decision?.turnFinished, false, "Abbruch darf kein Auto-Naming/Notification triggern")
     }
 
     func testStatusDeciderTreatsRecentOngoingAsWorking() {

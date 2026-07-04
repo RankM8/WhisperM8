@@ -12,7 +12,18 @@ enum AgentTranscriptEvent: Equatable {
     /// Assistant-Message ohne `stop_reason` → Tool-Use offen oder Streaming.
     case assistantMessageOngoing(timestamp: Date?)
     case toolResult(timestamp: Date?)
+    /// User hat den Turn per ESC abgebrochen — Claude schreibt dann eine
+    /// user-Zeile `[Request interrupted by user]` (ggf. „… for tool use").
+    /// Eigener Fall statt `.userMessage`, weil ein Abbruch das GEGENTEIL
+    /// eines Turn-Starts ist: der Chat idlet danach am Prompt.
+    case turnInterrupted(timestamp: Date?)
     case sessionMeta
+    /// Statusneutrale Claude-Zeile (`mode`, `last-prompt`, `queue-operation`,
+    /// `attachment`, `summary`, `system`, …). Wird beim `lastEvent`-Scan
+    /// ÜBERSPRUNGEN: solche Zeilen folgen oft NACH der semantisch relevanten
+    /// Zeile — sie als „letztes Event" zu werten stufte arbeitende Chats über
+    /// die 30-s-mtime-Heuristik fälschlich auf idle herab.
+    case meta
     case other
 }
 
@@ -32,14 +43,17 @@ enum AgentTranscriptParser {
         }
     }
 
-    /// Liefert das letzte parsebare Event aus einem Stück Transkript. Tail-Reads
-    /// können mit einer halben Zeile beginnen — wir parsen daher nicht starr ab
-    /// dem ersten Newline, sondern nehmen die letzten N vollständig parsebaren
-    /// Zeilen.
+    /// Liefert das letzte parsebare, statusRELEVANTE Event aus einem Stück
+    /// Transkript. Tail-Reads können mit einer halben Zeile beginnen — wir
+    /// parsen daher nicht starr ab dem ersten Newline, sondern scannen
+    /// rückwärts. `.meta`-Zeilen (mode/last-prompt/queue-operation/…) werden
+    /// übersprungen: sie folgen häufig NACH der semantischen Zeile und würden
+    /// den Status sonst verwässern. Nur-Meta-Tail → `nil` („keine Meinung").
     static func lastEvent(in tailText: String, provider: AgentProvider) -> AgentTranscriptEvent? {
         let lines = tailText.split(omittingEmptySubsequences: true) { $0.isNewline }
         for line in lines.reversed() {
             if let event = parseLine(String(line), provider: provider) {
+                if case .meta = event { continue }
                 return event
             }
         }
@@ -47,6 +61,10 @@ enum AgentTranscriptParser {
     }
 
     // MARK: - Claude
+
+    /// Marker, mit dem Claude einen User-Abbruch (ESC) ins Transkript schreibt.
+    /// Prefix-Match, weil es Varianten gibt („… for tool use]").
+    static let interruptMarkerPrefix = "[Request interrupted by user"
 
     private static func parseClaudeLine(_ obj: [String: Any]) -> AgentTranscriptEvent? {
         let type = obj["type"] as? String
@@ -56,9 +74,22 @@ enum AgentTranscriptParser {
             // Claude packt Tool-Results in user-Messages mit einem `tool_result`
             // Content-Block — nicht echte User-Eingabe.
             if let message = obj["message"] as? [String: Any],
-               let content = message["content"] as? [[String: Any]],
-               content.contains(where: { ($0["type"] as? String) == "tool_result" }) {
-                return .toolResult(timestamp: timestamp)
+               let content = message["content"] as? [[String: Any]] {
+                if content.contains(where: { ($0["type"] as? String) == "tool_result" }) {
+                    return .toolResult(timestamp: timestamp)
+                }
+                if content.contains(where: { block in
+                    (block["type"] as? String) == "text"
+                        && ((block["text"] as? String)?.hasPrefix(interruptMarkerPrefix) ?? false)
+                }) {
+                    return .turnInterrupted(timestamp: timestamp)
+                }
+            }
+            // Ältere Zeilen tragen den Content auch als reinen String.
+            if let message = obj["message"] as? [String: Any],
+               let text = message["content"] as? String,
+               text.hasPrefix(interruptMarkerPrefix) {
+                return .turnInterrupted(timestamp: timestamp)
             }
             return .userMessage(timestamp: timestamp)
         case "assistant":
@@ -67,12 +98,12 @@ enum AgentTranscriptParser {
                 return .assistantMessageStopped(timestamp: timestamp, stopReason: stopReason)
             }
             return .assistantMessageOngoing(timestamp: timestamp)
-        case "summary":
-            return .sessionMeta
-        case "system":
-            return .other
         default:
-            return .other
+            // Alles Nicht-Semantische (`summary`, `system`, `mode`,
+            // `last-prompt`, `queue-operation`, `attachment`,
+            // `file-history-snapshot`, künftige Typen) ist Meta — wird beim
+            // Rückwärts-Scan übersprungen statt den Status zu bestimmen.
+            return .meta
         }
     }
 
@@ -152,10 +183,25 @@ enum AgentTranscriptStatusDecider {
         /// Agent-Turn beendet wurde — Trigger für Auto-Naming und
         /// `AgentChatSession.lastTurnAt`-Update.
         var turnFinished: Bool
+        /// `true`, wenn der User den Turn abgebrochen hat (ESC-Interrupt im
+        /// Transkript). Wird vom Koordinator IMMER angewendet — auch bei
+        /// hook-getrackten Sessions, weil der Stop-Hook bei Interrupts nicht
+        /// feuert und der Chat sonst für immer als „arbeitet" pulsiert.
+        var turnAborted: Bool = false
     }
 
     /// Schwellwert: ab wann gilt eine ruhige Session ohne erkannten Stop als idle.
     static let idleAfterSeconds: TimeInterval = 30
+
+    /// Sicherheitsnetz für „working ohne Ausweg": Wenn die JSONL so lange
+    /// nicht mehr geschrieben wurde, obwohl das letzte Event Aktivität nahelegt
+    /// (userMessage/toolResult/ongoing/tool_use), stufen wir auf idle herunter.
+    /// Betrifft nur den Heuristik-Pfad (Codex/externe Sessions ohne Hooks) —
+    /// hook-getrackte Sessions ignorieren Decider-Statusmeinungen ohnehin.
+    /// Trade-off: ein hook-loser Tool-Lauf, der länger als 2 Minuten nichts
+    /// ins Transkript schreibt, wird vorübergehend als idle angezeigt —
+    /// das ist bewusst das kleinere Übel gegenüber ewigem Grün-Puls.
+    static let workingStallSeconds: TimeInterval = 120
 
     /// `stop_reason`-Werte einer Claude-Assistant-Message, die KEIN Turn-Ende
     /// bedeuten (Anthropic-API): der Agent hat nur einen Tool-Aufruf abgesetzt
@@ -191,10 +237,15 @@ enum AgentTranscriptStatusDecider {
 
         let mtime = fileMTime ?? now
         let secondsSinceWrite = now.timeIntervalSince(mtime)
+        // Sicherheitsnetz gegen hängende working-Zustände (Interrupt ohne
+        // Marker-Zeile, Netz-/API-Abbruch ohne finales end_turn, Crash):
+        // Aktivität, deren Datei seit `workingStallSeconds` unangetastet ist,
+        // gilt nicht mehr als Arbeit.
+        let isStalled = secondsSinceWrite > workingStallSeconds
 
         switch event {
         case .userMessage:
-            return Decision(status: .working, turnFinished: false)
+            return Decision(status: isStalled ? .idle : .working, turnFinished: false)
 
         case .assistantMessageStopped(let timestamp, let stopReason):
             // Tool-Aufruf/Pause ist KEIN Turn-Ende — der Agent arbeitet weiter,
@@ -203,7 +254,7 @@ enum AgentTranscriptStatusDecider {
             // JSONL ist) fälschlich als Turn-Ende → Fertig-Notification trotz
             // noch laufendem Chat.
             if let stopReason, Self.continuationStopReasons.contains(stopReason) {
-                return Decision(status: .working, turnFinished: false)
+                return Decision(status: isStalled ? .idle : .working, turnFinished: false)
             }
             let turnFinished: Bool = {
                 guard let prior = priorTurnFinishedAt else { return true }
@@ -221,12 +272,20 @@ enum AgentTranscriptStatusDecider {
             // langes Arbeiten (langer Tool-/Reasoning-Schritt, der nichts ins
             // JSONL schreibt) mit Warten auf Permission. „Braucht Handlung"
             // kommt jetzt ausschließlich vom Notification-Hook.
-            return Decision(status: .working, turnFinished: false)
+            return Decision(status: isStalled ? .idle : .working, turnFinished: false)
 
         case .toolResult:
-            return Decision(status: .working, turnFinished: false)
+            return Decision(status: isStalled ? .idle : .working, turnFinished: false)
 
-        case .sessionMeta, .other:
+        case .turnInterrupted:
+            // ESC-Abbruch: Chat idlet am Prompt. Kein `turnFinished` — ein
+            // Abbruch soll weder Auto-Naming noch Fertig-Notification auslösen.
+            return Decision(status: .idle, turnFinished: false, turnAborted: true)
+
+        case .sessionMeta, .meta, .other:
+            // `.meta` erreicht diesen Pfad nur, wenn ein Aufrufer das Event
+            // direkt durchreicht (der Tail-Scan überspringt es) — dann gilt
+            // dieselbe konservative mtime-Heuristik wie für `.other`.
             if secondsSinceWrite > idleAfterSeconds {
                 return Decision(status: .idle, turnFinished: false)
             }

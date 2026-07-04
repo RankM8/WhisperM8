@@ -45,15 +45,19 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
     }
 
     func testUnchangedStatSkipsTailRead() {
-        let stat = AgentTranscriptFileStat(mtime: Date(timeIntervalSince1970: 1000), size: 50)
+        // Frische mtime, damit hier wirklich der Stat-Skip getestet wird —
+        // eine alte mtime würde (korrekt) im Stall-Sicherheitsnetz des
+        // Deciders landen und idle liefern.
+        let now = Date()
+        let stat = AgentTranscriptFileStat(mtime: now.addingTimeInterval(-1), size: 50)
         let tailFlag = Flag()
         let snapshot = AgentSessionRuntimeWatcher.pollSnapshot(
             for: entry(
                 transcriptURL: url,
                 lastStat: stat,
-                cachedLastEvent: .userMessage(timestamp: Date(timeIntervalSince1970: 999))
+                cachedLastEvent: .userMessage(timestamp: now.addingTimeInterval(-2))
             ),
-            now: Date(),
+            now: now,
             statProvider: { _ in stat },          // identisch zu lastStat
             tailProvider: { _, _ in tailFlag.value = true; return "" },
             urlResolver: { _ in self.url }

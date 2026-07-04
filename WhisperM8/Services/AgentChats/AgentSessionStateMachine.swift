@@ -85,6 +85,12 @@ enum AgentSessionSignal: Equatable {
     /// Transcript-Decider meldet Ruhe (`.idle`); `turnFinished` = frisch
     /// erkanntes Turn-Ende (dedupliziert via `priorTurnFinishedAt`).
     case transcriptIdle(turnFinished: Bool)
+    /// User hat den Turn abgebrochen (ESC) — aus dem Transcript erkannt
+    /// (`[Request interrupted by user]`). Der Stop-Hook feuert bei Interrupts
+    /// NICHT; ohne dieses Signal pulsierte ein abgebrochener Chat für immer
+    /// als „arbeitet". Bewusst ohne `turnCompleted`-Effekt: ein Abbruch ist
+    /// kein Anlass für Fertig-Notification/Ton.
+    case turnAborted
     case processTerminated(exitCode: Int32?)
 
     /// Mapping Hook-Event → Signal. `nil` für Events ohne Status-Relevanz
@@ -146,12 +152,24 @@ enum AgentSessionStateMachine {
         state: AgentSessionLifecycleState,
         signal: AgentSessionSignal
     ) -> Transition {
-        // Prozessende ist final — nur ein neuer Launch belebt die Session.
+        // Prozessende ist final — ein neuer Launch belebt die Session, und
+        // starke Hook-Lebenszeichen ebenfalls: Hook-Events kommen NUR von
+        // einem laufenden Claude-Prozess. Ein `SessionStart`/`UserPromptSubmit`
+        // nach `stopped` beweist also, dass die Session lebt (z. B. SessionEnd
+        // mit falsch eingeschätztem Reason, oder Background-Agent-Respawn).
+        // Schwache/verspätete Signale (Transcript, Tool-Events) bleiben
+        // ignoriert — genau die trudelten früher nach dem PTY-Exit noch ein.
         if state == .stopped || state == .errored {
-            if case .processLaunched = signal {
+            switch signal {
+            case .processLaunched:
                 return Transition(state: .launching)
+            case .sessionStarted:
+                return Transition(state: .ready)
+            case .userPromptSubmitted:
+                return Transition(state: .working)
+            default:
+                return Transition(state: state)
             }
-            return Transition(state: state)
         }
 
         switch signal {
@@ -201,11 +219,28 @@ enum AgentSessionStateMachine {
             }
             return Transition(state: .turnDone, effects: [.turnCompleted])
 
-        case .sessionEnded:
-            if case .awaitingInput = state {
-                return Transition(state: .ready)
+        case .sessionEnded(let reason):
+            // In-Place-Wechsel (/clear, /resume, Auto-Compact) beenden nur die
+            // externe Session-ID, nicht den Prozess — direkt danach kommt ein
+            // frisches `SessionStart`. Alles andere (logout, prompt_input_exit,
+            // other, unbekannt) IST das Prozessende aus Hook-Sicht: ohne diesen
+            // Übergang blieben Background-Agents (kein PTY → nie
+            // `processTerminated`) für immer auf `.idle` = grüner Punkt.
+            if Self.inPlaceRestartReasons.contains(reason ?? "") {
+                if case .awaitingInput = state {
+                    return Transition(state: .ready)
+                }
+                return Transition(state: state)
             }
-            return Transition(state: state)
+            return Transition(state: .stopped)
+
+        case .turnAborted:
+            switch state {
+            case .working, .awaitingInput:
+                return Transition(state: .ready)
+            default:
+                return Transition(state: state)
+            }
 
         case .transcriptActivity:
             if case .awaitingInput = state {
@@ -236,6 +271,11 @@ enum AgentSessionStateMachine {
             return Transition(state: failed ? .errored : .stopped)
         }
     }
+
+    /// `SessionEnd`-Reasons, nach denen der Claude-Prozess weiterlebt und
+    /// sofort eine neue Session startet (`/clear`, `/resume`, Auto-Compact).
+    /// Alle anderen Reasons werten wir als Prozessende.
+    static let inPlaceRestartReasons: Set<String> = ["clear", "resume", "compact"]
 
     /// Tools, deren `PreToolUse` „wartet auf User-Entscheidung" bedeutet.
     /// Deckt genau die Fälle ab, die bisher private User-Hooks

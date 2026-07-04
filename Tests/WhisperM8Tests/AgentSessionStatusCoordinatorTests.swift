@@ -236,4 +236,151 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         coordinator.sessionLaunched(sessionID: sessionID)
         XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle)
     }
+
+    // MARK: Hook-Primat (Hooks als alleinige Statusquelle)
+
+    func testTranscriptCannotOverrideHookLiveWorking() throws {
+        // Kern der Neuordnung: Sobald die Hook-Bridge Events liefert, sind
+        // Transcript-Heuristiken für diese Session stumm. Vorher stufte der
+        // 1,5-s-Poll (Meta-Zeilen + 30-s-mtime-Heuristik) arbeitende Chats
+        // laufend fälschlich auf idle herab.
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.sessionLaunched(sessionID: sessionID)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+
+        coordinator.handleTranscriptDecision(
+            sessionID: sessionID,
+            decision: .init(status: .idle, turnFinished: false)
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working, "Decider-idle darf Hook-working nicht überschreiben")
+
+        coordinator.handleTranscriptDecision(
+            sessionID: sessionID,
+            decision: .init(status: .idle, turnFinished: true)
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working, "Auch turnFinished-idle bleibt nur Bookkeeping, kein Status-Write")
+    }
+
+    func testTranscriptStillDrivesStatusWithoutHooks() throws {
+        // Sessions ohne lebendige Hook-Bridge (Codex, extern, Hooks aus)
+        // behalten den Transcript-Pfad als Statusquelle.
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.sessionLaunched(sessionID: sessionID)
+
+        coordinator.handleTranscriptDecision(
+            sessionID: sessionID,
+            decision: .init(status: .working, turnFinished: false)
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+
+        coordinator.handleTranscriptDecision(
+            sessionID: sessionID,
+            decision: .init(status: .idle, turnFinished: true)
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle)
+    }
+
+    func testRelaunchResetsHookPrimacyUntilFirstEvent() throws {
+        // Neue Prozessinstanz muss erst wieder beweisen, dass ihre Hooks
+        // feuern — bis dahin gilt der Transcript-Fallback.
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.sessionLaunched(sessionID: sessionID)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        coordinator.sessionTerminated(sessionID: sessionID, exitCode: 0)
+
+        coordinator.sessionLaunched(sessionID: sessionID)
+        coordinator.handleTranscriptDecision(
+            sessionID: sessionID,
+            decision: .init(status: .working, turnFinished: false)
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working, "Ohne Hook-Event der neuen Instanz zählt das Transkript wieder")
+    }
+
+    func testInterruptAbortsTurnEvenWhenHookLive() throws {
+        // ESC-Interrupt: Der Stop-Hook feuert nicht — der Transcript-Fakt
+        // `turnAborted` muss auch bei hook-live Sessions durchgreifen,
+        // sonst pulsiert der abgebrochene Chat für immer als „arbeitet".
+        let (coordinator, sessionID, poster, sounds, _) = try makeCoordinator()
+        coordinator.sessionLaunched(sessionID: sessionID)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+
+        coordinator.handleTranscriptDecision(
+            sessionID: sessionID,
+            decision: .init(status: .idle, turnFinished: false, turnAborted: true)
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle)
+        XCTAssertEqual(coordinator.lifecycleState(for: sessionID), .ready)
+        XCTAssertTrue(poster.posted.isEmpty, "Abbruch ist keine Fertig-Notification")
+        XCTAssertTrue(sounds.played.isEmpty, "Abbruch spielt keinen Fertig-Ton")
+    }
+
+    // MARK: SessionEnd & Background-Agents
+
+    func testSessionEndWithTerminalReasonStopsSession() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.sessionLaunched(sessionID: sessionID)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.sessionStart))
+
+        var end = hookEvent(.sessionEnd)
+        end.reason = "prompt_input_exit"
+        coordinator.handleHookEvent(localID: sessionID, event: end)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .stopped)
+
+        // Starkes Lebenszeichen belebt wieder (falsch eingeschätzter Reason).
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+    }
+
+    func testSessionEndWithClearReasonKeepsSessionAlive() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.sessionLaunched(sessionID: sessionID)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.sessionStart))
+
+        var end = hookEvent(.sessionEnd)
+        end.reason = "clear"
+        coordinator.handleHookEvent(localID: sessionID, event: end)
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle, "/clear beendet die Session nicht")
+    }
+
+    func testBackgroundAttachExitDoesNotStopBackgroundSession() throws {
+        // Der PTY einer BG-Session ist nur ein `claude attach`-Fenster — sein
+        // Exit darf den weiterlaufenden Supervisor-Job nicht als beendet
+        // markieren. Das echte Ende kommt vom SessionEnd-Hook.
+        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("bg-workspace.json"))
+        let session = try store.createSession(
+            provider: .claude,
+            projectPath: tempDir.path,
+            title: "BG-Agent",
+            initialPrompt: nil,
+            kind: .backgroundChat
+        )
+        let coordinator = AgentSessionStatusCoordinator(
+            store: store,
+            hookBridge: ClaudeHookBridge(paths: ClaudeHookPaths(rootDirectory: tempDir)),
+            notificationPoster: NotificationPosterSpy(),
+            playSound: { _ in },
+            loadPreferences: { PreferencesBox().value },
+            launchGraceSeconds: 999
+        )
+        coordinator.terminalExternalIDUpdater = { _, _ in }
+
+        coordinator.sessionLaunched(sessionID: session.id)
+        coordinator.handleHookEvent(
+            localID: session.id,
+            event: ClaudeHookEvent(hookEventName: .userPromptSubmit, sessionID: "ext-bg", transcriptPath: nil, cwd: nil, reason: nil, toolName: nil, rawJSON: "{}")
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: session.id), .working)
+
+        // Attach-PTY geht zu — Agent arbeitet weiter.
+        coordinator.sessionTerminated(sessionID: session.id, exitCode: 0)
+        XCTAssertEqual(coordinator.statusStore.status(for: session.id), .working, "Attach-Exit ist kein Prozessende des BG-Agenten")
+
+        // Das echte Ende meldet der SessionEnd-Hook.
+        var end = ClaudeHookEvent(hookEventName: .sessionEnd, sessionID: "ext-bg", transcriptPath: nil, cwd: nil, reason: nil, toolName: nil, rawJSON: "{}")
+        end.reason = "other"
+        coordinator.handleHookEvent(localID: session.id, event: end)
+        XCTAssertEqual(coordinator.statusStore.status(for: session.id), .stopped)
+    }
 }

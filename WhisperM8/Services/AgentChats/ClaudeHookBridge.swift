@@ -216,11 +216,7 @@ final class ClaudeHookBridge {
     }
 
     private func deliver(_ event: ClaudeHookEvent, for entry: Entry, now: Date) {
-        // Pre-/PostToolUse koennen schnell aufeinander folgen (viele Tools) —
-        // gemeinsam drosseln (geteilter Timestamp), damit weder Event- noch
-        // Log-Spam entsteht. Die seltenen Events (UserPromptSubmit/Notification/
-        // Stop/Lifecycle) kommen immer ungedrosselt durch.
-        if event.hookEventName == .preToolUse || event.hookEventName == .postToolUse {
+        if Self.isThrottledToolEvent(event) {
             if let last = entry.lastDeliveredPreToolUseAt,
                now.timeIntervalSince(last) < preToolUseDeliveryInterval {
                 return
@@ -231,5 +227,27 @@ final class ClaudeHookBridge {
             Logger.claudeBinding.info("binding_hook_event_received localID=\(entry.localSessionID.uuidString, privacy: .public) event=\(event.hookEventName.rawValue, privacy: .public) sessionID=\(event.sessionID ?? "nil", privacy: .public)")
         }
         decisionHandler?(entry.localSessionID, event)
+    }
+
+    /// Pre-/PostToolUse koennen schnell aufeinander folgen (viele Tools) —
+    /// gemeinsam drosseln (geteilter Timestamp), damit weder Event- noch
+    /// Log-Spam entsteht. Die seltenen Events (UserPromptSubmit/Notification/
+    /// Stop/Lifecycle) kommen immer ungedrosselt durch.
+    ///
+    /// AUSNAHME von der Drossel: PreToolUse mit AskUserQuestion/ExitPlanMode
+    /// ist die EINZIGE Quelle fuer „Claude hat eine Frage/wartet auf
+    /// Plan-Freigabe". Solche Events folgen typischerweise <1 s auf ein
+    /// anderes Tool-Event — verworfen hiesse: Chat pulsiert „arbeitet",
+    /// waehrend er in Wahrheit auf den User wartet, und die
+    /// Rueckfrage-Notification fehlt. (Pur + statisch fuer Unit-Tests.)
+    nonisolated static func isThrottledToolEvent(_ event: ClaudeHookEvent) -> Bool {
+        switch event.hookEventName {
+        case .preToolUse:
+            return AgentSessionStateMachine.awaitingKind(forToolName: event.toolName) == nil
+        case .postToolUse:
+            return true
+        default:
+            return false
+        }
     }
 }

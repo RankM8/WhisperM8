@@ -5,7 +5,10 @@ import SwiftUI
 /// `PinnedSessionRow` (eine Quelle statt zwei Duplikate):
 /// - `working`       grüner Sonar-Puls (gefüllter Ring läuft nach außen + blendet aus)
 /// - `awaitingInput` atmender Amber-Halo (Outline-Ring, auffälliger) — „wartet auf dich"
-/// - `idle`          ruhiger gedämpfter Punkt
+/// - `idle`          ruhiger GRAUER Punkt (Prozess lebt, wartet auf Prompt).
+///   Bewusst nicht grün: Grün ist exklusiv für „arbeitet gerade" reserviert —
+///   der frühere gedimmt-grüne Idle-Punkt war bei 7 px vom Working-Grün kaum
+///   unterscheidbar und ließ ruhende Chats dauerhaft „laufend" wirken.
 /// - `errored`       hohler roter Ring
 /// - `stopped`/`nil` leer → die Row zeigt stattdessen die „zuletzt aktiv"-Zeit
 ///
@@ -28,9 +31,9 @@ struct AgentStatusIndicator: View {
                 .help("Wartet möglicherweise auf User-Input")
         case .idle:
             Circle()
-                .fill(AgentTheme.statusWorking.opacity(0.42))
+                .fill(AgentTheme.textTertiary.opacity(0.55))
                 .frame(width: core, height: core)
-                .help("Bereit")
+                .help("Bereit — wartet auf einen Prompt")
         case .errored:
             Circle()
                 .strokeBorder(AgentTheme.statusError, lineWidth: 1.4)

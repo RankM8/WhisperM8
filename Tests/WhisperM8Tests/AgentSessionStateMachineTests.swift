@@ -158,20 +158,61 @@ final class AgentSessionStateMachineTests: XCTestCase {
         XCTAssertEqual(reduce(.working, .processTerminated(exitCode: 1)).state, .errored)
     }
 
-    func testTerminatedSessionIgnoresLateSignalsUntilRelaunch() {
-        // Verspätete Hook-/Decider-Events nach Prozessende dürfen den finalen
-        // Zustand nicht wiederbeleben.
+    func testTerminatedSessionIgnoresWeakLateSignals() {
+        // Verspätete schwache Signale (Decider, Tool-Events, Stop) nach
+        // Prozessende dürfen den finalen Zustand nicht wiederbeleben.
         XCTAssertEqual(reduce(.stopped, .turnStopped).state, .stopped)
         XCTAssertEqual(reduce(.stopped, .transcriptActivity).state, .stopped)
-        XCTAssertEqual(reduce(.errored, .userPromptSubmitted).state, .errored)
+        XCTAssertEqual(reduce(.stopped, .toolDidRun).state, .stopped)
+        XCTAssertEqual(reduce(.stopped, .transcriptIdle(turnFinished: true)).state, .stopped)
+        XCTAssertEqual(reduce(.stopped, .turnAborted).state, .stopped)
         XCTAssertTrue(reduce(.stopped, .turnStopped).effects.isEmpty)
 
         XCTAssertEqual(reduce(.stopped, .processLaunched).state, .launching, "Relaunch belebt die Session")
     }
 
-    func testSessionEndClearsAwaiting() {
-        XCTAssertEqual(reduce(.awaitingInput(.permission), .sessionEnded(reason: "exit")).state, .ready)
+    func testStrongHookSignalsReviveTerminatedSession() {
+        // Hook-Events kommen nur von einem lebenden Prozess: SessionStart/
+        // UserPromptSubmit nach `stopped` beweisen, dass die Session lebt
+        // (falsch eingeschätzter SessionEnd-Reason, BG-Respawn).
+        XCTAssertEqual(reduce(.stopped, .sessionStarted).state, .ready)
+        XCTAssertEqual(reduce(.stopped, .userPromptSubmitted).state, .working)
+        XCTAssertEqual(reduce(.errored, .userPromptSubmitted).state, .working)
+    }
+
+    func testSessionEndWithInPlaceReasonKeepsSessionAlive() {
+        // /clear, /resume, Auto-Compact: Prozess lebt weiter, gleich kommt
+        // ein frisches SessionStart — nur awaiting wird aufgeräumt.
+        XCTAssertEqual(reduce(.awaitingInput(.permission), .sessionEnded(reason: "clear")).state, .ready)
         XCTAssertEqual(reduce(.working, .sessionEnded(reason: "resume")).state, .working)
+        XCTAssertEqual(reduce(.turnDone, .sessionEnded(reason: "compact")).state, .turnDone)
+    }
+
+    func testSessionEndWithTerminalReasonStops() {
+        // Alle anderen Reasons SIND das Prozessende aus Hook-Sicht — ohne
+        // diesen Übergang blieben Background-Agents (kein PTY → nie
+        // processTerminated) für immer auf .idle = grüner Punkt.
+        XCTAssertEqual(reduce(.working, .sessionEnded(reason: "prompt_input_exit")).state, .stopped)
+        XCTAssertEqual(reduce(.turnDone, .sessionEnded(reason: "logout")).state, .stopped)
+        XCTAssertEqual(reduce(.ready, .sessionEnded(reason: "other")).state, .stopped)
+        XCTAssertEqual(reduce(.awaitingInput(.question), .sessionEnded(reason: nil)).state, .stopped)
+        XCTAssertTrue(reduce(.working, .sessionEnded(reason: "other")).effects.isEmpty, "Session-Ende ist kein Turn-Ende — keine Fertig-Notification")
+    }
+
+    func testTurnAbortedReturnsToReadyWithoutEffects() {
+        // ESC-Interrupt: Stop-Hook feuert nicht — das Transcript-Signal muss
+        // den Chat aus working/awaiting holen, ohne Fertig-Notification.
+        let fromWorking = reduce(.working, .turnAborted)
+        XCTAssertEqual(fromWorking.state, .ready)
+        XCTAssertTrue(fromWorking.effects.isEmpty)
+
+        let fromAwaiting = reduce(.awaitingInput(.permission), .turnAborted)
+        XCTAssertEqual(fromAwaiting.state, .ready)
+        XCTAssertTrue(fromAwaiting.effects.isEmpty)
+
+        // Außerhalb eines Turns ist ein (alter) Interrupt-Marker bedeutungslos.
+        XCTAssertEqual(reduce(.turnDone, .turnAborted).state, .turnDone)
+        XCTAssertEqual(reduce(.ready, .turnAborted).state, .ready)
     }
 
     // MARK: UI-Mapping
