@@ -134,9 +134,9 @@ extension AgentChatsView {
         closeTab(session)
     }
 
-    /// „Wiederherstellen" aus dem Archiv-Sheet: Session zurück auf `.closed`,
-    /// Sheet zu, Projekt selektieren/aufklappen, Tab öffnen + aktivieren
-    /// (analog flatRow-onSelect).
+    /// „Wiederherstellen" aus dem Archiv-Modus: Session zurück auf `.closed`,
+    /// Archiv-Modus verlassen, Projekt selektieren/aufklappen, Tab öffnen +
+    /// aktivieren (analog flatRow-onSelect).
     func restoreArchivedSession(_ session: AgentChatSession) {
         do {
             try store.restoreSession(id: session.id)
@@ -144,7 +144,7 @@ extension AgentChatsView {
             errorMessage = error.localizedDescription
             return
         }
-        archiveSheetPresented = false
+        exitArchiveMode()
         selectedProjectID = session.projectID
         expandedProjectIDs.insert(session.projectID)
         openTab(session.id)

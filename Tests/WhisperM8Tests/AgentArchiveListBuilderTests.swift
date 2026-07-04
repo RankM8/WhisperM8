@@ -2,8 +2,8 @@ import Foundation
 import XCTest
 @testable import WhisperM8
 
-/// Tests für die pure Gruppierungs-/Sortier-/Suchlogik des Archiv-Sheets.
-final class AgentArchiveSheetTests: XCTestCase {
+/// Tests für die pure Gruppierungs-/Sortier-/Suchlogik des Archiv-Modus.
+final class AgentArchiveListBuilderTests: XCTestCase {
     private func makeArchivedSession(
         projectID: UUID,
         title: String,

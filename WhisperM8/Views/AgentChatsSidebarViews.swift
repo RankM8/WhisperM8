@@ -431,6 +431,10 @@ struct SessionListButton: View {
     /// auf der Platte liegt — „toter Zeiger" (z.B. von Claudes 30-Tage-Cleanup
     /// gelöscht). Row wird ausgegraut + bekommt einen Hinweis; nicht resumebar.
     var isMissingTranscript: Bool = false
+    /// Icon + Tooltip der Hover-Aktion rechts. Default = Archivieren; der
+    /// Archiv-Modus der Sidebar nutzt dieselbe Row mit „Wiederherstellen".
+    var closeIcon: String = "xmark"
+    var closeHelp: String = "Archivieren"
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -523,14 +527,14 @@ struct SessionListButton: View {
     @ViewBuilder
     private var trailingIndicator: some View {
         if isHovered || isSelected {
-            Image(systemName: "xmark")
+            Image(systemName: closeIcon)
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .frame(width: 16, height: 16)
                 .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
-                .help("Archivieren")
+                .help(closeHelp)
         } else if isMissingTranscript {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10, weight: .medium))
@@ -610,6 +614,8 @@ extension SessionListButton: Equatable {
             && lhs.isAutoRenaming == rhs.isAutoRenaming
             && lhs.isMissingTranscript == rhs.isMissingTranscript
             && lhs.isMultiSelected == rhs.isMultiSelected
+            && lhs.closeIcon == rhs.closeIcon
+            && lhs.closeHelp == rhs.closeHelp
     }
 }
 

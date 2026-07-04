@@ -209,8 +209,12 @@ struct AgentChatsView: View {
     /// Sessions, für die gerade der Archivieren-Bestätigungsdialog offen ist
     /// (nur gesetzt, wenn mindestens ein Terminal der Gruppe läuft).
     @State var sessionsPendingArchive: [AgentChatSession]?
-    /// `true` solange das Archiv-Sheet (Footer-Button) offen ist.
-    @State var archiveSheetPresented = false
+    /// `true` solange die Sidebar den Archiv-Modus zeigt (Footer-Button) —
+    /// gleiche Listen-UI, aber archivierte Chats mit „Wiederherstellen".
+    @State var archiveModeActive = false
+    /// Eigenes Suchfeld des Archiv-Modus (bewusst nicht `searchText`, damit
+    /// der normale Sidebar-Filter nicht ins Archiv leakt und umgekehrt).
+    @State var archiveSearchText = ""
     /// Projekte, für die wir in dieser App-Session schon einen Auto-Icon-Lookup
     /// gestartet haben — verhindert wiederholte Filesystem-Scans bei jedem
     /// Workspace-Reload.
@@ -267,10 +271,10 @@ struct AgentChatsView: View {
     }
 
     /// Archivierte, manuell erstellte Sessions — geteilte Datengrundlage für
-    /// Footer-Badge UND Archiv-Sheet (sonst driftet der Tooltip-Count).
+    /// Footer-Badge UND Archiv-Modus (sonst driftet der Tooltip-Count).
     /// BG-Sessions ohne Short-ID sind nicht wiederherstellbar (attach
     /// unmöglich) und werden ausgeblendet.
-    var archivedSessionsForSheet: [AgentChatSession] {
+    var archivedSidebarSessions: [AgentChatSession] {
         workspace.sessions.filter {
             $0.status == .archived
                 && $0.isManuallyCreated
@@ -452,14 +456,6 @@ struct AgentChatsView: View {
             Text(sessions.count == 1
                 ? "Der Chat läuft noch — beim Archivieren wird das Terminal beendet. Der Chat bleibt im Archiv erhalten und lässt sich wiederherstellen."
                 : "\(running) von \(sessions.count) Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen.")
-        }
-        .sheet(isPresented: $archiveSheetPresented) {
-            AgentArchiveSheet(
-                sessions: archivedSessionsForSheet,
-                projects: workspace.projects,
-                onRestore: { restoreArchivedSession($0) },
-                onClose: { archiveSheetPresented = false }
-            )
         }
         .sheet(item: $pendingBackgroundDispatch) { pending in
             BackgroundDispatchModal(
@@ -843,6 +839,13 @@ struct AgentChatsView: View {
                     .padding(.bottom, 4)
             }
 
+            if archiveModeActive {
+                // Archiv-Modus: gleiche Listen-UI (Ordner + Rows), aber
+                // archivierte Chats mit „Wiederherstellen" — ersetzt Befehle,
+                // Scope-Bar und Chat-Liste; der Footer bleibt.
+                archiveSidebarContent
+            } else {
+
             // Fest verankert: Befehle (Neuer Chat / Aktualisieren / Projekt
             // hinzufügen) + Filter scrollen NICHT mit — nur die Chat-Liste
             // darunter scrollt.
@@ -969,6 +972,7 @@ struct AgentChatsView: View {
                     }
                 }
                 .padding(.vertical, 6)
+            }
             }
 
             Spacer(minLength: 0)
@@ -1204,16 +1208,20 @@ struct AgentChatsView: View {
             SidebarUpdateBadge()
 
             Button {
-                archiveSheetPresented = true
+                if archiveModeActive {
+                    exitArchiveMode()
+                } else {
+                    archiveModeActive = true
+                }
             } label: {
-                Image(systemName: "archivebox")
+                Image(systemName: archiveModeActive ? "archivebox.fill" : "archivebox")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AgentTheme.textSecondary)
+                    .foregroundStyle(archiveModeActive ? AgentTheme.accent : AgentTheme.textSecondary)
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Archiv (\(archivedSessionsForSheet.count))")
+            .help(archiveModeActive ? "Archiv verlassen" : "Archiv (\(archivedSidebarSessions.count))")
 
             Button {
                 WindowRequestCenter.shared.request(.onboarding)
