@@ -105,6 +105,11 @@ enum OverlayPalette {
     static let glassTint = Color(red: 19.0 / 255.0, green: 22.0 / 255.0, blue: 27.0 / 255.0)
         .opacity(0.55)
 
+    /// Zu-laut-Stufe der Pegel-Ampel im Kern — derselbe Amber-Ton wie die
+    /// Transcribing-Phase; Verwechslung ist ausgeschlossen (andere
+    /// Bewegungsart, blitzt nur bei Lautstärke-Spitzen auf).
+    static let levelLoud = transcribing
+
     static func tint(for phase: OverlayPhase) -> Color {
         switch phase {
         case .recording: return recording

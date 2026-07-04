@@ -212,6 +212,14 @@ struct PillCoreView: View {
     private struct BarState {
         var height: CGFloat
         var opacity: Double
+        /// Pegel-Ampel im Recording (grau/Mint/Amber); nil = Phasen-Tint.
+        var color: Color?
+
+        init(height: CGFloat, opacity: Double, color: Color? = nil) {
+            self.height = height
+            self.opacity = opacity
+            self.color = color
+        }
     }
 
     private func bars(state: @escaping (Int, Int) -> BarState) -> some View {
@@ -219,7 +227,7 @@ struct PillCoreView: View {
             ForEach(0..<5, id: \.self) { index in
                 let bar = state(index, 5)
                 Capsule()
-                    .fill(tint)
+                    .fill(bar.color ?? tint)
                     .frame(width: PillMetrics.barWidth, height: bar.height)
                     .opacity(bar.opacity)
             }
@@ -238,16 +246,30 @@ struct PillCoreView: View {
         }
     }
 
-    /// Aufnahme: rein level-getrieben, keine Zeitkomponente — bei Stille
-    /// steht eine ruhige flache Linie, nur echte Sprache schlägt aus.
+    /// Aufnahme: rein level-getrieben, mit der Dynamik + Pegel-Ampel der
+    /// alten Bar (vor dem Pill-Neubau) — dünne graue Ruhelinie bei Stille,
+    /// voller Hub bis 20 px in der Kapsel, Mint bei normalem Sprechen,
+    /// Amber als Zu-laut-Warnung. Beantwortet „spreche ich? zu leise?"
+    /// auf einen Blick (Farbe), nicht erst über die Höhen.
     private func recordingBarState(index: Int) -> BarState {
-        let level = pow(CGFloat(max(0, min(levelModel.level, 1))), 0.6)
-        let boosts: [CGFloat] = [0.6, 0.85, 1.05, 0.85, 0.6]  // Mitte betont
-        let levelLift = min(1, level * boosts[index])
+        // Steilere Kurve als früher (0.5 statt 0.6): leise Sprache wird
+        // früher sichtbar, Sättigung bleibt bei 1.
+        let eased = pow(CGFloat(max(0, min(levelModel.level, 1))), 0.5)
+        let boosts: [CGFloat] = [0.75, 0.95, 1.1, 0.95, 0.75]  // Mitte betont
+        let maxHeights: [CGFloat] = [13, 17, 20, 17, 13]
+        let intensity = min(1, eased * boosts[index])
 
-        let base: CGFloat = 5
-        let height = min(16, base + levelLift * 11)
-        return BarState(height: height, opacity: 0.75 + 0.25 * Double(levelLift))
+        let base: CGFloat = 3
+        let height = base + (maxHeights[index] - base) * intensity
+
+        // Pegel-Ampel wie in der alten AudioLevelBars: grau = kein Signal.
+        if intensity < 0.08 {
+            return BarState(height: height, opacity: 1, color: Color.primary.opacity(0.28))
+        }
+        if intensity > 0.72 {
+            return BarState(height: height, opacity: 0.95, color: OverlayPalette.levelLoud)
+        }
+        return BarState(height: height, opacity: 0.6 + 0.4 * Double(intensity))
     }
 
     /// Transkription: Scan-Lauflicht (Höhe konstant, Helligkeit wandert).
@@ -272,7 +294,7 @@ struct PillCoreView: View {
         case .recording:
             // Nicht erreichbar (Recording ist immer level-getrieben) —
             // konsistent zur Ruhelinie, falls sich die Verzweigung ändert.
-            return BarState(height: 5, opacity: 0.75)
+            return BarState(height: 3, opacity: 1, color: Color.primary.opacity(0.28))
         case .transcribing:
             return BarState(height: 10, opacity: 1)
         case .improving:
