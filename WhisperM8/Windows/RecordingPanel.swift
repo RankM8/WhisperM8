@@ -14,7 +14,9 @@ enum OverlayStyle: String, CaseIterable {
         }
     }
 
-    var panelSize: NSSize {
+    /// Panel-Größen der alten Bar (vor dem Pill-Neubau) — nur noch für die
+    /// einmalige Migration der persistierten Position gebraucht.
+    var legacyPanelSize: NSSize {
         switch self {
         case .full:
             return NSSize(width: 590, height: 56)
@@ -22,30 +24,63 @@ enum OverlayStyle: String, CaseIterable {
             return NSSize(width: 220, height: 46)
         }
     }
+
+    /// Erwartete Pill-Breite im Ruhezustand des Stils — nur für die
+    /// Default-Zentrierung VOR dem ersten echten Layout; danach re-zentriert
+    /// der Controller exakt anhand der gemessenen Breite.
+    var estimatedPillWidth: CGFloat {
+        switch self {
+        case .full:
+            return 470
+        case .mini:
+            return 210
+        }
+    }
 }
+
+// MARK: - Positions-Persistenz (Anker-Schema)
 
 struct OverlayPositionStore {
     static let styleKey = "overlayStyle"
+    /// Legacy-Keys der alten Bar (Panel-Origin) — werden einmalig migriert.
     static let xKey = "overlayPositionX"
     static let yKey = "overlayPositionY"
-    static let defaultBottomOffset: CGFloat = 40
+    /// Neues Schema: Kanten der SICHTBAREN Pill (siehe `PillAnchor`).
+    static let anchorMaxXKey = "overlayAnchorMaxX"
+    static let anchorMinXKey = "overlayAnchorMinX"
+    static let anchorYKey = "overlayAnchorY"
 
     static func loadStyle() -> OverlayStyle {
         let raw = AppPreferences.shared.overlayStyleRaw
         return OverlayStyle(rawValue: raw) ?? .full
     }
 
-    static func savePosition(_ origin: NSPoint) {
-        AppPreferences.shared.set(origin.x, for: xKey)
-        AppPreferences.shared.set(origin.y, for: yKey)
+    static func saveAnchor(_ anchor: PillAnchor) {
+        AppPreferences.shared.set(anchor.maxX, for: anchorMaxXKey)
+        AppPreferences.shared.set(anchor.minX, for: anchorMinXKey)
+        AppPreferences.shared.set(anchor.y, for: anchorYKey)
     }
 
     static func clearPosition() {
         AppPreferences.shared.removeObject(for: xKey)
         AppPreferences.shared.removeObject(for: yKey)
+        AppPreferences.shared.removeObject(for: anchorMaxXKey)
+        AppPreferences.shared.removeObject(for: anchorMinXKey)
+        AppPreferences.shared.removeObject(for: anchorYKey)
     }
 
-    static func loadPosition() -> NSPoint? {
+    /// Lädt den Pill-Anker; migriert beim ersten Zugriff die alte
+    /// Origin-Persistenz (Panel-Origin der 590/220er-Bar) ins Anker-Schema.
+    static func loadAnchor() -> PillAnchor? {
+        if AppPreferences.shared.objectExists(for: anchorMaxXKey),
+           AppPreferences.shared.objectExists(for: anchorYKey) {
+            let maxX = AppPreferences.shared.double(for: anchorMaxXKey)
+            let minX = AppPreferences.shared.double(for: anchorMinXKey)
+            let y = AppPreferences.shared.double(for: anchorYKey)
+            guard maxX.isFinite, minX.isFinite, y.isFinite else { return nil }
+            return PillAnchor(maxX: maxX, minX: minX, y: y)
+        }
+
         guard AppPreferences.shared.objectExists(for: xKey),
               AppPreferences.shared.objectExists(for: yKey) else {
             return nil
@@ -55,22 +90,45 @@ struct OverlayPositionStore {
         let y = AppPreferences.shared.double(for: yKey)
         guard x.isFinite, y.isFinite else { return nil }
 
-        return NSPoint(x: x, y: y)
+        let anchor = OverlayFrameResolver.migrateLegacyOrigin(
+            NSPoint(x: x, y: y),
+            legacyPanelSize: loadStyle().legacyPanelSize
+        )
+        saveAnchor(anchor)
+        AppPreferences.shared.removeObject(for: xKey)
+        AppPreferences.shared.removeObject(for: yKey)
+        return anchor
     }
 
-    static func resolveInitialOrigin(for style: OverlayStyle) -> NSPoint {
-        let size = style.panelSize
-        guard let activeScreen else { return .zero }
+    /// Gibt es eine vom User gesetzte Position (neu oder legacy)?
+    static var hasStoredPosition: Bool {
+        (AppPreferences.shared.objectExists(for: anchorMaxXKey)
+            && AppPreferences.shared.objectExists(for: anchorYKey))
+            || (AppPreferences.shared.objectExists(for: xKey)
+                && AppPreferences.shared.objectExists(for: yKey))
+    }
 
-        guard let storedOrigin = loadPosition() else {
-            return defaultOrigin(size: size, on: activeScreen)
+    /// Startposition des Panels: gespeicherter Anker (geclampt auf seinen
+    /// Screen) oder Default unten mittig auf dem aktiven Screen.
+    static func resolveInitialResolution(for style: OverlayStyle) -> OverlayFrameResolver.Resolution {
+        guard let activeScreen else {
+            return OverlayFrameResolver.Resolution(panelOrigin: .zero, alignment: .trailing)
         }
 
-        guard let storedScreen = screenContainingRect(origin: storedOrigin, size: size) else {
-            return defaultOrigin(size: size, on: activeScreen)
+        if let anchor = loadAnchor() {
+            let screen = screenContaining(anchor: anchor) ?? activeScreen
+            return OverlayFrameResolver.resolve(anchor: anchor, visibleFrame: screen.visibleFrame)
         }
 
-        return clamp(origin: storedOrigin, size: size, on: storedScreen)
+        return defaultResolution(for: style, on: activeScreen)
+    }
+
+    static func defaultResolution(for style: OverlayStyle, on screen: NSScreen) -> OverlayFrameResolver.Resolution {
+        let anchor = OverlayFrameResolver.defaultAnchor(
+            estimatedPillWidth: style.estimatedPillWidth,
+            visibleFrame: screen.visibleFrame
+        )
+        return OverlayFrameResolver.resolve(anchor: anchor, visibleFrame: screen.visibleFrame)
     }
 
     static var activeScreen: NSScreen? {
@@ -83,44 +141,46 @@ struct OverlayPositionStore {
         return NSScreen.main ?? NSScreen.screens.first
     }
 
+    static func screenContaining(anchor: PillAnchor) -> NSScreen? {
+        let rect = NSRect(
+            x: anchor.minX,
+            y: anchor.y,
+            width: max(anchor.maxX - anchor.minX, 1),
+            height: OverlayFrameResolver.pillHeight
+        )
+        return NSScreen.screens.first { screen in
+            !screen.frame.intersection(rect).isEmpty
+        }
+    }
+
     static func screenContainingRect(origin: NSPoint, size: NSSize) -> NSScreen? {
         let rect = NSRect(origin: origin, size: size)
         return NSScreen.screens.first { screen in
             !screen.frame.intersection(rect).isEmpty
         }
     }
-
-    static func defaultOrigin(size: NSSize, on screen: NSScreen) -> NSPoint {
-        let visibleFrame = screen.visibleFrame
-        let defaultPoint = NSPoint(
-            x: visibleFrame.midX - (size.width / 2),
-            y: visibleFrame.minY + defaultBottomOffset
-        )
-        return clamp(origin: defaultPoint, size: size, on: screen)
-    }
-
-    static func clamp(origin: NSPoint, size: NSSize, on screen: NSScreen) -> NSPoint {
-        clamp(origin: origin, size: size, visibleFrame: screen.visibleFrame)
-    }
-
-    static func clamp(origin: NSPoint, size: NSSize, visibleFrame: NSRect) -> NSPoint {
-        let maxX = max(visibleFrame.minX, visibleFrame.maxX - size.width)
-        let maxY = max(visibleFrame.minY, visibleFrame.maxY - size.height)
-
-        let clampedX = min(max(origin.x, visibleFrame.minX), maxX)
-        let clampedY = min(max(origin.y, visibleFrame.minY), maxY)
-
-        return NSPoint(x: clampedX, y: clampedY)
-    }
 }
 
+// MARK: - Panel
+
+/// Das Overlay-Fenster: fixe Größe in ALLEN Zuständen — nur die SwiftUI-Pill
+/// darin animiert ihre Breite (eine Animationsquelle, kein Fenster-Resize-Jank).
+/// Geclampt wird die SICHTBARE Pill, nicht das Panel: der Schattenrand darf
+/// über die Screen-Kante überstehen.
 class RecordingPanel: NSPanel, NSWindowDelegate {
-    var onMove: ((NSPoint) -> Void)?
+    /// Feuert nach jedem User-Drag mit dem neuen Pill-Anker.
+    var onMoveAnchor: ((PillAnchor) -> Void)?
+    /// Doppelklick auf freie Pill-Fläche (Buttons/Menüs konsumieren ihre
+    /// Klicks selbst und erreichen diesen Pfad nie).
+    var onDoubleClick: (() -> Void)?
+    /// Sichtbarer Pill-Frame in Panel-Koordinaten (AppKit, bottom-left);
+    /// vom Controller aus dem SwiftUI-Layout gemeldet.
+    var pillFrameInPanel: NSRect = .zero
     private var suppressMoveCallback = false
 
-    init(style: OverlayStyle, initialOrigin: NSPoint) {
+    init(initialOrigin: NSPoint) {
         super.init(
-            contentRect: NSRect(origin: initialOrigin, size: style.panelSize),
+            contentRect: NSRect(origin: initialOrigin, size: OverlayFrameResolver.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -130,53 +190,143 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = true
         self.backgroundColor = .clear
-        self.hasShadow = false  // Disable window shadow - SwiftUI view has its own
+        self.hasShadow = false  // Schatten zeichnet die SwiftUI-Pill selbst
         self.isOpaque = false
         self.delegate = self
-
-        apply(style: style, preferredOrigin: initialOrigin)
     }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    func apply(style: OverlayStyle, preferredOrigin: NSPoint? = nil) {
-        let size = style.panelSize
-        let baseOrigin = preferredOrigin ?? frame.origin
-
-        guard let screen = OverlayPositionStore.screenContainingRect(origin: baseOrigin, size: size)
-                ?? OverlayPositionStore.activeScreen else {
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            onDoubleClick?()
             return
         }
+        super.mouseDown(with: event)
+    }
 
-        let origin = OverlayPositionStore.clamp(origin: baseOrigin, size: size, on: screen)
-        let updatedFrame = NSRect(origin: origin, size: size)
-
+    /// Setzt den Frame ohne Move-Callback (programmatische Positionierung).
+    func setOriginSilently(_ origin: NSPoint) {
         suppressMoveCallback = true
-        setFrame(updatedFrame, display: true)
+        setFrameOrigin(origin)
         suppressMoveCallback = false
+    }
+
+    /// Animierte Rückkehr (Doppelklick-Reset) — dieselbe Easing-Familie wie
+    /// die SwiftUI-Breitenanimation der Pill.
+    func animateOrigin(to origin: NSPoint, completion: (() -> Void)? = nil) {
+        suppressMoveCallback = true
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.35
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
+            animator().setFrame(NSRect(origin: origin, size: frame.size), display: true)
+        }, completionHandler: { [weak self] in
+            self?.suppressMoveCallback = false
+            completion?()
+        })
     }
 
     func windowDidMove(_ notification: Notification) {
         guard !suppressMoveCallback else { return }
+        guard pillFrameInPanel.width > 0 else { return }
 
-        let currentOrigin = frame.origin
-        let currentSize = frame.size
-
-        guard let screen = OverlayPositionStore.screenContainingRect(origin: currentOrigin, size: currentSize)
-                ?? OverlayPositionStore.activeScreen else {
-            onMove?(currentOrigin)
+        let pillOnScreen = pillFrameInPanel.offsetBy(dx: frame.origin.x, dy: frame.origin.y)
+        guard let screen = OverlayPositionStore.screenContainingRect(
+            origin: pillOnScreen.origin, size: pillOnScreen.size
+        ) ?? OverlayPositionStore.activeScreen else {
             return
         }
 
-        let clampedOrigin = OverlayPositionStore.clamp(origin: currentOrigin, size: currentSize, on: screen)
-        if clampedOrigin != currentOrigin {
-            suppressMoveCallback = true
-            setFrameOrigin(clampedOrigin)
-            suppressMoveCallback = false
+        let clamped = OverlayFrameResolver.clampedPanelOrigin(
+            panelOrigin: frame.origin,
+            pillFrameInPanel: pillFrameInPanel,
+            visibleFrame: screen.visibleFrame
+        )
+        if clamped != frame.origin {
+            setOriginSilently(clamped)
         }
 
-        onMove?(clampedOrigin)
+        onMoveAnchor?(OverlayFrameResolver.anchor(
+            panelOrigin: frame.origin,
+            pillFrameInPanel: pillFrameInPanel
+        ))
+    }
+}
+
+// MARK: - Hit-Test-Hosting-View
+
+/// NSHostingView, das nur die sichtbare Pill interaktiv macht: Klicks auf die
+/// transparente Restfläche des (fixen Maximal-)Panels liefern `nil` — zusammen
+/// mit den Alpha-0-Pixeln reicht der Window-Server sie ans Fenster darunter
+/// weiter, und `isMovableByWindowBackground` greift nur auf der Pill selbst.
+/// Trägt außerdem das Hover-Tracking (`.activeAlways` — funktioniert im
+/// non-activating Panel ohne Key-Status, anders als SwiftUIs `.onHover`).
+final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
+    /// Interaktiver Bereich in View-Koordinaten (AppKit, bottom-left).
+    var interactiveFrame: NSRect = .zero {
+        didSet {
+            guard interactiveFrame != oldValue else { return }
+            updateTrackingAreas()
+        }
+    }
+    var onHoverChange: ((Bool) -> Void)?
+
+    private var hoverArea: NSTrackingArea?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard interactiveFrame.insetBy(dx: -2, dy: -2).contains(local) else { return nil }
+        return super.hitTest(point)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea {
+            removeTrackingArea(hoverArea)
+        }
+        guard interactiveFrame.width > 0 else {
+            hoverArea = nil
+            return
+        }
+        let area = NSTrackingArea(
+            rect: interactiveFrame,
+            options: [.mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChange?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChange?(false)
+    }
+}
+
+// MARK: - Tick-isolierte Modelle
+
+/// Nur der Waveform-Kern observiert das Audio-Level — der 10-Hz-Tick
+/// invalidiert damit nicht die restliche Pill (Tick-Diät).
+@MainActor
+final class OverlayLevelModel: ObservableObject {
+    @Published var level: Float = 0
+}
+
+/// Der Timer-Text publisht nur bei echtem Sekundenwechsel (1 Hz statt 10 Hz).
+@MainActor
+final class OverlayClockModel: ObservableObject {
+    @Published var timeText: String = "00:00"
+
+    func update(duration: TimeInterval) {
+        let text = OverlayClockFormatter.format(duration)
+        if text != timeText {
+            timeText = text
+        }
     }
 }
 
@@ -194,9 +344,11 @@ enum ContextAction {
 @MainActor
 class OverlayController: ObservableObject {
     private var panel: RecordingPanel?
-    private var hostingView: NSHostingView<RecordingOverlayView>?
+    private var hostingView: PillHitTestHostingView<RecordingOverlayView>?
     private var previousApp: NSRunningApplication?
     private var modesObserver: NSObjectProtocol?
+    private var menuTrackingObservers: [NSObjectProtocol] = []
+    private var hoverCollapseWork: DispatchWorkItem?
     private var onCancel: (() -> Void)?
     private var onCancelTranscription: (() -> Void)?
     private var onCancelPostProcessing: (() -> Void)?
@@ -209,8 +361,11 @@ class OverlayController: ObservableObject {
     private var onClearContext: (() -> Void)?
     /// Vereinte Schiene für granulare Kontext-Bearbeitung pro Item.
     private var onContextAction: ((ContextAction) -> Void)?
-    @Published var audioLevel: Float = 0
-    @Published var duration: TimeInterval = 0
+
+    /// Tick-isoliert: Kern-Bars und Timer haben eigene Modelle (siehe oben).
+    let levelModel = OverlayLevelModel()
+    let clockModel = OverlayClockModel()
+
     @Published var isTranscribing: Bool = false
     @Published var isPostProcessing: Bool = false
     @Published var overlayStyle: OverlayStyle = .full
@@ -222,6 +377,23 @@ class OverlayController: ObservableObject {
     @Published var contextBundle: TranscriptContextBundle = .empty
     @Published var isScreenClipRecording: Bool = false
     @Published var postProcessingStatusText: String?
+    /// Wachstumsrichtung der Pill im Panel (Rechts-Anker bzw. Spiegel-Fall).
+    @Published var pillAlignment: PillAlignment = .trailing
+    /// Mini-Stil: Hover (mit Grace-Period) expandiert zur vollen Pill.
+    @Published var isHoverExpanded: Bool = false
+
+    /// Hat der User die Pill je bewegt? Ohne Custom-Position folgt der
+    /// Default dem aktiven Screen und wird nach dem ersten Layout exakt
+    /// zentriert (statt die Schätzbreite einzufrieren).
+    private var hasCustomPosition = false
+    private var didPreciseCenter = false
+    private var isResettingPosition = false
+    /// Offene Menüs (Mode/Kontext) halten die Mini-Pill expandiert.
+    private var menuTrackingCount = 0
+
+    var phase: OverlayPhase {
+        OverlayPhase.resolve(isTranscribing: isTranscribing, isPostProcessing: isPostProcessing)
+    }
 
     func show(
         appState: AppState,
@@ -253,8 +425,8 @@ class OverlayController: ObservableObject {
         self.onContextAction = onContextAction
 
         // Initialize state from appState
-        self.audioLevel = appState.audioLevel
-        self.duration = appState.recordingDuration
+        self.levelModel.level = appState.audioLevel
+        self.clockModel.update(duration: appState.recordingDuration)
         self.isTranscribing = appState.isTranscribing
         self.isPostProcessing = appState.isPostProcessing
         self.selectedOutputMode = appState.selectedOutputMode
@@ -266,18 +438,33 @@ class OverlayController: ObservableObject {
         self.isScreenClipRecording = appState.isScreenClipRecording
         self.postProcessingStatusText = appState.postProcessingStatusText
         self.overlayStyle = OverlayPositionStore.loadStyle()
+        self.isHoverExpanded = false
+        self.hasCustomPosition = OverlayPositionStore.hasStoredPosition
+        self.didPreciseCenter = false
+        self.isResettingPosition = false
+        self.menuTrackingCount = 0
 
-        let initialOrigin = OverlayPositionStore.resolveInitialOrigin(for: overlayStyle)
-        let panel = RecordingPanel(style: overlayStyle, initialOrigin: initialOrigin)
-        panel.onMove = { origin in
-            OverlayPositionStore.savePosition(origin)
+        let resolution = OverlayPositionStore.resolveInitialResolution(for: overlayStyle)
+        self.pillAlignment = resolution.alignment
+
+        let panel = RecordingPanel(initialOrigin: resolution.panelOrigin)
+        panel.onMoveAnchor = { [weak self] anchor in
+            guard let self, !self.isResettingPosition else { return }
+            self.hasCustomPosition = true
+            OverlayPositionStore.saveAnchor(anchor)
+        }
+        panel.onDoubleClick = { [weak self] in
+            self?.resetToDefaultPosition()
         }
 
         // Create view with bindings (ONCE) - view will update via bindings
         let view = RecordingOverlayView(controller: self)
 
-        let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(origin: .zero, size: overlayStyle.panelSize)
+        let hostingView = PillHitTestHostingView(rootView: view)
+        hostingView.frame = NSRect(origin: .zero, size: OverlayFrameResolver.panelSize)
+        hostingView.onHoverChange = { [weak self] hovering in
+            self?.setHovering(hovering)
+        }
 
         // Configure hosting view for full transparency
         hostingView.wantsLayer = true
@@ -301,6 +488,30 @@ class OverlayController: ObservableObject {
                 self.outputModes = OutputMode.availableBuiltInModes()
             }
         }
+
+        // Offene SwiftUI-Menüs (Mode/Kontext) melden sich nicht selbst —
+        // NSMenu-Tracking-Notifications halten die Mini-Pill solange offen.
+        let center = NotificationCenter.default
+        menuTrackingObservers = [
+            center.addObserver(
+                forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.menuTrackingCount += 1 }
+            },
+            center.addObserver(
+                forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.menuTrackingCount = max(0, self.menuTrackingCount - 1)
+                    if self.menuTrackingCount == 0 {
+                        // Menü zu: kollabieren, falls die Maus die Pill
+                        // inzwischen verlassen hat.
+                        self.scheduleHoverCollapse()
+                    }
+                }
+            },
+        ]
     }
 
     func hide() {
@@ -308,9 +519,14 @@ class OverlayController: ObservableObject {
             NotificationCenter.default.removeObserver(modesObserver)
             self.modesObserver = nil
         }
-        if let origin = panel?.frame.origin {
-            OverlayPositionStore.savePosition(origin)
+        for observer in menuTrackingObservers {
+            NotificationCenter.default.removeObserver(observer)
         }
+        menuTrackingObservers = []
+        hoverCollapseWork?.cancel()
+        hoverCollapseWork = nil
+        // Default-Position bleibt Default: gespeichert wird nur, was der
+        // User selbst bewegt hat (onMoveAnchor persistiert live).
         panel?.close()
         panel = nil
         hostingView = nil
@@ -375,14 +591,12 @@ class OverlayController: ObservableObject {
     func update(appState: AppState) {
         // Only update properties - view stays the same, SwiftUI handles animations.
         //
-        // Tick-Diät: update() läuft im 100-ms-Timer. Volatile Felder werden
-        // direkt gesetzt; alles andere nur bei echter Änderung, damit der
-        // 10-Hz-Tick keinen objectWillChange-Churn im SwiftUI-Overlay erzeugt.
-        // Der frühere OutputModeStore-Disk-Load pro Tick ist doppelt entschärft:
-        // availableBuiltInModes (profilgefiltertes enabledBuiltInModes) ist seit
-        // dem Stat-Cache billig, und der Guard verhindert das Publish.
-        self.audioLevel = appState.audioLevel
-        self.duration = appState.recordingDuration
+        // Tick-Diät: update() läuft im 100-ms-Timer. Die volatilen Felder
+        // fließen in eigene, klein observierte Modelle (Kern-Bars 10 Hz,
+        // Timer-String 1 Hz); alles andere published nur bei echter Änderung,
+        // damit der Tick keinen objectWillChange-Churn in der Pill erzeugt.
+        levelModel.level = appState.audioLevel
+        clockModel.update(duration: appState.recordingDuration)
         setIfChanged(\.isTranscribing, to: appState.isTranscribing)
         setIfChanged(\.isPostProcessing, to: appState.isPostProcessing)
         setIfChanged(\.selectedOutputMode, to: appState.selectedOutputMode)
@@ -393,11 +607,104 @@ class OverlayController: ObservableObject {
         setIfChanged(\.contextBundle, to: appState.contextBundle)
         setIfChanged(\.isScreenClipRecording, to: appState.isScreenClipRecording)
         setIfChanged(\.postProcessingStatusText, to: appState.postProcessingStatusText)
+        setIfChanged(\.overlayStyle, to: OverlayPositionStore.loadStyle())
+    }
 
-        let latestStyle = OverlayPositionStore.loadStyle()
-        if latestStyle != overlayStyle {
-            overlayStyle = latestStyle
-            applyCurrentStyleToPanel()
+    // MARK: - Pill-Geometrie (aus dem SwiftUI-Layout gemeldet)
+
+    /// SwiftUI meldet den sichtbaren Pill-Frame (Koordinaten des Hosting-Views,
+    /// top-left origin) — hier wird er in AppKit-Koordinaten gedreht und an
+    /// hitTest/Tracking/Clamp/Persistenz verteilt.
+    func reportPillFrame(_ swiftUIFrame: CGRect) {
+        guard let panel, let hostingView else { return }
+        guard swiftUIFrame.width > 0, swiftUIFrame.height > 0 else { return }
+
+        let panelHeight = OverlayFrameResolver.panelSize.height
+        let appKitFrame = NSRect(
+            x: swiftUIFrame.minX,
+            y: panelHeight - swiftUIFrame.maxY,
+            width: swiftUIFrame.width,
+            height: swiftUIFrame.height
+        )
+
+        hostingView.interactiveFrame = appKitFrame
+        panel.pillFrameInPanel = appKitFrame
+
+        // Ohne Custom-Position: nach dem ersten ECHTEN Layout einmalig exakt
+        // zentrieren (die Default-Position basierte auf einer Schätzbreite).
+        // Läuft vor dem ersten sichtbaren Frame — kein wahrnehmbarer Sprung.
+        if !hasCustomPosition, !didPreciseCenter,
+           let screen = panel.screen ?? OverlayPositionStore.activeScreen {
+            didPreciseCenter = true
+            let anchor = OverlayFrameResolver.defaultAnchor(
+                estimatedPillWidth: appKitFrame.width,
+                visibleFrame: screen.visibleFrame
+            )
+            let resolution = OverlayFrameResolver.resolve(anchor: anchor, visibleFrame: screen.visibleFrame)
+            pillAlignment = resolution.alignment
+            panel.setOriginSilently(resolution.panelOrigin)
+        }
+    }
+
+    // MARK: - Hover (Mini-Stil)
+
+    private func setHovering(_ hovering: Bool) {
+        if hovering {
+            hoverCollapseWork?.cancel()
+            hoverCollapseWork = nil
+            if !isHoverExpanded {
+                isHoverExpanded = true
+            }
+            return
+        }
+        scheduleHoverCollapse()
+    }
+
+    /// Collapse mit Grace-Period gegen Flackern an der Pill-Kante; kollabiert
+    /// nie unter einem offenen Menü und verifiziert die Mausposition, weil
+    /// Tracking-Areas während der Breitenanimation neu aufgebaut werden.
+    private func scheduleHoverCollapse() {
+        hoverCollapseWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.menuTrackingCount == 0 else { return }
+            if self.isMouseOverPill() { return }
+            self.isHoverExpanded = false
+        }
+        hoverCollapseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    private func isMouseOverPill() -> Bool {
+        guard let panel else { return false }
+        let pillOnScreen = panel.pillFrameInPanel.offsetBy(
+            dx: panel.frame.origin.x, dy: panel.frame.origin.y
+        )
+        return pillOnScreen.insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation)
+    }
+
+    // MARK: - Doppelklick-Reset
+
+    /// Animiert die Pill zurück zur Default-Position (unten mittig auf dem
+    /// aktuellen Screen) und löscht die gespeicherte Custom-Position.
+    func resetToDefaultPosition() {
+        guard let panel, !isResettingPosition else { return }
+        guard let screen = panel.screen ?? OverlayPositionStore.activeScreen else { return }
+
+        OverlayPositionStore.clearPosition()
+        hasCustomPosition = false
+
+        let pillWidth = panel.pillFrameInPanel.width
+        let anchor = OverlayFrameResolver.defaultAnchor(
+            estimatedPillWidth: pillWidth > 0 ? pillWidth : overlayStyle.estimatedPillWidth,
+            visibleFrame: screen.visibleFrame
+        )
+        let resolution = OverlayFrameResolver.resolve(anchor: anchor, visibleFrame: screen.visibleFrame)
+
+        isResettingPosition = true
+        pillAlignment = resolution.alignment
+        panel.animateOrigin(to: resolution.panelOrigin) { [weak self] in
+            self?.isResettingPosition = false
         }
     }
 
@@ -408,14 +715,5 @@ class OverlayController: ObservableObject {
         if self[keyPath: keyPath] != newValue {
             self[keyPath: keyPath] = newValue
         }
-    }
-
-    private func applyCurrentStyleToPanel() {
-        guard let panel else { return }
-
-        let newSize = overlayStyle.panelSize
-        hostingView?.frame = NSRect(origin: .zero, size: newSize)
-        panel.apply(style: overlayStyle)
-        OverlayPositionStore.savePosition(panel.frame.origin)
     }
 }
