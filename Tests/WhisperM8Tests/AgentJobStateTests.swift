@@ -62,15 +62,20 @@ final class AgentJobStateTests: XCTestCase {
         XCTAssertTrue(AgentJobState.canTransition(from: .stopped, to: .running))
         // Übernahme aus Ruhezuständen:
         XCTAssertTrue(AgentJobState.canTransition(from: .done, to: .takenOver))
+        // send-Claim reserviert ruhende Jobs auf spawning (TOCTOU-Schutz):
+        XCTAssertTrue(AgentJobState.canTransition(from: .done, to: .spawning))
+        XCTAssertTrue(AgentJobState.canTransition(from: .failed, to: .spawning))
+        XCTAssertTrue(AgentJobState.canTransition(from: .stopped, to: .spawning))
     }
 
     func testForbiddenTransitions() {
         // takenOver ist terminal.
         XCTAssertFalse(AgentJobState.canTransition(from: .takenOver, to: .running))
         XCTAssertFalse(AgentJobState.canTransition(from: .takenOver, to: .done))
-        // Kein Rückwärtslauf.
-        XCTAssertFalse(AgentJobState.canTransition(from: .done, to: .spawning))
+        // Aktive Jobs dürfen nicht erneut reserviert werden — genau das
+        // prallt einen zweiten parallelen send ab.
         XCTAssertFalse(AgentJobState.canTransition(from: .running, to: .spawning))
+        XCTAssertFalse(AgentJobState.canTransition(from: .spawning, to: .spawning))
         // spawning darf nicht direkt fertig sein.
         XCTAssertFalse(AgentJobState.canTransition(from: .spawning, to: .done))
     }

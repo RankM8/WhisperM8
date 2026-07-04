@@ -158,6 +158,27 @@ struct AgentJobStore {
         return state
     }
 
+    /// Exklusiver, prozessübergreifender Lock aufs Job-Verzeichnis (flock auf
+    /// eine `.claim.lock`-Datei). Serialisiert konkurrierende `send`-Claims,
+    /// damit „prüfen → reservieren → Prompt hinterlegen" atomar ist: sonst
+    /// könnten zwei parallele `send` beide den ruhenden Job sehen, beide den
+    /// Prompt schreiben (einer ginge verloren) und zwei Supervisoren starten.
+    /// Der Job muss existieren (das Verzeichnis ist der Anker). flock ist
+    /// advisory — greift nur zwischen Aufrufern, die diesen Lock nehmen.
+    func withExclusiveLock<T>(shortId: String, _ body: () throws -> T) throws -> T {
+        let lockURL = jobDirectory(for: shortId).appendingPathComponent(".claim.lock")
+        let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o644)
+        guard fd >= 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        defer { close(fd) }
+        guard flock(fd, LOCK_EX) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        defer { flock(fd, LOCK_UN) }
+        return try body()
+    }
+
     func removeJob(shortId: String) throws {
         let directory = jobDirectory(for: shortId)
         guard FileManager.default.fileExists(atPath: directory.path) else {

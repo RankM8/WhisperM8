@@ -310,9 +310,10 @@ struct SubagentJobDetailView: View {
 
     // MARK: - Aktionen
 
-    /// Folge-Turn: pending-prompt schreiben + detachten Supervisor spawnen —
-    /// exakt der `agent send`-Pfad, nur ohne Shell-out. Guards frisch von
-    /// Disk (`readCorrected`), nicht vom ggf. veralteten Snapshot.
+    /// Folge-Turn: exakt der `agent send`-Pfad, nur ohne Shell-out — Claim
+    /// (prüfen → auf spawning reservieren → Prompt hinterlegen) läuft unterm
+    /// selben prozessübergreifenden Job-Lock wie das CLI, damit Composer und
+    /// parallele CLI-sends nicht racen (TOCTOU-Schutz aus dem Codex-Review).
     private func sendFollowUpPrompt() {
         guard let shortId else { return }
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -322,20 +323,24 @@ struct SubagentJobDetailView: View {
         Task {
             let failure: String? = await Task.detached(priority: .userInitiated) {
                 let store = AgentJobStore()
-                guard let state = store.readCorrected(shortId: shortId) else {
+                guard store.readCorrected(shortId: shortId) != nil else {
                     return "Job \(shortId) nicht gefunden."
                 }
-                if state.state == .takenOver {
-                    return "Job wurde interaktiv übernommen — Senden ist deaktiviert."
+                var options = AgentSendOptions()
+                options.shortId = shortId
+                options.prompt = text
+                let claim: Result<Void, AgentSendCLI.AgentSendClaimError>
+                do {
+                    claim = try store.withExclusiveLock(shortId: shortId) {
+                        AgentSendCLI.claim(store: store, options: options)
+                    }
+                } catch {
+                    return "Job-Lock fehlgeschlagen: \(error.localizedDescription)"
                 }
-                if state.isActive {
-                    return "Job läuft gerade — warte auf done/failed oder stoppe ihn."
-                }
-                guard state.codexThreadID != nil else {
-                    return "Keine Codex-Thread-ID — Resume unmöglich."
+                if case .failure(let claimError) = claim {
+                    return claimError.message
                 }
                 do {
-                    try store.writePendingPrompt(shortId: shortId, prompt: text + AgentSubagentPrompt.reportSuffix)
                     let pid = try AgentSupervisorLauncher().launchDetached(
                         shortId: shortId,
                         logURL: store.supervisorLogURL(for: shortId)
@@ -343,6 +348,12 @@ struct SubagentJobDetailView: View {
                     try store.mutateState(shortId: shortId) { $0.supervisorPid = pid }
                     return nil
                 } catch {
+                    // Claim hat schon auf spawning reserviert — ohne Supervisor
+                    // wäre der Job sonst für 30s "aktiv" gesperrt.
+                    _ = try? store.mutateState(shortId: shortId) { job in
+                        if job.canTransition(to: .failed) { job.state = .failed }
+                        job.failureReason = "Supervisor-Launch fehlgeschlagen: \(error.localizedDescription)"
+                    }
                     return error.localizedDescription
                 }
             }.value

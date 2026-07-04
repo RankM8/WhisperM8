@@ -85,6 +85,39 @@ final class AgentJobStoreTests: XCTestCase {
         XCTAssertEqual(store.readState(shortId: "a3f81c2e")?.state, .done)
     }
 
+    func testReserveToSpawningFromRestingStatesSucceeds() throws {
+        // send reserviert einen ruhenden Job auf spawning, bevor der Supervisor
+        // startet — der Guard muss das aus done/failed/stopped erlauben.
+        for resting in [AgentJobState.State.done, .failed, .stopped] {
+            let store = makeStore()
+            let id = "rest\(resting.rawValue.prefix(4))"
+            try store.createJob(initial: makeJob(id, state: .running))
+            try store.transition(shortId: id, to: resting)
+            try store.transition(shortId: id, to: .spawning)
+            XCTAssertEqual(store.readState(shortId: id)?.state, .spawning)
+        }
+    }
+
+    func testReserveToSpawningFromActiveIsRejected() throws {
+        // Ein bereits reservierter/laufender Job darf nicht erneut reserviert
+        // werden — genau das prallt einen zweiten parallelen send ab.
+        let store = makeStore()
+        try store.createJob(initial: makeJob(state: .spawning))
+        XCTAssertThrowsError(try store.transition(shortId: "a3f81c2e", to: .spawning))
+        try store.transition(shortId: "a3f81c2e", to: .running)
+        XCTAssertThrowsError(try store.transition(shortId: "a3f81c2e", to: .spawning))
+    }
+
+    func testExclusiveLockRunsBodyAndReturnsValue() throws {
+        let store = makeStore()
+        try store.createJob(initial: makeJob())
+        let value = try store.withExclusiveLock(shortId: "a3f81c2e") { 42 }
+        XCTAssertEqual(value, 42)
+        // Reentrant-frei genutzt: ein zweiter Lock nach Freigabe klappt wieder.
+        let again = try store.withExclusiveLock(shortId: "a3f81c2e") { "ok" }
+        XCTAssertEqual(again, "ok")
+    }
+
     // MARK: - Orphan-Korrektur
 
     func testOrphanedRunningJobIsCorrectedToFailed() throws {

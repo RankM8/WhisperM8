@@ -137,36 +137,72 @@ enum AgentSendCLI {
         }
 
         let store = AgentJobCLIShared.storeFactory()
-        // Orphan-Korrektur ZUERST — ein toter running-Job wird zu failed
-        // und ist damit legal resumierbar.
-        guard let state = store.readCorrected(shortId: options.shortId) else {
+        // Existenz-Pre-Check (klare Meldung, bevor wir den Job-Lock nehmen —
+        // der braucht das Verzeichnis als Anker).
+        guard store.readCorrected(shortId: options.shortId) != nil else {
             CLIIO.err("Job \(options.shortId) nicht gefunden.")
             return AgentCLIExit.environment
         }
-        if state.state == .takenOver {
-            CLIIO.err("Job \(options.shortId) wurde als interaktiver Chat übernommen — send ist deaktiviert.")
-            return AgentCLIExit.stateConflict
-        }
-        if state.isActive {
-            CLIIO.err("Job \(options.shortId) läuft gerade (Turn aktiv) — warte auf done/failed oder stoppe ihn.")
-            return AgentCLIExit.stateConflict
-        }
-        guard state.codexThreadID != nil else {
-            CLIIO.err("Job \(options.shortId) hat keine Codex-Thread-ID (erster Turn kam nie bis thread.started) — Resume unmöglich. `agent rm` und neu starten.")
-            return AgentCLIExit.stateConflict
-        }
 
+        // Claim atomar unterm Job-Lock: prüfen → reservieren (spawning) →
+        // Prompt hinterlegen. Ohne den Lock ist das ein TOCTOU: zwei parallele
+        // send könnten beide den ruhenden Job sehen, beide den Prompt schreiben
+        // (einer verloren) und zwei Supervisoren starten.
+        let claim: Result<Void, AgentSendClaimError>
         do {
-            try store.writePendingPrompt(shortId: options.shortId, prompt: options.prompt + AgentSubagentPrompt.reportSuffix)
+            claim = try store.withExclusiveLock(shortId: options.shortId) {
+                AgentSendCLI.claim(store: store, options: options)
+            }
         } catch {
-            CLIIO.err("Prompt-Handoff fehlgeschlagen: \(error.localizedDescription)")
+            CLIIO.err("Job-Lock fehlgeschlagen: \(error.localizedDescription)")
             return AgentCLIExit.environment
+        }
+        if case .failure(let error) = claim {
+            CLIIO.err(error.message)
+            return error.exit
         }
 
         if options.wait {
             return await AgentJobCLIShared.superviseInlineAndEmit(store: store, shortId: options.shortId, json: options.json)
         }
         return AgentJobCLIShared.detachAndEmit(store: store, shortId: options.shortId, json: options.json)
+    }
+
+    /// Fehler eines fehlgeschlagenen Claims: Meldung + CLI-Exit-Code.
+    struct AgentSendClaimError: Error {
+        let message: String
+        let exit: Int32
+    }
+
+    /// Läuft UNTERM Job-Lock: Orphan-korrigiert lesen, Guards prüfen und —
+    /// wenn legal — den Job auf `spawning` reservieren und den Prompt
+    /// hinterlegen. Ab der Reservierung sehen konkurrierende send den Job als
+    /// aktiv und prallen mit stateConflict ab.
+    static func claim(store: AgentJobStore, options: AgentSendOptions) -> Result<Void, AgentSendClaimError> {
+        // Orphan-Korrektur ZUERST — ein toter running-Job wird zu failed
+        // und ist damit legal resumierbar.
+        guard let state = store.readCorrected(shortId: options.shortId) else {
+            return .failure(.init(message: "Job \(options.shortId) nicht gefunden.", exit: AgentCLIExit.environment))
+        }
+        if state.state == .takenOver {
+            return .failure(.init(message: "Job \(options.shortId) wurde als interaktiver Chat übernommen — send ist deaktiviert.", exit: AgentCLIExit.stateConflict))
+        }
+        if state.isActive {
+            return .failure(.init(message: "Job \(options.shortId) läuft gerade (Turn aktiv) — warte auf done/failed oder stoppe ihn.", exit: AgentCLIExit.stateConflict))
+        }
+        guard state.codexThreadID != nil else {
+            return .failure(.init(message: "Job \(options.shortId) hat keine Codex-Thread-ID (erster Turn kam nie bis thread.started) — Resume unmöglich. `agent rm` und neu starten.", exit: AgentCLIExit.stateConflict))
+        }
+
+        do {
+            // Reservieren: ruhend → spawning (macht den Job für parallele send
+            // sofort aktiv), danach erst der Prompt-Handoff.
+            try store.transition(shortId: options.shortId, to: .spawning)
+            try store.writePendingPrompt(shortId: options.shortId, prompt: options.prompt + AgentSubagentPrompt.reportSuffix)
+        } catch {
+            return .failure(.init(message: "Prompt-Handoff fehlgeschlagen: \(error.localizedDescription)", exit: AgentCLIExit.environment))
+        }
+        return .success(())
     }
 }
 
@@ -218,7 +254,7 @@ enum AgentStatusCLI {
         } else {
             AgentJobOutput.emitHumanStatus(state: state, lastMessage: lastMessage)
         }
-        return state.state == .failed ? AgentCLIExit.jobFailed : AgentCLIExit.ok
+        return AgentJobOutput.exitCode(for: state, lastMessage: lastMessage)
     }
 }
 
@@ -444,6 +480,21 @@ enum AgentJobOutput {
         default:
             return nil
         }
+    }
+
+    /// Exit-Code nach dem CLI-Vertrag für einen ruhenden Job: 2 wenn `failed`
+    /// ODER `done` mit Report-Status `failure` (spiegelt AgentJobSupervisor.
+    /// finalize). So liefert `agent status` denselben Code wie der
+    /// `--wait`-Lauf, der den Job beendet hat — ein Report-`failure` bleibt
+    /// nicht unentdeckt, nur weil der State `.done` ist.
+    static func exitCode(for state: AgentJobState, lastMessage: String?) -> Int32 {
+        if state.state == .failed { return AgentCLIExit.jobFailed }
+        if state.state == .done,
+           let lastMessage,
+           AgentReport.parse(lastMessage: lastMessage)?.status == .failure {
+            return AgentCLIExit.jobFailed
+        }
+        return AgentCLIExit.ok
     }
 
     static func age(of job: AgentJobState) -> String {

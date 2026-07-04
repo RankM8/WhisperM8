@@ -71,6 +71,36 @@ final class AgentCLICommandTests: XCTestCase {
         XCTAssertEqual(exit, AgentCLIExit.environment)
     }
 
+    /// Ein reservierter (spawning) Job prallt einen zweiten parallelen send ab.
+    func testSendOnSpawningJobIsRejectedWithConflict() async throws {
+        try makeJob(state: .spawning, pid: 4711)
+        let exit = await AgentSendCLI.run(["a3f81c2e", "next"])
+        XCTAssertEqual(exit, AgentCLIExit.stateConflict)
+        XCTAssertNil(store.consumePendingPrompt(shortId: "a3f81c2e"))
+    }
+
+    // MARK: - send: Claim (TOCTOU-Schutz, ohne Supervisor-Launch)
+
+    func testSendClaimReservesRestingJobAndStoresPrompt() throws {
+        try makeJob(state: .done, threadID: "thread-1")
+        let options = try AgentCLIParser.parseSend(["a3f81c2e", "next turn"])
+        let result = AgentSendCLI.claim(store: store, options: options)
+        guard case .success = result else { return XCTFail("claim sollte erfolgreich sein") }
+        // Reserviert: ruhend → spawning, danach sieht ein zweiter send isActive.
+        XCTAssertEqual(store.readState(shortId: "a3f81c2e")?.state, .spawning)
+        let prompt = try XCTUnwrap(store.consumePendingPrompt(shortId: "a3f81c2e"))
+        XCTAssertTrue(prompt.contains("next turn"))
+    }
+
+    func testSendClaimOnActiveJobFailsWithoutReserving() throws {
+        try makeJob(state: .running, pid: 4711)
+        let options = try AgentCLIParser.parseSend(["a3f81c2e", "next"])
+        let result = AgentSendCLI.claim(store: store, options: options)
+        guard case .failure(let error) = result else { return XCTFail("Konflikt erwartet") }
+        XCTAssertEqual(error.exit, AgentCLIExit.stateConflict)
+        XCTAssertNil(store.consumePendingPrompt(shortId: "a3f81c2e"))
+    }
+
     // MARK: - stop
 
     func testStopSendsSigtermToSupervisorPid() throws {
@@ -118,6 +148,24 @@ final class AgentCLICommandTests: XCTestCase {
 
     func testStatusOfUnknownJobIsEnvironmentError() {
         XCTAssertEqual(AgentStatusCLI.run(["deadbeef"]), AgentCLIExit.environment)
+    }
+
+    /// done + Report-Status `failure` muss Exit 2 liefern — konsistent mit dem
+    /// `--wait`-Lauf, der den Job beendet hat (Exit-Code-Vertrag).
+    func testStatusOfDoneJobWithFailureReportExitsJobFailed() throws {
+        try makeJob(state: .done)
+        store.writeLastMessage(shortId: "a3f81c2e", text: """
+        {"status": "failure", "summary": "kaputt", "filesChanged": [], "commits": [], "testsRun": null, "openQuestions": []}
+        """)
+        XCTAssertEqual(AgentStatusCLI.run(["a3f81c2e", "--json"]), AgentCLIExit.jobFailed)
+    }
+
+    func testStatusOfDoneJobWithSuccessReportExitsOK() throws {
+        try makeJob(state: .done)
+        store.writeLastMessage(shortId: "a3f81c2e", text: """
+        {"status": "success", "summary": "fertig", "filesChanged": [], "commits": [], "testsRun": null, "openQuestions": []}
+        """)
+        XCTAssertEqual(AgentStatusCLI.run(["a3f81c2e", "--json"]), AgentCLIExit.ok)
     }
 
     func testListRunsCleanOnEmptyStore() {

@@ -123,6 +123,12 @@ final class CodexExecRunner: @unchecked Sendable {
         onEvent: @escaping (CodexExecEvent, _ rawLine: String) -> Void
     ) async throws -> CodexTurnResult {
         _ = Self.ignoreSigpipe
+        // Frischer Lauf: Stall-Flag aus einem etwaigen Vorlauf zurücksetzen.
+        // Der Runner ist zwar single-use (ein Supervisor = ein Turn), aber so
+        // bleibt der Zustand ehrlich, falls ein Runner je wiederverwendet wird
+        // — sonst würde ein alter Watchdog-Abbruch den nächsten Turn
+        // fälschlich als stalled melden.
+        resetStalled()
         let exitCode: Int32 = try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: request.codexPath)
@@ -256,6 +262,12 @@ final class CodexExecRunner: @unchecked Sendable {
     private func markStalled() {
         lock.lock()
         stalledFlag = true
+        lock.unlock()
+    }
+
+    private func resetStalled() {
+        lock.lock()
+        stalledFlag = false
         lock.unlock()
     }
 

@@ -113,6 +113,11 @@ struct AgentJobState: Codable, Equatable {
         // send startet einen neuen Turn auf abgeschlossenen Jobs:
         case (.done, .running), (.failed, .running), (.stopped, .running):
             return true
+        // send reserviert einen ruhenden Job atomar (unterm Job-Lock) auf
+        // spawning, BEVOR der Supervisor startet — so sieht ein zweiter,
+        // paralleler send den Job sofort als aktiv (isActive) und prallt ab.
+        case (.done, .spawning), (.failed, .spawning), (.stopped, .spawning):
+            return true
         // Übernahme ist aus jedem Ruhezustand möglich:
         case (.done, .takenOver), (.failed, .takenOver), (.stopped, .takenOver):
             return true
