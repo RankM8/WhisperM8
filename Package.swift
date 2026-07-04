@@ -34,6 +34,7 @@ let package = Package(
             exclude: ["Info.plist", "WhisperM8.entitlements", "Resources/AppIcon.icns"],
             resources: [
                 .copy("Resources/whisperm8-cli-skill.md"),
+                .copy("Resources/whisperm8-agent-skill.md"),
                 .process("Resources/MenuBarIcon.png"),
                 .process("Resources/MenuBarIcon@2x.png"),
                 .process("Resources/AppLogo.png"),

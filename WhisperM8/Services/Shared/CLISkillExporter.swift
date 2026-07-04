@@ -1,44 +1,66 @@
 import Foundation
 
-/// Stellt den gebündelten Agent-Skill fürs whisperm8-CLI bereit (Anthropic-
-/// SKILL.md-Format, Ressource `whisperm8-cli-skill.md`) und installiert ihn
-/// auf Wunsch nach `~/.claude/skills/<name>/SKILL.md`, wo Claude Code ihn
-/// automatisch entdeckt. Für andere Tools (ChatGPT, Claude.ai) liefert er den
+/// Stellt die gebündelten Agent-Skills fürs whisperm8-CLI bereit (Anthropic-
+/// SKILL.md-Format, Ressourcen im App-Bundle) und installiert sie auf Wunsch
+/// nach `~/.claude/skills/<name>/SKILL.md`, wo Claude Code sie automatisch
+/// entdeckt. Für andere Tools (ChatGPT, Claude.ai) liefert er den
 /// Markdown-Inhalt zum Speichern/Kopieren.
 struct CLISkillExporter {
-    /// Muss dem `name:`-Frontmatter der Skill-Ressource entsprechen — Claude
-    /// Code erwartet, dass der Ordnername dem Skill-Namen gleicht.
-    static let skillName = "whisperm8-transcription"
-    static let resourceName = "whisperm8-cli-skill"
+    /// Ein installierbarer Skill: `name` muss dem `name:`-Frontmatter der
+    /// Ressource entsprechen — Claude Code erwartet Ordnername == Skill-Name.
+    struct SkillDefinition: Equatable {
+        let name: String
+        let resourceName: String
 
+        /// Transkriptions-Skill (`whisperm8 transcribe …`).
+        static let transcription = SkillDefinition(
+            name: "whisperm8-transcription",
+            resourceName: "whisperm8-cli-skill"
+        )
+        /// Codex-Subagents (`whisperm8 agent …`).
+        static let codexAgent = SkillDefinition(
+            name: "codex-subagent",
+            resourceName: "whisperm8-agent-skill"
+        )
+
+        static let all: [SkillDefinition] = [.transcription, .codexAgent]
+    }
+
+    /// Rückwärtskompatibler Alias (Tests/ältere Aufrufer).
+    static let skillName = SkillDefinition.transcription.name
+    static let resourceName = SkillDefinition.transcription.resourceName
+
+    var definition: SkillDefinition
     var homeDirectory: URL
     var bundle: Bundle
 
     init(
+        definition: SkillDefinition = .transcription,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         bundle: Bundle = .main
     ) {
+        self.definition = definition
         self.homeDirectory = homeDirectory
         self.bundle = bundle
     }
 
     enum SkillError: LocalizedError {
-        case resourceMissing
+        case resourceMissing(String)
 
         var errorDescription: String? {
             switch self {
-            case .resourceMissing:
-                return "Skill-Ressource fehlt im App-Bundle (\(CLISkillExporter.resourceName).md)."
+            case .resourceMissing(let name):
+                return "Skill-Ressource fehlt im App-Bundle (\(name).md)."
             }
         }
     }
 
     /// Der vollständige Skill-Inhalt (Frontmatter + Markdown-Body).
     func skillMarkdown() throws -> String {
-        guard let url = bundle.url(forResource: Self.resourceName, withExtension: "md"),
+        guard let url = bundle.url(forResource: definition.resourceName, withExtension: "md"),
               let content = try? String(contentsOf: url, encoding: .utf8),
               !content.isEmpty else {
-            throw SkillError.resourceMissing
+            throw SkillError.resourceMissing(definition.resourceName)
         }
         return content
     }
@@ -47,7 +69,7 @@ struct CLISkillExporter {
     var claudeCodeSkillURL: URL {
         homeDirectory
             .appendingPathComponent(".claude/skills", isDirectory: true)
-            .appendingPathComponent(Self.skillName, isDirectory: true)
+            .appendingPathComponent(definition.name, isDirectory: true)
             .appendingPathComponent("SKILL.md")
     }
 

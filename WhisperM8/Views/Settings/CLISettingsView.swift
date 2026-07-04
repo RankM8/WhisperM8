@@ -1,38 +1,35 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings-Bereich fürs whisperm8-CLI: zeigt den Installations-Status des
-/// Symlinks, eine Kurzreferenz und stellt den Agent-Skill bereit (Claude-Code-
-/// Install, Datei-Export, Zwischenablage), damit Nutzer das CLI ihren
-/// KI-Assistenten beibringen können.
+/// Settings-Bereich fürs whisperm8-CLI: Installations-Status des Symlinks,
+/// Kurzreferenzen für beide CLI-Systeme (Transkription + Codex-Subagents)
+/// und die installierbaren Agent-Skills (Claude-Code-Install, Datei-Export,
+/// Zwischenablage), damit Nutzer das CLI ihren KI-Assistenten beibringen.
 struct CLISettingsView: View {
     @State private var installState: CLIInstallStatus.State = .missing(expectedPath: "~/.local/bin/whisperm8")
-    @State private var skillInstalled = false
-    @State private var skillIsCurrent = false
-    @State private var feedback: String?
-    @State private var errorMessage: String?
-    @State private var isReferenceExpanded = false
-    @State private var skillMarkdown: String = ""
-
-    private let exporter = CLISkillExporter()
 
     var body: some View {
         Form {
             cliStatusSection
-            usageSection
-            skillSection
-            referenceSection
+            transcribeUsageSection
+            agentUsageSection
+            Section("Agent-Skills für Claude & ChatGPT") {
+                SkillCardView(
+                    definition: .transcription,
+                    summary: "Bringt KI-Assistenten bei, was die Transkriptions-CLI kann und wie man sie korrekt aufruft — z. B. „Transkribiere das Meeting-Video und fasse es zusammen“. Einmal installieren, danach erkennt der Assistent Transkriptions-Aufgaben von selbst."
+                )
+                Divider()
+                SkillCardView(
+                    definition: .codexAgent,
+                    summary: "Beschreibt das komplette Codex-Subagent-System präzise: alle Befehle, Flags, Exit-Codes, JSON-Formate, Report-Vertrag und Workflows. Damit kann Claude Code Codex-Subagents spawnen, nachsteuern und verwalten — z. B. „Lass Codex das parallel implementieren“."
+                )
+                Text("Claude Code lädt Skills automatisch aus `~/.claude/skills`. Für ChatGPT oder Claude.ai den Inhalt kopieren und als Projekt-Anweisung bzw. Custom Instruction einfügen. Beim manuellen Ablegen gilt: Ordnername = Skill-Name, Datei heißt SKILL.md.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .onAppear(perform: refresh)
-        .alert("Fehler", isPresented: .init(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
+        .onAppear { installState = CLIInstallStatus.current() }
     }
 
     // MARK: - CLI-Status
@@ -53,7 +50,7 @@ struct CLISettingsView: View {
                 if needsInstallAction {
                     Button("Link anlegen") {
                         CLISymlinkInstaller.installIfNeeded()
-                        refresh()
+                        installState = CLIInstallStatus.current()
                     }
                 }
             }
@@ -105,15 +102,15 @@ struct CLISettingsView: View {
         return true
     }
 
-    // MARK: - Kurzreferenz
+    // MARK: - Schnellstart: Transkription
 
-    private var usageSection: some View {
-        Section("Schnellstart") {
+    private var transcribeUsageSection: some View {
+        Section("Schnellstart: Transkription") {
             VStack(alignment: .leading, spacing: 6) {
-                commandExample("whisperm8 transcribe aufnahme.m4a", caption: "Audio → Text (stdout)")
-                commandExample("whisperm8 transcribe video.mp4 -f srt -o video.srt", caption: "Video → Untertitel (Audiospur wird automatisch extrahiert)")
-                commandExample("whisperm8 transcribe meeting.mp3 --mode clean -o meeting.txt", caption: "Transkript + Nachbearbeitung über einen Output-Mode")
-                commandExample("whisperm8 transcribe workshop.mp4 --dry-run", caption: "Nur Dauer, Chunks und Kostenschätzung — keine API-Calls")
+                CommandExampleRow(command: "whisperm8 transcribe aufnahme.m4a", caption: "Audio → Text (stdout)")
+                CommandExampleRow(command: "whisperm8 transcribe video.mp4 -f srt -o video.srt", caption: "Video → Untertitel (Audiospur wird automatisch extrahiert)")
+                CommandExampleRow(command: "whisperm8 transcribe meeting.mp3 --mode clean -o meeting.txt", caption: "Transkript + Nachbearbeitung über einen Output-Mode")
+                CommandExampleRow(command: "whisperm8 transcribe workshop.mp4 --dry-run", caption: "Nur Dauer, Chunks und Kostenschätzung — keine API-Calls")
             }
             .padding(.vertical, 2)
 
@@ -123,17 +120,54 @@ struct CLISettingsView: View {
         }
     }
 
-    private func commandExample(_ command: String, caption: String) -> some View {
+    // MARK: - Schnellstart: Codex-Subagents
+
+    private var agentUsageSection: some View {
+        Section("Schnellstart: Codex-Subagents") {
+            Text("WhisperM8 ist der Supervisor für headless Codex-Agenten (Codex hat kein eigenes Background-System). Jobs laufen detacht, sind über Turns fortsetzbar, erscheinen live in den Agent Chats — und lassen sich dort jederzeit als interaktiver Chat übernehmen.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                CommandExampleRow(command: "whisperm8 agent run --wait --json \"Reviewe den Diff von HEAD~3 auf Regressionen.\"", caption: "Synchroner Job — blockiert bis zum Report (JSON auf stdout)")
+                CommandExampleRow(command: "whisperm8 agent run --worktree \"Implementiere X, teste, committe bei grün.\"", caption: "Detachter Job im isolierten Git-Worktree (Branch subagent/<id>)")
+                CommandExampleRow(command: "whisperm8 agent send <id> --wait \"Bitte auch die Edge-Cases abdecken.\"", caption: "Folge-Turn — die Session behält ihren Kontext (codex exec resume)")
+                CommandExampleRow(command: "whisperm8 agent list", caption: "Alle Jobs mit Zustand · status/logs/stop/rm für Details und Verwaltung")
+            }
+            .padding(.vertical, 2)
+
+            Text("Sandbox: workspace-write (Default, committen ja / pushen nein) oder read-only. Exit-Codes: 0 done · 2 failed · 3 Konflikt · 4 Umgebung. Alle Optionen: `whisperm8 agent help`.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Befehls-Beispielzeile
+
+private struct CommandExampleRow: View {
+    let command: String
+    let caption: String
+    @State private var copied = false
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 6) {
                 Text(command)
                     .font(.callout.monospaced())
+                    .lineLimit(2)
                     .textSelection(.enabled)
                 Spacer()
                 Button {
-                    copyToPasteboard(command, feedbackText: "Befehl kopiert")
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(command, forType: .string)
+                    withAnimation { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation { copied = false }
+                    }
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
                 .help("Befehl kopieren")
@@ -143,44 +177,60 @@ struct CLISettingsView: View {
                 .foregroundStyle(.secondary)
         }
     }
+}
 
-    // MARK: - Agent-Skill
+// MARK: - Skill-Karte (pro Skill: Install, Export, Kopieren, Vorschau)
 
-    private var skillSection: some View {
-        Section("Agent-Skill für Claude & ChatGPT") {
+private struct SkillCardView: View {
+    let definition: CLISkillExporter.SkillDefinition
+    let summary: String
+
+    @State private var installed = false
+    @State private var isCurrent = false
+    @State private var markdown = ""
+    @State private var feedback: String?
+    @State private var errorMessage: String?
+    @State private var isPreviewExpanded = false
+
+    private var exporter: CLISkillExporter {
+        CLISkillExporter(definition: definition)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Skill „\(CLISkillExporter.skillName)“")
+                Text("Skill „\(definition.name)“")
                     .font(.headline)
-                Text("Bringt KI-Assistenten bei, was die CLI kann und wie man sie korrekt aufruft — z. B. „Transkribiere das Meeting-Video und fasse es zusammen“. Einmal installieren, danach erkennt der Assistent Transkriptions-Aufgaben von selbst.")
+                Text(summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 8) {
                 Button {
-                    installSkillForClaudeCode()
+                    install()
                 } label: {
                     Label(
-                        skillInstalled ? (skillIsCurrent ? "In Claude Code installiert" : "Skill aktualisieren")
-                                       : "In Claude Code installieren",
-                        systemImage: skillInstalled && skillIsCurrent ? "checkmark.circle" : "arrow.down.circle"
+                        installed ? (isCurrent ? "In Claude Code installiert" : "Skill aktualisieren")
+                                  : "In Claude Code installieren",
+                        systemImage: installed && isCurrent ? "checkmark.circle" : "arrow.down.circle"
                     )
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(skillInstalled && skillIsCurrent)
+                .disabled(installed && isCurrent)
 
                 Button {
-                    saveSkillToDisk()
+                    saveToDisk()
                 } label: {
                     Label("Skill-Datei sichern…", systemImage: "square.and.arrow.down")
                 }
 
                 Button {
-                    copyToPasteboard(skillMarkdown, feedbackText: "Skill kopiert")
+                    copyToPasteboard()
                 } label: {
                     Label("Inhalt kopieren", systemImage: "doc.on.doc")
                 }
-                .disabled(skillMarkdown.isEmpty)
+                .disabled(markdown.isEmpty)
 
                 if let feedback {
                     Text(feedback)
@@ -190,19 +240,9 @@ struct CLISettingsView: View {
                 }
             }
 
-            Text("Claude Code lädt Skills automatisch aus `~/.claude/skills`. Für ChatGPT oder Claude.ai den Inhalt kopieren und als Projekt-Anweisung bzw. Custom Instruction einfügen. Beim manuellen Ablegen gilt: Ordnername = Skill-Name, Datei heißt SKILL.md.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: - Skill-Vorschau
-
-    private var referenceSection: some View {
-        Section {
-            DisclosureGroup("Skill-Inhalt ansehen", isExpanded: $isReferenceExpanded) {
+            DisclosureGroup("Skill-Inhalt ansehen", isExpanded: $isPreviewExpanded) {
                 ScrollView {
-                    Text(skillMarkdown.isEmpty ? "Skill-Ressource nicht gefunden." : skillMarkdown)
+                    Text(markdown.isEmpty ? "Skill-Ressource nicht gefunden." : markdown)
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -212,21 +252,31 @@ struct CLISettingsView: View {
                 .background(Color(nsColor: .textBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
+            .font(.caption)
+        }
+        .padding(.vertical, 4)
+        .onAppear(perform: refresh)
+        .alert("Fehler", isPresented: .init(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 
-    // MARK: - Aktionen
+    // MARK: Aktionen
 
     private func refresh() {
-        installState = CLIInstallStatus.current()
-        skillInstalled = exporter.isInstalledForClaudeCode
-        skillIsCurrent = exporter.installedSkillIsCurrent
-        if skillMarkdown.isEmpty {
-            skillMarkdown = (try? exporter.skillMarkdown()) ?? ""
+        installed = exporter.isInstalledForClaudeCode
+        isCurrent = exporter.installedSkillIsCurrent
+        if markdown.isEmpty {
+            markdown = (try? exporter.skillMarkdown()) ?? ""
         }
     }
 
-    private func installSkillForClaudeCode() {
+    private func install() {
         do {
             try exporter.installForClaudeCode()
             refresh()
@@ -236,9 +286,9 @@ struct CLISettingsView: View {
         }
     }
 
-    private func saveSkillToDisk() {
-        guard !skillMarkdown.isEmpty else {
-            errorMessage = CLISkillExporter.SkillError.resourceMissing.localizedDescription
+    private func saveToDisk() {
+        guard !markdown.isEmpty else {
+            errorMessage = CLISkillExporter.SkillError.resourceMissing(definition.resourceName).localizedDescription
             return
         }
         let panel = NSSavePanel()
@@ -248,18 +298,18 @@ struct CLISettingsView: View {
         panel.title = "Skill-Datei sichern"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try skillMarkdown.write(to: url, atomically: true, encoding: .utf8)
+            try markdown.write(to: url, atomically: true, encoding: .utf8)
             showFeedback("Gesichert ✓")
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func copyToPasteboard(_ text: String, feedbackText: String) {
+    private func copyToPasteboard() {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        showFeedback(feedbackText)
+        pasteboard.setString(markdown, forType: .string)
+        showFeedback("Skill kopiert")
     }
 
     private func showFeedback(_ text: String) {

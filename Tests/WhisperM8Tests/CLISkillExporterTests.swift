@@ -31,6 +31,36 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertTrue(markdown.contains("whisperm8 transcribe"))
     }
 
+    // MARK: Codex-Agent-Skill
+
+    private func makeAgentExporter() -> CLISkillExporter {
+        CLISkillExporter(definition: .codexAgent, homeDirectory: tempHome, bundle: .module)
+    }
+
+    func testAgentSkillResourceLoadsAndMatchesDefinitionName() throws {
+        let markdown = try makeAgentExporter().skillMarkdown()
+        XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
+        XCTAssertTrue(markdown.contains("name: \(CLISkillExporter.SkillDefinition.codexAgent.name)"))
+        XCTAssertTrue(markdown.contains("whisperm8 agent run"))
+        // Der Skill muss die verbindlichen Exit-Codes dokumentieren.
+        XCTAssertTrue(markdown.contains("Exit-Codes"))
+    }
+
+    func testAgentSkillInstallsIntoOwnFolder() throws {
+        let exporter = makeAgentExporter()
+        let destination = try exporter.installForClaudeCode()
+        XCTAssertEqual(
+            destination.deletingLastPathComponent().lastPathComponent,
+            "codex-subagent"
+        )
+        XCTAssertTrue(exporter.installedSkillIsCurrent)
+        // Beide Skills koexistieren in getrennten Ordnern.
+        let transcription = makeExporter()
+        try transcription.installForClaudeCode()
+        XCTAssertTrue(transcription.isInstalledForClaudeCode)
+        XCTAssertTrue(exporter.isInstalledForClaudeCode)
+    }
+
     // MARK: Claude-Code-Install
 
     func testClaudeCodeSkillURLUsesSkillNamedFolder() {
