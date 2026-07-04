@@ -34,6 +34,21 @@ final class ExternalClaudeHooksInspectorTests: XCTestCase {
     func testIgnoresEventsWhisperM8DoesNotTrack() {
         let data = settingsJSON("""
         {
+          "PreCompact": [
+            { "hooks": [ { "type": "command", "command": "echo compact" } ] }
+          ]
+        }
+        """)
+
+        let findings = ExternalClaudeHooksInspector.overlappingHooks(settingsData: data, source: "settings.json")
+        XCTAssertTrue(findings.isEmpty, "PreCompact wird nicht getrackt → kein Konflikt")
+    }
+
+    func testFlagsPostToolUseFailureAsTracked() {
+        // Seit PostToolUseFailure registriert ist (Aktivitäts-Signal auch bei
+        // Tool-Fehlern), muss der Inspector fremde Hooks darauf melden.
+        let data = settingsJSON("""
+        {
           "PostToolUseFailure": [
             { "hooks": [ { "type": "command", "command": "echo fail" } ] }
           ]
@@ -41,7 +56,8 @@ final class ExternalClaudeHooksInspectorTests: XCTestCase {
         """)
 
         let findings = ExternalClaudeHooksInspector.overlappingHooks(settingsData: data, source: "settings.json")
-        XCTAssertTrue(findings.isEmpty, "PostToolUseFailure wird nicht getrackt → kein Konflikt")
+        XCTAssertEqual(findings.count, 1)
+        XCTAssertEqual(findings.first?.eventName, "PostToolUseFailure")
     }
 
     func testLongCommandsAreTruncatedForPreview() {

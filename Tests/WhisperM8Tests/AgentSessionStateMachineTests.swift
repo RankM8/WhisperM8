@@ -206,6 +206,8 @@ final class AgentSessionStateMachineTests: XCTestCase {
         XCTAssertEqual(AgentSessionSignal(hookEvent: event(.userPromptSubmit)), .userPromptSubmitted)
         XCTAssertEqual(AgentSessionSignal(hookEvent: event(.preToolUse, tool: "AskUserQuestion")), .toolWillRun(toolName: "AskUserQuestion"))
         XCTAssertEqual(AgentSessionSignal(hookEvent: event(.postToolUse, tool: "Bash")), .toolDidRun)
+        // Fehlgeschlagenes Tool = weiterhin Aktivität (Claude verarbeitet den Fehler).
+        XCTAssertEqual(AgentSessionSignal(hookEvent: event(.postToolUseFailure, tool: "Bash")), .toolDidRun)
         XCTAssertEqual(AgentSessionSignal(hookEvent: event(.permissionRequest)), .permissionRequested)
         XCTAssertEqual(AgentSessionSignal(hookEvent: event(.stop)), .turnStopped)
         XCTAssertEqual(AgentSessionSignal(hookEvent: event(.sessionEnd, reason: "resume")), .sessionEnded(reason: "resume"))

@@ -17,6 +17,9 @@ final class ClaudeHookBridgeTests: XCTestCase {
         XCTAssertNotNil(hooks?["UserPromptSubmit"])
         XCTAssertNotNil(hooks?["PreToolUse"])
         XCTAssertNotNil(hooks?["PostToolUse"])
+        // Auch bei fehlgeschlagenem Tool braucht die Bridge das
+        // Aktivitäts-Signal — sonst fehlt nach einem Tool-Fehler "arbeitet".
+        XCTAssertNotNil(hooks?["PostToolUseFailure"])
         // PermissionRequest (dedizierter Permission-Hook) statt Notification —
         // sonst markieren idle_prompts fertige Chats fälschlich als wartend.
         XCTAssertNotNil(hooks?["PermissionRequest"])
@@ -25,7 +28,8 @@ final class ClaudeHookBridgeTests: XCTestCase {
         XCTAssertEqual(
             Set(ClaudeHookSettingsBuilder.trackedEventNames),
             ["SessionStart", "SessionEnd", "UserPromptSubmit",
-             "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"]
+             "PreToolUse", "PostToolUse", "PostToolUseFailure",
+             "PermissionRequest", "Stop"]
         )
     }
 

@@ -15,6 +15,10 @@ struct ClaudeHookEvent: Equatable, Codable {
         /// Nach jedem Tool-Aufruf — Aktivitaets-Signal („arbeitet"); clear
         /// „needs input", sobald Claude nach bestaetigter Permission weitermacht.
         case postToolUse = "PostToolUse"
+        /// Tool-Aufruf fehlgeschlagen — ebenfalls Aktivitaet: Claude
+        /// verarbeitet den Fehler und macht weiter. Ohne dieses Event fehlte
+        /// nach einem Tool-Fehler das „arbeitet"-Signal.
+        case postToolUseFailure = "PostToolUseFailure"
         /// Echte Erlaubnis-Anfrage (Permission-Dialog) — „braucht Handlung".
         /// Claudes dedizierter Hook, feuert NUR beim echten Dialog (nicht beim
         /// 60-s-Idle-Ping). Ersetzt `Notification` als awaiting-Quelle.

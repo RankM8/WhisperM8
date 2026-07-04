@@ -99,7 +99,9 @@ enum AgentSessionSignal: Equatable {
             self = .userPromptSubmitted
         case .preToolUse:
             self = .toolWillRun(toolName: hookEvent.toolName)
-        case .postToolUse:
+        case .postToolUse, .postToolUseFailure:
+            // Auch ein fehlgeschlagenes Tool ist Aktivität — Claude
+            // verarbeitet den Fehler und der Turn läuft weiter.
             self = .toolDidRun
         case .permissionRequest:
             self = .permissionRequested

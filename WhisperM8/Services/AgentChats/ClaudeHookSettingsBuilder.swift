@@ -10,6 +10,10 @@ enum ClaudeHookSettingsBuilder {
     /// - SessionStart/End       → Lifecycle (externe ID binden, Ende)
     /// - UserPromptSubmit       → Turn-Start ("arbeitet", clear "needs input")
     /// - PreToolUse/PostToolUse → Aktivitaet ("arbeitet", clear "needs input")
+    /// - PostToolUseFailure     → Aktivitaet auch bei fehlgeschlagenem Tool —
+    ///   ohne dieses Event fehlt nach einem Tool-Fehler das "arbeitet"-Signal
+    ///   (Claude verarbeitet den Fehler ja weiter). Vgl. Superset, die es
+    ///   ebenfalls registrieren.
     /// - PermissionRequest      → echte Erlaubnis-Anfrage = "braucht Handlung".
     ///   BEWUSST NICHT `Notification`: das feuert auch fuer `idle_prompt`
     ///   (60-s-Stille) und markierte sonst alle fertigen Chats faelschlich
@@ -24,6 +28,7 @@ enum ClaudeHookSettingsBuilder {
         "UserPromptSubmit",
         "PreToolUse",
         "PostToolUse",
+        "PostToolUseFailure",
         "PermissionRequest",
         "Stop"
     ]
