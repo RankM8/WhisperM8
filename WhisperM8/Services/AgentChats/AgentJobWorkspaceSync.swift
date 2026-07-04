@@ -126,13 +126,11 @@ final class AgentJobWorkspaceSync {
                 let preWorkspace = store.loadWorkspace()
                 let sessionByID = Dictionary(uniqueKeysWithValues: preWorkspace.sessions.map { ($0.id, $0) })
                 for job in unresolvedJobs {
-                    // Benannter Best-Guess zuerst, dann die Kette von unten
-                    // nach oben (die NÄCHSTE PTY-Session gewinnt, falls
-                    // Chats verschachtelt laufen).
-                    var candidates: [Int32] = []
-                    if let pid = job.parentProcessID { candidates.append(pid) }
-                    candidates.append(contentsOf: job.parentProcessAncestry ?? [])
-                    guard let matchedPid = candidates.first(where: { sessionIDByPid[$0] != nil }),
+                    guard let matchedPid = Self.matchParentPid(
+                        job: job,
+                        livePids: Set(sessionIDByPid.keys),
+                        startTimeOf: { ProcessAncestry.startTime(for: $0) }
+                    ),
                           let parentLocalID = sessionIDByPid[matchedPid],
                           let parent = sessionByID[parentLocalID],
                           !parent.isSubagentJob,
@@ -195,6 +193,40 @@ final class AgentJobWorkspaceSync {
 
         let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
         Logger.agentPerformance.debug("subagent_sync reason=\(reason, privacy: .public) jobs=\(jobs.count) durationMs=\(durationMs)")
+    }
+
+    /// Pure + testbar: erster PID-Kandidat des Jobs (benannter Best-Guess
+    /// zuerst, dann die Vorfahren-Kette von unten nach oben — die NÄCHSTE
+    /// PTY-Session gewinnt, falls Chats verschachtelt laufen), der zu einer
+    /// laufenden PTY-shellPid gehört UND dessen Prozess schon VOR der
+    /// Job-Erzeugung lief.
+    ///
+    /// Der Startzeit-Check ist der PID-Reuse-Schutz: die Kandidaten-PIDs
+    /// wurden beim Spawn erfasst und lebten zu diesem Zeitpunkt — vergibt
+    /// das OS eine davon später an einen anderen Chat-Prozess neu, ist
+    /// dessen Startzeit zwangsläufig NACH `job.createdAt`. Ohne den Check
+    /// würde ein stale parentloser Job (die bleiben dauerhaft
+    /// Match-Kandidaten) irgendwann auf den falschen Chat gematcht und der
+    /// Fehler durch das Nie-überschreiben-Backfill permanent.
+    /// Unbekannte Startzeit (Prozess zwischen Registry-Snapshot und Check
+    /// verschwunden) zählt als Nicht-Treffer — der nächste Sync probiert es
+    /// erneut.
+    nonisolated static func matchParentPid(
+        job: AgentJobState,
+        livePids: Set<Int32>,
+        startTimeOf: (Int32) -> Date?
+    ) -> Int32? {
+        var candidates: [Int32] = []
+        if let pid = job.parentProcessID { candidates.append(pid) }
+        candidates.append(contentsOf: job.parentProcessAncestry ?? [])
+        return candidates.first { pid in
+            guard livePids.contains(pid), let started = startTimeOf(pid) else { return false }
+            // +1s Toleranz: createdAt ist ISO8601-persistiert (Sekunden-
+            // Präzision, abgeschnitten), die Startzeit mikrosekundengenau —
+            // ohne Puffer würde ein in derselben Sekunde gestarteter echter
+            // Parent fälschlich abgelehnt. Reuse liegt Minuten später.
+            return started <= job.createdAt.addingTimeInterval(1)
+        }
     }
 
     deinit {

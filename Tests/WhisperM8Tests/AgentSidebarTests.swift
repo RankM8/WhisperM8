@@ -252,6 +252,31 @@ final class SidebarVisibleSliceTests: XCTestCase {
         XCTAssertEqual(result.visible.count, 20)
         XCTAssertEqual(result.hiddenCount, 0)
     }
+
+    /// Selektions-Reveal: liegt die Muss-Row jenseits des Limits, wird bis zu
+    /// ihr aufgefüllt (sonst bliebe z.B. der Parent eines per Notification
+    /// selektierten Subagent-Kindes unsichtbar).
+    func testSliceExtendsToIncludeSelectionBeyondLimit() {
+        let sessions = makeSessions(30)
+        let target = sessions[24]
+        let result = ProjectChatGroup.visibleSlice(of: sessions, limit: 20, mustIncludeID: target.id)
+        XCTAssertEqual(result.visible.count, 25)
+        XCTAssertTrue(result.visible.contains { $0.id == target.id })
+        XCTAssertEqual(result.hiddenCount, 5)
+    }
+
+    func testSliceUnchangedWhenSelectionWithinLimit() {
+        let sessions = makeSessions(30)
+        let result = ProjectChatGroup.visibleSlice(of: sessions, limit: 20, mustIncludeID: sessions[3].id)
+        XCTAssertEqual(result.visible.count, 20)
+        XCTAssertEqual(result.hiddenCount, 10)
+    }
+
+    func testSliceIgnoresUnknownMustIncludeID() {
+        let result = ProjectChatGroup.visibleSlice(of: makeSessions(25), limit: 20, mustIncludeID: UUID())
+        XCTAssertEqual(result.visible.count, 20)
+        XCTAssertEqual(result.hiddenCount, 5)
+    }
 }
 
 // MARK: - Scope-Filter (Aktiv·Zuletzt·Alle) + Flach-Layout

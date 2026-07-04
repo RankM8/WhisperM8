@@ -74,7 +74,7 @@ struct ProjectChatGroup: View {
             groupHeader
 
             if isExpanded && !sessions.isEmpty {
-                let slice = Self.visibleSlice(of: sessions, limit: visibleSessionLimit)
+                let slice = Self.visibleSlice(of: sessions, limit: visibleSessionLimit, mustIncludeID: revealTargetID)
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(slice.visible) { session in
                         sessionRow(session)
@@ -119,13 +119,34 @@ struct ProjectChatGroup: View {
         }
     }
 
+    /// Row, die trotz Row-Limit sichtbar sein muss: die selektierte Session
+    /// dieses Projekts — oder der Parent eines selektierten Subagent-Kindes
+    /// (Kinder rendern nur unter einer sichtbaren Parent-Row; ohne Reveal
+    /// bliebe die Selektion nach einem Notification-Klick unsichtbar).
+    private var revealTargetID: UUID? {
+        guard let selectedSessionID else { return nil }
+        if sessions.contains(where: { $0.id == selectedSessionID }) { return selectedSessionID }
+        return subagentChildrenByParent.first { _, children in
+            children.contains { $0.id == selectedSessionID }
+        }?.key
+    }
+
     /// Pure Slice-Logik — testbar. Ersetzt die frühere stille prefix(20)-
     /// Kappung, bei der Sessions ab Platz 21 kommentarlos unsichtbar waren.
+    /// `mustIncludeID` hebt das Limit bis zu dieser Row an (Selektions-Reveal)
+    /// — unbekannte IDs ändern nichts.
     static func visibleSlice(
         of sessions: [AgentChatSession],
-        limit: Int
+        limit: Int,
+        mustIncludeID: UUID? = nil
     ) -> (visible: ArraySlice<AgentChatSession>, hiddenCount: Int) {
-        let visible = sessions.prefix(max(0, limit))
+        var effectiveLimit = max(0, limit)
+        if let mustIncludeID,
+           let index = sessions.firstIndex(where: { $0.id == mustIncludeID }),
+           index >= effectiveLimit {
+            effectiveLimit = index + 1
+        }
+        let visible = sessions.prefix(effectiveLimit)
         return (visible, sessions.count - visible.count)
     }
 

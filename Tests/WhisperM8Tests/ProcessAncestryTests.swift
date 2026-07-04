@@ -87,4 +87,15 @@ final class ProcessAncestryTests: XCTestCase {
         // PID_MAX auf macOS ist 99998 — 99999 existiert nie.
         XCTAssertNil(ProcessAncestry.info(for: 99999))
     }
+
+    func testStartTimeForOwnProcessIsInThePast() throws {
+        let started = try XCTUnwrap(ProcessAncestry.startTime(for: ProcessInfo.processInfo.processIdentifier))
+        XCTAssertLessThanOrEqual(started, Date())
+        // Sanity: nicht die Unix-Epoche (p_starttime wirklich gelesen).
+        XCTAssertGreaterThan(started, Date(timeIntervalSince1970: 1_000_000))
+    }
+
+    func testStartTimeForDeadPidReturnsNil() {
+        XCTAssertNil(ProcessAncestry.startTime(for: 99999))
+    }
 }

@@ -45,6 +45,93 @@ final class AgentJobWorkspaceSyncTests: XCTestCase {
         return job
     }
 
+    // MARK: - matchParentPid (pure — PID-Reuse-Schutz)
+
+    /// Baut einen Job mit PID-Kandidaten; createdAt = t1000.
+    private func makePidJob(
+        parentProcessID: Int32? = nil,
+        ancestry: [Int32] = []
+    ) -> AgentJobState {
+        var job = makeJob(parentSessionID: nil)
+        job.parentProcessID = parentProcessID
+        job.parentProcessAncestry = ancestry.isEmpty ? nil : ancestry
+        return job
+    }
+
+    /// Echter Vorfahre: PID lebt und der Prozess lief schon vor dem Spawn.
+    func testMatchParentPidAcceptsProcessStartedBeforeJobCreation() {
+        let job = makePidJob(ancestry: [4242])
+        let matched = AgentJobWorkspaceSync.matchParentPid(
+            job: job,
+            livePids: [4242],
+            startTimeOf: { _ in Date(timeIntervalSince1970: 500) }
+        )
+        XCTAssertEqual(matched, 4242)
+    }
+
+    /// PID-Reuse: dieselbe PID gehört jetzt einem Prozess, der NACH dem
+    /// Spawn gestartet ist — darf nicht matchen (sonst klebt der falsche
+    /// Parent dauerhaft, Backfill überschreibt nie).
+    func testMatchParentPidRejectsProcessStartedAfterJobCreation() {
+        let job = makePidJob(ancestry: [4242])
+        let matched = AgentJobWorkspaceSync.matchParentPid(
+            job: job,
+            livePids: [4242],
+            startTimeOf: { _ in Date(timeIntervalSince1970: 90_000) }
+        )
+        XCTAssertNil(matched)
+    }
+
+    /// Unbekannte Startzeit (Prozess zwischen Snapshot und Check weg) ist
+    /// KEIN Treffer — der nächste Sync probiert es erneut.
+    func testMatchParentPidSkipsUnknownStartTime() {
+        let job = makePidJob(ancestry: [4242])
+        XCTAssertNil(AgentJobWorkspaceSync.matchParentPid(
+            job: job,
+            livePids: [4242],
+            startTimeOf: { _ in nil }
+        ))
+    }
+
+    /// Kette von unten nach oben: ein per Reuse verbrannter Kandidat wird
+    /// übersprungen, der nächste echte gewinnt.
+    func testMatchParentPidFallsThroughReusedCandidateToNextInChain() {
+        let job = makePidJob(ancestry: [4242, 5353])
+        let matched = AgentJobWorkspaceSync.matchParentPid(
+            job: job,
+            livePids: [4242, 5353],
+            startTimeOf: { pid in
+                pid == 4242
+                    ? Date(timeIntervalSince1970: 90_000) // Reuse — nach Spawn
+                    : Date(timeIntervalSince1970: 500)    // echt — vor Spawn
+            }
+        )
+        XCTAssertEqual(matched, 5353)
+    }
+
+    /// Benannter Best-Guess (parentProcessID) hat Vorrang vor der Kette.
+    func testMatchParentPidPrefersNamedParentProcessID() {
+        let job = makePidJob(parentProcessID: 1111, ancestry: [4242])
+        let matched = AgentJobWorkspaceSync.matchParentPid(
+            job: job,
+            livePids: [1111, 4242],
+            startTimeOf: { _ in Date(timeIntervalSince1970: 500) }
+        )
+        XCTAssertEqual(matched, 1111)
+    }
+
+    /// Toleranzfenster: ISO8601 schneidet createdAt auf Sekunden ab — ein in
+    /// derselben Sekunde gestarteter echter Parent darf nicht abgelehnt werden.
+    func testMatchParentPidToleratesSameSecondStart() {
+        let job = makePidJob(ancestry: [4242]) // createdAt = t1000 (truncated)
+        let matched = AgentJobWorkspaceSync.matchParentPid(
+            job: job,
+            livePids: [4242],
+            startTimeOf: { _ in Date(timeIntervalSince1970: 1_000.6) }
+        )
+        XCTAssertEqual(matched, 4242)
+    }
+
     // MARK: - PID-aufgelöste Parents (Prozess-Abstammungs-Fallback)
 
     /// Ohne --parent, aber mit vom Sync aufgelöster PID-Zuordnung: die

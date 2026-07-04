@@ -236,6 +236,14 @@ final class AgentWindowStore {
         mutate { $0.expandedProjectIDs = ids }
     }
 
+    /// Klappt genau ein Projekt auf (idempotent, kein Save-Churn) — für den
+    /// Sidebar-Reveal beim Notification-Fokus: die Selektion allein macht die
+    /// Row nicht sichtbar, wenn ihre Projekt-Gruppe eingeklappt ist.
+    func expandProject(_ projectID: UUID) {
+        guard !state.expandedProjectIDs.contains(projectID) else { return }
+        mutate { $0.expandedProjectIDs.append(projectID) }
+    }
+
     // MARK: - Subagent-Unread (global, gelesen ist gelesen)
 
     /// Ungelesene Subagent-Ergebnisse als Set — Row-Input der Sidebar.
@@ -279,6 +287,14 @@ final class AgentWindowStore {
         } else {
             expandedSubagentParentIDs.insert(parentID)
         }
+    }
+
+    /// Klappt die Subagent-Gruppe eines Parents explizit AUF (Notification-
+    /// Fokus): die implizite Offenhaltung über die Selektion greift nur,
+    /// solange das Kind selektiert bleibt — nach einem Tab-Wechsel wäre die
+    /// Gruppe sonst wieder zu und die Row weg.
+    func expandSubagentChildren(_ parentID: UUID) {
+        expandedSubagentParentIDs.insert(parentID)
     }
 
     // MARK: - Wartung

@@ -32,6 +32,22 @@ enum ProcessAncestry {
         return ProcessInfoEntry(pid: pid, ppid: proc.kp_eproc.e_ppid, name: name)
     }
 
+    /// Startzeit eines Prozesses (kp_proc.p_starttime) — der PID-Reuse-Schutz
+    /// fürs Parent-Matching: eine vom OS wiedervergebene PID gehört zu einem
+    /// Prozess, der NACH dem Tod des Originals gestartet ist. nil wenn der
+    /// Prozess nicht (mehr) existiert.
+    static func startTime(for pid: Int32) -> Date? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var proc = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        let result = mib.withUnsafeMutableBufferPointer { mibPointer in
+            sysctl(mibPointer.baseAddress, 4, &proc, &size, nil, 0)
+        }
+        guard result == 0, size > 0, proc.kp_proc.p_pid == pid else { return nil }
+        let started = proc.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: TimeInterval(started.tv_sec) + TimeInterval(started.tv_usec) / 1_000_000)
+    }
+
     /// Läuft die Eltern-Kette hoch und liefert die PID des ersten Vorfahren
     /// mit dem gegebenen Prozessnamen. `maxDepth` als Endlosschleifen-Schutz
     /// (PID-Zyklen gibt es nicht, aber defensiv bleiben).

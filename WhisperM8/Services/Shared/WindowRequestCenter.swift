@@ -119,6 +119,21 @@ final class WindowRequestCenter: ObservableObject {
         }
         // Tab + Selektion im SSoT setzen — idempotent, die Fenster folgen.
         windowStore.openTab(sessionID, in: targetWindowID, select: true)
+        // Sidebar-Reveal: Selektion allein macht die Row nicht sichtbar —
+        // Projekt-Gruppe aufklappen und bei Subagent-Kindern die Parent-
+        // Gruppe explizit öffnen (die implizite Offenhaltung über die
+        // Selektion endet mit dem nächsten Tab-Wechsel).
+        let workspace = AgentSessionStore().loadWorkspace()
+        if let session = workspace.sessions.first(where: { $0.id == sessionID }) {
+            windowStore.expandProject(session.projectID)
+            if session.isSubagentJob,
+               let parentExternalID = session.subagentParentSessionID,
+               let parent = workspace.sessions.first(where: {
+                   !$0.isSubagentJob && $0.externalSessionID == parentExternalID
+               }) {
+                windowStore.expandSubagentChildren(parent.id)
+            }
+        }
         sessionFocusRequest = AgentSessionFocusRequest(
             requestID: UUID(),
             sessionID: sessionID,
