@@ -21,8 +21,9 @@ enum OverlayPhase: Equatable {
     /// Mode-/Kontext-Bedienung ist dann gesperrt (wie heute).
     var isBusy: Bool { self != .recording }
 
-    /// Label neben dem Kern — nur wo Text Information trägt.
-    /// Recording zeigt bewusst KEIN Dauerlabel: die Waveform ist der Status.
+    /// Status-Text der Phase — seit dem Label-Rückbau NUR noch als Tooltip
+    /// am Kern sichtbar (User-Feedback: abgeschnittene Labels + Breiten-Tanz
+    /// beim Phasenwechsel stören; die Bewegungsart trägt den Zustand).
     func statusLabel(postProcessingStatusText: String?) -> String? {
         switch self {
         case .recording:

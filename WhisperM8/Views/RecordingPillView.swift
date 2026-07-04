@@ -45,6 +45,11 @@ struct RecordingPillView: View {
                     .transition(.opacity)
             }
 
+            // Bewusst KEIN Status-Text neben dem Kern (auch nicht bei
+            // Transcribing/Improving): abgeschnittene Labels und der
+            // Breiten-Tanz beim Phasenwechsel stören mehr, als der Text
+            // nützt — die Bewegungsart + Farbe des Kerns trägt den Zustand,
+            // der Tooltip liefert die Details (z. B. „Building prompt…").
             PillCoreView(
                 levelModel: controller.levelModel,
                 phase: phase,
@@ -52,18 +57,7 @@ struct RecordingPillView: View {
                 reduceMotion: reduceMotion
             )
             .padding(.leading, isExpanded ? 0 : 2)
-
-            if let label = phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) {
-                // Text nur, wo er Information trägt (Transcribing/Improving).
-                // Kein fixedSize: ein langer Codex-Status truncated am
-                // 560-pt-Pill-Maximum, statt die Pill zu sprengen.
-                Text(label)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(OverlayPalette.tint(for: phase))
-                    .lineLimit(1)
-                    .padding(.leading, 9)
-                    .transition(.opacity)
-            }
+            .help(phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) ?? "Recording")
 
             if isExpanded || phase == .recording {
                 PillClockView(clockModel: controller.clockModel)
