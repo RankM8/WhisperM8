@@ -28,7 +28,11 @@ enum CLIModeDetector {
     /// Erste-Token, die den CLI-Modus auslösen (auch ohne Symlink testbar via
     /// `.build/.../WhisperM8 transcribe …`).
     static let recognizedCommands: Set<String> = [
-        "transcribe", "modes", "help", "--help", "-h", "--version", "-v"
+        "transcribe", "modes", "help", "--help", "-h", "--version", "-v",
+        // Codex-Subagents. "agent-supervise" ist der interne Detach-Modus —
+        // dort ist argv0 das App-Binary (WhisperM8), nicht der Symlink,
+        // deshalb muss das Keyword hier stehen.
+        "agent", "agent-supervise",
     ]
 
     static func shouldRunCLI(_ arguments: [String]) -> Bool {
@@ -84,6 +88,12 @@ enum CLICommand {
             return CLIModesCommand.run()
         case "transcribe":
             return await CLITranscribeCommand.run(arguments: Array(arguments.dropFirst()))
+        case "agent":
+            return await AgentCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "agent-supervise":
+            // Interner Detach-Modus — wird nur vom AgentSupervisorLauncher
+            // gestartet, nie von Hand.
+            return await AgentSuperviseCommand.run(arguments: Array(arguments.dropFirst()))
         default:
             CLIIO.err("Unbekannter Befehl: \(first)")
             CLIIO.out(CLIHelp.text)
@@ -124,6 +134,7 @@ enum CLIHelp {
     VERWENDUNG
       whisperm8 transcribe <datei> [optionen]
       whisperm8 modes
+      whisperm8 agent run [optionen] "<prompt>"   (Codex-Subagents — siehe `whisperm8 agent help`)
       whisperm8 --help | --version
 
     TRANSCRIBE
