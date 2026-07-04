@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhisperM8 — Transkript-Redesign: 4 Varianten</title>
+<style>
+/* ============================================================
+   Design-Mockup für die neue AgentChatTranscriptView (Option C).
+   4 Varianten in einer Datei, umschaltbar. Farben = 1:1 die
+   Dark-Werte aus Support/AgentTheme.swift.
+   ============================================================ */
+:root {
+  --bg:            #0f0f10;  /* AgentTheme.background (dark) */
+  --sidebar:       #131415;
+  --header:        #121213;
+  --surface:       #171718;
+  --panel:         #1b1c1d;
+  --control:       #242527;
+  --hover:         rgba(255,255,255,0.04);
+  --border:        rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.10);
+  --connector:     rgba(255,255,255,0.10);
+  --text:          rgba(255,255,255,0.92);
+  --text-2:        rgba(255,255,255,0.55);
+  --text-3:        rgba(255,255,255,0.38);
+  --accent:        #7c84e8;
+  --accent-strong: #5e6ad2;
+  --accent-tint:      rgba(124,132,232,0.16);
+  --accent-tint-soft: rgba(124,132,232,0.09);
+  --working:       #4cc38a;
+  --awaiting:      #e9b949;
+  --error:         #e5594f;
+  --diff-pos:      #66d973;
+  --diff-neg:      #f26666;
+
+  /* Die App rendert SF Pro / SF Mono — System-Stack ist hier
+     bewusste Fidelity-Entscheidung, kein Default. */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0b;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding: clamp(16px, 4vw, 56px) clamp(12px, 3vw, 40px);
+}
+
+/* ---------- Doku-Kopf + Varianten-Umschalter ---------- */
+.doc-head { max-width: 1060px; margin: 0 auto 22px; }
+.doc-head .kicker {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+}
+.doc-head h1 { font-size: clamp(20px, 3vw, 28px); font-weight: 700; letter-spacing: -0.02em; }
+.doc-head > p { color: var(--text-2); max-width: 660px; margin-top: 8px; }
+
+.variant-tabs {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  max-width: 1060px; margin: 22px auto 10px;
+}
+.variant-tabs button {
+  appearance: none; cursor: pointer; font: inherit;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 9px; padding: 8px 14px; color: var(--text-2);
+  min-width: 150px; text-align: left;
+}
+.variant-tabs button .vkey { font-size: 12px; font-weight: 650; color: var(--text); }
+.variant-tabs button .vkey span { color: var(--text-3); font-weight: 500; }
+.variant-tabs button .vsub { font-size: 10.5px; color: var(--text-3); }
+.variant-tabs button:hover { background: var(--hover); }
+.variant-tabs button.active {
+  background: var(--accent-tint-soft); border-color: var(--accent-tint);
+}
+.variant-tabs button.active .vkey span { color: var(--accent); }
+.variant-desc {
+  max-width: 1060px; margin: 0 auto 16px;
+  font-size: 12px; color: var(--text-3);
+}
+.variant-desc kbd {
+  font-family: var(--mono); font-size: 10px; background: var(--control);
+  border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 5px;
+}
+
+/* Nur die aktive Variante ist sichtbar */
+.variant { display: none; }
+body[data-variant="a"] #variantA { display: block; }
+body[data-variant="b"] #variantB { display: block; }
+body[data-variant="c"] #variantC { display: block; }
+body[data-variant="d"] #variantD { display: block; }
+body[data-variant="e"] #variantE { display: block; }
+
+/* ---------- macOS-Fensterrahmen (gemeinsam) ---------- */
+.window {
+  max-width: 1060px; margin: 0 auto;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.titlebar {
+  display: flex; align-items: center; gap: 8px;
+  height: 40px; padding: 0 14px;
+  background: var(--header); border-bottom: 1px solid var(--border);
+}
+.traffic { display: flex; gap: 8px; }
+.traffic span { width: 12px; height: 12px; border-radius: 50%; }
+.traffic .r { background: #ff5f57; } .traffic .y { background: #febc2e; } .traffic .g { background: #28c840; }
+.titlebar .wtitle { flex: 1; text-align: center; font-size: 12px; font-weight: 500; color: var(--text-3); }
+
+.chathead {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px;
+  background: var(--header); border-bottom: 1px solid var(--border);
+}
+.chathead .session-title { font-size: 13px; font-weight: 600; }
+.chathead .meta { font-size: 11px; color: var(--text-3); display: flex; gap: 6px; align-items: center; }
+.chathead .meta .sep { opacity: 0.5; }
+.chathead .spacer { flex: 1; }
+.seg {
+  display: flex; background: var(--control); border-radius: 7px; padding: 2px;
+  border: 1px solid var(--border);
+}
+.seg button {
+  appearance: none; border: 0; background: transparent; color: var(--text-2);
+  font: inherit; font-size: 11px; font-weight: 500; padding: 4px 12px;
+  border-radius: 5px; cursor: pointer;
+}
+.seg button.active { background: #3c3d3f; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.btn-resume {
+  appearance: none; border: 0; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 600; color: #fff;
+  background: var(--accent-strong); border-radius: 6px; padding: 5px 14px;
+}
+.btn-resume:hover { background: var(--accent); }
+
+.main { display: flex; height: 640px; }
+.scrollarea { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+.scrollarea::-webkit-scrollbar { width: 10px; }
+.scrollarea::-webkit-scrollbar-thumb { background: var(--control); border-radius: 5px; border: 2px solid var(--bg); }
+
+/* gerendertes Markdown (gemeinsam) */
+.md { font-size: 13px; color: var(--text); }
+.md p { margin: 0 0 10px; }
+.md p:last-child { margin-bottom: 0; }
+.md h4 { font-size: 13px; font-weight: 700; margin: 14px 0 7px; }
+.md ul, .md ol { margin: 0 0 10px 18px; }
+.md li { margin-bottom: 4px; }
+.md code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--control); border-radius: 4px; padding: 1px 5px;
+}
+.md strong { font-weight: 650; }
+
+.showmore {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  font-size: 11px; font-weight: 600; color: var(--accent); padding: 6px 0 0;
+}
+.answer-clamp .md-wrap { max-height: 128px; overflow: hidden; position: relative; }
+.answer-clamp .md-wrap::after {
+  content: ""; position: absolute; inset: auto 0 0 0; height: 56px;
+  background: linear-gradient(transparent, var(--bg));
+}
+
+/* Aufklapp-Animation (gemeinsam) */
+.reveal { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.32s cubic-bezier(0.22,1,0.36,1); }
+.open > .reveal, .open + .reveal { grid-template-rows: 1fr; }
+.reveal > div { overflow: hidden; }
+
+/* ============================================================
+   VARIANTE A — Timeline + Activity-Karten (ursprünglicher Entwurf)
+   ============================================================ */
+.sumstrip {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 8px 18px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  font-size: 11px; color: var(--text-2);
+}
+.sumstrip b { color: var(--text); font-weight: 600; }
+.sumstrip .dotsep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); }
+
+.timeline { max-width: 720px; margin: 0 auto; padding: 20px 24px 48px; }
+.earlier {
+  display: flex; align-items: center; gap: 7px; margin: 0 auto 26px;
+  appearance: none; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 500; color: var(--text-2);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 14px;
+}
+.earlier:hover { background: var(--panel); color: var(--text); }
+
+.round { position: relative; padding-left: 26px; padding-bottom: 8px; }
+.round::before {
+  content: ""; position: absolute; left: 7px; top: 26px; bottom: -6px;
+  width: 2px; background: var(--connector); border-radius: 1px;
+}
+.round:last-of-type::before { bottom: 24px; }
+
+.prompt { position: relative; margin-bottom: 14px; scroll-margin-top: 16px; }
+.prompt::before {
+  content: ""; position: absolute; left: -25px; top: 7px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent-tint);
+}
+.prompt .pmeta {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 5px;
+}
+.prompt .pmeta time { color: var(--text-3); font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+.prompt .bubble {
+  background: var(--accent-tint-soft);
+  border: 1px solid var(--accent-tint);
+  border-radius: 10px; padding: 11px 14px;
+  font-size: 13.5px; font-weight: 500; line-height: 1.55;
+}
+.prompt .attach {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+  font-size: 11px; color: var(--text-2);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 9px;
+}
+
+.activity {
+  margin: 0 0 14px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface); overflow: hidden;
+}
+.activity-summary {
+  display: block; width: 100%; text-align: left;
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  font: inherit; color: inherit; padding: 10px 13px;
+}
+.activity-summary:hover { background: var(--hover); }
+.activity-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chev { color: var(--text-3); font-size: 9px; transition: transform 0.28s cubic-bezier(0.22,1,0.36,1); }
+.activity.open .chev { transform: rotate(90deg); }
+.activity-stats { font-size: 12px; color: var(--text-2); }
+.activity-stats b { color: var(--text); font-weight: 600; }
+.badge-err {
+  font-size: 10px; font-weight: 600; color: var(--error);
+  background: rgba(229,89,79,0.12); border: 1px solid rgba(229,89,79,0.25);
+  border-radius: 5px; padding: 1px 7px;
+}
+.dur { margin-left: auto; font-size: 11px; color: var(--text-3); }
+
+.filechips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-2);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 8px;
+}
+.chip .op { font-family: var(--font); font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.op-write { color: var(--diff-pos); }
+.op-edit  { color: var(--accent); }
+.op-read  { color: var(--text-3); }
+.op-bash  { color: var(--awaiting); }
+.chip .count { color: var(--text-3); font-size: 10px; }
+.chip-more { border-style: dashed; color: var(--text-3); font-family: var(--font); font-size: 10.5px; }
+
+.activity-detail { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.32s cubic-bezier(0.22,1,0.36,1); }
+.activity.open .activity-detail { grid-template-rows: 1fr; }
+.activity-detail > div { overflow: hidden; }
+.detail-inner { border-top: 1px solid var(--border); padding: 4px 13px 12px; }
+
+.step { display: flex; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.step:last-child { border-bottom: 0; }
+.step .glyph { flex: none; width: 16px; text-align: center; font-size: 11px; color: var(--text-3); padding-top: 1px; }
+.step .body { min-width: 0; flex: 1; }
+.step .label { font-size: 11px; font-weight: 600; }
+.step .label .tname { font-family: var(--mono); font-weight: 600; }
+.step pre {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.5; color: var(--text-2);
+  background: var(--bg); border-radius: 6px; padding: 7px 9px; margin-top: 5px;
+  overflow-x: auto; white-space: pre;
+}
+.step.err .label { color: var(--error); }
+.step.err pre { border: 1px solid rgba(229,89,79,0.2); }
+.step .trunc { font-size: 10px; color: var(--text-3); margin-top: 3px; }
+.step details summary { cursor: pointer; list-style: none; font-size: 11px; font-weight: 600; color: var(--text-3); }
+.step details summary::before { content: "▸ "; font-size: 9px; }
+.step details[open] summary::before { content: "▾ "; }
+
+.answer { margin-bottom: 30px; }
+.answer .ameta {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-3); margin-bottom: 5px;
+}
+.answer .ameta time { font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+.answer .md { max-width: 62ch; }
+
+.outline {
+  flex: none; width: 200px; border-left: 1px solid var(--border);
+  background: var(--sidebar); padding: 16px 10px; overflow-y: auto;
+}
+.outline h3 {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-3); padding: 0 8px 8px;
+}
+.outline a {
+  display: block; text-decoration: none; color: var(--text-2);
+  font-size: 11.5px; line-height: 1.4; padding: 6px 8px; border-radius: 6px;
+  border-left: 2px solid transparent; margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.outline a:hover { background: var(--hover); color: var(--text); }
+.outline a.current { background: var(--accent-tint-soft); border-left-color: var(--accent); color: var(--text); }
+.outline a time { display: block; font-size: 9.5px; color: var(--text-3); }
+
+.rawlist { max-width: 720px; margin: 0 auto; padding: 20px 24px 48px; display: none; }
+.rawnote {
+  font-size: 11px; color: var(--awaiting); background: rgba(233,185,73,0.08);
+  border: 1px solid rgba(233,185,73,0.2); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 18px;
+}
+.rmsg { margin-bottom: 16px; }
+.rmsg .rmeta { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin-bottom: 4px; }
+.rmsg .rbubble {
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+  background: rgba(15,15,16,0.6); font-size: 12.5px;
+}
+.rmsg.user .rbubble { background: var(--surface); }
+.rmsg pre {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.5; color: var(--text);
+  background: var(--bg); border-radius: 6px; padding: 8px; margin-top: 6px;
+  overflow-x: auto; white-space: pre-wrap;
+}
+.rmsg .tlabel { display: flex; gap: 6px; align-items: center; font-size: 11px; font-weight: 600; color: var(--text-2); }
+
+#variantA.mode-raw .rawlist { display: block; }
+#variantA.mode-raw .timeline, #variantA.mode-raw .outline { display: none; }
+
+/* ============================================================
+   VARIANTE B — „Editorial": reine Typografie, keine Karten.
+   Hierarchie nur über Schriftgröße, Gewicht und Weißraum.
+   ============================================================ */
+.b-scroll { padding: 0 24px; }
+.b-col { max-width: 600px; margin: 0 auto; padding: 44px 0 72px; }
+.b-earlier {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  font-size: 11.5px; color: var(--text-3); padding: 0 0 40px;
+}
+.b-earlier:hover { color: var(--text-2); }
+.b-earlier em { font-style: normal; border-bottom: 1px solid var(--border-strong); padding-bottom: 1px; }
+
+.b-round { padding: 38px 0 6px; border-top: 1px solid var(--border); }
+.b-round:first-of-type { border-top: 0; padding-top: 0; }
+
+.b-plabel {
+  font-size: 10px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 10px;
+}
+.b-plabel time { color: var(--text-3); font-weight: 500; letter-spacing: 0.02em; margin-left: 8px; }
+.b-ptext {
+  font-size: 16.5px; font-weight: 620; letter-spacing: -0.015em; line-height: 1.45;
+  max-width: 30em;
+}
+.b-ptext code { font-family: var(--mono); font-size: 13.5px; font-weight: 500; }
+.b-attach { font-size: 11px; color: var(--text-3); margin-top: 8px; }
+
+.b-act {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  display: block; text-align: left; width: 100%;
+  font-size: 12px; color: var(--text-3); margin: 18px 0 0; padding: 0;
+}
+.b-act:hover .b-act-line { color: var(--text-2); }
+.b-act-line { transition: color 0.15s; }
+.b-act-line .tick { color: var(--working); }
+.b-act-line .cross { color: var(--error); }
+.b-act-line .files { color: var(--text-2); }
+.b-act .hintword { border-bottom: 1px dotted var(--border-strong); }
+
+.b-detail-inner { padding: 14px 0 2px 14px; border-left: 1px solid var(--border); margin-top: 12px; }
+.b-step { font-size: 11.5px; color: var(--text-2); padding: 3px 0; display: flex; gap: 10px; }
+.b-step .bop { flex: none; width: 38px; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 2px; }
+.b-step .bfile { font-family: var(--mono); font-size: 11px; }
+.b-step .bnote { color: var(--text-3); }
+.b-step.err, .b-step.err .bfile { color: var(--error); }
+
+.b-answer { margin: 22px 0 10px; }
+.b-answer .md { color: var(--text); font-size: 13.5px; line-height: 1.62; max-width: 58ch; }
+.b-answer .md p { margin-bottom: 12px; }
+
+/* ============================================================
+   VARIANTE C — „Ledger": Hairline-Zeilen, monochrom, 0 Radius.
+   Aktivität = tabellarische Zeilen mit Punktführung.
+   ============================================================ */
+.c-scroll { font-variant-numeric: tabular-nums; }
+.c-col { max-width: 760px; margin: 0 auto; padding: 8px 28px 64px; }
+.c-earlier {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  display: block; width: 100%; text-align: left;
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-3);
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+}
+.c-earlier:hover { color: var(--text-2); }
+
+.c-round { border-bottom: 1px solid var(--border); }
+.c-row { display: grid; grid-template-columns: 56px 1fr; gap: 18px; }
+.c-time { font-family: var(--mono); font-size: 10px; color: var(--text-3); padding-top: 4px; }
+
+.c-prompt { padding: 20px 0 4px; }
+.c-prompt .c-ptext { font-size: 14px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.5; }
+.c-prompt .c-ptext::before {
+  content: "›"; color: var(--accent); font-weight: 700; margin-right: 9px;
+}
+.c-prompt .c-ptext code { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.c-attach { font-family: var(--mono); font-size: 10px; color: var(--text-3); margin-top: 5px; padding-left: 18px; }
+
+.c-actsum {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  display: grid; grid-template-columns: 56px 1fr; gap: 18px; width: 100%;
+  text-align: left; padding: 10px 0;
+}
+.c-actsum:hover .c-actline { color: var(--text-2); }
+.c-actline {
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-3);
+  display: flex; align-items: baseline; gap: 8px; transition: color 0.15s;
+}
+.c-actline .c-plusminus { color: var(--text-3); }
+.c-actline .c-err { color: var(--error); }
+
+.c-oprows { padding-left: 74px; }
+.c-oprow {
+  display: flex; align-items: baseline; gap: 10px;
+  font-family: var(--mono); font-size: 11px; padding: 3px 0;
+}
+.c-oprow .c-op { flex: none; width: 12px; font-weight: 700; }
+.c-oprow .c-op.w { color: var(--diff-pos); } .c-oprow .c-op.e { color: var(--accent); }
+.c-oprow .c-op.r { color: var(--text-3); } .c-oprow .c-op.x { color: var(--awaiting); }
+.c-oprow .c-file { color: var(--text-2); }
+.c-oprow .c-leader { flex: 1; border-bottom: 1px dotted var(--border-strong); transform: translateY(-3px); }
+.c-oprow .c-right { color: var(--text-3); font-size: 10px; }
+.c-oprow.err .c-file, .c-oprow.err .c-right { color: var(--error); }
+.c-oplegend { font-family: var(--mono); font-size: 9.5px; color: var(--text-3); padding: 8px 0 12px; }
+
+.c-answer { padding: 8px 0 22px; }
+.c-answer .md { font-size: 13px; max-width: 60ch; }
+
+/* ============================================================
+   VARIANTE D — „Marginalien": Aktivität als Randnotiz.
+   Hauptspalte = reines Gespräch, Gutter links = Meta.
+   ============================================================ */
+.d-col { max-width: 780px; margin: 0 auto; padding: 40px 28px 72px; }
+.d-earlier {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  font-size: 11px; color: var(--text-3); padding: 0 0 34px 176px;
+}
+.d-earlier:hover { color: var(--text-2); }
+
+.d-round { display: grid; grid-template-columns: 148px 1fr; column-gap: 28px; padding: 30px 0 2px; }
+.d-round + .d-round { border-top: 1px solid var(--border); }
+
+.d-gutter { text-align: right; }
+.d-gutter .d-time { font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; padding-top: 3px; }
+
+.d-main { min-width: 0; }
+.d-ptext { font-size: 14.5px; font-weight: 620; letter-spacing: -0.01em; line-height: 1.5; }
+.d-ptext code { font-family: var(--mono); font-size: 12.5px; font-weight: 500; }
+.d-attach { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+
+/* Randnotiz neben der Antwort */
+.d-note {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  display: block; width: 100%; text-align: right; padding: 0; margin-top: 26px;
+}
+.d-note .d-nline { font-size: 11px; color: var(--text-3); line-height: 1.7; transition: color 0.15s; }
+.d-note:hover .d-nline { color: var(--text-2); }
+.d-note .d-nerr { color: var(--error); }
+.d-note .d-nfiles { margin-top: 6px; }
+.d-note .d-nfile {
+  display: block; font-family: var(--mono); font-size: 10px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl;
+}
+.d-note .d-nfile b { font-family: var(--font); font-size: 8.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-left: 5px; }
+
+.d-answerrow { display: contents; }
+.d-answer { margin-top: 22px; padding-bottom: 20px; }
+.d-answer .md { font-size: 13.5px; line-height: 1.6; max-width: 58ch; }
+
+.d-rawstrip-inner {
+  margin: 10px 0 18px; padding: 10px 12px;
+  border-left: 1px solid var(--border-strong);
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-2); line-height: 1.7;
+}
+.d-rawstrip-inner .err { color: var(--error); }
+
+/* ============================================================
+   VARIANTE E — „Chat": wie Claude/Codex-App. User-Bubble rechts,
+   Antwort als freier Text links. Ältere Runden gedimmt, der
+   letzte Prompt trägt als einziger den Akzent.
+   ============================================================ */
+.e-col { max-width: 620px; margin: 0 auto; padding: 26px 24px 56px; }
+.e-earlier {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  display: block; margin: 0 auto 18px;
+  font-size: 11px; color: var(--text-3); padding: 4px 10px;
+}
+.e-earlier:hover { color: var(--text-2); }
+
+.e-round { padding: 8px 0 16px; }
+.e-round.e-dim { opacity: 0.5; transition: opacity 0.25s cubic-bezier(0.22,1,0.36,1); }
+.e-round.e-dim:hover { opacity: 1; }
+
+/* User-Prompt: Bubble rechts (wie Claude-App) */
+.e-user { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin: 12px 0 2px; }
+.e-bubble {
+  max-width: 78%;
+  background: var(--control);
+  border-radius: 16px 16px 5px 16px;
+  padding: 9px 14px;
+  font-size: 13.5px; line-height: 1.52;
+}
+.e-bubble code { font-family: var(--mono); font-size: 12px; }
+.e-round.latest .e-bubble {
+  background: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px rgba(124,132,232,0.22);
+}
+.e-time { font-size: 10px; color: var(--text-3); padding-right: 5px; }
+.e-attach { font-size: 10.5px; color: var(--text-3); padding-right: 5px; }
+
+/* Aktivität: eine stille Zeile, wie „Worked for …" in der Claude-App */
+.e-act {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  display: flex; align-items: baseline; gap: 7px;
+  font-size: 11.5px; color: var(--text-3); padding: 12px 0 0; text-align: left;
+}
+.e-act:hover { color: var(--text-2); }
+.e-act .e-chev { font-size: 8px; transition: transform 0.25s cubic-bezier(0.22,1,0.36,1); }
+.e-act.open .e-chev { transform: rotate(90deg); }
+.e-act .e-err { color: var(--error); }
+.e-detail { border-left: 2px solid var(--border); padding: 6px 0 2px 14px; margin-top: 8px; }
+.e-drow {
+  display: flex; align-items: baseline; gap: 9px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-2); padding: 2.5px 0;
+}
+.e-drow .e-op { flex: none; width: 11px; font-weight: 700; }
+.e-drow .e-op.w { color: var(--diff-pos); } .e-drow .e-op.e { color: var(--accent); }
+.e-drow .e-op.r { color: var(--text-3); } .e-drow .e-op.x { color: var(--awaiting); }
+.e-drow .e-meta { color: var(--text-3); font-size: 10px; }
+.e-drow.err, .e-drow.err .e-meta { color: var(--error); }
+
+/* Antwort: freier Text, keine Bubble (wie Claude-App) */
+.e-assistant { margin-top: 12px; }
+.e-assistant .md { font-size: 13.5px; line-height: 1.58; max-width: 56ch; }
+
+/* ---------- Design-Notizen ---------- */
+.notes { max-width: 1060px; margin: 30px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 28px; }
+.notes .note h4 { font-size: 12px; font-weight: 650; margin-bottom: 4px; }
+.notes .note h4 .num { color: var(--accent); font-family: var(--mono); font-size: 11px; margin-right: 6px; }
+.notes .note p { font-size: 12px; color: var(--text-2); }
+.notes .note code { font-family: var(--mono); font-size: 10.5px; background: var(--control); border-radius: 4px; padding: 1px 4px; }
+
+@media (max-width: 860px) {
+  .outline { display: none; }
+  .main { height: 560px; }
+  .d-round { grid-template-columns: 1fr; }
+  .d-gutter { text-align: left; margin-bottom: 8px; }
+  .d-note, .d-note .d-nfile { text-align: left; direction: ltr; }
+  .d-earlier { padding-left: 0; }
+}
+</style>
+</head>
+<body data-variant="e">
+
+<header class="doc-head">
+  <div class="kicker">WhisperM8 · Design-Prototyp · 05.07.2026 · Rev 2</div>
+  <h1>Transkript-Ansicht: vier Gestaltungsvarianten</h1>
+  <p>Gleiche Datenbasis (geparste JSONL-Runden), vier Grade von Dichte. A ist der ursprüngliche
+     Karten-Entwurf, B–D sind bewusst minimalistischer: weniger Container, mehr Typografie und Weißraum.</p>
+</header>
+
+<div class="variant-tabs" role="tablist">
+  <button data-v="e" class="active"><span class="vkey">E <span>· Chat</span></span><span class="vsub">Wie Claude/Codex-App, letzter Prompt betont</span></button>
+  <button data-v="b"><span class="vkey">B <span>· Editorial</span></span><span class="vsub">Reine Typografie, keine Karten</span></button>
+  <button data-v="c"><span class="vkey">C <span>· Ledger</span></span><span class="vsub">Hairlines, monochrom, tabellarisch</span></button>
+  <button data-v="d"><span class="vkey">D <span>· Marginalien</span></span><span class="vsub">Aktivität als Randnotiz</span></button>
+  <button data-v="a"><span class="vkey">A <span>· Karten</span></span><span class="vsub">Timeline + Activity-Karten (Rev 1)</span></button>
+</div>
+<p class="variant-desc" id="variantDesc"></p>
+
+<!-- ============================================================
+     VARIANTE A — Timeline + Activity-Karten
+     ============================================================ -->
+<section class="variant" id="variantA">
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="wtitle">WhisperM8 — Agent Chats</div>
+  </div>
+  <div class="chathead">
+    <div>
+      <div class="session-title">Claude Chat</div>
+      <div class="meta">ListM8 <span class="sep">·</span> ⎇ develop <span class="sep">·</span> ~/repos/ListM8</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" role="tablist">
+      <button class="active" id="segTimeline">Timeline</button>
+      <button id="segRaw">Roh-Chat</button>
+    </div>
+    <button class="btn-resume">▶ Resume</button>
+  </div>
+  <div class="sumstrip">
+    <span><b>119</b> Nachrichten</span><span class="dotsep"></span>
+    <span><b>7</b> Runden</span><span class="dotsep"></span>
+    <span><b>9</b> Dateien angefasst</span><span class="dotsep"></span>
+    <span>Letzte Aktivität <b>04.07. 21:58</b></span>
+  </div>
+  <div class="main">
+    <div class="scrollarea" id="scrollA">
+      <div class="timeline" id="timelineList">
+        <button class="earlier">↑ 4 frühere Runden laden <span style="color:var(--text-3)">(58 Nachrichten)</span></button>
+
+        <article class="round">
+          <div class="prompt" id="r5">
+            <div class="pmeta">Du <time>04.07. 21:31</time></div>
+            <div class="bubble">Analysiere die Lead-Status-Farben im Admin — wir haben da gefühlt zehn
+              verschiedene Grüns. Ich will wissen, wo die Hex-Werte verstreut sind und ob wir das auf
+              semantische Tokens ziehen können.</div>
+          </div>
+          <div class="activity">
+            <button class="activity-summary" aria-expanded="false">
+              <div class="activity-head">
+                <span class="chev">▶</span>
+                <span class="activity-stats"><b>9 Tool-Aufrufe</b> · 6 Dateien gelesen</span>
+                <span class="dur">2 Min</span>
+              </div>
+              <div class="filechips">
+                <span class="chip"><span class="op op-read">Read</span> LeadStatusDots.tsx</span>
+                <span class="chip"><span class="op op-read">Read</span> constants.ts</span>
+                <span class="chip"><span class="op op-read">Read</span> ReviewQueue.tsx</span>
+                <span class="chip"><span class="op op-bash">Bash</span> grep -rn "#22c55e"</span>
+                <span class="chip chip-more">+3 weitere</span>
+              </div>
+            </button>
+            <div class="activity-detail"><div><div class="detail-inner">
+              <div class="step">
+                <span class="glyph">🔧</span>
+                <div class="body">
+                  <div class="label"><span class="tname">Grep</span> — Hex-Farben in src/admin suchen</div>
+                  <pre>{ "pattern": "#(22c55e|16a34a|4ade80|10b981)", "path": "src/admin" }</pre>
+                </div>
+              </div>
+              <div class="step">
+                <span class="glyph">↳</span>
+                <div class="body">
+                  <div class="label" style="color:var(--text-2)">Tool-Ergebnis</div>
+                  <pre>src/admin/leads/LeadStatusDots.tsx:24:  qualified: "#22c55e",
+src/admin/leads/constants.ts:11:  ACTIVE_GREEN = "#16a34a"
+src/admin/review/ReviewQueue.tsx:87:  scoreColor(s > 70 ? "#4ade80" : …)</pre>
+                  <div class="trunc">… 2.140 weitere Zeichen</div>
+                </div>
+              </div>
+              <div class="step">
+                <span class="glyph">🧠</span>
+                <div class="body">
+                  <details><summary>Thinking</summary>
+                    <pre>Die beiden Grüns unterscheiden sich nur in Sättigung — vermutlich meint
+"läuft" und "fertig" dasselbe Statusmodell. Prüfen ob statusModel.ts …</pre>
+                  </details>
+                </div>
+              </div>
+            </div></div></div>
+          </div>
+          <div class="answer">
+            <div class="ameta">Claude <time>04.07. 21:33</time></div>
+            <div class="md">
+              <p>Gefunden: <strong>~10 verstreute Hex-Werte</strong> in 6 Dateien, davon zwei fast identische
+              Grüns (<code>#22c55e</code> vs. <code>#16a34a</code>) für „läuft" und „fertig". Das Statusmodell
+              in <code>parts/statusModel.ts</code> kennt aber bereits 5 semantische Zustände — die Farben
+              hängen nur nicht dran.</p>
+              <p>Vorschlag: <strong>5 semantische Tonalitäten</strong> als Tokens, light+dark definiert,
+              statt der verstreuten Werte.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="round">
+          <div class="prompt" id="r6">
+            <div class="pmeta">Du <time>04.07. 21:39</time></div>
+            <div class="bubble">Okay, bau mir einen Sandbox-Prototyp unter <code style="font-family:var(--mono);font-size:12px">/admin/designs/leads-status-tokens</code> —
+              Dots-Variante und Pills-Variante nebeneinander, mit Light/Dark-Toggle. Kein Produktivcode anfassen.</div>
+          </div>
+          <div class="activity">
+            <button class="activity-summary" aria-expanded="false">
+              <div class="activity-head">
+                <span class="chev">▶</span>
+                <span class="activity-stats"><b>14 Tool-Aufrufe</b> · 3 Dateien geändert · 3 Kommandos</span>
+                <span class="badge-err">1 Fehler</span>
+                <span class="dur">6 Min</span>
+              </div>
+              <div class="filechips">
+                <span class="chip"><span class="op op-write">Write</span> LeadsStatusTokens.tsx</span>
+                <span class="chip"><span class="op op-edit">Edit</span> designRoutes.tsx</span>
+                <span class="chip"><span class="op op-edit">Edit</span> tokens.sandbox.css <span class="count">×3</span></span>
+                <span class="chip"><span class="op op-bash">Bash</span> npm run typecheck</span>
+              </div>
+            </button>
+            <div class="activity-detail"><div><div class="detail-inner">
+              <div class="step">
+                <span class="glyph">🔧</span>
+                <div class="body">
+                  <div class="label"><span class="tname">Write</span> — src/admin/designs/LeadsStatusTokens.tsx</div>
+                  <pre>{ "file_path": "src/admin/designs/LeadsStatusTokens.tsx",
+  "content": "import { STATUS_TONES } from './tokens.sandbox'; …" }</pre>
+                  <div class="trunc">… 6.812 weitere Zeichen</div>
+                </div>
+              </div>
+              <div class="step err">
+                <span class="glyph">⚠︎</span>
+                <div class="body">
+                  <div class="label">Tool-Fehler — Bash · npm run typecheck</div>
+                  <pre>src/admin/designs/LeadsStatusTokens.tsx(41,18): error TS2339:
+Property 'tone' does not exist on type 'LeadStatus'.</pre>
+                </div>
+              </div>
+              <div class="step">
+                <span class="glyph">🔧</span>
+                <div class="body">
+                  <div class="label"><span class="tname">Edit</span> — tokens.sandbox.css (Fix nach Typecheck)</div>
+                  <pre>{ "old_string": "--st-qualified: #22c55e;",
+  "new_string": "--st-qualified: light-dark(#16a34a, #4ade80);" }</pre>
+                </div>
+              </div>
+              <div class="step">
+                <span class="glyph">↳</span>
+                <div class="body">
+                  <div class="label" style="color:var(--text-2)">Tool-Ergebnis — npm run typecheck</div>
+                  <pre>✓ tsc --noEmit  (0 errors)</pre>
+                </div>
+              </div>
+            </div></div></div>
+          </div>
+          <div class="answer">
+            <div class="ameta">Claude <time>04.07. 21:45</time></div>
+            <div class="md">
+              <p>Prototyp steht unter <code>/admin/designs/leads-status-tokens</code> — beide Varianten
+              nebeneinander, komplett token-getrieben. Ein Typecheck-Fehler unterwegs
+              (<code>tone</code> fehlte am Interface), direkt behoben. Kein Produktivcode berührt,
+              alles liegt in <code>src/admin/designs/</code>.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="round">
+          <div class="prompt" id="r7">
+            <div class="pmeta">Du <time>04.07. 21:55</time></div>
+            <div class="bubble">Verifiziere das mal end-to-end im Browser — Light und Dark, und mach
+              einen Screenshot vom Dark Mode.</div>
+            <span class="attach">📷 Bild angehängt · image/png · 412 KB</span>
+          </div>
+          <div class="activity">
+            <button class="activity-summary" aria-expanded="false">
+              <div class="activity-head">
+                <span class="chev">▶</span>
+                <span class="activity-stats"><b>7 Tool-Aufrufe</b> · Browser-Verifikation</span>
+                <span class="dur">3 Min</span>
+              </div>
+              <div class="filechips">
+                <span class="chip"><span class="op op-bash">MCP</span> chrome · navigate</span>
+                <span class="chip"><span class="op op-bash">MCP</span> chrome · screenshot <span class="count">×2</span></span>
+                <span class="chip"><span class="op op-read">Read</span> tokens.sandbox.css</span>
+              </div>
+            </button>
+            <div class="activity-detail"><div><div class="detail-inner">
+              <div class="step">
+                <span class="glyph">🔧</span>
+                <div class="body">
+                  <div class="label"><span class="tname">mcp__chrome__computer</span> — Screenshot Dark Mode</div>
+                  <pre>{ "action": "screenshot", "save_to_disk": true, "tabId": 1289594142 }</pre>
+                </div>
+              </div>
+              <div class="step">
+                <span class="glyph">↳</span>
+                <div class="body">
+                  <div class="label" style="color:var(--text-2)">Tool-Ergebnis</div>
+                  <pre>Successfully captured screenshot (1479x831, jpeg) — ID: ss_9097txeec
+tabId 1289594142: "ListM8" (https://listm8.test/admin/designs/leads-status-tokens)</pre>
+                </div>
+              </div>
+            </div></div></div>
+          </div>
+          <div class="answer answer-clamp">
+            <div class="ameta">Claude <time>04.07. 21:58</time></div>
+            <div class="md-wrap"><div class="md">
+              <p>Läuft end-to-end im echten Shell. Verifiziert:</p>
+              <ul>
+                <li><strong>Light + Dark Mode</strong> ✓ — der <code>is-dark</code>-Token-Swap macht jeden
+                    Zustand kontraststark; die „Vorher"-Hardcode-Dots bleiben absichtlich starr.</li>
+                <li><strong>Dots-Variante</strong> (kompakt, 3 Achsen) ✓ und <strong>Pills-Variante</strong>
+                    (Label sichtbar) ✓ — beide token-getrieben.</li>
+                <li><strong>Score-Ringe</strong> (43 grau/low, 58+62 amber/mid, 78 grün/high) und
+                    <strong>+N-Taxonomy</strong> ✓.</li>
+              </ul>
+              <h4>Fazit LM8-UI-01</h4>
+              <p>Der P0-Vorschlag ist jetzt sicht- und anfassbar bewiesen: <strong>5 semantische
+              Tonalitäten</strong> ersetzen die ~10 verstreuten Hex-Werte, sind light+dark definiert und
+              lösen die zwei-fast-gleichen-Grüns auf („läuft" = blau, nur „fertig" = grün).</p>
+              <p><strong>Nächste sinnvolle Schritte — deine Wahl:</strong></p>
+              <ol>
+                <li><strong>Produktiv-Ticket ziehen</strong> (LM8-UI-01): <code>--st-*</code>-Tokens nach
+                    <code>styles/theme/tokens.ts</code>, dann Mapper umstellen.</li>
+                <li><strong>Iterieren</strong> — z. B. Pills als Default oder dritte Score-Darstellung.</li>
+                <li><strong>Weiter mit P1/P2</strong> (LeadDetail brand-fähig / Shared DataGrid).</li>
+              </ol>
+              <p>Was davon?</p>
+            </div></div>
+            <button class="showmore">Ganze Antwort anzeigen</button>
+          </div>
+        </article>
+      </div>
+
+      <div class="rawlist">
+        <div class="rawnote">⚠ So sieht dieselbe Runde heute aus — jede Message gleichwertig,
+          Tool-Ergebnisse als „DU"-Bubbles, Markdown roh. Zum Vergleich im Mockup belassen.</div>
+        <div class="rmsg user">
+          <div class="rmeta">Du · 04.07. 21:55</div>
+          <div class="rbubble">Verifiziere das mal end-to-end im Browser — Light und Dark, und mach einen Screenshot vom Dark Mode.</div>
+        </div>
+        <div class="rmsg">
+          <div class="rmeta">Claude · 04.07. 21:56</div>
+          <div class="rbubble">
+            <div class="tlabel">🔧 mcp__chrome__computer</div>
+            <pre>{
+  "action" : "screenshot",
+  "save_to_disk" : true,
+  "tabId" : 1289594142
+}</pre>
+          </div>
+        </div>
+        <div class="rmsg user">
+          <div class="rmeta">Du · 04.07. 21:58</div>
+          <div class="rbubble">
+            <div class="tlabel">↳ Tool-Ergebnis</div>
+            <pre>Successfully captured screenshot (1479x831, jpeg) — ID: ss_9097txeec
+
+Tab Context:
+- Executed on tabId: 1289594142
+- Available tabs:
+  • tabId 1289594142: "ListM8" (https://listm8.test/admin/designs/leads-status-tokens)</pre>
+          </div>
+        </div>
+        <div class="rmsg">
+          <div class="rmeta">Claude · 04.07. 21:58</div>
+          <div class="rbubble">Läuft end-to-end im echten Shell. Verifiziert:<br><br>
+- **Light + Dark Mode** ✓ — der `is-dark`-Token-Swap macht jeden Zustand kontraststark …<br><br>
+## Fazit LM8-UI-01<br><br>
+Der P0-Vorschlag ist jetzt sicht- und anfassbar bewiesen: **5 semantische Tonalitäten** …</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="outline" id="outline">
+      <h3>Runden</h3>
+      <a href="#r1" style="opacity:0.45">1 · Jira-Tickets MCP analysieren <time>19:02</time></a>
+      <a href="#r1" style="opacity:0.45">2 · Admin-Design-Audit starten <time>19:41</time></a>
+      <a href="#r1" style="opacity:0.45">3 · P0/P1/P2 priorisieren <time>20:15</time></a>
+      <a href="#r1" style="opacity:0.45">4 · Statusmodell prüfen <time>20:58</time></a>
+      <a href="#r5" data-target="r5">5 · Lead-Status-Farben analysieren <time>21:31</time></a>
+      <a href="#r6" data-target="r6">6 · Sandbox-Prototyp bauen <time>21:39</time></a>
+      <a href="#r7" data-target="r7">7 · Browser-Verifikation + Screenshot <time>21:55</time></a>
+    </aside>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================
+     VARIANTE E — Chat (wie Claude/Codex-App)
+     ============================================================ -->
+<section class="variant" id="variantE">
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="wtitle">WhisperM8 — Agent Chats</div>
+  </div>
+  <div class="chathead">
+    <div>
+      <div class="session-title">Claude Chat</div>
+      <div class="meta">ListM8 <span class="sep">·</span> ⎇ develop <span class="sep">·</span> 119 Nachrichten · 7 Runden</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn-resume">▶ Resume</button>
+  </div>
+  <div class="main">
+    <div class="scrollarea">
+      <div class="e-col">
+        <button class="e-earlier">4 frühere Runden anzeigen</button>
+
+        <!-- Runde 5 (gedimmt) -->
+        <article class="e-round e-dim">
+          <div class="e-user">
+            <div class="e-bubble">Analysiere die Lead-Status-Farben im Admin — wir haben da gefühlt
+              zehn verschiedene Grüns. Wo sind die Hex-Werte verstreut, und können wir das auf
+              semantische Tokens ziehen?</div>
+            <span class="e-time">21:31</span>
+          </div>
+          <button class="e-act">
+            <span class="e-chev">▶</span>
+            <span>9 Tool-Aufrufe · 6 Dateien gelesen · 2 Min</span>
+          </button>
+          <div class="reveal"><div><div class="e-detail">
+            <div class="e-drow"><span class="e-op r">R</span>LeadStatusDots.tsx</div>
+            <div class="e-drow"><span class="e-op r">R</span>constants.ts</div>
+            <div class="e-drow"><span class="e-op r">R</span>ReviewQueue.tsx</div>
+            <div class="e-drow"><span class="e-op x">$</span>grep -rn "#22c55e" src/admin<span class="e-meta">14 hits</span></div>
+            <div class="e-drow"><span class="e-op"></span><span class="e-meta">+ 5 weitere Aufrufe · Thinking (1)</span></div>
+          </div></div></div>
+          <div class="e-assistant">
+            <div class="md">
+              <p>Gefunden: <strong>~10 verstreute Hex-Werte</strong> in 6 Dateien, davon zwei fast
+              identische Grüns (<code>#22c55e</code> vs. <code>#16a34a</code>) für „läuft" und „fertig".
+              Das Statusmodell in <code>parts/statusModel.ts</code> kennt bereits 5 semantische
+              Zustände — die Farben hängen nur nicht dran.</p>
+              <p>Vorschlag: <strong>5 semantische Tonalitäten</strong> als Tokens, light+dark definiert.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 6 (gedimmt) -->
+        <article class="e-round e-dim">
+          <div class="e-user">
+            <div class="e-bubble">Bau mir einen Sandbox-Prototyp unter <code>/admin/designs/leads-status-tokens</code> —
+              Dots- und Pills-Variante nebeneinander, mit Light/Dark-Toggle. Kein Produktivcode anfassen.</div>
+            <span class="e-time">21:39</span>
+          </div>
+          <button class="e-act">
+            <span class="e-chev">▶</span>
+            <span>14 Tool-Aufrufe · 3 Dateien geändert · <span class="e-err">1 Fehler</span> behoben · 6 Min</span>
+          </button>
+          <div class="reveal"><div><div class="e-detail">
+            <div class="e-drow"><span class="e-op w">W</span>LeadsStatusTokens.tsx<span class="e-meta">neu, 6,8 kB</span></div>
+            <div class="e-drow"><span class="e-op e">E</span>designRoutes.tsx</div>
+            <div class="e-drow"><span class="e-op e">E</span>tokens.sandbox.css<span class="e-meta">×3</span></div>
+            <div class="e-drow err"><span class="e-op x">$</span>npm run typecheck<span class="e-meta">TS2339 'tone'</span></div>
+            <div class="e-drow"><span class="e-op x">$</span>npm run typecheck<span class="e-meta">✓ 0 errors</span></div>
+          </div></div></div>
+          <div class="e-assistant">
+            <div class="md">
+              <p>Prototyp steht unter <code>/admin/designs/leads-status-tokens</code> — beide Varianten
+              token-getrieben. Ein Typecheck-Fehler unterwegs (<code>tone</code> fehlte am Interface),
+              direkt behoben. Kein Produktivcode berührt.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 7 (letzte — betont) -->
+        <article class="e-round latest">
+          <div class="e-user">
+            <div class="e-bubble">Verifiziere das mal end-to-end im Browser — Light und Dark, und mach
+              einen Screenshot vom Dark Mode.</div>
+            <span class="e-attach">📷 Bild angehängt · 412 KB</span>
+            <span class="e-time">21:55</span>
+          </div>
+          <button class="e-act">
+            <span class="e-chev">▶</span>
+            <span>7 Tool-Aufrufe · Browser-Verifikation · 3 Min</span>
+          </button>
+          <div class="reveal"><div><div class="e-detail">
+            <div class="e-drow"><span class="e-op x">$</span>chrome · navigate<span class="e-meta">listm8.test/admin/designs/…</span></div>
+            <div class="e-drow"><span class="e-op x">$</span>chrome · screenshot<span class="e-meta">×2 (light, dark)</span></div>
+            <div class="e-drow"><span class="e-op r">R</span>tokens.sandbox.css</div>
+          </div></div></div>
+          <div class="e-assistant answer-clamp">
+            <div class="md-wrap"><div class="md">
+              <p>Läuft end-to-end im echten Shell. Verifiziert:</p>
+              <ul>
+                <li><strong>Light + Dark Mode</strong> ✓ — der <code>is-dark</code>-Token-Swap macht
+                    jeden Zustand kontraststark.</li>
+                <li><strong>Dots-</strong> und <strong>Pills-Variante</strong> ✓ — beide token-getrieben.</li>
+                <li><strong>Score-Ringe</strong> und <strong>+N-Taxonomy</strong> ✓.</li>
+              </ul>
+              <h4>Fazit LM8-UI-01</h4>
+              <p>Der P0-Vorschlag ist sicht- und anfassbar bewiesen: <strong>5 semantische
+              Tonalitäten</strong> ersetzen die ~10 verstreuten Hex-Werte, sind light+dark definiert
+              und lösen die zwei-fast-gleichen-Grüns auf.</p>
+              <p><strong>Nächste Schritte — deine Wahl:</strong></p>
+              <ol>
+                <li><strong>Produktiv-Ticket ziehen</strong>: Tokens nach <code>styles/theme/tokens.ts</code>.</li>
+                <li><strong>Iterieren</strong> — Pills als Default, andere Zeilendichte.</li>
+                <li><strong>Weiter mit P1/P2</strong> (LeadDetail / Shared DataGrid).</li>
+              </ol>
+              <p>Was davon?</p>
+            </div></div>
+            <button class="showmore">Ganze Antwort anzeigen</button>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================
+     VARIANTE B — Editorial
+     ============================================================ -->
+<section class="variant" id="variantB">
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="wtitle">WhisperM8 — Agent Chats</div>
+  </div>
+  <div class="chathead">
+    <div>
+      <div class="session-title">Claude Chat</div>
+      <div class="meta">ListM8 <span class="sep">·</span> ⎇ develop <span class="sep">·</span> 119 Nachrichten · 7 Runden</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn-resume">▶ Resume</button>
+  </div>
+  <div class="main">
+    <div class="scrollarea b-scroll">
+      <div class="b-col">
+        <button class="b-earlier"><em>4 frühere Runden</em> anzeigen</button>
+
+        <!-- Runde 5 -->
+        <article class="b-round">
+          <div class="b-plabel">Du <time>21:31</time></div>
+          <p class="b-ptext">Analysiere die Lead-Status-Farben im Admin — wir haben da gefühlt zehn
+            verschiedene Grüns. Wo sind die Hex-Werte verstreut, und können wir das auf semantische
+            Tokens ziehen?</p>
+
+          <button class="b-act">
+            <span class="b-act-line"><span class="tick">✓</span>&ensp;9 Aufrufe · <span class="files">6 Dateien gelesen</span> · 2 Min&ensp;<span class="hintword">Details</span></span>
+          </button>
+          <div class="reveal"><div><div class="b-detail-inner">
+            <div class="b-step"><span class="bop op-read">Read</span><span class="bfile">LeadStatusDots.tsx</span></div>
+            <div class="b-step"><span class="bop op-read">Read</span><span class="bfile">constants.ts</span></div>
+            <div class="b-step"><span class="bop op-read">Read</span><span class="bfile">ReviewQueue.tsx</span></div>
+            <div class="b-step"><span class="bop op-bash">Bash</span><span class="bfile">grep -rn "#22c55e" src/admin</span></div>
+            <div class="b-step"><span class="bop"></span><span class="bnote">+ 5 weitere Aufrufe · Thinking (1)</span></div>
+          </div></div></div>
+
+          <div class="b-answer">
+            <div class="md">
+              <p>Gefunden: <strong>~10 verstreute Hex-Werte</strong> in 6 Dateien, davon zwei fast
+              identische Grüns (<code>#22c55e</code> vs. <code>#16a34a</code>) für „läuft" und „fertig".
+              Das Statusmodell in <code>parts/statusModel.ts</code> kennt bereits 5 semantische
+              Zustände — die Farben hängen nur nicht dran.</p>
+              <p>Vorschlag: <strong>5 semantische Tonalitäten</strong> als Tokens, light+dark definiert.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 6 -->
+        <article class="b-round">
+          <div class="b-plabel">Du <time>21:39</time></div>
+          <p class="b-ptext">Bau mir einen Sandbox-Prototyp unter <code>/admin/designs/leads-status-tokens</code> —
+            Dots- und Pills-Variante nebeneinander, mit Light/Dark-Toggle. Kein Produktivcode anfassen.</p>
+
+          <button class="b-act">
+            <span class="b-act-line"><span class="cross">✕</span>&ensp;14 Aufrufe · <span class="files">LeadsStatusTokens.tsx neu, 2 geändert</span> · 1 Fehler behoben · 6 Min&ensp;<span class="hintword">Details</span></span>
+          </button>
+          <div class="reveal"><div><div class="b-detail-inner">
+            <div class="b-step"><span class="bop op-write">Write</span><span class="bfile">LeadsStatusTokens.tsx</span></div>
+            <div class="b-step"><span class="bop op-edit">Edit</span><span class="bfile">designRoutes.tsx</span></div>
+            <div class="b-step"><span class="bop op-edit">Edit</span><span class="bfile">tokens.sandbox.css</span><span class="bnote">×3</span></div>
+            <div class="b-step err"><span class="bop">Bash</span><span class="bfile">npm run typecheck — TS2339: 'tone' fehlt an LeadStatus</span></div>
+            <div class="b-step"><span class="bop op-bash">Bash</span><span class="bfile">npm run typecheck — ✓ 0 errors</span></div>
+          </div></div></div>
+
+          <div class="b-answer">
+            <div class="md">
+              <p>Prototyp steht unter <code>/admin/designs/leads-status-tokens</code> — beide Varianten
+              token-getrieben. Ein Typecheck-Fehler unterwegs (<code>tone</code> fehlte am Interface),
+              direkt behoben. Kein Produktivcode berührt.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 7 -->
+        <article class="b-round">
+          <div class="b-plabel">Du <time>21:55</time></div>
+          <p class="b-ptext">Verifiziere das end-to-end im Browser — Light und Dark, und mach einen
+            Screenshot vom Dark Mode.</p>
+          <div class="b-attach">📷 Bild angehängt · image/png · 412 KB</div>
+
+          <button class="b-act">
+            <span class="b-act-line"><span class="tick">✓</span>&ensp;7 Aufrufe · <span class="files">Browser-Verifikation, 2 Screenshots</span> · 3 Min&ensp;<span class="hintword">Details</span></span>
+          </button>
+          <div class="reveal"><div><div class="b-detail-inner">
+            <div class="b-step"><span class="bop op-bash">MCP</span><span class="bfile">chrome · navigate → /admin/designs/leads-status-tokens</span></div>
+            <div class="b-step"><span class="bop op-bash">MCP</span><span class="bfile">chrome · screenshot</span><span class="bnote">×2 (light, dark)</span></div>
+            <div class="b-step"><span class="bop op-read">Read</span><span class="bfile">tokens.sandbox.css</span></div>
+          </div></div></div>
+
+          <div class="b-answer answer-clamp">
+            <div class="md-wrap"><div class="md">
+              <p>Läuft end-to-end im echten Shell. Verifiziert:</p>
+              <ul>
+                <li><strong>Light + Dark Mode</strong> ✓ — der <code>is-dark</code>-Token-Swap macht
+                    jeden Zustand kontraststark.</li>
+                <li><strong>Dots-</strong> und <strong>Pills-Variante</strong> ✓ — beide token-getrieben.</li>
+                <li><strong>Score-Ringe</strong> und <strong>+N-Taxonomy</strong> ✓.</li>
+              </ul>
+              <h4>Fazit LM8-UI-01</h4>
+              <p>Der P0-Vorschlag ist sicht- und anfassbar bewiesen: <strong>5 semantische
+              Tonalitäten</strong> ersetzen die ~10 verstreuten Hex-Werte, light+dark definiert.</p>
+              <p><strong>Nächste Schritte — deine Wahl:</strong></p>
+              <ol>
+                <li><strong>Produktiv-Ticket ziehen</strong>: Tokens nach <code>styles/theme/tokens.ts</code>.</li>
+                <li><strong>Iterieren</strong> — Pills als Default, andere Zeilendichte.</li>
+                <li><strong>Weiter mit P1/P2</strong> (LeadDetail / Shared DataGrid).</li>
+              </ol>
+              <p>Was davon?</p>
+            </div></div>
+            <button class="showmore">Ganze Antwort anzeigen</button>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================
+     VARIANTE C — Ledger
+     ============================================================ -->
+<section class="variant" id="variantC">
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="wtitle">WhisperM8 — Agent Chats</div>
+  </div>
+  <div class="chathead">
+    <div>
+      <div class="session-title">Claude Chat</div>
+      <div class="meta">ListM8 <span class="sep">·</span> ⎇ develop <span class="sep">·</span> 119 Nachrichten · 7 Runden</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn-resume">▶ Resume</button>
+  </div>
+  <div class="main">
+    <div class="scrollarea c-scroll">
+      <div class="c-col">
+        <button class="c-earlier">··· 4 frühere runden · 58 nachrichten</button>
+
+        <!-- Runde 5 -->
+        <article class="c-round">
+          <div class="c-row c-prompt">
+            <div class="c-time">21:31</div>
+            <div>
+              <p class="c-ptext">Analysiere die Lead-Status-Farben im Admin — gefühlt zehn verschiedene
+                Grüns. Wo sind die Hex-Werte verstreut, geht das auf semantische Tokens?</p>
+            </div>
+          </div>
+          <button class="c-actsum">
+            <span></span>
+            <span class="c-actline">9 aufrufe · 6 read · 2 min</span>
+          </button>
+          <div class="reveal"><div class="c-oprows">
+            <div class="c-oprow"><span class="c-op r">R</span><span class="c-file">LeadStatusDots.tsx</span><span class="c-leader"></span><span class="c-right">leads/</span></div>
+            <div class="c-oprow"><span class="c-op r">R</span><span class="c-file">constants.ts</span><span class="c-leader"></span><span class="c-right">leads/</span></div>
+            <div class="c-oprow"><span class="c-op r">R</span><span class="c-file">ReviewQueue.tsx</span><span class="c-leader"></span><span class="c-right">review/</span></div>
+            <div class="c-oprow"><span class="c-op x">$</span><span class="c-file">grep -rn "#22c55e" src/admin</span><span class="c-leader"></span><span class="c-right">14 hits</span></div>
+            <div class="c-oplegend">R read · E edit · W write · $ bash — + 5 weitere aufrufe</div>
+          </div></div>
+          <div class="c-row c-answer">
+            <div class="c-time">21:33</div>
+            <div class="md">
+              <p>Gefunden: <strong>~10 verstreute Hex-Werte</strong> in 6 Dateien, zwei fast identische
+              Grüns (<code>#22c55e</code> / <code>#16a34a</code>). Das Statusmodell kennt bereits
+              5 semantische Zustände — Vorschlag: <strong>5 Tonalitäten</strong> als Tokens, light+dark.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 6 -->
+        <article class="c-round">
+          <div class="c-row c-prompt">
+            <div class="c-time">21:39</div>
+            <div>
+              <p class="c-ptext">Bau einen Sandbox-Prototyp unter <code>/admin/designs/leads-status-tokens</code> —
+                Dots + Pills nebeneinander, Light/Dark-Toggle. Kein Produktivcode.</p>
+            </div>
+          </div>
+          <button class="c-actsum">
+            <span></span>
+            <span class="c-actline">14 aufrufe · 1 write · 4 edit · 3 bash · <span class="c-err">1 fehler</span> · 6 min</span>
+          </button>
+          <div class="reveal"><div class="c-oprows">
+            <div class="c-oprow"><span class="c-op w">W</span><span class="c-file">LeadsStatusTokens.tsx</span><span class="c-leader"></span><span class="c-right">designs/</span></div>
+            <div class="c-oprow"><span class="c-op e">E</span><span class="c-file">designRoutes.tsx</span><span class="c-leader"></span><span class="c-right">designs/</span></div>
+            <div class="c-oprow"><span class="c-op e">E</span><span class="c-file">tokens.sandbox.css</span><span class="c-leader"></span><span class="c-right">×3</span></div>
+            <div class="c-oprow err"><span class="c-op x">$</span><span class="c-file">npm run typecheck</span><span class="c-leader"></span><span class="c-right">TS2339 'tone'</span></div>
+            <div class="c-oprow"><span class="c-op x">$</span><span class="c-file">npm run typecheck</span><span class="c-leader"></span><span class="c-right">✓ 0 errors</span></div>
+          </div></div>
+          <div class="c-row c-answer">
+            <div class="c-time">21:45</div>
+            <div class="md">
+              <p>Prototyp steht, beide Varianten token-getrieben. Ein Typecheck-Fehler
+              (<code>tone</code> fehlte am Interface) direkt behoben. Kein Produktivcode berührt.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 7 -->
+        <article class="c-round">
+          <div class="c-row c-prompt">
+            <div class="c-time">21:55</div>
+            <div>
+              <p class="c-ptext">Verifiziere end-to-end im Browser — Light und Dark, Screenshot vom Dark Mode.</p>
+              <div class="c-attach">▣ bild angehängt · png · 412 kb</div>
+            </div>
+          </div>
+          <button class="c-actsum">
+            <span></span>
+            <span class="c-actline">7 aufrufe · browser-verifikation · 2 screenshots · 3 min</span>
+          </button>
+          <div class="reveal"><div class="c-oprows">
+            <div class="c-oprow"><span class="c-op x">$</span><span class="c-file">chrome · navigate</span><span class="c-leader"></span><span class="c-right">listm8.test</span></div>
+            <div class="c-oprow"><span class="c-op x">$</span><span class="c-file">chrome · screenshot</span><span class="c-leader"></span><span class="c-right">×2</span></div>
+            <div class="c-oprow"><span class="c-op r">R</span><span class="c-file">tokens.sandbox.css</span><span class="c-leader"></span><span class="c-right">designs/</span></div>
+          </div></div>
+          <div class="c-row c-answer answer-clamp">
+            <div class="c-time">21:58</div>
+            <div>
+              <div class="md-wrap"><div class="md">
+                <p>Läuft end-to-end im echten Shell. Verifiziert: <strong>Light + Dark</strong> ✓,
+                <strong>Dots- und Pills-Variante</strong> ✓, <strong>Score-Ringe + +N-Taxonomy</strong> ✓.</p>
+                <h4>Fazit LM8-UI-01</h4>
+                <p><strong>5 semantische Tonalitäten</strong> ersetzen die ~10 verstreuten Hex-Werte,
+                light+dark definiert, lösen die zwei-fast-gleichen-Grüns auf.</p>
+                <p><strong>Nächste Schritte:</strong> Produktiv-Ticket ziehen · iterieren · weiter mit P1/P2.
+                Was davon?</p>
+              </div></div>
+              <button class="showmore">Ganze Antwort anzeigen</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================
+     VARIANTE D — Marginalien
+     ============================================================ -->
+<section class="variant" id="variantD">
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="wtitle">WhisperM8 — Agent Chats</div>
+  </div>
+  <div class="chathead">
+    <div>
+      <div class="session-title">Claude Chat</div>
+      <div class="meta">ListM8 <span class="sep">·</span> ⎇ develop <span class="sep">·</span> 119 Nachrichten · 7 Runden</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn-resume">▶ Resume</button>
+  </div>
+  <div class="main">
+    <div class="scrollarea">
+      <div class="d-col">
+        <button class="d-earlier">↑ 4 frühere Runden</button>
+
+        <!-- Runde 5 -->
+        <article class="d-round">
+          <div class="d-gutter">
+            <div class="d-time">21:31</div>
+            <button class="d-note">
+              <span class="d-nline">9 Aufrufe · 2 Min<br>6 Dateien gelesen</span>
+              <span class="d-nfiles">
+                <span class="d-nfile">LeadStatusDots.tsx</span>
+                <span class="d-nfile">constants.ts</span>
+                <span class="d-nfile">ReviewQueue.tsx +3</span>
+              </span>
+            </button>
+          </div>
+          <div class="d-main">
+            <p class="d-ptext">Analysiere die Lead-Status-Farben im Admin — wir haben da gefühlt zehn
+              verschiedene Grüns. Wo sind die Hex-Werte verstreut, und können wir das auf semantische
+              Tokens ziehen?</p>
+            <div class="reveal"><div><div class="d-rawstrip-inner">
+              $ grep -rn "#(22c55e|16a34a|4ade80)" src/admin → 14 hits<br>
+              R LeadStatusDots.tsx · constants.ts · ReviewQueue.tsx · statusModel.ts<br>
+              🧠 thinking: „beide grüns meinen dasselbe statusmodell …"
+            </div></div></div>
+            <div class="d-answer">
+              <div class="md">
+                <p>Gefunden: <strong>~10 verstreute Hex-Werte</strong> in 6 Dateien, davon zwei fast
+                identische Grüns (<code>#22c55e</code> vs. <code>#16a34a</code>). Das Statusmodell in
+                <code>parts/statusModel.ts</code> kennt bereits 5 semantische Zustände — die Farben
+                hängen nur nicht dran. Vorschlag: <strong>5 Tonalitäten</strong> als Tokens, light+dark.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 6 -->
+        <article class="d-round">
+          <div class="d-gutter">
+            <div class="d-time">21:39</div>
+            <button class="d-note">
+              <span class="d-nline">14 Aufrufe · 6 Min<br><span class="d-nerr">1 Fehler</span>, behoben</span>
+              <span class="d-nfiles">
+                <span class="d-nfile">LeadsStatusTokens.tsx<b style="color:var(--diff-pos)">neu</b></span>
+                <span class="d-nfile">designRoutes.tsx</span>
+                <span class="d-nfile">tokens.sandbox.css ×3</span>
+              </span>
+            </button>
+          </div>
+          <div class="d-main">
+            <p class="d-ptext">Bau mir einen Sandbox-Prototyp unter <code>/admin/designs/leads-status-tokens</code> —
+              Dots- und Pills-Variante nebeneinander, mit Light/Dark-Toggle. Kein Produktivcode anfassen.</p>
+            <div class="reveal"><div><div class="d-rawstrip-inner">
+              W LeadsStatusTokens.tsx (6,8 kB) · E designRoutes.tsx · E tokens.sandbox.css ×3<br>
+              <span class="err">$ npm run typecheck → TS2339: Property 'tone' does not exist</span><br>
+              $ npm run typecheck → ✓ 0 errors
+            </div></div></div>
+            <div class="d-answer">
+              <div class="md">
+                <p>Prototyp steht unter <code>/admin/designs/leads-status-tokens</code> — beide Varianten
+                token-getrieben. Ein Typecheck-Fehler unterwegs (<code>tone</code> fehlte am Interface),
+                direkt behoben. Kein Produktivcode berührt.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Runde 7 -->
+        <article class="d-round">
+          <div class="d-gutter">
+            <div class="d-time">21:55</div>
+            <button class="d-note">
+              <span class="d-nline">7 Aufrufe · 3 Min<br>Browser-Verifikation</span>
+              <span class="d-nfiles">
+                <span class="d-nfile">chrome · screenshot ×2</span>
+                <span class="d-nfile">tokens.sandbox.css</span>
+              </span>
+            </button>
+          </div>
+          <div class="d-main">
+            <p class="d-ptext">Verifiziere das end-to-end im Browser — Light und Dark, und mach einen
+              Screenshot vom Dark Mode.</p>
+            <div class="d-attach">📷 Bild angehängt · image/png · 412 KB</div>
+            <div class="reveal"><div><div class="d-rawstrip-inner">
+              $ chrome · navigate → listm8.test/admin/designs/leads-status-tokens<br>
+              $ chrome · screenshot ×2 → ss_9097txeec (1479×831)
+            </div></div></div>
+            <div class="d-answer answer-clamp">
+              <div class="md-wrap"><div class="md">
+                <p>Läuft end-to-end im echten Shell. Verifiziert:</p>
+                <ul>
+                  <li><strong>Light + Dark Mode</strong> ✓ — der <code>is-dark</code>-Token-Swap macht
+                      jeden Zustand kontraststark.</li>
+                  <li><strong>Dots-</strong> und <strong>Pills-Variante</strong> ✓ — beide token-getrieben.</li>
+                  <li><strong>Score-Ringe</strong> und <strong>+N-Taxonomy</strong> ✓.</li>
+                </ul>
+                <h4>Fazit LM8-UI-01</h4>
+                <p><strong>5 semantische Tonalitäten</strong> ersetzen die ~10 verstreuten Hex-Werte,
+                light+dark definiert, lösen die zwei-fast-gleichen-Grüns auf.</p>
+                <p><strong>Nächste Schritte — deine Wahl:</strong> Produktiv-Ticket ziehen · iterieren ·
+                weiter mit P1/P2. Was davon?</p>
+              </div></div>
+              <button class="showmore">Ganze Antwort anzeigen</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<section class="notes">
+  <div class="note">
+    <h4><span class="num">E</span>Chat</h4>
+    <p>Vertrautes App-Layout: Prompt-Bubble rechts, Antwort als freier Text, Aktivität als eine
+       Zeile (<code>▸ 14 Tool-Aufrufe · 3 Dateien · 6 Min</code>). Ältere Runden auf 50 % gedimmt
+       (Hover hebt sie an), nur der letzte Prompt trägt den Indigo-Akzent.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">B</span>Editorial</h4>
+    <p>Keine Container: Prompts als große Überschriften, Aktivität als eine stille Textzeile
+       (<code>✓ 14 Aufrufe · … · Details</code>), Antworten mit Lesetypografie. Am nächsten an „nur lesen".</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">C</span>Ledger</h4>
+    <p>Monochrome Hairline-Zeilen, Zeitspalte, Punktführung, 0 Radius. Aktivität als tabellarische
+       Op-Zeilen (<code>W/E/R/$</code>). Dichteste Variante — viel Inhalt pro Bildschirm.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">D</span>Marginalien</h4>
+    <p>Hauptspalte bleibt reines Gespräch; Statistik + Dateien stehen als Randnotiz im Gutter.
+       Klick auf die Notiz blendet einen kompakten Roh-Streifen unter dem Prompt ein.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">A</span>Karten (Rev 1)</h4>
+    <p>Ursprünglicher Entwurf mit Activity-Karten, Datei-Chips, Outline-Rail und Roh-Chat-Toggle —
+       als Referenz und oberes Ende der visuellen Dichte.</p>
+  </div>
+</section>
+
+<script>
+// ---------- Varianten-Umschalter (Tabs + Tasten 1–4) ----------
+const DESCRIPTIONS = {
+  e: 'E · Chat — wie Claude/Codex-App: dein Prompt als Bubble rechts, Antwort als freier Text links, Aktivität als eine stille Zeile. Ältere Runden gedimmt, der letzte Prompt trägt den Akzent. Tasten: 1–5 wechseln die Variante.',
+  b: 'B · Editorial — reine Typografie: Prompts als Überschriften, Aktivität als stille Zeile, Details klappen als eingerückte Liste auf. Tasten: 1–5 wechseln die Variante.',
+  c: 'C · Ledger — monochrome Hairline-Zeilen mit Zeitspalte und Punktführung; Aktivität als tabellarische Op-Zeilen (W/E/R/$). Tasten: 1–5 wechseln die Variante.',
+  d: 'D · Marginalien — Hauptspalte reines Gespräch, Statistik + Dateien als Randnotiz; Klick auf die Notiz zeigt den Roh-Streifen. Tasten: 1–5 wechseln die Variante.',
+  a: 'A · Karten — der ursprüngliche Entwurf (Rev 1) mit Activity-Karten, Chips, Outline und Roh-Chat-Vergleich. Tasten: 1–5 wechseln die Variante.',
+};
+const tabs = [...document.querySelectorAll('.variant-tabs button')];
+const descEl = document.getElementById('variantDesc');
+function setVariant(v) {
+  document.body.dataset.variant = v;
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.v === v));
+  descEl.textContent = DESCRIPTIONS[v];
+}
+tabs.forEach(t => t.addEventListener('click', () => setVariant(t.dataset.v)));
+document.addEventListener('keydown', e => {
+  const map = { '1': 'e', '2': 'b', '3': 'c', '4': 'd', '5': 'a' };
+  if (map[e.key] && !e.metaKey && !e.ctrlKey) setVariant(map[e.key]);
+});
+setVariant('e');
+
+// ---------- Variante A: Activity-Karten ----------
+document.querySelectorAll('.activity-summary').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const card = btn.closest('.activity');
+    const open = card.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open);
+  });
+});
+
+// ---------- Varianten B/C/E: Toggle direkt vor dem .reveal ----------
+document.querySelectorAll('.b-act, .c-actsum, .e-act').forEach(btn => {
+  btn.addEventListener('click', () => btn.classList.toggle('open'));
+});
+
+// ---------- Variante D: Randnotiz toggelt den Roh-Streifen der Runde ----------
+document.querySelectorAll('.d-note').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const reveal = btn.closest('.d-round')?.querySelector('.reveal');
+    if (reveal) reveal.parentElement.classList.toggle('open');
+  });
+});
+
+// ---------- Clamp lösen (alle Varianten) ----------
+document.querySelectorAll('.showmore').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.closest('.answer-clamp').classList.remove('answer-clamp');
+    btn.remove();
+  });
+});
+
+// ---------- Variante A: Timeline vs. Roh-Chat ----------
+const segT = document.getElementById('segTimeline');
+const segR = document.getElementById('segRaw');
+const variantA = document.getElementById('variantA');
+function setModeA(raw) {
+  variantA.classList.toggle('mode-raw', raw);
+  segT.classList.toggle('active', !raw);
+  segR.classList.toggle('active', raw);
+}
+segT.addEventListener('click', () => setModeA(false));
+segR.addEventListener('click', () => setModeA(true));
+
+// ---------- Variante A: Outline-Highlight + Sprünge ----------
+const links = [...document.querySelectorAll('.outline a[data-target]')];
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    links.forEach(l => l.classList.toggle('current', l.dataset.target === e.target.id));
+  });
+}, { root: document.getElementById('scrollA'), rootMargin: '0px 0px -70% 0px' });
+['r5','r6','r7'].forEach(id => { const el = document.getElementById(id); if (el) observer.observe(el); });
+links.forEach(l => l.addEventListener('click', ev => {
+  ev.preventDefault();
+  document.getElementById(l.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}));
+</script>
+</body>
+</html>
