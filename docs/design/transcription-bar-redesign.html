@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhisperM8 · Transcription-Bar Redesign</title>
+<style>
+/* ============================================================
+   WhisperM8 Transcription-Bar Redesign — Standalone-Prototyp
+   Signatur: der „Kern" — die Waveform IST der Status.
+   ============================================================ */
+:root{
+  --bg:#0c0e12;
+  --paper:#13161b;
+  --paper2:#181c22;
+  --ink:#e8ebf0;
+  --ink2:#9aa3b0;
+  --ink3:#5c6572;
+  --hair:rgba(255,255,255,.07);
+
+  /* Bar-Glas */
+  --glass:rgba(19,22,27,.86);
+  --glass-hair:rgba(255,255,255,.10);
+  --glass-ink:#eef1f5;
+  --glass-ink2:#aab3bf;
+
+  /* Zustandsfarben */
+  --rec:#3ddc97;        /* Aufnahme — Mint */
+  --rec-soft:rgba(61,220,151,.16);
+  --tx:#f2b13e;         /* Transkription — Amber */
+  --tx-soft:rgba(242,177,62,.16);
+  --pp:#a78bfa;         /* Post-Processing — Violett */
+  --pp-soft:rgba(167,139,250,.16);
+  --clip:#ff6b6b;       /* Screen-Clip — Rot */
+  --clip-soft:rgba(255,107,107,.18);
+
+  --r-pill:999px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font);
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(255,255,255,.18)}
+
+/* ---------- Doku-Chrome ---------- */
+.wrap{max-width:1060px;margin:0 auto;padding:0 28px 120px}
+header.doc{padding:64px 0 40px;border-bottom:1px solid var(--hair)}
+.eyebrow{
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink2);font-weight:600;margin-bottom:14px;
+}
+h1{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.15;max-width:640px}
+.lede{color:var(--ink2);max-width:620px;margin-top:14px;font-size:16px}
+.lede b{color:var(--ink);font-weight:600}
+
+section{padding:56px 0 8px}
+h2{font-size:21px;font-weight:650;letter-spacing:-.01em;margin-bottom:6px}
+.sub{color:var(--ink2);font-size:14px;max-width:640px;margin-bottom:22px}
+.sub code, .note code, td code, .expl code, .hint code{
+  font-family:var(--mono);font-size:.85em;color:var(--ink);
+  background:var(--paper2);border:1px solid var(--hair);
+  padding:1px 5px;border-radius:5px;white-space:nowrap;
+}
+.snum{
+  font-family:var(--mono);font-size:11px;color:var(--ink3);
+  display:block;margin-bottom:8px;letter-spacing:.08em;
+}
+
+/* ---------- Desktop-Bühnen ---------- */
+.desk{
+  position:relative;
+  border-radius:16px;
+  border:1px solid var(--hair);
+  overflow:hidden;
+  min-height:230px;
+  display:flex;align-items:flex-end;justify-content:center;
+  isolation:isolate;
+}
+.desk + .desk{margin-top:16px}
+.desk.light{
+  background:
+    radial-gradient(120% 90% at 15% 0%, #c8dcf2 0%, transparent 55%),
+    radial-gradient(110% 100% at 85% 10%, #f4e3c8 0%, transparent 50%),
+    linear-gradient(160deg,#a8c4e0 0%, #b6d0c4 45%, #dcc9a8 100%);
+}
+.desk.dark{
+  background:
+    radial-gradient(120% 90% at 20% 0%, #24334d 0%, transparent 60%),
+    radial-gradient(100% 90% at 85% 15%, #3d2c4a 0%, transparent 55%),
+    linear-gradient(165deg,#141b28 0%, #1d2433 55%, #2a2233 100%);
+}
+.desk-tag{
+  position:absolute;top:12px;left:14px;
+  font-size:11px;font-weight:600;letter-spacing:.06em;
+  color:rgba(255,255,255,.85);
+  background:rgba(0,0,0,.28);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  padding:3px 9px;border-radius:99px;
+}
+.desk.light .desk-tag{color:rgba(20,26,34,.8);background:rgba(255,255,255,.4)}
+.desk-slot{
+  padding-bottom:34px; /* = Standard-Offset unten mittig */
+  display:flex;justify-content:center;
+}
+
+/* Dock-Kerbe: markiert die Standardposition */
+.dock-notch{
+  position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+  width:56px;height:3px;border-radius:99px;
+  background:rgba(255,255,255,.28);
+  opacity:0;transition:opacity .3s ease;
+  pointer-events:none;
+}
+.desk.light .dock-notch{background:rgba(0,0,0,.25)}
+.dock-notch.show{opacity:1}
+
+/* ============================================================
+   DIE BAR
+   ============================================================ */
+.tbar{
+  /* Mono-Default: Zustand wird über Bewegungsart codiert, nicht über Farbe */
+  --state:#e9edf2;
+  --state-soft:rgba(255,255,255,.09);
+  --clipring:#e9edf2;
+  position:relative;
+  display:inline-flex;align-items:center;
+  gap:0;
+  height:40px;
+  padding:0 6px;
+  border-radius:var(--r-pill);
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(24px) saturate(1.3);
+  backdrop-filter:blur(24px) saturate(1.3);
+  border:1px solid var(--glass-hair);
+  box-shadow:
+    0 1px 1px rgba(0,0,0,.18),
+    0 8px 28px rgba(0,0,0,.35),
+    inset 0 1px 0 rgba(255,255,255,.06);
+  color:var(--glass-ink);
+  user-select:none;
+  white-space:nowrap;
+  cursor:grab; /* die ganze Leiste ist Drag-Fläche (Klick-Schwelle 4 px) */
+}
+.tbar.dragging{cursor:grabbing}
+.tbar[data-state="idle"]{--state:#8d98a6;--state-soft:rgba(141,152,166,.14)}
+
+/* Grip — Drag-Griff */
+.tb-grip{
+  display:grid;grid-template-columns:repeat(2,3px);gap:2.5px;
+  padding:0 7px 0 5px;height:100%;align-content:center;
+  cursor:grab;flex:none;
+}
+.tb-grip i{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.28)}
+.tbar.dragging .tb-grip{cursor:grabbing}
+
+/* Kern: Orb-Kapsel mit Waveform = Statusanzeige */
+.tb-core{
+  flex:none;
+  display:flex;align-items:center;justify-content:center;
+  gap:2.5px;
+  height:28px;min-width:46px;
+  padding:0 10px;
+  border-radius:99px;
+  background:var(--state-soft);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--state) 24%, transparent);
+  transition:background .4s ease, box-shadow .4s ease;
+}
+.tb-core i{
+  width:3px;border-radius:99px;
+  background:var(--state);
+  height:6px;
+  transition:background .4s ease;
+}
+/* Aufnahme: Level-Bars atmen */
+.tbar[data-state="recording"] .tb-core i{animation:lv 1.15s ease-in-out infinite}
+.tbar[data-state="recording"] .tb-core i:nth-child(1){animation-delay:-.9s}
+.tbar[data-state="recording"] .tb-core i:nth-child(2){animation-delay:-.6s}
+.tbar[data-state="recording"] .tb-core i:nth-child(3){animation-delay:-.2s}
+.tbar[data-state="recording"] .tb-core i:nth-child(4){animation-delay:-.7s}
+.tbar[data-state="recording"] .tb-core i:nth-child(5){animation-delay:-.4s}
+@keyframes lv{
+  0%,100%{height:5px;opacity:.75}
+  35%{height:15px;opacity:1}
+  70%{height:8px;opacity:.9}
+}
+/* Transkription: Scan-Lauflicht */
+.tbar[data-state="transcribing"] .tb-core i{height:10px;animation:scan 1s linear infinite;opacity:.35}
+.tbar[data-state="transcribing"] .tb-core i:nth-child(1){animation-delay:0s}
+.tbar[data-state="transcribing"] .tb-core i:nth-child(2){animation-delay:.12s}
+.tbar[data-state="transcribing"] .tb-core i:nth-child(3){animation-delay:.24s}
+.tbar[data-state="transcribing"] .tb-core i:nth-child(4){animation-delay:.36s}
+.tbar[data-state="transcribing"] .tb-core i:nth-child(5){animation-delay:.48s}
+@keyframes scan{0%,100%{opacity:.3}18%{opacity:1}}
+/* Improve: sanftes gemeinsames Pulsieren */
+.tbar[data-state="improving"] .tb-core i{height:9px;animation:pp 1.7s ease-in-out infinite}
+.tbar[data-state="improving"] .tb-core i:nth-child(odd){animation-delay:-.85s}
+@keyframes pp{0%,100%{opacity:.45;height:7px}50%{opacity:1;height:12px}}
+/* Idle: flache ruhige Linie */
+.tbar[data-state="idle"] .tb-core i{height:4px;opacity:.6}
+
+/* Screen-Clip aktiv: roter Ring um den Kern */
+.tbar.is-clipping .tb-core{
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--clipring) 55%, transparent),
+             0 0 0 3px color-mix(in srgb, var(--clipring) 18%, transparent);
+}
+
+/* Status-Label (nur wenn Text Information trägt) */
+.tb-status{
+  font-size:12.5px;font-weight:560;color:var(--state);
+  padding-left:9px;flex:none;
+  letter-spacing:.01em;
+}
+/* Timer */
+.tb-time{
+  font-family:var(--mono);font-size:12.5px;font-weight:500;
+  color:var(--glass-ink2);
+  padding:0 10px 0 9px;flex:none;
+  font-variant-numeric:tabular-nums;
+}
+
+/* Chips + Icon-Buttons */
+.tb-chip{
+  flex:none;
+  display:inline-flex;align-items:center;gap:5px;
+  height:26px;padding:0 10px;
+  border-radius:99px;border:none;
+  background:rgba(255,255,255,.07);
+  color:var(--glass-ink);
+  font:inherit;font-size:12px;font-weight:560;
+  cursor:pointer;
+  transition:background .18s ease;
+  margin-right:5px;
+}
+.tb-chip:hover{background:rgba(255,255,255,.13)}
+.tb-chip svg{width:11px;height:11px;flex:none;opacity:.7}
+.tb-chip .chev{width:8px;height:8px;opacity:.55}
+.tb-chip.has-ctx{color:var(--glass-ink)}
+.tb-chip.has-ctx svg{opacity:.9}
+.tb-chip:disabled{opacity:.45;cursor:default}
+.tb-chip:disabled:hover{background:rgba(255,255,255,.07)}
+/* Ohne Timer/Status: Chip klebt sonst am Kern */
+.tb-core + .tb-chip{margin-left:8px}
+
+.tb-ico{
+  flex:none;
+  width:28px;height:28px;border-radius:50%;
+  border:none;background:transparent;
+  color:var(--glass-ink2);
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:background .18s ease,color .18s ease;
+}
+.tb-ico svg{width:14px;height:14px}
+.tb-ico:hover{background:rgba(255,255,255,.1);color:var(--glass-ink)}
+.tb-ico.clip-on{color:var(--clipring)}
+.tb-ico.clip-on svg{animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.tb-ico:disabled{opacity:.4;cursor:default}
+.tb-ico:disabled:hover{background:transparent;color:var(--glass-ink2)}
+
+.tb-sep{width:1px;height:16px;background:rgba(255,255,255,.1);margin:0 4px;flex:none}
+
+/* Close/Cancel */
+.tb-x{color:var(--glass-ink2)}
+.tb-x:hover{background:rgba(255,255,255,.1);color:#fff}
+
+/* Fokus-Sichtbarkeit */
+.tb-chip:focus-visible,.tb-ico:focus-visible{
+  outline:2px solid rgba(255,255,255,.9);outline-offset:1px;
+}
+.tbar[data-tone="hell"] .tb-chip:focus-visible,
+.tbar[data-tone="hell"] .tb-ico:focus-visible{outline-color:rgba(0,0,0,.8)}
+
+/* ---------- Mini / Hover-Expand ----------
+   Alles außer Kern kollabiert; Hover lässt die Pill herauswachsen.
+   Stabilität: Höhe und Kern bleiben in ALLEN Zuständen identisch —
+   es animiert ausschließlich die Breite (Apple-Easing, eine Kurve). */
+.tbar .cx{
+  overflow:hidden;
+  max-width:220px;
+  opacity:1;
+  transition:max-width .35s cubic-bezier(.32,.72,0,1), opacity .22s ease .06s,
+             padding .35s cubic-bezier(.32,.72,0,1), margin .35s cubic-bezier(.32,.72,0,1);
+}
+.tbar.mini{padding:0 6px}
+.tbar.mini .cx{
+  max-width:0;opacity:0;
+  padding-left:0;padding-right:0;margin-right:0;margin-left:0;
+  transition:max-width .35s cubic-bezier(.32,.72,0,1), opacity .16s ease,
+             padding .35s cubic-bezier(.32,.72,0,1), margin .35s cubic-bezier(.32,.72,0,1);
+}
+.tbar.mini.expand-on-hover:hover .cx, .tbar.mini.forced-open .cx{
+  max-width:220px;opacity:1;
+  transition:max-width .35s cubic-bezier(.32,.72,0,1), opacity .22s ease .06s,
+             padding .35s cubic-bezier(.32,.72,0,1), margin .35s cubic-bezier(.32,.72,0,1);
+}
+/* Timer bleibt in Mini optional sichtbar (kompakteste Info) */
+.tbar.mini .tb-time.keep{max-width:60px;opacity:1;padding:0 8px 0 7px}
+/* Kontext ist Inhalt, keine Deko: vorhandener Kontext bleibt auch
+   ohne Hover sichtbar — die Pill wächst dafür animiert mit. */
+.tbar.mini .tb-ctx.keep{max-width:150px;opacity:1;padding:0 10px;margin-right:5px}
+
+/* ---------- Varianten-Achsen (Playground) ---------- */
+/* 1 · Ton — vier Zurückhaltungsstufen desselben Layouts.
+   Mono ist der Default (kein data-tone). */
+/* Mono + Punkt: einziger Farbtupfer ist der klassische REC-Punkt */
+.tbar[data-tone="punkt"],.tbar[data-tone="farbig"]{--clipring:var(--clip)}
+.tbar[data-tone="punkt"][data-state="recording"] .tb-core::before{
+  content:"";width:5px;height:5px;border-radius:50%;flex:none;margin-right:2px;
+  background:#ff453a;
+  animation:blink 1.4s ease-in-out infinite;
+}
+/* Hell: invertiertes Glas (macOS-Light-Material) */
+.tbar[data-tone="hell"]{
+  --glass:rgba(246,247,249,.9);
+  --glass-hair:rgba(0,0,0,.10);
+  --glass-ink:#1b1f26;
+  --glass-ink2:#5a616c;
+  --state:#23272e;
+  --state-soft:rgba(0,0,0,.07);
+  --clipring:#23272e;
+  box-shadow:0 1px 1px rgba(0,0,0,.08),0 8px 28px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.7);
+}
+.tbar[data-tone="hell"][data-state="idle"]{--state:#9aa1ab;--state-soft:rgba(0,0,0,.05)}
+.tbar[data-tone="hell"] .tb-grip i{background:rgba(0,0,0,.3)}
+.tbar[data-tone="hell"] .tb-chip{background:rgba(0,0,0,.06)}
+.tbar[data-tone="hell"] .tb-chip:hover{background:rgba(0,0,0,.11)}
+.tbar[data-tone="hell"] .tb-ico:hover{background:rgba(0,0,0,.08);color:#000}
+.tbar[data-tone="hell"] .tb-sep{background:rgba(0,0,0,.12)}
+.tbar[data-tone="hell"] .tb-ok:hover{background:rgba(0,0,0,.08);color:#000}
+/* Farbig: die bisherige Richtung, als Vergleich behalten */
+.tbar[data-tone="farbig"][data-state="recording"]{--state:var(--rec);--state-soft:var(--rec-soft)}
+.tbar[data-tone="farbig"][data-state="transcribing"]{--state:var(--tx);--state-soft:var(--tx-soft)}
+.tbar[data-tone="farbig"][data-state="improving"]{--state:var(--pp);--state-soft:var(--pp-soft)}
+.tbar[data-tone="farbig"] .tb-chip.has-ctx{color:var(--rec)}
+/* 2 · Stop-Interaktion: ✓ bewusst dezent — gleiche Familie wie ✕,
+   nur einen Hauch heller. Per Stop-Variante komplett abschaltbar. */
+.tb-ok{
+  width:28px;height:28px;border-radius:50%;border:none;flex:none;
+  background:transparent;color:var(--glass-ink);
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:background .18s ease,color .18s ease;
+}
+.tb-ok:hover{background:rgba(255,255,255,.1)}
+.tb-ok:active{transform:scale(.94)}
+.tb-ok svg{width:13px;height:13px}
+.tb-ok:focus-visible{outline:2px solid rgba(255,255,255,.9);outline-offset:1px}
+.tbar.core-stop .tb-core{cursor:pointer}
+.tbar.core-stop .tb-core:hover{
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--state) 55%, transparent),
+             0 0 0 3px var(--state-soft);
+}
+/* 3 · Mini-Anatomie: Mode-Chip optional dauerhaft sichtbar */
+.tbar.mini .tb-mode.keep{max-width:110px;opacity:1;padding:0 10px;margin-right:5px}
+
+/* ---------- Tip-Chip (leichter AirPods-Hinweis) ---------- */
+.tip-chip{
+  position:absolute;bottom:calc(100% + 10px);left:50%;
+  transform:translateX(-50%) translateY(6px);
+  display:flex;align-items:center;gap:10px;
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(24px) saturate(1.3);
+  backdrop-filter:blur(24px) saturate(1.3);
+  border:1px solid var(--glass-hair);
+  border-radius:12px;
+  padding:8px 8px 8px 12px;
+  font-size:12.5px;color:var(--glass-ink);
+  box-shadow:0 8px 28px rgba(0,0,0,.35);
+  opacity:0;pointer-events:none;
+  transition:opacity .3s ease, transform .3s cubic-bezier(.3,.9,.3,1);
+  white-space:nowrap;
+}
+.tip-chip.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+.tip-chip .t-ico{
+  width:24px;height:24px;border-radius:8px;flex:none;
+  background:rgba(255,255,255,.09);color:var(--glass-ink2);
+  display:flex;align-items:center;justify-content:center;
+}
+.tip-chip .t-ico svg{width:13px;height:13px}
+.tip-chip .t-txt b{font-weight:600}
+.tip-chip .t-txt span{color:var(--glass-ink2)}
+.tip-chip .t-act{
+  border:none;border-radius:8px;height:26px;padding:0 10px;
+  font:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  background:rgba(255,255,255,.1);color:var(--glass-ink);
+  transition:background .18s ease;
+}
+.tip-chip .t-act:hover{background:rgba(255,255,255,.17)}
+.tip-chip .t-act.ghost{background:transparent;color:var(--glass-ink2)}
+.tip-chip .t-act.ghost:hover{background:rgba(255,255,255,.08);color:var(--glass-ink)}
+/* Auto-Dismiss-Hairline */
+.tip-chip::after{
+  content:"";position:absolute;left:12px;right:12px;bottom:3px;height:2px;
+  border-radius:99px;background:rgba(255,255,255,.14);
+  transform-origin:left;
+}
+.tip-chip.show::after{animation:tipfade 8s linear forwards}
+@keyframes tipfade{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+
+/* ---------- Popover (Kontext / Modus) ---------- */
+.pop{
+  position:absolute;bottom:calc(100% + 10px);
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(28px) saturate(1.3);
+  backdrop-filter:blur(28px) saturate(1.3);
+  border:1px solid var(--glass-hair);
+  border-radius:13px;
+  box-shadow:0 12px 36px rgba(0,0,0,.42);
+  padding:6px;
+  min-width:230px;
+  font-size:12.5px;color:var(--glass-ink);
+  opacity:0;pointer-events:none;
+  transform:translateY(6px);
+  transition:opacity .22s ease, transform .22s cubic-bezier(.3,.9,.3,1);
+  z-index:30;
+  white-space:nowrap;
+}
+.pop.show{opacity:1;pointer-events:auto;transform:translateY(0)}
+.pop.static{position:static;opacity:1;pointer-events:auto;transform:none;display:inline-block}
+.pop h5{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--glass-ink2);font-weight:600;
+  padding:7px 10px 4px;
+}
+.pop .row{
+  display:flex;align-items:center;gap:9px;
+  padding:6px 8px;border-radius:8px;
+  transition:background .15s ease;
+}
+.pop .row:hover{background:rgba(255,255,255,.07)}
+.pop .row .thumb{
+  width:30px;height:21px;border-radius:5px;flex:none;
+  background:linear-gradient(135deg,#3d5a80,#98c1d9);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.15);
+}
+.pop .row .thumb.t2{background:linear-gradient(135deg,#5f4b8b,#b8a9d9)}
+.pop .row .thumb.txt{
+  background:rgba(255,255,255,.08);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--glass-ink2);font-size:10px;
+}
+.pop .row .lbl{flex:1;overflow:hidden;text-overflow:ellipsis}
+.pop .row .lbl small{display:block;color:var(--glass-ink2);font-size:11px}
+.pop .row .rm{
+  width:20px;height:20px;border:none;border-radius:50%;flex:none;
+  background:transparent;color:var(--glass-ink2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .15s ease, background .15s ease;
+}
+.pop .row:hover .rm{opacity:1}
+.pop .row .rm:hover{background:rgba(255,107,107,.18);color:var(--clip)}
+.pop .row .rm svg{width:10px;height:10px}
+.pop hr{border:none;border-top:1px solid rgba(255,255,255,.08);margin:5px 4px}
+.pop .act{
+  display:flex;align-items:center;gap:9px;width:100%;
+  padding:7px 10px;border:none;border-radius:8px;
+  background:transparent;color:var(--glass-ink);
+  font:inherit;font-size:12.5px;text-align:left;cursor:pointer;
+  transition:background .15s ease;
+}
+.pop .act:hover{background:rgba(255,255,255,.07)}
+.pop .act svg{width:13px;height:13px;opacity:.65;flex:none}
+.pop .act.danger{color:var(--clip)}
+.pop .act.danger svg{opacity:.9}
+.pop .act .kbd{
+  margin-left:auto;font-family:var(--mono);font-size:10.5px;
+  color:var(--glass-ink3, var(--glass-ink2));opacity:.7;
+}
+.pop .act.checked::before{
+  content:"✓";margin-right:-3px;color:var(--rec);font-weight:700;font-size:11px;
+}
+
+/* ---------- Playground-Steuerung ---------- */
+.controls{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  margin:18px 0 14px;
+}
+.controls .grp{
+  display:inline-flex;gap:2px;
+  background:var(--paper);border:1px solid var(--hair);
+  border-radius:10px;padding:3px;
+}
+.controls button.ctl{
+  border:none;border-radius:7px;height:30px;padding:0 12px;
+  font:inherit;font-size:12.5px;font-weight:560;
+  background:transparent;color:var(--ink2);cursor:pointer;
+  transition:background .15s ease,color .15s ease;
+}
+.controls button.ctl:hover{color:var(--ink)}
+.controls button.ctl.on{background:var(--paper2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--hair)}
+.controls .lone{
+  border:1px solid var(--hair);border-radius:10px;height:36px;padding:0 14px;
+  background:var(--paper);color:var(--ink2);font:inherit;font-size:12.5px;
+  font-weight:560;cursor:pointer;transition:color .15s ease,border-color .15s ease;
+}
+.controls .lone:hover{color:var(--ink);border-color:rgba(255,255,255,.16)}
+.controls .cap{
+  font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink3);margin:0 2px 0 6px;
+}
+.controls .cap:first-child{margin-left:0}
+.hint{font-size:12.5px;color:var(--ink3);margin-top:10px}
+.hint b{color:var(--ink2);font-weight:600}
+
+/* Playground-Bühne (draggbar) */
+#stage{min-height:340px;cursor:default}
+#stage .tbar{position:absolute;touch-action:none}
+
+/* ---------- Galerie-Annotationen ---------- */
+.expl{
+  display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;
+  margin-top:18px;
+}
+.expl .it{font-size:13.5px;color:var(--ink2)}
+.expl .it b{display:block;color:var(--ink);font-weight:600;font-size:13.5px;margin-bottom:2px}
+.expl .it b .dot{
+  display:inline-block;width:7px;height:7px;border-radius:50%;
+  margin-right:7px;vertical-align:1px;
+}
+@media(max-width:720px){.expl{grid-template-columns:1fr}}
+
+/* ---------- Ton-Varianten-Stapel ---------- */
+.desk .stack{
+  display:flex;flex-direction:column;align-items:center;gap:22px;
+  width:100%;padding:30px 0 36px;
+}
+.stack .vrow{display:flex;flex-direction:column;align-items:center;gap:7px}
+.stack .vcap{
+  font-size:11px;font-weight:600;letter-spacing:.05em;
+  color:rgba(255,255,255,.75);
+  background:rgba(0,0,0,.28);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  padding:2px 8px;border-radius:99px;
+}
+.desk.light .stack .vcap{color:rgba(20,26,34,.75);background:rgba(255,255,255,.45)}
+
+/* ---------- Popover-Schaukästen ---------- */
+.showcase{
+  display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;
+  background:var(--paper);border:1px solid var(--hair);border-radius:16px;
+  padding:26px;
+}
+.showcase .col{flex:1;min-width:250px}
+.showcase .col > p{font-size:12.5px;color:var(--ink3);margin-bottom:12px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.09em}
+
+/* ---------- Paritäts-Tabelle ---------- */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{
+  text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--ink3);font-weight:600;padding:0 14px 10px;
+}
+td{
+  padding:11px 14px;border-top:1px solid var(--hair);
+  color:var(--ink2);vertical-align:top;
+}
+td:first-child{color:var(--ink);width:38%}
+tr.grp td{
+  padding-top:22px;border-top:none;
+  font-size:11px;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--ink2);font-weight:600;
+}
+
+.note{
+  border:1px solid var(--hair);border-left:2px solid rgba(255,255,255,.35);
+  background:var(--paper);border-radius:0 12px 12px 0;
+  padding:16px 20px;font-size:13.5px;color:var(--ink2);
+  margin-top:18px;
+}
+.note b{color:var(--ink)}
+
+/* ---------- Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  /* Waveform bleibt ohne Animation als statische Silhouette lesbar */
+  .tbar[data-state="recording"] .tb-core i:nth-child(1){height:7px}
+  .tbar[data-state="recording"] .tb-core i:nth-child(2){height:13px}
+  .tbar[data-state="recording"] .tb-core i:nth-child(3){height:9px}
+  .tbar[data-state="recording"] .tb-core i:nth-child(4){height:14px}
+  .tbar[data-state="recording"] .tb-core i:nth-child(5){height:6px}
+  .tbar[data-state="transcribing"] .tb-core i,
+  .tbar[data-state="improving"] .tb-core i{opacity:1}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="eyebrow">WhisperM8 · Design-Prototyp</div>
+  <h1>Die Transcription-Bar, neu gedacht: ruhig, klein, immer auffindbar.</h1>
+  <p class="lede">Kernidee: <b>die Waveform ist der Status.</b> Kein dauerhaftes „Recording…", keine 590-px-Leiste — im Ruhezustand nur ein kleiner Glas-Kern unten mittig, der beim Hover zur vollen Bedienleiste aufwächst. Schwarz/weiß statt Farbcode: die <b>Bewegungsart</b> trägt den Zustand — Atmen = Aufnahme, Lauflicht = Transkription, Puls = Codex-Improve. Wo Text Information trägt, steht Text.</p>
+</header>
+
+<!-- ============================================================ -->
+<section id="playground">
+  <span class="snum">00 · LIVE-PLAYGROUND</span>
+  <h2>Ausprobieren</h2>
+  <p class="sub">Zustände durchschalten, die Bar an beliebiger freier Fläche ziehen — auch an der Laufzeit (Doppelklick auf freie Fläche = zurück zur Standardposition). Chips und Buttons bleiben dabei normal klickbar. Die Mini-Version expandiert beim Hover; vorhandener Kontext ist auch ohne Hover sichtbar. Die zweite Zeile schaltet die drei offenen Design-Entscheidungen aus der Critique um: Ton, Stop-Interaktion, Mini-Anatomie.</p>
+
+  <div class="controls">
+    <div class="grp" id="stateCtl">
+      <button class="ctl" data-st="idle">Idle</button>
+      <button class="ctl on" data-st="recording">Recording</button>
+      <button class="ctl" data-st="transcribing">Transcribing</button>
+      <button class="ctl" data-st="improving">Improving</button>
+    </div>
+    <div class="grp" id="sizeCtl">
+      <button class="ctl on" data-sz="mini">Mini + Hover</button>
+      <button class="ctl" data-sz="full">Voll</button>
+    </div>
+    <button class="lone" id="ctxBtn">Kontext an/aus</button>
+    <button class="lone" id="clipBtn">Screen-Clip an/aus</button>
+    <button class="lone" id="tipBtn">Tipp zeigen</button>
+    <button class="lone" id="wallBtn">Wallpaper wechseln</button>
+  </div>
+
+  <div class="controls" style="margin-top:-4px">
+    <span class="cap">Ton</span>
+    <div class="grp" id="toneCtl">
+      <button class="ctl on" data-t="mono">Mono</button>
+      <button class="ctl" data-t="punkt">Mono + Punkt</button>
+      <button class="ctl" data-t="hell">Hell</button>
+      <button class="ctl" data-t="farbig">Farbig</button>
+    </div>
+    <span class="cap">Stop</span>
+    <div class="grp" id="stopCtl">
+      <button class="ctl on" data-s="ok">✓-Button</button>
+      <button class="ctl" data-s="core">Kern-Klick</button>
+      <button class="ctl" data-s="hotkey">Nur Hotkey</button>
+    </div>
+    <span class="cap">Mini</span>
+    <div class="grp" id="miniCtl">
+      <button class="ctl" data-m="kern">Nur Kern</button>
+      <button class="ctl on" data-m="timer">+ Timer</button>
+      <button class="ctl" data-m="mode">+ Mode-Chip</button>
+    </div>
+  </div>
+
+  <div class="desk dark" id="stage">
+    <span class="desk-tag">Simulierter Desktop</span>
+    <div class="dock-notch" id="notch"></div>
+  </div>
+  <p class="hint"><b>Auffindbarkeit:</b> Wurde die Bar verschoben, zeigt eine dezente Kerbe die Standardposition; Doppelklick auf freie Fläche bringt sie zurück. Bewusst kein aktives Signal (Ping/Puls) — die Bar meldet sich nicht, sie ist einfach da, wo man sie hingelegt hat.</p>
+  <p class="hint"><b>Drag überall:</b> Die gesamte Leiste ist Drag-Fläche — Grip, Kern, Laufzeit, Zwischenräume. Erst ab 4 px Bewegung wird gezogen, darunter zählt es als Klick; Buttons und Menüs reagieren dadurch normal. Der Grip bleibt als sichtbare Affordanz erhalten.</p>
+  <p class="hint"><b>Ton:</b> Mono ist der Default — reines Schwarz/Weiß, Zustand über Bewegung. „+ Punkt" erlaubt genau einen Farbtupfer (roter REC-Punkt), „Hell" zeigt das invertierte Light-Material, „Farbig" ist die alte Richtung als Vergleich. <b>Stop:</b> gibt der Bar erstmals eine Primäraktion — ✓-Button (Whisper-Flow-Stil) oder Klick auf den Kern beendet die Aufnahme und transkribiert; Ziehen bleibt ab 4 px Bewegung möglich, „Nur Hotkey" ist der heutige Stand. <b>Mini:</b> was die eingeklappte Pill dauerhaft zeigt — entspricht der <code>showModePickerInMiniOverlay</code>-Preference-Familie.</p>
+  <p class="hint"><b>Stabile Buttons:</b> Die Pill ist an ihrer rechten Kante verankert und expandiert nach links — ✓ und ✕ bleiben beim Aufklappen exakt an Ort und Stelle, nichts wandert unter dem Cursor weg. Höhe und Kern sind in allen Zuständen identisch; es animiert ausschließlich die Breite, mit einer einzigen Easing-Kurve. (An der linken Bildschirmkante würde die echte App die Richtung spiegeln.)</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="states">
+  <span class="snum">01 · ZUSTÄNDE</span>
+  <h2>Die fünf Zustände im Überblick</h2>
+  <p class="sub">Jede Bühne zeigt die Bar in Originalgröße an ihrer Standardposition (unten mittig, 34 px Offset). Statische Referenz — die interaktive Version steht oben im Playground.</p>
+
+  <div class="desk light">
+    <span class="desk-tag">1 · Idle / Mini — bereit, fast unsichtbar</span>
+    <div class="desk-slot"><div id="ex-idle"></div></div>
+  </div>
+
+  <div class="desk light">
+    <span class="desk-tag">2 · Recording / Mini — Kontext bleibt ohne Hover sichtbar</span>
+    <div class="desk-slot"><div id="ex-rec-mini"></div></div>
+  </div>
+
+  <div class="desk dark">
+    <span class="desk-tag">3 · Recording / Expanded (Hover) — alle Features, eine Pill</span>
+    <div class="desk-slot"><div id="ex-rec-full"></div></div>
+  </div>
+
+  <div class="desk dark">
+    <span class="desk-tag">4 · Transcribing — Scan-Lauflicht, Abbruch möglich</span>
+    <div class="desk-slot"><div id="ex-tx"></div></div>
+  </div>
+
+  <div class="desk light">
+    <span class="desk-tag">5 · Improving — Codex-Status als Klartext</span>
+    <div class="desk-slot"><div id="ex-pp"></div></div>
+  </div>
+
+  <div class="desk dark">
+    <span class="desk-tag">6 · Screen-Clip läuft — Ring um den Kern</span>
+    <div class="desk-slot"><div id="ex-clip"></div></div>
+  </div>
+
+  <div class="expl">
+    <div class="it"><b>Recording — Atmen</b>
+      Der Kern atmet mit dem echten Audio-Level (heute: <code>audioLevel</code> → Bar-Höhen). Kein Text, keine Signalfarbe — wer die Bar sieht, sieht die Bewegung.</div>
+    <div class="it"><b>Transcribing — Lauflicht</b>
+      Scan-Lauflicht ersetzt den Spinner. Label erscheint, weil der Text hier Information trägt. ✕ bricht nur die Transkription ab — die Aufnahme bleibt gesichert (Tooltip sagt das).</div>
+    <div class="it"><b>Improving — Puls</b>
+      Zeigt den echten <code>postProcessingStatusText</code> („Formatting for Slack…"). ✕ bricht Codex ab und liefert das Raw-Transkript — kein Datenverlust, wie heute.</div>
+    <div class="it"><b>Screen-Clip — Ring</b>
+      Sub-Zustand der Aufnahme: Ring um den Kern + blinkendes Clip-Icon (rot nur in den Tönen „+ Punkt"/„Farbig"). Stoppen über dasselbe Icon, wie heute.</div>
+    <div class="it"><b>Idle — Stille</b>
+      Neu: optionaler Bereitschafts-Kern (flache graue Linie). Beantwortet „läuft gerade etwas?" auf großen Monitoren mit einem Blick. Abschaltbar — heute existiert die Bar nur während der Aufnahme, das bleibt der Default.</div>
+    <div class="it"><b>Mini vs. Voll</b>
+      Mini = Kern (+ optional Timer/Mode-Chip, entspricht <code>showModePickerInMiniOverlay</code>). Vorhandener Kontext („2 Shots") bleibt IMMER sichtbar — Kontext ist Inhalt, keine Deko; die Pill wächst dafür animiert. Hover expandiert zur vollen Pill, rechts verankert, damit ✓/✕ stehen bleiben. Wer permanent alles sehen will, wählt „Voll".</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="tones">
+  <span class="snum">02 · BASISLAYOUT-VARIANTEN</span>
+  <h2>Vier Töne, ein Layout</h2>
+  <p class="sub">Gleiche Anatomie, unterschiedliche Zurückhaltung. Mono ist der vorgeschlagene Default; „+ Punkt" gönnt sich genau einen Farbtupfer; „Hell" zeigt, wie das adaptive macOS-Material auf hellen Wallpapern rendert; „Farbig" ist die bisherige Richtung zum Vergleich.</p>
+
+  <div class="desk dark" style="min-height:auto">
+    <span class="desk-tag">Dunkles Wallpaper</span>
+    <div class="stack">
+      <div class="vrow"><span class="vcap">Mono — Default</span><div id="t-mono"></div></div>
+      <div class="vrow"><span class="vcap">Mono + roter Punkt</span><div id="t-punkt"></div></div>
+      <div class="vrow"><span class="vcap">Farbig — bisherige Richtung</span><div id="t-farbig"></div></div>
+    </div>
+  </div>
+
+  <div class="desk light" style="min-height:auto">
+    <span class="desk-tag">Helles Wallpaper</span>
+    <div class="stack">
+      <div class="vrow"><span class="vcap">Hell — invertiertes Glas</span><div id="t-hell"></div></div>
+      <div class="vrow"><span class="vcap">Mono-Dunkel auf hellem Grund</span><div id="t-mono-light"></div></div>
+    </div>
+  </div>
+
+  <div class="expl">
+    <div class="it"><b>Empfehlung: Mono, optional + Punkt</b>
+      Reines S/W hält die Bar maximal leise; der rote REC-Punkt ist der einzige Kandidat für Farbe, weil er eine 40 Jahre alte Konvention trägt. Alles andere (Modus, Kontext, Buttons) bleibt monochrom.</div>
+    <div class="it"><b>Hell/Dunkel entscheidet das System</b>
+      In der echten App liefert <code>.thinMaterial</code> die Anpassung an Wallpaper/Appearance gratis — „Mono" und „Hell" sind dieselbe Bar in beiden Material-Modi, keine zwei Designs.</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="drag">
+  <span class="snum">03 · VERSCHOBEN / CUSTOM-POSITION</span>
+  <h2>Dragging bleibt — Auffindbarkeit kommt dazu</h2>
+  <p class="sub">Die Bar bleibt frei positionierbar (Position wird wie heute persistiert und an Bildschirmkanten geclampt). Zwei stille Mechanismen sorgen dafür, dass man sie trotzdem nie suchen muss:</p>
+
+  <div class="desk dark" style="min-height:260px">
+    <span class="desk-tag">Verschoben nach rechts oben — Kerbe markiert die Heimatposition</span>
+    <div class="dock-notch show"></div>
+    <div id="ex-dragged" style="position:absolute;top:52px;right:56px"></div>
+    <div style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%);font-size:11.5px;color:rgba(255,255,255,.55)">↑ Standardposition (Doppelklick auf den Grip führt zurück)</div>
+  </div>
+
+  <div class="expl">
+    <div class="it"><b>1 · Dock-Kerbe</b>
+      Steht die Bar nicht an der Standardposition, erscheint unten mittig eine dezente Kerbe. Sie sagt: „Hier ist Zuhause" — und ist Drop-Ziel beim Zurückziehen.</div>
+    <div class="it"><b>2 · Doppelklick-Reset</b>
+      Doppelklick auf freie Fläche animiert die Bar zurück nach unten mittig und löscht die gespeicherte Custom-Position (heute: nur manuell möglich). Ein früherer „Locator-Ping" (Ring-Impuls bei Aufnahmestart) wurde bewusst verworfen — zu ablenkend.</div>
+    <div class="it"><b>Ganzflächen-Drag mit Klick-Schwelle</b>
+      Wie heute (<code>isMovableByWindowBackground</code>) ist die ganze Leiste Drag-Fläche — inklusive Laufzeit. Der Konflikt mit Klicks ist über die 4-px-Schwelle gelöst: Buttons und Menüs reagieren normal, alles andere zieht. Der Grip bleibt als sichtbare Affordanz.</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="tip">
+  <span class="snum">04 · TIP / WARNING</span>
+  <h2>Hinweise: angedockt statt Modal</h2>
+  <p class="sub">Der AirPods-Hinweis ist heute ein schweres schwarzes Popup mit zwei großen Buttons. Neu: ein leichter Chip, der aus der Bar herauswächst, sich nach 8 s selbst wegräumt (Hairline zeigt die Restzeit) und nie den Fokus stiehlt.</p>
+
+  <div class="desk light" style="min-height:250px">
+    <span class="desk-tag">AirPods-Hinweis, neu — an der Bar verankert, auto-dismiss</span>
+    <div class="desk-slot"><div id="ex-tip" style="position:relative"></div></div>
+  </div>
+
+  <div class="expl">
+    <div class="it"><b>Hierarchie umgedreht</b>
+      Primäraktion („Mikro wechseln") ist ein kleiner Button, Ignorieren ist Geistertext, „Nicht mehr zeigen" wandert ins Kontextmenü des Chips — der häufigste Fall (weiterreden) kostet null Klicks.</div>
+    <div class="it"><b>Gleiches Muster für alles</b>
+      Screen-Recording-Permission fehlt, API-Key ungültig, Aufnahme fehlgeschlagen: ein Anker, eine Optik. Warnstufe nur über die Icon-Farbe (Amber/Rot).</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="menus">
+  <span class="snum">05 · MENÜS</span>
+  <h2>Kontext & Output-Mode im Detail</h2>
+  <p class="sub">Beide Popover öffnen über der Bar. Funktionsumfang exakt wie heute — inklusive Per-Item-Löschen mit Thumbnails, Clipboard-Import und Screen-Clip-Steuerung.</p>
+
+  <div class="showcase">
+    <div class="col">
+      <p>Kontext-Popover</p>
+      <div class="pop static" id="ex-pop-ctx"></div>
+    </div>
+    <div class="col">
+      <p>Output-Mode-Menü</p>
+      <div class="pop static" id="ex-pop-mode"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="parity">
+  <span class="snum">06 · FEATURE-PARITÄT</span>
+  <h2>Nichts fällt weg</h2>
+  <p class="sub">Mapping jedes heutigen Features (aus <code>RecordingOverlayView.swift</code> / <code>RecordingPanel.swift</code>) auf die neue UI.</p>
+
+  <table>
+    <thead><tr><th>Heute</th><th>Neu</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="2">Status & Feedback</td></tr>
+      <tr><td>Status-Indikator (mic/waveform/sparkles) + Level-Ring</td><td>Der Kern: die Bewegungsart codiert Recording/Transcribing/Improving; Level treibt die Bar-Höhen</td></tr>
+      <tr><td>„Recording…"-Text (118 px reserviert)</td><td>Entfällt im Recording — die atmende Waveform genügt. Text nur bei Transcribing/Improving, wo er Information trägt</td></tr>
+      <tr><td>Timer (mono, mm:ss)</td><td>Bleibt; in Mini optional dauerhaft sichtbar</td></tr>
+      <tr><td>AudioLevelBars (5) / MiniAudioLevelBars (4)</td><td>In den Kern integriert — eine Anzeige statt zwei getrennter (Indikator + Bars)</td></tr>
+      <tr><td>Spinner bei Transcribing/Improving</td><td>Scan-Lauflicht / Puls im Kern (Farbe nur im Ton „Farbig")</td></tr>
+      <tr><td><code>postProcessingStatusText</code> („Improving…")</td><td>Klartext-Label neben dem Kern</td></tr>
+
+      <tr class="grp"><td colspan="2">Bedienung</td></tr>
+      <tr><td>OutputModeMenu (Raw/Clean/Prompt/Chat/Task/Mail/Slack/WA/Notes + Custom; gesperrt während Verarbeitung)</td><td>Mode-Chip + Popover, identische Sperrlogik</td></tr>
+      <tr><td>Kontext-Chip („No Context" / „Chat + Text + 2 Shots + Mark + Clip") + Menü mit Per-Item-Remove, Thumbnails, Text-Preview, Clear All</td><td>Kontext-Chip (heller Text sobald Kontext da) + Popover, 1:1 — vorhandener Kontext bleibt auch in Mini ohne Hover sichtbar</td></tr>
+      <tr><td>Screenshot (Area-Select), Clipboard-Import</td><td>Kamera-Icon direkt + beide Aktionen im Popover</td></tr>
+      <tr><td>Screen-Clip Start/Stop, Permission-Anforderung</td><td>Clip-Icon (Ring + Blinken wenn aktiv); fehlende Permission → Tip-Chip mit „Erlauben"-Aktion</td></tr>
+      <tr><td>Cancel: Aufnahme / Transkription (Aufnahme bleibt gesichert) / Post-Processing (Raw-Fallback) — 3 Semantiken</td><td>Ein ✕, Tooltip + Bestätigungsverhalten wechseln mit dem Zustand, wie heute</td></tr>
+      <tr><td>Aufnahme beenden &amp; transkribieren — heute nur per Hotkey</td><td>Neu: ✓ direkt in der Bar — bewusst dezent (gleiche Familie wie ✕) und per „Stop"-Variante komplett abschaltbar; alternativ Kern-Klick</td></tr>
+
+      <tr class="grp"><td colspan="2">Fenster & Position</td></tr>
+      <tr><td>Full (590×56) / Mini (220×46) per Preference</td><td>„Voll" (~500×40) / „Mini + Hover-Expand" (~64×36) — gleiche Preference, kleinerer Footprint</td></tr>
+      <tr><td><code>showModePickerInMiniOverlay</code></td><td>Mode-Chip in Mini optional einblendbar, unverändert</td></tr>
+      <tr><td>Drag überall, Position persistiert, Clamp an Screen-Kanten, Default unten mittig +40</td><td>Bleibt komplett — ganze Leiste inkl. Laufzeit zieht (4-px-Klick-Schwelle schützt Buttons); plus Grip-Affordanz, Dock-Kerbe, Doppelklick-Reset</td></tr>
+      <tr><td>Non-activating Panel, alle Spaces, Fokus-Rückgabe an <code>previousApp</code></td><td>Unverändert (kein UI-Thema)</td></tr>
+      <tr><td>AirPods-/Hinweis-Popup</td><td>Tip-Chip an der Bar, auto-dismiss, „Nicht mehr zeigen" im Kontextmenü</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>Konzept: akustisches Feedback (optional).</b> Start und Stopp bekommen je einen sehr leisen, kurzen Ton (&lt; 100 ms, −30 dB relativ zur Systemlautstärke, z. B. gedämpftes Holz-Tick auf­wärts/abwärts) — hörbar nur in ruhiger Umgebung, gedacht als Bestätigung, wenn man den Bildschirm gerade nicht ansieht. Analog zum bestehenden Agent-Stop-Ton als Preference, Default aus. Im Prototyp bewusst nicht implementiert.
+  </div>
+</section>
+
+</div><!-- /wrap -->
+
+<script>
+/* ============================================================
+   Bar-Factory — eine Quelle für Playground + Galerie
+   ============================================================ */
+const I = {
+  chev:'<svg class="chev" viewBox="0 0 10 10" fill="none"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  photo:'<svg viewBox="0 0 14 14" fill="none"><rect x="1.2" y="2.2" width="11.6" height="9.6" rx="2" stroke="currentColor" stroke-width="1.2"/><circle cx="5" cy="6" r="1.2" fill="currentColor"/><path d="M2.5 10.5 6 7.5l2.5 2 1.5-1.2 2 1.7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cam:'<svg viewBox="0 0 14 14" fill="none"><path d="M1.5 4.5h2l1-1.6h5l1 1.6h2v7h-11z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="7" cy="7.6" r="2.1" stroke="currentColor" stroke-width="1.2"/></svg>',
+  rec:'<svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.4" stroke="currentColor" stroke-width="1.2"/><circle cx="7" cy="7" r="2.3" fill="currentColor"/></svg>',
+  stop:'<svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.4" stroke="currentColor" stroke-width="1.2"/><rect x="4.8" y="4.8" width="4.4" height="4.4" rx="1" fill="currentColor"/></svg>',
+  x:'<svg viewBox="0 0 14 14" fill="none"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  clipbrd:'<svg viewBox="0 0 14 14" fill="none"><rect x="2.5" y="2.5" width="9" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><rect x="4.8" y="1.2" width="4.4" height="2.6" rx="1" fill="currentColor"/></svg>',
+  trash:'<svg viewBox="0 0 14 14" fill="none"><path d="M2.5 3.8h9M5.5 3.8V2.5h3v1.3M3.5 3.8l.6 8h5.8l.6-8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chat:'<svg viewBox="0 0 14 14" fill="none"><path d="M2 3.5A1.8 1.8 0 0 1 3.8 1.7h6.4A1.8 1.8 0 0 1 12 3.5v4.2a1.8 1.8 0 0 1-1.8 1.8H6l-2.8 2.3V9.5h-.4A1.8 1.8 0 0 1 2 7.7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  mic:'<svg viewBox="0 0 14 14" fill="none"><rect x="5" y="1.5" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M3 6.8a4 4 0 0 0 8 0M7 10.8v1.7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  pin:'<svg viewBox="0 0 14 14" fill="none"><path d="M7 1.5c-2 0-3.6 1.6-3.6 3.6C3.4 7.8 7 12.5 7 12.5s3.6-4.7 3.6-7.4C10.6 3.1 9 1.5 7 1.5z" stroke="currentColor" stroke-width="1.2"/><circle cx="7" cy="5" r="1.3" fill="currentColor"/></svg>',
+  check:'<svg viewBox="0 0 14 14" fill="none"><path d="M2.8 7.4 5.6 10.2 11.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+
+/**
+ * cfg: {state, mini, hover, clipping, time, mode, ctx, ctxCount, status, keepTime,
+ *       forcedOpen, bare, tone ('mono'|'punkt'|'hell'|'farbig'),
+ *       stopStyle ('ok'|'core'|'hotkey'), keepMode}
+ */
+function makeBar(cfg){
+  const el = document.createElement('div');
+  const isRec = (cfg.state || 'recording') === 'recording';
+  el.className = 'tbar' + (cfg.mini ? ' mini' : '') +
+    (cfg.hover ? ' expand-on-hover' : '') +
+    (cfg.clipping ? ' is-clipping' : '') +
+    (cfg.stopStyle === 'core' && isRec ? ' core-stop' : '') +
+    (cfg.forcedOpen ? ' forced-open' : '');
+  el.dataset.state = cfg.state || 'recording';
+  if (cfg.tone && cfg.tone !== 'mono') el.dataset.tone = cfg.tone;
+
+  const busy = cfg.state === 'transcribing' || cfg.state === 'improving';
+  const xTitle = {
+    idle:'Ausblenden',
+    recording:'Aufnahme abbrechen',
+    transcribing:'Transkription abbrechen — die Aufnahme bleibt gesichert',
+    improving:'Codex abbrechen — Raw-Transkript wird verwendet'
+  }[cfg.state || 'recording'];
+
+  const coreTitle = cfg.stopStyle === 'core' && isRec
+    ? 'Klick: Aufnahme beenden & transkribieren · Ziehen: Verschieben'
+    : 'Ziehen zum Verschieben';
+
+  el.innerHTML = `
+    <div class="tb-grip cx" title="Ziehen zum Verschieben · Doppelklick: Standardposition">
+      <i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <div class="tb-core" title="${coreTitle}" aria-label="Status">
+      <i></i><i></i><i></i><i></i><i></i>
+    </div>
+    ${cfg.status ? `<span class="tb-status">${cfg.status}</span>` : ''}
+    ${cfg.time ? `<span class="tb-time cx ${cfg.keepTime ? 'keep' : ''}">${cfg.time}</span>` : ''}
+    ${cfg.bare ? '' : `
+    <button class="tb-chip tb-mode cx ${cfg.keepMode ? 'keep' : ''}" ${busy ? 'disabled' : ''} title="Output-Modus">
+      ${cfg.mode || 'Raw'} ${I.chev}
+    </button>
+    <button class="tb-chip tb-ctx cx ${cfg.ctxCount ? 'has-ctx keep' : ''}" ${busy ? 'disabled' : ''}
+      title="${cfg.ctxCount ? 'Kontext dieser Aufnahme: ' + cfg.ctx : 'Kein Kontext erfasst'}">
+      ${I.photo} ${cfg.ctx || 'No Context'}
+    </button>
+    <button class="tb-ico tb-cam cx" ${busy ? 'disabled' : ''} title="Screenshot aufnehmen (Bereich wählen)">${I.cam}</button>
+    <button class="tb-ico tb-clip cx ${cfg.clipping ? 'clip-on' : ''}" ${busy ? 'disabled' : ''}
+      title="${cfg.clipping ? 'Screen-Clip stoppen' : 'Screen-Clip starten'}">${cfg.clipping ? I.stop : I.rec}</button>
+    <span class="tb-sep cx"></span>`}
+    ${cfg.stopStyle === 'ok' && isRec ? `<button class="tb-ok" title="Aufnahme beenden &amp; transkribieren">${I.check}</button>` : ''}
+    <button class="tb-ico tb-x" title="${xTitle}">${I.x}</button>
+  `;
+  return el;
+}
+
+/* ---------- Galerie (statisch) ---------- */
+const mount = (id, bar) => document.getElementById(id).appendChild(bar);
+
+mount('ex-idle',     makeBar({state:'idle', mini:true, hover:false, bare:true}));
+mount('ex-rec-mini', makeBar({state:'recording', mini:true, hover:false, time:'00:42', keepTime:true, stopStyle:'ok', ctx:'2 Shots', ctxCount:2}));
+mount('ex-rec-full', makeBar({state:'recording', time:'03:11', mode:'Prompt', ctx:'2 Shots', ctxCount:2, stopStyle:'ok'}));
+mount('ex-tx',       makeBar({state:'transcribing', status:'Transkribiert…', time:'03:11', mode:'Prompt', ctx:'2 Shots', ctxCount:2}));
+mount('ex-pp',       makeBar({state:'improving', status:'Formatting for Slack…', mode:'Slack', ctx:'Chat + Text', ctxCount:2}));
+mount('ex-clip',     makeBar({state:'recording', clipping:true, time:'01:07', mode:'Prompt', ctx:'Clip', ctxCount:1, stopStyle:'ok'}));
+mount('ex-dragged',  makeBar({state:'recording', mini:true, hover:true, time:'00:12', keepTime:true, stopStyle:'ok'}));
+
+/* Ton-Varianten (Basislayout im Vergleich) */
+const toneBase = {state:'recording', time:'02:34', mode:'Prompt', ctx:'2 Shots', ctxCount:2, stopStyle:'ok'};
+mount('t-mono',       makeBar({...toneBase}));
+mount('t-punkt',      makeBar({...toneBase, tone:'punkt'}));
+mount('t-farbig',     makeBar({...toneBase, tone:'farbig'}));
+mount('t-hell',       makeBar({...toneBase, tone:'hell'}));
+mount('t-mono-light', makeBar({...toneBase}));
+
+/* Tip-Beispiel: Bar + angedockter Chip */
+(function(){
+  const host = document.getElementById('ex-tip');
+  const bar = makeBar({state:'recording', mini:true, hover:false, time:'00:04', keepTime:true, stopStyle:'ok'});
+  host.appendChild(bar);
+  const tip = document.createElement('div');
+  tip.className = 'tip-chip show';
+  tip.style.animation = 'none';
+  tip.innerHTML = `
+    <span class="t-ico"><svg viewBox="0 0 14 14" fill="none"><rect x="5" y="1.5" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M3 6.8a4 4 0 0 0 8 0M7 10.8v1.7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
+    <span class="t-txt"><b>AirPods aktiv</b> <span>— Genauigkeit kann leiden</span></span>
+    <button class="t-act">Mikro wechseln</button>
+    <button class="t-act ghost">Weiter so</button>
+  `;
+  host.appendChild(tip);
+})();
+
+/* ---------- Kontext-Popover (Schaukasten) ---------- */
+document.getElementById('ex-pop-ctx').innerHTML = `
+  <h5>Chat</h5>
+  <div class="row">
+    <div class="thumb txt">${I.chat}</div>
+    <span class="lbl">Terminal-UX Fixes <small>whisperm8 · aktiver Tab</small></span>
+    <button class="rm" title="Entfernen">${I.x}</button>
+  </div>
+  <h5>Text</h5>
+  <div class="row">
+    <div class="thumb txt">„…"</div>
+    <span class="lbl">„Der Scroll-Lock bleibt erhalten, weil…" <small>42 Zeichen ausgewählt</small></span>
+    <button class="rm" title="Entfernen">${I.x}</button>
+  </div>
+  <h5>Visuals (2)</h5>
+  <div class="row">
+    <div class="thumb"></div>
+    <span class="lbl">Screenshot #1 <small>Bereich · gerade eben</small></span>
+    <button class="rm" title="Entfernen">${I.x}</button>
+  </div>
+  <div class="row">
+    <div class="thumb t2"></div>
+    <span class="lbl">Clip #1 · 6,2 s <small>Bildschirmaufnahme</small></span>
+    <button class="rm" title="Entfernen">${I.x}</button>
+  </div>
+  <hr>
+  <button class="act">${I.cam} Screenshot aufnehmen <span class="kbd">Bereich</span></button>
+  <button class="act">${I.clipbrd} Screenshot aus Zwischenablage</button>
+  <button class="act">${I.rec} Screen-Clip starten</button>
+  <hr>
+  <button class="act danger">${I.trash} Gesamten Kontext entfernen</button>
+`;
+
+/* ---------- Mode-Menü (Schaukasten) ---------- */
+document.getElementById('ex-pop-mode').innerHTML = `
+  <h5>Output-Modus</h5>
+  ${['Raw','Clean','Prompt','Chat','Task','Mail','Slack','WA','Notes'].map(m =>
+    `<button class="act ${m === 'Prompt' ? 'checked' : ''}">${m === 'Prompt' ? '' : '<span style="width:11px"></span>'}${m}</button>`
+  ).join('')}
+`;
+
+/* ============================================================
+   Playground
+   ============================================================ */
+const stage = document.getElementById('stage');
+const notch = document.getElementById('notch');
+let pg = { state:'recording', mini:true, clipping:false, custom:false,
+           tone:'mono', stop:'ok', miniA:'timer', ctx:true };
+let pgBar = null, tipEl = null, timerId = null, seconds = 251;
+
+function fmt(s){ return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0'); }
+function ctxLabel(){
+  if (!pg.ctx) return 'No Context';
+  return pg.clipping ? 'Clip + 2 Shots' : '2 Shots';
+}
+
+function buildPlaygroundBar(keepPos){
+  const old = pgBar;
+  /* rechts verankert: beim Expandieren wächst die Pill nach links,
+     ✓/✕ bleiben unter dem Cursor stehen */
+  const pos = keepPos && old ? {right:old.style.right, top:old.style.top, done:old.dataset.placed} : null;
+  if (old) old.remove();
+  if (tipEl){ tipEl.remove(); tipEl = null; }
+  if (openPop){ openPop.remove(); openPop = null; }
+
+  const statusText = pg.state === 'transcribing' ? 'Transkribiert…'
+                   : pg.state === 'improving' ? 'Formatting for Slack…' : '';
+  pgBar = makeBar({
+    state: pg.state,
+    mini: pg.mini, hover: pg.mini,
+    bare: pg.state === 'idle', /* Idle = nur Kern + ✕, keine stalen Chips */
+    clipping: pg.clipping && pg.state === 'recording',
+    time: pg.state === 'idle' ? '' : fmt(seconds),
+    keepTime: pg.miniA !== 'kern',
+    keepMode: pg.miniA === 'mode',
+    tone: pg.tone,
+    stopStyle: pg.stop,
+    mode:'Prompt',
+    ctx: ctxLabel(),
+    ctxCount: pg.ctx ? 2 : 0,
+    status: statusText
+  });
+  stage.appendChild(pgBar);
+
+  /* Position: unten mittig oder gemerkte Custom-Position (in die Bühne geclampt) */
+  if (pos && pos.done){
+    pgBar.style.right = pos.right; pgBar.style.top = pos.top;
+    pgBar.dataset.placed = '1';
+    clampIntoStage();
+  } else {
+    placeAtDefault();
+  }
+  updateNotch();
+  wireDrag(pgBar);
+  wireButtons(pgBar);
+}
+
+function clampIntoStage(){
+  /* Layout-Messung ist synchron — kein rAF (feuert in Hintergrund-Tabs nicht) */
+  if (!pgBar) return;
+  const curRight = stage.clientWidth - (pgBar.offsetLeft + pgBar.offsetWidth);
+  const maxRight = stage.clientWidth - pgBar.offsetWidth - 6;
+  const maxY = stage.clientHeight - pgBar.offsetHeight - 6;
+  pgBar.style.right = Math.min(Math.max(curRight, 6), maxRight) + 'px';
+  pgBar.style.top   = Math.min(Math.max(pgBar.offsetTop, 6), maxY) + 'px';
+}
+
+function placeAtDefault(){
+  /* zentrieren, rechts verankert — Messung synchron, kein rAF */
+  const sw = stage.clientWidth, bw = pgBar.offsetWidth, bh = pgBar.offsetHeight;
+  pgBar.style.right = ((sw - bw) / 2) + 'px';
+  pgBar.style.top = (stage.clientHeight - bh - 34) + 'px';
+  pgBar.dataset.placed = '1';
+  pg.custom = false;
+  updateNotch();
+}
+
+function updateNotch(){ notch.classList.toggle('show', pg.custom); }
+
+/* Ganzflächen-Drag mit 4-px-Klick-Schwelle: die GESAMTE Leiste ist Drag-Fläche
+   (inkl. Laufzeit und freier Bereiche) — nur echte Controls (Buttons, Popover)
+   bleiben Controls. Doppelklick auf freie Fläche = Standardposition.
+   In der „Kern-Klick"-Stop-Variante ist ein Klick (< 4 px) auf den Kern = fertig. */
+function wireDrag(bar){
+  let sx, sy, or, oy, dragging = false, dist = 0, viaCore = false;
+  const isControl = t => t.closest('button, .pop, .tip-chip');
+
+  const move = e => {
+    if (!dragging) return;
+    dist = Math.max(dist, Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy));
+    if (dist < 4) return;
+    const maxR = stage.clientWidth - bar.offsetWidth;
+    const maxY = stage.clientHeight - bar.offsetHeight;
+    bar.style.right = Math.min(Math.max(or - (e.clientX - sx), 6), maxR - 6) + 'px';
+    bar.style.top   = Math.min(Math.max(oy + e.clientY - sy, 6), maxY - 6) + 'px';
+  };
+  const up = () => {
+    if (!dragging) return;
+    dragging = false;
+    bar.classList.remove('dragging');
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    if (dist >= 4){
+      pg.custom = true; updateNotch();
+    } else if (viaCore && pg.stop === 'core' && pg.state === 'recording'){
+      setState('transcribing');
+    }
+  };
+  bar.addEventListener('pointerdown', e => {
+    if (isControl(e.target)) return; /* Buttons/Menüs bleiben normal bedienbar */
+    e.preventDefault();
+    dragging = true; dist = 0; viaCore = !!e.target.closest('.tb-core');
+    bar.classList.add('dragging');
+    sx = e.clientX; sy = e.clientY;
+    or = stage.clientWidth - (bar.offsetLeft + bar.offsetWidth);
+    oy = bar.offsetTop;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+  bar.addEventListener('dblclick', e => {
+    if (isControl(e.target)) return;
+    if (pg.stop === 'core' && e.target.closest('.tb-core')) return; /* Kern ist hier die Stop-Fläche */
+    bar.style.transition = 'right .45s cubic-bezier(.32,.72,0,1), top .45s cubic-bezier(.32,.72,0,1)';
+    placeAtDefault();
+    setTimeout(() => { bar.style.transition = ''; }, 500);
+  });
+}
+
+function wireButtons(bar){
+  const x = bar.querySelector('.tb-x');
+  x.addEventListener('click', () => {
+    if (pg.state === 'recording'){ setState('transcribing'); }
+    else if (pg.state === 'transcribing' || pg.state === 'improving'){ setState('idle'); }
+  });
+  const ok = bar.querySelector('.tb-ok');
+  if (ok) ok.addEventListener('click', () => setState('transcribing'));
+  const clipBtn = bar.querySelector('.tb-clip');
+  if (clipBtn) clipBtn.addEventListener('click', () => { pg.clipping = !pg.clipping; buildPlaygroundBar(true); });
+
+  /* Mode- und Kontext-Popover live */
+  wirePopover(bar.querySelector('.tb-mode'), () => {
+    const p = document.createElement('div');
+    p.className = 'pop';
+    p.innerHTML = document.getElementById('ex-pop-mode').innerHTML;
+    return p;
+  });
+  wirePopover(bar.querySelector('.tb-ctx'), () => {
+    const p = document.createElement('div');
+    p.className = 'pop';
+    p.innerHTML = document.getElementById('ex-pop-ctx').innerHTML;
+    return p;
+  });
+}
+
+let openPop = null;
+function wirePopover(btn, build){
+  if (!btn) return;
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (openPop){ openPop.remove(); openPop = null; return; }
+    const p = build();
+    pgBar.appendChild(p);
+    /* über dem Button ausrichten */
+    p.style.left = Math.max(0, btn.offsetLeft - 40) + 'px';
+    requestAnimationFrame(() => p.classList.add('show'));
+    openPop = p;
+  });
+}
+document.addEventListener('click', () => { if (openPop){ openPop.remove(); openPop = null; } });
+
+/* Zustands-Steuerung */
+function setState(st){
+  pg.state = st;
+  if (st !== 'recording') pg.clipping = false;
+  document.querySelectorAll('#stateCtl .ctl').forEach(b =>
+    b.classList.toggle('on', b.dataset.st === st));
+  buildPlaygroundBar(true);
+}
+document.querySelectorAll('#stateCtl .ctl').forEach(b =>
+  b.addEventListener('click', () => setState(b.dataset.st)));
+
+document.querySelectorAll('#sizeCtl .ctl').forEach(b =>
+  b.addEventListener('click', () => {
+    pg.mini = b.dataset.sz === 'mini';
+    document.querySelectorAll('#sizeCtl .ctl').forEach(x =>
+      x.classList.toggle('on', x === b));
+    buildPlaygroundBar(true);
+  }));
+
+document.getElementById('clipBtn').addEventListener('click', () => {
+  if (pg.state !== 'recording') setState('recording');
+  pg.clipping = !pg.clipping;
+  buildPlaygroundBar(true);
+});
+
+/* Kontext-Toggle OHNE Rebuild: der Chip wächst/schrumpft live —
+   so sieht man die animierte Breitenanpassung der Pill (Anforderung 4+5). */
+document.getElementById('ctxBtn').addEventListener('click', () => {
+  pg.ctx = !pg.ctx;
+  const chip = pgBar && pgBar.querySelector('.tb-ctx');
+  if (!chip){ buildPlaygroundBar(true); return; }
+  chip.classList.toggle('keep', pg.ctx);
+  chip.classList.toggle('has-ctx', pg.ctx);
+  chip.innerHTML = I.photo + ' ' + ctxLabel();
+  chip.title = pg.ctx ? 'Kontext dieser Aufnahme: ' + ctxLabel() : 'Kein Kontext erfasst';
+});
+
+document.getElementById('wallBtn').addEventListener('click', () => {
+  stage.classList.toggle('dark');
+  stage.classList.toggle('light');
+});
+
+/* Varianten-Achsen */
+function wireVariantGroup(groupId, dataKey, pgKey){
+  document.querySelectorAll('#' + groupId + ' .ctl').forEach(b =>
+    b.addEventListener('click', () => {
+      pg[pgKey] = b.dataset[dataKey];
+      document.querySelectorAll('#' + groupId + ' .ctl').forEach(x =>
+        x.classList.toggle('on', x === b));
+      buildPlaygroundBar(true);
+    }));
+}
+wireVariantGroup('toneCtl', 't', 'tone');
+wireVariantGroup('stopCtl', 's', 'stop');
+wireVariantGroup('miniCtl', 'm', 'miniA');
+
+/* Tip-Demo */
+document.getElementById('tipBtn').addEventListener('click', () => {
+  if (tipEl){ tipEl.remove(); tipEl = null; }
+  tipEl = document.createElement('div');
+  tipEl.className = 'tip-chip';
+  tipEl.innerHTML = `
+    <span class="t-ico">${I.mic}</span>
+    <span class="t-txt"><b>AirPods aktiv</b> <span>— Genauigkeit kann leiden</span></span>
+    <button class="t-act">Mikro wechseln</button>
+    <button class="t-act ghost">Weiter so</button>
+  `;
+  pgBar.appendChild(tipEl);
+  requestAnimationFrame(() => tipEl.classList.add('show'));
+  tipEl.querySelectorAll('.t-act').forEach(b =>
+    b.addEventListener('click', () => { tipEl.remove(); tipEl = null; }));
+  setTimeout(() => { if (tipEl){ tipEl.classList.remove('show'); setTimeout(() => tipEl && tipEl.remove(), 300); tipEl = null; } }, 8000);
+});
+
+/* Timer läuft im Recording-Zustand */
+timerId = setInterval(() => {
+  if (pg.state === 'recording' && pgBar){
+    seconds++;
+    const t = pgBar.querySelector('.tb-time');
+    if (t) t.textContent = fmt(seconds);
+  }
+}, 1000);
+
+/* Start */
+buildPlaygroundBar(false);
+window.addEventListener('resize', () => { if (!pg.custom) placeAtDefault(); });
+</script>
+</body>
+</html>

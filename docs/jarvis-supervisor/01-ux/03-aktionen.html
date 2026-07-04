@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 03 · Aktionen, Drafts &amp; Send — Jarvis v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35); --ink-soft: oklch(0.42 0.02 35); --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78); --paper-2: oklch(0.945 0.012 72);
+  --line: oklch(0.80 0.02 70); --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28); --accent-soft: oklch(0.92 0.06 30); --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145); --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235); --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75); --amber-soft: oklch(0.94 0.06 80);
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --wm-bg:#0c0e12; --wm-panel:#171b22; --wm-ink:#e8ebf0; --wm-ink-soft:#9aa3af; --wm-ink-mute:#5c6570;
+  --wm-hair:rgba(255,255,255,.07); --wm-hair-strong:rgba(255,255,255,.13);
+  --wm-green:#3ddc97; --wm-green-soft:rgba(61,220,151,.14);
+  --wm-amber:#f2b13e; --wm-amber-soft:rgba(242,177,62,.14);
+  --wm-purple:#a78bfa; --wm-purple-soft:rgba(167,139,250,.14);
+  --wm-red:#ff6b6b; --wm-red-soft:rgba(255,107,107,.14);
+  --wm-blue:#5aa9f7; --wm-blue-soft:rgba(90,169,247,.14);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+
+nav.top { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter: saturate(160%) blur(10px); border-bottom: 1px solid var(--line-soft); }
+nav.top .inner { max-width: 1180px; margin: 0 auto; padding: 14px 32px; display: flex; gap: 14px; align-items: center; font-family: var(--mono); font-size: 12px; flex-wrap: wrap; }
+nav.top .brand { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 17px; color: var(--ink); text-decoration: none; }
+nav.top .brand span { color: var(--accent); }
+nav.top .crumb { color: var(--ink-mute); font-size: 11px; }
+nav.top .crumb b { color: var(--ink); font-weight: 500; }
+nav.top .nav-links { display: flex; gap: 2px; margin-left: 12px; flex-wrap: wrap; }
+nav.top a { color: var(--ink-soft); text-decoration: none; padding: 5px 9px; border-radius: 4px; }
+nav.top a:hover { color: var(--accent-deep); background: var(--accent-soft); }
+nav.top .spacer { flex: 1; }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px solid var(--accent); border-radius: 100px; letter-spacing: 0.06em; transform: rotate(-2deg); }
+
+.hero { padding: 70px 0 50px; }
+.hero .pretitle { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 26px; }
+.hero h1 { font-family: var(--serif); font-weight: 300; font-size: clamp(44px, 7vw, 88px); line-height: 0.94; letter-spacing: -0.03em; margin: 0 0 20px; }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.hero .lede { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(18px, 2.2vw, 26px); line-height: 1.4; max-width: 800px; color: var(--ink-soft); }
+.hero .lede b { font-weight: 500; color: var(--ink); }
+.hero .meta { margin-top: 42px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-mute); border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.hero .meta b { display: block; color: var(--ink); font-weight: 500; font-family: var(--serif); font-style: italic; font-size: 18px; margin-bottom: 4px; }
+@media (max-width: 720px) { .hero .meta { grid-template-columns: 1fr 1fr; } }
+
+section { padding: 70px 0; border-top: 1px solid var(--line-soft); }
+section.alt { background: var(--paper-2); }
+.section-head { margin-bottom: 36px; max-width: 840px; }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.14em; display: block; margin-bottom: 12px; }
+.section-head h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(28px, 4vw, 46px); line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.section-kicker { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 17px; line-height: 1.5; max-width: 720px; margin-top: 14px; }
+.section-kicker code { font-family: var(--mono); font-size: 13px; font-style: normal; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+
+.mockup-block { margin-top: 48px; }
+.mockup-block:first-of-type { margin-top: 24px; }
+.mockup-label { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.mockup-label .l { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.1em; font-weight: 500; }
+.mockup-label h3 { font-family: var(--serif); font-weight: 500; font-size: clamp(22px, 2.8vw, 30px); margin: 0; letter-spacing: -0.01em; }
+.mockup-label h3 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.mockup-label .path-pill { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px dashed var(--accent); border-radius: 4px; }
+.mockup-block .notes { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 15.5px; max-width: 780px; margin: 0 0 20px; line-height: 1.5; }
+.mockup-block .notes b { font-weight: 500; }
+
+.annotations { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anno-box { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 10px; padding: 18px 20px; }
+.anno-box.full { grid-column: 1 / -1; }
+.anno-box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+.anno-box h4 { margin: 0 0 8px; font-family: var(--serif); font-weight: 500; font-size: 16px; }
+.anno-box ul { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.anno-box ul li { padding: 4px 0 4px 16px; position: relative; border-top: 1px solid var(--line-soft); }
+.anno-box ul li:first-child { border-top: none; padding-top: 0; }
+.anno-box ul li::before { content: "›"; position: absolute; left: 0; color: var(--accent); font-family: var(--mono); }
+.anno-box ul li b { color: var(--ink); font-weight: 500; }
+.anno-box ul li code { font-family: var(--mono); font-size: 11.5px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; color: var(--accent-deep); }
+@media (max-width: 720px) { .annotations { grid-template-columns: 1fr; } }
+
+.states-grid { display: grid; grid-template-columns: 220px 1fr; gap: 0; margin-top: 8px; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.states-grid .row { display: contents; }
+.states-grid .row > div { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+.states-grid .row:last-child > div { border-bottom: none; }
+.states-grid .row .state-name { background: var(--paper-2); font-family: var(--mono); font-size: 11px; color: var(--ink); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; border-right: 1px solid var(--line-soft); }
+.states-grid .row .state-desc { background: var(--paper); font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.states-grid .row .state-desc b { color: var(--ink); font-weight: 500; }
+.states-grid .row .state-desc code { font-family: var(--mono); font-size: 11.5px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; color: var(--accent-deep); }
+@media (max-width: 720px) { .states-grid { grid-template-columns: 1fr; } .states-grid .row .state-name { border-right: none; } }
+
+.data-shape { background: var(--ink); color: var(--paper); border-radius: 12px; padding: 24px 26px; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; overflow-x: auto; margin-top: 8px; }
+.data-shape .comment { color: oklch(0.62 0.05 145); }
+.data-shape .key { color: var(--moss-soft); }
+.data-shape .str { color: oklch(0.85 0.10 80); }
+.data-shape .num { color: var(--accent-soft); }
+
+.sidenote { background: var(--paper-2); border-left: 3px solid var(--accent); padding: 18px 22px; margin: 28px 0 0; border-radius: 0 8px 8px 0; max-width: 840px; }
+.sidenote .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.sidenote p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--ink-soft); line-height: 1.5; font-weight: 300; }
+.sidenote code { font-family: var(--mono); font-size: 13px; font-style: normal; background: var(--paper); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+
+.next-paket { margin-top: 60px; padding: 36px 40px; background: var(--ink); color: var(--paper); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-decoration: none; transition: transform .15s ease; }
+.next-paket:hover { transform: translateY(-2px); }
+.next-paket .left .ttl { font-family: var(--mono); font-size: 10px; color: var(--accent-soft); letter-spacing: 0.14em; margin-bottom: 8px; }
+.next-paket .left h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.1; letter-spacing: -0.015em; }
+.next-paket .left h3 em { color: var(--accent); font-style: italic; font-weight: 500; }
+.next-paket .arrow { font-family: var(--mono); font-size: 32px; color: var(--accent); font-weight: 300; }
+
+footer { padding: 50px 0 70px; border-top: 1px solid var(--line-soft); background: var(--paper-2); }
+footer .inner { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; gap: 16px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 16px; font-weight: 300; }
+footer a { color: var(--accent); text-decoration: none; }
+
+/* ====== Panel-Mockups ====== */
+.panel-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 880px) { .panel-duo { grid-template-columns: 1fr; } }
+.panel-frame { background: var(--wm-bg); border: 1px solid oklch(0.30 0.01 260); border-radius: 13px; box-shadow: 0 26px 54px -28px rgba(6,8,12,.5); overflow: hidden; font-family: var(--sans); color: var(--wm-ink); font-size: 13px; line-height: 1.45; }
+.panel-frame * { box-sizing: border-box; }
+.panel-cap { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--wm-ink-mute); background: #171a20; border-bottom: 1px solid var(--wm-hair); padding: 8px 14px; display: flex; justify-content: space-between; }
+.panel-cap .var { color: var(--wm-amber); }
+.jv { background: #12161c; display: flex; flex-direction: column; }
+.jv-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.jv-grp { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; color: var(--wm-ink-mute); margin: 4px 2px 0; display: flex; justify-content: space-between; align-items: center; }
+.jv-grp .cnt { color: var(--wm-ink-soft); }
+.jv-grp .batch { font-family: var(--sans); font-size: 9.5px; font-weight: 600; color: var(--wm-green); background: var(--wm-green-soft); border: 1px solid rgba(61,220,151,.35); border-radius: 100px; padding: 2px 9px; letter-spacing: 0; }
+.jv-act { background: var(--wm-panel); border: 1px solid var(--wm-hair); border-radius: 10px; padding: 10px 11px; display: flex; flex-direction: column; gap: 6px; }
+.jv-act.applied { border-color: rgba(61,220,151,.3); }
+.jv-act.failed { border-color: rgba(255,107,107,.4); }
+.jv-act .kind { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.1em; color: var(--wm-purple); text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+.jv-act .kind .st { letter-spacing: 0.06em; }
+.jv-act .kind .st.ok { color: var(--wm-green); }
+.jv-act .kind .st.fail { color: var(--wm-red); }
+.jv-act .ttl { font-size: 12px; font-weight: 600; color: var(--wm-ink); }
+.jv-act .target { font-size: 10px; color: var(--wm-ink-mute); display: flex; gap: 6px; align-items: center; }
+.jv-act .target .proj { font-family: var(--mono); font-size: 9px; color: var(--wm-ink-soft); background: rgba(255,255,255,.05); border-radius: 4px; padding: 1px 5px; }
+.jv-act .ba { font-family: var(--mono); font-size: 10px; line-height: 1.55; background: var(--wm-bg); border: 1px solid var(--wm-hair); border-radius: 7px; padding: 6px 8px; color: var(--wm-ink-soft); }
+.jv-act .ba .neg { color: var(--wm-red); text-decoration: line-through; }
+.jv-act .ba .pos { color: var(--wm-green); }
+.jv-act .why { font-size: 10.5px; color: var(--wm-ink-mute); font-style: italic; }
+.jv-act .fail-msg { font-size: 10.5px; color: var(--wm-red); background: var(--wm-red-soft); border-radius: 6px; padding: 5px 8px; }
+.jv-act .prompt-block { font-family: var(--mono); font-size: 10px; line-height: 1.55; background: var(--wm-bg); border: 1px solid var(--wm-hair); border-radius: 7px; padding: 7px 9px; color: #c3cad4; }
+.jv-act .acts { display: flex; gap: 5px; margin-top: 3px; flex-wrap: wrap; }
+.jv-btn { display: inline-block; font-size: 10px; font-weight: 600; padding: 3.5px 9px; border-radius: 6px; border: 1px solid var(--wm-hair-strong); background: transparent; color: var(--wm-ink-soft); }
+.jv-btn.pri { background: var(--wm-green-soft); border-color: rgba(61,220,151,.4); color: var(--wm-green); }
+.jv-btn.danger { background: var(--wm-red-soft); border-color: rgba(255,107,107,.4); color: var(--wm-red); }
+.jv-btn.info { background: var(--wm-blue-soft); border-color: rgba(90,169,247,.4); color: var(--wm-blue); }
+.jv-btn.disabled { opacity: .4; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.working { background: var(--wm-green); }
+.dot.idle { background: #444c57; }
+
+@media print { nav.top { display: none; } section { page-break-inside: avoid; padding: 24px 0; } body { font-size: 11px; background: white; } a { color: var(--ink) !important; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <a href="../index.html" class="brand">WhisperM8 <span>✱</span> Jarvis</a>
+    <span class="crumb">› <b>Paket 03 · Aktionen, Drafts &amp; Send</b></span>
+    <span class="nav-links">
+      <a href="#uebersicht">Übersicht</a>
+      <a href="#kinds">Action-Kinds</a>
+      <a href="#mockups">Mockups</a>
+      <a href="#apply">Apply-Pipeline</a>
+      <a href="#daten">Daten</a>
+      <a href="#edge">Edges</a>
+    </span>
+    <span class="spacer"></span>
+    <span class="stamp">Rev 2 · 2026-07-04</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pretitle">PAKET 03 ✱ AKTIONEN ✱ SLICE 3–4</div>
+    <h1>Vorschlagen darf Jarvis. <em>Anfassen darfst du.</em></h1>
+    <p class="lede">Der Review-Layer: Jede Mutation ist eine Karte mit <b>Vorher/Nachher und Begründung</b>. Apply führt aus, Skip verwirft, Undo dreht zurück. Und der Höhepunkt des Loops: der Prompt-Draft, der per <b>Bracketed Paste</b> in die laufende PTY geht.</p>
+    <div class="meta">
+      <div><b>Segment</b>Aktionen (Queue + Drafts)</div>
+      <div><b>Slices</b>3 (Queue) + 4 (Send)</div>
+      <div><b>Mutations-Pfad</b>Immer AgentSessionStore</div>
+      <div><b>Sicherung</b>Revalidierung + Drift-Check + Undo</div>
+    </div>
+  </div>
+</header>
+
+<section id="uebersicht">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">00 ✱ ÜBERSICHT</span>
+      <h2>Review-first, <em>konkret.</em></h2>
+      <p class="section-kicker">Aus dem früheren Tool-Registry-Konzept bleibt der mutierende Teil: <code>JarvisActionRegistry</code> mit MCP-kompatibel benannten Schemas — v2 kann sie 1:1 als MCP-Tools exportieren.</p>
+    </div>
+    <div class="annotations">
+      <div class="anno-box">
+        <span class="tag">Input</span>
+        <h4>Woher Actions kommen</h4>
+        <ul>
+          <li><b>Brain-Turns</b> — Chat-Antworten enthalten <code>actions[]</code>-Drafts (ohne IDs)</li>
+          <li><b>„Workspace aufräumen"</b>-Button — ein Cleanup-Turn über den ganzen Snapshot</li>
+          <li><b>„Folgeprompt entwerfen"</b> auf Report-Karten — erzeugt Prompt-Drafts</li>
+          <li>Parser validiert Drafts gegen den Snapshot, mappt Titel → Session-ID, verwirft Unauflösbares</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Output</span>
+        <h4>Wohin Mutationen gehen</h4>
+        <ul>
+          <li><b>rename / group / archive</b> → <code>AgentSessionStore</code> (nie am Workspace-Store vorbei)</li>
+          <li><b>Tab öffnen / Session selektieren</b> → Host-Callbacks aus <code>AgentChatsView</code></li>
+          <li><b>PTY-Send</b> → <code>AgentTerminalController.sendPrompt</code> (Bracketed Paste)</li>
+          <li>Validierung <b>vor</b> dem <code>mutate</code>-Aufruf — nichts Teures unter dem Store-Lock</li>
+        </ul>
+      </div>
+    </div>
+    <div class="sidenote">
+      <div class="label">Undo als Vertrauens-Hebel</div>
+      <p>Rename/Group/Archive speichern den <code>before</code>-Wert — ein Klick „Rückgängig" auf angewendeten Karten stellt ihn wieder her. Das senkt die Hemmschwelle beim Reviewen deutlich und ist der Pfad, über den v2 <b>Auto-Apply für reversible Actions</b> anbieten kann.</p>
+    </div>
+  </div>
+</section>
+
+<section id="kinds" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">01 ✱ ACTION-KINDS</span>
+      <h2>Fünf Kinds, klare <em>Regeln.</em></h2>
+    </div>
+    <div class="states-grid">
+      <div class="row">
+        <div class="state-name">rename_session</div>
+        <div class="state-desc">Batch-fähig. <b>Schutz:</b> bei manuell gesetztem Titel (<code>titleIsAutoGenerated != true</code>) nur erlaubt, wenn die Action explizit als nutzer-angefragte Cleanup-Aktion markiert ist. Undo: alter Titel.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">set_session_group</div>
+        <div class="state-desc">Batch-fähig. Gruppiert Sessions thematisch (z. B. Sprint-Gruppen). Undo: alte Gruppe (auch <code>nil</code>).</div>
+      </div>
+      <div class="row">
+        <div class="state-name">archive_session</div>
+        <div class="state-desc"><b>Nie im Batch.</b> Abgelehnt, wenn Session <code>working</code> ist oder ein PTY läuft. Undo: Status zurück auf den vorherigen Wert.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">create_prompt_draft</div>
+        <div class="state-desc">Erzeugt einen <code>JarvisPromptDraft</code> — selbst keine Mutation am Workspace, darum ohne Apply-Schritt direkt sichtbar. Wird erst durch Copy/Send „benutzt".</div>
+      </div>
+      <div class="row">
+        <div class="state-name">send_prompt_draft_to_running_pty</div>
+        <div class="state-desc"><b>Nie im Batch, kein Undo.</b> Nur bei laufendem <code>AgentTerminalController</code>; sonst ist der Button deaktiviert und Copy/Tab-öffnen übernehmen. Höchste Review-Stufe: expliziter Klick pro Send.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="mockups">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">02 ✱ MOCKUPS</span>
+      <h2>Karten, Zustände, <em>Send.</em></h2>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label">
+        <span class="l">MOCKUP A</span>
+        <h3>Die Queue nach <em>„Workspace aufräumen"</em></h3>
+        <span class="path-pill">JarvisActionQueueView</span>
+      </div>
+      <p class="notes">Ein Cleanup-Turn hat vier Vorschläge erzeugt. Batch-Apply gibt es <b>nur</b> für die sicheren Kinds (Rename/Group) — Archive steht einzeln darunter und will einzeln geklickt werden.</p>
+      <div class="panel-duo">
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>AKTIONEN-SEGMENT</span><span class="var">STATE: 4 PENDING</span></div>
+          <div class="jv"><div class="jv-body">
+            <div class="jv-grp">SICHER · RENAME/GROUP <span class="batch">Alle 3 anwenden</span></div>
+            <div class="jv-act">
+              <div class="kind">rename_session</div>
+              <div class="ttl">Umbenennen</div>
+              <div class="target"><span class="proj">whisperm8</span>claude — 2026-07-04 09:12</div>
+              <div class="ba"><span class="neg">„claude — 2026-07-04 09:12"</span><br><span class="pos">„Pill-Redesign QA — Hover-States"</span></div>
+              <div class="why">Auto-Titel; Transcript dreht sich seit 40 min um Hover-QA.</div>
+              <div class="acts"><span class="jv-btn pri">Apply</span><span class="jv-btn">Skip</span></div>
+            </div>
+            <div class="jv-act">
+              <div class="kind">set_session_group</div>
+              <div class="ttl">Gruppieren: „SEO Sprint 27"</div>
+              <div class="target"><span class="proj">rankm8</span>SEO-Audit Blog · Keyword-Cluster</div>
+              <div class="ba"><span class="pos">2 Sessions → Gruppe „SEO Sprint 27"</span></div>
+              <div class="why">Beide arbeiten am selben Sprint-Ziel.</div>
+              <div class="acts"><span class="jv-btn pri">Apply</span><span class="jv-btn">Skip</span></div>
+            </div>
+            <div class="jv-grp" style="margin-top: 6px;">EINZELN · ARCHIVE</div>
+            <div class="jv-act">
+              <div class="kind" style="color: var(--wm-red);">archive_session</div>
+              <div class="ttl">Archivieren: „test-spike alt"</div>
+              <div class="target"><span class="proj">whisperm8</span>idle seit 11 Tagen · Titel manuell</div>
+              <div class="ba"><span class="pos">status → archived</span> · Undo möglich</div>
+              <div class="why">Kein Turn seit 11 Tagen, Projektziel laut Transcript erledigt.</div>
+              <div class="acts"><span class="jv-btn danger">Archivieren</span><span class="jv-btn">Skip</span></div>
+            </div>
+          </div></div>
+        </div>
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>AKTIONEN-SEGMENT</span><span class="var">STATE: NACH APPLY · 1 FAILED</span></div>
+          <div class="jv"><div class="jv-body">
+            <div class="jv-act applied">
+              <div class="kind">rename_session <span class="st ok">✓ APPLIED</span></div>
+              <div class="ttl">Umbenennen</div>
+              <div class="ba"><span class="pos">„Pill-Redesign QA — Hover-States"</span></div>
+              <div class="acts"><span class="jv-btn">Rückgängig</span></div>
+            </div>
+            <div class="jv-act applied">
+              <div class="kind">set_session_group <span class="st ok">✓ APPLIED</span></div>
+              <div class="ttl">Gruppieren: „SEO Sprint 27"</div>
+              <div class="acts"><span class="jv-btn">Rückgängig</span></div>
+            </div>
+            <div class="jv-act failed">
+              <div class="kind" style="color: var(--wm-red);">archive_session <span class="st fail">✕ FAILED</span></div>
+              <div class="ttl">Archivieren: „test-spike alt"</div>
+              <div class="fail-msg">Session ist inzwischen wieder <b>working</b> — Archiv abgelehnt. Vorschlag neu prüfen.</div>
+              <div class="acts"><span class="jv-btn">Verwerfen</span></div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+      <div class="annotations">
+        <div class="anno-box">
+          <span class="tag">States</span>
+          <h4>Karten-Lebenszyklus</h4>
+          <ul>
+            <li><code>pending</code> → <code>applied</code> / <code>skipped</code> / <code>failed</code> / <code>reverted</code></li>
+            <li><b>Applied-Karten</b> bleiben mit Undo-Button sichtbar, bis sie aus dem Prune fallen (max. 100)</li>
+            <li><b>Failed</b> zeigt die konkrete Ablehnung — Drift ist eine Information, kein stiller Fehler</li>
+            <li>Batch-Apply wendet nur die <b>sicheren</b> Karten der Gruppe an; jede validiert einzeln</li>
+          </ul>
+        </div>
+        <div class="anno-box">
+          <span class="tag">Apply-Validierung</span>
+          <h4>Beim Klick, nicht nur beim Vorschlag</h4>
+          <ul>
+            <li>Session existiert noch? Status kompatibel? (Archive nicht bei <code>working</code>/PTY)</li>
+            <li><b>Drift-Check:</b> ist der <code>before</code>-Wert noch aktuell? Wenn nicht → <code>failed</code> mit Meldung</li>
+            <li>Validierung + Git/Subprozess-freie Vorarbeit <b>vor</b> dem Store-<code>mutate</code> (Lock-Gotcha)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label">
+        <span class="l">MOCKUP B</span>
+        <h3>Prompt-Draft: <em>Send when running</em></h3>
+        <span class="path-pill">JarvisPromptDraft · sendPrompt(_:submit:)</span>
+      </div>
+      <p class="notes">Der Moment, für den das ganze Feature existiert: Report → Folgeprompt → <b>ein Klick, und der Prompt steht in der laufenden Session</b>. Rechts der Fall ohne laufenden PTY — Send ist aus, Copy und Tab-öffnen übernehmen.</p>
+      <div class="panel-duo">
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>PROMPT-DRAFT</span><span class="var">STATE: PTY LÄUFT → SEND AKTIV</span></div>
+          <div class="jv"><div class="jv-body">
+            <div class="jv-act">
+              <div class="kind" style="color: var(--wm-blue);">prompt_draft</div>
+              <div class="ttl">Review-Folgeprompt</div>
+              <div class="target"><span class="dot working"></span><span class="proj">heartbeat-website</span>Onboarding-Copy · PTY läuft</div>
+              <div class="prompt-block">Review den Copy-Diff in section-copy.md gegen die 5 Ton-Regeln aus landingpage-v2:<br>1. Du-Form durchgehend<br>2. Verb zuerst in CTAs<br>3. Kein Buzzword-Stack<br>…<br>Liste Abweichungen als Tabelle mit Zeilen-Referenz.</div>
+              <div class="why">3 CTAs weichen von Regel 4 ab — gezielter Review statt Komplett-Neuschrieb.</div>
+              <div class="acts"><span class="jv-btn">Copy</span><span class="jv-btn info">Tab öffnen</span><span class="jv-btn pri">Senden ▸</span></div>
+            </div>
+            <div class="jv-act applied" style="opacity:.75;">
+              <div class="kind" style="color: var(--wm-blue);">prompt_draft <span class="st ok">✓ SENT · 14:41</span></div>
+              <div class="ttl">GSC-Reauth + Neustart</div>
+              <div class="target"><span class="proj">rankm8</span>SEO-Audit Blog</div>
+            </div>
+          </div></div>
+        </div>
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>PROMPT-DRAFT</span><span class="var">STATE: KEIN PTY → SEND DISABLED</span></div>
+          <div class="jv"><div class="jv-body">
+            <div class="jv-act">
+              <div class="kind" style="color: var(--wm-blue);">prompt_draft</div>
+              <div class="ttl">Keyword-Cluster fortsetzen</div>
+              <div class="target"><span class="dot idle"></span><span class="proj">rankm8</span>Keyword-Cluster · kein laufender PTY</div>
+              <div class="prompt-block">Setze das Clustering fort: die 40 offenen Keywords aus batch-3.csv nach Suchintention gruppieren…</div>
+              <div class="acts"><span class="jv-btn">Copy</span><span class="jv-btn info">Tab öffnen &amp; einfügen</span><span class="jv-btn pri disabled">Senden ▸</span></div>
+              <div class="why" style="color: var(--wm-amber);">Send braucht eine laufende Session — „Tab öffnen &amp; einfügen" startet sie und legt den Prompt ins Eingabefeld.</div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+      <div class="annotations">
+        <div class="anno-box full">
+          <span class="tag">Bracketed Paste — der technische Kern des Send</span>
+          <h4>Warum roh senden kaputt wäre</h4>
+          <ul>
+            <li>Mehrzeiliger Prompt roh an <code>terminal.send(txt:)</code> → <b>jede Newline submitted sofort</b> in der Claude/Codex-TUI. Der Prompt kommt als fünf halbe Nachrichten an.</li>
+            <li>Fix: Text in <code>ESC[200~ … ESC[201~</code> wrappen — die TUI behandelt ihn als einen Paste-Block</li>
+            <li><code>submit == true</code>: Return erst <b>nach</b> dem Paste-Block, mit ~50–100 ms Delay, damit die TUI den Paste verarbeitet hat</li>
+            <li>V1 sendet ausschließlich nach explizitem Button-Klick — kein Auto-Send, auch nicht als Setting</li>
+            <li>Draft-Status wandert: <code>draft → copied / sent / failed</code>; „sent" zeigt Uhrzeit</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="apply" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">03 ✱ APPLY-PIPELINE</span>
+      <h2>Vom Klick zur <em>Mutation.</em></h2>
+    </div>
+    <div class="states-grid">
+      <div class="row">
+        <div class="state-name">1 · Revalidate</div>
+        <div class="state-desc">Snapshot frisch ziehen: Session existiert, Status kompatibel, <code>before</code>-Wert stimmt noch. Alles außerhalb des Store-Locks.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">2 · Mutate</div>
+        <div class="state-desc">Kürzest möglicher <code>AgentSessionStore</code>-Aufruf: <code>renameSession</code> / <code>setSessionGroup</code> / <code>updateSession {{ status = .archived }}</code>. Keine Subprozesse, kein I/O im Closure.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">3 · Record</div>
+        <div class="state-desc">Action-Status auf <code>applied</code>, <code>before</code>-Wert bleibt für Undo gespeichert. UI-nahe Effekte (Tab selektieren) über Host-Callback danach.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Undo</div>
+        <div class="state-desc">Gleiche Pipeline rückwärts mit vertauschtem before/after; Status → <code>reverted</code>. Undo revalidiert genauso — wer den Titel inzwischen manuell geändert hat, bekommt <code>failed</code> statt Überschreiben.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="daten">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">04 ✱ DATENMODELL</span>
+      <h2>Action und Draft als <em>Datensätze.</em></h2>
+    </div>
+    <div class="data-shape">
+<span class="comment">// JarvisActionProposal — persistiert (max. 100)</span>
+{
+  <span class="key">"id"</span>: <span class="str">"…App-vergeben"</span>,
+  <span class="key">"createdAt"</span>: <span class="str">"2026-07-04T14:38:20Z"</span>,
+  <span class="key">"kind"</span>: <span class="str">"renameSession"</span>,
+  <span class="key">"targetSessionID"</span>: <span class="str">"B31F…"</span>,
+  <span class="key">"title"</span>: <span class="str">"Umbenennen"</span>,
+  <span class="key">"rationale"</span>: <span class="str">"Auto-Titel; Transcript dreht sich um Hover-QA."</span>,
+  <span class="key">"before"</span>: <span class="str">"claude — 2026-07-04 09:12"</span>,
+  <span class="key">"after"</span>: <span class="str">"Pill-Redesign QA — Hover-States"</span>,
+  <span class="key">"payload"</span>: { <span class="key">"newTitle"</span>: <span class="str">"Pill-Redesign QA — Hover-States"</span> },
+  <span class="key">"status"</span>: <span class="str">"pending"</span>,   <span class="comment">// pending|applied|skipped|failed|reverted</span>
+  <span class="key">"failureMessage"</span>: <span class="str">null</span>
+}
+
+<span class="comment">// JarvisPromptDraft — persistiert (max. 100)</span>
+{
+  <span class="key">"id"</span>: <span class="str">"…App-vergeben"</span>,
+  <span class="key">"targetSessionID"</span>: <span class="str">"C7A2…"</span>,
+  <span class="key">"title"</span>: <span class="str">"Review-Folgeprompt"</span>,
+  <span class="key">"prompt"</span>: <span class="str">"Review den Copy-Diff in section-copy.md gegen…"</span>,
+  <span class="key">"rationale"</span>: <span class="str">"3 CTAs weichen von Regel 4 ab"</span>,
+  <span class="key">"status"</span>: <span class="str">"draft"</span>      <span class="comment">// draft|copied|sent|failed</span>
+}
+    </div>
+  </div>
+</section>
+
+<section id="edge" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">05 ✱ EDGE-CASES</span>
+      <h2>Die Kanten des <em>Review-Layers.</em></h2>
+    </div>
+    <div class="states-grid">
+      <div class="row">
+        <div class="state-name">Drift zwischen Proposal &amp; Apply</div>
+        <div class="state-desc">Nutzer benennt manuell um, während die Karte offen ist → Drift-Check schlägt an, Karte wird <code>failed</code> mit Erklärung. Nie stilles Überschreiben.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">PTY stirbt zwischen Klick &amp; Send</div>
+        <div class="state-desc">Send prüft den Controller <b>im Moment des Sendens</b>. Weg? → Draft-Status <code>failed</code> mit „Session nicht mehr aktiv", Copy/Tab-öffnen bleiben.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Session mid-Turn beim Send</div>
+        <div class="state-desc">Ziel-Session ist <code>working</code> → Send-Button zeigt „Senden nach Turn-Ende" als Tooltip und bleibt aus. Ein Prompt mitten in einen laufenden Turn zu pasten erzeugt Chaos.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Doppel-Apply</div>
+        <div class="state-desc">Zwei Fenster, dieselbe Karte: der zweite Apply trifft auf Status <code>applied</code> → No-op mit kurzem Hinweis. Action-Status ist Teil des globalen Stores, nicht fensterlokal.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Codex schlägt Unbekanntes vor</div>
+        <div class="state-desc">Unbekannter <code>kind</code> oder nicht auflösbare Session → Parser verwirft und loggt. Die Queue zeigt nur, was die App auch ausführen kann.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="border-top: none; padding-top: 0;">
+  <div class="wrap">
+    <a class="next-paket" href="../02-system/01-architektur.html">
+      <div class="left">
+        <div class="ttl">ALS NÄCHSTES</div>
+        <h3>Paket 04 — Architektur: Stores, Digest &amp; <em>Brain</em></h3>
+        <div style="margin-top: 8px; font-size: 13px; color: oklch(0.78 0.02 75); max-width: 540px; line-height: 1.5;">Unter der Haube: Snapshot-Builder, Digest-Routing, JarvisCodexClient und der Strict-JSON-Vertrag — inklusive aller Gotchas.</div>
+      </div>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <div class="sig"><em>Paket 03 · Aktionen, Drafts &amp; Send</em> · <a href="../index.html">← Hub</a></div>
+      <div style="text-align: right;">WhisperM8 · Jarvis v1<br>STAND 2026-07-04 ✱ REV 2</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('nav.top a[href^="#"]');
+  const sections = Array.from(document.querySelectorAll('section[id]'));
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => {
+      const id = l.getAttribute('href').slice(1);
+      if (id === current?.id) { l.style.color = 'var(--accent-deep)'; l.style.background = 'var(--accent-soft)'; }
+      else { l.style.color = ''; l.style.background = ''; }
+    });
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>

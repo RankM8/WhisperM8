@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 02 · Chat &amp; @-Mentions — Jarvis v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35); --ink-soft: oklch(0.42 0.02 35); --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78); --paper-2: oklch(0.945 0.012 72);
+  --line: oklch(0.80 0.02 70); --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28); --accent-soft: oklch(0.92 0.06 30); --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145); --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235); --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75); --amber-soft: oklch(0.94 0.06 80);
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --wm-bg:#0c0e12; --wm-panel:#171b22; --wm-ink:#e8ebf0; --wm-ink-soft:#9aa3af; --wm-ink-mute:#5c6570;
+  --wm-hair:rgba(255,255,255,.07); --wm-hair-strong:rgba(255,255,255,.13);
+  --wm-green:#3ddc97; --wm-green-soft:rgba(61,220,151,.14);
+  --wm-amber:#f2b13e; --wm-amber-soft:rgba(242,177,62,.14);
+  --wm-purple:#a78bfa; --wm-purple-soft:rgba(167,139,250,.14);
+  --wm-red:#ff6b6b; --wm-red-soft:rgba(255,107,107,.14);
+  --wm-blue:#5aa9f7; --wm-blue-soft:rgba(90,169,247,.14);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+
+nav.top { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter: saturate(160%) blur(10px); border-bottom: 1px solid var(--line-soft); }
+nav.top .inner { max-width: 1180px; margin: 0 auto; padding: 14px 32px; display: flex; gap: 14px; align-items: center; font-family: var(--mono); font-size: 12px; flex-wrap: wrap; }
+nav.top .brand { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 17px; color: var(--ink); text-decoration: none; }
+nav.top .brand span { color: var(--accent); }
+nav.top .crumb { color: var(--ink-mute); font-size: 11px; }
+nav.top .crumb b { color: var(--ink); font-weight: 500; }
+nav.top .nav-links { display: flex; gap: 2px; margin-left: 12px; flex-wrap: wrap; }
+nav.top a { color: var(--ink-soft); text-decoration: none; padding: 5px 9px; border-radius: 4px; }
+nav.top a:hover { color: var(--accent-deep); background: var(--accent-soft); }
+nav.top .spacer { flex: 1; }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px solid var(--accent); border-radius: 100px; letter-spacing: 0.06em; transform: rotate(-2deg); }
+
+.hero { padding: 70px 0 50px; }
+.hero .pretitle { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 26px; }
+.hero h1 { font-family: var(--serif); font-weight: 300; font-size: clamp(44px, 7vw, 88px); line-height: 0.94; letter-spacing: -0.03em; margin: 0 0 20px; }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.hero .lede { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(18px, 2.2vw, 26px); line-height: 1.4; max-width: 800px; color: var(--ink-soft); }
+.hero .lede b { font-weight: 500; color: var(--ink); }
+.hero .meta { margin-top: 42px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-mute); border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.hero .meta b { display: block; color: var(--ink); font-weight: 500; font-family: var(--serif); font-style: italic; font-size: 18px; margin-bottom: 4px; }
+@media (max-width: 720px) { .hero .meta { grid-template-columns: 1fr 1fr; } }
+
+section { padding: 70px 0; border-top: 1px solid var(--line-soft); }
+section.alt { background: var(--paper-2); }
+.section-head { margin-bottom: 36px; max-width: 840px; }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.14em; display: block; margin-bottom: 12px; }
+.section-head h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(28px, 4vw, 46px); line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.section-kicker { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 17px; line-height: 1.5; max-width: 720px; margin-top: 14px; }
+.section-kicker code { font-family: var(--mono); font-size: 13px; font-style: normal; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+
+.mockup-block { margin-top: 48px; }
+.mockup-block:first-of-type { margin-top: 24px; }
+.mockup-label { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.mockup-label .l { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.1em; font-weight: 500; }
+.mockup-label h3 { font-family: var(--serif); font-weight: 500; font-size: clamp(22px, 2.8vw, 30px); margin: 0; letter-spacing: -0.01em; }
+.mockup-label h3 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.mockup-label .path-pill { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px dashed var(--accent); border-radius: 4px; }
+.mockup-block .notes { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 15.5px; max-width: 780px; margin: 0 0 20px; line-height: 1.5; }
+.mockup-block .notes b { font-weight: 500; }
+
+.annotations { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anno-box { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 10px; padding: 18px 20px; }
+.anno-box.full { grid-column: 1 / -1; }
+.anno-box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+.anno-box h4 { margin: 0 0 8px; font-family: var(--serif); font-weight: 500; font-size: 16px; }
+.anno-box ul { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.anno-box ul li { padding: 4px 0 4px 16px; position: relative; border-top: 1px solid var(--line-soft); }
+.anno-box ul li:first-child { border-top: none; padding-top: 0; }
+.anno-box ul li::before { content: "›"; position: absolute; left: 0; color: var(--accent); font-family: var(--mono); }
+.anno-box ul li b { color: var(--ink); font-weight: 500; }
+.anno-box ul li code { font-family: var(--mono); font-size: 11.5px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; color: var(--accent-deep); }
+@media (max-width: 720px) { .annotations { grid-template-columns: 1fr; } }
+
+.states-grid { display: grid; grid-template-columns: 220px 1fr; gap: 0; margin-top: 8px; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.states-grid .row { display: contents; }
+.states-grid .row > div { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+.states-grid .row:last-child > div { border-bottom: none; }
+.states-grid .row .state-name { background: var(--paper-2); font-family: var(--mono); font-size: 11px; color: var(--ink); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; border-right: 1px solid var(--line-soft); }
+.states-grid .row .state-desc { background: var(--paper); font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.states-grid .row .state-desc b { color: var(--ink); font-weight: 500; }
+.states-grid .row .state-desc code { font-family: var(--mono); font-size: 11.5px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; color: var(--accent-deep); }
+@media (max-width: 720px) { .states-grid { grid-template-columns: 1fr; } .states-grid .row .state-name { border-right: none; } }
+
+.data-shape { background: var(--ink); color: var(--paper); border-radius: 12px; padding: 24px 26px; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; overflow-x: auto; margin-top: 8px; }
+.data-shape .comment { color: oklch(0.62 0.05 145); }
+.data-shape .key { color: var(--moss-soft); }
+.data-shape .str { color: oklch(0.85 0.10 80); }
+.data-shape .num { color: var(--accent-soft); }
+
+.sidenote { background: var(--paper-2); border-left: 3px solid var(--accent); padding: 18px 22px; margin: 28px 0 0; border-radius: 0 8px 8px 0; max-width: 840px; }
+.sidenote .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.sidenote p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--ink-soft); line-height: 1.5; font-weight: 300; }
+.sidenote code { font-family: var(--mono); font-size: 13px; font-style: normal; background: var(--paper); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+
+.next-paket { margin-top: 60px; padding: 36px 40px; background: var(--ink); color: var(--paper); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-decoration: none; transition: transform .15s ease; }
+.next-paket:hover { transform: translateY(-2px); }
+.next-paket .left .ttl { font-family: var(--mono); font-size: 10px; color: var(--accent-soft); letter-spacing: 0.14em; margin-bottom: 8px; }
+.next-paket .left h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.1; letter-spacing: -0.015em; }
+.next-paket .left h3 em { color: var(--accent); font-style: italic; font-weight: 500; }
+.next-paket .arrow { font-family: var(--mono); font-size: 32px; color: var(--accent); font-weight: 300; }
+
+footer { padding: 50px 0 70px; border-top: 1px solid var(--line-soft); background: var(--paper-2); }
+footer .inner { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; gap: 16px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 16px; font-weight: 300; }
+footer a { color: var(--accent); text-decoration: none; }
+
+/* ====== Panel-Mockups ====== */
+.panel-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 880px) { .panel-duo { grid-template-columns: 1fr; } }
+.panel-frame { background: var(--wm-bg); border: 1px solid oklch(0.30 0.01 260); border-radius: 13px; box-shadow: 0 26px 54px -28px rgba(6,8,12,.5); overflow: hidden; font-family: var(--sans); color: var(--wm-ink); font-size: 13px; line-height: 1.45; }
+.panel-frame * { box-sizing: border-box; }
+.panel-cap { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--wm-ink-mute); background: #171a20; border-bottom: 1px solid var(--wm-hair); padding: 8px 14px; display: flex; justify-content: space-between; }
+.panel-cap .var { color: var(--wm-amber); }
+.jv { background: #12161c; display: flex; flex-direction: column; position: relative; }
+.jv-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--wm-hair); display: flex; align-items: center; gap: 8px; }
+.jv-head .jv-ic { width: 24px; height: 24px; border-radius: 7px; background: linear-gradient(135deg, var(--wm-purple), #6d5bd0); display: grid; place-items: center; font-size: 12px; color: #fff; }
+.jv-head .jv-tt { font-weight: 600; font-size: 13px; }
+.jv-head .jv-st { font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; color: var(--wm-green); background: var(--wm-green-soft); border-radius: 100px; padding: 2px 8px; }
+.jv-head .jv-st.think { color: var(--wm-amber); background: var(--wm-amber-soft); }
+.jv-head .jv-st.err { color: var(--wm-red); background: var(--wm-red-soft); }
+.jv-head .spacer { flex: 1; }
+.jv-seg { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--wm-hair); }
+.jv-seg span { flex: 1; text-align: center; font-size: 11px; font-weight: 500; color: var(--wm-ink-mute); border: 1px solid transparent; border-radius: 7px; padding: 5px 0; }
+.jv-seg span.on { background: rgba(255,255,255,.08); color: var(--wm-ink); border-color: var(--wm-hair-strong); }
+.jv-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 300px; }
+.jv-msg { max-width: 94%; border-radius: 10px; padding: 8px 11px; font-size: 11.5px; line-height: 1.5; }
+.jv-msg.user { align-self: flex-end; background: var(--wm-purple-soft); border: 1px solid rgba(167,139,250,.3); color: var(--wm-ink); }
+.jv-msg.jarvis { align-self: flex-start; background: var(--wm-panel); border: 1px solid var(--wm-hair); color: var(--wm-ink-soft); }
+.jv-msg.jarvis b { color: var(--wm-ink); }
+.jv-msg.failed { border-color: rgba(255,107,107,.4); }
+.jv-msg .who { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.1em; color: var(--wm-ink-mute); margin-bottom: 4px; }
+.jv-msg ul { margin: 4px 0 2px; padding-left: 16px; }
+.jv-msg li { margin: 2px 0; }
+.jv-mention { font-family: var(--mono); font-size: 10px; background: var(--wm-blue-soft); color: var(--wm-blue); border-radius: 4px; padding: 0 4px; }
+.jv-think { align-self: flex-start; display: flex; flex-direction: column; gap: 5px; background: var(--wm-panel); border: 1px solid rgba(242,177,62,.3); border-radius: 10px; padding: 9px 12px; font-size: 11px; color: var(--wm-ink-soft); min-width: 200px; }
+.jv-think .step { display: flex; align-items: center; gap: 7px; }
+.jv-think .step .st-done { color: var(--wm-green); }
+.jv-think .step .st-run { color: var(--wm-amber); }
+.jv-think .step .st-wait { color: var(--wm-ink-mute); }
+.jv-composer { border-top: 1px solid var(--wm-hair); padding: 10px 12px; position: relative; }
+.jv-chips { display: flex; gap: 5px; margin-bottom: 7px; flex-wrap: wrap; }
+.jv-chip { font-family: var(--mono); font-size: 9.5px; color: var(--wm-blue); background: var(--wm-blue-soft); border: 1px solid rgba(90,169,247,.3); border-radius: 100px; padding: 2px 8px; }
+.jv-chip .x { color: var(--wm-ink-mute); margin-left: 4px; }
+.jv-input { display: flex; align-items: center; gap: 8px; background: var(--wm-panel); border: 1px solid var(--wm-hair-strong); border-radius: 9px; padding: 7px 10px; }
+.jv-input .txt { flex: 1; font-size: 11.5px; color: var(--wm-ink); }
+.jv-input .txt .caret { border-left: 1.5px solid var(--wm-purple); margin-left: 1px; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.jv-input .ph { flex: 1; font-size: 11.5px; color: var(--wm-ink-mute); }
+.jv-input .send { width: 22px; height: 22px; border-radius: 6px; background: var(--wm-purple); color: #fff; display: grid; place-items: center; font-size: 11px; flex: none; }
+.quick-row { display: flex; gap: 5px; margin-bottom: 7px; flex-wrap: wrap; }
+.quick-chip { font-size: 10px; font-weight: 600; color: var(--wm-ink-soft); background: rgba(255,255,255,.05); border: 1px solid var(--wm-hair-strong); border-radius: 100px; padding: 3px 10px; }
+/* Mention-Picker */
+.mention-pop { position: absolute; bottom: 66px; left: 12px; right: 12px; background: #1a1f28; border: 1px solid var(--wm-hair-strong); border-radius: 10px; box-shadow: 0 -14px 34px -14px rgba(0,0,0,.55); overflow: hidden; }
+.mention-pop .mp-head { font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; color: var(--wm-ink-mute); padding: 8px 12px 5px; }
+.mp-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 11.5px; color: var(--wm-ink-soft); }
+.mp-item.sel { background: var(--wm-blue-soft); color: var(--wm-ink); }
+.mp-item .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.mp-item .kind { margin-left: auto; font-family: var(--mono); font-size: 8.5px; color: var(--wm-ink-mute); border: 1px solid var(--wm-hair-strong); border-radius: 3px; padding: 0 4px; }
+.mp-item b { color: inherit; font-weight: 600; }
+.mp-item b mark { background: transparent; color: var(--wm-blue); }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot.working { background: var(--wm-green); }
+.dot.await { background: var(--wm-amber); }
+.dot.err { background: var(--wm-red); }
+.dot.idle { background: #444c57; }
+.dot.done { background: var(--wm-purple); }
+.dot.proj { background: transparent; border: 1.5px solid var(--wm-ink-mute); border-radius: 2px; width: 7px; height: 7px; }
+.jv-btn { display: inline-block; font-size: 10px; font-weight: 600; padding: 3.5px 9px; border-radius: 6px; border: 1px solid var(--wm-hair-strong); background: transparent; color: var(--wm-ink-soft); }
+.jv-btn.pri { background: var(--wm-green-soft); border-color: rgba(61,220,151,.4); color: var(--wm-green); }
+
+@media print { nav.top { display: none; } section { page-break-inside: avoid; padding: 24px 0; } body { font-size: 11px; background: white; } a { color: var(--ink) !important; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <a href="../index.html" class="brand">WhisperM8 <span>✱</span> Jarvis</a>
+    <span class="crumb">› <b>Paket 02 · Chat &amp; @-Mentions</b></span>
+    <span class="nav-links">
+      <a href="#uebersicht">Übersicht</a>
+      <a href="#budget">Budget</a>
+      <a href="#mockups">Mockups</a>
+      <a href="#turn">Turn-Ablauf</a>
+      <a href="#daten">Daten</a>
+      <a href="#edge">Edges</a>
+    </span>
+    <span class="spacer"></span>
+    <span class="stamp">Rev 2 · 2026-07-04</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pretitle">PAKET 02 ✱ CHAT ✱ SLICE 1 + 2</div>
+    <h1>Ein Chat, der weiß, <em>woran du arbeitest.</em></h1>
+    <p class="lede">Der Supervisor-Chat sitzt über dem Board. Mit <b>@-Mentions</b> holst du gezielt Sessions in den Kontext — sie bekommen das volle Digest-Budget, alles andere bleibt Metadaten. Genau <b>ein Codex-Aufruf pro Turn</b>, und die UI ist ehrlich über die Latenz.</p>
+    <div class="meta">
+      <div><b>Segment</b>Chat</div>
+      <div><b>Slices</b>1 (Skelett) + 2 (Mentions/Digests)</div>
+      <div><b>Engine</b>codex exec · seriell · 45–90 s Timeout</div>
+      <div><b>Purer Kern</b>JarvisMentionResolver</div>
+    </div>
+  </div>
+</header>
+
+<section id="uebersicht">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">00 ✱ ÜBERSICHT</span>
+      <h2>Was der Chat <em>ist — und was nicht.</em></h2>
+      <p class="section-kicker">Kein Tool-Loop, kein Auto-Pilot: Der Chat beantwortet Fragen über den Workspace, entwirft Folgeprompts und schlägt Aufräumaktionen vor. Alles Mutierende landet als Karte unter „Aktionen".</p>
+    </div>
+    <div class="annotations">
+      <div class="anno-box">
+        <span class="tag">Kann</span>
+        <h4>Typische Turns</h4>
+        <ul>
+          <li><b>„Was ist liegengeblieben?"</b> — Zusammenfassung über alle Attention-Sessions</li>
+          <li><b>„Vergleiche @a mit @b"</b> — Cross-Projekt-Analyse mit vollen Digests der Erwähnten</li>
+          <li><b>„Entwirf den Folgeprompt für @x"</b> — erzeugt <code>JarvisPromptDraft</code> unter Aktionen</li>
+          <li><b>„Räum den Workspace auf"</b> — erzeugt Rename/Group/Archive-Vorschläge als Karten</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Kann nicht (v1)</span>
+        <h4>Bewusste Grenzen</h4>
+        <ul>
+          <li><b>Keine Laufzeit-Tools</b> — Kontext wird vorab injiziert; Jarvis kann nicht „nachschlagen"</li>
+          <li><b>Keine Mutation direkt aus dem Chat</b> — immer über die Action-Queue mit Apply</li>
+          <li><b>Kein Streaming</b> — <code>codex exec</code> liefert erst am Ende; die Thinking-UI überbrückt</li>
+          <li><b>Keine AgentView-Subsessions</b> — <code>unsupportedAgentView</code>, klar kommuniziert</li>
+        </ul>
+      </div>
+    </div>
+    <div class="sidenote">
+      <div class="label">Warum kein Tool-Loop</div>
+      <p><code>codex exec</code> ist ein One-Shot-Prozess. Ein Read-only-Tool-Loop hieße mehrere Codex-Aufrufe pro Turn — Minuten Latenz, Kontext jedes Mal neu bezahlt. Der v1-Schnitt: <b>alles Relevante steht schon im Prompt</b>, gesteuert über @-Mentions. Echter Tool-Loop kommt in v2 als MCP.</p>
+    </div>
+  </div>
+</section>
+
+<section id="budget" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">01 ✱ KONTEXTBUDGET</span>
+      <h2>Wer erwähnt wird, bekommt <em>Budget.</em></h2>
+      <p class="section-kicker">Ohne explizite Referenzen müsste Jarvis raten, wofür er Kontext ausgibt — und du zahlst Digests für 20 Sessions, von denen dich zwei interessieren.</p>
+    </div>
+    <div class="states-grid">
+      <div class="row">
+        <div class="state-name">Volles Budget · ~12k</div>
+        <div class="state-desc">Digest + Tail für: <b>@-erwähnte Sessions</b>, die <b>aktuell selektierte</b> Session, Sessions mit <b>frischem ungelesenem Statuswechsel</b> (bei Report-/Cleanup-Turns). Ein erwähntes <b>Projekt</b> zieht seine aktiven Sessions mit kleinem Budget nach.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Metadaten · ~200</div>
+        <div class="state-desc">Alle übrigen Sessions: Snapshot-Zeile (Titel, Projekt, Status, Dauer) + Tier-1-Einzeiler. Genug für „was läuft"-Fragen, zu wenig für Inhaltsanalyse — das ist Absicht.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Gesamt · ~60k</div>
+        <div class="state-desc">Hartes Prompt-Budget. Bei Überschreitung werden Digests in <b>Attention-Reihenfolge</b> gekürzt, und der Prompt vermerkt explizit, was gekürzt wurde — Jarvis behauptet nie, etwas gelesen zu haben, das nicht drin war.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Resolver</div>
+        <div class="state-desc"><code>JarvisMentionResolver</code> ist pur und unit-getestet: Text + Snapshot → aufgelöste Session-IDs. Fuzzy-Match auf Titel und Projektname; mehrdeutige Treffer zeigt der Picker, er rät nicht.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="mockups">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">02 ✱ MOCKUPS</span>
+      <h2>Picker, Denken, <em>Scheitern.</em></h2>
+      <p class="section-kicker">Die drei Momente, die über das Chat-Gefühl entscheiden: Kontext wählen, warten können, Fehler aushalten.</p>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label">
+        <span class="l">MOCKUP A</span>
+        <h3>Der <em>Mention-Picker</em></h3>
+        <span class="path-pill">JarvisMentionResolver + Picker</span>
+      </div>
+      <p class="notes">„@" im Composer öffnet den Picker über dem Eingabefeld. Fuzzy-Match läuft über Titel <b>und</b> Projektname; Projekte sind eigene Einträge und ziehen ihre aktiven Sessions mit. Auswahl wird zum Chip über dem Feld.</p>
+      <div class="panel-duo">
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>CHAT-COMPOSER</span><span class="var">STATE: PICKER OFFEN · „@onbo"</span></div>
+          <div class="jv">
+            <div class="jv-body" style="min-height: 170px; opacity: .35;">
+              <div class="jv-msg user">Was ist heute liegengeblieben?</div>
+              <div class="jv-msg jarvis"><div class="who">JARVIS</div>Drei Dinge brauchen dich: …</div>
+            </div>
+            <div class="mention-pop">
+              <div class="mp-head">SESSIONS &amp; PROJEKTE · „onbo"</div>
+              <div class="mp-item sel"><span class="dot done"></span><b><mark>Onbo</mark>arding-Copy</b><span class="kind">SESSION · heartbeat</span></div>
+              <div class="mp-item"><span class="dot idle"></span><b><mark>Onbo</mark>arding-Fix Paywall</b><span class="kind">SESSION · rankm8</span></div>
+              <div class="mp-item"><span class="dot proj"></span><b>heartbeat-website</b><span class="kind">PROJEKT · 3 SESSIONS</span></div>
+            </div>
+            <div class="jv-composer">
+              <div class="jv-input"><span class="txt">Review den Diff von @onbo<span class="caret">&nbsp;</span></span><span class="send">↑</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>CHAT-COMPOSER</span><span class="var">STATE: CHIP GESETZT</span></div>
+          <div class="jv">
+            <div class="jv-body" style="min-height: 170px; opacity: .35;">
+              <div class="jv-msg user">Was ist heute liegengeblieben?</div>
+              <div class="jv-msg jarvis"><div class="who">JARVIS</div>Drei Dinge brauchen dich: …</div>
+            </div>
+            <div class="jv-composer">
+              <div class="jv-chips">
+                <span class="jv-chip">@heartbeat/onboarding-copy <span class="x">✕</span></span>
+              </div>
+              <div class="jv-input"><span class="txt">Review den Diff von @onboarding-copy gegen unsere Ton-Regeln<span class="caret">&nbsp;</span></span><span class="send">↑</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annotations">
+        <div class="anno-box">
+          <span class="tag">Interactions</span>
+          <h4>Picker-Verhalten</h4>
+          <ul>
+            <li><b>„@" tippen</b> öffnet den Picker; weitertippen filtert fuzzy über Titel + Projektname</li>
+            <li><b>↑/↓ + Enter</b> wählt; <b>Esc</b> schließt und lässt das „@" als Text stehen</li>
+            <li><b>Match-Highlights</b> im Treffer (blau) zeigen, warum ein Eintrag matcht</li>
+            <li><b>Projekt wählen</b> = Chip <code>@projekt</code>; im Turn bekommen dessen aktive Sessions kleines Budget</li>
+            <li>Chips sind <b>pro Turn</b> — nach dem Senden bleiben sie sichtbar, bis man sie entfernt (Folge-Fragen zur selben Session)</li>
+          </ul>
+        </div>
+        <div class="anno-box">
+          <span class="tag">States</span>
+          <h4>Sortierung im Picker</h4>
+          <ul>
+            <li>Erst <b>Attention-Kategorie</b> (wer dich braucht, steht oben), dann Fuzzy-Score</li>
+            <li>Session-Einträge zeigen Statuspunkt + Projekt; Projekt-Einträge die Session-Anzahl</li>
+            <li>Max. 6 Treffer sichtbar, Rest scrollt — der Picker ist ein Schnellzugriff, kein Browser</li>
+            <li>Archivierte Sessions erscheinen nicht (Snapshot enthält sie nicht)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label">
+        <span class="l">MOCKUP B</span>
+        <h3>Thinking-State: <em>ehrlich warten</em></h3>
+        <span class="path-pill">JarvisCodexClient · serielle Queue</span>
+      </div>
+      <p class="notes">10–45 Sekunden ohne Feedback fühlen sich tot an. Deshalb: Schritt-Anzeige statt nackter Spinner — <b>Snapshot → Transcripts → Codex</b> — und der Header wechselt auf THINKING. Der Rest des Panels bleibt bedienbar.</p>
+      <div class="panel-duo">
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>CHAT</span><span class="var">STATE: THINKING · SCHRITT 2/3</span></div>
+          <div class="jv">
+            <div class="jv-head">
+              <div class="jv-ic">✦</div><div class="jv-tt">Jarvis</div><div class="jv-st think">THINKING</div><div class="spacer"></div>
+            </div>
+            <div class="jv-body" style="min-height: 220px;">
+              <div class="jv-msg user">Vergleich den Copy-Ton von <span class="jv-mention">@onboarding-copy</span> mit <span class="jv-mention">@landingpage-v2</span> und entwirf den Review-Prompt.</div>
+              <div class="jv-think">
+                <div class="step"><span class="st-done">✓</span> Snapshot gebaut · 7 Sessions</div>
+                <div class="step"><span class="st-run">◐</span> Liest 2 Transcripts (Digest-Cache: 1 Hit)</div>
+                <div class="step"><span class="st-wait">○</span> Codex denkt …</div>
+              </div>
+            </div>
+            <div class="jv-composer">
+              <div class="jv-input"><span class="ph">Warten auf Antwort — Turn läuft…</span><span class="send" style="background: rgba(255,255,255,.12);">✕</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>CHAT</span><span class="var">STATE: ANTWORT + DRAFT-VERWEIS</span></div>
+          <div class="jv">
+            <div class="jv-head">
+              <div class="jv-ic">✦</div><div class="jv-tt">Jarvis</div><div class="jv-st">READY</div><div class="spacer"></div>
+            </div>
+            <div class="jv-body" style="min-height: 220px;">
+              <div class="jv-msg jarvis">
+                <div class="who">JARVIS · 14:36 · 2 DIGESTS GELESEN</div>
+                <b>Ton-Vergleich:</b> onboarding-copy ist bereits Du-Form, aber die CTAs nutzen noch Nominalstil („Jetzt Registrierung starten") — landingpage-v2 hatte dafür Regel 4: Verb zuerst.
+                <ul>
+                  <li>3 CTAs weichen ab, Rest ist konsistent</li>
+                  <li>Review-Prompt liegt als <b>Draft</b> bereit →</li>
+                </ul>
+                <span class="jv-btn pri">Draft unter Aktionen ansehen</span>
+              </div>
+            </div>
+            <div class="jv-composer">
+              <div class="jv-input"><span class="ph">Frag Jarvis — @ erwähnt eine Session…</span><span class="send">↑</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annotations">
+        <div class="anno-box">
+          <span class="tag">States</span>
+          <h4>Thinking-Mechanik</h4>
+          <ul>
+            <li><b>Schritt 1 + 2 sind echte App-Arbeit</b> (Snapshot, Digests) — der Fortschritt ist nicht simuliert</li>
+            <li><b>Schritt 3</b> („Codex denkt") zeigt verstrichene Zeit ab 10 s: <code>Codex denkt · 22 s</code></li>
+            <li><b>Abbrechen (✕)</b> killt den Codex-Prozess; der Turn landet als abgebrochen im Verlauf</li>
+            <li>Timeout 45 s (Chat) / 90 s (Cleanup/Briefing) → Fehler-State, kein ewiger Spinner</li>
+          </ul>
+        </div>
+        <div class="anno-box">
+          <span class="tag">Interactions</span>
+          <h4>Während des Turns</h4>
+          <ul>
+            <li><b>Composer gesperrt</b>, aber Segmente frei — Board und Aktionen bleiben voll bedienbar</li>
+            <li>Neue Tier-1-Reports erscheinen währenddessen normal (unabhängige Schicht)</li>
+            <li>Folge-Turns landen in der <b>seriellen Queue</b>; die UI zeigt „1 wartend"</li>
+            <li>Antworten verweisen auf erzeugte Drafts/Actions per Inline-Button statt Inhalte zu duplizieren</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label">
+        <span class="l">MOCKUP C</span>
+        <h3>Ohne Codex: <em>degradieren, nicht sterben</em></h3>
+        <span class="path-pill">Failure Modes · Quick-Replies</span>
+      </div>
+      <p class="notes">Links: Codex fehlt oder ist abgemeldet — der Chat erklärt es, Board und Historie bleiben. Rechts: Fragen, die die App <b>selbst beantworten kann</b>, kosten nie einen Codex-Call — Quick-Reply-Chips über dem Composer.</p>
+      <div class="panel-duo">
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>CHAT</span><span class="var">STATE: CODEX ERROR</span></div>
+          <div class="jv">
+            <div class="jv-head">
+              <div class="jv-ic">✦</div><div class="jv-tt">Jarvis</div><div class="jv-st err">CODEX ERROR</div><div class="spacer"></div>
+            </div>
+            <div class="jv-body" style="min-height: 200px;">
+              <div class="jv-msg jarvis failed">
+                <div class="who">SYSTEM · 14:31</div>
+                <b>Codex nicht erreichbar.</b> <code style="font-family: var(--mono); font-size: 10px;">codex: command not found</code><br>
+                Board, Reports und Aktionen funktionieren weiter — nur Chat und Analysen brauchen Codex.<br>
+                <span class="jv-btn" style="margin-top: 6px;">Setup-Hilfe öffnen</span>
+              </div>
+              <div class="jv-msg jarvis" style="opacity:.6;">
+                <div class="who">GESTERN · VERLAUF BLEIBT LESBAR</div>
+                Drei Dinge brauchen dich: …
+              </div>
+            </div>
+            <div class="jv-composer">
+              <div class="jv-input" style="opacity:.5;"><span class="ph">Chat deaktiviert — Codex fehlt</span><span class="send" style="background: rgba(255,255,255,.12);">↑</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel-frame" style="max-width: 460px;">
+          <div class="panel-cap"><span>CHAT</span><span class="var">STATE: QUICK-REPLIES · 0 LLM-KOSTEN</span></div>
+          <div class="jv">
+            <div class="jv-head">
+              <div class="jv-ic">✦</div><div class="jv-tt">Jarvis</div><div class="jv-st">READY</div><div class="spacer"></div>
+            </div>
+            <div class="jv-body" style="min-height: 200px;">
+              <div class="jv-msg user">Wer wartet auf mich?</div>
+              <div class="jv-msg jarvis">
+                <div class="who">JARVIS · SOFORT · OHNE CODEX</div>
+                <b>2 Sessions warten:</b>
+                <ul>
+                  <li><b>Pill-Redesign QA</b> — Frage zu Chip-Breiten (4 min)</li>
+                  <li><b>SEO-Audit Blog</b> — Fehler: GSC-Token (11 min)</li>
+                </ul>
+              </div>
+            </div>
+            <div class="jv-composer">
+              <div class="quick-row">
+                <span class="quick-chip">Wer wartet?</span>
+                <span class="quick-chip">Was läuft?</span>
+                <span class="quick-chip">Briefing ✦</span>
+              </div>
+              <div class="jv-input"><span class="ph">Frag Jarvis — @ erwähnt eine Session…</span><span class="send">↑</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annotations">
+        <div class="anno-box">
+          <span class="tag">Regel</span>
+          <h4>Snapshot-Fragen kosten nichts</h4>
+          <ul>
+            <li>„Wer wartet?", „Was läuft?", „Wie lange läuft X schon?" — beantwortet das <b>Attention-Modell direkt</b>, gerendert als normale Jarvis-Nachricht mit „SOFORT"-Kennung</li>
+            <li>Erkennung über die Quick-Reply-Chips (klick = garantiert LLM-frei) — Freitext geht im Zweifel an Codex</li>
+            <li>„Briefing ✦" ist als einziger Chip ein Codex-Turn (gebatchte Tier-2-Zusammenfassung) — das ✦ markiert LLM-Kosten</li>
+          </ul>
+        </div>
+        <div class="anno-box">
+          <span class="tag">Failure</span>
+          <h4>Fehler-Verhalten</h4>
+          <ul>
+            <li><b>Codex fehlt/abgemeldet</b>: Header-Status CODEX ERROR, Composer deaktiviert, Setup-Hinweis; alles andere läuft</li>
+            <li><b>Kaputtes JSON</b> (auch nach Fence-Stripping): Raw-Output als failed-Event einsehbar, keine Actions erzeugt</li>
+            <li><b>Timeout</b>: klare Meldung mit „Erneut senden" — der Prompt geht nicht verloren</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="turn" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">03 ✱ TURN-ABLAUF</span>
+      <h2>Ein Turn, <em>fünf Schritte.</em></h2>
+    </div>
+    <div class="states-grid">
+      <div class="row">
+        <div class="state-name">1 · Resolve</div>
+        <div class="state-desc"><code>JarvisMentionResolver</code> löst Chips + Inline-@ gegen den Snapshot auf. Mehrdeutig → Picker fragt nach, der Turn startet erst danach.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">2 · Collect</div>
+        <div class="state-desc">Snapshot (MainActor) → <code>Sendable</code>-Kopie; Digests für Budget-Sessions off-main aus dem LRU-Cache oder frisch (mtime/size-Key).</div>
+      </div>
+      <div class="row">
+        <div class="state-name">3 · Build</div>
+        <div class="state-desc">Prompt Builder: Systemprompt + Snapshot kompakt + Digests + letzte N Chat-Messages + Action-Schemas + Auftrag. Budget-Kürzung in Attention-Reihenfolge, Kürzungen im Prompt vermerkt.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">4 · Execute</div>
+        <div class="state-desc"><code>codex exec --sandbox read-only</code>, Prompt via <b>stdin</b>, Antwort via <code>--output-last-message</code>. Serielle Queue, Timeout 45/90 s, Prozess-Kill bei Abbruch.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">5 · Apply</div>
+        <div class="state-desc">Fence-toleranter Strict-JSON-Parser. <b>IDs vergibt die App.</b> Message → Chat, Action-Drafts → validiert → Queue, Prompt-Drafts → Aktionen-Segment. Ungültiges wird geloggt und verworfen.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="daten">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">04 ✱ DATENMODELL</span>
+      <h2>Nachricht und <em>Antwortvertrag.</em></h2>
+    </div>
+    <div class="data-shape">
+<span class="comment">// JarvisChatMessage — persistiert (max. 200)</span>
+{
+  <span class="key">"id"</span>: <span class="str">"…App-vergeben"</span>,
+  <span class="key">"role"</span>: <span class="str">"user"</span>,            <span class="comment">// "user" | "jarvis" | "system"</span>
+  <span class="key">"text"</span>: <span class="str">"Review den Diff von @onboarding-copy…"</span>,
+  <span class="key">"mentionedSessionIDs"</span>: [<span class="str">"C7A2…"</span>],
+  <span class="key">"outcome"</span>: <span class="str">"ok"</span>,           <span class="comment">// "ok" | "failed" | "cancelled" | "instant"</span>
+  <span class="key">"createdAt"</span>: <span class="str">"2026-07-04T14:35:02Z"</span>
+}
+
+<span class="comment">// JarvisBrainResponse — was Codex liefern MUSS (kein toolCalls-Feld!)</span>
+{
+  <span class="key">"assistantMessage"</span>: <span class="str">"Ton-Vergleich: …"</span>,
+  <span class="key">"reports"</span>: [],                <span class="comment">// Tier-2-Anreicherungen (Draft-Typ, ohne IDs)</span>
+  <span class="key">"actions"</span>: [],                <span class="comment">// Mutations-Vorschläge (Draft-Typ)</span>
+  <span class="key">"promptDrafts"</span>: [
+    { <span class="key">"targetSessionTitle"</span>: <span class="str">"Onboarding-Copy"</span>,
+      <span class="key">"title"</span>: <span class="str">"Review-Folgeprompt"</span>,
+      <span class="key">"prompt"</span>: <span class="str">"Review den Copy-Diff gegen…"</span>,
+      <span class="key">"rationale"</span>: <span class="str">"3 CTAs weichen von Regel 4 ab"</span> }
+  ]
+}
+    </div>
+    <div class="sidenote">
+      <div class="label">Parser-Leitplanke</div>
+      <p>Draft-Typen referenzieren Sessions über Titel/Kontext — der Parser mappt gegen den Snapshot und <b>verwirft</b>, was nicht eindeutig auflösbar ist. Codex erfindet keine UUIDs, keine Timestamps, keine Stati.</p>
+    </div>
+  </div>
+</section>
+
+<section id="edge" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">05 ✱ EDGE-CASES</span>
+      <h2>Chat-spezifische <em>Kanten.</em></h2>
+    </div>
+    <div class="states-grid">
+      <div class="row">
+        <div class="state-name">Mention auf tote Session</div>
+        <div class="state-desc">Session wurde zwischen Chip und Senden archiviert/gelöscht → Resolver schlägt beim Turn-Start fehl, Chip färbt rot, Turn startet nicht. Kein halber Kontext.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Digest zu groß</div>
+        <div class="state-desc">Drei @-Mentions à 12k sprengen das 60k-Gesamtbudget → Kürzung in Attention-Reihenfolge; die Antwort beginnt mit dem Hinweis, welche Session nur teilweise gelesen wurde.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">Antwort behauptet Mutation</div>
+        <div class="state-desc">Systemprompt verbietet es; falls Codex trotzdem „ich habe umbenannt" schreibt, ohne Action-Draft: Message wird angezeigt, aber der Parser hängt einen Systemhinweis an („keine Aktion erzeugt").</div>
+      </div>
+      <div class="row">
+        <div class="state-name">App-Neustart mid-Turn</div>
+        <div class="state-desc">Laufender Codex-Prozess stirbt mit der App. Beim Start: offene Turns als <code>cancelled</code> markieren — nie ein ewiger THINKING-Header aus persistiertem State.</div>
+      </div>
+      <div class="row">
+        <div class="state-name">200-Message-Prune</div>
+        <div class="state-desc">Chat-Verlauf ist Arbeitskontext, kein Archiv. Prune schneidet älteste zuerst; der Prompt Builder nutzt ohnehin nur die letzten N Messages.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="border-top: none; padding-top: 0;">
+  <div class="wrap">
+    <a class="next-paket" href="03-aktionen.html">
+      <div class="left">
+        <div class="ttl">ALS NÄCHSTES</div>
+        <h3>Paket 03 — Aktionen, Drafts &amp; <em>Send</em></h3>
+        <div style="margin-top: 8px; font-size: 13px; color: oklch(0.78 0.02 75); max-width: 540px; line-height: 1.5;">Der Review-Layer: Action-Karten mit Vorher/Nachher, Apply/Skip/Undo — und der Bracketed-Paste-Send in die laufende PTY.</div>
+      </div>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <div class="sig"><em>Paket 02 · Chat &amp; @-Mentions</em> · <a href="../index.html">← Hub</a></div>
+      <div style="text-align: right;">WhisperM8 · Jarvis v1<br>STAND 2026-07-04 ✱ REV 2</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('nav.top a[href^="#"]');
+  const sections = Array.from(document.querySelectorAll('section[id]'));
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => {
+      const id = l.getAttribute('href').slice(1);
+      if (id === current?.id) { l.style.color = 'var(--accent-deep)'; l.style.background = 'var(--accent-soft)'; }
+      else { l.style.color = ''; l.style.background = ''; }
+    });
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>
