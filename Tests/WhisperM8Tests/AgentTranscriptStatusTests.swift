@@ -100,6 +100,54 @@ final class AgentTranscriptStatusTests: XCTestCase {
         XCTAssertEqual(decision?.turnFinished, true, "Erstes Stop-Event muss als turnFinished melden")
     }
 
+    func testStatusDeciderTreatsToolUseStopAsWorkingNotTurnFinished() {
+        // Regression: Während ein langlaufendes Bash-/Tool-Kommando läuft, ist
+        // die letzte JSONL-Zeile die Assistant-Message mit stop_reason
+        // "tool_use". Diese darf NICHT als Turn-Ende gelten — sonst feuert die
+        // „Agent fertig"-Notification, während der Chat noch arbeitet
+        // („Whirlpooling…").
+        let now = Date()
+        let event: AgentTranscriptEvent = .assistantMessageStopped(timestamp: now, stopReason: "tool_use")
+        let decision = AgentTranscriptStatusDecider.decide(
+            lastEvent: event,
+            fileMTime: now,
+            now: now,
+            priorTurnFinishedAt: nil
+        )
+        XCTAssertEqual(decision?.status, .working, "tool_use bedeutet: Agent arbeitet weiter")
+        XCTAssertEqual(decision?.turnFinished, false, "tool_use darf kein Turn-Ende melden")
+    }
+
+    func testStatusDeciderTreatsPauseTurnStopAsWorking() {
+        let now = Date()
+        let event: AgentTranscriptEvent = .assistantMessageStopped(timestamp: now, stopReason: "pause_turn")
+        let decision = AgentTranscriptStatusDecider.decide(
+            lastEvent: event,
+            fileMTime: now,
+            now: now,
+            priorTurnFinishedAt: nil
+        )
+        XCTAssertEqual(decision?.status, .working)
+        XCTAssertEqual(decision?.turnFinished, false)
+    }
+
+    func testStatusDeciderStillFinishesTurnForRealEndReasons() {
+        // Echte Turn-Enden bleiben unangetastet.
+        for reason in ["end_turn", "stop_sequence", "max_tokens"] {
+            let now = Date()
+            let stopped = now.addingTimeInterval(-1)
+            let event: AgentTranscriptEvent = .assistantMessageStopped(timestamp: stopped, stopReason: reason)
+            let decision = AgentTranscriptStatusDecider.decide(
+                lastEvent: event,
+                fileMTime: stopped,
+                now: now,
+                priorTurnFinishedAt: nil
+            )
+            XCTAssertEqual(decision?.status, .idle, "\(reason) ist ein echtes Turn-Ende")
+            XCTAssertEqual(decision?.turnFinished, true, "\(reason) muss turnFinished melden")
+        }
+    }
+
     func testStatusDeciderSuppressesTurnFinishedReDetection() {
         let now = Date()
         let stoppedAt = now.addingTimeInterval(-2)

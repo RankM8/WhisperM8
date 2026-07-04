@@ -157,6 +157,19 @@ enum AgentTranscriptStatusDecider {
     /// Schwellwert: ab wann gilt eine ruhige Session ohne erkannten Stop als idle.
     static let idleAfterSeconds: TimeInterval = 30
 
+    /// `stop_reason`-Werte einer Claude-Assistant-Message, die KEIN Turn-Ende
+    /// bedeuten (Anthropic-API): der Agent hat nur einen Tool-Aufruf abgesetzt
+    /// (`tool_use`) bzw. eine Server-seitige Pause (`pause_turn`) und arbeitet
+    /// danach weiter. Echte Turn-Enden sind `end_turn`, `stop_sequence`,
+    /// `max_tokens`, `refusal` (bzw. fehlendes/`null` stop_reason → `.ongoing`).
+    ///
+    /// Kern des „Agent fertig obwohl noch Whirlpooling"-Bugs: während ein
+    /// langlaufendes Bash-/Tool-Kommando läuft, ist die letzte JSONL-Zeile
+    /// genau die Assistant-Message mit `stop_reason == "tool_use"`. Sie als
+    /// Turn-Ende zu werten meldete `turnFinished` und löste die Fertig-
+    /// Notification aus, während der Turn noch lief.
+    static let continuationStopReasons: Set<String> = ["tool_use", "pause_turn"]
+
     /// - Parameter lastEvent: das letzte parsebare Event aus dem Transcript-Tail.
     /// - Parameter fileMTime: `Date` der letzten Datei-Modifikation.
     /// - Parameter now: aktuelle Zeit (injizierbar für Tests).
@@ -183,7 +196,15 @@ enum AgentTranscriptStatusDecider {
         case .userMessage:
             return Decision(status: .working, turnFinished: false)
 
-        case .assistantMessageStopped(let timestamp, _):
+        case .assistantMessageStopped(let timestamp, let stopReason):
+            // Tool-Aufruf/Pause ist KEIN Turn-Ende — der Agent arbeitet weiter,
+            // sobald das Tool-Result vorliegt. Ohne diese Weiche wertete jeder
+            // laufende Bash-/Tool-Schritt (dessen Assistant-Zeile die letzte im
+            // JSONL ist) fälschlich als Turn-Ende → Fertig-Notification trotz
+            // noch laufendem Chat.
+            if let stopReason, Self.continuationStopReasons.contains(stopReason) {
+                return Decision(status: .working, turnFinished: false)
+            }
             let turnFinished: Bool = {
                 guard let prior = priorTurnFinishedAt else { return true }
                 guard let timestamp else {
