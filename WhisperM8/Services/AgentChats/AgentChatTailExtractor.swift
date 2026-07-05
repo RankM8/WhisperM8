@@ -155,8 +155,12 @@ enum AgentChatTailExtractor {
         messages: [AgentChatMessage],
         maxCharacters: Int = defaultMaxCharacters
     ) -> String? {
-        let lastAssistant = messages.last(where: { $0.role == .assistant })
-        let lastUser = messages.last(where: { $0.role == .user })
+        // Bewusst die letzte Message MIT Klartext — seit der Codex-Reader
+        // auch Tool-Aktivitaet liefert (toolUse-only Assistant-Messages,
+        // toolResult-only User-Messages), waere "letzte Message der Rolle"
+        // oft textleer und der Kontext-Tail verloere seinen Inhalt.
+        let lastAssistant = messages.last(where: { $0.role == .assistant && plainText(from: $0) != nil })
+        let lastUser = messages.last(where: { $0.role == .user && plainText(from: $0) != nil })
         var lines: [String] = []
         if let user = lastUser, let text = plainText(from: user) {
             lines.append("[user] \(text)")

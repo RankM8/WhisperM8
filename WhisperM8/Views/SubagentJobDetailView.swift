@@ -21,6 +21,9 @@ struct SubagentJobDetailView: View {
     /// EINMALIG aufgelöste Rollout-JSONL-URL (rekursiver ~/.codex-Walk ist
     /// teuer — nie pro Render/Event neu suchen).
     @State private var cachedTranscriptURL: URL?
+    /// Tail-first wie in AgentSessionDetailView: initial nur das Dateiende,
+    /// mehr Verlauf per ×4-Eskalation auf User-Klick.
+    @State private var transcriptTailBytes = TranscriptTailReader.defaultTailBytes
     @State private var eventSource: FileEventSource?
     @State private var transcriptReloadTask: Task<Void, Never>?
     @State private var composerText = ""
@@ -57,9 +60,19 @@ struct SubagentJobDetailView: View {
 
             resultCard
 
-            AgentChatTranscriptView(transcript: transcript, session: session)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+            AgentTranscriptContainerView(
+                transcript: transcript,
+                session: session,
+                isWorking: snapshot?.isActive == true,
+                onLoadEarlierHistory: {
+                    transcriptTailBytes *= 4
+                    if let url = cachedTranscriptURL {
+                        reloadTranscript(from: url)
+                    }
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 8))
 
             composer
         }
@@ -197,28 +210,54 @@ struct SubagentJobDetailView: View {
             }
 
             if let report {
+                // Summary als Fließtext im Timeline-Ton — Details darunter
+                // als kompakte Op-Zeilen (Stil der Aktivitäts-Details).
                 Text(report.summary)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12.5))
                     .foregroundStyle(AgentTheme.textPrimary)
+                    .lineSpacing(2)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                if !report.filesChanged.isEmpty {
-                    Text(report.filesChanged.joined(separator: "  ·  "))
-                        .font(.system(size: 10).monospaced())
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        .lineLimit(3)
-                        .textSelection(.enabled)
+
+                if !report.filesChanged.isEmpty || !report.commits.isEmpty || report.testsRun != nil {
+                    VStack(alignment: .leading, spacing: 2.5) {
+                        ForEach(report.filesChanged, id: \.self) { file in
+                            reportRow(glyph: "±", glyphColor: AgentTheme.accent, text: file)
+                        }
+                        ForEach(Array(report.commits.enumerated()), id: \.offset) { _, commit in
+                            reportRow(
+                                glyph: "⌥",
+                                glyphColor: AgentTheme.accentDiffPos,
+                                text: "\(commit.sha.prefix(7)) \(commit.message)"
+                            )
+                        }
+                        if let tests = report.testsRun {
+                            reportRow(
+                                glyph: tests.passed ? "✓" : "✗",
+                                glyphColor: tests.passed ? AgentTheme.statusWorking : AgentTheme.statusError,
+                                text: tests.command
+                            )
+                        }
+                    }
+                    .padding(.leading, 2)
+                    .padding(.top, 2)
                 }
-                if let tests = report.testsRun {
-                    Text("\(tests.passed ? "✓" : "✗") \(tests.command)")
-                        .font(.system(size: 10).monospaced())
-                        .foregroundStyle(tests.passed ? AgentTheme.statusWorking : AgentTheme.statusError)
-                }
+
                 if !report.openQuestions.isEmpty {
-                    Text("Offen: " + report.openQuestions.joined(separator: " · "))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(report.openQuestions, id: \.self) { question in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("?")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(AgentTheme.statusAwaiting)
+                                Text(question)
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(AgentTheme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
                 }
             } else if let rawLastMessage {
                 // Nicht als Report parsebar → Rohtext durchreichen statt
@@ -248,6 +287,23 @@ struct SubagentJobDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AgentTheme.border, lineWidth: 1))
+    }
+
+    /// Kompakte Op-Zeile im Stil der Timeline-Aktivitäts-Details.
+    @ViewBuilder
+    private func reportRow(glyph: String, glyphColor: Color, text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(glyph)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(glyphColor)
+                .frame(width: 11, alignment: .center)
+            Text(text)
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(AgentTheme.textSecondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
     }
 
     private func reportStatusColor(_ status: AgentReport.Status) -> Color {
@@ -462,9 +518,10 @@ struct SubagentJobDetailView: View {
     }
 
     private func reloadTranscript(from url: URL) {
+        let tailBytes = transcriptTailBytes
         Task {
             let fresh = await Task.detached(priority: .utility) {
-                CodexTranscriptReader.readTail(fileURL: url)
+                CodexTranscriptReader.readTail(fileURL: url, tailBytes: tailBytes)
             }.value
             transcript = fresh
         }

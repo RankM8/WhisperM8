@@ -10,16 +10,23 @@ import Foundation
 /// - `session_meta` (1× am Anfang)
 /// - `turn_context`
 /// - `response_item` — granulare Events (message, function_call,
-///   function_call_output, reasoning, ...)
+///   function_call_output, reasoning, tool_search_call, ...)
 /// - `event_msg` — High-Level-Events:
 ///   - `user_message` (das, was der Nutzer tatsaechlich getippt hat)
-///   - `agent_message` (Codex' finale Antwort)
-///   - `exec_command_end`, `token_count`, `task_*` (Status, fuer uns
-///     uninteressant)
+///   - `agent_message` (Codex' Antwort-Texte, phase commentary|final_answer)
+///   - `token_count`, `task_*` (Status, fuer uns uninteressant)
 ///
-/// Fuer die Chat-Ansicht nehmen wir die `event_msg`-Variante (user_message
-/// + agent_message) — das ist Codex' eigene "high-level dialog"-Semantik
-/// und matched 1:1 wie Claude's user/assistant.
+/// Quellen-Aufteilung (verifiziert an echten Rollouts, codex 0.142.5):
+/// - **Texte** aus `event_msg` (user_message + agent_message) — die
+///   `response_item/message`-Zeilen sind 1:1-DUPLIKATE derselben Texte
+///   (role user/assistant/developer, inkl. AGENTS.md-Injektionen) und
+///   werden deshalb bewusst uebersprungen.
+/// - **Tool-Aktivitaet** NUR aus `response_item`: `function_call` →
+///   `.toolUse`, `function_call_output` → `.toolResult` (isError aus dem
+///   "Process exited with code N"-Praefix), `tool_search_call` →
+///   `.toolUse`.
+/// - `reasoning` ist verschluesselt (`encrypted_content`); lesbar ist
+///   hoechstens `summary` — nur dann wird ein `.thinking`-Block erzeugt.
 enum CodexTranscriptReader {
 
     /// Loest den JSONL-Pfad fuer eine (cwd, sessionID)-Kombi auf. Codex
@@ -59,6 +66,7 @@ enum CodexTranscriptReader {
         var messages: [AgentChatMessage] = []
         var lineNumber = 0
         var skipped = 0
+        var idGenerator = TranscriptStableIDGenerator()
 
         let stream = LineStream(fileURL: fileURL)
         for line in stream {
@@ -69,7 +77,7 @@ enum CodexTranscriptReader {
                 continue
             }
             if let message = parseEntry(obj) {
-                messages.append(message)
+                messages.append(idGenerator.assign(message))
             }
         }
 
@@ -85,7 +93,9 @@ enum CodexTranscriptReader {
     }
 
     static func readTail(fileURL: URL, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript {
-        let messages = TranscriptTailReader.tailLines(fileURL: fileURL, tailBytes: tailBytes)
+        var idGenerator = TranscriptStableIDGenerator()
+        let (lines, truncatedHead) = TranscriptTailReader.tailLinesWithTruncation(fileURL: fileURL, tailBytes: tailBytes)
+        let messages = lines
             .compactMap { line -> AgentChatMessage? in
                 guard let data = line.data(using: .utf8),
                       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -93,7 +103,8 @@ enum CodexTranscriptReader {
                 }
                 return parseEntry(obj)
             }
-        return AgentChatTranscript(messages: messages, isLiveSourcePossible: true)
+            .map { idGenerator.assign($0) }
+        return AgentChatTranscript(messages: messages, isLiveSourcePossible: true, hasTruncatedHead: truncatedHead)
     }
 
     /// Parst eine JSONL-Zeile zur `AgentChatMessage`, falls's ein anzeigbarer
@@ -127,14 +138,97 @@ enum CodexTranscriptReader {
                 return nil
             }
         case "response_item":
-            // Optionaler Pfad: function_call als zusaetzliche Assistant-Block.
-            // Aktuell skippen wir die Detail-Events; agent_message liefert die
-            // Endsumme. Falls man spaeter feingranular zeigen will, hier
-            // erweitern.
-            return nil
+            guard let payload = obj["payload"] as? [String: Any] else { return nil }
+            return parseResponseItem(payload, timestamp: timestamp)
         default:
             return nil
         }
+    }
+
+    /// Tool-Aktivitaet aus dem granularen `response_item`-Strom.
+    /// `message`-Items werden bewusst NICHT gemappt (Duplikate der
+    /// event_msg-Texte — siehe Header-Kommentar).
+    private static func parseResponseItem(_ payload: [String: Any], timestamp: Date?) -> AgentChatMessage? {
+        switch payload["type"] as? String ?? "" {
+        case "function_call":
+            let name = payload["name"] as? String ?? "tool"
+            let input = payload["arguments"] as? String ?? ""
+            return AgentChatMessage(
+                id: UUID(),
+                role: .assistant,
+                timestamp: timestamp,
+                blocks: [.toolUse(name: name, input: input)]
+            )
+        case "function_call_output":
+            let output = extractFunctionOutput(payload["output"])
+            guard !output.isEmpty else { return nil }
+            return AgentChatMessage(
+                id: UUID(),
+                role: .user, // Claude-Konvention: Results kommen als User-Message zurueck
+                timestamp: timestamp,
+                blocks: [.toolResult(content: output, isError: outputIndicatesFailure(output))]
+            )
+        case "tool_search_call":
+            let input: String
+            if let arguments = payload["arguments"],
+               let data = try? JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys]),
+               let str = String(data: data, encoding: .utf8) {
+                input = str
+            } else {
+                input = ""
+            }
+            return AgentChatMessage(
+                id: UUID(),
+                role: .assistant,
+                timestamp: timestamp,
+                blocks: [.toolUse(name: "tool_search", input: input)]
+            )
+        case "reasoning":
+            // encrypted_content ist per Design unlesbar — nur eine ggf.
+            // vorhandene Klartext-Summary wird angezeigt.
+            let summary = extractReasoningSummary(payload["summary"])
+            guard !summary.isEmpty else { return nil }
+            return AgentChatMessage(
+                id: UUID(),
+                role: .assistant,
+                timestamp: timestamp,
+                blocks: [.thinking(summary)]
+            )
+        default:
+            return nil
+        }
+    }
+
+    /// Outputs sind in der Praxis Strings; defensiv auch Dicts tolerieren.
+    private static func extractFunctionOutput(_ raw: Any?) -> String {
+        if let str = raw as? String { return str }
+        if let dict = raw as? [String: Any] {
+            if let content = dict["content"] as? String { return content }
+            if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
+               let str = String(data: data, encoding: .utf8) {
+                return str
+            }
+        }
+        return ""
+    }
+
+    /// Codex praefixt Kommando-Outputs mit "Process exited with code N".
+    private static func outputIndicatesFailure(_ output: String) -> Bool {
+        guard let range = output.range(of: #"Process exited with code (\d+)"#, options: .regularExpression) else {
+            return false
+        }
+        let digits = output[range].components(separatedBy: " ").last ?? "0"
+        return Int(digits).map { $0 != 0 } ?? false
+    }
+
+    /// Summary-Eintraege sind Strings oder {type, text}-Dicts — tolerant lesen.
+    private static func extractReasoningSummary(_ raw: Any?) -> String {
+        guard let array = raw as? [Any], !array.isEmpty else { return "" }
+        return array.compactMap { entry -> String? in
+            if let str = entry as? String { return str }
+            if let dict = entry as? [String: Any] { return dict["text"] as? String }
+            return nil
+        }.joined(separator: "\n")
     }
 
     private static func parseDate(_ string: String?) -> Date? {

@@ -66,6 +66,7 @@ enum ClaudeTranscriptReader {
         var messages: [AgentChatMessage] = []
         var lineNumber = 0
         var skipped = 0
+        var idGenerator = TranscriptStableIDGenerator()
 
         let stream = LineStream(fileURL: fileURL)
         for line in stream {
@@ -76,7 +77,7 @@ enum ClaudeTranscriptReader {
                 continue
             }
             if let message = parseEntry(obj) {
-                messages.append(message)
+                messages.append(idGenerator.assign(message))
             }
         }
 
@@ -95,7 +96,9 @@ enum ClaudeTranscriptReader {
     }
 
     static func readTail(fileURL: URL, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript {
-        let messages = TranscriptTailReader.tailLines(fileURL: fileURL, tailBytes: tailBytes)
+        var idGenerator = TranscriptStableIDGenerator()
+        let (lines, truncatedHead) = TranscriptTailReader.tailLinesWithTruncation(fileURL: fileURL, tailBytes: tailBytes)
+        let messages = lines
             .compactMap { line -> AgentChatMessage? in
                 guard let data = line.data(using: .utf8),
                       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -103,7 +106,8 @@ enum ClaudeTranscriptReader {
                 }
                 return parseEntry(obj)
             }
-        return AgentChatTranscript(messages: messages, isLiveSourcePossible: true)
+            .map { idGenerator.assign($0) }
+        return AgentChatTranscript(messages: messages, isLiveSourcePossible: true, hasTruncatedHead: truncatedHead)
     }
 
     /// Parsed eine einzelne JSONL-Zeile zu einer `AgentChatMessage`, falls
@@ -249,7 +253,13 @@ enum TranscriptTailReader {
     static let defaultTailBytes: Int = 256 * 1024
 
     static func tailLines(fileURL: URL, tailBytes: Int) -> [String] {
-        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return [] }
+        tailLinesWithTruncation(fileURL: fileURL, tailBytes: tailBytes).lines
+    }
+
+    /// Wie `tailLines`, meldet aber zusaetzlich, ob VOR dem Fenster noch
+    /// Dateiinhalt liegt — Basis fuer "Früheren Verlauf laden" in der UI.
+    static func tailLinesWithTruncation(fileURL: URL, tailBytes: Int) -> (lines: [String], truncatedHead: Bool) {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return ([], false) }
         defer { try? handle.close() }
         do {
             let size = try handle.seekToEnd()
@@ -262,9 +272,9 @@ enum TranscriptTailReader {
             if offset > 0, !lines.isEmpty {
                 lines.removeFirst()
             }
-            return lines
+            return (lines, offset > 0)
         } catch {
-            return []
+            return ([], false)
         }
     }
 }

@@ -38,6 +38,11 @@ struct AgentSessionDetailView: View {
     /// parsen muss.
     @State private var cachedTranscript: AgentChatTranscript?
     @State private var isLoadingTranscript = false
+    /// Tail-first: initial nur das Dateiende parsen. 17-MB-Transcripts
+    /// froren die App beim Voll-Read ein — mehr Verlauf holt der User
+    /// explizit nach (×4-Eskalation pro Klick).
+    private static let initialTailBytes = 512 * 1024
+    @State private var transcriptTailBytes = AgentSessionDetailView.initialTailBytes
 
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
@@ -51,12 +56,14 @@ struct AgentSessionDetailView: View {
             } else if isLoadingTranscript {
                 loadingView
             } else {
-                // Universal-Fallback fuer geschlossene Sessions: Transcript-
-                // View nutzt seinen eingebauten Empty-State wenn `cachedTranscript`
-                // nil oder leer ist (z. B. wenn die JSONL noch nicht existiert).
-                AgentChatTranscriptView(
+                // Universal-Fallback fuer geschlossene Sessions: Timeline
+                // (Variante E) mit Roh-Umschalter; leere Transcripts landen
+                // im eingebauten Empty-State der Roh-View (z. B. wenn die
+                // JSONL noch nicht existiert).
+                AgentTranscriptContainerView(
                     transcript: cachedTranscript,
-                    session: session
+                    session: session,
+                    onLoadEarlierHistory: { loadEarlierHistory() }
                 )
             }
         }
@@ -75,6 +82,7 @@ struct AgentSessionDetailView: View {
             errorMessage = nil
             cachedTranscript = nil
             isLoadingTranscript = false
+            transcriptTailBytes = Self.initialTailBytes
             if session.shouldLaunchOnOpen == true {
                 prepareCommand()
             }
@@ -122,14 +130,19 @@ struct AgentSessionDetailView: View {
         let provider = session.provider
         let cwd = project.path
         let targetSessionID = session.id
-        isLoadingTranscript = true
+        let tailBytes = transcriptTailBytes
+        // Spinner nur beim Erst-Load — beim Nachladen von Verlauf bleibt
+        // der bestehende Inhalt stehen (kein Flackern).
+        if cachedTranscript == nil { isLoadingTranscript = true }
         Task.detached(priority: .userInitiated) {
+            // Tail-Read statt Voll-Parse: bounded Memory + bounded Zeit,
+            // egal wie groß die JSONL ist.
             let transcript: AgentChatTranscript?
             switch provider {
             case .claude:
-                transcript = ClaudeTranscriptReader.read(cwd: cwd, sessionID: externalID)
+                transcript = ClaudeTranscriptReader.readTail(cwd: cwd, sessionID: externalID, tailBytes: tailBytes)
             case .codex:
-                transcript = CodexTranscriptReader.read(sessionID: externalID)
+                transcript = CodexTranscriptReader.readTail(sessionID: externalID, tailBytes: tailBytes)
             }
             await MainActor.run {
                 // Falls der User waehrend des Loads umgeschaltet hat,
@@ -139,6 +152,15 @@ struct AgentSessionDetailView: View {
                 isLoadingTranscript = false
             }
         }
+    }
+
+    /// „Früheren Verlauf laden": Lesefenster vervierfachen und neu laden.
+    /// Explizite User-Aktion — so bleibt auch ein 50-MB-Chat beherrschbar
+    /// (512 KB → 2 MB → 8 MB → …), statt beim Öffnen alles zu parsen.
+    private func loadEarlierHistory() {
+        guard cachedTranscript?.hasTruncatedHead == true else { return }
+        transcriptTailBytes *= 4
+        loadTranscriptIfNeeded()
     }
 
     @ViewBuilder

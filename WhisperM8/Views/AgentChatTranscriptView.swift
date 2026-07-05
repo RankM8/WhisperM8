@@ -12,6 +12,10 @@ struct AgentChatTranscriptView: View {
     /// dann als spezieller Empty-State angezeigt mit Hinweis auf Resume.
     let transcript: AgentChatTranscript?
     let session: AgentChatSession
+    /// Nachlade-Hook fuer tail-gelesene Transcripts (Owner vergroessert sein
+    /// Lesefenster) — greift wenn alle geladenen Messages sichtbar sind,
+    /// die Datei aber vor dem Fenster weiteren Verlauf hat.
+    var onLoadEarlierHistory: (() -> Void)?
 
     /// Wie viele Messages initial ueber `ForEach` ausgegeben werden.
     /// SwiftUI's LazyVStack mit `.defaultScrollAnchor(.bottom)` muss intern
@@ -57,7 +61,7 @@ struct AgentChatTranscriptView: View {
             } else {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 14) {
-                        if hasMoreEarlier {
+                        if hasMoreEarlier || canLoadEarlierHistory {
                             earlierButton
                                 .padding(.horizontal, 16)
                                 .padding(.top, 8)
@@ -73,24 +77,43 @@ struct AgentChatTranscriptView: View {
             }
         }
         .background(AgentTheme.background)
-        .onChange(of: allMessages.count) { _, _ in
-            // Neuer Transcript geladen → Window zuruecksetzen auf die letzten N.
-            visibleCount = Self.initialMessageWindow
+        .onChange(of: allMessages.count) { old, new in
+            // Nur bei SCHRUMPFENDEM Transcript (Session-Wechsel) resetten.
+            // Wachstum = Live-Append oder nachgeladener Verlauf — da muss
+            // das (ggf. praeventiv geweitete) Fenster erhalten bleiben.
+            if new < old {
+                visibleCount = Self.initialMessageWindow
+            }
         }
+    }
+
+    /// Alle geladenen Messages sichtbar, aber die Datei hat davor noch
+    /// Verlauf → Nachladen von der Platte anbieten.
+    private var canLoadEarlierHistory: Bool {
+        !hasMoreEarlier && transcript?.hasTruncatedHead == true && onLoadEarlierHistory != nil
     }
 
     @ViewBuilder
     private var earlierButton: some View {
         Button {
-            visibleCount = min(
-                allMessages.count,
-                visibleCount + Self.messageBatchIncrement
-            )
+            if hasMoreEarlier {
+                visibleCount = min(
+                    allMessages.count,
+                    visibleCount + Self.messageBatchIncrement
+                )
+            } else {
+                // Fenster praeventiv weiten, damit die nachgeladenen
+                // Messages direkt sichtbar sind.
+                visibleCount += Self.messageBatchIncrement
+                onLoadEarlierHistory?()
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.up.circle")
                     .font(.system(size: 12))
-                Text("\(hiddenEarlierCount) frühere Nachrichten laden")
+                Text(hasMoreEarlier
+                    ? "\(hiddenEarlierCount) frühere Nachrichten laden"
+                    : "Früheren Verlauf laden …")
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(AgentTheme.textSecondary)

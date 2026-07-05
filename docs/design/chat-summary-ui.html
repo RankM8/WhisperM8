@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhisperM8 — Chat-Zusammenfassungen, Subagent-Detail &amp; Verlaufsladen</title>
+<style>
+/* ============================================================
+   Design-Mockup Rev 2: Summary-UI + Subagent-Detailansicht +
+   Markdown-Typografie + „Früheren Verlauf laden"-Zustände.
+   Farben = 1:1 die Dark-Werte aus Support/AgentTheme.swift.
+   ============================================================ */
+:root {
+  --bg:            #0f0f10;
+  --sidebar:       #131415;
+  --header:        #121213;
+  --surface:       #171718;
+  --panel:         #1b1c1d;
+  --control:       #242527;
+  --hover:         rgba(255,255,255,0.04);
+  --selection:     rgba(255,255,255,0.07);
+  --border:        rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.10);
+  --text:          rgba(255,255,255,0.92);
+  --text-2:        rgba(255,255,255,0.55);
+  --text-3:        rgba(255,255,255,0.38);
+  --accent:        #7c84e8;
+  --accent-strong: #5e6ad2;
+  --accent-tint:      rgba(124,132,232,0.16);
+  --accent-tint-soft: rgba(124,132,232,0.09);
+  --working:       #4cc38a;
+  --awaiting:      #e9b949;
+  --error:         #e5594f;
+  --diff-pos:      #66d973;
+  --teal:          #4db6ac;
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0b;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding: clamp(16px, 4vw, 56px) clamp(12px, 3vw, 40px);
+}
+
+/* ---------- Doku-Kopf + Umschalter ---------- */
+.doc-head { max-width: 1140px; margin: 0 auto 20px; }
+.doc-head .kicker {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+}
+.doc-head h1 { font-size: clamp(20px, 3vw, 28px); font-weight: 700; letter-spacing: -0.02em; }
+.doc-head > p { color: var(--text-2); max-width: 760px; margin-top: 8px; }
+
+.controls {
+  max-width: 1140px; margin: 18px auto 14px;
+  display: flex; flex-wrap: wrap; gap: 16px 22px; align-items: flex-end;
+}
+.control-group .label {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-3); margin-bottom: 5px;
+}
+.seg { display: inline-flex; background: var(--control); border-radius: 7px; padding: 2px; border: 1px solid var(--border); }
+.seg button {
+  appearance: none; border: 0; background: transparent; color: var(--text-2);
+  font: inherit; font-size: 11px; font-weight: 500; padding: 4px 12px;
+  border-radius: 5px; cursor: pointer; white-space: nowrap;
+}
+.seg button.active { background: #3c3d3f; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+
+/* Kontext-abhängige Controls */
+body[data-view="sub"] .chat-only { display: none; }
+body[data-view="chat"] .sub-only { display: none; }
+
+/* ---------- macOS-Fenster ---------- */
+.window {
+  max-width: 1140px; margin: 0 auto;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.titlebar {
+  display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 14px;
+  background: var(--header); border-bottom: 1px solid var(--border);
+}
+.traffic { display: flex; gap: 8px; }
+.traffic span { width: 12px; height: 12px; border-radius: 50%; }
+.traffic .r { background: #ff5f57; } .traffic .y { background: #febc2e; } .traffic .g { background: #28c840; }
+.titlebar .wtitle { flex: 1; text-align: center; font-size: 12px; font-weight: 500; color: var(--text-3); }
+
+.main { display: flex; height: 760px; }
+
+/* ============================================================
+   SIDEBAR — Status/Zeit immer sichtbar, optionale Zweitzeile
+   ============================================================ */
+.side {
+  flex: none; width: 272px;
+  background: var(--sidebar); border-right: 1px solid var(--border);
+  padding: 12px 8px; overflow-y: auto;
+}
+.side .searchbox {
+  font-size: 11.5px; color: var(--text-3);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 10px; margin-bottom: 12px;
+}
+.proj { margin-bottom: 4px; }
+.proj-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  padding: 5px 8px;
+}
+.proj-head .picon {
+  width: 16px; height: 16px; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: #fff;
+}
+.proj-head .branch { font-size: 10px; color: var(--text-3); font-weight: 400; }
+.proj-head .count { margin-left: auto; font-size: 10px; color: var(--text-3); }
+
+.row {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 5px 8px 5px 26px;
+  border-radius: 7px; cursor: pointer;
+}
+.row:hover { background: var(--hover); }
+.row.selected { background: var(--selection); }
+.row.selected::before {
+  content: ""; position: absolute; left: 6px; top: 7px; bottom: 7px;
+  width: 2.5px; border-radius: 2px; background: var(--accent);
+}
+.row .ricon { flex: none; font-size: 11px; padding-top: 2px; color: var(--text-3); }
+.row .rbody { min-width: 0; flex: 1; }
+.row .rtitle {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 12.5px; color: var(--text);
+  white-space: nowrap; overflow: hidden;
+}
+.row .rtitle .t { overflow: hidden; text-overflow: ellipsis; }
+.pill {
+  flex: none; font-size: 8px; font-weight: 700; letter-spacing: 0.05em;
+  padding: 1px 5px; border-radius: 4px;
+  color: var(--teal); background: rgba(77,182,172,0.12); border: 1px solid rgba(77,182,172,0.25);
+}
+.row .rsummary {
+  font-size: 10.5px; color: var(--text-3); line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px;
+  display: flex; align-items: baseline; gap: 5px;
+}
+.row .rsummary .stale-dot {
+  flex: none; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--awaiting); transform: translateY(-1px);
+}
+body[data-sidebar="compact"] .row .rsummary { display: none; }
+
+.row .rmeta {
+  flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+  padding-top: 2px; min-width: 26px;
+}
+.row .rtime { font-size: 9.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; position: relative; }
+.dot.working { background: var(--working); }
+.dot.working::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%;
+  background: var(--working); opacity: 0.35;
+  animation: sonar 1.6s ease-out infinite;
+}
+@keyframes sonar { 0% { transform: scale(0.6); opacity: 0.45; } 100% { transform: scale(1.8); opacity: 0; } }
+.dot.idle { background: var(--text-3); opacity: 0.7; }
+.dot.unread { background: #58a6ff; }
+.dot.errored { background: var(--error); }
+
+.gen-spin { font-size: 10px; color: var(--accent); animation: genpulse 1.2s ease-in-out infinite; }
+@keyframes genpulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+.row .close {
+  position: absolute; right: 6px; top: 5px;
+  font-size: 10px; color: var(--text-3);
+  width: 16px; height: 16px; border-radius: 4px;
+  display: none; align-items: center; justify-content: center;
+}
+.row:hover .close { display: inline-flex; background: var(--control); }
+.row:hover .rmeta { visibility: hidden; }
+
+/* ============================================================
+   GEMEINSAM: Detail-Kopf, Metastrip
+   ============================================================ */
+.content { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+
+.chathead {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px;
+  background: var(--header); border-bottom: 1px solid var(--border);
+}
+.chathead .session-title { font-size: 13px; font-weight: 600; }
+.chathead .meta { font-size: 11px; color: var(--text-3); display: flex; gap: 6px; }
+.chathead .spacer { flex: 1; }
+.btn-resume {
+  appearance: none; border: 0; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 600; color: #fff;
+  background: var(--accent-strong); border-radius: 6px; padding: 5px 14px;
+}
+.btn-ghost {
+  appearance: none; cursor: pointer; font: inherit;
+  font-size: 11px; font-weight: 500; color: var(--text-2);
+  background: var(--control); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 11px;
+}
+.btn-ghost:hover { color: var(--text); }
+
+.metastrip {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+.metastrip .spacer { flex: 1; }
+.mini-seg { display: inline-flex; background: var(--control); border-radius: 6px; padding: 1.5px; border: 1px solid var(--border); }
+.mini-seg span { font-size: 10px; font-weight: 500; padding: 2px 9px; border-radius: 4.5px; color: var(--text-2); }
+.mini-seg .on { background: #3c3d3f; color: var(--text); }
+
+.scrollarea { flex: 1; overflow-y: auto; }
+
+/* ============================================================
+   MARKDOWN-TYPOGRAFIE (der Kern von Punkt 3)
+   Ruhig, klare Abstände, dezente Tokens, weiche Tabellen.
+   ============================================================ */
+.md { font-size: 13px; line-height: 1.6; color: var(--text); max-width: 58ch; }
+.md p { margin: 0 0 9px; }
+.md p:last-child { margin-bottom: 0; }
+.md b, .md strong { font-weight: 600; }
+.md h4 {
+  font-size: 13px; font-weight: 700; margin: 16px 0 6px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.md h4:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.md code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--control); border-radius: 4px; padding: 0.5px 5px;
+  color: rgba(255,255,255,0.82);
+}
+/* Nummerierte Abschnitte: Zahl dezent, Inhalt sauber eingerückt */
+.md ol { list-style: none; counter-reset: mdnum; margin: 0 0 10px; }
+.md ol > li { counter-increment: mdnum; position: relative; padding-left: 24px; margin-bottom: 7px; }
+.md ol > li::before {
+  content: counter(mdnum) "."; position: absolute; left: 2px; top: 0;
+  font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+.md ul { list-style: none; margin: 0 0 10px; }
+.md ul > li { position: relative; padding-left: 18px; margin-bottom: 5px; }
+.md ul > li::before {
+  content: ""; position: absolute; left: 4px; top: 8.5px;
+  width: 4px; height: 4px; border-radius: 50%; background: var(--text-3);
+}
+.md li > ul { margin: 5px 0 0; }
+/* Tabellen: Hairlines statt Monospace-Härte */
+.md table {
+  border-collapse: collapse; margin: 4px 0 12px;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.md th, .md td { text-align: left; padding: 5px 12px; border-bottom: 1px solid var(--border); }
+.md th {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-3); background: var(--surface);
+}
+.md tr:last-child td { border-bottom: 0; }
+.md td .ok { color: var(--working); }
+.md td .warn { color: var(--awaiting); }
+.md .codeblock {
+  font-family: var(--mono); font-size: 11px; line-height: 1.55; color: var(--text-2);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 9px 11px; margin: 4px 0 12px;
+  overflow-x: auto; white-space: pre;
+}
+
+/* ============================================================
+   TIMELINE-Bausteine
+   ============================================================ */
+.e-col { max-width: 660px; margin: 0 auto; padding: 12px 24px 48px; }
+.e-round { padding: 8px 0 18px; }
+.e-round.e-dim { opacity: 0.8; }
+
+/* Prompts: auch lange, mehrabsätzige Prompts bleiben ruhig */
+.e-user { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin: 12px 0 2px; }
+.e-bubble {
+  max-width: 82%;
+  background: var(--control);
+  border-radius: 16px 16px 5px 16px;
+  padding: 10px 14px;
+  font-size: 13px; line-height: 1.55;
+}
+.e-bubble p { margin-bottom: 8px; }
+.e-bubble p:last-child { margin-bottom: 0; }
+.e-bubble code { font-family: var(--mono); font-size: 11.5px; background: rgba(0,0,0,0.28); border-radius: 4px; padding: 0.5px 5px; }
+.e-round.latest .e-bubble { box-shadow: inset 0 0 0 1px rgba(124,132,232,0.28); }
+.e-time { font-size: 10px; color: var(--text-3); padding-right: 5px; }
+.e-round.latest .e-time { color: var(--accent); }
+
+.e-act {
+  display: flex; align-items: baseline; gap: 7px;
+  font-size: 11.5px; color: var(--text-3); padding: 12px 0 0;
+}
+.e-act .e-chev { font-size: 8px; }
+.e-act .err { color: var(--error); }
+.e-assistant { margin-top: 12px; }
+
+/* Teammate-/System-Injektion: eigener Block statt Riesen-User-Bubble.
+   Kopfzeile immer sichtbar, Payload eingeklappt. */
+.teammate {
+  max-width: 82%; margin: 12px 0 2px auto;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px; background: var(--surface);
+  overflow: hidden;
+}
+.teammate .tm-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px; cursor: pointer; font-size: 11px; color: var(--text-2);
+}
+.teammate .tm-head:hover { background: var(--hover); }
+.teammate .tm-badge {
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.05em;
+  padding: 1px 6px; border-radius: 4px;
+  color: #e498c8; background: rgba(228,152,200,0.10); border: 1px solid rgba(228,152,200,0.28);
+}
+.teammate .tm-gist { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.teammate .tm-chev { font-size: 8px; color: var(--text-3); transition: transform 0.25s; }
+.teammate.open .tm-chev { transform: rotate(90deg); }
+.teammate .tm-body { display: none; border-top: 1px solid var(--border); padding: 9px 12px; }
+.teammate.open .tm-body { display: block; }
+.teammate .tm-body pre {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.5; color: var(--text-2);
+  white-space: pre-wrap; word-break: break-word;
+}
+.teammate .tm-time { font-size: 10px; color: var(--text-3); }
+
+/* ============================================================
+   „FRÜHEREN VERLAUF LADEN" — vier Zustände (Punkt 4)
+   Ein echter Button, kein Geistertext.
+   ============================================================ */
+.history { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 14px; }
+.history [data-h] { display: none; }
+body[data-history="more"]    .history [data-h="more"],
+body[data-history="loading"] .history [data-h="loading"],
+body[data-history="loaded"]  .history [data-h="loaded"],
+body[data-history="start"]   .history [data-h="start"] { display: flex; }
+
+.btn-history {
+  appearance: none; cursor: pointer; font: inherit;
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 600; color: var(--text-2);
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 20px; padding: 5px 16px;
+}
+.btn-history:hover { color: var(--text); background: var(--panel); }
+.btn-history .arrow { font-size: 10px; color: var(--text-3); }
+
+.history .loading-line {
+  align-items: center; gap: 8px; font-size: 11px; color: var(--text-3);
+  padding: 5px 16px;
+}
+.spinner {
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 1.5px solid var(--border-strong); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.history .loaded-note {
+  align-items: center; gap: 7px; font-size: 10.5px; color: var(--working);
+  padding: 2px 0;
+}
+.history .start-marker {
+  align-items: center; gap: 8px; font-size: 10px; color: var(--text-3);
+  letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;
+  padding: 6px 0;
+}
+.history .start-marker::before, .history .start-marker::after {
+  content: ""; width: 56px; height: 1px; background: var(--border-strong);
+}
+
+/* ============================================================
+   SUMMARY-KARTE (Chat)
+   ============================================================ */
+.sumcard {
+  margin: 14px 18px 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.cardtop { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.cardlabel {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-3);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 9.5px; font-weight: 600;
+  padding: 2px 8px; border-radius: 20px;
+  border: 1px solid var(--border-strong); color: var(--text-3);
+}
+.chip.fresh .cdot { background: var(--working); }
+.chip.stale { color: var(--awaiting); border-color: rgba(233,185,73,0.35); background: rgba(233,185,73,0.07); }
+.chip.stale .cdot { background: var(--awaiting); }
+.chip.generating { color: var(--accent); border-color: var(--accent-tint); background: var(--accent-tint-soft); }
+.chip.source { color: var(--teal); border-color: rgba(77,182,172,0.3); background: rgba(77,182,172,0.06); }
+.chip .cdot { width: 5px; height: 5px; border-radius: 50%; }
+.chip .spin { animation: genpulse 1.2s ease-in-out infinite; }
+.cardtop .grow { flex: 1; }
+
+.headline { font-size: 13px; font-weight: 550; line-height: 1.5; color: var(--text); max-width: 68ch; }
+
+.evidence { margin-top: 9px; display: flex; flex-direction: column; gap: 3px; }
+.ev-row {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-2);
+}
+.ev-row .g { flex: none; width: 12px; text-align: center; font-weight: 700; }
+.ev-row .g.commit { color: var(--diff-pos); }
+.ev-row .g.test-ok { color: var(--working); }
+.ev-row .g.test-fail { color: var(--error); }
+.ev-row .g.file { color: var(--accent); }
+.ev-row .g.open { color: var(--awaiting); }
+.ev-row .evmeta { color: var(--text-3); font-size: 9.5px; }
+.ev-row .evtext { font-family: var(--font); font-size: 11px; }
+
+.deepdive-toggle {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 11px; font-weight: 600; color: var(--text-3);
+  padding: 9px 0 0;
+}
+.deepdive-toggle:hover { color: var(--text-2); }
+.deepdive-toggle .chev { font-size: 8px; transition: transform 0.25s cubic-bezier(0.22,1,0.36,1); display: inline-block; }
+.sumcard.open .deepdive-toggle .chev, .subreport.open .deepdive-toggle .chev { transform: rotate(90deg); }
+.deepdive { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.22,1,0.36,1); }
+.sumcard.open .deepdive, .subreport.open .deepdive { grid-template-rows: 1fr; }
+.deepdive > div { overflow: hidden; }
+.deepdive-inner {
+  border-top: 1px solid var(--border); margin-top: 9px; padding-top: 10px;
+  font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 68ch;
+}
+.deepdive-inner .md { color: var(--text-2); font-size: 12.5px; }
+.deepdive-inner .md b { color: var(--text); }
+
+.placeholder { font-size: 11.5px; color: var(--text-3); }
+.btn-generate {
+  appearance: none; cursor: pointer; font: inherit; margin-top: 8px;
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  background: var(--accent-tint-soft); border: 1px solid var(--accent-tint);
+  border-radius: 6px; padding: 4px 12px;
+}
+
+.sumcard [data-when] { display: none; }
+body[data-summary="fresh"]      .sumcard [data-when~="fresh"],
+body[data-summary="stale"]      .sumcard [data-when~="stale"],
+body[data-summary="generating"] .sumcard [data-when~="generating"],
+body[data-summary="none"]       .sumcard [data-when~="none"] { display: revert; }
+body[data-summary="fresh"] .sumcard .evidence, body[data-summary="stale"] .sumcard .evidence { display: flex; }
+body[data-summary="generating"] .sumcard .evidence, body[data-summary="none"] .sumcard .evidence { display: none; }
+body[data-summary="generating"] .sumcard .headline, body[data-summary="none"] .sumcard .headline { display: none; }
+body[data-summary="generating"] .sumcard .deepdive-toggle, body[data-summary="none"] .sumcard .deepdive-toggle { display: none; }
+
+/* ============================================================
+   SUBAGENT-DETAIL (Punkt 2)
+   Hierarchie: Kopf → Auftrag → Ergebnis → Live-Verlauf → Composer
+   ============================================================ */
+.subhead {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+  background: var(--header); border-bottom: 1px solid var(--border);
+}
+.status-pill {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 8px; border-radius: 20px;
+}
+.status-pill[data-s="running"] { color: var(--teal); background: rgba(77,182,172,0.14); border: 1px solid rgba(77,182,172,0.3); }
+.status-pill[data-s="done"]    { color: var(--working); background: rgba(76,195,138,0.13); border: 1px solid rgba(76,195,138,0.3); }
+.status-pill[data-s="failed"]  { color: var(--error); background: rgba(229,89,79,0.13); border: 1px solid rgba(229,89,79,0.3); }
+.status-pill[data-s="taken"]   { color: var(--accent); background: var(--accent-tint-soft); border: 1px solid var(--accent-tint); }
+.subhead .st-title { font-size: 13px; font-weight: 600; }
+.subhead .st-meta { font-size: 10px; color: var(--text-3); }
+
+/* Zustands-Sichtbarkeit Subagent */
+#viewSub [data-job] { display: none; }
+body[data-job="running"] #viewSub [data-job~="running"],
+body[data-job="done"]    #viewSub [data-job~="done"],
+body[data-job="failed"]  #viewSub [data-job~="failed"],
+body[data-job="taken"]   #viewSub [data-job~="taken"] { display: revert; }
+
+/* Auftrag: der letzte Prompt an den Subagent — immer sichtbar */
+.mandate {
+  margin: 12px 18px 0;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.mandate .m-label {
+  flex: none; font-size: 9px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-3); padding-top: 8px; width: 52px; text-align: right;
+}
+.mandate .m-bubble {
+  background: var(--control);
+  border-radius: 5px 16px 16px 16px;
+  padding: 9px 14px; font-size: 12.5px; line-height: 1.5;
+  color: var(--text); max-width: 70ch;
+}
+.mandate .m-bubble .m-time { font-size: 10px; color: var(--text-3); margin-left: 8px; }
+.mandate .m-bubble code { font-family: var(--mono); font-size: 11px; background: rgba(0,0,0,0.28); border-radius: 4px; padding: 0.5px 5px; }
+
+/* Ergebnis-Karte des Subagents */
+.subreport {
+  margin: 12px 18px 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.subreport .rep-status {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em;
+}
+.subreport .rep-status.success { color: var(--working); }
+.subreport .rep-status.failure { color: var(--error); }
+.subreport .metrics { font-size: 9.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* Live-Zeile (running) */
+.live-strip {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11.5px; color: var(--text-2);
+}
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--working); animation: genpulse 1s ease-in-out infinite; }
+.live-strip .last-cmd { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
+
+.takeover-note {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11.5px; color: var(--text-2);
+}
+
+.composer {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 18px 14px;
+}
+.composer .field {
+  flex: 1; font-size: 12px; color: var(--text-3);
+  background: var(--control); border-radius: 8px; padding: 7px 11px;
+}
+.composer .send { font-size: 18px; color: var(--text-3); }
+
+/* View-Umschaltung */
+#viewChat, #viewSub { display: none; flex: 1; min-width: 0; flex-direction: column; }
+body[data-view="chat"] #viewChat { display: flex; }
+body[data-view="sub"] #viewSub { display: flex; }
+
+/* Sidebar-Selektion je View */
+body[data-view="sub"] #rowChat { background: transparent; }
+body[data-view="sub"] #rowChat::before { display: none; }
+body[data-view="chat"] #rowSub { background: transparent; }
+body[data-view="chat"] #rowSub::before { display: none; }
+body[data-view="sub"] #rowSub { background: var(--selection); }
+body[data-view="chat"] #rowChat { background: var(--selection); }
+
+/* ---------- Design-Notizen ---------- */
+.notes {
+  max-width: 1140px; margin: 26px auto 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px 28px;
+}
+.notes .note h4 { font-size: 12px; font-weight: 650; margin-bottom: 4px; }
+.notes .note h4 .num { color: var(--accent); font-family: var(--mono); font-size: 11px; margin-right: 6px; }
+.notes .note p { font-size: 12px; color: var(--text-2); }
+.notes .note code { font-family: var(--mono); font-size: 10.5px; background: var(--control); border-radius: 4px; padding: 1px 4px; }
+</style>
+</head>
+<body data-view="chat" data-sidebar="twoline" data-summary="fresh" data-history="more" data-job="done">
+
+<header class="doc-head">
+  <div class="kicker">WhisperM8 · Design-Prototyp · Rev 2 · 05.07.2026</div>
+  <h1>Summary-UI, Subagent-Detail, Markdown &amp; Verlaufsladen</h1>
+  <p>Rev 2 ergänzt: die <b>Subagent-Detailansicht</b> (Auftrag → Ergebnis → Live-Verlauf, ohne LLM-Lauf),
+     eine <b>ruhige Markdown-Typografie</b> mit den echten Berichts-Beispielen aus den Screenshots
+     (nummerierte Abschnitte, Tabellen, Teammate-Nachricht) und die vier Zustände von
+     <b>„Früheren Verlauf laden"</b> — als echter Button, der auch in der Chat-Ansicht funktioniert.</p>
+</header>
+
+<div class="controls">
+  <div class="control-group">
+    <div class="label">Ansicht</div>
+    <div class="seg" data-target="view">
+      <button data-v="chat" class="active">Chat-Session</button>
+      <button data-v="sub">Subagent-Session</button>
+    </div>
+  </div>
+  <div class="control-group">
+    <div class="label">Sidebar</div>
+    <div class="seg" data-target="sidebar">
+      <button data-v="twoline" class="active">A · Zweitzeile</button>
+      <button data-v="compact">B · Kompakt</button>
+    </div>
+  </div>
+  <div class="control-group chat-only">
+    <div class="label">Summary-Zustand</div>
+    <div class="seg" data-target="summary">
+      <button data-v="fresh" class="active">Aktuell</button>
+      <button data-v="stale">Veraltet</button>
+      <button data-v="generating">Wird erzeugt …</button>
+      <button data-v="none">Keine</button>
+    </div>
+  </div>
+  <div class="control-group chat-only">
+    <div class="label">Verlauf davor</div>
+    <div class="seg" data-target="history">
+      <button data-v="more" class="active">Vorhanden</button>
+      <button data-v="loading">Lädt …</button>
+      <button data-v="loaded">Nachgeladen</button>
+      <button data-v="start">Anfang erreicht</button>
+    </div>
+  </div>
+  <div class="control-group sub-only">
+    <div class="label">Job-Zustand</div>
+    <div class="seg" data-target="job">
+      <button data-v="running">Arbeitet</button>
+      <button data-v="done" class="active">Fertig</button>
+      <button data-v="failed">Fehler</button>
+      <button data-v="taken">Übernommen</button>
+    </div>
+  </div>
+</div>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="wtitle">WhisperM8 — Agent Chats</div>
+  </div>
+  <div class="main">
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="side">
+      <div class="searchbox">Filter…</div>
+
+      <div class="proj">
+        <div class="proj-head"><span class="picon" style="background:#8e5fd3">A</span> akquise-ai <span class="branch">⎇ main</span><span class="count">2</span></div>
+        <div class="row">
+          <span class="ricon">✳</span>
+          <div class="rbody">
+            <div class="rtitle"><span class="t">AKQ-Tickets umsetzen und Status rekonstruieren</span></div>
+            <div class="rsummary">Keycloak-SMTP fehlt im Realm — 9 Tickets geprüft, Abrechnung E2E verifiziert.</div>
+          </div>
+          <div class="rmeta"><span class="dot idle"></span><span class="rtime">16h</span></div>
+          <span class="close">✕</span>
+        </div>
+        <div class="row">
+          <span class="ricon">✳</span>
+          <div class="rbody">
+            <div class="rtitle"><span class="t">AKQ-Tickets umsetzen (Fork)</span></div>
+          </div>
+          <div class="rmeta"><span class="dot working"></span></div>
+          <span class="close">✕</span>
+        </div>
+      </div>
+
+      <div class="proj">
+        <div class="proj-head"><span class="picon" style="background:#2f7fd1">L</span> ListM8 <span class="branch">⎇ develop</span><span class="count">2</span></div>
+        <div class="row">
+          <span class="ricon">✳</span>
+          <div class="rbody">
+            <div class="rtitle"><span class="t">MCP-Tickets im ListM8-Jira analysieren</span></div>
+            <div class="rsummary">Versions-Bug gefixt (0c49f151), auf Staging verifiziert, deployed.</div>
+          </div>
+          <div class="rmeta"><span class="dot idle"></span><span class="rtime">16h</span></div>
+          <span class="close">✕</span>
+        </div>
+        <div class="row">
+          <span class="ricon">✳</span>
+          <div class="rbody">
+            <div class="rtitle"><span class="t">Claude Chat</span></div>
+            <div class="rsummary"><span class="stale-dot"></span>Design-Token-Prototyp gebaut und verifiziert.</div>
+          </div>
+          <div class="rmeta"><span class="dot idle"></span><span class="rtime">13h</span></div>
+          <span class="close">✕</span>
+        </div>
+      </div>
+
+      <div class="proj">
+        <div class="proj-head"><span class="picon" style="background:#4f46a3">W</span> whisperm8 <span class="branch">⎇ main</span><span class="count">1</span></div>
+
+        <div class="row selected" id="rowChat" onclick="setState('view','chat')">
+          <span class="ricon">✳</span>
+          <div class="rbody">
+            <div class="rtitle"><span class="t">Codex-Subagent testen</span></div>
+            <div class="rsummary">Subagent-CLI end-to-end getestet, 3 Findings gefixt, committet.</div>
+          </div>
+          <div class="rmeta"><span class="dot unread"></span><span class="rtime">10h</span></div>
+          <span class="close">✕</span>
+        </div>
+
+        <div class="row" id="rowSub" style="padding-left: 42px;" onclick="setState('view','sub')">
+          <span class="ricon">◆</span>
+          <div class="rbody">
+            <div class="rtitle"><span class="t">Deep-Dive C: Codex-Subagent-System</span> <span class="pill">SUB</span></div>
+            <div class="rsummary">✓ Report: 5 Findings (2 hoch), keine Edits, success.</div>
+          </div>
+          <div class="rmeta"><span class="dot unread"></span><span class="rtime">1h</span></div>
+          <span class="close">✕</span>
+        </div>
+
+        <div class="row" style="padding-left: 42px;">
+          <span class="ricon">◆</span>
+          <div class="rbody">
+            <div class="rtitle"><span class="t">Deep-Dive A: Transcript-Timeline-K…</span> <span class="pill">SUB</span></div>
+            <div class="rsummary"><span class="gen-spin">✦</span> arbeitet · zuletzt: <span style="font-family:var(--mono)">sed -n '1,260p' …</span></div>
+          </div>
+          <div class="rmeta"><span class="dot working"></span></div>
+          <span class="close">✕</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============================================================
+         VIEW 1 — CHAT-SESSION
+         ============================================================ -->
+    <div class="content" id="viewChat">
+      <div class="chathead">
+        <div>
+          <div class="session-title">Codex-Subagent testen</div>
+          <div class="meta">whisperm8 · ⎇ main · /Users/giulianocosta/repos/whisperm8</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn-resume">▶ Resume</button>
+      </div>
+      <div class="metastrip">
+        <span>93 Nachrichten · 7 Runden</span>
+        <span class="spacer"></span>
+        <span class="mini-seg"><span class="on">Chat</span><span>Roh</span></span>
+      </div>
+
+      <div class="scrollarea">
+
+        <!-- Summary-Karte -->
+        <section class="sumcard" id="sumcard">
+          <div class="cardtop">
+            <span class="cardlabel">Zusammenfassung</span>
+            <span class="chip fresh" data-when="fresh"><span class="cdot"></span> Aktuell · vor 2 h</span>
+            <span class="chip stale" data-when="stale"><span class="cdot"></span> Veraltet — Transcript ist gewachsen</span>
+            <span class="chip generating" data-when="generating"><span class="spin">✦</span> Wird erzeugt …</span>
+            <span class="grow"></span>
+            <button class="btn-ghost" data-when="fresh stale">↻ Aktualisieren</button>
+          </div>
+
+          <p class="headline">Codex-Subagent-CLI end-to-end getestet: drei echte Findings aus dem
+          Selbst-Review gefixt (Exit-Code-Vertrag, stalledFlag, send-TOCTOU), Test-Jobs aufgeräumt,
+          alles committet — Working Tree sauber.</p>
+
+          <div class="evidence">
+            <div class="ev-row"><span class="g commit">⌥</span>4797eba&nbsp; fix(agent-cli): Tiefen-Review-Findings<span class="evmeta">8 Dateien, +233/−10</span></div>
+            <div class="ev-row"><span class="g test-ok">✓</span>swift test<span class="evmeta">871 Tests, 0 Fehler</span></div>
+            <div class="ev-row"><span class="g file">±</span>WhisperM8/CLI/AgentCLICommand.swift<span class="evmeta">+2 weitere</span></div>
+          </div>
+
+          <button class="deepdive-toggle" data-when="fresh stale" onclick="this.closest('.sumcard').classList.toggle('open')">
+            <span class="chev">▶</span> Deep-Dive
+          </button>
+          <div class="deepdive"><div><div class="deepdive-inner"><div class="md">
+            <p><b>Aufgabe:</b> Das neue <code>whisperm8 agent</code>-Subsystem aus einem echten
+            Claude-Code-Chat heraus testen — Spawn, Status, Report-Rückgabe, Aufräumen.</p>
+            <p><b>Verlauf:</b> Zwei Tiefen-Review-Subagents gestartet; Codex fand drei echte Bugs im
+            eigenen Supervisor-Code. Alle drei gefixt, 12 neue Tests, Test-Jobs per <code>agent rm</code> entfernt.</p>
+            <p><b>Stand:</b> Abgeschlossen — offen ist nur <code>make dev</code> für den Live-Effekt der letzten Fixes.</p>
+          </div></div></div></div>
+
+          <p class="placeholder" data-when="generating">Der letzte Verlauf wird gerade zusammengefasst — die Karte füllt sich gleich.</p>
+          <div data-when="none">
+            <p class="placeholder">Für diesen Chat gibt es noch keine Zusammenfassung.</p>
+            <button class="btn-generate">✦ Zusammenfassung erzeugen</button>
+          </div>
+        </section>
+
+        <div class="e-col">
+
+          <!-- „Früheren Verlauf laden" — vier Zustände, echter Button.
+               MUSS in der Chat-Ansicht identisch funktionieren wie in Roh. -->
+          <div class="history">
+            <button class="btn-history" data-h="more" onclick="setState('history','loading'); setTimeout(()=>setState('history','loaded'), 1200)">
+              <span class="arrow">↑</span> Früheren Verlauf laden <span style="color:var(--text-3); font-weight:500">· 512 KB → 2 MB</span>
+            </button>
+            <div class="loading-line" data-h="loading"><span class="spinner"></span> Verlauf wird geladen …</div>
+            <div class="loaded-note" data-h="loaded">✓ 23 ältere Runden geladen</div>
+            <button class="btn-history" data-h="loaded" onclick="setState('history','start')">
+              <span class="arrow">↑</span> Noch früheren Verlauf laden
+            </button>
+            <div class="start-marker" data-h="start">Anfang der Konversation</div>
+          </div>
+
+          <!-- Runde 1: langer Prompt + Bericht mit Tabelle (aus Screenshot „Abschlussbericht Welle 2") -->
+          <article class="e-round e-dim">
+            <div class="e-user">
+              <div class="e-bubble">
+                <p>Prüfe bitte alle Admin-Tickets aus Welle 2 durch und rekonstruiere den Status.
+                Wichtig: nichts auf „Erledigt" stellen, bevor ich es freigebe.</p>
+                <p>Nutze die Testumgebung unter <code>admin.akquise.test</code> und dokumentiere jeden
+                Befund mit Ticket-Nummer.</p>
+              </div>
+              <span class="e-time">20:12</span>
+            </div>
+            <div class="e-act"><span class="e-chev">▶</span><span>13 Tool-Aufrufe · 59 s</span></div>
+            <div class="e-assistant"><div class="md">
+              <h4>Abschlussbericht Welle 2 — fertig, alle Wellen gestoppt</h4>
+              <p><b>Endstand der geprüften Admin-Tickets:</b></p>
+              <table>
+                <tr><th>Ticket</th><th>Ergebnis</th></tr>
+                <tr><td>AKQ-84, 86, 87, 88, 89</td><td><span class="ok">✓</span> Bestanden</td></tr>
+                <tr><td>AKQ-93 Neuer Kunde → „Eingeladen"</td><td><span class="ok">✓</span> Bestanden — vom Agent zunächst als „nicht prüfbar" gemeldet</td></tr>
+                <tr><td>AKQ-115 Passwort-Reset</td><td><span class="warn">⚠</span> Mängel — Umgebung, nicht Code</td></tr>
+              </table>
+              <p><b>Der eine echte Befund:</b> Die laufende Keycloak-Instanz hat <b>keinen SMTP-Server
+              im Realm</b> („No sender address configured"). Folgen:</p>
+              <ol>
+                <li>Passwort-Reset für Teammitglieder → 502 statt Mail (AKQ-115)</li>
+                <li>Kunde anlegen → Kunde wird <b>persistiert</b>, aber der Einladungs-Mailversand
+                    wirft 502 — so sind 3 identische „QA Statustest"-Kunden entstanden (IDs 32–34).</li>
+              </ol>
+              <p><b>Fix:</b> SMTP einmalig in der Keycloak-Admin-Console nachtragen (oder Realm neu
+              importieren). Danach wäre AKQ-115 vermutlich sofort grün.</p>
+            </div></div>
+          </article>
+
+          <!-- Runde 2: Teammate-Nachricht als eigener Block (statt Riesen-Bubble) -->
+          <article class="e-round e-dim">
+            <div class="teammate" onclick="this.classList.toggle('open')">
+              <div class="tm-head">
+                <span class="tm-badge">TEAMMATE</span>
+                <span class="tm-gist">akq93 · idle_notification — „AKQ-93 Abschlussbericht: nicht prüfbar wegen 502"</span>
+                <span class="tm-time">22:27</span>
+                <span class="tm-chev">▶</span>
+              </div>
+              <div class="tm-body">
+                <pre>&lt;teammate-message teammate_id="akq93" color="pink"&gt;
+{"type":"idle_notification","from":"akq93","timestamp":"2026-07-04T20:24:42.828Z",
+ "idleReason":"available","summary":"[to main] AKQ-93 Abschlussbericht: nicht prüfbar wegen 502"}
+&lt;/teammate-message&gt;</pre>
+              </div>
+            </div>
+            <div class="e-assistant"><div class="md">
+              <p>Nur die Idle-Bestätigung von akq93 — dessen Bericht ist verbucht und durch meine
+              eigene Live-Nachprüfung sogar auf <b>BESTANDEN</b> korrigiert (die drei Testkunden
+              zeigen „Eingeladen", die Liste war beim Agent nur stale gecacht).</p>
+            </div></div>
+          </article>
+
+          <!-- Runde 3 (letzte): kurzer Prompt + nummerierter Bericht mit Bullets/Code -->
+          <article class="e-round latest">
+            <div class="e-user">
+              <div class="e-bubble"><p>Wie hängt die Kosten-Erfassung mit dem Anthropic-Budget zusammen? Kurz belegen.</p></div>
+              <span class="e-time">01:30</span>
+            </div>
+            <div class="e-act"><span class="e-chev">▶</span><span>18 Tool-Aufrufe · <span class="err">1 Fehler</span> · 3 Min</span></div>
+            <div class="e-assistant"><div class="md">
+              <p><b>Die Abrechnung funktioniert End-to-End einwandfrei.</b> Die Kette mit Belegen:</p>
+              <ol>
+                <li><b>Kosten-Erfassung pro Diktat:</b> OpenRouter liefert <code>usage.cost</code>,
+                    <code>AiUsageRecorder::recordWithCost()</code> schreibt es ungerechnet in
+                    <code>ai_usage_event.cost_usd</code>. 2-Minuten-Aufnahme = genau $0.003000.</li>
+                <li><b>Gemeinsamer Budget-Topf:</b> <code>AiBudgetGuard</code> summiert alle Features
+                    des Monats und vergleicht gegen <code>monthlyAiLimit</code>. Live getestet:
+                    <ul>
+                      <li><b>Anthropic-Ausgaben blocken Voice:</b> Diktat-✓ liefert 402, <b>kein</b> Voice-Event entsteht.</li>
+                      <li><b>Voice-Ausgaben blocken Anthropic:</b> Chat-Nachricht wird mit Toast geblockt, kein API-Call.</li>
+                    </ul>
+                </li>
+                <li><b>Aufgeräumt und gegenverifiziert:</b> synthetisches Event gelöscht, Limit
+                    zurück auf 1000 EUR, frisches Diktat läuft mit korrektem Event.</li>
+              </ol>
+              <p><b>Eine Einschränkung:</b> Das Limit ist eine Integer-Spalte (ganze EUR) — Grenzwerte
+              im Cent-Bereich lassen sich nur über den Spend testen.</p>
+            </div></div>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         VIEW 2 — SUBAGENT-SESSION
+         ============================================================ -->
+    <div class="content" id="viewSub">
+      <div class="subhead">
+        <span class="status-pill" data-s="running" data-job="running">ARBEITET</span>
+        <span class="status-pill" data-s="done" data-job="done">FERTIG</span>
+        <span class="status-pill" data-s="failed" data-job="failed">FEHLER</span>
+        <span class="status-pill" data-s="taken" data-job="taken">ÜBERNOMMEN</span>
+        <div>
+          <div class="st-title">Deep-Dive C: Codex-Subagent-System — Frische-Gesamtsicht</div>
+          <div class="st-meta">whisperm8 · /Users/giulianocosta/repos/whisperm8 · Job 798e7c91</div>
+        </div>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn-ghost" data-job="running">■ Stoppen</button>
+        <button class="btn-ghost" data-job="done failed">↩ Report → Chat</button>
+        <button class="btn-ghost" data-job="done failed">⌨ Interaktiv übernehmen</button>
+      </div>
+
+      <div class="scrollarea">
+
+        <!-- AUFTRAG: der Prompt an den Subagent — immer sichtbar, ganz oben -->
+        <div class="mandate">
+          <span class="m-label">Auftrag</span>
+          <div class="m-bubble">
+            Reviewe die Codex-Subagent-Implementierung auf Frische-Probleme: <code>last-message.txt</code>-Lebenszyklus,
+            Doppel-Supervisor, Stop-Races, Worktree-Aufräumen. <b>Nur Analyse, keine Edits.</b>
+            Fasse die wichtigsten Beobachtungen priorisiert zusammen.
+            <span class="m-time">01:12</span>
+          </div>
+        </div>
+
+        <!-- ERGEBNIS-KARTE: Quelle ist der Agent-Report, KEIN LLM-Lauf -->
+        <section class="subreport open" id="subreport">
+          <div class="cardtop">
+            <span class="cardlabel">Ergebnis</span>
+            <span class="rep-status success" data-job="done">SUCCESS</span>
+            <span class="rep-status failure" data-job="failed">FAILURE</span>
+            <span class="chip source" data-job="done failed"><span class="cdot" style="background:var(--teal)"></span> Quelle: Agent-Report</span>
+            <span class="chip generating" data-job="running"><span class="spin">✦</span> Turn läuft — Report folgt</span>
+            <span class="grow"></span>
+            <span class="metrics" data-job="done failed">Turns 1 · 178 s · 15 Dateien +517/−65</span>
+          </div>
+
+          <!-- done: Report ordentlich GERENDERT statt als JSON-Blob -->
+          <div data-job="done">
+            <p class="headline">Fünf Findings, zwei davon hoch: der wiederverwendete
+            <code>last-message.txt</code> zeigt nach gescheiterten Folge-Turns veraltete Reports,
+            und ein Doppel-Supervisor kann einen real laufenden Turn überschreiben. Keine Edits gemacht.</p>
+
+            <div class="evidence" style="margin-top:10px">
+              <div class="ev-row"><span class="g test-fail">1</span><span class="evtext"><b>Hoch</b> — <code>last-message.txt</code> wird pro Job wiederverwendet und vor einem neuen Turn nicht geleert; die UI zeigt nach Fehlschlägen den alten Report.</span></div>
+              <div class="ev-row"><span class="g test-fail">2</span><span class="evtext"><b>Hoch</b> — zweiter Supervisor für denselben Job kann einen real laufenden Turn überschreiben (Doppel-Launch).</span></div>
+              <div class="ev-row"><span class="g open">3</span><span class="evtext"><b>Mittel</b> — <code>requestStop()</code> zwischen <code>process.run()</code> und PID-Speicherung → SIGTERM läuft ins Leere.</span></div>
+              <div class="ev-row"><span class="g open">4</span><span class="evtext"><b>Mittel</b> — <code>agent rm</code> nach Worktree-Anlage-Fehler lässt Branch + Worktree im Repo zurück.</span></div>
+              <div class="ev-row"><span class="g open">5</span><span class="evtext"><b>Mittel/Security</b> — „Report → Chat" übergibt Report-Felder ungequotet als User-Text (Injection-Fläche).</span></div>
+            </div>
+
+            <button class="deepdive-toggle" onclick="this.closest('.subreport').classList.toggle('open')">
+              <span class="chev">▶</span> Offene Punkte &amp; Hinweise
+            </button>
+            <div class="deepdive"><div><div class="deepdive-inner"><div class="md">
+              <ul>
+                <li>Analyse nur gegen die committete HEAD-Version, keine Edits — Sandbox war read-only.</li>
+                <li><code>rg</code> war nicht installiert; Suche lief über <code>grep</code>/Datei-Auszüge.</li>
+                <li>Tests: keine ausgeführt (Auftrag war reine Analyse).</li>
+              </ul>
+            </div></div></div></div>
+          </div>
+
+          <!-- running: Live-Status IN der Karte, Ergebnis-Platz bleibt reserviert -->
+          <div data-job="running">
+            <div class="live-strip">
+              <span class="live-dot"></span>
+              <span>arbeitet — 12 Tool-Aufrufe bisher</span>
+              <span class="last-cmd">zuletzt: sed -n '1,260p' AgentJobSupervisor.swift</span>
+            </div>
+          </div>
+
+          <!-- failed -->
+          <div data-job="failed">
+            <p class="headline" style="color:var(--error)">Turn fehlgeschlagen: Idle-Watchdog hat nach
+            30 Min ohne Events abgebrochen (<code>stalled</code>).</p>
+            <p class="placeholder" style="margin-top:6px">Letzter Report bleibt unten im Verlauf sichtbar. <b>Erneut senden</b> startet einen frischen Turn.</p>
+          </div>
+
+          <!-- taken -->
+          <div data-job="taken">
+            <div class="takeover-note">
+              <span>⌨</span>
+              <span>Interaktiv übernommen — dieser Job läuft jetzt als normaler Codex-Chat weiter.
+              Composer und <code>agent send</code> sind deaktiviert; der Verlauf unten bleibt lesbar.</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- LIVE-VERLAUF: dieselbe Timeline-Komponente, klar unterhalb des Ergebnisses -->
+        <div class="metastrip" style="border-top:1px solid var(--border); margin-top:10px">
+          <span>Verlauf · 58 Nachrichten · 1 Runde</span>
+          <span class="spacer"></span>
+          <span class="mini-seg"><span class="on">Chat</span><span>Roh</span></span>
+        </div>
+        <div class="e-col" style="padding-top:14px">
+          <div class="history">
+            <button class="btn-history" data-h="more"><span class="arrow">↑</span> Früheren Verlauf laden</button>
+            <div class="loading-line" data-h="loading"><span class="spinner"></span> Verlauf wird geladen …</div>
+            <div class="loaded-note" data-h="loaded">✓ Früherer Verlauf geladen</div>
+            <div class="start-marker" data-h="start">Anfang der Konversation</div>
+          </div>
+
+          <article class="e-round e-dim">
+            <div class="e-act" style="padding-top:0"><span class="e-chev">▶</span><span>28 Tool-Aufrufe · <span class="err">2 Fehler</span> · 2 Min</span></div>
+            <div class="e-assistant"><div class="md">
+              <p>Ich lese gezielt die beiden Implementierungen und die angrenzenden Aufrufer/Tests,
+              damit die Review auf konkreten Codepfaden basiert. Es werden keine Dateien geändert.</p>
+            </div></div>
+          </article>
+
+          <article class="e-round latest">
+            <div class="e-assistant" style="margin-top:0"><div class="md">
+              <p><b>Review abgeschlossen, keine Edits.</b> Die wichtigsten Beobachtungen stehen im
+              Report oben — der finale Turn-Text wird hier <b>gerendert</b>, nicht als JSON-Blob:
+              die Findings erscheinen als nummerierte Liste mit <code>Datei:Zeile</code>-Ankern,
+              identisch formatiert wie eine normale Antwort.</p>
+            </div></div>
+            <div class="e-act" data-job="running"><span class="live-dot" style="width:6px;height:6px"></span><span style="color:var(--working)">schreibt weiter …</span></div>
+          </article>
+        </div>
+
+      </div>
+
+      <div class="composer">
+        <div class="field" data-job="done failed">Folge-Prompt an den Subagent …</div>
+        <div class="field" data-job="running" style="opacity:0.5">Turn läuft — warten oder stoppen …</div>
+        <div class="field" data-job="taken" style="opacity:0.5">Übernommen — weiter im Terminal-Tab</div>
+        <span class="send">➤</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<section class="notes">
+  <div class="note">
+    <h4><span class="num">1</span>Subagent-Hierarchie</h4>
+    <p><b>Auftrag → Ergebnis → Live-Verlauf.</b> Der Auftrag (letzter Prompt an den Agent) steht
+       fix oben als Bubble von links. Die Ergebnis-Karte hält ihren Platz in jedem Zustand —
+       im Running-Zustand wohnt dort die Live-Zeile, das Ergebnis verdrängt nie den Verlauf.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">2</span>Report gerendert, nie JSON</h4>
+    <p>Der Agent-Report wird als Headline + priorisierte Finding-Zeilen gerendert; der finale
+       Turn-Text im Verlauf ebenso (der Screenshot-JSON-Blob ist das Anti-Muster). Chip
+       <code>Quelle: Agent-Report</code> macht klar: hier lief kein LLM-Summary.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">3</span>Verlaufsladen = echter Button</h4>
+    <p>Runde Pill-Form mit Rahmen, vier Zustände: <b>Vorhanden</b> (mit Fenster-Angabe „512 KB → 2 MB"),
+       <b>Lädt</b> (Spinner, Button gesperrt), <b>Nachgeladen</b> („✓ 23 ältere Runden" + weiter-laden),
+       <b>Anfang erreicht</b> (Trennlinien-Marker). Muss in Chat- UND Roh-Ansicht identisch funktionieren
+       — der aktuelle Chat-Ansicht-Bug ist damit als Soll-Verhalten definiert.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">4</span>Markdown-Ruhe</h4>
+    <p>Nummerierte Abschnitte mit dezenter Zahl, Bullets als 4-px-Punkte, Tabellen mit Hairlines +
+       Uppercase-Kopf statt Monospace-Härte, <code>code</code>-Tokens leicht abgesetzt,
+       H4-Abschnitte mit Trennlinie. Lange Berichte lesen sich wie ein Dokument, nicht wie Rohtext.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">5</span>Teammate-Block</h4>
+    <p>Injizierte Teammate-/System-Nachrichten sind ein eigener gestrichelter Block: Badge + Ein-Zeilen-Gist
+       immer sichtbar, das rohe Payload erst nach Klick. Nie wieder eine bildschirmfüllende JSON-Bubble.</p>
+  </div>
+  <div class="note">
+    <h4><span class="num">6</span>Letzter Prompt sichtbar</h4>
+    <p>In Chats trägt jede Runde ihre Prompt-Bubble (auch die letzte); beim Subagent übernimmt der
+       fixe Auftrag-Block diese Rolle. Zusammen mit „Runde unvollständig"-Markern geht der Bezug
+       „worauf antwortet das?" nie verloren.</p>
+  </div>
+</section>
+
+<script>
+function setState(key, value) {
+  document.body.dataset[key] = value;
+  document.querySelectorAll('.seg[data-target="' + key + '"] button').forEach(b =>
+    b.classList.toggle('active', b.dataset.v === value));
+}
+document.querySelectorAll('.seg').forEach(seg => {
+  seg.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => setState(seg.dataset.target, btn.dataset.v));
+  });
+});
+</script>
+</body>
+</html>

@@ -520,10 +520,13 @@ body[data-variant="e"] #variantE { display: block; }
   font-size: 13.5px; line-height: 1.52;
 }
 .e-bubble code { font-family: var(--mono); font-size: 12px; }
+/* Letzte Runde: Betonung kommt primär vom Dimmen der älteren Runden —
+   der Indigo-Akzent bleibt bewusst dezent (Hairline-Ring + Zeitstempel),
+   die Bubble-Fläche bleibt neutral. */
 .e-round.latest .e-bubble {
-  background: var(--accent-tint);
-  box-shadow: inset 0 0 0 1px rgba(124,132,232,0.22);
+  box-shadow: inset 0 0 0 1px rgba(124,132,232,0.28);
 }
+.e-round.latest .e-time { color: var(--accent); }
 .e-time { font-size: 10px; color: var(--text-3); padding-right: 5px; }
 .e-attach { font-size: 10.5px; color: var(--text-3); padding-right: 5px; }
 
