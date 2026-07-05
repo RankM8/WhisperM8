@@ -63,6 +63,18 @@ struct AgentTranscriptContainerView: View {
                     loadHint: loadHint,
                     onLoadEarlierHistory: onLoadEarlierHistory
                 )
+            } else if timeline.isEmpty {
+                // Die Runden-Projektion baut noch (off-main). Die ScrollView
+                // darf sich NICHT an leerem Inhalt verankern — sonst bleibt
+                // der Viewport nach dem Befüllen leer stehen, bis der User
+                // scrollt (defaultScrollAnchor(.bottom)-Race).
+                VStack(spacing: 8) {
+                    Spacer()
+                    ProgressView().controlSize(.small)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(AgentTheme.background)
             } else {
                 AgentTimelineView(
                     timeline: timeline,
@@ -75,9 +87,19 @@ struct AgentTranscriptContainerView: View {
                 .background(AgentTheme.background)
             }
         }
-        .task(id: transcript?.messages.count ?? -1) {
+        .task(id: rebuildTaskID) {
             await rebuildTimeline()
         }
+    }
+
+    /// Inhaltsbasierte Rebuild-ID: Zahl allein reicht nicht — beim Wechsel
+    /// zwischen zwei Chats mit gleicher Nachrichtenzahl bliebe sonst die
+    /// alte Timeline stehen.
+    private var rebuildTaskID: String {
+        guard let transcript, let first = transcript.messages.first, let last = transcript.messages.last else {
+            return "leer"
+        }
+        return "\(transcript.messages.count)-\(first.id.uuidString)-\(last.id.uuidString)"
     }
 
     /// Off-main, weil volle Claude-Transcripts tausende Messages haben können
