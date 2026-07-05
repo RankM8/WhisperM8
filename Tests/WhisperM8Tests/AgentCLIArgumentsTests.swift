@@ -13,6 +13,7 @@ final class AgentCLIArgumentsTests: XCTestCase {
         XCTAssertFalse(options.json)
         XCTAssertFalse(options.worktree)
         XCTAssertFalse(options.allowNetwork)
+        XCTAssertNil(options.playwrightStorageStatePath)
         XCTAssertNil(options.parentSessionID)
     }
 
@@ -23,6 +24,7 @@ final class AgentCLIArgumentsTests: XCTestCase {
             "--sandbox", "read-only",
             "--model", "gpt-5.2-codex",
             "--effort", "high",
+            "--playwright-storage-state", ".qa/auth/admin.json",
             "--parent", "c71d-abc",
             "do the thing",
         ])
@@ -34,6 +36,7 @@ final class AgentCLIArgumentsTests: XCTestCase {
         XCTAssertEqual(options.sandbox, .readOnly)
         XCTAssertEqual(options.model, "gpt-5.2-codex")
         XCTAssertEqual(options.effort, "high")
+        XCTAssertEqual(options.playwrightStorageStatePath, ".qa/auth/admin.json")
         XCTAssertEqual(options.parentSessionID, "c71d-abc")
         XCTAssertEqual(options.prompt, "do the thing")
     }

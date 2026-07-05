@@ -85,6 +85,16 @@ enum AgentRunCLI {
         initial.model = options.model
         initial.effort = options.effort
         initial.allowNetwork = options.allowNetwork
+        initial.playwrightStorageStatePath = options.playwrightStorageStatePath.map {
+            AgentRunCLI.absolutePath($0, relativeTo: cwd)
+        }
+        // Fail-fast: eine fehlende State-Datei würde sonst erst beim ersten
+        // Browser-Tool-Call im laufenden Job auffallen.
+        if let statePath = initial.playwrightStorageStatePath,
+           !FileManager.default.fileExists(atPath: statePath) {
+            CLIIO.err("Playwright-storageState-Datei nicht gefunden: \(statePath)")
+            return AgentCLIExit.usage
+        }
         // Parent-Fallback ohne --parent: die komplette Vorfahren-PID-Kette
         // merken — die App matcht irgendeine davon gegen die shellPids ihrer
         // PTY-Sessions und ordnet den Job dem spawnenden Chat zu (Claude Code
@@ -131,6 +141,14 @@ enum AgentRunCLI {
             return await AgentJobCLIShared.superviseInlineAndEmit(store: store, shortId: shortId, json: options.json)
         }
         return AgentJobCLIShared.detachAndEmit(store: store, shortId: shortId, json: options.json)
+    }
+
+    private static func absolutePath(_ path: String, relativeTo cwd: String) -> String {
+        guard !path.hasPrefix("/") else { return path }
+        return URL(fileURLWithPath: cwd, isDirectory: true)
+            .appendingPathComponent(path)
+            .standardizedFileURL
+            .path
     }
 }
 
@@ -625,6 +643,8 @@ enum AgentCLIHelp {
       --model <name>         Codex-Modell-Override.
       --effort <level>       model_reasoning_effort-Override.
       --allow-network        Netzwerk in der Sandbox erlauben (u.a. git push).
+      --playwright-storage-state <path>
+                             Playwright-MCP isoliert mit dieser storageState-Datei starten.
       --worktree             Job in frischem Git-Worktree (Branch subagent/<id>).
       --parent <session-id>  Claude-Session, die diesen Subagent gespawnt hat.
 

@@ -67,6 +67,9 @@ struct AgentJobState: Codable, Equatable {
     var model: String?
     var effort: String?
     var allowNetwork: Bool
+    /// Optionaler Playwright-MCP Auth-State für Browser-QA. Wird vom
+    /// Supervisor als Codex-Config-Override in jeden Turn gegeben.
+    var playwrightStorageStatePath: String?
     var worktree: Worktree?
     var failureReason: String?
     var codexVersion: String?
@@ -100,6 +103,7 @@ struct AgentJobState: Codable, Equatable {
         self.model = nil
         self.effort = nil
         self.allowNetwork = false
+        self.playwrightStorageStatePath = nil
         self.worktree = nil
         self.failureReason = nil
         self.codexVersion = codexVersion

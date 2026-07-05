@@ -17,7 +17,7 @@ final class CodexExecRunnerTests: XCTestCase {
 
     func testBuildArgumentsForFirstTurn() {
         let args = CodexExecRunner.buildArguments(for: makeRequest())
-        XCTAssertEqual(args.first, "exec")
+        XCTAssertEqual(Array(args.prefix(3)), ["-a", "never", "exec"])
         XCTAssertFalse(args.contains("resume"))
         XCTAssertTrue(args.contains("--json"))
         // Default-Sandbox workspace-write, --cd nur beim ersten Turn.
@@ -28,7 +28,7 @@ final class CodexExecRunnerTests: XCTestCase {
 
     func testBuildArgumentsForResumeTurn() {
         let args = CodexExecRunner.buildArguments(for: makeRequest(resume: "thread-123"))
-        XCTAssertEqual(Array(args.prefix(2)), ["exec", "resume"])
+        XCTAssertEqual(Array(args.prefix(4)), ["-a", "never", "exec", "resume"])
         // exec resume kennt --sandbox/--cd nicht — Sandbox via Config-Override.
         XCTAssertFalse(args.contains("--sandbox"))
         XCTAssertFalse(args.contains("--cd"))
@@ -46,6 +46,32 @@ final class CodexExecRunnerTests: XCTestCase {
         XCTAssertEqual(args[args.firstIndex(of: "-m")!.advanced(by: 1)], "gpt-5.2-codex")
         XCTAssertTrue(args.contains("model_reasoning_effort=high"))
         XCTAssertTrue(args.contains("sandbox_workspace_write.network_access=true"))
+    }
+
+    func testBuildArgumentsWithPlaywrightStorageState() {
+        var request = makeRequest()
+        request.playwrightStorageStatePath = "/tmp/project/.qa/auth/admin state.json"
+        let args = CodexExecRunner.buildArguments(for: request)
+        let configValues = args.enumerated()
+            .filter { $0.element == "-c" }
+            .compactMap { index, _ in args.indices.contains(index + 1) ? args[index + 1] : nil }
+
+        // Self-contained: command + args + Startup-Timeout — darf nicht von
+        // einem [mcp_servers.playwright]-Eintrag in der User-Config abhängen.
+        XCTAssertTrue(configValues.contains(#"mcp_servers.playwright.command="npx""#))
+        XCTAssertTrue(configValues.contains { value in
+            value == #"mcp_servers.playwright.args=["-y","@playwright/mcp@"# + CodexExecRunner.playwrightMCPVersion + #"","--browser","chrome","--ignore-https-errors","--isolated","--storage-state","/tmp/project/.qa/auth/admin state.json"]"#
+        })
+        XCTAssertTrue(configValues.contains("mcp_servers.playwright.startup_timeout_sec=120"))
+        XCTAssertTrue(configValues.contains("mcp_servers.playwright.tool_timeout_sec=180"))
+        // Headless-Approval für nicht-read-only Browser-Tools (resize, tabs,
+        // evaluate, …) — ohne das: "user cancelled MCP tool call".
+        XCTAssertTrue(configValues.contains(#"mcp_servers.playwright.default_tools_approval_mode="approve""#))
+    }
+
+    func testBuildArgumentsWithoutPlaywrightStorageStateHasNoMCPOverride() {
+        let args = CodexExecRunner.buildArguments(for: makeRequest())
+        XCTAssertFalse(args.contains { $0.hasPrefix("mcp_servers.playwright") })
     }
 
     // MARK: - Integration mit Fake-codex-Skript

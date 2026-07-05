@@ -103,6 +103,7 @@ final class AgentJobSupervisor: @unchecked Sendable {
             model: state.model,
             effort: state.effort,
             allowNetwork: state.allowNetwork,
+            playwrightStorageStatePath: state.playwrightStorageStatePath,
             outputSchemaPath: store.reportSchemaURL(for: shortId).path,
             outputLastMessagePath: store.lastMessageURL(for: shortId).path,
             idleTimeout: idleTimeout

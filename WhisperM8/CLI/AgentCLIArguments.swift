@@ -26,6 +26,9 @@ struct AgentRunOptions: Equatable {
     var worktree = false
     /// Opt-in: Netzwerk in der Sandbox (u.a. git push).
     var allowNetwork = false
+    /// Optionaler Playwright-MCP Auth-State. Wenn gesetzt, startet Codex den
+    /// Playwright-MCP isoliert mit genau dieser storageState-Datei.
+    var playwrightStorageStatePath: String?
     /// Claude-Session-ID des Spawners — verknüpft den Job in der App mit
     /// seiner Parent-Session.
     var parentSessionID: String?
@@ -102,6 +105,8 @@ enum AgentCLIParser {
                 options.worktree = true
             case "--allow-network":
                 options.allowNetwork = true
+            case "--playwright-storage-state":
+                options.playwrightStorageStatePath = try nextValue(for: arg)
             case "--parent":
                 options.parentSessionID = try nextValue(for: arg)
             case "--wait":

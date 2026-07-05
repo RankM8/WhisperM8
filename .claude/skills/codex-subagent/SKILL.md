@@ -52,6 +52,7 @@ whisperm8 agent help                             # Hilfetext
 | `--sandbox <m>` | `read-only` oder `workspace-write` (Default). read-only für reine Analyse/Reviews. |
 | `--worktree` | Job arbeitet in einem frischen Git-Worktree (Branch `subagent/<id>`, liegt im Job-Verzeichnis). Pflicht-Empfehlung, wenn du selbst gerade im selben Checkout editierst. |
 | `--allow-network` | Netzwerk in der Sandbox (u.a. `git push`, Paketinstallationen). Default aus — vorher den User fragen. |
+| `--playwright-storage-state <path>` | Browser-QA: startet den Playwright-MCP im Codex-Subagent isoliert mit dieser storageState-Datei (`--isolated --storage-state`). Relative Pfade werden relativ zu `--cd`/CWD aufgelöst; fehlt die Datei, bricht `run` sofort mit Exit 1 ab. Browser-Traffic braucht KEIN `--allow-network`. |
 | `--model <name>` | Codex-Modell-Override. |
 | `--effort <level>` | `model_reasoning_effort`-Override (z.B. low/medium/high). |
 | `--parent <session-id>` | Claude-Session-ID des spawnenden Chats — nur nötig, wenn du eine echte ID kennst. OHNE das Flag ordnet WhisperM8 den Job automatisch über den Prozessbaum dem Chat zu, in dem du läufst (`$CLAUDE_SESSION_ID` existiert NICHT als Env-Variable — nicht verwenden). |
@@ -136,6 +137,76 @@ whisperm8 agent help                             # Hilfetext
 11. Formuliere Aufträge **abschlussorientiert**: was tun, wie verifizieren
     (Test-Befehl!), was committen. Der Abschluss-Report ist erzwungen — gute
     Prompts machen ihn aussagekräftig.
+
+## Browser-/UI-QA mit Playwright-State
+
+Für UI- und Browser-Verifikation ist Playwright-MCP der Standardpfad, nicht der
+sichtbare Chrome des Users und nicht Computer Use. Authentifizierung wird über
+Playwright `storageState` geteilt, z.B. `.qa/auth/akquise-admin.storageState.json`.
+
+Verbindliche Regeln:
+
+1. **Nie direkt fan-outen.** Starte zuerst genau einen Probe-Subagent mit
+   `--playwright-storage-state <path>`, der eine geschützte Route öffnet und
+   Auth-Indikatoren prüft.
+2. **Fan-out nur nach PASS.** Wenn der Probe-Subagent Playwright-MCP nicht sieht,
+   auf Login/Auth umgeleitet wird oder den Auth-Indikator nicht findet, keine
+   weiteren Browser-QA-Subagents starten.
+3. **State-Dateien sind read-only.** Subagents dürfen `.qa/auth/*` lesen, aber
+   nicht überschreiben. Refresh des Auth-State ist ein eigener, serieller Auftrag.
+4. **Isolierte Browser-Kontexte.** `--playwright-storage-state` erzwingt einen
+   isolierten Playwright-MCP-Kontext, damit parallele Subagents keine Browser-
+   Profile teilen.
+5. **Eindeutige Artefakte.** Jeder QA-Subagent bekommt eigene Pfade:
+   `.qa/reports/<task-id>.md`, `.qa/screenshots/<task-id>/`,
+   `.qa/traces/<task-id>/`.
+6. **Keine Fallbacks ohne Freigabe.** Wenn Playwright-MCP nicht funktioniert,
+   nicht auf sichtbaren Chrome, Codex Chrome Plugin oder Computer Use ausweichen.
+
+Technische Eigenschaften (für korrekte Flags/Prompts):
+
+- Der Playwright-MCP läuft **außerhalb der Codex-Sandbox** — Browser-Traffic
+  (auch localhost/Dev-Server) funktioniert ohne `--allow-network`. Das Flag nur
+  setzen, wenn der Subagent selbst Netz braucht (z.B. Paketinstallation).
+- Der MCP ist gepinnt (`@playwright/mcp`, `--browser chrome
+  --ignore-https-errors`): nutzt das installierte Chrome und ignoriert
+  TLS-Fehler — gedacht für lokale Test-Umgebungen mit self-signed Zertifikaten.
+- **Jeder Subagent startet eine eigene Chrome-Instanz.** Moderat
+  parallelisieren (3–5 Jobs) und größere Ticket-Mengen staffeln — der
+  Engpass sind RAM/CPU der vielen Chrome-Instanzen, kein hartes Limit.
+- **Fehlersignatur `user cancelled MCP tool call`:** Codex hat den Toolcall
+  am MCP-Approval-Gate abgebrochen (nicht-read-only Tools wie
+  `browser_resize`/`browser_tabs`/`browser_evaluate` brauchen headless eine
+  Freigabe). Das CLI setzt diese Freigabe seit 2026-07-05 automatisch
+  (`default_tools_approval_mode`) — tritt der Fehler trotzdem auf, ist es
+  KEIN Timing-/Parallel-Problem: Logs prüfen und den Job per
+  `agent send <id> "…erneut prüfen…"` nachsteuern statt neu spawnen — der
+  Session-Kontext (gelesene Tickets etc.) bleibt erhalten.
+
+Probe-Subagent:
+
+```bash
+whisperm8 agent run --wait --json --cd /pfad/zum/repo \
+  --playwright-storage-state .qa/auth/akquise-admin.storageState.json \
+  "Browser-QA Preflight. Öffne https://akquise.test/admin/kunden mit Playwright-MCP. Prüfe: keine Weiterleitung zu /login oder auth.akquise.test, Titel AkquiseAI, sichtbarer Auth-Indikator Admin AkquiseAI oder admin@akquise.ai. Schreibe .qa/reports/preflight.md. Keine App-Daten ändern."
+```
+
+Subagent-Prompt für Browser-QA:
+
+```text
+Browser-QA Auftrag.
+
+Base URL: <url>
+Auth-State: <storageState>
+Report: .qa/reports/<task-id>.md
+Screenshots: .qa/screenshots/<task-id>/
+Traces bei Fehlern: .qa/traces/<task-id>/
+
+Nutze Playwright-MCP. Nutze nicht den sichtbaren Chrome, nicht Computer Use und
+nicht das Codex Chrome Plugin. Überschreibe .qa/auth/* nicht. Brich ab, wenn der
+Auth-State nicht funktioniert. Schreibe pass/fail, finale URL, Titel, sichtbare
+Auth-Indikatoren, Console-/Network-Auffälligkeiten und Artefaktpfade.
+```
 
 ## Workflows (Kopiervorlagen)
 

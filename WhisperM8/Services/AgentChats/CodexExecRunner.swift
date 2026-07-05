@@ -19,6 +19,8 @@ struct CodexTurnRequest {
     var effort: String?
     /// Opt-in: erlaubt Netzwerk in der workspace-write-Sandbox (u.a. git push).
     var allowNetwork = false
+    /// Optional: isoliertes Playwright-MCP mit dieser storageState-Datei starten.
+    var playwrightStorageStatePath: String?
     var outputSchemaPath: String
     var outputLastMessagePath: String
     /// Idle-Watchdog: kein Gesamt-Timeout (Turns dürfen lange laufen), aber
@@ -68,8 +70,15 @@ final class CodexExecRunner: @unchecked Sendable {
 
     // MARK: argv (pure, separat testbar)
 
+    /// Gepinnte Playwright-MCP-Version — @latest würde Version-Drift zwischen
+    /// parallelen QA-Wellen und langsame npx-Kaltstarts bedeuten.
+    static let playwrightMCPVersion = "0.0.77"
+
     static func buildArguments(for request: CodexTurnRequest) -> [String] {
-        var args = ["exec"]
+        // `-a never` (nur als Root-Flag VOR `exec` gültig) betrifft
+        // Shell-Approvals. MCP-Tool-Approvals deckt es NICHT ab — die regelt
+        // default_tools_approval_mode unten (A/B-verifiziert 2026-07-05).
+        var args = ["-a", "never", "exec"]
         if request.resumeThreadID != nil {
             args.append("resume")
         }
@@ -96,6 +105,33 @@ final class CodexExecRunner: @unchecked Sendable {
         if request.allowNetwork {
             args += ["-c", "sandbox_workspace_write.network_access=true"]
         }
+        if let storageStatePath = request.playwrightStorageStatePath, !storageStatePath.isEmpty {
+            let playwrightArgs = tomlArray([
+                "-y",
+                "@playwright/mcp@\(playwrightMCPVersion)",
+                "--browser",
+                "chrome",
+                "--ignore-https-errors",
+                "--isolated",
+                "--storage-state",
+                storageStatePath,
+            ])
+            // command explizit mitgeben — sonst hängt der Server an einem
+            // vorhandenen [mcp_servers.playwright]-Eintrag in der User-Config.
+            args += [
+                "-c", "mcp_servers.playwright.command=\"npx\"",
+                "-c", "mcp_servers.playwright.args=\(playwrightArgs)",
+                // npx-Kaltstart (Paket-Download) kann den 10s-Default reißen.
+                "-c", "mcp_servers.playwright.startup_timeout_sec=120",
+                // Langsame Seiten/Screenshots unter Parallel-Last abfedern.
+                "-c", "mcp_servers.playwright.tool_timeout_sec=180",
+                // Codex gated nicht-read-only MCP-Tools (readOnlyHint) hinter
+                // einer Freigabe; headless werden sie sonst als
+                // "user cancelled MCP tool call" abgebrochen. `-a never`
+                // deckt das NICHT ab.
+                "-c", "mcp_servers.playwright.default_tools_approval_mode=\"approve\"",
+            ]
+        }
         if let resumeID = request.resumeThreadID {
             // Positional: [SESSION_ID] [PROMPT] — die ID direkt vor dem "-".
             args.append(resumeID)
@@ -104,6 +140,16 @@ final class CodexExecRunner: @unchecked Sendable {
         // Argument aktiviert den stdin-Modus.
         args.append("-")
         return args
+    }
+
+    private static func tomlArray(_ values: [String]) -> String {
+        "[" + values.map { "\"\(tomlEscape($0))\"" }.joined(separator: ",") + "]"
+    }
+
+    private static func tomlEscape(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     // MARK: Ausführung
