@@ -148,6 +148,9 @@ final class AgentSessionStatusCoordinator {
         apply(.processTerminated(exitCode: exitCode), to: sessionID)
         watcher.markTerminated(sessionID: sessionID)
         hookBridge.stopTracking(localSessionID: sessionID)
+        // T2: Chat wurde beendet (Ctrl-C/exit/Prozess-Ende) → debounced
+        // Zusammenfassung anstossen (Digest-Guard verhindert Doppel-Laeufe).
+        AgentSessionSummarizer.shared.noteSessionTerminated(sessionID: sessionID)
     }
 
     /// Aktueller Lebenszyklus-Zustand (für Settings-Diagnose/Tests).

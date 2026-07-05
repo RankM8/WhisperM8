@@ -261,6 +261,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // + Launch/Foreground-Sync — spiegelt Jobs als .subagentJob-Sessions
         // in den Workspace und pflegt Status/Zähler/Unread.
         AgentJobWorkspaceSync.shared.start()
+        // T4: Summary-Abgleich für die beim letzten Lauf offenen Tabs
+        // (gedeckelt + seriell; Digest-Guard überspringt Unverändertes).
+        AgentSessionSummarizer.shared.runStartupReconciliation(
+            openTabIDs: AgentWindowStore.shared.openTabIDsAtLaunch
+        )
 
         // Routing: Onboarding nur, wenn die zwei essenziellen System-Permissions
         // (Mikrofon + Accessibility) noch nicht erteilt sind. Ohne diese ist die

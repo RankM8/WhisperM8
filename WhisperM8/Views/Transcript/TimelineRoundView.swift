@@ -13,22 +13,25 @@ struct TimelineRoundView: View, Equatable {
     /// sich nicht — aber die Zeile aktualisiert live ihre Summary.)
     let isLiveRound: Bool
 
-    @State private var isHovering = false
-
     static func == (lhs: TimelineRoundView, rhs: TimelineRoundView) -> Bool {
         lhs.round == rhs.round && lhs.isLatest == rhs.isLatest && lhs.isLiveRound == rhs.isLiveRound
     }
 
-    /// Ältere Runden treten zurück (Design: 50 %); Hover holt sie hoch.
+    /// Ältere Runden treten KONSTANT leicht zurück (0.8 — jederzeit gut
+    /// lesbar). Bewusst KEIN Hover-Effekt: Zustandsinformation darf nie erst
+    /// unter dem Cursor erscheinen (User-Feedback 2026-07-05).
     private var dimOpacity: Double {
-        if isLatest || isHovering { return 1.0 }
-        return 0.55
+        isLatest ? 1.0 : 0.8
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let prompt = round.prompt {
-                promptBubble(prompt)
+                if let teammate = prompt.teammate {
+                    TeammateMessageBlock(message: teammate, timestamp: prompt.timestamp)
+                } else {
+                    promptBubble(prompt)
+                }
             } else {
                 incompleteHeader
             }
@@ -43,15 +46,21 @@ struct TimelineRoundView: View, Equatable {
             }
 
             ForEach(round.answers) { answer in
-                TranscriptMarkdownView(text: answer.text)
-                    .frame(maxWidth: 560, alignment: .leading)
-                    .padding(.top, 12)
+                // Finale Subagent-Antworten sind Report-JSON — gerendert
+                // statt als Blob (Prototyp-Note 2).
+                if let report = TimelineReportView.parseIfReport(answer.text) {
+                    TimelineReportView(report: report)
+                        .frame(maxWidth: 560, alignment: .leading)
+                        .padding(.top, 12)
+                } else {
+                    TranscriptMarkdownView(text: answer.text)
+                        .frame(maxWidth: 560, alignment: .leading)
+                        .padding(.top, 12)
+                }
             }
         }
         .padding(.vertical, 10)
         .opacity(dimOpacity)
-        .animation(.easeOut(duration: 0.18), value: dimOpacity)
-        .onHover { isHovering = $0 }
     }
 
     // MARK: - Prompt
@@ -128,5 +137,82 @@ struct TimelineRoundView: View, Equatable {
         formatter.allowedUnits = [.useKB, .useMB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: Int64(bytes))
+    }
+}
+
+/// Injizierte Teammate-/System-Nachricht: gestrichelter Block mit Badge und
+/// Ein-Zeilen-Gist; das rohe Payload erst nach Klick (nie wieder eine
+/// bildschirmfüllende JSON-Bubble).
+struct TeammateMessageBlock: View {
+    let message: InjectedTeammateMessage
+    let timestamp: Date?
+
+    @State private var isExpanded = false
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text("TEAMMATE")
+                        .font(.system(size: 8, weight: .bold))
+                        .tracking(0.5)
+                        .foregroundStyle(Color(red: 0.89, green: 0.60, blue: 0.78))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1.5)
+                        .background(Color(red: 0.89, green: 0.60, blue: 0.78).opacity(0.10), in: RoundedRectangle(cornerRadius: 4))
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(red: 0.89, green: 0.60, blue: 0.78).opacity(0.28), lineWidth: 1))
+                    Text(message.gist)
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 6)
+                    if let timestamp {
+                        Text(Self.timeFormatter.string(from: timestamp))
+                            .font(.system(size: 10).monospacedDigit())
+                            .foregroundStyle(AgentTheme.textTertiary)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Text(message.raw)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .textSelection(.enabled)
+                    .lineSpacing(2)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(Rectangle().frame(height: 1).foregroundStyle(AgentTheme.border), alignment: .top)
+                    .transition(.opacity)
+            }
+        }
+        .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(AgentTheme.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        )
+        .frame(maxWidth: 500, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.vertical, 12)
     }
 }

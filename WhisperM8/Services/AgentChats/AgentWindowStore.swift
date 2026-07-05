@@ -35,9 +35,16 @@ final class AgentWindowStore {
     /// Tab-Wechsel/Reorders zu einem Schreibvorgang.
     @ObservationIgnored var saveDebounce: Duration = .milliseconds(400)
 
+    /// Offene Tabs ALLER Fenster zum App-Start — Snapshot BEVOR Restore/
+    /// User-Interaktion den State verändern. Basis des Summary-Start-Abgleichs
+    /// („nur zuvor aktive Tabs prüfen, nie die Historie").
+    @ObservationIgnored private(set) var openTabIDsAtLaunch: [UUID] = []
+
     init(persistence: AgentSessionStore = AgentSessionStore()) {
         self.persistence = persistence
         self.state = persistence.loadUIState()
+        var seen = Set<UUID>()
+        openTabIDsAtLaunch = state.windows.flatMap(\.openTabIDs).filter { seen.insert($0).inserted }
     }
 
     // MARK: - Reads

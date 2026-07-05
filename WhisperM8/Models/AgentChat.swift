@@ -499,6 +499,27 @@ struct AgentSessionSummary: Codable, Equatable, Hashable {
     /// seit der Generierung gewachsen ist, betrachten wir den Summary als stale
     /// und triggern Re-Generation. Optional damit alte JSONs migrierbar bleiben.
     var transcriptDigest: String?
+    /// Grober Abschluss-Status aus dem Summarizer: abgeschlossen|offen|unterbrochen.
+    var status: String?
+    /// Deterministisch aus dem Transcript extrahierte Fakten (Commits/Tests/
+    /// Dateien) — das LLM schreibt nur headline/details, nie SHAs.
+    var evidence: Evidence?
+
+    struct Evidence: Codable, Equatable, Hashable {
+        struct Commit: Codable, Equatable, Hashable {
+            var sha: String
+            var message: String
+        }
+        struct TestRun: Codable, Equatable, Hashable {
+            var command: String
+            var passed: Bool
+        }
+        var commits: [Commit] = []
+        var tests: [TestRun] = []
+        var filesChanged: [String] = []
+
+        var isEmpty: Bool { commits.isEmpty && tests.isEmpty && filesChanged.isEmpty }
+    }
 }
 
 /// Leichter Zeiger auf den im Agent-Chats-Window aktuell aktiven Chat.

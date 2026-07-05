@@ -242,6 +242,14 @@ struct AgentSessionStore {
         }
     }
 
+    /// Persistiert eine (neu) generierte Session-Zusammenfassung — vom
+    /// `AgentSessionSummarizer` (LLM) bzw. Report-Mapping (Subagents).
+    func applySummary(id: UUID, summary: AgentSessionSummary) throws {
+        try updateSession(id: id) { session in
+            session.summary = summary
+        }
+    }
+
     /// Vom Runtime-Watcher beim Erkennen eines abgeschlossenen Agent-Turns gesetzt.
     /// Dient dem Auto-Namer als Vorbedingung („mindestens ein Turn ist gelaufen").
     func recordTurnEnded(id: UUID, at date: Date = Date()) throws {

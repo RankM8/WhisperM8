@@ -24,6 +24,8 @@ struct SubagentJobDetailView: View {
     /// Tail-first wie in AgentSessionDetailView: initial nur das Dateiende,
     /// mehr Verlauf per ×4-Eskalation auf User-Klick.
     @State private var transcriptTailBytes = TranscriptTailReader.defaultTailBytes
+    @State private var historyState = TranscriptHistoryState.idle
+    @State private var countBeforeEarlierLoad: Int?
     @State private var eventSource: FileEventSource?
     @State private var transcriptReloadTask: Task<Void, Never>?
     @State private var composerText = ""
@@ -58,18 +60,21 @@ struct SubagentJobDetailView: View {
                     .padding(.horizontal, 2)
             }
 
+            // Auftrag: der Prompt an den Subagent — immer sichtbar, ganz oben
+            // (Prototyp: Hierarchie Auftrag → Ergebnis → Live-Verlauf).
+            if let intent = snapshot?.intent, !intent.isEmpty {
+                mandateBlock(intent)
+            }
+
             resultCard
 
             AgentTranscriptContainerView(
                 transcript: transcript,
                 session: session,
                 isWorking: snapshot?.isActive == true,
-                onLoadEarlierHistory: {
-                    transcriptTailBytes *= 4
-                    if let url = cachedTranscriptURL {
-                        reloadTranscript(from: url)
-                    }
-                }
+                onLoadEarlierHistory: { loadEarlierHistory() },
+                history: historyState,
+                loadHint: nil
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(AgentTheme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -188,18 +193,52 @@ struct SubagentJobDetailView: View {
 
     // MARK: - Ergebnis-Karte
 
+    /// Auftrag-Bubble (Gegenstück zur User-Bubble, von links).
+    @ViewBuilder
+    private func mandateBlock(_ intent: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("Auftrag")
+                .font(.system(size: 9, weight: .bold))
+                .tracking(0.6)
+                .textCase(.uppercase)
+                .foregroundStyle(AgentTheme.textTertiary)
+                .padding(.top, 9)
+            Text(intent)
+                .font(.system(size: 12.5))
+                .foregroundStyle(AgentTheme.textPrimary)
+                .lineSpacing(2)
+                .lineLimit(4)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 5, bottomLeadingRadius: 16,
+                        bottomTrailingRadius: 16, topTrailingRadius: 16
+                    )
+                    .fill(AgentTheme.control)
+                )
+            Spacer(minLength: 0)
+        }
+    }
+
     @ViewBuilder
     private var resultCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 Text("Ergebnis")
                     .font(.system(size: 10, weight: .bold))
                     .tracking(0.6)
                     .foregroundStyle(AgentTheme.textTertiary)
-                if let reportStatus = report?.status {
+                if let reportStatus = report?.status, snapshot?.isActive != true {
                     Text(reportStatus.rawValue.uppercased())
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(reportStatusColor(reportStatus))
+                    reportSourceChip
+                }
+                if snapshot?.isActive == true {
+                    generatingChip
                 }
                 Spacer(minLength: 0)
                 if let metrics = metricsLine {
@@ -209,55 +248,35 @@ struct SubagentJobDetailView: View {
                 }
             }
 
-            if let report {
-                // Summary als Fließtext im Timeline-Ton — Details darunter
-                // als kompakte Op-Zeilen (Stil der Aktivitäts-Details).
-                Text(report.summary)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(AgentTheme.textPrimary)
-                    .lineSpacing(2)
+            // Zustands-Hierarchie (Prototyp): Übernommen → Live → Fehler →
+            // Report → Roh-Fallback → Platzhalter. Die Karte hält ihren
+            // Platz in JEDEM Zustand.
+            if snapshot?.state == .takenOver {
+                HStack(spacing: 8) {
+                    Image(systemName: "keyboard")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                    Text("Interaktiv übernommen — dieser Job läuft jetzt als normaler Codex-Chat weiter. Composer und `agent send` sind deaktiviert; der Verlauf unten bleibt lesbar.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if snapshot?.isActive == true {
+                liveStrip
+            } else if snapshot?.state == .failed, let reason = snapshot?.failureReason {
+                Text(reason)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AgentTheme.statusError)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-
-                if !report.filesChanged.isEmpty || !report.commits.isEmpty || report.testsRun != nil {
-                    VStack(alignment: .leading, spacing: 2.5) {
-                        ForEach(report.filesChanged, id: \.self) { file in
-                            reportRow(glyph: "±", glyphColor: AgentTheme.accent, text: file)
-                        }
-                        ForEach(Array(report.commits.enumerated()), id: \.offset) { _, commit in
-                            reportRow(
-                                glyph: "⌥",
-                                glyphColor: AgentTheme.accentDiffPos,
-                                text: "\(commit.sha.prefix(7)) \(commit.message)"
-                            )
-                        }
-                        if let tests = report.testsRun {
-                            reportRow(
-                                glyph: tests.passed ? "✓" : "✗",
-                                glyphColor: tests.passed ? AgentTheme.statusWorking : AgentTheme.statusError,
-                                text: tests.command
-                            )
-                        }
-                    }
-                    .padding(.leading, 2)
-                    .padding(.top, 2)
-                }
-
+                Text("Der letzte Report bleibt unten im Verlauf sichtbar. Ein Folge-Prompt startet einen frischen Turn.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AgentTheme.textTertiary)
+            } else if let report {
+                TranscriptMarkdownView(text: report.summary)
+                ReportEvidenceRows(report: report, includeOpenQuestions: false)
                 if !report.openQuestions.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(report.openQuestions, id: \.self) { question in
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text("?")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(AgentTheme.statusAwaiting)
-                                Text(question)
-                                    .font(.system(size: 10.5))
-                                    .foregroundStyle(AgentTheme.textSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                    .padding(.top, 2)
+                    openQuestionsDisclosure(report)
                 }
             } else if let rawLastMessage {
                 // Nicht als Report parsebar → Rohtext durchreichen statt
@@ -270,15 +289,8 @@ struct SubagentJobDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 120)
-            } else if let reason = snapshot?.failureReason {
-                Text(reason)
-                    .font(.system(size: 11))
-                    .foregroundStyle(AgentTheme.statusError)
-                    .textSelection(.enabled)
             } else {
-                Text(snapshot?.isActive == true
-                    ? "Der Subagent arbeitet — der Report erscheint nach dem Turn."
-                    : "Noch kein Report vorhanden.")
+                Text("Noch kein Report vorhanden.")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
             }
@@ -289,20 +301,92 @@ struct SubagentJobDetailView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AgentTheme.border, lineWidth: 1))
     }
 
-    /// Kompakte Op-Zeile im Stil der Timeline-Aktivitäts-Details.
+    /// Live-Zeile IN der Karte (running): pulsierender Dot + Tool-Zähler +
+    /// letztes Kommando — der Ergebnis-Platz bleibt reserviert.
     @ViewBuilder
-    private func reportRow(glyph: String, glyphColor: Color, text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
-            Text(glyph)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(glyphColor)
-                .frame(width: 11, alignment: .center)
-            Text(text)
-                .font(.system(size: 10.5, design: .monospaced))
+    private var liveStrip: some View {
+        let stats = liveToolStats
+        HStack(spacing: 8) {
+            TimelinePulsingDot(color: AgentTheme.statusWorking)
+            Text(stats.count > 0 ? "arbeitet — \(stats.count) Tool-Aufrufe bisher" : "arbeitet …")
+                .font(.system(size: 11.5))
                 .foregroundStyle(AgentTheme.textSecondary)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
+            if let last = stats.lastSubject {
+                Text("zuletzt: \(last)")
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+    }
+
+    /// Tool-Statistik aus dem Live-Transcript (Tail — bounded).
+    private var liveToolStats: (count: Int, lastSubject: String?) {
+        guard let messages = transcript?.messages else { return (0, nil) }
+        var count = 0
+        var last: String?
+        for message in messages {
+            for block in message.blocks {
+                if case .toolUse(let name, let input) = block {
+                    count += 1
+                    last = ToolCallClassifier.classify(name: name, input: input).subject
+                }
+            }
+        }
+        return (count, last)
+    }
+
+    /// Teal-Chip: das Ergebnis stammt aus dem Agent-Report (kein LLM-Lauf).
+    private var reportSourceChip: some View {
+        HStack(spacing: 5) {
+            Circle().fill(Color.teal).frame(width: 5, height: 5)
+            Text("Quelle: Agent-Report")
+        }
+        .font(.system(size: 9.5, weight: .semibold))
+        .foregroundStyle(Color.teal)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(Color.teal.opacity(0.06), in: Capsule())
+        .overlay(Capsule().stroke(Color.teal.opacity(0.3), lineWidth: 1))
+    }
+
+    private var generatingChip: some View {
+        HStack(spacing: 5) {
+            Text("✦")
+                .font(.system(size: 10))
+            Text("Turn läuft — Report folgt")
+        }
+        .font(.system(size: 9.5, weight: .semibold))
+        .foregroundStyle(AgentTheme.accent)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(AgentTheme.accentTintSoft, in: Capsule())
+        .overlay(Capsule().stroke(AgentTheme.accentTint, lineWidth: 1))
+    }
+
+    /// Offene Fragen im Deep-Dive-Stil (Prototyp: „Offene Punkte & Hinweise").
+    @ViewBuilder
+    private func openQuestionsDisclosure(_ report: AgentReport) -> some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(report.openQuestions.enumerated()), id: \.offset) { _, question in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("?")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AgentTheme.statusAwaiting)
+                        Text(question)
+                            .font(.system(size: 11))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            Text("Offene Punkte & Hinweise (\(report.openQuestions.count))")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AgentTheme.textTertiary)
         }
     }
 
@@ -330,9 +414,16 @@ struct SubagentJobDetailView: View {
 
     // MARK: - Composer
 
+    /// Placeholder erklärt den Zustand (Prototyp) — nicht nur disabled.
+    private var composerPlaceholder: String {
+        if snapshot?.state == .takenOver { return "Übernommen — weiter im Terminal-Tab" }
+        if snapshot?.isActive == true { return "Turn läuft — warten oder stoppen …" }
+        return "Folge-Prompt an den Subagent …"
+    }
+
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("Folge-Prompt an den Subagent …", text: $composerText, axis: .vertical)
+            TextField(composerPlaceholder, text: $composerText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .lineLimit(1...5)
@@ -517,6 +608,16 @@ struct SubagentJobDetailView: View {
         }
     }
 
+    /// Explizites Nachladen älteren Verlaufs (×4-Fenster) mit Feedback-Zustand.
+    private func loadEarlierHistory() {
+        guard transcript?.hasTruncatedHead == true, countBeforeEarlierLoad == nil,
+              let url = cachedTranscriptURL else { return }
+        countBeforeEarlierLoad = transcript?.messages.count ?? 0
+        historyState = TranscriptHistoryState(isLoading: true, lastLoadedDelta: nil, reachedStart: false)
+        transcriptTailBytes *= 4
+        reloadTranscript(from: url)
+    }
+
     private func reloadTranscript(from url: URL) {
         let tailBytes = transcriptTailBytes
         Task {
@@ -524,6 +625,16 @@ struct SubagentJobDetailView: View {
                 CodexTranscriptReader.readTail(fileURL: url, tailBytes: tailBytes)
             }.value
             transcript = fresh
+            // Feedback nur für explizites Nachladen — Live-Reloads (Events)
+            // fassen den History-Zustand nicht an.
+            if let before = countBeforeEarlierLoad {
+                countBeforeEarlierLoad = nil
+                historyState = TranscriptHistoryState(
+                    isLoading: false,
+                    lastLoadedDelta: max(0, fresh.messages.count - before),
+                    reachedStart: !fresh.hasTruncatedHead
+                )
+            }
         }
     }
 }

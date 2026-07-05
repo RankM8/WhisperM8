@@ -205,6 +205,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.isAutoChatRenameEnabled) }
     }
 
+    /// Aktiviert automatische Chat-Zusammenfassungen (Headless-CLI nach
+    /// Session-Ende + Start-Abgleich). Default: an. Manueller Refresh in der
+    /// Summary-Karte funktioniert unabhängig davon.
+    var isAutoSummaryEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.isAutoSummaryEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.isAutoSummaryEnabled) }
+    }
+
     /// Steuert ob SwiftTerm Terminal-Bell-Sounds (`\a` = 0x07 von Claude/Codex
     /// bei Permission-Prompts) als macOS-System-Sound ausspielt. Default: an.
     var isTerminalBellEnabled: Bool {
@@ -375,6 +383,7 @@ enum PreferenceKeys {
     static let agentDefaultProjectPath = "agentDefaultProjectPath"
     static let defaultAgentProvider = "defaultAgentProvider"
     static let isAutoChatRenameEnabled = "isAutoChatRenameEnabled"
+    static let isAutoSummaryEnabled = "isAutoSummaryEnabled"
     static let isTerminalBellEnabled = "isTerminalBellEnabled"
     static let codexExtraArguments = "codexExtraArguments"
     static let claudeExtraArguments = "claudeExtraArguments"

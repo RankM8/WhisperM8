@@ -14,6 +14,12 @@ struct AgentTranscriptContainerView: View {
     /// Nachlade-Hook des Owners (vergrößert dessen Tail-Lesefenster) — nur
     /// relevant wenn `transcript.hasTruncatedHead`.
     var onLoadEarlierHistory: (() -> Void)?
+    /// Lade-Feedback + Fenster-Hinweis des Owners (vier Zustände).
+    var history: TranscriptHistoryState = .idle
+    var loadHint: String?
+    /// Summary-Karte über der Timeline (Chat-Sessions; Subagents haben die
+    /// Ergebnis-Karte in ihrer eigenen Detail-View).
+    var showsSummaryCard: Bool = false
 
     /// Global gemerkter Modus — wer Roh bevorzugt, bekommt Roh überall.
     @AppStorage("agentTranscriptViewMode") private var storedMode = TranscriptViewMode.chat.rawValue
@@ -45,10 +51,16 @@ struct AgentTranscriptContainerView: View {
             if !isEmpty {
                 headerStrip
             }
+            if showsSummaryCard, !isEmpty {
+                SessionSummaryCard(session: session)
+                    .background(AgentTheme.background)
+            }
             if isEmpty || mode == .raw {
                 AgentChatTranscriptView(
                     transcript: transcript,
                     session: session,
+                    history: history,
+                    loadHint: loadHint,
                     onLoadEarlierHistory: onLoadEarlierHistory
                 )
             } else {
@@ -56,6 +68,8 @@ struct AgentTranscriptContainerView: View {
                     timeline: timeline,
                     isWorking: isWorking,
                     hasTruncatedHead: transcript?.hasTruncatedHead ?? false,
+                    history: history,
+                    loadHint: loadHint,
                     onLoadEarlierHistory: onLoadEarlierHistory
                 )
                 .background(AgentTheme.background)

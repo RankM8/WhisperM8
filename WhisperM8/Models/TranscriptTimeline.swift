@@ -43,6 +43,9 @@ struct TranscriptPrompt: Equatable {
     var text: String
     var attachments: [TranscriptAttachment]
     var timestamp: Date?
+    /// Gesetzt, wenn der Prompt eine injizierte Teammate-/System-Nachricht
+    /// ist — die View rendert dann den kompakten Block statt der Bubble.
+    var teammate: InjectedTeammateMessage?
 }
 
 /// Bild-Anhang eines Prompts (nur Metadaten, wie im Quell-Block).

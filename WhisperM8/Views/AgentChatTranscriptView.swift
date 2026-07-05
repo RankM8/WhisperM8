@@ -15,6 +15,8 @@ struct AgentChatTranscriptView: View {
     /// Nachlade-Hook fuer tail-gelesene Transcripts (Owner vergroessert sein
     /// Lesefenster) — greift wenn alle geladenen Messages sichtbar sind,
     /// die Datei aber vor dem Fenster weiteren Verlauf hat.
+    var history: TranscriptHistoryState = .idle
+    var loadHint: String?
     var onLoadEarlierHistory: (() -> Void)?
 
     /// Wie viele Messages initial ueber `ForEach` ausgegeben werden.
@@ -61,8 +63,9 @@ struct AgentChatTranscriptView: View {
             } else {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 14) {
-                        if hasMoreEarlier || canLoadEarlierHistory {
-                            earlierButton
+                        if hasMoreEarlier || canLoadEarlierHistory || history.isLoading
+                            || history.lastLoadedDelta != nil || history.reachedStart {
+                            historySection
                                 .padding(.horizontal, 16)
                                 .padding(.top, 8)
                         }
@@ -93,40 +96,40 @@ struct AgentChatTranscriptView: View {
         !hasMoreEarlier && transcript?.hasTruncatedHead == true && onLoadEarlierHistory != nil
     }
 
+    /// Vier Zustände, identisch zur Timeline (geteilte Bausteine).
     @ViewBuilder
-    private var earlierButton: some View {
-        Button {
-            if hasMoreEarlier {
-                visibleCount = min(
-                    allMessages.count,
-                    visibleCount + Self.messageBatchIncrement
-                )
+    private var historySection: some View {
+        VStack(spacing: 7) {
+            if history.isLoading {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Verlauf wird geladen …")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
+                .padding(.vertical, 5)
             } else {
-                // Fenster praeventiv weiten, damit die nachgeladenen
-                // Messages direkt sichtbar sind.
-                visibleCount += Self.messageBatchIncrement
-                onLoadEarlierHistory?()
+                if let delta = history.lastLoadedDelta {
+                    Text(delta > 0 ? "✓ \(delta) ältere Nachrichten geladen" : "✓ Verlauf aktualisiert")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(AgentTheme.statusWorking)
+                }
+                if hasMoreEarlier {
+                    TranscriptHistoryPill(title: "\(hiddenEarlierCount) frühere Nachrichten anzeigen", detail: nil) {
+                        visibleCount = min(allMessages.count, visibleCount + Self.messageBatchIncrement)
+                    }
+                } else if canLoadEarlierHistory {
+                    TranscriptHistoryPill(title: "Früheren Verlauf laden", detail: loadHint) {
+                        // Fenster praeventiv weiten, damit die nachgeladenen
+                        // Messages direkt sichtbar sind.
+                        visibleCount += Self.messageBatchIncrement
+                        onLoadEarlierHistory?()
+                    }
+                } else if history.reachedStart {
+                    TranscriptHistoryStartMarker()
+                }
             }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.up.circle")
-                    .font(.system(size: 12))
-                Text(hasMoreEarlier
-                    ? "\(hiddenEarlierCount) frühere Nachrichten laden"
-                    : "Früheren Verlauf laden …")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .foregroundStyle(AgentTheme.textSecondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(AgentTheme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(AgentTheme.border, lineWidth: 1)
-            )
         }
-        .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
     }
 

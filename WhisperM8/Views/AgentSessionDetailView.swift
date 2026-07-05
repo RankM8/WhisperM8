@@ -43,6 +43,10 @@ struct AgentSessionDetailView: View {
     /// explizit nach (×4-Eskalation pro Klick).
     private static let initialTailBytes = 512 * 1024
     @State private var transcriptTailBytes = AgentSessionDetailView.initialTailBytes
+    /// Feedback-Zustand des Nachladens (Spinner/„✓ N geladen"/Anfang).
+    @State private var historyState = TranscriptHistoryState.idle
+    /// Message-Zahl vor dem laufenden Nachladen — für das „✓ N"-Delta.
+    @State private var countBeforeEarlierLoad: Int?
 
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
@@ -63,7 +67,10 @@ struct AgentSessionDetailView: View {
                 AgentTranscriptContainerView(
                     transcript: cachedTranscript,
                     session: session,
-                    onLoadEarlierHistory: { loadEarlierHistory() }
+                    onLoadEarlierHistory: { loadEarlierHistory() },
+                    history: historyState,
+                    loadHint: tailWindowHint,
+                    showsSummaryCard: !session.isSubagentJob
                 )
             }
         }
@@ -83,6 +90,8 @@ struct AgentSessionDetailView: View {
             cachedTranscript = nil
             isLoadingTranscript = false
             transcriptTailBytes = Self.initialTailBytes
+            historyState = .idle
+            countBeforeEarlierLoad = nil
             if session.shouldLaunchOnOpen == true {
                 prepareCommand()
             }
@@ -150,6 +159,16 @@ struct AgentSessionDetailView: View {
                 guard targetSessionID == session.id else { return }
                 cachedTranscript = transcript
                 isLoadingTranscript = false
+                // Nachlade-Feedback: „✓ N geladen" bzw. Anfang erreicht —
+                // der Klick hat IMMER eine sichtbare Wirkung.
+                if let before = countBeforeEarlierLoad {
+                    countBeforeEarlierLoad = nil
+                    historyState = TranscriptHistoryState(
+                        isLoading: false,
+                        lastLoadedDelta: max(0, (transcript?.messages.count ?? 0) - before),
+                        reachedStart: transcript?.hasTruncatedHead != true
+                    )
+                }
             }
         }
     }
@@ -158,9 +177,21 @@ struct AgentSessionDetailView: View {
     /// Explizite User-Aktion — so bleibt auch ein 50-MB-Chat beherrschbar
     /// (512 KB → 2 MB → 8 MB → …), statt beim Öffnen alles zu parsen.
     private func loadEarlierHistory() {
-        guard cachedTranscript?.hasTruncatedHead == true else { return }
+        guard cachedTranscript?.hasTruncatedHead == true, countBeforeEarlierLoad == nil else { return }
+        countBeforeEarlierLoad = cachedTranscript?.messages.count ?? 0
+        historyState = TranscriptHistoryState(isLoading: true, lastLoadedDelta: nil, reachedStart: false)
         transcriptTailBytes *= 4
         loadTranscriptIfNeeded()
+    }
+
+    /// Fenster-Hinweis für den Nachlade-Button („512 KB → 2 MB").
+    private var tailWindowHint: String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB]
+        formatter.countStyle = .binary
+        let current = formatter.string(fromByteCount: Int64(transcriptTailBytes))
+        let next = formatter.string(fromByteCount: Int64(transcriptTailBytes * 4))
+        return "\(current) → \(next)"
     }
 
     @ViewBuilder

@@ -184,6 +184,22 @@ final class AgentJobWorkspaceSync {
                     sessionID: session.id,
                     failed: job.state == .failed
                 )
+                // Report → Session-Summary (KEIN LLM-Lauf — der Report IST
+                // die Zusammenfassung). Read off-main, Apply auf Main.
+                let shortId = job.shortId
+                let sessionID = session.id
+                Task { @MainActor in
+                    let lastMessage = await Task.detached(priority: .utility) {
+                        AgentJobStore().readLastMessage(shortId: shortId)
+                    }.value
+                    guard let lastMessage,
+                          let report = AgentReport.parse(lastMessage: lastMessage) else { return }
+                    AgentSessionSummarizer.shared.applyReportSummary(
+                        sessionID: sessionID,
+                        report: report,
+                        transcriptDigest: nil
+                    )
+                }
             }
         }
         AgentJobRuntimeModel.shared.apply(

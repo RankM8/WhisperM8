@@ -109,3 +109,33 @@ final class MarkdownBlockParserTests: XCTestCase {
         XCTAssertTrue(MarkdownBlockParser.parse("").isEmpty)
     }
 }
+
+final class MarkdownTableTests: XCTestCase {
+
+    func testParsesHeaderAndRows() {
+        let table = MarkdownTable.parse("| Ticket | Ergebnis |\n|---|---|\n| AKQ-84 | ✓ Bestanden |\n| AKQ-115 | ⚠ Mängel |")
+        XCTAssertEqual(table?.headers, ["Ticket", "Ergebnis"])
+        XCTAssertEqual(table?.rows, [["AKQ-84", "✓ Bestanden"], ["AKQ-115", "⚠ Mängel"]])
+    }
+
+    func testTableWithoutSeparatorHasNoHeaders() {
+        let table = MarkdownTable.parse("| a | b |\n| c | d |")
+        XCTAssertEqual(table?.headers, [])
+        XCTAssertEqual(table?.rows, [["a", "b"], ["c", "d"]])
+    }
+
+    func testPadsShortRowsToColumnCount() {
+        let table = MarkdownTable.parse("| a | b | c |\n|---|---|---|\n| nur-eine |")
+        XCTAssertEqual(table?.rows, [["nur-eine", "", ""]])
+    }
+
+    func testAlignmentColonsCountAsSeparator() {
+        let table = MarkdownTable.parse("| L | R |\n|:--|--:|\n| 1 | 2 |")
+        XCTAssertEqual(table?.headers, ["L", "R"])
+        XCTAssertEqual(table?.rows, [["1", "2"]])
+    }
+
+    func testGarbageYieldsNil() {
+        XCTAssertNil(MarkdownTable.parse("kein pipe inhalt"))
+    }
+}

@@ -53,12 +53,14 @@ enum TranscriptTimelineBuilder {
                         }
                         return nil
                     }
+                    let promptText = textBlocks.joined(separator: "\n\n")
                     current = RoundAccumulator(
                         id: message.id.uuidString,
                         prompt: TranscriptPrompt(
-                            text: textBlocks.joined(separator: "\n\n"),
+                            text: promptText,
                             attachments: attachments,
-                            timestamp: message.timestamp
+                            timestamp: message.timestamp,
+                            teammate: TeammateMessageParser.parse(promptText)
                         )
                     )
                 }

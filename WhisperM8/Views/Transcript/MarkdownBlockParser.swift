@@ -9,10 +9,56 @@ enum MarkdownBlock: Equatable {
     case codeFence(language: String?, code: String)
     case list(items: [String], ordered: Bool)
     case quote(String)
-    /// Markdown-Tabellen behalten wir als Monospace-Block — echtes
-    /// Tabellen-Layout lohnt den Aufwand hier nicht, Ausrichtung bleibt lesbar.
+    /// Markdown-Tabelle als Roh-Zeilen; die View parst sie via
+    /// `MarkdownTable.parse` in Kopf + Zeilen (Hairline-Rendering) und fällt
+    /// bei unparsebarem Inhalt auf den Monospace-Block zurück.
     case table(String)
     case divider
+}
+
+/// Geparste Markdown-Tabelle für das Hairline-Rendering. `headers` ist leer,
+/// wenn die Tabelle keine Separator-Zeile (`|---|`) hat — dann sind alle
+/// Zeilen Datenzeilen.
+struct MarkdownTable: Equatable {
+    var headers: [String]
+    var rows: [[String]]
+
+    /// Zerlegt die Roh-Zeilen eines `.table`-Blocks. Tolerant: Zellen werden
+    /// getrimmt, führende/abschließende Pipes entfernt, die Separator-Zeile
+    /// (nur `-`, `:` und Leerraum) übersprungen. `nil` bei leerem Ergebnis.
+    static func parse(_ raw: String) -> MarkdownTable? {
+        var headers: [String] = []
+        var rows: [[String]] = []
+        var sawSeparator = false
+
+        for line in raw.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("|") || trimmed.contains("|") else { continue }
+            let inner = trimmed
+                .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+            let cells = inner.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+            let isSeparator = !cells.isEmpty && cells.allSatisfy { cell in
+                !cell.isEmpty && cell.allSatisfy { $0 == "-" || $0 == ":" }
+            }
+            if isSeparator {
+                // Erste Separator-Zeile adelt die Zeile davor zum Kopf.
+                if !sawSeparator, headers.isEmpty, rows.count == 1 {
+                    headers = rows.removeFirst()
+                }
+                sawSeparator = true
+                continue
+            }
+            rows.append(cells)
+        }
+        guard !rows.isEmpty || !headers.isEmpty else { return nil }
+        // Spaltenzahl angleichen (kürzere Zeilen auffüllen), damit das
+        // Grid-Rendering nicht kippt.
+        let columns = max(headers.count, rows.map(\.count).max() ?? 0)
+        guard columns > 0 else { return nil }
+        if !headers.isEmpty { headers += Array(repeating: "", count: columns - headers.count) }
+        rows = rows.map { $0 + Array(repeating: "", count: columns - $0.count) }
+        return MarkdownTable(headers: headers, rows: rows)
+    }
 }
 
 /// Purer, zeilenbasierter Markdown-Block-Splitter für Assistant-Antworten.

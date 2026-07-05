@@ -13,6 +13,10 @@ struct AgentTimelineView: View {
     var isWorking: Bool = false
     /// Die Quelldatei hat vor dem Lesefenster weiteren Verlauf.
     var hasTruncatedHead: Bool = false
+    /// Lade-Feedback des Owners (Spinner / „✓ N geladen" / Anfang erreicht).
+    var history: TranscriptHistoryState = .idle
+    /// Fenster-Hinweis für den Button, z.B. „512 KB → 2 MB".
+    var loadHint: String?
     /// Vergrößert das Tail-Lesefenster des Owners (explizites Nachladen).
     var onLoadEarlierHistory: (() -> Void)?
 
@@ -38,8 +42,8 @@ struct AgentTimelineView: View {
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 4) {
-                if hiddenEarlierCount > 0 || (hasTruncatedHead && onLoadEarlierHistory != nil) {
-                    earlierButton
+                if showsHistorySection {
+                    historySection
                 }
                 ForEach(visibleRounds) { round in
                     TimelineRoundView(
@@ -70,29 +74,50 @@ struct AgentTimelineView: View {
         }
     }
 
+    private var canLoadFromDisk: Bool {
+        hasTruncatedHead && onLoadEarlierHistory != nil
+    }
+
+    private var showsHistorySection: Bool {
+        history.isLoading || history.lastLoadedDelta != nil
+            || hiddenEarlierCount > 0 || canLoadFromDisk || history.reachedStart
+    }
+
+    /// Vier Zustände (Prototyp Rev 2): Button → Spinner → „✓ N geladen" →
+    /// „Anfang der Konversation". Sichtbares Feedback für JEDEN Klick.
     @ViewBuilder
-    private var earlierButton: some View {
-        Button {
-            if hiddenEarlierCount > 0 {
-                // Erst das Render-Fenster über bereits geladene Runden ziehen …
-                visibleCount = min(timeline.rounds.count, visibleCount + Self.roundBatchIncrement)
-            } else {
-                // … dann von der Platte nachladen (Owner vergrößert sein
-                // Tail-Fenster). Fenster präventiv weiten, damit die neuen
-                // Runden direkt sichtbar sind.
-                visibleCount += Self.roundBatchIncrement
-                onLoadEarlierHistory?()
-            }
-        } label: {
-            Text(hiddenEarlierCount > 0
-                ? "\(hiddenEarlierCount) frühere Runden anzeigen"
-                : "Früheren Verlauf laden …")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AgentTheme.textTertiary)
-                .padding(.horizontal, 10)
+    private var historySection: some View {
+        VStack(spacing: 7) {
+            if history.isLoading {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Verlauf wird geladen …")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
                 .padding(.vertical, 5)
+            } else {
+                if let delta = history.lastLoadedDelta {
+                    Text(delta > 0 ? "✓ \(delta) ältere Nachrichten geladen" : "✓ Verlauf aktualisiert")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(AgentTheme.statusWorking)
+                }
+                if hiddenEarlierCount > 0 {
+                    TranscriptHistoryPill(title: "\(hiddenEarlierCount) frühere Runden anzeigen", detail: nil) {
+                        visibleCount = min(timeline.rounds.count, visibleCount + Self.roundBatchIncrement)
+                    }
+                } else if canLoadFromDisk {
+                    TranscriptHistoryPill(title: "Früheren Verlauf laden", detail: loadHint) {
+                        // Fenster präventiv weiten, damit die nachgeladenen
+                        // Runden direkt sichtbar sind.
+                        visibleCount += Self.roundBatchIncrement
+                        onLoadEarlierHistory?()
+                    }
+                } else if history.reachedStart {
+                    TranscriptHistoryStartMarker()
+                }
+            }
         }
-        .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
         .padding(.bottom, 10)
     }
