@@ -15,32 +15,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static func page(routeID: String) -> SettingsPage? {
-        if let page = SettingsPage(rawValue: routeID) {
-            return page
-        }
-
-        switch routeID {
-        case "api":
-            return .transcription
-        case "codex", "modes", "templates", "testLab":
-            return .aiOutput
-        case "outputOverview", "history":
-            return .output
-        case "agentChats", "claudeCode":
-            return .agentChats
-        case "permissions":
-            return .permissions
-        case "hotkey", "audio":
-            return .recording
-        case "behavior":
-            return .general
-        case "cli":
-            return .cli
-        case "about":
-            return .about
-        default:
-            return nil
-        }
+        SettingsRouteTarget.resolve(routeID: routeID)?.page
     }
 
     var title: String {
@@ -177,34 +152,17 @@ struct SettingsView: View {
 
     private func applySettingsRoute(_ request: WindowRequest?) {
         guard let routeID = request?.settingsSectionID,
-              let page = SettingsPage.page(routeID: routeID) else {
+              let target = SettingsRouteTarget.resolve(routeID: routeID) else {
             return
         }
 
-        applyTabAlias(routeID: routeID)
-        selection = page
-    }
-
-    private func applyTabAlias(routeID: String) {
-        // Alte Deep-Links sollen nach dem Strangler-Umbau weiter im passenden Tab landen.
-        switch routeID {
-        case "codex", SettingsPage.aiOutput.rawValue:
-            aiOutputTab = .account
-        case "modes":
-            aiOutputTab = .modes
-        case "templates":
-            aiOutputTab = .templates
-        case "testLab":
-            aiOutputTab = .testLab
-        case "agentChats", SettingsPage.agentChats.rawValue:
-            agentChatsTab = .workspace
-        case "claudeCode":
-            agentChatsTab = .claudeHooks
-        // outputOverview/history: die fusionierte Output-Seite hat keine Tabs mehr —
-        // beide Alt-Routen landen ohne Zusatz-Zustand auf .output (A24).
-        default:
-            break
+        if let aiOutputTab = target.aiOutputTab {
+            self.aiOutputTab = aiOutputTab
         }
+        if let agentChatsTab = target.agentChatsTab {
+            self.agentChatsTab = agentChatsTab
+        }
+        selection = target.page
     }
 
     private func sidebarSection(_ group: SettingsPageGroup) -> some View {

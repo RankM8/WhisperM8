@@ -2,41 +2,40 @@ import XCTest
 @testable import WhisperM8
 
 final class SettingsRouteMappingTests: XCTestCase {
-    func testLegacyRouteIDsMapToSettingsPages() {
-        let expectations: [(routeID: String, page: SettingsPage)] = [
-            ("api", .transcription),
-            ("codex", .aiOutput),
-            ("outputOverview", .output),
-            ("history", .output),
-            ("modes", .aiOutput),
-            ("templates", .aiOutput),
-            ("testLab", .aiOutput),
-            ("agentChats", .agentChats),
-            ("claudeCode", .agentChats),
-            ("permissions", .permissions),
-            ("hotkey", .recording),
-            ("audio", .recording),
-            ("behavior", .general),
-            ("cli", .cli),
-            ("about", .about)
-        ]
+    func testRouteIDsResolveToExpectedTargets() {
+        let expectations: [(routeID: String, target: SettingsRouteTarget)] = [
+            ("api", SettingsRouteTarget(page: .transcription, aiOutputTab: nil, agentChatsTab: nil)),
+            ("codex", SettingsRouteTarget(page: .aiOutput, aiOutputTab: .account, agentChatsTab: nil)),
+            ("modes", SettingsRouteTarget(page: .aiOutput, aiOutputTab: .modes, agentChatsTab: nil)),
+            ("templates", SettingsRouteTarget(page: .aiOutput, aiOutputTab: .templates, agentChatsTab: nil)),
+            ("testLab", SettingsRouteTarget(page: .aiOutput, aiOutputTab: .testLab, agentChatsTab: nil)),
+            ("outputOverview", SettingsRouteTarget(page: .output, aiOutputTab: nil, agentChatsTab: nil)),
+            ("history", SettingsRouteTarget(page: .output, aiOutputTab: nil, agentChatsTab: nil)),
+            ("agentChats", SettingsRouteTarget(page: .agentChats, aiOutputTab: nil, agentChatsTab: .workspace)),
+            ("claudeCode", SettingsRouteTarget(page: .agentChats, aiOutputTab: nil, agentChatsTab: .claudeHooks)),
+            ("hotkey", SettingsRouteTarget(page: .recording, aiOutputTab: nil, agentChatsTab: nil)),
+            ("audio", SettingsRouteTarget(page: .recording, aiOutputTab: nil, agentChatsTab: nil)),
+            ("behavior", SettingsRouteTarget(page: .general, aiOutputTab: nil, agentChatsTab: nil))
+        ] + SettingsPage.allCases.map { page in
+            (page.rawValue, SettingsRouteTarget(page: page, aiOutputTab: nil, agentChatsTab: nil))
+        }
 
         for expectation in expectations {
             XCTAssertEqual(
+                SettingsRouteTarget.resolve(routeID: expectation.routeID),
+                expectation.target,
+                "Route \(expectation.routeID) should resolve to \(expectation.target)"
+            )
+            XCTAssertEqual(
                 SettingsPage.page(routeID: expectation.routeID),
-                expectation.page,
-                "Route \(expectation.routeID) should map to \(expectation.page)"
+                expectation.target.page,
+                "Wrapper should keep mapping \(expectation.routeID) to \(expectation.target.page)"
             )
         }
     }
 
-    func testRawValuesMapOneToOne() {
-        for page in SettingsPage.allCases {
-            XCTAssertEqual(SettingsPage.page(routeID: page.rawValue), page)
-        }
-    }
-
     func testUnknownRouteIDReturnsNil() {
+        XCTAssertNil(SettingsRouteTarget.resolve(routeID: "unknown-settings-route"))
         XCTAssertNil(SettingsPage.page(routeID: "unknown-settings-route"))
     }
 }

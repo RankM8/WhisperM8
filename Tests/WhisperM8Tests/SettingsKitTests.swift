@@ -16,7 +16,7 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(sleep.startCount, 1)
 
         sleep.resolveNext()
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await waitUntil { !state.isActive }
 
         XCTAssertFalse(state.isActive)
     }
@@ -38,7 +38,7 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(sleep.cancelCount, 1)
 
         sleep.resolveNext()
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await waitUntil { !state.isActive }
 
         XCTAssertFalse(state.isActive)
     }
@@ -86,23 +86,21 @@ final class SettingsKitTests: XCTestCase {
 
     @MainActor
     func testFeedbackStateResetStopsPendingTaskImmediately() async throws {
-        var releaseSleep: (() -> Void)?
-        let feedback = SettingsFeedbackState(duration: .seconds(5)) { _ in
-            try await withCheckedThrowingContinuation { continuation in
-                releaseSleep = { continuation.resume() }
-            }
+        let sleep = ManualSleep()
+        let feedback = SettingsFeedbackState(duration: .seconds(5)) { duration in
+            try await sleep.sleep(duration)
         }
 
         feedback.trigger()
+        try await waitUntil { sleep.startCount == 1 }
         XCTAssertTrue(feedback.isActive)
 
         feedback.reset()
         XCTAssertFalse(feedback.isActive)
+        try await waitUntil { sleep.cancelCount == 1 }
 
-        // Ein später auflösender alter Sleep darf den Zustand nicht mehr ändern
-        // (Generation-Guard) — reset() muss sofort und endgültig wirken.
-        releaseSleep?()
-        try await Task.sleep(nanoseconds: 20_000_000)
+        // Die alte Reset-Task ist gecancelt; ein spaeter Completion-Pfad darf
+        // den sofort zurueckgesetzten Zustand nicht wieder veraendern.
         XCTAssertFalse(feedback.isActive)
     }
 

@@ -102,6 +102,65 @@ final class OutputArchiveViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedReport?.id, report.id)
     }
 
+    func testSelectedReportCanStayOutsideCurrentFilter() throws {
+        let store = makeStore()
+        let hiddenByFilter = try store.save(
+            makeDraft(
+                createdAt: Date(timeIntervalSince1970: 20),
+                modeID: OutputMode.cleanID,
+                status: .failed,
+                finalTranscript: "hidden but selected"
+            ),
+            cleanupPolicy: nil
+        )
+        _ = try store.save(
+            makeDraft(
+                createdAt: Date(timeIntervalSince1970: 10),
+                modeID: OutputMode.taskID,
+                status: .succeeded,
+                finalTranscript: "visible"
+            ),
+            cleanupPolicy: nil
+        )
+        let model = OutputArchiveViewModel(store: store)
+        model.reload()
+
+        model.select(reportID: hiddenByFilter.id)
+        model.scope = .tasks
+        model.status = .succeeded
+
+        XCTAssertFalse(model.filteredReports.contains { $0.id == hiddenByFilter.id })
+        XCTAssertEqual(model.selectedReportID, hiddenByFilter.id)
+        XCTAssertEqual(model.selectedReport?.id, hiddenByFilter.id)
+    }
+
+    func testLatestFallbackKeepsRawAndFinalOutputSeparately() {
+        let fallback = OutputArchiveFallback(
+            mode: OutputMode.mode(for: OutputMode.cleanID),
+            rawTranscript: "raw fallback",
+            finalTranscript: "final fallback",
+            createdAt: Date(timeIntervalSince1970: 40)
+        )
+        let model = OutputArchiveViewModel(store: makeStore(), latestFallback: fallback)
+
+        XCTAssertEqual(model.latestFallback?.rawTranscript, "raw fallback")
+        XCTAssertEqual(model.latestFallback?.finalTranscript, "final fallback")
+        XCTAssertEqual(model.latestFallback?.shortSummary, "final fallback")
+        XCTAssertTrue(model.latestFallback?.hasVisibleOutput == true)
+    }
+
+    func testSelectUnknownReportIDClearsExplicitSelectionAndFallsBackToFirstFilteredReport() throws {
+        let store = makeStore()
+        let report = try store.save(makeDraft(createdAt: Date(timeIntervalSince1970: 10), finalTranscript: "fallback"), cleanupPolicy: nil)
+        let model = OutputArchiveViewModel(store: store)
+        model.reload()
+
+        model.select(reportID: UUID())
+
+        XCTAssertNil(model.selectedReportID)
+        XCTAssertEqual(model.selectedReport?.id, report.id)
+    }
+
     private func makeStore() -> TranscriptRunReportStore {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8OutputArchiveTests-\(UUID().uuidString)", isDirectory: true)

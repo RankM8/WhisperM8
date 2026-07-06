@@ -97,6 +97,109 @@ final class PermissionSettingsModelTests: XCTestCase {
         try await waitUntil { sleep.cancelCount == 2 }
     }
 
+    func testMicrophonePrimaryActionsUseExpectedSideEffects() async {
+        let expectations: [(status: AVAuthorizationStatus, requestCount: Int, openSettingsCount: Int, refreshDelta: Int)] = [
+            (.notDetermined, 1, 0, 1),
+            (.denied, 0, 1, 0),
+            (.restricted, 0, 1, 0)
+        ]
+
+        for expectation in expectations {
+            var requestCount = 0
+            var openSettingsCount = 0
+            var refreshCount = 0
+            let model = makeModel(
+                microphoneStatusProvider: {
+                    refreshCount += 1
+                    return expectation.status
+                },
+                accessibilityStatusProvider: { true },
+                screenRecordingStatusProvider: { true },
+                requestMicrophonePermission: {
+                    requestCount += 1
+                    return true
+                },
+                openMicrophoneSettings: {
+                    openSettingsCount += 1
+                },
+                sleep: { _ in }
+            )
+            let countAfterInit = refreshCount
+
+            await model.performMicrophonePrimaryAction()
+
+            XCTAssertEqual(requestCount, expectation.requestCount, "Request count for \(expectation.status)")
+            XCTAssertEqual(openSettingsCount, expectation.openSettingsCount, "Open-settings count for \(expectation.status)")
+            XCTAssertEqual(refreshCount, countAfterInit + expectation.refreshDelta, "Refresh count for \(expectation.status)")
+        }
+    }
+
+    func testOptionalPermissionPrimaryActionsRequestAndOpenSettings() {
+        enum Action {
+            case accessibility
+            case screenRecording
+        }
+
+        let expectations: [(action: Action, accessibilityGranted: Bool, screenRecordingGranted: Bool)] = [
+            (.accessibility, false, true),
+            (.screenRecording, true, false)
+        ]
+
+        for expectation in expectations {
+            var accessibilityRefreshCount = 0
+            var screenRecordingRefreshCount = 0
+            var requestAccessibilityCount = 0
+            var openAccessibilityCount = 0
+            var requestScreenRecordingCount = 0
+            var openScreenRecordingCount = 0
+            let model = makeModel(
+                microphoneStatusProvider: { .authorized },
+                accessibilityStatusProvider: {
+                    accessibilityRefreshCount += 1
+                    return expectation.accessibilityGranted
+                },
+                screenRecordingStatusProvider: {
+                    screenRecordingRefreshCount += 1
+                    return expectation.screenRecordingGranted
+                },
+                requestAccessibilityPermission: {
+                    requestAccessibilityCount += 1
+                },
+                requestScreenRecordingPermission: {
+                    requestScreenRecordingCount += 1
+                    return true
+                },
+                openAccessibilitySettings: {
+                    openAccessibilityCount += 1
+                },
+                openScreenRecordingSettings: {
+                    openScreenRecordingCount += 1
+                },
+                sleep: { _ in }
+            )
+            let accessibilityCountAfterInit = accessibilityRefreshCount
+            let screenRecordingCountAfterInit = screenRecordingRefreshCount
+
+            switch expectation.action {
+            case .accessibility:
+                model.performAccessibilityPrimaryAction()
+                XCTAssertEqual(requestAccessibilityCount, 1)
+                XCTAssertEqual(openAccessibilityCount, 1)
+                XCTAssertEqual(requestScreenRecordingCount, 0)
+                XCTAssertEqual(openScreenRecordingCount, 0)
+            case .screenRecording:
+                model.performScreenRecordingPrimaryAction()
+                XCTAssertEqual(requestAccessibilityCount, 0)
+                XCTAssertEqual(openAccessibilityCount, 0)
+                XCTAssertEqual(requestScreenRecordingCount, 1)
+                XCTAssertEqual(openScreenRecordingCount, 1)
+            }
+
+            XCTAssertEqual(accessibilityRefreshCount, accessibilityCountAfterInit)
+            XCTAssertEqual(screenRecordingRefreshCount, screenRecordingCountAfterInit)
+        }
+    }
+
     private func makeModel(
         microphoneStatus: AVAuthorizationStatus = .authorized,
         accessibilityGranted: Bool = true,
@@ -115,18 +218,24 @@ final class PermissionSettingsModelTests: XCTestCase {
         microphoneStatusProvider: @escaping PermissionSettingsModel.MicrophoneStatusProvider,
         accessibilityStatusProvider: @escaping PermissionSettingsModel.BooleanStatusProvider,
         screenRecordingStatusProvider: @escaping PermissionSettingsModel.BooleanStatusProvider,
+        requestMicrophonePermission: @escaping PermissionSettingsModel.AsyncRequestAction = { true },
+        requestAccessibilityPermission: @escaping PermissionSettingsModel.RequestAction = {},
+        requestScreenRecordingPermission: @escaping PermissionSettingsModel.BooleanRequestAction = { true },
+        openMicrophoneSettings: @escaping PermissionSettingsModel.OpenSettingsAction = {},
+        openAccessibilitySettings: @escaping PermissionSettingsModel.OpenSettingsAction = {},
+        openScreenRecordingSettings: @escaping PermissionSettingsModel.OpenSettingsAction = {},
         sleep: @escaping PermissionSettingsModel.SleepAction
     ) -> PermissionSettingsModel {
         PermissionSettingsModel(
             microphoneStatusProvider: microphoneStatusProvider,
             accessibilityStatusProvider: accessibilityStatusProvider,
             screenRecordingStatusProvider: screenRecordingStatusProvider,
-            requestMicrophonePermission: { true },
-            requestAccessibilityPermission: {},
-            requestScreenRecordingPermission: { true },
-            openMicrophoneSettings: {},
-            openAccessibilitySettings: {},
-            openScreenRecordingSettings: {},
+            requestMicrophonePermission: requestMicrophonePermission,
+            requestAccessibilityPermission: requestAccessibilityPermission,
+            requestScreenRecordingPermission: requestScreenRecordingPermission,
+            openMicrophoneSettings: openMicrophoneSettings,
+            openAccessibilitySettings: openAccessibilitySettings,
+            openScreenRecordingSettings: openScreenRecordingSettings,
             pollingInterval: .milliseconds(10),
             sleep: sleep
         )
