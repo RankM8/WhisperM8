@@ -328,17 +328,9 @@ struct SettingsView: View {
     }
 
     private var recordingPage: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                pageHeader(.recording)
-                HotkeySettingsView()
-                AudioSettingsView()
-            }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(AppTheme.background)
+        // Phase 4: erste fertig migrierte V3-Seite — ersetzt Hotkey- + Audio-View
+        // und übernimmt die Recording-Teile der alten Behavior-Seite (A2, A29).
+        RecordingSettingsPage()
     }
 
     private func aiOutputPage(_ page: SettingsPage) -> some View {
