@@ -85,7 +85,7 @@ struct WhisperM8App: App {
                 .environment(AppState.shared)
                 .preferredColorScheme(themeManager.override.preferredColorScheme)
         }
-        .defaultSize(width: 900, height: 640)
+        .defaultSize(width: 960, height: 680)
         .defaultPosition(.center)
 
         // Onboarding window
