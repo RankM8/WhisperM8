@@ -1,12 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// 22 Theme-Tokens, je in Light- und Dark-Variante. Alle Werte werden über
+/// App-weites Theme (22 Tokens, je Light- und Dark-Variante) — genutzt von
+/// Agent Chats UND Settings. Historisch als AgentTheme entstanden; der
+/// typealias unten hält alle bestehenden Aufrufstellen stabil. Alle Werte werden über
 /// `Color.dynamic(light:dark:)` aufgelöst — der zugrundeliegende
 /// `NSColor(name:dynamicProvider:)` liest die aktuelle `NSAppearance` aus
 /// der View-Hierarchie, sodass `.preferredColorScheme(.light/.dark)` auf
 /// dem Root die Tokens automatisch umschaltet.
-enum AgentTheme {
+enum AppTheme {
     static let background = Color.dynamic(
         light: Color(red: 1.0, green: 1.0, blue: 1.0),
         dark: Color(red: 0.058, green: 0.060, blue: 0.064)
@@ -160,3 +162,7 @@ extension String {
         isEmpty ? nil : self
     }
 }
+
+
+/// Kompatibilitätsbrücke: bestehender Agent-Chats-Code nutzt weiter AgentTheme.
+typealias AgentTheme = AppTheme

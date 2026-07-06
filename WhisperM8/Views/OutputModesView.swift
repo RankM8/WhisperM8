@@ -7,7 +7,10 @@ struct OutputModesView: View {
     @State private var templates = PostProcessingTemplateStore().templates
     @State private var selectedModeID = OutputMode.rawID
     @State private var errorMessage: String?
-    @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.rawID
+    // Fallback muss AppPreferences.defaultOutputModeID entsprechen (cleanID) —
+    // vorher stand hier rawID, wodurch zwei Views denselben Key mit
+    // verschiedenen Defaults lasen (Fix A1, docs/features/settings/UMSETZUNGSPLAN.md).
+    @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.cleanID
     @AppStorage("showModePickerInMiniOverlay") private var showModePickerInMiniOverlay = true
     @AppStorage("fallbackToRawOnProcessingError") private var fallbackToRawOnProcessingError = true
     @AppStorage("codexPostProcessingModel") private var globalCodexModelRaw = CodexPostProcessingModel.defaultModel.rawValue
