@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhisperM8 · Settings — Layout-Varianten</title>
+<style>
+/* ================= Doku-Rahmen (editorial, wie settings-redesign.html) ================= */
+:root {
+  --paper: oklch(0.97 0.008 85); --ink: oklch(0.24 0.015 60);
+  --ink-soft: oklch(0.42 0.015 60); --ink-mute: oklch(0.58 0.012 60);
+  --accent: oklch(0.62 0.19 40); --moss: oklch(0.55 0.11 150);
+  --line: oklch(0.88 0.01 80); --card: oklch(0.995 0.004 90);
+  --mono: "SF Mono", ui-monospace, Menlo, monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--paper); color:var(--ink); font-size:16px; line-height:1.6; }
+.wrap { max-width:1180px; margin:0 auto; padding:0 32px; }
+.hero { padding:64px 0 36px; border-bottom:1px solid var(--line); }
+.hero .kicker { font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:12px; }
+.hero h1 { font-family:Charter,Georgia,serif; font-size:42px; line-height:1.14; font-weight:600; }
+.hero h1 em { font-style:italic; color:var(--accent); }
+.hero .lede { max-width:800px; margin-top:16px; font-size:17.5px; color:var(--ink-soft); }
+section.doc { padding:52px 0 6px; }
+.sec-label { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+.sec-label .num { font-family:var(--mono); font-size:13px; color:var(--accent); }
+section.doc h2 { font-family:Charter,Georgia,serif; font-size:30px; font-weight:600; }
+section.doc h2 em { font-style:italic; color:var(--accent); }
+.sec-lede { max-width:780px; color:var(--ink-soft); margin:10px 0 26px; }
+.note { font-family:Charter,Georgia,serif; font-style:italic; color:var(--ink-soft); font-size:16px; border-left:3px solid var(--accent); padding:4px 0 4px 16px; margin:20px 0; max-width:840px; }
+table.tok { width:100%; border-collapse:collapse; font-size:13px; margin:14px 0; background:var(--card); border:1px solid var(--line); }
+table.tok th { text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute); padding:9px 12px; border-bottom:1px solid var(--line); background:oklch(0.955 0.008 85); }
+table.tok td { padding:7px 12px; border-bottom:1px solid var(--line); vertical-align:middle; }
+table.tok tr:last-child td { border-bottom:none; }
+table.tok code { font-family:var(--mono); font-size:11.5px; }
+.swatch { display:inline-block; width:15px; height:15px; border-radius:4px; border:1px solid rgba(0,0,0,.15); vertical-align:-3px; margin-right:7px; }
+.anno-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:18px 0 8px; }
+.anno { background:var(--card); border:1px solid var(--line); padding:16px 20px; }
+.anno .tag { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+.anno h4 { font-size:15px; margin:5px 0 6px; }
+.anno ul { list-style:none; font-size:13.5px; color:var(--ink-soft); }
+.anno li { padding-left:14px; position:relative; margin:3px 0; }
+.anno li::before { content:"›"; position:absolute; left:0; color:var(--accent); }
+.vhead { display:flex; align-items:baseline; gap:14px; margin:44px 0 6px; }
+.vhead .vtag { font-family:var(--mono); font-size:12px; background:var(--ink); color:var(--paper); padding:3px 10px; border-radius:4px; }
+.vhead h3 { font-family:Charter,Georgia,serif; font-size:24px; font-weight:600; }
+.vhead h3 em { font-style:italic; color:var(--accent); }
+.vdesc { max-width:820px; color:var(--ink-soft); font-size:15px; margin-bottom:16px; }
+.vdesc code { font-family:var(--mono); font-size:12.5px; background:oklch(0.94 0.01 85); padding:1px 5px; border-radius:3px; }
+footer { border-top:1px solid var(--line); margin-top:64px; padding:26px 0 44px; color:var(--ink-mute); font-size:13.5px; }
+footer .wrap { display:flex; justify-content:space-between; }
+
+/* ================= Theme-Toggle ================= */
+.theme-bar { position:sticky; top:0; z-index:40; background:oklch(0.97 0.008 85 / .92); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); padding:10px 0; }
+.theme-bar .wrap { display:flex; align-items:center; gap:14px; }
+.theme-bar .lab { font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute); }
+.tswitch { display:inline-flex; background:oklch(0.93 0.01 85); border:1px solid var(--line); border-radius:7px; padding:2px; gap:2px; }
+.tswitch button { border:none; background:transparent; font:inherit; font-size:12.5px; padding:4px 16px; border-radius:5px; cursor:pointer; color:var(--ink-soft); }
+.tswitch button.on { background:var(--ink); color:var(--paper); }
+
+/* ================= AgentTheme-Tokens (exakte Swift-Werte) ================= */
+.s-frame {
+  /* Dark = Default */
+  --t-bg:#0f0f10;            /* AgentTheme.background dark */
+  --t-side:#131415;          /* sidebar */
+  --t-surface:#171719;       /* surface */
+  --t-panel:#1b1c1d;         /* panel */
+  --t-control:#242526;       /* control */
+  --t-seg:#3c3d3f;           /* segmentActive dark */
+  --t-line:rgba(255,255,255,.06);
+  --t-line-strong:rgba(255,255,255,.10);
+  --t-text:rgba(255,255,255,.92);
+  --t-text2:rgba(255,255,255,.55);
+  --t-text3:rgba(255,255,255,.38);
+  --t-accent:#7c84e8;        /* accent dark */
+  --t-accent-strong:#5e6ad2;
+  --t-tint:rgba(124,132,232,.16);
+  --t-tint-soft:rgba(124,132,232,.09);
+  --t-ok:#4cc38a;            /* statusWorking */
+  --t-warn:#e9b949;          /* statusAwaiting */
+  --t-err:#e5594f;
+  --t-shadow:0 26px 70px rgba(0,0,0,.55);
+  --t-knob:#ffffff;
+}
+.s-frame[data-theme="light"] {
+  --t-bg:#ffffff; --t-side:#eeeef0; --t-surface:#ffffff; --t-panel:#ffffff;
+  --t-control:#ebebed; --t-seg:#ffffff;
+  --t-line:rgba(0,0,0,.08); --t-line-strong:rgba(0,0,0,.13);
+  --t-text:rgba(0,0,0,.90); --t-text2:rgba(0,0,0,.58); --t-text3:rgba(0,0,0,.42);
+  --t-accent:#5e6ad2; --t-accent-strong:#4b56c0;
+  --t-tint:rgba(94,106,210,.13); --t-tint-soft:rgba(94,106,210,.07);
+  --t-ok:#3fa873; --t-warn:#c9962a; --t-err:#d6473d;
+  --t-shadow:0 22px 60px rgba(0,0,0,.18);
+  --t-knob:#ffffff;
+}
+
+/* ================= Fenster-Grundgerüst (alle Varianten) ================= */
+.s-frame { border-radius:11px; overflow:hidden; background:var(--t-bg); border:1px solid rgba(0,0,0,.55); box-shadow:var(--t-shadow); font-size:13px; color:var(--t-text); -webkit-font-smoothing:antialiased; }
+.s-frame[data-theme="light"] { border-color:rgba(0,0,0,.14); }
+.s-title { display:flex; align-items:center; height:40px; background:var(--t-side); border-bottom:1px solid var(--t-line-strong); padding:0 14px; position:relative; }
+.s-dots { display:flex; gap:8px; }
+.s-dots span { width:12px; height:12px; border-radius:50%; }
+.s-dots span:nth-child(1){background:#ff5f57;} .s-dots span:nth-child(2){background:#febc2e;} .s-dots span:nth-child(3){background:#28c840;}
+.s-title .t { position:absolute; left:0; right:0; text-align:center; font-size:13px; font-weight:600; color:var(--t-text2); pointer-events:none; }
+.s-body { display:grid; grid-template-columns:220px 1fr; min-height:600px; }
+.s-side { background:var(--t-side); border-right:1px solid var(--t-line); padding:12px 9px 16px; }
+.s-side .g { font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--t-text3); padding:0 11px 6px; }
+.s-side .grp { margin-bottom:14px; }
+.s-item { display:flex; align-items:center; gap:8px; padding:5.5px 10px; border-radius:6px; cursor:default; font-size:13px; color:var(--t-text); }
+.s-item .ic { width:16px; height:16px; flex-shrink:0; stroke:var(--t-text2); fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+/* Auswahl-Stil pro Variante unten */
+.s-main { padding:24px 28px 32px; }
+
+/* Controls (geteilt, Token-basiert) */
+.c-tgl { width:38px; height:22px; border-radius:11px; background:var(--t-control); position:relative; cursor:pointer; flex-shrink:0; transition:background .15s; border:1px solid var(--t-line); }
+.c-tgl::after { content:""; position:absolute; top:1.5px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--t-knob); transition:left .15s; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.c-tgl.on { background:var(--t-ok); border-color:transparent; }
+.c-tgl.on::after { left:17px; }
+.c-tgl.acc.on { background:var(--t-accent-strong); }
+.c-seg { display:inline-flex; background:var(--t-control); border-radius:7px; padding:2px; gap:2px; }
+.c-seg span { padding:3.5px 14px; border-radius:5px; color:var(--t-text2); font-size:12.5px; cursor:default; font-weight:500; }
+.c-seg span.on { background:var(--t-seg); color:var(--t-text); box-shadow:0 1px 3px rgba(0,0,0,.25); }
+.c-seg.filled span.on { background:var(--t-accent-strong); color:#fff; }
+.c-pop { display:inline-flex; align-items:center; gap:7px; background:var(--t-control); border:1px solid var(--t-line); border-radius:6px; padding:3.5px 8px 3.5px 11px; font-size:12.5px; }
+.c-pop::after { content:""; width:11px; height:15px; background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="11" height="15" viewBox="0 0 11 15"><path d="M2.5 5.5L5.5 2.5L8.5 5.5M2.5 9.5L5.5 12.5L8.5 9.5" fill="none" stroke="%23909098" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>') center/contain no-repeat; }
+.c-btn { background:var(--t-control); border:1px solid var(--t-line); border-radius:6px; padding:4px 12px; font-size:12.5px; color:var(--t-text); }
+.c-btn.primary { background:var(--t-accent-strong); border-color:transparent; color:#fff; }
+.c-key { font-family:var(--mono); font-size:12px; background:var(--t-control); border:1px solid var(--t-line-strong); border-radius:6px; padding:4px 12px; }
+.c-slider { width:150px; height:4px; background:var(--t-control); border-radius:2px; position:relative; }
+.c-slider .f { position:absolute; inset:0 60% 0 0; background:var(--t-accent); border-radius:2px; }
+.c-slider .k { position:absolute; top:-6px; left:calc(40% - 8px); width:16px; height:16px; background:var(--t-knob); border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+.c-dot { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--t-text2); }
+.c-dot::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--t-ok); }
+
+/* ---------- V1: Grouped Cards ---------- */
+.v1 .s-item.sel { background:var(--t-tint); color:var(--t-accent); }
+.v1 .s-item.sel .ic { stroke:var(--t-accent); }
+.v1 .s-main h1 { font-size:21px; font-weight:700; margin-bottom:3px; }
+.v1 .psub { color:var(--t-text2); font-size:12.5px; margin-bottom:18px; }
+.v1 .card { background:var(--t-panel); border:1px solid var(--t-line); border-radius:10px; margin-bottom:14px; overflow:hidden; }
+.v1 .card .ch { padding:11px 16px 3px; font-weight:600; font-size:13px; }
+.v1 .row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:10px 16px; border-bottom:1px solid var(--t-line); min-height:42px; }
+.v1 .row:last-child { border-bottom:none; }
+.v1 .row .l small { display:block; color:var(--t-text3); font-size:11.5px; margin-top:2px; max-width:420px; line-height:1.45; }
+.v1 .row.sub { padding-left:32px; background:var(--t-tint-soft); }
+
+/* ---------- V2: System Settings (nativ, zentrierte Spalte) ---------- */
+.v2 .s-item { border-radius:6px; }
+.v2 .s-item.sel { background:var(--t-accent-strong); color:#fff; }
+.v2 .s-item.sel .ic-tile { box-shadow:0 0 0 1.5px rgba(255,255,255,.35); }
+.ic-tile { width:19px; height:19px; border-radius:5px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ic-tile svg { width:12px; height:12px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.v2 .s-main { padding:0; }
+.v2 .ptitle { text-align:center; font-size:14.5px; font-weight:700; padding:14px 0 10px; border-bottom:1px solid var(--t-line); background:var(--t-side); }
+.v2 .col { max-width:620px; margin:0 auto; padding:22px 24px 34px; }
+.v2 .slab { font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--t-text3); margin:18px 4px 6px; }
+.v2 .slab:first-child { margin-top:0; }
+.v2 .card { background:var(--t-panel); border:1px solid var(--t-line); border-radius:9px; overflow:hidden; }
+.v2 .row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:8px 14px; border-bottom:1px solid var(--t-line); min-height:38px; font-size:13px; }
+.v2 .row:last-child { border-bottom:none; }
+.v2 .row .l small { display:block; color:var(--t-text3); font-size:11px; margin-top:1px; max-width:360px; line-height:1.4; }
+.v2 .row.sub { padding-left:30px; }
+.v2[data-theme="dark"] .card, .s-frame.v2:not([data-theme="light"]) .card { background:var(--t-surface); }
+
+/* ---------- V3: Linear Hairline (Agent-Chats-DNA) ---------- */
+.v3 .s-item { border-radius:7px; padding:6px 10px; }
+.v3 .s-item.sel { background:var(--t-tint); color:var(--t-accent); font-weight:600; }
+.v3 .s-item.sel .ic { stroke:var(--t-accent); }
+.v3 .s-main { padding:30px 40px 40px; max-width:800px; }
+.v3 .s-main h1 { font-size:24px; font-weight:700; letter-spacing:-.01em; margin-bottom:4px; }
+.v3 .psub { color:var(--t-text2); font-size:13px; margin-bottom:26px; }
+.v3 .sect { margin-bottom:28px; }
+.v3 .shead { display:flex; align-items:center; gap:10px; margin-bottom:2px; }
+.v3 .shead .sl { font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--t-accent); }
+.v3 .shead::after { content:""; flex:1; height:1px; background:linear-gradient(90deg, var(--t-tint), transparent); }
+.v3 .row { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:11px 2px; border-bottom:1px solid var(--t-line); min-height:44px; }
+.v3 .row:last-child { border-bottom:none; }
+.v3 .row .l { font-size:13.5px; }
+.v3 .row .l small { display:block; color:var(--t-text3); font-size:11.5px; margin-top:2px; max-width:460px; line-height:1.5; }
+.v3 .row.sub { padding-left:26px; }
+.v3 .val { font-family:var(--mono); font-size:11.5px; color:var(--t-text2); }
+
+@media (max-width:900px){ .s-body{grid-template-columns:1fr;} .anno-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">WhisperM8 · Settings-Redesign · Layout &amp; Farben</div>
+    <h1>Ein Design-System, drei <em>Layout-Varianten</em>.</h1>
+    <p class="lede">Die Settings-Inhalte stehen fest (10 Seiten, Plan in settings-redesign.html). Diese Datei klärt die zweite Frage: <b>Wie sieht es aus?</b> Grundlage ist das existierende <code style="font-family:var(--mono);font-size:13.5px;">AgentTheme.swift</code> der Agent Chats — alle Farbwerte unten sind die exakten Swift-Tokens, Dark und Light. Beispielseite überall: „Recording".</p>
+  </div>
+</header>
+
+<section class="doc" id="farben">
+  <div class="wrap">
+    <div class="sec-label"><span class="num">01</span><h2>Farb-Beratung: <em>AgentTheme wiederverwenden</em>, nichts Neues erfinden</h2></div>
+    <p class="sec-lede">Die Agent Chats haben bereits ein vollständiges, beschlossenes Token-System (Linear-Indigo als Markenakzent, Grün exklusiv für „working", Hairlines statt Flächen-Tints, Dark + Light via <code style="font-family:var(--mono);font-size:12.5px;">Color.dynamic</code>). Die heutigen Settings ignorieren das — sie nutzen System-Blau und eigene Grautöne. Empfehlung: <b>AgentTheme wird zum App-Theme</b> (umbenennen zu <code style="font-family:var(--mono);font-size:12.5px;">AppTheme</code> o.ä.), die Settings konsumieren dieselben Tokens. Ein Ort für Farben, automatisch konsistenter Dark/Light-Mode.</p>
+
+    <table class="tok">
+      <tr><th>Token (AgentTheme)</th><th>Dark</th><th>Light</th><th>Verwendung in den Settings</th></tr>
+      <tr><td><code>background</code></td><td><span class="swatch" style="background:#0f0f10"></span><code>#0f0f10</code></td><td><span class="swatch" style="background:#ffffff"></span><code>#ffffff</code></td><td>Fenster-/Content-Hintergrund</td></tr>
+      <tr><td><code>sidebar</code></td><td><span class="swatch" style="background:#131415"></span><code>#131415</code></td><td><span class="swatch" style="background:#eeeef0"></span><code>#eeeef0</code></td><td>Sidebar + Titlebar</td></tr>
+      <tr><td><code>surface</code> / <code>panel</code></td><td><span class="swatch" style="background:#171719"></span><code>#171719</code> / <span class="swatch" style="background:#1b1c1d"></span><code>#1b1c1d</code></td><td><span class="swatch" style="background:#ffffff;border-color:rgba(0,0,0,.25)"></span><code>#ffffff</code></td><td>Cards / Gruppen</td></tr>
+      <tr><td><code>control</code></td><td><span class="swatch" style="background:#242526"></span><code>#242526</code></td><td><span class="swatch" style="background:#ebebed"></span><code>#ebebed</code></td><td>Toggle-Track, Popup, Buttons, Segmented-Track</td></tr>
+      <tr><td><code>accent</code> / <code>accentStrong</code></td><td><span class="swatch" style="background:#7c84e8"></span><code>#7c84e8</code> / <span class="swatch" style="background:#5e6ad2"></span><code>#5e6ad2</code></td><td><span class="swatch" style="background:#5e6ad2"></span><code>#5e6ad2</code> / <span class="swatch" style="background:#4b56c0"></span><code>#4b56c0</code></td><td>Sidebar-Auswahl, Links, primäre Buttons, Fokus — <b>ersetzt System-Blau</b></td></tr>
+      <tr><td><code>accentTint</code></td><td><code>accent @ 16 %</code></td><td><code>accent @ 13 %</code></td><td>Auswahl-Pill in der Sidebar, aktive Tab-Fläche</td></tr>
+      <tr><td><code>statusWorking</code></td><td><span class="swatch" style="background:#4cc38a"></span><code>#4cc38a</code></td><td><span class="swatch" style="background:#3fa873"></span><code>#3fa873</code></td><td>Status-Punkte („Granted", „Signed in", Toggle-ON) — Grün bleibt Status-exklusiv</td></tr>
+      <tr><td><code>statusAwaiting</code> / <code>statusError</code></td><td><span class="swatch" style="background:#e9b949"></span><code>#e9b949</code> / <span class="swatch" style="background:#e5594f"></span><code>#e5594f</code></td><td><span class="swatch" style="background:#c9962a"></span><code>#c9962a</code> / <span class="swatch" style="background:#d6473d"></span><code>#d6473d</code></td><td>Warnungen (GPT-5.5-CLI, fehlende Permission) / Fehler, Delete</td></tr>
+      <tr><td><code>border</code> / <code>borderStrong</code></td><td><code>white 6 % / 10 %</code></td><td><code>black 8 % / 13 %</code></td><td>Hairlines: Zeilentrenner, Card-Rand — nie harte Linien</td></tr>
+      <tr><td><code>textPrimary/Secondary/Tertiary</code></td><td><code>white 92 / 55 / 38 %</code></td><td><code>black 90 / 58 / 42 %</code></td><td>Label / Hilfetext / Captions</td></tr>
+    </table>
+
+    <div class="anno-grid">
+      <div class="anno"><span class="tag">Prinzipien (aus den Agent-Chats-Entscheidungen)</span><h4>Was die Settings übernehmen</h4><ul>
+        <li>Indigo ist der einzige Markenakzent — Auswahl, Links, Primär-Buttons. System-Blau verschwindet.</li>
+        <li>Grün exklusiv für Status (working/granted/ok) und Toggle-ON — nie dekorativ.</li>
+        <li>Hairlines + Tints statt Flächenfarben (Timeline-Entscheidung „Variante E").</li>
+        <li>Kein Hover-only: Zustände sind dauerhaft sichtbar, Hover verstärkt nur.</li>
+      </ul></div>
+      <div class="anno"><span class="tag">SwiftUI-Umsetzung</span><h4>Ein Theme, zwei Fenster</h4><ul>
+        <li><code>AgentTheme</code> → <code>AppTheme</code> teilen (reine Umbenennung + Re-Export; Agent-Chats-Code bleibt unberührt).</li>
+        <li>Settings-Views ersetzen <code>.blue</code>/Systemfarben durch Theme-Tokens.</li>
+        <li>Dark/Light kommt gratis über <code>Color.dynamic</code> — kein zweiter Farbsatz nötig.</li>
+        <li>Ein Toggle-Test pro Modus in der QA (Theme-Umschalter unten in jeder Variante).</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<div class="theme-bar" id="themebar">
+  <div class="wrap">
+    <span class="lab">Vorschau-Modus für alle Varianten</span>
+    <div class="tswitch"><button class="on" data-theme="dark">Dark</button><button data-theme="light">Light</button></div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/></symbol>
+<symbol id="i-wave" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 4l1.6 4.6L17.2 10.2l-4.6 1.6L11 16.4l-1.6-4.6L4.8 10.2l4.6-1.6zM18 14.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></symbol>
+<symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/></symbol>
+<symbol id="i-prompt" viewBox="0 0 24 24"><path d="M4 17l6.5-5L4 7M13 19h7"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5M5.3 5.3l2.5 2.5M16.2 16.2l2.5 2.5M18.7 5.3l-2.5 2.5M7.8 16.2l-2.5 2.5"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.8v5.4c0 4.8-3.3 7.9-7 9.8-3.7-1.9-7-5-7-9.8V5.8z"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.2M12 7.6h.01"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v4h4M10.5 12.5h5M10.5 16h5"/></symbol>
+</defs></svg>
+
+<section class="doc" id="varianten">
+  <div class="wrap">
+    <div class="sec-label"><span class="num">02</span><h2>Drei <em>Layout-Varianten</em> — gleicher Inhalt, gleiche Tokens</h2></div>
+    <p class="sec-lede">Alle drei zeigen die Recording-Seite mit identischen Controls und identischen AgentTheme-Farben. Was sich unterscheidet, ist die Anatomie: Karten-Stil, Spaltenbreite, Section-Beschriftung, Sidebar-Auswahl. Der Umschalter oben wechselt überall Dark/Light.</p>
+
+    <div class="vhead"><span class="vtag">V1</span><h3>Grouped Cards — <em>der verfeinerte Status quo</em></h3></div>
+    <p class="vdesc">Karten mit Titel <b>in</b> der Karte, volle Content-Breite, Sidebar-Auswahl als Indigo-<b>Tint-Pill</b> (wie die Agent-Chats-Sidebar). Nah an den heutigen Settings, aber mit Theme-Tokens statt System-Blau. SwiftUI: eigene Card-Container (heutiger Code, umgefärbt) — <code>~2–3 Tage</code> für alle 10 Seiten.</p>
+
+<div class="s-frame v1" data-theme="dark">
+  <div class="s-title"><div class="s-dots"><span></span><span></span><span></span></div><div class="t">WhisperM8 Settings</div></div>
+  <div class="s-body">
+    <aside class="s-side"><div class="grp"><div class="g">Dictation</div>
+          <div class="s-item sel"><svg class="ic"><use href="#i-mic"/></svg> Recording</div>
+          <div class="s-item"><svg class="ic"><use href="#i-wave"/></svg> Transcription</div>
+          <div class="s-item"><svg class="ic"><use href="#i-spark"/></svg> AI Output</div>
+          <div class="s-item"><svg class="ic"><use href="#i-search"/></svg> Context & Privacy</div>
+          </div>
+          <div class="grp"><div class="g">Agents</div>
+          <div class="s-item"><svg class="ic"><use href="#i-term"/></svg> Agent Chats</div>
+          <div class="s-item"><svg class="ic"><use href="#i-prompt"/></svg> CLI & Skills</div>
+          </div>
+          <div class="grp"><div class="g">App</div>
+          <div class="s-item"><svg class="ic"><use href="#i-gear"/></svg> General</div>
+          <div class="s-item"><svg class="ic"><use href="#i-shield"/></svg> Permissions</div>
+          <div class="s-item"><svg class="ic"><use href="#i-info"/></svg> About</div>
+          </div>
+          <div class="grp"><div class="g">Workspace</div>
+          <div class="s-item"><svg class="ic"><use href="#i-doc"/></svg> Output</div>
+          </div></aside>
+    <main class="s-main"><h1>Recording</h1>
+      <div class="psub">Everything that happens while you record.</div>
+            <div class="card"><div class="ch">Hotkey</div>
+              <div class="row"><div class="l">Recording Hotkey<small>Hold to talk, or tap to toggle. Taps under 0.3 s are ignored.</small></div><span class="c-key">⌃ ⇧ Space</span></div>
+              <div class="row"><div class="l">Show confirm button (✓) in overlay<small>Clicking ✓ stops and transcribes — same path as the hotkey.</small></div><div class="c-tgl on"></div></div>
+            </div>
+            <div class="card"><div class="ch">Microphone</div>
+              <div class="row"><div class="l">Input Device<small>Applies to the next recording. Bluetooth may fall back to System Default.</small></div><span class="c-pop">System Default</span></div>
+            </div>
+            <div class="card"><div class="ch">Audio Ducking</div>
+              <div class="row"><div class="l">Reduce system volume while recording</div><div class="c-tgl on"></div></div>
+              <div class="row sub"><div class="l">Target volume</div><div class="c-slider"><div class="f"></div><div class="k"></div></div></div>
+            </div>
+            <div class="card"><div class="ch">Recording Overlay</div>
+              <div class="row"><div class="l">Overlay UI</div><div class="c-seg"><span>Full</span><span class="on">Mini</span></div></div>
+              <div class="row"><div class="l">Show mode picker in Mini overlay</div><div class="c-tgl on"></div></div>
+              <div class="row"><div class="l">Overlay position<small>Drag the overlay to move it; double-click resets.</small></div><span class="c-btn">Reset Position</span></div>
+            </div>
+            <div class="card"><div class="ch">Delivery</div>
+              <div class="row"><div class="l">Auto-paste after transcription<small>Pastes into the frontmost app (needs Accessibility; clipboard fallback).</small></div><div class="c-tgl on"></div></div>
+            </div></main>
+  </div>
+</div>
+    <div class="anno-grid">
+      <div class="anno"><span class="tag">Pro</span><h4>Vertraut &amp; flexibel</h4><ul><li>Geringste Abweichung vom Bestand — Migration Seite für Seite</li><li>Karten-Header tragen die Struktur auch bei langen Seiten</li><li>Volle Breite gut für Master-Detail (Modes) und Tabellen</li></ul></div>
+      <div class="anno"><span class="tag">Contra</span><h4>Weder nativ noch markant</h4><ul><li>Sieht keiner echten macOS-App ähnlich — Eigenbau-Anmutung bleibt</li><li>Doppelte Hierarchie: Karte + Header + Zeilen</li></ul></div>
+    </div>
+
+    <div class="vhead"><span class="vtag">V2</span><h3>System Settings — <em>die native Anatomie</em></h3></div>
+    <p class="vdesc">Exakt die macOS-System-Settings-Anatomie: zentrierte <b>620-pt-Spalte</b>, Section-Titel <b>außerhalb</b> der Gruppen, kompakte Zeilen, Seitentitel in der Toolbar, Sidebar mit <b>farbigen Icon-Kacheln</b> und gefüllter Indigo-Auswahl. SwiftUI: <code>Form + .formStyle(.grouped)</code> liefert das fast gratis — <code>~1–2 Tage</code>, geringster Custom-Code.</p>
+
+<div class="s-frame v2" data-theme="dark">
+  <div class="s-title"><div class="s-dots"><span></span><span></span><span></span></div><div class="t">WhisperM8 Settings</div></div>
+  <div class="s-body">
+    <aside class="s-side"><div class="grp"><div class="g">Dictation</div>
+          <div class="s-item sel"><span class="ic-tile" style="background:#e05d5d"><svg><use href="#i-mic"/></svg></span> Recording</div>
+          <div class="s-item"><span class="ic-tile" style="background:#4a9eda"><svg><use href="#i-wave"/></svg></span> Transcription</div>
+          <div class="s-item"><span class="ic-tile" style="background:#8a6fe8"><svg><use href="#i-spark"/></svg></span> AI Output</div>
+          <div class="s-item"><span class="ic-tile" style="background:#4cae8e"><svg><use href="#i-search"/></svg></span> Context & Privacy</div>
+          </div>
+          <div class="grp"><div class="g">Agents</div>
+          <div class="s-item"><span class="ic-tile" style="background:#d98b3f"><svg><use href="#i-term"/></svg></span> Agent Chats</div>
+          <div class="s-item"><span class="ic-tile" style="background:#6a7280"><svg><use href="#i-prompt"/></svg></span> CLI & Skills</div>
+          </div>
+          <div class="grp"><div class="g">App</div>
+          <div class="s-item"><span class="ic-tile" style="background:#8e8e96"><svg><use href="#i-gear"/></svg></span> General</div>
+          <div class="s-item"><span class="ic-tile" style="background:#4a9eda"><svg><use href="#i-shield"/></svg></span> Permissions</div>
+          <div class="s-item"><span class="ic-tile" style="background:#6a7280"><svg><use href="#i-info"/></svg></span> About</div>
+          </div>
+          <div class="grp"><div class="g">Workspace</div>
+          <div class="s-item"><span class="ic-tile" style="background:#4cae8e"><svg><use href="#i-doc"/></svg></span> Output</div>
+          </div></aside>
+    <main class="s-main"><div class="ptitle">Recording</div>
+      <div class="col">
+        <div class="slab">Hotkey</div>
+        <div class="card">
+              <div class="row"><div class="l">Recording Hotkey<small>Hold to talk, or tap to toggle. Taps under 0.3 s are ignored.</small></div><span class="c-key">⌃ ⇧ Space</span></div>
+              <div class="row"><div class="l">Show confirm button (✓) in overlay<small>Clicking ✓ stops and transcribes — same path as the hotkey.</small></div><div class="c-tgl on"></div></div>
+        </div>
+        <div class="slab">Microphone</div>
+        <div class="card">
+              <div class="row"><div class="l">Input Device<small>Applies to the next recording. Bluetooth may fall back to System Default.</small></div><span class="c-pop">System Default</span></div>
+        </div>
+        <div class="slab">Audio Ducking</div>
+        <div class="card">
+              <div class="row"><div class="l">Reduce system volume while recording</div><div class="c-tgl on"></div></div>
+              <div class="row sub"><div class="l">Target volume</div><div class="c-slider"><div class="f"></div><div class="k"></div></div></div>
+        </div>
+        <div class="slab">Recording Overlay</div>
+        <div class="card">
+              <div class="row"><div class="l">Overlay UI</div><div class="c-seg"><span>Full</span><span class="on">Mini</span></div></div>
+              <div class="row"><div class="l">Show mode picker in Mini overlay</div><div class="c-tgl on"></div></div>
+              <div class="row"><div class="l">Overlay position<small>Drag the overlay to move it; double-click resets.</small></div><span class="c-btn">Reset Position</span></div>
+        </div>
+        <div class="slab">Delivery</div>
+        <div class="card">
+              <div class="row"><div class="l">Auto-paste after transcription<small>Pastes into the frontmost app (needs Accessibility; clipboard fallback).</small></div><div class="c-tgl on"></div></div>
+        </div>
+      </div></main>
+  </div>
+</div>
+    <div class="anno-grid">
+      <div class="anno"><span class="tag">Pro</span><h4>Nativ &amp; billig</h4><ul><li>Nutzer kennen die Anatomie aus System Settings — null Lernkurve</li><li><code>Form .grouped</code> = macOS rendert Abstände/Zeilen selbst, wenig Pflege</li><li>Farbige Kacheln machen die 10 Seiten schnell unterscheidbar</li></ul></div>
+      <div class="anno"><span class="tag">Contra</span><h4>Eng &amp; unflexibel</h4><ul><li>620-pt-Spalte zwingt Master-Detail (Modes) und Output-Archiv in die Enge — die zwei Tab-Seiten bräuchten Ausnahmen</li><li>Gefüllte Auswahl + Kacheln = deutlich anderer Charakter als die Agent-Chats-Sidebar</li></ul></div>
+    </div>
+
+    <div class="vhead"><span class="vtag">V3</span><h3>Linear Hairline — <em>die Agent-Chats-DNA</em></h3></div>
+    <p class="vdesc">Keine Karten: flache Sections mit <b>Mono-Uppercase-Label + Indigo-Hairline</b>, Zeilen nur durch Hairlines getrennt, großzügige Breite (max 800 pt), Sidebar identisch zur Agent-Chats-Sidebar (Tint-Pill). Dieselbe Formensprache wie Timeline „Variante E" und das Hauptfenster. SwiftUI: eigene Section-/Row-Bausteine — <code>~3–4 Tage</code>, dafür ein wiederverwendbares Settings-Kit.</p>
+
+<div class="s-frame v3" data-theme="dark">
+  <div class="s-title"><div class="s-dots"><span></span><span></span><span></span></div><div class="t">WhisperM8 Settings</div></div>
+  <div class="s-body">
+    <aside class="s-side"><div class="grp"><div class="g">Dictation</div>
+          <div class="s-item sel"><svg class="ic"><use href="#i-mic"/></svg> Recording</div>
+          <div class="s-item"><svg class="ic"><use href="#i-wave"/></svg> Transcription</div>
+          <div class="s-item"><svg class="ic"><use href="#i-spark"/></svg> AI Output</div>
+          <div class="s-item"><svg class="ic"><use href="#i-search"/></svg> Context & Privacy</div>
+          </div>
+          <div class="grp"><div class="g">Agents</div>
+          <div class="s-item"><svg class="ic"><use href="#i-term"/></svg> Agent Chats</div>
+          <div class="s-item"><svg class="ic"><use href="#i-prompt"/></svg> CLI & Skills</div>
+          </div>
+          <div class="grp"><div class="g">App</div>
+          <div class="s-item"><svg class="ic"><use href="#i-gear"/></svg> General</div>
+          <div class="s-item"><svg class="ic"><use href="#i-shield"/></svg> Permissions</div>
+          <div class="s-item"><svg class="ic"><use href="#i-info"/></svg> About</div>
+          </div>
+          <div class="grp"><div class="g">Workspace</div>
+          <div class="s-item"><svg class="ic"><use href="#i-doc"/></svg> Output</div>
+          </div></aside>
+    <main class="s-main"><h1>Recording</h1>
+      <div class="psub">Everything that happens while you record — hotkey, microphone, ducking, overlay, delivery.</div>
+            <div class="sect"><div class="shead"><span class="sl">Hotkey</span></div>
+              <div class="row"><div class="l">Recording Hotkey<small>Hold to talk, or tap to toggle. Taps under 0.3 s are ignored.</small></div><span class="c-key">⌃ ⇧ Space</span></div>
+              <div class="row"><div class="l">Show confirm button (✓) in overlay<small>Clicking ✓ stops and transcribes — same path as the hotkey.</small></div><div class="c-tgl on"></div></div>
+            </div>
+            <div class="sect"><div class="shead"><span class="sl">Microphone</span></div>
+              <div class="row"><div class="l">Input Device<small>Applies to the next recording. Bluetooth may fall back to System Default.</small></div><span class="c-pop">System Default</span></div>
+            </div>
+            <div class="sect"><div class="shead"><span class="sl">Audio Ducking</span></div>
+              <div class="row"><div class="l">Reduce system volume while recording</div><div class="c-tgl on"></div></div>
+              <div class="row sub"><div class="l">Target volume</div><div class="c-slider"><div class="f"></div><div class="k"></div></div></div>
+            </div>
+            <div class="sect"><div class="shead"><span class="sl">Recording Overlay</span></div>
+              <div class="row"><div class="l">Overlay UI</div><div class="c-seg"><span>Full</span><span class="on">Mini</span></div></div>
+              <div class="row"><div class="l">Show mode picker in Mini overlay</div><div class="c-tgl on"></div></div>
+              <div class="row"><div class="l">Overlay position<small>Drag the overlay to move it; double-click resets.</small></div><span class="c-btn">Reset Position</span></div>
+            </div>
+            <div class="sect"><div class="shead"><span class="sl">Delivery</span></div>
+              <div class="row"><div class="l">Auto-paste after transcription<small>Pastes into the frontmost app (needs Accessibility; clipboard fallback).</small></div><div class="c-tgl on"></div></div>
+            </div></main>
+  </div>
+</div>
+    <div class="anno-grid">
+      <div class="anno"><span class="tag">Pro</span><h4>Eine App, eine Sprache</h4><ul><li>Settings fühlen sich wie das Hauptfenster an — maximale Markenkonsistenz</li><li>Hairline-Ästhetik skaliert am besten auf breite Inhalte (Modes, Output, Tabellen)</li><li>Ruhigste Fläche: keine Karten-auf-Karten-Schachtelung</li></ul></div>
+      <div class="anno"><span class="tag">Contra</span><h4>Custom &amp; ungewohnt</h4><ul><li>Am weitesten weg von nativen macOS-Settings — bewusste Design-Entscheidung nötig</li><li>Meiste Eigenbau-Bausteine (Section, Row, Trenner) — dafür einmalig als Kit</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="empfehlung">
+  <div class="wrap">
+    <div class="sec-label"><span class="num">03</span><h2>Empfehlung &amp; <em>nächste Schritte</em></h2></div>
+    <p class="sec-lede"><b>Empfehlung: V3 „Linear Hairline"</b> — mit einem V2-Zugeständnis: schmale Formular-Seiten (Permissions, General, About) zentrieren ihre Inhalte auf ~640 pt, Tab-Seiten (AI Output, Agent Chats) und Output nutzen die volle Breite. Begründung: Die Settings sind bei WhisperM8 kein Fremdkörper wie bei Apple, sondern die zweite Hälfte der App — sie wie eine fremde App aussehen zu lassen (V2) wäre ein Stilbruch neben dem Agent-Chats-Fenster. V1 wäre der geringste Aufwand, konserviert aber die heutige Eigenbau-Anmutung.</p>
+    <div class="anno-grid">
+      <div class="anno"><span class="tag">Umsetzungs-Plan</span><h4>Settings-Kit zuerst</h4><ul>
+        <li>1 · <code>AgentTheme</code> → geteiltes <code>AppTheme</code> (Re-Export, kein Agent-Chats-Diff)</li>
+        <li>2 · Settings-Kit: <code>SettingsSection</code> (Mono-Label + Hairline), <code>SettingsRow</code>, Token-Controls</li>
+        <li>3 · Seiten migrieren in Plan-Reihenfolge: Recording → AI Output → Agent Chats → Rest</li>
+        <li>4 · Bugfixes A1–A3/A22/A25 laufen in derselben Migration mit</li>
+      </ul></div>
+      <div class="anno"><span class="tag">Codex-Delegation</span><h4>Bauen + verifizieren</h4><ul>
+        <li>Kit + erste Seite (Recording) als Codex-Job im Worktree, Review durch mich</li>
+        <li>Danach 2–3 Seiten pro Job parallel, Screenshot-QA in beiden Modi</li>
+        <li>Abschluss: Opus-Gegenprüfung gegen die Referenz-Docs (kein Control verloren)</li>
+      </ul></div>
+    </div>
+    <p class="note">Entscheidung gesucht: V1, V2 oder V3 (ggf. V3 mit zentrierten Formular-Seiten)? Danach halte ich die Wahl im Plan fest und starte die Umsetzung.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap"><span>WhisperM8 · Settings — Layout-Varianten · Tokens aus AgentTheme.swift</span><span>2026-07-06</span></div>
+</footer>
+
+<script>
+document.querySelectorAll('#themebar .tswitch button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('#themebar .tswitch button').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    document.querySelectorAll('.s-frame').forEach(function(f){ f.dataset.theme = b.dataset.theme; });
+  });
+});
+document.querySelectorAll('.c-tgl').forEach(function(t){ t.addEventListener('click', function(){ t.classList.toggle('on'); }); });
+</script>
+</body>
+</html>
