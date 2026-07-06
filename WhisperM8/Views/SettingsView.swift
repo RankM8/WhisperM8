@@ -102,13 +102,13 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .aiOutput:
             return "Connect Codex and manage post-processing modes, templates, and test runs."
         case .context:
-            return "Review context and privacy controls while pages are migrated."
+            return "What WhisperM8 may capture alongside your voice — and what happens to it."
         case .agentChats:
             return "Configure the agent workspace and Claude Code hooks."
         case .cli:
             return "Command line access and installable agent skills."
         case .general:
-            return "App behavior and appearance while pages are migrated."
+            return "Profile, appearance, startup, and updates."
         case .permissions:
             return "System permissions required for recording and automation."
         case .about:

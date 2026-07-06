@@ -7,7 +7,7 @@ description_long: |
   Persistenz/Kompatibilität, Infrastruktur) und den validierten
   Referenz-Docs. Jede Phase mit Test- und Review-Gate.
 updated: 2026-07-06 12:05
-status: 📋 WARTET AUF FREIGABE
+status: ✅ UMGESETZT (Phasen 0–10, 2026-07-06) — Review-Flotte läuft
 ---
 
 # Settings-Refactor — Umsetzungsplan (V3)

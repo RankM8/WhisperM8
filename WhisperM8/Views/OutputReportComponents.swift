@@ -64,7 +64,7 @@ struct ReportTextBlock: View {
                     CopyToClipboardButton(text: copyableText)
                 }
             }
-            Text(text?.isEmpty == false ? text! : "None")
+            Text(text.flatMap { $0.isEmpty ? nil : $0 } ?? "None")
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
