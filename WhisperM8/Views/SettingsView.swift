@@ -258,9 +258,9 @@ struct SettingsView: View {
         case .recording:
             recordingPage
         case .transcription:
-            settingsPage(page) {
-                APISettingsView()
-            }
+            // Phase 9b: migrierte V3-Seite (A4 Status-Zeile, A5 Remove Key,
+            // A6 Preisstand, A7 Language-Wirkungshinweis).
+            TranscriptionSettingsPage()
         case .aiOutput:
             aiOutputPage(page)
         case .context:
@@ -269,9 +269,8 @@ struct SettingsView: View {
         case .agentChats:
             agentChatsPage(page)
         case .cli:
-            settingsPage(page) {
-                CLISettingsView()
-            }
+            // Phase 9b: migrierte V3-Seite (Inhalte 1:1, Kit-Optik, CopyCommandRows).
+            CLISkillsSettingsPage()
         case .general:
             // Phase 7: migrierte V3-Seite (Profil/Theme/Login der alten Behavior-Seite,
             // A20/A21) — damit ist BehaviorSettingsView vollständig abgelöst.

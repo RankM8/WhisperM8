@@ -1,0 +1,349 @@
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct CLISkillsSettingsPage: View {
+    @State private var installState: CLIInstallStatus.State = .missing(expectedPath: "~/.local/bin/whisperm8")
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                pageHeader
+                commandLineSection
+                transcriptionQuickstartSection
+                codexSubagentsQuickstartSection
+                agentSkillsSection
+            }
+            .frame(maxWidth: 800, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(AppTheme.background)
+        .onAppear { installState = CLIInstallStatus.current() }
+    }
+
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("CLI & Skills")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(AppTheme.textPrimary)
+
+            Text("Command line access and installable agent skills.")
+                .font(.system(size: 13))
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var commandLineSection: some View {
+        SettingsSection("Command Line") {
+            SettingsStatusRow(
+                title: statusTitle,
+                tone: statusTone,
+                detail: statusDetail
+            ) {
+                if needsInstallAction {
+                    Button("Create Link") {
+                        CLISymlinkInstaller.installIfNeeded()
+                        installState = CLIInstallStatus.current()
+                    }
+                    .buttonStyle(SettingsButtonStyle.primary)
+                }
+            }
+
+            SettingsHelpText("uses the same Keychain API key as the app")
+                .padding(.vertical, 10)
+                .padding(.horizontal, 2)
+        }
+    }
+
+    private var transcriptionQuickstartSection: some View {
+        SettingsSection("Quickstart · Transcription") {
+            SettingsCopyCommandRow(
+                command: "whisperm8 transcribe aufnahme.m4a",
+                caption: "Audio → Text (stdout)"
+            )
+            SettingsCopyCommandRow(
+                command: "whisperm8 transcribe video.mp4 -f srt -o video.srt",
+                caption: "Video → Untertitel (Audiospur wird automatisch extrahiert)"
+            )
+            SettingsCopyCommandRow(
+                command: "whisperm8 transcribe meeting.mp3 --mode clean -o meeting.txt",
+                caption: "Transkript + Nachbearbeitung über einen Output-Mode"
+            )
+            SettingsCopyCommandRow(
+                command: "whisperm8 transcribe workshop.mp4 --dry-run",
+                caption: "Nur Dauer, Chunks und Kostenschätzung — keine API-Calls"
+            )
+
+            SettingsHelpText("Formate: txt, json, srt, vtt · Provider: Groq (Default) und OpenAI · lange Dateien werden automatisch gestückelt und wieder zusammengefügt. Alle Optionen: `whisperm8 --help`.")
+                .padding(.vertical, 10)
+                .padding(.horizontal, 2)
+        }
+    }
+
+    private var codexSubagentsQuickstartSection: some View {
+        SettingsSection("Quickstart · Codex Subagents") {
+            SettingsHelpText("WhisperM8 ist der Supervisor für headless Codex-Agenten (Codex hat kein eigenes Background-System). Jobs laufen detacht, sind über Turns fortsetzbar, erscheinen live in den Agent Chats — und lassen sich dort jederzeit als interaktiver Chat übernehmen.")
+                .padding(.vertical, 10)
+                .padding(.horizontal, 2)
+
+            SettingsCopyCommandRow(
+                command: "whisperm8 agent run --wait --json \"Reviewe den Diff von HEAD~3 auf Regressionen.\"",
+                caption: "Synchroner Job — blockiert bis zum Report (JSON auf stdout)"
+            )
+            SettingsCopyCommandRow(
+                command: "whisperm8 agent run --worktree \"Implementiere X, teste, committe bei grün.\"",
+                caption: "Detachter Job im isolierten Git-Worktree (Branch subagent/<id>)"
+            )
+            SettingsCopyCommandRow(
+                command: "whisperm8 agent send <id> --wait \"Bitte auch die Edge-Cases abdecken.\"",
+                caption: "Folge-Turn — die Session behält ihren Kontext (codex exec resume)"
+            )
+            SettingsCopyCommandRow(
+                command: "whisperm8 agent list",
+                caption: "Alle Jobs mit Zustand · status/logs/stop/rm für Details und Verwaltung"
+            )
+
+            SettingsHelpText("Sandbox: workspace-write (Default, committen ja / pushen nein) oder read-only. Exit-Codes: 0 done · 2 failed · 3 Konflikt · 4 Umgebung. Alle Optionen: `whisperm8 agent help`.")
+                .padding(.vertical, 10)
+                .padding(.horizontal, 2)
+        }
+    }
+
+    private var agentSkillsSection: some View {
+        SettingsSection("Agent Skills") {
+            VStack(alignment: .leading, spacing: 12) {
+                CLISkillSettingsCard(
+                    title: "Transcription Skill",
+                    definition: .transcription,
+                    summary: "Teaches AI assistants what the transcription CLI can do and how to call it correctly, for example transcribing a meeting video and summarizing it."
+                )
+
+                CLISkillSettingsCard(
+                    title: "Codex Subagent Skill",
+                    definition: .codexAgent,
+                    summary: "Describes the Codex subagent system with commands, flags, exit codes, JSON formats, report contract, and workflows."
+                )
+            }
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var statusTitle: String {
+        switch installState {
+        case .linked:
+            return "whisperm8 ist installiert"
+        case .linkedElsewhere:
+            return "Link zeigt auf eine andere App-Kopie"
+        case .missing:
+            return "CLI-Link noch nicht angelegt"
+        }
+    }
+
+    private var statusDetail: String {
+        switch installState {
+        case .linked(let path):
+            return path
+        case .linkedElsewhere(let path, let destination):
+            return "\(path) → \(destination)"
+        case .missing(let expectedPath):
+            return expectedPath
+        }
+    }
+
+    private var statusTone: SettingsStatusTone {
+        switch installState {
+        case .linked:
+            return .ok
+        case .linkedElsewhere:
+            return .warn
+        case .missing:
+            return .off
+        }
+    }
+
+    private var needsInstallAction: Bool {
+        if case .linked = installState { return false }
+        return true
+    }
+}
+
+private struct CLISkillSettingsCard: View {
+    let title: String
+    let definition: CLISkillExporter.SkillDefinition
+    let summary: String
+
+    @State private var installed = false
+    @State private var isCurrent = false
+    @State private var markdown = ""
+    @State private var feedback: String?
+    @State private var errorMessage: String?
+    @State private var isPreviewPresented = false
+
+    private var exporter: CLISkillExporter {
+        CLISkillExporter(definition: definition)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Text("Skill · \(definition.name)")
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(AppTheme.textSecondary)
+
+                SettingsHelpText(summary)
+
+                SettingsHelpText("Claude Code reads from ~/.claude/skills; other tools need the file copied manually.")
+            }
+
+            HStack(spacing: 8) {
+                Button(installButtonTitle) {
+                    install()
+                }
+                .buttonStyle(SettingsButtonStyle.primary)
+                .disabled(installed && isCurrent)
+
+                Button("Save…") {
+                    saveToDisk()
+                }
+                .buttonStyle(SettingsButtonStyle.standard)
+
+                Button("Copy") {
+                    copyToPasteboard()
+                }
+                .buttonStyle(SettingsButtonStyle.standard)
+                .disabled(markdown.isEmpty)
+
+                Button("View") {
+                    isPreviewPresented = true
+                }
+                .buttonStyle(SettingsButtonStyle.standard)
+                .disabled(markdown.isEmpty)
+
+                if let feedback {
+                    Text(feedback)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(AppTheme.statusWorking)
+                        .transition(.opacity)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        }
+        .onAppear(perform: refresh)
+        .sheet(isPresented: $isPreviewPresented) {
+            CLISkillPreviewSheet(
+                title: "Skill · \(definition.name)",
+                markdown: markdown.isEmpty ? "Skill resource not found." : markdown
+            )
+        }
+        .alert("Error", isPresented: .init(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var installButtonTitle: String {
+        if installed && isCurrent {
+            return "Installed"
+        }
+        if installed {
+            return "Update Skill"
+        }
+        return "Install"
+    }
+
+    private func refresh() {
+        installed = exporter.isInstalledForClaudeCode
+        isCurrent = exporter.installedSkillIsCurrent
+        if markdown.isEmpty {
+            markdown = (try? exporter.skillMarkdown()) ?? ""
+        }
+    }
+
+    private func install() {
+        do {
+            try exporter.installForClaudeCode()
+            refresh()
+            showFeedback("Installed")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveToDisk() {
+        guard !markdown.isEmpty else {
+            errorMessage = CLISkillExporter.SkillError.resourceMissing(definition.resourceName).localizedDescription
+            return
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "SKILL.md"
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.canCreateDirectories = true
+        panel.title = "Save Skill File"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try markdown.write(to: url, atomically: true, encoding: .utf8)
+            showFeedback("Saved")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func copyToPasteboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(markdown, forType: .string)
+        showFeedback("Copied")
+    }
+
+    private func showFeedback(_ text: String) {
+        withAnimation { feedback = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation { feedback = nil }
+        }
+    }
+}
+
+private struct CLISkillPreviewSheet: View {
+    let title: String
+    let markdown: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Spacer()
+
+                Button("Close") {
+                    dismiss()
+                }
+                .buttonStyle(SettingsButtonStyle.standard)
+            }
+
+            SettingsCodeBlock(text: markdown, minHeight: 420)
+        }
+        .padding(20)
+        .frame(width: 720, height: 540)
+        .background(AppTheme.background)
+    }
+}
