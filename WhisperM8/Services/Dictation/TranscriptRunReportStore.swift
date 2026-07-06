@@ -31,6 +31,11 @@ struct TranscriptRunReportDraft {
 }
 
 struct TranscriptRunReportStore {
+    private struct ReportSummaryIndex: Codable, Equatable {
+        var version: Int
+        var entries: [TranscriptRunReportSummary]
+    }
+
     struct CleanupPolicy {
         var maxAge: TimeInterval?
         var maxCount: Int?
@@ -172,6 +177,7 @@ struct TranscriptRunReportStore {
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(report)
         try data.write(to: reportURL(for: draft.id), options: .atomic)
+        try upsertIndexEntry(TranscriptRunReportSummary(from: report))
         runCleanupIfNeeded(policy: cleanupPolicy)
         return report
     }
@@ -199,6 +205,7 @@ struct TranscriptRunReportStore {
         if FileManager.default.fileExists(atPath: directory.path) {
             try FileManager.default.removeItem(at: directory)
         }
+        try removeIndexEntries(ids: [report.id])
     }
 
     @discardableResult
@@ -239,15 +246,108 @@ struct TranscriptRunReportStore {
 
         var removedCount = 0
         var removedBytes: Int64 = 0
+        var removedIDs = Set<UUID>()
         for candidate in candidates where removalPaths.contains(candidate.url) {
             if FileManager.default.fileExists(atPath: candidate.url.path) {
                 try FileManager.default.removeItem(at: candidate.url)
                 removedCount += 1
                 removedBytes += candidate.size
+                if let id = UUID(uuidString: candidate.url.lastPathComponent) {
+                    removedIDs.insert(id)
+                }
             }
         }
 
+        if !removedIDs.isEmpty {
+            try removeIndexEntries(ids: removedIDs)
+        }
+
         return CleanupResult(removedCount: removedCount, removedBytes: removedBytes)
+    }
+
+    func loadOrRebuildIndex() -> [TranscriptRunReportSummary] {
+        if let index = try? readIndex(), isIndexCurrent(index) {
+            return index.entries
+        }
+        return rebuildIndex()
+    }
+
+    @discardableResult
+    func rebuildIndex() -> [TranscriptRunReportSummary] {
+        let entries = sortedSummaries(
+            reportDirectories().compactMap { directory in
+                guard let report = try? loadReport(from: directory.appendingPathComponent("report.json")) else {
+                    return nil
+                }
+                return TranscriptRunReportSummary(from: report)
+            }
+        )
+
+        do {
+            try writeIndex(entries)
+        } catch {
+            Logger.debug("Failed to write transcript report index: \(error.localizedDescription)")
+        }
+
+        return entries
+    }
+
+    func reportSummaries(before cursor: (Date, UUID)? = nil, limit: Int) -> [TranscriptRunReportSummary] {
+        guard limit > 0 else { return [] }
+
+        return loadOrRebuildIndex()
+            .filter { summary in
+                guard let cursor else { return true }
+                return isSummary(summary, after: cursor)
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    func loadReport(id: UUID) -> TranscriptRunReport? {
+        try? loadReport(from: reportURL(for: id))
+    }
+
+    func searchFullText(
+        matching query: String,
+        excluding alreadyMatched: Set<UUID>,
+        limit: Int
+    ) -> [TranscriptRunReportSummary] {
+        searchFullText(
+            matching: query,
+            before: nil,
+            excluding: alreadyMatched,
+            limit: limit
+        )
+    }
+
+    func searchFullText(
+        matching query: String,
+        before cursor: (Date, UUID)?,
+        excluding alreadyMatched: Set<UUID>,
+        limit: Int
+    ) -> [TranscriptRunReportSummary] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty, limit > 0 else { return [] }
+
+        var results: [TranscriptRunReportSummary] = []
+        for summary in loadOrRebuildIndex() {
+            if let cursor, !isSummary(summary, after: cursor) {
+                continue
+            }
+            if alreadyMatched.contains(summary.id) {
+                continue
+            }
+            guard let report = loadReport(id: summary.id), reportMatchesFullText(report, needle: needle) else {
+                continue
+            }
+            results.append(TranscriptRunReportSummary(from: report))
+            if results.count == limit {
+                break
+            }
+        }
+
+        return results
     }
 
     private func runCleanupIfNeeded(policy: CleanupPolicy?) {
@@ -337,6 +437,83 @@ struct TranscriptRunReportStore {
         return try decoder.decode(TranscriptRunReport.self, from: data)
     }
 
+    private func upsertIndexEntry(_ summary: TranscriptRunReportSummary) throws {
+        var entries = loadOrRebuildIndex().filter { $0.id != summary.id }
+        entries.append(summary)
+        try writeIndex(sortedSummaries(entries))
+    }
+
+    private func removeIndexEntries(ids: Set<UUID>) throws {
+        guard !ids.isEmpty else { return }
+        let entries = loadOrRebuildIndex().filter { !ids.contains($0.id) }
+        try writeIndex(entries)
+    }
+
+    private func readIndex() throws -> ReportSummaryIndex {
+        let data = try Data(contentsOf: indexURL())
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(ReportSummaryIndex.self, from: data)
+    }
+
+    private func writeIndex(_ entries: [TranscriptRunReportSummary]) throws {
+        try FileManager.default.createDirectory(
+            at: reportsDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let index = ReportSummaryIndex(version: 1, entries: sortedSummaries(entries))
+        let data = try encoder.encode(index)
+        try data.write(to: indexURL(), options: .atomic)
+    }
+
+    private func isIndexCurrent(_ index: ReportSummaryIndex) -> Bool {
+        guard index.version == 1 else { return false }
+
+        let entryIDs = Set(index.entries.map(\.id))
+        guard entryIDs.count == index.entries.count else { return false }
+        guard entryIDs == reportDirectoryIDs() else { return false }
+        return index.entries == sortedSummaries(index.entries)
+    }
+
+    private func reportDirectoryIDs() -> Set<UUID> {
+        Set(reportDirectories().compactMap { UUID(uuidString: $0.lastPathComponent) })
+    }
+
+    private func sortedSummaries(_ summaries: [TranscriptRunReportSummary]) -> [TranscriptRunReportSummary] {
+        summaries.sorted { left, right in
+            if left.createdAt != right.createdAt {
+                return left.createdAt > right.createdAt
+            }
+            return left.id.uuidString < right.id.uuidString
+        }
+    }
+
+    private func isSummary(_ summary: TranscriptRunReportSummary, after cursor: (Date, UUID)) -> Bool {
+        if summary.createdAt != cursor.0 {
+            return summary.createdAt < cursor.0
+        }
+        return summary.id.uuidString > cursor.1.uuidString
+    }
+
+    private func reportMatchesFullText(_ report: TranscriptRunReport, needle: String) -> Bool {
+        let haystack = [
+            report.mode.name,
+            report.sourceAppName,
+            report.rawTranscript,
+            report.finalTranscript,
+            report.selectedText
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n")
+        .lowercased()
+
+        return haystack.contains(needle)
+    }
+
     private func reportDirectories() -> [URL] {
         (try? FileManager.default.contentsOfDirectory(
             at: reportsDirectory,
@@ -372,6 +549,10 @@ struct TranscriptRunReportStore {
         reportsDirectory
             .appendingPathComponent(id.uuidString, isDirectory: true)
             .appendingPathComponent("report.json")
+    }
+
+    private func indexURL() -> URL {
+        reportsDirectory.appendingPathComponent("reports-index.json")
     }
 
     private static func defaultReportsDirectory() -> URL {
