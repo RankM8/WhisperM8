@@ -31,7 +31,7 @@ struct OutputModesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("AI enrichment is off")
                     .font(.caption.weight(.semibold))
-                Text("Clean, Email, Slack and other modes need Codex. Switch to an enrichment profile in Behavior → Usage to unlock them. Raw dictation stays available.")
+                Text("Clean, Email, Slack and other modes need Codex. Switch to an enrichment profile in Behavior → Usage to unlock them. Fast dictation stays available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -98,7 +98,7 @@ struct OutputModesView: View {
                         .font(.headline)
 
                     VStack(spacing: 0) {
-                        Toggle("Fallback to Raw on processing errors", isOn: $fallbackToRawOnProcessingError)
+                        Toggle("Fallback to Fast on processing errors", isOn: $fallbackToRawOnProcessingError)
                             .padding(.vertical, 10)
                         Divider()
                         Toggle("Show mode chip in Mini overlay", isOn: $showModePickerInMiniOverlay)

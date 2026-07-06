@@ -137,8 +137,8 @@ extension OutputMode {
     static let builtInModes: [OutputMode] = [
         OutputMode(
             id: rawID,
-            name: "Raw",
-            shortLabel: "Raw",
+            name: "Fast",
+            shortLabel: "Fast",
             kind: .raw,
             templateID: nil,
             isEnabled: true,

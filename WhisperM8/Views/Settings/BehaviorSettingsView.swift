@@ -5,8 +5,9 @@ struct BehaviorSettingsView: View {
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
     @AppStorage("audioDuckingEnabled") private var audioDuckingEnabled = true
     @AppStorage("audioDuckingFactor") private var audioDuckingFactor = 0.2
-    @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.full.rawValue
+    @AppStorage("overlayStyle") private var overlayStyleRaw = OverlayStyle.mini.rawValue
     @AppStorage("showConfirmButtonInOverlay") private var showConfirmButtonInOverlay = true
+    @AppStorage("showModePickerInMiniOverlay") private var showModePickerInMiniOverlay = true
     @AppStorage("selectedContextCaptureEnabled") private var selectedContextCaptureEnabled = true
     @AppStorage("visualContextCaptureEnabled") private var visualContextCaptureEnabled = true
     @AppStorage("maxScreenshotsPerRecording") private var maxScreenshotsPerRecording = AppPreferences.defaultMaxScreenshotsPerRecording
@@ -122,6 +123,12 @@ struct BehaviorSettingsView: View {
                 Toggle("Show Confirm Button (✓)", isOn: $showConfirmButtonInOverlay)
 
                 Text("The ✓ button stops the recording and starts transcription — same as the hotkey.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Show mode picker in Mini overlay", isOn: $showModePickerInMiniOverlay)
+
+                Text("When off, the Mini pill hides the mode dropdown; it appears next to the waveform while hovering the pill.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

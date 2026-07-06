@@ -155,6 +155,11 @@ struct OutputModeStore {
             guard var mode = byID[id] else { return nil }
             mode.isDefault = mode.id == defaultID
             if mode.id == OutputMode.rawID {
+                // Migration: der Modus hieß bis 2.7 „Raw" — persistierte
+                // Dateien mit dem alten Default-Namen bekommen den neuen;
+                // eigene Umbenennungen des Users bleiben unangetastet.
+                if mode.name == "Raw" { mode.name = "Fast" }
+                if mode.shortLabel == "Raw" { mode.shortLabel = "Fast" }
                 mode.isEnabled = true
                 mode.kind = .raw
                 mode.templateID = nil

@@ -9,7 +9,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.isAutoPasteEnabled)
             XCTAssertTrue(preferences.isAudioDuckingEnabled)
             XCTAssertEqual(preferences.audioDuckingFactor, 0.2)
-            XCTAssertEqual(preferences.overlayStyleRaw, OverlayStyle.full.rawValue)
+            XCTAssertEqual(preferences.overlayStyleRaw, OverlayStyle.mini.rawValue)
             XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.cleanID)
             XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.cleanID)
             XCTAssertTrue(preferences.fallbackToRawOnProcessingError)

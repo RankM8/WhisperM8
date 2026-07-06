@@ -52,7 +52,7 @@ struct OverlayPositionStore {
 
     static func loadStyle() -> OverlayStyle {
         let raw = AppPreferences.shared.overlayStyleRaw
-        return OverlayStyle(rawValue: raw) ?? .full
+        return OverlayStyle(rawValue: raw) ?? .mini
     }
 
     static func saveAnchor(_ anchor: PillAnchor) {
@@ -386,7 +386,7 @@ class OverlayController: ObservableObject {
 
     @Published var isTranscribing: Bool = false
     @Published var isPostProcessing: Bool = false
-    @Published var overlayStyle: OverlayStyle = .full
+    @Published var overlayStyle: OverlayStyle = .mini
     @Published var selectedOutputMode: OutputMode = OutputMode.defaultMode()
     @Published var outputModes: [OutputMode] = OutputMode.availableBuiltInModes()
     @Published var showModePickerInMiniOverlay: Bool = true

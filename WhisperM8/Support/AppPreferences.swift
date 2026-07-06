@@ -57,7 +57,7 @@ struct AppPreferences {
     }
 
     var overlayStyleRaw: String {
-        get { defaults.string(forKey: Keys.overlayStyle) ?? OverlayStyle.full.rawValue }
+        get { defaults.string(forKey: Keys.overlayStyle) ?? OverlayStyle.mini.rawValue }
         nonmutating set { defaults.set(newValue, forKey: Keys.overlayStyle) }
     }
 
