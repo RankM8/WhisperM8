@@ -36,33 +36,13 @@ struct AgentChatsSettingsPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                pageHeader
-
-                SettingsTabs(selection: $selectedTab, tabs: tabs)
-
-                tabContent
-            }
-            .frame(maxWidth: 920, alignment: .leading)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        SettingsPageContainer(
+            title: "Agent Chats",
+            subtitle: "One page for the whole agent workspace: launch defaults, notifications, Claude hooks, and CLI arguments."
+        ) {
+            SettingsTabs(selection: $selectedTab, tabs: tabs)
+            tabContent
         }
-        .background(AppTheme.background)
-    }
-
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Agent Chats")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            Text("One page for the whole agent workspace: launch defaults, notifications, Claude hooks, and CLI arguments.")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

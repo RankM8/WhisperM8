@@ -8,71 +8,52 @@ struct ContextPrivacySettingsPage: View {
     @AppStorage("deleteContextFilesAfterProcessing") private var deleteContextFilesAfterProcessing = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                pageHeader
+        SettingsPageContainer(
+            title: "Context & Privacy",
+            subtitle: "What WhisperM8 may capture alongside your voice - and what happens to it."
+        ) {
+            SettingsSection("Text Context") {
+                SettingsToggleRow(
+                    title: "Use selected text as context",
+                    subtitle: "Reads the current selection (needs Accessibility permission) so modes like Reply understand what you refer to.",
+                    isOn: $selectedContextCaptureEnabled
+                )
+            }
 
-                SettingsSection("Text Context") {
-                    SettingsToggleRow(
-                        title: "Use selected text as context",
-                        subtitle: "Reads the current selection (needs Accessibility permission) so modes like Reply understand what you refer to.",
-                        isOn: $selectedContextCaptureEnabled
+            SettingsSection("Visual Context") {
+                SettingsToggleRow(
+                    title: "Allow screenshots and screen clips as context",
+                    subtitle: "Needs Screen Recording permission (optional) - see Permissions.",
+                    isOn: $visualContextCaptureEnabled
+                )
+
+                if visualContextCaptureEnabled {
+                    SettingsStepperRow(
+                        title: "Screenshots per recording",
+                        value: $maxScreenshotsPerRecording,
+                        in: 1...AppPreferences.maximumScreenshotsPerRecording,
+                        format: .number
                     )
-                }
 
-                SettingsSection("Visual Context") {
-                    SettingsToggleRow(
-                        title: "Allow screenshots and screen clips as context",
-                        subtitle: "Needs Screen Recording permission (optional) - see Permissions.",
-                        isOn: $visualContextCaptureEnabled
+                    ScreenClipDurationRow(
+                        title: "Max screen clip",
+                        value: $maxScreenRecordingDuration,
+                        range: 5...60
                     )
 
-                    if visualContextCaptureEnabled {
-                        SettingsStepperRow(
-                            title: "Screenshots per recording",
-                            value: $maxScreenshotsPerRecording,
-                            in: 1...AppPreferences.maximumScreenshotsPerRecording,
-                            format: .number
-                        )
-
-                        ScreenClipDurationRow(
-                            title: "Max screen clip",
-                            value: $maxScreenRecordingDuration,
-                            range: 5...60
-                        )
-
-                        SettingsToggleRow(
-                            title: "Delete visual context files after processing",
-                            isOn: $deleteContextFilesAfterProcessing
-                        )
-                    }
-                }
-
-                SettingsSection("Privacy") {
-                    SettingsHelpText("Audio goes only to your chosen transcription provider (Groq/OpenAI). Context text, screenshots and clips go only to Codex when a mode requests them. Nothing else leaves your machine; history is stored locally under Application Support.")
-                        .padding(.vertical, 11)
-                        .padding(.horizontal, 2)
+                    SettingsToggleRow(
+                        title: "Delete visual context files after processing",
+                        isOn: $deleteContextFilesAfterProcessing
+                    )
                 }
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .background(AppTheme.background)
-    }
 
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Context & Privacy")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            Text("What WhisperM8 may capture alongside your voice - and what happens to it.")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
+            SettingsSection("Privacy") {
+                SettingsHelpText("Audio goes only to your chosen transcription provider (Groq/OpenAI). Context text, screenshots and clips go only to Codex when a mode requests them. Nothing else leaves your machine; history is stored locally under Application Support.")
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, 2)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

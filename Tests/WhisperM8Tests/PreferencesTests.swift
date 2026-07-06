@@ -10,8 +10,10 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.isAudioDuckingEnabled)
             XCTAssertEqual(preferences.audioDuckingFactor, 0.2)
             XCTAssertEqual(preferences.overlayStyleRaw, OverlayStyle.mini.rawValue)
-            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.cleanID)
-            XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.cleanID)
+            // Beschlossen 2026-07-06: Erstinstallation startet mit Fast (raw) —
+            // gespeicherte Werte bleiben unangetastet (siehe Folge-Asserts).
+            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.rawID)
+            XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.rawID)
             XCTAssertTrue(preferences.fallbackToRawOnProcessingError)
             XCTAssertTrue(preferences.showModePickerInMiniOverlay)
             XCTAssertTrue(preferences.isSelectedContextCaptureEnabled)
@@ -282,8 +284,10 @@ final class PreferencesTests: XCTestCase {
             XCTAssertNil(preferences.selectedAudioDeviceUID)
             XCTAssertEqual(preferences.appearanceOverride, .system)
             XCTAssertFalse(preferences.isDebugFileLoggingEnabled)
-            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.cleanID)
-            XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.cleanID)
+            // Beschlossen 2026-07-06: Erstinstallation startet mit Fast (raw) —
+            // gespeicherte Werte bleiben unangetastet (siehe Folge-Asserts).
+            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.rawID)
+            XCTAssertEqual(preferences.lastSelectedOutputModeID, OutputMode.rawID)
             XCTAssertTrue(preferences.fallbackToRawOnProcessingError)
             XCTAssertTrue(preferences.showModePickerInMiniOverlay)
             XCTAssertTrue(preferences.showConfirmButtonInOverlay)

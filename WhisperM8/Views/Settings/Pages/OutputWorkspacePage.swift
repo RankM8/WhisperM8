@@ -17,17 +17,13 @@ struct OutputWorkspacePage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                pageHeader
-                latestRun
-                archiveWorkspace
-            }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        SettingsPageContainer(
+            title: "Output",
+            subtitle: "Your dictation results: latest run plus the full archive."
+        ) {
+            latestRun
+            archiveWorkspace
         }
-        .background(AppTheme.background)
         .onAppear {
             updateFallbackFromAppState()
             model.reload()
@@ -48,19 +44,6 @@ struct OutputWorkspacePage: View {
         } message: {
             Text("This removes the report and its attachments from the local archive.")
         }
-    }
-
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Output")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            Text("Your dictation results: latest run plus the full archive.")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

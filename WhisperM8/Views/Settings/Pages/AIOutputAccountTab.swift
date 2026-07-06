@@ -5,7 +5,7 @@ struct AIOutputAccountTab: View {
     @AppStorage("codexReasoningEffort") private var reasoningEffortRaw = CodexReasoningEffort.defaultEffort.rawValue
     @AppStorage("codexServiceTier") private var serviceTierRaw = CodexServiceTier.defaultTier.rawValue
     @AppStorage("codexVisualInputMode") private var visualInputModeRaw = CodexVisualInputMode.defaultMode.rawValue
-    @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.cleanID
+    @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.rawID
     @AppStorage("fallbackToRawOnProcessingError") private var fallbackToRawOnProcessingError = true
 
     @State private var connectionModel = CodexConnectionModel()

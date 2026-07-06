@@ -9,72 +9,66 @@ struct PermissionsSettingsPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                pageHeader
-
-                SettingsSection("System Access") {
-                    SettingsStatusRow(
-                        title: "Permissions",
-                        subtitle: "Re-check or repair system permissions without running onboarding again.",
-                        tone: model.headerTone,
-                        detail: model.headerText
-                    ) {
-                        Button("Refresh") {
-                            model.refresh()
-                        }
-                        .buttonStyle(SettingsButtonStyle.standard)
+        SettingsPageContainer(
+            title: "Permissions",
+            subtitle: "Re-check or repair system permissions without running onboarding again."
+        ) {
+            SettingsSection("System Access") {
+                SettingsStatusRow(
+                    title: "Permissions",
+                    subtitle: "Re-check or repair system permissions without running onboarding again.",
+                    tone: model.headerTone,
+                    detail: model.headerText
+                ) {
+                    Button("Refresh") {
+                        model.refresh()
                     }
-                }
-
-                SettingsSection("Required") {
-                    permissionRow(
-                        title: "Microphone",
-                        subtitle: "Required to record your voice for transcription.",
-                        statusText: model.microphoneStatusText,
-                        isGranted: model.microphoneGranted,
-                        primaryTitle: model.microphonePrimaryButtonTitle,
-                        primaryAction: {
-                            Task { await model.performMicrophonePrimaryAction() }
-                        },
-                        secondaryAction: model.openMicrophonePrivacySettings
-                    )
-
-                    permissionRow(
-                        title: "Accessibility",
-                        subtitle: "Required for auto-paste and selected text capture.",
-                        statusText: model.accessibilityGranted ? "Granted" : "Not granted",
-                        isGranted: model.accessibilityGranted,
-                        primaryTitle: model.accessibilityGranted ? "Check Again" : "Grant",
-                        primaryAction: model.performAccessibilityPrimaryAction,
-                        secondaryAction: model.openAccessibilityPrivacySettings
-                    )
-                }
-
-                SettingsSection("Optional · Visual Context") {
-                    permissionRow(
-                        title: "Screen Recording",
-                        subtitle: "Required only when you add screenshots or screen clips as context. Visual context can be configured in Context & Privacy.",
-                        statusText: model.screenRecordingGranted ? "Granted" : "Not granted",
-                        isGranted: model.screenRecordingGranted,
-                        primaryTitle: model.screenRecordingGranted ? "Check Again" : "Grant",
-                        primaryAction: model.performScreenRecordingPrimaryAction,
-                        secondaryAction: model.openScreenRecordingPrivacySettings
-                    )
-                }
-
-                SettingsSection("What happens without permissions") {
-                    SettingsHelpText("Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste and selected text capture will be blocked by macOS. Screen Recording is optional and only needed for screenshot or screen clip context.")
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(SettingsButtonStyle.standard)
                 }
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .center)
+
+            SettingsSection("Required") {
+                permissionRow(
+                    title: "Microphone",
+                    subtitle: "Required to record your voice for transcription.",
+                    statusText: model.microphoneStatusText,
+                    isGranted: model.microphoneGranted,
+                    primaryTitle: model.microphonePrimaryButtonTitle,
+                    primaryAction: {
+                        Task { await model.performMicrophonePrimaryAction() }
+                    },
+                    secondaryAction: model.openMicrophonePrivacySettings
+                )
+
+                permissionRow(
+                    title: "Accessibility",
+                    subtitle: "Required for auto-paste and selected text capture.",
+                    statusText: model.accessibilityGranted ? "Granted" : "Not granted",
+                    isGranted: model.accessibilityGranted,
+                    primaryTitle: model.accessibilityGranted ? "Check Again" : "Grant",
+                    primaryAction: model.performAccessibilityPrimaryAction,
+                    secondaryAction: model.openAccessibilityPrivacySettings
+                )
+            }
+
+            SettingsSection("Optional · Visual Context") {
+                permissionRow(
+                    title: "Screen Recording",
+                    subtitle: "Required only when you add screenshots or screen clips as context. Visual context can be configured in Context & Privacy.",
+                    statusText: model.screenRecordingGranted ? "Granted" : "Not granted",
+                    isGranted: model.screenRecordingGranted,
+                    primaryTitle: model.screenRecordingGranted ? "Check Again" : "Grant",
+                    primaryAction: model.performScreenRecordingPrimaryAction,
+                    secondaryAction: model.openScreenRecordingPrivacySettings
+                )
+            }
+
+            SettingsSection("What happens without permissions") {
+                SettingsHelpText("Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste and selected text capture will be blocked by macOS. Screen Recording is optional and only needed for screenshot or screen clip context.")
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .background(AppTheme.background)
         .onAppear {
             model.refresh()
             model.startPolling()
@@ -82,19 +76,6 @@ struct PermissionsSettingsPage: View {
         .onDisappear {
             model.stopPolling()
         }
-    }
-
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Permissions")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            Text("Re-check or repair system permissions without running onboarding again.")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func permissionRow(

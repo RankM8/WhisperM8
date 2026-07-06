@@ -28,83 +28,77 @@ struct TranscriptionSettingsPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                pageHeader
+        SettingsPageContainer(
+            title: "Transcription",
+            subtitle: "Speech-to-text provider, API key, model and language."
+        ) {
+            SettingsSection("Provider") {
+                TranscriptionProviderSegmentedRow(provider: providerBinding)
 
-                SettingsSection("Provider") {
-                    TranscriptionProviderSegmentedRow(provider: providerBinding)
-
-                    TranscriptionAPIKeyInputRow(
-                        text: $apiKey,
-                        hasSavedKey: apiKeyAvailable,
-                        providerName: provider.displayName
-                    )
-                    .onChange(of: apiKey) { _, newValue in
-                        guard !newValue.isEmpty else {
-                            return
-                        }
-                        KeychainManager.save(key: provider.keychainKey, value: newValue)
-                        apiKeyAvailable = true
+                TranscriptionAPIKeyInputRow(
+                    text: $apiKey,
+                    hasSavedKey: apiKeyAvailable,
+                    providerName: provider.displayName
+                )
+                .onChange(of: apiKey) { _, newValue in
+                    guard !newValue.isEmpty else {
+                        return
                     }
-
-                    if apiKeyAvailable && apiKey.isEmpty {
-                        SettingsStatusRow(
-                            title: "Saved Key",
-                            tone: .ok,
-                            detail: "API key saved in Keychain"
-                        ) {
-                            Button("Remove Key…") {
-                                isConfirmingKeyRemoval = true
-                            }
-                            .buttonStyle(SettingsButtonStyle.destructive)
-                        }
-                    }
-
-                    TranscriptionAPIKeyLinkRow(provider: provider)
+                    KeychainManager.save(key: provider.keychainKey, value: newValue)
+                    apiKeyAvailable = true
                 }
 
-                SettingsSection("Model") {
-                    SettingsPickerRow(
-                        title: "Model",
-                        selection: $selectedModelRaw,
-                        options: provider.availableModels.map(\.rawValue)
-                    ) { rawValue in
-                        Text(TranscriptionModel(rawValue: rawValue)?.displayName ?? rawValue)
-                    }
-
-                    if let currentModel {
-                        SettingsHelpText(modelHelpText(for: currentModel))
-                    }
-
-                    SettingsRow(
-                        title: "Price",
-                        subtitle: "Static list price, as of 2026-07."
+                if apiKeyAvailable && apiKey.isEmpty {
+                    SettingsStatusRow(
+                        title: "Saved Key",
+                        tone: .ok,
+                        detail: "API key saved in Keychain"
                     ) {
-                        Text(provider.priceInfo)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(AppTheme.textSecondary)
+                        Button("Remove Key…") {
+                            isConfirmingKeyRemoval = true
+                        }
+                        .buttonStyle(SettingsButtonStyle.destructive)
                     }
                 }
 
-                SettingsSection("Language") {
-                    SettingsPickerRow(
-                        title: "Spoken language",
-                        selection: $language,
-                        options: ["de", "en", ""]
-                    ) { code in
-                        Text(languageDisplayName(for: code))
-                    }
+                TranscriptionAPIKeyLinkRow(provider: provider)
+            }
 
-                    SettingsHelpText("Also used for AI Output post-processing and the Test Lab. Auto-detect omits the language field.")
+            SettingsSection("Model") {
+                SettingsPickerRow(
+                    title: "Model",
+                    selection: $selectedModelRaw,
+                    options: provider.availableModels.map(\.rawValue)
+                ) { rawValue in
+                    Text(TranscriptionModel(rawValue: rawValue)?.displayName ?? rawValue)
+                }
+
+                if let currentModel {
+                    SettingsHelpText(modelHelpText(for: currentModel))
+                }
+
+                SettingsRow(
+                    title: "Price",
+                    subtitle: "Static list price, as of 2026-07."
+                ) {
+                    Text(provider.priceInfo)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .center)
+
+            SettingsSection("Language") {
+                SettingsPickerRow(
+                    title: "Spoken language",
+                    selection: $language,
+                    options: ["de", "en", ""]
+                ) { code in
+                    Text(languageDisplayName(for: code))
+                }
+
+                SettingsHelpText("Also used for AI Output post-processing and the Test Lab. Auto-detect omits the language field.")
+            }
         }
-        .background(AppTheme.background)
         .onAppear(perform: syncFromPreferencesAndKeychain)
         .confirmationDialog("Remove \(provider.displayName) API key?", isPresented: $isConfirmingKeyRemoval) {
             Button("Remove Key", role: .destructive) {
@@ -114,19 +108,6 @@ struct TranscriptionSettingsPage: View {
         } message: {
             Text("This removes the saved \(provider.displayName) API key from Keychain.")
         }
-    }
-
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Transcription")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            Text("Speech-to-text provider, API key, model and language.")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func syncFromPreferencesAndKeychain() {

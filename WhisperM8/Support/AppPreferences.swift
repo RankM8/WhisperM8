@@ -82,7 +82,9 @@ struct AppPreferences {
     }
 
     var defaultOutputModeID: String {
-        get { defaults.string(forKey: Keys.defaultOutputModeID) ?? OutputMode.cleanID }
+        // Fallback bewusst Fast/raw: Erstinstallationen starten ohne Codex-Login,
+        // Fast liefert sofort Ergebnisse (User-Entscheidung 2026-07-06; vorher clean).
+        get { defaults.string(forKey: Keys.defaultOutputModeID) ?? OutputMode.rawID }
         nonmutating set { defaults.set(newValue, forKey: Keys.defaultOutputModeID) }
     }
 

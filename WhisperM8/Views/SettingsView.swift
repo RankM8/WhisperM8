@@ -137,11 +137,9 @@ struct SettingsView: View {
             detailView(for: selection ?? .recording)
         }
         .frame(minWidth: 920, minHeight: 620)
-        .onChange(of: selection) { _, newSelection in
-            if newSelection == .agentChats {
-                WindowRequestCenter.shared.request(.agentChats)
-            }
-        }
+        // Bewusst KEIN Auto-Öffnen des Agent-Chat-Hubs bei Sidebar-Auswahl mehr:
+        // die Seite „Agent Chats" ist eine normale Settings-Seite; in den Hub
+        // führt ausschließlich der explizite „Open Agent Chats"-Button.
         .onAppear {
             applySettingsRoute(windowRequestCenter.latestRequest)
         }

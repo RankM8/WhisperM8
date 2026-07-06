@@ -32,96 +32,77 @@ struct AboutSettingsPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                pageHeader
+        SettingsPageContainer(
+            title: "About",
+            subtitle: "Version, updates, credits."
+        ) {
+            SettingsSection("App") {
+                HStack(alignment: .center, spacing: 16) {
+                    iconTile
 
-                SettingsSection("App") {
-                    HStack(alignment: .center, spacing: 16) {
-                        iconTile
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("WhisperM8")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(AppTheme.textPrimary)
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("WhisperM8")
-                                .font(.system(size: 17, weight: .bold))
-                                .foregroundStyle(AppTheme.textPrimary)
+                        Text(versionText)
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppTheme.textSecondary)
 
-                            Text(versionText)
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppTheme.textSecondary)
-
-                            Text("Native macOS dictation with AI transcription")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(AppTheme.textTertiary)
-                        }
-
-                        Spacer(minLength: 0)
+                        Text("Native macOS dictation with AI transcription")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(AppTheme.textTertiary)
                     }
-                    .padding(.vertical, 14)
-                    .padding(.horizontal, 2)
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(AppTheme.border)
-                            .frame(height: 1)
-                    }
+
+                    Spacer(minLength: 0)
                 }
-
-                SettingsSection("Updates") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        AboutUpdateSection()
-
-                        if let lastCheckedText {
-                            SettingsHelpText(lastCheckedText)
-                        }
-                    }
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(AppTheme.border)
-                            .frame(height: 1)
-                    }
-                }
-
-                SettingsSection("Credits") {
-                    HStack {
-                        if let websiteURL = Self.websiteURL {
-                            Link("Built by 360WebManager", destination: websiteURL)
-                                .font(.system(size: 11.5))
-                        } else {
-                            Text("Built by 360WebManager")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(AppTheme.textSecondary)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.vertical, 10)
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(AppTheme.border)
-                            .frame(height: 1)
-                    }
+                .padding(.vertical, 14)
+                .padding(.horizontal, 2)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(AppTheme.border)
+                        .frame(height: 1)
                 }
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .background(AppTheme.background)
-    }
 
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("About")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
+            SettingsSection("Updates") {
+                VStack(alignment: .leading, spacing: 8) {
+                    AboutUpdateSection()
 
-            Text("Version, updates, credits.")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
+                    if let lastCheckedText {
+                        SettingsHelpText(lastCheckedText)
+                    }
+                }
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(AppTheme.border)
+                        .frame(height: 1)
+                }
+            }
+
+            SettingsSection("Credits") {
+                HStack {
+                    if let websiteURL = Self.websiteURL {
+                        Link("Built by 360WebManager", destination: websiteURL)
+                            .font(.system(size: 11.5))
+                    } else {
+                        Text("Built by 360WebManager")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 10)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(AppTheme.border)
+                        .frame(height: 1)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var iconTile: some View {

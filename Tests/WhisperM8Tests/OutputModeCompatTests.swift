@@ -14,7 +14,9 @@ final class OutputModeCompatTests: XCTestCase {
             let store = OutputModeStore(fileURL: fileURL)
             defer { try? FileManager.default.removeItem(at: fileURL) }
 
-            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.cleanID)
+            // Beschlossen 2026-07-06: Erstinstallation startet mit Fast (raw) —
+            // gespeicherte Werte bleiben unangetastet (siehe Folge-Asserts).
+            XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.rawID)
 
             preferences.defaultOutputModeID = OutputMode.rawID
             XCTAssertEqual(preferences.defaultOutputModeID, OutputMode.rawID)

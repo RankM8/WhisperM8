@@ -6,34 +6,18 @@ struct CLISkillsSettingsPage: View {
     @State private var installState: CLIInstallStatus.State = .missing(expectedPath: "~/.local/bin/whisperm8")
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                pageHeader
-                commandLineSection
-                transcriptionQuickstartSection
-                codexSubagentsQuickstartSection
-                agentSkillsSection
-            }
-            .frame(maxWidth: 800, alignment: .leading)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        SettingsPageContainer(
+            title: "CLI & Skills",
+            subtitle: "Command line access and installable agent skills."
+        ) {
+            // Skills zuerst: die installierbaren Karten sind die Hauptaktion
+            // der Seite (User-Wunsch 2026-07-06), CLI-Details folgen darunter.
+            agentSkillsSection
+            commandLineSection
+            transcriptionQuickstartSection
+            codexSubagentsQuickstartSection
         }
-        .background(AppTheme.background)
         .onAppear { installState = CLIInstallStatus.current() }
-    }
-
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("CLI & Skills")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            Text("Command line access and installable agent skills.")
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var commandLineSection: some View {
