@@ -4,28 +4,120 @@ import XCTest
 
 @MainActor
 final class OutputArchiveViewModelTests: XCTestCase {
-    func testLatestReportComesFromPersistedStore() throws {
+    func testInitialLoadLoadsExactlyPageSize() async throws {
         let store = makeStore()
-        let older = try store.save(makeDraft(createdAt: Date(timeIntervalSince1970: 10), finalTranscript: "older"), cleanupPolicy: nil)
-        let newer = try store.save(makeDraft(createdAt: Date(timeIntervalSince1970: 20), finalTranscript: "newer"), cleanupPolicy: nil)
-        let model = OutputArchiveViewModel(
-            store: store,
-            latestFallback: OutputArchiveFallback(
-                mode: OutputMode.mode(for: OutputMode.cleanID),
-                rawTranscript: "fallback raw",
-                finalTranscript: "fallback final",
-                createdAt: Date(timeIntervalSince1970: 30)
-            )
-        )
+        let reports = try saveReports(count: OutputArchiveViewModel.pageSize + 5, in: store)
+        let model = OutputArchiveViewModel(store: store)
 
-        model.reload()
+        await model.initialLoad()
 
-        XCTAssertEqual(model.latestReport?.id, newer.id)
-        XCTAssertNotEqual(model.latestReport?.id, older.id)
-        XCTAssertEqual(model.latestReport?.finalTranscript, "newer")
+        XCTAssertEqual(model.reports.count, OutputArchiveViewModel.pageSize)
+        XCTAssertEqual(model.latestReport?.id, reports.last?.id)
+        XCTAssertTrue(model.hasMore)
     }
 
-    func testFilteredReportsDelegateToOutputHistoryFilter() throws {
+    func testLoadMoreAppendsNextPageAndClearsHasMoreAtEnd() async throws {
+        let store = makeStore()
+        try saveReports(count: OutputArchiveViewModel.pageSize + 5, in: store)
+        let model = OutputArchiveViewModel(store: store)
+
+        await model.initialLoad()
+        await model.loadMore()
+
+        XCTAssertEqual(model.reports.count, OutputArchiveViewModel.pageSize + 5)
+        XCTAssertFalse(model.hasMore)
+    }
+
+    func testSelectLoadsFullReport() async throws {
+        let store = makeStore()
+        _ = try store.save(
+            makeDraft(
+                createdAt: Date(timeIntervalSince1970: 20),
+                finalTranscript: "newer"
+            ),
+            cleanupPolicy: nil
+        )
+        let target = try store.save(
+            makeDraft(
+                createdAt: Date(timeIntervalSince1970: 10),
+                rawTranscript: "full raw text",
+                finalTranscript: "full final text"
+            ),
+            cleanupPolicy: nil
+        )
+        let model = OutputArchiveViewModel(store: store)
+
+        await model.initialLoad()
+        model.select(id: target.id)
+        try await waitUntil {
+            model.selectedReport?.id == target.id && !model.isLoadingDetail
+        }
+
+        XCTAssertEqual(model.selectedReportID, target.id)
+        XCTAssertEqual(model.selectedReport?.rawTranscript, "full raw text")
+        XCTAssertEqual(model.selectedReport?.finalTranscript, "full final text")
+    }
+
+    func testSearchUsesSummaryImmediatelyAndFullTextInBackground() async throws {
+        let store = makeStore()
+        let target = try store.save(
+            makeDraft(
+                createdAt: Date(timeIntervalSince1970: 30),
+                rawTranscript: String(repeating: "a", count: 300) + " deepneedle",
+                finalTranscript: "ordinary visible summary"
+            ),
+            cleanupPolicy: nil
+        )
+        let summaryTarget = try store.save(
+            makeDraft(
+                createdAt: Date(timeIntervalSince1970: 20),
+                sourceAppName: "NeedleApp",
+                rawTranscript: "raw",
+                finalTranscript: "summary match"
+            ),
+            cleanupPolicy: nil
+        )
+        _ = try store.save(
+            makeDraft(
+                createdAt: Date(timeIntervalSince1970: 10),
+                rawTranscript: "raw",
+                finalTranscript: "unrelated"
+            ),
+            cleanupPolicy: nil
+        )
+        let model = OutputArchiveViewModel(store: store)
+
+        await model.initialLoad()
+        model.searchText = "NeedleApp"
+
+        XCTAssertEqual(model.filteredReports.map(\.id), [summaryTarget.id])
+
+        model.searchText = "deepneedle"
+        XCTAssertFalse(model.filteredReports.contains { $0.id == target.id })
+
+        try await waitUntil(timeoutNanoseconds: 2_000_000_000) {
+            model.filteredReports.contains { $0.id == target.id } && !model.searchingDeeper
+        }
+
+        XCTAssertEqual(model.filteredReports.map(\.id), [target.id])
+    }
+
+    func testDeleteRemovesLoadedSummaryWithoutReloadingPage() async throws {
+        let store = makeStore()
+        try saveReports(count: OutputArchiveViewModel.pageSize + 5, in: store)
+        let model = OutputArchiveViewModel(store: store)
+
+        await model.initialLoad()
+        let target = try XCTUnwrap(model.reports.dropFirst(10).first)
+        await model.delete(id: target.id)
+
+        XCTAssertNil(store.loadReport(id: target.id))
+        XCTAssertFalse(model.reports.contains { $0.id == target.id })
+        XCTAssertEqual(model.reports.count, OutputArchiveViewModel.pageSize - 1)
+        XCTAssertTrue(model.hasMore)
+    }
+
+    func testFiltersScopeStatusAndSearchOnSummaries() async throws {
         let store = makeStore()
         let target = try store.save(
             makeDraft(
@@ -34,7 +126,7 @@ final class OutputArchiveViewModelTests: XCTestCase {
                 status: .succeeded,
                 sourceAppName: "Xcode",
                 rawTranscript: "build passed",
-                finalTranscript: "target"
+                finalTranscript: "target summary"
             ),
             cleanupPolicy: nil
         )
@@ -45,7 +137,7 @@ final class OutputArchiveViewModelTests: XCTestCase {
                 status: .failed,
                 sourceAppName: "Xcode",
                 rawTranscript: "build passed",
-                finalTranscript: "wrong status"
+                finalTranscript: "wrong status target summary"
             ),
             cleanupPolicy: nil
         )
@@ -56,82 +148,18 @@ final class OutputArchiveViewModelTests: XCTestCase {
                 status: .succeeded,
                 sourceAppName: "Xcode",
                 rawTranscript: "build passed",
-                finalTranscript: "wrong scope"
+                finalTranscript: "wrong scope target summary"
             ),
             cleanupPolicy: nil
         )
         let model = OutputArchiveViewModel(store: store)
-        model.reload()
 
+        await model.initialLoad()
         model.scope = .tasks
         model.status = .succeeded
-        model.searchText = "build"
+        model.searchText = "target"
 
-        let expected = OutputHistoryFilter(
-            scope: .tasks,
-            status: .succeeded,
-            searchText: "build"
-        ).apply(to: model.reports)
-        XCTAssertEqual(model.filteredReports, expected)
         XCTAssertEqual(model.filteredReports.map(\.id), [target.id])
-    }
-
-    func testDeleteRemovesReportFromStoreAndReloads() throws {
-        let store = makeStore()
-        let report = try store.save(makeDraft(createdAt: Date(timeIntervalSince1970: 10), finalTranscript: "delete me"), cleanupPolicy: nil)
-        let survivor = try store.save(makeDraft(createdAt: Date(timeIntervalSince1970: 20), finalTranscript: "keep me"), cleanupPolicy: nil)
-        let model = OutputArchiveViewModel(store: store)
-        model.reload()
-
-        model.delete(report: report)
-
-        XCTAssertFalse(store.recentReports(limit: 10).contains { $0.id == report.id })
-        XCTAssertTrue(store.recentReports(limit: 10).contains { $0.id == survivor.id })
-        XCTAssertFalse(model.reports.contains { $0.id == report.id })
-    }
-
-    func testSelectReportIDSetsSelection() throws {
-        let store = makeStore()
-        let report = try store.save(makeDraft(createdAt: Date(timeIntervalSince1970: 10), finalTranscript: "selected"), cleanupPolicy: nil)
-        let model = OutputArchiveViewModel(store: store)
-        model.reload()
-
-        model.select(reportID: report.id)
-
-        XCTAssertEqual(model.selectedReportID, report.id)
-        XCTAssertEqual(model.selectedReport?.id, report.id)
-    }
-
-    func testSelectedReportCanStayOutsideCurrentFilter() throws {
-        let store = makeStore()
-        let hiddenByFilter = try store.save(
-            makeDraft(
-                createdAt: Date(timeIntervalSince1970: 20),
-                modeID: OutputMode.cleanID,
-                status: .failed,
-                finalTranscript: "hidden but selected"
-            ),
-            cleanupPolicy: nil
-        )
-        _ = try store.save(
-            makeDraft(
-                createdAt: Date(timeIntervalSince1970: 10),
-                modeID: OutputMode.taskID,
-                status: .succeeded,
-                finalTranscript: "visible"
-            ),
-            cleanupPolicy: nil
-        )
-        let model = OutputArchiveViewModel(store: store)
-        model.reload()
-
-        model.select(reportID: hiddenByFilter.id)
-        model.scope = .tasks
-        model.status = .succeeded
-
-        XCTAssertFalse(model.filteredReports.contains { $0.id == hiddenByFilter.id })
-        XCTAssertEqual(model.selectedReportID, hiddenByFilter.id)
-        XCTAssertEqual(model.selectedReport?.id, hiddenByFilter.id)
     }
 
     func testLatestFallbackKeepsRawAndFinalOutputSeparately() {
@@ -149,16 +177,20 @@ final class OutputArchiveViewModelTests: XCTestCase {
         XCTAssertTrue(model.latestFallback?.hasVisibleOutput == true)
     }
 
-    func testSelectUnknownReportIDClearsExplicitSelectionAndFallsBackToFirstFilteredReport() throws {
-        let store = makeStore()
-        let report = try store.save(makeDraft(createdAt: Date(timeIntervalSince1970: 10), finalTranscript: "fallback"), cleanupPolicy: nil)
-        let model = OutputArchiveViewModel(store: store)
-        model.reload()
-
-        model.select(reportID: UUID())
-
-        XCTAssertNil(model.selectedReportID)
-        XCTAssertEqual(model.selectedReport?.id, report.id)
+    @discardableResult
+    private func saveReports(
+        count: Int,
+        in store: TranscriptRunReportStore
+    ) throws -> [TranscriptRunReport] {
+        try (0..<count).map { index in
+            try store.save(
+                makeDraft(
+                    createdAt: Date(timeIntervalSince1970: TimeInterval(index)),
+                    finalTranscript: "report \(index)"
+                ),
+                cleanupPolicy: nil
+            )
+        }
     }
 
     private func makeStore() -> TranscriptRunReportStore {
@@ -178,7 +210,7 @@ final class OutputArchiveViewModelTests: XCTestCase {
         status: TranscriptRunStatus = .succeeded,
         sourceAppName: String? = "Mail",
         rawTranscript: String = "raw",
-        finalTranscript: String
+        finalTranscript: String? = "final"
     ) -> TranscriptRunReportDraft {
         TranscriptRunReportDraft(
             createdAt: createdAt,
@@ -200,5 +232,19 @@ final class OutputArchiveViewModelTests: XCTestCase {
             copiedToClipboard: true,
             autoPasteRequested: false
         )
+    }
+
+    private func waitUntil(
+        timeoutNanoseconds: UInt64 = 500_000_000,
+        _ condition: @escaping @MainActor () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + .nanoseconds(Int(timeoutNanoseconds))
+        while !condition() {
+            if ContinuousClock.now >= deadline {
+                XCTFail("Bedingung wurde nicht rechtzeitig erfuellt")
+                return
+            }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
     }
 }

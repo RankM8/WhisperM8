@@ -3,7 +3,7 @@ import SwiftUI
 struct OutputWorkspacePage: View {
     @Environment(AppState.self) private var appState
     @State private var model: OutputArchiveViewModel
-    @State private var reportPendingDeletion: TranscriptRunReport?
+    @State private var reportPendingDeletionID: UUID?
     @State private var isConfirmingDelete = false
 
     init(
@@ -19,27 +19,27 @@ struct OutputWorkspacePage: View {
     var body: some View {
         SettingsPageContainer(
             title: "Output",
-            subtitle: "Your dictation results: latest run plus the full archive."
+            subtitle: "Your dictation results: latest run plus the full archive.",
+            scrolls: false
         ) {
             latestRun
             archiveWorkspace
         }
-        .onAppear {
+        .task {
             updateFallbackFromAppState()
-            model.reload()
+            await model.initialLoad()
         }
-        .onChange(of: model.searchText) { _, _ in model.ensureSelectionIsVisible() }
-        .onChange(of: model.scope) { _, _ in model.ensureSelectionIsVisible() }
-        .onChange(of: model.status) { _, _ in model.ensureSelectionIsVisible() }
         .confirmationDialog("Delete report?", isPresented: $isConfirmingDelete) {
             Button("Delete Report", role: .destructive) {
-                if let reportPendingDeletion {
-                    model.delete(report: reportPendingDeletion)
-                    self.reportPendingDeletion = nil
+                if let reportPendingDeletionID {
+                    Task {
+                        await model.delete(id: reportPendingDeletionID)
+                        self.reportPendingDeletionID = nil
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {
-                reportPendingDeletion = nil
+                reportPendingDeletionID = nil
             }
         } message: {
             Text("This removes the report and its attachments from the local archive.")
@@ -51,11 +51,13 @@ struct OutputWorkspacePage: View {
         SettingsSection("Latest Run") {
             if let report = model.latestReport {
                 Button {
-                    model.select(reportID: report.id)
+                    model.select(id: report.id)
                 } label: {
                     LatestReportRow(report: report)
                 }
                 .buttonStyle(.plain)
+            } else if model.isLoading {
+                LoadingOutputPanel(title: "Loading latest run")
             } else if let fallback = model.latestFallback {
                 LatestFallbackRow(fallback: fallback)
             } else {
@@ -75,11 +77,14 @@ struct OutputWorkspacePage: View {
             HStack(alignment: .top, spacing: 18) {
                 archiveList
                     .frame(width: 360, alignment: .topLeading)
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
 
                 detailPane
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var archiveToolbar: some View {
@@ -117,20 +122,35 @@ struct OutputWorkspacePage: View {
             .frame(width: 190)
 
             Button {
-                updateFallbackFromAppState()
-                model.reload()
+                Task {
+                    updateFallbackFromAppState()
+                    await model.reload()
+                }
             } label: {
                 Label("Reload", systemImage: "arrow.clockwise")
             }
             .labelStyle(.iconOnly)
             .help("Reload output archive")
             .buttonStyle(SettingsButtonStyle.standard)
+            .disabled(model.isLoading)
+
+            if model.searchingDeeper {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Searching full text...")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(AppTheme.textTertiary)
+                }
+            }
         }
     }
 
     @ViewBuilder
     private var archiveList: some View {
-        if model.filteredReports.isEmpty {
+        if model.isLoading && model.reports.isEmpty {
+            LoadingOutputPanel(title: "Loading archive")
+        } else if model.filteredReports.isEmpty {
             EmptyOutputPanel(
                 title: model.reports.isEmpty ? "No Output Yet" : "No Matches",
                 systemImage: model.reports.isEmpty ? "clock.arrow.circlepath" : "line.3.horizontal.decrease.circle",
@@ -139,20 +159,28 @@ struct OutputWorkspacePage: View {
                     : "No output matches the current filter."
             )
         } else {
-            VStack(spacing: 2) {
-                ForEach(model.filteredReports) { report in
-                    Button {
-                        model.select(reportID: report.id)
-                    } label: {
-                        OutputArchiveReportRow(
-                            report: report,
-                            isSelected: model.selectedReport?.id == report.id
-                        )
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(model.filteredReports) { report in
+                        Button {
+                            model.select(id: report.id)
+                        } label: {
+                            OutputArchiveReportRow(
+                                report: report,
+                                isSelected: model.selectedReportID == report.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .onAppear {
+                            loadMoreIfNeeded(report)
+                        }
                     }
-                    .buttonStyle(.plain)
+
+                    archiveListFooter
                 }
+                .padding(8)
             }
-            .padding(8)
+            .frame(maxHeight: .infinity)
             .background(AppTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
@@ -163,49 +191,55 @@ struct OutputWorkspacePage: View {
     }
 
     @ViewBuilder
+    private var archiveListFooter: some View {
+        if model.isLoadingMore {
+            LoadingFooterText("Loading more...")
+        } else if model.searchingDeeper {
+            LoadingFooterText("Searching full text...")
+        } else if !model.hasMore {
+            Text("All reports loaded")
+                .font(.system(size: 11.5))
+                .foregroundStyle(AppTheme.textTertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
     private var detailPane: some View {
-        if let selectedReport = model.selectedReport {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Detail")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    Spacer()
-
-                    Button(role: .destructive) {
-                        confirmDelete(selectedReport)
-                    } label: {
-                        Label("Delete Report...", systemImage: "trash")
-                    }
-                    .buttonStyle(SettingsButtonStyle.destructive)
-                }
-
+        VStack(alignment: .leading, spacing: 8) {
+            if model.isLoadingDetail {
+                LoadingOutputPanel(title: "Loading report")
+                    .frame(maxHeight: .infinity, alignment: .top)
+            } else if let selectedReport = model.selectedReport {
                 TranscriptReportDetailView(report: selectedReport) {
-                    confirmDelete(selectedReport)
+                    confirmDelete(selectedReport.id)
                 }
+                .frame(maxHeight: .infinity)
                 .background(AppTheme.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .stroke(AppTheme.border, lineWidth: 1)
                 }
-
-                if let errorMessage = model.errorMessage {
-                    Text(errorMessage)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(AppTheme.statusError)
-                }
+            } else {
+                EmptyOutputPanel(
+                    title: model.reports.isEmpty ? "No Output Yet" : "No Matches",
+                    systemImage: model.reports.isEmpty ? "clock.arrow.circlepath" : "line.3.horizontal.decrease.circle",
+                    description: model.reports.isEmpty
+                        ? "Recorded outputs will appear here."
+                        : "Select an output report to inspect it."
+                )
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-        } else {
-            EmptyOutputPanel(
-                title: model.reports.isEmpty ? "No Output Yet" : "No Matches",
-                systemImage: model.reports.isEmpty ? "clock.arrow.circlepath" : "line.3.horizontal.decrease.circle",
-                description: model.reports.isEmpty
-                    ? "Recorded outputs will appear here."
-                    : "No output matches the current filter."
-            )
+
+            if let errorMessage = model.errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(AppTheme.statusError)
+            }
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var statusOptions: [TranscriptRunStatus] {
@@ -221,14 +255,21 @@ struct OutputWorkspacePage: View {
         ))
     }
 
-    private func confirmDelete(_ report: TranscriptRunReport) {
-        reportPendingDeletion = report
+    private func confirmDelete(_ reportID: UUID) {
+        reportPendingDeletionID = reportID
         isConfirmingDelete = true
+    }
+
+    private func loadMoreIfNeeded(_ report: TranscriptRunReportSummary) {
+        guard report.id == model.filteredReports.last?.id else { return }
+        Task {
+            await model.loadMore()
+        }
     }
 }
 
 private struct LatestReportRow: View {
-    let report: TranscriptRunReport
+    let report: TranscriptRunReportSummary
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -237,11 +278,7 @@ private struct LatestReportRow: View {
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
-                LatestTranscriptPreviews(
-                    rawTranscript: report.rawTranscript,
-                    finalTranscript: report.finalTranscript,
-                    emptyText: report.errorMessage ?? "No transcript"
-                )
+                LatestSummaryPreview(text: report.preview)
             }
 
             VStack(alignment: .trailing, spacing: 7) {
@@ -292,6 +329,17 @@ private struct LatestFallbackRow: View {
                 .fill(AppTheme.border)
                 .frame(height: 1)
         }
+    }
+}
+
+private struct LatestSummaryPreview: View {
+    let text: String
+
+    var body: some View {
+        LatestTranscriptPreviewBlock(
+            title: "Preview",
+            text: text.isEmpty ? "No transcript" : text
+        )
     }
 }
 
@@ -357,7 +405,7 @@ private struct LatestTranscriptPreviewBlock: View {
 }
 
 private struct OutputArchiveReportRow: View {
-    let report: TranscriptRunReport
+    let report: TranscriptRunReportSummary
     let isSelected: Bool
 
     var body: some View {
@@ -368,7 +416,7 @@ private struct OutputArchiveReportRow: View {
                     .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.textPrimary)
                     .lineLimit(1)
 
-                Text(report.shortSummary)
+                Text(report.preview.isEmpty ? "No transcript" : report.preview)
                     .font(.system(size: 11.5))
                     .foregroundStyle(AppTheme.textTertiary)
                     .lineLimit(2)
@@ -419,6 +467,49 @@ private struct OutputStatusChip: View {
         case .failed:
             return .error
         }
+    }
+}
+
+private struct LoadingOutputPanel: View {
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+
+            Text(title)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundStyle(AppTheme.textPrimary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 160)
+        .padding(18)
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        }
+    }
+}
+
+private struct LoadingFooterText: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.small)
+            Text(title)
+                .font(.system(size: 11.5))
+                .foregroundStyle(AppTheme.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 }
 
