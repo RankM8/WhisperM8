@@ -126,18 +126,6 @@ private struct SettingsPageGroup: Identifiable {
     var id: String { title }
 }
 
-private enum AIOutputSettingsTab: String, Hashable {
-    case account
-    case modes
-    case templates
-    case testLab
-}
-
-private enum AgentChatsSettingsTab: String, Hashable {
-    case workspace
-    case claudeHooks
-}
-
 private enum OutputSettingsTab: String, Hashable {
     case latest
     case archive
@@ -147,8 +135,8 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @StateObject private var windowRequestCenter = WindowRequestCenter.shared
     @State private var selection: SettingsPage? = .transcription
-    @State private var aiOutputTab: AIOutputSettingsTab = .account
-    @State private var agentChatsTab: AgentChatsSettingsTab = .workspace
+    @State private var aiOutputTab: AIOutputPageTab = .account
+    @State private var agentChatsTab: AgentChatsSettingsPageTab = .workspace
     @State private var outputTab: OutputSettingsTab = .latest
     /// Report, den die History beim Öffnen aus der Overview vorselektieren soll.
     @State private var historyPreselectID: UUID?
@@ -158,18 +146,6 @@ struct SettingsView: View {
         SettingsPageGroup(title: "Agents", pages: [.agentChats, .cli]),
         SettingsPageGroup(title: "App", pages: [.general, .permissions, .about]),
         SettingsPageGroup(title: "Workspace", pages: [.output])
-    ]
-
-    private let aiOutputTabs = [
-        SettingsTab(id: AIOutputSettingsTab.account, title: "Account"),
-        SettingsTab(id: AIOutputSettingsTab.modes, title: "Modes"),
-        SettingsTab(id: AIOutputSettingsTab.templates, title: "Templates"),
-        SettingsTab(id: AIOutputSettingsTab.testLab, title: "Test Lab")
-    ]
-
-    private let agentChatsTabs = [
-        SettingsTab(id: AgentChatsSettingsTab.workspace, title: "Workspace"),
-        SettingsTab(id: AgentChatsSettingsTab.claudeHooks, title: "Claude Hooks")
     ]
 
     private let outputTabs = [
@@ -303,7 +279,8 @@ struct SettingsView: View {
         case .aiOutput:
             aiOutputPage(page)
         case .context:
-            contextPage(page)
+            // Phase 7: migrierte V3-Seite (Kontext-Teile der alten Behavior-Seite, A3).
+            ContextPrivacySettingsPage()
         case .agentChats:
             agentChatsPage(page)
         case .cli:
@@ -311,9 +288,9 @@ struct SettingsView: View {
                 CLISettingsView()
             }
         case .general:
-            settingsPage(page) {
-                BehaviorSettingsView()
-            }
+            // Phase 7: migrierte V3-Seite (Profil/Theme/Login der alten Behavior-Seite,
+            // A20/A21) — damit ist BehaviorSettingsView vollständig abgelöst.
+            GeneralSettingsPage()
         case .permissions:
             settingsPage(page) {
                 PermissionsSettingsView()
@@ -334,56 +311,16 @@ struct SettingsView: View {
     }
 
     private func aiOutputPage(_ page: SettingsPage) -> some View {
-        settingsPage(page) {
-            VStack(alignment: .leading, spacing: 14) {
-                SettingsTabs(selection: $aiOutputTab, tabs: aiOutputTabs)
-                    .padding(.horizontal, 32)
-
-                Group {
-                    switch aiOutputTab {
-                    case .account:
-                        CodexSettingsView()
-                    case .modes:
-                        OutputModesView()
-                    case .templates:
-                        OutputTemplatesView()
-                    case .testLab:
-                        OutputTestLabView()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-        }
+        // Phase 5: migrierte V3-Seite mit eigenen Tabs; Binding hält Deep-Links
+        // (alte Routen modes/templates/testLab) funktionsfähig.
+        AIOutputSettingsPage(selectedTab: $aiOutputTab)
     }
 
-    private func contextPage(_ page: SettingsPage) -> some View {
-        settingsPage(page) {
-            VStack(alignment: .leading, spacing: 0) {
-                SettingsHelpText("Context & privacy controls are temporarily on General while pages are migrated.")
-                    .padding(.horizontal, 32)
-                    .padding(.top, 2)
-                Spacer(minLength: 0)
-            }
-        }
-    }
 
     private func agentChatsPage(_ page: SettingsPage) -> some View {
-        settingsPage(page) {
-            VStack(alignment: .leading, spacing: 14) {
-                SettingsTabs(selection: $agentChatsTab, tabs: agentChatsTabs)
-                    .padding(.horizontal, 32)
-
-                Group {
-                    switch agentChatsTab {
-                    case .workspace:
-                        AgentChatsAccessView()
-                    case .claudeHooks:
-                        ClaudeCodeSettingsView()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-        }
+        // Phase 6: migrierte V3-Seite (vereint alte Agent-Chats- + Claude-Code-Seite,
+        // A17/A18/A30, F6/F7); Binding hält den claudeCode-Deep-Link funktionsfähig.
+        AgentChatsSettingsPage(selectedTab: $agentChatsTab)
     }
 
     private func outputPage(_ page: SettingsPage) -> some View {
