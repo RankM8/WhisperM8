@@ -10,6 +10,8 @@ struct AIOutputTestLabTab: View {
     @State private var errorMessage: String?
     @State private var isProcessing = false
     @State private var modes = OutputModeStore().enabledModes
+    @State private var previewGeneration = 0
+    @State private var previewTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -24,11 +26,11 @@ struct AIOutputTestLabTab: View {
                 }
 
                 SettingsRow(title: "Input — raw transcript")
-                SettingsTextArea(text: $rawText, minHeight: 160)
+                SettingsTextArea(title: "Input — raw transcript", text: $rawText, minHeight: 160)
 
                 SettingsButtonRow(title: "Preview actions") {
                     Button("Preview") {
-                        Task { await runPreview() }
+                        startPreview()
                     }
                     .disabled(rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isProcessing)
                     .buttonStyle(SettingsButtonStyle.primary)
@@ -51,7 +53,7 @@ struct AIOutputTestLabTab: View {
                 }
 
                 SettingsRow(title: "Output — processed preview")
-                SettingsTextArea(text: $previewText, minHeight: 180)
+                SettingsTextArea(title: "Output — processed preview", text: $previewText, minHeight: 180)
             }
         }
         .onAppear {
@@ -60,24 +62,67 @@ struct AIOutputTestLabTab: View {
                 selectedModeID = modes.first?.id ?? OutputMode.rawID
             }
         }
+        .onDisappear(perform: cancelPreview)
     }
 
     @MainActor
-    private func runPreview() async {
+    private func startPreview() {
+        previewGeneration += 1
+        let generation = previewGeneration
+        let inputText = rawText
+        let modeID = selectedModeID
+        let shouldFallbackToRaw = fallbackToRawOnProcessingError
+
+        previewTask?.cancel()
         isProcessing = true
         errorMessage = nil
+        previewTask = Task { @MainActor in
+            await runPreview(
+                generation: generation,
+                inputText: inputText,
+                modeID: modeID,
+                shouldFallbackToRaw: shouldFallbackToRaw
+            )
+        }
+    }
 
-        let mode = OutputMode.mode(for: selectedModeID)
-        let normalizedText = TextNormalizer.normalizeTranscriptionText(rawText)
+    @MainActor
+    private func cancelPreview() {
+        previewGeneration += 1
+        previewTask?.cancel()
+        previewTask = nil
+        isProcessing = false
+    }
+
+    @MainActor
+    private func runPreview(
+        generation: Int,
+        inputText: String,
+        modeID: String,
+        shouldFallbackToRaw: Bool
+    ) async {
+        defer {
+            if generation == previewGeneration {
+                isProcessing = false
+                previewTask = nil
+            }
+        }
+
+        let mode = OutputMode.mode(for: modeID)
+        let normalizedText = TextNormalizer.normalizeTranscriptionText(inputText)
         do {
             let output = try await PostProcessingService().process(
                 rawText: normalizedText,
                 mode: mode,
                 language: AppPreferences.shared.language
             )
+            guard generation == previewGeneration, !Task.isCancelled else { return }
             previewText = output
+        } catch is CancellationError {
+            return
         } catch {
-            if fallbackToRawOnProcessingError {
+            guard generation == previewGeneration, !Task.isCancelled else { return }
+            if shouldFallbackToRaw {
                 previewText = normalizedText
                 errorMessage = "\(error.localizedDescription) Showing Raw fallback."
             } else {
@@ -85,7 +130,5 @@ struct AIOutputTestLabTab: View {
                 errorMessage = error.localizedDescription
             }
         }
-
-        isProcessing = false
     }
 }

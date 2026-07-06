@@ -5,9 +5,11 @@ description_long: |
   Dokumentiert werden UI-Aufbau, jede Option und jedes Control, Persistenzorte,
   Laufzeitwirkung in Overlay, Diktat-Pipeline, Test Lab und Codex-Post-Processing
   sowie UX-Beobachtungen für ein späteres Settings-Redesign.
-updated: 2026-07-06 09:54
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 2 Zeilenverweise korrigiert)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `AIOutputSettingsPage.swift` / `AIOutputModesTab.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: Modes
 

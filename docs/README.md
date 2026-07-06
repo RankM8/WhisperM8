@@ -4,7 +4,7 @@ description_long: |
   Einstiegspunkt der WhisperM8-Dokumentation: Kurzbeschreibung der nativen
   macOS-Diktier-App (OpenAI Whisper / Groq), Quick Start, Feature-Liste und
   Install-/Build-Hinweise. Verweist auf USER_GUIDE.md und die Detail-Docs.
-updated: 2026-06-27
+updated: 2026-07-06 14:05
 ---
 
 # WhisperM8
@@ -120,7 +120,7 @@ On first launch, the onboarding opens. You need an API key:
 
 ### 2. Set Hotkey
 
-Default: **Fn** (Globe key) or choose your own in Settings → Hotkey.
+Default: **Fn** (Globe key) or choose your own in Settings → Recording.
 
 **Recommended:** `Control + Shift + Space`
 
@@ -169,18 +169,26 @@ During recording, appears at bottom of screen:
 - "Transcribing..." during API call
 - Default position is bottom-center (40pt), but you can drag it anywhere on-screen
 - Overlay position is remembered for the next recordings
-- Overlay UI can be switched between `Full` and `Mini` in Settings → Behavior
+- Overlay UI can be switched between `Full` and `Mini` in Settings → Recording
 
 ### Settings
 
 Via menu bar icon → "Settings...":
 
-| Tab | Options |
-|-----|---------|
-| API | Choose provider, API key, language (de/en/auto) |
-| Hotkey | Configure recording key |
-| Behavior | Auto-start, auto-paste, audio ducking, overlay UI style (`Full`/`Mini`) |
-| Audio | Select input device (microphone) |
+| Group | Page | Options |
+|---|---|---|
+| Dictation | Recording | Hotkey, input device, audio ducking, overlay and auto-paste |
+| Dictation | Transcription | Provider, API key, model, language and price info |
+| Dictation | AI Output | Codex account, defaults, modes, templates and test lab |
+| Dictation | Context & Privacy | Selected text, screenshots, screen clips and retention |
+| Agents | Agent Chats | Workspace, notifications, Claude hooks and advanced CLI arguments |
+| Agents | CLI & Skills | CLI symlink, command examples and installable skills |
+| App | General | Usage profile, startup, theme and update checks |
+| App | Permissions | Microphone, Accessibility and optional Screen Recording |
+| App | About | Version, updates and project information |
+| Workspace | Output | Latest run, output archive, filters and delete actions |
+
+Detailed Settings documentation: [features/settings/README.md](features/settings/README.md).
 
 ---
 
@@ -203,7 +211,7 @@ This is usually due to old settings or permissions from previous versions.
 
 2. **Restart app** after permission change
 
-3. **Auto-paste disabled?** → Check Settings → Behavior
+3. **Auto-paste disabled?** → Check Settings → Recording
 
 4. **Check logs:**
    ```bash

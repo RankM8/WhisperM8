@@ -23,7 +23,7 @@ struct SettingsPickerRow<Option: Hashable, Label: View>: View {
 
     var body: some View {
         SettingsRow(title: title, subtitle: subtitle) {
-            Picker("", selection: $selection) {
+            Picker(title, selection: $selection) {
                 ForEach(options, id: \.self) { option in
                     label(option)
                         .tag(option)
@@ -31,6 +31,7 @@ struct SettingsPickerRow<Option: Hashable, Label: View>: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
+            .accessibilityLabel(Text(title))
         }
     }
 }

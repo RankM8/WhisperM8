@@ -129,7 +129,7 @@ private struct SettingsPageGroup: Identifiable {
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @StateObject private var windowRequestCenter = WindowRequestCenter.shared
-    @State private var selection: SettingsPage? = .transcription
+    @State private var selection: SettingsPage? = .recording
     @State private var aiOutputTab: AIOutputPageTab = .account
     @State private var agentChatsTab: AgentChatsSettingsPageTab = .workspace
 
@@ -159,7 +159,7 @@ struct SettingsView: View {
             .navigationTitle("WhisperM8")
             .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
         } detail: {
-            detailView(for: selection ?? .transcription)
+            detailView(for: selection ?? .recording)
         }
         .frame(minWidth: 920, minHeight: 620)
         .onChange(of: selection) { _, newSelection in
@@ -273,7 +273,7 @@ struct SettingsView: View {
             CLISkillsSettingsPage()
         case .general:
             // Phase 7: migrierte V3-Seite (Profil/Theme/Login der alten Behavior-Seite,
-            // A20/A21) — damit ist BehaviorSettingsView vollständig abgelöst.
+            // A20/A21) — löst die frühere Sammelseite „Behavior" vollständig ab.
             GeneralSettingsPage()
         case .permissions:
             // Phase 8: migrierte V3-Seite (Header-Fix A22, cancellable Polling).
@@ -312,32 +312,4 @@ struct SettingsView: View {
             .environment(appState)
     }
 
-    private func settingsPage<Content: View>(
-        _ page: SettingsPage,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            pageHeader(page)
-                .padding(.horizontal, 32)
-                .padding(.top, 28)
-                .padding(.bottom, 14)
-
-            content()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .background(AppTheme.background)
-    }
-
-    private func pageHeader(_ page: SettingsPage) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(page.title)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            Text(page.subtitle)
-                .font(.system(size: 13))
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 }

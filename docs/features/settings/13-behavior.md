@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „Behavior" im WhisperM8-Settings-Fenster.
   Dokumentiert werden UI-Aufbau, Defaults, Persistenz, Laufzeitwirkung, Datenfluss,
   Querverweise und UX-Beobachtungen für die Sammelseite App → Behavior.
-updated: 2026-07-06 09:55
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 0 Mängel)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `RecordingSettingsPage.swift`, `ContextPrivacySettingsPage.swift` und `GeneralSettingsPage.swift` + Doku-Verweis [ARCHITEKTUR: Kompatibilitätsvertrag](ARCHITEKTUR.md#kompatibilitätsvertrag).
 
 # Settings: Behavior
 

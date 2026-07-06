@@ -94,52 +94,59 @@ struct AIOutputModesTab: View {
 
     private func modeRow(_ mode: OutputMode) -> some View {
         let isLocked = !enrichmentAvailable && mode.isCodexDependent
-        return Button {
-            model.selectedModeID = mode.id
-        } label: {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(indicatorColor(for: mode, isLocked: isLocked))
-                    .frame(width: 8, height: 8)
+        let isSelected = mode.id == model.selectedModeID
+        return HStack(spacing: 10) {
+            Button {
+                model.selectedModeID = mode.id
+            } label: {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(indicatorColor(for: mode, isLocked: isLocked))
+                        .frame(width: 8, height: 8)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mode.name)
-                        .font(.system(size: 13, weight: mode.id == model.selectedModeID ? .semibold : .regular))
-                        .foregroundStyle(mode.id == model.selectedModeID ? AppTheme.accent : AppTheme.textPrimary)
-                    Text(isLocked ? "Needs AI enrichment (Codex)" : model.modeSummary(mode))
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppTheme.textTertiary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(mode.name)
+                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.textPrimary)
+                        Text(isLocked ? "Needs AI enrichment (Codex)" : model.modeSummary(mode))
+                            .font(.system(size: 11))
+                            .foregroundStyle(AppTheme.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if isLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textTertiary)
+                    }
+
+                    if mode.id == model.defaultOutputModeID {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(AppTheme.statusWorking)
+                    }
                 }
-
-                Spacer()
-
-                if isLocked {
-                    Image(systemName: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.textTertiary)
-                } else {
-                    Toggle("Enabled", isOn: enabledBinding(for: mode.id))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .disabled(!model.canDisable(mode))
-                        .help(model.modeToggleHelp(mode))
-                }
-
-                if mode.id == model.defaultOutputModeID {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(AppTheme.statusWorking)
-                }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .background(mode.id == model.selectedModeID ? AppTheme.accentTint : AppTheme.surface.opacity(0))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .opacity(isLocked ? 0.58 : 1)
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !isLocked {
+                Toggle("Enabled", isOn: enabledBinding(for: mode.id))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(!model.canDisable(mode))
+                    .help(model.modeToggleHelp(mode))
+                    .accessibilityLabel(Text("Enabled"))
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(isSelected ? AppTheme.accentTint : AppTheme.surface.opacity(0))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .opacity(isLocked ? 0.58 : 1)
     }
 
     @ViewBuilder
@@ -166,6 +173,8 @@ struct AIOutputModesTab: View {
                         subtitle: model.modeVisibilityHelp(mode),
                         isOn: enabledBinding(for: mode.id)
                     )
+                    .disabled(!model.canDisable(mode))
+                    .help(model.modeToggleHelp(mode))
 
                     SettingsToggleRow(
                         title: "Paste screenshots into target app",

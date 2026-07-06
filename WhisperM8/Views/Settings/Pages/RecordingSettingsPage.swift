@@ -60,7 +60,8 @@ struct RecordingSettingsPage: View {
                             title: "Target volume",
                             subtitle: "System volume will be set to \(Int(audioDuckingFactor * 100))% during recording.",
                             value: $audioDuckingFactor,
-                            in: 0.05...0.3
+                            in: 0.05...0.3,
+                            step: 0.05
                         )
                     }
                 }

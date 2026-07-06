@@ -5,9 +5,11 @@ description_long: |
   Dokumentiert sind alle sichtbaren, dynamischen und bedingt sichtbaren Controls mit
   Defaultwerten, Persistenzorten, Aufrufstellen, konkreter Wirkung im Diktat- und
   Agent-Chat-Pfad sowie UX-Beobachtungen für das Settings-Redesign.
-updated: 2026-07-06 09:54
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 0 Fehler)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `AIOutputSettingsPage.swift` / `AIOutputAccountTab.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: Codex / ChatGPT
 

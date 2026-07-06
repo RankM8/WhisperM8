@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „Agent Chats" im WhisperM8-Settings-Fenster.
   Dokumentiert sind nur die Controls dieser Seite: Agent-Chats-Fenster öffnen, Standard-Provider,
   Auto-Rename, Terminal-Bell sowie Extra-Argumente für Claude und Codex.
-updated: 2026-07-06 10:03
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 0 Mängel)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `AgentChatsSettingsPage.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: Agent Chats
 

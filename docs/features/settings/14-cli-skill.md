@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „CLI & Skill": Zweck, UI-Aufbau,
   alle Controls mit Persistenz bzw. Installationsorten, Statusprüfung, Datenfluss,
   Querverweise sowie UX-Beobachtungen für das Settings-Redesign.
-updated: 2026-07-06 10:05
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 1 Lücke im Quellen-Header korrigiert)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `CLISkillsSettingsPage.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: CLI & Skill
 

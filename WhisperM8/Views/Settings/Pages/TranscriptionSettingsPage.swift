@@ -13,7 +13,7 @@ struct TranscriptionSettingsPage: View {
         TranscriptionProvider(rawValue: selectedProviderRaw) ?? .groq
     }
 
-    /// Der Setter spiegelt die alte APISettingsView-Logik: getippte Keys werden
+    /// Der Setter spiegelt die alte der früheren API-Seite-Logik: getippte Keys werden
     /// verworfen, die Keychain-Verfuegbarkeit wechselt mit dem Account und fremde
     /// Modelle werden auf den Provider-Default zurueckgesetzt.
     private var providerBinding: Binding<TranscriptionProvider> {
@@ -48,7 +48,7 @@ struct TranscriptionSettingsPage: View {
                         apiKeyAvailable = true
                     }
 
-                    if apiKeyAvailable {
+                    if apiKeyAvailable && apiKey.isEmpty {
                         SettingsStatusRow(
                             title: "Saved Key",
                             tone: .ok,
@@ -130,9 +130,13 @@ struct TranscriptionSettingsPage: View {
     }
 
     private func syncFromPreferencesAndKeychain() {
-        TranscriptionSettings.migrateIfNeeded()
-        selectedProviderRaw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.groq.rawValue
-        selectedModelRaw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.groq_whisper_v3.rawValue
+        // Migration läuft zentral beim App-Start (RecordingCoordinator) — hier
+        // nur LESEN und nur bei echter Abweichung zurückschreiben, damit das
+        // bloße Öffnen der Seite keine Preferences mutiert (Review-Befund K2).
+        let providerRaw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.groq.rawValue
+        let modelRaw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.groq_whisper_v3.rawValue
+        if selectedProviderRaw != providerRaw { selectedProviderRaw = providerRaw }
+        if selectedModelRaw != modelRaw { selectedModelRaw = modelRaw }
         apiKey = ""
         apiKeyAvailable = KeychainManager.exists(key: provider.keychainKey)
     }
@@ -260,7 +264,7 @@ private struct TranscriptionAPIKeyInputRow: View {
                     Image(systemName: isRevealed ? "eye.slash" : "eye")
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
-                        .frame(width: 22, height: 22)
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
                 .background(AppTheme.control)
@@ -270,6 +274,7 @@ private struct TranscriptionAPIKeyInputRow: View {
                         .stroke(AppTheme.border, lineWidth: 1)
                 }
                 .help(isRevealed ? "Hide typed key" : "Show typed key")
+                .accessibilityLabel(Text(isRevealed ? "Hide API key" : "Show API key"))
             }
         }
     }

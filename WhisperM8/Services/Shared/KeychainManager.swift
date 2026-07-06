@@ -105,6 +105,10 @@ enum KeychainManager {
         ]
 
         SecItemDelete(query as CFDictionary)
+        // Legacy-Migration: alte Versionen hielten den Key in UserDefaults; ohne
+        // dieses Aufräumen meldet exists() den Key nach dem Löschen weiter als
+        // vorhanden (Review-Befund K1, Flotte 2026-07-06).
+        UserDefaults.standard.removeObject(forKey: key)
         removeCachedValue(for: key)
     }
 

@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „Hotkey" im WhisperM8-Settings-Fenster.
   Die Seite konfiguriert genau den globalen Recording-Shortcut `.toggleRecording`,
   dessen Speicherung das KeyboardShortcuts-Package in `UserDefaults` übernimmt.
-updated: 2026-07-06 10:05
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 0 Mängel)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `RecordingSettingsPage.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: Hotkey
 

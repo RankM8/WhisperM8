@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct SettingsTextArea: View {
+    let title: String?
     @Binding var text: String
     let minHeight: CGFloat
 
-    init(text: Binding<String>, minHeight: CGFloat = 96) {
+    init(title: String? = nil, text: Binding<String>, minHeight: CGFloat = 96) {
+        self.title = title
         self._text = text
         self.minHeight = minHeight
     }
@@ -22,5 +24,6 @@ struct SettingsTextArea: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(AppTheme.border, lineWidth: 1)
             }
+            .accessibilityLabel(Text(title ?? "Text area"))
     }
 }

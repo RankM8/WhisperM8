@@ -13,10 +13,11 @@ struct SettingsToggleRow: View {
 
     var body: some View {
         SettingsRow(title: title, subtitle: subtitle) {
-            Toggle("", isOn: $isOn)
+            Toggle(title, isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .tint(AppTheme.statusWorking)
+                .accessibilityLabel(Text(title))
         }
     }
 }

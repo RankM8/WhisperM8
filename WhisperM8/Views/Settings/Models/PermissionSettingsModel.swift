@@ -58,6 +58,12 @@ final class PermissionSettingsModel {
         self.screenRecordingGranted = screenRecordingStatusProvider()
     }
 
+    deinit {
+        // deinit ist nonisolated — daher direkte Task-Cancellation statt der
+        // MainActor-isolierten stopPolling()-Methode.
+        pollingTask?.cancel()
+    }
+
     var microphoneGranted: Bool {
         microphoneStatus == .authorized
     }
@@ -117,14 +123,19 @@ final class PermissionSettingsModel {
     func startPolling() {
         stopPolling()
         pollingTask = Task { @MainActor [weak self] in
-            guard let self else { return }
             while !Task.isCancelled {
+                guard let pollingInterval = self?.pollingInterval,
+                      let sleep = self?.sleep else {
+                    break
+                }
+
                 do {
                     try await sleep(pollingInterval)
                 } catch {
                     break
                 }
                 guard !Task.isCancelled else { break }
+                guard let self else { break }
                 refresh()
             }
         }

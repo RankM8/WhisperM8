@@ -28,7 +28,10 @@ enum WindowRequest: String, Equatable {
     var settingsSectionID: String? {
         switch self {
         case .settings:
-            return "api"
+            // Generischer Einstieg: erste Sidebar-Seite der neuen Struktur.
+            // Explizite Alt-Routen (api, outputOverview, …) bleiben als
+            // Aliasse in SettingsPage.page(routeID:) erhalten.
+            return "recording"
         case .settingsOutput:
             return "outputOverview"
         case .agentChats, .onboarding:

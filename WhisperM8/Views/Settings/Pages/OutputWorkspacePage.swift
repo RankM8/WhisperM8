@@ -254,11 +254,11 @@ private struct LatestReportRow: View {
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
-                Text(report.shortSummary)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                LatestTranscriptPreviews(
+                    rawTranscript: report.rawTranscript,
+                    finalTranscript: report.finalTranscript,
+                    emptyText: report.errorMessage ?? "No transcript"
+                )
             }
 
             VStack(alignment: .trailing, spacing: 7) {
@@ -296,11 +296,11 @@ private struct LatestFallbackRow: View {
                 }
             }
 
-            Text(fallback.shortSummary)
-                .font(.system(size: 12.5))
-                .foregroundStyle(AppTheme.textSecondary)
-                .lineLimit(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            LatestTranscriptPreviews(
+                rawTranscript: fallback.rawTranscript,
+                finalTranscript: fallback.finalTranscript,
+                emptyText: "No transcript"
+            )
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 2)
@@ -308,6 +308,67 @@ private struct LatestFallbackRow: View {
             Rectangle()
                 .fill(AppTheme.border)
                 .frame(height: 1)
+        }
+    }
+}
+
+private struct LatestTranscriptPreviews: View {
+    let rawTranscript: String?
+    let finalTranscript: String?
+    let emptyText: String
+
+    private var rawPreview: String? {
+        Self.visibleText(rawTranscript)
+    }
+
+    private var finalPreview: String? {
+        Self.visibleText(finalTranscript)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let rawPreview {
+                LatestTranscriptPreviewBlock(title: "Raw Transcript", text: rawPreview)
+            }
+
+            if let finalPreview {
+                LatestTranscriptPreviewBlock(title: "Final / Fallback", text: finalPreview)
+            }
+
+            if rawPreview == nil && finalPreview == nil {
+                Text(emptyText)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static func visibleText(_ text: String?) -> String? {
+        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return text
+    }
+}
+
+private struct LatestTranscriptPreviewBlock: View {
+    let title: String
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                .foregroundStyle(AppTheme.textTertiary)
+
+            Text(text)
+                .font(.system(size: 12.5))
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

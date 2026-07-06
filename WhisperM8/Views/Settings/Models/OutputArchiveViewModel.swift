@@ -64,7 +64,7 @@ final class OutputArchiveViewModel {
     }
 
     var selectedReport: TranscriptRunReport? {
-        filteredReports.first { $0.id == selectedReportID } ?? filteredReports.first
+        report(matching: selectedReportID) ?? filteredReports.first
     }
 
     var hasFilters: Bool {
@@ -84,7 +84,11 @@ final class OutputArchiveViewModel {
     }
 
     func select(reportID: UUID?) {
-        selectedReportID = reportID
+        guard let reportID else {
+            selectedReportID = nil
+            return
+        }
+        selectedReportID = report(matching: reportID)?.id
     }
 
     func delete(report: TranscriptRunReport) {
@@ -97,19 +101,23 @@ final class OutputArchiveViewModel {
     }
 
     func ensureSelectionIsVisible() {
-        let visible = filteredReports
-        if selectedReportID == nil || !visible.contains(where: { $0.id == selectedReportID }) {
-            selectedReportID = visible.first?.id
+        if report(matching: selectedReportID) == nil {
+            selectedReportID = filteredReports.first?.id
         }
     }
 
     private func reconcileSelection() {
         let visible = filteredReports
-        if let preselectReportID, visible.contains(where: { $0.id == preselectReportID }) {
+        if let preselectReportID, report(matching: preselectReportID) != nil {
             selectedReportID = preselectReportID
             self.preselectReportID = nil
-        } else if selectedReportID == nil || !visible.contains(where: { $0.id == selectedReportID }) {
+        } else if report(matching: selectedReportID) == nil {
             selectedReportID = visible.first?.id
         }
+    }
+
+    private func report(matching reportID: UUID?) -> TranscriptRunReport? {
+        guard let reportID else { return nil }
+        return reports.first { $0.id == reportID }
     }
 }

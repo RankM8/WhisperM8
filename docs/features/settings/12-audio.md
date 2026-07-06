@@ -5,9 +5,11 @@ description_long: |
   der einzelne persistierte Eingabegeräte-Picker, Laufzeitwirkung im Recorder,
   Querverweise zu Audio-Ducking auf „Behavior" sowie UX-Beobachtungen als
   Grundlage für das Settings-Redesign.
-updated: 2026-07-06 10:01
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 0 Mängel)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `RecordingSettingsPage.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: Audio
 

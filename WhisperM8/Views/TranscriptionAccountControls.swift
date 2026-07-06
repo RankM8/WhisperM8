@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Geteilte UI-Bausteine für die Transcription-Provider-/API-Key-Konfiguration.
-/// Werden sowohl in den Settings (`APISettingsView`) als auch im Onboarding
+/// Werden sowohl in den Settings (`TranscriptionSettingsPage`) als auch im Onboarding
 /// (`APIKeyStep`) verwendet, damit beide Screens konsistent sind und Groq als
 /// empfohlener Provider zuerst erscheint.
 

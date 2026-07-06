@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „History" im WhisperM8-Settings-Fenster.
   Dokumentiert werden UI-Aufbau, alle sichtbaren Controls, Datenquelle, JSON-Persistenz,
   Übergang aus der Output-Overview sowie UX-Beobachtungen für ein mögliches Redesign.
-updated: 2026-07-06 10:00
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 0 Mängel)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `OutputWorkspacePage.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: History
 

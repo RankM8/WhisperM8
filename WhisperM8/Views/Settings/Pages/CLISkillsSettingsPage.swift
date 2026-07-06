@@ -52,7 +52,7 @@ struct CLISkillsSettingsPage: View {
                 }
             }
 
-            SettingsHelpText("uses the same Keychain API key as the app")
+            SettingsHelpText("Uses the same Keychain API key as the app.")
                 .padding(.vertical, 10)
                 .padding(.horizontal, 2)
         }
@@ -66,18 +66,18 @@ struct CLISkillsSettingsPage: View {
             )
             SettingsCopyCommandRow(
                 command: "whisperm8 transcribe video.mp4 -f srt -o video.srt",
-                caption: "Video → Untertitel (Audiospur wird automatisch extrahiert)"
+                caption: "Video → subtitles (audio track is extracted automatically)"
             )
             SettingsCopyCommandRow(
                 command: "whisperm8 transcribe meeting.mp3 --mode clean -o meeting.txt",
-                caption: "Transkript + Nachbearbeitung über einen Output-Mode"
+                caption: "Transcript + post-processing through an output mode"
             )
             SettingsCopyCommandRow(
                 command: "whisperm8 transcribe workshop.mp4 --dry-run",
-                caption: "Nur Dauer, Chunks und Kostenschätzung — keine API-Calls"
+                caption: "Duration, chunks, and cost estimate only — no API calls"
             )
 
-            SettingsHelpText("Formate: txt, json, srt, vtt · Provider: Groq (Default) und OpenAI · lange Dateien werden automatisch gestückelt und wieder zusammengefügt. Alle Optionen: `whisperm8 --help`.")
+            SettingsHelpText("Formats: txt, json, srt, vtt · Providers: Groq (default) and OpenAI · long files are chunked automatically and merged again. All options: `whisperm8 --help`.")
                 .padding(.vertical, 10)
                 .padding(.horizontal, 2)
         }
@@ -85,28 +85,28 @@ struct CLISkillsSettingsPage: View {
 
     private var codexSubagentsQuickstartSection: some View {
         SettingsSection("Quickstart · Codex Subagents") {
-            SettingsHelpText("WhisperM8 ist der Supervisor für headless Codex-Agenten (Codex hat kein eigenes Background-System). Jobs laufen detacht, sind über Turns fortsetzbar, erscheinen live in den Agent Chats — und lassen sich dort jederzeit als interaktiver Chat übernehmen.")
+            SettingsHelpText("WhisperM8 is the supervisor for headless Codex agents; Codex does not have its own background system. Jobs run detached, can be continued across turns, appear live in Agent Chats, and can be taken over there as an interactive chat at any time.")
                 .padding(.vertical, 10)
                 .padding(.horizontal, 2)
 
             SettingsCopyCommandRow(
-                command: "whisperm8 agent run --wait --json \"Reviewe den Diff von HEAD~3 auf Regressionen.\"",
-                caption: "Synchroner Job — blockiert bis zum Report (JSON auf stdout)"
+                command: "whisperm8 agent run --wait --json \"Review the diff from HEAD~3 for regressions.\"",
+                caption: "Synchronous job — blocks until the report (JSON on stdout)"
             )
             SettingsCopyCommandRow(
-                command: "whisperm8 agent run --worktree \"Implementiere X, teste, committe bei grün.\"",
-                caption: "Detachter Job im isolierten Git-Worktree (Branch subagent/<id>)"
+                command: "whisperm8 agent run --worktree \"Implement X, test it, and commit when green.\"",
+                caption: "Detached job in an isolated Git worktree (branch subagent/<id>)"
             )
             SettingsCopyCommandRow(
-                command: "whisperm8 agent send <id> --wait \"Bitte auch die Edge-Cases abdecken.\"",
-                caption: "Folge-Turn — die Session behält ihren Kontext (codex exec resume)"
+                command: "whisperm8 agent send <id> --wait \"Please cover the edge cases too.\"",
+                caption: "Follow-up turn — the session keeps its context (codex exec resume)"
             )
             SettingsCopyCommandRow(
                 command: "whisperm8 agent list",
-                caption: "Alle Jobs mit Zustand · status/logs/stop/rm für Details und Verwaltung"
+                caption: "All jobs with state · status/logs/stop/rm for details and management"
             )
 
-            SettingsHelpText("Sandbox: workspace-write (Default, committen ja / pushen nein) oder read-only. Exit-Codes: 0 done · 2 failed · 3 Konflikt · 4 Umgebung. Alle Optionen: `whisperm8 agent help`.")
+            SettingsHelpText("Sandbox: workspace-write (default, commits yes / pushes no) or read-only. Exit codes: 0 done · 2 failed · 3 conflict · 4 environment. All options: `whisperm8 agent help`.")
                 .padding(.vertical, 10)
                 .padding(.horizontal, 2)
         }
@@ -134,11 +134,11 @@ struct CLISkillsSettingsPage: View {
     private var statusTitle: String {
         switch installState {
         case .linked:
-            return "whisperm8 ist installiert"
+            return "whisperm8 is installed"
         case .linkedElsewhere:
-            return "Link zeigt auf eine andere App-Kopie"
+            return "Link points to another app copy"
         case .missing:
-            return "CLI-Link noch nicht angelegt"
+            return "CLI link has not been created yet"
         }
     }
 
@@ -178,9 +178,18 @@ private struct CLISkillSettingsCard: View {
     @State private var installed = false
     @State private var isCurrent = false
     @State private var markdown = ""
-    @State private var feedback: String?
+    @State private var feedback: SettingsFeedbackState
+    @State private var feedbackMessage: String?
     @State private var errorMessage: String?
     @State private var isPreviewPresented = false
+
+    @MainActor
+    init(title: String, definition: CLISkillExporter.SkillDefinition, summary: String) {
+        self.title = title
+        self.definition = definition
+        self.summary = summary
+        self._feedback = State(initialValue: SettingsFeedbackState(duration: .milliseconds(2500)))
+    }
 
     private var exporter: CLISkillExporter {
         CLISkillExporter(definition: definition)
@@ -226,8 +235,8 @@ private struct CLISkillSettingsCard: View {
                 .buttonStyle(SettingsButtonStyle.standard)
                 .disabled(markdown.isEmpty)
 
-                if let feedback {
-                    Text(feedback)
+                if let feedbackMessage, feedback.isActive {
+                    Text(feedbackMessage)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusWorking)
                         .transition(.opacity)
@@ -313,10 +322,8 @@ private struct CLISkillSettingsCard: View {
     }
 
     private func showFeedback(_ text: String) {
-        withAnimation { feedback = text }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            withAnimation { feedback = nil }
-        }
+        feedbackMessage = text
+        withAnimation { feedback.trigger() }
     }
 }
 

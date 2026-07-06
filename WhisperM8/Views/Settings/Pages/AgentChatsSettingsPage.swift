@@ -206,7 +206,13 @@ private struct AgentChatsNotificationsSettingsTab: View {
 
     @State private var notificationAuthStatus: UNAuthorizationStatus?
     @State private var availableSounds: [String] = []
-    @State private var notificationFeedback: NotificationFeedback?
+    @State private var notificationFeedback: SettingsFeedbackState
+    @State private var notificationFeedbackMessage: NotificationFeedback?
+
+    @MainActor
+    init() {
+        self._notificationFeedback = State(initialValue: SettingsFeedbackState(duration: .milliseconds(2500)))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -234,8 +240,8 @@ private struct AgentChatsNotificationsSettingsTab: View {
 
                 notificationPermissionRow
 
-                if let notificationFeedback {
-                    SettingsHelpText(notificationFeedback.message, tone: notificationFeedback.tone)
+                if let notificationFeedbackMessage, notificationFeedback.isActive {
+                    SettingsHelpText(notificationFeedbackMessage.message, tone: notificationFeedbackMessage.tone)
                 }
             }
 
@@ -282,6 +288,7 @@ private struct AgentChatsNotificationsSettingsTab: View {
                 .buttonStyle(.plain)
                 .disabled(!stopSoundEnabled)
                 .help("Play sound")
+                .accessibilityLabel(Text("Play completion sound"))
             }
         }
     }
@@ -365,23 +372,22 @@ private struct AgentChatsNotificationsSettingsTab: View {
 
     private func sendTestNotification() {
         let content = UNMutableNotificationContent()
-        content.title = "Agent Chat"
+        content.title = "Statusmaschine-Chat"
         content.subtitle = "WhisperM8 Test"
-        content.body = "Agent finished and is waiting for you."
+        content.body = "Agent ist fertig und wartet auf dich."
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             Task { @MainActor in
                 if let error {
-                    notificationFeedback = NotificationFeedback(
+                    showNotificationFeedback(NotificationFeedback(
                         message: "Notification failed: \(error.localizedDescription)",
                         tone: .error
-                    )
+                    ))
                 } else {
-                    notificationFeedback = NotificationFeedback(message: "Notification sent.", tone: .secondary)
+                    showNotificationFeedback(NotificationFeedback(message: "Sent", tone: .secondary))
                     refresh()
                 }
-                clearFeedbackLater()
             }
         }
     }
@@ -392,10 +398,9 @@ private struct AgentChatsNotificationsSettingsTab: View {
         }
     }
 
-    private func clearFeedbackLater() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            notificationFeedback = nil
-        }
+    private func showNotificationFeedback(_ feedback: NotificationFeedback) {
+        notificationFeedbackMessage = feedback
+        notificationFeedback.trigger()
     }
 }
 
@@ -415,6 +420,15 @@ private struct AgentChatsClaudeHooksSettingsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             SettingsSection("Claude Code Hooks") {
+                SettingsStatusRow(
+                    title: hooksEnabled ? "Session hooks active" : "Session hooks disabled",
+                    subtitle: hooksEnabled
+                        ? "Claude chats start with a temporary hook configuration. Status, questions, and turn completion arrive in real time; your global ~/.claude/settings.json stays untouched."
+                        : "Chats start without the hook bridge. Status comes only from the transcript, with coarser detection, no question detection, and no notifications.",
+                    tone: hooksEnabled ? .ok : .off,
+                    detail: hooksEnabled ? "Live status via session hooks" : "Transcript fallback"
+                )
+
                 SettingsToggleRow(
                     title: "Use session hooks",
                     subtitle: "Launches Claude with a temporary --settings file for live status. Your global ~/.claude/settings.json is never touched. Running sessions need a restart to pick up changes.",
@@ -424,12 +438,7 @@ private struct AgentChatsClaudeHooksSettingsTab: View {
                 statusLegendRow
 
                 if !externalHookFindings.isEmpty {
-                    SettingsStatusRow(
-                        title: "Own Claude hooks detected",
-                        subtitle: "External hooks can cause duplicate notifications. WhisperM8 never changes ~/.claude/.",
-                        tone: .warn,
-                        detail: "\(externalHookFindings.count) found"
-                    )
+                    externalHooksSection
                 }
 
                 DisclosureGroup("How does it work?", isExpanded: $isExplainerExpanded) {
@@ -469,6 +478,52 @@ private struct AgentChatsClaudeHooksSettingsTab: View {
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
         }
+    }
+
+    private var externalHooksSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SettingsStatusRow(
+                title: "External Claude hooks detected",
+                subtitle: "External hooks can cause duplicate notifications. WhisperM8 never changes ~/.claude/.",
+                tone: .warn,
+                detail: "\(externalHookFindings.count) found"
+            )
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(externalHookFindings) { finding in
+                    externalHookFindingRow(finding)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func externalHookFindingRow(_ finding: ExternalClaudeHooksInspector.Finding) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(finding.eventName)
+                    .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Text("matcher: \(finding.matcher ?? "none")")
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(AppTheme.textSecondary)
+
+                Spacer(minLength: 8)
+
+                Text(finding.source)
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(AppTheme.textTertiary)
+            }
+
+            Text(finding.commandPreview)
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .foregroundStyle(AppTheme.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 6)
     }
 
     private func refresh() {

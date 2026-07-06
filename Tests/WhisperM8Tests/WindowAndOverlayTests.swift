@@ -22,7 +22,9 @@ final class WindowAndOverlayTests: XCTestCase {
 
     func testWindowRequestsExposeExplicitRoutingTargets() {
         XCTAssertEqual(WindowRequest.settings.targetWindowID, "settings")
-        XCTAssertEqual(WindowRequest.settings.settingsSectionID, "api")
+        // Seit dem V3-Refactor startet der generische Settings-Einstieg auf
+        // der ersten Sidebar-Seite; "api" bleibt als Alias für Deep-Links gültig.
+        XCTAssertEqual(WindowRequest.settings.settingsSectionID, "recording")
 
         // Deep-Link in die Output-Sektion der Settings (Menüleiste/App-Menü).
         XCTAssertEqual(WindowRequest.settingsOutput.targetWindowID, "settings")

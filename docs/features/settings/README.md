@@ -1,55 +1,76 @@
 ---
-description: Settings-Dokumentation — eine Referenz-Seite pro Settings-Seite (Control Center)
+description: Settings-Dokumentation nach dem Refactor 2026-07-06 mit 10 Seiten, Legacy-Aliasen und Architekturverweisen.
 description_long: |
-  Vollständige Dokumentation des Settings-Fensters (Control Center) von
-  WhisperM8: pro Sidebar-Seite ein eigenes Referenz-Dokument mit allen
-  Optionen, Persistenz, Code-Wirkung und UX-Beobachtungen. Grundlage für
-  das geplante Settings-Redesign (bessere Kategorien und Auffindbarkeit).
-updated: 2026-07-06 09:51
+  Übersicht über die aktuelle Settings-Dokumentation von WhisperM8 nach dem
+  Settings-Refactor vom 2026-07-06. Beschrieben werden die 10 neuen SettingsPage-
+  Seiten in den Gruppen Dictation, Agents, App und Workspace, die Alias-Zuordnung
+  der historischen 15 Seiten sowie die Kit/Models/Pages-Architektur.
+updated: 2026-07-06 14:05
 ---
 
-# Settings (Control Center)
+# Settings
 
-Das Settings-Fenster von WhisperM8 („Control Center") besteht aus **15 Seiten**
-in 4 Sidebar-Gruppen. Aufhängung: `ControlCenterSection` in
-`WhisperM8/Views/SettingsView.swift` (Enum + Sidebar + Detail-Switch).
+Das Settings-Fenster nutzt seit dem Refactor vom **2026-07-06** eine
+10-Seiten-Struktur. Die frühere 15-Seiten-Dokumentation bleibt als historische
+Referenz erhalten, beschreibt aber den Stand vor dem Refactor.
 
-Pro Seite existiert hier ein Referenz-Dokument mit fester Struktur:
-Zweck → UI-Aufbau → Optionen im Detail (Control, Default, Persistenz,
-Code-Wirkung) → Datenfluss → Querverweise → **UX-Beobachtungen** (Rohmaterial
-für das Redesign) → Offene Fragen.
+Aktuelle Code-Aufhängung: `SettingsPage` und `SettingsView` in
+`WhisperM8/Views/SettingsView.swift`. Die UI liegt in
+`WhisperM8/Views/Settings/Pages/`, gemeinsame Bausteine in
+`WhisperM8/Views/Settings/Kit/`, testbare Zustandsmodelle in
+`WhisperM8/Views/Settings/Models/`.
 
-## Seiten-Übersicht
+## Aktuelle 10 Seiten
 
-| # | Seite | Gruppe | Dokument | Status |
-|---|-------|--------|----------|--------|
-| 1 | Transcription API | Accounts | [01-transcription-api.md](01-transcription-api.md) | ✅ |
-| 2 | Codex / ChatGPT | Accounts | [02-codex-chatgpt.md](02-codex-chatgpt.md) | ✅ |
-| 3 | Output Overview | Output | [03-output-overview.md](03-output-overview.md) | ✅ |
-| 4 | History | Output | [04-history.md](04-history.md) | ✅ |
-| 5 | Modes | Output | [05-modes.md](05-modes.md) | ✅ |
-| 6 | Templates | Output | [06-templates.md](06-templates.md) | ✅ |
-| 7 | Test Lab | Output | [07-test-lab.md](07-test-lab.md) | ✅ |
-| 8 | Agent Chats | Agents | [08-agent-chats.md](08-agent-chats.md) | ✅ |
-| 9 | Claude Code | Agents | [09-claude-code.md](09-claude-code.md) | ✅ |
-| 10 | Permissions | App | [10-permissions.md](10-permissions.md) | ✅ |
-| 11 | Hotkey | App | [11-hotkey.md](11-hotkey.md) | ✅ |
-| 12 | Audio | App | [12-audio.md](12-audio.md) | ✅ |
-| 13 | Behavior | App | [13-behavior.md](13-behavior.md) | ✅ |
-| 14 | CLI & Skill | App | [14-cli-skill.md](14-cli-skill.md) | ✅ |
-| 15 | About | App | [15-about.md](15-about.md) | ✅ |
+| Gruppe | Seite | Route | Page-Datei | Inhalt |
+|---|---|---|---|---|
+| Dictation | Recording | `recording` | `RecordingSettingsPage.swift` | Hotkey, Mikrofon, Audio-Ducking, Overlay und Auto-Paste. |
+| Dictation | Transcription | `transcription` | `TranscriptionSettingsPage.swift` | Transcription-Provider, API-Key, Modell, Preisstand und Sprache. |
+| Dictation | AI Output | `ai-output` | `AIOutputSettingsPage.swift` | Codex-Account, Defaults, Modes, Templates und Test Lab als Tabs. |
+| Dictation | Context & Privacy | `context` | `ContextPrivacySettingsPage.swift` | Selected Context, Visual Context und Privacy-Hinweise. |
+| Agents | Agent Chats | `agent-chats` | `AgentChatsSettingsPage.swift` | Workspace, Notifications, Claude Hooks und Advanced als Tabs. |
+| Agents | CLI & Skills | `cli` | `CLISkillsSettingsPage.swift` | CLI-Symlink, Schnellstart-Befehle und installierbare Skills. |
+| App | General | `general` | `GeneralSettingsPage.swift` | Usage Profile, Start at Login, Theme und Update-Checks. |
+| App | Permissions | `permissions` | `PermissionsSettingsPage.swift` | Microphone, Accessibility und optional Screen Recording. |
+| App | About | `about` | `AboutSettingsPage.swift` | Version, Updates und Hersteller-Link. |
+| Workspace | Output | `output` | `OutputWorkspacePage.swift` | Latest Run, Output-Archiv, Filter und Löschaktion. |
 
-Status: 🔄 = Entwurf/wird gefüllt · ✅ = von Codex gefüllt und per
-Opus-Gegenprüfung validiert.
+## Legacy-Aliasse
 
-## Redesign
+Alte Deep-Links bleiben kompatibel. `SettingsPage.page(routeID:)` mappt die
+historischen Route-IDs auf die neuen Seiten; `applyTabAlias(routeID:)` setzt
+zusätzlich die passenden Tabs für AI Output und Agent Chats.
 
-Die Synthese aller UX-Beobachtungen mit Neustruktur-Varianten und Empfehlung
-steht in [REDESIGN-BERATUNG.md](REDESIGN-BERATUNG.md).
+| Historische Doc | Alte Seite | Neue Seite | Neue Page-Datei | Doku-Verweis |
+|---|---|---|---|---|
+| [01-transcription-api.md](01-transcription-api.md) | Transcription API | Transcription | `TranscriptionSettingsPage.swift` | [Aktuelle 10 Seiten](#aktuelle-10-seiten) |
+| [02-codex-chatgpt.md](02-codex-chatgpt.md) | Codex / ChatGPT | AI Output | `AIOutputSettingsPage.swift` / `AIOutputAccountTab.swift` | [AI Output Tabs](ARCHITEKTUR.md#pages) |
+| [03-output-overview.md](03-output-overview.md) | Output Overview | Output | `OutputWorkspacePage.swift` | [Output](ARCHITEKTUR.md#pages) |
+| [04-history.md](04-history.md) | History | Output | `OutputWorkspacePage.swift` | [Output](ARCHITEKTUR.md#pages) |
+| [05-modes.md](05-modes.md) | Modes | AI Output | `AIOutputSettingsPage.swift` / `AIOutputModesTab.swift` | [AI Output Tabs](ARCHITEKTUR.md#pages) |
+| [06-templates.md](06-templates.md) | Templates | AI Output | `AIOutputSettingsPage.swift` / `AIOutputTemplatesTab.swift` | [AI Output Tabs](ARCHITEKTUR.md#pages) |
+| [07-test-lab.md](07-test-lab.md) | Test Lab | AI Output | `AIOutputSettingsPage.swift` / `AIOutputTestLabTab.swift` | [AI Output Tabs](ARCHITEKTUR.md#pages) |
+| [08-agent-chats.md](08-agent-chats.md) | Agent Chats | Agent Chats | `AgentChatsSettingsPage.swift` | [Agent Chats](ARCHITEKTUR.md#pages) |
+| [09-claude-code.md](09-claude-code.md) | Claude Code | Agent Chats | `AgentChatsSettingsPage.swift` | [Agent Chats](ARCHITEKTUR.md#pages) |
+| [10-permissions.md](10-permissions.md) | Permissions | Permissions | `PermissionsSettingsPage.swift` | [Permissions](ARCHITEKTUR.md#pages) |
+| [11-hotkey.md](11-hotkey.md) | Hotkey | Recording | `RecordingSettingsPage.swift` | [Recording](ARCHITEKTUR.md#pages) |
+| [12-audio.md](12-audio.md) | Audio | Recording | `RecordingSettingsPage.swift` | [Recording](ARCHITEKTUR.md#pages) |
+| [13-behavior.md](13-behavior.md) | Behavior | Recording / Context & Privacy / General | `RecordingSettingsPage.swift`, `ContextPrivacySettingsPage.swift`, `GeneralSettingsPage.swift` | [Strukturvertrag](ARCHITEKTUR.md#kompatibilitätsvertrag) |
+| [14-cli-skill.md](14-cli-skill.md) | CLI & Skill | CLI & Skills | `CLISkillsSettingsPage.swift` | [CLI & Skills](ARCHITEKTUR.md#pages) |
+| [15-about.md](15-about.md) | About | About | `AboutSettingsPage.swift` | [About](ARCHITEKTUR.md#pages) |
 
-## Entstehung & Pflege
+## Architektur
 
-Erstbefüllung 2026-07-06: pro Seite ein Codex-Subagent (Analyse der Views +
-Services), anschließend unabhängige Validierung durch Opus-Subagents
-(Widerlegungs-Prüfung der Datei:Zeile-Belege). Bei Änderungen an einer
-Settings-Seite das zugehörige Dokument mitpflegen (`updated`-Feld setzen).
+Die aktuelle Struktur ist in [ARCHITEKTUR.md](ARCHITEKTUR.md) dokumentiert:
+
+- Routing und Alias-Vertrag in `SettingsView.swift`.
+- Wiederverwendbare SettingsKit-Bausteine unter `Views/Settings/Kit/`.
+- Testbare ViewModels unter `Views/Settings/Models/`.
+- Page-Komposition unter `Views/Settings/Pages/`.
+- Kompatibilitätsvertrag und Test-Landschaft.
+
+## Historische Referenzen
+
+Die 15 historischen Referenzdateien bleiben bewusst im Ordner. Jede Datei trägt
+oben einen Warnblock mit Zielseite und Doku-Verweis. Sie dienen nur noch als
+Migrations- und Review-Material für Inhalte vor dem Refactor vom 2026-07-06.

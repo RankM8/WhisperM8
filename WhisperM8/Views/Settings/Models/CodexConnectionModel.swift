@@ -14,6 +14,8 @@ final class CodexConnectionModel {
     var isRefreshing = false
 
     @ObservationIgnored private let probe: @Sendable () async -> Snapshot
+    @ObservationIgnored private var refreshGeneration = 0
+    @ObservationIgnored private var refreshTask: Task<Snapshot, Never>?
 
     init(
         probe: @escaping @Sendable () async -> Snapshot = {
@@ -25,11 +27,31 @@ final class CodexConnectionModel {
     }
 
     func refresh() async {
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        refreshTask?.cancel()
         isRefreshing = true
-        let snapshot = await probe()
+
+        let task = Task { await probe() }
+        refreshTask = task
+        let snapshot = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+
+        guard generation == refreshGeneration, !Task.isCancelled else {
+            if generation == refreshGeneration {
+                refreshTask = nil
+                isRefreshing = false
+            }
+            return
+        }
+
         status = snapshot.status
         codexVersion = snapshot.version
         isRefreshing = false
+        refreshTask = nil
     }
 
     func shouldWarnAboutGPT55(selectedModelRaw: String) -> Bool {

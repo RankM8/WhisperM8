@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „Test Lab": Zweck, UI-Aufbau,
   alle sichtbaren Controls mit Default, Persistenz und Code-Wirkung, Datenfluss,
   Querverweise sowie UX-Beobachtungen als Grundlage für das Settings-Redesign.
-updated: 2026-07-06 10:00
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, Formulierung präzisiert)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `AIOutputSettingsPage.swift` / `AIOutputTestLabTab.swift` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: Test Lab
 

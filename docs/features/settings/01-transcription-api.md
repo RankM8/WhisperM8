@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „Transcription API" im WhisperM8-Settings-Fenster.
   Die Seite verwaltet Transcription-Provider, API-Key, Modell, Sprach-Hinweis und Preis-Anzeige
   für den Diktat-Upload sowie die Keychain-/UserDefaults-Persistenz dieser Werte.
-updated: 2026-07-06 09:54
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 0 Mängel)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `TranscriptionSettingsPage.swift` + Doku-Verweis [Settings README: Aktuelle 10 Seiten](README.md#aktuelle-10-seiten).
 
 # Settings: Transcription API
 

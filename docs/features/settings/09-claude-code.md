@@ -4,9 +4,11 @@ description_long: |
   Vollständige Referenz der Settings-Seite „Claude Code" im WhisperM8-Settings-Fenster.
   Die Seite dokumentiert Hook-Status, Benachrichtigungen, Ton-Auswahl, externe Hook-Konflikte und die erzeugte Claude-Code-Settings-Vorschau.
   Persistenz, Laufzeitwirkung und UX-Befunde sind gegen den aktuellen Working Tree belegt.
-updated: 2026-07-06 10:04
+updated: 2026-07-06 14:05
 status: ✅ Validiert (Opus-Gegenprüfung 2026-07-06, 3 Zeilenverweise + 1 Ergänzung korrigiert)
 ---
+
+> ⚠️ HISTORISCH (Stand vor Refactor 2026-07-06) — Inhalte beschreiben die alte Seite; neue Seite: `AgentChatsSettingsPage.swift` / Tab `Claude Hooks` + Doku-Verweis [ARCHITEKTUR: Pages](ARCHITEKTUR.md#pages).
 
 # Settings: Claude Code
 

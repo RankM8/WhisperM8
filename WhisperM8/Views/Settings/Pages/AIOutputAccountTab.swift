@@ -112,7 +112,7 @@ struct AIOutputAccountTab: View {
             SettingsSection("Output & Fallback") {
                 SettingsPickerRow(
                     title: "Default Mode",
-                    subtitle: "New recordings start here. Hidden or missing choices fall back through the existing Clean default.",
+                    subtitle: "New recordings start here. If the stored mode was deleted, recordings fall back to Fast (raw) at runtime.",
                     selection: $defaultOutputModeID,
                     options: enabledModes.map(\.id)
                 ) { modeID in

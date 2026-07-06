@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Detail-Ansicht eines einzelnen Transcript-Run-Reports (Metadaten, Kontext,
-/// Prompt, Raw/Final). Wird von `OutputHistoryView` als Detailspalte genutzt.
+/// Prompt, Raw/Final). Wird von `OutputWorkspacePage` als Detailansicht genutzt.
 struct TranscriptReportDetailView: View {
     let report: TranscriptRunReport
     var onDelete: () -> Void
