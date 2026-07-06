@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhisperM8 · Settings-Redesign — Demo + Plan</title>
+<style>
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root {
+  /* Plan-Doku (Editorial, warm) */
+  --paper: oklch(0.97 0.008 85);
+  --ink: oklch(0.24 0.015 60);
+  --ink-soft: oklch(0.42 0.015 60);
+  --ink-mute: oklch(0.58 0.012 60);
+  --accent: oklch(0.62 0.19 40);
+  --moss: oklch(0.55 0.11 150);
+  --ocean: oklch(0.52 0.10 240);
+  --amber: oklch(0.72 0.14 80);
+  --line: oklch(0.88 0.01 80);
+  --card: oklch(0.995 0.004 90);
+
+  /* macOS-Demo (dunkel, wie WhisperM8-Screenshot) */
+  --mac-bg: #1c1c1e;
+  --mac-sidebar: #232326;
+  --mac-panel: #2a2a2d;
+  --mac-panel-2: #313135;
+  --mac-line: #3d3d42;
+  --mac-text: #e8e8ea;
+  --mac-text-2: #a5a5ac;
+  --mac-text-3: #737379;
+  --mac-blue: #3b82f6;
+  --mac-blue-soft: rgba(59,130,246,.18);
+  --mac-green: #34c759;
+  --mac-orange: #ff9f0a;
+  --mac-red: #ff453a;
+  --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--paper); color: var(--ink);
+  font-size: 16px; line-height: 1.6;
+}
+::selection { background: oklch(0.62 0.19 40 / .25); }
+
+/* ============================================================
+   DOKU-LAYOUT
+   ============================================================ */
+.doc-wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+.hero { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+.hero .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+.hero h1 { font-family: Charter, Georgia, serif; font-size: 46px; line-height: 1.12; font-weight: 600; letter-spacing: -0.01em; }
+.hero h1 em { font-style: italic; color: var(--accent); }
+.hero .lede { max-width: 780px; margin-top: 18px; font-size: 18px; color: var(--ink-soft); }
+.hero-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 32px; }
+.hero-meta > div { background: var(--card); padding: 14px 18px; }
+.hero-meta .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-mute); }
+.hero-meta .v { font-size: 14.5px; font-weight: 600; margin-top: 3px; }
+
+section.doc { padding: 56px 0 8px; }
+section.doc > .doc-wrap > .sec-label { display:flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+.sec-label .num { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+section.doc h2 { font-family: Charter, Georgia, serif; font-size: 32px; font-weight: 600; }
+section.doc h2 em { font-style: italic; color: var(--accent); }
+section.doc .sec-lede { max-width: 760px; color: var(--ink-soft); margin: 10px 0 28px; }
+
+.note { font-family: Charter, Georgia, serif; font-style: italic; color: var(--ink-soft); font-size: 16.5px; border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 20px 0; max-width: 820px; }
+
+/* Mapping-Tabellen */
+table.map { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 14px 0 8px; background: var(--card); border: 1px solid var(--line); }
+table.map th { text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mute); font-weight: 600; padding: 9px 12px; border-bottom: 1px solid var(--line); background: oklch(0.955 0.008 85); }
+table.map td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.map tr:last-child td { border-bottom: none; }
+table.map code { font-family: var(--mono); font-size: 11.5px; background: oklch(0.94 0.01 85); padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+.st { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.st.same { background: oklch(0.55 0.11 150 / .14); color: var(--moss); }
+.st.moved { background: oklch(0.52 0.10 240 / .14); color: var(--ocean); }
+.st.changed { background: oklch(0.72 0.14 80 / .2); color: oklch(0.5 0.12 70); }
+.st.new { background: oklch(0.62 0.19 40 / .14); color: var(--accent); }
+.st.gone { background: oklch(0.24 0.015 60 / .09); color: var(--ink-mute); text-decoration: line-through; }
+
+.page-map { margin: 34px 0; }
+.page-map h3 { font-family: Charter, Georgia, serif; font-size: 21px; font-weight: 600; display: flex; align-items: baseline; gap: 10px; }
+.page-map h3 .pp { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); font-weight: 400; }
+.page-map .src { font-size: 13px; color: var(--ink-mute); margin: 2px 0 4px; }
+
+/* Änderungs-Log */
+.change-list { display: grid; gap: 10px; margin-top: 20px; }
+.change { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--amber); padding: 14px 18px; }
+.change.fix { border-left-color: var(--moss); }
+.change.newf { border-left-color: var(--accent); }
+.change .cid { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+.change h4 { font-size: 15px; margin: 3px 0 4px; }
+.change p { font-size: 14px; color: var(--ink-soft); }
+.change code { font-family: var(--mono); font-size: 11.5px; background: oklch(0.94 0.01 85); padding: 1px 5px; border-radius: 3px; }
+
+/* Offene Fragen */
+.q-list { display: grid; gap: 8px; margin-top: 18px; }
+.q { display: grid; grid-template-columns: 120px 1fr; gap: 16px; background: var(--card); border: 1px solid var(--line); padding: 13px 18px; font-size: 14.5px; }
+.q .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); align-self: start; padding-top: 3px; }
+
+/* Prinzipien-Karten */
+.prin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+.prin { background: var(--card); border: 1px solid var(--line); padding: 20px 22px; }
+.prin .n { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.prin h4 { font-family: Charter, Georgia, serif; font-size: 18px; margin: 6px 0 8px; }
+.prin p { font-size: 14px; color: var(--ink-soft); }
+
+footer { border-top: 1px solid var(--line); margin-top: 72px; padding: 28px 0 48px; color: var(--ink-mute); font-size: 13.5px; }
+footer .doc-wrap { display: flex; justify-content: space-between; }
+
+/* ============================================================
+   DEMO: macOS-Settings-Fenster
+   ============================================================ */
+.demo-band { background: #141416; padding: 56px 0 30px; margin-top: 48px; }
+.demo-band .demo-head { max-width: 1180px; margin: 0 auto 26px; padding: 0 32px; color: #d7d7db; }
+.demo-head .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #7aa2ff; margin-bottom: 8px; }
+.demo-head h2 { font-family: Charter, Georgia, serif; font-size: 30px; font-weight: 600; color: #f2f2f4; }
+.demo-head p { max-width: 760px; color: #9d9da5; margin-top: 8px; font-size: 15px; }
+.demo-hint { max-width: 1180px; margin: 14px auto 0; padding: 0 32px; color: #6f6f77; font-size: 12.5px; font-family: var(--mono); }
+
+.mac-window {
+  max-width: 1180px; margin: 0 auto; border-radius: 12px; overflow: hidden;
+  background: var(--mac-bg); border: 1px solid #000;
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
+  font-size: 13px; color: var(--mac-text);
+  -webkit-font-smoothing: antialiased;
+}
+.mac-titlebar { display: flex; align-items: center; height: 40px; background: var(--mac-sidebar); border-bottom: 1px solid #000; padding: 0 14px; position: relative; }
+.mac-dots { display: flex; gap: 8px; }
+.mac-dots span { width: 12px; height: 12px; border-radius: 50%; }
+.mac-dots span:nth-child(1){ background:#ff5f57; } .mac-dots span:nth-child(2){ background:#febc2e; } .mac-dots span:nth-child(3){ background:#28c840; }
+.mac-title { position: absolute; left: 0; right: 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--mac-text-2); pointer-events: none; }
+
+.mac-body { display: grid; grid-template-columns: 224px 1fr; min-height: 720px; }
+.mac-side { background: var(--mac-sidebar); border-right: 1px solid #000; padding: 14px 10px 18px; overflow-y: auto; }
+.side-group { margin-bottom: 16px; }
+.side-group .g { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mac-text-3); padding: 0 10px 5px; }
+.side-item { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 7px; cursor: pointer; color: var(--mac-text); font-size: 13px; user-select: none; }
+.side-item:hover { background: rgba(255,255,255,.05); }
+.side-item.active { background: var(--mac-blue); color: #fff; }
+.side-item .ico { width: 17px; text-align: center; font-size: 13px; opacity: .85; }
+.side-item .badge-new { margin-left: auto; font-size: 9px; font-family: var(--mono); background: rgba(59,130,246,.25); color: #8ab4ff; border-radius: 4px; padding: 1px 5px; }
+.side-item.active .badge-new { background: rgba(255,255,255,.22); color: #fff; }
+
+.mac-main { padding: 26px 30px 34px; overflow-y: auto; max-height: 760px; }
+.mac-main h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.mac-main .page-sub { color: var(--mac-text-2); font-size: 12.5px; margin-bottom: 20px; }
+
+.mpage { display: none; }
+.mpage.active { display: block; animation: fadeIn .18s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: none;} }
+
+.card { background: var(--mac-panel); border: 1px solid var(--mac-line); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+.card .card-h { padding: 12px 16px 4px; font-size: 13px; font-weight: 600; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 16px; border-bottom: 1px solid var(--mac-line); min-height: 44px; }
+.row:last-child { border-bottom: none; }
+.row .lbl { font-size: 13px; }
+.row .lbl small { display: block; color: var(--mac-text-3); font-size: 11.5px; margin-top: 2px; max-width: 460px; line-height: 1.45; }
+.row.sub { padding-left: 34px; background: rgba(0,0,0,.12); }
+.caption { padding: 8px 16px 12px; color: var(--mac-text-3); font-size: 11.5px; line-height: 1.5; }
+.caption a { color: var(--mac-blue); text-decoration: none; }
+
+/* Controls */
+.tgl { width: 40px; height: 24px; border-radius: 12px; background: #4a4a4f; position: relative; cursor: pointer; flex-shrink: 0; transition: background .15s; }
+.tgl::after { content:""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.tgl.on { background: var(--mac-green); } .tgl.on::after { left: 18px; }
+.seg { display: inline-flex; background: var(--mac-panel-2); border-radius: 7px; padding: 2px; gap: 2px; }
+.seg span { padding: 4px 14px; border-radius: 5px; cursor: pointer; color: var(--mac-text-2); font-size: 12.5px; }
+.seg span.on { background: var(--mac-blue); color: #fff; }
+.pop { display: inline-flex; align-items: center; gap: 7px; background: var(--mac-panel-2); border: 1px solid var(--mac-line); border-radius: 6px; padding: 4px 10px; font-size: 12.5px; cursor: default; }
+.pop::after { content: "⌃⌄"; font-size: 8px; letter-spacing: -2px; color: var(--mac-text-3); transform: scaleY(.8); }
+.btn { background: var(--mac-panel-2); border: 1px solid var(--mac-line); border-radius: 6px; padding: 4px 12px; font-size: 12.5px; color: var(--mac-text); cursor: default; }
+.btn.primary { background: var(--mac-blue); border-color: var(--mac-blue); color: #fff; }
+.btn.ghost { background: transparent; border: none; color: var(--mac-blue); }
+.field { background: var(--mac-panel-2); border: 1px solid var(--mac-line); border-radius: 6px; padding: 5px 10px; font-size: 12.5px; color: var(--mac-text-2); min-width: 240px; }
+.field.mono { font-family: var(--mono); font-size: 11px; }
+.slider { width: 160px; height: 4px; background: #4a4a4f; border-radius: 2px; position: relative; }
+.slider .fill { position: absolute; left:0; top:0; bottom:0; width: 40%; background: var(--mac-blue); border-radius: 2px; }
+.slider .knob { position: absolute; top: -6px; left: calc(40% - 8px); width: 16px; height: 16px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.stepper { display: inline-flex; align-items: center; gap: 8px; }
+.stepper .val { font-family: var(--mono); font-size: 12px; }
+.stepper .pm { display: inline-flex; border: 1px solid var(--mac-line); border-radius: 5px; overflow: hidden; }
+.stepper .pm b { padding: 2px 8px; background: var(--mac-panel-2); font-weight: 400; cursor: default; font-size: 12px; }
+.stepper .pm b:first-child { border-right: 1px solid var(--mac-line); }
+.status-dot { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.status-dot::before { content:""; width: 8px; height: 8px; border-radius: 50%; background: var(--mac-green); }
+.status-dot.warn::before { background: var(--mac-orange); }
+.status-dot.off::before { background: var(--mac-text-3); }
+.pill-note { font-size: 10.5px; font-family: var(--mono); background: var(--mac-blue-soft); color: #8ab4ff; padding: 2px 7px; border-radius: 4px; }
+.keyrec { font-family: var(--mono); font-size: 12px; background: var(--mac-panel-2); border: 1px solid var(--mac-line); border-radius: 6px; padding: 4px 12px; }
+
+/* Tabs (KI-Ausgabe) */
+.tabs { display: flex; gap: 2px; background: var(--mac-panel); border: 1px solid var(--mac-line); border-radius: 8px; padding: 3px; margin-bottom: 16px; width: fit-content; }
+.tabs span { padding: 5px 16px; font-size: 12.5px; border-radius: 6px; cursor: pointer; color: var(--mac-text-2); user-select: none; }
+.tabs span.on { background: var(--mac-blue); color: #fff; }
+.subtab { display: none; }
+.subtab.on { display: block; animation: fadeIn .15s ease; }
+
+/* Modes Master-Detail */
+.md-split { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+.md-list { background: var(--mac-panel); border: 1px solid var(--mac-line); border-radius: 10px; overflow: hidden; }
+.md-list .mrow { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--mac-line); font-size: 12.5px; cursor: default; }
+.md-list .mrow:last-child { border-bottom: none; }
+.md-list .mrow.sel { background: var(--mac-blue-soft); }
+.md-list .mrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mac-green); flex-shrink: 0; }
+.md-list .mrow .dot.off { background: var(--mac-text-3); }
+.md-list .mrow .name { flex: 1; }
+.md-list .mrow .def { color: var(--mac-green); font-size: 11px; }
+.md-list .mrow .mini-tgl { width: 26px; height: 16px; border-radius: 8px; background: var(--mac-green); position: relative; }
+.md-list .mrow .mini-tgl::after { content:""; position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.md-list .mrow .mini-tgl.off { background: #4a4a4f; } .md-list .mrow .mini-tgl.off::after { right: auto; left: 2px; }
+.md-list .mrow .lock { color: var(--mac-text-3); font-size: 11px; }
+.md-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--mac-line); font-size: 12px; font-weight: 600; color: var(--mac-text-2); }
+
+/* Output-Workspace */
+.out-toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; }
+.out-toolbar .search { flex: 1; background: var(--mac-panel-2); border: 1px solid var(--mac-line); border-radius: 7px; padding: 6px 12px; color: var(--mac-text-3); font-size: 12.5px; }
+.report-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--mac-line); align-items: center; }
+.report-row:last-child { border-bottom: none; }
+.report-row .t { font-size: 12.5px; font-weight: 600; }
+.report-row .t small { display:block; font-weight: 400; color: var(--mac-text-3); font-size: 11px; margin-top: 1px; }
+.report-row .when { font-family: var(--mono); font-size: 10.5px; color: var(--mac-text-3); }
+.chip { font-size: 10px; font-family: var(--mono); padding: 2px 7px; border-radius: 4px; }
+.chip.ok { background: rgba(52,199,89,.15); color: var(--mac-green); }
+.chip.fb { background: rgba(255,159,10,.15); color: var(--mac-orange); }
+.chip.fail { background: rgba(255,69,58,.15); color: var(--mac-red); }
+
+/* Skill-Cards */
+.skill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cmd { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--mac-line); }
+.cmd code { font-family: var(--mono); font-size: 11px; color: #9ecbff; }
+.cmd small { display: block; color: var(--mac-text-3); font-size: 10.5px; margin-top: 2px; font-family: -apple-system, sans-serif; }
+.cmd .cp { color: var(--mac-text-3); cursor: default; font-size: 12px; }
+
+@media (max-width: 900px) {
+  .mac-body { grid-template-columns: 1fr; }
+  .mac-side { display: flex; overflow-x: auto; }
+  .prin-grid, .skill-grid, .md-split { grid-template-columns: 1fr; }
+  .hero-meta { grid-template-columns: 1fr 1fr; }
+}
+
+/* ============ Refinement: echtes macOS-Dark, SF-Symbol-Icons ============ */
+:root {
+  --mac-bg: #1e1e1f; --mac-sidebar: #242426; --mac-panel: #29292b;
+  --mac-panel-2: #39393d; --mac-line: #38383c; --mac-blue: #3474f6;
+}
+.mac-window { border-radius: 11px; border: 1px solid #0a0a0b; box-shadow: 0 34px 90px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.08) inset; }
+.mac-titlebar { height: 42px; background: #242426; border-bottom: 1px solid #141415; }
+.mac-side { padding: 12px 9px 18px; }
+.side-group .g { font-size: 10px; color: #808088; padding: 0 11px 6px; }
+.side-item { gap: 8px; padding: 5.5px 10px; border-radius: 6px; }
+.ico-svg { width: 16px; height: 16px; flex-shrink: 0; stroke: #a8a8b0; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.side-item.active .ico-svg { stroke: #fff; }
+.ico-inline { width: 14px; height: 14px; vertical-align: -2px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.btn .ico-inline { width: 13px; height: 13px; }
+.row-ico { width: 22px; height: 22px; stroke: #b6b6bd; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; margin-right: 2px; }
+.lbl-ico { display: flex; align-items: flex-start; gap: 10px; }
+.card { background: #29292b; border: 1px solid rgba(255,255,255,.055); border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.row { border-bottom: 1px solid rgba(255,255,255,.06); }
+.row.sub { background: rgba(0,0,0,.16); }
+.pop { background: #3a3a3e; border: 1px solid rgba(255,255,255,.09); box-shadow: 0 1px 2px rgba(0,0,0,.3); border-radius: 6px; padding: 3.5px 8px 3.5px 11px; }
+.pop::after { content: ""; width: 11px; height: 15px; transform: none; letter-spacing: 0;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="11" height="15" viewBox="0 0 11 15"><path d="M2.5 5.5L5.5 2.5L8.5 5.5M2.5 9.5L5.5 12.5L8.5 9.5" fill="none" stroke="%23a0a0a8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>') center / contain no-repeat; }
+.seg { background: rgba(0,0,0,.28); border-radius: 7px; }
+.seg span { padding: 3.5px 14px; font-weight: 500; }
+.seg span.on { background: var(--mac-blue); box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+.btn { background: #3a3a3e; border: 1px solid rgba(255,255,255,.09); box-shadow: 0 1px 1px rgba(0,0,0,.25); border-radius: 6px; }
+.btn.primary { background: var(--mac-blue); border-color: rgba(255,255,255,.14); }
+.btn.ghost { background: transparent; border: none; box-shadow: none; }
+.tgl { width: 38px; height: 22px; border-radius: 11px; }
+.tgl::after { width: 18px; height: 18px; }
+.tgl.on::after { left: 18px; }
+.keyrec { background: #3a3a3e; border: 1px solid rgba(255,255,255,.1); box-shadow: 0 1px 1px rgba(0,0,0,.25); }
+.pill-note { background: rgba(52,116,246,.16); border: 1px dashed rgba(122,162,255,.45); color: #93b4ff; }
+.about-tile { width: 58px; height: 58px; border-radius: 13px; background: linear-gradient(150deg,#3474f6,#7c5cf0); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.15) inset; }
+.about-tile svg { width: 30px; height: 30px; stroke: #fff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.md-list .mrow.sel { background: rgba(52,116,246,.22); }
+.search .ico-inline { stroke: #737379; margin-right: 4px; }
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     HERO
+     ============================================================ -->
+<header class="hero">
+  <div class="doc-wrap">
+    <div class="kicker">WhisperM8 · Settings-Redesign · Variante A</div>
+    <h1>Settings, sortiert nach <em>Aufgaben</em> — nicht nach Code-Herkunft.</h1>
+    <p class="lede">Interaktive Demo der neuen Settings-Struktur (15 → 10 Seiten) plus vollständiger Umbau-Plan. Alle ~154 dokumentierten Controls aus den validierten Referenz-Docs sind erhalten — jede Verschiebung, Zusammenlegung oder Anpassung ist unten im Mapping und Änderungs-Log nachvollziehbar.</p>
+    <div class="hero-meta">
+      <div><div class="k">Basis</div><div class="v">docs/features/settings/ (15 Docs, validiert)</div></div>
+      <div><div class="k">Struktur</div><div class="v">10 Seiten · 4 Gruppen</div></div>
+      <div><div class="k">Controls</div><div class="v">154 erhalten · Inventar deep-dive-geprüft</div></div>
+      <div><div class="k">Stand</div><div class="v">2026-07-06 · beschlossen (F1–F3, F6/F7)</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================
+     DEMO
+     ============================================================ -->
+<div class="demo-band" id="demo">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/></symbol>
+<symbol id="i-wave" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 4l1.6 4.6L17.2 10.2l-4.6 1.6L11 16.4l-1.6-4.6L4.8 10.2l4.6-1.6zM18 14.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></symbol>
+<symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/></symbol>
+<symbol id="i-prompt" viewBox="0 0 24 24"><path d="M4 17l6.5-5L4 7M13 19h7"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5M5.3 5.3l2.5 2.5M16.2 16.2l2.5 2.5M18.7 5.3l-2.5 2.5M7.8 16.2l-2.5 2.5"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.8v5.4c0 4.8-3.3 7.9-7 9.8-3.7-1.9-7-5-7-9.8V5.8z"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.2M12 7.6h.01"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v4h4M10.5 12.5h5M10.5 16h5"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 6.2 12 6.2 21.5 12 21.5 12 18 17.8 12 17.8 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8.5 6.2l9.5 5.8-9.5 5.8z"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
+<symbol id="i-reload" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7M18 2.8v4h-4"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="6" y="10.5" width="12" height="9.5" rx="2"/><path d="M8.8 10.5V8a3.2 3.2 0 0 1 6.4 0v2.5"/></symbol>
+<symbol id="i-access" viewBox="0 0 24 24"><circle cx="12" cy="4.8" r="2"/><path d="M4.5 9.2h15M12 9.2v6M12 15.2l-3.8 5.6M12 15.2l3.8 5.6"/></symbol>
+<symbol id="i-display" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</defs></svg>
+
+  <div class="demo-head">
+    <div class="kicker">Interaktive Demo</div>
+    <h2>Das neue Settings-Fenster</h2>
+    <p>Sidebar-Einträge sind klickbar, ebenso die Tabs in „AI Output" und die Toggles. Neue oder veränderte Elemente tragen ein <span style="font-size:10px;font-family:var(--mono);background:rgba(59,130,246,.25);color:#8ab4ff;border-radius:4px;padding:1px 5px;">NEU</span>-Badge — Details dazu im Änderungs-Log unter der Demo. UI-Sprache: Englisch (Empfehlung, siehe offene Frage F1).</p>
+  </div>
+
+  <div class="mac-window">
+    <div class="mac-titlebar">
+      <div class="mac-dots"><span></span><span></span><span></span></div>
+      <div class="mac-title">WhisperM8 Settings</div>
+    </div>
+    <div class="mac-body">
+
+      <!-- ================= SIDEBAR ================= -->
+      <aside class="mac-side">
+        <div class="side-group">
+          <div class="g">Dictation</div>
+          <div class="side-item active" data-page="recording"><svg class="ico-svg"><use href="#i-mic"/></svg> Recording</div>
+          <div class="side-item" data-page="transcription"><svg class="ico-svg"><use href="#i-wave"/></svg> Transcription</div>
+          <div class="side-item" data-page="ai-output"><svg class="ico-svg"><use href="#i-spark"/></svg> AI Output <span class="badge-new">NEU</span></div>
+          <div class="side-item" data-page="context"><svg class="ico-svg"><use href="#i-search"/></svg> Context &amp; Privacy</div>
+        </div>
+        <div class="side-group">
+          <div class="g">Agents</div>
+          <div class="side-item" data-page="agent-chats"><svg class="ico-svg"><use href="#i-term"/></svg> Agent Chats <span class="badge-new">NEU</span></div>
+          <div class="side-item" data-page="cli"><svg class="ico-svg"><use href="#i-prompt"/></svg> CLI &amp; Skills</div>
+        </div>
+        <div class="side-group">
+          <div class="g">App</div>
+          <div class="side-item" data-page="general"><svg class="ico-svg"><use href="#i-gear"/></svg> General</div>
+          <div class="side-item" data-page="permissions"><svg class="ico-svg"><use href="#i-shield"/></svg> Permissions</div>
+          <div class="side-item" data-page="about"><svg class="ico-svg"><use href="#i-info"/></svg> About</div>
+        </div>
+        <div class="side-group">
+          <div class="g">Workspace</div>
+          <div class="side-item" data-page="output"><svg class="ico-svg"><use href="#i-doc"/></svg> Output <span class="badge-new">NEU</span></div>
+        </div>
+      </aside>
+
+      <!-- ================= MAIN ================= -->
+      <main class="mac-main">
+
+        <!-- ========== 1. RECORDING ========== -->
+        <div class="mpage active" id="p-recording">
+          <h1>Recording</h1>
+          <div class="page-sub">Everything that happens while you record: hotkey, microphone, ducking, overlay. <span class="pill-note">zieht Controls aus Hotkey + Audio + Behavior zusammen</span></div>
+
+          <div class="card">
+            <div class="card-h">Hotkey</div>
+            <div class="row">
+              <div class="lbl">Recording Hotkey<small>Hold to talk, or tap to toggle recording on/off. Short taps under 0.3 s are ignored to prevent accidental stops.</small></div>
+              <span class="keyrec">⌃ ⇧ Space</span>
+            </div>
+            <div class="row">
+              <div class="lbl">Show confirm button (✓) in overlay<small>An alternative stop: clicking ✓ stops and transcribes — same path as the hotkey.</small></div>
+              <div class="tgl on"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Microphone</div>
+            <div class="row">
+              <div class="lbl">Input Device<small>Changes apply to the next recording. Bluetooth devices may fall back to System Default. <span class="pill-note">NEU: Fallback-Hinweis</span></small></div>
+              <span class="pop">System Default</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Audio Ducking</div>
+            <div class="row">
+              <div class="lbl">Reduce system volume while recording</div>
+              <div class="tgl on" data-reveals="duck-target"></div>
+            </div>
+            <div class="row sub" id="duck-target">
+              <div class="lbl">Target volume</div>
+              <div class="slider"><div class="fill"></div><div class="knob"></div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Recording Overlay</div>
+            <div class="row">
+              <div class="lbl">Overlay UI</div>
+              <div class="seg"><span>Full</span><span class="on">Mini</span></div>
+            </div>
+            <div class="row">
+              <div class="lbl">Show mode picker in Mini overlay<small>Single source now — the duplicate toggle on the Modes page was removed. <span class="pill-note">NEU: dedupliziert (A2)</span></small></div>
+              <div class="tgl on"></div>
+            </div>
+            <div class="row">
+              <div class="lbl">Overlay position<small>You can also drag the overlay; double-click resets it.</small></div>
+              <span class="btn">Reset Position</span>
+            </div>
+            <div class="caption">Reset clears position and anchor keys (overlayPositionX/Y + overlayAnchorMaxX/MinX/Y).</div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Delivery <span class="pill-note">NEU hier: A29 — vorher unter General</span></div>
+            <div class="row">
+              <div class="lbl">Auto-paste after transcription<small>Pastes the result into the frontmost app (needs Accessibility; falls back to clipboard). The end of the dictation flow — so it lives here.</small></div>
+              <div class="tgl on"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 2. TRANSCRIPTION ========== -->
+        <div class="mpage" id="p-transcription">
+          <h1>Transcription</h1>
+          <div class="page-sub">Speech-to-text provider, API key, model and language. <span class="pill-note">= alte Seite „Transcription API"</span></div>
+
+          <div class="card">
+            <div class="card-h">Provider</div>
+            <div class="row">
+              <div class="lbl"><span class="pill-note" style="background:rgba(52,199,89,.15);color:#6bd089;">Free API key</span> <small>Recommended for personal use. Free key available; low-cost if you exceed free limits.</small></div>
+              <div class="seg"><span class="on">Groq</span><span>OpenAI</span></div>
+            </div>
+            <div class="row">
+              <div class="lbl" style="flex:1;"><span class="field mono" style="display:block;">••••••••••••••••</span></div>
+              <span class="btn ghost"><svg class="ico-inline"><use href="#i-eye"/></svg></span>
+            </div>
+            <div class="row">
+              <div class="lbl"><span class="status-dot">API key saved in Keychain</span><small>One status line instead of placeholder + extra banner. <span class="pill-note">NEU: A4</span></small></div>
+              <span class="btn">Remove Key…</span>
+            </div>
+            <div class="caption"><a href="#">Get Groq API key →</a> &nbsp;·&nbsp; „Remove Key…" ist neu — bisher gab es keinen Lösch-Flow (A5).</div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Model</div>
+            <div class="row">
+              <div class="lbl">Model<small>Best quality at Groq, 299× real-time.</small></div>
+              <span class="pop">Whisper Large v3</span>
+            </div>
+            <div class="row">
+              <div class="lbl">Price<small>Static list price, as of 2026-07. <span class="pill-note">NEU: Stand-Angabe (A6)</span></small></div>
+              <span style="font-family:var(--mono);font-size:12px;">$0.002/min</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Language</div>
+            <div class="row">
+              <div class="lbl">Spoken language<small>Also used for AI Output post-processing and the Test Lab — not only transcription. Auto-detect omits the language field entirely. <span class="pill-note">NEU: Wirkungs-Hinweis (A7)</span></small></div>
+              <span class="pop">German</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 3. AI OUTPUT ========== -->
+        <div class="mpage" id="p-ai-output">
+          <h1>AI Output</h1>
+          <div class="page-sub">One home for the whole AI pipeline: account, defaults, modes, templates, testing. <span class="pill-note">vereint Codex/ChatGPT + Modes + Templates + Test Lab</span></div>
+
+          <div class="tabs" id="ai-tabs">
+            <span class="on" data-tab="t-account">Account &amp; Defaults</span>
+            <span data-tab="t-modes">Modes</span>
+            <span data-tab="t-templates">Templates</span>
+            <span data-tab="t-testlab">Test Lab</span>
+          </div>
+
+          <!-- TAB: Account & Defaults -->
+          <div class="subtab on" id="t-account">
+            <div class="card">
+              <div class="card-h">ChatGPT Subscription via Codex</div>
+              <div class="row">
+                <div class="lbl"><span class="status-dot">Signed in with ChatGPT</span><small>Uses the official Codex CLI login — separate from the OpenAI transcription API key on the Transcription page.</small></div>
+                <div><span class="btn">Check Again</span> <span class="btn">Reconnect…</span></div>
+              </div>
+              <div class="row">
+                <div class="lbl">Codex CLI<small>Version 0.120.1 detected.</small></div>
+                <span class="status-dot">Installed</span>
+              </div>
+              <div class="row">
+                <div class="lbl" style="color:var(--mac-orange);">GPT-5.5 needs a newer Codex CLI<small>Conditional warning — appears only when the selected model requires a CLI update (kept from the old page).</small></div>
+                <span></span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h">Post-processing Defaults <span class="pill-note">Modes können pro Modus überschreiben — Hinweis jetzt direkt hier (A8)</span></div>
+              <div class="row">
+                <div class="lbl">Model<small>Default. Best quality when your Codex CLI supports it.</small></div>
+                <span class="pop">GPT-5.5</span>
+              </div>
+              <div class="row">
+                <div class="lbl">Thinking<small>Balanced reasoning effort.</small></div>
+                <span class="pop">Medium</span>
+              </div>
+              <div class="row">
+                <div class="lbl">Speed<small>Fast mode uses a credit multiplier on supported ChatGPT plans.</small></div>
+                <span class="pop">Fast</span>
+              </div>
+              <div class="caption">These defaults also seed new Codex agent chats. Individual modes can override each value (see Modes tab). <span class="pill-note">NEU: Agent-Chat-Wirkung sichtbar (A9)</span></div>
+            </div>
+
+            <div class="card">
+              <div class="card-h">Visual Input</div>
+              <div class="row">
+                <div class="lbl">Screen clips<small>Codex receives extracted frames as images — real video upload is not supported by codex exec. <span class="pill-note">NEU: „Video" ehrlich benannt (A10)</span></small></div>
+                <span class="pop">Frames (auto)</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h">Output &amp; Fallback</div>
+              <div class="row">
+                <div class="lbl">Default Mode<small>New recordings start with this mode. Single source of truth — the second picker on the old Overview page is gone. <span class="pill-note">FIX: A1</span></small></div>
+                <span class="pop">Clean</span>
+              </div>
+              <div class="row">
+                <div class="lbl">Fall back to Fast on processing errors<small>If Codex fails, the raw transcript is delivered instead. Moved here from the old Modes page — it lives next to the privacy note that explains it.</small></div>
+                <div class="tgl on"></div>
+              </div>
+              <div class="caption">With fallback enabled, unprocessed raw text is delivered unmodified. Full privacy explanation lives on Context &amp; Privacy (one canonical text, no duplicates).</div>
+            </div>
+          </div>
+
+          <!-- TAB: Modes -->
+          <div class="subtab" id="t-modes">
+            <div class="md-split">
+              <div class="md-list">
+                <div class="md-head"><span>Modes</span><span class="btn ghost" style="padding:0;"><svg class="ico-inline"><use href="#i-plus"/></svg> New</span></div>
+                <div class="mrow"><span class="dot"></span><span class="name">Fast</span><span class="mini-tgl"></span></div>
+                <div class="mrow sel"><span class="dot"></span><span class="name">Clean</span><span class="def">✓ Default</span><span class="mini-tgl"></span></div>
+                <div class="mrow"><span class="dot"></span><span class="name">Email</span><span class="mini-tgl"></span></div>
+                <div class="mrow"><span class="dot off"></span><span class="name">Slack</span><span class="mini-tgl off"></span></div>
+                <div class="mrow"><span class="dot"></span><span class="name">Agent prompt</span><span class="mini-tgl"></span></div>
+                <div class="mrow"><span class="dot off"></span><span class="name">Custom Mode</span><span class="lock"><svg class="ico-inline" style="width:12px;height:12px;stroke:#8e8e95;"><use href="#i-lock"/></svg></span></div>
+              </div>
+              <div>
+                <div class="card">
+                  <div class="card-h">Clean <span style="color:var(--mac-text-3);font-weight:400;">· Built-in</span></div>
+                  <div class="row"><div class="lbl">Mode name</div><span class="field">Clean</span></div>
+                  <div class="row"><div class="lbl">Overlay label</div><span class="field" style="min-width:120px;">Clean</span></div>
+                  <div class="row"><div class="lbl">Make default</div><span class="btn" style="opacity:.5;">Is Default</span></div>
+                  <div class="row"><div class="lbl">Paste screenshots into target app</div><div class="tgl"></div></div>
+                </div>
+                <div class="card">
+                  <div class="card-h">Codex Overrides <span style="color:var(--mac-text-3);font-weight:400;">· defaults from Account tab</span></div>
+                  <div class="row"><div class="lbl">Use global Codex model</div><div class="tgl on" data-reveals="ov-model" data-invert="true"></div></div>
+                  <div class="row sub" id="ov-model" style="display:none;"><div class="lbl">Mode model</div><span class="pop">GPT-5.4</span></div>
+                  <div class="row"><div class="lbl">Use global Thinking level</div><div class="tgl on"></div></div>
+                  <div class="row"><div class="lbl">Use global Fast mode</div><div class="tgl on"></div></div>
+                </div>
+                <div class="card">
+                  <div class="card-h">Context &amp; Template</div>
+                  <div class="row"><div class="lbl">Selected context</div><span class="pop">Auto when selected</span></div>
+                  <div class="row">
+                    <div class="lbl">Template<small>Edit template contents on the Templates tab. <span class="pill-note">NEU: Sprung-Link (A11)</span></small></div>
+                    <div><span class="pop">Clean transcript</span> <span class="btn ghost">Edit →</span></div>
+                  </div>
+                  <div class="row"><div class="lbl" style="color:var(--mac-red);">Delete Custom Mode</div><span class="btn" style="opacity:.4;">Delete</span></div>
+                  <div class="row"><div class="lbl">Reload from disk</div><span class="btn">Reload</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="caption" style="padding-left:2px;">Locked state (lock icon) appears when the usage profile disables AI enrichment. Manual drag-reorder stays deferred (F4) — custom modes sort alphabetically.</div>
+          </div>
+
+          <!-- TAB: Templates -->
+          <div class="subtab" id="t-templates">
+            <div class="md-split">
+              <div class="md-list">
+                <div class="md-head"><span>Templates</span><span class="btn ghost" style="padding:0;"><svg class="ico-inline"><use href="#i-plus"/></svg> New</span></div>
+                <div class="mrow sel"><span class="name">Clean transcript</span><span class="lock" title="Built-in"><svg class="ico-inline" style="width:12px;height:12px;stroke:#8e8e95;"><use href="#i-lock"/></svg></span></div>
+                <div class="mrow"><span class="name">Email</span><span class="lock"><svg class="ico-inline" style="width:12px;height:12px;stroke:#8e8e95;"><use href="#i-lock"/></svg></span></div>
+                <div class="mrow"><span class="name">Agent prompt</span><span class="lock"><svg class="ico-inline" style="width:12px;height:12px;stroke:#8e8e95;"><use href="#i-lock"/></svg></span></div>
+                <div class="mrow"><span class="name">Mein Referat-Stil</span></div>
+              </div>
+              <div>
+                <div class="card">
+                  <div class="card-h">Clean transcript <span style="color:var(--mac-text-3);font-weight:400;">· Read-only built-in template</span></div>
+                  <div class="row"><div class="lbl">Name</div><span class="field" style="opacity:.55;">Clean transcript</span></div>
+                  <div class="row"><div class="lbl">Description</div><span class="field" style="opacity:.55;">Entfernt Füllwörter, behält Inhalt</span></div>
+                  <div class="row" style="align-items:flex-start;">
+                    <div class="lbl">Instruction<small>Embedded as “## Mode Instruction” into the full prompt (global contract + context blocks). <span class="pill-note">NEU: Einbettung erklärt (A12)</span></small></div>
+                    <span class="field mono" style="min-height:64px;opacity:.55;display:block;min-width:300px;">Clean up the transcript.<br>Keep meaning, remove fillers…</span>
+                  </div>
+                  <div class="row"><div class="lbl">Used by modes<small>Clean · Email — shown so edits are traceable. <span class="pill-note">NEU: A13</span></small></div><span></span></div>
+                  <div class="row"><div class="lbl"></div><div><span class="btn">Duplicate</span> <span class="btn primary" style="opacity:.5;">Save</span></div></div>
+                  <div class="caption">Placeholders: {transcript} {language} {appName} … + 6 agent-chat variables ({agentChatTitle} … {agentChatTail}) — now all listed. <span class="pill-note">NEU: A14</span> Save validates empty name/instruction before writing. <span class="pill-note">NEU: A15</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: Test Lab -->
+          <div class="subtab" id="t-testlab">
+            <div class="card">
+              <div class="card-h">Try a mode without recording <span class="pill-note">NEU: Labels + Zweck-Hinweis (A16)</span></div>
+              <div class="row"><div class="lbl">Mode</div><div class="seg"><span>Fast</span><span class="on">Clean</span><span>Email</span><span>Agent prompt</span></div></div>
+              <div class="row" style="align-items:flex-start;">
+                <div class="lbl">Input — raw transcript<small>No recording or transcription is started; text goes straight to post-processing.</small></div>
+                <span class="field mono" style="min-height:56px;display:block;min-width:320px;">also ähm ich wollte nur sagen dass wir das morgen äh fertig machen sollten…</span>
+              </div>
+              <div class="row">
+                <div class="lbl"><span class="btn primary">Preview</span> <span class="btn">Copy</span></div>
+                <span style="color:var(--mac-text-3);font-size:11.5px;">Uses your Language setting (Transcription page)</span>
+              </div>
+              <div class="row" style="align-items:flex-start;">
+                <div class="lbl">Output — processed preview</div>
+                <span class="field mono" style="min-height:56px;display:block;min-width:320px;color:var(--mac-text);">Ich wollte nur sagen, dass wir das morgen fertig machen sollten.</span>
+              </div>
+              <div class="caption">While processing, a spinner replaces the buttons. Errors appear in orange; „Showing Raw fallback." when the fallback toggle kicks in. Note: selected/visual context is not part of the preview (F5).</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 4. CONTEXT & PRIVACY ========== -->
+        <div class="mpage" id="p-context">
+          <h1>Context &amp; Privacy</h1>
+          <div class="page-sub">What WhisperM8 may capture alongside your voice — and what happens to it. <span class="pill-note">zieht Kontext-Controls aus Behavior zusammen</span></div>
+
+          <div class="card">
+            <div class="card-h">Text Context</div>
+            <div class="row">
+              <div class="lbl">Use selected text as context<small>Reads the current selection (needs Accessibility permission) so modes like “Reply” understand what you refer to.</small></div>
+              <div class="tgl on"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Visual Context</div>
+            <div class="row">
+              <div class="lbl">Allow screenshots and screen clips as context<small>Needs Screen Recording permission (optional) — see Permissions.</small></div>
+              <div class="tgl on" data-reveals="vc-details"></div>
+            </div>
+            <div id="vc-details">
+              <div class="row sub"><div class="lbl">Screenshots per recording</div><div class="stepper"><span class="val">20</span><span class="pm"><b>−</b><b>＋</b></span></div></div>
+              <div class="row sub"><div class="lbl">Max screen clip</div><div><div class="slider"><div class="fill" style="width:60%;"></div><div class="knob" style="left:calc(60% - 8px);"></div></div><span style="font-family:var(--mono);font-size:11px;color:var(--mac-text-3);margin-left:8px;">30 s</span></div></div>
+              <div class="row sub"><div class="lbl">Delete visual context files after processing</div><div class="tgl"></div></div>
+            </div>
+            <div class="caption">Details are hidden when the master toggle is off — previously they stayed visible. <span class="pill-note">FIX: A3</span></div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Privacy</div>
+            <div class="caption" style="padding-top:12px;">Audio goes only to your chosen transcription provider (Groq/OpenAI). Context text, screenshots and clips go only to Codex when a mode requests them. Nothing else leaves your machine; history is stored locally under Application Support.</div>
+          </div>
+        </div>
+
+        <!-- ========== 5. AGENT CHATS ========== -->
+        <div class="mpage" id="p-agent-chats">
+          <h1>Agent Chats</h1>
+          <div class="page-sub">One page for the whole agent workspace — same tab pattern as AI Output. <span class="pill-note">vereint „Agent Chats" + „Claude Code" (A30: 4 Tabs)</span></div>
+
+          <div class="tabs" id="ac-tabs">
+            <span class="on" data-tab="ac-workspace">Workspace</span>
+            <span data-tab="ac-notify">Notifications</span>
+            <span data-tab="ac-hooks">Claude Hooks</span>
+            <span data-tab="ac-advanced">Advanced</span>
+          </div>
+
+          <div class="subtab on" id="ac-workspace">
+          <div class="card">
+            <div class="card-h">Workspace</div>
+            <div class="row">
+              <div class="lbl">Agent Chats<small>Open the Codex and Claude session hub.</small></div>
+              <span class="btn primary">Open Agent Chats</span>
+            </div>
+            <div class="row">
+              <div class="lbl">New chat starts with</div>
+              <span class="pop">Claude</span>
+            </div>
+            <div class="row">
+              <div class="lbl">Default project folder<small>New chats start here instead of silently reusing the last path (<span style="font-family:var(--mono);">agentDefaultProjectPath</span>). <span class="pill-note">BESCHLOSSEN (F6)</span></small></div>
+              <div><span class="field mono" style="min-width:200px;">~/repos/whisperm8</span> <span class="btn">Choose…</span></div>
+            </div>
+            <div class="row">
+              <div class="lbl">Rename chats automatically<small>Generates a title after the first turn.</small></div>
+              <div class="tgl on"></div>
+            </div>
+            <div class="row">
+              <div class="lbl">Summarize chats automatically<small>Creates timeline summaries per session (<span style="font-family:var(--mono);">isAutoSummaryEnabled</span> — existed without UI). <span class="pill-note">BESCHLOSSEN (F7)</span></small></div>
+              <div class="tgl on"></div>
+            </div>
+          </div>
+
+          </div>
+
+          <div class="subtab" id="ac-notify">
+          <div class="card">
+            <div class="card-h">Notifications &amp; Sounds <span class="pill-note">alles an einem Ort — vorher auf 2 Seiten (A17)</span></div>
+            <div class="row">
+              <div class="lbl">When an agent finishes<small>Banner also shows while WhisperM8 is frontmost; clicking opens the chat.</small></div>
+              <div class="tgl on"></div>
+            </div>
+            <div class="row">
+              <div class="lbl">On questions (permission, question, plan approval)<small>Deliberately silent — notification only, no sound.</small></div>
+              <div class="tgl on"></div>
+            </div>
+            <div class="row">
+              <div class="lbl">Completion sound</div>
+              <div><div class="tgl on" style="display:inline-block;vertical-align:middle;"></div> <span class="pop" style="margin-left:8px;">Glass</span> <span class="btn ghost"><svg class="ico-inline"><use href="#i-play"/></svg></span></div>
+            </div>
+            <div class="row">
+              <div class="lbl"><span class="btn">Send test notification</span></div>
+              <span class="status-dot">macOS notifications allowed</span>
+            </div>
+            <div class="caption">If macOS notifications are denied, a warning row with an “Open System Settings” button appears here (state kept from the old Claude Code page).</div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Terminal</div>
+            <div class="row">
+              <div class="lbl">Allow terminal sounds<small>The terminal bell inside chat views — a different event than the completion sound above (TUI bell vs. stop hook).</small></div>
+              <div class="tgl on"></div>
+            </div>
+          </div>
+
+          </div>
+
+          <div class="subtab" id="ac-hooks">
+          <div class="card">
+            <div class="card-h">Claude Code Hooks <span style="color:var(--mac-text-3);font-weight:400;">· applies to Claude chats only</span></div>
+            <div class="row">
+              <div class="lbl">Use session hooks<small>Launches Claude with a temporary --settings file for live status (working / awaiting input / done). Your global ~/.claude/settings.json is never touched. Running sessions need a restart to pick up changes.</small></div>
+              <div class="tgl on"></div>
+            </div>
+            <div class="row">
+              <div class="lbl">Live status legend<small><span style="color:var(--mac-green);">●</span> working &nbsp; <span style="color:var(--mac-orange);">●</span> awaiting input &nbsp; <span style="color:var(--mac-text-3);">●</span> idle</small></div>
+              <span></span>
+            </div>
+            <div class="row">
+              <div class="lbl"><span class="status-dot warn">Own Claude hooks detected</span><small>External hooks can cause duplicate notifications.</small></div>
+              <span></span>
+            </div>
+            <div class="row">
+              <div class="lbl">How does it work?<small>Explains the hook bridge, the temporary settings file and its limits.</small></div>
+              <span class="btn ghost">Show ▸</span>
+            </div>
+            <div class="row">
+              <div class="lbl">Hook settings preview<small>The generated JSON, read-only.</small></div>
+              <span class="btn ghost">Show settings preview ▸</span>
+            </div>
+          </div>
+
+          </div>
+
+          <div class="subtab" id="ac-advanced">
+          <div class="card">
+            <div class="card-h">Advanced · CLI Arguments</div>
+            <div class="row" style="align-items:flex-start;">
+              <div class="lbl">Claude CLI · extra arguments</div>
+              <span class="field mono">--mcp-config ~/mcp.json</span>
+            </div>
+            <div class="row sub">
+              <div class="lbl" style="font-family:var(--mono);font-size:10.5px;color:var(--mac-text-3);">preview: claude --mcp-config ~/mcp.json <span class="pill-note">NEU: Command-Preview (A18)</span></div>
+            </div>
+            <div class="row" style="align-items:flex-start;">
+              <div class="lbl">Codex CLI · extra arguments</div>
+              <span class="field mono" style="color:var(--mac-text-3);">—</span>
+            </div>
+          </div>
+          </div>
+        </div>
+
+        <!-- ========== 6. CLI & SKILLS ========== -->
+        <div class="mpage" id="p-cli">
+          <h1>CLI &amp; Skills</h1>
+          <div class="page-sub">Command line access and installable agent skills. <span class="pill-note">unverändert — zieht nur von „App" in die Agents-Gruppe (A19)</span></div>
+
+          <div class="card">
+            <div class="card-h">Command Line</div>
+            <div class="row">
+              <div class="lbl"><span class="status-dot">whisperm8 is installed</span><small>~/.local/bin/whisperm8 — uses the same Keychain API key as the app.</small></div>
+              <span class="btn" style="opacity:.4;">Create Link</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Quickstart · Transcription</div>
+            <div class="cmd"><div><code>whisperm8 transcribe aufnahme.m4a</code><small>Audio to text on stdout</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+            <div class="cmd"><div><code>whisperm8 transcribe video.mp4 -f srt -o video.srt</code><small>Video to subtitles</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+            <div class="cmd"><div><code>whisperm8 transcribe memo.m4a --mode clean</code><small>With Clean post-processing</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+            <div class="cmd"><div><code>whisperm8 transcribe memo.m4a --dry-run</code><small>Show plan without calling the API</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Quickstart · Codex Subagents</div>
+            <div class="cmd"><div><code>whisperm8 agent run --wait --json "…"</code><small>Run a headless Codex job</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+            <div class="cmd"><div><code>whisperm8 agent run --worktree "…"</code><small>Isolated in a fresh git worktree</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+            <div class="cmd"><div><code>whisperm8 agent send &lt;id&gt; "…"</code><small>Follow-up turn, context preserved</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+            <div class="cmd"><div><code>whisperm8 agent list --json</code><small>All jobs, newest first</small></div><span class="cp"><svg class="ico-inline"><use href="#i-copy"/></svg></span></div>
+          </div>
+
+          <div class="skill-grid">
+            <div class="card" style="margin:0;">
+              <div class="card-h">Skill · whisperm8-transcription</div>
+              <div class="caption" style="padding-top:6px;">Claude Code reads from ~/.claude/skills; ChatGPT/Claude.ai need the file copied manually.</div>
+              <div class="row"><div class="lbl"></div><div><span class="btn primary">Installed ✓</span> <span class="btn">Save…</span> <span class="btn">Copy</span> <span class="btn ghost">View</span></div></div>
+            </div>
+            <div class="card" style="margin:0;">
+              <div class="card-h">Skill · codex-subagent</div>
+              <div class="caption" style="padding-top:6px;">Lets Claude spawn and manage headless Codex jobs via the whisperm8 CLI.</div>
+              <div class="row"><div class="lbl"></div><div><span class="btn primary">Update Skill</span> <span class="btn">Save…</span> <span class="btn">Copy</span> <span class="btn ghost">View</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 7. GENERAL ========== -->
+        <div class="mpage" id="p-general">
+          <h1>General</h1>
+          <div class="page-sub">App-wide basics: profile, appearance, startup, updates. Auto-paste ist zu Recording gezogen (A29). <span class="pill-note">Rest der alten „Behavior"-Seite + neuer Update-Toggle</span></div>
+
+          <div class="card">
+            <div class="card-h">Usage Profile</div>
+            <div class="row">
+              <div class="lbl">Profile<small>Switches Dock vs. menu-bar app, Agent Chats and AI enrichment. This is powerful — hence first position with a clear description. <span class="pill-note">NEU: Erklärtext (A20)</span></small></div>
+              <span class="pop">Full (with Agent Chats)</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Startup</div>
+            <div class="row">
+              <div class="lbl">Start at Login<small>Placed next to the profile: with “Dictation only” the app starts as a menu-bar item. <span class="pill-note">Review-Empfehlung</span></small></div>
+              <div class="tgl"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Appearance</div>
+            <div class="row"><div class="lbl">Theme</div><div class="seg"><span class="on">System</span><span>Light</span><span>Dark</span></div></div>
+          </div>
+
+
+          <div class="card">
+            <div class="card-h">Updates</div>
+            <div class="row">
+              <div class="lbl">Check for updates automatically<small>Daily check on launch. Previously only reachable via defaults write. <span class="pill-note">NEU: A21</span></small></div>
+              <div class="tgl on"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 8. PERMISSIONS ========== -->
+        <div class="mpage" id="p-permissions">
+          <h1>Permissions</h1>
+          <div class="page-sub">Re-check or repair system permissions without running onboarding again.</div>
+
+          <div class="card">
+            <div class="row">
+              <div class="lbl"><span class="status-dot">Required permissions granted — Screen Recording optional</span><small>Header no longer claims “all” while ignoring Screen Recording. <span class="pill-note">FIX: A22</span></small></div>
+              <span class="btn">Refresh</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Required</div>
+            <div class="row">
+              <div class="lbl lbl-ico"><svg class="row-ico"><use href="#i-mic"/></svg><span>Microphone<small>Needed to record your voice.</small></span></div>
+              <div><span class="status-dot">Granted</span> <span class="btn ghost">Open Settings</span></div>
+            </div>
+            <div class="row">
+              <div class="lbl lbl-ico"><svg class="row-ico"><use href="#i-access"/></svg><span>Accessibility<small>Needed for auto-paste and selected-text context.</small></span></div>
+              <div><span class="status-dot">Granted</span> <span class="btn ghost">Open Settings</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Optional · Visual Context</div>
+            <div class="row">
+              <div class="lbl lbl-ico"><svg class="row-ico"><use href="#i-display"/></svg><span>Screen Recording<small>Only for screenshots and screen clips as context — configure on Context &amp; Privacy.</small></span></div>
+              <div><span class="status-dot warn">Not granted</span> <span class="btn primary">Request…</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">What happens without permissions</div>
+            <div class="caption" style="padding-top:10px;">Without Microphone, recording cannot start. Without Accessibility, results land in the clipboard instead of auto-pasting. Without Screen Recording, visual context is skipped silently.</div>
+          </div>
+        </div>
+
+        <!-- ========== 9. ABOUT ========== -->
+        <div class="mpage" id="p-about">
+          <h1>About</h1>
+          <div class="page-sub">Version, updates, credits.</div>
+
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:16px;padding:20px 16px;">
+              <div class="about-tile"><svg><use href="#i-mic"/></svg></div>
+              <div>
+                <div style="font-size:17px;font-weight:700;">WhisperM8</div>
+                <div style="color:var(--mac-text-2);font-size:12px;">Version 2.7.0</div>
+                <div style="color:var(--mac-text-3);font-size:11.5px;margin-top:2px;">Native macOS dictation with AI transcription</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">Updates</div>
+            <div class="row">
+              <div class="lbl"><span class="status-dot">WhisperM8 2.7.0 is up to date</span><small>Last checked: today, 09:41 <span class="pill-note">NEU: lastCheckedAt sichtbar (A23)</span></small></div>
+              <span class="btn">Check Again</span>
+            </div>
+            <div class="caption">Update available → shows headline, installed version, copyable <span style="font-family:var(--mono);">brew upgrade --cask whisperm8</span>, Homebrew first-install hint, release notes link. Errors show a retry button. (Alle Update-Zustände bleiben erhalten — Demo zeigt „up to date".)</div>
+          </div>
+
+          <div class="card">
+            <div class="caption" style="padding-top:12px;">Built by <a href="#">360WebManager</a></div>
+          </div>
+        </div>
+
+        <!-- ========== 10. OUTPUT (WORKSPACE) ========== -->
+        <div class="mpage" id="p-output">
+          <h1>Output</h1>
+          <div class="page-sub">Your dictation results — latest run plus the full archive. One page, one mental model. <span class="pill-note">vereint Output Overview + History (A24)</span></div>
+
+          <div class="card">
+            <div class="card-h">Latest Run</div>
+            <div class="row">
+              <div class="lbl">Clean · Mail <small>Ich wollte nur sagen, dass wir das morgen fertig machen sollten…</small></div>
+              <div><span class="chip ok">Succeeded</span> <span class="when" style="font-family:var(--mono);font-size:10.5px;color:var(--mac-text-3);margin-left:8px;">10:32</span></div>
+            </div>
+            <div class="caption">Survives restarts — reads the persisted report store, not just in-memory state. <span class="pill-note">FIX: A25</span></div>
+          </div>
+
+          <div class="out-toolbar">
+            <span class="search"><svg class="ico-inline"><use href="#i-search"/></svg> Search raw, final, app…</span>
+            <span class="pop">All modes</span>
+            <span class="pop">Any status</span>
+            <span class="btn"><svg class="ico-inline"><use href="#i-reload"/></svg></span>
+          </div>
+
+          <div class="card">
+            <div class="report-row"><div class="t">Clean · Mail<small>Ich wollte nur sagen, dass wir das morgen…</small></div><span class="chip ok">Succeeded</span><span class="when">10:32</span></div>
+            <div class="report-row"><div class="t">Agent prompt · WhisperM8 — Chat<small>Bau mir bitte eine Timeline-Ansicht für…</small></div><span class="chip ok">Succeeded</span><span class="when">09:58</span></div>
+            <div class="report-row"><div class="t">Email · Superhuman<small>Hi Jonas, danke für dein Feedback zu…</small></div><span class="chip fb">Raw Fallback</span><span class="when">09:12</span></div>
+            <div class="report-row"><div class="t">Slack · Slack<small>kurzes update zum sprint wir sind…</small></div><span class="chip fail">Failed</span><span class="when">Gestern</span></div>
+          </div>
+
+          <div class="caption" style="padding-left:2px;">Row click → detail (Run · Input Context · Delivery · Prompt · Output, each with Copy). Detail actions: „Open in Agent Chats", „Delete Report…" — Delete now asks for confirmation. <span class="pill-note">NEU: A26</span> Codex status card from the old Overview is gone — it lives on AI Output (A27). Empty states („No Output Yet" / „No Matches") and the raw/final fallback previews of the old Overview live on in Latest Run and the list.</div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+  <div class="demo-hint">DEMO · Sidebar, Tabs und Toggles sind klickbar · Werte sind Beispieldaten · UI-Sprache Englisch (offene Frage F1)</div>
+</div>
+
+<!-- ============================================================
+     PLAN-DOKU
+     ============================================================ -->
+<section class="doc" id="prinzipien">
+  <div class="doc-wrap">
+    <div class="sec-label"><span class="num">01</span><h2>Drei <em>Prinzipien</em> hinter der Struktur</h2></div>
+    <p class="sec-lede">Abgeleitet aus den validierten Befunden der 15 Referenz-Docs (siehe <code style="font-family:var(--mono);font-size:13px;">docs/features/settings/</code>).</p>
+    <div class="prin-grid">
+      <div class="prin"><div class="n">P1</div><h4>Eine Aufgabe = eine Seite</h4><p>„Aufnahme konfigurieren" berührte bisher 4 Seiten, „KI-Ausgabe" 3. Jetzt bündelt je eine Seite den kompletten Flow — Recording zieht Hotkey/Audio/Ducking/Overlay zusammen, AI Output vereint Codex, Modes, Templates und Test Lab als Tabs.</p></div>
+      <div class="prin"><div class="n">P2</div><h4>Settings ≠ Arbeitsbereich</h4><p>Output Overview und History verwalten Nutzdaten, keine Konfiguration. Sie werden zur fusionierten „Output"-Seite in einer eigenen Workspace-Gruppe — sichtbar getrennt von echten Einstellungen.</p></div>
+      <div class="prin"><div class="n">P3</div><h4>Ein Wert = ein Ort</h4><p>Jeder UserDefaults-Key hat genau einen Schreibort. Der Default-Mode-Doppelpicker (mit inkonsistentem Fallback!) und der doppelte Mini-Overlay-Toggle sind aufgelöst.</p></div>
+    </div>
+    <p class="note">Kein einziges Feature fällt weg: 154 dokumentierte Controls bleiben erhalten. Was sich ändert, ist ausschließlich Ort, Benennung oder Sichtbarkeitslogik — jede Abweichung steht im Änderungs-Log (Abschnitt 03).</p>
+  </div>
+</section>
+
+<section class="doc" id="mapping">
+  <div class="doc-wrap">
+    <div class="sec-label"><span class="num">02</span><h2>Vollständiges <em>Control-Mapping</em> — alt → neu</h2></div>
+    <p class="sec-lede">Pro neuer Seite: jedes Control, seine Herkunft und sein Status. Persistenz-Keys unverändert — der Umbau ist ein reiner View-Umbau, keine Datenmigration nötig (Ausnahme: A1-Fix).</p>
+
+    <div class="page-map"><h3>1 · Recording <span class="pp">Gruppe: Dictation</span></h3>
+    <div class="src">Quellen: Hotkey (komplett) · Audio (komplett) · Behavior (Ducking, Overlay, Confirm)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Recording Hotkey (Recorder)</td><td>Hotkey</td><td><code>KeyboardShortcuts_toggleRecording</code></td><td><span class="st moved">VERSCHOBEN</span></td></tr>
+    <tr><td>Show Confirm Button (✓)</td><td>Behavior</td><td><code>showConfirmButtonInOverlay</code></td><td><span class="st moved">VERSCHOBEN</span> — gehört zum Stop-Pfad des Hotkeys</td></tr>
+    <tr><td>Input Device</td><td>Audio</td><td><code>selectedAudioDeviceUID</code></td><td><span class="st changed">ANGEPASST</span> — Bluetooth-Fallback-Hinweis ergänzt (A28)</td></tr>
+    <tr><td>Reduce system volume + Target volume</td><td>Behavior</td><td><code>audioDuckingEnabled</code> / <code>audioDuckingFactor</code></td><td><span class="st moved">VERSCHOBEN</span></td></tr>
+    <tr><td>Overlay UI (Full/Mini)</td><td>Behavior</td><td><code>overlayStyle</code></td><td><span class="st moved">VERSCHOBEN</span></td></tr>
+    <tr><td>Show mode picker in Mini overlay</td><td>Behavior + Modes (doppelt)</td><td><code>showModePickerInMiniOverlay</code></td><td><span class="st changed">DEDUPLIZIERT</span> (A2)</td></tr>
+    <tr><td>Reset Overlay Position</td><td>Behavior</td><td>löscht <code>overlayPositionX/Y</code> + <code>overlayAnchorMaxX/MinX/Y</code></td><td><span class="st moved">VERSCHOBEN</span></td></tr><tr><td>Auto-paste after transcription</td><td>Behavior (im ersten Entwurf: General)</td><td><code>autoPasteEnabled</code></td><td><span class="st moved">VERSCHOBEN</span> — Delivery-Ende des Diktat-Flows (A29)</td></tr></table></div>
+
+    <div class="page-map"><h3>2 · Transcription <span class="pp">Gruppe: Dictation</span></h3>
+    <div class="src">Quelle: Transcription API (komplett, 10 Controls)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Provider-Picker + Empfehlungs-Badge</td><td>Transcription API</td><td><code>selectedProvider</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>API-Key-Feld + Anzeigen/Verbergen + Key-Link</td><td>Transcription API</td><td>Keychain <code>groq_apikey</code>/<code>openai_apikey</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Keychain-Status (Placeholder + grüne Zeile)</td><td>Transcription API</td><td>—</td><td><span class="st changed">ZUSAMMENGELEGT</span> zu einer Statuszeile (A4)</td></tr>
+    <tr><td>Remove Key…</td><td>— (Code existiert: <code>KeychainManager.delete</code>)</td><td>Keychain</td><td><span class="st new">NEU</span> (A5)</td></tr>
+    <tr><td>Model + Modellbeschreibung</td><td>Transcription API</td><td><code>selectedModel</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Language</td><td>Transcription API</td><td><code>language</code></td><td><span class="st changed">ANGEPASST</span> — Wirkungs-Hinweis auf KI-Ausgabe/Test Lab (A7)</td></tr>
+    <tr><td>Preis</td><td>Transcription API</td><td>— (statisch)</td><td><span class="st changed">ANGEPASST</span> — „Stand"-Angabe (A6)</td></tr></table></div>
+
+    <div class="page-map"><h3>3 · AI Output <span class="pp">Gruppe: Dictation · 4 Tabs</span></h3>
+    <div class="src">Quellen: Codex/ChatGPT (16) · Modes (21) · Templates (10) · Test Lab (7) · Output Overview (Default Mode)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>ChatGPT-Status, Sign-in/Reconnect, Check Again, Login-Hinweis</td><td>Codex/ChatGPT</td><td>— (Probe)</td><td><span class="st same">UNVERÄNDERT</span> — einziger Status-Ort (A27)</td></tr>
+    <tr><td>Codex-CLI-Version + GPT-5.5-Warnung</td><td>Codex/ChatGPT</td><td>—</td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Model / Thinking / Speed + Hilfetexte</td><td>Codex/ChatGPT</td><td><code>codexPostProcessingModel</code> / <code>codexReasoningEffort</code> / <code>codexServiceTier</code></td><td><span class="st changed">ANGEPASST</span> — Override- und Agent-Chat-Hinweis (A8, A9)</td></tr>
+    <tr><td>Screen clips (Visual Input)</td><td>Codex/ChatGPT</td><td><code>codexVisualInputMode</code></td><td><span class="st changed">ANGEPASST</span> — „Video" ehrlich benannt (A10)</td></tr>
+    <tr><td>Privacy-Hinweis</td><td>Codex/ChatGPT</td><td>—</td><td><span class="st moved">VERSCHOBEN</span> — neben den Fallback-Toggle</td></tr>
+    <tr><td>Default Mode</td><td>Output Overview + Modes (doppelt)</td><td><code>defaultOutputModeID</code></td><td><span class="st changed">EIN ORT + Fallback-Fix</span> (A1)</td></tr>
+    <tr><td>Fallback to Fast on processing errors</td><td>Modes</td><td><code>fallbackToRawOnProcessingError</code></td><td><span class="st moved">VERSCHOBEN</span> zu Output &amp; Fallback</td></tr>
+    <tr><td>Modes-Liste: Auswahl, Enabled-Switch, Locked-State, New</td><td>Modes</td><td><code>OutputModes.json</code></td><td><span class="st same">UNVERÄNDERT</span> (Tab „Modes")</td></tr>
+    <tr><td>Editor: Name, Overlay label, Make Default, Paste screenshots</td><td>Modes</td><td><code>OutputModes.json</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>3× Use-global-Toggle + Model/Thinking/Speed-Picker</td><td>Modes</td><td><code>OutputModes.json</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Selected context, Template-Picker, Delete, Reload</td><td>Modes</td><td><code>OutputModes.json</code></td><td><span class="st changed">ANGEPASST</span> — „Edit →"-Sprung zum Template (A11)</td></tr>
+    <tr><td>Drag-Reorder</td><td>Modes (nicht implementiert)</td><td>—</td><td><span class="st gone">WEITER OFFEN</span> (F4)</td></tr>
+    <tr><td>Templates: Auswahl, New, Duplicate, Save, Name, Description, Instruction, Read-only-Status, Fehleranzeige</td><td>Templates</td><td><code>PostProcessingTemplates.json</code></td><td><span class="st same">UNVERÄNDERT</span> (Tab „Templates") + A12/A13/A14/A15</td></tr>
+    <tr><td>Test Lab: Mode, Eingabe, Preview, Copy, Indikator, Fehler, Ausgabe</td><td>Test Lab</td><td>— (keine Persistenz)</td><td><span class="st changed">ANGEPASST</span> — Feldlabels + Zweck-Hinweis (A16)</td></tr></table></div>
+
+    <div class="page-map"><h3>4 · Context &amp; Privacy <span class="pp">Gruppe: Dictation</span></h3>
+    <div class="src">Quellen: Behavior (Kontext-Sections) · Codex/ChatGPT (Privacy-Text)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Use selected text as context</td><td>Behavior</td><td><code>selectedContextCaptureEnabled</code></td><td><span class="st moved">VERSCHOBEN</span></td></tr>
+    <tr><td>Allow screenshots/clips + Stepper + Slider + Delete-after</td><td>Behavior</td><td><code>visualContextCaptureEnabled</code>, <code>maxScreenshotsPerRecording</code>, <code>maxScreenRecordingDuration</code>, <code>deleteContextFilesAfterProcessing</code></td><td><span class="st changed">ANGEPASST</span> — Detail-Controls nur bei aktivem Master-Toggle (A3)</td></tr>
+    <tr><td>Privacy-Erklärung</td><td>Codex/ChatGPT</td><td>—</td><td><span class="st moved">KANONISCH HIER</span> — AI Output behält nur Kurzhinweis + Verweis</td></tr></table></div>
+
+    <div class="page-map"><h3>5 · Agent Chats <span class="pp">Gruppe: Agents</span></h3>
+    <div class="src">Quellen: Agent Chats (6) · Claude Code (13, komplett)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Open Agent Chats, Standard-Provider, Auto-Rename</td><td>Agent Chats</td><td><code>defaultAgentProvider</code>, <code>isAutoChatRenameEnabled</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Notifications: fertig / Rückfragen / Test-Button / Berechtigungswarnung</td><td>Claude Code</td><td><code>agentStopNotificationEnabled</code>, <code>agentAwaitingNotificationEnabled</code></td><td><span class="st moved">VERSCHOBEN</span> — ein Ort für alle Meldungen (A17)</td></tr>
+    <tr><td>Fertig-Ton: Toggle + Sound-Picker + Anspielen</td><td>Claude Code</td><td><code>agentStopSoundEnabled</code>, <code>agentStopSoundName</code></td><td><span class="st moved">VERSCHOBEN</span></td></tr>
+    <tr><td>Terminal-Sounds erlauben</td><td>Agent Chats</td><td><code>isTerminalBellEnabled</code></td><td><span class="st changed">ANGEPASST</span> — steht jetzt direkt neben dem Fertig-Ton, Unterschied erklärt</td></tr>
+    <tr><td>Session-Hooks-Toggle, Statuslegende, „Wie funktioniert das?", externe Hooks, JSON-Vorschau</td><td>Claude Code</td><td><code>claudeHooksEnabled</code></td><td><span class="st moved">VERSCHOBEN</span> als Abschnitt „Claude Code Hooks"</td></tr>
+    <tr><td>Default project folder</td><td>— (implizit: letzter Pfad)</td><td><code>agentDefaultProjectPath</code></td><td><span class="st new">VORSCHLAG</span> — sichtbar machen (F6)</td></tr>
+    <tr><td>Summarize chats automatically</td><td>— (Key ohne UI)</td><td><code>isAutoSummaryEnabled</code></td><td><span class="st new">VORSCHLAG</span> — Toggle aufnehmen (F7)</td></tr>
+    <tr><td>Claude/Codex CLI Extra-Argumente</td><td>Agent Chats</td><td><code>claudeExtraArguments</code>, <code>codexExtraArguments</code></td><td><span class="st changed">ANGEPASST</span> — Command-Preview (A18)</td></tr></table></div>
+
+    <div class="page-map"><h3>6 · CLI &amp; Skills <span class="pp">Gruppe: Agents (vorher: App)</span></h3>
+    <div class="src">Quelle: CLI &amp; Skill (komplett, 18 Controls)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>CLI-Status + Link anlegen</td><td>CLI &amp; Skill</td><td>Symlink <code>~/.local/bin/whisperm8</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Schnellstart Transkription (4 Copy-Befehle)</td><td>CLI &amp; Skill</td><td>—</td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Schnellstart Codex-Subagents (4 Copy-Befehle)</td><td>CLI &amp; Skill</td><td>—</td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>2 Skill-Karten (je Install/Update, Sichern, Kopieren, Ansehen)</td><td>CLI &amp; Skill</td><td><code>~/.claude/skills/…</code></td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Seitenzuordnung</td><td>Gruppe „App"</td><td>—</td><td><span class="st moved">GRUPPE → Agents</span> (A19)</td></tr></table></div>
+
+    <div class="page-map"><h3>7 · General <span class="pp">Gruppe: App</span></h3>
+    <div class="src">Quellen: Behavior (Rest) · neu: Update-Toggle</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Usage Profile</td><td>Behavior</td><td><code>usageProfile</code></td><td><span class="st changed">ANGEPASST</span> — prominenter + Erklärtext (A20)</td></tr>
+    <tr><td>Theme (System/Hell/Dunkel)</td><td>Behavior</td><td><code>appearanceOverride</code></td><td><span class="st moved">VERSCHOBEN</span></td></tr>
+        <tr><td>Start at Login</td><td>Behavior</td><td>LaunchAtLogin</td><td><span class="st moved">VERSCHOBEN</span></td></tr>
+    <tr><td>Check for updates automatically</td><td>— (nur <code>defaults write</code>)</td><td><code>updateCheckEnabled</code></td><td><span class="st new">NEU sichtbar</span> (A21)</td></tr></table></div>
+
+    <div class="page-map"><h3>8 · Permissions <span class="pp">Gruppe: App</span></h3>
+    <div class="src">Quelle: Permissions (komplett, 5 Controls)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Globaler Status + Refresh</td><td>Permissions</td><td>— (TCC-Abfrage)</td><td><span class="st changed">TEXT-FIX</span> — „Required granted — Screen Recording optional" (A22)</td></tr>
+    <tr><td>Microphone / Accessibility / Screen Recording Rows</td><td>Permissions</td><td>— (TCC)</td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>„What happens without permissions"</td><td>Permissions</td><td>—</td><td><span class="st same">UNVERÄNDERT</span></td></tr></table></div>
+
+    <div class="page-map"><h3>9 · About <span class="pp">Gruppe: App</span></h3>
+    <div class="src">Quelle: About (komplett — alle Update-Zustände bleiben)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Icon, Name, Version/Build, Beschreibung, Hersteller-Link</td><td>About</td><td>— (Bundle)</td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Alle Update-Zustände (Suchen/Suche läuft/Aktuell/Verfügbar mit brew-Feldern + Release-Notes/Fehler + Retry)</td><td>About</td><td>—</td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>„Last checked"-Anzeige</td><td>— (<code>lastCheckedAt</code> existierte unsichtbar)</td><td>—</td><td><span class="st new">NEU sichtbar</span> (A23)</td></tr></table></div>
+
+    <div class="page-map"><h3>10 · Output <span class="pp">Gruppe: Workspace</span></h3>
+    <div class="src">Quellen: Output Overview (14) · History (11) — fusioniert (A24)</div>
+    <table class="map"><tr><th>Control</th><th>Herkunft</th><th>Persistenz</th><th>Status</th></tr>
+    <tr><td>Latest-Run-Karte (Titel, Uhrzeit, Status, Kurzvorschau, Öffnen)</td><td>Overview (Last Output + Raw/Final-Fallback-Previews + No-output-Zustand)</td><td>Reports-Store</td><td><span class="st changed">ANGEPASST</span> — liest persistierten Store, überlebt Neustart (A25)</td></tr>
+    <tr><td>Report-Liste, Scope-Filter, Suchfeld, Status-Filter, Reload, leere Zustände, Vorselektion</td><td>History</td><td><code>Reports/&lt;UUID&gt;/report.json</code></td><td><span class="st same">UNVERÄNDERT</span> — Vorselektion jetzt seitenintern</td></tr>
+    <tr><td>Detailansicht + Copy-Buttons + Open in Agent Chats</td><td>History</td><td>—</td><td><span class="st same">UNVERÄNDERT</span></td></tr>
+    <tr><td>Delete Report</td><td>History</td><td>löscht Report-Ordner</td><td><span class="st changed">ANGEPASST</span> — Bestätigungsdialog (A26)</td></tr>
+    <tr><td>Codex-Status + Check Again + Set up Codex</td><td>Overview</td><td>—</td><td><span class="st gone">HIER ENTFERNT</span> → lebt auf AI Output (A27)</td></tr>
+    <tr><td>Default Mode</td><td>Overview</td><td><code>defaultOutputModeID</code></td><td><span class="st gone">HIER ENTFERNT</span> → ein Ort auf AI Output (A1)</td></tr>
+    <tr><td>onOpenHistory-Sprung (Overview → History)</td><td>Overview</td><td>—</td><td><span class="st gone">OBSOLET</span> — beide Ansichten sind jetzt eine Seite</td></tr></table></div>
+  </div>
+</section>
+
+
+<section class="doc" id="inventar">
+  <div class="doc-wrap">
+    <div class="sec-label"><span class="num">02b</span><h2>Vollständigkeits-Inventar — <em>alle übrigen</em> persistierten Werte</h2></div>
+    <p class="sec-lede">Ergebnis des Codex-Deep-Dive-Reviews (Job 0c10adec, 2026-07-06): jeder persistierte Key, der NICHT als Control in den Mapping-Tabellen auftaucht, ist hier klassifiziert. Damit ist das Inventar nachweisbar vollständig — nichts ist vergessen.</p>
+    <table class="map"><tr><th>Key / Datei</th><th>Was es ist</th><th>Klassifikation</th></tr>
+    <tr><td><code>debugFileLoggingEnabled</code></td><td>Debug-Datei-Logging</td><td><span class="st changed">F3-KANDIDAT</span> — Advanced/Diagnostics oder bewusst versteckt</td></tr>
+    <tr><td><code>isAutoSummaryEnabled</code></td><td>Auto-Zusammenfassungen der Agent-Chats</td><td><span class="st new">UI-KANDIDAT</span> — als Toggle in der Demo auf Agent Chats sichtbar (F7)</td></tr>
+    <tr><td><code>agentSidebarDragEnabled</code> · <code>agentEventDrivenWatchEnabled</code> · <code>agentTerminalMetalEnabled</code></td><td>Kill-Switches (Sidebar-Drag, Event-Watch, Metal-Renderer)</td><td><span class="st changed">F3</span> — Entscheidung Advanced-Seite vs. versteckt</td></tr>
+    <tr><td><code>agentDefaultProjectPath</code></td><td>Default-/letzter Projektpfad für neue Chats</td><td><span class="st new">UI-KANDIDAT</span> — in der Demo auf Agent Chats sichtbar (F6)</td></tr>
+    <tr><td><code>agentProjectOpenTarget</code></td><td>Gemerkte Wahl „Projekt öffnen in" (PhpStorm/Finder)</td><td><span class="st same">GEMERKTE UI-PRÄFERENZ</span> — bleibt im Kontextmenü, kein Settings-Control</td></tr>
+    <tr><td><code>agentTranscriptViewMode</code> · <code>agentPinnedSectionCollapsed</code> · <code>agentSidebarScope/Layout/Width</code> · <code>lastSelectedOutputModeID</code></td><td>Gemerkte Ansichts-/Auswahlzustände</td><td><span class="st same">UI-STATE</span> — bewusst NICHT in Settings</td></tr>
+    <tr><td><code>didMigrateMaxScreenshotsPerRecordingTo20</code> · <code>agentIconResolverVersion</code></td><td>Migrationsmarker</td><td><span class="st same">INTERN</span> — nie in der UI</td></tr>
+    <tr><td><code>AgentSessions.json</code> · <code>agent-ui-state.json</code> · <code>agent-index-cache.json</code> · <code>Reports/&lt;UUID&gt;/</code></td><td>Workspace-Daten &amp; Sidecars</td><td><span class="st same">DATEN, KEINE SETTINGS</span> — verwaltet über Agent Chats bzw. Output-Seite</td></tr>
+    <tr><td><code>KeyboardShortcuts_toggleRecording</code> · Keychain <code>groq_apikey</code>/<code>openai_apikey</code> · <code>OutputModes.json</code> · <code>PostProcessingTemplates.json</code></td><td>Bereits im Mapping zugeordnet</td><td><span class="st same">ABGEDECKT</span> (Recording / Transcription / AI Output)</td></tr>
+    </table>
+    <p class="note">Damit gilt: jedes persistierte Bit ist entweder ein sichtbares Control im Plan, ein klassifizierter Sonderfall in dieser Tabelle, oder eine offene Frage (F3/F6/F7) mit Empfehlung.</p>
+  </div>
+</section>
+
+
+<section class="doc" id="checkliste">
+  <div class="doc-wrap">
+    <div class="sec-label"><span class="num">02c</span><h2>Rückwärts-Checkliste — <em>jedes Control</em> der 15 alten Seiten</h2></div>
+    <p class="sec-lede">Antwort auf „Wo ist X?": jede alte Settings-Seite, Control für Control (aus den validierten Referenz-Docs), mit exaktem neuem Ort. Die alte Seite „Claude Code" ist vollständig in <b>Agent Chats</b> aufgegangen — kein Control fehlt.</p>
+
+    <div class="page-map"><h3>01 · Transcription API <span class="pp">→ Transcription</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Provider</td><td>Transcription · Provider-Card</td></tr>
+    <tr><td>Provider-Empfehlung (Badge + Hinweis)</td><td>Transcription · Provider-Card</td></tr>
+    <tr><td>API-Key-Eingabe</td><td>Transcription · Provider-Card</td></tr>
+    <tr><td>API-Key anzeigen/verbergen</td><td>Transcription · Auge-Button</td></tr>
+    <tr><td>API-Key-Link („Get … API key")</td><td>Transcription · Caption</td></tr>
+    <tr><td>Keychain-Statusanzeige</td><td>Transcription · eine Statuszeile (A4) + „Remove Key…" (A5, neu)</td></tr>
+    <tr><td>Modell + Modellbeschreibung</td><td>Transcription · Model-Card</td></tr>
+    <tr><td>Sprache</td><td>Transcription · Language-Card (A7)</td></tr>
+    <tr><td>Preis</td><td>Transcription · Model-Card (A6)</td></tr></table></div>
+
+    <div class="page-map"><h3>02 · Codex / ChatGPT <span class="pp">→ AI Output · Tab „Account &amp; Defaults"</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Status (Signed in / Not installed / …)</td><td>AI Output · ChatGPT-Card — <b>einziger</b> Settings-Status-Ort (A27)</td></tr>
+    <tr><td>Sign in with ChatGPT / Reconnect</td><td>AI Output · ChatGPT-Card</td></tr>
+    <tr><td>Check Again</td><td>AI Output · ChatGPT-Card</td></tr>
+    <tr><td>Hinweis „official Codex CLI login"</td><td>AI Output · Caption der ChatGPT-Card</td></tr>
+    <tr><td>Model + Hilfetext</td><td>AI Output · Post-processing Defaults</td></tr>
+    <tr><td>Thinking + Hilfetext</td><td>AI Output · Post-processing Defaults</td></tr>
+    <tr><td>Speed + Hilfetext</td><td>AI Output · Post-processing Defaults</td></tr>
+    <tr><td>Codex CLI (Versionszeile)</td><td>AI Output · ChatGPT-Card</td></tr>
+    <tr><td>GPT-5.5-Codex-CLI-Warnung (bedingt)</td><td>AI Output · ChatGPT-Card (Warnzeile, in Demo sichtbar)</td></tr>
+    <tr><td>Screen clips + Hilfetext</td><td>AI Output · Visual Input</td></tr>
+    <tr><td>Video-/Image-CLI-Hinweis</td><td>AI Output · Visual Input Caption („Frames (auto)", A10)</td></tr>
+    <tr><td>Privacy-Hinweis</td><td>Kanonisch: Context &amp; Privacy · Kurzform bei AI Output · Output &amp; Fallback</td></tr></table></div>
+
+    <div class="page-map"><h3>03 · Output Overview <span class="pp">→ Output (Workspace) bzw. AI Output</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Default Mode + Hinweistext</td><td>AI Output · Output &amp; Fallback (A1 — ein Ort)</td></tr>
+    <tr><td>Codex-Statusanzeige / Check Again / Set up Codex</td><td>AI Output · ChatGPT-Card (A27)</td></tr>
+    <tr><td>Last-Output-Karte (Titel, Uhrzeit, Status, Kurzvorschau)</td><td>Output · Latest Run (A25: liest jetzt den Store)</td></tr>
+    <tr><td>Raw-/Final-Fallback-Previews</td><td>Output · Latest Run (Fallback-Zustände)</td></tr>
+    <tr><td>Open in History / Open History (2 Varianten)</td><td>obsolet — Overview + History sind EINE Seite (A24)</td></tr>
+    <tr><td>„No output yet"</td><td>Output · Empty-State</td></tr>
+    <tr><td>onOpenHistory-Sprung</td><td>obsolet (seitenintern)</td></tr></table></div>
+
+    <div class="page-map"><h3>04 · History <span class="pp">→ Output (Workspace)</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Report-Liste</td><td>Output · Liste</td></tr>
+    <tr><td>Detailansicht (Run / Input Context / Delivery / Prompt / Output)</td><td>Output · Zeilen-Klick → Detail</td></tr>
+    <tr><td>Scope-Filter</td><td>Output · Toolbar „All modes"</td></tr>
+    <tr><td>Suchfeld</td><td>Output · Toolbar</td></tr>
+    <tr><td>Status-Filter</td><td>Output · Toolbar „Any status"</td></tr>
+    <tr><td>Reload-Button</td><td>Output · Toolbar</td></tr>
+    <tr><td>Delete Report</td><td>Output · Detail — jetzt mit Bestätigung (A26)</td></tr>
+    <tr><td>Copy-Buttons in Textblöcken</td><td>Output · Detail</td></tr>
+    <tr><td>Open in Agent Chats</td><td>Output · Detail</td></tr>
+    <tr><td>Leere Zustände („No Output Yet" / „No Matches")</td><td>Output · Empty-States</td></tr>
+    <tr><td>Vorselektion aus Overview</td><td>obsolet (seitenintern)</td></tr></table></div>
+
+    <div class="page-map"><h3>05 · Modes <span class="pp">→ AI Output · Tab „Modes" (2 Ausnahmen)</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Mode-Liste: Zeile auswählen / New / Enabled-Switch / Locked-State</td><td>AI Output · Modes-Liste (links)</td></tr>
+    <tr><td>Make Default / Default-Anzeige</td><td>AI Output · Modes-Editor</td></tr>
+    <tr><td>Mode name / Overlay label</td><td>AI Output · Modes-Editor</td></tr>
+    <tr><td>Paste screenshots into target app</td><td>AI Output · Modes-Editor</td></tr>
+    <tr><td>Use global Codex model + Mode model</td><td>AI Output · Codex Overrides</td></tr>
+    <tr><td>Use global Thinking level + Thinking level</td><td>AI Output · Codex Overrides</td></tr>
+    <tr><td>Use global Fast mode + Speed</td><td>AI Output · Codex Overrides</td></tr>
+    <tr><td>Selected context</td><td>AI Output · Context &amp; Template</td></tr>
+    <tr><td>Template</td><td>AI Output · Context &amp; Template + „Edit →" (A11)</td></tr>
+    <tr><td>Delete Custom Mode / Reload</td><td>AI Output · Context &amp; Template</td></tr>
+    <tr><td>Drag-Reorder (war nie implementiert)</td><td>weiter offen (F4)</td></tr>
+    <tr><td>Fallback to Fast on processing errors</td><td>AI Output · Tab Account → Output &amp; Fallback</td></tr>
+    <tr><td>Show mode chip in Mini overlay</td><td>Recording · Overlay (A2 — Duplikat entfernt)</td></tr></table></div>
+
+    <div class="page-map"><h3>06 · Templates <span class="pp">→ AI Output · Tab „Templates"</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Template-Auswahl / New / Duplicate / Save</td><td>AI Output · Templates-Liste + Editor</td></tr>
+    <tr><td>Name / Description / Instruction</td><td>AI Output · Templates-Editor (A12: Einbettung erklärt)</td></tr>
+    <tr><td>Platzhalter-Hinweis</td><td>AI Output · Templates-Caption — jetzt alle 15 Variablen (A14)</td></tr>
+    <tr><td>Read-only-Status Built-in/Custom</td><td>AI Output · Templates-Editor (Header + gesperrte Felder)</td></tr>
+    <tr><td>Fehleranzeige und Validierung</td><td>AI Output · Templates-Editor (A15: Save-Validierung neu)</td></tr></table></div>
+
+    <div class="page-map"><h3>07 · Test Lab <span class="pp">→ AI Output · Tab „Test Lab"</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Mode / Rohtext-Eingabe / Preview / Copy</td><td>AI Output · Test-Lab-Tab (A16: Labels neu)</td></tr>
+    <tr><td>Verarbeitungsindikator</td><td>AI Output · Test-Lab (Spinner während Processing)</td></tr>
+    <tr><td>Fehlermeldung / Vorschau-Ausgabe</td><td>AI Output · Test-Lab</td></tr></table></div>
+
+    <div class="page-map"><h3>08 · Agent Chats <span class="pp">→ Agent Chats</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Agent Chats öffnen</td><td>Agent Chats · Tab „Workspace"</td></tr>
+    <tr><td>Neuer Chat startet mit</td><td>Agent Chats · Tab „Workspace"</td></tr>
+    <tr><td>Chats automatisch umbenennen</td><td>Agent Chats · Tab „Workspace"</td></tr>
+    <tr><td>Terminal-Sounds erlauben</td><td>Agent Chats · Tab „Notifications" (Terminal-Card)</td></tr>
+    <tr><td>Claude CLI · Extra-Argumente</td><td>Agent Chats · Tab „Advanced" (A18: Command-Preview)</td></tr>
+    <tr><td>Codex CLI · Extra-Argumente</td><td>Agent Chats · Tab „Advanced" (A18)</td></tr></table></div>
+
+    <div class="page-map"><h3>09 · Claude Code <span class="pp">→ Agent Chats — HIER ist die Seite aufgegangen</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Live-Status-Anzeige und Statuslegende</td><td>Agent Chats · Tab „Claude Hooks" (Legend-Zeile)</td></tr>
+    <tr><td>Session-Hooks verwenden (Master-Toggle)</td><td>Agent Chats · Tab „Claude Hooks"</td></tr>
+    <tr><td>macOS-Mitteilungen deaktiviert → Systemeinstellungen öffnen</td><td>Agent Chats · Tab „Notifications" (bedingte Warnzeile)</td></tr>
+    <tr><td>Wenn ein Agent fertig ist</td><td>Agent Chats · Tab „Notifications"</td></tr>
+    <tr><td>Bei Rückfragen (Berechtigung, Frage, Plan-Freigabe)</td><td>Agent Chats · Tab „Notifications" („bewusst lautlos" direkt am Toggle)</td></tr>
+    <tr><td>Test-Notification senden</td><td>Agent Chats · Tab „Notifications"</td></tr>
+    <tr><td>Ton, wenn ein Agent fertig ist</td><td>Agent Chats · Tab „Notifications"</td></tr>
+    <tr><td>Sound (Picker)</td><td>Agent Chats · Tab „Notifications"</td></tr>
+    <tr><td>Sound anspielen</td><td>Agent Chats · Tab „Notifications" (Play-Button)</td></tr>
+    <tr><td>Eigene Claude-Hooks erkannt</td><td>Agent Chats · Tab „Claude Hooks" (Warnzeile)</td></tr>
+    <tr><td>„Wie funktioniert das?"</td><td>Agent Chats · Tab „Claude Hooks" (Show ▸)</td></tr>
+    <tr><td>Hook-Settings-Vorschau (JSON)</td><td>Agent Chats · Tab „Claude Hooks" (Show settings preview ▸)</td></tr></table></div>
+
+    <div class="page-map"><h3>10–12 · Permissions / Hotkey / Audio <span class="pp">→ Permissions / Recording</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Permissions: globaler Status + Refresh / Microphone / Accessibility / Screen Recording / Hinweistext</td><td>Permissions (unverändert; Header-Text A22)</td></tr>
+    <tr><td>Hotkey: Recording Hotkey</td><td>Recording · Hotkey-Card</td></tr>
+    <tr><td>Audio: Input Device</td><td>Recording · Microphone-Card (A28: Bluetooth-Hinweis)</td></tr></table></div>
+
+    <div class="page-map"><h3>13 · Behavior <span class="pp">→ aufgeteilt auf Recording / Context &amp; Privacy / General</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Profile (Usage)</td><td>General · Usage Profile (A20)</td></tr>
+    <tr><td>Theme (Erscheinungsbild)</td><td>General · Appearance</td></tr>
+    <tr><td>Auto-paste after transcription</td><td>Recording · Delivery (A29)</td></tr>
+    <tr><td>Use selected text as context</td><td>Context &amp; Privacy · Text Context</td></tr>
+    <tr><td>Allow screenshots and screen clips as context</td><td>Context &amp; Privacy · Visual Context</td></tr>
+    <tr><td>Screenshots per recording</td><td>Context &amp; Privacy · Visual Context (bedingt, A3)</td></tr>
+    <tr><td>Max screen clip</td><td>Context &amp; Privacy · Visual Context (bedingt, A3)</td></tr>
+    <tr><td>Delete visual context files after processing</td><td>Context &amp; Privacy · Visual Context (bedingt, A3)</td></tr>
+    <tr><td>Reduce system volume while recording</td><td>Recording · Audio Ducking</td></tr>
+    <tr><td>Target volume</td><td>Recording · Audio Ducking (bedingt)</td></tr>
+    <tr><td>Overlay UI</td><td>Recording · Recording Overlay</td></tr>
+    <tr><td>Show Confirm Button (✓)</td><td>Recording · Hotkey-Card</td></tr>
+    <tr><td>Show mode picker in Mini overlay</td><td>Recording · Recording Overlay (A2)</td></tr>
+    <tr><td>Reset Overlay Position</td><td>Recording · Recording Overlay (inkl. Anchor-Keys)</td></tr>
+    <tr><td>Start at Login</td><td>General · Startup (neben Usage Profile)</td></tr></table></div>
+
+    <div class="page-map"><h3>14 · CLI &amp; Skill <span class="pp">→ CLI &amp; Skills (Gruppe Agents, A19)</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>CLI-Statusanzeige / Link anlegen</td><td>CLI &amp; Skills · Command Line</td></tr>
+    <tr><td>4 Transkriptions-Befehle (Audio→Text, Video→SRT, Clean-Mode, Dry-Run)</td><td>CLI &amp; Skills · Quickstart Transcription</td></tr>
+    <tr><td>4 Subagent-Befehle (run --wait, --worktree, send, list)</td><td>CLI &amp; Skills · Quickstart Codex Subagents</td></tr>
+    <tr><td>Transkriptions-Skill: Installieren / Sichern / Kopieren / Ansehen</td><td>CLI &amp; Skills · Skill-Karte 1</td></tr>
+    <tr><td>Codex-Subagent-Skill: Installieren / Sichern / Kopieren / Ansehen</td><td>CLI &amp; Skills · Skill-Karte 2</td></tr></table></div>
+
+    <div class="page-map"><h3>15 · About <span class="pp">→ About</span></h3>
+    <table class="map"><tr><th>Altes Control</th><th>Neuer Ort</th></tr>
+    <tr><td>Navigationstitel / App-Icon / Name / Version+Build / Beschreibung</td><td>About · Kopf-Card</td></tr>
+    <tr><td>Updates-Section mit ALLEN Zuständen: „Nach Updates suchen", „Suche …", „ist aktuell" + „Erneut suchen", Update-verfügbar-Headline + installierte Version + brew-upgrade-Kopierfeld + Terminal-/Neustart-Hinweis + „Noch nicht über Homebrew?"-Hinweis + brew-install-Kopierfeld + Release-Notes-Link, Fehlermeldung + „Erneut versuchen"</td><td>About · Updates-Card (Demo zeigt „up to date"; alle anderen Zustände bleiben 1:1 erhalten, siehe Caption)</td></tr>
+    <tr><td>„Last checked"-Zeitpunkt</td><td>About · Updates-Card (A23, neu sichtbar)</td></tr>
+    <tr><td>Footer-Link „Built by 360WebManager"</td><td>About · Fuß-Card</td></tr></table></div>
+
+    <p class="note">Damit ist jedes der 154 dokumentierten Controls rückwärts nachgewiesen. „Claude Code" existiert nicht mehr als eigene Seite — alle 12 Controls stehen auf Agent Chats in den Tabs „Notifications" und „Claude Hooks" (A30), plus der Statuslegende. Grund: Die Trennung war laut Referenz-Doc 09 nur einseitig erklärt und für Nutzer nicht nachvollziehbar.</p>
+  </div>
+</section>
+
+<section class="doc" id="log">
+  <div class="doc-wrap">
+    <div class="sec-label"><span class="num">03</span><h2>Änderungs-Log — <em>jede</em> Abweichung vom Ist-Zustand</h2></div>
+    <p class="sec-lede">Grün = Bugfix (Verhalten war falsch/irreführend). Orange = bewusste UX-Anpassung. Rot-Akzent = neues Element. Alles andere ist 1:1 übernommen.</p>
+    <div class="change-list">
+      <div class="change fix"><span class="cid">R · Review-Nachtrag (Codex-Deep-Dive, 2026-07-06)</span><h4>In diesen Plan bereits eingearbeitet</h4><p>Key-Korrektur <code>usageProfile</code> (stand fälschlich „appUsageProfile") · Overlay-Reset löscht auch <code>overlayAnchorMaxX/MinX/Y</code> · Privacy-Text kanonisch auf Context &amp; Privacy · Terminal-Bell als eigene Untergruppe · Hooks-Card zeigt „How does it work?" + JSON-Vorschau + Denied-Warnung vollständig · Vollständigkeits-Inventar (Abschnitt 02b) ergänzt · Routen-Kompatibilität konkretisiert (siehe Abschnitt 04).</p></div>
+      <div class="change"><span class="cid">A30</span><h4>Agent Chats in 4 Tabs unterteilt</h4><p>Workspace · Notifications · Claude Hooks · Advanced — dasselbe Muster wie AI Output. Eine Sammelseite mit fünf Cards war zu lang; Tabs halten die Fusion, machen sie aber navigierbar.</p></div>
+      <div class="change"><span class="cid">A29</span><h4>Auto-paste → Recording &gt; Delivery</h4><p>Aus dem Review bestätigt: Auto-paste ist das Ende des Diktat-Flows (Accessibility, Clipboard-Fallback) und gehört nicht zu App-Basics. General behält nur Profil, Theme, Start at Login, Updates.</p></div>
+      <div class="change fix"><span class="cid">A1 · Bugfix</span><h4>defaultOutputModeID: ein Schreibort, ein Fallback</h4><p>Bisher zwei Picker (Overview + Modes) mit inkonsistentem Fallback (<code>cleanID</code> vs. <code>rawID</code>). Neu: nur AI Output → „Default Mode"; Fallback zentral in <code>AppPreferences</code> (= <code>cleanID</code>), Views lesen nur noch darüber.</p></div>
+      <div class="change fix"><span class="cid">A2 · Bugfix</span><h4>Mini-Overlay-Toggle dedupliziert</h4><p><code>showModePickerInMiniOverlay</code> hatte zwei Toggles mit verschiedenen Labels („mode picker" vs. „mode chip"). Neu: ein Toggle auf Recording → Overlay.</p></div>
+      <div class="change fix"><span class="cid">A3 · Bugfix</span><h4>Visual-Context-Details nur bei aktivem Master-Toggle</h4><p>Stepper/Slider/Delete-Toggle waren auch bei ausgeschaltetem „Allow screenshots…" sichtbar (inkonsistent zu Ducking). Neu: bedingt eingeblendet.</p></div>
+      <div class="change"><span class="cid">A4</span><h4>Keychain-Status: eine Zeile statt zwei Signale</h4><p>Bullet-Placeholder + grüne Statuszeile bedeuteten denselben Zustand. Neu: eine Statuszeile mit Punkt.</p></div>
+      <div class="change newf"><span class="cid">A5 · Neu</span><h4>„Remove Key…"-Button</h4><p><code>KeychainManager.delete(key:)</code> existiert, war aber nie in der UI erreichbar. Neu mit Bestätigung.</p></div>
+      <div class="change"><span class="cid">A6</span><h4>Preis mit Stand-Angabe</h4><p>Hart codierter Preis wirkt wie Live-Tarif. Neu: „Static list price, as of 2026-07".</p></div>
+      <div class="change"><span class="cid">A7</span><h4>Language: Wirkung transparent</h4><p>Hinweis, dass die Sprache auch KI-Nachbearbeitung und Test Lab steuert und Auto-detect das Feld weglässt.</p></div>
+      <div class="change"><span class="cid">A8</span><h4>Global-vs-Override direkt erklärt</h4><p>Die Defaults-Card sagt jetzt selbst, dass Modes pro Modus überschreiben können — bisher musste man das auf der Modes-Seite entdecken.</p></div>
+      <div class="change"><span class="cid">A9</span><h4>Agent-Chat-Wirkung sichtbar</h4><p>Model/Thinking seeden auch neue Codex-Agent-Sessions — stand nirgends.</p></div>
+      <div class="change"><span class="cid">A10</span><h4>„Video" → „Frames (auto)"</h4><p>Der Picker versprach Video-Upload; technisch gehen Frames als <code>--image</code>. Ehrliche Benennung.</p></div>
+      <div class="change newf"><span class="cid">A11 · Neu</span><h4>„Edit →"-Sprung vom Mode zum Template</h4><p>Beendet das Pendeln zwischen zwei Seiten für „Template pro Mode".</p></div>
+      <div class="change"><span class="cid">A12</span><h4>Template-Einbettung erklärt</h4><p>Editor sagt jetzt, dass die Instruction als „## Mode Instruction" in den Gesamt-Prompt eingebettet wird.</p></div>
+      <div class="change newf"><span class="cid">A13 · Neu</span><h4>„Used by modes"-Zeile im Template-Editor</h4><p>Zeigt, welche Modes ein Template referenzieren, bevor man es ändert.</p></div>
+      <div class="change"><span class="cid">A14</span><h4>Alle 15 Platzhalter gelistet</h4><p>Die 6 Agent-Chat-Variablen ({agentChatTitle} … {agentChatTail}) waren unsichtbar, obwohl Built-ins sie nutzen.</p></div>
+      <div class="change newf"><span class="cid">A15 · Neu</span><h4>Save-Validierung im Template-Editor</h4><p>Leerer Name/Instruction wird vor dem Speichern abgefangen statt erst zur Laufzeit (<code>missingTemplate</code>).</p></div>
+      <div class="change"><span class="cid">A16</span><h4>Test Lab: Labels + Zweck-Hinweis</h4><p>Beide Textfelder beschriftet („Input — raw transcript" / „Output — processed preview") + Hinweis, dass keine Aufnahme startet.</p></div>
+      <div class="change"><span class="cid">A17</span><h4>Alle Agent-Meldungen an einem Ort</h4><p>Terminal-Bell (Agent Chats) und Fertig-Ton/Notifications (Claude Code) stehen jetzt in einer Card, Unterschied erklärt. Die „Rückfragen sind bewusst lautlos"-Logik steht direkt am Rückfrage-Toggle.</p></div>
+      <div class="change newf"><span class="cid">A18 · Neu</span><h4>Command-Preview unter den Extra-Argumenten</h4><p>Zeigt den resultierenden Befehl — stille Fehlkonfiguration der mächtigen CLI-Felder wird sichtbar.</p></div>
+      <div class="change"><span class="cid">A19</span><h4>CLI &amp; Skills → Gruppe Agents</h4><p>Codex-Subagents und Agent-Skills gehören fachlich zu Agents, nicht zu „App".</p></div>
+      <div class="change"><span class="cid">A20</span><h4>Usage Profile prominent + erklärt</h4><p>Schaltet Dock-App, Agent Chats und KI-Enrichment — dafür war „Behavior → Usage" zu versteckt.</p></div>
+      <div class="change newf"><span class="cid">A21 · Neu</span><h4>Update-Check-Toggle sichtbar</h4><p><code>updateCheckEnabled</code> war nur per <code>defaults write</code> erreichbar.</p></div>
+      <div class="change fix"><span class="cid">A22 · Bugfix</span><h4>Permissions-Header ehrlich</h4><p>„All system permissions are active" ignorierte Screen Recording. Neu: „Required permissions granted — Screen Recording optional".</p></div>
+      <div class="change newf"><span class="cid">A23 · Neu</span><h4>„Last checked" auf About</h4><p><code>lastCheckedAt</code> wird publiziert, war aber nie sichtbar.</p></div>
+      <div class="change"><span class="cid">A24</span><h4>Overview + History = „Output"</h4><p>Eine Workspace-Seite: letzter Run oben, Archiv darunter. Der interne onOpenHistory-Sprung entfällt.</p></div>
+      <div class="change fix"><span class="cid">A25 · Bugfix</span><h4>Latest Run überlebt Neustart</h4><p>Die alte Overview las nur In-Memory-State und zeigte nach Neustart „No output yet" trotz vorhandener Reports. Neu: liest den persistierten Report-Store.</p></div>
+      <div class="change"><span class="cid">A26</span><h4>Delete Report mit Bestätigung</h4><p>Löschte bisher ohne Rückfrage den ganzen Report-Ordner.</p></div>
+      <div class="change"><span class="cid">A27</span><h4>Codex-Status nur noch auf AI Output</h4><p>Drittfacher Status (Codex-Seite/Overview/Onboarding) → ein Settings-Ort; Onboarding behält seinen eigenen Schritt.</p></div>
+      <div class="change"><span class="cid">A28</span><h4>Input-Device: Bluetooth-Fallback-Hinweis</h4><p>Der Code fällt bei Bluetooth-Geräten still auf System Default zurück — steht jetzt in der Caption.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="fragen">
+  <div class="doc-wrap">
+    <div class="sec-label"><span class="num">04</span><h2>Entscheidungen — <em>beschlossen am 2026-07-06</em></h2></div>
+    <div class="q-list">
+      <div class="q"><span class="tag">F1 ✅</span><div><b>Entschieden: Englisch konsequent.</b> Deutsch später über echte Lokalisierung statt Mischtexte. Betrifft jeden String — Sprachbereinigung läuft als Teil jeder umgebauten Seite mit.</div></div>
+      <div class="q"><span class="tag">F2 ✅</span><div><b>Entschieden: erst Settings (Workspace-Gruppe), Umzug ins Hauptfenster später evaluieren.</b> Die Fusion hält Variante C offen.</div></div>
+      <div class="q"><span class="tag">F3 ✅</span><div><b>Entschieden: versteckt lassen.</b> Kill-Switches (Event-Watch, Metal, Sidebar-Drag, Debug-Logging) bleiben defaults-write-only; dokumentiert im Inventar (02b). Keine Advanced-Seite.</div></div>
+      <div class="q"><span class="tag">F4 · offen</span><div>Manuelles Drag-Reorder der Modes bleibt aufgeschoben (alphabetische Sortierung). Bei Bedarf späteres Feature — Demo reserviert dafür keinen Platz.</div></div>
+      <div class="q"><span class="tag">F6 ✅</span><div><b>Entschieden: übernehmen.</b> „Default project folder" wird sichtbares Setting auf Agent Chats → Tab „Workspace".</div></div>
+      <div class="q"><span class="tag">F7 ✅</span><div><b>Entschieden: übernehmen.</b> Auto-Summary-Toggle auf Agent Chats → Tab „Workspace".</div></div>
+      <div class="q"><span class="tag">F5 · offen</span><div>Preview testet weiterhin nur den Text-Pfad (kein Selected-/Visual-Context). Soll ein simulierter Kontext-Input dazukommen?</div></div>
+    </div>
+    <p class="note">Umsetzungsreihenfolge-Empfehlung: erst die Bugfixes A1–A3/A22/A25 (unabhängig shipbar), dann Seiten-Umbau in der Reihenfolge Recording → AI Output → Agent Chats → Rest. Routen-Kompatibilität im <code style="font-family:var(--mono);font-size:13px;">WindowRequestCenter</code>: <code style="font-family:var(--mono);font-size:13px;">settings→api</code> ⇒ Transcription, <code style="font-family:var(--mono);font-size:13px;">settingsOutput→outputOverview</code> ⇒ Output; alte Section-IDs als Aliasse behalten, MenuBar- und Onboarding-Verweise mitziehen.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="doc-wrap">
+    <span>WhisperM8 · Settings-Redesign-Demo + Plan · Variante A</span>
+    <span>Quellen: docs/features/settings/ (15 validierte Referenz-Docs) · 2026-07-06</span>
+  </div>
+</footer>
+
+<script>
+// Sidebar-Navigation
+document.querySelectorAll('.side-item').forEach(function(item){
+  item.addEventListener('click', function(){
+    document.querySelectorAll('.side-item').forEach(function(i){ i.classList.remove('active'); });
+    document.querySelectorAll('.mpage').forEach(function(p){ p.classList.remove('active'); });
+    item.classList.add('active');
+    var page = document.getElementById('p-' + item.dataset.page);
+    if (page) page.classList.add('active');
+    document.querySelector('.mac-main').scrollTop = 0;
+  });
+});
+// Tabs (generisch: AI Output + Agent Chats) — wirkt nur innerhalb der eigenen Seite
+document.querySelectorAll('.tabs').forEach(function(tabbar){
+  var page = tabbar.closest('.mpage');
+  tabbar.querySelectorAll('span').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      tabbar.querySelectorAll('span').forEach(function(t){ t.classList.remove('on'); });
+      page.querySelectorAll('.subtab').forEach(function(st){ st.classList.remove('on'); });
+      tab.classList.add('on');
+      var el = document.getElementById(tab.dataset.tab);
+      if (el) el.classList.add('on');
+    });
+  });
+});
+// Toggles inkl. bedingter Sichtbarkeit (data-invert: Ziel erscheint bei AUS)
+document.querySelectorAll('.tgl').forEach(function(t){
+  t.addEventListener('click', function(){
+    t.classList.toggle('on');
+    var target = t.dataset.reveals ? document.getElementById(t.dataset.reveals) : null;
+    if (!target) return;
+    var on = t.classList.contains('on');
+    var invert = t.dataset.invert === 'true';
+    target.style.display = (invert ? !on : on) ? '' : 'none';
+  });
+});
+</script>
+</body>
+</html>
