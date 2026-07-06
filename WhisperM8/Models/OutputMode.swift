@@ -127,12 +127,22 @@ extension OutputMode {
     static let rawID = "raw"
     static let cleanID = "clean"
     static let promptID = "prompt"
-    static let chatID = "chat"
     static let taskID = "task"
     static let emailID = "email"
     static let slackID = "slack"
     static let whatsappID = "whatsapp"
     static let notesID = "notes"
+
+    /// Chat-Modus 2026-07-07 ausgebaut: er war ein Delivery-Ziel (Codex-Session
+    /// spawnen) im Gewand eines Output-Stils; der Anwendungsfall ist über
+    /// Prompt-Modus + aktiven Agent-Chat abgedeckt. Die ID bleibt als Konstante,
+    /// damit persistierte Bestände (OutputModes.json, Prefs) migriert werden können.
+    static let retiredChatID = "chat"
+
+    /// Stillgelegte Built-in-IDs: `OutputModeStore.normalized()` filtert sie beim
+    /// Laden heraus, sonst würden persistierte Einträge als Custom-Modes
+    /// wiederauferstehen (normalized() klassifiziert unbekannte IDs als .custom).
+    static let retiredBuiltInModeIDs: Set<String> = [retiredChatID]
 
     static let builtInModes: [OutputMode] = [
         OutputMode(
@@ -159,17 +169,6 @@ extension OutputMode {
             shortLabel: "Prompt",
             kind: .builtIn,
             templateID: PostProcessingTemplate.promptID,
-            isEnabled: true,
-            isDefault: false,
-            contextPolicy: .auto,
-            pasteVisualAttachments: true
-        ),
-        OutputMode(
-            id: chatID,
-            name: "Chat",
-            shortLabel: "Chat",
-            kind: .builtIn,
-            templateID: PostProcessingTemplate.chatID,
             isEnabled: true,
             isDefault: false,
             contextPolicy: .auto,
@@ -262,7 +261,7 @@ extension OutputMode {
 
     static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {
         switch id {
-        case promptID, chatID, taskID, emailID, slackID, whatsappID:
+        case promptID, taskID, emailID, slackID, whatsappID:
             return .auto
         default:
             return .off
@@ -279,7 +278,7 @@ extension OutputMode {
         }
 
         switch id {
-        case promptID, chatID, taskID, emailID, slackID, whatsappID:
+        case promptID, taskID, emailID, slackID, whatsappID:
             return true
         default:
             return false

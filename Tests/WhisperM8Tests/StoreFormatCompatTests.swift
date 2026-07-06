@@ -83,6 +83,45 @@ final class StoreFormatCompatTests: XCTestCase {
         XCTAssertEqual(report.codex?.usesFrameFallbackForVideo, false)
     }
 
+    func testTranscriptRunReportWithHistoricAgentChatIntentStillDecodes() throws {
+        // Chat-Modus 2026-07-07 ausgebaut — Bestands-Reports tragen den
+        // Intent "agentChat" aber weiterhin; der Enum-Case muss decodierbar bleiben.
+        let json = """
+        {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "createdAt": "2026-01-02T03:04:05Z",
+          "status": "succeeded",
+          "mode": {
+            "id": "chat",
+            "name": "Chat",
+            "shortLabel": "Chat",
+            "templateID": "template.chat",
+            "contextPolicy": "auto"
+          },
+          "transcription": {
+            "provider": "OpenAI",
+            "model": "Whisper",
+            "language": "de",
+            "audioDuration": 4.5
+          },
+          "attachments": [],
+          "replyIntent": "agentChat",
+          "rawTranscript": "Raw",
+          "finalTranscript": "Opened Codex chat: Demo",
+          "copiedToClipboard": true,
+          "autoPasteRequested": false
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let report = try decoder.decode(TranscriptRunReport.self, from: Data(json.utf8))
+
+        XCTAssertEqual(report.replyIntent, .agentChat)
+        XCTAssertEqual(report.replyIntent?.displayName, "Agent Chat")
+        XCTAssertEqual(report.mode.id, OutputMode.retiredChatID)
+    }
+
     func testTranscriptRunReportStoreDefaultPathAndCleanupConstantsAreStable() throws {
         let store = TranscriptRunReportStore()
         let expectedDirectory = FileManager.default.urls(

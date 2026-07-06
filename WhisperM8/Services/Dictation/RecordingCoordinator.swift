@@ -68,7 +68,6 @@ final class RecordingCoordinator {
     let modelResolver: () -> TranscriptionModel
     let apiKeyResolver: (TranscriptionProvider) -> String?
     let transcriberFactory: (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol
-    let agentChatLauncherFactory: () -> AgentChatLaunchService
 
     init(
         appState: AppState,
@@ -85,8 +84,7 @@ final class RecordingCoordinator {
         apiKeyResolver: @escaping (TranscriptionProvider) -> String? = { KeychainManager.load(key: $0.keychainKey) },
         transcriberFactory: @escaping (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol = { provider, model, apiKey in
             provider.createService(apiKey: apiKey, model: model)
-        },
-        agentChatLauncherFactory: @escaping () -> AgentChatLaunchService = { AgentChatLaunchService() }
+        }
     ) {
         self.appState = appState
         self.audioRecorder = AudioRecorder()
@@ -103,7 +101,6 @@ final class RecordingCoordinator {
         self.modelResolver = modelResolver
         self.apiKeyResolver = apiKeyResolver
         self.transcriberFactory = transcriberFactory
-        self.agentChatLauncherFactory = agentChatLauncherFactory
     }
 
     func startRecording() async {

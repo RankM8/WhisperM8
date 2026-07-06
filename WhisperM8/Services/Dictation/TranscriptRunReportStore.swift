@@ -105,7 +105,7 @@ struct TranscriptRunReportStore {
             .compactMap(\.storedPath)
 
         let codex: TranscriptRunReport.CodexSnapshot?
-        if draft.mode.usesPostProcessing && draft.mode.id != OutputMode.chatID {
+        if draft.mode.usesPostProcessing {
             let outputURL = runDirectory.appendingPathComponent("codex-output.txt")
             let resolvedCodexModel = draft.mode.resolvedCodexModelRaw()
             let resolvedReasoningEffort = draft.mode.resolvedCodexReasoningEffortRaw()

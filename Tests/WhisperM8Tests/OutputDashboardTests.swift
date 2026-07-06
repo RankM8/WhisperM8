@@ -7,11 +7,12 @@ final class OutputDashboardTests: XCTestCase {
         let modes = OutputMode.builtInModes
         let modesByID = Dictionary(uniqueKeysWithValues: modes.map { ($0.id, $0) })
 
+        // Vertrags-Update 2026-07-07: Chat-Modus ausgebaut (siehe
+        // OutputMode.retiredChatID) — die Built-in-Liste ist bewusst ohne ihn gepinnt.
         XCTAssertEqual(modes.map(\.id), [
             OutputMode.rawID,
             OutputMode.cleanID,
             OutputMode.promptID,
-            OutputMode.chatID,
             OutputMode.taskID,
             OutputMode.emailID,
             OutputMode.slackID,
@@ -22,7 +23,6 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(modesByID[OutputMode.whatsappID]?.shortLabel, "WA")
         XCTAssertEqual(modesByID[OutputMode.slackID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.promptID]?.contextPolicy, .auto)
-        XCTAssertEqual(modesByID[OutputMode.chatID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.taskID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.rawID]?.contextPolicy, .off)
         XCTAssertFalse(modesByID[OutputMode.rawID]?.usesPostProcessing ?? true)
@@ -30,7 +30,6 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertFalse(modesByID[OutputMode.rawID]?.pasteVisualAttachments ?? true)
         XCTAssertFalse(modesByID[OutputMode.cleanID]?.pasteVisualAttachments ?? true)
         XCTAssertTrue(modesByID[OutputMode.promptID]?.pasteVisualAttachments ?? false)
-        XCTAssertTrue(modesByID[OutputMode.chatID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.taskID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.emailID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.slackID]?.pasteVisualAttachments ?? false)
@@ -195,12 +194,11 @@ final class OutputDashboardTests: XCTestCase {
     func testBuiltInTemplatesIncludePromptAndTaskModes() {
         let promptTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.promptID }
         let taskTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.taskID }
-        let chatTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.chatID }
 
         XCTAssertEqual(promptTemplate?.name, "Agent prompt")
         XCTAssertTrue(promptTemplate?.instruction.contains("Markdown prompt") == true)
-        XCTAssertEqual(chatTemplate?.name, "Agent chat")
-        XCTAssertTrue(chatTemplate?.instruction.contains("persistent Codex or Claude session") == true)
+        // Chat-Modus 2026-07-07 ausgebaut — das Built-in-Template darf nicht mehr existieren.
+        XCTAssertFalse(PostProcessingTemplate.builtInTemplates.contains { $0.id == PostProcessingTemplate.retiredChatID })
         XCTAssertEqual(taskTemplate?.name, "Agent task")
         XCTAssertTrue(taskTemplate?.instruction.contains("Execute this task") == true)
         XCTAssertTrue(taskTemplate?.instruction.contains("Do not output a prompt") == true)
@@ -401,10 +399,6 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(
             router.route(rawText: "mach daraus einen prompt", mode: OutputMode.mode(for: OutputMode.promptID), contextBundle: context),
             .promptPackage
-        )
-        XCTAssertEqual(
-            router.route(rawText: "öffne das im chat", mode: OutputMode.mode(for: OutputMode.chatID), contextBundle: context),
-            .agentChat
         )
         XCTAssertEqual(
             router.route(rawText: "recherchiere das kurz", mode: OutputMode.mode(for: OutputMode.taskID), contextBundle: context),

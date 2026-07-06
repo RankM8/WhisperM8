@@ -143,7 +143,23 @@ struct OutputModeStore {
     }
 
     private func normalized(_ modes: [OutputMode]) -> [OutputMode] {
-        var byID = Dictionary(uniqueKeysWithValues: modes.map { ($0.id, $0) })
+        // Migration stillgelegter Built-ins (aktuell: Chat, 2026-07-07):
+        // persistierte Einträge herausfiltern — ohne Filter würde die
+        // Custom-Klassifizierung unten sie als Zombie-Custom-Modes
+        // wiederbeleben. Idempotent; der nächste saveModes schreibt die
+        // Datei bereinigt. Custom-Modes, die noch auf das entfernte
+        // Chat-Template zeigen, werden auf das Prompt-Template umgehängt,
+        // damit ihr Post-Processing nicht still am fehlenden Template scheitert.
+        let migratedModes = modes
+            .filter { !OutputMode.retiredBuiltInModeIDs.contains($0.id) }
+            .map { mode -> OutputMode in
+                guard mode.templateID == PostProcessingTemplate.retiredChatID else { return mode }
+                var updatedMode = mode
+                updatedMode.templateID = PostProcessingTemplate.promptID
+                return updatedMode
+            }
+
+        var byID = Dictionary(uniqueKeysWithValues: migratedModes.map { ($0.id, $0) })
 
         for builtInMode in OutputMode.builtInModes where byID[builtInMode.id] == nil {
             byID[builtInMode.id] = builtInMode

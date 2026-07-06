@@ -84,13 +84,21 @@ struct AppPreferences {
     var defaultOutputModeID: String {
         // Fallback bewusst Fast/raw: Erstinstallationen starten ohne Codex-Login,
         // Fast liefert sofort Ergebnisse (User-Entscheidung 2026-07-06; vorher clean).
-        get { defaults.string(forKey: Keys.defaultOutputModeID) ?? OutputMode.rawID }
+        get { Self.remappingRetiredModeID(defaults.string(forKey: Keys.defaultOutputModeID)) ?? OutputMode.rawID }
         nonmutating set { defaults.set(newValue, forKey: Keys.defaultOutputModeID) }
     }
 
     var lastSelectedOutputModeID: String {
-        get { defaults.string(forKey: Keys.lastSelectedOutputModeID) ?? defaultOutputModeID }
+        get { Self.remappingRetiredModeID(defaults.string(forKey: Keys.lastSelectedOutputModeID)) ?? defaultOutputModeID }
         nonmutating set { defaults.set(newValue, forKey: Keys.lastSelectedOutputModeID) }
+    }
+
+    /// Lese-seitiger Remap stillgelegter Modus-IDs (Chat → Prompt, 2026-07-07):
+    /// der gespeicherte Wert bleibt unangetastet (Konvention: gespeicherte Prefs
+    /// werden nie still mutiert), effektiv gilt der semantisch nächste lebende Modus.
+    private static func remappingRetiredModeID(_ storedID: String?) -> String? {
+        guard let storedID else { return nil }
+        return OutputMode.retiredBuiltInModeIDs.contains(storedID) ? OutputMode.promptID : storedID
     }
 
     var fallbackToRawOnProcessingError: Bool {

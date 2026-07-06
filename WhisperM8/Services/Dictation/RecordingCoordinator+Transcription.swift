@@ -58,7 +58,7 @@ extension RecordingCoordinator {
             contextBundle: contextBundle
         )
         let finalText = postProcessingResult.finalText
-        let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled && outputMode.id != OutputMode.chatID
+        let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled
         var deliveryAttachments: [PasteAttachment] = []
         var deliveryErrors: [String] = []
 
@@ -177,27 +177,6 @@ extension RecordingCoordinator {
         overlayController.update(appState: appState)
 
         do {
-            if mode.id == OutputMode.chatID, let promptPackage {
-                let visualInput = CodexVisualInputSelection(contextBundle: contextBundle)
-                let result = try agentChatLauncherFactory().openCodexChat(
-                    title: chatTitle(from: rawText),
-                    prompt: promptPackage.prompt,
-                    imagePaths: visualInput.imageURLs.map(\.path)
-                )
-                appState.isPostProcessing = false
-                appState.postProcessingStatusText = nil
-                overlayController.update(appState: appState)
-                return PostProcessingRunResult(
-                    finalText: "Opened Codex chat: \(result.session.title)",
-                    renderedPrompt: renderedPrompt,
-                    replyIntent: promptPackage.intent,
-                    visualManifest: promptPackage.visualManifest,
-                    agentProvider: .codex,
-                    agentSessionID: result.session.externalSessionID ?? result.session.id.uuidString,
-                    agentProjectPath: result.project.path
-                )
-            }
-
             let processedText = try await postProcessingService.process(
                 rawText: rawText,
                 mode: mode,
@@ -254,14 +233,6 @@ extension RecordingCoordinator {
 
             throw error
         }
-    }
-
-    func chatTitle(from rawText: String) -> String {
-        let trimmed = rawText
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Voice Chat" }
-        return String(trimmed.prefix(52))
     }
 
     func latestTaskAgentSession() -> (provider: AgentProvider, externalSessionID: String?, projectPath: String?)? {
