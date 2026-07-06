@@ -126,31 +126,18 @@ private struct SettingsPageGroup: Identifiable {
     var id: String { title }
 }
 
-private enum OutputSettingsTab: String, Hashable {
-    case latest
-    case archive
-}
-
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @StateObject private var windowRequestCenter = WindowRequestCenter.shared
     @State private var selection: SettingsPage? = .transcription
     @State private var aiOutputTab: AIOutputPageTab = .account
     @State private var agentChatsTab: AgentChatsSettingsPageTab = .workspace
-    @State private var outputTab: OutputSettingsTab = .latest
-    /// Report, den die History beim Öffnen aus der Overview vorselektieren soll.
-    @State private var historyPreselectID: UUID?
 
     private let pageGroups: [SettingsPageGroup] = [
         SettingsPageGroup(title: "Dictation", pages: [.recording, .transcription, .aiOutput, .context]),
         SettingsPageGroup(title: "Agents", pages: [.agentChats, .cli]),
         SettingsPageGroup(title: "App", pages: [.general, .permissions, .about]),
         SettingsPageGroup(title: "Workspace", pages: [.output])
-    ]
-
-    private let outputTabs = [
-        SettingsTab(id: OutputSettingsTab.latest, title: "Latest"),
-        SettingsTab(id: OutputSettingsTab.archive, title: "Archive")
     ]
 
     var body: some View {
@@ -213,10 +200,8 @@ struct SettingsView: View {
             agentChatsTab = .workspace
         case "claudeCode":
             agentChatsTab = .claudeHooks
-        case "outputOverview", SettingsPage.output.rawValue:
-            outputTab = .latest
-        case "history":
-            outputTab = .archive
+        // outputOverview/history: die fusionierte Output-Seite hat keine Tabs mehr —
+        // beide Alt-Routen landen ohne Zusatz-Zustand auf .output (A24).
         default:
             break
         }
@@ -292,13 +277,11 @@ struct SettingsView: View {
             // A20/A21) — damit ist BehaviorSettingsView vollständig abgelöst.
             GeneralSettingsPage()
         case .permissions:
-            settingsPage(page) {
-                PermissionsSettingsView()
-            }
+            // Phase 8: migrierte V3-Seite (Header-Fix A22, cancellable Polling).
+            PermissionsSettingsPage()
         case .about:
-            settingsPage(page) {
-                AboutView()
-            }
+            // Phase 8: migrierte V3-Seite (Last-checked A23, sicherer Hersteller-Link).
+            AboutSettingsPage()
         case .output:
             outputPage(page)
         }
@@ -324,26 +307,10 @@ struct SettingsView: View {
     }
 
     private func outputPage(_ page: SettingsPage) -> some View {
-        settingsPage(page) {
-            VStack(alignment: .leading, spacing: 14) {
-                SettingsTabs(selection: $outputTab, tabs: outputTabs)
-                    .padding(.horizontal, 32)
-
-                Group {
-                    switch outputTab {
-                    case .latest:
-                        OutputOverviewView(onOpenHistory: { reportID in
-                            historyPreselectID = reportID
-                            outputTab = .archive
-                        })
-                        .environment(appState)
-                    case .archive:
-                        OutputHistoryView(preselectReportID: historyPreselectID)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-        }
+        // Phase 9: fusionierte Workspace-Seite (Overview + History, A24–A27);
+        // Latest kommt aus dem persistierten Store (A25), Delete mit Bestätigung (A26).
+        OutputWorkspacePage()
+            .environment(appState)
     }
 
     private func settingsPage<Content: View>(
