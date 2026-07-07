@@ -487,6 +487,13 @@ struct AgentSessionStore {
                 return nil
             }
 
+            // Terminals binden NIE eine externe Session — ihr Provider ist
+            // nur Schema-Platzhalter; das Matching unten (Provider + cwd +
+            // ±5s) würde sonst eine fremde Claude-/Codex-Session kapern.
+            guard !workspace.sessions[index].isTerminal else {
+                return nil
+            }
+
             guard workspace.sessions[index].externalSessionID == nil else {
                 return workspace.sessions[index]
             }
@@ -630,6 +637,11 @@ struct AgentSessionStore {
                     }
                 } else if let index = workspace.sessions.firstIndex(where: {
                     $0.provider == indexed.provider
+                        // Terminals (Platzhalter-Provider, kein Transcript)
+                        // dürfen im ±5s-Fenster keine fremde JSONL kapern.
+                        // Bewusst NUR Terminals ausschließen — die übrigen
+                        // Kinds behalten ihr bisheriges Adoptionsverhalten.
+                        && $0.effectiveKind != .terminal
                         && $0.externalSessionID == nil
                         && $0.projectID == project.id
                         && $0.hasLaunchedInitialPrompt

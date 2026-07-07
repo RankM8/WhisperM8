@@ -29,11 +29,15 @@ extension AgentChatsView {
         guard let selectedProject else { return }
         do {
             // Agent View hat keine externe Session-ID (es ist ein Dashboard
-            // ueber viele Sessions). Auch der Titel ist anders.
-            let isAgentView = kind == .agentView
-            let title = isAgentView
-                ? "Agent View"
-                : "\(provider.displayName) Chat"
+            // ueber viele Sessions). Auch der Titel ist anders. Terminals
+            // heissen schlicht "Terminal" — der Live-Titel aus der Shell
+            // (OSC 0/2) uebernimmt danach, solange der User nicht umbenennt.
+            let title: String
+            switch kind {
+            case .agentView: title = "Agent View"
+            case .terminal: title = "Terminal"
+            default: title = "\(provider.displayName) Chat"
+            }
             // Weg B (Superset-Prinzip): KEINE Vorab-Session-ID mehr. Claude
             // vergibt die ID selbst — wie Codex/Agent View. Der SessionStart-Hook
             // + Indexer-Merge binden die REALE, von Claude geschriebene ID nach.

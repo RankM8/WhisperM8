@@ -123,6 +123,14 @@ final class AgentSessionStatusCoordinator {
     func sessionLaunched(sessionID: UUID) {
         hookLiveSessions.remove(sessionID)
         apply(.processLaunched, to: sessionID)
+
+        // Terminals haben weder Transcript noch Hooks: kein Watch, kein
+        // Grace-Timer — die Shell ist sofort "ready" (statischer Idle-Punkt).
+        if isTerminalSession(sessionID) {
+            apply(.launchGraceExpired, to: sessionID)
+            return
+        }
+
         attachWatch(sessionID: sessionID)
         scheduleLaunchGrace(sessionID: sessionID)
     }
@@ -150,7 +158,10 @@ final class AgentSessionStatusCoordinator {
         hookBridge.stopTracking(localSessionID: sessionID)
         // T2: Chat wurde beendet (Ctrl-C/exit/Prozess-Ende) → debounced
         // Zusammenfassung anstossen (Digest-Guard verhindert Doppel-Laeufe).
-        AgentSessionSummarizer.shared.noteSessionTerminated(sessionID: sessionID)
+        // Terminals haben kein Transcript — nichts zusammenzufassen.
+        if !isTerminalSession(sessionID) {
+            AgentSessionSummarizer.shared.noteSessionTerminated(sessionID: sessionID)
+        }
     }
 
     /// Aktueller Lebenszyklus-Zustand (für Settings-Diagnose/Tests).
@@ -304,6 +315,12 @@ final class AgentSessionStatusCoordinator {
         store.loadWorkspace().sessions
             .first(where: { $0.id == sessionID })?
             .isBackgroundChat ?? false
+    }
+
+    private func isTerminalSession(_ sessionID: UUID) -> Bool {
+        store.loadWorkspace().sessions
+            .first(where: { $0.id == sessionID })?
+            .isTerminal ?? false
     }
 
     // MARK: - Watch/Binding-Helfer

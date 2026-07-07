@@ -29,3 +29,23 @@ struct ProviderIcon: View {
         return copy
     }
 }
+
+/// Session-bewusstes Icon: Terminals zeigen das Terminal-Symbol statt des
+/// (Platzhalter-)Provider-Logos — überall dort verwenden, wo das Icon eine
+/// konkrete Session repräsentiert (Sidebar-Rows, Tab-Chips, Drag-Previews).
+struct AgentSessionIcon: View {
+    let session: AgentChatSession
+    var size: CGFloat = 11
+    var tint: Color = AgentTheme.textSecondary
+
+    var body: some View {
+        if session.isTerminal {
+            Image(systemName: "terminal")
+                .font(.system(size: size - 1, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
+        } else {
+            ProviderIcon(provider: session.provider, size: size, tint: tint)
+        }
+    }
+}

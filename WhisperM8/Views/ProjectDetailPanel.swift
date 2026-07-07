@@ -36,8 +36,8 @@ struct ProjectDetailPanel: View {
                 DetailRow(label: "Kontextquelle", value: "Aktiver Chat")
                 if let session {
                     HStack {
-                        ProviderIcon(
-                            provider: session.provider,
+                        AgentSessionIcon(
+                            session: session,
                             size: 13,
                             tint: Color(hex: AgentChatColor.fallback(for: session))
                         )

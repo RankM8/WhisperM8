@@ -435,7 +435,7 @@ struct ProjectChatGroup: View {
     /// bekommen Drags hier bewusst eine statische, billige Ansicht.
     private func sessionDragPreview(_ session: AgentChatSession) -> some View {
         HStack(spacing: 6) {
-            ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textSecondary)
+            AgentSessionIcon(session: session, size: 11, tint: AgentTheme.textSecondary)
             Text(session.title)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AgentTheme.textPrimary)
@@ -565,7 +565,7 @@ struct SessionListButton: View {
                                 .fill(customColor.opacity(isSelected ? 0.95 : 0.7))
                                 .frame(width: 6, height: 6)
                         } else {
-                            ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
+                            AgentSessionIcon(session: session, size: 11, tint: AgentTheme.textTertiary)
                                 .frame(width: 11, alignment: .center)
                         }
                     }
@@ -792,7 +792,7 @@ struct PinnedSessionRow: View {
                     ProjectAvatar(project: project, size: 14)
                         .help(project.name)
                 } else {
-                    ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
+                    AgentSessionIcon(session: session, size: 11, tint: AgentTheme.textTertiary)
                         .frame(width: 14, alignment: .center)
                 }
 

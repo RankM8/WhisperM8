@@ -64,6 +64,11 @@ enum AgentSessionKind: String, Codable, Equatable {
     /// (`whisperm8 agent run`). Kein PTY — Detail-View statt Terminal-Tab;
     /// nach Übernahme läuft er über den normalen codex-resume-Pfad weiter.
     case subagentJob
+    /// Normales interaktives Terminal: die Login-Shell des Users im
+    /// Projektverzeichnis, KEIN Agent. Keine externe Session-ID, kein
+    /// Transcript, keine Hook-Bridge, kein Auto-Naming/Resume — der
+    /// `provider` ist nur ein inerter Platzhalter (non-optional im Schema).
+    case terminal
 
     var displayName: String {
         switch self {
@@ -71,6 +76,7 @@ enum AgentSessionKind: String, Codable, Equatable {
         case .agentView: return "Agent View"
         case .backgroundChat: return "Hintergrund-Agent"
         case .subagentJob: return "Subagent"
+        case .terminal: return "Terminal"
         }
     }
 
@@ -451,6 +457,10 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// (whisperm8-CLI-Supervisor, kein PTY bis zur Übernahme).
     var isSubagentJob: Bool { effectiveKind == .subagentJob }
 
+    /// `true` wenn diese Session ein normales Shell-Terminal ist
+    /// (Login-Shell im Projekt-cwd, kein Agent).
+    var isTerminal: Bool { effectiveKind == .terminal }
+
     /// `true` wenn der Background-Agent bereits vom Supervisor registriert
     /// ist (Short-ID vorhanden) — Voraussetzung fuer `claude attach/logs/stop`.
     var hasBackgroundShortID: Bool {
@@ -474,6 +484,11 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     }
 
     var runtimeDisplayText: String {
+        // Terminals haben keinen Agent-Provider — der `provider` ist nur
+        // Schema-Platzhalter und darf hier nicht durchscheinen.
+        if isTerminal {
+            return "Terminal · Login-Shell"
+        }
         switch provider {
         case .codex:
             return "Codex · \(model) · \(reasoningEffort)"

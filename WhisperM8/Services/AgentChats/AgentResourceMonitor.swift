@@ -7,6 +7,9 @@ struct AgentResourceSessionDescriptor: Equatable, Hashable {
     var title: String
     var provider: AgentProvider
     var rootProcessID: Int32?
+    /// Session-Art fuers Icon im Resource-Popover (Terminal vs. Provider-Logo).
+    /// Optional mit Default, damit bestehende Aufrufer/Tests unveraendert bauen.
+    var kind: AgentSessionKind? = nil
 }
 
 struct AgentResourceProcessSample: Equatable {
@@ -33,6 +36,8 @@ struct AgentResourceSessionSnapshot: Identifiable, Equatable {
     var cpuPercent: Double
     var memoryBytes: Int64
     var processes: [AgentResourceProcessSnapshot]
+    /// Session-Art (siehe Descriptor) — `nil` wird als `.chat` interpretiert.
+    var kind: AgentSessionKind? = nil
 }
 
 struct AgentResourceProjectSnapshot: Identifiable, Equatable {
@@ -98,7 +103,8 @@ struct AgentResourceMonitor {
                 rootProcessID: rootPID,
                 cpuPercent: processSnapshots.reduce(0) { $0 + $1.cpuPercent },
                 memoryBytes: processSnapshots.reduce(0) { $0 + $1.memoryBytes },
-                processes: processSnapshots.sorted { $0.memoryBytes > $1.memoryBytes }
+                processes: processSnapshots.sorted { $0.memoryBytes > $1.memoryBytes },
+                kind: descriptor.kind
             )
 
             var group = groupedSessions[descriptor.projectPath]

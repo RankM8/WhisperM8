@@ -351,7 +351,8 @@ struct AgentChatsView: View {
                 projectPath: project.path,
                 title: session.title,
                 provider: session.provider,
-                rootProcessID: terminalRegistry.controller(for: session.id)?.processID
+                rootProcessID: terminalRegistry.controller(for: session.id)?.processID,
+                kind: session.kind
             )
         }
     }
@@ -2256,6 +2257,9 @@ struct AgentChatsView: View {
                 } else if selectedSession.isAgentView {
                     kindBadge("VIEW", color: .orange)
                         .help("Claude Agents View · Multi-Session-Dashboard. Der aktive Sub-Chat innerhalb der TUI ist von WhisperM8 aus nicht erkennbar.")
+                } else if selectedSession.isTerminal {
+                    kindBadge("TERM", color: .teal)
+                        .help("Normales Terminal · Login-Shell im Projektverzeichnis, kein Agent")
                 }
             } else if let selectedProject {
                 Text(selectedProject.name)

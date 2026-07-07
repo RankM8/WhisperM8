@@ -55,6 +55,30 @@ struct AgentCommandBuilder {
         CodexServiceTier.resolve(AppPreferences.shared.codexServiceTierRaw)
     }
 
+    /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
+    /// Default liest `$SHELL` (von launchd auch für GUI-Apps gesetzt) und
+    /// fällt auf `/bin/zsh` zurück, wenn die Variable fehlt oder auf kein
+    /// ausführbares Binary zeigt. Im Test überschreibbar.
+    var shellResolver: () -> String = {
+        Self.resolveLoginShell(
+            fromEnvironment: ProcessInfo.processInfo.environment["SHELL"],
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }
+        )
+    }
+
+    /// Pure Auflösung der Login-Shell — separat, damit sie ohne echtes
+    /// Filesystem testbar ist.
+    static func resolveLoginShell(
+        fromEnvironment shellValue: String?,
+        isExecutable: (String) -> Bool
+    ) -> String {
+        let trimmed = shellValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty, trimmed.hasPrefix("/"), isExecutable(trimmed) {
+            return trimmed
+        }
+        return "/bin/zsh"
+    }
+
     /// Parsed eine Whitespace-getrennte Argument-Zeile.
     /// Unterstützt einfache Quotes für Argumente mit Leerzeichen: `--text "hello world"`.
     static func parseArguments(_ raw: String) -> [String] {
@@ -98,12 +122,32 @@ struct AgentCommandBuilder {
             throw AgentCommandError.missingProject(project.path)
         }
 
+        // Terminals sind kein Agent-Launch: der `provider` ist nur ein
+        // Schema-Platzhalter, das Kommando ist immer die Login-Shell.
+        if session.isTerminal {
+            return terminalCommand(project: project)
+        }
+
         switch session.provider {
         case .codex:
             return try codexCommand(for: session, project: project)
         case .claude:
             return try claudeCommand(for: session, project: project)
         }
+    }
+
+    /// Baut den Launch für einen normalen Terminal-Tab: die Login-Shell des
+    /// Users, interaktiv + als Login-Shell gestartet (`-i -l`), damit
+    /// .zprofile/.zshrc gesourct werden und PATH/Prompt/Aliases exakt wie in
+    /// Terminal.app aussehen. Keine Session-Args, kein Resume — jede neue
+    /// Shell ist frisch.
+    private func terminalCommand(project: AgentProject) -> AgentLaunchCommand {
+        AgentLaunchCommand(
+            executablePath: shellResolver(),
+            arguments: ["-i", "-l"],
+            workingDirectory: project.path,
+            keyboardProfile: .plainShell
+        )
     }
 
     private func codexCommand(for session: AgentChatSession, project: AgentProject) throws -> AgentLaunchCommand {

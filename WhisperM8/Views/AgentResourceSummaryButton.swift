@@ -181,11 +181,19 @@ private struct AgentResourcePopover: View {
             ForEach(project.sessions) { session in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        ProviderIcon(
-                            provider: session.provider,
-                            size: 12,
-                            tint: Color(hex: session.provider == .codex ? "#32D74B" : "#FF9F0A")
-                        )
+                        Group {
+                            if session.kind == .terminal {
+                                Image(systemName: "terminal")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ProviderIcon(
+                                    provider: session.provider,
+                                    size: 12,
+                                    tint: Color(hex: session.provider == .codex ? "#32D74B" : "#FF9F0A")
+                                )
+                            }
+                        }
                         .frame(width: 18)
                         Text(session.title)
                             .lineLimit(1)

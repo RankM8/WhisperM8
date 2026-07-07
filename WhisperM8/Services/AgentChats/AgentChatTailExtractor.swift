@@ -59,6 +59,9 @@ enum AgentChatTailExtractor {
             // derselbe Tail-Read wie beim Chat (externalSessionID =
             // codexThreadID des Jobs).
             return extractFromChat(ref: ref, maxCharacters: maxCharacters)
+        case .terminal:
+            // Normales Shell-Terminal: kein Transcript, kein Chat-Kontext.
+            return nil
         }
     }
 

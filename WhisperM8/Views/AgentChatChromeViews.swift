@@ -133,7 +133,7 @@ struct ChatTabButton: View {
                     ProjectAvatar(project: project, size: 13)
                         .help(project.name)
                 } else {
-                    ProviderIcon(provider: session.provider, size: 11, tint: AgentTheme.textTertiary)
+                    AgentSessionIcon(session: session, size: 11, tint: AgentTheme.textTertiary)
                 }
 
                 Text(session.title)

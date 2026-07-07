@@ -332,10 +332,15 @@ final class AgentTerminalRegistry: ObservableObject {
 /// - `claudeAgentsView`: `claude agents` Dashboard mit eigenem Input-Field
 ///   ohne Backslash-Konvention. Erwartet die moderne CSI-u-Sequenz fuer
 ///   Shift+Enter (`ESC [ 13 ; 2 u`, kitty keyboard protocol).
+/// - `plainShell`: normales Terminal (Login-Shell, kein Agent). Die
+///   Readline/ZLE-Mappings (Word-Kill, Word-Move, Zeilenanfang/-ende, Undo)
+///   gelten weiter; TUI-Spezifika (Shift+Enter-Continuation, Alt+P =
+///   Claude-Model-Switch) werden bewusst NICHT gemappt.
 enum TerminalKeyboardProfile: Equatable {
     case claudeCodeChat
     case codexChat
     case claudeAgentsView
+    case plainShell
 }
 
 /// Reine Übersetzungs-Logik von macOS-Tastenkombinationen in die TUI-üblichen
@@ -428,13 +433,19 @@ enum TerminalShortcut {
                     // bei Claude Code installs) und erwartet die CSI-u-
                     // Sequenz `ESC [ 13 ; 2 u` fuer Shift+Enter.
                     return [0x1b, 0x5b, 0x31, 0x33, 0x3b, 0x32, 0x75]
+                case .plainShell:
+                    // Normale Shell: Shift+Enter ist ein gewöhnliches Enter,
+                    // keine Continuation-Konvention — Event durchreichen.
+                    return nil
                 }
             }
         case KeyCode.p:
             // Alt+P → `ESC p` (Meta-P), Claude Codes Model-Switch.
             // Ohne Mapping würde `optionAsMetaKey=false` das macOS-Sonderzeichen
             // `π` an die TUI schicken, statt der erwarteten Meta-Sequenz.
-            if hasOption && !hasCommand && !hasShift {
+            // In der normalen Shell gibt es keinen Model-Switch — dort soll
+            // Option+P das macOS-Sonderzeichen liefern (deutsches Layout).
+            if hasOption && !hasCommand && !hasShift, profile != .plainShell {
                 return [0x1b, 0x70]
             }
         default:
@@ -553,6 +564,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         guard isRunning else { return }
         terminal.send(txt: text)
     }
+
+    /// Wird gefeuert, wenn der Subprocess den Terminal-Titel per
+    /// Escape-Sequenz setzt (OSC 0/2 — Shells melden so laufendes Kommando
+    /// bzw. cwd). Genutzt von `.terminal`-Tabs für den Live-Tab-Titel;
+    /// Agent-Tabs ignorieren das (Auto-Namer ist dort die Titelquelle).
+    /// Dedupliziert: identische Folge-Titel feuern nicht erneut.
+    var onTitleChanged: ((String) -> Void)?
+    private var lastReportedTitle: String?
 
     private var onLaunched: () -> Void
     private var onTerminated: (Int32?) -> Void
@@ -717,7 +736,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     }
 
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
+
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != lastReportedTitle else { return }
+        lastReportedTitle = trimmed
+        onTitleChanged?(trimmed)
+    }
+
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
     /// Behandelt einen Link-/Pfad-Klick aus dem Terminal (geroutet über den
