@@ -26,7 +26,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
     var contextPolicy: ContextCapturePolicy
     var pasteVisualAttachments: Bool
     /// Siehe `ProjectAccessPolicy` — `.readOnly` gibt dem Codex-Lauf das
-    /// aufgelöste Projekt als Working Directory (Task, Prompt+).
+    /// aufgelöste Projekt als Working Directory (Task, Ultra-Prompt).
     var projectAccess: ProjectAccessPolicy
     /// Optional Codex model override for this mode. `nil` means the global
     /// Codex post-processing model preference is used.
@@ -196,8 +196,8 @@ extension OutputMode {
         ),
         OutputMode(
             id: promptPlusID,
-            name: "Prompt+",
-            shortLabel: "Prompt+",
+            name: "Ultra-Prompt",
+            shortLabel: "Ultra-Prompt",
             kind: .builtIn,
             templateID: PostProcessingTemplate.promptPlusID,
             isEnabled: true,

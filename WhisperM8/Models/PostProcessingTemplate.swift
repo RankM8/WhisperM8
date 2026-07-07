@@ -73,7 +73,7 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
 extension PostProcessingTemplate {
     /// Gemeinsamer Playbook-Kern von "Agent prompt" und "Agent prompt+ (project-aware)" —
     /// als eine Quelle, damit die beiden Templates inhaltlich nicht auseinanderlaufen.
-    /// Prompt+ fügt zwischen Kern und Kontext-Footer nur den Explorations-Block ein.
+    /// Ultra-Prompt fügt zwischen Kern und Kontext-Footer nur den Explorations-Block ein.
     private static let promptPlaybookCore = """
     Turn the user's spoken instruction and captured context into an executable Markdown prompt for an AI coding or work agent (Claude Code or Codex).
 
@@ -119,7 +119,7 @@ extension PostProcessingTemplate {
     - Keep it as short as possible while complete enough that the agent can start without asking back.
     """
 
-    /// Nur Prompt+ (Modus mit `projectAccess == .readOnly`): begrenzt die
+    /// Nur Ultra-Prompt (Modus mit `projectAccess == .readOnly`): begrenzt die
     /// Exploration hart, damit der Prompt-Builder nicht anfängt, die Aufgabe
     /// selbst zu lösen.
     private static let promptPlusExplorationBlock = """
