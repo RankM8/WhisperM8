@@ -61,6 +61,17 @@ final class OutputModeCompatTests: XCTestCase {
             "templateID": "template.clean",
             "isEnabled": true,
             "isDefault": false
+          },
+          {
+            "id": "task",
+            "name": "Task",
+            "shortLabel": "Task",
+            "kind": "builtIn",
+            "templateID": "template.task",
+            "isEnabled": true,
+            "isDefault": false,
+            "contextPolicy": "auto",
+            "pasteVisualAttachments": true
           }
         ]
         """
@@ -69,6 +80,7 @@ final class OutputModeCompatTests: XCTestCase {
         let raw = try XCTUnwrap(modes.first { $0.id == OutputMode.rawID })
         let slack = try XCTUnwrap(modes.first { $0.id == OutputMode.slackID })
         let custom = try XCTUnwrap(modes.first { $0.id == "custom-legacy" })
+        let task = try XCTUnwrap(modes.first { $0.id == OutputMode.taskID })
 
         XCTAssertEqual(raw.contextPolicy, .off)
         XCTAssertFalse(raw.pasteVisualAttachments)
@@ -79,6 +91,12 @@ final class OutputModeCompatTests: XCTestCase {
         XCTAssertNil(slack.codexServiceTierRawOverride)
         XCTAssertEqual(custom.contextPolicy, .off)
         XCTAssertFalse(custom.pasteVisualAttachments)
+        // Bestandsdateien ohne projectAccess-Feld: Task lief schon immer im
+        // Default-Projekt (.readOnly), alle anderen bleiben ohne Projekt.
+        XCTAssertEqual(task.projectAccess, .readOnly)
+        XCTAssertEqual(raw.projectAccess, .off)
+        XCTAssertEqual(slack.projectAccess, .off)
+        XCTAssertEqual(custom.projectAccess, .off)
     }
 
     func testOutputModeStoreNormalizationPinsBuiltInsRawFastMigrationAndCustomSort() throws {

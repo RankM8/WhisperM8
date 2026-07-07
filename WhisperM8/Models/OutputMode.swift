@@ -1,5 +1,14 @@
 import Foundation
 
+/// Projekt-Zugriff des Codex-Laufs eines Modus. Die Codex-Sandbox ist ohnehin
+/// immer `read-only` (CodexInvocation) — dieses Feld entscheidet nur, OB der
+/// Lauf ein Projekt als Working Directory bekommt (`-C <pfad>`), damit Codex
+/// den Code lesend inspizieren kann. Auflösung des Pfads: `ProjectPathResolver`.
+enum ProjectAccessPolicy: String, Codable {
+    case off
+    case readOnly = "read-only"
+}
+
 struct OutputMode: Identifiable, Codable, Equatable, Hashable {
     enum Kind: String, Codable {
         case raw
@@ -16,6 +25,9 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
     var isDefault: Bool
     var contextPolicy: ContextCapturePolicy
     var pasteVisualAttachments: Bool
+    /// Siehe `ProjectAccessPolicy` — `.readOnly` gibt dem Codex-Lauf das
+    /// aufgelöste Projekt als Working Directory (Task, Prompt+).
+    var projectAccess: ProjectAccessPolicy
     /// Optional Codex model override for this mode. `nil` means the global
     /// Codex post-processing model preference is used.
     var codexModelRawOverride: String?
@@ -46,6 +58,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         isDefault: Bool,
         contextPolicy: ContextCapturePolicy = .off,
         pasteVisualAttachments: Bool? = nil,
+        projectAccess: ProjectAccessPolicy? = nil,
         codexModelRawOverride: String? = nil,
         codexReasoningEffortRawOverride: String? = nil,
         codexServiceTierRawOverride: String? = nil
@@ -60,6 +73,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         self.contextPolicy = contextPolicy
         self.pasteVisualAttachments = pasteVisualAttachments
             ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
+        self.projectAccess = projectAccess ?? Self.defaultProjectAccess(for: id)
         self.codexModelRawOverride = codexModelRawOverride
         self.codexReasoningEffortRawOverride = codexReasoningEffortRawOverride
         self.codexServiceTierRawOverride = codexServiceTierRawOverride
@@ -75,6 +89,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
         case isDefault
         case contextPolicy
         case pasteVisualAttachments
+        case projectAccess
         case codexModelRawOverride
         case codexReasoningEffortRawOverride
         case codexServiceTierRawOverride
@@ -93,6 +108,10 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
             ?? Self.defaultContextPolicy(for: id)
         pasteVisualAttachments = try container.decodeIfPresent(Bool.self, forKey: .pasteVisualAttachments)
             ?? Self.defaultPasteVisualAttachments(for: id, kind: kind, contextPolicy: contextPolicy)
+        // Additive Migration: Bestandsdateien ohne das Feld bekommen den
+        // ID-basierten Default (Task lief schon immer im Default-Projekt).
+        projectAccess = try container.decodeIfPresent(ProjectAccessPolicy.self, forKey: .projectAccess)
+            ?? Self.defaultProjectAccess(for: id)
         codexModelRawOverride = try container.decodeIfPresent(String.self, forKey: .codexModelRawOverride)
         codexReasoningEffortRawOverride = try container.decodeIfPresent(String.self, forKey: .codexReasoningEffortRawOverride)
         codexServiceTierRawOverride = try container.decodeIfPresent(String.self, forKey: .codexServiceTierRawOverride)
@@ -127,6 +146,7 @@ extension OutputMode {
     static let rawID = "raw"
     static let cleanID = "clean"
     static let promptID = "prompt"
+    static let promptPlusID = "prompt-plus"
     static let taskID = "task"
     static let emailID = "email"
     static let slackID = "slack"
@@ -169,6 +189,17 @@ extension OutputMode {
             shortLabel: "Prompt",
             kind: .builtIn,
             templateID: PostProcessingTemplate.promptID,
+            isEnabled: true,
+            isDefault: false,
+            contextPolicy: .auto,
+            pasteVisualAttachments: true
+        ),
+        OutputMode(
+            id: promptPlusID,
+            name: "Prompt+",
+            shortLabel: "Prompt+",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.promptPlusID,
             isEnabled: true,
             isDefault: false,
             contextPolicy: .auto,
@@ -261,8 +292,19 @@ extension OutputMode {
 
     static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {
         switch id {
-        case promptID, taskID, emailID, slackID, whatsappID:
+        case promptID, promptPlusID, taskID, emailID, slackID, whatsappID:
             return .auto
+        default:
+            return .off
+        }
+    }
+
+    /// ID-basierter Default für `projectAccess` — greift beim Init ohne
+    /// expliziten Wert und beim Decode von Bestandsdateien ohne das Feld.
+    static func defaultProjectAccess(for id: String) -> ProjectAccessPolicy {
+        switch id {
+        case promptPlusID, taskID:
+            return .readOnly
         default:
             return .off
         }
@@ -278,7 +320,7 @@ extension OutputMode {
         }
 
         switch id {
-        case promptID, taskID, emailID, slackID, whatsappID:
+        case promptID, promptPlusID, taskID, emailID, slackID, whatsappID:
             return true
         default:
             return false

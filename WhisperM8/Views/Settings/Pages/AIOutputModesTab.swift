@@ -247,6 +247,12 @@ struct AIOutputModesTab: View {
                             Text(policy.displayName)
                         }
 
+                        SettingsToggleRow(
+                            title: "Project access (read-only)",
+                            subtitle: "Codex runs inside the resolved project — active agent chat first, then the default project path — and can read the code to ground its output. Slower, but more precise.",
+                            isOn: projectAccessBinding(for: mode.id)
+                        )
+
                         SettingsPickerRow(
                             title: "Template",
                             subtitle: model.templateDescription(for: mode.templateID) ?? "Template not found.",
@@ -351,6 +357,13 @@ struct AIOutputModesTab: View {
         Binding(
             get: { model.modes.first { $0.id == modeID }?.contextPolicy ?? .off },
             set: { model.setContextPolicy($0, for: modeID) }
+        )
+    }
+
+    private func projectAccessBinding(for modeID: String) -> Binding<Bool> {
+        Binding(
+            get: { model.modes.first { $0.id == modeID }?.projectAccess == .readOnly },
+            set: { model.setProjectAccess($0 ? .readOnly : .off, for: modeID) }
         )
     }
 

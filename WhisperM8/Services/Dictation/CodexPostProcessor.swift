@@ -37,20 +37,28 @@ struct CodexPostProcessor: PostProcessing {
             language: language,
             contextBundle: contextBundle
         )
+        // Projekt-Auflösung passiert hier (nicht in performCodexRun), weil nur
+        // process() das contextBundle mit dem aktiven Agent-Chat kennt.
+        let projectPath = ProjectPathResolver.resolvedProjectPath(
+            mode: mode,
+            agentChatProjectPath: contextBundle.agentChat?.projectPath,
+            defaultProjectPath: AppPreferences.shared.agentDefaultProjectPath
+        )
         return try await runCodex(
             prompt: package.prompt,
             imageURLs: visualInput.imageURLs,
-            mode: mode
+            mode: mode,
+            projectPath: projectPath
         )
     }
 
-    private func runCodex(prompt: String, imageURLs: [URL], mode: OutputMode) async throws -> String {
+    private func runCodex(prompt: String, imageURLs: [URL], mode: OutputMode, projectPath: String?) async throws -> String {
         try await Task.detached(priority: .userInitiated) {
-            try performCodexRun(prompt: prompt, imageURLs: imageURLs, mode: mode)
+            try performCodexRun(prompt: prompt, imageURLs: imageURLs, mode: mode, projectPath: projectPath)
         }.value
     }
 
-    private func performCodexRun(prompt: String, imageURLs: [URL], mode: OutputMode) throws -> String {
+    private func performCodexRun(prompt: String, imageURLs: [URL], mode: OutputMode, projectPath: String?) throws -> String {
         guard let codexPath = CodexStatusProbe().commandPath("codex") else {
             throw PostProcessingError.codexUnavailable("Codex CLI is not installed.")
         }
@@ -62,7 +70,6 @@ struct CodexPostProcessor: PostProcessing {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: codexPath)
-        let projectPath = mode.id == OutputMode.taskID ? AppPreferences.shared.agentDefaultProjectPath : nil
         process.currentDirectoryURL = projectPath.map(URL.init(fileURLWithPath:)) ?? FileManager.default.temporaryDirectory
         process.arguments = CodexInvocation.arguments(
             promptImageURLs: imageURLs,

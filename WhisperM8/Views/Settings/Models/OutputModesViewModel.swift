@@ -97,6 +97,10 @@ final class OutputModesViewModel {
         updateMode(modeID) { $0.contextPolicy = policy }
     }
 
+    func setProjectAccess(_ access: ProjectAccessPolicy, for modeID: String) {
+        updateMode(modeID) { $0.projectAccess = access }
+    }
+
     func setTemplateID(_ templateID: String, for modeID: String) {
         updateMode(modeID) { $0.templateID = templateID }
     }

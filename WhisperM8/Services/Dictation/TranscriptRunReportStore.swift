@@ -121,7 +121,13 @@ struct TranscriptRunReportStore {
                     reasoningEffort: resolvedReasoningEffort,
                     serviceTier: resolvedServiceTier,
                     isEphemeral: draft.mode.id != OutputMode.taskID,
-                    projectPath: draft.mode.id == OutputMode.taskID ? AppPreferences.shared.agentDefaultProjectPath : nil
+                    // Gleiche Auflösung wie der echte Lauf im CodexPostProcessor,
+                    // damit die commandPreview den tatsächlichen Aufruf zeigt.
+                    projectPath: ProjectPathResolver.resolvedProjectPath(
+                        mode: draft.mode,
+                        agentChatProjectPath: draft.contextBundle.agentChat?.projectPath,
+                        defaultProjectPath: AppPreferences.shared.agentDefaultProjectPath
+                    )
                 ),
                 imageInputPaths: imageInputPaths,
                 videoInputPaths: videoInputPaths,

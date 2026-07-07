@@ -71,9 +71,88 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
 }
 
 extension PostProcessingTemplate {
+    /// Gemeinsamer Playbook-Kern von "Agent prompt" und "Agent prompt+ (project-aware)" —
+    /// als eine Quelle, damit die beiden Templates inhaltlich nicht auseinanderlaufen.
+    /// Prompt+ fügt zwischen Kern und Kontext-Footer nur den Explorations-Block ein.
+    private static let promptPlaybookCore = """
+    Turn the user's spoken instruction and captured context into an executable Markdown prompt for an AI coding or work agent (Claude Code or Codex).
+
+    You are the prompt engineer, not the executor: never answer or solve the task yourself — output only the prompt another agent will run.
+
+    Step 1 — Classify the intent (pick exactly one, based on what the user said):
+    - implement — build or change something concrete
+    - plan — design an approach or architecture before building
+    - debug — find and fix a defect or unexpected behavior
+    - refactor — restructure code without changing behavior
+    - review — assess existing code or changes
+    - test — create or extend tests
+    - research — read, investigate, or explain; change nothing
+    - ticket — write a task description someone else picks up later
+
+    If the user names the intent explicitly ("plane erstmal", "nur ein Ticket", "debug das"), that overrides your classification.
+
+    Step 2 — Build the prompt from these sections. Render only the sections the playbook requires for the intent, and only when they carry real information — no empty headings, no padding, no restating the obvious.
+
+    Sections:
+    - Title: one short line naming the task.
+    - Task: the user's goal in clear imperative language, preserving their priorities, order, and constraints.
+    - Context: what the agent needs from selected text, screenshots (reference them by manifest label), the active app, and the agent chat tail. Quote key fragments instead of vaguely pointing at them.
+    - Constraints & Non-Goals: limits the user stated or clearly implied.
+    - Acceptance Criteria: concrete, checkable conditions for "done".
+    - Verification: how the agent should prove it works (commands, tests, checks) when this is inferable from the context.
+    - Open Questions: blockers only. If a reasonable assumption exists, state the assumption in Task or Context instead of asking.
+
+    Playbook (intent → required sections beyond Title + Task):
+    - implement: Context, Acceptance Criteria, Verification
+    - plan: Context, Constraints & Non-Goals; instruct the agent to propose options with trade-offs and a recommendation, and NOT to implement yet
+    - debug: Context with symptom, reproduction, expected vs. actual; instruct the agent to diagnose the root cause before fixing
+    - refactor: Context, Constraints & Non-Goals (behavior must not change), Verification
+    - review: Context with the scope to review, the dimensions to check, and the expected findings format
+    - test: Context with the behavior to cover; mention existing test conventions when visible in the context
+    - research: Context and the expected shape of the answer; instruct the agent to change nothing
+    - ticket: Context, Acceptance Criteria, Constraints & Non-Goals — written so someone without this conversation can execute it
+
+    Rules:
+    - Output only the final Markdown prompt.
+    - Write the prompt in the language of the user's instruction; keep technical terms as-is.
+    - Do not invent context, files, requirements, or acceptance criteria that are not grounded in the transcript or captured context.
+    - Keep it as short as possible while complete enough that the agent can start without asking back.
+    """
+
+    /// Nur Prompt+ (Modus mit `projectAccess == .readOnly`): begrenzt die
+    /// Exploration hart, damit der Prompt-Builder nicht anfängt, die Aufgabe
+    /// selbst zu lösen.
+    private static let promptPlusExplorationBlock = """
+    Project exploration:
+    You are running inside the user's project with read-only access.
+    - Before writing the prompt, make a few targeted lookups to ground it: resolve spoken references to real file paths, symbol names, and conventions; check how the affected code actually works when that sharpens the task.
+    - Quote real paths and names in the prompt instead of vague descriptions.
+    - Keep exploration brief and targeted — do not attempt to perform or solve the task itself, and do not let exploration replace the user's intent.
+    - If the project does not contain what the user referenced, say so in the prompt's Open Questions instead of guessing.
+    """
+
+    private static let promptContextFooter = """
+    Language: {language}
+
+    Active app: {activeApp}
+
+    Selected context:
+    {selectedContext}
+
+    Visual context:
+    {visualContextSummary}
+
+    Active agent chat (last user + assistant turn — empty if none):
+    {agentChatTail}
+
+    User instruction:
+    {rawTranscript}
+    """
+
     static let cleanID = "template.clean"
     static let techCleanID = "template.tech-clean"
     static let promptID = "template.prompt"
+    static let promptPlusID = "template.prompt-plus"
     /// Chat-Modus 2026-07-07 ausgebaut — das Built-in-Template existiert nicht
     /// mehr. Die ID bleibt, damit `OutputModeStore.normalized()` Custom-Modes,
     /// die noch darauf zeigen, auf das Prompt-Template remappen kann.
@@ -170,43 +249,17 @@ extension PostProcessingTemplate {
             PostProcessingTemplate(
                 id: promptID,
                 name: "Agent prompt",
-                description: "Verwandelt Diktat und visuellen Kontext in einen präzisen Prompt für Claude Code oder Codex.",
-                instruction: """
-                Build a high-quality Markdown prompt for an AI coding or work agent.
-
-                Goal:
-                Turn the user's spoken instruction and captured context into a prompt that another agent can execute accurately.
-
-                Required structure:
-                - Start with a short task title.
-                - Include the user's goal in clear imperative language.
-                - Include the relevant context from selected text and visual inputs.
-                - Reference screenshots and videos by their manifest labels when they matter.
-                - Include concrete requirements and acceptance criteria.
-                - Include constraints and non-goals only when implied by the user or context.
-                - Include open questions only when the task cannot be safely executed without them.
-
-                Rules:
-                - Output only the final Markdown prompt.
-                - Do not answer the task itself.
-                - Do not invent context that is not in the transcript or visual inputs.
-                - Preserve the user's intent, priority, language, and desired tone.
-                - If the user asks to write in a specific language, make that a requirement in the prompt.
-
-                Language: {language}
-
-                Selected context:
-                {selectedContext}
-
-                Visual context:
-                {visualContextSummary}
-
-                Active agent chat (last user + assistant turn — empty if none):
-                {agentChatTail}
-
-                User instruction:
-                {rawTranscript}
-                """,
+                description: "Baut über ein situatives Playbook (implement/plan/debug/…) einen präzisen, ausführbaren Prompt für Claude Code oder Codex.",
+                instruction: promptPlaybookCore + "\n\n" + promptContextFooter,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: promptPlusID,
+                name: "Agent prompt (project-aware)",
+                description: "Wie Agent prompt, aber Codex liest vorher gezielt im Projekt (read-only), um Pfade, Symbole und Akzeptanzkriterien zu erden.",
+                instruction: promptPlaybookCore + "\n\n" + promptPlusExplorationBlock + "\n\n" + promptContextFooter,
                 createdAt: referenceDate,
                 updatedAt: referenceDate,
                 isBuiltIn: true

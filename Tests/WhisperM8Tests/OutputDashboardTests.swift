@@ -13,6 +13,7 @@ final class OutputDashboardTests: XCTestCase {
             OutputMode.rawID,
             OutputMode.cleanID,
             OutputMode.promptID,
+            OutputMode.promptPlusID,
             OutputMode.taskID,
             OutputMode.emailID,
             OutputMode.slackID,
@@ -23,13 +24,20 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(modesByID[OutputMode.whatsappID]?.shortLabel, "WA")
         XCTAssertEqual(modesByID[OutputMode.slackID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.promptID]?.contextPolicy, .auto)
+        XCTAssertEqual(modesByID[OutputMode.promptPlusID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.taskID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.rawID]?.contextPolicy, .off)
+        // Projekt-Zugriff: nur Prompt+ und Task laufen im Projekt (read-only).
+        XCTAssertEqual(modesByID[OutputMode.promptPlusID]?.projectAccess, .readOnly)
+        XCTAssertEqual(modesByID[OutputMode.taskID]?.projectAccess, .readOnly)
+        XCTAssertEqual(modesByID[OutputMode.promptID]?.projectAccess, .off)
+        XCTAssertEqual(modesByID[OutputMode.rawID]?.projectAccess, .off)
         XCTAssertFalse(modesByID[OutputMode.rawID]?.usesPostProcessing ?? true)
         XCTAssertTrue(modesByID[OutputMode.cleanID]?.usesPostProcessing ?? false)
         XCTAssertFalse(modesByID[OutputMode.rawID]?.pasteVisualAttachments ?? true)
         XCTAssertFalse(modesByID[OutputMode.cleanID]?.pasteVisualAttachments ?? true)
         XCTAssertTrue(modesByID[OutputMode.promptID]?.pasteVisualAttachments ?? false)
+        XCTAssertTrue(modesByID[OutputMode.promptPlusID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.taskID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.emailID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.slackID]?.pasteVisualAttachments ?? false)
@@ -193,10 +201,25 @@ final class OutputDashboardTests: XCTestCase {
 
     func testBuiltInTemplatesIncludePromptAndTaskModes() {
         let promptTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.promptID }
+        let promptPlusTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.promptPlusID }
         let taskTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.taskID }
 
         XCTAssertEqual(promptTemplate?.name, "Agent prompt")
         XCTAssertTrue(promptTemplate?.instruction.contains("Markdown prompt") == true)
+        // Playbook-Kern (Intent-Klassifikation + Baustein-Tabelle) in beiden Prompt-Templates.
+        for template in [promptTemplate, promptPlusTemplate] {
+            XCTAssertTrue(template?.instruction.contains("Classify the intent") == true)
+            XCTAssertTrue(template?.instruction.contains("Playbook (intent → required sections beyond Title + Task)") == true)
+            XCTAssertTrue(template?.instruction.contains("never answer or solve the task yourself") == true)
+            XCTAssertTrue(template?.instruction.contains("{rawTranscript}") == true)
+            XCTAssertTrue(template?.instruction.contains("{agentChatTail}") == true)
+            XCTAssertTrue(template?.instruction.contains("{activeApp}") == true)
+        }
+        // Nur Prompt+ enthält den begrenzten Explorations-Block.
+        XCTAssertEqual(promptPlusTemplate?.name, "Agent prompt (project-aware)")
+        XCTAssertTrue(promptPlusTemplate?.instruction.contains("read-only access") == true)
+        XCTAssertTrue(promptPlusTemplate?.instruction.contains("do not attempt to perform or solve the task itself") == true)
+        XCTAssertFalse(promptTemplate?.instruction.contains("Project exploration") == true)
         // Chat-Modus 2026-07-07 ausgebaut — das Built-in-Template darf nicht mehr existieren.
         XCTAssertFalse(PostProcessingTemplate.builtInTemplates.contains { $0.id == PostProcessingTemplate.retiredChatID })
         XCTAssertEqual(taskTemplate?.name, "Agent task")
@@ -398,6 +421,10 @@ final class OutputDashboardTests: XCTestCase {
         )
         XCTAssertEqual(
             router.route(rawText: "mach daraus einen prompt", mode: OutputMode.mode(for: OutputMode.promptID), contextBundle: context),
+            .promptPackage
+        )
+        XCTAssertEqual(
+            router.route(rawText: "bau mir einen prompt mit repo-blick", mode: OutputMode.mode(for: OutputMode.promptPlusID), contextBundle: context),
             .promptPackage
         )
         XCTAssertEqual(

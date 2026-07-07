@@ -48,7 +48,7 @@ enum ReplyIntentKind: String, Codable, Equatable {
 
 struct ReplyIntentRouter {
     func route(rawText: String, mode: OutputMode, contextBundle: TranscriptContextBundle) -> ReplyIntentKind {
-        if mode.id == OutputMode.promptID {
+        if mode.id == OutputMode.promptID || mode.id == OutputMode.promptPlusID {
             return .promptPackage
         }
         if mode.id == OutputMode.taskID {
@@ -319,7 +319,7 @@ struct PromptPackageBuilder {
         - Output mode: \(mode.name)
         - Router decision: \(intent.displayName)
         - For Slack, WhatsApp, and Email, always return the finished message, never a prompt for the user to run elsewhere.
-        - For Prompt mode, return a polished Markdown prompt for Claude Code or Codex.
+        - For Prompt modes, follow the mode instruction's playbook and return only the final Markdown prompt for Claude Code or Codex — never perform the task itself.
         - For Task mode, execute the user's task as far as the current Codex session can do non-interactively, then return the final answer or deliverable.
         - Task mode must not return a prompt unless the user explicitly asks for a prompt.
         - If a Task mode request cannot be completed because required external access, credentials, or write permissions are unavailable, return the best safe result plus the exact blocker.

@@ -181,6 +181,7 @@ struct OutputModeStore {
                 mode.templateID = nil
                 mode.contextPolicy = .off
                 mode.pasteVisualAttachments = false
+                mode.projectAccess = .off
                 mode.codexModelRawOverride = nil
                 mode.codexReasoningEffortRawOverride = nil
                 mode.codexServiceTierRawOverride = nil
