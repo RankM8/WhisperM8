@@ -32,9 +32,13 @@ extension AgentChatsView {
     func installCloseTabShortcutIfNeeded() {
         guard closeTabKeyMonitor == nil else { return }
         closeTabKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Reihenfolge: ⌘N (Picker öffnen) → ⌘⌥←/→ (Tab-Wechsel) → ⌘W
-            // (Tab schließen). Jeder Schritt gibt bei Treffer `nil` zurück
-            // (Event konsumiert), sonst das Event weiter an den nächsten.
+            // Reihenfolge: Ctrl+Tab-Switcher (MUSS zuerst — bei aktivem
+            // Switcher konsumiert er ALLE Tasten dieses Fensters, sonst würde
+            // z. B. ⌘N mitten im Durchtabben den Picker öffnen) → ⌘N (Picker
+            // öffnen) → ⌘⌥←/→ (Tab-Wechsel) → ⌘W (Tab schließen). Jeder
+            // Schritt gibt bei Treffer `nil` zurück (Event konsumiert), sonst
+            // das Event weiter an den nächsten.
+            guard let event = handleTabSwitcherKeyDown(event) else { return nil }
             guard let event = handleNewChatShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
             return handleCloseTabShortcut(event)
@@ -94,6 +98,111 @@ extension AgentChatsView {
         }
         selectAdjacentTab(direction)
         return nil
+    }
+
+    // MARK: - Ctrl+Tab-Switcher (Alt-Tab-artige Tab-Auswahl)
+
+    /// Verarbeitet den Ctrl+Tab-Switcher im `keyDown`-Pfad. Gibt `nil` zurück,
+    /// wenn das Event konsumiert wurde, sonst das Original-Event.
+    ///
+    /// Warum das auch bei fokussiertem Terminal greift: `TerminalShortcut.bytes`
+    /// reicht Control-Combos explizit durch (`guard !hasControl`), und dieser
+    /// Monitor konsumiert das Event, BEVOR SwiftTerms `keyDown` ein Tab-Byte
+    /// an die PTY schicken würde.
+    ///
+    /// Bei AKTIVEM Switcher werden alle `keyDown` dieses Fensters konsumiert:
+    /// Tab/Shift+Tab und ←/→ navigieren, Esc bricht ab (darf die TUI nie
+    /// erreichen — würde dort die laufende Generation abbrechen), Return
+    /// committet sofort. Jede andere Taste bricht ab und wird geschluckt —
+    /// wer mit gehaltenem Ctrl z. B. `C` drückt, will fast nie ein Ctrl+C an
+    /// die laufende TUI schicken.
+    private func handleTabSwitcherKeyDown(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow else { return event }
+        let direction = TabSwitcherShortcut.direction(
+            keyCode: event.keyCode, modifiers: event.modifierFlags
+        )
+
+        guard tabSwitcher != nil else {
+            guard let direction else { return event }
+            // Aktivierung braucht ≥ 2 Tabs — `begin` liefert sonst nil. Das
+            // Event wird trotzdem konsumiert (No-op), damit kein Tab-Byte im
+            // Terminal landet.
+            tabSwitcher = TabSwitcherModel.begin(
+                order: headerTabs.map(\.id),
+                current: selectedSession?.id,
+                direction: direction
+            )
+            return nil
+        }
+
+        if let direction {
+            tabSwitcher?.advance(direction, order: headerTabs.map(\.id))
+            return nil
+        }
+        switch event.keyCode {
+        case TerminalShortcut.KeyCode.leftArrow:
+            tabSwitcher?.advance(-1, order: headerTabs.map(\.id))
+        case TerminalShortcut.KeyCode.rightArrow:
+            tabSwitcher?.advance(+1, order: headerTabs.map(\.id))
+        case TabSwitcherShortcut.KeyCode.escape:
+            cancelTabSwitcher()
+        case TerminalShortcut.KeyCode.returnKey:
+            commitTabSwitcher()
+        default:
+            cancelTabSwitcher()
+        }
+        return nil
+    }
+
+    /// Installiert den `.flagsChanged`-Monitor: Loslassen von Control bei
+    /// aktivem Switcher = Commit. Dauerhaft installiert (idempotent, wie die
+    /// anderen Monitore); der Guard auf `tabSwitcher` macht ihn im
+    /// Normalbetrieb zu einem Bool-Check pro Modifier-Druck. Beobachtend —
+    /// Modifier-Änderungen laufen unverändert weiter.
+    func installTabSwitcherFlagsMonitorIfNeeded() {
+        guard tabSwitcherFlagsMonitor == nil else { return }
+        tabSwitcherFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            guard tabSwitcher != nil else { return event }
+            // Control weg (egal ob Shift o. ä. noch gehalten wird) → Commit.
+            if !event.modifierFlags.contains(.control) {
+                commitTabSwitcher()
+            }
+            return event
+        }
+    }
+
+    func removeTabSwitcherFlagsMonitor() {
+        if let tabSwitcherFlagsMonitor {
+            NSEvent.removeMonitor(tabSwitcherFlagsMonitor)
+            self.tabSwitcherFlagsMonitor = nil
+        }
+    }
+
+    /// Committet den per Tastatur hervorgehobenen Tab (Control losgelassen
+    /// oder Return). Existiert der Tab nicht mehr, bleibt die Selektion
+    /// unverändert.
+    func commitTabSwitcher() {
+        guard let switcher = tabSwitcher else { return }
+        // Erst den Switcher-State räumen, DANN selektieren — der
+        // `onChange(of: selectedSessionID)`-Cancel (Klick in Sidebar/Strip
+        // bricht den Switcher ab) darf den eigenen Commit nicht anfassen.
+        tabSwitcher = nil
+        guard let target = switcher.commitTarget(order: headerTabs.map(\.id)) else { return }
+        selectedSessionID = target
+        multiSelection = []
+    }
+
+    /// Maus-Commit aus dem Overlay: Klick auf eine Zelle wählt diesen Chat
+    /// sofort — auch wenn Control noch gehalten wird.
+    func commitTabSwitcher(to sessionID: UUID) {
+        tabSwitcher = nil
+        guard headerTabs.contains(where: { $0.id == sessionID }) else { return }
+        selectedSessionID = sessionID
+        multiSelection = []
+    }
+
+    func cancelTabSwitcher() {
+        tabSwitcher = nil
     }
 
     // MARK: - Titelleisten-Maus: Doppelklick-Zoom

@@ -182,6 +182,15 @@ struct AgentChatsView: View {
     /// und `DropDelegate.dropExited`/`performDrop` feuern bei Cancel/Außerhalb-
     /// Drop nicht zuverlässig — mouseUp ist der einzige verlässliche Geber.
     @State var tabDragEndMonitor: Any?
+    /// Ctrl+Tab-Switcher: pure Durchlauf-Maschine (nil = inaktiv). Ephemer und
+    /// fensterlokal — bewusst `@State` statt AgentWindowStore: der Zustand lebt
+    /// und stirbt mit einer einzigen Key-Interaktion in DIESEM Fenster.
+    /// internal, da die Handler in +Shortcuts ihn steuern.
+    @State var tabSwitcher: TabSwitcherModel?
+    /// Lokaler `.flagsChanged`-Monitor: Loslassen von Control bei aktivem
+    /// Switcher committet den hervorgehobenen Tab. `keyDown` sieht Modifier-
+    /// Änderungen nicht — dafür braucht es diesen zweiten Monitor.
+    @State var tabSwitcherFlagsMonitor: Any?
     /// Frame des Tab-Strips im benannten Window-Coordinate-Space
     /// (`windowCoordinateSpaceName`). Dient dem Scroll-Monitor als X-Spanne
     /// fürs Hit-Test-Gating. Bewusst window-relativ statt `.global`, damit der
@@ -512,6 +521,7 @@ struct AgentChatsView: View {
             installTitleBarZoomHandlerIfNeeded()
             installTabStripScrollMonitorIfNeeded()
             installTabDragEndMonitorIfNeeded()
+            installTabSwitcherFlagsMonitorIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
             guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
@@ -536,10 +546,17 @@ struct AgentChatsView: View {
             removeTitleBarZoomHandler()
             removeTabStripScrollMonitor()
             removeTabDragEndMonitor()
+            removeTabSwitcherFlagsMonitor()
             // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
             AppState.shared.activeAgentChat = nil
         }
         .onChange(of: selectedSessionID) { _, newValue in
+            // Externe Selektion (Sidebar-Row, Tab-Klick, ⌘1–⌘9) mitten im
+            // Ctrl+Tab-Durchlauf bricht den Switcher ab — sonst würde das
+            // spätere Ctrl-Loslassen die frische Wahl wieder überstimmen.
+            // Der eigene Commit räumt den Switcher VOR dem Selektieren
+            // (siehe commitTabSwitcher) und ist hier deshalb ein No-op.
+            if tabSwitcher != nil { tabSwitcher = nil }
             syncActiveAgentChat()
             // Kontext-Projekt folgt der Selektion — Tabs sind global, das
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
@@ -571,6 +588,17 @@ struct AgentChatsView: View {
         }
         .onChange(of: openTabIDs) { _, _ in
             closeWindowIfEmptyAndSecondary()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
+            // Fenster verliert den Key-Status mitten im Ctrl+Tab-Durchlauf
+            // (Cmd+Tab zu anderer App, Klick in anderes Fenster) → Abbruch.
+            // Das Ctrl-Loslassen passiert dann außerhalb unseres Fensters und
+            // der `.flagsChanged`-Monitor würde sonst nie committen — das
+            // Overlay bliebe hängen.
+            guard tabSwitcher != nil,
+                  let window = note.object as? NSWindow,
+                  window === hostWindow else { return }
+            cancelTabSwitcher()
         }
         .onChange(of: isHoveringTabStrip) { _, hovering in
             // Window-Drag hover-gesteuert: über dem Tab-Strip AUS (Klick/Drag
@@ -1722,12 +1750,38 @@ struct AgentChatsView: View {
                     if detachZoneTargeted { detachDropBanner }
                 }
                 .animation(.easeOut(duration: 0.12), value: detachZoneTargeted)
+                // Ctrl+Tab-Switcher: liegt bewusst NUR über dem Terminal-
+                // Content — Sidebar und Tab-Strip bleiben sichtbar/bedienbar.
+                .overlay {
+                    if tabSwitcher != nil { tabSwitcherOverlay }
+                }
+                .animation(.easeOut(duration: 0.1), value: tabSwitcher != nil)
             } else {
                 ContentUnavailableView("Kein Agent Chat", systemImage: "terminal")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(AgentTheme.background)
+    }
+
+    /// Ctrl+Tab-Switcher-Overlay über dem Terminal-Content. Die Tastatur-
+    /// Steuerung (Tab/Shift+Tab/Esc/Return, Ctrl-Release-Commit) läuft über
+    /// die Monitore in +Shortcuts — hier nur Rendering + Maus-Callbacks.
+    @ViewBuilder
+    private var tabSwitcherOverlay: some View {
+        if let tabSwitcher {
+            AgentTabSwitcherOverlay(
+                sessions: headerTabs,
+                highlightedID: tabSwitcher.highlightedID,
+                projectsByID: Dictionary(
+                    workspace.projects.map { ($0.id, $0) },
+                    uniquingKeysWith: { a, _ in a }
+                ),
+                statusStore: runtimeStatusStore,
+                onCommit: { commitTabSwitcher(to: $0) },
+                onCancel: { cancelTabSwitcher() }
+            )
+        }
     }
 
     /// Banner-Indikator, der während eines Tab-Drags über dem Content erscheint
@@ -1966,6 +2020,10 @@ struct AgentChatsView: View {
                 Menu {
                     Button("Neuer Codex Chat") { createSession(provider: .codex) }
                     Button("Neuer Claude Chat") { createSession(provider: .claude) }
+                    // Kein Agent: normale Login-Shell im Projektverzeichnis.
+                    // Der Provider ist nur Schema-Platzhalter (siehe
+                    // AgentSessionKind.terminal).
+                    Button("Neues Terminal") { createSession(provider: .claude, kind: .terminal) }
                     Divider()
                     Button("Neuer Hintergrund-Agent…") { presentBackgroundDispatchModal() }
                         .disabled(selectedProject == nil)
