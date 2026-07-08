@@ -222,6 +222,7 @@ struct ProjectChatGroup: View {
             statusStore: statusStore,
             isAutoRenaming: autoRenamingSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptSessionIDs.contains(session.id),
+            closeHelp: session.isTerminal ? "Terminal schließen" : "Archivieren",
             isUnreadSubagentResult: unreadSubagentSessionIDs.contains(session.id),
             runningChildCount: runningSubagentCountByParent[session.id] ?? 0,
             childCount: subagentChildrenByParent[session.id]?.count ?? 0,
@@ -298,7 +299,12 @@ struct ProjectChatGroup: View {
                 }
             }
             Divider()
-            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) archivieren" : "Archivieren", systemImage: "archivebox") {
+            Button(
+                bulkCount(session) > 1
+                    ? "\(bulkCount(session)) archivieren"
+                    : (session.isTerminal ? "Terminal schließen" : "Archivieren"),
+                systemImage: bulkCount(session) == 1 && session.isTerminal ? "xmark.circle" : "archivebox"
+            ) {
                 onCloseSession(session)
             }
         }
@@ -836,7 +842,7 @@ struct PinnedSessionRow: View {
                 .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
-                .help("Archivieren")
+                .help(session.isTerminal ? "Terminal schließen" : "Archivieren")
         } else if isMissingTranscript {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10, weight: .medium))

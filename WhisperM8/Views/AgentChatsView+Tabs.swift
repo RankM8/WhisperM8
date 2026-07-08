@@ -93,19 +93,43 @@ extension AgentChatsView {
         }
     }
 
-    /// Einstiegspunkt aller „Archivieren"-Aktionen (einzeln + Bulk): läuft in
-    /// der Gruppe mindestens ein Terminal, fragt ein confirmationDialog nach
-    /// (Terminieren ist die einzige irreversible Nebenwirkung) — sonst wird
-    /// direkt archiviert.
+    /// Einstiegspunkt aller „Archivieren"-Aktionen (einzeln + Bulk).
+    /// `.terminal`-Sessions werden NICHT archiviert — ein Shell-Terminal hat
+    /// kein Transcript und kein Resume, ein Archiv-Eintrag wäre ein toter
+    /// Geist. Sie werden ohne Rückfrage geschlossen und entfernt. Für den
+    /// Rest gilt: läuft in der Gruppe mindestens ein PTY, fragt ein
+    /// confirmationDialog nach (Terminieren ist die einzige irreversible
+    /// Nebenwirkung) — sonst wird direkt archiviert.
     func requestArchive(_ sessions: [AgentChatSession]) {
-        let hasRunning = sessions.contains {
+        sessions.filter(\.isTerminal).forEach { closeTerminalSession($0) }
+
+        let archivable = sessions.filter { !$0.isTerminal }
+        guard !archivable.isEmpty else { return }
+        let hasRunning = archivable.contains {
             terminalRegistry.controller(for: $0.id)?.isRunning == true
         }
         if hasRunning {
-            sessionsPendingArchive = sessions
+            sessionsPendingArchive = archivable
         } else {
-            commitArchive(sessions)
+            commitArchive(archivable)
         }
+    }
+
+    /// Terminal-Session schließen: laufende Shell beenden, Session komplett
+    /// aus dem Workspace löschen (nichts wiederherstellbar), Pin + Tab weg.
+    func closeTerminalSession(_ session: AgentChatSession) {
+        if terminalRegistry.controller(for: session.id)?.isRunning == true {
+            terminalRegistry.terminate(sessionID: session.id)
+        }
+
+        do {
+            try store.deleteSession(id: session.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        pinnedSessionIDs.removeAll { $0 == session.id }
+        closeTab(session)
     }
 
     /// Führt die Archivierung aus (direkt oder nach Dialog-Bestätigung).

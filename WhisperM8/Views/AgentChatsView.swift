@@ -1139,7 +1139,7 @@ struct AgentChatsView: View {
             forkMenuItem(session)
             tabColorMenu(for: session)
             Divider()
-            Button(bulkLabel("Archivieren", "%d Chats archivieren", for: session), systemImage: "archivebox") {
+            Button(archiveLabel(for: session), systemImage: archiveIcon(for: session)) {
                 archiveSelection(session)
             }
         }
@@ -1181,7 +1181,7 @@ struct AgentChatsView: View {
             }
             tabColorMenu(for: session)
             Divider()
-            Button(bulkLabel("Archivieren", "%d Chats archivieren", for: session), systemImage: "archivebox") {
+            Button(archiveLabel(for: session), systemImage: archiveIcon(for: session)) {
                 archiveSelection(session)
             }
         }
@@ -2426,7 +2426,10 @@ struct AgentChatsView: View {
                 Button("Tab schließen", systemImage: "xmark.square") {
                     closeTab(session)
                 }
-                Button("Archivieren", systemImage: "archivebox") {
+                Button(
+                    session.isTerminal ? "Terminal schließen" : "Archivieren",
+                    systemImage: session.isTerminal ? "xmark.circle" : "archivebox"
+                ) {
                     requestArchive([session])
                 }
             } label: {
@@ -2538,7 +2541,7 @@ struct AgentChatsView: View {
                 backgroundLifecycleMenuItems(session)
             }
             Divider()
-            Button(bulkLabel("Archivieren", "%d Chats archivieren", for: session), systemImage: "archivebox") {
+            Button(archiveLabel(for: session), systemImage: archiveIcon(for: session)) {
                 archiveSelection(session)
             }
         }
