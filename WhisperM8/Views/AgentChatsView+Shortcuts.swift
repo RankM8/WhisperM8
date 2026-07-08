@@ -211,40 +211,58 @@ extension AgentChatsView {
         tabSwitcher = nil
     }
 
-    // MARK: - Drei-Finger-Swipe (Tab links/rechts)
+    // MARK: - Zwei-Finger-Swipe (Tab links/rechts)
 
-    /// Installiert den lokalen `.swipe`-Monitor für den Drei-Finger-Tab-Wechsel.
-    /// Idempotent, gleiches Muster wie die übrigen Monitore. `.swipe` ist ein
-    /// eigener Event-Typ — Zwei-Finger-Scroll (Terminal-Scrollback, Tab-Strip)
-    /// bleibt unberührt. Ob Events überhaupt ankommen, entscheiden die
-    /// Trackpad-Systemeinstellungen (siehe `TabSwipeShortcut`).
-    func installTabSwipeMonitorIfNeeded() {
-        guard tabSwipeMonitor == nil else { return }
-        tabSwipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .swipe) { event in
-            handleTabSwipe(event)
-        }
-    }
+    /// Übersetzt eine horizontale Zwei-Finger-Trackpad-Geste (Safari-Stil) in
+    /// den benachbarten Tab — gleiche Semantik wie ⌘⌥←/→ (Wrap-around,
+    /// Multi-Select-Reset via `selectAdjacentTab`). Läuft im selben
+    /// `scrollWheel`-Monitor wie der Tab-Strip-Scroll (siehe
+    /// `installTabStripScrollMonitorIfNeeded`). Gibt `nil` zurück, wenn das
+    /// Event konsumiert wurde.
+    ///
+    /// Gating (sonst Event durchreichen):
+    /// - nur dieses Fenster, nur Trackpad (`hasPreciseScrollingDeltas`) —
+    ///   Mausräder gehören dem Tab-Strip-Monitor bzw. dem Terminal;
+    /// - nicht über dem Tab-Strip (`isHoveringTabStrip`) — dort scrollt die
+    ///   Leiste nativ horizontal.
+    ///
+    /// Die Gesten-Logik (Achsen-Entscheid, Schwellwert, Einmal-Trigger,
+    /// Momentum-Schlucken) lebt pur und getestet im
+    /// `TabScrollSwipeRecognizer`; vertikale Gesten laufen unangetastet
+    /// durch → Terminal-Scrollback bleibt unberührt. Bei aktivem
+    /// Ctrl+Tab-Switcher wird der Trigger ignoriert (Geste trotzdem
+    /// geschluckt) — zwei Navigationsmodi würden ums Highlight kämpfen.
+    ///
+    /// Vorzeichen: `scrollingDeltaX` wird über `isDirectionInvertedFromDevice`
+    /// in den FINGER-Raum normalisiert (positiv = Finger nach rechts); Finger
+    /// nach rechts → Tab rechts. Sollte die QA auf realer Hardware eine
+    /// invertierte Richtung zeigen, dreht sich NUR diese Normalisierung.
+    private func handleTabSwipeScroll(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow,
+              event.hasPreciseScrollingDeltas,
+              !isHoveringTabStrip else { return event }
 
-    func removeTabSwipeMonitor() {
-        if let tabSwipeMonitor {
-            NSEvent.removeMonitor(tabSwipeMonitor)
-            self.tabSwipeMonitor = nil
-        }
-    }
+        let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        var recognizer = tabScrollSwipeRecognizer
+        let verdict = recognizer.handle(
+            phase: event.phase,
+            momentumPhase: event.momentumPhase,
+            deltaX: event.scrollingDeltaX * sign,
+            deltaY: event.scrollingDeltaY * sign
+        )
+        tabScrollSwipeRecognizer = recognizer
 
-    /// Übersetzt einen Drei-Finger-Swipe in den benachbarten Tab — gleiche
-    /// Semantik wie ⌘⌥←/→ (Wrap-around, Multi-Select-Reset) über
-    /// `selectAdjacentTab`. Gibt `nil` zurück, wenn das Event konsumiert wurde.
-    /// Bei aktivem Ctrl+Tab-Switcher wird der Swipe geschluckt und ignoriert —
-    /// zwei Navigationsmodi gleichzeitig würden ums Highlight kämpfen.
-    private func handleTabSwipe(_ event: NSEvent) -> NSEvent? {
-        guard let hostWindow, event.window === hostWindow else { return event }
-        guard tabSwitcher == nil else { return nil }
-        guard let direction = TabSwipeShortcut.direction(deltaX: event.deltaX) else {
+        switch verdict {
+        case .passThrough:
             return event
+        case .consume:
+            return nil
+        case .trigger(let direction):
+            if tabSwitcher == nil {
+                selectAdjacentTab(direction)
+            }
+            return nil
         }
-        selectAdjacentTab(direction)
-        return nil
     }
 
     // MARK: - Titelleisten-Maus: Doppelklick-Zoom
@@ -297,11 +315,14 @@ extension AgentChatsView {
     /// Installiert den lokalen `scrollWheel`-Monitor. Idempotent. Wir nutzen —
     /// wie beim Cmd-W- und Zoom-Monitor — bewusst einen NSEvent-Monitor, weil
     /// SwiftUI einen `ScrollView(.horizontal)` nicht per vertikalem Mausrad
-    /// scrollt.
+    /// scrollt. Pipeline wie beim keyDown-Monitor: erst Tab-Strip-Scroll
+    /// (Mausrad über dem Strip), dann Zwei-Finger-Swipe (Trackpad-Blättern) —
+    /// jeder Schritt gibt bei Konsum `nil` zurück.
     func installTabStripScrollMonitorIfNeeded() {
         guard tabStripScrollMonitor == nil else { return }
         tabStripScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            handleTabStripScroll(event)
+            guard let event = handleTabStripScroll(event) else { return nil }
+            return handleTabSwipeScroll(event)
         }
     }
 

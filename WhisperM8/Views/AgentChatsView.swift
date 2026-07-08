@@ -200,11 +200,11 @@ struct AgentChatsView: View {
     /// Switcher committet den hervorgehobenen Tab. `keyDown` sieht Modifier-
     /// Änderungen nicht — dafür braucht es diesen zweiten Monitor.
     @State var tabSwitcherFlagsMonitor: Any?
-    /// Lokaler `.swipe`-Monitor: Drei-Finger-Swipe wechselt zum benachbarten
-    /// Tab (gleiche Semantik wie ⌘⌥←/→). Liefert nur Events, wenn die
-    /// Trackpad-Systemeinstellungen Drei-Finger-Seitenblättern erlauben
-    /// (siehe `TabSwipeShortcut`).
-    @State var tabSwipeMonitor: Any?
+    /// Zustand der Zwei-Finger-Swipe-Erkennung (Tab links/rechts, Safari-
+    /// Stil) — pure State-Machine über eine Gesten-Lebensdauer, gefüttert vom
+    /// `scrollWheel`-Monitor (siehe `handleTabSwipeScroll` in +Shortcuts).
+    /// Ephemer, fensterlokal.
+    @State var tabScrollSwipeRecognizer = TabScrollSwipeRecognizer()
     /// Frame des Tab-Strips im benannten Window-Coordinate-Space
     /// (`windowCoordinateSpaceName`). Dient dem Scroll-Monitor als X-Spanne
     /// fürs Hit-Test-Gating. Bewusst window-relativ statt `.global`, damit der
@@ -537,7 +537,6 @@ struct AgentChatsView: View {
             installTabStripScrollMonitorIfNeeded()
             installTabDragEndMonitorIfNeeded()
             installTabSwitcherFlagsMonitorIfNeeded()
-            installTabSwipeMonitorIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
             guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
@@ -563,7 +562,6 @@ struct AgentChatsView: View {
             removeTabStripScrollMonitor()
             removeTabDragEndMonitor()
             removeTabSwitcherFlagsMonitor()
-            removeTabSwipeMonitor()
             // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
             AppState.shared.activeAgentChat = nil
         }
