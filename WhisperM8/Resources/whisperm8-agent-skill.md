@@ -1,6 +1,6 @@
 ---
 name: codex-subagent
-description: Codex-Subagents über das whisperm8-CLI spawnen, steuern und verwalten — delegiere Implementierungen, Reviews, Second Opinions oder parallele Teilaufgaben an einen headless Codex-Agenten. Nutze diese Skill bei "frag Codex", "lass Codex das machen/reviewen", "Codex-Subagent", "zweite Meinung", "delegiere an Codex" oder wenn Subagent-Jobs verwaltet werden sollen (Status, Logs, Nachsteuern, Stoppen, Aufräumen).
+description: Codex-Subagents über das whisperm8-CLI spawnen, steuern und verwalten — delegiere Implementierungen, Reviews, Second Opinions oder parallele Teilaufgaben an einen headless Codex-Agenten. Nutze diese Skill bei "frag Codex", "lass Codex das machen/reviewen", "Codex-Subagent", "zweite Meinung", "delegiere an Codex", wenn Subagent-Jobs verwaltet werden sollen (Status, Logs, Nachsteuern, Stoppen, Aufräumen) oder wenn Codex-Jobs als Steps in Claude Dynamic Workflows orchestriert werden.
 ---
 
 # Codex-Subagents via `whisperm8 agent`
@@ -128,8 +128,13 @@ whisperm8 agent help                             # Hilfetext
    oder Job wurde übernommen.
 7. **Zwischenstand:** `agent logs <id> --tail 20` (rohe JSONL-Events:
    `agent_message`-, `command_execution`-Items etc.).
-8. **Committen ja, Pushen nein** (Sandbox blockt Netzwerk). Push nur nach
-   User-Freigabe via `--allow-network`.
+8. **Committen: aktuell BLOCKIERT** (Stand 2026-07-08, codex 0.142.5): die
+   Codex-Sandbox schützt `.git` — Commits scheitern in-place UND mit
+   `--worktree`, der Job endet als `partial` mit `.git`-openQuestion.
+   Bis zum CLI-Fix (writable_roots-Override): Aufträge ohne Commit-Pflicht
+   formulieren, Dateiarbeit aus dem Report übernehmen und selbst committen.
+   Pushen weiterhin nein (Sandbox blockt Netzwerk; nur nach User-Freigabe
+   via `--allow-network`). Details: `references/claude-workflows.md`.
 9. **Aufräumen:** fertige, ausgewertete Jobs mit `agent rm <id>` entfernen —
    aber nicht ungefragt, der User sieht die Jobs auch in der App.
 10. Codex liest Projekt-Konventionen aus `AGENTS.md` im Ziel-Repo (nicht
@@ -162,6 +167,21 @@ Verbindliche Regeln:
    `.qa/traces/<task-id>/`.
 6. **Keine Fallbacks ohne Freigabe.** Wenn Playwright-MCP nicht funktioniert,
    nicht auf sichtbaren Chrome, Codex Chrome Plugin oder Computer Use ausweichen.
+7. **State frisch capturen, direkt vor jedem Batch.** storageStates sterben
+   serverseitig binnen ~40 Minuten (App-Session-Rotation), unabhängig von der
+   Cookie-Expiry im JSON. Erzeugung via 1Password-CLI ohne Secret-Sichtkontakt:
+   siehe `references/1password-cli.md`.
+8. **Harte Verbotsregeln in JEDEN Prompt.** Codex kennt die Sicherheitsregeln
+   des Haupt-Agenten nicht — ein Agent hat sich bei totem State eigenmächtig
+   mit Seed-Credentials eingeloggt. Pflichtbausteine: nie einloggen/ausloggen/
+   Passwörter, bei Login-Redirect abbrechen mit VERDICT "NICHT PRUEFBAR",
+   erlaubte Datenänderungen explizit benennen inkl. Rückdreh-Pflicht.
+9. **Mutierende Agents brauchen disjunkte Testobjekte** (pro Agent ein eigenes
+   Wegwerf-Objekt, namentlich zugewiesen). Fehlende Testdaten vorher selbst
+   headless anlegen, nicht dem Agent überlassen.
+10. **Agent-Verdicts sind Evidenz, keine Wahrheit.** Überraschende MÄNGEL/
+    NICHT-PRÜFBAR-Urteile selbst nachmessen (headless Playwright mit demselben
+    State) — Fehlurteil-Muster in `references/playwright-browser-qa.md`.
 
 Technische Eigenschaften (für korrekte Flags/Prompts):
 
@@ -203,10 +223,32 @@ Screenshots: .qa/screenshots/<task-id>/
 Traces bei Fehlern: .qa/traces/<task-id>/
 
 Nutze Playwright-MCP. Nutze nicht den sichtbaren Chrome, nicht Computer Use und
-nicht das Codex Chrome Plugin. Überschreibe .qa/auth/* nicht. Brich ab, wenn der
-Auth-State nicht funktioniert. Schreibe pass/fail, finale URL, Titel, sichtbare
-Auth-Indikatoren, Console-/Network-Auffälligkeiten und Artefaktpfade.
+nicht das Codex Chrome Plugin. Überschreibe .qa/auth/* nicht.
+
+HARTE REGELN: NIEMALS einloggen, ausloggen oder Passwörter eingeben — wenn eine
+Login-Seite erscheint oder der Auth-State nicht greift, sofort abbrechen und
+VERDICT "NICHT PRUEFBAR" dokumentieren. Erlaubte Datenänderungen: <explizit
+aufzählen oder "keine">; jede Änderung zurückdrehen und im Report dokumentieren.
+Arbeite zügig — der Auth-State altert.
+
+Schreibe VERDICT (BESTANDEN/MAENGEL/NICHT PRUEFBAR), Beobachtung pro
+Akzeptanzpunkt (Texte wörtlich zitieren), finale URL, Console-/Network-
+Auffälligkeiten und Artefaktpfade — VERDICT zusätzlich in die Abschlussnachricht.
 ```
+
+## Einsatz in Claude Dynamic Workflows (`/workflows`)
+
+Codex-Jobs funktionieren als Steps in Dynamic Workflows — validiert 2026-07-08
+(Fan-out, Resume über Phasen, Exit-Code-Pfade, Parent-Zuordnung alle grün).
+Das Workflow-Skript kann nicht selbst shellen; jeder Codex-Aufruf läuft über
+einen billigen Claude-Wrapper-Subagenten (`model: 'sonnet'` oder `'haiku'`,
+`effort: 'low'` — nie das teure Hauptmodell) mit `run --wait --json`,
+`; echo "EXIT:$?"` und `{schema}`-Relay des stdout-JSON. Exit-Codes wertet das
+Skript aus, nicht der Wrapper. `status <id>` statt `list` (Kontext-Falle!),
+`shortId` durch die Stages reichen für `send`-Nachsteuerung, Playwright-Jobs
+auf 3–5 parallel batchen. Prompt-Vorlage, Schema, Muster (Cross-Model-
+Verifier-Panel, Fan-out-Implementierung) und bekannte Grenzen:
+**`references/claude-workflows.md`**.
 
 ## Workflows (Kopiervorlagen)
 
@@ -243,3 +285,30 @@ whisperm8 agent send a3f81c2e --wait --json \
   fragen.
 - **Report null trotz done**: `rawLastMessage` nutzen; beim nächsten `send`
   explizit an den Report-Vertrag erinnern.
+- **`partial` + openQuestion „Sandbox blockiert .git/index.lock"**: bekannte
+  Codex-Sandbox-Regression (siehe Arbeitsregel 8) — die Dateiarbeit ist
+  erledigt, nur der Commit fehlt. Selbst committen, Job NICHT als gescheitert
+  werten und nicht per `send` zum erneuten Committen auffordern (scheitert
+  wieder).
+- **Report meldet Commits, aber `git log` kennt sie nicht als neu**: Codex
+  referenziert gern existierende SHAs — Commits IMMER per git verifizieren,
+  besonders bei read-only-Jobs (die können gar nicht committen).
+
+## Referenzen
+
+Vertiefendes Betriebswissen (bei Bedarf laden):
+
+- **`references/playwright-browser-qa.md`** — Browser-QA im Detail:
+  State-Lebensdauer und Frische-Regeln, Parallelitäts-Empirie und
+  Approval-Gate-Historie, Sandbox-Grenzen, Werkzeug-Verfügbarkeits-Fallbacks,
+  Prompt-Pflichtbausteine, Testdaten-Kollisionsvermeidung, Verdict-Kalibrierung
+  (dokumentierte Fehlurteil-Muster), bewährter Batch-Ablauf.
+- **`references/1password-cli.md`** — Auth-States via 1Password-CLI:
+  `op run`-Muster ohne Secret-Sichtkontakt, capture-state.mjs, Item-Mapping,
+  Setup, Betriebsregeln (Frische, gitignore, read-only für Subagents).
+- **`references/claude-workflows.md`** — Codex-Jobs als Steps in Claude
+  Dynamic Workflows: Wrapper-Kontrakt (Prompt-Vorlage + Schema),
+  Exit-Code-Mapping im Skript, Parallelitäts- und Budget-Regeln, bewährte
+  Muster (Cross-Model-Verifier-Panel, Fan-out, Nachsteuer-Kette), bekannte
+  Grenzen inkl. Commit-Blockade und verifiziertem Fix (Testprotokoll
+  2026-07-08).

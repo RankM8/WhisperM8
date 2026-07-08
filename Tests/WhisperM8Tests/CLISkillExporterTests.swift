@@ -61,6 +61,67 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertTrue(exporter.isInstalledForClaudeCode)
     }
 
+    func testAgentSkillInstallsReferences() throws {
+        let exporter = makeAgentExporter()
+        try exporter.installForClaudeCode()
+
+        let references = CLISkillExporter.SkillDefinition.codexAgent.references
+        XCTAssertFalse(references.isEmpty, "codex-subagent muss references mitbringen")
+        for reference in references {
+            let url = exporter.claudeCodeReferenceURL(for: reference)
+            XCTAssertTrue(
+                url.path.contains("/codex-subagent/references/"),
+                "Referenz muss unter references/ liegen: \(url.path)"
+            )
+            let written = try String(contentsOf: url, encoding: .utf8)
+            XCTAssertEqual(written, try exporter.referenceMarkdown(reference))
+        }
+        // Die SKILL.md muss auf jede installierte Referenz verweisen.
+        let skill = try exporter.skillMarkdown()
+        for reference in references {
+            XCTAssertTrue(
+                skill.contains("references/\(reference.fileName)"),
+                "SKILL.md verweist nicht auf \(reference.fileName)"
+            )
+        }
+    }
+
+    func testAgentSkillNotCurrentWhenReferenceOutdated() throws {
+        let exporter = makeAgentExporter()
+        try exporter.installForClaudeCode()
+        XCTAssertTrue(exporter.installedSkillIsCurrent)
+
+        let reference = try XCTUnwrap(
+            CLISkillExporter.SkillDefinition.codexAgent.references.first
+        )
+        try "veraltet".write(
+            to: exporter.claudeCodeReferenceURL(for: reference),
+            atomically: true,
+            encoding: .utf8
+        )
+        XCTAssertFalse(exporter.installedSkillIsCurrent)
+
+        try exporter.installForClaudeCode()
+        XCTAssertTrue(exporter.installedSkillIsCurrent)
+    }
+
+    func testAgentSkillInstallLeavesForeignReferenceFilesAlone() throws {
+        let exporter = makeAgentExporter()
+        try exporter.installForClaudeCode()
+
+        // Lokale Ergänzung des Users simulieren — Update darf sie nicht löschen.
+        let foreign = exporter.claudeCodeReferencesDirectory
+            .appendingPathComponent("lokales-mapping.md")
+        try "privates Betriebswissen".write(to: foreign, atomically: true, encoding: .utf8)
+
+        try exporter.installForClaudeCode()
+        XCTAssertEqual(
+            try String(contentsOf: foreign, encoding: .utf8),
+            "privates Betriebswissen"
+        )
+        XCTAssertTrue(exporter.installedSkillIsCurrent)
+    }
+
     // MARK: Claude-Code-Install
 
     func testClaudeCodeSkillURLUsesSkillNamedFolder() {

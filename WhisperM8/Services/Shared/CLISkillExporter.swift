@@ -6,11 +6,22 @@ import Foundation
 /// entdeckt. Für andere Tools (ChatGPT, Claude.ai) liefert er den
 /// Markdown-Inhalt zum Speichern/Kopieren.
 struct CLISkillExporter {
+    /// Eine Referenz-Datei eines Skills: wird nach
+    /// `~/.claude/skills/<name>/references/<fileName>` installiert.
+    struct SkillReference: Equatable {
+        /// Dateiname im references/-Ordner (inkl. .md).
+        let fileName: String
+        /// Bundle-Ressource (ohne .md-Endung).
+        let resourceName: String
+    }
+
     /// Ein installierbarer Skill: `name` muss dem `name:`-Frontmatter der
     /// Ressource entsprechen — Claude Code erwartet Ordnername == Skill-Name.
     struct SkillDefinition: Equatable {
         let name: String
         let resourceName: String
+        /// Vertiefende references/-Dateien (SKILL.md verweist auf sie).
+        var references: [SkillReference] = []
 
         /// Transkriptions-Skill (`whisperm8 transcribe …`).
         static let transcription = SkillDefinition(
@@ -20,7 +31,21 @@ struct CLISkillExporter {
         /// Codex-Subagents (`whisperm8 agent …`).
         static let codexAgent = SkillDefinition(
             name: "codex-subagent",
-            resourceName: "whisperm8-agent-skill"
+            resourceName: "whisperm8-agent-skill",
+            references: [
+                SkillReference(
+                    fileName: "playwright-browser-qa.md",
+                    resourceName: "whisperm8-agent-skill-ref-playwright-browser-qa"
+                ),
+                SkillReference(
+                    fileName: "1password-cli.md",
+                    resourceName: "whisperm8-agent-skill-ref-1password-cli"
+                ),
+                SkillReference(
+                    fileName: "claude-workflows.md",
+                    resourceName: "whisperm8-agent-skill-ref-claude-workflows"
+                ),
+            ]
         )
 
         static let all: [SkillDefinition] = [.transcription, .codexAgent]
@@ -57,10 +82,19 @@ struct CLISkillExporter {
 
     /// Der vollständige Skill-Inhalt (Frontmatter + Markdown-Body).
     func skillMarkdown() throws -> String {
-        guard let url = bundle.url(forResource: definition.resourceName, withExtension: "md"),
+        try resourceMarkdown(definition.resourceName)
+    }
+
+    /// Inhalt einer Referenz-Datei aus dem Bundle.
+    func referenceMarkdown(_ reference: SkillReference) throws -> String {
+        try resourceMarkdown(reference.resourceName)
+    }
+
+    private func resourceMarkdown(_ resourceName: String) throws -> String {
+        guard let url = bundle.url(forResource: resourceName, withExtension: "md"),
               let content = try? String(contentsOf: url, encoding: .utf8),
               !content.isEmpty else {
-            throw SkillError.resourceMissing(definition.resourceName)
+            throw SkillError.resourceMissing(resourceName)
         }
         return content
     }
@@ -73,21 +107,45 @@ struct CLISkillExporter {
             .appendingPathComponent("SKILL.md")
     }
 
+    /// Zielordner der Referenz-Dateien: `~/.claude/skills/<name>/references/`.
+    var claudeCodeReferencesDirectory: URL {
+        claudeCodeSkillURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("references", isDirectory: true)
+    }
+
+    func claudeCodeReferenceURL(for reference: SkillReference) -> URL {
+        claudeCodeReferencesDirectory.appendingPathComponent(reference.fileName)
+    }
+
     var isInstalledForClaudeCode: Bool {
         FileManager.default.fileExists(atPath: claudeCodeSkillURL.path)
     }
 
-    /// Ist der installierte Skill inhaltlich identisch mit dem gebündelten?
-    /// `false` auch, wenn (noch) gar keiner installiert ist.
+    /// Ist der installierte Skill inhaltlich identisch mit dem gebündelten
+    /// (SKILL.md UND alle verwalteten references/-Dateien)? `false` auch,
+    /// wenn (noch) gar keiner installiert ist.
     var installedSkillIsCurrent: Bool {
         guard let bundled = try? skillMarkdown(),
-              let installed = try? String(contentsOf: claudeCodeSkillURL, encoding: .utf8) else {
+              let installed = try? String(contentsOf: claudeCodeSkillURL, encoding: .utf8),
+              installed == bundled else {
             return false
         }
-        return installed == bundled
+        for reference in definition.references {
+            guard let bundledReference = try? referenceMarkdown(reference),
+                  let installedReference = try? String(
+                    contentsOf: claudeCodeReferenceURL(for: reference), encoding: .utf8),
+                  installedReference == bundledReference else {
+                return false
+            }
+        }
+        return true
     }
 
-    /// Schreibt (bzw. aktualisiert) den Skill für Claude Code. Idempotent.
+    /// Schreibt (bzw. aktualisiert) den Skill für Claude Code: SKILL.md plus
+    /// alle verwalteten references/-Dateien. Idempotent. Fremde Dateien im
+    /// references/-Ordner (z. B. lokale Ergänzungen des Users) bleiben
+    /// unangetastet.
     @discardableResult
     func installForClaudeCode() throws -> URL {
         let content = try skillMarkdown()
@@ -97,6 +155,21 @@ struct CLISkillExporter {
             withIntermediateDirectories: true
         )
         try content.write(to: destination, atomically: true, encoding: .utf8)
+
+        if !definition.references.isEmpty {
+            try FileManager.default.createDirectory(
+                at: claudeCodeReferencesDirectory,
+                withIntermediateDirectories: true
+            )
+            for reference in definition.references {
+                let referenceContent = try referenceMarkdown(reference)
+                try referenceContent.write(
+                    to: claudeCodeReferenceURL(for: reference),
+                    atomically: true,
+                    encoding: .utf8
+                )
+            }
+        }
         Logger.debug("[CLI] Skill installiert: \(destination.path)")
         return destination
     }
