@@ -15,6 +15,37 @@ final class AgentCLIArgumentsTests: XCTestCase {
         XCTAssertFalse(options.allowNetwork)
         XCTAssertNil(options.playwrightStorageStatePath)
         XCTAssertNil(options.parentSessionID)
+        XCTAssertTrue(options.configOverrides.isEmpty)
+    }
+
+    func testConfigOverridesAreRepeatableAndOrdered() throws {
+        let options = try AgentCLIParser.parseRun([
+            "--config", "tools.web_search=true",
+            "--config", #"mcp_servers.foo.command="bar""#,
+            "prompt",
+        ])
+        XCTAssertEqual(options.configOverrides, [
+            "tools.web_search=true",
+            #"mcp_servers.foo.command="bar""#,
+        ])
+    }
+
+    func testConfigOverrideWithoutKeyValueThrows() {
+        XCTAssertThrowsError(try AgentCLIParser.parseRun(["--config", "kaputt", "p"])) { error in
+            guard case .invalidValue(let flag, let value, _)? = error as? AgentCLIParser.ParseError else {
+                return XCTFail("Erwartet invalidValue, war \(error)")
+            }
+            XCTAssertEqual(flag, "--config")
+            XCTAssertEqual(value, "kaputt")
+        }
+        // "=wert" ohne Key ist ebenso ungültig.
+        XCTAssertThrowsError(try AgentCLIParser.parseRun(["--config", "=wert", "p"]))
+    }
+
+    func testConfigOverrideMissingValueThrows() {
+        XCTAssertThrowsError(try AgentCLIParser.parseRun(["prompt", "--config"])) { error in
+            XCTAssertEqual(error as? AgentCLIParser.ParseError, .missingValue("--config"))
+        }
     }
 
     func testAllFlags() throws {

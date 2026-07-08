@@ -113,17 +113,18 @@ const verdicts = await parallel(findings.map(f => () =>
 
 ## Bekannte Grenzen (Stand 2026-07-08, codex 0.142.5)
 
-- **Commits sind headless blockiert.** Die Codex-Sandbox behandelt `.git` jeder
-  writable root als read-only (`index.lock: Operation not permitted`) — in-place
-  UND `--worktree` (dort liegt der Lock im Haupt-Repo unter `.git/worktrees/`).
-  Schreib-Jobs enden als `report.status: partial` mit leerem `commits`-Array und
-  einer `.git`-openQuestion. Verifizierter Fix (noch nicht im CLI eingebaut):
-  `-c 'sandbox_workspace_write.writable_roots=["<repo>/.git"]'` in
-  `CodexExecRunner.buildArguments`. **Bis dahin:** Aufträge ohne Commit-Pflicht
-  formulieren; `partial` mit `.git`-openQuestion als Erfolg der Dateiarbeit
-  werten und selbst committen. Report-`commits` grundsätzlich per git
-  verifizieren — read-only-Jobs haben nachweislich schon existierende SHAs als
-  „eigene" Commits gemeldet.
+- **Commits: behoben (Fix vom 2026-07-08).** Codex' Sandbox behandelt `.git`
+  jeder writable root als read-only; das CLI schaltet das `.git`-Verzeichnis
+  bei workspace-write seither automatisch frei
+  (`sandbox_workspace_write.writable_roots`, auch für Resume-Turns und
+  Worktrees). Tritt `index.lock: Operation not permitted` doch auf, läuft ein
+  Binary von vor dem Fix — App neu bauen/starten. Report-`commits` weiterhin
+  per git verifizieren — read-only-Jobs haben nachweislich schon existierende
+  SHAs als „eigene" Commits gemeldet.
+- **Codex-Fähigkeiten freischalten:** `--config key=value` (wiederholbar)
+  reicht beliebige Codex-Configs durch (z.B. weitere MCP-Server oder
+  `tools.web_search=true`) und gilt für alle Turns des Jobs — die Overrides
+  gewinnen gegen eingebaute Werte.
 - **`rg` fehlt im Codex-PATH** — Jobs weichen selbstständig auf grep/awk aus
   (nur Noise in openQuestions, kein Fehler).
 - **Wrapper-Overhead:** ~35 k Sonnet-Tokens pro Wrapper (System-Prompt + Relay).

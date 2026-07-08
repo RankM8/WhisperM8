@@ -34,6 +34,24 @@ final class AgentJobStateTests: XCTestCase {
         XCTAssertEqual(decoded.codexThreadID, "thread-1")
     }
 
+    func testStateWithoutConfigOverridesDecodes() throws {
+        // Kompatibilität: state.json von Builds VOR --config hat das Feld
+        // nicht — muss weiter lesbar sein (Overrides dann nil).
+        let json = """
+        {"version":1,"shortId":"x","provider":"codex","state":"done","intent":"i","cwd":"/tmp","turns":1,"sandbox":"workspace-write","allowNetwork":false,"createdAt":"2026-07-04T10:00:00Z","updatedAt":"2026-07-04T10:00:00Z"}
+        """
+        let decoded = try XCTUnwrap(AgentJobStore.decode(Data(json.utf8)))
+        XCTAssertNil(decoded.configOverrides)
+    }
+
+    func testConfigOverridesRoundTrip() throws {
+        var job = makeState()
+        job.configOverrides = ["tools.web_search=true", #"a.b="c""#]
+        let data = try AgentJobStore.encode(job)
+        let decoded = try XCTUnwrap(AgentJobStore.decode(data))
+        XCTAssertEqual(decoded.configOverrides, ["tools.web_search=true", #"a.b="c""#])
+    }
+
     func testUnknownStateFailsDecode() {
         let json = """
         {"version":1,"shortId":"x","provider":"codex","state":"exploded","intent":"i","cwd":"/tmp","turns":0,"sandbox":"workspace-write","createdAt":"2026-07-04T10:00:00Z","updatedAt":"2026-07-04T10:00:00Z"}

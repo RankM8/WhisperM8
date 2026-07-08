@@ -74,6 +74,87 @@ final class CodexExecRunnerTests: XCTestCase {
         XCTAssertFalse(args.contains { $0.hasPrefix("mcp_servers.playwright") })
     }
 
+    func testBuildArgumentsAddsGitWritableRootForWorkspaceWrite() {
+        var request = makeRequest()
+        request.gitWritableRootPath = "/tmp/project/.git"
+        let args = CodexExecRunner.buildArguments(for: request)
+        XCTAssertTrue(args.contains(#"sandbox_workspace_write.writable_roots=["/tmp/project/.git"]"#))
+    }
+
+    func testBuildArgumentsAddsGitWritableRootOnResume() {
+        var request = makeRequest(resume: "thread-123")
+        request.gitWritableRootPath = "/tmp/project/.git"
+        let args = CodexExecRunner.buildArguments(for: request)
+        // Auch Folge-Turns müssen committen können (Sandbox dort via -c).
+        XCTAssertTrue(args.contains(#"sandbox_workspace_write.writable_roots=["/tmp/project/.git"]"#))
+    }
+
+    func testBuildArgumentsOmitsGitWritableRootForReadOnly() {
+        var request = makeRequest()
+        request.sandbox = .readOnly
+        request.gitWritableRootPath = "/tmp/project/.git"
+        let args = CodexExecRunner.buildArguments(for: request)
+        XCTAssertFalse(args.contains { $0.hasPrefix("sandbox_workspace_write.writable_roots") })
+    }
+
+    func testBuildArgumentsOmitsGitWritableRootWithoutRepo() {
+        let args = CodexExecRunner.buildArguments(for: makeRequest())
+        XCTAssertFalse(args.contains { $0.hasPrefix("sandbox_workspace_write.writable_roots") })
+    }
+
+    func testBuildArgumentsAppendsConfigOverridesAfterBuiltins() {
+        var request = makeRequest()
+        request.effort = "high"
+        request.configOverrides = ["model_reasoning_effort=low", #"tools.web_search=true"#]
+        let args = CodexExecRunner.buildArguments(for: request)
+
+        // Beide Overrides landen als -c-Werte …
+        XCTAssertTrue(args.contains("model_reasoning_effort=low"))
+        XCTAssertTrue(args.contains("tools.web_search=true"))
+        // … und zwar NACH den eingebauten Werten (letzter -c gewinnt),
+        // damit der Aufrufer z.B. den Effort-Builtin übersteuern kann.
+        let builtin = args.firstIndex(of: "model_reasoning_effort=high")
+        let override = args.firstIndex(of: "model_reasoning_effort=low")
+        XCTAssertNotNil(builtin)
+        XCTAssertNotNil(override)
+        XCTAssertLessThan(builtin!, override!)
+        // Positional-Kontrakt bleibt: "-" ist das letzte Argument.
+        XCTAssertEqual(args.last, "-")
+    }
+
+    // MARK: - CodexGitWritableRoot
+
+    func testGitWritableRootResolvesPlainRepo() throws {
+        let dir = try makeTempProjectDirectory()
+        let gitDir = dir.appendingPathComponent(".git", isDirectory: true)
+        try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
+        XCTAssertEqual(CodexGitWritableRoot.resolve(repoPath: dir.path), gitDir.path)
+    }
+
+    func testGitWritableRootResolvesLinkedWorktreeToMainGit() throws {
+        // Haupt-Repo mit .git/worktrees/<n> + Worktree-Checkout, dessen
+        // .git-DATEI dorthin zeigt — Commits brauchen das Haupt-.git.
+        let dir = try makeTempProjectDirectory()
+        let mainGit = dir.appendingPathComponent("main/.git/worktrees/feature", isDirectory: true)
+        try FileManager.default.createDirectory(at: mainGit, withIntermediateDirectories: true)
+        let checkout = dir.appendingPathComponent("checkout", isDirectory: true)
+        try FileManager.default.createDirectory(at: checkout, withIntermediateDirectories: true)
+        try "gitdir: \(mainGit.path)\n".write(
+            to: checkout.appendingPathComponent(".git"),
+            atomically: true,
+            encoding: .utf8
+        )
+        XCTAssertEqual(
+            CodexGitWritableRoot.resolve(repoPath: checkout.path),
+            dir.appendingPathComponent("main/.git").path
+        )
+    }
+
+    func testGitWritableRootNilWithoutGitRepo() throws {
+        let dir = try makeTempProjectDirectory()
+        XCTAssertNil(CodexGitWritableRoot.resolve(repoPath: dir.path))
+    }
+
     // MARK: - Integration mit Fake-codex-Skript
 
     /// Baut ein ausführbares Shellskript, das den Fixture-Stream ausgibt und

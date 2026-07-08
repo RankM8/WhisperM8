@@ -52,6 +52,7 @@ whisperm8 agent help                             # Hilfetext
 | `--sandbox <m>` | `read-only` oder `workspace-write` (Default). read-only für reine Analyse/Reviews. |
 | `--worktree` | Job arbeitet in einem frischen Git-Worktree (Branch `subagent/<id>`, liegt im Job-Verzeichnis). Pflicht-Empfehlung, wenn du selbst gerade im selben Checkout editierst. |
 | `--allow-network` | Netzwerk in der Sandbox (u.a. `git push`, Paketinstallationen). Default aus — vorher den User fragen. |
+| `--config <key=value>` | Generischer Codex-Config-Override, wiederholbar — wird 1:1 als `-c` an codex exec durchgereicht und gilt auch für Folge-Turns (`send`). Kommt NACH den eingebauten Configs, übersteuert sie also (z.B. `--config tools.web_search=true`). |
 | `--playwright-storage-state <path>` | Browser-QA: startet den Playwright-MCP im Codex-Subagent isoliert mit dieser storageState-Datei (`--isolated --storage-state`). Relative Pfade werden relativ zu `--cd`/CWD aufgelöst; fehlt die Datei, bricht `run` sofort mit Exit 1 ab. Browser-Traffic braucht KEIN `--allow-network`. |
 | `--model <name>` | Codex-Modell-Override. |
 | `--effort <level>` | `model_reasoning_effort`-Override (z.B. low/medium/high). |
@@ -128,13 +129,12 @@ whisperm8 agent help                             # Hilfetext
    oder Job wurde übernommen.
 7. **Zwischenstand:** `agent logs <id> --tail 20` (rohe JSONL-Events:
    `agent_message`-, `command_execution`-Items etc.).
-8. **Committen: aktuell BLOCKIERT** (Stand 2026-07-08, codex 0.142.5): die
-   Codex-Sandbox schützt `.git` — Commits scheitern in-place UND mit
-   `--worktree`, der Job endet als `partial` mit `.git`-openQuestion.
-   Bis zum CLI-Fix (writable_roots-Override): Aufträge ohne Commit-Pflicht
-   formulieren, Dateiarbeit aus dem Report übernehmen und selbst committen.
-   Pushen weiterhin nein (Sandbox blockt Netzwerk; nur nach User-Freigabe
-   via `--allow-network`). Details: `references/claude-workflows.md`.
+8. **Committen ja, Pushen nein.** Das CLI schaltet das `.git`-Verzeichnis
+   bei workspace-write automatisch frei (Codex' Sandbox behandelt es sonst
+   als read-only) — Commits funktionieren in-place und mit `--worktree`.
+   Push nur nach User-Freigabe via `--allow-network`. Scheitert ein Commit
+   trotzdem an `.git/index.lock: Operation not permitted`, läuft ein
+   whisperm8-Binary von vor dem Fix (2026-07-08) — App neu bauen/starten.
 9. **Aufräumen:** fertige, ausgewertete Jobs mit `agent rm <id>` entfernen —
    aber nicht ungefragt, der User sieht die Jobs auch in der App.
 10. Codex liest Projekt-Konventionen aus `AGENTS.md` im Ziel-Repo (nicht
@@ -285,11 +285,11 @@ whisperm8 agent send a3f81c2e --wait --json \
   fragen.
 - **Report null trotz done**: `rawLastMessage` nutzen; beim nächsten `send`
   explizit an den Report-Vertrag erinnern.
-- **`partial` + openQuestion „Sandbox blockiert .git/index.lock"**: bekannte
-  Codex-Sandbox-Regression (siehe Arbeitsregel 8) — die Dateiarbeit ist
-  erledigt, nur der Commit fehlt. Selbst committen, Job NICHT als gescheitert
-  werten und nicht per `send` zum erneuten Committen auffordern (scheitert
-  wieder).
+- **`partial` + openQuestion „Sandbox blockiert .git/index.lock"**: das
+  laufende whisperm8-Binary ist älter als der Commit-Fix vom 2026-07-08
+  (writable_roots-Override) — App neu bauen/starten. Die Dateiarbeit des
+  Jobs ist trotzdem erledigt: notfalls selbst committen; nach dem Update
+  committet ein `send`-Folge-Turn auch selbst nach.
 - **Report meldet Commits, aber `git log` kennt sie nicht als neu**: Codex
   referenziert gern existierende SHAs — Commits IMMER per git verifizieren,
   besonders bei read-only-Jobs (die können gar nicht committen).

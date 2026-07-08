@@ -21,6 +21,13 @@ struct CodexTurnRequest {
     var allowNetwork = false
     /// Optional: isoliertes Playwright-MCP mit dieser storageState-Datei starten.
     var playwrightStorageStatePath: String?
+    /// .git-Verzeichnis, das für Commits beschreibbar sein muss (Codex behandelt
+    /// das Top-Level-.git jeder writable root als read-only). nil = kein Repo
+    /// bzw. read-only-Job — dann kein Override.
+    var gitWritableRootPath: String?
+    /// Generische Codex-Config-Overrides (`--config key=value`), 1:1 als `-c`
+    /// durchgereicht — NACH den eingebauten Werten, damit sie gewinnen.
+    var configOverrides: [String] = []
     var outputSchemaPath: String
     var outputLastMessagePath: String
     /// Idle-Watchdog: kein Gesamt-Timeout (Turns dürfen lange laufen), aber
@@ -96,6 +103,16 @@ final class CodexExecRunner: @unchecked Sendable {
             // über `currentDirectoryURL` des Prozesses.
             args += ["-c", "sandbox_mode=\"\(request.sandbox.rawValue)\""]
         }
+        // Commits freischalten: Codex' workspace-write behandelt das
+        // Top-Level-.git jeder writable root als read-only — `git commit`
+        // stirbt sonst an `.git/index.lock: Operation not permitted`
+        // (empirisch verifiziert 2026-07-08, codex 0.142.5; gilt für
+        // in-place UND Linked Worktrees, deren Metadaten im Haupt-.git
+        // liegen). read-only-Jobs bekommen bewusst keinen Override.
+        if request.sandbox == .workspaceWrite,
+           let gitRoot = request.gitWritableRootPath, !gitRoot.isEmpty {
+            args += ["-c", "sandbox_workspace_write.writable_roots=\(tomlArray([gitRoot]))"]
+        }
         if let model = request.model, !model.isEmpty {
             args += ["-m", model]
         }
@@ -131,6 +148,12 @@ final class CodexExecRunner: @unchecked Sendable {
                 // deckt das NICHT ab.
                 "-c", "mcp_servers.playwright.default_tools_approval_mode=\"approve\"",
             ]
+        }
+        // Generische Overrides als LETZTE -c-Werte: in der Codex CLI gewinnt
+        // der letzte -c, so kann der Aufrufer auch eingebaute Werte (Effort,
+        // writable_roots, Playwright-Konfiguration) gezielt übersteuern.
+        for override in request.configOverrides where !override.isEmpty {
+            args += ["-c", override]
         }
         if let resumeID = request.resumeThreadID {
             // Positional: [SESSION_ID] [PROMPT] — die ID direkt vor dem "-".
@@ -458,5 +481,45 @@ extension CodexExecRunner {
         let state = TurnStreamState(onEvent: onEvent)
         adopt(state: state)
         return state
+    }
+}
+
+// MARK: - .git-Auflösung für den Commit-Override
+
+/// Ermittelt das .git-VERZEICHNIS, das für Commits eines Jobs beschreibbar
+/// sein muss (→ `CodexTurnRequest.gitWritableRootPath`). Der Supervisor ruft
+/// das pro Turn auf — bewusst NICHT in Store-Mutation-Closures (Datei-I/O).
+enum CodexGitWritableRoot {
+    static func resolve(repoPath: String) -> String? {
+        let repoURL = URL(fileURLWithPath: repoPath, isDirectory: true)
+        let gitURL = repoURL.appendingPathComponent(".git")
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: gitURL.path, isDirectory: &isDirectory) else {
+            return nil
+        }
+        if isDirectory.boolValue {
+            return gitURL.path
+        }
+        // .git ist eine DATEI → der Checkout ist selbst ein Linked Worktree:
+        // "gitdir: <hauptrepo>/.git/worktrees/<name>". Commits schreiben in
+        // das Haupt-.git (index.lock, objects, refs) — also DORT freischalten.
+        guard let content = try? String(contentsOf: gitURL, encoding: .utf8),
+              let line = content.split(separator: "\n").first(where: { $0.hasPrefix("gitdir:") }) else {
+            return nil
+        }
+        let rawPath = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
+        guard !rawPath.isEmpty else { return nil }
+        var gitDir = URL(
+            fileURLWithPath: rawPath,
+            isDirectory: true,
+            relativeTo: repoURL
+        ).standardizedFileURL
+        // Bis zur ".git"-Komponente hochlaufen (…/.git/worktrees/<n> → …/.git).
+        while gitDir.lastPathComponent != ".git" {
+            let parent = gitDir.deletingLastPathComponent()
+            guard parent.path != gitDir.path else { return nil }
+            gitDir = parent
+        }
+        return gitDir.path
     }
 }

@@ -85,6 +85,7 @@ enum AgentRunCLI {
         initial.model = options.model
         initial.effort = options.effort
         initial.allowNetwork = options.allowNetwork
+        initial.configOverrides = options.configOverrides.isEmpty ? nil : options.configOverrides
         initial.playwrightStorageStatePath = options.playwrightStorageStatePath.map {
             AgentRunCLI.absolutePath($0, relativeTo: cwd)
         }
@@ -643,6 +644,10 @@ enum AgentCLIHelp {
       --model <name>         Codex-Modell-Override.
       --effort <level>       model_reasoning_effort-Override.
       --allow-network        Netzwerk in der Sandbox erlauben (u.a. git push).
+      --config <key=value>   Generischer Codex-Config-Override, wiederholbar —
+                             wird als -c an codex exec durchgereicht und gilt
+                             auch für Folge-Turns (send). Letzter Wert gewinnt,
+                             übersteuert also auch eingebaute Configs.
       --playwright-storage-state <path>
                              Playwright-MCP isoliert mit dieser storageState-Datei starten.
       --worktree             Job in frischem Git-Worktree (Branch subagent/<id>).

@@ -193,6 +193,65 @@ final class AgentJobSupervisorTests: XCTestCase {
         XCTAssertEqual(store.readState(shortId: "a3f81c2e")?.state, .takenOver)
     }
 
+    func testConfigOverridesAndGitRootReachCodexArgv() async throws {
+        // Job mit persistierten Overrides in einem "Repo" (.git-Verzeichnis) —
+        // der Supervisor muss beides in die codex-argv geben.
+        try makeJob()
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try store.mutateState(shortId: "a3f81c2e") {
+            $0.configOverrides = ["tools.web_search=true"]
+        }
+
+        let argvFile = root.appendingPathComponent("seen-argv.txt")
+        let body = """
+        printf '%s\\n' "$@" > "\(argvFile.path)"
+        printf '%s\\n' '\(CodexExecFixtures.turnCompleted)'
+        printf '{"status":"success","summary":"ok","filesChanged":[],"commits":[],"testsRun":null,"openQuestions":[]}' > "$out"
+        exit 0
+        """
+        let supervisor = makeSupervisor(fakeCodexPath: try makeFakeCodex(body: body))
+
+        let exit = await supervisor.superviseCurrentTurn(shortId: "a3f81c2e")
+
+        XCTAssertEqual(exit, AgentCLIExit.ok)
+        let argv = try String(contentsOf: argvFile, encoding: .utf8)
+        XCTAssertTrue(argv.contains("tools.web_search=true"))
+        XCTAssertTrue(argv.contains(
+            #"sandbox_workspace_write.writable_roots=["\#(root.path)/.git"]"#
+        ))
+    }
+
+    func testResumeTurnAppliesStoredConfigOverrides() async throws {
+        // Folge-Turn (send): die beim run persistierten Overrides müssen auch
+        // bei `codex exec resume` ankommen.
+        try makeJob()
+        try store.mutateState(shortId: "a3f81c2e") {
+            $0.codexThreadID = "prev-thread-42"
+            $0.configOverrides = ["model_reasoning_effort=low"]
+        }
+        try store.transition(shortId: "a3f81c2e", to: .running)
+        try store.transition(shortId: "a3f81c2e", to: .done)
+
+        let argvFile = root.appendingPathComponent("seen-argv.txt")
+        let body = """
+        printf '%s\\n' "$@" > "\(argvFile.path)"
+        printf '%s\\n' '\(CodexExecFixtures.turnCompleted)'
+        printf '{"status":"success","summary":"ok","filesChanged":[],"commits":[],"testsRun":null,"openQuestions":[]}' > "$out"
+        exit 0
+        """
+        let supervisor = makeSupervisor(fakeCodexPath: try makeFakeCodex(body: body))
+
+        let exit = await supervisor.superviseCurrentTurn(shortId: "a3f81c2e")
+
+        XCTAssertEqual(exit, AgentCLIExit.ok)
+        let argv = try String(contentsOf: argvFile, encoding: .utf8)
+        XCTAssertTrue(argv.contains("resume"))
+        XCTAssertTrue(argv.contains("model_reasoning_effort=low"))
+    }
+
     func testResumeTurnPassesThreadIDToCodex() async throws {
         // Job mit vorhandener Thread-ID (zweiter Turn) — das Fake-Skript
         // schreibt seine argv in eine Datei, damit wir resume prüfen können.

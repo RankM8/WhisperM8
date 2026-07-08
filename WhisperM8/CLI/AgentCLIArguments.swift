@@ -29,6 +29,10 @@ struct AgentRunOptions: Equatable {
     /// Optionaler Playwright-MCP Auth-State. Wenn gesetzt, startet Codex den
     /// Playwright-MCP isoliert mit genau dieser storageState-Datei.
     var playwrightStorageStatePath: String?
+    /// Generische Codex-Config-Overrides (`--config key=value`, wiederholbar) —
+    /// werden 1:1 als `-c` an codex exec durchgereicht und gelten für alle
+    /// Turns des Jobs.
+    var configOverrides: [String] = []
     /// Claude-Session-ID des Spawners — verknüpft den Job in der App mit
     /// seiner Parent-Session.
     var parentSessionID: String?
@@ -107,6 +111,18 @@ enum AgentCLIParser {
                 options.allowNetwork = true
             case "--playwright-storage-state":
                 options.playwrightStorageStatePath = try nextValue(for: arg)
+            case "--config":
+                let raw = try nextValue(for: arg)
+                // Minimalvalidierung "key=value" — den Rest validiert codex
+                // selbst (TOML-Parsing des value-Teils).
+                guard let equalsIndex = raw.firstIndex(of: "="),
+                      equalsIndex != raw.startIndex else {
+                    throw ParseError.invalidValue(
+                        flag: arg, value: raw,
+                        allowed: "key=value (Codex-Config-Override, z.B. tools.web_search=true)"
+                    )
+                }
+                options.configOverrides.append(raw)
             case "--parent":
                 options.parentSessionID = try nextValue(for: arg)
             case "--wait":

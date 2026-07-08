@@ -70,6 +70,11 @@ struct AgentJobState: Codable, Equatable {
     /// Optionaler Playwright-MCP Auth-State für Browser-QA. Wird vom
     /// Supervisor als Codex-Config-Override in jeden Turn gegeben.
     var playwrightStorageStatePath: String?
+    /// Generische Codex-Config-Overrides (`--config key=value`) — gelten für
+    /// JEDEN Turn des Jobs, auch für Resume via `send` (der detachte
+    /// Supervisor rekonstruiert sie von hier). Optional: ältere state.json
+    /// ohne das Feld decodieren zu nil.
+    var configOverrides: [String]?
     var worktree: Worktree?
     var failureReason: String?
     var codexVersion: String?
@@ -104,6 +109,7 @@ struct AgentJobState: Codable, Equatable {
         self.effort = nil
         self.allowNetwork = false
         self.playwrightStorageStatePath = nil
+        self.configOverrides = nil
         self.worktree = nil
         self.failureReason = nil
         self.codexVersion = codexVersion

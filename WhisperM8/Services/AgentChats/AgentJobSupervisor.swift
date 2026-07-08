@@ -94,16 +94,24 @@ final class AgentJobSupervisor: @unchecked Sendable {
         }
 
         let effectiveCwd = state.worktree?.path ?? state.cwd
+        let sandbox = CodexSandboxMode(rawValue: state.sandbox) ?? .workspaceWrite
         let request = CodexTurnRequest(
             codexPath: codexPath,
             cwd: effectiveCwd,
             prompt: prompt,
             resumeThreadID: state.codexThreadID,
-            sandbox: CodexSandboxMode(rawValue: state.sandbox) ?? .workspaceWrite,
+            sandbox: sandbox,
             model: state.model,
             effort: state.effort,
             allowNetwork: state.allowNetwork,
             playwrightStorageStatePath: state.playwrightStorageStatePath,
+            // Aus dem effektiven cwd aufgelöst: beim Linked Worktree zeigt
+            // dessen .git-DATEI auf das Haupt-.git — genau das muss
+            // beschreibbar sein, damit Commits funktionieren.
+            gitWritableRootPath: sandbox == .workspaceWrite
+                ? CodexGitWritableRoot.resolve(repoPath: effectiveCwd)
+                : nil,
+            configOverrides: state.configOverrides ?? [],
             outputSchemaPath: store.reportSchemaURL(for: shortId).path,
             outputLastMessagePath: store.lastMessageURL(for: shortId).path,
             idleTimeout: idleTimeout
