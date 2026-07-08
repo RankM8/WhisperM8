@@ -194,13 +194,18 @@ final class AgentJobSupervisorTests: XCTestCase {
     }
 
     func testConfigOverridesAndGitRootReachCodexArgv() async throws {
-        // Job mit persistierten Overrides in einem "Repo" (.git-Verzeichnis) —
-        // der Supervisor muss beides in die codex-argv geben.
+        // Job mit persistierten Overrides in einem ECHTEN Repo — der
+        // Supervisor muss Overrides und den .git-Writable-Root in die
+        // codex-argv geben (der Root kommt aus `git rev-parse`).
         try makeJob()
-        try FileManager.default.createDirectory(
-            at: root.appendingPathComponent(".git", isDirectory: true),
-            withIntermediateDirectories: true
-        )
+        let gitInit = Process()
+        gitInit.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        gitInit.arguments = ["-C", root.path, "init", "-q"]
+        gitInit.standardError = FileHandle.nullDevice
+        try gitInit.run()
+        gitInit.waitUntilExit()
+        let expectedGitRoot = try XCTUnwrap(CodexGitWritableRoot.resolve(repoPath: root.path))
+
         try store.mutateState(shortId: "a3f81c2e") {
             $0.configOverrides = ["tools.web_search=true"]
         }
@@ -220,7 +225,7 @@ final class AgentJobSupervisorTests: XCTestCase {
         let argv = try String(contentsOf: argvFile, encoding: .utf8)
         XCTAssertTrue(argv.contains("tools.web_search=true"))
         XCTAssertTrue(argv.contains(
-            #"sandbox_workspace_write.writable_roots=["\#(root.path)/.git"]"#
+            #"sandbox_workspace_write.writable_roots=["\#(expectedGitRoot)"]"#
         ))
     }
 

@@ -223,12 +223,17 @@ enum AgentSendCLI {
             return .failure(.init(message: "Job \(options.shortId) hat keine Codex-Thread-ID (erster Turn kam nie bis thread.started) — Resume unmöglich. `agent rm` und neu starten.", exit: AgentCLIExit.stateConflict))
         }
 
+        let previousState = state.state
         do {
             // Reservieren: ruhend → spawning (macht den Job für parallele send
             // sofort aktiv), danach erst der Prompt-Handoff.
             try store.transition(shortId: options.shortId, to: .spawning)
             try store.writePendingPrompt(shortId: options.shortId, prompt: options.prompt + AgentSubagentPrompt.reportSuffix)
         } catch {
+            // Rollback: ohne ihn bliebe der Job als `spawning` ohne Supervisor
+            // stehen und wäre bis zur 30s-Orphan-Korrektur weder per `send`
+            // fortsetzbar noch per `stop` beendbar.
+            _ = try? store.mutateState(shortId: options.shortId) { $0.state = previousState }
             return .failure(.init(message: "Prompt-Handoff fehlgeschlagen: \(error.localizedDescription)", exit: AgentCLIExit.environment))
         }
         return .success(())
@@ -436,7 +441,20 @@ enum AgentJobCLIShared {
                 shortId: shortId,
                 logURL: store.supervisorLogURL(for: shortId)
             )
-            try store.mutateState(shortId: shortId) { $0.supervisorPid = pid }
+            // Unterm Job-Lock, sonst Race gegen den bereits laufenden
+            // Supervisor: der schreibt `running` (samt eigener PID), und ein
+            // ungeschütztes read-modify-write hier könnte diesen neueren
+            // Snapshot mit `spawning` überschreiben. `finalize` verweigert
+            // danach `spawning → done` — ein erfolgreicher Turn stünde als
+            // failed da. Die PID nur setzen, solange der Supervisor sie noch
+            // nicht selbst eingetragen hat.
+            try store.withExclusiveLock(shortId: shortId) {
+                _ = try store.mutateState(shortId: shortId) { job in
+                    if job.state == .spawning, job.supervisorPid == nil {
+                        job.supervisorPid = pid
+                    }
+                }
+            }
         } catch {
             CLIIO.err(error.localizedDescription)
             _ = try? store.mutateState(shortId: shortId) { job in
@@ -629,7 +647,8 @@ enum AgentCLIHelp {
 
     VERWENDUNG
       whisperm8 agent run  [optionen] "<prompt>"       Job starten (detacht; --wait = synchron)
-      whisperm8 agent send <id> [--wait] "<prompt>"    Folge-Turn (codex exec resume)
+      whisperm8 agent send <id> [--wait] [--json] "<prompt>"
+                                                       Folge-Turn (codex exec resume)
       whisperm8 agent list [--json]                    alle Jobs
       whisperm8 agent status <id> [--json]             Zustand + Report
       whisperm8 agent logs <id> [--tail N]             letzte Events (Default 50)
@@ -647,7 +666,8 @@ enum AgentCLIHelp {
       --config <key=value>   Generischer Codex-Config-Override, wiederholbar —
                              wird als -c an codex exec durchgereicht und gilt
                              auch für Folge-Turns (send). Letzter Wert gewinnt,
-                             übersteuert also auch eingebaute Configs.
+                             übersteuert also auch eingebaute Configs (u.a. den
+                             writable_roots-Eintrag fürs .git-Verzeichnis).
       --playwright-storage-state <path>
                              Playwright-MCP isoliert mit dieser storageState-Datei starten.
       --worktree             Job in frischem Git-Worktree (Branch subagent/<id>).

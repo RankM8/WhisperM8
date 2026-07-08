@@ -101,6 +101,28 @@ final class AgentCLICommandTests: XCTestCase {
         XCTAssertNil(store.consumePendingPrompt(shortId: "a3f81c2e"))
     }
 
+    /// Scheitert der Prompt-Handoff NACH der spawning-Reservierung, muss der
+    /// Job in seinen Ruhezustand zurückfallen — sonst gilt er bis zur
+    /// 30s-Orphan-Korrektur als aktiv und ist weder per `send` fortsetzbar
+    /// noch per `stop` beendbar.
+    func testSendClaimRollsBackWhenPromptHandoffFails() throws {
+        try makeJob(state: .done, threadID: "thread-1")
+        // pending-prompt.txt als VERZEICHNIS anlegen: der Prompt-Write scheitert,
+        // state.json bleibt schreibbar.
+        try FileManager.default.createDirectory(
+            at: store.pendingPromptURL(for: "a3f81c2e"),
+            withIntermediateDirectories: true
+        )
+
+        let options = try AgentCLIParser.parseSend(["a3f81c2e", "next turn"])
+        let result = AgentSendCLI.claim(store: store, options: options)
+
+        guard case .failure(let error) = result else { return XCTFail("Handoff-Fehler erwartet") }
+        XCTAssertEqual(error.exit, AgentCLIExit.environment)
+        XCTAssertEqual(store.readState(shortId: "a3f81c2e")?.state, .done, "Rollback auf den Ruhezustand fehlt")
+        XCTAssertFalse(try XCTUnwrap(store.readState(shortId: "a3f81c2e")).isActive)
+    }
+
     // MARK: - stop
 
     func testStopSendsSigtermToSupervisorPid() throws {

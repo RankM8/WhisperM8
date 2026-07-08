@@ -75,11 +75,15 @@ final class AgentJobSupervisor: @unchecked Sendable {
         }
 
         // running + eigene PID atomar markieren. Verweigert die Guard-Tabelle
-        // (z.B. weil inzwischen takenOver), fassen wir nichts an.
+        // (z.B. weil inzwischen takenOver), fassen wir nichts an. Unterm
+        // Job-Lock, damit der detachende Parent (der gleich unsere PID
+        // nachträgt) diesen Übergang nicht per read-modify-write überschreibt.
         let state: AgentJobState
         do {
-            state = try store.transition(shortId: shortId, to: .running) { job in
-                job.supervisorPid = ProcessInfo.processInfo.processIdentifier
+            state = try store.withExclusiveLock(shortId: shortId) {
+                try store.transition(shortId: shortId, to: .running) { job in
+                    job.supervisorPid = ProcessInfo.processInfo.processIdentifier
+                }
             }
         } catch {
             log("Turn nicht startbar: \(error.localizedDescription)")

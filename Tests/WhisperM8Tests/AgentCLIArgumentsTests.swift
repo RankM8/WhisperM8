@@ -42,6 +42,20 @@ final class AgentCLIArgumentsTests: XCTestCase {
         XCTAssertThrowsError(try AgentCLIParser.parseRun(["--config", "=wert", "p"]))
     }
 
+    /// Ein Override mit führendem "-" landet als eigenes argv-Element hinter
+    /// `-c`; codex liest ihn dann als Flag ("unexpected argument '-f'").
+    /// Deshalb muss der Parser ihn ablehnen, nicht die CLI später crashen.
+    func testConfigOverrideWithLeadingDashThrows() {
+        XCTAssertThrowsError(try AgentCLIParser.parseRun(["--config", "-foo=bar", "p"])) { error in
+            guard case .invalidValue(let flag, let value, _)? = error as? AgentCLIParser.ParseError else {
+                return XCTFail("Erwartet invalidValue, war \(error)")
+            }
+            XCTAssertEqual(flag, "--config")
+            XCTAssertEqual(value, "-foo=bar")
+        }
+        XCTAssertThrowsError(try AgentCLIParser.parseRun(["--config", "--sandbox=x", "p"]))
+    }
+
     func testConfigOverrideMissingValueThrows() {
         XCTAssertThrowsError(try AgentCLIParser.parseRun(["prompt", "--config"])) { error in
             XCTAssertEqual(error as? AgentCLIParser.ParseError, .missingValue("--config"))

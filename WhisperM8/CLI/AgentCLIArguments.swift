@@ -114,12 +114,16 @@ enum AgentCLIParser {
             case "--config":
                 let raw = try nextValue(for: arg)
                 // Minimalvalidierung "key=value" — den Rest validiert codex
-                // selbst (TOML-Parsing des value-Teils).
+                // selbst (TOML-Parsing des value-Teils). Ein führendes "-"
+                // MUSS hier scheitern: der Wert wird als eigenes argv-Element
+                // hinter `-c` gereicht, und codex läse ihn dann als Flag
+                // ("unexpected argument '-f'") statt als Config-Override.
                 guard let equalsIndex = raw.firstIndex(of: "="),
-                      equalsIndex != raw.startIndex else {
+                      equalsIndex != raw.startIndex,
+                      !raw.hasPrefix("-") else {
                     throw ParseError.invalidValue(
                         flag: arg, value: raw,
-                        allowed: "key=value (Codex-Config-Override, z.B. tools.web_search=true)"
+                        allowed: "key=value ohne führendes '-' (Codex-Config-Override, z.B. tools.web_search=true)"
                     )
                 }
                 options.configOverrides.append(raw)

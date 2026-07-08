@@ -108,13 +108,16 @@ final class CodexExecRunnerTests: XCTestCase {
         request.configOverrides = ["model_reasoning_effort=low", #"tools.web_search=true"#]
         let args = CodexExecRunner.buildArguments(for: request)
 
-        // Beide Overrides landen als -c-Werte …
-        XCTAssertTrue(args.contains("model_reasoning_effort=low"))
-        XCTAssertTrue(args.contains("tools.web_search=true"))
+        // Overrides müssen ECHTE -c-Werte sein (Paar-Kontrakt), nicht bloß
+        // irgendwo im argv stehen: ein loser Wert würde von codex als
+        // Positional/Prompt gelesen.
+        let configValues = Self.configValues(in: args)
+        XCTAssertTrue(configValues.contains("model_reasoning_effort=low"))
+        XCTAssertTrue(configValues.contains("tools.web_search=true"))
         // … und zwar NACH den eingebauten Werten (letzter -c gewinnt),
         // damit der Aufrufer z.B. den Effort-Builtin übersteuern kann.
-        let builtin = args.firstIndex(of: "model_reasoning_effort=high")
-        let override = args.firstIndex(of: "model_reasoning_effort=low")
+        let builtin = configValues.firstIndex(of: "model_reasoning_effort=high")
+        let override = configValues.firstIndex(of: "model_reasoning_effort=low")
         XCTAssertNotNil(builtin)
         XCTAssertNotNil(override)
         XCTAssertLessThan(builtin!, override!)
@@ -122,37 +125,128 @@ final class CodexExecRunnerTests: XCTestCase {
         XCTAssertEqual(args.last, "-")
     }
 
-    // MARK: - CodexGitWritableRoot
+    func testGitWritableRootIsPassedAsConfigPair() {
+        var request = makeRequest()
+        request.gitWritableRootPath = "/tmp/project/.git"
+        let values = Self.configValues(in: CodexExecRunner.buildArguments(for: request))
+        XCTAssertTrue(values.contains(#"sandbox_workspace_write.writable_roots=["/tmp/project/.git"]"#))
+    }
+
+    /// Werte, die unmittelbar auf ein `-c` folgen — genau das, was codex als
+    /// Config-Override akzeptiert. Ein Substring-Match über das ganze argv
+    /// würde ein kaputtes Layout (loser Wert ohne `-c`) grün durchlassen.
+    private static func configValues(in args: [String]) -> [String] {
+        args.enumerated().compactMap { index, element in
+            guard element == "-c", args.indices.contains(index + 1) else { return nil }
+            return args[index + 1]
+        }
+    }
+
+    // MARK: - CodexGitWritableRoot (echte Repos — die Fälle, die eine
+    // Pfad-Heuristik reihenweise verfehlt hat)
+
+    @discardableResult
+    private func git(_ arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Repo mit einem Commit (worktree add braucht HEAD).
+    private func makeRepo(at dir: URL) throws {
+        try git(["-C", dir.path, "init", "-q"])
+        try Data("x".utf8).write(to: dir.appendingPathComponent("README.md"))
+        try git(["-C", dir.path, "add", "."])
+        try git(["-C", dir.path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"])
+    }
 
     func testGitWritableRootResolvesPlainRepo() throws {
         let dir = try makeTempProjectDirectory()
-        let gitDir = dir.appendingPathComponent(".git", isDirectory: true)
-        try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
-        XCTAssertEqual(CodexGitWritableRoot.resolve(repoPath: dir.path), gitDir.path)
+        try makeRepo(at: dir)
+        let expected = try git(["-C", dir.path, "rev-parse", "--path-format=absolute", "--git-common-dir"])
+        XCTAssertEqual(CodexGitWritableRoot.resolve(repoPath: dir.path), expected)
     }
 
-    func testGitWritableRootResolvesLinkedWorktreeToMainGit() throws {
-        // Haupt-Repo mit .git/worktrees/<n> + Worktree-Checkout, dessen
-        // .git-DATEI dorthin zeigt — Commits brauchen das Haupt-.git.
+    /// Regression: cwd im UNTERverzeichnis (z.B. `--cd /repo/Sources`) — der
+    /// alte Resolver fand dort kein `.git` und lieferte nil, wodurch Commits
+    /// weiterhin an `.git/index.lock` scheiterten.
+    func testGitWritableRootResolvesFromSubdirectory() throws {
         let dir = try makeTempProjectDirectory()
-        let mainGit = dir.appendingPathComponent("main/.git/worktrees/feature", isDirectory: true)
-        try FileManager.default.createDirectory(at: mainGit, withIntermediateDirectories: true)
-        let checkout = dir.appendingPathComponent("checkout", isDirectory: true)
-        try FileManager.default.createDirectory(at: checkout, withIntermediateDirectories: true)
-        try "gitdir: \(mainGit.path)\n".write(
-            to: checkout.appendingPathComponent(".git"),
-            atomically: true,
-            encoding: .utf8
-        )
+        try makeRepo(at: dir)
+        let sub = dir.appendingPathComponent("Sources/Deep", isDirectory: true)
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+
+        let resolved = try XCTUnwrap(CodexGitWritableRoot.resolve(repoPath: sub.path))
+        XCTAssertEqual(resolved, try git(["-C", dir.path, "rev-parse", "--path-format=absolute", "--git-common-dir"]))
+        XCTAssertTrue(resolved.hasSuffix("/.git"))
+    }
+
+    /// Linked Worktree: Commits schreiben ins gemeinsame Haupt-.git.
+    func testGitWritableRootResolvesLinkedWorktreeToCommonDir() throws {
+        let dir = try makeTempProjectDirectory()
+        let main = dir.appendingPathComponent("main", isDirectory: true)
+        try FileManager.default.createDirectory(at: main, withIntermediateDirectories: true)
+        try makeRepo(at: main)
+        let worktree = dir.appendingPathComponent("wt", isDirectory: true)
+        try git(["-C", main.path, "worktree", "add", "-q", worktree.path, "-b", "feature"])
+
+        let resolved = try XCTUnwrap(CodexGitWritableRoot.resolve(repoPath: worktree.path))
+        // Das gemeinsame Verzeichnis ist main/.git, NICHT .git/worktrees/wt.
         XCTAssertEqual(
-            CodexGitWritableRoot.resolve(repoPath: checkout.path),
-            dir.appendingPathComponent("main/.git").path
+            resolved,
+            try git(["-C", main.path, "rev-parse", "--path-format=absolute", "--git-common-dir"])
+        )
+        XCTAssertFalse(resolved.contains("worktrees"))
+    }
+
+    /// Regression: Worktree eines BARE-Repos — gitdir hat keine `.git`-
+    /// Pfadkomponente (`/repos/main.git/worktrees/feature`).
+    func testGitWritableRootResolvesWorktreeOfBareRepo() throws {
+        let dir = try makeTempProjectDirectory()
+        let bare = dir.appendingPathComponent("main.git", isDirectory: true)
+        try git(["init", "-q", "--bare", bare.path])
+        let clone = dir.appendingPathComponent("work", isDirectory: true)
+        try git(["clone", "-q", bare.path, clone.path])
+        try Data("x".utf8).write(to: clone.appendingPathComponent("README.md"))
+        try git(["-C", clone.path, "add", "."])
+        try git(["-C", clone.path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"])
+        let worktree = dir.appendingPathComponent("wt", isDirectory: true)
+        try git(["-C", clone.path, "worktree", "add", "-q", worktree.path, "-b", "feature"])
+
+        let resolved = try XCTUnwrap(CodexGitWritableRoot.resolve(repoPath: worktree.path))
+        XCTAssertEqual(
+            resolved,
+            try git(["-C", clone.path, "rev-parse", "--path-format=absolute", "--git-common-dir"])
         )
     }
 
     func testGitWritableRootNilWithoutGitRepo() throws {
+        // Temp-Verzeichnis liegt unter /var/folders — kein Git-Repo darüber.
         let dir = try makeTempProjectDirectory()
         XCTAssertNil(CodexGitWritableRoot.resolve(repoPath: dir.path))
+    }
+
+    func testGitWritableRootNilOnGitFailureOrRelativeOutput() {
+        let original = CodexGitWritableRoot.gitRunner
+        defer { CodexGitWritableRoot.gitRunner = original }
+
+        CodexGitWritableRoot.gitRunner = { _ in .init(exitCode: 128, stdout: "") }
+        XCTAssertNil(CodexGitWritableRoot.resolve(repoPath: "/tmp/x"))
+
+        // Relativer Output (fehlendes --path-format) darf nie durchrutschen —
+        // ein relativer writable_root wäre in der Sandbox wirkungslos.
+        CodexGitWritableRoot.gitRunner = { _ in .init(exitCode: 0, stdout: ".git\n") }
+        XCTAssertNil(CodexGitWritableRoot.resolve(repoPath: "/tmp/x"))
+
+        CodexGitWritableRoot.gitRunner = { _ in .init(exitCode: 0, stdout: "  /abs/repo/.git  \n") }
+        XCTAssertEqual(CodexGitWritableRoot.resolve(repoPath: "/tmp/x"), "/abs/repo/.git")
     }
 
     // MARK: - Integration mit Fake-codex-Skript
@@ -268,6 +362,69 @@ final class CodexExecRunnerTests: XCTestCase {
         XCTAssertEqual(result.threadID, "019f2efe-a948-7ad3-8f21-afd79af17271")
         // Watchdog muss deutlich vor den 30s Skript-Sleep zuschlagen.
         XCTAssertLessThan(Date().timeIntervalSince(started), 10)
+    }
+
+    /// Regression: der Idle-Watchdog darf einen bereits abgeschlossenen Run
+    /// nicht nachträglich als stalled markieren — `mapOutcome` prüft `stalled`
+    /// VOR dem Exit-Code, ein erfolgreicher Turn würde sonst als failed enden.
+    /// Direkt am Guard getestet: der Timer-Handler feuert im echten Lauf
+    /// zeitabhängig, ein Integrationstest wäre flaky.
+    func testStalledFlagIsIgnoredAfterRunFinished() {
+        let runner = CodexExecRunner()
+        runner.markRunFinished()   // group.notify: stdout+stderr+Termination da
+        runner.markStalled()       // spät feuernder Watchdog-Handler
+        XCTAssertFalse(runner.isStalled, "Fertiger Run darf nicht nachträglich stalled werden")
+    }
+
+    func testStalledFlagIsSetWhileRunIsActive() {
+        let runner = CodexExecRunner()
+        runner.markStalled()       // Watchdog feuert, während der Prozess hängt
+        XCTAssertTrue(runner.isStalled)
+    }
+
+    /// Ein zügig endender Run mit großzügigem Idle-Timeout ist nie stalled.
+    func testFastRunIsNeverStalled() async throws {
+        let dir = try makeTempProjectDirectory()
+        let fixture = try writeFixtureStream(in: dir)
+        let fakeCodex = try makeFakeCodex(in: dir, body: """
+        cat "\(fixture.path)"
+        printf '{"status":"success","summary":"ok","filesChanged":[],"commits":[],"testsRun":null,"openQuestions":[]}' > "$out"
+        exit 0
+        """)
+
+        var request = makeRequest()
+        request.codexPath = fakeCodex.path
+        request.cwd = dir.path
+        request.outputLastMessagePath = dir.appendingPathComponent("last.txt").path
+        request.idleTimeout = 5
+
+        let runner = CodexExecRunner()
+        let result = try await runner.run(request: request) { _, _ in }
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertFalse(result.stalled)
+    }
+
+    func testStderrTailSurvivesSplitMultibyteCharacter() async throws {
+        let dir = try makeTempProjectDirectory()
+        // stderr > 4096 Bytes, gefüllt mit Mehrbyte-Zeichen → der Tail-Schnitt
+        // trifft garantiert mitten in ein 'ä'. Mit String(data:encoding:) wäre
+        // der komplette Tail nil → Diagnose weg.
+        let fakeCodex = try makeFakeCodex(in: dir, body: """
+        for i in $(seq 1 400); do printf 'ääääääääää' >&2; done
+        printf 'ENDMARKER' >&2
+        exit 1
+        """)
+
+        var request = makeRequest()
+        request.codexPath = fakeCodex.path
+        request.cwd = dir.path
+        request.outputLastMessagePath = dir.appendingPathComponent("last.txt").path
+
+        let runner = CodexExecRunner()
+        let result = try await runner.run(request: request) { _, _ in }
+        XCTAssertEqual(result.exitCode, 1)
+        XCTAssertFalse(result.stderrTail.isEmpty, "stderr-Tail darf nicht komplett verloren gehen")
+        XCTAssertTrue(result.stderrTail.hasSuffix("ENDMARKER"))
     }
 
     func testMissingBinaryThrowsLaunchFailed() async {

@@ -74,6 +74,8 @@ final class CodexExecRunner: @unchecked Sendable {
     private let lock = NSLock()
     private var process: Process?
     private var stalledFlag = false
+    /// Gesetzt, sobald stdout-EOF + stderr-EOF + Termination da sind.
+    private var runFinished = false
 
     // MARK: argv (pure, separat testbar)
 
@@ -296,6 +298,12 @@ final class CodexExecRunner: @unchecked Sendable {
             }
 
             group.notify(queue: .global(qos: .utility)) { [weak self] in
+                // Run als beendet markieren, BEVOR der Timer gecancelt wird:
+                // ein bereits fälliger/enqueuter Handler darf den fertigen
+                // Turn nicht nachträglich als stalled abstempeln (mapOutcome
+                // prüft `stalled` vor dem Exit-Code — sonst würde ein
+                // erfolgreicher Turn als failed enden).
+                self?.markRunFinished()
                 watchdog?.cancel()
                 self?.clearProcess()
                 continuation.resume(returning: exitBox.code)
@@ -328,15 +336,35 @@ final class CodexExecRunner: @unchecked Sendable {
 
     // MARK: - Interna
 
-    private func markStalled() {
+    /// No-op, sobald der Run vollständig abgeschlossen ist (siehe
+    /// `markRunFinished`) — schützt gegen den spät feuernden Watchdog.
+    /// `internal` statt `private`: der Guard ist ohne Timing-Flakiness nur
+    /// direkt testbar.
+    func markStalled() {
         lock.lock()
-        stalledFlag = true
+        if !runFinished {
+            stalledFlag = true
+        }
         lock.unlock()
+    }
+
+    func markRunFinished() {
+        lock.lock()
+        runFinished = true
+        lock.unlock()
+    }
+
+    /// Test-Seam: aktueller Stand des Stall-Flags.
+    var isStalled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stalledFlag
     }
 
     private func resetStalled() {
         lock.lock()
         stalledFlag = false
+        runFinished = false
         lock.unlock()
     }
 
@@ -456,7 +484,10 @@ private final class TurnStreamState: @unchecked Sendable {
     var stderrTail: String {
         lock.lock()
         defer { lock.unlock() }
-        return String(data: stderrBuffer, encoding: .utf8) ?? ""
+        // Lossy dekodieren: der Byte-Schnitt am Tail-Limit kann ein
+        // Mehrbyte-Zeichen halbieren — mit `String(data:encoding:)` wäre
+        // dann die GANZE Diagnose weg (nil → ""). U+FFFD ist besser als nichts.
+        return String(decoding: stderrBuffer, as: UTF8.self)
     }
 
     private func trackEventLocked(_ event: CodexExecEvent) {
@@ -486,40 +517,60 @@ extension CodexExecRunner {
 
 // MARK: - .git-Auflösung für den Commit-Override
 
-/// Ermittelt das .git-VERZEICHNIS, das für Commits eines Jobs beschreibbar
-/// sein muss (→ `CodexTurnRequest.gitWritableRootPath`). Der Supervisor ruft
-/// das pro Turn auf — bewusst NICHT in Store-Mutation-Closures (Datei-I/O).
+/// Ermittelt das gemeinsame Git-Verzeichnis, das für Commits eines Jobs
+/// beschreibbar sein muss (→ `CodexTurnRequest.gitWritableRootPath`).
+///
+/// Bewusst über `git rev-parse --git-common-dir` statt eigener Pfad-Heuristik:
+/// git kennt alle Fälle, die eine Handrollung reihenweise verfehlt — cwd im
+/// Repo-UNTERverzeichnis (häufigster Fall, `--cd /repo/Sources`), Linked
+/// Worktrees (gemeinsames Verzeichnis ist das Haupt-`.git`), bare Repos ohne
+/// `.git`-Pfadkomponente (`/repos/main.git`), relative `gitdir:`-Zeilen und
+/// `$GIT_DIR`. `--git-common-dir` (nicht `--git-dir`) liefert bei Worktrees
+/// genau das Verzeichnis, in dem index.lock/objects/refs landen.
+///
+/// Der Supervisor ruft das pro Turn auf — bewusst NICHT in
+/// Store-Mutation-Closures (Subprozess unter dem Store-Lock ist verboten).
 enum CodexGitWritableRoot {
+    struct GitResult: Equatable {
+        var exitCode: Int32
+        var stdout: String
+    }
+
+    /// Test-Seam (Muster: GitProjectStatus/AgentWorktreeManager).
+    static var gitRunner: ([String]) -> GitResult = runGit
+
     static func resolve(repoPath: String) -> String? {
-        let repoURL = URL(fileURLWithPath: repoPath, isDirectory: true)
-        let gitURL = repoURL.appendingPathComponent(".git")
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: gitURL.path, isDirectory: &isDirectory) else {
-            return nil
+        // `--path-format=absolute` MUSS vor dem Query-Flag stehen; ohne das
+        // liefert git bei cwd == Repo-Root das relative ".git".
+        let result = gitRunner(["-C", repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir"])
+        guard result.exitCode == 0 else { return nil }
+        let path = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty, path.hasPrefix("/") else { return nil }
+        // Gits Ausgabe UNVERÄNDERT übernehmen: sie ist absolut und bereits
+        // symlink-aufgelöst (/private/var/… statt /var/…). `standardizedFileURL`
+        // würde genau das rückgängig machen — ein Symlink-Pfad als
+        // Sandbox-Root ist bestenfalls fragil.
+        return path
+    }
+
+    private static func runGit(_ arguments: [String]) -> GitResult {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        let stdoutPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        // stderr verwerfen: "not a git repository" ist ein erwarteter Fall.
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return GitResult(
+                exitCode: process.terminationStatus,
+                stdout: String(data: data, encoding: .utf8) ?? ""
+            )
+        } catch {
+            return GitResult(exitCode: -1, stdout: "")
         }
-        if isDirectory.boolValue {
-            return gitURL.path
-        }
-        // .git ist eine DATEI → der Checkout ist selbst ein Linked Worktree:
-        // "gitdir: <hauptrepo>/.git/worktrees/<name>". Commits schreiben in
-        // das Haupt-.git (index.lock, objects, refs) — also DORT freischalten.
-        guard let content = try? String(contentsOf: gitURL, encoding: .utf8),
-              let line = content.split(separator: "\n").first(where: { $0.hasPrefix("gitdir:") }) else {
-            return nil
-        }
-        let rawPath = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
-        guard !rawPath.isEmpty else { return nil }
-        var gitDir = URL(
-            fileURLWithPath: rawPath,
-            isDirectory: true,
-            relativeTo: repoURL
-        ).standardizedFileURL
-        // Bis zur ".git"-Komponente hochlaufen (…/.git/worktrees/<n> → …/.git).
-        while gitDir.lastPathComponent != ".git" {
-            let parent = gitDir.deletingLastPathComponent()
-            guard parent.path != gitDir.path else { return nil }
-            gitDir = parent
-        }
-        return gitDir.path
     }
 }

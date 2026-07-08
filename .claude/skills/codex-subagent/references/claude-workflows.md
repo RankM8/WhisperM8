@@ -3,8 +3,8 @@
 Empirisch validiert am 2026-07-08: ein Test-Workflow mit 10 Agenten (8 Codex-Jobs:
 Smoke, 3er-Fan-out, Resume, 2 Schreib-Jobs, 2 Fehlerpfade) lief in 75 s fehlerfrei
 durch. Kontext-Erhalt über `send`, Exit-Code-Vertrag, Schema-Relay und
-Parent-Zuordnung funktionieren aus Workflows heraus. Einzige offene Lücke:
-die Commit-Blockade der Codex-Sandbox (siehe „Bekannte Grenzen").
+Parent-Zuordnung funktionieren aus Workflows heraus. Die damals gefundene
+Commit-Blockade der Codex-Sandbox ist behoben (siehe „Bekannte Grenzen").
 
 ## Grundprinzip
 
@@ -114,17 +114,22 @@ const verdicts = await parallel(findings.map(f => () =>
 ## Bekannte Grenzen (Stand 2026-07-08, codex 0.142.5)
 
 - **Commits: behoben (Fix vom 2026-07-08).** Codex' Sandbox behandelt `.git`
-  jeder writable root als read-only; das CLI schaltet das `.git`-Verzeichnis
-  bei workspace-write seither automatisch frei
-  (`sandbox_workspace_write.writable_roots`, auch für Resume-Turns und
-  Worktrees). Tritt `index.lock: Operation not permitted` doch auf, läuft ein
-  Binary von vor dem Fix — App neu bauen/starten. Report-`commits` weiterhin
-  per git verifizieren — read-only-Jobs haben nachweislich schon existierende
-  SHAs als „eigene" Commits gemeldet.
+  jeder writable root als read-only; das CLI ermittelt das gemeinsame
+  Git-Verzeichnis (`git rev-parse --git-common-dir`) und schaltet es bei
+  workspace-write automatisch frei (`sandbox_workspace_write.writable_roots`,
+  auch für Resume-Turns, Repo-Unterverzeichnisse und Worktrees). Tritt
+  `index.lock: Operation not permitted` doch auf, läuft ein Binary von vor dem
+  Fix — App neu bauen/starten. Der Override ersetzt ein etwaiges eigenes
+  `writable_roots` aus der `config.toml`; eigene Roots per `--config`
+  mitgeben. Report-`commits` weiterhin per git verifizieren — read-only-Jobs
+  haben nachweislich schon existierende SHAs als „eigene" Commits gemeldet.
 - **Codex-Fähigkeiten freischalten:** `--config key=value` (wiederholbar)
   reicht beliebige Codex-Configs durch (z.B. weitere MCP-Server oder
   `tools.web_search=true`) und gilt für alle Turns des Jobs — die Overrides
-  gewinnen gegen eingebaute Werte.
+  gewinnen gegen eingebaute Werte. Werte mit führendem `-` lehnt das CLI ab.
+- **PID-Reuse** (dokumentierte Limitation): stirbt ein Supervisor und vergibt
+  macOS seine PID neu, kann ein toter Job als aktiv gelten. Selten; `agent
+  status` und ein Blick in die App klären es.
 - **`rg` fehlt im Codex-PATH** — Jobs weichen selbstständig auf grep/awk aus
   (nur Noise in openQuestions, kein Fehler).
 - **Wrapper-Overhead:** ~35 k Sonnet-Tokens pro Wrapper (System-Prompt + Relay).
