@@ -144,6 +144,12 @@ extension AgentChatsView {
             tabSwitcher?.advance(-1, order: headerTabs.map(\.id))
         case TerminalShortcut.KeyCode.rightArrow:
             tabSwitcher?.advance(+1, order: headerTabs.map(\.id))
+        case TabSwitcherShortcut.KeyCode.upArrow:
+            // Eine Grid-Reihe hoch/runter: Schrittweite = Spaltenzahl des
+            // Karten-Grids (vom Overlay gemeldet), Wrap-around inklusive.
+            tabSwitcher?.advance(-max(1, tabSwitcherColumns), order: headerTabs.map(\.id))
+        case TabSwitcherShortcut.KeyCode.downArrow:
+            tabSwitcher?.advance(+max(1, tabSwitcherColumns), order: headerTabs.map(\.id))
         case TabSwitcherShortcut.KeyCode.escape:
             cancelTabSwitcher()
         case TerminalShortcut.KeyCode.returnKey:

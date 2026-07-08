@@ -37,3 +37,56 @@ struct TabSwitcherModel: Equatable {
         return highlightedID
     }
 }
+
+/// Berechnetes Karten-Grid des Switchers.
+struct TabSwitcherGridMetrics: Equatable {
+    var columns: Int
+    var rows: Int
+    /// Reihen, die ohne Scrollen ins Overlay passen.
+    var visibleRows: Int
+    var gridWidth: CGFloat
+    var gridHeight: CGFloat
+
+    var needsScroll: Bool { rows > visibleRows }
+}
+
+/// Pure Layout-Mathematik des Karten-Grids: Kartenmaß ist fix (Lesbarkeit),
+/// Spalten-/Reihenzahl leitet sich aus Tab-Anzahl und verfügbarem Platz ab.
+/// Alle Tabs werden mit Umbruch gezeigt; erst wenn die Reihen den verfügbaren
+/// Platz sprengen, scrollt das Grid vertikal (`needsScroll`). Window-frei →
+/// unit-testbar.
+enum TabSwitcherGridLayout {
+    static let cardWidth: CGFloat = 236
+    static let cardHeight: CGFloat = 128
+    static let spacing: CGFloat = 10
+    /// Obergrenze — mehr als 4 Spalten liest niemand mehr im Block.
+    static let maxColumns = 4
+    /// Chrome um das Grid: Overlay-Padding + Karten-Padding + Footer-Zeile.
+    /// Wird vom verfügbaren Platz abgezogen, bevor Spalten/Reihen berechnet
+    /// werden.
+    static let horizontalChrome: CGFloat = 96
+    static let verticalChrome: CGFloat = 132
+
+    static func metrics(count: Int, availableSize: CGSize) -> TabSwitcherGridMetrics {
+        guard count > 0 else {
+            return TabSwitcherGridMetrics(columns: 0, rows: 0, visibleRows: 0, gridWidth: 0, gridHeight: 0)
+        }
+
+        let availableWidth = max(0, availableSize.width - horizontalChrome)
+        let fittingColumns = Int((availableWidth + spacing) / (cardWidth + spacing))
+        let columns = max(1, min(count, maxColumns, fittingColumns))
+        let rows = (count + columns - 1) / columns
+
+        let availableHeight = max(0, availableSize.height - verticalChrome)
+        let fittingRows = Int((availableHeight + spacing) / (cardHeight + spacing))
+        let visibleRows = max(1, min(rows, fittingRows))
+
+        return TabSwitcherGridMetrics(
+            columns: columns,
+            rows: rows,
+            visibleRows: visibleRows,
+            gridWidth: CGFloat(columns) * cardWidth + CGFloat(columns - 1) * spacing,
+            gridHeight: CGFloat(visibleRows) * cardHeight + CGFloat(visibleRows - 1) * spacing
+        )
+    }
+}

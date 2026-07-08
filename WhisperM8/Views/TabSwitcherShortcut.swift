@@ -12,6 +12,9 @@ enum TabSwitcherShortcut {
     enum KeyCode {
         static let tab: UInt16 = 48
         static let escape: UInt16 = 53
+        // Vertikale Grid-Navigation im Karten-Switcher (↑/↓ = eine Reihe).
+        static let downArrow: UInt16 = 125
+        static let upArrow: UInt16 = 126
     }
 
     /// Richtung für den Switcher-Schritt: `+1` (Ctrl+Tab, nächster Tab) /

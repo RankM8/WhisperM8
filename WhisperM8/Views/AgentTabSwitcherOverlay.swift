@@ -4,12 +4,21 @@ import SwiftUI
 /// Liegt bewusst NUR über dem Content-Bereich (Anker: die Session-Group in
 /// `mainWorkspace`) — Sidebar und Tab-Strip bleiben sichtbar und bedienbar.
 ///
+/// Darstellung: Karten-Grid mit Umbruch statt einzeiliger Zellen-Reihe — der
+/// Switcher ist eine Übersicht, also müssen ALLE offenen Tabs lesbar sein.
+/// Jede Karte trägt die Kerninfos direkt (Status, Icon, Titel, Projekt +
+/// Branch, Summary-Headline); ein separater Detailbereich entfällt. Die
+/// Grid-Mathematik (Spalten/Reihen/Scroll) lebt pur und getestet in
+/// `TabSwitcherGridLayout`. Erst wenn die Reihen den verfügbaren Platz
+/// sprengen, scrollt das Grid vertikal und hält das Highlight in Sicht.
+///
 /// Interaktion:
-/// - Tastatur (Ctrl+Tab / Ctrl+Shift+Tab / Esc / Return) läuft komplett über
-///   die NSEvent-Monitore in `AgentChatsView+Shortcuts` — diese View rendert
-///   nur den Zustand (`highlightedID`).
-/// - Maus: Klick auf eine Zelle = sofortiger Commit (auch bei gehaltenem
-///   Ctrl), Klick auf den Scrim = Abbruch. Hover verstärkt eine Zelle nur
+/// - Tastatur (Ctrl+Tab / Ctrl+Shift+Tab / ←→↑↓ / Esc / Return) läuft komplett
+///   über die NSEvent-Monitore in `AgentChatsView+Shortcuts` — diese View
+///   rendert nur den Zustand (`highlightedID`) und meldet die aktuelle
+///   Spaltenzahl für die ↑/↓-Schrittweite zurück (`onColumnsChange`).
+/// - Maus: Klick auf eine Karte = sofortiger Commit (auch bei gehaltenem
+///   Ctrl), Klick auf den Scrim = Abbruch. Hover verstärkt eine Karte nur
 ///   visuell und verschiebt NIE das Keyboard-Highlight — sonst kämpfen
 ///   Mausposition und Tab-Taste um das Highlight und ein Ctrl-Loslassen
 ///   committet überraschend den gehoverten statt den ertabbten Chat.
@@ -29,33 +38,39 @@ struct AgentTabSwitcherOverlay: View {
     @ObservedObject var statusStore: AgentSessionRuntimeStatusStore
     let onCommit: (UUID) -> Void
     let onCancel: () -> Void
+    /// Meldet die aktuell gerenderte Spaltenzahl an die AgentChatsView —
+    /// die ↑/↓-Navigation in `+Shortcuts` springt damit exakt eine
+    /// Grid-Reihe (Schrittweite = Spalten).
+    var onColumnsChange: (Int) -> Void = { _ in }
 
-    /// Nur Hover-Verstärkung der Zellen (siehe oben) — kein Selektionszustand.
+    /// Nur Hover-Verstärkung der Karten (siehe oben) — kein Selektionszustand.
     @State private var hoveredID: UUID?
 
-    private var highlighted: AgentChatSession? {
-        sessions.first { $0.id == highlightedID }
-    }
-
     var body: some View {
-        ZStack {
-            // Scrim: Terminal scheint angedeutet durch; Klick daneben = Abbruch.
-            AgentTheme.background.opacity(0.62)
-                .contentShape(Rectangle())
-                .onTapGesture { onCancel() }
-            card
+        GeometryReader { geo in
+            let metrics = TabSwitcherGridLayout.metrics(count: sessions.count, availableSize: geo.size)
+            ZStack {
+                // Scrim: Terminal scheint angedeutet durch; Klick daneben = Abbruch.
+                AgentTheme.background.opacity(0.62)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onCancel() }
+                card(metrics: metrics)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .onAppear { onColumnsChange(metrics.columns) }
+            .onChange(of: metrics.columns) { _, columns in
+                onColumnsChange(columns)
+            }
         }
         .transition(.opacity)
     }
 
-    private var card: some View {
-        VStack(spacing: 12) {
-            cellRow
-            Divider().overlay(AgentTheme.border)
-            detailArea
+    private func card(metrics: TabSwitcherGridMetrics) -> some View {
+        VStack(spacing: 10) {
+            grid(metrics: metrics)
+            footer
         }
-        .padding(14)
-        .frame(maxWidth: 680)
+        .padding(16)
         .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
@@ -63,78 +78,116 @@ struct AgentTabSwitcherOverlay: View {
         )
         .shadow(color: .black.opacity(0.30), radius: 26, y: 10)
         .padding(24)
+        .fixedSize()
         // Klicks auf die Karten-Fläche (zwischen den Zellen) dürfen nicht zum
         // Scrim durchfallen und den Switcher abbrechen.
         .onTapGesture {}
     }
 
-    // MARK: - Zellenreihe
+    // MARK: - Karten-Grid
 
-    /// Horizontale Reihe kompakter Tab-Zellen. Bei vielen Tabs scrollt die
-    /// Reihe und zentriert sich auf das Highlight — die Karte wird nie
-    /// breiter als `maxWidth`.
-    private var cellRow: some View {
+    private func grid(metrics: TabSwitcherGridMetrics) -> some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+            ScrollView(.vertical, showsIndicators: metrics.needsScroll) {
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.fixed(TabSwitcherGridLayout.cardWidth), spacing: TabSwitcherGridLayout.spacing),
+                        count: max(1, metrics.columns)
+                    ),
+                    spacing: TabSwitcherGridLayout.spacing
+                ) {
                     ForEach(sessions) { session in
-                        cell(for: session)
+                        cardCell(for: session)
                             .id(session.id)
                     }
                 }
-                .padding(2)
             }
+            .frame(width: metrics.gridWidth, height: metrics.gridHeight)
             .onChange(of: highlightedID) { _, id in
-                guard let id else { return }
+                guard metrics.needsScroll, let id else { return }
                 withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(id, anchor: .center)
+                    proxy.scrollTo(id, anchor: nil)
                 }
             }
             .onAppear {
-                if let highlightedID {
+                if metrics.needsScroll, let highlightedID {
                     proxy.scrollTo(highlightedID, anchor: .center)
                 }
             }
         }
     }
 
-    private func cell(for session: AgentChatSession) -> some View {
+    /// Fußzeile: Tab-Anzahl + Bedien-Hinweis, dauerhaft sichtbar.
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Text("\(sessions.count) Tabs")
+                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .foregroundStyle(AgentTheme.textSecondary)
+            Spacer(minLength: 12)
+            Text("⌃Tab weiter · ⇧ rückwärts · ←→↑↓ navigieren · Loslassen wechselt · Esc bricht ab")
+                .font(.system(size: 10))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .lineLimit(1)
+        }
+    }
+
+    // MARK: - Einzelkarte
+
+    private func cardCell(for session: AgentChatSession) -> some View {
         let isHighlighted = session.id == highlightedID
         let isHovered = session.id == hoveredID
+        let project = projectsByID[session.projectID]
+
         return Button {
             onCommit(session.id)
         } label: {
-            HStack(spacing: 6) {
-                // Status dauerhaft auf JEDER Zelle sichtbar (kein Hover-only-UI).
-                AgentStatusIndicator(status: statusStore.status(for: session.id))
-                ProviderIcon(
-                    provider: session.provider,
-                    size: 11,
-                    tint: isHighlighted ? AgentTheme.textPrimary : AgentTheme.textSecondary
-                )
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    // Status dauerhaft auf JEDER Karte sichtbar (kein Hover-only-UI).
+                    AgentStatusIndicator(status: statusStore.status(for: session.id))
+                    AgentSessionIcon(
+                        session: session,
+                        size: 11,
+                        tint: isHighlighted ? AgentTheme.textPrimary : AgentTheme.textSecondary
+                    )
+                    kindBadges(session)
+                    Spacer(minLength: 6)
+                    Text(SidebarRelativeTime.short(session.lastActivityAt))
+                        .font(.system(size: 9).monospacedDigit())
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
+
                 Text(session.title)
-                    .font(.system(size: 11, weight: isHighlighted ? .semibold : .regular))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(isHighlighted ? AgentTheme.textPrimary : AgentTheme.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: 140)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    // 2 Zeilen reservieren, damit alle Karten gleich hoch wirken.
+                    .frame(minHeight: 32, alignment: .topLeading)
+
+                projectRow(project)
+                summaryRow(session)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(10)
+            .frame(
+                width: TabSwitcherGridLayout.cardWidth,
+                height: TabSwitcherGridLayout.cardHeight,
+                alignment: .topLeading
+            )
             .background(
                 isHighlighted
                     ? AnyShapeStyle(AgentTheme.selectionStrong)
                     : AnyShapeStyle(AgentTheme.control.opacity(isHovered ? 0.9 : 0.45)),
-                in: RoundedRectangle(cornerRadius: 8)
+                in: RoundedRectangle(cornerRadius: 10)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(
-                        isHighlighted ? AgentTheme.accent.opacity(0.8) : AgentTheme.border,
-                        lineWidth: isHighlighted ? 1.2 : 0.5
+                        isHighlighted ? AgentTheme.accent.opacity(0.85) : AgentTheme.border,
+                        lineWidth: isHighlighted ? 1.5 : 0.5
                     )
             )
-            .contentShape(Rectangle())
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -142,81 +195,45 @@ struct AgentTabSwitcherOverlay: View {
         }
     }
 
-    // MARK: - Detailbereich
-
-    /// Kerninfos des hervorgehobenen Chats. Die Zeilen reservieren ihre Höhe
-    /// auch ohne Inhalt (Branch fehlt, keine Summary), damit die Karte beim
-    /// Durchtabben nicht springt.
+    /// Sub-Kind-Badges (BG / VIEW / TERM) — gleiche Semantik wie im Header.
     @ViewBuilder
-    private var detailArea: some View {
-        if let session = highlighted {
-            let project = projectsByID[session.projectID]
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    AgentStatusIndicator(status: statusStore.status(for: session.id))
-                    Text(session.title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AgentTheme.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if session.isBackgroundChat {
-                        kindBadge("BG", color: .indigo)
-                        if let shortID = session.backgroundShortID, !shortID.isEmpty {
-                            Text(shortID)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(AgentTheme.textTertiary)
-                        }
-                    } else if session.isAgentView {
-                        kindBadge("VIEW", color: .orange)
-                    }
-                    Spacer(minLength: 12)
-                    Text(SidebarRelativeTime.short(session.lastActivityAt))
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(AgentTheme.textTertiary)
-                }
-                projectRow(project)
-                summaryRow(session)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func kindBadges(_ session: AgentChatSession) -> some View {
+        if session.isBackgroundChat {
+            kindBadge("BG", color: .indigo)
+        } else if session.isAgentView {
+            kindBadge("VIEW", color: .orange)
+        } else if session.isTerminal {
+            kindBadge("TERM", color: .teal)
         }
     }
 
-    /// Projekt · Branch · Pfad — gleiche Datenquellen wie `secondaryProjectRow`
-    /// in der AgentChatsView, nur mit reservierter Höhe.
+    /// Projekt · Branch — gleiche Datenquellen wie `secondaryProjectRow`
+    /// in der AgentChatsView, nur mit reservierter Höhe (kein Springen).
     @ViewBuilder
     private func projectRow(_ project: AgentProject?) -> some View {
-        if let project {
-            HStack(spacing: 6) {
+        HStack(spacing: 5) {
+            if let project {
                 Image(systemName: "folder")
-                    .font(.system(size: 9))
+                    .font(.system(size: 8.5))
                     .foregroundStyle(AgentTheme.textTertiary)
                 Text(project.name)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
                 if let branch = project.lastBranch, !branch.isEmpty {
                     Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 9))
+                        .font(.system(size: 8.5))
                         .foregroundStyle(AgentTheme.textTertiary)
                     Text(branch)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.system(size: 9.5, design: .monospaced))
                         .foregroundStyle(AgentTheme.textTertiary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                Text("·")
-                    .font(.system(size: 10))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                Text(project.path)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
             }
-            .frame(height: 14)
-        } else {
-            Color.clear.frame(height: 14)
+            Spacer(minLength: 0)
         }
+        .frame(height: 13)
     }
 
     /// Kontext-Zeile: die persistierte Summary-Headline („worum ging's").
@@ -226,14 +243,15 @@ struct AgentTabSwitcherOverlay: View {
         Group {
             if let headline = session.summary?.headline, !headline.isEmpty {
                 Text(headline)
-                    .font(.system(size: 11))
-                    .foregroundStyle(AgentTheme.textSecondary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             } else {
                 Color.clear
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func kindBadge(_ text: String, color: Color) -> some View {

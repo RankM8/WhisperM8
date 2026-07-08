@@ -2,13 +2,18 @@ import AppKit
 import SwiftUI
 
 /// Liefert die nächste/vorherige Tab-ID mit Wrap-around (Browser-Verhalten).
-/// `direction`: -1 = vorheriger, +1 = nächster Tab. Gibt `nil` zurück, wenn
+/// `direction`: -1 = vorheriger, +1 = nächster Tab; der Ctrl+Tab-Switcher
+/// springt mit ±Spaltenzahl auch ganze Grid-Reihen. Gibt `nil` zurück, wenn
 /// keine Tabs offen sind. Ist `current` nicht (mehr) in der Liste, wird auf den
 /// ersten Tab gesprungen. Window-frei → unit-testbar.
 func adjacentTabID(in order: [UUID], current: UUID?, direction: Int) -> UUID? {
     guard !order.isEmpty else { return nil }
     guard let current, let idx = order.firstIndex(of: current) else { return order.first }
-    return order[(idx + direction + order.count) % order.count]
+    // Echtes positives Modulo: Swifts `%` behält das Vorzeichen — bei
+    // Mehrfach-Schritten (|direction| > count, z. B. stale Spaltenzahl nach
+    // externem Tab-Close) wäre der Index sonst negativ.
+    let raw = (idx + direction) % order.count
+    return order[(raw + order.count) % order.count]
 }
 
 /// Gesamtbreite des Tab-Strip-Inhalts (HStack aller Tabs).
@@ -187,6 +192,10 @@ struct AgentChatsView: View {
     /// und stirbt mit einer einzigen Key-Interaktion in DIESEM Fenster.
     /// internal, da die Handler in +Shortcuts ihn steuern.
     @State var tabSwitcher: TabSwitcherModel?
+    /// Spaltenzahl des gerade gerenderten Switcher-Grids — vom Overlay
+    /// gemeldet (`onColumnsChange`), von `+Shortcuts` als ↑/↓-Schrittweite
+    /// benutzt (eine Reihe = `tabSwitcherColumns` Schritte).
+    @State var tabSwitcherColumns: Int = 1
     /// Lokaler `.flagsChanged`-Monitor: Loslassen von Control bei aktivem
     /// Switcher committet den hervorgehobenen Tab. `keyDown` sieht Modifier-
     /// Änderungen nicht — dafür braucht es diesen zweiten Monitor.
@@ -1780,7 +1789,8 @@ struct AgentChatsView: View {
                 ),
                 statusStore: runtimeStatusStore,
                 onCommit: { commitTabSwitcher(to: $0) },
-                onCancel: { cancelTabSwitcher() }
+                onCancel: { cancelTabSwitcher() },
+                onColumnsChange: { tabSwitcherColumns = $0 }
             )
         }
     }
