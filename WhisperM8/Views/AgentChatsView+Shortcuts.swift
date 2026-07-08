@@ -211,6 +211,42 @@ extension AgentChatsView {
         tabSwitcher = nil
     }
 
+    // MARK: - Drei-Finger-Swipe (Tab links/rechts)
+
+    /// Installiert den lokalen `.swipe`-Monitor für den Drei-Finger-Tab-Wechsel.
+    /// Idempotent, gleiches Muster wie die übrigen Monitore. `.swipe` ist ein
+    /// eigener Event-Typ — Zwei-Finger-Scroll (Terminal-Scrollback, Tab-Strip)
+    /// bleibt unberührt. Ob Events überhaupt ankommen, entscheiden die
+    /// Trackpad-Systemeinstellungen (siehe `TabSwipeShortcut`).
+    func installTabSwipeMonitorIfNeeded() {
+        guard tabSwipeMonitor == nil else { return }
+        tabSwipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .swipe) { event in
+            handleTabSwipe(event)
+        }
+    }
+
+    func removeTabSwipeMonitor() {
+        if let tabSwipeMonitor {
+            NSEvent.removeMonitor(tabSwipeMonitor)
+            self.tabSwipeMonitor = nil
+        }
+    }
+
+    /// Übersetzt einen Drei-Finger-Swipe in den benachbarten Tab — gleiche
+    /// Semantik wie ⌘⌥←/→ (Wrap-around, Multi-Select-Reset) über
+    /// `selectAdjacentTab`. Gibt `nil` zurück, wenn das Event konsumiert wurde.
+    /// Bei aktivem Ctrl+Tab-Switcher wird der Swipe geschluckt und ignoriert —
+    /// zwei Navigationsmodi gleichzeitig würden ums Highlight kämpfen.
+    private func handleTabSwipe(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow else { return event }
+        guard tabSwitcher == nil else { return nil }
+        guard let direction = TabSwipeShortcut.direction(deltaX: event.deltaX) else {
+            return event
+        }
+        selectAdjacentTab(direction)
+        return nil
+    }
+
     // MARK: - Titelleisten-Maus: Doppelklick-Zoom
 
     func installTitleBarZoomHandlerIfNeeded() {
