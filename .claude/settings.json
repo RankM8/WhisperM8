@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(whisperm8 agent run *)",
+      "Bash(whisperm8 agent send *)",
+      "Bash(whisperm8 agent list *)",
+      "Bash(whisperm8 agent list)",
+      "Bash(whisperm8 agent status *)",
+      "Bash(whisperm8 agent logs *)"
+    ]
+  }
+}

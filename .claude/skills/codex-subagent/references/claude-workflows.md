@@ -23,7 +23,22 @@ Workflow-Skript (JS)
   ←─ Report-Objekt im Skript verfügbar
 ```
 
-## Der Wrapper-Kontrakt
+## Der bequeme Weg: `agentType: 'codex-runner'`
+
+Liegt im Projekt ein `.claude/agents/codex-runner.md` (in WhisperM8 selbst
+vorhanden), ist der Wrapper-Kontrakt dort fest verdrahtet — Sonnet, nur Bash,
+mechanisches Relay. Dann genügt im Workflow:
+
+```js
+agent(`Führe genau diesen Befehl aus:\n\n${cmd}\n\n${relayHinweis}`,
+      { agentType: 'codex-runner', schema: RESULT })
+```
+
+Kein Boilerplate, kein `model`/`effort` setzen (kommt aus der Agent-Definition).
+Ein benannter Beispiel-Workflow liegt in `.claude/workflows/codex-verify.js`
+(Finder × adversarische Refuter). Ohne diese Datei gilt der Kontrakt unten.
+
+## Der Wrapper-Kontrakt (manuell)
 
 Wrapper sind mechanische Arbeit — **immer ein günstiges Modell**
 (`model: 'sonnet'` oder `'haiku'`, `effort: 'low'`), nie das teure
@@ -89,6 +104,12 @@ User hat übernommen, Step überspringen), `4` = Umgebung (abbrechen, loggen).
    nur Claude-Tokens). Kostensteuerung für Codex = Anzahl Jobs im Skript.
 8. **Permission-Allowlist:** `Bash(whisperm8 agent *)` in die Projekt-Settings,
    sonst können Wrapper in restriktiven Sessions an Permission-Prompts hängen.
+   In WhisperM8 stehen `run`/`send`/`list`/`status`/`logs` in `.claude/settings.json`
+   — `rm` und `stop` bewusst nicht: löschen und töten bleibt Handarbeit.
+9. **Urteile nie mit `--effort low` einholen.** Gemessen am 2026-07-08: Codex
+   erfand auf dieser Stufe Guards und Fehlertypen, die es im geprüften Code
+   nicht gibt, und „widerlegte" damit zwei echte Defekte. Für Refuter/Reviewer
+   `--effort high`; `low` taugt nur zum Smoke-Test der Mechanik.
 
 ## Bewährte Muster
 
@@ -132,6 +153,7 @@ const verdicts = await parallel(findings.map(f => () =>
   status` und ein Blick in die App klären es.
 - **`rg` fehlt im Codex-PATH** — Jobs weichen selbstständig auf grep/awk aus
   (nur Noise in openQuestions, kein Fehler).
-- **Wrapper-Overhead:** ~35 k Sonnet-Tokens pro Wrapper (System-Prompt + Relay).
+- **Wrapper-Overhead:** ~35 k Sonnet-Tokens pro Wrapper mit Inline-Kontrakt,
+  ~15 k mit `agentType: 'codex-runner'` (Kontrakt steckt im Agent, nicht im Prompt).
   Bei großen Fan-outs einkalkulieren; der Wrapper belegt außerdem einen
   Workflow-Concurrency-Slot für die gesamte Turn-Dauer.
