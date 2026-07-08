@@ -98,9 +98,26 @@ class AudioRecorder {
             }
         }
 
-        // Input format from device - MUST use inputFormat(forBus:) for correct hardware format
-        let inputFormat = inputNode.inputFormat(forBus: 0)
-        Logger.debug("[AudioRecorder] Input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
+        // Input format from device - MUST use inputFormat(forBus:) for correct hardware format.
+        // Mit Retry + Validierung: CoreAudio liefert direkt nach dem Binden
+        // (Bluetooth-Wechsel, Systemlast) zeitweise 0 Hz / 0 Kanäle — ein
+        // installTap damit wirft eine unfangbare NSException → Prozess-Abort.
+        // Gleiche Schutzlogik wie in handleConfigurationChange().
+        var validFormat: AVAudioFormat?
+        for attempt in 1...5 {
+            let format = inputNode.inputFormat(forBus: 0)
+            if AudioFormatDecision.isRecordable(format) {
+                validFormat = format
+                Logger.debug("[AudioRecorder] Input format (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount) channels")
+                break
+            }
+            Logger.debug("[AudioRecorder] Input format invalid (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount)ch — retrying…")
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        guard let inputFormat = validFormat else {
+            Logger.debug("[AudioRecorder] ERROR: No recordable input format after retries — aborting start")
+            throw RecordingError.invalidFormat
+        }
 
         // Create converter if needed
         if AudioFormatDecision.needsConversion(from: inputFormat, to: targetFormat) {
@@ -261,7 +278,7 @@ class AudioRecorder {
         for attempt in 1...maxRetries {
             // CRITICAL: Use inputFormat(forBus:) NOT outputFormat(forBus:)
             let format = inputNode.inputFormat(forBus: 0)
-            if format.sampleRate > 0 && format.channelCount > 0 {
+            if AudioFormatDecision.isRecordable(format) {
                 newFormat = format
                 Logger.debug("[AudioRecorder] New format (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount)ch")
                 break
@@ -345,6 +362,11 @@ class AudioRecorder {
         label: String,
         logHundredthCallback: Bool
     ) {
+        // Defensiv: ein evtl. vorhandener Tap würde installTap ebenfalls mit
+        // einer unfangbaren NSException quittieren; removeTap ohne Tap ist
+        // ein No-op.
+        inputNode.removeTap(onBus: 0)
+
         var tapCallCount = 0
         let capturedTargetFormat = self.targetFormat
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in

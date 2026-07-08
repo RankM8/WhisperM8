@@ -30,4 +30,26 @@ final class AudioFormatDecisionTests: XCTestCase {
     func testConversionWhenBothDiffer() {
         XCTAssertTrue(AudioFormatDecision.needsConversion(from: format(48000, 2), to: target))
     }
+
+    // MARK: - isRecordable (Crash-Guard)
+
+    // CoreAudio liefert 0 Hz / 0 Kanäle, solange das Eingabegerät nicht
+    // gebunden ist — installTap damit wirft eine unfangbare NSException
+    // (Crashes 2026-07-01 + 2026-07-08). AVAudioFormat lässt sich mit 0 Hz
+    // nicht konstruieren, daher die skalare Variante testen (genau das, was
+    // die Format-Property-Werte liefern).
+
+    func testRecordableWithValidHardwareFormat() {
+        XCTAssertTrue(AudioFormatDecision.isRecordable(sampleRate: 48000, channelCount: 1))
+        XCTAssertTrue(AudioFormatDecision.isRecordable(format(16000, 1)))
+    }
+
+    func testNotRecordableWithZeroSampleRate() {
+        XCTAssertFalse(AudioFormatDecision.isRecordable(sampleRate: 0, channelCount: 1))
+    }
+
+    func testNotRecordableWithZeroChannels() {
+        XCTAssertFalse(AudioFormatDecision.isRecordable(sampleRate: 48000, channelCount: 0))
+        XCTAssertFalse(AudioFormatDecision.isRecordable(sampleRate: 0, channelCount: 0))
+    }
 }
