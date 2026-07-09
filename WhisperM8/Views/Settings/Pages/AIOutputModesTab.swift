@@ -7,6 +7,8 @@ struct AIOutputModesTab: View {
 
     @State private var model = OutputModesViewModel()
     @State private var isConfirmingDelete = false
+    /// Dynamischer Modellkatalog — gleiche Quelle wie der Account-Tab.
+    @State private var catalog = CodexModelCatalogStore.shared.catalog()
 
     let onEditTemplate: (String) -> Void
 
@@ -26,7 +28,10 @@ struct AIOutputModesTab: View {
             modeEditor
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .onAppear { model.reload() }
+        .onAppear {
+            model.reload()
+            catalog = CodexModelCatalogStore.shared.catalog()
+        }
         .confirmationDialog("Delete custom mode?", isPresented: $isConfirmingDelete) {
             Button("Delete", role: .destructive) {
                 model.deleteSelectedMode()
@@ -187,36 +192,49 @@ struct AIOutputModesTab: View {
                     SettingsSection("Codex Overrides") {
                         SettingsToggleRow(
                             title: "Use global Codex model",
-                            subtitle: mode.codexModelRawOverride == nil ? "Uses Account default: \(CodexPostProcessingModel.resolve(globalCodexModelRaw).displayName)." : nil,
+                            subtitle: mode.codexModelRawOverride == nil ? "Uses Account default: \(catalogModelLabel(for: globalCodexModelRaw))." : nil,
                             isOn: useGlobalModelBinding(for: mode.id)
                         )
 
                         if mode.codexModelRawOverride != nil {
                             SettingsPickerRow(
                                 title: "Mode model",
-                                subtitle: CodexPostProcessingModel.resolve(mode.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw)).detail,
+                                subtitle: catalog.model(slug: effectiveModeModelSlug(for: mode))?.detail
+                                    ?? "Not listed in your Codex CLI's model catalog.",
                                 selection: modeModelBinding(for: mode.id),
-                                options: CodexPostProcessingModel.allCases.map(\.rawValue)
+                                options: [CodexModelSelection.autoRawValue]
+                                    + catalog.pickerModelSlugs(including: mode.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw))
                             ) { rawValue in
-                                Text(CodexPostProcessingModel.resolve(rawValue).displayName)
+                                Text(catalogModelLabel(for: rawValue))
                             }
                         }
 
                         SettingsToggleRow(
                             title: "Use global Thinking level",
-                            subtitle: mode.codexReasoningEffortRawOverride == nil ? "Uses Account default: \(CodexReasoningEffort.resolve(globalReasoningEffortRaw).displayName)." : nil,
+                            subtitle: mode.codexReasoningEffortRawOverride == nil ? "Uses Account default: \(CodexModelCatalog.effortDisplayName(globalReasoningEffortRaw))." : nil,
                             isOn: useGlobalReasoningBinding(for: mode.id)
                         )
 
                         if mode.codexReasoningEffortRawOverride != nil {
+                            // Effort-Optionen des EFFEKTIVEN Modells dieses Modus —
+                            // auch bei "Use global model" + eigenem Thinking-Override.
                             SettingsPickerRow(
                                 title: "Thinking level",
-                                subtitle: CodexReasoningEffort.resolve(mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw)).detail,
+                                subtitle: catalog.efforts(forModelSlug: effectiveModeModelSlug(for: mode))
+                                    .first { $0.effort == mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw) }?
+                                    .detail ?? "Reasoning depth for this mode.",
                                 selection: modeReasoningBinding(for: mode.id),
-                                options: CodexReasoningEffort.allCases.map(\.rawValue)
+                                options: catalog.pickerEffortValues(
+                                    forModelSlug: effectiveModeModelSlug(for: mode),
+                                    including: mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw)
+                                )
                             ) { rawValue in
-                                Text(CodexReasoningEffort.resolve(rawValue).displayName)
+                                Text(CodexModelCatalog.effortDisplayName(rawValue))
                             }
+                        }
+
+                        if let hint = effortConflictHint(for: mode) {
+                            SettingsHelpText(hint, tone: .warning)
                         }
 
                         SettingsToggleRow(
@@ -384,8 +402,54 @@ struct AIOutputModesTab: View {
     private func modeModelBinding(for modeID: String) -> Binding<String> {
         Binding(
             get: { model.modes.first { $0.id == modeID }?.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw) ?? globalCodexModelRaw },
-            set: { model.setModeModel($0, for: modeID) }
+            set: { newValue in
+                model.setModeModel(newValue, for: modeID)
+                // Konflikt-Klemme nur für den EIGENEN Effort-Override dieses
+                // Modus (der globale Wert gehört dem User): unterstützt das
+                // neue Modell das Level nicht, fällt der Override auf "high".
+                if let mode = model.modes.first(where: { $0.id == modeID }),
+                   let effortOverride = mode.codexReasoningEffortRawOverride {
+                    let slug = CodexModelSelection.resolveSlug(newValue, catalog: catalog)
+                    if catalog.shouldReplaceEffort(effortOverride, forModelSlug: slug) {
+                        model.setModeReasoning(CodexModelCatalog.conflictFallbackEffort, for: modeID)
+                    }
+                }
+            }
         )
+    }
+
+    // MARK: - Katalog-Helper
+
+    /// Effektives Modell eines Modus (Override oder globaler Default),
+    /// "auto" bereits zum Frontier-Slug aufgelöst.
+    private func effectiveModeModelSlug(for mode: OutputMode) -> String {
+        CodexModelSelection.resolveSlug(
+            mode.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw),
+            catalog: catalog
+        )
+    }
+
+    private func catalogModelLabel(for rawValue: String) -> String {
+        if rawValue == CodexModelSelection.autoRawValue {
+            let frontier = catalog.frontierModel?.displayName ?? "latest"
+            return "Auto — latest (\(frontier))"
+        }
+        guard catalog.model(slug: rawValue) != nil else {
+            return "\(rawValue) (not in catalog)"
+        }
+        return catalog.modelDisplayName(rawValue)
+    }
+
+    /// Hinweis, wenn die effektive Modell/Thinking-Kombination laut Katalog
+    /// nicht unterstützt wird (z.B. globales Ultra + Mode-Override Luna).
+    /// Bewusst nur ein Hinweis — globale Werte werden nie automatisch
+    /// umgeschrieben.
+    private func effortConflictHint(for mode: OutputMode) -> String? {
+        let slug = effectiveModeModelSlug(for: mode)
+        let effort = mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw)
+        guard let catalogModel = catalog.model(slug: slug),
+              !catalogModel.supportsEffort(effort) else { return nil }
+        return "\(CodexModelCatalog.effortDisplayName(effort)) is not listed for \(catalogModel.displayName) — Codex may reject or downgrade it."
     }
 
     private func useGlobalReasoningBinding(for modeID: String) -> Binding<Bool> {

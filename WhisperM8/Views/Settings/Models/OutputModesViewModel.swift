@@ -12,17 +12,21 @@ final class OutputModesViewModel {
 
     @ObservationIgnored private let store: OutputModeStore
     @ObservationIgnored private let templateStore: PostProcessingTemplateStore
+    /// Closure-DI: Tests injizieren einen festen Katalog statt der Datei.
+    @ObservationIgnored private let catalogProvider: () -> CodexModelCatalog
 
     init(
         fileURL: URL? = nil,
         templateFileURL: URL? = nil,
         selectedModeID: String = OutputMode.rawID,
-        defaultOutputModeID: String = AppPreferences.shared.defaultOutputModeID
+        defaultOutputModeID: String = AppPreferences.shared.defaultOutputModeID,
+        catalogProvider: @escaping () -> CodexModelCatalog = { CodexModelCatalogStore.shared.catalog() }
     ) {
         self.store = OutputModeStore(fileURL: fileURL)
         self.templateStore = PostProcessingTemplateStore(fileURL: templateFileURL)
         self.selectedModeID = selectedModeID
         self.defaultOutputModeID = defaultOutputModeID
+        self.catalogProvider = catalogProvider
         reload()
     }
 
@@ -148,7 +152,13 @@ final class OutputModesViewModel {
         let templateName = templates.first { $0.id == mode.templateID }?.name ?? "No template"
         let modelText: String
         if let override = mode.codexModelRawOverride, !override.isEmpty {
-            modelText = CodexPostProcessingModel.resolve(override).displayName
+            // Katalog-Displayname; "auto" und Fremd-Slugs ehrlich benennen
+            // statt (wie früher via resolve()) still als Default auszugeben.
+            if override == CodexModelSelection.autoRawValue {
+                modelText = "Auto model"
+            } else {
+                modelText = catalogProvider().modelDisplayName(override)
+            }
         } else {
             modelText = "Default model"
         }

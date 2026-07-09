@@ -54,11 +54,6 @@ final class CodexConnectionModel {
         refreshTask = nil
     }
 
-    func shouldWarnAboutGPT55(selectedModelRaw: String) -> Bool {
-        CodexPostProcessingModel.resolve(selectedModelRaw) == .gpt55
-            && codexVersion.contains("0.120.")
-    }
-
     var statusTone: SettingsStatusTone {
         switch status {
         case .signedIn:

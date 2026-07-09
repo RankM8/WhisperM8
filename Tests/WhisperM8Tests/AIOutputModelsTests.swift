@@ -13,20 +13,20 @@ final class AIOutputModelsTests: XCTestCase {
         super.tearDown()
     }
 
-    func testCodexConnectionModelRefreshUsesInjectedProbeAndWarnsForOldGPT55CLI() async {
+    /// Die alte GPT-5.5/"0.120."-Warnheuristik ist gestrichen — Modell-Warnungen
+    /// kommen jetzt katalogbasiert aus der View (CodexModelCatalog).
+    func testCodexConnectionModelRefreshUsesInjectedProbe() async {
         let model = CodexConnectionModel {
             return CodexConnectionModel.Snapshot(
                 status: .signedIn,
-                version: "codex 0.120.1"
+                version: "codex 0.144.0"
             )
         }
 
         await model.refresh()
 
         XCTAssertEqual(model.status, .signedIn)
-        XCTAssertEqual(model.codexVersion, "codex 0.120.1")
-        XCTAssertTrue(model.shouldWarnAboutGPT55(selectedModelRaw: CodexPostProcessingModel.gpt55.rawValue))
-        XCTAssertFalse(model.shouldWarnAboutGPT55(selectedModelRaw: CodexPostProcessingModel.gpt52.rawValue))
+        XCTAssertEqual(model.codexVersion, "codex 0.144.0")
         XCTAssertEqual(model.statusTone, .ok)
     }
 
