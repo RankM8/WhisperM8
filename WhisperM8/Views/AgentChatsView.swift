@@ -1053,6 +1053,10 @@ struct AgentChatsView: View {
                     }
                 }
                 .padding(.vertical, 6)
+                // Mit angeschlossener Maus rendert macOS sonst einen 15 pt
+                // breiten Legacy-Scroller mit hellem Track in die dunkle
+                // Sidebar — Overlay-Stil erzwingen (Views/OverlayScrollers).
+                .overlayScrollers()
             }
             }
 
