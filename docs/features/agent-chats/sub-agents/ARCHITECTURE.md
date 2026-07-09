@@ -20,7 +20,7 @@ Produktive Job-Daten liegen unter:
 |-------|--------|
 | `state.json` | `AgentJobState`, atomar per Temp-Datei und `rename` geschrieben. |
 | `events.jsonl` | Roher `codex exec --json` Event-Strom, append-only. |
-| `last-message.txt` | Letzter strukturierter Report aus `--output-last-message`. |
+| `last-message.txt` | Letzte Antwort aus `--output-last-message`; parsebarer Report oder Rohtext-Fallback. |
 | `pending-prompt.txt` | Prompt-Handoff von CLI/App an den nächsten Supervisor-Turn. |
 | `supervisor.log` | stdout/stderr des detachten `agent-supervise`-Prozesses. |
 | `report-schema.json` | JSON-Schema, das der Supervisor vor dem Turn schreibt. |
@@ -44,10 +44,16 @@ Job-Wahrheit in den eigenen Application-Support-Bereich.
 - `WhisperM8/Services/AgentChats/AgentJobDirectoryMonitor.swift` beobachtet das Job-Root per FSEvents und filtert nur `state.json` und `last-message.txt` als sync-relevante Änderungen.
 - `WhisperM8/Services/AgentChats/AgentJobWorkspaceSync.swift` liest Jobs off-main, korrigiert Orphans, merged sie in den Workspace und füllt Runtime-Modell, Status-Dots und Unread-Marker.
 - `WhisperM8/Services/AgentChats/AgentJobRuntimeModel.swift` hält ephemere UI-Snapshots pro lokaler Session-ID und die Zahl aktiver Kinder pro Parent.
-- `WhisperM8/Services/AgentChats/SubAgentDiscovery.swift` scannt `<project>/.claude/agents/*.md` und `~/.claude/agents/*.md` und extrahiert einfache Frontmatter-Felder für die Dispatch-Anzeige.
+- `WhisperM8/Services/AgentChats/SubAgentDiscovery.swift` scannt Claude-Subagent-Definitionen unter `<project>/.claude/agents/*.md` und `~/.claude/agents/*.md` und extrahiert Frontmatter-Felder für die Dispatch-Anzeige.
 - `WhisperM8/Services/AgentChats/ProcessAncestry.swift` liest Prozess-Vorfahren und Startzeiten per `sysctl`, damit parentlose CLI-Aufrufe einer laufenden Claude-PTY-Session zugeordnet werden können.
 - `WhisperM8/Views/SubagentJobDetailView.swift` ist die nicht-PTY Detailansicht für Jobs vor der Übernahme.
 - `WhisperM8/Views/AgentChatsView+Subagents.swift` schreibt `takenOver` und startet den normalen Codex-Resume-Pfad im Terminal-Tab.
+
+`SubAgentDiscovery` gehört zur Claude-Subagent-Definitionsebene: Es liest
+Felder wie `permissionMode`, `model`, `tools` und `isolation: worktree` aus
+Markdown-Dateien. Das ist nicht die Discovery der Codex-Subagent-Jobs selbst;
+Jobs entstehen erst durch `whisperm8 agent run` und werden über
+`AgentJobStore` gefunden.
 
 ## Datenfluss: run
 
@@ -97,9 +103,9 @@ Merge das Job-CWD als Projekt-Fallback.
 
 ## Parent-Zuordnung
 
-`$CLAUDE_SESSION_ID` ist laut Code und Skill-Doku keine verlässliche Quelle:
-Claude Code exportiert sie in der Bash-Umgebung nicht. WhisperM8 löst Parents
-deshalb zweistufig auf.
+`$CLAUDE_SESSION_ID` ist kein Code-Vertrag. Als Laufzeitverhalten wurde am
+2026-07-08 validiert, dass Claude Code sie in der Bash-Umgebung nicht
+bereitstellt; WhisperM8 löst Parents deshalb zweistufig auf.
 
 Wenn `--parent <session-id>` gesetzt ist, speichert der Job diese externe
 Claude-Session-ID direkt. Ohne `--parent` speichert der CLI-Start die
@@ -129,11 +135,13 @@ Codex-PTY-Pfad.
 
 - `state.json` ist die Job-Wahrheit; Decode-Fehler einzelner Jobs werden übersprungen, nicht als Workspace-Korruption behandelt.
 - `spawning` und `running` gelten als aktiv; ohne lebende Supervisor-PID wird ein aktiver Job best effort zu `failed` korrigiert.
+- Der Liveness-Anker `supervisorPid` nutzt `kill(pid, 0)`; bei PID-Reuse kann ein toter Job theoretisch für lebendig gehalten werden.
 - `spawning` ohne PID ist kurz erlaubt; hängt es länger als 30 Sekunden, wird es als Spawn-Timeout markiert.
+- Der Codex-Runner hat einen Idle-Watchdog: Kommen 1800 Sekunden keine Events, terminiert er den `codex`-Prozess per SIGTERM und der Job endet als `failed` mit `failureReason` `stalled: keine Events mehr vom codex-Prozess (Idle-Watchdog)`.
 - `send` nimmt `.claim.lock` und reserviert ruhende Jobs als `spawning`, bevor der Prompt geschrieben und der Supervisor gestartet wird.
 - `takenOver` ist terminal und sperrt `agent send` dauerhaft; die App erlaubt Übernahme nur auf nicht aktiven Jobs.
 - Ein Report mit `status: failure` kann bei State `done` trotzdem Exit-Code `2` ergeben.
-- `codex exec resume` akzeptiert laut Runner keine `--sandbox`- und `--cd`-Flags; Sandbox wird per `-c sandbox_mode=...` gesetzt, das CWD über `Process.currentDirectoryURL`.
+- Das Laufzeitverhalten von `codex exec resume` wurde am 2026-07-08 validiert: `resume` akzeptiert keine `--sandbox`- und `--cd`-Flags; Sandbox wird per `-c sandbox_mode=...` gesetzt, das CWD über `Process.currentDirectoryURL`.
 - Für `workspace-write` löst der Supervisor das gemeinsame Git-Verzeichnis per `git rev-parse --git-common-dir` auf und setzt es als `writable_roots`-Override, weil Commits sonst an `.git/index.lock` scheitern können.
 - Generische `--config key=value`-Overrides werden nach den eingebauten Codex-Configs angehängt und können deshalb auch die eingebauten Werte übersteuern.
 - In `AgentWorkspaceStore`-Mutationen laufen keine Subprozesse; Git-Branch-Lookups für neue Fallback-Projekte werden vor der Mutation berechnet.

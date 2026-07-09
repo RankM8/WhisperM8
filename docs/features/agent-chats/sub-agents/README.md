@@ -19,8 +19,10 @@ Job-Verzeichnis unter `~/Library/Application Support/WhisperM8/agent-jobs/`
 an, schreibt den Prompt als `pending-prompt.txt` und startet einen
 Supervisor-Prozess. Dieser Supervisor fährt genau einen `codex exec`-Turn,
 schreibt Codex-Events nach `events.jsonl`, übernimmt die Codex-Thread-ID aus
-dem ersten `thread.started`-Event und beendet den Turn mit einem strukturierten
-Report in `last-message.txt`.
+dem ersten `thread.started`-Event und lässt Codex die letzte Antwort in
+`last-message.txt` schreiben. Diese Antwort ist im Normalfall der
+strukturierte WhisperM8-Report; wenn sie nicht parsebar ist, bleibt sie als
+Rohtext-Fallback sichtbar.
 
 Die App spiegelt diese Job-Verzeichnisse in `AgentSessions.json`. Dadurch
 taucht ein Subagent in der Sidebar, der Tab-Leiste und in der normalen
@@ -63,6 +65,11 @@ Die Exit-Codes sind Teil des Maschinenvertrags: `0` ok, `1` Usage-Fehler,
 `2` Job fehlgeschlagen oder Report `failure`, `3` Zustandskonflikt und `4`
 Umgebungsproblem.
 
+Für Browser-QA kann `run` zusätzlich `--playwright-storage-state <path>`
+erhalten. Die CLI validiert den Pfad vor dem Start, persistiert ihn im
+Job-State und startet in jedem Turn einen isolierten Playwright-MCP mit genau
+dieser Storage-State-Datei.
+
 ## Darstellung in der App
 
 Subagent-Jobs erscheinen als `AgentSessionKind.subagentJob` im Workspace. Wenn
@@ -77,6 +84,10 @@ zeigt den Auftrag, Status, Report, Metriken, Live-Transcript aus dem
 Codex-Rollout-JSONL, einen Stop-Button für aktive Turns, einen Composer für
 Folge-Prompts und einen Button zur interaktiven Übernahme. Nach der Übernahme
 wechselt die App auf die normale `AgentSessionDetailView` mit PTY.
+Ein eigener Button "Report → Chat" legt den Report als Prompt-Baustein in die
+Parent-Claude-Session, ohne ihn automatisch abzusenden. Detailverhalten der
+Sidebar wie Unread-Dot, Reveal, Sortierung und ephemeres Aufklappen gehört zur
+UI-Dokumentation unter `docs/features/agent-chats/ui/`.
 
 ## Abgrenzung
 
@@ -112,5 +123,6 @@ Codex-Report, `whisperm8 agent`, `agent run`, `agent send`, `agent list`,
 `AgentJobDirectoryMonitor`, `AgentJobWorkspaceSync`, `AgentJobRuntimeModel`,
 `SubagentJobDetailView`, `takeOverSubagentJob`, `SubAgentDiscovery`,
 `ProcessAncestry`, `CodexTurnRequest`, `CodexExecRunner`,
+`--playwright-storage-state`, `playwrightStorageStatePath`,
 `AgentSessionKind.subagentJob`, `takenOver`, `spawning`, `running`, `done`,
 `failed`, `stopped`.

@@ -5,29 +5,37 @@ updated: 2026-07-09
 
 # Sub-Agents in Claude Dynamic Workflows
 
-Claude Dynamic Workflows können Codex-Subagents benutzen, obwohl die
-Workflow-Skripte selbst keine beliebigen Shell-Befehle ausführen. Das Muster
-im Repo ist ein Wrapper: Ein Claude-Subagent vom Typ `codex-runner` erhält
+Claude Dynamic Workflows können Codex-Subagents benutzen. Das im Repo
+verwendete Muster berücksichtigt das am 2026-07-08 validierte
+Laufzeitverhalten, dass Workflow-Skripte selbst nicht direkt beliebige
+Shell-Befehle ausführen: Ein Claude-Subagent vom Typ `codex-runner` erhält
 genau einen fertigen `whisperm8 agent …`-Befehl, führt ihn per Bash aus,
-wartet auf das Ergebnis und relayed das JSON zurück an das Workflow-Skript.
+wartet auf das Ergebnis und relayed strukturierte Ergebnisfelder zurück an
+das Workflow-Skript.
 
 ## Wrapper-Muster
 
 `.claude/agents/codex-runner.md` beschreibt einen mechanischen Agenten mit
 `tools: Bash`. Seine Aufgabe ist nicht Analyse, sondern Ausführung: Er nimmt
 einen einzigen `whisperm8 agent`-Befehl, hängt `; echo "EXIT:$?"` an, nutzt
-einen langen Bash-Timeout und gibt das stdout-JSON unverfälscht weiter.
+den als Laufzeitkonfiguration am 2026-07-08 validierten Bash-Timeout von
+600000 ms und füllt aus dem CLI-stdout-JSON die Felder des jeweils gesetzten
+Workflow-Schemas.
 
-Das Workflow-Skript wertet dieses JSON aus. Es interpretiert Exit-Codes,
-Short-ID, State, Report und Metriken, entscheidet über Folge-Jobs und baut
-gegebenenfalls weitere `agent run`- oder `agent send`-Aufrufe. Damit bleibt
-die Shell-Fähigkeit im Claude-Agent mit Bash-Tool, während die Workflow-Logik
-strukturierte Daten statt Terminaltext verarbeitet.
+Welche Werte das Workflow-Skript sieht, hängt vom jeweiligen Schema ab.
+`codex-verify.js` relayed zum Beispiel für Finder `exitCode`, `state`,
+`reportStatus`, `findings` und `notes`, für Refuter `exitCode`, `state`,
+`refuted`, `reasoning` und `notes`; es verarbeitet nicht das rohe CLI-JSON.
+Andere Workflows können Felder wie `shortId`, `turns` oder Metriken in ihr
+Schema aufnehmen. Damit bleibt die Shell-Fähigkeit im Claude-Agent mit
+Bash-Tool, während die Workflow-Logik strukturierte Daten statt Terminaltext
+verarbeitet.
 
-Falls der Agent-Typ noch nicht registriert ist, nutzt
-`.claude/workflows/codex-verify.js` denselben Vertrag inline im Prompt und
-startet einen Sonnet-Agenten mit Bash-Fähigkeit. Der eigentliche Codex-Job
-läuft trotzdem über `whisperm8 agent run --wait --json`.
+`.claude/workflows/codex-verify.js` nutzt standardmäßig `agentType:
+"codex-runner"`. Der Inline-Fallback greift nur, wenn der Aufrufer explizit
+`agentType: null` übergibt; dann steht der Wrapper-Vertrag im Prompt und der
+Workflow startet einen Sonnet-Agenten mit Bash-Fähigkeit. Der eigentliche
+Codex-Job läuft trotzdem über `whisperm8 agent run --wait --json`.
 
 ## Exit-Code-Vertrag
 
@@ -39,21 +47,23 @@ läuft trotzdem über `whisperm8 agent run --wait --json`.
 | `3` | Zustandskonflikt; typischer Fall ist ein aktiver oder bereits übernommener Job. |
 | `4` | Umgebungsproblem; etwa fehlendes Codex-Binary, unbekannte Job-ID oder nicht entfernbarer Worktree. |
 
-Der `codex-runner` interpretiert diese Codes nicht fachlich. Er meldet sie
-zusammen mit dem JSON zurück; die Workflow-Datei entscheidet, ob daraus ein
-Retry, ein Abbruch oder ein bewusstes negatives Urteil folgt.
+Der `codex-runner` interpretiert diese Codes nicht fachlich. Er meldet sie im
+Schema-Ergebnis zurück; die Workflow-Datei entscheidet, ob daraus ein Retry,
+ein Abbruch oder ein bewusstes negatives Urteil folgt.
 
 ## `shortId` weiterreichen
 
 Detached Jobs geben sofort eine `shortId` zurück. Synchrone Workflow-Schritte
 verwenden im Repo meist `--wait --json`, damit der Wrapper erst nach dem Turn
-zurückkehrt und direkt ein vollständiges Statusobjekt auswertbar ist.
+zurückkehrt und das Workflow-Schema aus einem finalen Statusobjekt befüllt
+werden kann.
 
-Die Short-ID bleibt trotzdem wichtig: Sie ist der stabile Handle für
+Die Short-ID bleibt trotzdem wichtig, wenn das jeweilige Workflow-Schema sie
+weiterreicht: Sie ist der stabile Handle für
 Nachsteuerung per `whisperm8 agent send <shortId> --wait --json "<prompt>"`,
 für `status`, `logs`, `stop` und für manuelles Debugging in der App. Ein
 Workflow, der einen Job später fortsetzen will, muss die `shortId` aus dem
-ersten JSON-Ergebnis explizit im eigenen Zwischenzustand weiterreichen.
+ersten Ergebnis explizit im eigenen Zwischenzustand weiterreichen.
 
 `send` ist nur auf ruhenden Jobs erlaubt. Der CLI-Claim reserviert den Job
 unter `.claim.lock`; parallele Nachsteuerungen auf dieselbe Short-ID enden
@@ -75,7 +85,7 @@ Arbeitsbereiche trennen oder Konflikte fachlich einplanen.
 
 ## Reale Beispiele im Repo
 
-- `.claude/agents/codex-runner.md` ist der registrierbare Claude-Subagent für das Bash-Relay eines einzelnen `whisperm8 agent`-Befehls.
+- `.claude/agents/codex-runner.md` ist der registrierbare Claude-Subagent für das Bash-Relay eines einzelnen `whisperm8 agent`-Befehls; der Timeout-Wert ist Teil dieses Agent-Vertrags und wurde als Laufzeitkonfiguration am 2026-07-08 validiert.
 - `.claude/workflows/codex-verify.js` ist ein Dynamic Workflow, der mehrere Codex-Finder parallel startet und jedes Finding durch zwei adversarische Codex-Refuter prüfen lässt.
 
 `codex-verify.js` baut Befehle der Form
