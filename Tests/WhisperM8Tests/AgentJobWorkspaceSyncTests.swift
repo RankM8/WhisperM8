@@ -185,6 +185,58 @@ final class AgentJobWorkspaceSyncTests: XCTestCase {
         )
     }
 
+    // MARK: - Modell/Effort der Job-Session (Header-Anzeige)
+
+    /// Explizite Job-Parameter (--model/--effort) landen in der Session —
+    /// nicht die App-Defaults (die zeigten fälschlich "gpt-5.5 · high").
+    func testJobSessionUsesExplicitJobModelAndEffort() throws {
+        var job = makeJob()
+        job.model = "gpt-5.6-terra"
+        job.effort = "xhigh"
+
+        try store.mergeSubagentJobs([job], codexConfigDefaults: .empty)
+
+        let session = store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }
+        XCTAssertEqual(session?.model, "gpt-5.6-terra")
+        XCTAssertEqual(session?.reasoningEffort, "xhigh")
+    }
+
+    /// Job ohne --model/--effort läuft real mit den config.toml-Defaults —
+    /// genau die muss die Session zeigen.
+    func testJobSessionFallsBackToCodexConfigDefaults() throws {
+        let job = makeJob()
+
+        try store.mergeSubagentJobs(
+            [job],
+            codexConfigDefaults: CodexGlobalConfigDefaults(model: "gpt-5.6-sol", effort: "high")
+        )
+
+        let session = store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }
+        XCTAssertEqual(session?.model, "gpt-5.6-sol")
+        XCTAssertEqual(session?.reasoningEffort, "high")
+    }
+
+    /// Bestand-Reparatur: eine früher mit App-Defaults angelegte Job-Session
+    /// wird beim nächsten Sync auf die echten Werte korrigiert.
+    func testKnownJobSessionModelIsCorrectedOnLaterSync() throws {
+        let job = makeJob()
+        // Erster Sync ohne bekannte Defaults → Init-Fallback (gpt-5.5).
+        try store.mergeSubagentJobs([job], codexConfigDefaults: .empty)
+        XCTAssertEqual(
+            store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }?.model,
+            CodexPostProcessingModel.defaultModel.rawValue
+        )
+
+        // Späterer Sync kennt die config.toml-Defaults → korrigiert.
+        try store.mergeSubagentJobs(
+            [job],
+            codexConfigDefaults: CodexGlobalConfigDefaults(model: "gpt-5.6-sol", effort: "high")
+        )
+        let session = store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }
+        XCTAssertEqual(session?.model, "gpt-5.6-sol")
+        XCTAssertEqual(session?.reasoningEffort, "high")
+    }
+
     /// Explizites --parent gewinnt gegen die PID-Auflösung.
     func testExplicitParentWinsOverResolvedParent() throws {
         _ = try store.createSession(

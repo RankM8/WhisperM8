@@ -697,10 +697,15 @@ struct AgentSessionStore {
     ///   aufgelöste Parents (Claude-externalSessionID) für Jobs OHNE
     ///   explizites `--parent` — wird beim Anlegen genutzt und bei bekannten
     ///   Sessions nachgetragen, solange dort noch kein Parent steht.
+    /// - `codexConfigDefaults`: die globalen ~/.codex/config.toml-Defaults —
+    ///   das nutzt `codex exec` real, wenn der Job ohne `--model`/`--effort`
+    ///   lief. Default-Argument (at call site evaluiert = außerhalb des
+    ///   Store-Locks, Datei-I/O!); Tests injizieren feste Werte.
     func mergeSubagentJobs(
         _ jobs: [AgentJobState],
         activityBumpShortIds: Set<String> = [],
-        resolvedParentExternalByShortId: [String: String] = [:]
+        resolvedParentExternalByShortId: [String: String] = [:],
+        codexConfigDefaults: CodexGlobalConfigDefaults = CodexGlobalConfigReader.shared.defaults()
     ) throws {
         // Branch-Lookups VOR der Mutation (kein Subprozess unter dem
         // Store-Lock) — nur für Fallback-Projekte, die es noch nicht gibt.
@@ -731,11 +736,26 @@ struct AgentSessionStore {
                 // Explizites --parent gewinnt; sonst die PID-Auflösung.
                 let parentExternalID = job.parentSessionID
                     ?? resolvedParentExternalByShortId[job.shortId]
+                // Was der Job WIRKLICH nutzt: explizites --model/--effort aus
+                // dem Job-State, sonst der globale config.toml-Default (den
+                // zieht codex bei jedem Turn). nil = unbekannt → nicht raten.
+                let jobModel = job.model ?? codexConfigDefaults.model
+                let jobEffort = job.effort ?? codexConfigDefaults.effort
                 if let index = workspace.sessions.firstIndex(where: { $0.subagentJobShortID == job.shortId }) {
                     // Bekannter Job → nur ECHTE Änderungen schreiben.
                     if workspace.sessions[index].externalSessionID == nil,
                        let threadID = job.codexThreadID {
                         workspace.sessions[index].externalSessionID = threadID
+                    }
+                    // Frühere Versionen legten Job-Sessions mit den App-
+                    // Defaults an (zeigte z.B. gpt-5.5 statt des echten
+                    // gpt-5.6-sol) — hier einmalig geradeziehen; idempotent,
+                    // schreibt nur bei echter Abweichung.
+                    if let jobModel, workspace.sessions[index].model != jobModel {
+                        workspace.sessions[index].model = jobModel
+                    }
+                    if let jobEffort, workspace.sessions[index].reasoningEffort != jobEffort {
+                        workspace.sessions[index].reasoningEffort = jobEffort
                     }
                     // Nachträgliche Parent-Zuordnung (Job lief schon, bevor
                     // die PID aufgelöst werden konnte) — nie überschreiben.
@@ -788,6 +808,10 @@ struct AgentSessionStore {
                             projectID: projectID,
                             externalSessionID: job.codexThreadID,
                             title: Self.subagentSessionTitle(from: job.intent),
+                            // Echte Job-Parameter statt App-Defaults; nur wenn
+                            // beides unbekannt ist, greift der Init-Fallback.
+                            model: jobModel ?? CodexPostProcessingModel.defaultModel.rawValue,
+                            reasoningEffort: jobEffort ?? CodexReasoningEffort.defaultEffort.rawValue,
                             status: .closed,
                             // Resume-Pfad ohne Sonderfall (Übernahme):
                             hasLaunchedInitialPrompt: true,
