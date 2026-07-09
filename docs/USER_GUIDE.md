@@ -4,7 +4,7 @@ description_long: |
   Ausführlicher Nutzer-Leitfaden: Installation/Permissions, Diktat-Workflow
   (Hotkey, Output-Modes, Auto-Paste), Agent Chats und Settings. Zielgruppe sind
   Endnutzer; technische Architektur steht in ARCHITECTURE.md.
-updated: 2026-06-27
+updated: 2026-07-09
 ---
 
 # WhisperM8 - User Guide
@@ -79,8 +79,9 @@ On first launch, two permissions are required:
 - Dialog appears automatically on first recording attempt
 - Click "Allow"
 
-#### Accessibility (for Auto-Paste)
-- System Settings opens automatically
+#### Accessibility
+- Required by onboarding even when Auto-Paste is disabled; without it, Next and Done remain blocked and onboarding opens again on the next launch
+- Click the permission button to open System Settings
 - Find WhisperM8 in the list and enable
 - **If not in list:** Click "+" → select `/Applications/WhisperM8.app`
 

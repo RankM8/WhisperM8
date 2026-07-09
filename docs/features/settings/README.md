@@ -5,7 +5,7 @@ description_long: |
   Settings-Refactor vom 2026-07-06. Beschrieben werden die 10 neuen SettingsPage-
   Seiten in den Gruppen Dictation, Agents, App und Workspace, die Alias-Zuordnung
   der historischen 15 Seiten sowie die Kit/Models/Pages-Architektur.
-updated: 2026-07-06 14:05
+updated: 2026-07-09 23:53
 ---
 
 # Settings
@@ -23,24 +23,26 @@ Aktuelle Code-Aufhängung: `SettingsPage` und `SettingsView` in
 
 ## Aktuelle 10 Seiten
 
-| Gruppe | Seite | Route | Page-Datei | Inhalt |
-|---|---|---|---|---|
-| Dictation | Recording | `recording` | `RecordingSettingsPage.swift` | Hotkey, Mikrofon, Audio-Ducking, Overlay und Auto-Paste. |
-| Dictation | Transcription | `transcription` | `TranscriptionSettingsPage.swift` | Transcription-Provider, API-Key, Modell, Preisstand und Sprache. |
-| Dictation | AI Output | `ai-output` | `AIOutputSettingsPage.swift` | Codex-Account, Defaults, Modes, Templates und Test Lab als Tabs. |
-| Dictation | Context & Privacy | `context` | `ContextPrivacySettingsPage.swift` | Selected Context, Visual Context und Privacy-Hinweise. |
-| Agents | Agent Chats | `agent-chats` | `AgentChatsSettingsPage.swift` | Workspace, Notifications, Claude Hooks und Advanced als Tabs. |
-| Agents | CLI & Skills | `cli` | `CLISkillsSettingsPage.swift` | CLI-Symlink, Schnellstart-Befehle und installierbare Skills. |
-| App | General | `general` | `GeneralSettingsPage.swift` | Usage Profile, Start at Login, Theme und Update-Checks. |
-| App | Permissions | `permissions` | `PermissionsSettingsPage.swift` | Microphone, Accessibility und optional Screen Recording. |
-| App | About | `about` | `AboutSettingsPage.swift` | Version, Updates und Hersteller-Link. |
-| Workspace | Output | `output` | `OutputWorkspacePage.swift` | Latest Run, Output-Archiv, Filter und Löschaktion. |
+| Gruppe | Seite | Route | Page-Datei | Inhalt | Fachlicher Besitzer |
+|---|---|---|---|---|---|
+| Dictation | Recording | `recording` | `RecordingSettingsPage.swift` | Hotkey, Mikrofon, Audio-Ducking, Overlay und Auto-Paste. | [Recording](../dictation/recording/) |
+| Dictation | Transcription | `transcription` | `TranscriptionSettingsPage.swift` | Transcription-Provider, API-Key, Modell, Preisstand und Sprache. | [Transcription](../dictation/transcription/) |
+| Dictation | AI Output | `ai-output` | `AIOutputSettingsPage.swift` | Codex-Account, Defaults, Modes, Templates und Test Lab als Tabs. | [AI Output](../dictation/ai-output/) |
+| Dictation | Context & Privacy | `context` | `ContextPrivacySettingsPage.swift` | Selected Context, Visual Context und Privacy-Hinweise. | [Visual Context](../dictation/visual-context/) |
+| Agents | Agent Chats | `agent-chats` | `AgentChatsSettingsPage.swift` | Workspace, Notifications, Claude Hooks und Advanced als Tabs. | [Agent Chats](../agent-chats/) |
+| Agents | CLI & Skills | `cli` | `CLISkillsSettingsPage.swift` | CLI-Symlink, Schnellstart-Befehle und installierbare Skills. | [CLI](../cli/) |
+| App | General | `general` | `GeneralSettingsPage.swift` | Usage Profile, Start at Login, Theme und Update-Checks. | [App-Architektur](../../ARCHITECTURE.md) |
+| App | Permissions | `permissions` | `PermissionsSettingsPage.swift` | Microphone, Accessibility und optional Screen Recording. | [App-Architektur](../../ARCHITECTURE.md) |
+| App | About | `about` | `AboutSettingsPage.swift` | Version, Updates und Hersteller-Link. | [App-Architektur](../../ARCHITECTURE.md) |
+| Workspace | Output | `output` | `OutputWorkspacePage.swift` | Latest Run, Output-Archiv, Filter und Löschaktion. | [AI Output](../dictation/ai-output/) |
 
 ## Legacy-Aliasse
 
-Alte Deep-Links bleiben kompatibel. `SettingsPage.page(routeID:)` mappt die
-historischen Route-IDs auf die neuen Seiten; `applyTabAlias(routeID:)` setzt
-zusätzlich die passenden Tabs für AI Output und Agent Chats.
+Alte Deep-Links bleiben kompatibel. `SettingsRouteTarget.resolve(routeID:)` ist
+die gemeinsame Single Source of Truth für aktuelle Seiten-Routen und historische
+Aliasse. Das Ergebnis enthält die Zielseite und bei AI Output beziehungsweise
+Agent Chats zusätzlich den passenden Tab. `SettingsPage.page(routeID:)`
+delegiert für Aufrufer, die nur die Seite benötigen, an denselben Resolver.
 
 | Historische Doc | Alte Seite | Neue Seite | Neue Page-Datei | Doku-Verweis |
 |---|---|---|---|---|
@@ -64,11 +66,19 @@ zusätzlich die passenden Tabs für AI Output und Agent Chats.
 
 Die aktuelle Struktur ist in [ARCHITECTURE.md](ARCHITECTURE.md) dokumentiert:
 
-- Routing und Alias-Vertrag in `SettingsView.swift`.
+- Routing und Alias-Vertrag in `Views/Settings/Models/SettingsRouteTarget.swift`;
+  Anwendung des aufgelösten Ziels in `SettingsView.swift`.
 - Wiederverwendbare SettingsKit-Bausteine unter `Views/Settings/Kit/`.
 - Testbare ViewModels unter `Views/Settings/Models/`.
 - Page-Komposition unter `Views/Settings/Pages/`.
 - Kompatibilitätsvertrag und Test-Landschaft.
+
+## Keywords
+
+`SettingsRouteTarget`, `Deep-Link`, `Legacy-Alias`, `AIOutputPageTab`,
+`AgentChatsSettingsPageTab`, `SettingsKit`, `Settings-Routing`, `10 Seiten`,
+`Recording`, `Transcription`, `AI Output`, `Context & Privacy`, `Agent Chats`,
+`CLI & Skills`, `General`, `Permissions`, `About`, `Output`
 
 ## Historische Referenzen
 

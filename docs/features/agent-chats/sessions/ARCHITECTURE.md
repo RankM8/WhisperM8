@@ -29,8 +29,8 @@ Workspace-URL teilen sich über `AgentWorkspaceStoreRegistry` genau einen
 `AgentWorkspaceStore`. Der Store lädt lazy einmal, hält den kanonischen
 Workspace im Speicher, serialisiert Mutationen mit `NSLock`, normalisiert nach
 jeder Änderung und persistiert für die Produktionsdatei debounced nach 0,5 s.
-Strukturelle Creates flushen sofort, damit Crash- oder Force-Quit-Fenster
-klein bleiben.
+`createSession` flusht seine neue Session danach explizit; ein neues Projekt,
+das allein über `upsertProject` entsteht, bleibt dagegen im 0,5-s-Debounce.
 
 `AgentWorkspaceRepository` kapselt Disk-I/O, ISO-8601-Encoding, atomische
 Writes und Backups bei Migration oder Decode-Fehler. `AgentWorkspaceUIModel`
@@ -100,6 +100,14 @@ zeitnahen Ersatz neu oder setzt `externalSessionID`, `hasLaunchedInitialPrompt`,
 physische Transcript-Datei. Fehlt sie weiterhin, startet WhisperM8 frisch im
 selben Tab, damit kein blindes `claude --resume <dead-id>` an Claude geht.
 
+Der noch vorhandene `ClaudeActiveSessionResolver` und der
+Ambiguous-Rebind-Picker sind kein aktiver Produktionspfad: Die View besitzt
+zwar weiterhin einen Consumer für `ambiguousRebindNotification`, im
+Produktionscode existiert aber kein Producer dieser Notification mehr. Der
+reale Launch-Pfad fragt daher keine Auswahl ab, sondern übernimmt automatisch
+den besten Ersatz aus `repairResumeStateBeforeLaunch` oder setzt die Session
+für einen frischen Start zurück.
+
 ## Runtime-Status
 
 Der Live-Status wird zentral von `AgentSessionStatusCoordinator` geschrieben.
@@ -149,6 +157,28 @@ direkt: `spawning` und `running` zu `working`, `done` zu `idle`, `failed` zu
 `errored`, `stopped` zu `stopped` und `takenOver` räumt den Job-Status, weil
 danach der normale PTY-Pfad übernimmt.
 
+## Benachrichtigungen und Töne
+
+State-Machine-Effekte gelangen über `AgentSessionStatusCoordinator` zu den
+Bausteinen in `AgentSessionNotifier.swift`. `AgentSessionUserNotification`
+unterscheidet Turn-Ende, konkrete Rückfragegründe sowie erfolgreiche und
+fehlgeschlagene Subagent-Jobs. `AgentNotificationThrottle` unterdrückt nur
+dieselbe Art für dieselbe lokale Session innerhalb von zwei Sekunden; ein
+Wechsel etwa von Rückfrage zu Turn-Ende wird nicht gedrosselt.
+
+`UNAgentUserNotificationPoster` setzt Titel, optionalen Projektnamen, Body und
+die lokale Session-ID, aber bewusst keinen `content.sound`. Rückfragen und
+Subagent-Meldungen bleiben damit lautlos. Der konfigurierbare Completion-Sound
+wird bei einem Turn-End-Effekt separat vom Status-Koordinator abgespielt; der
+Terminal-Bell reagiert dagegen auf das Bell-Ereignis von SwiftTerm und besitzt
+mit `isTerminalBellEnabled` eine eigene Präferenz.
+
+`AppDelegate` setzt beim Launch den `UNUserNotificationCenterDelegate` und
+fragt die Berechtigung für Alert und Sound an. Im Vordergrund präsentiert der
+Delegate Banner und Listeneintrag. Beim Klick liest er die Session-ID aus
+`userInfo` und routet über `WindowRequestCenter.requestSessionFocus` zum
+richtigen Fenster und Tab.
+
 ## Transcripts
 
 `AgentTranscriptLocator` lokalisiert native Transcript-Dateien. Claude-Pfade
@@ -191,6 +221,16 @@ gebaut; der CLI-Aufruf läuft über `AgentTitleGenerator` mit
 `LoginShellEnvironment.shared.processEnvironment()` und
 `AgentCommandBuilder.commandPath(_:)`.
 
+### Kurze Headless-CLI-Aufrufe
+
+`AgentHeadlessCLI` kapselt kurze, nicht streamende Subprozesse. Er sammelt
+stdout und stderr, liefert bei Exit-Code 0 stdout zurück und meldet sonst
+`nonZeroExit` mit Exit-Code und stderr. Ein Watchdog beendet den Lauf nach dem
+konfigurierten Timeout und schützt die Continuation gegen doppeltes Beenden.
+Der Baustein wird vom Auto-Naming und von `CodexAgentPreflight` für
+`codex --version` genutzt. `CodexExecRunner` verwendet ihn bewusst nicht, weil
+lange JSONL-Ausgabe während des Laufs gestreamt werden muss.
+
 `AgentSessionSummarizer` nutzt denselben Headless-CLI-Stil für Summaries. Ein
 Digest aus Dateigröße und mtime verhindert Wiederholung für unveränderte
 Transcripts. Automatische Trigger sind Session-Ende mit kurzem Debounce und
@@ -228,6 +268,31 @@ wichtige Gotcha: bestehende Resume-Sessions können nicht über
 `initialPrompt` gefüttert werden, weil der Resume-Pfad diesen Wert ignoriert;
 deshalb muss der Text als TUI-Eingabe injiziert werden.
 
+## Projektdienste
+
+`GitProjectStatus` ruft `/usr/bin/git` synchron auf und liefert Branch,
+Dateianzahl sowie Add/Delete-Summen für die Projektanzeige. Die Zahlen haben
+unterschiedliche Reichweite: `git status --porcelain` zählt staged, unstaged
+und untracked Dateien; das verwendete `git diff --numstat` summiert nur
+unstaged Zeilenänderungen an verfolgten Dateien. Bei ausschließlich staged
+oder untracked Änderungen kann `changedFiles` daher positiv sein, während
+`added` und `deleted` null bleiben.
+
+`AgentProjectIconResolver` arbeitet ohne HTTP- oder DNS-Zugriff. Zuerst prüft
+ein Quick-Probe gängige Web-Root-Pfade am Repo-Root und in Unterordnern erster
+Ebene; deklarierte Icons aus Web-Manifests haben Vorrang. Der Fallback sammelt
+Manifests und Bilder in einem Durchlauf, überspringt Dependencies und Caches,
+bricht nach 20.000 Einträgen ab und steigt höchstens bis Scan-Tiefe vier ab.
+Manifest-Größe und ein deterministisches Pfad-Scoring bevorzugen echte,
+flache Brand-Icons und verwerfen Kandidaten unter Score 80.
+
+Ein absoluter, vom User gewählter Icon-Pfad überstimmt den automatisch
+gefundenen relativen Repo-Pfad. `AgentChatsView` scannt nur manuell angelegte,
+noch nicht geprüfte Projekte ohne Override. Wird
+`AgentProjectIconResolver.version` erhöht, setzt die Migration nur für
+Projekte ohne manuelles Icon den Auto-Lookup zurück und stößt so einen
+Neuscan mit der verbesserten Erkennung an.
+
 ## Scope-Abgrenzung
 
 Diese Datei beschreibt nur den gemeinsamen Session-Kern. Die tieferen
@@ -244,6 +309,7 @@ Schnittstellen zum Session-Store, Status-Koordinator oder Transcript-System.
 - UI-State bleibt in `agent-ui-state.json` getrennt von `AgentSessions.json`.
 - Alles unter `~/.claude/` und `~/.codex/` wird als externes CLI-System gelesen; WhisperM8 löscht dort keine Transcripts.
 - Vor Claude-Resume wird nie blind `claude --resume` gestartet, wenn die erwartete Transcript-Datei fehlt; der Repair-Pfad scannt, reboundet oder startet frisch.
+- Der Ambiguous-Rebind-Picker hat keinen Produktions-Producer; Resume-Recovery entscheidet automatisch zwischen bestem Ersatz und Fresh Start.
 - Hook-live Claude-Sessions verwenden Hooks als Status-Quelle; Transcript-Status ist nur Fallback oder Bookkeeping.
 - Der Runtime-Watcher schreibt keinen Status direkt, sondern liefert Entscheidungen an den Status-Koordinator.
 - `agentEventDrivenWatchEnabled` ist der Kill-Switch für vnode-basierte Transcript-Watches; Polling bleibt als Fallback bestehen.
@@ -251,6 +317,9 @@ Schnittstellen zum Session-Store, Status-Koordinator oder Transcript-System.
 - Indexer-Merge überspringt Codex-Thread-IDs von `.subagentJob`-Sessions, damit Job-Sessions nicht dupliziert werden.
 - Archivieren verändert nur den lokalen Workspace-Status; externe Transcripts bleiben bestehen.
 - Retention entfernt nur verwaiste Hook-Settings und Hook-Event-Dateien im App-Support-Verzeichnis.
+- Completion-Sound und Terminal-Bell sind getrennte Pfade; `UNAgentUserNotificationPoster` setzt selbst keinen Sound.
+- `GitProjectStatus.changedFiles` und seine Add/Delete-Summen dürfen wegen der unterschiedlichen Git-Kommandos voneinander abweichen.
+- Die automatische Icon-Suche bleibt lokal, begrenzt und überschreibt keinen manuellen Icon-Pfad.
 
 ## Schlüsseldateien
 
@@ -268,6 +337,7 @@ Schnittstellen zum Session-Store, Status-Koordinator oder Transcript-System.
 - `WhisperM8/Views/AgentSessionDetailView.swift` führt vor Claude-Resume den Fast-Path-Dateicheck, den Scan-Rebind und den Fresh-Start-Guard aus.
 - `WhisperM8/Services/AgentChats/AgentSessionStateMachine.swift` reduziert Status-Signale pur zu Lifecycle-Zustand und Effekten.
 - `WhisperM8/Services/AgentChats/AgentSessionStatusCoordinator.swift` besitzt den Runtime-Status, konsumiert Hooks, Transcript-Entscheidungen und Prozess-Lifecycle und stößt Notifications, Auto-Naming und Summary-Trigger an.
+- `WhisperM8/Services/AgentChats/AgentSessionNotifier.swift` definiert Notification-Inhalt, UN-Poster und Zwei-Sekunden-Throttle.
 - `WhisperM8/Services/AgentChats/ClaudeHookBridge.swift` beobachtet Claude-Hook-Event-Dateien und liefert Status- sowie Binding-Events an den Koordinator.
 - `WhisperM8/Services/AgentChats/ClaudeHookEventStore.swift` liest neue Hook-JSONL-Zeilen cursorbasiert und parst sie in `ClaudeHookEvent`.
 - `WhisperM8/Services/AgentChats/ClaudeHookSettingsBuilder.swift` erzeugt die temporären Claude-Settings-Dateien, die WhisperM8-Hooks in ein Event-File schreiben lassen.
@@ -279,11 +349,14 @@ Schnittstellen zum Session-Store, Status-Koordinator oder Transcript-System.
 - `WhisperM8/Services/AgentChats/BoundedJSONLReader.swift` liefert begrenzte Präfix-Reads für Indexing.
 - `WhisperM8/Services/AgentChats/AgentChatTailExtractor.swift` extrahiert kurze Conversation-Tails für Diktat-Kontext.
 - `WhisperM8/Services/AgentChats/AgentSessionAutoNamer.swift` erzeugt automatische Titel aus begrenzten Transcript-Excerpts.
+- `WhisperM8/Services/AgentChats/AgentHeadlessCLI.swift` kapselt Timeout, Exit-Code, stderr und genau-einmalige Completion kurzer CLI-Läufe.
 - `WhisperM8/Services/AgentChats/AgentSessionSummarizer.swift` erzeugt Chat-Summaries, prüft Digest-Staleness und mappt Subagent-Reports.
 - `WhisperM8/Services/AgentChats/SummaryStartupPlanner.swift` plant Startup-Summaries nur für frische offene Tabs und schließt Archive, Subagent-Jobs, Agent Views und Background-Chats aus.
 - `WhisperM8/Services/AgentChats/TranscriptTimelineBuilder.swift` baut die verlustfreie Runden-Projektion aus Transcript-Messages.
 - `WhisperM8/Services/AgentChats/TranscriptEvidenceExtractor.swift` extrahiert deterministische Commit-, Test- und Datei-Fakten für Summary-Prompts.
 - `WhisperM8/Services/AgentChats/AgentSessionRetentionService.swift` räumt verwaiste Claude-Hook-Dateien im App-Support-Verzeichnis.
+- `WhisperM8/Services/AgentChats/GitProjectStatus.swift` liefert den kompakten Branch- und Arbeitsbaumstatus für Projekte.
+- `WhisperM8/Services/AgentChats/AgentProjectIconResolver.swift` löst Repo-Icons lokal über Quick-Probe, Manifest und begrenztes Scoring auf.
 - `WhisperM8/Services/AgentChats/AgentChatLaunchService.swift` erstellt neue Codex-Chat-Sessions aus App-Flows.
 - `WhisperM8/Services/AgentChats/AgentCommandBuilder.swift` baut CLI-Argumente und löst Claude-, Codex- und Shell-Binaries über das korrigierte Login-Shell-Environment auf.
 - `WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift` spawnt `claude --bg` und parst die Short-ID aus dem externen Claude-Output.

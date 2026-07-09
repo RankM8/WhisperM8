@@ -18,7 +18,7 @@ persistieren oder anzeigen.
 - `WhisperM8/Services/AgentChats/CodexTurnExecutor.swift` koordiniert Runner und `AgentTurnSink`, persistiert selbst nichts und bildet `CodexTurnResult` auf `CodexTurnOutcome` ab.
 - `WhisperM8/Services/AgentChats/CodexReportSchema.swift` definiert den erzwungenen Abschlussreport und das Swift-Modell `AgentReport`.
 - `WhisperM8/Services/AgentChats/CodexAgentPreflight.swift` ist die Subagent-Preflight-Prüfung für Codex-Pfad und Version.
-- `WhisperM8/Models/CodexReasoningEffort.swift` liefert die auswählbaren Reasoning-Efforts und den Default `medium`.
+- `WhisperM8/Models/CodexReasoningEffort.swift` liefert die auswählbaren Reasoning-Efforts und den Default `high`.
 - `WhisperM8/Models/CodexServiceTier.swift` liefert die Service-Tiers samt Codex-Config-Argumenten für Fast und Standard.
 - `WhisperM8/Views/Settings/Models/CodexConnectionModel.swift` kapselt den beobachtbaren Settings-Zustand für Status, Version, Refresh und Warnlogik.
 
@@ -157,7 +157,7 @@ Settings-Töne.
 ## Reasoning und Service-Tier
 
 `CodexReasoningEffort` enthält `low`, `medium`, `high` und `xhigh`; unbekannte
-Rohwerte fallen nur dort auf `medium` zurück, wo `CodexReasoningEffort.resolve`
+Rohwerte fallen nur dort auf `high` zurück, wo `CodexReasoningEffort.resolve`
 aufgerufen wird. Sub-Agents reichen den gespeicherten Wert als
 `model_reasoning_effort=...` an den Runner weiter. AI-Output nutzt
 `OutputMode.resolvedCodexReasoningEffortRaw()` und gibt den resultierenden

@@ -61,12 +61,13 @@ Fenster B neu — keine fensterübergreifende Synchronisation, kein
 
 ## Zentrale Invarianten
 
-Erzwungen bei jeder Mutation (`AgentUIState.normalizedWindows`):
+Durch `AgentUIState.normalizedWindows` grundsätzlich erzwungen:
 
 1. **Eine Session lebt in genau EINEM Fenster** (Primärfenster hat Vorrang).
 2. **Genau ein Primärfenster** (`primaryWindowID`), nie entfernbar.
-3. **Keine leeren Sekundärfenster** (werden beim Leerwerden entfernt + Fenster
-   geschlossen).
+3. **Keine leeren Sekundärfenster nach vollständiger Bereinigung.**
+   `closeTab` kann vorübergehend ein leeres Sekundärfenster hinterlassen; erst
+   der separate UI-Folgeschritt entfernt den Store-Eintrag und schließt es.
 
 ## Persistenz & Migration
 

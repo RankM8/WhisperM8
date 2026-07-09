@@ -41,7 +41,7 @@ Codex-Job läuft trotzdem über `whisperm8 agent run --wait --json`.
 
 | Code | Bedeutung im Workflow |
 |------|-----------------------|
-| `0` | Job ist verwendbar abgeschlossen; Report `success` oder `partial`. |
+| `0` | Turn ist technisch abgeschlossen; der Report kann `success` oder `partial`, aber auch fehlend oder unparsebar sein. |
 | `1` | Usage-Fehler im erzeugten CLI-Aufruf; Workflow-Builder hat falsch parametrisiert. |
 | `2` | Job ist fehlgeschlagen oder der Report meldet `failure`; Workflow kann das als negatives Ergebnis behandeln. |
 | `3` | Zustandskonflikt; typischer Fall ist ein aktiver oder bereits übernommener Job. |

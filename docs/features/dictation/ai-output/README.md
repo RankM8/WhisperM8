@@ -113,15 +113,16 @@ Screenshots, Annotationen, Visual Frames, Screen Clips und eine
 Visual-Context-Zusammenfassung. Agent-Chat-Session, Tail und Projektzuordnung
 gehören fachlich zu `docs/features/agent-chats/`; AI Output verwendet diese
 Daten nur als Prompt- und Projektkontext. `CodexVisualInputSelection`
-entscheidet anhand der globalen Visual-Input-Einstellung, welche Dateien als
-AI-Output-Eingabe markiert werden.
+setzt für `auto`, `frames` und `video` dieselben Bild- und Video-URLs; die
+Visual-Input-Einstellung verändert nur `usesFrameFallback` im Video-Modus.
 
-Heute sendet WhisperM8 Bilder über `--image`. In `auto` und `frames` werden
-Screenshots, Annotationen und Visual Frames als Bilder übergeben. In `video`
-werden Screen-Clip-Pfade im Prompt und im Report gehalten; Frames bleiben als
-Bild-Fallback für Codex erhalten. Aus dem Code ist nicht ableitbar, ob die
-externe Codex CLI direkte Video-Uploads unterstützt; belegbar ist nur, dass
-WhisperM8 aktuell keine Video-Dateien als eigenes Prozessargument übergibt.
+Heute sendet WhisperM8 in allen drei Modi Screenshots, Annotationen und Visual
+Frames über `--image`. Screen-Clip-Pfade werden im Prompt und im Report
+gehalten; im Video-Modus zeigt `usesFrameFallback` an, dass bei vorhandenen
+Screen-Clips die extrahierten Frames als Video-Ersatz über `--image` gesendet
+werden. Aus dem Code ist nicht ableitbar, ob die externe Codex CLI
+direkte Video-Uploads unterstützt; belegbar ist nur, dass WhisperM8 aktuell
+keine Video-Dateien als eigenes Prozessargument übergibt.
 
 Für Auto-Paste ist das separate Mode-Feld `pasteVisualAttachments` relevant.
 Es entscheidet, ob vorbereitete visuelle Anhänge zusätzlich zum Text in die
@@ -146,7 +147,11 @@ Report enthält Status, Mode-Snapshot, STT-Provider und Modell, Sprache,
 Audiodauer, Raw-Transkript, Final Output, Selected Text, Visual Summary,
 gerenderten Prompt, Router-Intent, Visual Manifest, Anhänge, Delivery-Daten,
 Paste-Fehler und bei Codex-Modes eine Codex-Snapshot mit Modell, Thinking,
-Visual-Input-Modus, Command-Preview und den an Codex gesendeten Bildpfaden.
+Visual-Input-Modus, Command-Preview und archivierten Bildpfaden. Diese Pfade
+stammen aus den kopierten `storedPath`-Anhängen; außerdem kann der Report das
+beim Stop eingefrorene Kontext-Bundle statt des später für den echten Spawn
+ergänzten Live-Bundles abbilden. Sie sind daher nicht als Originalpfade des
+tatsächlichen Codex-Aufrufs zu verstehen.
 
 Die produktiven Reports liegen unter
 `~/Library/Application Support/WhisperM8/Reports/<uuid>/report.json`; kopierte

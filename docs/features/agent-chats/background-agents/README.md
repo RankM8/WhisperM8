@@ -44,9 +44,10 @@ Session-Menü bietet für Background-Sessions `Logs anzeigen`, `Stoppen`,
 Subprozesse; bei `rm` räumt WhisperM8 zusätzlich den lokalen Tab-State auf.
 
 Beim Öffnen des Fensters prüft WhisperM8 gespeicherte Background-Sessions mit
-Short-ID einmal gegen den Claude-Supervisor. Erkennt `claude logs <short-id>`
-eine unbekannte ID, archiviert die App die lokale Session, damit nicht
-attachbare Tabs aus der Sidebar verschwinden.
+Short-ID einmal gegen den Claude-Supervisor. Nur ein Unknown-Marker in stderr
+von `claude logs <short-id>` wird als unbekannte ID klassifiziert und führt zum
+Archivieren der lokalen Session. Steht derselbe Marker ausschließlich in
+stdout, gilt der Check als Fehler und die Session bleibt erhalten.
 
 ## Dispatch-Troubleshooting
 

@@ -5,16 +5,17 @@ description_long: |
   ViewModels, Page-Komposition, Kompatibilitätsvertrag und Testabdeckung der
   Settings-Architektur. Alle Belege verweisen auf den aktuellen Code-Stand nach
   dem Refactor.
-updated: 2026-07-06 14:05
+updated: 2026-07-09 23:53
 ---
 
 # Settings-Architektur
 
-Die Settings-Architektur ist nach dem Refactor vom **2026-07-06** dreigeteilt:
-`SettingsView.swift` routet Seiten und Legacy-Aliasse, `Views/Settings/Kit/`
-stellt wiederverwendbare UI-Bausteine bereit, `Views/Settings/Models/` kapselt
-testbare Zustandslogik und `Views/Settings/Pages/` enthält die eigentlichen
-Settings-Seiten.
+Die Settings-Architektur ist nach dem Refactor vom **2026-07-06** viergeteilt:
+`SettingsView.swift` wendet das von
+`Views/Settings/Models/SettingsRouteTarget.swift` aufgelöste Routing-Ziel an,
+`Views/Settings/Kit/` stellt wiederverwendbare UI-Bausteine bereit,
+`Views/Settings/Models/` kapselt testbare Zustandslogik einschließlich des
+Resolvers und `Views/Settings/Pages/` enthält die eigentlichen Settings-Seiten.
 
 ## Routing
 
@@ -42,9 +43,14 @@ annimmt (`WhisperM8/Views/SettingsView.swift:145`). Die Detailseite wird über
 ## Kompatibilitätsvertrag
 
 Der Kompatibilitätsvertrag ist: neue Routes werden direkt über den Raw-Value
-aufgelöst, alte Route-IDs bleiben als Aliasse gültig. `SettingsPage.page(routeID:)`
-prüft zuerst den neuen Raw-Value und mappt danach historische IDs
-(`WhisperM8/Views/SettingsView.swift:17`).
+aufgelöst, alte Route-IDs bleiben als Aliasse gültig.
+`SettingsRouteTarget.resolve(routeID:)` ist dafür die Single Source of Truth:
+Der Resolver prüft zuerst den aktuellen `SettingsPage`-Raw-Value und mappt
+danach historische IDs auf ein Ziel aus Seite und optionalem AI-Output- oder
+Agent-Chats-Tab
+(`WhisperM8/Views/Settings/Models/SettingsRouteTarget.swift:6`).
+`SettingsPage.page(routeID:)` delegiert für seitenbezogene Aufrufer an diesen
+Resolver (`WhisperM8/Views/SettingsView.swift:17`).
 
 | Alte Route-ID | Neue Seite | Zusatzverhalten |
 |---|---|---|
@@ -58,14 +64,14 @@ prüft zuerst den neuen Raw-Value und mappt danach historische IDs
 | `claudeCode` | Agent Chats | Tab `Claude Hooks`. |
 | `hotkey`, `audio` | Recording | Fusionierte Seite ohne Tab. |
 | `behavior` | General | Der alte Inhalt ist auf Recording, Context & Privacy und General verteilt. |
-| `permissions`, `cli`, `about` | Gleichnamige neue Seite | Direkter Alias. |
+| `permissions`, `cli`, `about` | Gleichnamige neue Seite | Direkte aktuelle Route über den Raw-Value. |
 
-`applyTabAlias(routeID:)` hält alte Deep-Links auf Tab-Ebene kompatibel:
-`codex`, `modes`, `templates` und `testLab` setzen den AI-Output-Tab;
-`agentChats` und `claudeCode` setzen den Agent-Chats-Tab
-(`WhisperM8/Views/SettingsView.swift:188`). Für `outputOverview` und `history`
-gibt es nach der Fusion bewusst keinen Zusatz-State
-(`WhisperM8/Views/SettingsView.swift:203`).
+Der Resolver hält alte Deep-Links auch auf Tab-Ebene kompatibel: `codex`,
+`modes`, `templates` und `testLab` liefern einen `AIOutputPageTab`; `agentChats`
+und `claudeCode` liefern einen `AgentChatsSettingsPageTab`. `SettingsView`
+übernimmt diese optionalen Tab-Ziele vor der Seitenauswahl
+(`WhisperM8/Views/SettingsView.swift:151`). Für `outputOverview` und `history`
+liefert der Resolver nach der Fusion bewusst kein Tab-Ziel.
 
 ## Kit
 
@@ -88,6 +94,7 @@ Die Models kapseln Logik, die ohne SwiftUI-Rendering testbar bleiben soll.
 
 | Model | Verantwortung | Code-Beleg |
 |---|---|---|
+| `SettingsRouteTarget` | Single Source of Truth für aktuelle Seiten-Routen, Legacy-Aliasse und optionale Tab-Ziele von AI Output und Agent Chats. | `WhisperM8/Views/Settings/Models/SettingsRouteTarget.swift:1` |
 | `CodexConnectionModel` | Codex-Status und CLI-Version (Modell-Warnungen sind katalogbasiert in den Views, via `CodexModelCatalog`). | `WhisperM8/Views/Settings/Models/CodexConnectionModel.swift:4` |
 | `OutputModesViewModel` | Modes laden, aktivieren, Defaults setzen, Custom Modes verwalten. | `WhisperM8/Views/Settings/Models/OutputModesViewModel.swift:4` |
 | `TemplateEditorModel` | Templates laden, duplizieren, validieren und speichern. | `WhisperM8/Views/Settings/Models/TemplateEditorModel.swift:4` |

@@ -45,11 +45,12 @@ parallel zur laufenden Aufnahme erfasst und später per Merge nachgereicht,
 damit der sichtbare Aufnahme-Start nicht auf Accessibility- oder
 Dateisystem-I/O wartet.
 
-Während der Aufnahme läuft ein Clipboard-Monitor im 500-ms-Takt. Er übernimmt
-kopierte Bilder als Screenshots und kopierten Text als zusätzlichen
-Textkontext. Der Monitor bleibt auch während Transcribing und Post-Processing
-aktiv; ein letzter Sweep vor dem Prompt-Build übernimmt späte Kopien noch in
-das Live-Bundle.
+Der Clipboard-Monitor startet erst, nachdem das parallele Kontext-Capture
+erfolgreich in `finishContextCapture` gemergt wurde. Ein Capture-Timeout kann
+deshalb verhindern, dass er für den Lauf überhaupt startet. Danach prüft er die
+Zwischenablage im 500-ms-Takt, bleibt auch während Transcribing und
+Post-Processing aktiv und übernimmt kopierte Bilder sowie Text in das
+Live-Bundle; ein letzter Sweep vor dem Prompt-Build erfasst späte Kopien.
 
 Manuelle Aktionen im Overlay können einen interaktiven Screenshot aufnehmen,
 einen Screen-Clip starten oder stoppen, einzelne Anhänge entfernen, den

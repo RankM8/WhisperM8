@@ -1,7 +1,7 @@
 # Plan: Sidebar-Feinschliff (Ausrichtung, grauer Button, Status-Indikatoren, Ton)
 
 Stand: 2026-06-24 · Status: **vom User freigegeben, aber zurückgestellt** hinter dem
-Datenverlust-Fix ([01-chat-persistenz-datenverlust.md](01-chat-persistenz-datenverlust.md)).
+Datenverlust-Fix ([01-chat-persistenz-datenverlust.md](../archive/agent-chats-redesign/01-chat-persistenz-datenverlust.md)).
 
 > Hinweis: Teil C/D (Status-Hooks + Ton) berühren denselben Hook-/Session-Bereich wie der
 > Datenverlust-Fix. Reihenfolge daher: **erst 01 (Persistenz) stabilisieren**, dann dieser Plan.

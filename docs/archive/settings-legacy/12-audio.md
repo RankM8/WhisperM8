@@ -68,7 +68,7 @@ Ein Neustart der App ist für die Auswahl nicht nötig; der Manager startet beim
 
 `RecordingCoordinator` ruft Ducking vor dem Recorder-Start auf und beendet beziehungsweise restauriert es beim Stop oder Fehlerpfad; diese Audio-Funktion hängt daher am Aufnahme-Lifecycle, aber nicht an der Audio-Settings-Seite. (`WhisperM8/Services/Dictation/RecordingCoordinator.swift:140`, `WhisperM8/Services/Dictation/RecordingCoordinator.swift:145`, `WhisperM8/Services/Dictation/RecordingCoordinator.swift:146`, `WhisperM8/Services/Dictation/RecordingCoordinator.swift:147`, `WhisperM8/Services/Dictation/RecordingCoordinator.swift:151`, `WhisperM8/Services/Dictation/RecordingCoordinator.swift:307`, `WhisperM8/Services/Dictation/RecordingCoordinator.swift:308`)
 
-Die separate Datei `docs/AUDIO_DUCKING.md` beschreibt Ducking als Settings unter „Settings → Behavior → Audio Ducking" und nennt die Keys `audioDuckingEnabled` und `audioDuckingFactor`. (`docs/AUDIO_DUCKING.md:48`, `docs/AUDIO_DUCKING.md:52`, `docs/AUDIO_DUCKING.md:53`, `docs/AUDIO_DUCKING.md:55`)
+Die separate Datei `docs/features/dictation/recording/audio-ducking.md` beschreibt Ducking als Settings unter „Settings → Behavior → Audio Ducking" und nennt die Keys `audioDuckingEnabled` und `audioDuckingFactor`. (`docs/features/dictation/recording/audio-ducking.md:48`, `docs/features/dictation/recording/audio-ducking.md:52`, `docs/features/dictation/recording/audio-ducking.md:53`, `docs/features/dictation/recording/audio-ducking.md:55`)
 
 Die Settings-Seite „Behavior" dokumentiert dieselbe Platzierung bereits als UX-Spannung: Audio-Ducking und Target Volume liegen dort, obwohl „Audio" eine eigene Sidebar-Sektion ist. (`docs/features/settings/13-behavior.md:236`, `docs/features/settings/13-behavior.md:246`)
 

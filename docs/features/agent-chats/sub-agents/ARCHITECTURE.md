@@ -101,6 +101,24 @@ werden als `AgentChatSession(provider: .codex, kind: .subagentJob)` angelegt.
 Wenn ein Parent existiert, übernimmt der Job dessen Projekt; sonst nutzt der
 Merge das Job-CWD als Projekt-Fallback.
 
+## Effektive Codex-Defaults
+
+Jobs ohne explizites `--model` beziehungsweise `--effort` werden im
+Workspace auf die Top-Level-Werte `model` und `model_reasoning_effort` aus
+`~/.codex/config.toml` projiziert. `CodexGlobalConfigReader` liest dafür nur
+den Bereich vor der ersten TOML-Sektion und cached das Ergebnis anhand von
+Änderungszeit und Dateigröße. Ist die Datei nicht statbar oder vorübergehend
+unlesbar, gilt der letzte erfolgreich gelesene Stand, andernfalls ein leerer
+Default.
+
+Die Fallback-Reihenfolge je Feld lautet: expliziter Wert aus `state.json`,
+Top-Level-Wert aus `config.toml`, beim erstmaligen Anlegen einer Session der
+eingebaute App-Default. Bei späteren Syncs korrigiert `mergeSubagentJobs` auch
+bestehende Session-Metadaten auf das so ermittelte effektive Modell und den
+Default-Effort. Der Vertrag gegenüber `~/.codex/` bleibt strikt read-only:
+WhisperM8 liest die Konfiguration, beschreibt dieses externe Verzeichnis aber
+nie.
+
 ## Parent-Zuordnung
 
 `$CLAUDE_SESSION_ID` ist kein Code-Vertrag. Als Laufzeitverhalten wurde am
@@ -134,10 +152,10 @@ Codex-PTY-Pfad.
 ## Invarianten und Gotchas
 
 - `state.json` ist die Job-Wahrheit; Decode-Fehler einzelner Jobs werden übersprungen, nicht als Workspace-Korruption behandelt.
-- `spawning` und `running` gelten als aktiv; ohne lebende Supervisor-PID wird ein aktiver Job best effort zu `failed` korrigiert.
+- `spawning` und `running` gelten als aktiv. Eine vorhandene, tote Supervisor-PID wird best effort zu `failed` korrigiert; `spawning` ohne PID erst nach 30 Sekunden. `running` ohne `supervisorPid` bleibt dagegen unverändert `running`.
 - Der Liveness-Anker `supervisorPid` nutzt `kill(pid, 0)`; bei PID-Reuse kann ein toter Job theoretisch für lebendig gehalten werden.
 - `spawning` ohne PID ist kurz erlaubt; hängt es länger als 30 Sekunden, wird es als Spawn-Timeout markiert.
-- Der Codex-Runner hat einen Idle-Watchdog: Kommen 1800 Sekunden keine Events, terminiert er den `codex`-Prozess per SIGTERM und der Job endet als `failed` mit `failureReason` `stalled: keine Events mehr vom codex-Prozess (Idle-Watchdog)`.
+- Der Codex-Runner hat einen Idle-Watchdog: Kommen 1800 Sekunden keine stdout-Bytes, terminiert er den `codex`-Prozess per SIGTERM und der Job endet als `failed` mit `failureReason` `stalled: keine Events mehr vom codex-Prozess (Idle-Watchdog)`. Beliebige stdout-Daten spannen den Timer neu, auch ohne vollständiges oder parsebares Event.
 - `send` nimmt `.claim.lock` und reserviert ruhende Jobs als `spawning`, bevor der Prompt geschrieben und der Supervisor gestartet wird.
 - `takenOver` ist terminal und sperrt `agent send` dauerhaft; die App erlaubt Übernahme nur auf nicht aktiven Jobs.
 - Ein Report mit `status: failure` kann bei State `done` trotzdem Exit-Code `2` ergeben.
@@ -156,3 +174,7 @@ Codex-PTY-Pfad.
 - `Tests/WhisperM8Tests/ProcessAncestryTests.swift` deckt PID-Ketten und Parent-Matching ab.
 - `Tests/WhisperM8Tests/SubAgentDiscoveryTests.swift` deckt Frontmatter-Discovery für Claude-Subagent-Definitionen ab.
 - `Tests/WhisperM8Tests/AgentSidebarTests.swift` deckt Subagent-Kindgruppierung, sichtbare Kinder, Footer und Statusmengen ab.
+
+## Keywords
+
+config.toml, effektives Modell, Default-Effort

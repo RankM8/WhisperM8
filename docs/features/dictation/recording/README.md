@@ -7,8 +7,9 @@ updated: 2026-07-09
 
 Recording ist der Hotkey-gesteuerte Diktat-Flow von WhisperM8: Die App nimmt
 Audio auf, zeigt den Zustand in einer schwebenden Pill, transkribiert die M4A
-über den konfigurierten Anbieter und liefert das Ergebnis in die Zwischenablage,
-per Auto-Paste oder über Codex-Post-Processing in einen Agent-Chat-Kontext.
+über den konfigurierten Anbieter und liefert das Ergebnis in die Zwischenablage
+und optional per Auto-Paste. Codex-Post-Processing verändert den Ausgabetext,
+liefert ihn aber nicht an einen Agent-Chat aus.
 
 ## Nutzerflow
 
@@ -27,10 +28,11 @@ aus Cursor, VS Code, Browser oder einer anderen Ziel-App, bleibt der aktive
 Agent-Chat bewusst außen vor.
 
 Während der Aufnahme zeigt die Pill Pegel, Dauer, Output-Modus, Kontext und die
-Aktionen zum Stoppen oder Abbrechen. Nach Stop friert der Coordinator
-Output-Modus und Kontext ein, stoppt den Recorder, setzt das Ducking zurück und
-wechselt in die Transkription. Wenn der Modus Codex-Post-Processing nutzt, folgt
-nach der Rohtranskription die Improve-Phase.
+Aktionen zum Stoppen oder Abbrechen. Nach Stop friert der Coordinator den
+Output-Modus und ein erstes Kontext-Bundle ein, stoppt den Recorder, setzt das
+Ducking zurück und wechselt in die Transkription. Späte Clipboard-Kopien können
+das Live-Bundle bis zum Prompt-Build noch ergänzen. Wenn der Modus
+Codex-Post-Processing nutzt, folgt nach der Rohtranskription die Improve-Phase.
 
 ## Overlay-Phasen
 
@@ -60,10 +62,11 @@ Pasteboard-Payload vorbereitet und nacheinander eingefügt.
 Output-Modi ohne Post-Processing liefern die normalisierte Rohtranskription.
 Output-Modi mit Post-Processing rufen Codex als externes CLI-Werkzeug auf; der
 Erfolg hängt daher vom installierten und angemeldeten Codex-CLI-Zustand ab. Der
-Task-Modus läuft nicht-ephemeral im konfigurierten Default-Projekt, damit die
-entstehende Codex-Session über den Projektpfad als Agent-Chat wiedergefunden
-werden kann. Prompt-basierte Modi bevorzugen, falls vorhanden, das Projekt des
-aktiven Agent-Chats als Codex-Arbeitsverzeichnis.
+Task-Modus läuft nicht-ephemeral im konfigurierten Default-Projekt. Danach kann
+die jüngste Codex-Session über den Projektpfad gematcht und diese Zuordnung im
+Run-Report gespeichert werden; eine Auslieferung an den Agent-Chat findet nicht
+statt. Prompt-basierte Modi bevorzugen, falls vorhanden, das Projekt des aktiven
+Agent-Chats als Codex-Arbeitsverzeichnis.
 
 STT-Anbieter, Multipart-Upload und Chunking sind in
 [Transcription](../transcription/) dokumentiert. Output-Modi, Templates,
@@ -81,10 +84,11 @@ KeyboardShortcuts-Hotkey.
 
 ## Fehlerfälle
 
-Fehlt die Mikrofonberechtigung oder liefert der Recorder keine Datei, setzt der
-Coordinator `lastError`, blendet das Overlay aus und zeigt einen Alert. Fehlt
-die Accessibility-Berechtigung für Auto-Paste, bleibt das Ergebnis trotzdem in
-der Zwischenablage und der Fehler wird im App-State sichtbar.
+Fehlt die Mikrofonberechtigung, setzt der Coordinator `lastError`, beendet das
+Audio-Ducking und kehrt ohne Alert zurück. Liefert der Recorder beim Stoppen
+keine Datei, blendet er das Overlay aus und zeigt einen Recording-Error-Alert.
+Fehlt die Accessibility-Berechtigung für Auto-Paste, bleibt das Ergebnis
+trotzdem in der Zwischenablage und der Fehler wird im App-State sichtbar.
 
 Schlägt die Transkription fehl, läuft in ein Netzwerkproblem oder wird während
 `Transcribing...` per ESC oder ✕ abgebrochen, wird die M4A nicht gelöscht.

@@ -1,10 +1,11 @@
 ---
-description: Projekt-README — Überblick, Quick Start, Features und Build von WhisperM8
+status: aktiv
+description: Projekt-README — Überblick, Quick Start, Dokumentationslandkarte und Build von WhisperM8
 description_long: |
   Einstiegspunkt der WhisperM8-Dokumentation: Kurzbeschreibung der nativen
-  macOS-Diktier-App (OpenAI Whisper / Groq), Quick Start, Feature-Liste und
-  Install-/Build-Hinweise. Verweist auf USER_GUIDE.md und die Detail-Docs.
-updated: 2026-07-06 14:05
+  macOS-Diktier-App (OpenAI Whisper / Groq), Quick Start, Dokumentationslandkarte
+  und Install-/Build-Hinweise. Verweist auf USER_GUIDE.md und die Detail-Docs.
+updated: 2026-07-09
 ---
 
 # WhisperM8
@@ -29,13 +30,44 @@ make clean-install
 
 ---
 
-## Features
+## Dokumentationslandkarte
 
-- **Toggle Recording**: Press hotkey to start → speak → press again to stop and transcribe
-- **Auto-Paste**: Transcribed text automatically pasted into active app
-- **Cancel Recording**: Click X button in overlay to cancel (no transcription)
-- **Dual-Provider**: OpenAI Whisper or Groq (faster, cheaper)
-- **Menu Bar App**: Runs discreetly in the menu bar
+Seit der Neuordnung vom 2026-07-09 trennt die Dokumentation den aktuellen
+Produktstand, offene Vorhaben, historische Quellen und externe Referenzen.
+Diese Seite beschränkt sich auf Navigation und betriebliche Kurzreferenz;
+fachliche und UI-bezogene Details liegen in den verlinkten Dokumenten.
+
+### Produkt-Säulen
+
+| Säule | Rolle |
+|---|---|
+| [`features/dictation/`](features/dictation/) | Beschreibt die Diktat-Pipeline vom Hotkey über Aufnahme, Transkription und optionale AI-Nachbearbeitung bis zur Ausgabe. |
+| [`features/agent-chats/`](features/agent-chats/) | Beschreibt Agent-Sessions, Terminal- und Timeline-UI, Subagents, Background-Agents und die Codex-Exec-Integration. |
+| [`features/cli/`](features/cli/) | Beschreibt das gemeinsame `whisperm8`-Binary mit den Befehlen für Transkription, Agent-Jobs und deren Supervisor. |
+| [`features/settings/`](features/settings/) | Beschreibt die aktuelle Settings-Struktur, ihr Routing sowie die wiederverwendbaren UI- und Zustandsbausteine. |
+| [`features/app-shell/`](features/app-shell/) | Beschreibt die App-Hülle: Nutzungsprofile (Dock/MenuBar), Onboarding-Wizard, Menüleisten-Aktionen und den Update-Flow. |
+
+Der Einstieg in alle Bereiche liegt unter
+[`features/README.md`](features/README.md).
+
+### Weitere Dokumentationsbereiche
+
+| Pfad | Rolle |
+|---|---|
+| [`plans/`](plans/) | Offene, noch nicht vollständig umgesetzte Vorhaben; sie beschreiben nicht den Ist-Zustand. |
+| [`archive/`](archive/) | Historie und Quellenlager für abgelöste Pläne, Recherchen und frühere Dokumentationsstände. |
+| [`referenz/claude-code/`](referenz/claude-code/) | Externe CLI-Referenz für Claude Code und dessen Session-, Hook- und Agent-Verhalten. |
+| [`adr/`](adr/) | Architekturentscheidungen mit Kontext, Entscheidung und Folgen. |
+| [`refactor/`](refactor/) | Querschnittliche Refactoring-Befunde und technische Konsolidierung. |
+| [`commit-doc/`](commit-doc/) | Änderungsbezogene Commit- und WIP-Dokumentation mit globalem Index. |
+
+### Schlüsseldateien
+
+| Pfad | Rolle |
+|---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Querschnittliche Systemarchitektur und Infrastruktur-Leitplanken. |
+| [`USER_GUIDE.md`](USER_GUIDE.md) | Anwenderorientierte Bedienungsanleitung. |
+| [`DMG_BAUEN.md`](DMG_BAUEN.md) | Betriebliche Anleitung zum Erzeugen eines DMG-Pakets. |
 
 ---
 
@@ -45,7 +77,10 @@ make clean-install
 
 **Requirements:**
 - macOS 14.0+
-- Xcode Command Line Tools: `xcode-select --install`
+- Vollständiges Xcode unter `/Applications/Xcode.app`; der Makefile-Build setzt
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` für die
+  SwiftUI-Makros. Command Line Tools allein reichen für den regulären Build
+  nicht aus.
 
 ```bash
 git clone git@github.com:RankM8/whisperm8.git
@@ -64,7 +99,7 @@ The app will be installed to `/Applications/WhisperM8.app`.
 | `make build` | Create release build (app stays in repo) |
 | `make install` | Build + install to `/Applications` |
 | `make run` | Debug build + launch immediately |
-| `make clean-install` | **Reset everything** + reinstall |
+| `make clean-install` | Remove app data, reset Microphone/Accessibility permissions, then reinstall |
 | `make kill` | Stop all running instances |
 | `make clean` | Delete build artifacts |
 
@@ -78,10 +113,10 @@ If the app crashes, behaves strangely, or won't start after the first time:
 make clean-install
 ```
 
-**What the script does (`scripts/clean-install.sh`):**
+**What `make clean-install` does:**
 1. Stops all WhisperM8 processes
 2. Removes old app installations (`/Applications`, `~/Applications`, `~/Desktop`, `~/Downloads`)
-3. Resets **all** TCC permissions (for all possible bundle IDs)
+3. Resets Accessibility and Microphone permissions for current and legacy bundle IDs; Screen Recording is not reset
 4. Deletes UserDefaults (for all possible bundle IDs)
 5. Deletes Preferences files directly
 6. Deletes Keychain entries (API keys)
@@ -90,19 +125,23 @@ make clean-install
 9. Deletes saved window state
 10. Deletes Container data (if present)
 11. Deletes temporary files
-12. Reinstalls the app
+12. Runs `make install` after `scripts/clean-install.sh` has completed
 
 **After this you need to:**
-- Grant permissions again (Microphone + Accessibility)
+- Grant Microphone permission again and, when using Auto-Paste, Accessibility
 - Re-enter API key
 - Set hotkey
 
-### Manual Reset (without reinstall)
+### Cleanup without automatic reinstall
 
-If you only want to reset permissions:
+Running the cleanup script directly performs the same destructive cleanup,
+including removal of app bundles, UserDefaults, Keychain entries, caches and
+Application Support. It does **not** reinstall the app:
+
 ```bash
 ./scripts/clean-install.sh
-# Then manually: make install
+# Required afterwards if you want the app installed again:
+make install
 ```
 
 ---
@@ -113,29 +152,40 @@ If you only want to reset permissions:
 
 On first launch, the onboarding opens. You need an API key:
 
-| Provider | Link | Price |
-|----------|------|-------|
-| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | ~$0.006/min |
-| Groq | [console.groq.com/keys](https://console.groq.com/keys) | Free (rate-limited) |
+| Provider | Link | Im Repository hinterlegter Richtwert |
+|----------|------|--------------------------------------|
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | $0.006/min |
+| Groq | [console.groq.com/keys](https://console.groq.com/keys) | $0.002/min; die App weist zusätzlich auf einen kostenlosen Key und Freigrenzen hin |
+
+Die Werte sind statische UI-Angaben des Repositorys, keine live geprüften
+Providerpreise. Verfügbarkeit, Freikontingente, Abrechnung sowie relative
+Geschwindigkeit und Kosten sind externe Eigenschaften der Provider.
 
 ### 2. Set Hotkey
 
-Default: **Fn** (Globe key) or choose your own in Settings → Recording.
+On a fresh installation no default shortcut is registered. Set one in
+Settings → Recording.
 
 **Recommended:** `Control + Shift + Space`
 
-**Note:** Option-only shortcuts don't work reliably on macOS 15+.
+**Empirical note:** Option-only shortcuts have historically been reported as
+unreliable on macOS 15+. This behavior is not enforced by a platform check and
+is not covered by repository tests.
 
 ### 3. Permissions
 
-The app requires two permissions:
+Microphone permission is required for dictation. Accessibility is also a
+mandatory onboarding and startup gate, even when Auto-Paste is disabled;
+Auto-Paste and selected-text capture use it at runtime. Optional visual-context
+capture can additionally request Screen Recording permission.
 
 #### Microphone
 - Automatically requested on first recording attempt
 - If denied: **System Settings → Privacy & Security → Microphone → WhisperM8** enable
 
-#### Accessibility (for Auto-Paste)
-- Required to send Cmd+V to other apps
+#### Accessibility
+- Missing permission reopens onboarding on every launch, keeps the regular Dock policy and blocks Next/Done
+- Used to send Cmd+V to other apps and to capture selected text
 - **System Settings → Privacy & Security → Accessibility → WhisperM8** enable
 
 **If WhisperM8 doesn't appear in the list:**
@@ -147,48 +197,14 @@ The app requires two permissions:
 
 ## Usage
 
-1. **Place cursor** in a text field (TextEdit, Slack, browser, etc.)
-2. **Press hotkey** to start recording
-3. **Speak** your text
-4. **Press hotkey again** to stop → transcription starts
-5. **Text appears** automatically in text field (or clipboard)
+Use the configured hotkey to start and stop dictation. Every successful result
+is copied to the clipboard. If Auto-Paste is enabled, Accessibility is granted
+and a target application was captured before the overlay opened, WhisperM8
+pastes there; otherwise the text remains on the clipboard.
 
-### Cancel Recording
-
-During recording you can cancel anytime:
-- **X button** in overlay click
-
-The recording is discarded, nothing is transcribed or pasted.
-
-### Overlay Display
-
-During recording, appears at bottom of screen:
-- Red recording indicator with duration
-- Audio level visualization
-- X button to cancel (right side)
-- "Transcribing..." during API call
-- Default position is bottom-center (40pt), but you can drag it anywhere on-screen
-- Overlay position is remembered for the next recordings
-- Overlay UI can be switched between `Full` and `Mini` in Settings → Recording
-
-### Settings
-
-Via menu bar icon → "Settings...":
-
-| Group | Page | Options |
-|---|---|---|
-| Dictation | Recording | Hotkey, input device, audio ducking, overlay and auto-paste |
-| Dictation | Transcription | Provider, API key, model, language and price info |
-| Dictation | AI Output | Codex account, defaults, modes, templates and test lab |
-| Dictation | Context & Privacy | Selected text, screenshots, screen clips and retention |
-| Agents | Agent Chats | Workspace, notifications, Claude hooks and advanced CLI arguments |
-| Agents | CLI & Skills | CLI symlink, command examples and installable skills |
-| App | General | Usage profile, startup, theme and update checks |
-| App | Permissions | Microphone, Accessibility and optional Screen Recording |
-| App | About | Version, updates and project information |
-| Workspace | Output | Latest run, output archive, filters and delete actions |
-
-Detailed Settings documentation: [features/settings/README.md](features/settings/README.md).
+Detailed operation and UI behavior: [USER_GUIDE.md](USER_GUIDE.md) and
+[features/dictation/](features/dictation/). Current Settings structure:
+[features/settings/README.md](features/settings/README.md).
 
 ---
 
@@ -201,7 +217,9 @@ Detailed Settings documentation: [features/settings/README.md](features/settings
 make clean-install
 ```
 
-This is usually due to old settings or permissions from previous versions.
+`make clean-install` is an empirical troubleshooting measure. The repository
+contains no diagnostic or frequency data proving that old settings or
+permissions are the usual cause of startup crashes.
 
 ### Auto-paste not working
 
@@ -226,19 +244,16 @@ make clean-install
 
 ### Bluetooth-Mikrofone (AirPods, etc.)
 
-WhisperM8 unterstützt Bluetooth-Mikrofone vollständig. **Wichtige Hinweise:**
+WhisperM8 beobachtet Audio-Konfigurationsänderungen während einer Aufnahme nur,
+wenn als Eingabegerät **System Default** gewählt ist. In diesem Modus kann der
+Recorder auf einen Wechsel des macOS-Standardgeräts reagieren und den Audio-Tap
+mit dem neuen Format neu installieren. Für ein explizit ausgewähltes Gerät ist
+dieser Observer nicht aktiv; ein unterbrechungsfreier Wechsel wird daher nicht
+zugesichert.
 
-**Automatischer Profilwechsel:** Wenn du AirPods als Eingabegerät verwendest, wechselt macOS automatisch vom A2DP-Profil (Musik, 48kHz) zum HFP-Profil (Telefon, 16kHz). Dies ist normal und wird von WhisperM8 automatisch gehandhabt.
-
-**Gerät während Aufnahme wechseln:** Du kannst Bluetooth-Geräte auch während einer laufenden Aufnahme verbinden oder trennen. WhisperM8 erkennt den Konfigurationswechsel und passt sich automatisch an.
-
-**Empfohlene Einstellung:** Verwende "System Default" als Eingabegerät in den Audio-Einstellungen. So folgt WhisperM8 automatisch dem macOS-Standardgerät.
-
-**Technischer Hintergrund:**
-- Bluetooth-Audio wechselt bei Mikrofonzugriff von A2DP (48kHz, nur Ausgabe) zu HFP (16kHz, bidirektional)
-- WhisperM8 verwendet `inputFormat(forBus:)` für das korrekte Hardware-Format
-- Bei Konfigurationsänderungen wird der Audio-Tap automatisch mit dem neuen Format reinstalliert
-- Retry-Logik sorgt für Stabilität bei kurzzeitig ungültigen Formaten
+Der Wechsel von Bluetooth-Audio zwischen A2DP und HFP ist externes
+macOS-/Geräteverhalten und wird durch das Repository nicht allgemein
+garantiert.
 
 ### API errors
 
@@ -251,10 +266,10 @@ WhisperM8 unterstützt Bluetooth-Mikrofone vollständig. **Wichtige Hinweise:**
 - Already an instance running? `make kill`
 - Check Console.app → WhisperM8 logs
 
-### Completely reset permissions
+### Reset Microphone and Accessibility permissions
 
 ```bash
-# Only reset permissions (without reinstall)
+# Reset these two permissions without reinstalling
 tccutil reset Accessibility com.whisperm8.app
 tccutil reset Microphone com.whisperm8.app
 ```
@@ -279,33 +294,20 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 
 ```
 whisperm8/
-├── WhisperM8/                    # Source Code
-│   ├── WhisperM8App.swift        # App entry, single-instance check
-│   ├── Models/
-│   │   └── AppState.swift        # Central state, recording + paste logic
-│   ├── Views/
-│   │   ├── MenuBarView.swift     # Menu bar UI
-│   │   ├── SettingsView.swift    # Settings
-│   │   └── OnboardingView.swift
-│   ├── Windows/
-│   │   └── RecordingPanel.swift  # Floating overlay + controller
+├── WhisperM8/                    # App- und CLI-Quellcode
+│   ├── CLI/                      # CLI-Erkennung, Dispatch und Befehle
+│   ├── Models/                   # Geteilte Zustands- und Datenmodelle
 │   ├── Services/
-│   │   ├── AudioRecorder.swift   # AVAudioRecorder wrapper
-│   │   ├── AudioDeviceManager.swift # CoreAudio device management
-│   │   ├── TranscriptionService.swift # OpenAI/Groq API
-│   │   ├── KeychainManager.swift # Secure API key storage
-│   │   └── Logger.swift          # Debug logging
-│   ├── Resources/
-│   │   └── AppIcon.icns          # App icon
-│   └── Info.plist                # App configuration, permissions
-├── scripts/
-│   ├── build-dmg.sh              # Packaging script (currently not the primary install path)
-│   └── clean-install.sh          # Reset + reinstall
-├── docs/
-│   ├── README.md                 # Technical documentation (this file)
-│   └── USER_GUIDE.md             # User guide
-├── Makefile                      # Build commands
-└── Package.swift                 # Swift Package definition
+│   │   ├── Dictation/            # Aufnahme, Kontext, STT und Nachbearbeitung
+│   │   ├── AgentChats/           # Sessions, Agent-Jobs und Laufzeitbeobachtung
+│   │   └── Shared/               # Prozess-, Berechtigungs- und Systemdienste
+│   ├── Views/                    # SwiftUI-Oberflächen
+│   └── Windows/                  # Fenster- und Overlay-Controller
+├── Tests/WhisperM8Tests/         # Unit- und Integrationstests
+├── scripts/                      # Installation, Bereinigung und Packaging
+├── docs/                         # Dokumentationslandkarte und Detaildokumente
+├── Makefile                      # Betriebliche Build- und Installationsbefehle
+└── Package.swift                 # SwiftPM-Paketdefinition
 ```
 
 ---
@@ -314,35 +316,14 @@ whisperm8/
 
 ### Important Code Locations
 
-#### Auto-Paste Sequence (`AppState.swift`)
-```
-1. AXIsProcessTrusted() check
-2. Get previousApp from OverlayController
-3. Hide panel
-4. Wait 50ms
-5. targetApp.activate()
-6. Poll until app active (max 1s)
-7. Wait 100ms
-8. Post CGEvent Cmd+V
-```
-
-#### Previous App Capture (`RecordingPanel.swift`)
-The app that was active before the overlay is saved in `show()`:
-```swift
-previousApp = NSWorkspace.shared.frontmostApplication
-```
-
-#### Accessibility Permission Check (`AppState.swift`)
-```swift
-var hasAccessibilityPermission: Bool {
-    AXIsProcessTrusted()
-}
-
-func requestAccessibilityPermission() {
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-    AXIsProcessTrustedWithOptions(options)
-}
-```
+| Path | Role |
+|---|---|
+| `WhisperM8/CLI/CLIEntryPoint.swift` | Gemeinsamer Prozesseinstieg, der zwischen GUI- und CLI-Ausführung entscheidet. |
+| `WhisperM8/Models/AppState.swift` | Beobachtbarer App-Zustand und schmale Fassade zum Diktat-Koordinator. |
+| `WhisperM8/Services/Dictation/RecordingCoordinator.swift` | Orchestriert den Lebenszyklus einer Aufnahme; thematische Erweiterungen kapseln Kontext, Transkription, Ausgabe, Fehler und UI. |
+| `WhisperM8/Services/Dictation/PasteService.swift` | Aktiviert die vorherige Ziel-App und führt die Auto-Paste-Sequenz aus. |
+| `WhisperM8/Services/Shared/PermissionService.swift` | Bündelt Status, Anforderung und Systemeinstellungen für Mikrofon, Bedienungshilfen und Bildschirmaufnahme. |
+| `WhisperM8/Windows/RecordingPanel.swift` | Steuert das schwebende Aufnahme-Overlay und merkt die zuvor aktive Anwendung. |
 
 ---
 

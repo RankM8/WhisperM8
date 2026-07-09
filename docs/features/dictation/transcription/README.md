@@ -59,8 +59,9 @@ sind `groq_apikey` und `openai_apikey`, abgeleitet aus
 Die Settings-Seite speichert einen neu getippten Key sofort in der Keychain,
 zeigt gespeicherte Keys nur maskiert an und kann den Key des aktuellen
 Providers löschen. Der echte gespeicherte Key wird nicht in das Textfeld
-zurückgeladen. `KeychainManager.load` migriert alte UserDefaults-Werte beim
-Lesen in die Keychain und entfernt danach den alten UserDefaults-Eintrag.
+zurückgeladen. `KeychainManager.load` versucht alte UserDefaults-Werte beim
+Lesen in die Keychain zu migrieren und entfernt den alten UserDefaults-Eintrag
+anschließend bedingungslos, also auch bei fehlgeschlagenem Keychain-Save.
 
 Das GUI-Diktat lädt den Key über den Provider-Keychain-Key. Fehlt er, endet der
 Lauf mit `TranscriptionError.missingAPIKey`. Die CLI sucht in dieser

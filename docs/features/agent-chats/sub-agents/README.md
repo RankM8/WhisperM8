@@ -74,10 +74,12 @@ dieser Storage-State-Datei.
 
 Subagent-Jobs erscheinen als `AgentSessionKind.subagentJob` im Workspace. Wenn
 die Parent-Session bekannt ist, rendert die Sidebar den Job eingerückt unter
-dieser Claude-Session. Laufende und fehlgeschlagene Kinder bleiben direkt
-sichtbar; fertige Kinder werden im Subagent-Footer gesammelt und können
-aufgeklappt werden. Jobs ohne auffindbaren Parent werden als normale Rows im
-Projekt-Fallback angezeigt.
+dieser Claude-Session. Das Parent-Chevron kann alle Kinder einklappen, auch
+laufende und fehlgeschlagene; ein selektiertes Kind erzwingt die Expansion.
+Im ausgeklappten Zustand sind laufende und fehlgeschlagene Kinder direkt
+sichtbar, fertige Kinder werden im Subagent-Footer gesammelt und können über
+eine zweite, nur lokal gespeicherte Stufe aufgeklappt werden. Jobs ohne
+auffindbaren Parent werden als normale Rows im Projekt-Fallback angezeigt.
 
 Die Detailfläche rendert `SubagentJobDetailView` statt eines Terminals. Sie
 zeigt den Auftrag, Status, Report, Metriken, Live-Transcript aus dem

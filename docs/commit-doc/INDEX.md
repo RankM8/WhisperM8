@@ -14,7 +14,7 @@ kommen ganz oben dazu (neueste zuerst).
 
 | Typ | Datum | Branch | Feature | Beschreibung | Status | Hash | Doc |
 |-----|-------|--------|---------|--------------|--------|------|-----|
-| WIP | 2026-06-27 | main | agent-chats-multiwindow | feat(agent-chats): Multi-Window-Support mit zentralem AgentWindowStore (UI-State Schema v3) | 🔄 | - | [wip-agent-multiwindow/COMMIT.md](wip-agent-multiwindow/COMMIT.md) |
+| 7bc214c | 2026-06-27 | main | agent-chats-multiwindow | feat(agent-chats): Multi-Window-Support mit zentralem AgentWindowStore (UI-State Schema v3) | ✅ | 2026-07-09 | [wip-agent-multiwindow/COMMIT.md](wip-agent-multiwindow/COMMIT.md) |
 
 ## Legende
 

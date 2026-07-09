@@ -29,6 +29,22 @@ SwiftTerm-View in einen `AgentTerminalContainerView`, der zusätzlich
 Finder-Datei-Drops akzeptiert und die Pfade shell-escaped ins PTY schreibt,
 ohne automatisch Enter zu senden.
 
+## Ressourcenmonitor
+
+Für laufende Sessions mit registriertem Controller übernimmt dessen
+`processID` die Rolle der Root-PID. `AgentResourceMonitor` liest mit `/bin/ps`
+PID, Parent-PID, CPU, RSS und Kommando aller Prozesse, traversiert den
+Nachfahrenbaum der Root-PID und summiert CPU und RAM pro Session. Die
+`AgentResourceSummaryButton`-UI aggregiert weiter nach Projekt und insgesamt;
+über das gecachte `hw.memsize` zeigt das Popover zusätzlich den RAM-Anteil.
+
+Das geschlossene Badge aktualisiert alle 10 Sekunden, das offene Popover alle
+2 Sekunden. Bei einem inaktiven Fenster stoppt die Polling-Schleife vollständig,
+und ein paralleler Refresh wird nicht gestartet. Die `ps`-Ausführung liest
+stdout und stderr sequenziell vor `waitUntilExit()` leer — das vermeidet den
+häufigsten Deadlock, schützt aber nicht, wenn ein Child zuerst den
+stderr-Puffer füllt, während stdout noch bis EOF gelesen wird.
+
 ## SwiftTerm-Anpassungen
 
 `QuietableTerminalView` unterdrückt Window-Dragging im Terminalbereich und
@@ -128,6 +144,8 @@ damit tote PTYs nicht weiter jedes App-Event durchlaufen.
 - `WhisperM8/Views/AgentTerminalPalette.swift` definiert die Light-/Dark-Terminalpaletten und ANSI-16-Farben.
 - `WhisperM8/Views/AgentTerminalLinkInterceptor.swift` proxied SwiftTerms `terminalDelegate` und fängt nur Link-Klicks ab.
 - `WhisperM8/Views/TerminalLinkResolver.swift` entscheidet pure und getestet, ob ein Terminal-Link als Web-URL, Editor-Datei, Datei, Ordner, Finder-Reveal, Not-Found oder Reject behandelt wird.
+- `WhisperM8/Services/AgentChats/AgentResourceMonitor.swift` aggregiert CPU und RSS über den Prozessbaum einer Controller-Root-PID.
+- `WhisperM8/Views/AgentResourceSummaryButton.swift` rendert Ressourcen-Badge und Popover und steuert das 10-s-/2-s-Polling.
 - `WhisperM8/Services/AgentChats/AgentCommandBuilder.swift` baut `AgentLaunchCommand` inklusive ausführbarem Pfad, Argumenten, Arbeitsverzeichnis und Keyboard-Profil.
 - `WhisperM8/Views/AgentSessionDetailView.swift` startet und bindet interaktive Terminal-Sessions in der Agent-Chat-Detailfläche.
 
@@ -144,4 +162,8 @@ Mouse-Reporting, `AgentTerminalView`, `AgentTerminalController`,
 `TerminalShortcut`, `TerminalDropPayload`, `AgentTerminalContainerView`,
 `AgentTerminalPalette`, `AgentTerminalLinkInterceptor`,
 `TerminalLinkResolver`, `PhpStormLauncher`, `AgentLaunchCommand`,
-`AgentCommandBuilder`, `AgentSessionDetailView`.
+`AgentCommandBuilder`, `AgentSessionDetailView`, Ressourcenmonitor,
+CPU-Monitoring, RAM-Monitoring, RSS, RAM Share, Prozessbaum, Root-PID,
+`/bin/ps`, `hw.memsize`, `AgentResourceMonitor`,
+`AgentResourceSummaryButton`, 10-Sekunden-Polling, 2-Sekunden-Polling,
+inaktives Fenster, Pipe-Drain, `waitUntilExit()`, Child-Deadlock.

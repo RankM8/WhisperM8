@@ -11,7 +11,7 @@ updated: 2026-06-27 14:10
 
 # WIP: Multi-Window-Support für Agent Chats
 
-**Typ:** `feat` · **Status:** 🔄 WIP (unstaged/staged, noch nicht committed)
+**Typ:** `feat` · **Status:** ✅ Committed als `7bc214c` (feat(agent-chats): Multi-Window-Support mit Store-first-Architektur; finalisiert 2026-07-09)
 **Branch:** `main` · **Datum:** 2026-06-27
 **Feature-Bereich:** Agent Chats (`docs/features/agent-chats/ui/`)
 

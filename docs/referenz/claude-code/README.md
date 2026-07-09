@@ -1,4 +1,4 @@
-# Claude Code Dokumentation für WhisperM8
+# Claude-Code-Referenz für WhisperM8
 
 > Recherche-Stand: **2026-05-12** · Claude Code aktuelle Version-Linie ≥ 2.1.139
 > Ziel dieser Doku: vollständiges, fundiertes Verständnis von Claude Code (CLI, SDK, Hooks, Agent View, Cloud-Pendants), damit wir saubere Entscheidungen für die WhisperM8-Agents-View-Integration treffen können.

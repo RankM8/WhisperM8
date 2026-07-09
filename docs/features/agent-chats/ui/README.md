@@ -54,6 +54,18 @@ Projektkopf, Session-Rows, Drop-Zonen und einem Row-Limit mit
 fallen aus den Projektlisten heraus. Archivierte Sessions sind nicht Teil der
 normalen Liste, sondern werden über den Archiv-Modus gezeigt.
 
+Sidebar-Drops laufen über den puren `AgentDragDropPlanner`. Er unterscheidet
+beim Reorder innerhalb eines Projekts die Drag-Richtung, plant Moves in ein
+anderes Projekt samt Zielindex und berechnet auch die neue Projektreihenfolge.
+Erst `AgentChatsView+DragDrop` führt den Plan über `AgentSessionStore` aus.
+
+Die Sidebar erzwingt mit `overlayScrollers()` schmale, automatisch
+ausblendende AppKit-Scroller. Der Modifier muss am Inhalt innerhalb der
+`ScrollView` hängen, damit sein Applier die umgebende `NSScrollView` findet.
+Das ist auch nach dem Anschließen einer Maus nötig: macOS würde sonst auf
+einen 15-Punkt-Legacy-Scroller wechseln; ein Observer setzt den Overlay-Stil
+nach Änderungen der Systempräferenz erneut.
+
 Session-Rows zeigen Provider-/Kind-Icons, Titel, Projektfarbe,
 Offen-im-Tab-Hervorhebung, Multi-Select-Hervorhebung, fehlende Transcripts und
 Live-Status. Der Status kommt row-lokal aus
@@ -62,11 +74,16 @@ Body liest den globalen Status absichtlich nicht direkt.
 
 Subagent-Jobs werden unter ihrem Parent gruppiert, wenn
 `subagentParentSessionID` zur externen Session-ID des Parents passt.
-Variante D ist im Code aktiv: fehlgeschlagene und laufende Kinder bleiben
-immer sichtbar, erfolgreich fertige Kinder wandern in eine leise Footer-Zeile.
-Der Footer zeigt die Zahl fertiger Kinder und einen Segment-Meter; ein Klick
-klappt die fertigen Kinder auf. Ungelesene fertige Ergebnisse erscheinen als
-Unread-Markierung am Kind, sobald es aufgeklappt oder selektiert wird.
+Das Parent-Chip-Chevron klappt alle Kinder ein, auch fehlgeschlagene und
+laufende. Die erste Expansion wird im `AgentWindowStore` nur ephemer für den
+aktuellen App-Start gehalten; ein selektiertes Kind erzwingt sie unabhängig
+davon als Reveal. Im ausgeklappten Zustand stehen fehlgeschlagene und laufende
+Kinder direkt unter dem Parent, erfolgreich fertige Kinder hinter einer
+zweiten, lokal in `ProjectChatGroup` gehaltenen Footer-Expansion. Dort werden
+ungelesene fertige Kinder vor gelesenen sortiert. Ihre sichtbare Row trägt bei
+Idle beziehungsweise fehlendem Live-Status einen blauen Dot. Die Unread-ID wird
+bei Tab-/Session-Selektion und zusätzlich beim Öffnen der Job-Detailansicht
+gelöscht.
 
 ## Tabs
 
@@ -106,6 +123,12 @@ feste Breite, beeinflusst damit die verfügbare Hauptfläche und bietet Aktionen
 wie Projekt-Refresh, neue Codex-/Claude-Chats und Öffnen des Projekts in
 PhpStorm; die Wahl zwischen Finder und PhpStorm sitzt im Projekt-Opener der
 Header-Zeile.
+
+Oben in der Sidebar zeigt `AgentResourceSummaryButton` für laufende,
+controllergebundene Sessions Anzahl, CPU und RAM. Sein Popover ergänzt den
+RAM-Anteil am Gesamtspeicher und schlüsselt die Werte nach Projekt, Session und
+Prozess auf. Das Badge aktualisiert alle 10 Sekunden, das geöffnete Popover alle
+2 Sekunden; bei einem inaktiven Fenster pausiert das Polling vollständig.
 
 ## Terminal-Bereich
 
@@ -174,7 +197,11 @@ Terminal-spezifische Tastenkombinationen sind vom Fenster-Shortcut getrennt:
 - `WhisperM8/Views/AgentChatsView+Shortcuts.swift` enthält die lokalen AppKit-Shortcut- und Scroll-Monitore für Tabwechsel, Cmd-W, Ctrl-Tab, Titelzonen-Zoom und Tab-Strip-Scroll.
 - `WhisperM8/Views/AgentChatsSidebarViews.swift` rendert Projektgruppen, Session-Rows, Subagent-Kinder, Footer und Sidebar-Drop-Zonen.
 - `WhisperM8/Services/AgentChats/AgentSidebarModelBuilder.swift` baut die pure, getestete Sidebar-Projektion inklusive Scope, flacher Liste, Subagent-Kindzuordnung und Variante-D-Split.
+- `WhisperM8/Services/AgentChats/AgentDragDropPlanner.swift` plant richtungsabhängige Session-Reorders, Cross-Project-Moves und Projekt-Reorders als pure Logik.
 - `WhisperM8/Services/AgentChats/AgentWindowStore.swift` ist die Single Source of Truth für Fenster, Tabs, Pinning, Projekt-Expansion, Unread-Subagents und ephemere Multi-Selection.
+- `WhisperM8/Services/AgentChats/AgentResourceMonitor.swift` erfasst und aggregiert CPU-/RAM-Werte des Prozessbaums laufender Sessions.
+- `WhisperM8/Views/AgentResourceSummaryButton.swift` rendert Ressourcen-Badge und Detail-Popover samt Polling-Lebenszyklus.
+- `WhisperM8/Views/OverlayScrollers.swift` erzwingt den Overlay-Stil für die Sidebar-ScrollView und reagiert auf Systemänderungen.
 - `WhisperM8/Views/AgentChatChromeViews.swift` enthält Chrome-Hilfen wie Mittelklick-Catcher, Drag-Exclusion, Titelzonen-Zoom und Tab-Button.
 - `WhisperM8/Views/AgentStatusIndicator.swift` rendert die kompakten Statusanzeigen für working, awaiting input, idle, errored und stopped.
 - `WhisperM8/Views/AgentTabSelection.swift` enthält die pure Multi-Select-Semantik der Tab-Leiste.
@@ -192,10 +219,18 @@ Sidebar, Projektliste, Chatliste, Session-Row, Statuspunkt, arbeitet,
 wartet auf Eingabe, Sidebar-Scope, Aktiv, Zuletzt, Alle, flache Sidebar,
 Projektgruppen, gepinnte Chats, Archiv-Modus, Subagent-Kinder,
 Subagent-Footer, Variante D, fertige Subagents, Segment-Meter,
-ungelesenes Subagent-Ergebnis, globale Tabs, Tab-Leiste, Pinning,
+ephemere Subagent-Expansion, selektiertes Kind, Unread-Sortierung,
+blauer Unread-Dot, ungelesenes Subagent-Ergebnis, globale Tabs, Tab-Leiste, Pinning,
 Multi-Select, Cmd-Klick, Shift-Klick, Bulk-Aktion, Tab-Reorder,
-Einfügelinie, Drag Drop, Tear-off, neues Fenster, Ctrl-Tab-Switcher,
+Einfügelinie, Drag Drop, Sidebar-Reorder, richtungsabhängiger Reorder,
+Cross-Project-Move, Projekt-Reorder, `AgentDragDropPlanner`, Tear-off,
+neues Fenster, Ctrl-Tab-Switcher,
 Overflow-Menü, Terminal, SwiftTerm, LocalProcessTerminalView, PTY,
+Ressourcenmonitor, CPU-Monitoring, RAM-Monitoring, RAM Share,
+Prozessbaum-Aggregation, `AgentResourceMonitor`, `AgentResourceSummaryButton`,
+10-Sekunden-Polling, 2-Sekunden-Polling, inaktives Fenster,
+Overlay-Scroller, Legacy-Scroller, 15-Punkt-Scroller, `overlayScrollers()`,
+`OverlayScrollersApplier`, `preferredScrollerStyleDidChangeNotification`,
 Transcript, Timeline, Report, Summary, `AgentChatsView`,
 `AgentChatsView+Tabs`, `AgentChatsView+Shortcuts`,
 `AgentChatsSidebarViews`, `ProjectChatGroup`, `SessionListButton`,

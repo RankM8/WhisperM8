@@ -156,11 +156,11 @@ rate-limitierten Sofort-Refresh bei User-Aktivität in der TUI. Die konkrete
 Header- und Sidebar-Darstellung dieser Daten gehört zur UI-Dokumentation unter
 `../ui/`.
 
-`ClaudeActiveSessionResolver` ist keine Background-Polling-Schleife mehr. Die
-pure Entscheidungslogik bleibt für Lazy-Checks und Tests: Sie betrachtet
-indexierte Claude-Sessions im gleichen Projekt, filtert neue externe IDs seit
-Launch-Zeitpunkt und entscheidet zwischen `unchanged`, eindeutigem `rebind`
-oder `ambiguous`.
+`ClaudeActiveSessionResolver` ist keine Background-Polling-Schleife mehr und
+hat im Produktionscode keinen Aufrufer. Die pure Entscheidungslogik bleibt nur
+für Tests erhalten und kann dort zwischen `unchanged`, eindeutigem `rebind`
+oder `ambiguous` entscheiden. Der aktive Resume-Recovery-Pfad in
+`AgentSessionDetailView` wählt dagegen selbst einen Ersatz oder startet frisch.
 
 ## Startup-Abgrenzungen
 
