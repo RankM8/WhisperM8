@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Variante D — Chip &amp; Fuß</title>
+<style>
+  :root {
+    --ink:        oklch(0.16 0.012 200);
+    --ink-2:      oklch(0.20 0.014 200);
+    --line:       oklch(0.32 0.012 205);
+    --line-soft:  oklch(0.27 0.010 205);
+
+    --paper:      oklch(0.93 0.008 90);
+    --paper-dim:  oklch(0.72 0.010 200);
+    --paper-mute: oklch(0.55 0.012 205);
+
+    --teal:       oklch(0.74 0.10 195);
+    --teal-deep:  oklch(0.52 0.09 195);
+    --amber:      oklch(0.78 0.14 70);
+    --green:      oklch(0.70 0.16 148);
+    --blue:       oklch(0.68 0.14 250);
+    --red:        oklch(0.65 0.17 25);
+
+    --app-bg:   #1e1e20;
+    --app-sel:  #2f3a44;
+    --app-text: #d8d8dc;
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans:  ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ink); color: var(--paper);
+    font-family: var(--sans); font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 56px); }
+
+  header { padding: clamp(50px, 8vh, 96px) 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--teal-deep); margin: 0 0 20px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(34px, 5.4vw, 66px); line-height: 1; letter-spacing: -.02em;
+    margin: 0; max-width: 17ch;
+  }
+  h1 em { font-style: italic; color: var(--teal); }
+  .lede { margin: 26px 0 0; max-width: 66ch; font-size: 16.5px; color: var(--paper-dim); }
+  .lede strong { color: var(--paper); font-weight: 500; }
+
+  section { padding: clamp(48px, 7vh, 80px) 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 10px; }
+  .sec-num { font-family: var(--mono); font-size: 12px; color: var(--teal-deep); padding-top: 5px; }
+  h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(25px, 3.2vw, 37px); letter-spacing: -.015em; margin: 0;
+  }
+  .sec-sub { margin: 0 0 34px 40px; max-width: 70ch; color: var(--paper-dim); }
+  @media (max-width: 720px) { .sec-sub { margin-left: 0; } }
+  h3 {
+    font-family: var(--sans); font-size: 12.5px; font-weight: 600;
+    letter-spacing: .05em; text-transform: uppercase; color: var(--paper-mute);
+    margin: 0 0 12px;
+  }
+  p { margin: 0 0 16px; }
+  code {
+    font-family: var(--mono); font-size: .86em; background: var(--ink-2);
+    border: 1px solid var(--line-soft); border-radius: 4px; padding: 1px 5px;
+    color: oklch(0.82 0.04 195);
+  }
+
+  /* ═══════ Sidebar-Fidelity ═══════ */
+  .sb, .iso {
+    background: var(--app-bg); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 0 9px;
+    font-size: 12px; color: var(--app-text); user-select: none;
+  }
+  .sb { width: 268px; }
+  .sb-sec {
+    font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: #6a6a70; padding: 6px 12px 3px;
+  }
+  .row {
+    display: flex; align-items: center; gap: 7px;
+    height: 26px; padding: 0 9px 0 12px;
+    border-radius: 5px; margin: 0 6px; position: relative;
+  }
+  .row.sel { background: var(--app-sel); }
+  .row.sel::before {
+    content: ""; position: absolute; left: -6px; top: 4px; bottom: 4px;
+    width: 2.5px; border-radius: 2px; background: var(--teal);
+  }
+  .row.child { padding-left: 30px; }
+  .row .glyph { font-size: 10px; color: #7a7a82; width: 11px; flex: none; }
+  .row .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .row.child .title { color: #b6b6bc; }
+  .row .time { font-size: 9.5px; color: #6e6e76; font-variant-numeric: tabular-nums; }
+
+  .badge-sub {
+    font-size: 7.5px; font-weight: 700; letter-spacing: .04em;
+    color: #7f9dbb; background: rgba(90,140,190,.16);
+    border: .5px solid rgba(90,140,190,.30);
+    border-radius: 3px; padding: 1px 3px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .dot.run   { background: var(--green); animation: pulse 1.9s ease-in-out infinite; }
+  .dot.unread{ background: var(--blue); }
+  .dot.done  { background: #4a4a52; }
+  .dot.err   { background: transparent; border: 1.4px solid var(--red); width: 7px; height: 7px; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .38 } }
+
+  /* ═══════════════════════════════════════════════════
+     CHIP-VARIANTEN — am Parent, IMMER sichtbar
+     ═══════════════════════════════════════════════════ */
+  .k {
+    display: inline-flex; align-items: center; gap: 3.5px;
+    font-size: 8px; font-weight: 700; font-variant-numeric: tabular-nums;
+    line-height: 1; flex: none;
+  }
+  .k .chev { font-size: 6.5px; opacity: .8; }
+  /* Klick-Affordanz im Chip: „hier aufklappen, um alle Agents zu sehen". */
+  .k .kchev { font-size: 6.5px; opacity: .75; margin-right: .5px; }
+  .k .pd { width: 4px; height: 4px; border-radius: 50%; background: var(--green); animation: pulse 1.9s ease-in-out infinite; }
+  .k .ed { width: 4px; height: 4px; border-radius: 50%; background: var(--red); }
+  .k .den { font-weight: 600; }
+
+  /* boxed = heutiger Look */
+  .k.boxed {
+    color: var(--teal); background: rgba(60,190,190,.15);
+    border: .5px solid rgba(60,190,190,.30);
+    border-radius: 3px; padding: 1.5px 4px;
+  }
+  .k.boxed .den { color: rgba(160,200,205,.55); }
+  /* nackt = ohne Fläche */
+  .k.bare { color: rgba(150,205,205,.85); padding: 1.5px 2px; }
+  .k.bare .den { color: #6e6e76; }
+
+  /* Ring (conic) */
+  .ring {
+    width: 9px; height: 9px; border-radius: 50%; flex: none;
+    background: conic-gradient(var(--teal) 0 var(--p), #3d3d45 var(--p) 100%);
+    position: relative;
+  }
+  .ring::after {
+    content: ""; position: absolute; inset: 2.4px;
+    background: var(--app-bg); border-radius: 50%;
+  }
+  .k.sel-ctx .ring::after { background: var(--app-sel); }
+
+  /* Micro-Meter im Chip */
+  .mm { display: flex; gap: 1px; align-items: center; flex: none; }
+  .mm i { width: 2px; height: 7px; border-radius: .5px; background: #45454e; }
+  .mm i.on { background: var(--teal); }
+  .mm.g i.on { background: var(--green); }
+
+  /* Füll-Pille: der Chip SELBST ist der Fortschrittsbalken — grüne Füllung
+     bis var(--p), Zahl liegt darüber. */
+  .k.fill {
+    position: relative; overflow: hidden;
+    color: var(--paper); border: .5px solid rgba(76,195,138,.35);
+    background: #262a28; border-radius: 3px; padding: 1.5px 5px;
+  }
+  .k.fill::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+    width: var(--p); background: rgba(76,195,138,.32);
+  }
+  .k.fill > * { position: relative; z-index: 1; }
+  .k.fill .den { color: rgba(220,230,220,.55); }
+
+  /* Unterstrich-Fortschritt: Zahl mit dünnem Fortschritts-Underline statt Slash. */
+  .k.uline { position: relative; color: var(--paper); padding: 1.5px 4px 3px; }
+  .k.uline .den { color: #6e6e76; }
+  .k.uline .track { position: absolute; left: 4px; right: 4px; bottom: 1px; height: 1.5px; background: #34343c; border-radius: 1px; }
+  .k.uline .track i { display: block; height: 100%; background: var(--green); border-radius: 1px; }
+
+  /* ── Chip-Galerie ── */
+  .chipgal { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 30px 34px; }
+  .cc .head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 3px; }
+  .cc .cn { font-family: var(--serif); font-size: 23px; line-height: 1; color: var(--teal-deep); }
+  .cc.pick .cn, .cc.pick .cname { color: var(--teal); }
+  .cc .cname { font-family: var(--serif); font-size: 17px; letter-spacing: -.01em; }
+  .cc .note { color: var(--paper-dim); font-size: 12.5px; margin: 3px 0 12px; min-height: 3em; }
+  /* Zoom-Bühne: der echte Chip 2.4× vergrößert, damit 8px lesbar wird. */
+  .cc .zoom {
+    display: flex; align-items: center; justify-content: center;
+    height: 58px; background: var(--ink-2);
+    border-radius: 8px; margin-bottom: 10px; overflow: hidden;
+  }
+  .cc .zoom .k { transform: scale(2.4); transform-origin: center; }
+  .cc .verdict { margin-top: 10px; }
+
+  /* ═══════════════════════════════════════════════════
+     FUSS-VARIANTEN — leiser als jede Kind-Zeile
+     ═══════════════════════════════════════════════════ */
+  .foot {
+    display: flex; align-items: center; gap: 7px;
+    margin: 1px 6px 0; border-radius: 4px;
+    cursor: pointer; position: relative;
+    transition: background .12s ease-out, color .12s ease-out;
+  }
+  .foot:hover { background: rgba(255,255,255,.038); }
+  .foot .chev { font-size: 6.5px; color: #5c5c64; flex: none; }
+  .foot .n { font-variant-numeric: tabular-nums; }
+  /* Ungelesen = ein Punkt. Keine Zahl. */
+  .ud { width: 4.5px; height: 4.5px; border-radius: 50%; background: var(--blue); flex: none; }
+
+  .meter { display: flex; gap: 1.5px; align-items: center; flex: none; }
+  .meter i { width: 3px; height: 8px; border-radius: 1px; background: #3a3a42; }
+  .meter i.u { background: var(--blue); }
+  .meter i.g { background: var(--green); }   /* grüner Fortschritts-Anteil (fertig) */
+  .meter .plus { font-size: 8px; color: #55555c; margin-left: 3px; font-variant-numeric: tabular-nums; }
+
+  .foot.v1 { height: 22px; padding: 0 10px 0 24px; font-size: 10px; letter-spacing: .03em; color: #7a7a82; }
+  .foot.v1 .lbl { color: #9a9aa2; }
+  .foot.v1 .ud { margin-left: auto; }
+
+  .foot.v2 { height: 21px; padding: 0 10px 0 24px; font-size: 10px; color: #74747c; letter-spacing: .02em; }
+  .foot.v2 .ud { margin-left: 5px; }
+
+  .foot.v3 { height: 26px; padding: 0 10px 0 24px; font-size: 9.5px; color: #6e6e76; letter-spacing: .05em; }
+  .foot.v3::after {
+    content: ""; position: absolute; left: 24px; right: 10px; top: 50%;
+    height: 1px; background: #2e2e34; z-index: 0;
+  }
+  .foot.v3 .inner {
+    position: relative; z-index: 1; background: var(--app-bg);
+    padding-right: 8px; display: flex; align-items: center; gap: 6px;
+  }
+  .foot.v3:hover { background: transparent; }
+
+  .foot.v4 { height: 23px; padding: 0 10px 0 24px; font-size: 10px; color: #7a7a82; }
+  .foot.v4 .lbl { color: #9a9aa2; }
+  .foot.v4 .bar {
+    margin-left: auto; width: 54px; height: 3px; border-radius: 2px;
+    background: #34343c; overflow: hidden; flex: none; display: flex;
+  }
+  .foot.v4 .bar .seen { background: #50505a; }
+  .foot.v4 .bar .un   { background: var(--blue); }
+
+  .foot.v5 { height: 22px; padding: 0 11px 0 24px; font-size: 10px; color: #74747c; }
+  .foot.v5 .grp { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+  .foot.v5 .cnt { display: flex; align-items: center; gap: 3.5px; font-variant-numeric: tabular-nums; }
+  .foot.v5 .cnt .d { width: 5px; height: 5px; border-radius: 50%; background: #50505a; }
+
+  .foot.v6 { height: 20px; padding: 0 11px 0 30px; font-size: 9.5px; color: #62626a; letter-spacing: .04em; }
+  .foot.v6 .ud { margin-left: auto; }
+
+  .foot.old {
+    height: 28px; padding: 0 10px 0 30px;
+    background: rgba(60,190,190,.055); border: .5px solid rgba(60,190,190,.16);
+    border-radius: 5px; font-size: 11px; color: #a2a2aa;
+  }
+  .foot.old b { color: var(--paper); font-weight: 600; }
+  .foot.old .unread { color: var(--blue); }
+  .foot.old .go { margin-left: auto; font-size: 10px; color: #6e6e76; }
+
+  /* ═══════ Steuerung ═══════ */
+  .bar-ctl { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+  .bar-ctl .lbl {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--paper-mute); margin-right: 10px; min-width: 118px;
+  }
+  .btn {
+    font-family: var(--mono); font-size: 12px;
+    background: transparent; color: var(--paper-dim);
+    border: 1px solid var(--line); border-radius: 5px; padding: 6px 13px; cursor: pointer;
+    transition: color .16s cubic-bezier(.22,1,.36,1), border-color .16s, background .16s;
+  }
+  .btn:hover { color: var(--paper); border-color: var(--paper-mute); }
+  .btn.on { background: var(--teal); border-color: var(--teal); color: var(--ink); font-weight: 600; }
+  .btn .sub { display: block; font-size: 8.5px; letter-spacing: .04em; opacity: .7; margin-top: 1px; }
+  .btn.act { border-color: var(--amber); color: var(--amber); }
+  .btn.act:hover { background: rgba(220,160,60,.1); }
+
+  /* ═══════ Karten ═══════ */
+  .cat { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 34px 40px; }
+  .card .head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 3px; }
+  .card .vn { font-family: var(--serif); font-size: 26px; line-height: 1; color: var(--teal-deep); }
+  .card.pick .vn, .card.pick .vname { color: var(--teal); }
+  .card .vname { font-family: var(--serif); font-size: 19px; letter-spacing: -.01em; }
+  .flag {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink); background: var(--teal); padding: 2px 6px; border-radius: 3px; align-self: center;
+  }
+  .flag.warn { background: var(--amber); }
+  .card .note { color: var(--paper-dim); font-size: 13px; margin: 2px 0 14px; min-height: 3.2em; }
+  .verdict {
+    margin-top: 12px; font-size: 12.5px; line-height: 1.5;
+    color: var(--paper-mute); padding-left: 11px; border-left: 2px solid var(--line);
+    min-height: 3em;
+  }
+  .verdict.good { border-left-color: var(--green); color: var(--paper-dim); }
+  .verdict.bad  { border-left-color: var(--amber); }
+  .verdict b { color: var(--paper); font-weight: 500; }
+
+  .live { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; }
+  .why {
+    padding: 20px 24px; background: var(--ink-2);
+    border-left: 2px solid var(--teal); border-radius: 0 7px 7px 0; max-width: 62ch;
+  }
+  .why h3 { color: var(--teal); }
+  .why p:last-child { margin-bottom: 0; }
+  .why.warn { border-left-color: var(--amber); }
+  .why.warn h3 { color: var(--amber); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line-soft); }
+  th {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--paper-mute); font-weight: 400;
+  }
+  td:first-child { color: var(--paper-dim); font-family: var(--mono); font-size: 11.5px; }
+  .y { color: var(--green); } .n { color: var(--amber); } .p { color: var(--paper-mute); }
+
+  /* ═══════ Nenner-Demo ═══════ */
+  .demo {
+    display: flex; gap: 30px; flex-wrap: wrap; align-items: stretch; margin-top: 8px;
+  }
+  .dcol {
+    flex: 1 1 240px; background: var(--app-bg); border: 1px solid var(--line);
+    border-radius: 9px; padding: 22px 20px;
+  }
+  .dcol .dt { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-mute); margin-bottom: 16px; }
+  .dcol .big { display: flex; align-items: center; justify-content: center; height: 46px; }
+  .dcol .big .k { font-size: 15px; gap: 6px; padding: 5px 9px; }
+  .dcol .big .k .pd, .dcol .big .k .ed { width: 7px; height: 7px; }
+  .dcol .big .ring { width: 20px; height: 20px; }
+  .dcol .big .ring::after { inset: 5px; }
+  .dcol .big .mm i { width: 4px; height: 14px; }
+  .dcol .readout {
+    margin-top: 14px; font-family: var(--mono); font-size: 11px; color: #6e6e76;
+    text-align: center; font-variant-numeric: tabular-nums; min-height: 1.4em;
+  }
+  .dcol .readout .warn { color: var(--red); }
+  .log {
+    margin-top: 22px; font-family: var(--mono); font-size: 11.5px; color: var(--paper-mute);
+    line-height: 1.9; max-width: 62ch;
+  }
+  .log b { color: var(--paper); font-weight: 500; }
+  .log .bad { color: var(--red); }
+
+  footer { padding: 54px 0 76px; color: var(--paper-mute); font-size: 12.5px; }
+
+  .toggle-hint {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--teal-deep); letter-spacing: .04em; margin-top: 12px;
+  }
+  /* Fortschritts-Balken in der Welle: ein durchgehender Track, proportional
+     gefüllt — skaliert auf jede Agent-Zahl (keine Segment-Kappung nötig). */
+  .wbar {
+    width: 60px; height: 4px; border-radius: 2px;
+    background: #34343c; overflow: hidden; display: flex; flex: none;
+    margin-left: 2px;
+  }
+  .wbar span { height: 100%; }
+  /* Klartext-Aufschlüsselung (W3) */
+  .breakdown { display: inline-flex; align-items: center; gap: 7px; font-variant-numeric: tabular-nums; }
+  .breakdown .seg { display: inline-flex; align-items: center; gap: 3px; }
+  .breakdown .seg .d { width: 5px; height: 5px; border-radius: 50%; }
+  .breakdown .done .d { background: var(--green); }
+  .breakdown .work .d { background: var(--green); }
+  .breakdown .work { color: #9a9aa2; }
+  .breakdown .err  { color: var(--red); }
+  .breakdown .err .d { background: transparent; border: 1.2px solid var(--red); width: 6px; height: 6px; }
+
+  /* Parent-Zeile als Toggle: Chevron-Glyph dreht, ganze Zeile klickbar. */
+  .row.toggle { cursor: pointer; }
+  .row .pchev {
+    font-size: 8px; color: #8a8a92; width: 11px; flex: none;
+    transition: transform .12s ease-out;
+  }
+  /* Welle als Toggle */
+  .foot.v1[data-footer] { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">WhisperM8 · Variante D · Chip &amp; Fuß</p>
+  <h1>Der Fortschritt gehört<br>an den <em>Chip</em>.<br>Der Fuß hält den Mund.</h1>
+  <p class="lede">
+    Der Fuß enthält nur fertige Agents — sein Inhalt ist zu 100 % erledigt. Ein Fortschrittswert
+    darin spricht über etwas, das gar nicht darin steht. <strong>Und die Gruppe ist standardmäßig
+    eingeklappt</strong>: den Fortschritt willst du sehen, wenn der Fuß nicht existiert.
+  </p>
+
+  <div class="why" style="margin-top:34px; max-width:82ch; border-left-color: var(--green);">
+    <h3 style="color:var(--green)">Beschlossen · 09.07.2026</h3>
+    <p style="margin-bottom:8px">
+      <b>Chip</b> = grüne <b>Segmentleiste</b> (Fertig-Anteil) + Bruch <code>erledigt / gesamt</code>
+      + <b>Pfeilchen</b> (▸/▾) als Klick-Affordanz. Roter Punkt, sobald einer scheitert. Kein
+      grüner Lauf-Punkt (Grün heißt hier „fertig"). Immer sichtbar, auch eingeklappt.
+    </p>
+    <p style="margin-bottom:8px">
+      <b>Sichtbare Kind-Zeilen</b> = nur <code>working</code> ∪ <code>errored</code>
+      („die Aktiven"). <b>Alles erfolgreich Fertige fällt in die Welle</b> — auch ungelesen.
+    </p>
+    <p style="margin-bottom:0">
+      <b>Welle</b> = dieselbe <b>Segment-Sprache</b> in groß: <code>N fertig</code> + grüne
+      Segmentleiste (Fertig-Anteil, gedeckelt) + Pfeilchen zum Aufklappen. Ungelesen wandert an
+      die fertige Kind-Zeile (blauer Punkt) — kein Aggregat mehr.
+    </p>
+  </div>
+</header>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DAS FINALE UI — interaktiv. Führt alle Zustände vor.
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="final">
+  <div class="sec-head"><span class="sec-num">★</span><h2>Das finale UI, bedienbar</h2></div>
+  <p class="sec-sub">
+    <b>Segmente durchgezogen</b> (beschlossen): der Chip trägt eine grüne Segmentleiste
+    (Fertig-Anteil) + Bruch + Pfeilchen als Klick-Affordanz; die Welle nutzt dieselbe
+    Segment-Sprache. Beim Aufklappen erscheinen <b>nur die aktiven</b> Kinder — laufend und
+    fehlgeschlagen. Alles erfolgreich Fertige liegt in der leisen Segment-Welle.
+    <br><br>
+    <b>Klick auf die Parent-Zeile</b> (oder den Chip) = auf/zu. <b>Klick auf die Welle</b> =
+    fertige Kinder ein/aus. Wechsle das Szenario und beobachte, wie Chip und Welle mitlaufen.
+  </p>
+
+  <div class="bar-ctl">
+    <span class="lbl">Szenario</span>
+    <button class="btn fs" data-scen="fresh">Frisch gespawnt<span class="sub">1/6</span></button>
+    <button class="btn fs on" data-scen="running">Großer Lauf<span class="sub">27/36</span></button>
+    <button class="btn fs" data-scen="almost">Fast fertig<span class="sub">35/36</span></button>
+    <button class="btn fs" data-scen="done">Alles fertig<span class="sub">36/36</span></button>
+  </div>
+  <div class="bar-ctl" style="margin-bottom:28px">
+    <span class="lbl">Welle zeigt</span>
+    <button class="btn ws on" data-wave="segments">Segmente · Grün<span class="sub">gewählt</span></button>
+    <button class="btn ws" data-wave="progress">Fortschritt · Teal<span class="sub">Balken</span></button>
+    <button class="btn ws" data-wave="compo">Komposition<span class="sub">grün/teal/rot</span></button>
+    <button class="btn ws" data-wave="text">Klartext<span class="sub">Zahlen</span></button>
+  </div>
+
+  <div class="live">
+    <div>
+      <div class="sb" id="final-sb" style="width:288px"></div>
+      <p class="toggle-hint" id="final-hint"></p>
+    </div>
+
+    <div class="why" style="flex:1; min-width:300px;">
+      <h3>Segmente — im Chip wie in der Welle</h3>
+      <p>
+        Eine Sprache, zweimal: der <b>Chip</b> zeigt den Fertig-Anteil als grüne Segmentleiste
+        vor dem Bruch, die <b>Welle</b> dieselbe Leiste in groß. Wer den Chip liest, versteht
+        die Welle sofort — kein zweites Vokabular.
+      </p>
+      <p>
+        <b>Das Pfeilchen</b> im Chip (▸/▾) macht klar: hier lässt sich aufklappen, um alle Agents
+        zu sehen. Klick auf Chip oder Zeile klappt auf; die Welle klappt die Fertigen ein/aus.
+      </p>
+      <p>
+        <b>Farbregel:</b> in den Zeilen heißt Grün „läuft". Im Segment-Balken heißt Grün „fertig".
+        Damit es nicht kollidiert, trägt der Chip <em>keinen</em> grünen Lauf-Punkt mehr — die
+        Segmente sagen „fertig", der rote Punkt sagt „gescheitert", und dass noch etwas läuft,
+        sieht man an den grauen Rest-Segmenten.
+      </p>
+      <p style="margin-bottom:0">
+        Die anderen drei Welle-Stile bleiben zum Vergleich — <b>Segmente · Grün</b> ist gewählt.
+        <b>Ungelesen</b> ist raus aus der Welle: es lebt als blauer Punkt an der fertigen
+        Kind-Zeile (beim Aufklappen der Welle). Ein Lesezeichen, kein Fortschritt.
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CHIP-GALERIE — Varianten des Fortschritts-Badges
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="chips-gallery">
+  <div class="sec-head"><span class="sec-num">★</span><h2>Varianten des Chips</h2></div>
+  <p class="sec-sub">
+    Alle im selben Zustand: <b>27 von 36 durch, 9 laufen, 1 gescheitert</b>. Jeder Chip 2,4×
+    vergrößert (damit die 8 px lesbar werden) und darunter in echter Größe in der Zeile.
+    <br><br>
+    <b>Farbregel:</b> Chips mit Punkten behalten die App-Sprache — grüner Punkt = läuft.
+    Chips, die den Fortschritt <em>im Balken/Ring/in der Füllung</em> zeigen, nutzen dort
+    <span style="color:var(--green)">Grün = fertig</span> und lassen den grünen Lauf-Punkt weg
+    (der Balken sagt schon, dass noch etwas offen ist) — so bleibt Grün eindeutig.
+  </p>
+
+  <div class="chipgal" id="chipgal"></div>
+</section>
+
+
+<!-- ═══ 01 · GEWICHT ═══ -->
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>Das Gewichtsproblem</h2></div>
+  <p class="sec-sub">
+    Dieselbe Gruppe zweimal. Links zieht der Fuß das Auge zuerst an — er ist höher, fetter
+    und farbiger als die Chat-Zeile, die er zusammenfasst.
+  </p>
+
+  <div class="live">
+    <div>
+      <h3 style="color:var(--amber)">Heute</h3>
+      <div class="sb">
+        <div class="sb-sec">whisperm8</div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+        <div class="row sel"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+          <span class="k boxed"><span class="chev">▾</span><span class="pd"></span>1<span class="den">/6</span></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">find:commit-fix</span><span class="badge-sub">SUB</span><span class="dot err"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">find:config-overrides</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="foot old">
+          <span class="meter"><i class="u"></i><i></i><i></i><i></i></span>
+          <span><b>4 fertig</b> · <span class="unread">1 ungelesen</span></span>
+          <span class="go">›</span>
+        </div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="color:var(--green)">Ziel</h3>
+      <div class="sb">
+        <div class="sb-sec">whisperm8</div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+        <div class="row sel"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+          <span class="k boxed sel-ctx"><span class="chev">▾</span><span class="ed"></span><span class="pd"></span>4<span class="den">/6</span></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">find:commit-fix</span><span class="badge-sub">SUB</span><span class="dot err"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">find:config-overrides</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="foot v6"><span class="chev">▸</span><span class="n">4</span>&nbsp;fertig<span class="ud"></span></div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+      </div>
+    </div>
+
+    <div class="why" style="flex:1; min-width:280px;">
+      <h3>Das Grundgesetz</h3>
+      <p>
+        Eine Kind-Zeile ist <code>12px</code> in <code>#b6b6bc</code>, 26 pt hoch, ohne Fläche.
+        Der Fuß fasst sie zusammen — er ist <b>Metadaten über Zeilen</b>, nicht selbst eine Zeile.
+      </p>
+      <p>
+        Also liegt er in jeder Dimension darunter: kleiner (≤ 10.5 px), blasser
+        (≤ <code>#7a7a82</code>), flacher (≤ 23 pt), <b>ohne Rahmen, ohne Tint</b>. Der alte Fuß
+        verletzte alle vier gleichzeitig — er sah aus wie ein Button, weil er einer sein wollte.
+      </p>
+      <p>
+        Und er trägt <b>keine Zahl mehr für Ungelesenes</b>. Nur einen Punkt: „da ist was."
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══ 02 · WARUM UNGELESEN KEIN AGGREGAT IST ═══ -->
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>Ungelesen ist ein Lesezeichen</h2></div>
+  <p class="sec-sub">
+    Zwei Befunde aus dem Code, die erklären, warum <code>· 7 ungelesen</code> an dieser Stelle
+    falsch war.
+  </p>
+
+  <div class="live">
+    <div class="why warn" style="flex:1 1 340px;">
+      <h3>Es gibt bereits einen Alarm</h3>
+      <p>
+        <code>postSubagentNotification</code> (<code>AgentSessionStatusCoordinator:295</code>)
+        feuert bei <em>jedem</em> <code>running → done/failed</code> eine echte
+        macOS-Notification. Der blaue Zähler ist ein zweiter, schwächerer Kanal für dasselbe
+        Ereignis.
+      </p>
+      <p style="margin-bottom:0">
+        <b>Ungelesen ist kein Alarm, sondern ein Lesezeichen.</b> Ein Lesezeichen gehört an die
+        Zeile, die es markiert — als blauer Dot in der aufgeklappten Liste. Nicht in einen
+        Aggregatzähler.
+      </p>
+    </div>
+    <div class="why warn" style="flex:1 1 340px;">
+      <h3>Der Chip aggregiert es ohnehin nicht</h3>
+      <p>
+        <code>isUnreadSubagentResult: unreadSubagentSessionIDs.contains(session.id)</code>
+        (<code>AgentChatsSidebarViews:226</code>) prüft die <em>Parent-Session selbst</em>,
+        nicht ihre Kinder.
+      </p>
+      <p style="margin-bottom:0">
+        Der Fuß-Zähler ist damit heute der einzige Ort, an dem „da wartet ein Ergebnis"
+        aggregiert erscheint — und er ist nur sichtbar, wenn die Gruppe <b>aufgeklappt</b> ist.
+        Sie ist standardmäßig zu. Die Zahl erreicht dich also genau dann, wenn du sie nicht
+        brauchst.
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══ 03 · CHIP-VARIANTEN ═══ -->
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>Wo der Fortschritt lebt</h2></div>
+  <p class="sec-sub">
+    Der Chip ist immer sichtbar, auch bei eingeklappter Gruppe. Sechs Varianten, im echten
+    Kontext einer eingeklappten Parent-Zeile. Die Regler ändern Szenario und Zähl-Regel.
+  </p>
+
+  <div class="bar-ctl">
+    <span class="lbl">Szenario</span>
+    <button class="btn s" data-s="start">Start<span class="sub">1/6</span></button>
+    <button class="btn s on" data-s="mid">Mitte<span class="sub">27/36</span></button>
+    <button class="btn s" data-s="end">Ende<span class="sub">36/36</span></button>
+    <button class="btn s" data-s="huge">Ultracode<span class="sub">127/300</span></button>
+  </div>
+  <div class="bar-ctl" style="margin-bottom:34px">
+    <span class="lbl">Fehlschlag zählt</span>
+    <button class="btn f on" data-f="1">als Fortschritt<span class="sub">terminal</span></button>
+    <button class="btn f" data-f="0">nicht mit<span class="sub">nur done</span></button>
+  </div>
+
+  <div class="cat" id="chips"></div>
+</section>
+
+
+<!-- ═══ 04 · NENNER-FALLE ═══ -->
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>Die Nenner-Falle</h2></div>
+  <p class="sec-sub">
+    Dein Screenshot von vorhin: <code>4/22 agents</code> … später <code>8/36 agents</code>.
+    <b>Der Nenner wächst</b>, während der Workflow spawnt. Drück den Knopf und sieh zu, was
+    mit den grafischen Anzeigen passiert.
+  </p>
+
+  <div class="bar-ctl" style="margin-bottom:26px">
+    <button class="btn act" id="spawn">+ 6 Agents spawnen</button>
+    <button class="btn act" id="finish">+ 3 Agents fertig</button>
+    <button class="btn" id="reset">Zurücksetzen</button>
+  </div>
+
+  <div class="demo">
+    <div class="dcol">
+      <div class="dt">Ring · Anteil</div>
+      <div class="big" id="d-ring"></div>
+      <div class="readout" id="r-ring"></div>
+    </div>
+    <div class="dcol">
+      <div class="dt">Micro-Meter · Anteil</div>
+      <div class="big" id="d-mm"></div>
+      <div class="readout" id="r-mm"></div>
+    </div>
+    <div class="dcol" style="border-color: var(--teal-deep)">
+      <div class="dt" style="color:var(--teal)">Bruch · Zahlen</div>
+      <div class="big" id="d-frac"></div>
+      <div class="readout" id="r-frac"></div>
+    </div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <div class="why warn" style="margin-top:34px; max-width:80ch;">
+    <h3>Warum jede grafische Anzeige hier lügt</h3>
+    <p>
+      Ein Ring bei 27/30 zeigt 90 %. Spawnen sechs neue Agents, fällt er auf 75 % —
+      <b>ohne dass irgendetwas rückgängig gemacht wurde</b>. Ein Fortschrittsbalken, der
+      rückwärts läuft, ist schlimmer als gar keiner: er behauptet einen Rückschritt, den es
+      nicht gab.
+    </p>
+    <p>
+      Der Bruch <code>27/36</code> ist zu jedem Zeitpunkt wahr. Er sagt: „27 sind durch, es sind
+      36 geworden." Beide Zahlen wachsen monoton, keine springt zurück.
+    </p>
+    <p style="margin-bottom:0">
+      Das disqualifiziert Ring, Micro-Meter und Track — nicht wegen der Skalierung, sondern
+      <b>grundsätzlich</b>. Bei einem Fanout mit dynamischem Nenner ist der Anteil keine
+      Größe, die man anzeigen darf.
+    </p>
+  </div>
+</section>
+
+
+<!-- ═══ 05 · FUSS-VARIANTEN ═══ -->
+<section>
+  <div class="sec-head"><span class="sec-num">05</span><h2>Und der Fuß, jetzt still</h2></div>
+  <p class="sec-sub">
+    Ohne Ungelesen-Zähler bleibt: eine Zahl und ein Punkt. Sechs Varianten im Kontext,
+    Regler für die Zahl der fertigen Agents.
+  </p>
+
+  <div class="bar-ctl" style="margin-bottom:14px">
+    <span class="lbl">Fertige Agents</span>
+    <button class="btn fn" data-n="1">1</button>
+    <button class="btn fn" data-n="4">4</button>
+    <button class="btn fn on" data-n="11">11</button>
+    <button class="btn fn" data-n="27">27</button>
+    <button class="btn fn" data-n="80">80<span class="sub">extrem</span></button>
+  </div>
+  <div class="bar-ctl" style="margin-bottom:34px">
+    <span class="lbl">Ungelesene</span>
+    <button class="btn fu on" data-u="0">keine</button>
+    <button class="btn fu" data-u="1">welche</button>
+  </div>
+
+  <div class="cat" id="feet"></div>
+
+  <table style="margin-top:44px">
+    <thead><tr><th>Variante</th><th>N=1</th><th>N=27</th><th>N=80</th><th>Höhe</th><th>Urteil</th></tr></thead>
+    <tbody>
+      <tr><td>V1 Welle</td><td class="y">ok</td><td class="n">Meter cappt</td><td class="n">Rauschen</td><td class="y">22 pt</td><td class="p">Meter trägt nicht</td></tr>
+      <tr><td>V2 Nur Text</td><td class="y">ok</td><td class="y">gut</td><td class="y">gut</td><td class="y">21 pt</td><td class="p">solide</td></tr>
+      <tr><td>V3 Hairline</td><td class="n">Zeremonie</td><td class="y">gut</td><td class="y">gut</td><td class="n">26 pt</td><td class="n">streichen</td></tr>
+      <tr><td>V4 Balken</td><td class="n">0 % o. 100 %</td><td class="p">Anteil</td><td class="p">Anteil</td><td class="y">23 pt</td><td class="n">Nenner-Falle</td></tr>
+      <tr><td>V5 Zähler</td><td class="y">ok</td><td class="y">gut</td><td class="y">gut</td><td class="y">22 pt</td><td class="p">rechtsbündig</td></tr>
+      <tr style="background:rgba(60,190,190,.05)"><td>V6 Geist</td><td class="y">gut</td><td class="y">gut</td><td class="y">gut</td><td class="y">20 pt</td><td class="y">Favorit</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ═══ 06 · EMPFEHLUNG ═══ -->
+<section>
+  <div class="sec-head"><span class="sec-num">06</span><h2>Empfehlung</h2></div>
+  <p class="sec-sub">Chip K3, Fuß V6. Und die offene Definitionsfrage.</p>
+
+  <div class="live">
+    <div>
+      <h3 style="color:var(--teal)">Eingeklappt — der Normalfall</h3>
+      <div class="sb">
+        <div class="sb-sec">whisperm8</div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+          <span class="k boxed"><span class="chev">▸</span><span class="ed"></span><span class="pd"></span>27<span class="den">/36</span></span></div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+      </div>
+      <p style="font-size:12.5px; color:var(--paper-mute); max-width:268px; margin-top:12px">
+        Roter Punkt: etwas ist fehlgeschlagen. Grüner Punkt pulst: es läuft noch.
+        <code>27/36</code>: so weit ist es.
+      </p>
+    </div>
+
+    <div>
+      <h3 style="color:var(--teal)">Aufgeklappt</h3>
+      <div class="sb">
+        <div class="sb-sec">whisperm8</div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+        <div class="row sel"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+          <span class="k boxed sel-ctx"><span class="chev">▾</span><span class="ed"></span><span class="pd"></span>27<span class="den">/36</span></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">find:commit-fix</span><span class="badge-sub">SUB</span><span class="dot err"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">find:tests</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">verify:process-io</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">verify:tests</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="foot v6"><span class="chev">▸</span><span class="n">27</span>&nbsp;fertig<span class="ud"></span></div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+      </div>
+      <p style="font-size:12.5px; color:var(--paper-mute); max-width:268px; margin-top:12px">
+        Der Fuß sagt nur noch, was drunter liegt. Der blaue Punkt: da ist was.
+        Wie viel — steht an den Zeilen, sobald du aufklappst.
+      </p>
+    </div>
+
+    <div class="why" style="flex:1; min-width:300px;">
+      <h3>Was jede Zahl sagt</h3>
+      <p>
+        <b>Chip</b> = Bilanz der ganzen Gruppe. Immer sichtbar. Der pulsierende Punkt ersetzt
+        die Laufend-Zahl: <em>dass</em> etwas läuft ist wichtiger als <em>wie viele</em>, und
+        wenn du es genau wissen willst, klappst du auf.
+      </p>
+      <p>
+        <b>Fuß</b> = wie viele Zeilen hier verborgen sind. Sonst nichts.
+      </p>
+      <p>
+        <b>Blauer Dot</b> = Lesezeichen an der Kind-Zeile. Der Punkt im Fuß sagt nur, dass
+        drunter noch Lesezeichen liegen.
+      </p>
+      <p style="margin-bottom:0">
+        Keine Information doppelt, keine Grafik, die bei wachsendem Nenner lügt.
+      </p>
+    </div>
+  </div>
+
+  <div class="why warn" style="margin-top:38px; max-width:80ch;">
+    <h3>Offen: Was heißt „fertig"?</h3>
+    <p>
+      Der Regler in Abschnitt 03 zeigt beide Lesarten. <b>Zählt ein Fehlschlag als Fortschritt?</b>
+    </p>
+    <p>
+      <b>Ja (terminal)</b> — <code>(done + errored + stopped) / total</code>. Am Ende steht
+      <code>36/36</code>, auch wenn einer scheiterte. Die Summe geht auf, der rote Punkt sagt,
+      dass nicht alles gut war.
+    </p>
+    <p>
+      <b>Nein (nur done)</b> — bei einem Fehlschlag bleibt für immer <code>35/36</code> stehen,
+      obwohl nichts mehr läuft. Der Chip sieht dann aus, als hinge etwas — dabei ist es
+      erledigt, nur eben gescheitert.
+    </p>
+    <p style="margin-bottom:0">
+      <b>Empfehlung: terminal.</b> Ein Chip, der nie <code>36/36</code> erreicht, verliert seine
+      Aussage. Das Scheitern trägt der rote Punkt, nicht der Bruch.
+    </p>
+  </div>
+</section>
+
+<footer>
+  Fidelity: Kind-Zeile 26 pt / 12 px / <code>#b6b6bc</code> ·
+  Zeitstempel 9.5 px / <code>#6e6e76</code> · Chip 8 px.
+  Der Fuß bleibt unter allen dreien.
+  <br><br>
+  Nichts implementiert. Vorlage für die Slice-1-Spec.
+</footer>
+
+</div>
+
+<script>
+(function () {
+
+  /* ═════════ Gemeinsame Bausteine ═════════ */
+  const pd = '<span class="pd"></span>';
+  const ed = '<span class="ed"></span>';
+  const ring = pct => `<span class="ring" style="--p:${pct}%"></span>`;
+  const microMeter = (pct, segs = 6) => {
+    const on = Math.round((pct / 100) * segs);
+    return '<span class="mm">' + Array.from({ length: segs }, (_, i) =>
+      `<i class="${i < on ? 'on' : ''}"></i>`).join('') + '</span>';
+  };
+
+  /* ═════════ 03 · Chip-Varianten ═════════ */
+  const SCEN = {
+    start: { total: 6,   done: 1,   err: 0 },
+    mid:   { total: 36,  done: 26,  err: 1 },
+    end:   { total: 36,  done: 35,  err: 1 },
+    huge:  { total: 300, done: 124, err: 3 },
+  };
+  let scen = 'mid', failCounts = true;
+
+  // Chip-Renderer: (done, err, total, running, pct) → innerHTML
+  const K = {
+    1: (d, e, t, r) => `<span class="chev">▸</span>${r ? pd : ''}${r}<span class="den">/${t}</span>`,
+    2: (d, e, t, r, p) => `<span class="chev">▸</span>${r ? pd : ''}${d}<span class="den">/${t}</span>`,
+    3: (d, e, t, r, p) => `<span class="chev">▸</span>${e ? ed : ''}${r ? pd : ''}${d}<span class="den">/${t}</span>`,
+    4: (d, e, t, r, p) => `<span class="chev">▸</span>${ring(p)}<span class="den" style="color:inherit">${t}</span>`,
+    5: (d, e, t, r, p) => `${e ? ed : ''}${r ? pd : ''}${d}<span class="den">/${t}</span>`,
+    6: (d, e, t, r, p) => `<span class="chev">▸</span>${microMeter(p)}<span class="den" style="color:inherit">${t}</span>`,
+  };
+  const KMETA = {
+    1: ['Heute', 'Laufend / gesamt. Sagt nichts darüber, wie weit der Fanout ist — nur, wie viel gerade brennt.'],
+    2: ['Bruch', 'Erledigt / gesamt. Der Punkt pulst, solange etwas läuft. Zwei Zeichen mehr als heute.'],
+    3: ['Bruch + Fehlschlag', 'Wie K2, plus roter Punkt sobald ein Agent gescheitert ist. Drei Signale, ein Chip.'],
+    4: ['Ring', 'Conic-Progress statt Zahlen. Kompakt bei jeder Größe — und unbrauchbar, siehe Abschnitt 04.'],
+    5: ['Nackt', 'Ohne Fläche und Rahmen. Verschwindet in der Zeile, statt sie zu unterbrechen.'],
+    6: ['Micro-Meter', 'Sechs Segmente als Anteil. Dieselbe Falle wie der Ring, nur grober.'],
+  };
+  const KPICK = 3;
+
+  function kVerdict(v, d, e, t, r, p) {
+    if (v === 1) return ['bad', `Zeigt <b>${r}</b> — aber nicht, dass <b>${d}</b> von <b>${t}</b> durch sind. Fortschritt fehlt komplett.`];
+    if (v === 2 && e > 0) return ['p', `<b>${d}/${t}</b> stimmt, doch der Fehlschlag bleibt unsichtbar, bis du aufklappst.`];
+    if (v === 2) return ['good', 'Sagt alles Nötige, wenn nichts scheitert.'];
+    if (v === 3 && t > 99) return ['bad', `<b>${d}/${t}</b> = sieben Zeichen. Bei 8 px sprengt das die Zeile — Randbedingung, keine Regel.`];
+    if (v === 3) return ['good', '<b>Drei Signale in einem Chip:</b> wie weit, läuft noch, ist was kaputt.'];
+    if (v === 4) return ['bad', `Ring zeigt <b>${p}%</b>. Spawnen sechs Agents nach, fällt er auf ${Math.round((d / (t + 6)) * 100)}% — ohne Rückschritt.`];
+    if (v === 5 && t > 99) return ['p', 'Ohne Fläche verträgt er die Breite besser als K3. Dafür fehlt ihm die Badge-Anmutung.'];
+    if (v === 5) return ['good', 'Ruhig. Aber ein Chip <em>soll</em> ein Chip sein — er ist klickbar.'];
+    if (v === 6) return ['bad', `Sechs Segmente für ${t} Agents. Gröber als der Ring und mit derselben Nenner-Falle.`];
+    return ['p', ''];
+  }
+
+  function paintChips() {
+    const s = SCEN[scen];
+    const done = failCounts ? s.done + s.err : s.done;
+    const running = s.total - s.done - s.err;
+    const pct = Math.round((done / s.total) * 100);
+
+    document.getElementById('chips').innerHTML = Object.keys(K).map(key => {
+      const v = Number(key);
+      const [nm, note] = KMETA[v];
+      const [tone, text] = kVerdict(v, done, s.err, s.total, running, pct);
+      const cls = v === 5 ? 'bare' : 'boxed';
+      return `
+        <div class="card ${v === KPICK ? 'pick' : ''}">
+          <div class="head">
+            <span class="vn">K${v}</span><span class="vname">${nm}</span>
+            ${v === KPICK ? '<span class="flag">im Finale</span>' : ''}
+            ${(v === 4 || v === 6) ? '<span class="flag warn">Nenner-Falle</span>' : ''}
+          </div>
+          <p class="note">${note}</p>
+          <div class="iso">
+            <div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+            <div class="row"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+              <span class="k ${cls}">${K[v](done, s.err, s.total, running, pct)}</span></div>
+            <div class="row"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          </div>
+          <div class="verdict ${tone === 'p' ? '' : tone}">${text}</div>
+        </div>`;
+    }).join('');
+  }
+
+  document.querySelectorAll('.btn.s').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.btn.s').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); scen = b.dataset.s; paintChips();
+  }));
+  document.querySelectorAll('.btn.f').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.btn.f').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); failCounts = b.dataset.f === '1'; paintChips();
+  }));
+
+
+  /* ═════════ 04 · Nenner-Demo ═════════ */
+  const START = { total: 30, done: 27 };
+  let dm = { ...START }, best = { ring: 0, mm: 0 }, events = [];
+
+  function paintDemo() {
+    const pct = Math.round((dm.done / dm.total) * 100);
+    const mmOn = Math.round((pct / 100) * 6);
+
+    document.getElementById('d-ring').innerHTML = `<span class="k boxed">${ring(pct)}<span class="den" style="color:inherit">${dm.total}</span></span>`;
+    document.getElementById('d-mm').innerHTML   = `<span class="k boxed">${microMeter(pct)}<span class="den" style="color:inherit">${dm.total}</span></span>`;
+    document.getElementById('d-frac').innerHTML = `<span class="k boxed">${pd}${dm.done}<span class="den">/${dm.total}</span></span>`;
+
+    const ringBack = pct < best.ring;
+    const mmBack = mmOn < best.mm;
+    best.ring = Math.max(best.ring, pct);
+    best.mm = Math.max(best.mm, mmOn);
+
+    document.getElementById('r-ring').innerHTML = `${pct}%` +
+      (ringBack ? ' <span class="warn">↓ rückwärts</span>' : '');
+    document.getElementById('r-mm').innerHTML = `${mmOn}/6 Segmente` +
+      (mmBack ? ' <span class="warn">↓ rückwärts</span>' : '');
+    document.getElementById('r-frac').innerHTML = `${dm.done} durch, ${dm.total} geworden`;
+
+    document.getElementById('log').innerHTML = events.length
+      ? events.slice(-6).map(e => e).join('<br>')
+      : '<span style="opacity:.55">Startzustand: 27 von 30 fertig. Drück „+ 6 Agents spawnen".</span>';
+  }
+
+  document.getElementById('spawn').addEventListener('click', () => {
+    const before = Math.round((dm.done / dm.total) * 100);
+    dm.total += 6;
+    const after = Math.round((dm.done / dm.total) * 100);
+    events.push(`+6 gespawnt · Ring <b>${before}%</b> → <span class="bad">${after}%</span> · ` +
+                `Bruch <b>${dm.done}/${dm.total - 6}</b> → <b>${dm.done}/${dm.total}</b>`);
+    paintDemo();
+  });
+  document.getElementById('finish').addEventListener('click', () => {
+    dm.done = Math.min(dm.done + 3, dm.total);
+    events.push(`3 fertig · Bruch <b>${dm.done}/${dm.total}</b>`);
+    paintDemo();
+  });
+  document.getElementById('reset').addEventListener('click', () => {
+    dm = { ...START }; best = { ring: 0, mm: 0 }; events = []; paintDemo();
+  });
+
+
+  /* ═════════ 05 · Fuß-Varianten ═════════ */
+  const METER_CAP = 12;
+  let fn = 11, fu = 0;
+
+  const meter = (total, hasUnread) => {
+    const shown = Math.min(total, METER_CAP);
+    let h = '<span class="meter">';
+    for (let i = 0; i < shown; i++) h += `<i class="${hasUnread && i === 0 ? 'u' : ''}"></i>`;
+    if (total > shown) h += `<span class="plus">+${total - shown}</span>`;
+    return h + '</span>';
+  };
+  const udot = u => (u ? '<span class="ud"></span>' : '');
+
+  const V = {
+    1: (t, u) => `<span class="chev">▸</span><span class="lbl n">${t} fertig</span>${meter(t, u)}${udot(u)}`,
+    2: (t, u) => `<span class="chev">▸</span><span><span class="n">${t}</span> fertig</span>${udot(u)}`,
+    3: (t, u) => `<span class="inner"><span class="chev">▸</span><span class="n">${t}</span> fertig${udot(u)}</span>`,
+    4: (t, u) => `<span class="chev">▸</span><span class="lbl n">${t} fertig</span>` +
+                 `<span class="bar"><span class="un" style="width:${u ? 20 : 0}%"></span><span class="seen" style="width:${u ? 80 : 100}%"></span></span>`,
+    5: (t, u) => `<span class="chev">▸</span><span>fertig</span>` +
+                 `<span class="grp"><span class="cnt"><span class="d"></span><span class="n">${t}</span></span>${udot(u)}</span>`,
+    6: (t, u) => `<span class="chev">▸</span><span class="n">${t}</span>&nbsp;fertig${udot(u)}`,
+  };
+  const VMETA = {
+    1: ['Welle', 'Der E-Look. Meter zwischen Label und Punkt — solange die Segmente lesbar bleiben.'],
+    2: ['Nur Text', 'Keine Grafik. Eine Zahl, ein Wort, ein Punkt. Unbeeindruckt von jeder Größe.'],
+    3: ['Hairline', 'Trennlinie mit eingelassenem Label. Sagt „Abschnitt endet hier“ — stimmt nicht.'],
+    4: ['Balken', 'Track statt Segmenten. Zeigt Anteil — den es hier gar nicht gibt, alles ist fertig.'],
+    5: ['Zähler', 'Rechtsbündig, dort wo in dieser Sidebar alle Metadaten sitzen.'],
+    6: ['Geist', '20 pt, 9.5 px, fast weg. Der blaue Punkt ist das Einzige, was zieht.'],
+  };
+  const VPICK = 1;
+
+  function vVerdict(v, t, u) {
+    if (v === 1) return ['good', '<b>Im Finale gewählt.</b> Der Meter ist dort gedeckelt und dient als Textur — die Zahl „N fertig" trägt die Wahrheit.'];
+    if (v === 2) return ['good', 'Nüchtern. Nichts zu deuten, nichts zu skalieren.'];
+    if (v === 3 && t === 1) return ['bad', 'Eine Trennlinie über eine einzige verborgene Zeile. Zeremonie.'];
+    if (v === 3) return ['bad', '26 pt — höher als die Kind-Zeile darüber. Verletzt das Grundgesetz.'];
+    if (v === 4) return ['bad', '<b>Anteil wovon?</b> Im Fuß liegt nur Fertiges. Der Balken steht immer auf 100 %.'];
+    if (v === 5 && !u) return ['good', 'Ohne Ungelesene bleibt eine graue Ziffer. Maximal leise.'];
+    if (v === 5) return ['good', 'Rechtsbündig wie jeder Zeitstempel. Fügt sich in die Metadaten-Spalte.'];
+    if (v === 6 && u) return ['good', 'Fast unsichtbar — bis der blaue Punkt auftaucht. <b>Signal ohne Grundrauschen.</b>'];
+    if (v === 6) return ['good', 'Ohne Ungelesene praktisch nicht vorhanden. Genau das ist der Punkt.'];
+    return ['good', ''];
+  }
+
+  function paintFeet() {
+    document.getElementById('feet').innerHTML = Object.keys(V).map(key => {
+      const v = Number(key);
+      const [nm, note] = VMETA[v];
+      const [tone, text] = vVerdict(v, fn, fu);
+      return `
+        <div class="card ${v === VPICK ? 'pick' : ''}">
+          <div class="head">
+            <span class="vn">V${v}</span><span class="vname">${nm}</span>
+            ${v === VPICK ? '<span class="flag">im Finale</span>' : ''}
+            ${(v === 3 || v === 4) ? '<span class="flag warn">streichen</span>' : ''}
+          </div>
+          <p class="note">${note}</p>
+          <div class="iso">
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:config-overrides</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+            <div class="foot v${v}">${V[v](fn, fu)}</div>
+            <div class="row"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          </div>
+          <div class="verdict ${tone}">${text}</div>
+        </div>`;
+    }).join('');
+  }
+
+  document.querySelectorAll('.btn.fn').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.btn.fn').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); fn = Number(b.dataset.n); paintFeet();
+  }));
+  document.querySelectorAll('.btn.fu').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.btn.fu').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); fu = Number(b.dataset.u); paintFeet();
+  }));
+
+  paintChips();
+  paintDemo();
+  paintFeet();
+})();
+</script>
+
+<script>
+/* ═════════ Das finale UI — interaktiver Prototyp ═════════ */
+(function () {
+  const sb = document.getElementById('final-sb');
+  const hint = document.getElementById('final-hint');
+  if (!sb) return;
+
+  // Szenarien: total, working (grün, ungekappt sichtbar), errored (rot,
+  // sichtbar), done (fertig → Welle), unread (Teilmenge von done).
+  const SCEN = {
+    fresh:   { total: 6,  working: 5, errored: 0, done: 1,  unread: 0 },
+    running: { total: 36, working: 9, errored: 1, done: 26, unread: 3 },
+    almost:  { total: 36, working: 1, errored: 1, done: 34, unread: 2 },
+    done:    { total: 36, working: 0, errored: 0, done: 36, unread: 0 },
+  };
+
+  const WORK = ['find:tests', 'verify:process-io', 'verify:tests', 'find:config-overrides',
+                'synth:report', 'find:resume-state', 'verify:doc-consist…', 'verify:commit-fix',
+                'find:process-io'];
+  const ERR  = ['find:process-io', 'verify:resume-state'];
+  const DONE = ['find:commit-fix', 'find:doc-consistency', 'Code-Review mit ma…',
+                'Adversarische Gege…', 'Baseline-Test. Lies…', 'Merke dir das Codew…',
+                'find:config-overrides', 'verify:tests'];
+
+  const state = { scenario: 'running', parentOpen: true, footerOpen: false, waveStyle: 'segments' };
+
+  // Der Parent-Chip: grüne Segmentleiste (Fertig-Anteil) + Bruch + Pfeilchen.
+  // Kein grüner Lauf-Punkt (Grün ist hier „fertig"); roter Punkt = gescheitert.
+  function chipMarkup(s) {
+    const terminal = s.total - s.working;
+    const segN = 6;
+    const on = s.total ? Math.round((terminal / s.total) * segN) : 0;
+    let mm = '<span class="mm g">';
+    for (let i = 0; i < segN; i++) mm += `<i class="${i < on ? 'on' : ''}"></i>`;
+    mm += '</span>';
+    return `<span class="k boxed">` +
+      `<span class="kchev">${state.parentOpen ? '▾' : '▸'}</span>` +
+      (s.errored > 0 ? '<span class="ed"></span>' : '') +
+      mm +
+      `<span class="n">${terminal}</span><span class="den">/${s.total}</span></span>`;
+  }
+
+  const childRow = (name, st) =>
+    `<div class="row child"><span class="glyph">◎</span><span class="title">${name}</span>` +
+    `<span class="badge-sub">SUB</span><span class="dot ${st}"></span></div>`;
+
+  // Ein Balken-Segment: proportionale Breite, Farbe inline (spart Klassen).
+  const seg = (pct, color) => pct > 0 ? `<span style="width:${pct}%;background:${color}"></span>` : '';
+
+  // Der Welle-Inhalt — Fortschritt der GANZEN Gruppe statt „ungelesen".
+  // Drei Stile zum Vergleich; „progress" (Teal) ist die Empfehlung.
+  function waveInner(s) {
+    const chev = `<span class="chev">${state.footerOpen ? '▾' : '▸'}</span>`;
+    const pct = n => s.total ? (n / s.total) * 100 : 0;
+
+    if (state.waveStyle === 'text') {
+      return chev + `<span class="breakdown">` +
+        `<span class="seg done"><span class="d"></span>${s.done} fertig</span>` +
+        (s.working > 0 ? `<span class="seg work"><span class="d"></span>${s.working} laufen</span>` : '') +
+        (s.errored > 0 ? `<span class="seg err"><span class="d"></span>${s.errored}</span>` : '') +
+        `</span>`;
+    }
+
+    if (state.waveStyle === 'segments') {
+      // Der alte Segment-Look, aber GRÜN = fertig-Anteil (statt blau=ungelesen).
+      // Proportional gefüllt, bei 12 Segmenten gedeckelt.
+      const cap = 12;
+      const shown = Math.min(s.total, cap);
+      const greenN = Math.round((s.done / s.total) * shown);
+      let m = '<span class="meter">';
+      for (let i = 0; i < shown; i++) m += `<i class="${i < greenN ? 'g' : ''}"></i>`;
+      m += '</span>';
+      return chev + `<span class="lbl">${s.done} fertig</span>` + m;
+    }
+
+    let bar;
+    if (state.waveStyle === 'compo') {
+      // grün fertig · teal läuft · rot fehlgeschlagen (füllt 100 %).
+      bar = `<span class="wbar">` +
+        seg(pct(s.done), 'var(--green)') +
+        seg(pct(s.working), 'var(--teal)') +
+        seg(pct(s.errored), 'var(--red)') + `</span>`;
+    } else {
+      // progress: teal = fertig, grau (Track) = Rest.
+      bar = `<span class="wbar">` + seg(pct(s.done), 'var(--teal)') + `</span>`;
+    }
+    return chev + `<span class="lbl">${s.done} fertig</span>` + bar;
+  }
+
+  const neighbor = (title, time) =>
+    `<div class="row"><span class="glyph">✳</span><span class="title">${title}</span>` +
+    `<span class="time">${time}</span></div>`;
+
+  function render() {
+    const s = SCEN[state.scenario];
+    const chip = chipMarkup(s);
+
+    let html = `<div class="sb-sec">whisperm8</div>`;
+    html += `<div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>`;
+    // Parent: normale Session-Zeile (✳), ganze Zeile + Chip klickbar (auf/zu).
+    // Das Pfeilchen sitzt im Chip als Klick-Affordanz.
+    html += `<div class="row toggle sel" data-parent>` +
+      `<span class="glyph">✳</span>` +
+      `<span class="title">Codex-Subagents m…</span>${chip}</div>`;
+
+    if (state.parentOpen) {
+      // Nur AKTIVE Kinder: fehlgeschlagen (Rang 0) vor laufend (Rang 1).
+      for (let i = 0; i < s.errored; i++) html += childRow(ERR[i % ERR.length], 'err');
+      for (let i = 0; i < s.working; i++) html += childRow(WORK[i % WORK.length], 'run');
+      // Welle: fasst die Fertigen zusammen; klappt sie auf Klick ein/aus.
+      if (s.done > 0) {
+        html += `<div class="foot v1" data-footer>${waveInner(s)}</div>`;
+        if (state.footerOpen) {
+          for (let i = 0; i < s.done; i++) {
+            html += childRow(DONE[i % DONE.length], i < s.unread ? 'unread' : 'done');
+          }
+        }
+      }
+    }
+
+    html += neighbor('Control+Tab-Umschal…', '8h');
+    html += neighbor('Claude Chat', '10h');
+    sb.innerHTML = html;
+
+    hint.textContent = state.parentOpen
+      ? '↑ Parent klicken = zuklappen · Welle klicken = Fertige ein/aus'
+      : '↑ Parent klicken = aufklappen';
+
+    sb.querySelector('[data-parent]')?.addEventListener('click', () => {
+      state.parentOpen = !state.parentOpen;
+      render();
+    });
+    sb.querySelector('[data-footer]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.footerOpen = !state.footerOpen;
+      render();
+    });
+  }
+
+  document.querySelectorAll('.btn.fs').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.btn.fs').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    state.scenario = b.dataset.scen;
+    state.footerOpen = false;   // bei Szenario-Wechsel Fuß wieder einklappen
+    render();
+  }));
+
+  document.querySelectorAll('.btn.ws').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.btn.ws').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    state.waveStyle = b.dataset.wave;
+    render();
+  }));
+
+  render();
+})();
+</script>
+
+<script>
+/* ═════════ Chip-Galerie — ein Zustand, viele Treatments ═════════ */
+(function () {
+  const host = document.getElementById('chipgal');
+  if (!host) return;
+
+  // Repräsentativer Zustand: 36 gesamt, 9 laufen, 1 kaputt → 27 terminal.
+  const S = { total: 36, working: 9, errored: 1 };
+  const terminal = S.total - S.working;         // 27
+  const pct = Math.round((terminal / S.total) * 100);  // 75
+
+  const ed = '<span class="ed"></span>';
+  const pd = '<span class="pd"></span>';
+  const mm = (on, segs, green) => {
+    let h = `<span class="mm${green ? ' g' : ''}">`;
+    for (let i = 0; i < segs; i++) h += `<i class="${i < on ? 'on' : ''}"></i>`;
+    return h + '</span>';
+  };
+
+  // Jeder Chip als fertiges Markup im gewählten Treatment.
+  const CHIPS = {
+    boxed: ['Bruch, boxed', 'Der heutige Look. Rote + grüne Punkte, dann der Bruch. Vertraut, kompakt, klar lesbar.',
+      `<span class="k boxed">${ed}${pd}${terminal}<span class="den">/${S.total}</span></span>`],
+
+    fill: ['Füll-Pille', 'Die Pille SELBST ist der Balken — grün gefüllt bis zum Fortschritt, Zahl darüber. Vereint Bruch + „grün abgeschlossen".',
+      `<span class="k fill" style="--p:${pct}%">${ed}${terminal}<span class="den">/${S.total}</span></span>`],
+
+    bare: ['Bruch, nackt', 'Ohne Fläche und Rahmen. Verschwindet ruhig in der Zeile, statt sie zu unterbrechen — am leisesten.',
+      `<span class="k bare">${ed}${pd}${terminal}<span class="den">/${S.total}</span></span>`],
+
+    segments: ['Segmente', 'Grüne Segmentleiste (Fertig-Anteil) + Bruch + Pfeilchen. Dieselbe Sprache wie die Welle — im Chip wie im Fuß durchgezogen.',
+      `<span class="k boxed"><span class="kchev">▸</span>${ed}${mm(Math.round(pct / 100 * 6), 6, true)}<span class="n">${terminal}</span><span class="den">/${S.total}</span></span>`],
+
+    ring: ['Ring + Zahl', 'Fortschrittsring (grün) + Fertig-Zahl. Sehr kompakt — aber der Ring zeigt Anteil, der bei wachsendem Nenner scheinbar zurückfällt.',
+      `<span class="k boxed">${ed}<span class="ring" style="--p:${pct}%;background:conic-gradient(var(--green) 0 ${pct}%,#3d3d45 ${pct}% 100%)"></span>${terminal}</span>`],
+
+    uline: ['Unterstrich', 'Zahl mit dünnem grünem Fortschritts-Unterstrich statt Slash. Der Balken sitzt unter der Zahl, nicht daneben — spart Breite.',
+      `<span class="k uline">${ed}${terminal}<span class="den">/${S.total}</span><span class="track"><i style="width:${pct}%"></i></span></span>`],
+
+    percent: ['Prozent', 'Ein Wert statt zwei Zahlen. Kürzer, aber Prozent lügt bei wachsendem Nenner (75 % fällt, wenn neue Agents spawnen).',
+      `<span class="k boxed">${ed}${pd}${pct}%</span>`],
+
+    justdone: ['Nur Fertig-Zahl', 'Nur die erledigten, kein Nenner (Gesamt im Tooltip). Maximal knapp — verliert aber „wie viele noch".',
+      `<span class="k bare">${ed}${pd}${terminal}</span>`],
+  };
+
+  const PICK = 'segments';
+
+  host.innerHTML = Object.entries(CHIPS).map(([key, [name, note, chip]]) => `
+    <div class="cc ${key === PICK ? 'pick' : ''}">
+      <div class="head">
+        <span class="cn">C</span><span class="cname">${name}</span>
+        ${key === PICK ? '<span class="flag">gewählt · durchgezogen</span>' : ''}
+        ${(key === 'ring' || key === 'percent') ? '<span class="flag warn">Nenner-Falle</span>' : ''}
+      </div>
+      <p class="note">${note}</p>
+      <div class="zoom">${chip}</div>
+      <div class="iso">
+        <div class="row"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+        <div class="row sel"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>${chip}</div>
+        <div class="row"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+      </div>
+    </div>`).join('');
+})();
+</script>
+</body>
+</html>

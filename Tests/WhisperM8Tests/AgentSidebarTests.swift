@@ -95,6 +95,7 @@ final class SessionListButtonEquatableTests: XCTestCase {
         indentAsSubagent: Bool = false,
         isUnreadSubagentResult: Bool = false,
         runningChildCount: Int = 0,
+        hiddenChildCount: Int = 0,
         store: AgentSessionRuntimeStatusStore? = nil
     ) -> SessionListButton {
         SessionListButton(
@@ -109,6 +110,7 @@ final class SessionListButtonEquatableTests: XCTestCase {
             indentAsSubagent: indentAsSubagent,
             isUnreadSubagentResult: isUnreadSubagentResult,
             runningChildCount: runningChildCount,
+            hiddenChildCount: hiddenChildCount,
             onSelect: {},
             onClose: {}
         )
@@ -140,6 +142,7 @@ final class SessionListButtonEquatableTests: XCTestCase {
         XCTAssertNotEqual(base, makeButton(session: session, indentAsSubagent: true))
         XCTAssertNotEqual(base, makeButton(session: session, isUnreadSubagentResult: true))
         XCTAssertNotEqual(base, makeButton(session: session, runningChildCount: 2))
+        XCTAssertNotEqual(base, makeButton(session: session, hiddenChildCount: 1))
     }
 }
 
@@ -496,5 +499,191 @@ final class SidebarRelativeTimeTests: XCTestCase {
         XCTAssertEqual(label(secondsAgo: 7 * 24 * 3600), "1w")
         XCTAssertEqual(label(secondsAgo: 21 * 24 * 3600), "3w")
         XCTAssertEqual(label(secondsAgo: 60 * 24 * 3600), "2mo")
+    }
+}
+
+// MARK: - Subagent-Split für Variante D (Aktive sichtbar, Fertige in den Fuß)
+
+final class AgentSidebarSubagentSplitTests: XCTestCase {
+    private let projectID = UUID()
+
+    /// Kind mit kontrollierbarer ID und Recency — für Rang- und Tiebreak-Tests.
+    private func child(
+        id: UUID = UUID(),
+        title: String = "Kind",
+        secondsSinceEpoch: TimeInterval = 1_000
+    ) -> AgentChatSession {
+        var session = AgentChatSession(
+            id: id,
+            provider: .codex,
+            projectID: projectID,
+            externalSessionID: "thread-\(UUID().uuidString)",
+            title: title,
+            createdAt: Date(timeIntervalSince1970: 500),
+            lastActivityAt: Date(timeIntervalSince1970: secondsSinceEpoch),
+            createdManually: true,
+            kind: .subagentJob,
+            subagentJobShortID: "a1b2c3d4",
+            subagentParentSessionID: "parent-ext"
+        )
+        session.status = .closed
+        return session
+    }
+
+    func testErroredRankBeforeWorkingInVisible() {
+        let working = child(title: "läuft")
+        let errored = child(title: "kaputt")
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: [working, errored],
+            erroredIDs: [errored.id],
+            workingIDs: [working.id],
+            unreadIDs: [],
+            selectedID: nil
+        )
+        XCTAssertEqual(split.visible.map(\.title), ["kaputt", "läuft"])
+        XCTAssertTrue(split.hidden.isEmpty)
+    }
+
+    func testUnreadDoneChildIsHiddenNotVisible() {
+        let unread = child(title: "fertig-ungelesen")
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: [unread],
+            erroredIDs: [],
+            workingIDs: [],
+            unreadIDs: [unread.id],
+            selectedID: nil
+        )
+        XCTAssertTrue(split.visible.isEmpty, "Fertig = Fuß, auch wenn ungelesen")
+        XCTAssertEqual(split.hidden.map(\.title), ["fertig-ungelesen"])
+        XCTAssertEqual(split.hiddenUnreadCount, 1)
+    }
+
+    func testHiddenOrdersUnreadBeforeSeen() {
+        // Gesichtetes ist NEUER, würde bei reiner Recency vorn stehen —
+        // der Split muss Ungelesenes trotzdem zuerst listen.
+        let seen = child(title: "gesichtet", secondsSinceEpoch: 9_000)
+        let unread = child(title: "ungelesen", secondsSinceEpoch: 1_000)
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: [seen, unread],
+            erroredIDs: [],
+            workingIDs: [],
+            unreadIDs: [unread.id],
+            selectedID: nil
+        )
+        XCTAssertEqual(split.hidden.map(\.title), ["ungelesen", "gesichtet"])
+    }
+
+    func testAllWorkingChildrenVisibleWithoutCap() {
+        let kids = (0..<12).map { child(title: "w\($0)") }
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: kids,
+            erroredIDs: [],
+            workingIDs: Set(kids.map(\.id)),
+            unreadIDs: [],
+            selectedID: nil
+        )
+        XCTAssertEqual(split.visible.count, 12)
+        XCTAssertTrue(split.hidden.isEmpty)
+        XCTAssertEqual(split.workingCount, 12)
+    }
+
+    func testAllErroredChildrenVisibleWithoutCap() {
+        let kids = (0..<20).map { child(title: "e\($0)") }
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: kids,
+            erroredIDs: Set(kids.map(\.id)),
+            workingIDs: [],
+            unreadIDs: [],
+            selectedID: nil
+        )
+        XCTAssertEqual(split.visible.count, 20)
+        XCTAssertEqual(split.erroredCount, 20)
+    }
+
+    func testSelectedSeenChildIsRevealedInVisible() {
+        let seen = child(title: "gesichtet-selektiert")
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: [seen],
+            erroredIDs: [],
+            workingIDs: [],
+            unreadIDs: [],
+            selectedID: seen.id
+        )
+        XCTAssertEqual(split.visible.map(\.title), ["gesichtet-selektiert"])
+        XCTAssertTrue(split.hidden.isEmpty)
+    }
+
+    func testSelectedUnreadChildRevealedAndNotDoubleCounted() {
+        let unread = child(title: "ungelesen-selektiert")
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: [unread],
+            erroredIDs: [],
+            workingIDs: [],
+            unreadIDs: [unread.id],
+            selectedID: unread.id
+        )
+        XCTAssertEqual(split.visible.map(\.title), ["ungelesen-selektiert"])
+        XCTAssertTrue(split.hidden.isEmpty, "Selektiert schlägt Fuß — keine Dopplung")
+        XCTAssertEqual(split.hiddenUnreadCount, 0)
+    }
+
+    func testAllDoneCollapsesVisibleAndFillsFooter() {
+        let kids = (0..<15).map { child(title: "d\($0)") }
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: kids,
+            erroredIDs: [],
+            workingIDs: [],
+            unreadIDs: [],
+            selectedID: nil
+        )
+        XCTAssertTrue(split.visible.isEmpty)
+        XCTAssertEqual(split.hidden.count, 15)
+    }
+
+    func testEmptyChildrenYieldEmptySplit() {
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: [],
+            erroredIDs: [],
+            workingIDs: [],
+            unreadIDs: [],
+            selectedID: nil
+        )
+        XCTAssertTrue(split.visible.isEmpty)
+        XCTAssertTrue(split.hidden.isEmpty)
+        XCTAssertEqual(split.totalCount, 0)
+    }
+
+    func testTerminalCountIsTotalMinusWorking() {
+        // 6 Kinder: 2 laufen, 1 kaputt, 3 fertig → terminal = 4, Nenner = 6.
+        let working = (0..<2).map { child(title: "w\($0)") }
+        let errored = child(title: "e")
+        let done = (0..<3).map { child(title: "d\($0)") }
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: working + [errored] + done,
+            erroredIDs: [errored.id],
+            workingIDs: Set(working.map(\.id)),
+            unreadIDs: [],
+            selectedID: nil
+        )
+        XCTAssertEqual(split.workingCount, 2)
+        XCTAssertEqual(split.totalCount, 6)
+        XCTAssertEqual(split.terminalCount, 4)
+    }
+
+    func testDeterministicTiebreakOnEqualRecency() {
+        // Zwei laufende Kinder mit identischem lastActivityAt: die Reihenfolge
+        // muss stabil nach ID-UUID sein, nicht implementierungsabhängig.
+        let idLow = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let idHigh = UUID(uuidString: "FFFFFFFF-0000-0000-0000-000000000000")!
+        let a = child(id: idHigh, title: "high", secondsSinceEpoch: 5_000)
+        let b = child(id: idLow, title: "low", secondsSinceEpoch: 5_000)
+        let split = AgentSidebarModelBuilder.subagentChildSplit(
+            children: [a, b],
+            erroredIDs: [],
+            workingIDs: [a.id, b.id],
+            unreadIDs: [],
+            selectedID: nil
+        )
+        XCTAssertEqual(split.visible.map(\.title), ["low", "high"])
     }
 }

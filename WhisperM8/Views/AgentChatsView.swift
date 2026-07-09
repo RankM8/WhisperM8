@@ -926,6 +926,16 @@ struct AgentChatsView: View {
                 let subagentChildIDs = Set(
                     subagentChildren.byParentLocalID.values.flatMap { $0 }.map(\.id)
                 )
+                // Variante-D-Mengen für den Kinder-Split: laufend = aktiv
+                // (spawning/running) ∪ übernommen mit lebender PTY; fehl-
+                // geschlagen = state == .failed.
+                let workingSubagentIDs = jobRuntimeModel.activeSubagentSessionIDs
+                    .union(jobRuntimeModel.snapshotsBySessionID
+                        .filter { $0.value.state == .takenOver && terminalRegistry.activeSessionIDs.contains($0.key) }
+                        .keys)
+                let erroredSubagentIDs = Set(jobRuntimeModel.snapshotsBySessionID
+                    .filter { $0.value.state == .failed }
+                    .keys)
                 let runningSessionIDs = terminalRegistry.activeSessionIDs
                     .union(jobRuntimeModel.runningCountByParentSessionID.filter { $0.value > 0 }.keys)
                     .union(jobRuntimeModel.activeSubagentSessionIDs)
@@ -1021,7 +1031,8 @@ struct AgentChatsView: View {
                             autoRenamingSessionIDs: autoRenamingSessionIDs,
                             missingTranscriptSessionIDs: missingTranscriptIDs,
                             subagentChildrenByParent: subagentChildren.byParentLocalID,
-                            runningSubagentCountByParent: jobRuntimeModel.runningCountByParentSessionID,
+                            workingSubagentSessionIDs: workingSubagentIDs,
+                            erroredSubagentSessionIDs: erroredSubagentIDs,
                             unreadSubagentSessionIDs: windowStore.unreadSubagentSessionIDs,
                             expandedSubagentParentIDs: windowStore.expandedSubagentParentIDs,
                             onToggleSubagentChildren: { windowStore.toggleSubagentChildren($0) },

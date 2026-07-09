@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subagent-Sidebar — UI-Optionen</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     Palette: tiefes Petrol-Anthrazit, warm gebrochenes Weiß.
+     Akzent = das Teal der App-Chips. Signal-Amber nur für Defekte.
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --ink:        oklch(0.16 0.012 200);
+    --ink-2:      oklch(0.20 0.014 200);
+    --panel:      oklch(0.235 0.013 205);
+    --line:       oklch(0.32 0.012 205);
+    --line-soft:  oklch(0.27 0.010 205);
+
+    --paper:      oklch(0.93 0.008 90);
+    --paper-dim:  oklch(0.72 0.010 200);
+    --paper-mute: oklch(0.55 0.012 205);
+
+    --teal:       oklch(0.74 0.10 195);
+    --teal-deep:  oklch(0.52 0.09 195);
+    --amber:      oklch(0.78 0.14 70);
+    --green:      oklch(0.70 0.16 148);
+    --blue:       oklch(0.68 0.14 250);
+    --red:        oklch(0.65 0.17 25);
+
+    /* App-Fidelity: exakt die Werte, die die Sidebar rendert */
+    --app-bg:     #1e1e20;
+    --app-row:    #26262a;
+    --app-sel:    #2f3a44;
+    --app-text:   #d8d8dc;
+    --app-dim:    #86868c;
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans:  ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Asymmetrisches Grundraster: schmale Marginalspalte + breiter Satzspiegel */
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 clamp(20px, 4vw, 56px);
+  }
+
+  /* ── Kopf ── */
+  header {
+    padding: clamp(56px, 9vh, 110px) 0 clamp(36px, 6vh, 64px);
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--teal-deep);
+    margin: 0 0 22px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(38px, 6.2vw, 76px);
+    line-height: 0.98;
+    letter-spacing: -0.02em;
+    margin: 0;
+    max-width: 15ch;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--teal);
+  }
+  .lede {
+    margin: 30px 0 0;
+    max-width: 62ch;
+    font-size: 17px;
+    color: var(--paper-dim);
+  }
+  .lede strong { color: var(--paper); font-weight: 500; }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin-top: 44px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .fact {
+    padding: 16px 28px 16px 0;
+    margin-right: 28px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .fact:last-child { border-right: 0; }
+  .fact dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--paper-mute);
+    margin: 0 0 4px;
+  }
+  .fact dd {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 25px;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Sektionen ── */
+  section { padding: clamp(56px, 8vh, 96px) 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+
+  .sec-head { display: flex; align-items: baseline; gap: 18px; margin-bottom: 12px; }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--teal-deep);
+    padding-top: 6px;
+  }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(27px, 3.4vw, 40px);
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .sec-sub {
+    margin: 0 0 40px 44px;
+    max-width: 66ch;
+    color: var(--paper-dim);
+  }
+  @media (max-width: 720px) { .sec-sub { margin-left: 0; } }
+
+  h3 {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--paper-mute);
+    margin: 0 0 14px;
+  }
+
+  p { margin: 0 0 16px; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--ink-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: oklch(0.82 0.04 195);
+  }
+
+  /* ═══════════ SIDEBAR-MOCKUP (echte Pixel) ═══════════ */
+  .sb {
+    width: 262px;
+    background: var(--app-bg);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 0 10px;
+    font-size: 12px;
+    color: var(--app-text);
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+  }
+  .sb-scope {
+    display: flex; gap: 2px;
+    margin: 0 8px 8px;
+    background: #141416;
+    border-radius: 6px;
+    padding: 2px;
+  }
+  .sb-scope span {
+    flex: 1; text-align: center;
+    font-size: 11px; padding: 3px 0;
+    border-radius: 4px;
+    color: var(--app-dim);
+  }
+  .sb-scope span.on { background: #3a3a40; color: #fff; }
+
+  .sb-sec {
+    font-size: 9.5px; letter-spacing: 0.08em;
+    color: #6a6a70; padding: 6px 12px 3px;
+    text-transform: uppercase;
+  }
+
+  .row {
+    display: flex; align-items: center; gap: 7px;
+    height: 26px;
+    padding: 0 9px 0 14px;
+    border-radius: 5px;
+    margin: 0 6px;
+    position: relative;
+  }
+  .row.parent { padding-left: 12px; }
+  .row.sel { background: var(--app-sel); }
+  .row.sel::before {
+    content: ""; position: absolute; left: -6px; top: 4px; bottom: 4px;
+    width: 2.5px; border-radius: 2px; background: var(--teal);
+  }
+  .row.child { padding-left: 30px; }
+  .row .glyph { font-size: 10px; color: #7a7a82; width: 11px; flex: none; }
+  .row .title {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12px;
+  }
+  .row.child .title { color: #b6b6bc; }
+  .row .time { font-size: 9.5px; color: #6e6e76; font-variant-numeric: tabular-nums; }
+
+  .badge-sub {
+    font-size: 7.5px; font-weight: 700; letter-spacing: 0.04em;
+    color: #7f9dbb; background: rgba(90,140,190,0.16);
+    border: .5px solid rgba(90,140,190,0.30);
+    border-radius: 3px; padding: 1px 3px;
+  }
+  /* Statuspunkte — 1:1 die App-Semantik (AgentStatusIndicator.swift).
+     Kein Amber: `awaitingInput` ist für Subagent-Jobs unerreichbar. */
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .dot.run   { background: var(--green); animation: pulse 1.9s ease-in-out infinite; }
+  .dot.unread{ background: var(--blue); }
+  .dot.done  { background: #4a4a52; }
+  .dot.err   { background: transparent; border: 1.4px solid var(--red); width: 7px; height: 7px; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .38 } }
+
+  /* Chip an der Parent-Row */
+  .chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 8px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--teal);
+    background: rgba(60,190,190,0.15);
+    border: .5px solid rgba(60,190,190,0.30);
+    border-radius: 3px; padding: 1.5px 4px;
+    cursor: pointer;
+  }
+  .chip .chev { font-size: 6.5px; }
+  .chip .sep, .chip .total { color: rgba(160,200,205,0.55); font-weight: 600; }
+  .chip .mini-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--green); animation: pulse 1.9s ease-in-out infinite; }
+  .chip:hover { background: rgba(60,190,190,0.24); }
+
+  .reveal {
+    display: flex; align-items: center; gap: 7px;
+    height: 24px; padding-left: 30px; margin: 0 6px;
+    font-size: 11px; color: #74747c; cursor: pointer;
+    border-radius: 5px;
+  }
+  .reveal:hover { background: rgba(255,255,255,0.045); color: #a8a8b0; }
+  .reveal .cnt { color: var(--blue); }
+
+  /* Rollup-Zeile (Option C) */
+  .rollup {
+    display: flex; align-items: center; gap: 8px;
+    height: 28px; padding: 0 10px 0 30px; margin: 0 6px;
+    border-radius: 5px; cursor: pointer;
+    background: rgba(60,190,190,0.055);
+    border: .5px solid rgba(60,190,190,0.16);
+  }
+  .rollup:hover { background: rgba(60,190,190,0.10); }
+  .meter { display: flex; gap: 1.5px; }
+  .meter i { width: 3px; height: 9px; border-radius: 1px; background: #3a3a42; }
+  .meter i.on { background: var(--green); }
+  .meter i.u  { background: var(--blue); }
+  .meter i.e  { background: var(--red); }
+  .rollup .lbl { font-size: 11px; color: #a2a2aa; }
+  .rollup .lbl b { color: var(--paper); font-weight: 600; }
+  .rollup .go { margin-left: auto; font-size: 10px; color: #6e6e76; }
+
+  .hidden { display: none !important; }
+
+  /* ── Scroll-Simulation in den Mockups ── */
+  .sb-list { max-height: 460px; overflow-y: auto; }
+
+  /* Variante 1 — heute: Legacy-Scroller (Maus angeschlossen) */
+  .scroll-legacy::-webkit-scrollbar { width: 15px; }
+  .scroll-legacy::-webkit-scrollbar-track {
+    background: #e8e8ea;
+    border-left: 1px solid #c9c9cd;
+  }
+  .scroll-legacy::-webkit-scrollbar-thumb {
+    background: #b8b8be; border-radius: 8px;
+    border: 3px solid #e8e8ea;
+  }
+  /* Variante 2 — Overlay, dezent */
+  .scroll-overlay::-webkit-scrollbar { width: 9px; }
+  .scroll-overlay::-webkit-scrollbar-track { background: transparent; }
+  .scroll-overlay::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.16);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scroll-overlay:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.28); background-clip: content-box; }
+  /* Variante 3 — ganz weg */
+  .scroll-none::-webkit-scrollbar { width: 0; height: 0; }
+
+  /* ═══════════ Skalen-Test ═══════════ */
+  .scale-bar {
+    display: flex; align-items: center; gap: 4px;
+    margin: 0 0 34px;
+    flex-wrap: wrap;
+  }
+  .scale-bar .lbl {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--paper-mute); margin-right: 12px;
+  }
+  .scale-btn {
+    font-family: var(--mono); font-size: 12.5px;
+    background: transparent; color: var(--paper-dim);
+    border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px 14px;
+    cursor: pointer;
+    transition: color .18s cubic-bezier(.22,1,.36,1), border-color .18s, background .18s;
+  }
+  .scale-btn:hover { color: var(--paper); border-color: var(--paper-mute); }
+  .scale-btn.on {
+    background: var(--teal); border-color: var(--teal);
+    color: var(--ink); font-weight: 600;
+  }
+  .scale-btn .sub { display: block; font-size: 9px; letter-spacing: .04em; opacity: .7; margin-top: 1px; }
+
+  .grid4 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+    gap: 30px;
+    align-items: start;
+  }
+  .verdict {
+    margin-top: 14px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--paper-mute);
+    min-height: 4.4em;
+    padding-left: 11px;
+    border-left: 2px solid var(--line);
+  }
+  .verdict.good { border-left-color: var(--green); color: var(--paper-dim); }
+  .verdict.bad  { border-left-color: var(--amber); }
+  .verdict b { color: var(--paper); font-weight: 500; }
+
+  /* Wellen (Option E) */
+  .wave-head {
+    display: flex; align-items: center; gap: 7px;
+    height: 22px; padding: 0 10px 0 24px; margin: 3px 6px 1px;
+    font-size: 10px; letter-spacing: .04em;
+    color: #8a8a92;
+    cursor: pointer; border-radius: 4px;
+  }
+  .wave-head:hover { background: rgba(255,255,255,.04); }
+  .wave-head .wn { color: var(--paper); font-weight: 600; letter-spacing: 0; font-size: 11px; }
+  .wave-head .wc { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 9.5px; color: #66666e; }
+  .wave-head .chev { font-size: 6.5px; color: #66666e; }
+
+  /* ═══════════ Layout der Optionskarten ═══════════ */
+  .opts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
+    gap: 30px;
+    align-items: start;
+  }
+  .opt { position: relative; }
+  .opt-tag {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 6px;
+  }
+  .opt-letter {
+    font-family: var(--serif);
+    font-size: 34px; line-height: 1;
+    color: var(--teal-deep);
+  }
+  .opt-name {
+    font-family: var(--serif);
+    font-size: 21px; letter-spacing: -0.01em;
+  }
+  .opt.rec .opt-letter, .opt.rec .opt-name { color: var(--teal); }
+  .rec-flag {
+    font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink); background: var(--teal);
+    padding: 2px 6px; border-radius: 3px;
+    align-self: center;
+  }
+  .opt-line { color: var(--paper-dim); font-size: 13.5px; margin: 4px 0 18px; min-height: 3.4em; }
+
+  .tradeoff { margin-top: 18px; font-size: 13px; }
+  .tradeoff div { display: flex; gap: 9px; padding: 5px 0; align-items: baseline; }
+  .tradeoff .s { font-family: var(--mono); flex: none; width: 13px; }
+  .tradeoff .plus  .s { color: var(--green); }
+  .tradeoff .minus .s { color: var(--amber); }
+  .tradeoff .minus span:last-child { color: var(--paper-dim); }
+
+  /* ── Annotationen ── */
+  .annot {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 0 14px;
+    margin-top: 22px;
+    font-size: 13.5px;
+  }
+  .annot dt {
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    color: var(--ink); background: var(--amber);
+    width: 19px; height: 19px; border-radius: 50%;
+    display: grid; place-items: center;
+    margin-top: 3px;
+  }
+  .annot dd { margin: 0 0 14px; color: var(--paper-dim); }
+  .annot dd b { color: var(--paper); font-weight: 500; }
+
+  /* ── Rang-Legende ── */
+  .ranks { display: flex; flex-wrap: wrap; gap: 0; margin: 26px 0 0; }
+  .rank {
+    flex: 1 1 190px;
+    padding: 14px 18px 16px;
+    border-left: 2px solid var(--line);
+  }
+  .rank:nth-child(1) { border-left-color: var(--amber); }
+  .rank:nth-child(2) { border-left-color: var(--green); }
+  .rank:nth-child(3) { border-left-color: var(--blue); }
+  .rank:nth-child(4) { border-left-color: var(--line); }
+  .rank .n { font-family: var(--mono); font-size: 10px; color: var(--paper-mute); }
+  .rank .t { font-size: 14.5px; margin: 3px 0 2px; }
+  .rank .d { font-size: 12.5px; color: var(--paper-mute); }
+
+  /* ═══════════ Inspector-Mockup ═══════════ */
+  .insp {
+    background: var(--app-bg);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .insp-tabs {
+    display: flex; gap: 1px; background: #141416;
+    padding: 5px 6px 0;
+  }
+  .insp-tabs span {
+    padding: 5px 12px; font-size: 11px; color: var(--app-dim);
+    border-radius: 5px 5px 0 0;
+  }
+  .insp-tabs span.on { background: var(--app-bg); color: var(--paper); }
+  .insp-body { padding: 16px 18px 20px; }
+  .insp-h {
+    display: flex; align-items: baseline; gap: 12px;
+    padding-bottom: 12px; margin-bottom: 6px;
+    border-bottom: 1px solid #2c2c31;
+  }
+  .insp-h .n { font-size: 14px; font-weight: 600; }
+  .insp-h .m { font-size: 11px; color: var(--app-dim); font-variant-numeric: tabular-nums; }
+  .grp {
+    font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: #6a6a70; margin: 16px 0 5px;
+  }
+  .grp b { color: var(--paper); }
+  .irow {
+    display: grid;
+    grid-template-columns: 16px minmax(120px, 1.6fr) 100px 62px 58px 70px;
+    align-items: center; gap: 10px;
+    height: 25px; padding: 0 8px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .irow:hover { background: rgba(255,255,255,0.04); }
+  .irow .st { text-align: center; font-size: 10px; }
+  .irow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .irow .mdl, .irow .tn, .irow .rt, .irow .df { font-size: 11px; color: var(--app-dim); }
+  .irow .rt { text-align: right; }
+  .irow .df { text-align: right; font-size: 10.5px; }
+  .irow .df .a { color: var(--green); }
+  .irow .df .d { color: var(--red); }
+  .irow.done .nm { color: #9a9aa2; }
+  .st.ok { color: var(--green); }
+  .st.rn { color: var(--green); }
+  .st.wt { color: var(--amber); }
+  .st.fl { color: var(--red); }
+  .st.dn { color: #56565e; }
+  .strike { color: #56565e; }
+
+  .no-tokens {
+    margin-top: 20px; padding: 12px 15px;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    font-size: 12.5px; color: var(--paper-mute);
+  }
+  .no-tokens b { color: var(--amber); font-weight: 500; }
+
+  /* ═══════════ Scrollbar-Sektion ═══════════ */
+  .scrolls { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px; }
+  .scroll-demo .cap { font-size: 12.5px; color: var(--paper-dim); margin-top: 12px; }
+  .scroll-demo .cap b { display: block; color: var(--paper); font-weight: 500; font-size: 13.5px; margin-bottom: 2px; }
+  .filler { height: 26px; margin: 0 6px; display: flex; align-items: center; padding-left: 14px; color: #55555c; font-size: 12px; }
+
+  .why {
+    margin-top: 34px;
+    padding: 22px 26px;
+    background: var(--ink-2);
+    border-left: 2px solid var(--amber);
+    border-radius: 0 7px 7px 0;
+    max-width: 78ch;
+  }
+  .why h3 { color: var(--amber); margin-bottom: 10px; }
+  .why p:last-child { margin-bottom: 0; }
+
+  /* ═══════════ Matrix ═══════════ */
+  .matrix-scroll { overflow-x: auto; margin-top: 8px; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); }
+  th {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--paper-mute); font-weight: 400;
+    border-bottom-color: var(--line);
+  }
+  td:first-child { color: var(--paper-dim); }
+  td.y { color: var(--green); }
+  td.n { color: var(--amber); }
+  td.p { color: var(--paper-mute); }
+  tr.rec td { background: rgba(60,190,190,0.05); }
+  tr.rec td:nth-child(3) { font-weight: 600; }
+
+  /* ═══════════ Fußnote / Fragen ═══════════ */
+  .asks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 26px; margin-top: 30px; }
+  .ask { border-top: 2px solid var(--teal-deep); padding-top: 14px; }
+  .ask h4 { font-family: var(--serif); font-weight: 400; font-size: 19px; margin: 0 0 8px; }
+  .ask p { font-size: 13.5px; color: var(--paper-dim); margin: 0; }
+
+  footer { padding: 60px 0 80px; color: var(--paper-mute); font-size: 12.5px; }
+  footer code { font-size: 11.5px; }
+
+  .toggle-hint {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--teal-deep); letter-spacing: .05em;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">WhisperM8 · Agent Chats · Entscheidungsvorlage</p>
+  <h1>Fünfzehn Subagents,<br>und keiner sagt,<br><em>welcher wichtig ist.</em></h1>
+  <p class="lede">
+    Die Sidebar rendert Subagent-Kinder heute <strong>ungekappt und recency-sortiert</strong>.
+    Ein einziger Workflow-Parent frisst den halben Viewport, und die drei Agents, die
+    gerade arbeiten, stehen zwischen zwölf, die längst fertig sind. Drei Optionen,
+    ein Vorschlag.
+  </p>
+
+  <dl class="facts">
+    <div class="fact"><dt>Kinder heute sichtbar</dt><dd>15 von 15</dd></div>
+    <div class="fact"><dt>davon aktiv</dt><dd>3</dd></div>
+    <div class="fact"><dt>Sidebar-Höhe dafür</dt><dd>390 pt</dd></div>
+    <div class="fact"><dt>Sortierung</dt><dd>Recency</dd></div>
+  </dl>
+</header>
+
+
+<!-- ══════════ 1 · IST ══════════ -->
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>Der Ist-Zustand</h2></div>
+  <p class="sec-sub">
+    Nachgebaut aus deinem Screenshot. Drei Defekte überlagern sich hier — sie sind
+    unabhängig voneinander und einzeln behebbar.
+  </p>
+
+  <div style="display:flex; gap:44px; flex-wrap:wrap; align-items:flex-start;">
+    <div class="sb">
+      <div class="sb-scope"><span class="on">Aktiv</span><span>Zuletzt</span><span>Alle</span></div>
+      <div class="sb-sec">Chats</div>
+      <div class="sb-list scroll-legacy" style="max-height:430px;">
+        <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+        <div class="row parent sel">
+          <span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+          <span class="chip"><span class="chev">▾</span><span class="mini-dot"></span>15</span>
+        </div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Merke dir das Codew…</span><span class="badge-sub">SUB</span><span class="time">4h</span></div>
+        <div class="row child"><span class="glyph">◎</span><span class="title">Baseline-Test. Lies…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+        <div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+        <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+        <div class="filler">heartbeat …</div>
+        <div class="filler">sales-ai-hbc …</div>
+      </div>
+    </div>
+
+    <div style="flex:1; min-width:300px;">
+      <h3>Was hier kaputt ist</h3>
+      <dl class="annot">
+        <dt>1</dt>
+        <dd><b>Alles-oder-nichts-Chip.</b> Bei Expansion rendert <code>ForEach(children)</code>
+        ungekappt (<code>AgentChatsSidebarViews.swift:86–93</code>). Die
+        <code>visibleSlice</code>-Kappung existiert nur eine Ebene höher, für Parents.</dd>
+
+        <dt>2</dt>
+        <dd><b>Kein Ranking.</b> <code>subagentChildren(…)</code> sortiert per
+        <code>AgentSessionStore.sortedSessions</code> = Recency. Darum stehen grüne (aktiv),
+        blaue (ungelesen) und graue (fertig) Punkte wahllos gemischt. Die Liste ist nicht
+        lang — sie ist <b>nicht scanbar</b>.</dd>
+
+        <dt>3</dt>
+        <dd><b>Der Chip zeigt die falsche Zahl.</b> <code>15</code> groß, „3 aktiv" nur als
+        anonymer Punkt. Die Zahl, die zählt, ist die kleine.</dd>
+
+        <dt>4</dt>
+        <dd><b>Die Scrollbar.</b> Genau die helle 15pt-Leiste rechts — kommt aus dem nackten
+        <code>ScrollView { }</code> in <code>AgentChatsView.swift:910</code>. Eigene Sektion,
+        weiter unten.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════ 2 · RANKING ══════════ -->
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>Erst sortieren, dann kappen</h2></div>
+  <p class="sec-sub">
+    Eine Regel, ein Schnitt: <b>Oben steht, was noch läuft oder kaputt ist.
+    Alles Fertige ist unten.</b> Innerhalb des Fußes stehen die ungelesenen Ergebnisse zuerst.
+  </p>
+
+  <div class="ranks">
+    <div class="rank" style="border-left-color: var(--red)">
+      <div class="n">RANG 0 · SICHTBAR</div><div class="t">Fehlgeschlagen</div>
+      <div class="d"><code>errored</code>. Dringender als jeder laufende Agent. Kein Cap.</div>
+    </div>
+    <div class="rank">
+      <div class="n">RANG 1 · SICHTBAR</div><div class="t">Arbeitet</div>
+      <div class="d"><code>working</code> (spawning/running). Nie unsichtbar. Kein Cap.</div>
+    </div>
+    <div class="rank">
+      <div class="n">RANG 2 · FUSS</div><div class="t">Fertig, ungelesen</div>
+      <div class="d"><code>idle ∧ unread</code>. Ganz oben im Fuß, blauer Zähler.</div>
+    </div>
+    <div class="rank">
+      <div class="n">RANG 3 · FUSS</div><div class="t">Fertig, gesichtet</div>
+      <div class="d"><code>idle</code> gelesen, <code>stopped</code>. Der stille Schwanz.</div>
+    </div>
+  </div>
+
+  <p style="margin-top:26px; color:var(--paper-dim); max-width:74ch;">
+    <b style="color:var(--paper)">Fertig ist fertig.</b> Ein Agent, der durchläuft, verlässt die
+    Liste — auch wenn sein Ergebnis noch ungelesen ist. Er verschwindet nicht: der Fuß-Zähler
+    zählt hoch und färbt sich blau. Der Ruhezustand ist damit exakt definiert — laufen keine
+    Agents und ist nichts fehlgeschlagen, besteht die ganze Gruppe aus <em>einer</em> Zeile.
+    <br><br>
+    Der Preis, offen benannt: <b>zwei Klicks zum Ergebnis statt einem.</b> Abgefedert dadurch,
+    dass die Ungelesenen im aufgeklappten Fuß ganz oben stehen — der Rang bleibt, nur die
+    Sichtbarkeitsgrenze wandert. Und <code>UNREAD_CAP</code> entfällt ersatzlos:
+    <b>es gibt kein Limit mehr, nirgends.</b>
+  </p>
+
+  <div class="why" style="max-width:78ch;">
+    <h3>Befund: Gold gibt es hier nicht</h3>
+    <p>
+      Der Screenshot des Mockups zeigte einen orangefarbenen Punkt bei
+      <code>find:commit-fix</code>. Der stand für <code>awaitingInput</code> — und war ein
+      Fehler meinerseits: <b>ein Subagent-Job kann diesen Zustand nicht erreichen.</b>
+      <code>AgentSessionStatusCoordinator.updateSubagentJobStatus</code> (<code>:182</code>) mappt
+      hart <code>spawning|running → working</code>, <code>done → idle</code>,
+      <code>failed → errored</code>, <code>stopped → stopped</code>. Es gibt keinen Pfad zu
+      <code>awaitingInput</code>. Ein Subagent ist headless; der Supervisor fährt ihn, niemand
+      fragt ihn etwas.
+    </p>
+    <p>
+      Der einzige Weg zu Gold (<code>AgentTheme.statusAwaiting</code>, <code>#e9b949</code>):
+      Du <em>übernimmst</em> den Job. Dann feuert <code>takenOver → statusStore.clear()</code>,
+      und ab da liefert der normale PTY-/Hook-Pfad wieder das volle Statusspektrum. Der reale
+      Zustandsraum eines Kindes ist also vierstufig, nicht fünf — und die Ränge oben spiegeln
+      genau das.
+    </p>
+  </div>
+
+  <p style="margin-top:24px; color:var(--paper-dim); max-width:70ch;">
+    Tiebreak innerhalb eines Rangs: <code>lastActivityAt</code> absteigend, dann
+    <code>id.uuidString</code> — sonst flackert die Reihenfolge bei identischen Zeitstempeln,
+    und genau das passiert, wenn ein Workflow sechs Agents in derselben Sekunde spawnt.
+  </p>
+</section>
+
+
+<!-- ══════════ 3 · OPTIONEN ══════════ -->
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>Erste Runde</h2></div>
+  <p class="sec-sub">
+    Drei Optionen, entworfen am Workflow-Fall: 15 Agents, Fanout. Bedienbar — Klick auf den
+    Chip klappt zu, „weitere anzeigen" entfaltet den Rest.
+    <br><br>
+    <b style="color:var(--amber)">Der blinde Fleck:</b> Subagents laufen genauso oft <em>einzeln</em>.
+    „Frag Codex mal kurz" spawnt <em>einen</em>. Keine dieser drei Optionen weiß das —
+    siehe Abschnitt 04.
+  </p>
+
+  <div class="opts">
+
+    <!-- ── A ── -->
+    <div class="opt">
+      <div class="opt-tag"><span class="opt-letter">A</span><span class="opt-name">Aktiv-Fenster</span></div>
+      <p class="opt-line">Ranking + Kappung bei 10. Der Rest hinter einer Reveal-Zeile. Sonst ändert sich nichts.</p>
+
+      <div class="sb">
+        <div class="sb-sec">whisperm8</div>
+        <div class="sb-list scroll-overlay" style="max-height:340px;">
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+          <div class="row parent sel">
+            <span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+            <span class="chip" data-toggle="a"><span class="chev">▾</span><span class="mini-dot"></span>3<span class="sep">/</span><span class="total">15</span></span>
+          </div>
+          <div data-group="a">
+            <div class="row child"><span class="glyph">◎</span><span class="title">verify:resume-state</span><span class="badge-sub">SUB</span><span class="dot wait"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:config-overrides</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:tests</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Baseline-Test. Lies…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:commit-fix</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:process-io</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:doc-consistency</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="hidden" data-more="a">
+              <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+              <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+              <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot fail"></span></div>
+              <div class="row child"><span class="glyph">◎</span><span class="title">Merke dir das Codew…</span><span class="badge-sub">SUB</span><span class="time">4h</span></div>
+              <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            </div>
+            <div class="reveal" data-reveal="a"><span>▾</span><span>5 weitere anzeigen</span></div>
+          </div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+        </div>
+      </div>
+      <p class="toggle-hint">↑ Chip und Reveal-Zeile sind klickbar</p>
+
+      <div class="tradeoff">
+        <div class="plus"><span class="s">+</span><span>~120 LOC. Builder + <code>ProjectChatGroup</code>. Kein Architekturumbau.</span></div>
+        <div class="plus"><span class="s">+</span><span>Non-lazy-Container bleibt bezahlbar: max. 10 Rows pro Parent.</span></div>
+        <div class="plus"><span class="s">+</span><span>Drag&amp;Drop-Constraint unangetastet.</span></div>
+        <div class="minus"><span class="s">−</span><span>Löst vier von fünf Anforderungen. Dichte (Modell, Laufzeit, Fortschritt) passt nicht in 262 pt.</span></div>
+        <div class="minus"><span class="s">−</span><span>„Alle anzeigen" führt zurück in dieselbe lange Liste — nur freiwillig.</span></div>
+      </div>
+    </div>
+
+    <!-- ── B ── -->
+    <div class="opt rec">
+      <div class="opt-tag">
+        <span class="opt-letter">B</span><span class="opt-name">A + Inspector-Tab</span>
+        <span class="rec-flag">Stärkste aus Runde 1</span>
+      </div>
+      <p class="opt-line">Sidebar wie A. Aber „Alle 15 anzeigen" öffnet keinen Listen-Wasserfall, sondern einen Tab mit echter Dichte.</p>
+
+      <div class="sb">
+        <div class="sb-sec">whisperm8</div>
+        <div class="sb-list scroll-overlay" style="max-height:340px;">
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+          <div class="row parent sel">
+            <span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+            <span class="chip" data-toggle="b"><span class="chev">▾</span><span class="mini-dot"></span>3<span class="sep">/</span><span class="total">15</span></span>
+          </div>
+          <div data-group="b">
+            <div class="row child"><span class="glyph">◎</span><span class="title">verify:resume-state</span><span class="badge-sub">SUB</span><span class="dot wait"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:config-overrides</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:tests</span><span class="badge-sub">SUB</span><span class="dot run"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Code-Review mit ma…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Baseline-Test. Lies…</span><span class="badge-sub">SUB</span><span class="dot unread"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:commit-fix</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:process-io</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">find:doc-consistency</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="row child"><span class="glyph">◎</span><span class="title">Adversarische Gege…</span><span class="badge-sub">SUB</span><span class="dot done"></span></div>
+            <div class="reveal" data-open-insp><span>⌗</span><span>Alle 15 anzeigen</span><span class="cnt">· 3 ungelesen</span></div>
+          </div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+        </div>
+      </div>
+      <p class="toggle-hint">↑ „Alle 15 anzeigen" springt zum Inspector</p>
+
+      <div class="tradeoff">
+        <div class="plus"><span class="s">+</span><span>Sidebar = Navigation (ruhig, ≤10). Dichte landet dort, wo Platz ist.</span></div>
+        <div class="plus"><span class="s">+</span><span>Deckt alle fünf Anforderungen. Skaliert auf 36 Agents.</span></div>
+        <div class="plus"><span class="s">+</span><span>Slice 1 <em>ist</em> Option A — eigenständig auslieferbar.</span></div>
+        <div class="minus"><span class="s">−</span><span>Neue View, ~250 LOC, plus Anbindung an die Tab-Infrastruktur.</span></div>
+        <div class="minus"><span class="s">−</span><span>Zwei Slices statt einem.</span></div>
+      </div>
+    </div>
+
+    <!-- ── C ── -->
+    <div class="opt">
+      <div class="opt-tag"><span class="opt-letter">C</span><span class="opt-name">Rollup-Zeile</span></div>
+      <p class="opt-line">Kinder nie inline. Eine Aggregat-Zeile mit Meter. Nur wartende und ungelesene brechen durch.</p>
+
+      <div class="sb">
+        <div class="sb-sec">whisperm8</div>
+        <div class="sb-list scroll-overlay" style="max-height:340px;">
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>
+          <div class="row parent sel">
+            <span class="glyph">✳</span><span class="title">Codex-Subagents m…</span>
+            <span class="chip"><span class="mini-dot"></span>3<span class="sep">/</span><span class="total">15</span></span>
+          </div>
+          <div class="row child"><span class="glyph">◎</span><span class="title">verify:resume-state</span><span class="badge-sub">SUB</span><span class="dot wait"></span></div>
+          <div class="rollup" data-open-insp>
+            <span class="meter">
+              <i class="on"></i><i class="on"></i><i class="u"></i><i class="u"></i><i class="u"></i>
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </span>
+            <span class="lbl"><b>14 Subagents</b> · 2 aktiv · 3 neu</span>
+            <span class="go">›</span>
+          </div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+          <div class="filler">heartbeat …</div>
+          <div class="filler">sales-ai-hbc …</div>
+          <div class="filler">akquise-ai …</div>
+        </div>
+      </div>
+      <p class="toggle-hint">↑ Rollup springt zum Inspector</p>
+
+      <div class="tradeoff">
+        <div class="plus"><span class="s">+</span><span>Konstante Höhe, egal ob 3 oder 36 Agents.</span></div>
+        <div class="plus"><span class="s">+</span><span>Der Meter zeigt Fortschritt, ohne eine Zeile pro Agent zu kosten.</span></div>
+        <div class="minus"><span class="s">−</span><span>Nimmt den Ein-Klick-Sprung auf ein einzelnes Kind. Bei 3 Subagents eine klare Regression.</span></div>
+        <div class="minus"><span class="s">−</span><span>Falscher Trade für deinen Median — richtig erst jenseits von ~20.</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════ 4 · SKALEN-TEST ══════════ -->
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>Zweite Runde: die Skala</h2></div>
+  <p class="sec-sub">
+    Ein Subagent ist kein kleiner Workflow — es ist ein anderer Fall. Was bei 15 Agents
+    Ordnung schafft, ist bei einem albern. Drei neue Optionen, und ein Regler, der sie
+    alle bei jeder Größe zeigt. <b>Schalte durch — dort trennt sich, was wirklich trägt.</b>
+  </p>
+
+  <div class="scale-bar">
+    <span class="lbl">Subagents</span>
+    <button class="scale-btn" data-n="1">1<span class="sub">ad-hoc</span></button>
+    <button class="scale-btn" data-n="3">3<span class="sub">delegiert</span></button>
+    <button class="scale-btn on" data-n="6">6<span class="sub">kleiner fanout</span></button>
+    <button class="scale-btn" data-n="15">15<span class="sub">workflow</span></button>
+    <button class="scale-btn" data-n="36">36<span class="sub">ultracode</span></button>
+  </div>
+
+  <div class="grid4">
+
+    <div class="opt">
+      <div class="opt-tag"><span class="opt-letter">C</span><span class="opt-name">Rollup-Kopf</span></div>
+      <p class="opt-line" style="min-height:2.6em">Aus Runde 1. Aggregat statt Liste, immer.</p>
+      <div class="sb"><div class="sb-list scroll-overlay" style="max-height:400px" data-render="C"></div></div>
+      <div class="verdict" data-verdict="C"></div>
+    </div>
+
+    <div class="opt rec">
+      <div class="opt-tag">
+        <span class="opt-letter">D</span><span class="opt-name">Rollup als Fuß</span>
+        <span class="rec-flag">Empfehlung</span>
+      </div>
+      <p class="opt-line" style="min-height:2.6em">A und C sind dasselbe Element — einmal oben, einmal unten. Unten gewinnt.</p>
+      <div class="sb"><div class="sb-list scroll-overlay" style="max-height:400px" data-render="D"></div></div>
+      <div class="verdict" data-verdict="D"></div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-tag"><span class="opt-letter">E</span><span class="opt-name">Wellen</span></div>
+      <p class="opt-line" style="min-height:2.6em">Spawn-Kohorten als Phasen-Analogon. Erledigte Wellen falten sich selbst zu.</p>
+      <div class="sb"><div class="sb-list scroll-overlay" style="max-height:400px" data-render="E"></div></div>
+      <div class="verdict" data-verdict="E"></div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-tag"><span class="opt-letter">F</span><span class="opt-name">Schwellwert</span></div>
+      <p class="opt-line" style="min-height:2.6em">Unter 4 Kinder: Liste. Ab 4: Rollup. Die UI wechselt den Modus.</p>
+      <div class="sb"><div class="sb-list scroll-overlay" style="max-height:400px" data-render="F"></div></div>
+      <div class="verdict" data-verdict="F"></div>
+    </div>
+
+  </div>
+
+  <div class="why" style="border-left-color: var(--teal); max-width:82ch;">
+    <h3 style="color:var(--teal)">Warum D — und was „sichtbar" heißt</h3>
+    <p>
+      <b>Beschlossen:</b> Sichtbar ist ausschließlich <code>errored</code> ∪ <code>working</code>,
+      beides ungekappt. <b>Alles Fertige fällt in den Fuß</b> — ungelesen wie gesichtet.
+      Eine Regel, ein Schnitt, kein Zwischenzustand.
+    </p>
+    <p>
+      Bei <b>N = 1</b> gibt es keine Fuß-Zeile, solange der eine Agent läuft — nur eine eingerückte
+      Kind-Zeile. Ist er fertig, kippt alles in den Fuß und die Gruppe schrumpft auf eine Zeile.
+      Bei <b>N = 15</b> stehen oben Fehlschlag und Läufer, unten der Meter mit blauem Zähler.
+      <b>Es ist derselbe Code</b>: die Zeile rendert, wenn <code>hiddenCount &gt; 0</code>, und sie
+      rendert nicht, wenn nicht. Kein Schwellwert, kein Moduswechsel, keine Hysterese.
+    </p>
+    <p>
+      Damit ist der Ruhezustand keine Nebenwirkung, sondern die Definition: <b>läuft nichts und
+      ist nichts kaputt, besteht die Gruppe aus einer Zeile.</b> Der Rollup, den du wolltest —
+      erreicht ohne Sonderregel und ohne Aggregat über ein einzelnes Element.
+    </p>
+    <p>
+      <b>F</b> zeigt, warum ein expliziter Schwellwert die falsche Antwort ist: Ein Workflow spawnt
+      Agents nacheinander. Bei Agent 4 klappt die ganze Liste in ein Aggregat zusammen, während du
+      hinsiehst. Das lässt sich mit Hysterese dämpfen, aber nicht heilen — man baut Zustand, um
+      Zustand zu verstecken.
+    </p>
+    <p>
+      <b>E</b> ist die schönste Idee und die teuerste. Kohorten müssten aus
+      <code>createdAt</code>-Nähe geraten werden (±60 s beim selben Parent), weil
+      <code>AgentJobState</code> keinen Batch-Schlüssel hat. Eine Heuristik, die bei einem
+      langsam nachrückenden Workflow falsch gruppiert. <b>Merken, nicht jetzt bauen</b> —
+      wenn ihr je ein echtes <code>batchID</code> beim Spawn mitgebt, wird E über Nacht richtig.
+    </p>
+  </div>
+</section>
+
+
+<!-- ══════════ 5 · INSPECTOR (VERWORFEN) ══════════ -->
+<section id="inspector">
+  <div class="sec-head">
+    <span class="sec-num">05</span>
+    <h2 style="color:var(--paper-mute)"><s style="text-decoration-thickness:1px; text-underline-offset:3px">Der Inspector-Tab</s></h2>
+  </div>
+
+  <div class="why" style="border-left-color: var(--amber); max-width:80ch; margin-bottom:40px;">
+    <h3>Als eigener Tab verworfen — 08.07.2026</h3>
+    <p>
+      Slice 2 kommt <b>nicht</b> als Tab in der Tab-Leiste. Stattdessen bekommt die
+      <b>rechte Sidebar</b> („Project context") die Subagent-Ansicht — sie steht heute
+      weitgehend ungenutzt herum und ist die natürliche Fläche für Kontext neben dem
+      laufenden Chat. Details werden separat besprochen.
+    </p>
+    <p style="margin-bottom:0">
+      Was hier stehenbleibt, ist trotzdem gültig: <b>die Datenlage und die Spaltendichte.</b>
+      Egal wo die Ansicht später lebt — das ist, was <code>AgentJobState</code> hergibt,
+      und das ist, was fehlt.
+    </p>
+  </div>
+
+  <p class="sec-sub">
+    Die Dichte deiner Cloud-Workflow-Ansicht, gefüttert aus <code>AgentJobState</code>.
+    Gruppiert nach Rang statt nach Phase — Phasen kennt das Subagent-Modell nicht.
+  </p>
+
+  <div class="insp">
+    <div class="insp-tabs">
+      <span>Claude Chat</span>
+      <span>Codex-Subagents mit C…</span>
+      <span class="on">⌗ 15 Subagents</span>
+    </div>
+    <div class="insp-body">
+      <div class="insp-h">
+        <span class="n">Codex-Subagents mit Cloud-Workflows kombinieren</span>
+        <span class="m">15 Jobs · 3 aktiv · 3m52s</span>
+      </div>
+
+      <div class="grp">Wartet auf Eingabe · <b>1</b></div>
+      <div class="irow">
+        <span class="st wt">◐</span><span class="nm">verify:resume-state</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">4 turns</span>
+        <span class="rt">3m 24s</span><span class="df"></span>
+      </div>
+
+      <div class="grp">Aktiv · <b>2</b></div>
+      <div class="irow">
+        <span class="st rn">●</span><span class="nm">find:config-overrides</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">2 turns</span>
+        <span class="rt">3m 44s</span><span class="df"></span>
+      </div>
+      <div class="irow">
+        <span class="st rn">●</span><span class="nm">find:tests</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">3 turns</span>
+        <span class="rt">3m 33s</span><span class="df"></span>
+      </div>
+
+      <div class="grp">Ungelesen · <b>3</b></div>
+      <div class="irow">
+        <span class="st ok">✔</span><span class="nm">Code-Review mit maximaler Tiefe</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">6 turns</span>
+        <span class="rt">2m 23s</span><span class="df"><span class="a">+84</span> <span class="d">−12</span></span>
+      </div>
+      <div class="irow">
+        <span class="st ok">✔</span><span class="nm">Adversarische Gegenprüfung</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">4 turns</span>
+        <span class="rt">2m 08s</span><span class="df"><span class="a">+11</span></span>
+      </div>
+      <div class="irow">
+        <span class="st ok">✔</span><span class="nm">Baseline-Test. Lies zuerst…</span>
+        <span class="mdl">Sonnet 5 · med</span><span class="tn">2 turns</span>
+        <span class="rt">1m 04s</span><span class="df"></span>
+      </div>
+
+      <div class="grp">Erledigt · <b>8</b> · Fehlgeschlagen · <b>1</b></div>
+      <div class="irow done">
+        <span class="st dn">✔</span><span class="nm">find:commit-fix</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">6 turns</span>
+        <span class="rt">2m 23s</span><span class="df"><span class="a">+84</span> <span class="d">−12</span></span>
+      </div>
+      <div class="irow done">
+        <span class="st dn">✔</span><span class="nm">find:doc-consistency</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">3 turns</span>
+        <span class="rt">2m 26s</span><span class="df"></span>
+      </div>
+      <div class="irow done">
+        <span class="st fl">✖</span><span class="nm">Adversarische Gegenprüfung (2)</span>
+        <span class="mdl">Sonnet 5 · high</span><span class="tn">1 turn</span>
+        <span class="rt">0m 12s</span><span class="df"></span>
+      </div>
+      <div class="irow done" style="opacity:.5">
+        <span class="st dn">›</span><span class="nm">6 weitere erledigte Jobs</span>
+        <span class="mdl"></span><span class="tn"></span><span class="rt"></span><span class="df"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="no-tokens">
+    <b>Wichtig für den Implementierungs-Agenten:</b> Die Cloud-Workflow-Ansicht zeigt
+    <code>36.8k tok</code>. <code>AgentJobState</code> hat <em>keine</em> Token-Zahl —
+    verfügbar sind <code>state</code>, <code>model</code>, <code>effort</code>,
+    <code>turns</code>, <code>createdAt/updatedAt</code> und
+    <code>metrics.{lastTurnSeconds, diffChangedFiles, diffAdded, diffDeleted}</code>.
+    Laufzeit ist ableitbar. Die Token-Spalte fällt ersatzlos weg, sonst wird eine
+    leere Spalte gebaut.
+  </div>
+</section>
+
+
+<!-- ══════════ 6 · SCROLLBAR ══════════ -->
+<section>
+  <div class="sec-head"><span class="sec-num">06</span><h2>Die Scrollbar in der Sidebar</h2></div>
+  <p class="sec-sub">
+    Nicht das Terminal — die Chat-Liste links. Hier zum Vergleich dieselbe Liste
+    dreimal, scrollbar.
+  </p>
+
+  <div class="scrolls">
+    <div class="scroll-demo">
+      <div class="sb" style="width:100%">
+        <div class="sb-list scroll-legacy" style="max-height:230px;">
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Meilensteine &amp; Kunden…</span><span class="time">22m</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Voice-Kern für AKQ-132…</span><span class="time">10h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Voice-UI-Tickets für…</span><span class="time">2d</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Modellwechsel zu Fable 5</span><span class="time">50m</span></div>
+          <div class="row parent sel"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Instantly-Webhook per…</span><span class="time">20m</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Modell auf Opus 4.8…</span><span class="time">1h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">2d</span></div>
+        </div>
+      </div>
+      <p class="cap"><b>Heute</b>Legacy-Scroller, 15 pt, heller Track. Kein Autohide. Genau das, was du siehst.</p>
+    </div>
+
+    <div class="scroll-demo">
+      <div class="sb" style="width:100%">
+        <div class="sb-list scroll-overlay" style="max-height:230px;">
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Meilensteine &amp; Kunden…</span><span class="time">22m</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Voice-Kern für AKQ-132…</span><span class="time">10h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Voice-UI-Tickets für…</span><span class="time">2d</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Modellwechsel zu Fable 5</span><span class="time">50m</span></div>
+          <div class="row parent sel"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Instantly-Webhook per…</span><span class="time">20m</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Modell auf Opus 4.8…</span><span class="time">1h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">2d</span></div>
+        </div>
+      </div>
+      <p class="cap"><b>Overlay erzwungen</b>Schmal, transparent, Knob im Fensterton. Position bleibt ablesbar. Empfehlung.</p>
+    </div>
+
+    <div class="scroll-demo">
+      <div class="sb" style="width:100%">
+        <div class="sb-list scroll-none" style="max-height:230px;">
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Meilensteine &amp; Kunden…</span><span class="time">22m</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Voice-Kern für AKQ-132…</span><span class="time">10h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Voice-UI-Tickets für…</span><span class="time">2d</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Modellwechsel zu Fable 5</span><span class="time">50m</span></div>
+          <div class="row parent sel"><span class="glyph">✳</span><span class="title">Codex-Subagents m…</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Instantly-Webhook per…</span><span class="time">20m</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Modell auf Opus 4.8…</span><span class="time">1h</span></div>
+          <div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">2d</span></div>
+        </div>
+      </div>
+      <p class="cap"><b><code>.scrollIndicators(.never)</code></b>Eine Zeile. Aber bei 182 Chats weißt du nie, wo du bist. Zu billig.</p>
+    </div>
+  </div>
+
+  <div class="why">
+    <h3>Warum ich zuerst danebenlag</h3>
+    <p>
+      Ich habe <code>defaults read -g AppleShowScrollBars</code> gelesen → <code>Automatic</code>
+      und daraus geschlossen, SwiftUI-ScrollViews könnten gar nicht permanent breit sein.
+      Falsch: <em>Automatic</em> heißt <b>„Overlay bei Trackpad, Legacy bei angeschlossener Maus"</b>.
+      Du hast eine Maus. Also bekommt jede nackte <code>ScrollView { }</code> einen 15 pt
+      breiten <code>NSScroller</code> mit hellem Track — und in
+      <code>AgentChatsView.swift:910</code> steht genau das, ohne jeden Modifier.
+    </p>
+    <p>
+      Der saubere Weg ist <b>nicht</b> <code>.scrollIndicators(.never)</code>. Es ist, die
+      darunterliegende <code>NSScrollView</code> zu greifen und
+      <code>scrollerStyle = .overlay</code> + <code>autohidesScrollers = true</code> zu setzen —
+      ein winziges <code>NSViewRepresentable</code> (0×0, findet
+      <code>enclosingScrollView</code>) als Modifier <code>.overlayScrollers()</code>, plus ein
+      Observer auf <code>NSPreferredScrollerStyleDidChangeNotification</code>, weil AppKit den
+      Stil beim Anstecken einer Maus zurücksetzt. Native API, kein visueller Hack, ~40 LOC —
+      und einmal gebaut, für <em>jede</em> ScrollView der App verfügbar.
+    </p>
+  </div>
+</section>
+
+
+<!-- ══════════ 7 · MATRIX ══════════ -->
+<section>
+  <div class="sec-head"><span class="sec-num">07</span><h2>Gegenüberstellung</h2></div>
+  <p class="sec-sub">
+    Gegen deine fünf Anforderungen, die Repo-Constraints — und die Skala. Die letzten drei
+    Zeilen entscheiden.
+  </p>
+
+  <div class="matrix-scroll">
+  <table>
+    <thead>
+      <tr><th>Anforderung</th><th>A</th><th>C</th><th>D + Inspector</th><th>E</th><th>F</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Standard: keine Dutzenden Kinder</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td></tr>
+      <tr><td>Standard zeigt primär Aktive</td><td class="y">ja</td><td class="p">nur Zähler</td><td class="y">ja</td><td class="y">ja</td><td class="p">ab N≥4 nein</td></tr>
+      <tr><td>Alles Fertige im Fuß</td><td class="n">nein</td><td class="y">ja</td><td class="y">ja</td><td class="p">pro Welle</td><td class="y">ja</td></tr>
+      <tr><td>Rest hinter „fertig“</td><td class="p">gleiche Liste</td><td class="y">Rollup</td><td class="y">Rollup</td><td class="y">Rollup</td><td class="y">Rollup</td></tr>
+      <tr><td>Fehlschlag bleibt sichtbar</td><td class="p">nur bei Recency</td><td class="p">bricht durch</td><td class="y">Rang 0</td><td class="y">Rang 0</td><td class="n">ab N≥4</td></tr>
+      <tr><td>Aktive nie unsichtbar</td><td class="y">ja</td><td class="n">Rollup verdeckt</td><td class="y">ja</td><td class="y">ja</td><td class="n">ab N≥4</td></tr>
+      <tr><td>Ungelesenes bleibt zählbar</td><td class="y">Dot</td><td class="y">Zähler</td><td class="y">blauer Zähler</td><td class="y">Zähler</td><td class="y">Zähler</td></tr>
+      <tr><td>Kein Limit nötig</td><td class="n">limit 10</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td><td class="n">Schwelle 4</td></tr>
+      <tr><td>D&amp;D / non-lazy respektiert</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td></tr>
+      <tr class="rec"><td><b>Trägt bei N = 1</b></td><td class="y">ja</td><td class="n">Meter über 1 Element</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td></tr>
+      <tr class="rec"><td><b>Trägt bei N = 36</b></td><td class="n">10 Rows + Wasserfall</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td><td class="y">ja</td></tr>
+      <tr class="rec"><td><b>Springt beim Spawnen</b></td><td class="y">nein</td><td class="y">nein</td><td class="y">nein</td><td class="p">neue Welle</td><td class="n">Moduswechsel</td></tr>
+      <tr><td>Braucht Heuristik</td><td class="y">nein</td><td class="y">nein</td><td class="y">nein</td><td class="n">Spawn-Kohorte</td><td class="y">nein</td></tr>
+      <tr><td>Aufwand</td><td class="p">~120</td><td class="p">~90 + 250</td><td class="p">~140 + 250</td><td class="p">~260 + 250</td><td class="p">~170 + 250</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-top:18px; font-size:13px; color:var(--paper-mute); max-width:74ch;">
+    <b style="color:var(--paper)">D ist A und C zugleich</b>, ohne dass irgendwo entschieden werden
+    muss, welches von beiden gerade gilt. Die Bedingung <code>hiddenCount &gt; 0</code> entscheidet
+    es von selbst.
+    <br><br>
+    <b style="color:var(--paper)">Es gibt kein Zeilenlimit mehr.</b> <code>errored</code> und
+    <code>working</code> sind ungekappt (12 laufende Agents = 12 Zeilen — die Zusage schlägt
+    jede Zahl), und alles Fertige ist ohnehin unten. Ein Limit wäre eine Antwort auf ein
+    Problem, das die Regel nicht mehr hat.
+  </p>
+</section>
+
+
+<!-- ══════════ 8 · OFFEN ══════════ -->
+<section>
+  <div class="sec-head"><span class="sec-num">08</span><h2>Bevor jemand Code schreibt</h2></div>
+  <p class="sec-sub">Punkte, bei denen ich nicht raten will.</p>
+
+  <div class="asks">
+    <div class="ask">
+      <h4>Sammeln sich Fehlschläge an?</h4>
+      <p><code>errored</code> hat kein Cap und fällt nie in den Fuß. Nach zwanzig fehlgeschlagenen Jobs stehen zwanzig rote Ringe oben. Braucht es ein „Fehlgeschlagene archivieren" im Kontextmenü — oder sollen gesichtete Fehlschläge doch nach unten?</p>
+    </div>
+    <div class="ask">
+      <h4>Fuß-Klick: alles oder nur Ungelesene?</h4>
+      <p>Ein Klick auf <code>„11 fertig · 3 ungelesen"</code> klappt heute alle elf auf, Ungelesene zuerst. Alternative: der blaue Teil ist ein eigener Klickbereich, der nur die drei zeigt. Zwei Trefferflächen in einer Zeile — mehr Präzision, mehr Erklärbedarf.</p>
+    </div>
+    <div class="ask">
+      <h4>Gibt es je ein <code>batchID</code>?</h4>
+      <p>Wenn der Spawner eines mitgeben könnte, wird Option E von einer Heuristik zu einer Tatsache — und die Sidebar spiegelt die Phasen deiner Cloud-Ansicht exakt. Lohnt sich die Frage an den Supervisor?</p>
+    </div>
+    <div class="ask">
+      <h4>Overlay-Scroller: nur Sidebar oder App-weit?</h4>
+      <p>Der <code>.overlayScrollers()</code>-Modifier kostet einmalig ~40 LOC und wirkt überall. Nur an <code>AgentChatsView:910</code> hängen — oder gleich an Transcript und Timeline?</p>
+    </div>
+    <div class="ask">
+      <h4>Such-Lücke mitnehmen?</h4>
+      <p>Aufgefallen beim Lesen: <code>visibleProjects(query:)</code> matcht Subagent-Titel nicht, weil Kinder aus <code>sessionsByProject</code> gefiltert sind. Ein Subagent ist über die Suche unauffindbar. Slice 1 — oder separat?</p>
+    </div>
+  </div>
+</section>
+
+
+<footer>
+  Betroffene Dateien für Slice 1:
+  <code>Services/AgentChats/AgentSidebarModelBuilder.swift</code> (neu:
+  <code>subagentChildSlice</code>, <code>subagentSortRank</code>, pur) ·
+  <code>Views/AgentChatsSidebarViews.swift</code> (body 86–93, Chip 692ff,
+  <code>@State fullyExpandedParentIDs</code>) ·
+  <code>Views/AgentChatsView.swift</code> (~1023, Sets durchreichen) ·
+  <code>Tests/WhisperM8Tests/AgentSidebarTests.swift</code> (8 Fälle, alle pur).
+  <br><br>
+  Kein <code>make dev</code> aus der Session — Relaunch machst du.
+</footer>
+
+</div>
+
+<script>
+(function () {
+  // Chip → Gruppe auf/zu
+  document.querySelectorAll('[data-toggle]').forEach(chip => {
+    chip.addEventListener('click', e => {
+      e.stopPropagation();
+      const key = chip.dataset.toggle;
+      const grp = document.querySelector(`[data-group="${key}"]`);
+      const open = !grp.classList.contains('hidden');
+      grp.classList.toggle('hidden', open);
+      chip.querySelector('.chev').textContent = open ? '▸' : '▾';
+    });
+  });
+
+  // Reveal-Zeile → Rest entfalten
+  document.querySelectorAll('[data-reveal]').forEach(rev => {
+    rev.addEventListener('click', () => {
+      const more = document.querySelector(`[data-more="${rev.dataset.reveal}"]`);
+      const hidden = more.classList.contains('hidden');
+      more.classList.toggle('hidden', !hidden);
+      rev.innerHTML = hidden
+        ? '<span>▴</span><span>Weniger anzeigen</span>'
+        : '<span>▾</span><span>5 weitere anzeigen</span>';
+    });
+  });
+
+  // „Alle anzeigen" / Rollup → zum Inspector
+  document.querySelectorAll('[data-open-insp]').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('inspector').scrollIntoView({ block: 'start' });
+    });
+  });
+
+  /* ══════════════════════════════════════════════════════════════
+     SKALEN-TEST — dieselben N Kinder, vier Darstellungen.
+     Der Datensatz ist deterministisch: derselbe N ergibt immer
+     dieselben Stati, damit die Spalten vergleichbar bleiben.
+     ══════════════════════════════════════════════════════════════ */
+
+  const NAMES = [
+    'find:commit-fix', 'find:config-overrides', 'find:resume-state', 'find:process-io',
+    'find:tests', 'find:doc-consistency', 'verify:commit-fix', 'verify:process-io',
+    'verify:tests', 'Code-Review mit ma…', 'Adversarische Gege…', 'Baseline-Test. Lies…',
+    'Merke dir das Codew…', 'verify:doc-consist…', 'synth:report',
+  ];
+  const childName = i => NAMES[i % NAMES.length] + (i >= NAMES.length ? ' (' + (Math.floor(i / NAMES.length) + 1) + ')' : '');
+
+  // Realistische Verteilung: kleine Batches sind fast ganz aktiv,
+  // große haben einen langen gesichteten Schwanz.
+  // Ränge: 0 errored · 1 working · 2 idle+unread · 3 idle gelesen (Fuß)
+  function makeChildren(n) {
+    const fail   = n >= 6 ? 1 : 0;
+    const run    = n <= 2 ? n : Math.max(1, Math.round(n * 0.22));
+    const unread = n <= 3 ? 0 : Math.max(1, Math.round(n * 0.20));
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      let rank, dot;
+      if (i < fail)                      { rank = 0; dot = 'err';    }
+      else if (i < fail + run)           { rank = 1; dot = 'run';    }
+      else if (i < fail + run + unread)  { rank = 2; dot = 'unread'; }
+      else                               { rank = 3; dot = 'done';   }
+      out.push({ i, rank, dot, title: childName(i) });
+    }
+    return out;
+  }
+
+  // BESCHLOSSEN: Oben steht nur, was noch läuft oder kaputt ist.
+  // Rang 0 (errored) + Rang 1 (working) sichtbar, ungekappt.
+  // Alles Fertige — ungelesen (Rang 2) wie gesichtet (Rang 3) — in den Fuß,
+  // ungelesen zuerst. Kein Cap, nirgends.
+  function split(kids) {
+    const visible = kids.filter(c => c.rank <= 1);
+    const unread  = kids.filter(c => c.rank === 2);
+    const seen    = kids.filter(c => c.rank === 3);
+    return { visible, hidden: unread.concat(seen), unread, seen };
+  }
+
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const childRow = c =>
+    `<div class="row child"><span class="glyph">◎</span><span class="title">${esc(c.title)}</span>` +
+    `<span class="badge-sub">SUB</span><span class="dot ${c.dot}"></span></div>`;
+
+  function meter(kids, cap = 15) {
+    const shown = kids.slice(0, cap);
+    return '<span class="meter">' + shown.map(c =>
+      `<i class="${c.dot === 'run' ? 'on' : c.dot === 'unread' ? 'u' : c.dot === 'err' ? 'e' : ''}"></i>`
+    ).join('') + '</span>';
+  }
+
+  function parentRow(kids, expanded = true) {
+    const running = kids.filter(c => c.rank === 1).length;
+    return `<div class="row parent sel"><span class="glyph">✳</span>` +
+      `<span class="title">Codex-Subagents m…</span>` +
+      `<span class="chip"><span class="chev">${expanded ? '▾' : '▸'}</span>` +
+      (running ? '<span class="mini-dot"></span>' + running + '<span class="sep">/</span>' : '') +
+      `<span class="${running ? 'total' : ''}">${kids.length}</span></span></div>`;
+  }
+
+  const shell = inner =>
+    `<div class="sb-sec">whisperm8</div>` +
+    `<div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="dot done"></span></div>` +
+    inner +
+    `<div class="row parent"><span class="glyph">✳</span><span class="title">Control+Tab-Umschal…</span><span class="time">8h</span></div>` +
+    `<div class="row parent"><span class="glyph">✳</span><span class="title">Claude Chat</span><span class="time">10h</span></div>`;
+
+  const rollupRow = (kids, hidden, label) =>
+    `<div class="rollup" data-jump>${meter(kids)}<span class="lbl">${label}</span><span class="go">›</span></div>`;
+
+  // ── Option C: Aggregat immer, nur errored bricht durch
+  function renderC(kids) {
+    const running = kids.filter(c => c.rank === 1).length;
+    const unread  = kids.filter(c => c.rank === 2).length;
+    const breakthrough = kids.filter(c => c.rank === 0);
+    const lbl = `<b>${kids.length} Subagent${kids.length === 1 ? '' : 's'}</b>` +
+      (running ? ` · ${running} aktiv` : '') + (unread ? ` · ${unread} neu` : '');
+    return shell(parentRow(kids, false) + breakthrough.map(childRow).join('') + rollupRow(kids, 0, lbl));
+  }
+
+  // ── Option D: sichtbar = errored ∪ working. Alles Fertige in den Fuß.
+  //    Der Fuß rendert nur, wenn er etwas trägt.
+  function renderD(kids) {
+    const { visible, hidden, unread } = split(kids);
+    let inner = parentRow(kids) + visible.map(childRow).join('');
+    if (hidden.length) {
+      const lbl = `<b>${hidden.length} fertig</b>` +
+        (unread.length ? ` · <span style="color:var(--blue)">${unread.length} ungelesen</span>` : '');
+      inner += rollupRow(hidden, hidden.length, lbl);
+    }
+    return shell(inner);
+  }
+
+  // ── Option E: Spawn-Wellen. Erledigte Wellen falten sich zu.
+  function renderE(kids) {
+    if (kids.length <= 2) return shell(parentRow(kids) + kids.map(childRow).join(''));
+    const PHASES = ['Find', 'Verify', 'Synth'];
+    const size = Math.ceil(kids.length / Math.min(3, Math.ceil(kids.length / 5)));
+    let inner = parentRow(kids), w = 0;
+    for (let i = 0; i < kids.length; i += size, w++) {
+      const wave = kids.slice(i, i + size);
+      const live = wave.filter(c => c.rank <= 2).length;
+      const done = wave.length - live;
+      const open = live > 0;
+      inner += `<div class="wave-head"><span class="chev">${open ? '▾' : '▸'}</span>` +
+        `<span class="wn">${PHASES[w] || 'Welle ' + (w + 1)}</span>` +
+        meter(wave) + `<span class="wc">${done}/${wave.length}</span></div>`;
+      if (open) inner += wave.map(childRow).join('');
+    }
+    return shell(inner);
+  }
+
+  // ── Option F: harter Moduswechsel bei 4
+  function renderF(kids) {
+    if (kids.length < 4) return shell(parentRow(kids) + kids.map(childRow).join(''));
+    return renderC(kids);
+  }
+
+  const RENDER = { C: renderC, D: renderD, E: renderE, F: renderF };
+
+  const VERDICTS = {
+    C: {
+      1:  ['bad',  '<b>Ein Meter über ein Element.</b> Ein Balken, ein Agent, ein Klick zu viel. Genau das, was du meintest.'],
+      3:  ['bad',  'Drei Namen wären lesbar gewesen — stattdessen eine Zahl und ein Sprung.'],
+      6:  ['bad',  'Der laufende Agent verschwindet hinter dem Zähler. Verstößt gegen „Aktive nie unsichtbar".'],
+      15: ['bad',  'Konstante Höhe — aber jedes Ergebnis kostet zwei Klicks statt einem. Der blaue Dot wird bedeutungslos.'],
+      36: ['good', 'Skaliert perfekt. Der Preis wird bei jedem kleineren N fällig.'],
+    },
+    D: {
+      1:  ['good', '<b>Ein laufender Agent, eine Zeile.</b> Kein Aggregat über ein Element. Ist er fertig, bleibt nur der Fuß.'],
+      3:  ['good', 'Drei Läufer, drei Namen. Kein UI, das sich wichtig macht.'],
+      6:  ['good', 'Ein Fehlschlag (roter Ring), ein Läufer. Die vier Fertigen — auch das ungelesene — sind unten.'],
+      15: ['good', '<b>Nur was arbeitet oder kaputt ist.</b> Fehlschlag + 3 Läufer oben. Elf Fertige im Fuß, davon 3 ungelesen (blau).'],
+      36: ['good', 'Fehlschlag + 8 Läufer. 27 Fertige verdichten sich im Meter, der blaue Zähler zeigt, was auf dich wartet.'],
+    },
+    E: {
+      1:  ['good', 'Unter zwei Kindern keine Wellen-Köpfe. Degradiert sauber auf eine Zeile.'],
+      3:  ['bad',  'Ein Wellen-Kopf über drei Agents ist Zeremonie. Die Kohortenerkennung feuert zu früh.'],
+      6:  ['good', 'Hier beginnt es zu tragen: „Find 3/6" liest sich wie deine Cloud-Ansicht.'],
+      15: ['good', '<b>Das Phasen-Analogon.</b> Fertige Wellen falten sich zu, die laufende bleibt offen.'],
+      36: ['good', 'Die stärkste Struktur — <em>wenn</em> die Kohorten stimmen. Sie werden geraten.'],
+    },
+    F: {
+      1:  ['good', 'Eine Zeile. Unter dem Schwellwert, alles gut.'],
+      3:  ['good', 'Noch Liste. Aber der nächste Agent kippt die ganze Darstellung.'],
+      6:  ['bad',  '<b>Gekippt.</b> Zwischen N=3 und N=4 wechselt die UI die Form — während ein Workflow spawnt, unter deinem Cursor.'],
+      15: ['bad',  'Identisch zu C. Der Schwellwert hat nur einen Sprung gekauft, keinen Nutzen.'],
+      36: ['bad',  'Identisch zu C. Zwei Codepfade für ein Ergebnis, das eine Bedingung auch hinbekommt.'],
+    },
+  };
+
+  function paint(n) {
+    const kids = makeChildren(n);
+    Object.entries(RENDER).forEach(([key, fn]) => {
+      const host = document.querySelector(`[data-render="${key}"]`);
+      if (host) host.innerHTML = fn(kids);
+      const v = document.querySelector(`[data-verdict="${key}"]`);
+      if (v) {
+        const [tone, text] = VERDICTS[key][n];
+        v.className = 'verdict ' + tone;
+        v.innerHTML = text;
+      }
+    });
+    document.querySelectorAll('[data-jump]').forEach(el =>
+      el.addEventListener('click', () =>
+        document.getElementById('inspector').scrollIntoView({ block: 'start' })));
+  }
+
+  document.querySelectorAll('.scale-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.scale-btn').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      paint(Number(btn.dataset.n));
+    });
+  });
+
+  paint(6);
+})();
+</script>
+
+</body>
+</html>

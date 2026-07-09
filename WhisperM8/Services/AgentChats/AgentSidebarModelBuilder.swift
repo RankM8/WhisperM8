@@ -79,6 +79,28 @@ struct SidebarScopeFilter {
     }
 }
 
+/// Ergebnis von `subagentChildSplit` — die sichtbaren „aktiven" Kinder, der
+/// verborgene fertige Rest (für den Fuß) und die Zähler, die der Parent-Chip
+/// für den Fortschritts-Bruch braucht.
+struct SubagentChildSplit: Equatable {
+    /// Immer sichtbar unter der Parent-Row: fehlgeschlagen (Rang 0) + laufend
+    /// (Rang 1), plus ein evtl. selektiertes Kind (Reveal).
+    var visible: [AgentChatSession]
+    /// Der Fuß-Inhalt: erfolgreich fertige Kinder, ungelesene zuerst.
+    var hidden: [AgentChatSession]
+    /// Wie viele der verborgenen Kinder ein ungelesenes Ergebnis tragen —
+    /// speist den blauen Punkt am Fuß (nur „da ist was", keine Zahl).
+    var hiddenUnreadCount: Int
+    /// Fehlgeschlagene Kinder — roter Punkt am Chip.
+    var erroredCount: Int
+    /// Laufende Kinder — grüner Punkt am Chip.
+    var workingCount: Int
+    /// Gesamtzahl der Kinder — Nenner des Chip-Bruchs.
+    var totalCount: Int
+    /// Zähler des Chip-Bruchs: terminale (= nicht laufende) Kinder.
+    var terminalCount: Int { totalCount - workingCount }
+}
+
 /// Pure Funktionen für das Sidebar-Modell (P4): Gruppierung + Suche in EINEM
 /// Durchlauf statt pro Projekt neu zu filtern/sortieren.
 /// Tests in AgentSidebarTests.swift.
@@ -145,6 +167,81 @@ struct AgentSidebarModelBuilder {
             }
         }
         return (byParent.mapValues { AgentSessionStore.sortedSessions($0) }, orphans)
+    }
+
+    /// Variante D (beschlossen 2026-07-09): Von den Subagent-Kindern eines
+    /// Parents bleiben nur die „aktiven" sichtbar — fehlgeschlagene
+    /// (`errored`, Rang 0) und laufende (`working`, Rang 1). Alles erfolgreich
+    /// Fertige fällt in den FUSS (`hidden`), ungelesene zuerst. Ein selektiertes
+    /// Kind bleibt sichtbar, auch wenn es gerade fertig wurde (Reveal — sonst
+    /// spränge die Auswahl in den eingeklappten Fuß).
+    ///
+    /// Der Aufrufer liefert reine ID-Mengen — kein Store, kein `AgentJobState`
+    /// —, damit die Funktion pur + testbar bleibt:
+    ///   • `erroredIDs` = Jobs mit `state == .failed`
+    ///   • `workingIDs` = aktive Jobs (spawning/running) ∪ übernommene mit
+    ///     lebender PTY
+    ///   • `unreadIDs`  = fertige Jobs mit noch ungelesenem Ergebnis
+    /// Was in keiner Menge steht, gilt als „fertig, gesichtet".
+    ///
+    /// Der Chip-Bruch am Parent ist `terminalCount / totalCount` mit
+    /// `terminalCount = total − working` (beschlossen: terminal zählt, ein
+    /// Fehlschlag ist Fortschritt — das Scheitern trägt der rote Punkt).
+    /// Tests in AgentSidebarTests.swift.
+    static func subagentChildSplit(
+        children: [AgentChatSession],
+        erroredIDs: Set<UUID>,
+        workingIDs: Set<UUID>,
+        unreadIDs: Set<UUID>,
+        selectedID: UUID?
+    ) -> SubagentChildSplit {
+        var errored: [AgentChatSession] = []
+        var working: [AgentChatSession] = []
+        var revealed: [AgentChatSession] = []
+        var hiddenUnread: [AgentChatSession] = []
+        var hiddenSeen: [AgentChatSession] = []
+
+        for child in children {
+            if erroredIDs.contains(child.id) {
+                errored.append(child)
+            } else if workingIDs.contains(child.id) {
+                working.append(child)
+            } else if child.id == selectedID {
+                revealed.append(child)          // fertig, aber selektiert → sichtbar
+            } else if unreadIDs.contains(child.id) {
+                hiddenUnread.append(child)
+            } else {
+                hiddenSeen.append(child)
+            }
+        }
+
+        // Sichtbar: errored (Rang 0) vor working (Rang 1) vor Reveal, je Recency.
+        let visible = sortByRecency(errored)
+            + sortByRecency(working)
+            + sortByRecency(revealed)
+        // Fuß: ungelesene zuerst, dann gesichtete — je Recency.
+        let hidden = sortByRecency(hiddenUnread) + sortByRecency(hiddenSeen)
+
+        return SubagentChildSplit(
+            visible: visible,
+            hidden: hidden,
+            hiddenUnreadCount: hiddenUnread.count,
+            erroredCount: errored.count,
+            workingCount: working.count,
+            totalCount: children.count
+        )
+    }
+
+    /// Stabiler Recency-Sort (neueste zuerst), Tiebreak über die ID-UUID —
+    /// sonst flackert die Reihenfolge, wenn ein Workflow mehrere Kinder in
+    /// derselben Sekunde spawnt.
+    private static func sortByRecency(_ sessions: [AgentChatSession]) -> [AgentChatSession] {
+        sessions.sorted {
+            if $0.lastActivityAt != $1.lastActivityAt {
+                return $0.lastActivityAt > $1.lastActivityAt
+            }
+            return $0.id.uuidString < $1.id.uuidString
+        }
     }
 
     /// Flache, projektübergreifende Chat-Liste für das `.flat`-Layout —
