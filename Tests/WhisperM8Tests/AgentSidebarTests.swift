@@ -95,7 +95,6 @@ final class SessionListButtonEquatableTests: XCTestCase {
         indentAsSubagent: Bool = false,
         isUnreadSubagentResult: Bool = false,
         runningChildCount: Int = 0,
-        hiddenChildCount: Int = 0,
         store: AgentSessionRuntimeStatusStore? = nil
     ) -> SessionListButton {
         SessionListButton(
@@ -110,7 +109,6 @@ final class SessionListButtonEquatableTests: XCTestCase {
             indentAsSubagent: indentAsSubagent,
             isUnreadSubagentResult: isUnreadSubagentResult,
             runningChildCount: runningChildCount,
-            hiddenChildCount: hiddenChildCount,
             onSelect: {},
             onClose: {}
         )
@@ -142,7 +140,6 @@ final class SessionListButtonEquatableTests: XCTestCase {
         XCTAssertNotEqual(base, makeButton(session: session, indentAsSubagent: true))
         XCTAssertNotEqual(base, makeButton(session: session, isUnreadSubagentResult: true))
         XCTAssertNotEqual(base, makeButton(session: session, runningChildCount: 2))
-        XCTAssertNotEqual(base, makeButton(session: session, hiddenChildCount: 1))
     }
 }
 

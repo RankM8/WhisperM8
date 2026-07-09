@@ -40,9 +40,10 @@ struct ProjectChatGroup: View {
     var erroredSubagentSessionIDs: Set<UUID> = []
     /// Subagent-Sessions mit ungelesenem Ergebnis — blauer Dot.
     var unreadSubagentSessionIDs: Set<UUID> = []
-    /// Parents, deren FERTIGE (verborgene) Kinder zusätzlich ausgeklappt sind
-    /// (Default: nur die aktiven sichtbar, Fertige im Fuß; ephemer im
-    /// AgentWindowStore).
+    /// Parents mit AUSGEKLAPPTEN Subagent-Kindern (Stufe 1, Chip-Chevron;
+    /// Default zugeklappt = KEINE Kind-Zeilen, nur der Chip mit Lauf-Puls;
+    /// ephemer im AgentWindowStore). Die zweite Stufe (Fertige hinter der
+    /// Welle) lebt lokal in `finishedExpandedParentIDs`.
     var expandedSubagentParentIDs: Set<UUID> = []
     var onToggleSubagentChildren: (UUID) -> Void = { _ in }
     var onRenameProjectRequest: (AgentProject) -> Void
@@ -60,6 +61,10 @@ struct ProjectChatGroup: View {
     /// Sidebar-Drop-Indikator: Session-Row, über der die Einfügelinie steht
     /// (= „landet vor dieser Zeile"), bzw. der Append-Footer am Projektende.
     @State private var dropTargetedSessionID: UUID?
+    /// Stufe 2 der Subagent-Expansion: Parents, deren FERTIGE Kinder hinter
+    /// der Welle-Zeile ausgeklappt sind. Bewusst lokaler View-State (resettet
+    /// mit der View-Identity) — die Stufe-1-Expansion lebt im AgentWindowStore.
+    @State private var finishedExpandedParentIDs: Set<UUID> = []
     @State private var isFooterDropTargeted = false
 
     /// Einmal pro View-Init gelesen statt pro Render — das Flag ist ein
@@ -93,27 +98,33 @@ struct ProjectChatGroup: View {
                             selectedID: selectedSessionID
                         )
                         sessionRow(session, split: split)
-                        // Variante D: die AKTIVEN (fehlgeschlagen + laufend)
-                        // sind immer sichtbar; alles Fertige liegt hinter dem
-                        // Chip-Chevron. Die Welle-Zeile rendert NUR im
-                        // ausgeklappten Zustand (als Einklapp-Griff über den
-                        // Fertigen) — eingeklappt trägt der Chip bereits
-                        // Segmente + Bruch + Pfeil, eine zweite Zeile mit
-                        // derselben Aussage wäre Dopplung. Ein selektiertes
-                        // Kind bleibt sichtbar (Reveal, im Split).
+                        // Variante D (revidiert 2026-07-09): das Chip-Chevron
+                        // klappt ALLE Kinder zu — auch laufende. Zugeklappt
+                        // bleibt nur der Chip; dass noch etwas arbeitet, zeigt
+                        // dort der pulsierende Punkt. Ausgeklappt: aktive
+                        // Kinder (fehlgeschlagen + laufend) direkt, alles
+                        // Fertige hinter der Welle-Zeile (zweite Stufe, lokaler
+                        // State). Ein selektiertes Kind erzwingt die Expansion
+                        // (Reveal, z.B. nach Notification-Klick).
                         if let split {
-                            ForEach(split.visible) { child in
-                                subagentChildRow(child)
-                            }
-                            if !split.hidden.isEmpty,
-                               expandedSubagentParentIDs.contains(session.id) {
-                                subagentFooterRow(
-                                    parentID: session.id,
-                                    split: split,
-                                    isExpanded: true
-                                )
-                                ForEach(split.hidden) { child in
+                            let isTopExpanded = expandedSubagentParentIDs.contains(session.id)
+                                || children.contains { $0.id == selectedSessionID }
+                            if isTopExpanded {
+                                ForEach(split.visible) { child in
                                     subagentChildRow(child)
+                                }
+                                if !split.hidden.isEmpty {
+                                    let finishedOpen = finishedExpandedParentIDs.contains(session.id)
+                                    subagentFooterRow(
+                                        parentID: session.id,
+                                        split: split,
+                                        isExpanded: finishedOpen
+                                    )
+                                    if finishedOpen {
+                                        ForEach(split.hidden) { child in
+                                            subagentChildRow(child)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -202,9 +213,10 @@ struct ProjectChatGroup: View {
     }
 
     /// Fuß-Zeile („Welle") unter den aktiven Subagent-Kindern: zählt die
-    /// verborgenen FERTIGEN Kinder und blendet sie auf Klick ein. Bewusst die
-    /// LEISESTE Zeile der Gruppe — kleiner und flacher als eine Kind-Zeile,
-    /// ohne Rahmen/Fläche. Trägt dieselbe grüne Segment-Sprache wie der Chip
+    /// verborgenen FERTIGEN Kinder und blendet sie auf Klick ein (Stufe 2,
+    /// lokaler State — Stufe 1 ist das Chip-Chevron). Bewusst die LEISESTE
+    /// Zeile der Gruppe — kleiner und flacher als eine Kind-Zeile, ohne
+    /// Rahmen/Fläche. Trägt dieselbe grüne Segment-Sprache wie der Chip
     /// (Fertig-Anteil der Gruppe), nur in groß. Ungelesen sitzt als blauer
     /// Punkt an der fertigen Kind-Zeile (beim Aufklappen), nicht hier.
     private func subagentFooterRow(
@@ -213,7 +225,11 @@ struct ProjectChatGroup: View {
         isExpanded: Bool
     ) -> some View {
         Button {
-            onToggleSubagentChildren(parentID)
+            if finishedExpandedParentIDs.contains(parentID) {
+                finishedExpandedParentIDs.remove(parentID)
+            } else {
+                finishedExpandedParentIDs.insert(parentID)
+            }
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
@@ -292,7 +308,6 @@ struct ProjectChatGroup: View {
             closeHelp: session.isTerminal ? "Terminal schließen" : "Archivieren",
             isUnreadSubagentResult: unreadSubagentSessionIDs.contains(session.id),
             runningChildCount: split?.workingCount ?? 0,
-            hiddenChildCount: split?.hidden.count ?? 0,
             childCount: split?.totalCount ?? 0,
             isChildrenExpanded: expandedSubagentParentIDs.contains(session.id),
             onSelect: { onSelectSession(session.id) },
@@ -591,6 +606,25 @@ struct SubagentSegmentMeter: View {
     }
 }
 
+/// Kleiner pulsierender Lauf-Punkt für den Fortschritts-Chip — sagt im
+/// zugeklappten Zustand „hier arbeitet noch etwas". Gleiche Grün-Semantik
+/// wie der working-Dot der Kind-Zeilen (AgentTheme.statusWorking).
+private struct ChipPulseDot: View {
+    @State private var dimmed = false
+
+    var body: some View {
+        Circle()
+            .fill(AgentTheme.statusWorking)
+            .frame(width: 4, height: 4)
+            .opacity(dimmed ? 0.35 : 1)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                    dimmed = true
+                }
+            }
+    }
+}
+
 struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
@@ -630,16 +664,12 @@ struct SessionListButton: View {
     /// geöffnet): blauer Dot statt des grauen Idle-Punkts.
     var isUnreadSubagentResult: Bool = false
     /// Anzahl aktuell LAUFENDER Subagent-Kinder dieser Session — Nenner-Abzug
-    /// für den Fortschritts-Bruch (`terminal = gesamt − laufend`).
+    /// für den Fortschritts-Bruch (`terminal = gesamt − laufend`) + Lauf-Puls.
     var runningChildCount: Int = 0
-    /// Anzahl VERBORGENER (fertiger) Subagent-Kinder — steuert, ob das
-    /// Chevron erscheint (nur wenn es fertige zum Einblenden gibt).
-    var hiddenChildCount: Int = 0
     /// Gesamtzahl der Subagent-Kinder — Nenner des Fortschritts-Bruchs; der
     /// Chip erscheint, sobald es welche gibt.
     var childCount: Int = 0
-    /// Sind die FERTIGEN (verborgenen) Kinder ausgeklappt? Steuert das Chevron
-    /// im Chip.
+    /// Sind die Kinder ausgeklappt (Stufe 1)? Steuert das Chevron im Chip.
     var isChildrenExpanded: Bool = false
     var onSelect: () -> Void
     var onClose: () -> Void
@@ -792,19 +822,19 @@ struct SessionListButton: View {
         }
     }
 
-    /// Fortschritts-Chip an der Parent-Row (beschlossen 2026-07-09): grüne
-    /// Segmentleiste (Fertig-Anteil) + Bruch `terminal / gesamt` + Pfeilchen
-    /// als Klick-Affordanz. KEINE Status-Punkte — Grün heißt hier „fertig"
-    /// (im Balken), Fehlschläge sieht man an den stets sichtbaren Kind-Zeilen.
-    /// Das Chevron erscheint nur, wenn es verborgene fertige Kinder gibt; ein
-    /// Tap blendet sie ein/aus (gleiche Aktion wie die Welle).
+    /// Fortschritts-Chip an der Parent-Row (revidiert 2026-07-09): Pfeilchen
+    /// (klappt ALLE Kinder auf/zu) + Lauf-Puls (nur solange etwas arbeitet —
+    /// der eine Indikator, der im zugeklappten Zustand „läuft noch" sagt) +
+    /// grüne Segmentleiste (Fertig-Anteil) + Bruch `terminal / gesamt`.
+    /// Fehlschläge sieht man beim Aufklappen an den Kind-Zeilen.
     private var subagentChildrenChip: some View {
         // terminal = gesamt − laufend (ein Fehlschlag ist Fortschritt).
         let terminal = max(0, childCount - runningChildCount)
         return HStack(spacing: 3) {
-            if hiddenChildCount > 0 {
-                Image(systemName: isChildrenExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 6.5, weight: .bold))
+            Image(systemName: isChildrenExpanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 6.5, weight: .bold))
+            if runningChildCount > 0 {
+                ChipPulseDot()
             }
             SubagentSegmentMeter(
                 terminal: terminal,
@@ -827,9 +857,10 @@ struct SessionListButton: View {
         )
         .fixedSize()
         .contentShape(Rectangle())
-        .onTapGesture { if hiddenChildCount > 0 { onToggleChildren?() } }
+        .onTapGesture { onToggleChildren?() }
         .help("\(terminal) von \(childCount) Subagents fertig"
-            + (runningChildCount > 0 ? " · \(runningChildCount) laufen" : ""))
+            + (runningChildCount > 0 ? " · \(runningChildCount) laufen" : "")
+            + " — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")")
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
@@ -883,7 +914,6 @@ extension SessionListButton: Equatable {
             && lhs.indentAsSubagent == rhs.indentAsSubagent
             && lhs.isUnreadSubagentResult == rhs.isUnreadSubagentResult
             && lhs.runningChildCount == rhs.runningChildCount
-            && lhs.hiddenChildCount == rhs.hiddenChildCount
             && lhs.childCount == rhs.childCount
             && lhs.isChildrenExpanded == rhs.isChildrenExpanded
     }
