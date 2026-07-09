@@ -216,8 +216,9 @@ Detailreport, cached bis zu fünf Detailreports als kleines LRU, sucht ab zwei
 Zeichen im Volltext weiter und löscht Reports über den Store.
 
 `CodexConnectionModel` gehört zur Account-UI und kapselt die frische
-Status-/Versionsprobe; es warnt bei ausgewähltem GPT-5.5 und einer Codex-
-Version, deren Text `0.120.` enthält.
+Status-/Versionsprobe. (Die frühere GPT-5.5/`0.120.`-Warnheuristik ist
+gestrichen — Modell-Warnungen kommen jetzt katalogbasiert direkt aus der
+View: „not in catalog" bzw. „not listed for <model>".)
 
 ## Settings-UI
 
@@ -228,6 +229,13 @@ und dort das zugehörige Template auswählen kann.
 `AIOutputAccountTab` liest und schreibt AppStorage-Werte für globales Modell,
 Reasoning, Service-Tier, Visual-Input-Modus, Default-Mode und
 Fallback-Verhalten; es nutzt `CodexConnectionModel` für Status und Version.
+Model- und Thinking-Picker speisen sich aus `CodexModelCatalog`
+(Services/Shared): der Service liest die von der Codex CLI gepflegte
+`~/.codex/models_cache.json` (Stat-gecacht, read-only), merged sie mit einem
+eingebetteten Fallback und liefert die Level pro Modell (bis `ultra`). Der
+Model-Picker bietet zusätzlich „Auto — latest": persistiert wird der Sentinel
+`auto`, aufgelöst wird er an den Egress-Grenzen (`CodexInvocation.arguments`,
+`AppPreferences.resolvedCodexDefaultModelRaw()`).
 
 `AIOutputModesTab` bearbeitet `OutputMode`-Felder. Für Raw-Modes blendet es
 Codex- und Template-Abschnitte aus; für Codex-Modes zeigt es Overrides,
@@ -247,7 +255,7 @@ Preview, Copy und Fallback-Anzeige. Es erfasst keinen Laufzeitkontext.
 - `WhisperM8/Models/PostProcessingTemplate.swift` beschreibt Template-Metadaten, Placeholder-Rendering und alle Built-in-Instruktionen.
 - `WhisperM8/Models/TranscriptRunReport.swift` beschreibt den vollständigen lokalen Run-Report inklusive Codex-, Kontext-, Output- und Delivery-Snapshot.
 - `WhisperM8/Models/TranscriptRunReportSummary.swift` beschreibt den kompakten Listen- und Indexeintrag eines Reports.
-- `WhisperM8/Models/CodexPostProcessingModel.swift` beschreibt die auswählbaren Codex-Modelle und den Default `gpt-5.5`.
+- `WhisperM8/Models/CodexPostProcessingModel.swift` liefert nur noch den Fallback-Default (`gpt-5.5`); die auswählbaren Modelle kommen dynamisch aus `WhisperM8/Services/Shared/CodexModelCatalog.swift`.
 - `WhisperM8/Models/OutputHistoryFilter.swift` beschreibt die pure Filterlogik für Archiv-Scope, Status und Suche.
 
 ## Invarianten und Gotchas

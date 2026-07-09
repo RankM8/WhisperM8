@@ -194,7 +194,7 @@ sondern erwartet den finalen nachbearbeiteten Text.
 - Netzwerkzugriff ist ein Opt-in für `workspace-write` über `sandbox_workspace_write.network_access=true`.
 - `CodexExecEventParser` wirft nie und ist nicht die Instanz, die Turns fehlschlagen lässt.
 - stderr wird begrenzt gespeichert; vollständige stderr-Logs sind kein Vertrag dieser Schicht.
-- `CodexConnectionModel.shouldWarnAboutGPT55` warnt bei GPT-5.5-Auswahl und Codex-Versionen mit `0.120.`.
+- Modell-Warnungen sind katalogbasiert (`CodexModelCatalog`, Services/Shared): die Settings-Views warnen, wenn das gewählte Modell nicht in `~/.codex/models_cache.json` gelistet ist oder das Thinking-Level vom Modell nicht unterstützt wird. (`shouldWarnAboutGPT55` ist gestrichen.)
 - Externe Tool-Ausgaben wie `codex login status` und `codex exec --json` bleiben Laufzeitverhalten und werden defensiv behandelt.
 
 ## Test-Cluster

@@ -54,8 +54,8 @@ whisperm8 agent help                             # Hilfetext
 | `--allow-network` | Netzwerk in der Sandbox (u.a. `git push`, Paketinstallationen). Default aus — vorher den User fragen. |
 | `--config <key=value>` | Generischer Codex-Config-Override, wiederholbar — wird 1:1 als `-c` an codex exec durchgereicht und gilt auch für Folge-Turns (`send`). Kommt NACH den eingebauten Configs, übersteuert sie also (z.B. `--config tools.web_search=true`). Werte mit führendem `-` werden abgelehnt (Exit 1) — codex läse sie als Flag. |
 | `--playwright-storage-state <path>` | Browser-QA: startet den Playwright-MCP im Codex-Subagent isoliert mit dieser storageState-Datei (`--isolated --storage-state`). Relative Pfade werden relativ zu `--cd`/CWD aufgelöst; fehlt die Datei, bricht `run` sofort mit Exit 1 ab. Browser-Traffic braucht KEIN `--allow-network`. |
-| `--model <name>` | Codex-Modell-Override. |
-| `--effort <level>` | `model_reasoning_effort`-Override (z.B. low/medium/high). |
+| `--model <name>` | Codex-Modell-Override (z.B. `gpt-5.6-sol` — Frontier-Modell, Stand codex 0.144.0). Freier String, keine Whitelist — neue Modelle funktionieren sofort. |
+| `--effort <level>` | `model_reasoning_effort`-Override: minimal/low/medium/high/xhigh/max/ultra — modellabhängig (bis `ultra` nur gpt-5.6-sol/terra; gpt-5.6-luna bis `max`; ältere Modelle bis `xhigh`). Verfügbare Level pro Modell: `~/.codex/models_cache.json`. |
 | `--parent <session-id>` | Claude-Session-ID des spawnenden Chats — nur nötig, wenn du eine echte ID kennst. OHNE das Flag ordnet WhisperM8 den Job automatisch über den Prozessbaum dem Chat zu, in dem du läufst (`$CLAUDE_SESSION_ID` existiert NICHT als Env-Variable — nicht verwenden). |
 
 ## Exit-Codes (verbindlich — kein Text-Parsing nötig)

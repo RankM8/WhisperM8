@@ -88,7 +88,7 @@ Die Models kapseln Logik, die ohne SwiftUI-Rendering testbar bleiben soll.
 
 | Model | Verantwortung | Code-Beleg |
 |---|---|---|
-| `CodexConnectionModel` | Codex-Status, CLI-Version und GPT-5.5-Warnlogik. | `WhisperM8/Views/Settings/Models/CodexConnectionModel.swift:4` |
+| `CodexConnectionModel` | Codex-Status und CLI-Version (Modell-Warnungen sind katalogbasiert in den Views, via `CodexModelCatalog`). | `WhisperM8/Views/Settings/Models/CodexConnectionModel.swift:4` |
 | `OutputModesViewModel` | Modes laden, aktivieren, Defaults setzen, Custom Modes verwalten. | `WhisperM8/Views/Settings/Models/OutputModesViewModel.swift:4` |
 | `TemplateEditorModel` | Templates laden, duplizieren, validieren und speichern. | `WhisperM8/Views/Settings/Models/TemplateEditorModel.swift:4` |
 | `OutputArchiveViewModel` | Persistierte Reports laden, filtern, selektieren und löschen. | `WhisperM8/Views/Settings/Models/OutputArchiveViewModel.swift:30` |

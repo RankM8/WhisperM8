@@ -109,7 +109,11 @@ User hat übernommen, Step überspringen), `4` = Umgebung (abbrechen, loggen).
 9. **Urteile nie mit `--effort low` einholen.** Gemessen am 2026-07-08: Codex
    erfand auf dieser Stufe Guards und Fehlertypen, die es im geprüften Code
    nicht gibt, und „widerlegte" damit zwei echte Defekte. Für Refuter/Reviewer
-   `--effort high`; `low` taugt nur zum Smoke-Test der Mechanik.
+   `--effort high`; `low` taugt nur zum Smoke-Test der Mechanik. Oberhalb von
+   `high` existieren seit codex 0.144.0 `xhigh`, `max` und `ultra`
+   (modellabhängig — gpt-5.6-sol/terra bis `ultra`, gpt-5.6-luna bis `max`);
+   für die härtesten Verifikationen `--model gpt-5.6-sol --effort xhigh`
+   aufwärts erwägen. Verfügbare Level pro Modell: `~/.codex/models_cache.json`.
 
 ## Bewährte Muster
 
