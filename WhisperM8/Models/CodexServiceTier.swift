@@ -1,5 +1,9 @@
 import Foundation
 
+/// Zukunftsnotiz: ~/.codex/models_cache.json liefert pro Modell auch
+/// `service_tiers`/`additional_speed_tiers` — sollte der Speed-Picker je
+/// dynamisch werden, ist `CodexModelCatalog` die Anlaufstelle. Bis dahin
+/// bleibt dieses Enum bewusst statisch (fast/standard).
 enum CodexServiceTier: String, CaseIterable, Identifiable, Codable {
     case fast
     case standard

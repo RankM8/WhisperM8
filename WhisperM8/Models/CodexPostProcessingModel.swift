@@ -1,5 +1,11 @@
 import Foundation
 
+/// NUR NOCH Fallback-Konstanten (deterministischer Default für frische
+/// Installationen + Legacy-Referenz) — die Picker-Quelle der Settings ist
+/// seit dem dynamischen Katalog `CodexModelCatalog` (Services/Shared).
+/// Neue Modelle (gpt-5.6-Familie …) kommen aus ~/.codex/models_cache.json
+/// und müssen hier NICHT mehr nachgezogen werden. `gpt52` bleibt für alte
+/// persistierte Overrides erhalten.
 enum CodexPostProcessingModel: String, CaseIterable, Identifiable, Codable {
     case gpt55 = "gpt-5.5"
     case gpt54 = "gpt-5.4"

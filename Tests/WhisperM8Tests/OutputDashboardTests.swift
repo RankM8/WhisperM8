@@ -69,10 +69,11 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(CodexPostProcessingModel.resolve("gpt-5.2"), .gpt52)
     }
 
-    func testCodexReasoningEffortDefaultsToMedium() {
-        XCTAssertEqual(CodexReasoningEffort.defaultEffort, .medium)
+    /// Beschlossen 2026-07-09: High statt Medium als Standard-Thinking.
+    func testCodexReasoningEffortDefaultsToHigh() {
+        XCTAssertEqual(CodexReasoningEffort.defaultEffort, .high)
         XCTAssertEqual(CodexReasoningEffort.resolve("xhigh"), .xhigh)
-        XCTAssertEqual(CodexReasoningEffort.resolve("unknown"), .medium)
+        XCTAssertEqual(CodexReasoningEffort.resolve("unknown"), .high)
     }
 
     func testDefaultModePreferenceSaveLoad() {
