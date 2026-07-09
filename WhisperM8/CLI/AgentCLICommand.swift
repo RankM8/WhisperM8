@@ -25,6 +25,8 @@ enum AgentCLICommand {
             return AgentListCLI.run(rest)
         case "status":
             return AgentStatusCLI.run(rest)
+        case "wait":
+            return await AgentWaitCLI.run(rest)
         case "logs":
             return AgentLogsCLI.run(rest)
         case "stop":
@@ -139,7 +141,7 @@ enum AgentRunCLI {
         }
 
         if options.wait {
-            return await AgentJobCLIShared.superviseInlineAndEmit(store: store, shortId: shortId, json: options.json)
+            return await AgentJobCLIShared.detachThenFollowAndEmit(store: store, shortId: shortId, json: options.json)
         }
         return AgentJobCLIShared.detachAndEmit(store: store, shortId: shortId, json: options.json)
     }
@@ -192,7 +194,7 @@ enum AgentSendCLI {
         }
 
         if options.wait {
-            return await AgentJobCLIShared.superviseInlineAndEmit(store: store, shortId: options.shortId, json: options.json)
+            return await AgentJobCLIShared.detachThenFollowAndEmit(store: store, shortId: options.shortId, json: options.json)
         }
         return AgentJobCLIShared.detachAndEmit(store: store, shortId: options.shortId, json: options.json)
     }
@@ -237,6 +239,32 @@ enum AgentSendCLI {
             return .failure(.init(message: "Prompt-Handoff fehlgeschlagen: \(error.localizedDescription)", exit: AgentCLIExit.environment))
         }
         return .success(())
+    }
+}
+
+// MARK: - wait
+
+/// `agent wait <short-id> [--json]` — hängt sich an einen (detacht) laufenden
+/// Job und wartet bis zum Turn-Ende. Genau der Wiederaufnahme-Pfad, wenn ein
+/// `--wait`-Aufrufer gestorben ist (Bash-Timeout, Ctrl-C): der Job lief
+/// weiter, `wait` holt das Ergebnis ab. Ruhende Jobs liefern sofort ihr
+/// letztes Ergebnis (idempotent, gleicher Exit-Code-Vertrag wie status).
+enum AgentWaitCLI {
+    static func run(_ arguments: [String]) async -> Int32 {
+        let shortId: String
+        let json: Bool
+        do {
+            (shortId, json) = try AgentCLIParser.parseIDCommand(arguments)
+        } catch {
+            CLIIO.err(error.localizedDescription)
+            return AgentCLIExit.usage
+        }
+        let store = AgentJobCLIShared.storeFactory()
+        guard store.readState(shortId: shortId) != nil else {
+            CLIIO.err("Job \(shortId) nicht gefunden.")
+            return AgentCLIExit.environment
+        }
+        return await AgentJobCLIShared.followAndEmit(store: store, shortId: shortId, json: json)
     }
 }
 
@@ -414,28 +442,77 @@ enum AgentJobCLIShared {
     /// ein Temp-Root laufen können (Konvention: Closure-DI).
     static var storeFactory: () -> AgentJobStore = { AgentJobStore() }
 
-    /// E1: --wait macht den Frontend-Prozess selbst zum Supervisor — kein
-    /// File-Watching, kein Race. SIGINT (Ctrl-C) stoppt den Turn sauber.
-    static func superviseInlineAndEmit(store: AgentJobStore, shortId: String, json: Bool) async -> Int32 {
-        // Live-Progress nur für Menschen (stderr); --json bleibt still bis
-        // zum finalen Objekt auf stdout.
-        let supervisor = AgentJobSupervisor(store: store, onEvent: json ? nil : { event, _ in
-            AgentJobOutput.progressLine(for: event).map(CLIIO.err)
-        })
-
-        signal(SIGINT, SIG_IGN)
-        let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global(qos: .userInitiated))
-        sigint.setEventHandler { supervisor.requestStop() }
-        sigint.resume()
-        defer { sigint.cancel() }
-
-        let superviseExit = await supervisor.superviseCurrentTurn(shortId: shortId)
-        emitFinal(store: store, shortId: shortId, json: json)
-        return superviseExit
+    /// Entkoppelt (beschlossen 2026-07-10, ersetzt E1-inline): auch `--wait`
+    /// spawnt den DETACHTEN Supervisor und schaut nur noch zu. Stirbt der
+    /// Waiter (Bash-Timeout des Aufrufers, Ctrl-C, Workflow-Stop), läuft der
+    /// Job ungestört weiter — `agent wait <id>` hängt sich wieder an.
+    /// Semantik-Änderung: Ctrl-C stoppt nur noch das Zuschauen; den Turn
+    /// beendet ausschließlich `agent stop <id>`.
+    static func detachThenFollowAndEmit(store: AgentJobStore, shortId: String, json: Bool) async -> Int32 {
+        if let launchError = launchDetachedSupervisor(store: store, shortId: shortId) {
+            return launchError
+        }
+        // Breadcrumb IMMER auf stderr — auch im --json-Modus. Killt der
+        // Aufrufer den Waiter per Timeout, steht die Short-ID im bereits
+        // gelieferten Teil-Output und der Job bleibt wiederauffindbar.
+        CLIIO.err("[whisperm8] Job \(shortId) läuft detacht — wieder anhängen: whisperm8 agent wait \(shortId)\(json ? " --json" : "")")
+        return await followAndEmit(store: store, shortId: shortId, json: json)
     }
 
-    /// Detach: Supervisor-Prozess starten, PID persistieren, Short-ID melden.
-    static func detachAndEmit(store: AgentJobStore, shortId: String, json: Bool) -> Int32 {
+    /// Test-Seam: Poll-Intervall des Follow-Loops (Tests: Millisekunden).
+    static var followPollInterval: TimeInterval = 0.5
+
+    /// Folgt einem detacht laufenden Job per state.json-Polling (mit Orphan-
+    /// Korrektur) bis zum Turn-Ende und emittiert das finale Ergebnis mit dem
+    /// üblichen Exit-Code-Vertrag. Menschlicher Live-Progress kommt aus dem
+    /// Tail der events.jsonl; --json bleibt bis zum finalen Objekt still.
+    static func followAndEmit(store: AgentJobStore, shortId: String, json: Bool) async -> Int32 {
+        var eventsOffset: UInt64 = 0
+        while true {
+            guard let state = store.readCorrected(shortId: shortId) else {
+                CLIIO.err("Job \(shortId) nicht gefunden.")
+                return AgentCLIExit.environment
+            }
+            if !json {
+                eventsOffset = emitNewProgressLines(store: store, shortId: shortId, from: eventsOffset)
+            }
+            if !state.isActive {
+                emitFinal(store: store, shortId: shortId, json: json)
+                return AgentJobOutput.exitCode(for: state, lastMessage: store.readLastMessage(shortId: shortId))
+            }
+            try? await Task.sleep(nanoseconds: UInt64(followPollInterval * 1_000_000_000))
+        }
+    }
+
+    /// Liest neue Zeilen der events.jsonl ab `offset` und druckt Progress-
+    /// Zeilen (stderr). Gibt den neuen Offset zurück; eine ggf. angeschnittene
+    /// letzte Zeile wird beim nächsten Poll erneut gelesen (Offset bleibt vor
+    /// ihr stehen).
+    private static func emitNewProgressLines(store: AgentJobStore, shortId: String, from offset: UInt64) -> UInt64 {
+        let url = store.jobDirectory(for: shortId).appendingPathComponent("events.jsonl")
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return offset }
+        defer { try? handle.close() }
+        guard (try? handle.seek(toOffset: offset)) != nil,
+              let data = try? handle.readToEnd(), !data.isEmpty else { return offset }
+
+        var consumed = offset
+        var lineStart = data.startIndex
+        for index in data.indices where data[index] == UInt8(ascii: "\n") {
+            let lineData = data[lineStart..<index]
+            consumed += UInt64(index - lineStart) + 1
+            lineStart = data.index(after: index)
+            guard let line = String(data: lineData, encoding: .utf8), !line.isEmpty else { continue }
+            if let event = CodexExecEventParser.parse(line: line),
+               let progress = AgentJobOutput.progressLine(for: event) {
+                CLIIO.err(progress)
+            }
+        }
+        return consumed
+    }
+
+    /// Supervisor-Prozess starten + PID persistieren. nil = Erfolg, sonst
+    /// der zu emittierende Exit-Code.
+    static func launchDetachedSupervisor(store: AgentJobStore, shortId: String) -> Int32? {
         do {
             let pid = try AgentSupervisorLauncher().launchDetached(
                 shortId: shortId,
@@ -455,6 +532,7 @@ enum AgentJobCLIShared {
                     }
                 }
             }
+            return nil
         } catch {
             CLIIO.err(error.localizedDescription)
             _ = try? store.mutateState(shortId: shortId) { job in
@@ -463,12 +541,19 @@ enum AgentJobCLIShared {
             }
             return AgentCLIExit.environment
         }
+    }
 
+    /// Detach: Supervisor-Prozess starten, PID persistieren, Short-ID melden.
+    static func detachAndEmit(store: AgentJobStore, shortId: String, json: Bool) -> Int32 {
+        if let launchError = launchDetachedSupervisor(store: store, shortId: shortId) {
+            return launchError
+        }
         if json {
             CLIIO.out(#"{"shortId":"\#(shortId)","state":"spawning"}"#)
         } else {
             CLIIO.out(shortId)
             CLIIO.err("  whisperm8 agent status \(shortId)   Zustand + Report")
+            CLIIO.err("  whisperm8 agent wait \(shortId)     auf Turn-Ende warten")
             CLIIO.err("  whisperm8 agent logs \(shortId)     letzte Events")
             CLIIO.err("  whisperm8 agent send \(shortId) \"…\"  Folge-Turn")
             CLIIO.err("  whisperm8 agent stop \(shortId)     Turn abbrechen")
@@ -651,12 +736,17 @@ enum AgentCLIHelp {
                                                        Folge-Turn (codex exec resume)
       whisperm8 agent list [--json]                    alle Jobs
       whisperm8 agent status <id> [--json]             Zustand + Report
+      whisperm8 agent wait <id> [--json]               auf Turn-Ende warten / wieder anhängen
       whisperm8 agent logs <id> [--tail N]             letzte Events (Default 50)
       whisperm8 agent stop <id>                        laufenden Turn abbrechen
       whisperm8 agent rm <id>                          Job entfernen (Codex-Session bleibt)
 
     RUN-OPTIONEN
-      --wait                 Synchron: blockiert bis Turn-Ende, Report auf stdout.
+      --wait                 Blockiert bis Turn-Ende, Report auf stdout. Der Job
+                             läuft dabei DETACHT: stirbt der wartende Prozess
+                             (Timeout, Ctrl-C), arbeitet der Turn weiter —
+                             `agent wait <id>` hängt sich wieder an. Stoppen
+                             nur explizit per `agent stop <id>`.
       --json                 Maschinenlesbares Ergebnis-Objekt auf stdout.
       --cd <dir>             Working Directory (Default: aktuelles Verzeichnis).
       --sandbox <mode>       read-only | workspace-write (Default).

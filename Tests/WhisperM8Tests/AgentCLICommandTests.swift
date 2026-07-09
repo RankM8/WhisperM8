@@ -44,6 +44,80 @@ final class AgentCLICommandTests: XCTestCase {
         try store.createJob(initial: job)
     }
 
+    // MARK: - wait (Follow-Loop, entkoppelt vom Supervisor)
+
+    func testWaitOnDoneJobReturnsImmediatelyWithOk() async throws {
+        try makeJob(state: .done)
+        let exit = await AgentWaitCLI.run(["a3f81c2e", "--json"])
+        XCTAssertEqual(exit, AgentCLIExit.ok)
+    }
+
+    func testWaitOnFailedJobReturnsJobFailed() async throws {
+        try makeJob(state: .failed)
+        let exit = await AgentWaitCLI.run(["a3f81c2e", "--json"])
+        XCTAssertEqual(exit, AgentCLIExit.jobFailed)
+    }
+
+    /// Exit-Code-Vertrag wie bei status/--wait: done + Report-`failure` = 2.
+    func testWaitOnDoneJobWithFailureReportReturnsJobFailed() async throws {
+        try makeJob(state: .done)
+        let report = #"{"status":"failure","summary":"kaputt","filesChanged":[],"commits":[],"openQuestions":[]}"#
+        try report.write(
+            to: store.jobDirectory(for: "a3f81c2e").appendingPathComponent("last-message.txt"),
+            atomically: true, encoding: .utf8
+        )
+        let exit = await AgentWaitCLI.run(["a3f81c2e", "--json"])
+        XCTAssertEqual(exit, AgentCLIExit.jobFailed)
+    }
+
+    /// Der Kern des Umbaus: wait folgt einem AKTIVEN Job, bis ein (fremder)
+    /// Supervisor ihn beendet — hier simuliert durch eine verzögerte
+    /// State-Mutation.
+    func testWaitFollowsRunningJobUntilDone() async throws {
+        try makeJob(state: .running, pid: 4711)
+        let previousInterval = AgentJobCLIShared.followPollInterval
+        AgentJobCLIShared.followPollInterval = 0.02
+        defer { AgentJobCLIShared.followPollInterval = previousInterval }
+
+        let testStore = store!
+        Task.detached {
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            _ = try? testStore.mutateState(shortId: "a3f81c2e") { $0.state = .done }
+        }
+        let exit = await AgentWaitCLI.run(["a3f81c2e", "--json"])
+        XCTAssertEqual(exit, AgentCLIExit.ok)
+    }
+
+    /// Stirbt der Supervisor, korrigiert der Follow-Loop den Job über die
+    /// Orphan-Erkennung zu failed statt ewig zu warten.
+    func testWaitDetectsDeadSupervisorAsFailed() async throws {
+        // Eigener Store mit toter Liveness-Probe (Setup-Store sagt immer true).
+        let deadStore = AgentJobStore(rootDirectory: root, livenessProbe: { _ in false })
+        AgentJobCLIShared.storeFactory = { deadStore }
+        var job = AgentJobState(
+            shortId: "b4c92d1f", state: .spawning, intent: "test",
+            cwd: root.path, sandbox: .workspaceWrite
+        )
+        job.state = .running
+        job.supervisorPid = 99999
+        try deadStore.createJob(initial: job)
+
+        let exit = await AgentWaitCLI.run(["b4c92d1f", "--json"])
+        XCTAssertEqual(exit, AgentCLIExit.jobFailed)
+        XCTAssertEqual(deadStore.readState(shortId: "b4c92d1f")?.failureReason,
+                       "supervisor died (pid 99999 nicht mehr vorhanden)")
+    }
+
+    func testWaitOnUnknownJobIsEnvironmentError() async {
+        let exit = await AgentWaitCLI.run(["deadbeef"])
+        XCTAssertEqual(exit, AgentCLIExit.environment)
+    }
+
+    func testWaitRejectsUnknownFlag() async {
+        let exit = await AgentWaitCLI.run(["a3f81c2e", "--bogus"])
+        XCTAssertEqual(exit, AgentCLIExit.usage)
+    }
+
     // MARK: - send: Zustands-Guards
 
     func testSendOnRunningJobIsRejectedWithConflict() async throws {
