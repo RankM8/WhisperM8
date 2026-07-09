@@ -36,6 +36,7 @@ whisperm8 agent run  [optionen] "<prompt>"       # Job starten
 whisperm8 agent send <id> [--wait] [--json] "<prompt>"   # Folge-Turn (resume)
 whisperm8 agent list [--json]                    # alle Jobs, neueste zuerst
 whisperm8 agent status <id> [--json]             # Zustand + Report + Metriken
+whisperm8 agent wait <id> [--json]               # auf Turn-Ende warten / nach Timeout wieder anhängen
 whisperm8 agent logs <id> [--tail N]             # letzte N Event-Zeilen (Default 50, rohe JSONL)
 whisperm8 agent stop <id>                        # laufenden Turn abbrechen (SIGTERM)
 whisperm8 agent rm <id>                          # Job-Verzeichnis entfernen (Codex-Session bleibt)
@@ -119,6 +120,11 @@ whisperm8 agent help                             # Hilfetext
 3. **Länger:** `run --wait --json` als **Background-Bash-Task** starten
    (run_in_background) — das Harness meldet sich beim Prozessende von
    selbst. Keine Poll-Schleifen bauen.
+   **`--wait` ist nur Zuschauer:** der Job läuft immer detacht; stirbt der
+   wartende Prozess (Bash-Timeout, Ctrl-C, Abbruch), arbeitet der Turn
+   weiter. `agent wait <id>` hängt sich wieder an (die Short-ID steht als
+   stderr-Breadcrumb sofort im Output, auch bei `--json`). Turns stoppt
+   ausschließlich `agent stop <id>`.
 4. **Paralleles Schreiben im selben Repo, in dem du selbst editierst:**
    `--worktree`. Danach: Branch `subagent/<id>` reviewen
    (`git log/diff <branch>`), mergen/cherry-picken oder verwerfen.

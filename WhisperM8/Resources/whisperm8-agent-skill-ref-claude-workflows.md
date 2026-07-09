@@ -87,6 +87,13 @@ User hat übernommen, Step überspringen), `4` = Umgebung (abbrechen, loggen).
 
 1. **Immer `run --wait --json`.** Kein Detach-plus-Polling — der Wrapper wartet,
    das Harness ist geduldig. Gemessene Turn-Zeiten bei kleinen Aufträgen: 5–30 s.
+   **Timeout-fest seit dem `agent wait`-Umbau:** `--wait` ist nur Zuschauer,
+   der Job läuft detacht. Killt das Bash-Timeout des Wrappers (hart max.
+   10 Min) den Waiter, arbeitet der Turn weiter — die Short-ID steht als
+   stderr-Breadcrumb im Teil-Output, `whisperm8 agent wait <id> --json`
+   hängt sich wieder an (der `codex-runner` macht das automatisch, max.
+   5 Wiederanhänge). Vorher starben Turns > 10 Min GARANTIERT mitten in
+   der Arbeit („supervisor died") — forensisch belegt am 2026-07-10.
 2. **`status <id> --json` statt `list --json`.** `list` liefert ALLE Jobs mit
    vollen Intents (bei ~160 Jobs ≈ 385 KB) — sprengt jeden Kontext.
 3. **`shortId` durch die Pipeline reichen.** Spätere Phasen steuern denselben
@@ -114,6 +121,17 @@ User hat übernommen, Step überspringen), `4` = Umgebung (abbrechen, loggen).
    (modellabhängig — gpt-5.6-sol/terra bis `ultra`, gpt-5.6-luna bis `max`);
    für die härtesten Verifikationen `--model gpt-5.6-sol --effort xhigh`
    aufwärts erwägen. Verfügbare Level pro Modell: `~/.codex/models_cache.json`.
+
+## Ausnahme: `codex exec` direkt (ohne whisperm8)
+
+Für **kurze, read-only Einweg-Urteile** (< ~8 Min, kein Folge-Turn, keine
+Commits, App-Sichtbarkeit egal — z.B. ein schnelles Verifier-Panel in einem
+Repo ohne WhisperM8) darf der Wrapper auch direkt
+`codex exec --json --sandbox read-only "<prompt>"` aufrufen. Bewusst NUR
+dort: ein direkter Call verliert alles, was die Supervisor-Schicht leistet —
+Überleben des 10-Min-Bash-Timeouts (Totalverlust statt `agent wait`),
+`send`-Folge-Turns, Sichtbarkeit in der App, Report-Vertrag und den
+automatischen `.git`-writable_roots-Fix für Commits.
 
 ## Bewährte Muster
 

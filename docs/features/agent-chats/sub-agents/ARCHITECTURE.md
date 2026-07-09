@@ -66,9 +66,14 @@ Jobs entstehen erst durch `whisperm8 agent run` und werden über
    Job-Verzeichnis an und speichert Pfad und Branch im State.
 4. Der Prompt wird zusammen mit dem WhisperM8-Report-Suffix als
    `pending-prompt.txt` gespeichert.
-5. Mit `--wait` läuft `AgentJobSupervisor` im aktuellen CLI-Prozess; ohne
-   `--wait` startet `AgentSupervisorLauncher` den internen
+5. `AgentSupervisorLauncher` startet IMMER den internen, detachten
    `agent-supervise`-Prozess und persistiert dessen PID als Liveness-Anker.
+   Mit `--wait` wird der CLI-Prozess zusätzlich zum Zuschauer
+   (`followAndEmit`: state.json-Polling mit Orphan-Korrektur +
+   events.jsonl-Tail) — stirbt er (Bash-Timeout, Ctrl-C), läuft der Turn
+   weiter; `agent wait <id>` hängt sich wieder an. Turns stoppt nur
+   `agent stop`. (Ersetzt die frühere E1-Inline-Supervision, die den Turn
+   mit dem Waiter sterben ließ — Ursache der „supervisor died"-Fails.)
 
 ## Datenfluss: Supervisor-Turn
 

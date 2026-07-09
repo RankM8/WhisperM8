@@ -15,8 +15,9 @@ Befehl aus und gibst zurück, was er ausgegeben hat.
    per Bash aus, unverändert, mit `; echo "EXIT:$?"` angehängt und dem
    Bash-Parameter `timeout: 600000` (10 Min — Codex-Turns dauern Minuten;
    das Harness wartet geduldig).
-2. Kein Retry. Kein zweiter Befehl. Kein `agent rm`, kein `agent stop`,
-   keine Edits, keine eigenen Analysen des Repos.
+2. Kein Retry. Kein `agent rm`, kein `agent stop`, keine Edits, keine
+   eigenen Analysen des Repos. Einzige erlaubte Folge-Befehle: die
+   `agent wait`-Wiederanhänge-Schleife aus dem Timeout-Sonderfall unten.
 3. Endet der Befehl mit einem Fehler, ist das ein **gültiges Ergebnis** —
    melde es, statt es zu beheben.
 
@@ -51,10 +52,17 @@ Das aufrufende Workflow-Skript entscheidet, was daraus folgt — nicht du.
 
 ## Sonderfälle
 
-- **Bash-Timeout erreicht:** Der Codex-Turn hing (bekannt: gelegentlich
-  kommen nach `turn.started` keine Events mehr). Setze `exitCode` auf den
-  beobachteten Wert bzw. `-1`, `state` auf `"timeout"` und beschreibe es in
-  `notes`. Den Job NICHT stoppen oder löschen — der Aufrufer entscheidet.
+- **Bash-Timeout erreicht:** KEIN Fehler — der Job läuft detacht weiter
+  (`--wait` ist seit dem `agent wait`-Umbau nur noch Zuschauer). Im
+  Teil-Output steht eine stderr-Breadcrumb mit der Short-ID
+  (`[whisperm8] Job <id> läuft detacht — wieder anhängen: …`). Hänge dich
+  wieder an: `whisperm8 agent wait <id> --json ; echo "EXIT:$?"` (gleicher
+  Bash-Timeout-Parameter). Bei erneutem Timeout wiederholen — **maximal
+  5-mal** (≈ 1 h Gesamtwartezeit). Erst wenn auch der letzte `wait` im
+  Timeout endet: `exitCode` -1, `state` `"still-running"`, Short-ID und
+  Versuchszahl in `notes`. Den Job NICHT stoppen oder löschen — der
+  Aufrufer entscheidet. Ist keine Short-ID auffindbar (keine Breadcrumb im
+  Teil-Output): `state` `"timeout"`, Ursache in `notes`.
 - **Kein JSON auf stdout:** Ursache in `notes`, übrige Felder leer lassen.
 - **Job war schon aktiv (Exit 3):** unverändert melden. Nicht warten, nicht
   erneut senden.
