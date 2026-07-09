@@ -59,9 +59,12 @@ enum CodexInvocation {
         isEphemeral: Bool = true,
         projectPath: String? = nil
     ) -> [String] {
+        // Egress-Grenze: der persistierte "auto"-Sentinel wird erst hier zum
+        // aktuellen Frontier-Modell aufgelöst — jede Nutzung profitiert damit
+        // automatisch vom neuesten Katalog-Stand.
         var arguments = [
             "exec",
-            "-m", model,
+            "-m", CodexModelSelection.resolveSlug(model),
             "-c", "model_reasoning_effort=\(reasoningEffort)",
         ]
         arguments.append(contentsOf: CodexServiceTier.resolve(serviceTier).configArguments)

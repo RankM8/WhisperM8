@@ -25,7 +25,7 @@ struct AgentChatLaunchService {
             provider: .codex,
             projectPath: project.path,
             title: title,
-            model: AppPreferences.shared.codexPostProcessingModelRaw,
+            model: AppPreferences.shared.resolvedCodexDefaultModelRaw(),
             reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
             initialPrompt: prompt,
             imagePaths: imagePaths,

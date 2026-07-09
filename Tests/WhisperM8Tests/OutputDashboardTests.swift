@@ -323,6 +323,34 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(arguments.last, "-")
     }
 
+    /// Egress-Auflösung des "auto"-Sentinels: -m enthält den konkreten
+    /// Frontier-Slug, nie das Wort "auto"; konkrete Slugs sind Pass-through.
+    func testCodexInvocationResolvesAutoModelSentinel() throws {
+        let outputURL = URL(fileURLWithPath: "/tmp/output.txt")
+
+        let autoArguments = CodexInvocation.arguments(
+            promptImageURLs: [],
+            outputURL: outputURL,
+            model: CodexModelSelection.autoRawValue,
+            reasoningEffort: "high"
+        )
+        let modelIndex = try XCTUnwrap(autoArguments.firstIndex(of: "-m"))
+        let resolved = autoArguments[modelIndex + 1]
+        XCTAssertNotEqual(resolved, "auto")
+        XCTAssertNotNil(
+            CodexModelCatalog.parseSlugVersion(resolved),
+            "aufgelöstes Auto-Modell muss ein konkreter gpt-X.Y-Slug sein, war '\(resolved)'"
+        )
+
+        let concreteArguments = CodexInvocation.arguments(
+            promptImageURLs: [],
+            outputURL: outputURL,
+            model: "gpt-5.4",
+            reasoningEffort: "high"
+        )
+        XCTAssertTrue(concreteArguments.contains("gpt-5.4"))
+    }
+
     func testCodexInvocationCanUseStandardServiceTier() {
         let outputURL = URL(fileURLWithPath: "/tmp/output.txt")
 

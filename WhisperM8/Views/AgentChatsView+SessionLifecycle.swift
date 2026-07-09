@@ -48,7 +48,7 @@ extension AgentChatsView {
                 provider: provider,
                 projectPath: selectedProject.path,
                 title: title,
-                model: AppPreferences.shared.codexPostProcessingModelRaw,
+                model: AppPreferences.shared.resolvedCodexDefaultModelRaw(),
                 reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
                 externalSessionID: externalSessionID,
                 shouldLaunchOnOpen: true,

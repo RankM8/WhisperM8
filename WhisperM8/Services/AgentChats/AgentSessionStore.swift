@@ -414,7 +414,10 @@ struct AgentSessionStore {
         provider: AgentProvider,
         projectPath: String,
         title: String,
-        model: String = AppPreferences.shared.codexPostProcessingModelRaw,
+        // Aufgelöster Default ("auto" → konkreter Frontier-Slug): Sessions
+        // persistieren immer ein konkretes Modell, historische Chats bleiben
+        // auf ihrem damaligen Stand.
+        model: String = AppPreferences.shared.resolvedCodexDefaultModelRaw(),
         reasoningEffort: String = AppPreferences.shared.codexReasoningEffortRaw,
         externalSessionID: String? = nil,
         initialPrompt: String? = nil,
@@ -599,6 +602,12 @@ struct AgentSessionStore {
             }
         }
 
+        // Vor der Mutation auflösen ("auto" → Katalog-Datei-Stat/-Parse):
+        // Mutation-Closures laufen unter dem Store-Lock und dürfen kein
+        // blockierendes I/O machen — gleiches Hoisting wie branchByPath oben.
+        let fallbackModelRaw = AppPreferences.shared.resolvedCodexDefaultModelRaw()
+        let fallbackEffortRaw = AppPreferences.shared.codexReasoningEffortRaw
+
         try mutateWorkspace { workspace in
             Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
             Self.removeUnresumableClaudeSessions(from: &workspace)
@@ -660,8 +669,8 @@ struct AgentSessionStore {
                             projectID: project.id,
                             externalSessionID: indexed.externalSessionID,
                             title: indexed.title,
-                            model: indexed.model ?? AppPreferences.shared.codexPostProcessingModelRaw,
-                            reasoningEffort: indexed.reasoningEffort ?? AppPreferences.shared.codexReasoningEffortRaw,
+                            model: indexed.model ?? fallbackModelRaw,
+                            reasoningEffort: indexed.reasoningEffort ?? fallbackEffortRaw,
                             status: .closed,
                             hasLaunchedInitialPrompt: true,
                             createdAt: indexed.createdAt,

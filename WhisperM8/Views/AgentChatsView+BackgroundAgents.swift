@@ -48,7 +48,7 @@ extension AgentChatsView {
                 provider: .claude,
                 projectPath: project.path,
                 title: backgroundSessionTitle(for: request),
-                model: AppPreferences.shared.codexPostProcessingModelRaw,
+                model: AppPreferences.shared.resolvedCodexDefaultModelRaw(),
                 reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
                 externalSessionID: nil,
                 initialPrompt: request.prompt,

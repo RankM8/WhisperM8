@@ -157,6 +157,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.codexPostProcessingModel) }
     }
 
+    /// Wie `codexPostProcessingModelRaw`, aber mit aufgelöstem "auto"-Sentinel
+    /// (→ aktuelles Frontier-Modell). Für Stellen, die einen KONKRETEN Slug
+    /// persistieren müssen (Agent-Session-Erzeugung): historische Chats sollen
+    /// auf ihrem damaligen Modell bleiben, nur neue bekommen das aktuelle.
+    /// Der rohe Getter bleibt für die Settings-UI ("auto" sichtbar).
+    func resolvedCodexDefaultModelRaw() -> String {
+        CodexModelSelection.resolveSlug(codexPostProcessingModelRaw)
+    }
+
     var codexReasoningEffortRaw: String {
         get { defaults.string(forKey: Keys.codexReasoningEffort) ?? CodexReasoningEffort.defaultEffort.rawValue }
         nonmutating set { defaults.set(newValue, forKey: Keys.codexReasoningEffort) }
