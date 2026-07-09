@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-07-10
 ---
 
 # CLI — das whisperm8-Binary
@@ -103,17 +103,21 @@ eingeloggt und lauffähig ist, ist externes Laufzeitverhalten.
 ## Agent
 
 `whisperm8 agent` ist der öffentliche CLI-Namespace für Codex-Subagent-Jobs.
-Die Befehle `run`, `send`, `list`, `status`, `logs`, `stop` und `rm` arbeiten
-gegen denselben Job-Store, den die App in Agent Chats darstellt. `run` startet
-standardmäßig detached und gibt die Short-ID aus; mit `--wait` wird der
-aufrufende CLI-Prozess selbst zum Supervisor und blockiert bis zum Turn-Ende.
+Die Befehle `run`, `send`, `wait`, `list`, `status`, `logs`, `stop` und `rm`
+arbeiten gegen denselben Job-Store, den die App in Agent Chats darstellt.
+`run` startet standardmäßig detached und gibt die Short-ID aus; mit `--wait`
+startet der Job ebenfalls detacht, und der Aufrufer hängt sich nur als
+Zuschauer an (Follow bis Turn-Ende). Stirbt der Zuschauer — Bash-Timeout,
+Ctrl-C —, läuft der Job ungestört weiter; `agent wait <id>` hängt sich wieder
+an und liefert bei ruhenden Jobs sofort das letzte Ergebnis. Den Turn beendet
+ausschließlich `agent stop <id>`.
 Mit `--json` schreibt der Befehl maschinenlesbare Objekte nach stdout.
 
 Wichtige Optionen für `agent run`:
 
 | Option | Bedeutung |
 |--------|-----------|
-| `--wait` | Führt den Supervisor im aktuellen CLI-Prozess aus und blockiert bis zum Turn-Ende. |
+| `--wait` | Startet detacht und folgt als Zuschauer bis zum Turn-Ende; Ctrl-C stoppt nur das Zuschauen, nicht den Turn. |
 | `--json` | Gibt maschinenlesbare Statusobjekte auf stdout aus. |
 | `--cd <dir>` | Setzt das Arbeitsverzeichnis; Default ist das aktuelle Verzeichnis. |
 | `--sandbox <mode>` | `read-only` oder `workspace-write`, Default ist `workspace-write`. |
@@ -178,7 +182,7 @@ Dieser getrennte Vertrag ist wichtig, weil Claude Code und andere Tools beim
 - `WhisperM8/CLI/CLIAudioChunker.swift` schneidet normalisierte Audiodateien silence-aware in API-taugliche Chunks.
 - `WhisperM8/CLI/CLIOutputFormatter.swift` fügt Chunk-Ergebnisse zusammen und rendert `txt`, `json`, `srt` und `vtt`.
 - `WhisperM8/CLI/AgentCLIArguments.swift` definiert Parser und Exit-Code-Vertrag des `agent`-Namespaces.
-- `WhisperM8/CLI/AgentCLICommand.swift` implementiert `agent run`, `send`, `list`, `status`, `logs`, `stop` und `rm`.
+- `WhisperM8/CLI/AgentCLICommand.swift` implementiert `agent run`, `send`, `wait`, `list`, `status`, `logs`, `stop` und `rm`.
 - `WhisperM8/CLI/AgentSuperviseCommand.swift` implementiert den internen detachten Supervisor-Modus `agent-supervise <short-id>`.
 - `WhisperM8/Services/Shared/CLISymlinkInstaller.swift` verwaltet den Symlink `~/.local/bin/whisperm8` auf das aktuelle App-Binary.
 - `WhisperM8/Services/Shared/CLISkillExporter.swift` exportiert die gebündelten CLI-Skills und ihren Installationsstatus für Claude Code.
@@ -195,7 +199,7 @@ Codex-Subagent, Subagent-Job, detached Supervisor, interner Supervisor,
 Exit-Code, sysexits, Maschinenvertrag, `whisperm8`, `transcribe`, `modes`,
 `--language`, `--provider`, `--model`, `--mode`, `--api-key`,
 `--chunk-seconds`, `--dry-run`, `agent`, `agent run`, `agent send`,
-`agent list`, `agent status`, `agent logs`, `agent stop`, `agent rm`,
+`agent wait`, `agent list`, `agent status`, `agent logs`, `agent stop`, `agent rm`,
 `agent-supervise`, `--worktree`, `--allow-network`, `--config`,
 `--playwright-storage-state`, `--sandbox`, `--cd`, `--wait`, `--json`,
 `--tail`, `--parent`, `--effort`,

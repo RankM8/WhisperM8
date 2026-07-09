@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-07-10
 ---
 
 # CLI — Architektur
@@ -85,7 +85,8 @@ Prompts mit führendem Bindestrich als Positional erhalten bleiben.
 Binary, ist die Version zu alt oder kann der Job-State nicht angelegt werden,
 endet der Befehl mit dem Agent-Environment-Code `4`. Ein erfolgreicher Start
 schreibt `AgentJobState` als `spawning`, speichert den Prompt mit
-WhisperM8-Report-Suffix und startet entweder inline oder detached.
+WhisperM8-Report-Suffix und startet den Supervisor immer detacht — auch mit
+`--wait`.
 
 `AgentSendCLI` arbeitet unter einem exklusiven Job-Lock. Der Code liest den
 aktuellen State inklusive Orphan-Korrektur, sperrt aktive oder übernommene Jobs
@@ -101,12 +102,16 @@ und `rm` löscht das WhisperM8-Job-Verzeichnis. Bei Worktree-Jobs versucht
 `rm` vorher `git worktree remove` und bricht bei dirty Worktree vor dem
 Job-Removal ab.
 
-`AgentJobCLIShared` enthält die gemeinsamen Startpfade. Mit `--wait` erstellt
-der aufrufende Prozess selbst einen `AgentJobSupervisor`, behandelt SIGINT als
-Stop-Anforderung und gibt am Ende Status oder JSON aus. Ohne `--wait` startet
-`AgentSupervisorLauncher` denselben Prozess im internen Modus
-`agent-supervise <short-id>`, persistiert die PID als Liveness-Anker und gibt
-die Short-ID zurück.
+`AgentJobCLIShared` enthält die gemeinsamen Startpfade. In beiden Fällen
+startet `AgentSupervisorLauncher` denselben Prozess im internen Modus
+`agent-supervise <short-id>` und persistiert die PID als Liveness-Anker. Ohne
+`--wait` endet der Befehl mit der Short-ID; mit `--wait` schreibt
+`detachThenFollowAndEmit` eine Breadcrumb mit der Short-ID auf stderr und
+folgt dem Job per Status-Poll bis zum Turn-Ende (`followAndEmit`). SIGINT
+beendet dabei nur das Zuschauen, nicht den Turn — der detachte Supervisor
+lebt weiter. `AgentWaitCLI` (`agent wait <id>`) ist derselbe Follow-Pfad als
+eigenständiger Befehl: Wiederaufnahme nach gestorbenem Zuschauer, idempotent
+bei ruhenden Jobs (gleicher Exit-Code-Vertrag wie `status`).
 
 `AgentSuperviseCommand` ist der interne Kindprozess. Er löst sich mit
 `setsid()` vom Terminal, ignoriert SIGHUP und setzt einen SIGTERM-Handler, der
