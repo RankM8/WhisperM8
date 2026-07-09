@@ -647,7 +647,7 @@ enum AgentCLIHelp {
 
     VERWENDUNG
       whisperm8 agent run  [optionen] "<prompt>"       Job starten (detacht; --wait = synchron)
-      whisperm8 agent send <id> [--wait] [--json] "<prompt>"
+      whisperm8 agent send <id> [--wait] [--json] [--] "<prompt>"
                                                        Folge-Turn (codex exec resume)
       whisperm8 agent list [--json]                    alle Jobs
       whisperm8 agent status <id> [--json]             Zustand + Report
@@ -683,5 +683,6 @@ enum AgentCLIHelp {
         "Reviewe den Diff von HEAD~3 auf Regressionen. Nur Analyse."
       whisperm8 agent run --worktree "Implementiere X, teste, committe bei grün."
       whisperm8 agent send a3f81c2e --wait "Klärung: bitte auch die Edge-Cases abdecken."
+      whisperm8 agent send a3f81c2e -- "- Punkt 1 offen, bitte fixen"   (Prompt mit führendem -)
     """
 }

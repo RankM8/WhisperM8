@@ -126,6 +126,73 @@ final class AgentCLIArgumentsTests: XCTestCase {
         }
     }
 
+    /// Defekt 1: Ein wertnehmendes Flag darf das folgende Flag nicht als Wert
+    /// schlucken. Früher wurde `--model` still auf "--json" gesetzt und --json
+    /// blieb aus — jetzt ein klares missingValue.
+    func testFlagValueDoesNotConsumeFollowingFlag() {
+        XCTAssertThrowsError(try AgentCLIParser.parseRun(["--model", "--json", "p"])) { error in
+            XCTAssertEqual(error as? AgentCLIParser.ParseError, .missingValue("--model"))
+        }
+        XCTAssertThrowsError(try AgentCLIParser.parseRun(["--cd", "--wait", "p"])) { error in
+            XCTAssertEqual(error as? AgentCLIParser.ParseError, .missingValue("--cd"))
+        }
+    }
+
+    /// Defekt 2: Nach `--` ist der Prompt frei — auch mit führendem "-".
+    func testDashDashTerminatorAllowsDashPrompt() throws {
+        let options = try AgentCLIParser.parseRun(["--wait", "--", "- fix the bug"])
+        XCTAssertTrue(options.wait)
+        XCTAssertEqual(options.prompt, "- fix the bug")
+    }
+
+    /// `--` beendet die Flag-Erkennung: ein danach stehendes "--json" ist Text,
+    /// kein Flag mehr.
+    func testDashDashTerminatorStopsFlagParsing() throws {
+        let options = try AgentCLIParser.parseRun(["--", "--json ist hier nur Text"])
+        XCTAssertFalse(options.json)
+        XCTAssertEqual(options.prompt, "--json ist hier nur Text")
+    }
+
+    // MARK: - parseSend
+
+    func testSendBasic() throws {
+        let options = try AgentCLIParser.parseSend(["a3f81c2e", "--wait", "mach weiter"])
+        XCTAssertEqual(options.shortId, "a3f81c2e")
+        XCTAssertEqual(options.prompt, "mach weiter")
+        XCTAssertTrue(options.wait)
+    }
+
+    /// Defekt 2 (Live-Beweis): `send <id> "- prompt"` schlug fehl. Mit `--`
+    /// davor geht es.
+    func testSendDashDashTerminatorAllowsDashPrompt() throws {
+        let options = try AgentCLIParser.parseSend(["a3f81c2e", "--wait", "--", "- bitte zusammenfassen"])
+        XCTAssertEqual(options.shortId, "a3f81c2e")
+        XCTAssertTrue(options.wait)
+        XCTAssertEqual(options.prompt, "- bitte zusammenfassen")
+    }
+
+    func testSendUnknownFlagBeforeTerminatorThrows() {
+        XCTAssertThrowsError(try AgentCLIParser.parseSend(["a3f81c2e", "--bogus", "p"])) { error in
+            XCTAssertEqual(error as? AgentCLIParser.ParseError, .unknownFlag("--bogus"))
+        }
+    }
+
+    // MARK: - parseLogs
+
+    func testLogsTail() throws {
+        let result = try AgentCLIParser.parseLogs(["a3f81c2e", "--tail", "10"])
+        XCTAssertEqual(result.shortId, "a3f81c2e")
+        XCTAssertEqual(result.tail, 10)
+    }
+
+    /// Defekt 1 (Live-Beweis): `logs <id> --tail --json` meldete "Ungültiger
+    /// Wert '--json'". Jetzt: --tail hat keinen Wert bekommen.
+    func testLogsTailDoesNotConsumeFollowingFlag() {
+        XCTAssertThrowsError(try AgentCLIParser.parseLogs(["a3f81c2e", "--tail", "--json"])) { error in
+            XCTAssertEqual(error as? AgentCLIParser.ParseError, .missingValue("--tail"))
+        }
+    }
+
     // MARK: - CLIModeDetector
 
     func testAgentSubcommandRunsCLI() {

@@ -83,16 +83,31 @@ enum AgentCLIParser {
         var options = AgentRunOptions()
         var prompts: [String] = []
         var index = 0
+        // Alles nach einem `--` ist Positional (Prompt), auch mit führendem "-".
+        var promptsOnly = false
 
-        func nextValue(for flag: String) throws -> String {
+        // Liest den Wert nach einem Flag. `allowDashPrefix: false` (Default)
+        // lehnt einen Folge-Token mit führendem "-" ab: sonst schluckt z.B.
+        // `--model --json` still `--json` als Modellnamen. `--config` erlaubt
+        // dagegen "-"-Werte, damit dessen eigene key=value-Prüfung greift.
+        func nextValue(for flag: String, allowDashPrefix: Bool = false) throws -> String {
             index += 1
             guard index < arguments.count else { throw ParseError.missingValue(flag) }
-            return arguments[index]
+            let value = arguments[index]
+            if !allowDashPrefix, value.hasPrefix("-") { throw ParseError.missingValue(flag) }
+            return value
         }
 
         while index < arguments.count {
             let arg = arguments[index]
+            if promptsOnly {
+                prompts.append(arg)
+                index += 1
+                continue
+            }
             switch arg {
+            case "--":
+                promptsOnly = true
             case "--cd":
                 options.cd = try nextValue(for: arg)
             case "--model":
@@ -112,7 +127,7 @@ enum AgentCLIParser {
             case "--playwright-storage-state":
                 options.playwrightStorageStatePath = try nextValue(for: arg)
             case "--config":
-                let raw = try nextValue(for: arg)
+                let raw = try nextValue(for: arg, allowDashPrefix: true)
                 // Minimalvalidierung "key=value" — den Rest validiert codex
                 // selbst (TOML-Parsing des value-Teils). Ein führendes "-"
                 // MUSS hier scheitern: der Wert wird als eigenes argv-Element
@@ -148,12 +163,20 @@ enum AgentCLIParser {
         return options
     }
 
-    /// `agent send <short-id> [--wait] [--json] "<prompt>"`
+    /// `agent send <short-id> [--wait] [--json] [--] "<prompt>"`
+    /// Nach `--` gilt jedes weitere Argument als Positional — nötig für Prompts
+    /// mit führendem "-" (z.B. `send <id> -- "- bitte zusammenfassen"`).
     static func parseSend(_ arguments: [String]) throws -> AgentSendOptions {
         var options = AgentSendOptions()
         var positionals: [String] = []
+        var positionalsOnly = false
         for arg in arguments {
+            if positionalsOnly {
+                positionals.append(arg)
+                continue
+            }
             switch arg {
+            case "--": positionalsOnly = true
             case "--wait": options.wait = true
             case "--json": options.json = true
             default:
@@ -210,8 +233,13 @@ enum AgentCLIParser {
             case "--tail":
                 index += 1
                 guard index < arguments.count else { throw ParseError.missingValue("--tail") }
-                guard let value = Int(arguments[index]), value > 0 else {
-                    throw ParseError.invalidValue(flag: "--tail", value: arguments[index], allowed: "positive Ganzzahl")
+                let raw = arguments[index]
+                // Ein folgendes Flag (z.B. `--tail --json`) ist ein vergessener
+                // Wert, kein "ungültiger Wert" — präzisere Meldung, gleiche Logik
+                // wie nextValue in parseRun.
+                guard !raw.hasPrefix("-") else { throw ParseError.missingValue("--tail") }
+                guard let value = Int(raw), value > 0 else {
+                    throw ParseError.invalidValue(flag: "--tail", value: raw, allowed: "positive Ganzzahl")
                 }
                 tail = value
             default:
