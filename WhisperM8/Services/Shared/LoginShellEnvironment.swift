@@ -102,7 +102,7 @@ final class LoginShellEnvironment: @unchecked Sendable {
         // → spätere `--resume` ergeben „No conversation found", der Chat wirkt
         // „verschwunden". Jeder von uns gestartete Agent muss eine saubere
         // Top-Level-Session sein. Siehe
-        // docs/agent-chats-redesign/03-claude-code-cli-session-verhalten.md
+        // docs/referenz/claude-code/session-verhalten.md
         for key in env.keys where key.hasPrefix("CLAUDE_CODE_") || key == "CLAUDECODE" {
             env.removeValue(forKey: key)
         }

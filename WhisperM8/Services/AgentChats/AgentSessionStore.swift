@@ -448,7 +448,7 @@ struct AgentSessionStore {
         let stored = try upsertSession(session)
         // Crash-safe: strukturelle Erstellung SOFORT persistieren statt auf den
         // 0,5-s-Debounce zu warten — sonst Verlust bei Crash/Force-Quit/kill im
-        // Zeitfenster. Siehe docs/agent-chats-redesign/01-chat-persistenz-datenverlust.md
+        // Zeitfenster. Siehe docs/archive/agent-chats-redesign/01-chat-persistenz-datenverlust.md
         Logger.agentStore.notice("session_created id=\(stored.id.uuidString, privacy: .public) provider=\(provider.rawValue, privacy: .public)")
         workspaceStore.flush(reason: "create")
         return stored

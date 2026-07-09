@@ -83,7 +83,7 @@ struct PerformanceBudget {
 }
 
 /// Konkrete Budgets der instrumentierten Hot-Paths. Begründung der Werte und
-/// Treiber: docs/strategie/2026-06-10-refactor-plan.md, Paket P7.
+/// Treiber: docs/archive/strategie/2026-06-10-refactor-plan.md, Paket P7.
 enum PerfBudgets {
     // Diktat-Pipeline
     static let recordingStart = PerformanceBudget(name: "recording.start", budget: 0.400, signposter: PerfSignposts.recording)

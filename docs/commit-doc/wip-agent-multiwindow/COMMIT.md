@@ -13,7 +13,7 @@ updated: 2026-06-27 14:10
 
 **Typ:** `feat` · **Status:** 🔄 WIP (unstaged/staged, noch nicht committed)
 **Branch:** `main` · **Datum:** 2026-06-27
-**Feature-Bereich:** Agent Chats (`docs/features/agent-chats-multiwindow/`)
+**Feature-Bereich:** Agent Chats (`docs/features/agent-chats/ui/`)
 
 ---
 

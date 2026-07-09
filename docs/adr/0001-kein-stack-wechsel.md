@@ -1,7 +1,7 @@
 # ADR 0001: Kein Stack-Wechsel — nativ Swift/SwiftUI/SwiftTerm bleibt
 
 **Status:** Akzeptiert (10. Juni 2026)
-**Kontext:** docs/strategie/2026-06-10-technologie-analyse.md (Markt-Recherche + drei unabhängige Architektur-Gutachten mit adversarialer Faktenprüfung)
+**Kontext:** docs/archive/strategie/2026-06-10-technologie-analyse.md (Markt-Recherche + drei unabhängige Architektur-Gutachten mit adversarialer Faktenprüfung)
 
 ## Entscheidung
 
@@ -24,7 +24,7 @@ Eine Migration zu Electron oder Tauri findet nicht statt.
    Mac-Diktat-Apps (Superwhisper, VoiceInk, MacWhisper, Handy) sind nativ.
 4. **Die realen Performance-Probleme waren Implementierungsmuster** (Polling,
    synchrones Voll-Load/Voll-Save, Main-Thread-I/O) — behoben durch die
-   Refactor-Pakete P1–P6 (siehe docs/strategie/2026-06-10-refactor-plan.md),
+   Refactor-Pakete P1–P6 (siehe docs/archive/strategie/2026-06-10-refactor-plan.md),
    ohne Stack-Wechsel.
 
 ## Re-Evaluations-Trigger
