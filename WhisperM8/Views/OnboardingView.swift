@@ -331,7 +331,7 @@ struct CodexConnectStep: View {
                 .buttonStyle(.borderedProminent)
 
                 Button("Check Again") {
-                    status = CodexStatusProbe().status()
+                    refreshStatus()
                 }
             }
 
@@ -342,7 +342,16 @@ struct CodexConnectStep: View {
         }
         .padding(32)
         .onAppear {
-            status = CodexStatusProbe().status()
+            refreshStatus()
+        }
+    }
+
+    /// Die Probe spawnt einen Subprozess (`codex login status`) — nie synchron
+    /// auf dem Main-Thread laufen lassen, sonst friert das Onboarding kurz ein.
+    private func refreshStatus() {
+        Task.detached(priority: .userInitiated) {
+            let result = CodexStatusProbe().status()
+            await MainActor.run { status = result }
         }
     }
 }

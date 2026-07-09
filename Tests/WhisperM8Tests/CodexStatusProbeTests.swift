@@ -38,4 +38,26 @@ final class CodexStatusProbeTests: XCTestCase {
     func testVersionNotInstalledWhenCommandMissing() {
         XCTAssertEqual(probe(path: nil).version(), "Not installed")
     }
+
+    /// Regression für den node-Wrapper-Bug: `runProcess` MUSS das übergebene
+    /// (bzw. per Default das Login-Shell-)Environment an den Subprozess geben.
+    /// Vorher lief die Probe mit dem rohen GUI-Env — ein npm-installiertes
+    /// `codex` (node-Shebang) scheiterte mit "env: node: No such file or
+    /// directory" und alle Diktier-Modi verweigerten wegen Status .installed.
+    func testRunProcessPassesEnvironmentToSubprocess() {
+        let output = CodexStatusProbe.runProcess(
+            "/bin/sh",
+            arguments: ["-c", "echo $WHISPERM8_ENV_CHECK"],
+            environment: ["WHISPERM8_ENV_CHECK": "probe-env-ok", "PATH": "/usr/bin:/bin"]
+        )
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "probe-env-ok")
+    }
+
+    /// Das Default-Environment ist das Login-Shell-Env — es enthält die
+    /// Homebrew-/User-Pfade, in denen node & codex liegen.
+    func testRunProcessDefaultEnvironmentIsLoginShellEnvironment() {
+        let output = CodexStatusProbe.runProcess("/bin/sh", arguments: ["-c", "echo $PATH"])
+        let expected = LoginShellEnvironment.shared.processEnvironment()["PATH"] ?? ""
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), expected)
+    }
 }

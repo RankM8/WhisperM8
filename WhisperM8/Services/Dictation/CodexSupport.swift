@@ -227,10 +227,21 @@ struct CodexStatusProbe {
         return AgentCommandBuilder.commandPath(command)
     }
 
-    private static func runProcess(_ path: String, arguments: [String]) -> String {
+    /// Läuft IMMER mit korrigiertem Login-Shell-Environment: `codex` kann ein
+    /// node-Wrapper sein (npm-Installation), der `node` im PATH braucht — im
+    /// minimalen launchd-PATH der GUI scheitert er sonst mit
+    /// "env: node: No such file or directory", die Probe meldet dann fälschlich
+    /// `.installed` statt `.signedIn` und das Post-Processing verweigert.
+    /// `internal` + injizierbares Env für Tests.
+    static func runProcess(
+        _ path: String,
+        arguments: [String],
+        environment: [String: String] = LoginShellEnvironment.shared.processEnvironment()
+    ) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
+        process.environment = environment
         let output = Pipe()
         process.standardOutput = output
         process.standardError = output
