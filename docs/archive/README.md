@@ -17,3 +17,5 @@ Historische Dokumentation — **Quellenlager, kein Endlager**: Aktuelle Feature-
 | `claude-code-integration/` | WhisperM8-Integrationsstand (Mai), Beratungs-Optionen, Integrationsplan-HTML | Stand Mai 2026 — flache `Services/`-Struktur, viele heutige Services fehlen; ersetzt durch `features/agent-chats/` |
 | `agent-chats-redesign/` | Redesign-Plan-Index + Chat-Persistenz-Plan (2026-06-24) | Umgesetzt (Phasen ✅); offener Rest lebt in `plans/sidebar-feinschliff.md` |
 | `design/` | 4 Agent-Chats-Redesign-Prototypen (HTML, Juni-Generation) | Vom umgesetzten Redesign überholt; aktive Prototypen liegen in `docs/design/` |
+| `design-prompts/` | Claude-Design-Prompt für die Agent-Chat-UX + Referenz-Screenshot (2026-05-12, ehem. Top-Level `Dokumentation/`) | Einmaliges Prompt-Material, UX längst umgesetzt |
+| `analyse/` | Zwei Iterationen der Refactoring-Analyse vom 2026-05-11 (ehem. Top-Level `analysis/` + `analysis-refactoring/`) | Vorgänger des Juni-Audits `docs/refactor/REFACTORING-AUDIT.md` |
