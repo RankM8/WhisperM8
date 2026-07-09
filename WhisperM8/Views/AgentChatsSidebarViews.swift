@@ -94,23 +94,26 @@ struct ProjectChatGroup: View {
                         )
                         sessionRow(session, split: split)
                         // Variante D: die AKTIVEN (fehlgeschlagen + laufend)
-                        // sind immer sichtbar; alles Fertige liegt in der Welle
-                        // und wird auf Klick eingeblendet. Ein selektiertes Kind
-                        // bleibt sichtbar (Reveal, im Split).
+                        // sind immer sichtbar; alles Fertige liegt hinter dem
+                        // Chip-Chevron. Die Welle-Zeile rendert NUR im
+                        // ausgeklappten Zustand (als Einklapp-Griff über den
+                        // Fertigen) — eingeklappt trägt der Chip bereits
+                        // Segmente + Bruch + Pfeil, eine zweite Zeile mit
+                        // derselben Aussage wäre Dopplung. Ein selektiertes
+                        // Kind bleibt sichtbar (Reveal, im Split).
                         if let split {
                             ForEach(split.visible) { child in
                                 subagentChildRow(child)
                             }
-                            if !split.hidden.isEmpty {
+                            if !split.hidden.isEmpty,
+                               expandedSubagentParentIDs.contains(session.id) {
                                 subagentFooterRow(
                                     parentID: session.id,
                                     split: split,
-                                    isExpanded: expandedSubagentParentIDs.contains(session.id)
+                                    isExpanded: true
                                 )
-                                if expandedSubagentParentIDs.contains(session.id) {
-                                    ForEach(split.hidden) { child in
-                                        subagentChildRow(child)
-                                    }
+                                ForEach(split.hidden) { child in
+                                    subagentChildRow(child)
                                 }
                             }
                         }
@@ -564,20 +567,26 @@ struct SubagentSegmentMeter: View {
     let terminal: Int
     let total: Int
     var segments: Int = 12
+    /// Ganzzahlige Punktwerte — Bruchteile (z.B. 1.5) landen zwischen den
+    /// Gerätepixeln und rendern als ungleich breite Lücken.
     var barWidth: CGFloat = 3
     var barHeight: CGFloat = 8
+    var spacing: CGFloat = 2
 
     var body: some View {
         let filled = total > 0
             ? Int((Double(terminal) / Double(total) * Double(segments)).rounded())
             : 0
-        HStack(spacing: 1.5) {
+        HStack(spacing: spacing) {
             ForEach(0..<segments, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 1)
+                RoundedRectangle(cornerRadius: 0.5)
                     .fill(index < filled ? AgentTheme.statusWorking : AgentTheme.textTertiary.opacity(0.30))
                     .frame(width: barWidth, height: barHeight)
             }
         }
+        // Auf dem Pixelraster fixieren: die HStack-Gesamtbreite ist mit
+        // Integer-Werten exakt, kein Subpixel-Snapping pro Segment.
+        .fixedSize()
         .accessibilityLabel("\(terminal) von \(total) fertig")
     }
 }
