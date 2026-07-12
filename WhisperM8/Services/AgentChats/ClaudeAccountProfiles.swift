@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Ein Claude-Code-Account-Profil. „main" ist das historische `~/.claude`
@@ -216,7 +217,126 @@ struct ClaudeAccountProfiles {
             try? fileManager.createSymbolicLink(at: target, withDestinationURL: source)
         }
         Logger.agentStore.notice("claude_profile_created name=\(name, privacy: .public)")
+        writeKeychainServiceMarker(forProfile: name)
         return profile(named: name)
+    }
+
+    // MARK: - Keychain-Service
+
+    /// Keychain-Service-Name eines Profils. Claude Code benutzt fuer das
+    /// Default-`~/.claude` den blanken Namen und haengt fuer abweichende
+    /// `CLAUDE_CONFIG_DIR`s die ersten 8 Hex-Zeichen von
+    /// `sha256(<config-dir-pfad>)` an — empirisch verifiziert (v2.1.207,
+    /// 2026-07-12) gegen zwei unabhaengige Profile.
+    func keychainService(forProfile name: String) -> String {
+        guard name != Self.mainProfileName else { return "Claude Code-credentials" }
+        let digest = SHA256.hash(data: Data(configDir(forProfile: name).path.utf8))
+        let suffix = digest.map { String(format: "%02x", $0) }.joined().prefix(8)
+        return "Claude Code-credentials-\(suffix)"
+    }
+
+    /// Hinterlegt den (berechneten) Service-Namen als `.keychain-service` im
+    /// Profil — die Statusline (`statusline-command.sh`) und `ccs status`
+    /// lesen diese Datei. Heilt auch Profile nach, die vor dieser Logik
+    /// angelegt wurden. `main` braucht keinen Marker.
+    func writeKeychainServiceMarker(forProfile name: String) {
+        guard name != Self.mainProfileName else { return }
+        let dir = configDir(forProfile: name)
+        guard fileManager.fileExists(atPath: dir.path) else { return }
+        let marker = dir.appendingPathComponent(".keychain-service")
+        try? keychainService(forProfile: name).write(to: marker, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Profil umbenennen
+
+    enum RenameError: LocalizedError, Equatable {
+        case invalidName(String)
+        case profileMissing(String)
+        case targetExists(String)
+        case keychainMoveFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidName(let name):
+                return "Invalid profile name “\(name)”. Use letters, digits, - and _; “main” is reserved."
+            case .profileMissing(let name):
+                return "Account profile “\(name)” does not exist."
+            case .targetExists(let name):
+                return "A profile named “\(name)” already exists."
+            case .keychainMoveFailed(let detail):
+                return "Could not move the Keychain login to the new profile name: \(detail)"
+            }
+        }
+    }
+
+    /// Fuer Tests injizierbarer Runner fuer `/usr/bin/security`-Aufrufe.
+    /// Rueckgabe: (exitCode, stdout).
+    var securityRunner: ([String]) -> (Int32, String) = { arguments in
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+        } catch {
+            return (1, "")
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+    }
+
+    /// Benennt ein Profil um — inklusive Keychain-Umzug, damit der Login
+    /// erhalten bleibt: der Service-Name haengt am Verzeichnis-Pfad
+    /// (sha256-Suffix), ein blosser Ordner-Rename wuerde Claude also vom
+    /// Login trennen. Ablauf: Secret lesen → Ordner umbenennen → Item unter
+    /// neuem Namen anlegen → altes Item loeschen. Schlaegt der Keychain-Teil
+    /// fehl, wird der Ordner-Rename zurueckgerollt.
+    ///
+    /// Der Caller muss sicherstellen, dass keine Session dieses Profils
+    /// laeuft, und danach die Session-Stempel im Store umziehen
+    /// (`AgentSessionStore.renameClaudeSessionProfiles`).
+    func renameProfile(from oldName: String, to newName: String) throws {
+        guard oldName != Self.mainProfileName else { throw RenameError.invalidName(oldName) }
+        guard Self.isValidProfileName(newName) else { throw RenameError.invalidName(newName) }
+        let oldDir = configDir(forProfile: oldName)
+        let newDir = configDir(forProfile: newName)
+        guard fileManager.fileExists(atPath: oldDir.path) else { throw RenameError.profileMissing(oldName) }
+        guard !fileManager.fileExists(atPath: newDir.path) else { throw RenameError.targetExists(newName) }
+
+        let oldService = keychainService(forProfile: oldName)
+        // Secret VOR dem Rename lesen (Exit != 0 = kein Login vorhanden — dann
+        // ist nichts zu retten und der reine Ordner-Rename reicht).
+        let (readStatus, secret) = securityRunner(["find-generic-password", "-s", oldService, "-w"])
+        let trimmedSecret = secret.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        try fileManager.moveItem(at: oldDir, to: newDir)
+
+        if readStatus == 0, !trimmedSecret.isEmpty {
+            let newService = keychainService(forProfile: newName)
+            let account = NSUserName()
+            let (addStatus, _) = securityRunner([
+                "add-generic-password", "-a", account, "-s", newService,
+                "-l", newService, "-w", trimmedSecret, "-U",
+            ])
+            guard addStatus == 0 else {
+                // Rollback: Ordner zurueck, Login bleibt am alten Namen intakt.
+                try? fileManager.moveItem(at: newDir, to: oldDir)
+                throw RenameError.keychainMoveFailed("security add-generic-password exit \(addStatus)")
+            }
+            _ = securityRunner(["delete-generic-password", "-s", oldService])
+        }
+
+        writeKeychainServiceMarker(forProfile: newName)
+
+        // Aktives Profil nachziehen, falls es auf den alten Namen zeigte.
+        if (try? String(contentsOf: activeFileURL, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) == oldName {
+            try? setActiveProfile(newName)
+        }
+        Logger.agentStore.notice("claude_profile_renamed from=\(oldName, privacy: .public) to=\(newName, privacy: .public)")
     }
 
     // MARK: - Chat zu anderem Account verschieben

@@ -9,9 +9,12 @@ import SwiftUI
 /// Config-Dir); WhisperM8 liest nur Metadaten.
 struct AgentChatsClaudeAccountsTab: View {
     private let profileService = ClaudeAccountProfiles()
+    private let usageFetcher = ClaudeAccountUsageFetcher()
 
     @State private var profiles: [ClaudeAccountProfile] = []
     @State private var activeProfileName = ClaudeAccountProfiles.mainProfileName
+    @State private var usageByProfile: [String: ClaudeAccountUsage] = [:]
+    @State private var isFetchingUsage = false
     @State private var newProfileName = ""
     @State private var feedback: String?
     @State private var feedbackTone: SettingsHelpText.Tone = .secondary
@@ -75,10 +78,16 @@ struct AgentChatsClaudeAccountsTab: View {
             subtitle: profileSubtitle(profile)
         ) {
             HStack(spacing: 10) {
-                if let usage = usageText(for: profile) {
-                    Text(usage)
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
-                        .foregroundStyle(AppTheme.textTertiary)
+                usageView(for: profile)
+
+                if !profile.isMain {
+                    Button {
+                        renameProfile(profile)
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .help("Rename profile (keeps the login — the Keychain entry moves along)")
                 }
 
                 if !profile.isLoggedIn {
@@ -129,21 +138,52 @@ struct AgentChatsClaudeAccountsTab: View {
         return "Not logged in yet — click “Log in…” and finish the one-time browser login."
     }
 
-    private func usageText(for profile: ClaudeAccountProfile) -> String? {
-        guard let usage = profileService.usageSnapshot(forProfile: profile.name) else {
-            return nil
+    /// Limit-Anzeige pro Account: 5h-/Wochen-Auslastung mit Reset-Zeiten,
+    /// farbcodiert nach Verbrauch. Dauerhaft sichtbar (kein Hover), dim wenn
+    /// die Daten nur aus dem Cache stammen.
+    @ViewBuilder
+    private func usageView(for profile: ClaudeAccountProfile) -> some View {
+        if let usage = usageByProfile[profile.name] {
+            HStack(spacing: 8) {
+                if let fiveHour = usage.fiveHourPercent {
+                    limitLabel(prefix: "5h", percent: fiveHour, resetsAt: usage.fiveHourResetsAt)
+                }
+                if let sevenDay = usage.sevenDayPercent {
+                    limitLabel(prefix: "wk", percent: sevenDay, resetsAt: usage.sevenDayResetsAt)
+                }
+                if !usage.isLive {
+                    Text(cacheAgeText(usage.fetchedAt))
+                        .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+                        .foregroundStyle(AppTheme.textTertiary)
+                }
+            }
+        } else if profile.isLoggedIn, isFetchingUsage {
+            Text("loading…")
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .foregroundStyle(AppTheme.textTertiary)
         }
-        var parts: [String] = []
-        if let fiveHour = usage.fiveHourUtilization {
-            parts.append("5h \(Int(fiveHour.rounded()))%")
+    }
+
+    private func limitLabel(prefix: String, percent: Double, resetsAt: Date?) -> some View {
+        var text = "\(prefix) \(Int(percent.rounded()))%"
+        if let resetsAt {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "de_DE")
+            // Wochen-Reset liegt Tage voraus → Wochentag zeigen, 5h nur Uhrzeit
+            formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
+            text += " ↻\(formatter.string(from: resetsAt))"
         }
-        if let sevenDay = usage.sevenDayUtilization {
-            parts.append("week \(Int(sevenDay.rounded()))%")
-        }
-        guard !parts.isEmpty else { return nil }
-        let age = Int(Date().timeIntervalSince(usage.fetchedAt) / 60)
-        parts.append(age < 1 ? "now" : "\(age)m ago")
-        return parts.joined(separator: " · ")
+        let color: Color = percent >= 80 ? AppTheme.statusError
+            : percent >= 50 ? AppTheme.statusAwaiting
+            : AppTheme.textSecondary
+        return Text(text)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .foregroundStyle(color)
+    }
+
+    private func cacheAgeText(_ fetchedAt: Date) -> String {
+        let minutes = Int(Date().timeIntervalSince(fetchedAt) / 60)
+        return minutes < 1 ? "(cache)" : "(cache, \(minutes)m)"
     }
 
     // MARK: - Actions
@@ -151,6 +191,35 @@ struct AgentChatsClaudeAccountsTab: View {
     private func reload() {
         profiles = profileService.profiles()
         activeProfileName = profileService.activeProfileName()
+        // Statusline-Marker nachziehen (heilt auch aeltere Profile ohne Datei)
+        for profile in profiles where !profile.isMain {
+            profileService.writeKeychainServiceMarker(forProfile: profile.name)
+        }
+        fetchUsageForAllProfiles()
+    }
+
+    /// Holt die Limits ALLER eingeloggten Accounts parallel — live vom
+    /// oauth/usage-Endpoint, mit Statusline-Cache als Fallback.
+    private func fetchUsageForAllProfiles() {
+        guard !isFetchingUsage else { return }
+        isFetchingUsage = true
+        let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
+        Task {
+            var results: [String: ClaudeAccountUsage] = [:]
+            await withTaskGroup(of: (String, ClaudeAccountUsage?).self) { group in
+                for name in loggedIn {
+                    group.addTask { (name, await usageFetcher.fetchUsage(forProfile: name)) }
+                }
+                for await (name, usage) in group {
+                    if let usage { results[name] = usage }
+                }
+            }
+            let finalResults = results
+            await MainActor.run {
+                usageByProfile = finalResults
+                isFetchingUsage = false
+            }
+        }
     }
 
     private func setActive(_ profile: ClaudeAccountProfile) {
@@ -202,6 +271,45 @@ struct AgentChatsClaudeAccountsTab: View {
             NSWorkspace.shared.open(commandURL)
         } catch {
             showFeedback("Could not open the login Terminal: \(error.localizedDescription)", tone: .error)
+        }
+    }
+
+    /// Rename-Dialog: neuer Name via NSAlert-Textfeld. Der Service zieht das
+    /// Keychain-Item mit um (Login bleibt erhalten), danach werden die
+    /// Session-Stempel im Store nachgezogen. Blockiert, solange irgendeine
+    /// Session dieses Profils läuft — deren CLAUDE_CONFIG_DIR zeigt auf den
+    /// alten Pfad.
+    private func renameProfile(_ profile: ClaudeAccountProfile) {
+        let store = AgentSessionStore()
+        let runningIDs = AgentTerminalRegistry.shared.activeSessionIDs
+        let hasRunningSession = store.loadWorkspace().sessions.contains {
+            $0.claudeProfileName == profile.name && runningIDs.contains($0.id)
+        }
+        guard !hasRunningSession else {
+            showFeedback("“\(profile.name)” has running sessions — stop them before renaming.", tone: .warning)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Rename account profile “\(profile.name)”"
+        alert.informativeText = "The login is kept — the Keychain entry moves to the new name automatically. All chats of this profile keep working."
+        let field = NSTextField(string: profile.name)
+        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let newName = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard newName != profile.name else { return }
+        do {
+            try profileService.renameProfile(from: profile.name, to: newName)
+            try store.renameClaudeSessionProfiles(from: profile.name, to: newName)
+            usageByProfile[newName] = usageByProfile.removeValue(forKey: profile.name)
+            reload()
+            showFeedback("Profile renamed to “\(newName)”. Login and chats moved along.", tone: .secondary)
+        } catch {
+            showFeedback(error.localizedDescription, tone: .error)
         }
     }
 

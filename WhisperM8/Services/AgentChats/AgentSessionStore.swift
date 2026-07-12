@@ -282,6 +282,21 @@ struct AgentSessionStore {
         }
     }
 
+    /// Zieht nach einem Profil-Rename die Stempel ALLER betroffenen Sessions
+    /// nach — die Transcripts sind mit dem Verzeichnis bereits umgezogen,
+    /// nur die Metadaten zeigen noch auf den alten Namen.
+    func renameClaudeSessionProfiles(from oldName: String, to newName: String) throws {
+        try mutateWorkspaceIfChanged { workspace in
+            var changed = false
+            for index in workspace.sessions.indices
+            where workspace.sessions[index].claudeProfileName == oldName {
+                workspace.sessions[index].claudeProfileName = newName
+                changed = true
+            }
+            return changed
+        }
+    }
+
     // MARK: - Drag-and-Drop reordering
 
     /// Schreibt fortlaufende `sortIndex`-Werte (0…n-1) anhand der gegebenen

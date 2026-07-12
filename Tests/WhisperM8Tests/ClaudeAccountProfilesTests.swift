@@ -270,3 +270,134 @@ extension ClaudeAccountProfilesTests {
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
     }
 }
+
+// MARK: - Keychain-Service & Rename
+
+extension ClaudeAccountProfilesTests {
+    func testKeychainServiceUsesVerifiedSHA256Suffix() {
+        // Ground truth vom echten System (claude v2.1.207, 2026-07-12):
+        // ~/.claude-profiles/PowerUser → Eintrag "…-7aab1f41".
+        let service = ClaudeAccountProfiles(
+            homeDirectory: URL(fileURLWithPath: "/Users/giulianocosta")
+        )
+        XCTAssertEqual(
+            service.keychainService(forProfile: "PowerUser"),
+            "Claude Code-credentials-7aab1f41"
+        )
+        XCTAssertEqual(service.keychainService(forProfile: "main"), "Claude Code-credentials")
+    }
+
+    func testCreateProfileWritesKeychainServiceMarker() throws {
+        let profile = try service.createProfile(named: "firma")
+
+        let marker = profile.configDir.appendingPathComponent(".keychain-service")
+        let content = try String(contentsOf: marker, encoding: .utf8)
+        XCTAssertEqual(content, service.keychainService(forProfile: "firma"))
+    }
+
+    func testRenameProfileMovesDirAndKeychain() throws {
+        var service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "alt")
+        try service.setActiveProfile("alt")
+        var securityCalls: [[String]] = []
+        service.securityRunner = { arguments in
+            securityCalls.append(arguments)
+            if arguments.first == "find-generic-password" { return (0, "{\"claudeAiOauth\":{}}") }
+            return (0, "")
+        }
+
+        try service.renameProfile(from: "alt", to: "neu")
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.configDir(forProfile: "alt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.configDir(forProfile: "neu").path))
+        // Keychain: gelesen (alter Service), angelegt (neuer), alter geloescht
+        let oldService = service.keychainService(forProfile: "alt")
+        let newService = service.keychainService(forProfile: "neu")
+        XCTAssertTrue(securityCalls.contains { $0.first == "find-generic-password" && $0.contains(oldService) })
+        XCTAssertTrue(securityCalls.contains { $0.first == "add-generic-password" && $0.contains(newService) })
+        XCTAssertTrue(securityCalls.contains { $0.first == "delete-generic-password" && $0.contains(oldService) })
+        // .active zieht mit, Marker aktualisiert
+        XCTAssertEqual(service.activeProfileName(), "neu")
+        XCTAssertEqual(
+            try String(contentsOf: service.configDir(forProfile: "neu").appendingPathComponent(".keychain-service"), encoding: .utf8),
+            newService
+        )
+    }
+
+    func testRenameProfileRollsBackWhenKeychainAddFails() throws {
+        var service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "alt")
+        service.securityRunner = { arguments in
+            if arguments.first == "find-generic-password" { return (0, "{\"claudeAiOauth\":{}}") }
+            if arguments.first == "add-generic-password" { return (1, "") }
+            return (0, "")
+        }
+
+        XCTAssertThrowsError(try service.renameProfile(from: "alt", to: "neu"))
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.configDir(forProfile: "alt").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.configDir(forProfile: "neu").path))
+    }
+
+    func testRenameProfileWithoutLoginSkipsKeychainOps() throws {
+        var service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "alt")
+        var mutatingCalls: [String] = []
+        service.securityRunner = { arguments in
+            if arguments.first != "find-generic-password" { mutatingCalls.append(arguments.first ?? "") }
+            return (44, "")  // errSecItemNotFound-artiger Fehler beim Lesen
+        }
+
+        try service.renameProfile(from: "alt", to: "neu")
+
+        XCTAssertTrue(mutatingCalls.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.configDir(forProfile: "neu").path))
+    }
+
+    func testRenameProfileGuards() throws {
+        _ = try service.createProfile(named: "alt")
+        _ = try service.createProfile(named: "belegt")
+
+        XCTAssertThrowsError(try service.renameProfile(from: "main", to: "x"))
+        XCTAssertThrowsError(try service.renameProfile(from: "fehlt", to: "x"))
+        XCTAssertThrowsError(try service.renameProfile(from: "alt", to: "belegt"))
+        XCTAssertThrowsError(try service.renameProfile(from: "alt", to: "böse name"))
+    }
+}
+
+// MARK: - Usage-Parsing
+
+final class ClaudeAccountUsageFetcherTests: XCTestCase {
+    func testParseUsageEndpointShape() throws {
+        let json = """
+        {"five_hour": {"utilization": 24.4, "resets_at": "2026-07-12T18:00:00.123456+00:00"},
+         "seven_day": {"utilization": 6.0, "resets_at": "2026-07-17T17:00:00Z"}}
+        """
+        let usage = try XCTUnwrap(
+            ClaudeAccountUsageFetcher.parseUsage(Data(json.utf8), fetchedAt: Date(), isLive: true)
+        )
+        XCTAssertEqual(usage.fiveHourPercent, 24.4)
+        XCTAssertEqual(usage.sevenDayPercent, 6.0)
+        XCTAssertNotNil(usage.fiveHourResetsAt)
+        XCTAssertNotNil(usage.sevenDayResetsAt)
+        XCTAssertTrue(usage.isLive)
+    }
+
+    func testParseUsageStatuslineStdinShape() throws {
+        // Offizielles rate_limits-Format: used_percentage + Epoch-Sekunden
+        let json = """
+        {"five_hour": {"used_percentage": 12, "resets_at": 1784000000}}
+        """
+        let usage = try XCTUnwrap(
+            ClaudeAccountUsageFetcher.parseUsage(Data(json.utf8), fetchedAt: Date(), isLive: false)
+        )
+        XCTAssertEqual(usage.fiveHourPercent, 12)
+        XCTAssertEqual(usage.fiveHourResetsAt, Date(timeIntervalSince1970: 1_784_000_000))
+        XCTAssertNil(usage.sevenDayPercent)
+    }
+
+    func testParseUsageRejectsGarbage() {
+        XCTAssertNil(ClaudeAccountUsageFetcher.parseUsage(Data("{}".utf8), fetchedAt: Date(), isLive: true))
+        XCTAssertNil(ClaudeAccountUsageFetcher.parseUsage(Data("kaputt".utf8), fetchedAt: Date(), isLive: true))
+    }
+}
