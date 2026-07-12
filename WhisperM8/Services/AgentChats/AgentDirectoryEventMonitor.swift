@@ -21,23 +21,32 @@ final class AgentDirectoryEventMonitor {
         debounceInterval: TimeInterval = 5.0
     ) {
         let home = FileManager.default.homeDirectoryForCurrentUser
+        // `.claude-profiles` statt der einzelnen Profil-projects-Dirs: so
+        // werden auch NACH App-Start angelegte Account-Profile erfasst.
+        // `relevantPaths` filtert Nicht-Transcript-JSONL (history.jsonl etc.).
         self.rootURLs = rootURLs ?? [
             home.appendingPathComponent(".claude/projects", isDirectory: true),
+            home.appendingPathComponent(".claude-profiles", isDirectory: true),
             home.appendingPathComponent(".codex/sessions", isDirectory: true),
         ]
         self.debounceInterval = debounceInterval
     }
 
-    /// Pure, testbarer Filter: nur .jsonl-Pfade sind relevant, und Pfade
-    /// aktuell live-gewatchter Transcripts werden VERWORFEN — sonst würde
-    /// jede aktive In-App-Session (schreibt sekündlich) dauerhaft Scans
-    /// auslösen.
+    /// Pure, testbarer Filter: nur .jsonl-Transcript-Pfade sind relevant, und
+    /// Pfade aktuell live-gewatchter Transcripts werden VERWORFEN — sonst
+    /// würde jede aktive In-App-Session (schreibt sekündlich) dauerhaft Scans
+    /// auslösen. Transcripts liegen immer unter einem `projects/`- (Claude)
+    /// bzw. `sessions/`-Segment (Codex) — das haelt Profil-interne JSONL wie
+    /// `history.jsonl` aus dem Scan-Trigger heraus (der `.claude-profiles`-
+    /// Root wird als GANZES gewatcht, damit neue Profile ohne Neustart zaehlen).
     nonisolated static func relevantPaths(
         _ paths: [String],
         watchedTranscriptPaths: Set<String>
     ) -> [String] {
         paths.filter { path in
-            path.hasSuffix(".jsonl") && !watchedTranscriptPaths.contains(path)
+            path.hasSuffix(".jsonl")
+                && (path.contains("/projects/") || path.contains("/sessions/"))
+                && !watchedTranscriptPaths.contains(path)
         }
     }
 

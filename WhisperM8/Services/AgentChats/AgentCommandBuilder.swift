@@ -10,6 +10,9 @@ struct AgentLaunchCommand: Equatable {
     /// Implementation und braucht andere Byte-Sequenzen (z. B. CSI-u fuer
     /// Shift+Enter statt Backslash-Continuation).
     var keyboardProfile: TerminalKeyboardProfile = .claudeCodeChat
+    /// Zusaetzliche Env-Variablen fuer den Launch, gemerged ueber das
+    /// LoginShellEnvironment (z. B. `CLAUDE_CONFIG_DIR` fuer Account-Profile).
+    var environmentOverrides: [String: String] = [:]
 }
 
 enum AgentCommandError: LocalizedError, Equatable {
@@ -53,6 +56,13 @@ struct AgentCommandBuilder {
 
     var codexServiceTierResolver: () -> CodexServiceTier = {
         CodexServiceTier.resolve(AppPreferences.shared.codexServiceTierRaw)
+    }
+
+    /// Liefert die Env-Overrides fuer das Claude-Account-Profil einer Session
+    /// (`CLAUDE_CONFIG_DIR`). Default liest die echten Profile von der Platte,
+    /// im Test ueberschreibbar. `nil`/main → leeres Dict.
+    var claudeProfileEnvironmentResolver: (String?) -> [String: String] = { profileName in
+        ClaudeAccountProfiles().environmentOverrides(forProfile: profileName)
     }
 
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
@@ -212,6 +222,12 @@ struct AgentCommandBuilder {
             throw AgentCommandError.commandNotFound("Claude")
         }
 
+        // Account-Profil der Session (Multi-Account): laeuft die Session unter
+        // einem Zusatz-Account, bekommt der Launch dessen CLAUDE_CONFIG_DIR.
+        // Der Stempel ist Session-stabil — Resume MUSS unter demselben
+        // Config-Dir laufen, unter dem die Session erstellt wurde.
+        let profileEnvironment = claudeProfileEnvironmentResolver(session.claudeProfileName)
+
         // Claude Agents View ist ein separater Subcommand (`claude agents`)
         // mit eigener TUI fuer Background-Sessions. Kein --resume,
         // kein --session-id, keine Hook-Bridge — das ist ein
@@ -224,7 +240,8 @@ struct AgentCommandBuilder {
                 executablePath: executable,
                 arguments: arguments,
                 workingDirectory: project.path,
-                keyboardProfile: .claudeAgentsView
+                keyboardProfile: .claudeAgentsView,
+                environmentOverrides: profileEnvironment
             )
         }
 
@@ -248,7 +265,8 @@ struct AgentCommandBuilder {
                 workingDirectory: project.path,
                 // Attach landet in einer normalen Claude-Chat-Session, also
                 // selbes Keyboard-Profil wie ein interaktiver `.chat`.
-                keyboardProfile: .claudeCodeChat
+                keyboardProfile: .claudeCodeChat,
+                environmentOverrides: profileEnvironment
             )
         }
 
@@ -291,7 +309,8 @@ struct AgentCommandBuilder {
             executablePath: executable,
             arguments: arguments,
             workingDirectory: project.path,
-            keyboardProfile: .claudeCodeChat
+            keyboardProfile: .claudeCodeChat,
+            environmentOverrides: profileEnvironment
         )
     }
 

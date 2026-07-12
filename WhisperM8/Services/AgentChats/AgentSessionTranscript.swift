@@ -324,13 +324,19 @@ enum AgentTranscriptLocator {
     }
 
     private static func locateClaude(externalSessionID: String, cwd: String) -> URL? {
+        // Multi-Account: das Transcript kann unter ~/.claude/projects ODER
+        // unter einem Profil-Root (~/.claude-profiles/<name>/projects) liegen —
+        // alle Roots pruefen, main zuerst.
         let encoded = encodeClaudeCwd(cwd)
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude")
-            .appendingPathComponent("projects")
-            .appendingPathComponent(encoded)
-            .appendingPathComponent("\(externalSessionID).jsonl")
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        for root in ClaudeAccountProfiles().claudeProjectsRoots() {
+            let url = root
+                .appendingPathComponent(encoded)
+                .appendingPathComponent("\(externalSessionID).jsonl")
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        return nil
     }
 
     /// P3 S4: Einmal gefundene Codex-Pfade sind stabil (Dateien wandern

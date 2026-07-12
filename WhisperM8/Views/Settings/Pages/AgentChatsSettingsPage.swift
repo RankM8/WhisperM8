@@ -5,6 +5,7 @@ import UserNotifications
 enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
     case workspace
     case notifications
+    case claudeAccounts
     case claudeHooks
     case advanced
 
@@ -14,6 +15,8 @@ enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
             return "Workspace"
         case .notifications:
             return "Notifications"
+        case .claudeAccounts:
+            return "Claude Accounts"
         case .claudeHooks:
             return "Claude Hooks"
         case .advanced:
@@ -52,6 +55,8 @@ struct AgentChatsSettingsPage: View {
             AgentChatsWorkspaceSettingsTab()
         case .notifications:
             AgentChatsNotificationsSettingsTab()
+        case .claudeAccounts:
+            AgentChatsClaudeAccountsTab()
         case .claudeHooks:
             AgentChatsClaudeHooksSettingsTab()
         case .advanced:

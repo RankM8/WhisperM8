@@ -1,6 +1,6 @@
 # Plan: Claude-Code Account-Switcher (`ccs`)
 
-**Stand:** 2026-07-12 · **Status:** Slice 1–3 umgesetzt (`~/.claude-profiles/ccs.zsh` + profil-fähige Statusline), Slice 4 offen · **Scope:** eigenständiges CLI-Tool (Terminal), WhisperM8-Integration als späterer Slice
+**Stand:** 2026-07-12 · **Status:** Slice 1–4 umgesetzt (`~/.claude-profiles/ccs.zsh`, profil-fähige Statusline, WhisperM8-Settings-Tab „Claude Accounts") · **Scope:** CLI-Tool + WhisperM8-Integration
 
 ## Ziel
 
@@ -59,13 +59,17 @@ Der Kern des „manuell steuern"-Wunsches: **vor** dem Start sehen, welcher Acco
 - Ausgabe: Tabelle Profil · E-Mail · 5h % · Reset · Woche % · Reset · Aktiv-Marker.
 - **Akzeptanz:** Ein Befehl zeigt alle Abos mit Rest-Kontingent; bei Endpoint-Ausfall degradiert die Anzeige sichtbar statt zu brechen.
 
-### Slice 4 (später, optional) — WhisperM8-Integration
+### Slice 4 — WhisperM8-Integration ✅ (umgesetzt 2026-07-12)
 
-- `AccountProfile`-Modell; `CLAUDE_CONFIG_DIR`-Injektion beim PTY-Spawn (`AgentTerminalView` / `LoginShellEnvironment`, nur für `claude`).
-- Profil-Picker im Neu-Session-Flow + dauerhaftes Account-Badge (E-Mail/Org + Limit-Ampel) an Tab/Sidebar-Row.
-- `AgentSessionIndexer`/`AgentDirectoryEventMonitor`/Runtime-Watcher auf mehrere `<profil>/projects`-Roots erweitern.
-- Bridge: WhisperM8 liest `.active` als Default-Profil.
-- Ausbaustufe: Auto-Failover bei Rate-Limit (claude-swap-Parametrik: Schwelle, Cooldown, Hysterese) — erst nach stabilem manuellem Betrieb.
+**Umsetzung: Settings-first (User-Entscheidung), kein Profil-Picker im Session-Start-Flow.**
+
+- **Settings → Agent Chats → „Claude Accounts"** (`AgentChatsClaudeAccountsTab`): Übersicht aller Profile (E-Mail/Org, Login-Status, Usage-Snapshot aus dem Statusline-Cache), „Set Active" (schreibt `.active` — dieselbe Datei wie `ccs use`), „Create & Log in…" (legt Profil + Shared-Symlinks an, öffnet Terminal via `login.command` für den einmaligen Browser-Login), „Log in…"/„Remove…" pro Profil.
+- **Service `ClaudeAccountProfiles`** (Services/AgentChats): Discovery, aktives Profil, `environmentOverrides(forProfile:)` (`CLAUDE_CONFIG_DIR`), `claudeProjectsRoots()`, `profileName(forTranscriptPath:)`, `createProfile` — dateibasiert, SSoT geteilt mit dem `ccs`-CLI.
+- **Session-Stempel `claudeProfileName`** auf `AgentChatSession` (persistiert): beim Erstellen aus dem aktiven Profil gesetzt, Fork erbt von der Quelle, Auto-Import taggt aus dem Transcript-Root. **Resume läuft immer unter dem Config-Dir der Session-Entstehung** — nie unter dem gerade aktiven Profil.
+- **Env-Injektion**: `AgentLaunchCommand.environmentOverrides` → PTY-Spawn merged sie über das `LoginShellEnvironment` (`AgentTerminalView.start()`). Nur `claude`-Launches; Codex nie.
+- **Multi-Root**: `ClaudeSessionIndexer` (alle `projects/`-Roots), `AgentTranscriptLocator.locateClaude` (Root-Kaskade), `AgentDirectoryEventMonitor` (watcht `~/.claude-profiles` als Ganzes, Filter lässt nur Transcript-JSONL durch — `history.jsonl` etc. triggern keine Scans).
+- **Bewusste v1-Grenzen**: Background-Agents (`claude --bg`) laufen immer über main (Jobs-/Daemon-Multi-Root wäre ein eigener Slice); Auto-Namer nutzt main-Quota; kein Account-Badge an Tab/Sidebar-Rows (Folge-Slice); Auto-Failover bei Rate-Limit weiterhin offen.
+- Tests: `ClaudeAccountProfilesTests` (14), Builder-Env-Injektion (3), FSEvents-Filter aktualisiert.
 
 ## Risiken & Gegenmaßnahmen
 

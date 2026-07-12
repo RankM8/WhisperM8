@@ -676,10 +676,20 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // Korrigierter PATH (siehe LoginShellEnvironment) verhindert, dass
         // Claude/Codex in einem Subprocess landen, der `git`, `npm`, `mise`-shims
         // nicht findet, weil macOS' launchd uns mit minimalem ENV gestartet hat.
+        // Command-Overrides (z. B. CLAUDE_CONFIG_DIR fuer Account-Profile)
+        // gewinnen gegen gleichnamige Basis-Eintraege.
+        var environment = LoginShellEnvironment.shared.terminalEnvironmentArray()
+        if !command.environmentOverrides.isEmpty {
+            let overrideKeys = Set(command.environmentOverrides.keys)
+            environment.removeAll { entry in
+                overrideKeys.contains(String(entry.prefix(while: { $0 != "=" })))
+            }
+            environment.append(contentsOf: command.environmentOverrides.map { "\($0.key)=\($0.value)" })
+        }
         terminal.startProcess(
             executable: command.executablePath,
             args: command.arguments,
-            environment: LoginShellEnvironment.shared.terminalEnvironmentArray(),
+            environment: environment,
             currentDirectory: command.workingDirectory
         )
         onLaunched()

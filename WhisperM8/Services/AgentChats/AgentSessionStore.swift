@@ -428,7 +428,8 @@ struct AgentSessionStore {
         backgroundShortID: String? = nil,
         backgroundSubAgent: String? = nil,
         backgroundPermissionMode: String? = nil,
-        forkSourceSessionID: String? = nil
+        forkSourceSessionID: String? = nil,
+        claudeProfileName: String? = nil
     ) throws -> AgentChatSession {
         let project = try upsertProject(path: projectPath, createdManually: createdManually)
         let session = AgentChatSession(
@@ -446,7 +447,8 @@ struct AgentSessionStore {
             backgroundShortID: backgroundShortID,
             backgroundSubAgent: backgroundSubAgent,
             backgroundPermissionMode: backgroundPermissionMode,
-            forkSourceSessionID: forkSourceSessionID
+            forkSourceSessionID: forkSourceSessionID,
+            claudeProfileName: claudeProfileName
         )
         let stored = try upsertSession(session)
         // Crash-safe: strukturelle Erstellung SOFORT persistieren statt auf den
@@ -662,6 +664,13 @@ struct AgentSessionStore {
                     if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
                         workspace.sessions[index].title = indexed.title
                     }
+                    // Profil nachtragen, falls das Transcript unter einem
+                    // Profil-Root liegt und die Session noch keins traegt —
+                    // sonst wuerde ein Resume unterm falschen Config-Dir laufen.
+                    if workspace.sessions[index].claudeProfileName == nil,
+                       let profile = indexed.claudeProfileName {
+                        workspace.sessions[index].claudeProfileName = profile
+                    }
                 } else {
                     workspace.sessions.append(
                         AgentChatSession(
@@ -674,7 +683,8 @@ struct AgentSessionStore {
                             status: .closed,
                             hasLaunchedInitialPrompt: true,
                             createdAt: indexed.createdAt,
-                            lastActivityAt: indexed.lastActivityAt
+                            lastActivityAt: indexed.lastActivityAt,
+                            claudeProfileName: indexed.claudeProfileName
                         )
                     )
                 }
@@ -1040,6 +1050,10 @@ struct IndexedAgentSession: Codable, Equatable {
     var reasoningEffort: String?
     var createdAt: Date
     var lastActivityAt: Date
+    /// Claude-Account-Profil, unter dessen Root das Transcript liegt
+    /// (`~/.claude-profiles/<name>/projects/...`). `nil` = main. Optional,
+    /// damit alte `agent-index-cache.json`-Staende weiter dekodieren.
+    var claudeProfileName: String?
 }
 
 struct AgentResumeRepairResult: Equatable {

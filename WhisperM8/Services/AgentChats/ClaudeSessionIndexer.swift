@@ -1,9 +1,18 @@
 import Foundation
 
 struct ClaudeSessionIndexer {
-    var projectsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude", isDirectory: true)
-        .appendingPathComponent("projects", isDirectory: true)
+    /// Alle Transcript-Roots: `~/.claude/projects` (main) plus die
+    /// `projects/`-Dirs der Account-Profile (`~/.claude-profiles/<name>/`).
+    var projectsDirectories: [URL]
+
+    init(projectsDirectories: [URL]? = nil) {
+        self.projectsDirectories = projectsDirectories ?? ClaudeAccountProfiles().claudeProjectsRoots()
+    }
+
+    /// Bequemer Einzel-Root-Init (Tests, gezielte Scans).
+    init(projectsDirectory: URL) {
+        self.projectsDirectories = [projectsDirectory]
+    }
 
     func indexedSessions(limit: Int = 100) -> [IndexedAgentSession] {
         indexedSessionResult(limit: limit).sessions
@@ -31,15 +40,30 @@ struct ClaudeSessionIndexer {
         cache: inout AgentSessionIndexCache,
         stats: inout AgentSessionIndexStats
     ) -> [IndexedAgentSession] {
+        var sessions: [IndexedAgentSession] = []
+        for directory in projectsDirectories {
+            indexSessions(in: directory, into: &sessions, cache: &cache, stats: &stats)
+        }
+        return sessions
+            .sorted { $0.lastActivityAt > $1.lastActivityAt }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private func indexSessions(
+        in projectsDirectory: URL,
+        into sessions: inout [IndexedAgentSession],
+        cache: inout AgentSessionIndexCache,
+        stats: inout AgentSessionIndexStats
+    ) {
         guard let enumerator = FileManager.default.enumerator(
             at: projectsDirectory,
             includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey, .fileSizeKey, .isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return []
+            return
         }
 
-        var sessions: [IndexedAgentSession] = []
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
             guard !fileURL.path.contains("/subagents/") else {
                 stats.skippedFiles += 1
@@ -73,11 +97,6 @@ struct ClaudeSessionIndexer {
                 cache[.claude, fileURL, metadata] = nil
             }
         }
-
-        return sessions
-            .sorted { $0.lastActivityAt > $1.lastActivityAt }
-            .prefix(limit)
-            .map { $0 }
     }
 
     private func parseSessionFile(
@@ -143,7 +162,10 @@ struct ClaudeSessionIndexer {
             model: nil,
             reasoningEffort: nil,
             createdAt: created,
-            lastActivityAt: lastActivity
+            lastActivityAt: lastActivity,
+            // Account-Profil aus dem Ablageort: Sessions unter einem
+            // Profil-Root muessen spaeter unter demselben Config-Dir resumen.
+            claudeProfileName: ClaudeAccountProfiles.profileName(forTranscriptPath: fileURL.path)
         )
     }
 

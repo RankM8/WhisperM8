@@ -52,7 +52,12 @@ extension AgentChatsView {
                 reasoningEffort: AppPreferences.shared.codexReasoningEffortRaw,
                 externalSessionID: externalSessionID,
                 shouldLaunchOnOpen: true,
-                kind: kind
+                kind: kind,
+                // Multi-Account: neue Claude-Sessions laufen unter dem in den
+                // Settings gewaehlten aktiven Profil (nil = Haupt-Account).
+                claudeProfileName: provider == .claude
+                    ? ClaudeAccountProfiles().activeProfileNameOrNil()
+                    : nil
             )
             openTab(session.id)
             selectedSessionID = session.id
@@ -83,7 +88,10 @@ extension AgentChatsView {
                 externalSessionID: nil, // wird nach Launch via Hook gebunden
                 shouldLaunchOnOpen: true,
                 kind: .chat,
-                forkSourceSessionID: sourceExternalID
+                forkSourceSessionID: sourceExternalID,
+                // Fork erbt das Account-Profil der Quelle — `--resume` der
+                // Quell-Session funktioniert nur unter deren Config-Dir.
+                claudeProfileName: source.claudeProfileName
             )
             // Farbe der Quelle erben, damit Fork und Original visuell
             // zusammengehören.

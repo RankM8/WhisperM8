@@ -59,22 +59,44 @@ final class FileEventSourceTests: XCTestCase {
 // MARK: - FSEvents-Pfad-Filter (P2 S4)
 
 final class AgentDirectoryEventFilterTests: XCTestCase {
-    func testKeepsOnlyJSONLPaths() {
+    func testKeepsOnlyJSONLTranscriptPaths() {
         let result = AgentDirectoryEventMonitor.relevantPaths(
-            ["/a/x.jsonl", "/a/x.json", "/a/notes.txt", "/b/y.jsonl"],
+            [
+                "/u/.claude/projects/-repo/x.jsonl",
+                "/u/.claude/projects/-repo/x.json",
+                "/u/.claude/projects/-repo/notes.txt",
+                "/u/.codex/sessions/2026/07/12/y.jsonl",
+            ],
             watchedTranscriptPaths: []
         )
-        XCTAssertEqual(result, ["/a/x.jsonl", "/b/y.jsonl"])
+        XCTAssertEqual(result, [
+            "/u/.claude/projects/-repo/x.jsonl",
+            "/u/.codex/sessions/2026/07/12/y.jsonl",
+        ])
+    }
+
+    func testDropsProfileInternalJSONL() {
+        // Der `.claude-profiles`-Root wird als Ganzes gewatcht — Profil-interne
+        // JSONL wie history.jsonl (schreibt bei jedem Prompt) dürfen KEINE
+        // Scans auslösen, Transcripts unter <profil>/projects/ schon.
+        let result = AgentDirectoryEventMonitor.relevantPaths(
+            [
+                "/u/.claude-profiles/firma/history.jsonl",
+                "/u/.claude-profiles/firma/projects/-repo/x.jsonl",
+            ],
+            watchedTranscriptPaths: []
+        )
+        XCTAssertEqual(result, ["/u/.claude-profiles/firma/projects/-repo/x.jsonl"])
     }
 
     func testDropsLiveWatchedTranscripts() {
         // Aktive In-App-Sessions schreiben sekündlich — ihre Pfade dürfen
         // KEINE Scans auslösen.
         let result = AgentDirectoryEventMonitor.relevantPaths(
-            ["/a/live.jsonl", "/a/neu.jsonl"],
-            watchedTranscriptPaths: ["/a/live.jsonl"]
+            ["/u/.claude/projects/-repo/live.jsonl", "/u/.claude/projects/-repo/neu.jsonl"],
+            watchedTranscriptPaths: ["/u/.claude/projects/-repo/live.jsonl"]
         )
-        XCTAssertEqual(result, ["/a/neu.jsonl"])
+        XCTAssertEqual(result, ["/u/.claude/projects/-repo/neu.jsonl"])
     }
 
     func testEmptyInputYieldsEmptyOutput() {

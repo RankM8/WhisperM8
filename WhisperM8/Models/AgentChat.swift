@@ -295,6 +295,12 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// Session hängt am Parent-PROJEKT, aber Resume/Übernahme muss im
     /// Job-cwd laufen — `codexCommand()` bevorzugt dieses Feld.
     var subagentCwd: String?
+    /// Claude-Account-Profil, unter dem die Session läuft (`CLAUDE_CONFIG_DIR`
+    /// = `~/.claude-profiles/<name>`). `nil` = Haupt-Account (`~/.claude`).
+    /// Beim Erstellen aus dem aktiven Profil gestempelt und danach STABIL —
+    /// ein `--resume` funktioniert nur unter demselben Config-Dir, unter dem
+    /// die Session entstanden ist.
+    var claudeProfileName: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -327,6 +333,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case subagentJobShortID
         case subagentParentSessionID
         case subagentCwd
+        case claudeProfileName
     }
 
     init(
@@ -359,7 +366,8 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         forkSourceSessionID: String? = nil,
         subagentJobShortID: String? = nil,
         subagentParentSessionID: String? = nil,
-        subagentCwd: String? = nil
+        subagentCwd: String? = nil,
+        claudeProfileName: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -391,6 +399,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.subagentJobShortID = subagentJobShortID
         self.subagentParentSessionID = subagentParentSessionID
         self.subagentCwd = subagentCwd
+        self.claudeProfileName = claudeProfileName
     }
 
     init(from decoder: Decoder) throws {
@@ -429,6 +438,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         subagentJobShortID = try container.decodeIfPresent(String.self, forKey: .subagentJobShortID)
         subagentParentSessionID = try container.decodeIfPresent(String.self, forKey: .subagentParentSessionID)
         subagentCwd = try container.decodeIfPresent(String.self, forKey: .subagentCwd)
+        claudeProfileName = try container.decodeIfPresent(String.self, forKey: .claudeProfileName)
     }
 
     var isManuallyCreated: Bool { createdManually == true }

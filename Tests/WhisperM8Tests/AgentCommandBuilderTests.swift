@@ -383,3 +383,65 @@ final class AgentCommandBuilderTests: XCTestCase {
         XCTAssertFalse(command.arguments.contains("service_tier=fast"))
     }
 }
+
+// MARK: - Claude-Account-Profile (CLAUDE_CONFIG_DIR-Injektion)
+
+extension AgentCommandBuilderTests {
+    func testClaudeCommandInjectsProfileEnvironment() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { profileName in
+            profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
+        }
+
+        let profileSession = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Chat",
+            claudeProfileName: "firma"
+        )
+        let command = try builder.command(for: profileSession, project: project)
+        XCTAssertEqual(command.environmentOverrides, ["CLAUDE_CONFIG_DIR": "/profiles/firma"])
+
+        // Resume behaelt das Profil der Session — nicht das aktive.
+        let resumeSession = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "ext-1",
+            title: "Chat",
+            hasLaunchedInitialPrompt: true,
+            claudeProfileName: "firma"
+        )
+        let resumeCommand = try builder.command(for: resumeSession, project: project)
+        XCTAssertEqual(resumeCommand.environmentOverrides, ["CLAUDE_CONFIG_DIR": "/profiles/firma"])
+    }
+
+    func testClaudeCommandWithoutProfileHasNoEnvironmentOverrides() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { profileName in
+            profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
+        }
+
+        let mainSession = AgentChatSession(provider: .claude, projectID: project.id, title: "Chat")
+        let command = try builder.command(for: mainSession, project: project)
+        XCTAssertTrue(command.environmentOverrides.isEmpty)
+    }
+
+    func testCodexCommandNeverGetsClaudeProfileEnvironment() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.codexServiceTierResolver = { .standard }
+        builder.claudeProfileEnvironmentResolver = { _ in
+            XCTFail("Codex-Launches duerfen den Claude-Profil-Resolver nicht aufrufen")
+            return [:]
+        }
+
+        let codexSession = AgentChatSession(provider: .codex, projectID: project.id, title: "Codex")
+        let command = try builder.command(for: codexSession, project: project)
+        XCTAssertTrue(command.environmentOverrides.isEmpty)
+    }
+}
