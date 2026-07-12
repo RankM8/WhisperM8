@@ -117,6 +117,13 @@ struct AgentChatsView: View {
     @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
     /// Tear-off: die Detach-Drop-Zone (Content) ist gerade Drop-Ziel.
     @State private var detachZoneTargeted = false
+    /// Kompakt-Modus: Maus schwebt über den Header-Buttons (Pin/Expand) —
+    /// nimmt sie aus der Doppelklick-Expand-Zone aus (Muster
+    /// `isHoveringTabStrip`). internal, da der Monitor in +Shortcuts liest.
+    @State var isHoveringCompactControls = false
+    /// Kompakt-Modus: Fenster ist per Pin always-on-top (`.floating`).
+    /// Ephemer, nie persistiert. internal, da +Compact es setzt/liest.
+    @State var isCompactPinned = false
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
 
@@ -377,6 +384,12 @@ struct AgentChatsView: View {
         // er nimmt exakt die Flaeche ein, die vorher der HStack fuellte
         // (greedy), alle nachfolgenden Modifier verhalten sich unveraendert.
         GeometryReader { geo in
+            if isCompactMode {
+                // Projekt-Cockpit: ersetzt Sidebar+Tabs+Content komplett
+                // (Muster Archiv-Modus). Der ausgeblendete Zustand bleibt
+                // im Store unangetastet. Siehe AgentChatsView+Compact.swift.
+                compactContent
+            } else {
             HStack(spacing: 0) {
                 if isSidebarVisible {
                     hashboardSidebar
@@ -420,6 +433,7 @@ struct AgentChatsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         // Bewusst KEINE feste Mindestgröße mehr — der User soll das Fenster
         // so klein ziehen können, wie er will. Die einzige Untergrenze ist
@@ -427,7 +441,12 @@ struct AgentChatsView: View {
         // lassen sich per Toggle ausblenden, um noch kleiner zu werden).
         .background(AgentTheme.background)
         .background(AgentChatsWindowAccessor(
-            onResolve: { hostWindow = $0 },
+            onResolve: { window in
+                hostWindow = window
+                // Launch-Restore eines kompakt persistierten Fensters:
+                // Constraints + Kompakt-Größe sofort, ohne Animation.
+                applyCompactWindowChromeIfNeeded(window)
+            },
             // User schliesst das Fenster (rotes X, Fenstermenue, ⌘W ohne
             // Tabs) → Fenster + Tabs aus dem Store, sonst stellt der
             // Launch-Restore es beim naechsten Start wieder her. Quit/
@@ -1726,43 +1745,9 @@ struct AgentChatsView: View {
             projectChatStrip
 
             if let selectedSession, let project = selectedSessionProject {
-                Group {
-                    // Subagent-Jobs rendern die Job-Detail-View (Report +
-                    // Live-Transcript + Composer) — bis zur Übernahme, dann
-                    // übernimmt der normale PTY-Pfad (AgentSessionDetailView).
-                    if selectedSession.isSubagentJob && !jobRuntimeModel.isTakenOver(selectedSession.id) {
-                        SubagentJobDetailView(
-                            session: selectedSession,
-                            project: project,
-                            jobRuntimeModel: jobRuntimeModel,
-                            onTakeOver: { takeOverSubagentJob(selectedSession) },
-                            onAppearClearUnread: { windowStore.clearSubagentUnread(selectedSession.id) }
-                        )
-                    } else {
-                        AgentSessionDetailView(
-                            project: project,
-                            session: selectedSession,
-                            terminalRegistry: terminalRegistry,
-                            actionRequest: sessionActionRequest,
-                            onStateChanged: loadWorkspaceFast,
-                            onSessionLaunched: { sessionID in
-                                AgentSessionStatusCoordinator.shared.sessionLaunched(sessionID: sessionID)
-                            },
-                            onSessionTerminated: { sessionID, exitCode in
-                                AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: sessionID, exitCode: exitCode)
-                            },
-                            onExternalSessionIDBound: { sessionID in
-                                AgentSessionStatusCoordinator.shared.externalSessionIDBound(sessionID: sessionID)
-                            },
-                            onPrepareClaudeHookArguments: { sessionID in
-                                AgentSessionStatusCoordinator.shared.prepareLaunchArguments(localSessionID: sessionID)
-                            },
-                            onClaudeHookLaunched: { sessionID in
-                                AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: sessionID)
-                            }
-                        )
-                    }
-                }
+                // Detail-Pfad (Subagent-Job vs. PTY) geteilt mit dem
+                // Kompakt-Modus — siehe sessionDetailContent in +Compact.
+                sessionDetailContent(for: selectedSession, project: project)
                 .id(selectedSession.id)
                 .padding(.top, 14)
                 .padding(.horizontal, 14)
@@ -2083,6 +2068,10 @@ struct AgentChatsView: View {
                 // der Sidebar-Projekt-Zeile und im Project-Inspector, und
                 // visueller Clutter im Titlebar-Bereich kostet mehr als er
                 // hier liefert.
+
+                TitlebarIconButton(systemImage: "arrow.down.right.and.arrow.up.left", help: "Fenster verkleinern — Projekt-Cockpit (⌘⇧M)") {
+                    toggleCompactMode()
+                }
 
                 TitlebarIconButton(systemImage: "sidebar.right", help: isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen", isActive: isInspectorVisible) {
                     isInspectorVisible.toggle()

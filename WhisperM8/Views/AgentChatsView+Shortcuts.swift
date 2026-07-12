@@ -40,6 +40,7 @@ extension AgentChatsView {
             // das Event weiter an den nächsten.
             guard let event = handleTabSwitcherKeyDown(event) else { return nil }
             guard let event = handleNewChatShortcut(event) else { return nil }
+            guard let event = handleCompactToggleShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
             return handleCloseTabShortcut(event)
         }
@@ -80,6 +81,18 @@ extension AgentChatsView {
         guard modifiers == .command,
               event.charactersIgnoringModifiers == "n" else { return event }
         showNewChatProjectPicker = true
+        return nil
+    }
+
+    /// Verarbeitet ⌘⇧M: Kompakt-Modus („Projekt-Cockpit") umschalten.
+    /// Gleiche Window-Gating-Semantik wie Cmd-W — greift auch bei
+    /// fokussiertem Terminal, weil der Monitor VOR SwiftTerm dran ist.
+    private func handleCompactToggleShortcut(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow else { return event }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == [.command, .shift],
+              event.charactersIgnoringModifiers?.lowercased() == "m" else { return event }
+        toggleCompactMode()
         return nil
     }
 
@@ -303,8 +316,16 @@ extension AgentChatsView {
         let inTopBand = location.y >= contentView.bounds.height - topZone
 
         // Nur im freien Band: nicht über den Tabs, nicht über den Ampel-Buttons.
-        if inTopBand, location.x >= trafficLightWidth, !isHoveringTabStrip {
-            TitleBarZoom.performSystemDoubleClickAction(on: window)
+        // Im Kompakt-Modus gibt es keinen Tab-Strip → das ganze Band zählt;
+        // die Header-Buttons (Pin/Expand) sind über ihr Hover-Flag ausgenommen.
+        if inTopBand, location.x >= trafficLightWidth, !isHoveringTabStrip, !isHoveringCompactControls {
+            if isCompactMode {
+                // Doppelklick = „vergrößern" statt System-Zoom — sonst springt
+                // die Palette auf Bildschirmgröße.
+                toggleCompactMode()
+            } else {
+                TitleBarZoom.performSystemDoubleClickAction(on: window)
+            }
             return nil
         }
         return event
