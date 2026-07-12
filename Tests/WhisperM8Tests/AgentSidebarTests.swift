@@ -95,6 +95,8 @@ final class SessionListButtonEquatableTests: XCTestCase {
         indentAsSubagent: Bool = false,
         isUnreadSubagentResult: Bool = false,
         runningChildCount: Int = 0,
+        erroredChildCount: Int = 0,
+        unreadChildCount: Int = 0,
         store: AgentSessionRuntimeStatusStore? = nil
     ) -> SessionListButton {
         SessionListButton(
@@ -109,6 +111,8 @@ final class SessionListButtonEquatableTests: XCTestCase {
             indentAsSubagent: indentAsSubagent,
             isUnreadSubagentResult: isUnreadSubagentResult,
             runningChildCount: runningChildCount,
+            erroredChildCount: erroredChildCount,
+            unreadChildCount: unreadChildCount,
             onSelect: {},
             onClose: {}
         )
@@ -140,6 +144,49 @@ final class SessionListButtonEquatableTests: XCTestCase {
         XCTAssertNotEqual(base, makeButton(session: session, indentAsSubagent: true))
         XCTAssertNotEqual(base, makeButton(session: session, isUnreadSubagentResult: true))
         XCTAssertNotEqual(base, makeButton(session: session, runningChildCount: 2))
+        XCTAssertNotEqual(base, makeButton(session: session, erroredChildCount: 1))
+        XCTAssertNotEqual(base, makeButton(session: session, unreadChildCount: 3))
+    }
+}
+
+// MARK: - SubagentRoad-Welle (B4)
+
+/// Die Wellen-Kurve ist pur (Wanduhr rein, Opazität raus) — hier ist der
+/// Kontrakt festgenagelt, der die „unabhängige Pulse"-Regression verhindert:
+/// alle Balken teilen EINE Zeitbasis, Balken i ist die um i·stagger
+/// verschobene Kurve von Balken 0 (Lauflicht links → rechts).
+final class SubagentRoadWaveTests: XCTestCase {
+    func testBarsShareOneTimebaseShiftedByStagger() {
+        for time in stride(from: 0.0, through: 2.2, by: 0.05) {
+            for index in 1..<6 {
+                XCTAssertEqual(
+                    SubagentRoad.opacity(at: time + Double(index) * SubagentRoad.stagger, index: index),
+                    SubagentRoad.opacity(at: time, index: 0),
+                    accuracy: 0.0001,
+                    "Balken \(index) muss die verschobene Kurve von Balken 0 sein — sonst pulst er unabhängig"
+                )
+            }
+        }
+    }
+
+    func testWaveTravelsLeftToRight() {
+        // Peak von Balken 0 liegt bei 18 % des Zyklus; jeder weitere Balken
+        // peakt um stagger später — das Licht wandert nach rechts.
+        let peak0 = 0.18 * SubagentRoad.cycle
+        for index in 0..<6 {
+            let value = SubagentRoad.opacity(at: peak0 + Double(index) * SubagentRoad.stagger, index: index)
+            XCTAssertEqual(value, 1.0, accuracy: 0.0001)
+        }
+    }
+
+    func testOpacityStaysInBoundsIncludingNegativePhases() {
+        // Frühe Zeiten machen die Phase hinterer Balken negativ — der
+        // Wrap darf nie unter die Grund-Opazität fallen oder über 1 gehen.
+        for step in 0..<300 {
+            let value = SubagentRoad.opacity(at: Double(step) * 0.01, index: 5)
+            XCTAssertGreaterThanOrEqual(value, 0.2999)
+            XCTAssertLessThanOrEqual(value, 1.0001)
+        }
     }
 }
 

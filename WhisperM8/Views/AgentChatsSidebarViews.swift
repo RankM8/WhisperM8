@@ -212,13 +212,13 @@ struct ProjectChatGroup: View {
         .help("Weitere Sessions dieses Projekts einblenden")
     }
 
-    /// Fuß-Zeile („Welle") unter den aktiven Subagent-Kindern: zählt die
-    /// verborgenen FERTIGEN Kinder und blendet sie auf Klick ein (Stufe 2,
-    /// lokaler State — Stufe 1 ist das Chip-Chevron). Bewusst die LEISESTE
-    /// Zeile der Gruppe — kleiner und flacher als eine Kind-Zeile, ohne
-    /// Rahmen/Fläche. Trägt dieselbe grüne Segment-Sprache wie der Chip
-    /// (Fertig-Anteil der Gruppe), nur in groß. Ungelesen sitzt als blauer
-    /// Punkt an der fertigen Kind-Zeile (beim Aufklappen), nicht hier.
+    /// Fuß-Zeile unter den aktiven Subagent-Kindern: zählt die verborgenen
+    /// FERTIGEN Kinder und blendet sie auf Klick ein (Stufe 2, lokaler State
+    /// — Stufe 1 ist das Chip-Chevron). Bewusst die LEISESTE Zeile der
+    /// Gruppe — kleiner und flacher als eine Kind-Zeile, ohne Rahmen/Fläche.
+    /// Mit dem B4-Chip (2026-07-10) ohne Segmentleiste: den Fertig-Anteil
+    /// trägt niemand mehr, die Zahl reicht. Ungelesenes im verborgenen Teil
+    /// markiert ein blauer Punkt (Details beim Aufklappen an den Kind-Zeilen).
     private func subagentFooterRow(
         parentID: UUID,
         split: SubagentChildSplit,
@@ -237,23 +237,26 @@ struct ProjectChatGroup: View {
                 Text("\(split.hidden.count) fertig")
                     .font(.system(size: 9.5))
                     .monospacedDigit()
-                SubagentSegmentMeter(
-                    terminal: split.terminalCount,
-                    total: split.totalCount,
-                    segments: 12,
-                    barWidth: 3,
-                    barHeight: 8
-                )
+                if split.hiddenUnreadCount > 0 {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 5, height: 5)
+                }
                 Spacer(minLength: 0)
             }
             .foregroundStyle(AgentTheme.textTertiary)
-            .padding(.leading, 40)
+            // 52 = 8 (Row-Außenrand der SessionListButton-Zeilen) + 44
+            // (Subagent-Einzug): bündig mit den Kind-Zeilen darüber — die
+            // Fußzeile gehört zur Subagent-Ebene, nicht zur Chat-Ebene.
+            .padding(.leading, 52)
             .padding(.trailing, 8)
             .frame(minHeight: 22, maxHeight: 22)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(split.hidden.count) fertige Subagents — klicken zum \(isExpanded ? "Einklappen" : "Anzeigen")")
+        .help("\(split.hidden.count) fertige Subagents"
+            + (split.hiddenUnreadCount > 0 ? " · \(split.hiddenUnreadCount) ungelesen" : "")
+            + " — klicken zum \(isExpanded ? "Einklappen" : "Anzeigen")")
     }
 
     /// Anzahl der Sessions, auf die eine Bulk-Aktion wirken würde (die Auswahl,
@@ -308,6 +311,8 @@ struct ProjectChatGroup: View {
             closeHelp: session.isTerminal ? "Terminal schließen" : "Archivieren",
             isUnreadSubagentResult: unreadSubagentSessionIDs.contains(session.id),
             runningChildCount: split?.workingCount ?? 0,
+            erroredChildCount: split?.erroredCount ?? 0,
+            unreadChildCount: split?.hiddenUnreadCount ?? 0,
             childCount: split?.totalCount ?? 0,
             isChildrenExpanded: expandedSubagentParentIDs.contains(session.id),
             onSelect: { onSelectSession(session.id) },
@@ -572,56 +577,54 @@ extension View {
     }
 }
 
-/// Grüne Segmentleiste als Fortschritts-Anzeige des Subagent-Batches —
-/// beschlossen 2026-07-09, durchgezogen im Chip (klein) UND in der Welle
-/// (groß). Zeigt den Fertig-Anteil `terminal / total` als gefüllte Segmente;
-/// bei `segments` Segmenten gedeckelt, proportional gefüllt. Grün = fertig
-/// (bewusst: die Leiste ist ein Fortschrittsbalken, kein Liveness-Punkt —
-/// der grüne Lauf-Dot lebt exklusiv an den Kind-Zeilen).
-struct SubagentSegmentMeter: View {
-    let terminal: Int
-    let total: Int
-    var segments: Int = 12
-    /// Ganzzahlige Punktwerte — Bruchteile (z.B. 1.5) landen zwischen den
-    /// Gerätepixeln und rendern als ungleich breite Lücken.
-    var barWidth: CGFloat = 3
-    var barHeight: CGFloat = 8
-    var spacing: CGFloat = 2
+/// Die „Agenten-Straße" des Subagent-Chips (B4, 2026-07-10): 1 Balken =
+/// 1 laufender Agent (vom Aufrufer bei 6 gedeckelt — die Zahl daneben trägt
+/// die Wahrheit). Über die Reihe wandert das Lauflicht der Transcription-Bar
+/// links → rechts. Die Phase kommt aus der WANDUHR (`TimelineView`), nicht
+/// aus per-Balken-`onAppear`-Animationen: eine gemeinsame Zeitbasis für alle
+/// Balken (und alle Rows) — kommt ein Agent dazu oder fällt einer weg,
+/// steigt der Balken in korrekter Phase ein statt eigenständig loszupulsen,
+/// und nichts driftet über Re-Renders auseinander. Nur Opazität variiert —
+/// keine Geometrie, kein Layout-Zappeln.
+struct SubagentRoad: View {
+    let barCount: Int
+
+    /// Gesamtzyklus wie der CSS-Keyframe „scan" des Prototyps (1,1 s) …
+    nonisolated static let cycle: Double = 1.1
+    /// … mit 0,13 s Phasenversatz je Balken (Lauflicht links → rechts).
+    nonisolated static let stagger: Double = 0.13
 
     var body: some View {
-        let filled = total > 0
-            ? Int((Double(terminal) / Double(total) * Double(segments)).rounded())
-            : 0
-        HStack(spacing: spacing) {
-            ForEach(0..<segments, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 0.5)
-                    .fill(index < filled ? AgentTheme.statusWorking : AgentTheme.textTertiary.opacity(0.30))
-                    .frame(width: barWidth, height: barHeight)
-            }
-        }
-        // Auf dem Pixelraster fixieren: die HStack-Gesamtbreite ist mit
-        // Integer-Werten exakt, kein Subpixel-Snapping pro Segment.
-        .fixedSize()
-        .accessibilityLabel("\(terminal) von \(total) fertig")
-    }
-}
-
-/// Kleiner pulsierender Lauf-Punkt für den Fortschritts-Chip — sagt im
-/// zugeklappten Zustand „hier arbeitet noch etwas". Gleiche Grün-Semantik
-/// wie der working-Dot der Kind-Zeilen (AgentTheme.statusWorking).
-private struct ChipPulseDot: View {
-    @State private var dimmed = false
-
-    var body: some View {
-        Circle()
-            .fill(AgentTheme.statusWorking)
-            .frame(width: 4, height: 4)
-            .opacity(dimmed ? 0.35 : 1)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                    dimmed = true
+        // 30 fps reichen für einen 7-px-Opazitätsverlauf und halbieren die
+        // Frame-Last gegenüber .animation-Default.
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            let now = timeline.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    Capsule()
+                        .fill(AgentTheme.statusWorking)
+                        .frame(width: 2, height: 7)
+                        .opacity(Self.opacity(at: now, index: index))
                 }
             }
+        }
+        .fixedSize()
+        .accessibilityHidden(true) // die Zahl daneben trägt die Information
+    }
+
+    /// Helligkeit eines Balkens zum Zeitpunkt `time` — pur + getestet
+    /// (SubagentRoadWaveTests). Kurve wie „scan": schneller Anstieg auf den
+    /// ersten 18 % des Zyklus, langsames Abklingen über den Rest; Balken i
+    /// ist exakt die um i·stagger verschobene Kurve von Balken 0.
+    nonisolated static func opacity(at time: TimeInterval, index: Int) -> Double {
+        var phase = ((time - Double(index) * stagger) / cycle)
+            .truncatingRemainder(dividingBy: 1)
+        if phase < 0 { phase += 1 }
+        let rise = 0.18
+        let value = phase < rise
+            ? phase / rise
+            : 1 - (phase - rise) / (1 - rise)
+        return 0.3 + 0.7 * value
     }
 }
 
@@ -663,11 +666,17 @@ struct SessionListButton: View {
     /// Ungelesenes Subagent-Ergebnis (running→done/failed, noch nicht
     /// geöffnet): blauer Dot statt des grauen Idle-Punkts.
     var isUnreadSubagentResult: Bool = false
-    /// Anzahl aktuell LAUFENDER Subagent-Kinder dieser Session — Nenner-Abzug
-    /// für den Fortschritts-Bruch (`terminal = gesamt − laufend`) + Lauf-Puls.
+    /// Anzahl aktuell LAUFENDER Subagent-Kinder dieser Session — speist die
+    /// Agenten-Straße (1 Balken = 1 laufender Agent) + die grüne Laufzahl.
     var runningChildCount: Int = 0
-    /// Gesamtzahl der Subagent-Kinder — Nenner des Fortschritts-Bruchs; der
-    /// Chip erscheint, sobald es welche gibt.
+    /// Fehlgeschlagene Kinder — roter Stand-Balken + rote Zahl im Chip
+    /// (kaputt bewegt sich nicht; der Kontrast zur laufenden Straße trägt).
+    var erroredChildCount: Int = 0
+    /// Verborgene fertige Kinder mit ungelesenem Ergebnis — blauer Punkt
+    /// am Chip-Ende (nur „da ist was", keine Zahl).
+    var unreadChildCount: Int = 0
+    /// Gesamtzahl der Subagent-Kinder — die graue Bestandszahl im
+    /// Ruhezustand; der Chip erscheint, sobald es welche gibt.
     var childCount: Int = 0
     /// Sind die Kinder ausgeklappt (Stufe 1)? Steuert das Chevron im Chip.
     var isChildrenExpanded: Bool = false
@@ -822,45 +831,64 @@ struct SessionListButton: View {
         }
     }
 
-    /// Fortschritts-Chip an der Parent-Row (revidiert 2026-07-09): Pfeilchen
-    /// (klappt ALLE Kinder auf/zu) + Lauf-Puls (nur solange etwas arbeitet —
-    /// der eine Indikator, der im zugeklappten Zustand „läuft noch" sagt) +
-    /// grüne Segmentleiste (Fertig-Anteil) + Bruch `terminal / gesamt`.
-    /// Fehlschläge sieht man beim Aufklappen an den Kind-Zeilen.
+    /// Subagent-Chip an der Parent-Row — „Agenten-Straße, randlos" (B4,
+    /// beschlossen 2026-07-10, Prototyp docs/design/subagent-chip-strasse-
+    /// varianten.html): kein Kasten, kein Fertig-Bruch, keine Segmentleiste.
+    /// Grammatik: läuft etwas → Straße (1 Balken = 1 laufender Agent,
+    /// Deckel 6, Lauflicht links → rechts) + grüne Laufzahl; Ruhe → nur die
+    /// graue Bestandszahl. Fehler = roter Stand-Balken + Zahl, Ungelesen =
+    /// blauer Punkt. Das Chevron bleibt der Button (klappt ALLE Kinder auf/zu).
     private var subagentChildrenChip: some View {
-        // terminal = gesamt − laufend (ein Fehlschlag ist Fortschritt).
-        let terminal = max(0, childCount - runningChildCount)
-        return HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Image(systemName: isChildrenExpanded ? "chevron.down" : "chevron.right")
                 .font(.system(size: 6.5, weight: .bold))
+                .foregroundStyle(runningChildCount > 0 ? AgentTheme.statusWorking : AgentTheme.textTertiary)
             if runningChildCount > 0 {
-                ChipPulseDot()
+                SubagentRoad(barCount: min(runningChildCount, 6))
+                Text("\(runningChildCount)")
+                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .foregroundStyle(AgentTheme.statusWorking)
+            } else {
+                Text("\(childCount)")
+                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textTertiary)
             }
-            SubagentSegmentMeter(
-                terminal: terminal,
-                total: childCount,
-                segments: 6,
-                barWidth: 2,
-                barHeight: 7
-            )
-            (Text("\(terminal)")
-                + Text("/\(childCount)").foregroundColor(Color.teal.opacity(0.55)))
-                .font(.system(size: 8, weight: .bold).monospacedDigit())
+            if erroredChildCount > 0 {
+                Capsule()
+                    .fill(AgentTheme.statusError)
+                    .frame(width: 2, height: 7)
+                Text("\(erroredChildCount)")
+                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .foregroundStyle(AgentTheme.statusError)
+            }
+            if unreadChildCount > 0 {
+                Circle()
+                    .fill(Color.blue)
+                    .frame(width: 4, height: 4)
+            }
         }
-        .foregroundStyle(Color.teal)
-        .padding(.horizontal, 4)
+        // Randlos, aber die Klick-Fläche bleibt in voller Chip-Größe
+        // erhalten (Padding ohne Optik).
+        .padding(.horizontal, 2)
         .padding(.vertical, 1.5)
-        .background(Color.teal.opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
-        .overlay(
-            RoundedRectangle(cornerRadius: 3)
-                .stroke(Color.teal.opacity(0.30), lineWidth: 0.5)
-        )
         .fixedSize()
         .contentShape(Rectangle())
         .onTapGesture { onToggleChildren?() }
-        .help("\(terminal) von \(childCount) Subagents fertig"
-            + (runningChildCount > 0 ? " · \(runningChildCount) laufen" : "")
-            + " — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")")
+        .help(chipHelpText)
+        .accessibilityLabel(chipHelpText)
+    }
+
+    private var chipHelpText: String {
+        var parts: [String] = []
+        if runningChildCount > 0 {
+            parts.append("\(runningChildCount) von \(childCount) Subagents laufen")
+        } else {
+            parts.append("\(childCount) Subagents")
+        }
+        if erroredChildCount > 0 { parts.append("\(erroredChildCount) fehlgeschlagen") }
+        if unreadChildCount > 0 { parts.append("\(unreadChildCount) ungelesen") }
+        return parts.joined(separator: " · ")
+            + " — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")"
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
@@ -914,6 +942,8 @@ extension SessionListButton: Equatable {
             && lhs.indentAsSubagent == rhs.indentAsSubagent
             && lhs.isUnreadSubagentResult == rhs.isUnreadSubagentResult
             && lhs.runningChildCount == rhs.runningChildCount
+            && lhs.erroredChildCount == rhs.erroredChildCount
+            && lhs.unreadChildCount == rhs.unreadChildCount
             && lhs.childCount == rhs.childCount
             && lhs.isChildrenExpanded == rhs.isChildrenExpanded
     }
