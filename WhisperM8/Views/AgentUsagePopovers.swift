@@ -13,11 +13,15 @@ struct SidebarUsageButtons: View {
             Button {
                 showClaudePopover.toggle()
             } label: {
-                Image(systemName: "sparkle")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(showClaudePopover ? AppTheme.accent : AppTheme.textSecondary)
-                    .frame(width: 26, height: 28)
-                    .contentShape(Rectangle())
+                // Offizielles Provider-Logo — dieselben Assets wie in
+                // Sidebar-Rows und Tab-Chips (ProviderIcon).
+                ProviderIcon(
+                    provider: .claude,
+                    size: 13,
+                    tint: showClaudePopover ? AgentTheme.accent : AgentTheme.textSecondary
+                )
+                .frame(width: 26, height: 28)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Claude-Accounts: Usage-Limits")
@@ -28,11 +32,13 @@ struct SidebarUsageButtons: View {
             Button {
                 showCodexPopover.toggle()
             } label: {
-                Image(systemName: "circle.hexagongrid")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(showCodexPopover ? AppTheme.accent : AppTheme.textSecondary)
-                    .frame(width: 26, height: 28)
-                    .contentShape(Rectangle())
+                ProviderIcon(
+                    provider: .codex,
+                    size: 13,
+                    tint: showCodexPopover ? AgentTheme.accent : AgentTheme.textSecondary
+                )
+                .frame(width: 26, height: 28)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("ChatGPT/Codex: Usage-Limits")
