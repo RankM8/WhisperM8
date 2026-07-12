@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subagent-Chip — Design-Varianten</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     Gleiche Design-Sprache wie subagent-sidebar-options.html:
+     tiefes Petrol-Anthrazit, Serifen-Display, Teal als Akzent.
+     Die Sidebar-Mocks darunter sind App-Fidelity (AppTheme-Werte).
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --ink:        oklch(0.16 0.012 200);
+    --ink-2:      oklch(0.20 0.014 200);
+    --panel:      oklch(0.235 0.013 205);
+    --line:       oklch(0.32 0.012 205);
+    --line-soft:  oklch(0.27 0.010 205);
+
+    --paper:      oklch(0.93 0.008 90);
+    --paper-dim:  oklch(0.72 0.010 200);
+    --paper-mute: oklch(0.55 0.012 205);
+
+    --teal:       oklch(0.74 0.10 195);
+    --teal-deep:  oklch(0.52 0.09 195);
+    --amber:      oklch(0.78 0.14 70);
+
+    /* App-Fidelity: exakt die AppTheme-Werte der Sidebar (Dark) */
+    --app-sidebar:   #131418;            /* AppTheme.sidebar dark */
+    --app-hover:     rgba(255,255,255,.04);
+    --app-sel:       rgba(124,132,232,.16); /* accentTint dark */
+    --app-accent:    #7c84e8;            /* accent dark (Indigo) */
+    --app-text:      rgba(255,255,255,.92);
+    --app-text2:     rgba(255,255,255,.55);
+    --app-text3:     rgba(255,255,255,.38);
+    --app-green:     #4cc38a;            /* statusWorking dark */
+    --app-amber:     #e9b949;            /* statusAwaiting dark */
+    --app-red:       #e5594f;            /* statusError dark */
+    --app-blue:      #3f8cff;            /* Unread-Dot (SwiftUI .blue) */
+    --app-teal:      #46b8ca;            /* SwiftUI Color.teal ~ */
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans:  ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 56px); }
+
+  /* ── Kopf ── */
+  header { padding: clamp(52px, 8vh, 96px) 0 clamp(32px, 5vh, 56px); border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--teal-deep); margin: 0 0 20px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(36px, 5.6vw, 68px); line-height: 1.0;
+    letter-spacing: -.02em; margin: 0; max-width: 18ch;
+  }
+  h1 em { font-style: italic; color: var(--teal); }
+  .lede { margin: 26px 0 0; max-width: 64ch; font-size: 16.5px; color: var(--paper-dim); }
+  .lede strong { color: var(--paper); font-weight: 500; }
+
+  .facts { display: flex; flex-wrap: wrap; margin-top: 38px; border-top: 1px solid var(--line-soft); }
+  .fact { padding: 14px 26px 14px 0; margin-right: 26px; border-right: 1px solid var(--line-soft); }
+  .fact:last-child { border-right: 0; }
+  .fact dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-mute); margin: 0 0 3px; }
+  .fact dd { margin: 0; font-family: var(--mono); font-size: 13px; color: var(--paper-dim); }
+  .fact dd b { color: var(--teal); font-weight: 600; }
+
+  /* ── Abschnitte ── */
+  section { padding: clamp(40px, 6vh, 72px) 0; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: 0; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--teal-deep); margin: 0 0 14px; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(26px, 3.4vw, 40px); letter-spacing: -.015em; line-height: 1.08; margin: 0 0 18px; max-width: 26ch; }
+  h2 em { font-style: italic; color: var(--teal); }
+  .prose { max-width: 66ch; color: var(--paper-dim); }
+  .prose strong { color: var(--paper); font-weight: 500; }
+  .prose code { font-family: var(--mono); font-size: .85em; color: var(--teal); background: var(--ink-2); padding: 1px 5px; border-radius: 3px; }
+
+  /* Varianten-Artikel: Nummer als Marginalie, asymmetrisch */
+  article.variant { display: grid; grid-template-columns: 84px 1fr; gap: 0 28px; padding: clamp(36px, 5vh, 60px) 0; border-bottom: 1px solid var(--line-soft); }
+  article.variant:last-of-type { border-bottom: 0; }
+  .vnum { font-family: var(--serif); font-style: italic; font-size: 44px; color: var(--teal-deep); line-height: 1; padding-top: 4px; }
+  .vbody h3 { font-family: var(--serif); font-weight: 400; font-size: clamp(23px, 2.6vw, 31px); letter-spacing: -.01em; margin: 0 0 4px; }
+  .vclaim { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-mute); margin: 0 0 16px; }
+
+  /* Grammatik-Tabelle: Zustand → Anzeige */
+  .grammar { margin: 18px 0 24px; border-top: 1px solid var(--line-soft); max-width: 620px; }
+  .grammar div { display: grid; grid-template-columns: 210px 1fr; gap: 16px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+  .grammar div span:first-child { font-family: var(--mono); font-size: 11.5px; color: var(--paper-mute); padding-top: 1px; }
+  .grammar div span:last-child { color: var(--paper-dim); }
+  .grammar b { color: var(--paper); font-weight: 500; }
+
+  /* Pro/Contra-Fußnote */
+  .verdict { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 22px; max-width: 680px; }
+  .verdict p { flex: 1 1 260px; margin: 0; font-size: 13.5px; color: var(--paper-dim); border-top: 2px solid var(--line); padding-top: 10px; }
+  .verdict p b { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; }
+  .verdict .pro b { color: var(--teal); }
+  .verdict .con b { color: var(--amber); }
+
+  /* ── Sidebar-Mocks (App-Fidelity) ── */
+  .mockrow { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; margin-top: 8px; }
+  .sb {
+    width: 292px; flex: none;
+    background: var(--app-sidebar);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 10px;
+    padding: 10px 0 12px;
+    font-family: var(--sans);
+    box-shadow: 0 18px 50px -28px rgba(0,0,0,.8);
+  }
+  .sb.narrow { width: 208px; }
+  .sb-cap {
+    font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--teal-deep); padding: 12px 12px 4px 28px;
+  }
+  .sb-cap:first-child { padding-top: 4px; }
+
+  .row {
+    display: flex; align-items: center; gap: 8px;
+    height: 26px; margin: 0 8px; padding: 0 8px 0 20px;
+    border-radius: 6px; position: relative;
+  }
+  .row.sel { background: var(--app-sel); }
+  .row.sel::before {
+    content: ""; position: absolute; left: 6px; width: 2.5px; height: 13px;
+    border-radius: 1.25px; background: var(--app-accent);
+  }
+  .row .ico { width: 11px; flex: none; text-align: center; font-size: 10px; color: var(--app-text3); opacity: .55; }
+  .row .title {
+    font-size: 12px; color: var(--app-text2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0; flex: 0 1 auto;
+  }
+  .row.sel .title { color: var(--app-text); font-weight: 600; }
+  .row .sp { flex: 1 1 0; min-width: 0; }
+  .row .time { font-family: var(--mono); font-size: 9.5px; color: var(--app-text3); flex: none; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.idle { background: rgba(255,255,255,.22); }
+  .dot.green { background: var(--app-green); }
+  .dot.blue { background: var(--app-blue); }
+  .dot.red { background: var(--app-red); }
+  .dot.pulse { animation: softpulse 1.6s ease-in-out infinite; }
+
+  /* Kind-Zeile (Subagent) + SUB-Pill */
+  .row.child { padding-left: 36px; height: 25px; }
+  .subpill {
+    font-size: 8px; font-weight: 700; letter-spacing: .04em; color: var(--app-teal);
+    background: rgba(70,184,202,.16); border: .5px solid rgba(70,184,202,.3);
+    border-radius: 3px; padding: 1px 4px; flex: none;
+  }
+  /* Fuß-Zeile „N fertig" */
+  .row.foot { height: 22px; padding-left: 32px; gap: 7px; }
+  .row.foot .chev { font-size: 7px; color: var(--app-text3); }
+  .row.foot .ftxt { font-size: 9.5px; font-family: var(--mono); color: var(--app-text3); }
+  .row.foot .fdot { width: 5px; height: 5px; border-radius: 50%; background: var(--app-blue); flex: none; }
+
+  /* ── Chips: gemeinsame Basis ── */
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    flex: none; cursor: pointer; user-select: none;
+    font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+  }
+  .chip .chev { font-size: 6.5px; line-height: 1; transform: translateY(-.5px); }
+
+  /* Status quo (Diagnose): das heutige Teal-Chip 1:1 */
+  .chip.now {
+    color: var(--app-teal); background: rgba(70,184,202,.16);
+    border: .5px solid rgba(70,184,202,.3); border-radius: 3px;
+    padding: 1.5px 4px; gap: 3px; font-size: 8px;
+  }
+  .chip.now .seg { display: flex; gap: 2px; }
+  .chip.now .seg i { width: 2px; height: 7px; border-radius: .5px; background: var(--app-green); }
+  .chip.now .seg i.off { background: rgba(255,255,255,.14); }
+  .chip.now .frac span { color: rgba(70,184,202,.55); }
+  .chip.now .pd { width: 4px; height: 4px; border-radius: 50%; background: var(--app-green); animation: softpulse 2s ease-in-out infinite; }
+
+  /* ── Variante A · Stille Ziffer ──
+     Neutraler Untergrund, keine Segmente, kein Bruch. Grammatik:
+     farbiger Punkt + Zahl je aktivem Signal; Ruhe = graue Gesamtzahl. */
+  .chip.a {
+    background: rgba(255,255,255,.05); border: .5px solid rgba(255,255,255,.08);
+    border-radius: 4px; padding: 2.5px 6px; color: var(--app-text3);
+  }
+  .chip.a .pair { display: inline-flex; align-items: center; gap: 3px; }
+  .chip.a .pair i { width: 4px; height: 4px; border-radius: 50%; flex: none; }
+  .chip.a .run { color: var(--app-green); } .chip.a .run i { background: var(--app-green); animation: softpulse 1.6s ease-in-out infinite; }
+  .chip.a .err { color: var(--app-red); }   .chip.a .err i { background: var(--app-red); }
+  .chip.a .new { color: var(--app-blue); }  .chip.a .new i { background: var(--app-blue); }
+  .chip.a.live { border-color: rgba(76,195,138,.25); }
+
+  /* ── Variante B · Agenten-Straße ──
+     Übernahme des Transkriptions-Lauflichts (keyframe „scan" aus
+     transcription-bar-redesign.html): 1 Balken = 1 LAUFENDER Agent
+     (Deckel 6, exakte Zahl daneben), Licht wandert links → rechts. */
+  .chip.b {
+    background: rgba(255,255,255,.05); border: .5px solid rgba(255,255,255,.08);
+    border-radius: 99px; padding: 2.5px 7px; color: var(--app-text3);
+  }
+  .chip.b.live { border-color: rgba(76,195,138,.28); background: rgba(76,195,138,.07); color: var(--app-green); }
+  .chip.b .road { display: inline-flex; align-items: center; gap: 2px; }
+  .chip.b .road i {
+    width: 2px; height: 7px; border-radius: 99px; background: var(--app-green);
+    opacity: .35; animation: roadscan 1.1s linear infinite;
+  }
+  .chip.b .road i:nth-child(1) { animation-delay: 0s; }
+  .chip.b .road i:nth-child(2) { animation-delay: .13s; }
+  .chip.b .road i:nth-child(3) { animation-delay: .26s; }
+  .chip.b .road i:nth-child(4) { animation-delay: .39s; }
+  .chip.b .road i:nth-child(5) { animation-delay: .52s; }
+  .chip.b .road i:nth-child(6) { animation-delay: .65s; }
+  .chip.b .err { color: var(--app-red); display: inline-flex; align-items: center; gap: 3px; }
+  .chip.b .err i { width: 2px; height: 7px; border-radius: 99px; background: var(--app-red); }
+  .chip.b .new { width: 4px; height: 4px; border-radius: 50%; background: var(--app-blue); }
+
+  /* ── Variante C · Ring ──
+     Fortschritt bleibt (als Bogen), aber ohne Zahlenbruch. Der Ring
+     ist in Ruhe fast unsichtbar; läuft etwas, zählt nur die Zahl. */
+  .chip.c { gap: 5px; padding: 2px 2px; color: var(--app-text3); }
+  .chip.c svg { flex: none; }
+  .chip.c .track { stroke: rgba(255,255,255,.12); }
+  .chip.c .arc { stroke: var(--app-green); opacity: .75; }
+  .chip.c.quiet .arc { stroke: rgba(255,255,255,.30); opacity: 1; }
+  .chip.c .n { font-size: 8.5px; }
+  .chip.c .n.run { color: var(--app-green); }
+  .chip.c .cdot { width: 4px; height: 4px; border-radius: 50%; background: var(--app-green); animation: softpulse 1.6s ease-in-out infinite; }
+  .chip.c .err { color: var(--app-red); }
+  .chip.c .new { width: 4px; height: 4px; border-radius: 50%; background: var(--app-blue); }
+
+  /* ── Variante D · Lichtlauf-Pill ──
+     Keine diskreten Balken: die Pill selbst führt das Licht. Ein
+     weicher Schimmer wandert links → rechts, solange etwas läuft. */
+  .chip.d {
+    position: relative; overflow: hidden;
+    background: rgba(255,255,255,.05); border: .5px solid rgba(255,255,255,.08);
+    border-radius: 99px; padding: 2.5px 8px; color: var(--app-text3);
+  }
+  .chip.d.live { color: var(--app-green); border-color: rgba(76,195,138,.28); }
+  .chip.d.live::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 20%, rgba(76,195,138,.28) 50%, transparent 80%);
+    transform: translateX(-100%); animation: sweep 1.9s ease-in-out infinite;
+  }
+  .chip.d .err { color: var(--app-red); }
+  .chip.d .new { width: 4px; height: 4px; border-radius: 50%; background: var(--app-blue); }
+
+  /* ── Variante E · Typografisch nackt ──
+     Kein Chip. Chevron + Text in der Zeile, Farbe = Zustand. */
+  .chip.e { gap: 5px; color: var(--app-text3); font-family: var(--sans); font-size: 10px; font-weight: 500; }
+  .chip.e .n { font-family: var(--mono); font-size: 9.5px; font-weight: 700; }
+  .chip.e .run { color: var(--app-green); }
+  .chip.e .err { color: var(--app-red); }
+  .chip.e .edot { width: 4px; height: 4px; border-radius: 50%; background: var(--app-green); animation: softpulse 1.6s ease-in-out infinite; flex: none; }
+  .chip.e .new { width: 4px; height: 4px; border-radius: 50%; background: var(--app-blue); flex: none; }
+
+  @keyframes roadscan { 0%, 100% { opacity: .3; } 18% { opacity: 1; } }
+  @keyframes sweep { 0% { transform: translateX(-100%); } 55%, 100% { transform: translateX(100%); } }
+  @keyframes softpulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+  /* Empfehlung */
+  .reco {
+    margin-top: 26px; max-width: 760px;
+    border-left: 2px solid var(--teal); padding: 4px 0 4px 26px;
+  }
+  .reco h3 { font-family: var(--serif); font-weight: 400; font-size: 24px; margin: 0 0 10px; }
+  .reco p { margin: 0 0 12px; color: var(--paper-dim); font-size: 14.5px; }
+  .reco p:last-child { margin-bottom: 0; }
+  .reco b { color: var(--paper); font-weight: 500; }
+
+  footer { padding: 40px 0 70px; color: var(--paper-mute); font-size: 12.5px; font-family: var(--mono); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  }
+  @media (max-width: 720px) {
+    article.variant { grid-template-columns: 1fr; }
+    .vnum { padding-bottom: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">WhisperM8 · Agent-Chats · Sidebar · 2026-07-10</p>
+  <h1>Der Subagent-Chip, <em>zur Ruhe gebracht</em></h1>
+  <p class="lede">
+    Der heutige Chip beantwortet die falsche Frage. <strong>»74/74«</strong> erzählt Geschichte
+    (»alles, was je lief, ist fertig«) — aber die einzige Frage, die die Sidebar im Vorbeigehen
+    beantworten muss, ist: <strong>Läuft gerade etwas? Und wenn ja: wie viele?</strong>
+    Fünf Varianten, alle gespeist aus denselben vorhandenen Zählern, keine erfundenen Zustände.
+  </p>
+  <dl class="facts">
+    <div class="fact"><dt>Datenquelle</dt><dd><b>SubagentChildSplit</b></dd></div>
+    <div class="fact"><dt>Signal 1</dt><dd><b>workingCount</b> — läuft?</dd></div>
+    <div class="fact"><dt>Signal 2</dt><dd><b>erroredCount</b> — kaputt?</dd></div>
+    <div class="fact"><dt>Signal 3</dt><dd><b>hiddenUnreadCount</b> — neu?</dd></div>
+    <div class="fact"><dt>Ruhe-Fall</dt><dd><b>totalCount</b> — nur Bestand</dd></div>
+  </dl>
+</header>
+
+<!-- ════════════════════ DIAGNOSE ════════════════════ -->
+<section id="diagnose">
+  <p class="kicker">Diagnose</p>
+  <h2>Warum »74/74« <em>nichts</em> sagt</h2>
+  <div class="prose">
+    <p>
+      Der aktuelle Chip trägt vier Vokabeln gleichzeitig — Chevron, Puls-Punkt, sechs grüne
+      Segmente, Zahlenbruch — und drei davon wiederholen dieselbe Aussage. Sobald ein Batch
+      durch ist (der Normalfall, 95&nbsp;% der Lebenszeit einer Zeile), zeigt er
+      <code>74/74</code> mit voll gefüllter Segmentleiste: maximale Tinte für die Information
+      <strong>»nichts passiert«</strong>. Die Gesamtzahl ist Bestand, kein Ereignis — sie gehört
+      in die Ruhe-Typografie, nicht in einen leuchtenden Teal-Kasten.
+    </p>
+  </div>
+  <div class="mockrow">
+    <div class="sb">
+      <div class="sb-cap">Status quo — alles fertig, und trotzdem laut</div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Docs</span>
+        <span class="chip now"><span class="chev">›</span><span class="seg"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="frac">74<span>/74</span></span></span>
+        <span class="sp"></span><span class="dot idle"></span>
+      </div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Codex-Suba…</span>
+        <span class="chip now"><span class="chev">›</span><span class="seg"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="frac">53<span>/53</span></span></span>
+        <span class="sp"></span><span class="dot idle"></span>
+      </div>
+      <div class="sb-cap">Status quo — 3 laufen (das eigentlich Wichtige ist am kleinsten)</div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Dokumenta…</span>
+        <span class="chip now"><span class="chev">›</span><span class="pd"></span><span class="seg"><i></i><i></i><i></i><i></i><i class="off"></i><i class="off"></i></span><span class="frac">39<span>/42</span></span></span>
+        <span class="sp"></span><span class="dot green"></span>
+      </div>
+    </div>
+    <div class="prose" style="flex:1 1 320px; font-size:14px;">
+      <p style="margin-top:0">
+        <strong>Leitplanken für alle Varianten:</strong>
+      </p>
+      <p>
+        1 · <strong>Ruhe ist der Default.</strong> Kein Grün, kein Teal, keine Füllung, wenn nichts
+        läuft — nur die graue Bestandszahl als Aufklapp-Affordanz.<br>
+        2 · <strong>Laufend schlägt alles.</strong> <code>workingCount</code> ist die einzige Zahl,
+        die im Aktivfall prominent sein darf.<br>
+        3 · <strong>Fehler und Ungelesen sind Punkte, keine Flächen.</strong> Rot
+        (<code>erroredCount</code>) und Blau (<code>hiddenUnreadCount</code>) borgen die
+        Dot-Sprache, die die Kind-Zeilen schon sprechen.<br>
+        4 · Der Chip bleibt <strong>Button</strong>: Chevron klappt alle Kinder auf/zu, wie heute.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ VARIANTE A ════════════════════ -->
+<article class="variant" id="v-a">
+  <div class="vnum">A</div>
+  <div class="vbody">
+    <h3>Stille Ziffer</h3>
+    <p class="vclaim">Keine Segmente · kein Bruch · Punkt + Zahl je Signal</p>
+    <div class="prose">
+      <p>
+        Der Chip wird ein neutraler, fast unsichtbarer Zähler. Grammatik: <strong>ein farbiger
+        Punkt + die zugehörige Zahl</strong>, nur für Signale, die gerade existieren. Läuft
+        nichts, bleibt eine einzige graue Zahl — der Bestand. Radikalste Erfüllung der Vorgabe
+        »ohne Segmentstriche, ohne fertig/gesamt«.
+      </p>
+    </div>
+    <div class="grammar">
+      <div><span>workingCount == 0, alles gelesen</span><span>graue <b>74</b> — sonst nichts</span></div>
+      <div><span>workingCount == 3</span><span>grüner Puls-Punkt + <b>3</b> in Grün (Bestandszahl weicht)</span></div>
+      <div><span>erroredCount == 1</span><span>zusätzlich roter Punkt + <b>1</b></span></div>
+      <div><span>hiddenUnreadCount == 5</span><span>blauer Punkt + <b>5</b> statt der grauen Bestandszahl</span></div>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">Alle fertig · gelesen — eingeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip a"><span class="chev">›</span><span>74</span></span>
+          <span class="sp"></span><span class="time">2h</span>
+        </div>
+        <div class="sb-cap">3 laufen (von 74)</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip a live"><span class="chev">›</span><span class="pair run"><i></i><span>3</span></span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Codex-Suba…</span>
+          <span class="chip a live"><span class="chev">›</span><span class="pair run"><i></i><span>2</span></span><span class="pair err"><i></i><span>1</span></span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">Fertig · 5 ungelesen</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Dokumenta…</span>
+          <span class="chip a"><span class="chev">›</span><span class="pair new"><i></i><span>5</span></span></span>
+          <span class="sp"></span><span class="dot blue"></span>
+        </div>
+      </div>
+      <div class="sb">
+        <div class="sb-cap">Ausgeklappt — Chevron dreht, Kinder + Fuß</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip a live"><span class="chev">⌄</span><span class="pair run"><i></i><span>2</span></span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Konsistenz- und F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row foot">
+          <span class="chev">›</span><span class="ftxt">72 fertig</span><span class="fdot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Maximale Ruhe; die Signalfarben decken sich 1:1 mit den Dots der Kind-Zeilen — eine Sprache im ganzen Baum.</p>
+      <p class="con"><b>Dagegen</b>Kein Liveness-Gefühl: dass gearbeitet wird, trägt allein der kleine Puls-Punkt. Wer Bewegung erwartet, findet sie nicht.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ VARIANTE B ════════════════════ -->
+<article class="variant" id="v-b">
+  <div class="vnum">B</div>
+  <div class="vbody">
+    <h3>Agenten-Straße</h3>
+    <p class="vclaim">Deine Idee: 1 Balken = 1 laufender Agent · Lauflicht wie beim Transkribieren</p>
+    <div class="prose">
+      <p>
+        Die Balken bleiben — aber sie wechseln die Bedeutung. Statt »Fertig-Anteil von allem, was
+        je lief« zeigt jeder Balken <strong>einen gerade laufenden Agenten</strong>, und über die
+        Reihe wandert das Lauflicht der Transcription-Bar (Keyframe <code>scan</code>,
+        links&nbsp;→&nbsp;rechts, leicht pulsierend). Ein Agent fertig&nbsp;→ ein Balken weniger;
+        Stille&nbsp;→ die Straße verschwindet, es bleibt die graue Bestandszahl.
+        Gedeckelt bei 6 Balken, die exakte Zahl steht immer daneben — die Balken sind Stimmung,
+        die Ziffer ist Wahrheit.
+      </p>
+    </div>
+    <div class="grammar">
+      <div><span>workingCount == 0, alles gelesen</span><span>graue <b>74</b>, keine Balken, kein Grün</span></div>
+      <div><span>workingCount == 3</span><span><b>3 Balken</b> mit Lauflicht + <b>3</b> in Grün</span></div>
+      <div><span>workingCount == 24 (&gt; Deckel)</span><span>6 Balken + <b>24</b> — Zahl trägt die Wahrheit</span></div>
+      <div><span>erroredCount == 1</span><span>roter Stand-Balken (ohne Licht) + <b>1</b> hinter der Straße</span></div>
+      <div><span>hiddenUnreadCount &gt; 0</span><span>blauer Punkt am Chip-Ende</span></div>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">Alle fertig · gelesen — eingeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip b"><span class="chev">›</span><span>74</span></span>
+          <span class="sp"></span><span class="time">2h</span>
+        </div>
+        <div class="sb-cap">3 laufen — die Straße läuft</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip b live"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">24 laufen — Deckel 6, Zahl exakt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Workflow-La…</span>
+          <span class="chip b live"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Codex-Suba…</span>
+          <span class="chip b live"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span><span class="err"><i></i>1</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">Fertig · 5 ungelesen</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Dokumenta…</span>
+          <span class="chip b"><span class="chev">›</span><span>74</span><span class="new"></span></span>
+          <span class="sp"></span><span class="dot blue"></span>
+        </div>
+      </div>
+      <div class="sb">
+        <div class="sb-cap">Ausgeklappt — Straße oben, Puls unten, ein Takt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip b live"><span class="chev">⌄</span><span class="road"><i></i><i></i></span><span>2</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Finaler adversaria…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row foot">
+          <span class="chev">›</span><span class="ftxt">72 fertig</span><span class="fdot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Balken bekommen echte Semantik (1 Balken = 1 Agent), das Lauflicht ist gelernte WhisperM8-Sprache — »hier wird gearbeitet« wie beim Transkribieren. Liveness ohne einen einzigen zusätzlichen Zustand.</p>
+      <p class="con"><b>Dagegen</b>Dauer-Animation in der Sidebar kann bei vielen parallel laufenden Parents unruhig werden — Deckel + dezente Opazität (kein Höhen-Tanz) sind Pflicht.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ VARIANTE C ════════════════════ -->
+<article class="variant" id="v-c">
+  <div class="vnum">C</div>
+  <div class="vbody">
+    <h3>Ring</h3>
+    <p class="vclaim">Fortschritt bleibt — als Bogen, nicht als Bruch</p>
+    <div class="prose">
+      <p>
+        Falls der Fertig-Anteil doch erhaltenswert ist: ein 11-px-Ring trägt
+        <code>terminalCount&nbsp;/&nbsp;totalCount</code> als Bogen — die Information bleibt, aber
+        ohne Zahlenbruch und ohne sechs leuchtende Rechtecke. Daneben steht im Aktivfall nur die
+        Zahl der Laufenden. Voll gewordener Ring entfärbt sich zu Grau: Erledigtes hört auf zu leuchten.
+      </p>
+    </div>
+    <div class="grammar">
+      <div><span>workingCount == 0, alles gelesen</span><span>grauer Voll-Ring + graue <b>74</b></span></div>
+      <div><span>workingCount == 3</span><span>grüner Teil-Bogen + Puls-Punkt + <b>3</b> in Grün</span></div>
+      <div><span>erroredCount == 1</span><span>rote <b>1</b> hinter der Lauf-Zahl</span></div>
+      <div><span>hiddenUnreadCount &gt; 0</span><span>blauer Punkt am Ende</span></div>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">Alle fertig · gelesen — eingeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip c quiet"><span class="chev">›</span><svg width="11" height="11" viewBox="0 0 11 11"><circle class="track" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6"/><circle class="arc" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="26.4 26.4" transform="rotate(-90 5.5 5.5)"/></svg><span class="n">74</span></span>
+          <span class="sp"></span><span class="time">2h</span>
+        </div>
+        <div class="sb-cap">3 laufen — Bogen 71/74</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip c"><span class="chev">›</span><svg width="11" height="11" viewBox="0 0 11 11"><circle class="track" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6"/><circle class="arc" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="25.3 26.4" transform="rotate(-90 5.5 5.5)"/></svg><span class="cdot"></span><span class="n run">3</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">2 laufen · 1 Fehler — Bogen 39/42</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Codex-Suba…</span>
+          <span class="chip c"><span class="chev">›</span><svg width="11" height="11" viewBox="0 0 11 11"><circle class="track" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6"/><circle class="arc" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="24.5 26.4" transform="rotate(-90 5.5 5.5)"/></svg><span class="cdot"></span><span class="n run">2</span><span class="n err">1</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">Fertig · 5 ungelesen</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Dokumenta…</span>
+          <span class="chip c quiet"><span class="chev">›</span><svg width="11" height="11" viewBox="0 0 11 11"><circle class="track" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6"/><circle class="arc" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="26.4 26.4" transform="rotate(-90 5.5 5.5)"/></svg><span class="n">74</span><span class="new"></span></span>
+          <span class="sp"></span><span class="dot blue"></span>
+        </div>
+      </div>
+      <div class="sb">
+        <div class="sb-cap">Ausgeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip c"><span class="chev">⌄</span><svg width="11" height="11" viewBox="0 0 11 11"><circle class="track" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6"/><circle class="arc" cx="5.5" cy="5.5" r="4.2" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="25.3 26.4" transform="rotate(-90 5.5 5.5)"/></svg><span class="cdot"></span><span class="n run">2</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Konsistenz- und F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row foot">
+          <span class="chev">›</span><span class="ftxt">72 fertig</span><span class="fdot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Einziger Entwurf, der den Fertig-Anteil behält, ohne zu schreien — der Bogen liest sich peripher, die Zahl bleibt den Laufenden vorbehalten.</p>
+      <p class="con"><b>Dagegen</b>Bei 11 px ist der Unterschied zwischen 90 % und 100 % kaum lesbar; der Ring riskiert, hübsche Dekoration statt Information zu sein.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ VARIANTE D ════════════════════ -->
+<article class="variant" id="v-d">
+  <div class="vnum">D</div>
+  <div class="vbody">
+    <h3>Lichtlauf-Pill</h3>
+    <p class="vclaim">Die Straße ohne Balken — der Schimmer wandert durch die Pill selbst</p>
+    <div class="prose">
+      <p>
+        Dieselbe Bewegungsidee wie B, eine Abstraktionsstufe höher: <strong>keine diskreten
+        Balken</strong>, stattdessen wandert ein weicher grüner Schimmer durch den Chip-Hintergrund,
+        solange <code>workingCount&nbsp;&gt;&nbsp;0</code> — wie Licht, das über eine nasse Straße
+        zieht. Der Inhalt bleibt reine Typografie: die Zahl der Laufenden. Das ist die ruhigste
+        Form von »hier arbeitet etwas«, die noch Bewegung ist.
+      </p>
+    </div>
+    <div class="grammar">
+      <div><span>workingCount == 0, alles gelesen</span><span>statische graue Pill mit <b>74</b></span></div>
+      <div><span>workingCount == 3</span><span>Schimmer läuft + <b>3</b> in Grün</span></div>
+      <div><span>erroredCount == 1</span><span>rote <b>1</b> hinter der Lauf-Zahl</span></div>
+      <div><span>hiddenUnreadCount &gt; 0</span><span>blauer Punkt am Ende</span></div>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">Alle fertig · gelesen — eingeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip d"><span class="chev">›</span><span>74</span></span>
+          <span class="sp"></span><span class="time">2h</span>
+        </div>
+        <div class="sb-cap">3 laufen — Schimmer zieht durch</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip d live"><span class="chev">›</span><span>3</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Codex-Suba…</span>
+          <span class="chip d live"><span class="chev">›</span><span>2</span><span class="err">·1</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">Fertig · 5 ungelesen</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Dokumenta…</span>
+          <span class="chip d"><span class="chev">›</span><span>74</span><span class="new"></span></span>
+          <span class="sp"></span><span class="dot blue"></span>
+        </div>
+      </div>
+      <div class="sb">
+        <div class="sb-cap">Ausgeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip d live"><span class="chev">⌄</span><span>2</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Finaler Vollstaend…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row foot">
+          <span class="chev">›</span><span class="ftxt">72 fertig</span><span class="fdot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Bewegung ohne Geometrie: skaliert auf jede Zahl (3 wie 120 sieht gleich edel aus), kleinster Platzbedarf aller Aktiv-Anzeigen.</p>
+      <p class="con"><b>Dagegen</b>Verliert die schönste Idee von B — dass man die Agenten <em>zählen</em> kann. Der Schimmer sagt »etwas«, nicht »drei«.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ VARIANTE E ════════════════════ -->
+<article class="variant" id="v-e">
+  <div class="vnum">E</div>
+  <div class="vbody">
+    <h3>Typografisch nackt</h3>
+    <p class="vclaim">Kein Chip — der Zustand steht einfach da</p>
+    <div class="prose">
+      <p>
+        Die Apple-Antwort: Kästen weglassen. Chevron + Text sitzen direkt in der Zeile, wie ein
+        Finder-Badge. <code>3 aktiv</code> in Grün, wenn etwas läuft; sonst die stille graue
+        Bestandszahl. Kein Rahmen, kein Hintergrund, keine Konkurrenz zur SUB-Pill der Kinder.
+      </p>
+    </div>
+    <div class="grammar">
+      <div><span>workingCount == 0, alles gelesen</span><span>graues <b>74</b> hinter dem Chevron</span></div>
+      <div><span>workingCount == 3</span><span>Puls-Punkt + <b>3 aktiv</b> in Grün</span></div>
+      <div><span>erroredCount == 1</span><span>zusätzlich <b>1 Fehler</b> in Rot</span></div>
+      <div><span>hiddenUnreadCount &gt; 0</span><span>blauer Punkt hinter der Zahl</span></div>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">Alle fertig · gelesen — eingeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip e"><span class="chev">›</span><span class="n">74</span></span>
+          <span class="sp"></span><span class="time">2h</span>
+        </div>
+        <div class="sb-cap">3 laufen</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip e"><span class="chev">›</span><span class="edot"></span><span class="run"><span class="n">3</span> aktiv</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Codex-Suba…</span>
+          <span class="chip e"><span class="chev">›</span><span class="edot"></span><span class="run"><span class="n">2</span> aktiv</span><span class="err"><span class="n">1</span> Fehler</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="sb-cap">Fertig · 5 ungelesen</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Dokumenta…</span>
+          <span class="chip e"><span class="chev">›</span><span class="n">74</span><span class="new"></span></span>
+          <span class="sp"></span><span class="dot blue"></span>
+        </div>
+      </div>
+      <div class="sb">
+        <div class="sb-cap">Ausgeklappt</div>
+        <div class="row">
+          <span class="ico">✳</span><span class="title">Docs</span>
+          <span class="chip e"><span class="chev">⌄</span><span class="edot"></span><span class="run"><span class="n">2</span> aktiv</span></span>
+          <span class="sp"></span><span class="dot green"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row child">
+          <span class="ico">◎</span><span class="title">Konsistenz- und F…</span><span class="subpill">SUB</span>
+          <span class="sp"></span><span class="dot green pulse"></span>
+        </div>
+        <div class="row foot">
+          <span class="chev">›</span><span class="ftxt">72 fertig</span><span class="fdot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Null visuelle Schuld — nichts konkurriert mit Titel und Status-Dot. Die Sidebar sieht aus, als hätte macOS sie selbst gebaut.</p>
+      <p class="con"><b>Dagegen</b>»aktiv«/»Fehler« kosten Breite (Deutsch ist lang); die Klick-Affordanz des Aufklappens ist am schwächsten von allen Varianten.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ STRESSTEST ════════════════════ -->
+<section id="stress">
+  <p class="kicker">Stresstest</p>
+  <h2>Schmale Sidebar, <em>große Zahlen</em></h2>
+  <div class="prose">
+    <p>
+      208 px Sidebar-Breite (Minimum), Zähler bis 120, lange Titel. Chips sind
+      <code>flex: none</code> — der Titel truncated, nie der Chip. Variante B deckelt bei
+      6 Balken; A, D und E wachsen nur um Ziffernbreite.
+    </p>
+  </div>
+  <div class="mockrow">
+    <div class="sb narrow">
+      <div class="sb-cap">A · 120 gesamt, 12 laufen</div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Dokumentations-Over…</span>
+        <span class="chip a live"><span class="chev">›</span><span class="pair run"><i></i><span>12</span></span></span>
+        <span class="sp"></span><span class="dot green"></span>
+      </div>
+      <div class="sb-cap">B · 24 laufen (Deckel 6)</div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Workflow-Lauf sehr la…</span>
+        <span class="chip b live"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span>
+        <span class="sp"></span><span class="dot green"></span>
+      </div>
+      <div class="sb-cap">B · Ruhe mit 120</div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Docs</span>
+        <span class="chip b"><span class="chev">›</span><span>120</span></span>
+        <span class="sp"></span><span class="time">3d</span>
+      </div>
+      <div class="sb-cap">D · Ruhe mit 120 · ungelesen</div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Codex-Subagents Qual…</span>
+        <span class="chip d"><span class="chev">›</span><span>120</span><span class="new"></span></span>
+        <span class="sp"></span><span class="dot blue"></span>
+      </div>
+      <div class="sb-cap">E · 12 aktiv · 2 Fehler</div>
+      <div class="row">
+        <span class="ico">✳</span><span class="title">Docs-Rebuild Welle 3…</span>
+        <span class="chip e"><span class="chev">›</span><span class="edot"></span><span class="run"><span class="n">12</span> aktiv</span><span class="err"><span class="n">2</span></span></span>
+        <span class="sp"></span><span class="dot green"></span>
+      </div>
+    </div>
+    <div class="prose" style="flex:1 1 320px; font-size:14px;">
+      <p style="margin-top:0">
+        Erkenntnisse aus dem schmalen Layout: <strong>E braucht die Wort-Kürzung</strong>
+        (»2 Fehler« → rote <code>2</code>), sonst frisst Deutsch die Titelbreite.
+        <strong>B bleibt auch mit Deckel ehrlich</strong>, weil die Zahl neben der Straße exakt
+        ist. Die Ruhe-Zustände aller Varianten sind schmaler als der heutige Chip — der
+        Normalfall gewinnt am meisten Platz zurück.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ EMPFEHLUNG ════════════════════ -->
+<section id="empfehlung">
+  <p class="kicker">Empfehlung</p>
+  <h2>Die Straße gewinnt — <em>mit der Ruhe von A</em></h2>
+  <div class="reco">
+    <h3>Variante B, Agenten-Straße</h3>
+    <p>
+      <b>B ist die stärkste Variante für WhisperM8</b>, weil sie drei Dinge gleichzeitig löst,
+      die sonst keine schafft: Die Balken bekommen endlich <b>echte Semantik</b> (1 Balken =
+      1 laufender Agent statt eines abstrakten Fertig-Anteils), das Lauflicht ist <b>gelernte
+      Marken-Sprache</b> aus der Transcription-Bar (»von links nach rechts, leicht pulsierend« —
+      dieselbe Bewegung, die schon »es wird gearbeitet« bedeutet), und der Chip bleibt der
+      <b>eine Button</b> zum Auf- und Zuklappen, den es heute schon gibt.
+    </p>
+    <p>
+      Entscheidend ist, dass B die <b>Ruhe-Logik von A übernimmt</b> (so ist sie oben gebaut):
+      Läuft nichts, gibt es keine Balken, kein Grün, keinen Teal-Kasten — nur die graue
+      Bestandszahl. Der Bruch <code>74/74</code> und die Segmentleiste entfallen ersatzlos;
+      den Fertig-Anteil trägt niemand mehr im Chip, denn die Frage beantwortet die
+      »N fertig«-Fußzeile beim Aufklappen präziser.
+    </p>
+    <p>
+      <b>Zweiter Platz: E</b> — falls die Sidebar noch stiller werden soll, ist die nackte
+      Typografie die konsequenteste Form; sie opfert dafür Liveness und Klick-Affordanz.
+      <b>C</b> nur, falls der Fertig-Anteil aus Produktgründen sichtbar bleiben muss;
+      <b>D</b> ist die Rückfalloption, wenn die diskreten Balken von B im Alltag zu unruhig
+      wirken — gleicher Schimmer, keine Geometrie.
+    </p>
+  </div>
+</section>
+
+<footer>
+  docs/design/subagent-chip-varianten.html · Datenvertrag: SubagentChildSplit (workingCount · erroredCount · hiddenUnreadCount · totalCount · terminalCount) · Lauflicht-Referenz: transcription-bar-redesign.html (keyframe „scan")
+</footer>
+
+</div>
+</body>
+</html>

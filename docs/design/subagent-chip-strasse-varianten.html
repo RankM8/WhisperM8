@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenten-Straße — Ausbaustufen</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     Fortsetzung von subagent-chip-varianten.html: Variante B
+     („Agenten-Straße") hat gewonnen — hier ihre Ausbaustufen.
+     Gleiche Design-Sprache, gleiche App-Fidelity-Tokens.
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --ink:        oklch(0.16 0.012 200);
+    --ink-2:      oklch(0.20 0.014 200);
+    --line:       oklch(0.32 0.012 205);
+    --line-soft:  oklch(0.27 0.010 205);
+
+    --paper:      oklch(0.93 0.008 90);
+    --paper-dim:  oklch(0.72 0.010 200);
+    --paper-mute: oklch(0.55 0.012 205);
+
+    --teal:       oklch(0.74 0.10 195);
+    --teal-deep:  oklch(0.52 0.09 195);
+    --amber:      oklch(0.78 0.14 70);
+
+    /* App-Fidelity: AppTheme-Werte der Sidebar (Dark) */
+    --app-sidebar:   #131418;
+    --app-sel:       rgba(124,132,232,.16);
+    --app-accent:    #7c84e8;
+    --app-text:      rgba(255,255,255,.92);
+    --app-text2:     rgba(255,255,255,.55);
+    --app-text3:     rgba(255,255,255,.38);
+    --app-green:     #4cc38a;
+    --app-red:       #e5594f;
+    --app-blue:      #3f8cff;
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans:  ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--ink); color: var(--paper);
+    font-family: var(--sans); font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 56px); }
+
+  header { padding: clamp(52px, 8vh, 90px) 0 clamp(30px, 5vh, 52px); border-bottom: 1px solid var(--line); }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--teal-deep); margin: 0 0 20px; }
+  h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 5.6vw, 66px); line-height: 1.0; letter-spacing: -.02em; margin: 0; max-width: 18ch; }
+  h1 em { font-style: italic; color: var(--teal); }
+  .lede { margin: 24px 0 0; max-width: 64ch; font-size: 16.5px; color: var(--paper-dim); }
+  .lede strong { color: var(--paper); font-weight: 500; }
+
+  section { padding: clamp(38px, 5vh, 64px) 0; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: 0; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--teal-deep); margin: 0 0 14px; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(25px, 3.2vw, 38px); letter-spacing: -.015em; line-height: 1.08; margin: 0 0 16px; max-width: 28ch; }
+  h2 em { font-style: italic; color: var(--teal); }
+  .prose { max-width: 66ch; color: var(--paper-dim); }
+  .prose strong { color: var(--paper); font-weight: 500; }
+  .prose code { font-family: var(--mono); font-size: .85em; color: var(--teal); background: var(--ink-2); padding: 1px 5px; border-radius: 3px; }
+
+  article.variant { display: grid; grid-template-columns: 84px 1fr; gap: 0 28px; padding: clamp(32px, 4.5vh, 52px) 0; border-bottom: 1px solid var(--line-soft); }
+  article.variant:last-of-type { border-bottom: 0; }
+  .vnum { font-family: var(--serif); font-style: italic; font-size: 38px; color: var(--teal-deep); line-height: 1; padding-top: 4px; white-space: nowrap; }
+  .vbody h3 { font-family: var(--serif); font-weight: 400; font-size: clamp(22px, 2.5vw, 29px); letter-spacing: -.01em; margin: 0 0 4px; }
+  .vclaim { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-mute); margin: 0 0 14px; }
+
+  .verdict { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 20px; max-width: 680px; }
+  .verdict p { flex: 1 1 260px; margin: 0; font-size: 13.5px; color: var(--paper-dim); border-top: 2px solid var(--line); padding-top: 10px; }
+  .verdict p b { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; }
+  .verdict .pro b { color: var(--teal); }
+  .verdict .con b { color: var(--amber); }
+
+  /* ── Sidebar-Mocks ── */
+  .mockrow { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; margin-top: 6px; }
+  .sb {
+    width: 292px; flex: none;
+    background: var(--app-sidebar);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 10px; padding: 10px 0 12px;
+    font-family: var(--sans);
+    box-shadow: 0 18px 50px -28px rgba(0,0,0,.8);
+  }
+  .sb.narrow { width: 208px; }
+  .sb.wide { width: 340px; }
+  .sb-cap { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--teal-deep); padding: 12px 12px 4px 28px; }
+  .sb-cap:first-child { padding-top: 4px; }
+
+  .row { display: flex; align-items: center; gap: 8px; height: 26px; margin: 0 8px; padding: 0 8px 0 20px; border-radius: 6px; position: relative; }
+  .row .ico { width: 11px; flex: none; text-align: center; font-size: 10px; color: var(--app-text3); opacity: .55; }
+  .row .title { font-size: 12px; color: var(--app-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+  .row .sp { flex: 1 1 0; min-width: 0; }
+  .row .time { font-family: var(--mono); font-size: 9.5px; color: var(--app-text3); flex: none; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.idle { background: rgba(255,255,255,.22); }
+  .dot.green { background: var(--app-green); }
+  .dot.blue { background: var(--app-blue); }
+  .dot.pulse { animation: softpulse 1.6s ease-in-out infinite; }
+  .row.child { padding-left: 36px; height: 25px; }
+  .subpill { font-size: 8px; font-weight: 700; letter-spacing: .04em; color: #46b8ca; background: rgba(70,184,202,.16); border: .5px solid rgba(70,184,202,.3); border-radius: 3px; padding: 1px 4px; flex: none; }
+  .row.foot { height: 22px; padding-left: 32px; gap: 7px; }
+  .row.foot .chev { font-size: 7px; color: var(--app-text3); transition: transform .15s ease-out; }
+  .row.foot .ftxt { font-size: 9.5px; font-family: var(--mono); color: var(--app-text3); }
+  .row.foot .fdot { width: 5px; height: 5px; border-radius: 50%; background: var(--app-blue); flex: none; }
+
+  /* ── Interaktive Gruppen (Sektion „Interaktion"): Chip-Klick klappt
+     die Kinder auf (Stufe 1), Fußzeilen-Klick die Fertigen (Stufe 2) —
+     das reale Zwei-Stufen-Verhalten der App als klickbarer Mock. */
+  .grp .kids { display: none; }
+  .grp.open .kids { display: block; }
+  .grp .fin { display: none; }
+  .grp.fin-open .fin { display: block; }
+  .grp .row.foot { cursor: pointer; }
+  .grp.fin-open .row.foot .chev { transform: rotate(90deg); }
+  .grp .chip .chev { transition: transform .15s ease-out; }
+  .grp.open .chip .chev { transform: translateY(-.5px) rotate(90deg); }
+
+  /* ── Chip-Basis (geteilt von allen Straßen-Ausbaustufen) ──
+     Ruhe-Grammatik ist bei ALLEN identisch: neutraler Kasten,
+     graue Bestandszahl, keine Balken, kein Grün. */
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    flex: none; cursor: pointer; user-select: none;
+    font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+    background: rgba(255,255,255,.05); border: .5px solid rgba(255,255,255,.08);
+    border-radius: 99px; padding: 2.5px 7px; color: var(--app-text3);
+  }
+  .chip .chev { font-size: 6.5px; line-height: 1; transform: translateY(-.5px); }
+  .chip.live { border-color: rgba(76,195,138,.28); background: rgba(76,195,138,.07); color: var(--app-green); }
+  .chip .new { width: 4px; height: 4px; border-radius: 50%; background: var(--app-blue); flex: none; }
+  .chip .err { color: var(--app-red); display: inline-flex; align-items: center; gap: 3px; }
+  .chip .err i { width: 2px; height: 7px; border-radius: 99px; background: var(--app-red); }
+
+  .road { display: inline-flex; align-items: center; gap: 2px; }
+  .road i { width: 2px; height: 7px; border-radius: 99px; background: var(--app-green); }
+
+  /* B1 · Referenz — Scan-Lauflicht (Opazität), wie beschlossen */
+  .b1 .road i { opacity: .35; animation: roadscan 1.1s linear infinite; }
+
+  /* B2 · Atmende Welle — Höhe + Opazität atmen durch die Reihe
+     (die Recording-Sprache der Transcription-Bar, gezähmt) */
+  .b2 .road i { height: 4px; opacity: .5; animation: welle 1.3s ease-in-out infinite; }
+
+  /* B3 · Komet — enges Lauffenster mit Glüh-Schweif: Peak hell +
+     Glow, dann langsames Ausklingen (Schweif hinter dem Licht) */
+  .b3 .road i { opacity: .22; animation: komet 1.4s linear infinite; }
+
+  /* B4 · Randlos — gleiche Straße wie B1, aber ohne Kasten:
+     Balken + Zahl sitzen nackt in der Zeile */
+  .chip.b4 { background: transparent; border-color: transparent; padding: 2.5px 2px; }
+  .chip.b4.live { background: transparent; border-color: transparent; }
+  .b4 .road i { opacity: .35; animation: roadscan 1.1s linear infinite; }
+
+  /* B5 · Semantik-Straße — EINE Spur trägt alles: laufende Balken
+     (grün, animiert), Fehler-Balken (rot, stehend), Ungelesen-Balken
+     (blau, stehend). Zahl = nur die Laufenden. */
+  .b5 .road i { opacity: .35; animation: roadscan 1.1s linear infinite; }
+  .b5 .road i.r { background: var(--app-red); opacity: .9; animation: none; }
+  .b5 .road i.u { background: var(--app-blue); opacity: .9; animation: none; }
+
+  /* B6 · Unterstrich — die Straße wird zur 2-px-Fahrbahn UNTER der
+     Zahl: kleinster Fußabdruck, Bewegung bleibt */
+  .chip.b6 { flex-direction: column; gap: 2.5px; padding: 3px 7px; border-radius: 6px; }
+  .chip.b6 .top { display: inline-flex; align-items: center; gap: 4px; }
+  .b6 .lane { display: inline-flex; gap: 2px; }
+  .b6 .lane i { width: 3px; height: 2px; border-radius: 99px; background: var(--app-green); opacity: .35; animation: roadscan 1.1s linear infinite; }
+  .b6 .lane i:nth-child(1) { animation-delay: 0s; }
+  .b6 .lane i:nth-child(2) { animation-delay: .13s; }
+  .b6 .lane i:nth-child(3) { animation-delay: .26s; }
+  .b6 .lane i:nth-child(4) { animation-delay: .39s; }
+  .b6 .lane i:nth-child(5) { animation-delay: .52s; }
+  .b6 .lane i:nth-child(6) { animation-delay: .65s; }
+
+  /* B7 · Leuchtkapsel — die laute Schwester: satter Grün-Tint,
+     helle Balken, helle Zahl. Für „aktiv MUSS auffallen". */
+  .chip.b7.live { background: rgba(76,195,138,.18); border-color: rgba(76,195,138,.45); color: #d9ffe9; }
+  .b7 .road i { background: #a8f0c8; opacity: .4; animation: roadscan 1.1s linear infinite; }
+
+  /* Stagger-Delays — NACH den Varianten-Regeln und mit höherer
+     Spezifität (.chip .road), sonst setzt deren animation:-Shorthand
+     das Delay auf 0 zurück und die Welle blinkt im Gleichtakt statt
+     links → rechts durchzulaufen. */
+  .chip .road i:nth-child(1) { animation-delay: 0s; }
+  .chip .road i:nth-child(2) { animation-delay: .13s; }
+  .chip .road i:nth-child(3) { animation-delay: .26s; }
+  .chip .road i:nth-child(4) { animation-delay: .39s; }
+  .chip .road i:nth-child(5) { animation-delay: .52s; }
+  .chip .road i:nth-child(6) { animation-delay: .65s; }
+  /* Fehler-/Ungelesen-Balken in der Semantik-Spur laufen NIE mit —
+     das Delay-Raster oben darf ihr animation:none nicht aushebeln. */
+  .b5 .road i.r, .b5 .road i.u { animation: none; }
+
+  @keyframes roadscan { 0%, 100% { opacity: .3; } 18% { opacity: 1; } }
+  @keyframes welle { 0%, 100% { height: 4px; opacity: .5; } 40% { height: 8px; opacity: 1; } }
+  @keyframes komet {
+    0% { opacity: .22; }
+    8% { opacity: 1; box-shadow: 0 0 5px rgba(76,195,138,.9); }
+    30% { opacity: .55; box-shadow: none; }
+    100% { opacity: .22; }
+  }
+  @keyframes softpulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+  .reco { margin-top: 26px; max-width: 760px; border-left: 2px solid var(--teal); padding: 4px 0 4px 26px; }
+  .reco h3 { font-family: var(--serif); font-weight: 400; font-size: 24px; margin: 0 0 10px; }
+  .reco p { margin: 0 0 12px; color: var(--paper-dim); font-size: 14.5px; }
+  .reco p:last-child { margin-bottom: 0; }
+  .reco b { color: var(--paper); font-weight: 500; }
+
+  footer { padding: 40px 0 70px; color: var(--paper-mute); font-size: 12.5px; font-family: var(--mono); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  }
+  @media (max-width: 720px) {
+    article.variant { grid-template-columns: 1fr; }
+    .vnum { padding-bottom: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">WhisperM8 · Agent-Chats · Sidebar · Fortsetzung von subagent-chip-varianten.html · 2026-07-10</p>
+  <h1>Die Agenten-Straße, <em>in sieben Ausbaustufen</em></h1>
+  <p class="lede">
+    Entschieden: der Chip zeigt <strong>1 Balken = 1 laufender Agent</strong> mit dem Lauflicht
+    der Transcription-Bar, und in Ruhe nur die graue Bestandszahl. Diese Seite variiert genau
+    diesen Chip entlang von vier Achsen — <strong>Container</strong> (Kapsel, randlos, Unterstrich),
+    <strong>Animation</strong> (Scan, Welle, Komet), <strong>Balken-Semantik</strong> (nur laufend
+    vs. eine Spur für alles) und <strong>Lautstärke</strong>. Ruhe-Grammatik und Deckel 6 sind
+    überall identisch; nur der Laufzustand wechselt das Kostüm.
+  </p>
+</header>
+
+<!-- ════════════════════ ÜBERBLICK ════════════════════ -->
+<section id="ueberblick">
+  <p class="kicker">Überblick</p>
+  <h2>Alle sieben, <em>Seite an Seite</em></h2>
+  <div class="prose">
+    <p>
+      Gleiche Datenlage in jeder Zeile: <code>workingCount == 3</code> von 74 Kindern.
+      Rechts daneben derselbe Chip im Ruhezustand — der bei allen Ausbaustufen gleich
+      (und gleich leise) ist, mit Ausnahme der Bauhöhe von B6.
+    </p>
+  </div>
+  <div class="mockrow">
+    <div class="sb wide">
+      <div class="sb-cap">Laufzustand — 3 aktiv, Lauflicht an</div>
+      <div class="row"><span class="ico">✳</span><span class="title">B1 · Referenz</span><span class="chip live b1"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="row"><span class="ico">✳</span><span class="title">B2 · Welle</span><span class="chip live b2"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="row"><span class="ico">✳</span><span class="title">B3 · Komet</span><span class="chip live b3"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="row"><span class="ico">✳</span><span class="title">B4 · Randlos</span><span class="chip live b4"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="row"><span class="ico">✳</span><span class="title">B5 · Semantik</span><span class="chip live b5"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i class="r"></i><i class="u"></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="row"><span class="ico">✳</span><span class="title">B6 · Unterstrich</span><span class="chip live b6"><span class="top"><span class="chev">›</span><span>3</span></span><span class="lane"><i></i><i></i><i></i></span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="row"><span class="ico">✳</span><span class="title">B7 · Leuchtkapsel</span><span class="chip live b7"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+    </div>
+    <div class="sb">
+      <div class="sb-cap">Ruhezustand — überall gleich leise</div>
+      <div class="row"><span class="ico">✳</span><span class="title">B1–B5, B7</span><span class="chip"><span class="chev">›</span><span>74</span></span><span class="sp"></span><span class="time">2h</span></div>
+      <div class="row"><span class="ico">✳</span><span class="title">B6</span><span class="chip"><span class="chev">›</span><span>74</span></span><span class="sp"></span><span class="time">2h</span></div>
+      <div class="sb-cap">Ruhe · 5 ungelesen</div>
+      <div class="row"><span class="ico">✳</span><span class="title">Dokumenta…</span><span class="chip"><span class="chev">›</span><span>74</span><span class="new"></span></span><span class="sp"></span><span class="dot blue"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ INTERAKTION ════════════════════ -->
+<section id="interaktion">
+  <p class="kicker">Interaktion · klickbar</p>
+  <h2>Klick auf den Chip — <em>die Subagents kommen</em></h2>
+  <div class="prose">
+    <p>
+      Der Chip bleibt in jeder Ausbaustufe der <strong>eine Button</strong> des heutigen
+      Zwei-Stufen-Modells: <strong>Stufe 1</strong> — Chip-Klick klappt alle Kinder auf
+      (fehlgeschlagene + laufende direkt sichtbar, das Chevron dreht nach unten);
+      <strong>Stufe 2</strong> — die „N fertig"-Fußzeile klappt die erfolgreich fertigen
+      Kinder aus. <strong>Diese Mocks sind echt klickbar</strong> — probier es: Chip anklicken,
+      dann die Fußzeile. Ausgeklappt läuft die Straße im Chip weiter und die grünen Puls-Punkte
+      der Kind-Zeilen übernehmen denselben Takt: oben die Summe, unten die Einzelnen.
+    </p>
+  </div>
+  <div class="mockrow">
+    <div class="sb">
+      <div class="sb-cap">B1 · Scan — 2 laufen, 72 fertig</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b1"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="kids">
+          <div class="row child"><span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Konsistenz- und F…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">72 fertig</span><span class="fdot"></span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Adversariale Fakt…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot blue"></span></div>
+            <div class="row child"><span class="ico">◎</span><span class="title">Doku-Ergänzung…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+            <div class="row child"><span class="ico">◎</span><span class="title">Link- und Struktu…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sb-cap">B2 · Welle — 3 laufen</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Dokumenta…</span><span class="chip live b2"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="kids">
+          <div class="row child"><span class="ico">◎</span><span class="title">Review des Com…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Finaler Vollstaend…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Finaler adversaria…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">39 fertig</span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Doku-Auftrag: Ne…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+            <div class="row child"><span class="ico">◎</span><span class="title">Re-Check (NUR A…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sb-cap">B3 · Komet — 3 laufen</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Jarvis-Board</span><span class="chip live b3"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="kids">
+          <div class="row child"><span class="ico">◎</span><span class="title">Tier-1-Report gen…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Board-Sync Slice…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Vertical-Slice-QA…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">17 fertig</span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Kickoff-Recherch…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sb-cap">B4 · Randlos — 2 laufen</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b4"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="kids">
+          <div class="row child"><span class="ico">◎</span><span class="title">Smoke-Suite grü…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Doku-Auftrag: do…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">51 fertig</span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Konsistenz- und F…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sb">
+      <div class="sb-cap">B5 · Semantik — 2 laufen, 1 Fehler, Ungelesenes</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b5"><span class="chev">›</span><span class="road"><i></i><i></i><i class="r"></i><i class="u"></i></span><span>2</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="kids">
+          <div class="row child"><span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot" style="background:var(--app-red)"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Konsistenz- und F…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Finaler adversaria…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">70 fertig</span><span class="fdot"></span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Doku-Auftrag: Di…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot blue"></span></div>
+            <div class="row child"><span class="ico">◎</span><span class="title">Doku-Ergänzung…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot blue"></span></div>
+            <div class="row child"><span class="ico">◎</span><span class="title">Re-Check (NUR A…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sb-cap">B6 · Unterstrich — 2 laufen</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip live b6"><span class="top"><span class="chev">›</span><span>2</span></span><span class="lane"><i></i><i></i></span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="kids">
+          <div class="row child"><span class="ico">◎</span><span class="title">Migrations-Sweep…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Verifikations-Lauf…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">22 fertig</span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Scope-Analyse fü…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sb-cap">B7 · Leuchtkapsel — 2 laufen</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Docs-Rebuild</span><span class="chip live b7"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="kids">
+          <div class="row child"><span class="ico">◎</span><span class="title">Welle 3 — Schreib…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row child"><span class="ico">◎</span><span class="title">Gesamtverifikatio…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">44 fertig</span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Inventur-Scan…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sb-cap">Ruhe-Fall (alle Stufen) — Klick zeigt nur die Fußzeile</div>
+      <div class="grp">
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip"><span class="chev">›</span><span>74</span><span class="new"></span></span><span class="sp"></span><span class="dot blue"></span></div>
+        <div class="kids">
+          <div class="row foot"><span class="chev">›</span><span class="ftxt">74 fertig</span><span class="fdot"></span></div>
+          <div class="fin">
+            <div class="row child"><span class="ico">◎</span><span class="title">Finaler adversaria…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot blue"></span></div>
+            <div class="row child"><span class="ico">◎</span><span class="title">Doku-Ergänzung…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot idle"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="verdict">
+    <p class="pro"><b>Design-Regel</b>Ausgeklappt bleibt die Straße im Chip an — sie ist die Summe, die Kind-Punkte sind die Einzelnen. Wer sie ausgeklappt abschalten will, verliert die Konstanz des Signals beim Scrollen (Parent sichtbar, Kinder außerhalb des Viewports).</p>
+    <p class="con"><b>Grenze des Mocks</b>Reihenfolge-Logik (fehlgeschlagen vor laufend, Ungelesene zuerst im Fuß) kommt in der App aus <code>subagentChildSplit</code> — hier nur angedeutet.</p>
+  </div>
+</section>
+
+<!-- ════════════════════ B1 ════════════════════ -->
+<article class="variant" id="b1">
+  <div class="vnum">B1</div>
+  <div class="vbody">
+    <h3>Referenz — Scan</h3>
+    <p class="vclaim">Die beschlossene Basis · Opazitäts-Lauflicht, Balken stehen still</p>
+    <div class="prose">
+      <p>
+        Der Stand aus dem ersten Prototyp, unverändert als Messlatte: Balken in fixer Höhe,
+        nur die <strong>Helligkeit</strong> wandert links → rechts (Keyframe <code>scan</code>
+        der Transcription-Bar). Fehler als roter Stand-Balken hinter der Straße, Ungelesen als
+        blauer Punkt am Ende.
+      </p>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">3 laufen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b1"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">24 laufen — Deckel 6</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip live b1"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b1"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span><span class="err"><i></i>1</span></span><span class="sp"></span><span class="dot green"></span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Ruhigste Bewegungsform: nichts ändert die Geometrie, nur Licht. Der sichere Default.</p>
+      <p class="con"><b>Dagegen</b>Bei nur 1–2 Balken ist das Lauflicht kaum als Lauf erkennbar — es wirkt wie schlichtes Blinken.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ B2 ════════════════════ -->
+<article class="variant" id="b2">
+  <div class="vnum">B2</div>
+  <div class="vbody">
+    <h3>Atmende Welle</h3>
+    <p class="vclaim">Höhe + Helligkeit atmen durch die Reihe · die Recording-Sprache, gezähmt</p>
+    <div class="prose">
+      <p>
+        Statt reinem Licht wandert eine <strong>Hebung</strong> durch die Balken: jeder wächst
+        kurz von 4 auf 8 px und sinkt zurück — die Waveform-Sprache der Aufnahme, auf
+        Sidebar-Lautstärke gedimmt. Wirkt organischer, „lebendiger" als B1; die Bewegung ist
+        auch bei einem einzelnen Balken als Puls lesbar.
+      </p>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">3 laufen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b2"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">24 laufen — Deckel 6</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip live b2"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">1 läuft — Puls statt Straße</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Dokumenta…</span><span class="chip live b2"><span class="chev">›</span><span class="road"><i></i></span><span>1</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b2"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span><span class="err"><i></i>1</span></span><span class="sp"></span><span class="dot green"></span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Am nächsten an der Transkriptions-DNA — „WhisperM8 arbeitet" sieht überall in der App gleich aus. Funktioniert ab 1 Balken.</p>
+      <p class="con"><b>Dagegen</b>Höhen-Animation ist die unruhigste der drei Bewegungen; bei vielen parallel laufenden Parents tanzt die Sidebar.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ B3 ════════════════════ -->
+<article class="variant" id="b3">
+  <div class="vnum">B3</div>
+  <div class="vbody">
+    <h3>Komet</h3>
+    <p class="vclaim">Enges Lauffenster, Glüh-Peak, langsamer Schweif</p>
+    <div class="prose">
+      <p>
+        Dramatischere Fassung des Scans: das Licht ist ein <strong>schmaler Komet</strong> —
+        kurzer heller Peak mit dezentem Glow, dann klingt der Balken langsam aus, während das
+        Licht schon weiterzieht. Der Schweif macht die Laufrichtung unmissverständlich, auch
+        im Augenwinkel.
+      </p>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">3 laufen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b3"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">24 laufen — Deckel 6</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip live b3"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b3"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span><span class="err"><i></i>1</span></span><span class="sp"></span><span class="dot green"></span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Die schönste Einzelbewegung — Richtung und Leben sind sofort lesbar, ohne dass sich Geometrie ändert.</p>
+      <p class="con"><b>Dagegen</b>Der Glow ist auf 7-px-Balken grenzwertig fein; in SwiftUI kostet ein animierter Schatten pro Balken messbar Rendering.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ B4 ════════════════════ -->
+<article class="variant" id="b4">
+  <div class="vnum">B4</div>
+  <div class="vbody">
+    <h3>Randlos</h3>
+    <p class="vclaim">Dieselbe Straße, ohne Kasten — nackte Balken in der Zeile</p>
+    <div class="prose">
+      <p>
+        Der Kasten fällt weg: Chevron, Balken und Zahl sitzen <strong>direkt in der Zeile</strong>,
+        wie ein Finder-Badge. Im Ruhezustand bleibt nur die graue Zahl — die leiseste denkbare
+        Fassung der Straße. Die Klick-Fläche bleibt unsichtbar in voller Chip-Größe erhalten
+        (Padding ohne Optik).
+      </p>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">3 laufen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b4"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">24 laufen — Deckel 6</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip live b4"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">Ruhe — nur Zahl, kein Kasten</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip b4"><span class="chev">›</span><span>74</span></span><span class="sp"></span><span class="time">2h</span></div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b4"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span><span class="err"><i></i>1</span></span><span class="sp"></span><span class="dot green"></span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Null Chrom — die Sidebar wirkt am aufgeräumtesten; nichts konkurriert mit der SUB-Pill der Kinder.</p>
+      <p class="con"><b>Dagegen</b>Die Button-Affordanz („hier kann man klappen") hängt allein am winzigen Chevron; Hover-Hintergrund wäre nötig — und Hover-only-UI wollen wir nicht.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ B5 ════════════════════ -->
+<article class="variant" id="b5">
+  <div class="vnum">B5</div>
+  <div class="vbody">
+    <h3>Semantik-Straße</h3>
+    <p class="vclaim">Eine Spur trägt alles: grün läuft, rot steht, blau wartet</p>
+    <div class="prose">
+      <p>
+        Die Straße wird zur vollständigen Statuszeile: <strong>laufende Agenten als animierte
+        grüne Balken, Fehler als stehende rote Balken, Ungelesen als stehender blauer
+        Balken</strong> am Ende — alles in einer Spur, exakt aus <code>workingCount</code>,
+        <code>erroredCount</code> und <code>hiddenUnreadCount &gt; 0</code>. Die Zahl daneben
+        zählt weiterhin nur die Laufenden. Rot steht still (kaputt bewegt sich nicht), und
+        genau dieser Kontrast macht Fehler sofort auffällig.
+      </p>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">3 laufen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b5"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">3 laufen · 1 Fehler · Ungelesenes</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b5"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i class="r"></i><i class="u"></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">Nur Fehler übrig — 2 rote Stand-Balken</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip b5" style="border-color:rgba(229,89,79,.3)"><span class="chev">›</span><span class="road"><i class="r"></i><i class="r"></i></span><span style="color:var(--app-red)">2</span></span><span class="sp"></span><span class="dot idle"></span></div>
+        <div class="sb-cap">Ruhe · ungelesen — blauer Balken bleibt</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Dokumenta…</span><span class="chip b5"><span class="chev">›</span><span class="road"><i class="u"></i></span><span>74</span></span><span class="sp"></span><span class="dot blue"></span></div>
+      </div>
+      <div class="sb">
+        <div class="sb-cap">Ausgeklappt — Spur oben spiegelt die Kinder</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b5"><span class="chev">⌄</span><span class="road"><i></i><i></i><i class="r"></i></span><span>2</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="row child"><span class="ico">◎</span><span class="title">Re-Check nach F…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot" style="background:var(--app-red)"></span></div>
+        <div class="row child"><span class="ico">◎</span><span class="title">Konsistenz- und F…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+        <div class="row child"><span class="ico">◎</span><span class="title">Finaler adversaria…</span><span class="subpill">SUB</span><span class="sp"></span><span class="dot green pulse"></span></div>
+        <div class="row foot"><span class="chev">›</span><span class="ftxt">71 fertig</span><span class="fdot"></span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Der komplette Gruppenzustand in einem Blick, ohne ein Zeichen Text mehr — und die Spur oben ist eine wörtliche Miniatur der aufgeklappten Kinderliste.</p>
+      <p class="con"><b>Dagegen</b>Drei Farben auf 7 px verlangen gutes Farbsehen; für Rot/Grün-Schwäche braucht es die stehende-vs-laufende Unterscheidung als zweiten Kanal (ist eingebaut, aber subtil).</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ B6 ════════════════════ -->
+<article class="variant" id="b6">
+  <div class="vnum">B6</div>
+  <div class="vbody">
+    <h3>Unterstrich</h3>
+    <p class="vclaim">Die Fahrbahn rutscht unter die Zahl — kleinster Fußabdruck</p>
+    <div class="prose">
+      <p>
+        Die Straße wird zur <strong>2-px-Fahrbahn unter der Zahl</strong>: oben Chevron + Anzahl
+        der Laufenden, darunter die animierten Mini-Balken. Der Chip wird schmaler als jede
+        andere Fassung (Breite wächst nicht mit der Balkenzahl über die Zahl hinaus) und
+        bekommt dafür minimal mehr Höhe. In Ruhe verschwindet die Fahrbahn ersatzlos.
+      </p>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">3 laufen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b6"><span class="top"><span class="chev">›</span><span>3</span></span><span class="lane"><i></i><i></i><i></i></span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">24 laufen — Deckel 6</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip live b6"><span class="top"><span class="chev">›</span><span>24</span></span><span class="lane"><i></i><i></i><i></i><i></i><i></i><i></i></span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b6"><span class="top"><span class="chev">›</span><span>2</span><span class="err">·1</span></span><span class="lane"><i></i><i></i></span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">Ruhe — Fahrbahn weg, flacher Chip</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip"><span class="chev">›</span><span>74</span></span><span class="sp"></span><span class="time">2h</span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Bleibt bei jeder Agentenzahl gleich breit — das Layout der Zeile zappelt nie, egal ob 1 oder 24 laufen.</p>
+      <p class="con"><b>Dagegen</b>Zwei Bauhöhen (mit/ohne Fahrbahn) lassen die Zeile beim Zustandswechsel minimal atmen; die 2-px-Balken sind an der Grenze der Sichtbarkeit.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ B7 ════════════════════ -->
+<article class="variant" id="b7">
+  <div class="vnum">B7</div>
+  <div class="vbody">
+    <h3>Leuchtkapsel</h3>
+    <p class="vclaim">Die laute Schwester — satter Tint, helle Balken, helle Zahl</p>
+    <div class="prose">
+      <p>
+        Gegenentwurf zur Zurückhaltung: solange etwas läuft, füllt sich die Kapsel mit einem
+        satten Grün-Tint, Balken und Zahl hellen auf. Für den Fall, dass „es laufen Agents"
+        die <strong>wichtigste Information der ganzen Sidebar</strong> sein soll — z.&nbsp;B. bei
+        langen Workflow-Läufen, die man aus dem Augenwinkel überwachen will. Ruhe bleibt grau.
+      </p>
+    </div>
+    <div class="mockrow">
+      <div class="sb">
+        <div class="sb-cap">3 laufen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip live b7"><span class="chev">›</span><span class="road"><i></i><i></i><i></i></span><span>3</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">24 laufen — Deckel 6</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Workflow-La…</span><span class="chip live b7"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">2 laufen · 1 Fehler</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Codex-Suba…</span><span class="chip live b7"><span class="chev">›</span><span class="road"><i></i><i></i></span><span>2</span><span class="err"><i></i>1</span></span><span class="sp"></span><span class="dot green"></span></div>
+        <div class="sb-cap">Ruhe — identisch mit allen anderen</div>
+        <div class="row"><span class="ico">✳</span><span class="title">Docs</span><span class="chip"><span class="chev">›</span><span>74</span></span><span class="sp"></span><span class="time">2h</span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <p class="pro"><b>Dafür</b>Über die Distanz eines ganzen Bildschirms erkennbar; der Wechsel laut → still macht das Fertigwerden zum sichtbaren Ereignis.</p>
+      <p class="con"><b>Dagegen</b>Kollidiert mit der Grundthese des Redesigns („ruhiger, besser integriert") — und konkurriert farblich mit den grünen Status-Dots der Kinder.</p>
+    </div>
+  </div>
+</article>
+
+<!-- ════════════════════ STRESSTEST ════════════════════ -->
+<section id="stress">
+  <p class="kicker">Stresstest</p>
+  <h2>Schmale Sidebar, <em>volle Straßen</em></h2>
+  <div class="prose">
+    <p>
+      208 px Breite, Deckel-6-Straßen und dreistellige Ruhe-Zahlen. Chips sind
+      <code>flex: none</code> — der Titel truncated, nie der Chip. B6 ist hier am stärksten,
+      B5 mit voller Semantik-Spur am breitesten.
+    </p>
+  </div>
+  <div class="mockrow">
+    <div class="sb narrow">
+      <div class="sb-cap">B1 · 24 laufen</div>
+      <div class="row"><span class="ico">✳</span><span class="title">Workflow-Lauf sehr…</span><span class="chip live b1"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i></i><i></i></span><span>24</span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="sb-cap">B5 · volle Spur + Fehler</div>
+      <div class="row"><span class="ico">✳</span><span class="title">Codex-Subagents…</span><span class="chip live b5"><span class="chev">›</span><span class="road"><i></i><i></i><i></i><i></i><i class="r"></i><i class="u"></i></span><span>12</span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="sb-cap">B6 · 24 laufen, schmalster Chip</div>
+      <div class="row"><span class="ico">✳</span><span class="title">Docs-Rebuild Welle…</span><span class="chip live b6"><span class="top"><span class="chev">›</span><span>24</span></span><span class="lane"><i></i><i></i><i></i><i></i><i></i><i></i></span></span><span class="sp"></span><span class="dot green"></span></div>
+      <div class="sb-cap">Ruhe · 120 gesamt</div>
+      <div class="row"><span class="ico">✳</span><span class="title">Dokumentations-O…</span><span class="chip"><span class="chev">›</span><span>120</span></span><span class="sp"></span><span class="time">3d</span></div>
+    </div>
+    <div class="prose" style="flex:1 1 320px; font-size:14px;">
+      <p style="margin-top:0">
+        Alle Ausbaustufen bleiben bei 208 px intakt. <strong>B5 braucht die Disziplin</strong>,
+        die Spur bei Deckel 6 <em>inklusive</em> Rot/Blau zu kappen (laufende Balken weichen
+        zuerst), sonst wächst der Chip mit jedem Signal. B6 gewinnt den Platz-Wettbewerb
+        deutlich — der Chip ist nie breiter als Chevron + Zahl.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ EMPFEHLUNG ════════════════════ -->
+<section id="empfehlung">
+  <p class="kicker">Empfehlung</p>
+  <h2>Komet-Licht auf der <em>Semantik-Straße</em></h2>
+  <div class="reco">
+    <h3>B5 als Ziel, B1 als sicherer Start</h3>
+    <p>
+      <b>Die stärkste Kombination ist B5 mit der Komet-Animation von B3</b> (ohne deren Glow,
+      der in SwiftUI zu teuer ist — nur Peak + langsames Ausklingen): Eine Spur erzählt den
+      kompletten Gruppenzustand — grüne Balken laufen, rote stehen, der blaue wartet —, und
+      der Schweif macht schon bei zwei Balken klar, dass sich hier etwas <em>bewegt</em> statt
+      blinkt. Der Chip wird damit zur wörtlichen Miniatur der aufgeklappten Kinderliste; nichts
+      daran ist Dekoration.
+    </p>
+    <p>
+      Wer konservativer starten will, implementiert <b>B1 zuerst</b> (kleinster Schritt vom
+      Beschluss, reine Opazitäts-Animation) und zieht Rot/Blau später in die Spur — B1 → B5 ist
+      rein additiv, kein Umbau. <b>B2</b> nur, wenn die Verwandtschaft zur Aufnahme-Waveform
+      wichtiger ist als Laufruhe; <b>B4/B6</b> sind die Optionen, falls die Sidebar nach dem
+      Einbau immer noch zu voll wirkt; <b>B7</b> nur als bewusster Stilbruch für
+      Überwachungs-Szenarien.
+    </p>
+  </div>
+</section>
+
+<footer>
+  docs/design/subagent-chip-strasse-varianten.html · Fortsetzung von subagent-chip-varianten.html (Variante B) · Datenvertrag: SubagentChildSplit · Lauflicht-Referenz: transcription-bar-redesign.html (keyframe „scan")
+</footer>
+
+</div>
+
+<script>
+  // Zwei-Stufen-Interaktion wie in der App: Chip-Klick = Stufe 1
+  // (alle Kinder auf/zu), Fußzeilen-Klick = Stufe 2 (Fertige auf/zu).
+  document.querySelectorAll('.grp').forEach(grp => {
+    const chip = grp.querySelector(':scope > .row .chip');
+    if (chip) {
+      chip.addEventListener('click', e => {
+        e.stopPropagation();
+        grp.classList.toggle('open');
+        if (!grp.classList.contains('open')) grp.classList.remove('fin-open');
+      });
+    }
+    const foot = grp.querySelector('.row.foot');
+    if (foot) {
+      foot.addEventListener('click', e => {
+        e.stopPropagation();
+        grp.classList.toggle('fin-open');
+      });
+    }
+  });
+</script>
+</body>
+</html>
