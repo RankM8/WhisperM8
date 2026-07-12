@@ -270,7 +270,12 @@ extension AgentChatsView {
     func installTitleBarZoomHandlerIfNeeded() {
         guard titleBarZoomMonitor == nil else { return }
         titleBarZoomMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            handleTitleBarMouse(event)
+            // Grid-Ansicht: Klick in eine nicht-fokussierte Pane verschiebt
+            // die Selektion dorthin (Dictation-Routing folgt). Beobachtend —
+            // das Event läuft danach unverändert weiter (Terminal-Klick,
+            // Titelzonen-Doppelklick).
+            handleGridPaneMouseDown(event)
+            return handleTitleBarMouse(event)
         }
     }
 

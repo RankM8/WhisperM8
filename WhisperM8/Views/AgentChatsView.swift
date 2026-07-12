@@ -117,6 +117,10 @@ struct AgentChatsView: View {
     @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
     /// Tear-off: die Detach-Drop-Zone (Content) ist gerade Drop-Ziel.
     @State private var detachZoneTargeted = false
+    /// Grid-Ansicht: Pane, über der die Maus gerade schwebt — Klick-Routing
+    /// für den Fokus-Wechsel (Muster `isHoveringTabStrip`, kein Koordinaten-
+    /// Hit-Test). internal, da Monitor (+Shortcuts) und +Grid es nutzen.
+    @State var hoveredGridPaneID: UUID?
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
 
@@ -1727,44 +1731,15 @@ struct AgentChatsView: View {
         VStack(spacing: 0) {
             projectChatStrip
 
-            if let selectedSession, let project = selectedSessionProject {
-                Group {
-                    // Subagent-Jobs rendern die Job-Detail-View (Report +
-                    // Live-Transcript + Composer) — bis zur Übernahme, dann
-                    // übernimmt der normale PTY-Pfad (AgentSessionDetailView).
-                    if selectedSession.isSubagentJob && !jobRuntimeModel.isTakenOver(selectedSession.id) {
-                        SubagentJobDetailView(
-                            session: selectedSession,
-                            project: project,
-                            jobRuntimeModel: jobRuntimeModel,
-                            onTakeOver: { takeOverSubagentJob(selectedSession) },
-                            onAppearClearUnread: { windowStore.clearSubagentUnread(selectedSession.id) }
-                        )
-                    } else {
-                        AgentSessionDetailView(
-                            project: project,
-                            session: selectedSession,
-                            terminalRegistry: terminalRegistry,
-                            actionRequest: sessionActionRequest,
-                            onStateChanged: loadWorkspaceFast,
-                            onSessionLaunched: { sessionID in
-                                AgentSessionStatusCoordinator.shared.sessionLaunched(sessionID: sessionID)
-                            },
-                            onSessionTerminated: { sessionID, exitCode in
-                                AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: sessionID, exitCode: exitCode)
-                            },
-                            onExternalSessionIDBound: { sessionID in
-                                AgentSessionStatusCoordinator.shared.externalSessionIDBound(sessionID: sessionID)
-                            },
-                            onPrepareClaudeHookArguments: { sessionID in
-                                AgentSessionStatusCoordinator.shared.prepareLaunchArguments(localSessionID: sessionID)
-                            },
-                            onClaudeHookLaunched: { sessionID in
-                                AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: sessionID)
-                            }
-                        )
-                    }
-                }
+            if gridPreset != .single, !headerTabs.isEmpty {
+                // Split-Grid: mehrere offene Tabs gleichzeitig — ersetzt nur
+                // den Detail-Bereich; Sidebar/Tab-Strip bleiben unverändert.
+                // Siehe AgentChatsView+Grid.swift.
+                gridWorkspace
+            } else if let selectedSession, let project = selectedSessionProject {
+                // Detail-Pfad (Subagent-Job vs. PTY) geteilt mit den
+                // Grid-Panes — siehe sessionDetailContent in +Grid.
+                sessionDetailContent(for: selectedSession, project: project)
                 .id(selectedSession.id)
                 .padding(.top, 14)
                 .padding(.horizontal, 14)
@@ -2085,6 +2060,8 @@ struct AgentChatsView: View {
                 // der Sidebar-Projekt-Zeile und im Project-Inspector, und
                 // visueller Clutter im Titlebar-Bereich kostet mehr als er
                 // hier liefert.
+
+                gridPresetSwitcher
 
                 TitlebarIconButton(systemImage: "sidebar.right", help: isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen", isActive: isInspectorVisible) {
                     isInspectorVisible.toggle()

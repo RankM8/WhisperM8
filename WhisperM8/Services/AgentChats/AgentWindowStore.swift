@@ -172,6 +172,16 @@ final class AgentWindowStore {
         updateWindow(windowID) { $0.selectedProjectID = projectID }
     }
 
+    // MARK: - Grid-Preset (pro Fenster)
+
+    func gridPreset(in windowID: UUID) -> AgentGridPreset {
+        window(for: windowID).gridPreset
+    }
+
+    func setGridPreset(_ preset: AgentGridPreset, in windowID: UUID) {
+        updateWindow(windowID) { $0.gridPreset = preset }
+    }
+
     /// Entfernt ein leeres Sekundaerfenster aus dem State. Gibt `true` zurueck,
     /// wenn tatsaechlich entfernt wurde (Aufrufer kann dann das NSWindow zu).
     @discardableResult

@@ -16,6 +16,12 @@ struct AgentSessionDetailView: View {
     let session: AgentChatSession
     @ObservedObject var terminalRegistry: AgentTerminalRegistry
     var actionRequest: AgentSessionActionRequest?
+    /// Grid-Panes: unterdrückt Auto-Launch (`shouldLaunchOnOpen`) und den
+    /// automatischen Terminal-Fokus beim Mount/Session-Wechsel — nur die
+    /// Fokus-Pane darf beides, sonst spawnt ein Preset-Wechsel bis zu vier
+    /// PTYs und die Panes kämpfen um den First-Responder. Explizite
+    /// Start-Aktionen (Button, actionRequest) bleiben unberührt.
+    var suppressesAutoActivation: Bool = false
     var onStateChanged: () -> Void
     /// Runtime-Watcher-Hooks. Aufrufer (AgentChatsView) reicht hier Closures
     /// rein, die intern `runtimeWatcher?.watch(...)` etc. aufrufen — so muss
@@ -80,14 +86,16 @@ struct AgentSessionDetailView: View {
             }
         }
         .onAppear {
-            if session.shouldLaunchOnOpen == true {
-                prepareCommand()
+            if !suppressesAutoActivation {
+                if session.shouldLaunchOnOpen == true {
+                    prepareCommand()
+                }
+                // Direkt nach dem Mount Tastaturfokus auf das Terminal setzen,
+                // damit der User sofort tippen kann und nicht im Sidebar-Filter
+                // hängenbleibt. `focusTerminal` is async-dispatched — okay wenn
+                // das View jetzt erst mountet.
+                controller?.focusTerminal()
             }
-            // Direkt nach dem Mount Tastaturfokus auf das Terminal setzen,
-            // damit der User sofort tippen kann und nicht im Sidebar-Filter
-            // hängenbleibt. `focusTerminal` is async-dispatched — okay wenn
-            // das View jetzt erst mountet.
-            controller?.focusTerminal()
             loadTranscriptIfNeeded()
         }
         .onChange(of: session.id) { _, _ in
@@ -97,11 +105,13 @@ struct AgentSessionDetailView: View {
             transcriptTailBytes = Self.initialTailBytes
             historyState = .idle
             countBeforeEarlierLoad = nil
-            if session.shouldLaunchOnOpen == true {
-                prepareCommand()
+            if !suppressesAutoActivation {
+                if session.shouldLaunchOnOpen == true {
+                    prepareCommand()
+                }
+                // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
+                controller?.focusTerminal()
             }
-            // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
-            controller?.focusTerminal()
             loadTranscriptIfNeeded()
         }
         .onChange(of: actionRequest) { _, request in

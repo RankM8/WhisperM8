@@ -16,19 +16,75 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
     var selectedSessionID: UUID?
     var selectedProjectID: UUID?
     var isPrimary: Bool
+    /// Grid-Ansicht des Fensters: wie viele der offenen Tabs gleichzeitig
+    /// als Panes sichtbar sind (1 = heutige Einzelansicht). Reine
+    /// Präsentation der Tab-Liste — kein zusätzlicher Slot-Zustand.
+    var gridPreset: AgentGridPreset
 
     init(
         id: UUID = UUID(),
         openTabIDs: [UUID] = [],
         selectedSessionID: UUID? = nil,
         selectedProjectID: UUID? = nil,
-        isPrimary: Bool = false
+        isPrimary: Bool = false,
+        gridPreset: AgentGridPreset = .single
     ) {
         self.id = id
         self.openTabIDs = openTabIDs
         self.selectedSessionID = selectedSessionID
         self.selectedProjectID = selectedProjectID
         self.isPrimary = isPrimary
+        self.gridPreset = gridPreset
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, openTabIDs, selectedSessionID, selectedProjectID, isPrimary
+        case gridPreset
+    }
+
+    /// Manueller Decoder statt Synthese: synthetisiertes Codable nutzt KEINE
+    /// Property-Defaults — ein fehlender `gridPreset`-Key in Bestandsdateien
+    /// wuerde `keyNotFound` werfen, und der `loadUIState`-Fallback verwirft
+    /// dann still den kompletten Fenster-/Tab-State des Users.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        openTabIDs = try c.decodeIfPresent([UUID].self, forKey: .openTabIDs) ?? []
+        selectedSessionID = try c.decodeIfPresent(UUID.self, forKey: .selectedSessionID)
+        selectedProjectID = try c.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
+        isPrimary = try c.decodeIfPresent(Bool.self, forKey: .isPrimary) ?? false
+        gridPreset = try c.decodeIfPresent(AgentGridPreset.self, forKey: .gridPreset) ?? .single
+    }
+}
+
+/// Grid-Preset der Tab-Ansicht eines Fensters. Unbekannte Raw-Werte aus
+/// zukuenftigen Versionen fallen beim Decoding auf `.single` (siehe
+/// `init(from:)` in `AgentChatWindowState` — decodeIfPresent wirft dort
+/// nicht, weil der Key dann fehlt; bei UNGUELTIGEM Wert schuetzt der
+/// failable `init(rawValue:)`-Umweg unten).
+enum AgentGridPreset: String, Codable, CaseIterable {
+    /// Einzelansicht (heutiges Verhalten).
+    case single
+    /// Zwei Panes nebeneinander (1 Zeile × 2 Spalten).
+    case cols2
+    /// Zwei Panes uebereinander (2 Zeilen × 1 Spalte).
+    case rows2
+    /// Vier Panes (2 × 2).
+    case grid2x2
+
+    var paneCount: Int {
+        switch self {
+        case .single: 1
+        case .cols2, .rows2: 2
+        case .grid2x2: 4
+        }
+    }
+
+    /// Robust gegen unbekannte Werte aus neueren App-Versionen: nie werfen,
+    /// sondern auf `.single` fallen.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AgentGridPreset(rawValue: raw) ?? .single
     }
 }
 
