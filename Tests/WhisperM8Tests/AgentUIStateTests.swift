@@ -71,47 +71,6 @@ final class AgentUIStateTests: XCTestCase {
         XCTAssertEqual(object["schemaVersion"] as? Int, AgentUIState.currentSchemaVersion)
     }
 
-    // MARK: - Codable (Kompakt-Felder)
-
-    func testWindowStateWithoutCompactFieldsDecodesWithDefaults() throws {
-        // Bestandsdatei (v3, vor dem Kompakt-Feature): windows-Eintraege ohne
-        // isCompact/expandedFrame duerfen NICHT keyNotFound werfen — der
-        // loadUIState-Fallback wuerde sonst still den kompletten Tab-State
-        // des Users verwerfen (initialMigration).
-        let windowID = UUID()
-        let tabID = UUID()
-        let json = """
-        {"schemaVersion": 3,
-         "openTabIDs": ["\(tabID.uuidString)"],
-         "pinnedSessionIDs": [], "expandedProjectIDs": [],
-         "primaryWindowID": "\(windowID.uuidString)",
-         "windows": [{"id": "\(windowID.uuidString)",
-                      "openTabIDs": ["\(tabID.uuidString)"],
-                      "isPrimary": true}]}
-        """
-        let decoded = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
-        let window = decoded.windowState(for: windowID)
-        XCTAssertEqual(window.openTabIDs, [tabID], "Tab-State bleibt erhalten")
-        XCTAssertFalse(window.isCompact)
-        XCTAssertNil(window.expandedFrame)
-    }
-
-    func testCompactWindowStateRoundTripsViaJSON() throws {
-        let frame = AgentWindowFrame(x: 220, y: 140, width: 1280, height: 800)
-        let window = AgentChatWindowState(
-            openTabIDs: [UUID()],
-            isPrimary: true,
-            isCompact: true,
-            expandedFrame: frame
-        )
-        let original = AgentUIState(windows: [window], primaryWindowID: window.id)
-        let encoded = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(AgentUIState.self, from: encoded)
-        XCTAssertEqual(decoded, original)
-        XCTAssertTrue(decoded.windowState(for: window.id).isCompact)
-        XCTAssertEqual(decoded.windowState(for: window.id).expandedFrame, frame)
-    }
-
     // MARK: - Migration v1 → v2
 
     func testMigrationFlattensV1TabsInProjectOrder() throws {

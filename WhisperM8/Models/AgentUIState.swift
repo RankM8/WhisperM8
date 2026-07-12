@@ -16,61 +16,20 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
     var selectedSessionID: UUID?
     var selectedProjectID: UUID?
     var isPrimary: Bool
-    /// Kompakt-Zustand („Projekt-Cockpit"): Fenster zeigt statt Sidebar+Tabs
-    /// eine schmale Projekt-Chat-Liste + den aktiven Chat.
-    var isCompact: Bool
-    /// Fenster-Frame VOR dem Verkleinern — Ziel der Rueckverwandlung. Muss
-    /// persistiert werden, weil die Agent-Fenster `isRestorable = false`
-    /// setzen und macOS sich nichts merkt. `nil` ausserhalb des Kompakt-Modus.
-    var expandedFrame: AgentWindowFrame?
 
     init(
         id: UUID = UUID(),
         openTabIDs: [UUID] = [],
         selectedSessionID: UUID? = nil,
         selectedProjectID: UUID? = nil,
-        isPrimary: Bool = false,
-        isCompact: Bool = false,
-        expandedFrame: AgentWindowFrame? = nil
+        isPrimary: Bool = false
     ) {
         self.id = id
         self.openTabIDs = openTabIDs
         self.selectedSessionID = selectedSessionID
         self.selectedProjectID = selectedProjectID
         self.isPrimary = isPrimary
-        self.isCompact = isCompact
-        self.expandedFrame = expandedFrame
     }
-
-    enum CodingKeys: String, CodingKey {
-        case id, openTabIDs, selectedSessionID, selectedProjectID, isPrimary
-        case isCompact, expandedFrame
-    }
-
-    /// Manueller Decoder statt Synthese: synthetisiertes Codable nutzt KEINE
-    /// Property-Defaults — ein fehlender `isCompact`-Key in Bestandsdateien
-    /// wuerde `keyNotFound` werfen, und der `loadUIState`-Fallback verwirft
-    /// dann still den kompletten Fenster-/Tab-State des Users.
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        openTabIDs = try c.decodeIfPresent([UUID].self, forKey: .openTabIDs) ?? []
-        selectedSessionID = try c.decodeIfPresent(UUID.self, forKey: .selectedSessionID)
-        selectedProjectID = try c.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
-        isPrimary = try c.decodeIfPresent(Bool.self, forKey: .isPrimary) ?? false
-        isCompact = try c.decodeIfPresent(Bool.self, forKey: .isCompact) ?? false
-        expandedFrame = try c.decodeIfPresent(AgentWindowFrame.self, forKey: .expandedFrame)
-    }
-}
-
-/// Fenster-Frame in Bildschirm-Koordinaten — eigener Codable-Typ statt
-/// `CGRect`, damit das Sidecar-JSON lesbare Keys hat (CGRect encodiert als
-/// verschachteltes Array) und das Model plattform-neutral bleibt.
-struct AgentWindowFrame: Codable, Equatable, Hashable {
-    var x: Double
-    var y: Double
-    var width: Double
-    var height: Double
 }
 
 struct AgentUIState: Codable, Equatable {
