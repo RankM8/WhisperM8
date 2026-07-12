@@ -516,3 +516,77 @@ extension ClaudeAccountProfilesTests {
         XCTAssertEqual(service.profile(named: "firma").planDisplayName, "Max 20×")
     }
 }
+
+// MARK: - Codex-Usage (JSONL + wham/usage)
+
+final class CodexUsageTests: XCTestCase {
+    func testParseRateLimitsLineFromSessionJSONL() throws {
+        // Reale Event-Form aus ~/.codex/sessions (verifiziert 2026-07-12)
+        let line = """
+        {"timestamp":"2026-07-12T21:55:10.123Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":4.0,"window_minutes":10080,"resets_at":1784488204},"secondary":null,"credits":null,"individual_limit":null,"plan_type":"pro","rate_limit_reached_type":null}}}
+        """
+        let usage = try XCTUnwrap(CodexUsageReader.parseRateLimitsLine(line))
+        XCTAssertEqual(usage.primary?.usedPercent, 4.0)
+        XCTAssertEqual(usage.primary?.windowMinutes, 10080)
+        XCTAssertEqual(usage.primary?.label, "wk")
+        XCTAssertEqual(usage.primary?.resetsAt, Date(timeIntervalSince1970: 1_784_488_204))
+        XCTAssertEqual(usage.planType, "pro")
+        XCTAssertNil(usage.secondary)
+        XCTAssertFalse(usage.isLive)
+        XCTAssertNotNil(usage.capturedAt)
+    }
+
+    func testParseRateLimitsLineRejectsEventsWithoutWindows() {
+        XCTAssertNil(CodexUsageReader.parseRateLimitsLine(
+            #"{"timestamp":"2026-07-12T21:55:10Z","payload":{"type":"token_count","rate_limits":{"primary":null,"secondary":null}}}"#
+        ))
+        XCTAssertNil(CodexUsageReader.parseRateLimitsLine("kaputt"))
+    }
+
+    func testWindowLabels() {
+        XCTAssertEqual(CodexUsage.Window(usedPercent: 0, windowMinutes: 300, resetsAt: nil).label, "5h")
+        XCTAssertEqual(CodexUsage.Window(usedPercent: 0, windowMinutes: 10080, resetsAt: nil).label, "wk")
+        XCTAssertEqual(CodexUsage.Window(usedPercent: 0, windowMinutes: 1440, resetsAt: nil).label, "24h")
+    }
+
+    func testParseWhamUsageResponse() throws {
+        // Reale Antwort-Form von chatgpt.com/backend-api/wham/usage
+        // (live verifiziert 2026-07-13)
+        let json = """
+        {"plan_type": "pro", "email": "a@b.de",
+         "rate_limit": {"allowed": true, "limit_reached": false,
+           "primary_window": {"used_percent": 4, "limit_window_seconds": 604800, "reset_after_seconds": 598182, "reset_at": 1784488204},
+           "secondary_window": null},
+         "additional_rate_limits": [
+           {"limit_name": "GPT-5.3-Codex-Spark", "metered_feature": "codex_bengalfox",
+            "rate_limit": {"primary_window": {"used_percent": 12, "limit_window_seconds": 604800, "reset_at": 1784494823}}}
+         ]}
+        """
+        let usage = try XCTUnwrap(CodexUsageFetcher.parseWhamUsage(Data(json.utf8), fetchedAt: Date()))
+        XCTAssertEqual(usage.planType, "pro")
+        XCTAssertEqual(usage.emailAddress, "a@b.de")
+        XCTAssertEqual(usage.primary?.usedPercent, 4)
+        XCTAssertEqual(usage.primary?.windowMinutes, 10080)
+        XCTAssertNil(usage.secondary)
+        XCTAssertEqual(usage.scopedLimits.count, 1)
+        XCTAssertEqual(usage.scopedLimits.first?.name, "GPT-5.3-Codex-Spark")
+        XCTAssertEqual(usage.scopedLimits.first?.window.usedPercent, 12)
+        XCTAssertTrue(usage.isLive)
+    }
+
+    func testLatestUsageReadsTailOfSessionFile() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-usage-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("rollout-test.jsonl")
+        let older = #"{"timestamp":"2026-07-12T20:00:00Z","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":1.0,"window_minutes":10080,"resets_at":1784488204},"plan_type":"pro"}}}"#
+        let newer = #"{"timestamp":"2026-07-12T21:00:00Z","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":9.0,"window_minutes":10080,"resets_at":1784488204},"plan_type":"pro"}}}"#
+        try ([older, newer].joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+
+        let usage = try XCTUnwrap(CodexUsageReader(sessionsRoot: dir).latestUsage())
+
+        // Das JÜNGSTE Event gewinnt
+        XCTAssertEqual(usage.primary?.usedPercent, 9.0)
+    }
+}

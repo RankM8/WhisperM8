@@ -1314,6 +1314,9 @@ struct AgentChatsView: View {
             .buttonStyle(.plain)
             .help(archiveModeActive ? "Archiv verlassen" : "Archiv (\(archivedSidebarSessions.count))")
 
+            // Usage-Limits der verbundenen Claude-/ChatGPT-Accounts
+            SidebarUsageButtons()
+
             Button {
                 WindowRequestCenter.shared.request(.onboarding)
             } label: {
