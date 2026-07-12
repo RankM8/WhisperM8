@@ -29,6 +29,16 @@ Unterschied zu BridgeMind, bewusst akzeptiert (V1): unsere Panes zeigen die **ro
 Pane — Eingabe geschieht in der TUI der fokussierten Pane. Eine Block-Ansicht existiert als
 Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offene Entscheidungen".
 
+**Präzisierung (Verifikations-Befund 2026-07-12):** „Live-PTY" gibt es nur für Sessions mit
+laufendem `AgentTerminalController` — PTYs entstehen ausschließlich über `startController`
+(getriggert aus `AgentSessionDetailView.prepareCommand`). Eine Pane hostet deshalb die volle
+`AgentSessionDetailView`-Verzweigung: lebender Controller → Live-PTY; sonst → read-only
+Transcript bzw. `terminalEndedView`. **Auto-Panes starten nie selbst einen Prozess**
+(kein `shouldLaunchOnOpen`-Trigger beim Auto-Befüllen — sonst spawnt ein Preset-Wechsel bis
+zu 4 Prozesse); Live wird eine Auto-Pane nur, wenn der Controller schon existiert oder der
+User explizit startet. Die Projekt-Ansicht zeigt also typischerweise eine Mischung aus
+Live-Terminals und Transcript-Tails — das ist okay und dem BridgeMind-Block-Look sogar näher.
+
 ## Zielbild
 
 ```
@@ -51,7 +61,9 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
     Projekts (`selectedProjectID`), Priorität `awaitingInput > working > zuletzt aktiv`. Bei
     mehr Chats als Panes: Top-N nach Priorität + Chip „+N weitere" (Klick öffnet Sidebar).
   - **„Running"** — laufende Sessions (`isLive`) über **alle** Projekte, gleiche Priorität;
-    Pane-Header zeigt zusätzlich ein Projekt-Badge, weil cross-project.
+    Pane-Header zeigt zusätzlich ein Projekt-Badge, weil cross-project. **Einschränkung
+    (verifiziert):** der RuntimeWatcher watcht nur in-App gestartete bzw. hook-gebundene
+    Sessions — extern im Terminal gestartete erscheinen hier nicht. Bewusst akzeptiert.
   - Kein dritter „Manuell"-Modus: **Drag eines Tabs/Chats auf eine Pane pinnt sie** (📌 im
     Pane-Header). Gepinnte Panes werden von der Automatik nie ersetzt; Pin lösen gibt den
     Slot an die Automatik zurück.
@@ -74,9 +86,17 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
   `pinnedPaneSessionIDs: [UUID?]` (Slot→gepinnte Session, `nil` = Slot gehört der Automatik).
   Die **automatisch** befüllten Panes werden NICHT persistiert — sie sind eine Ableitung aus
   Workspace + Runtime-Status und werden zur Laufzeit berechnet. Invarianten in
-  `normalizedWindows` (`AgentUIState.swift:381`): keine Session in zwei Slots, Pins nur auf
-  existierende Sessions, `isCompact` erzwingt `gridPreset = .single`.
-  `decodeIfPresent` mit Defaults → kein Schema-Bump.
+  `normalizedWindows` (`AgentUIState.swift:381`): keine Session in zwei Slots (hart nötig —
+  `attach()` reparentet per `removeFromSuperview`, dieselbe Terminal-View kann nur in EINEM
+  Container leben), Pins nur auf existierende Sessions, `isCompact` erzwingt
+  `gridPreset = .single`. Decoding via manuellem `init(from:)` mit `decodeIfPresent` (siehe
+  Kompakt-Plan: synthetisiertes Codable + neues Pflichtfeld = stiller Datenverlust).
+- **Fokus braucht ein eigenes Feld** (Verifikations-Befund): `normalizedWindows` setzt
+  `selectedSessionID` hart auf `openTabIDs.first` zurück, sobald es nicht in den Tabs liegt —
+  eine fokussierte Auto-Pane ohne Tab verlöre still die Selektion. Deshalb neues, der
+  Tab-Invariante entzogenes `focusedPaneSessionID: UUID?` (nur bei `gridPreset != .single`
+  belegt); Dictation-/AppState-Routing liest im Grid-Modus dieses Feld statt
+  `selectedSessionID`.
 - Neue pure Logik `PaneAssignmentResolver` (analog `TabSelectionResolver`): Eingabe =
   Preset, Ansicht, Pins, Fokus-Slot, Kandidaten-Sessions mit Status/zuletzt-aktiv; Ausgabe =
   Slot-Belegung. Kapselt Priorität (`awaitingInput > working > zuletzt aktiv`) und die
@@ -91,8 +111,9 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
 
 - Neue Datei `Views/AgentChatsView+Grid.swift`: bei `gridPreset != .single` ersetzt ein
   Grid-Container den einzelnen Content (Muster Archiv-/Kompakt-Modus). Pro Slot eine
-  `AgentPaneView`: Header + `AgentTerminalView(sessionID:)` — `attach()` erledigt das Hosting,
-  SwiftTerm meldet die neue Spaltenzahl je Pane an die PTY.
+  `AgentPaneView`: Header + **volle `AgentSessionDetailView`-Verzweigung** (lebender
+  Controller → Live-PTY via `attach()`; sonst read-only Transcript/`terminalEndedView`) —
+  mit unterdrücktem Auto-Launch (`shouldLaunchOnOpen` wird beim Auto-Befüllen nie getriggert).
 - **Pane-Header** (wiederverwenden statt neu): Status-Dot über `statusPublisher(for:)` +
   `.onReceive`-Muster wie `SessionListButton` (`AgentChatsSidebarViews.swift:774`),
   Provider-Icon, Session-Name, Branch-Chip (Datenquelle wie Sidebar-Gruppenheader), Close (=
@@ -115,8 +136,13 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
 - Tab-Strip-Verhalten im Grid: Klick auf Tab, dessen Session schon in einer Pane liegt →
   diese Pane fokussieren; sonst → Session in die Fokus-Pane **pinnen** (Automatik darf sie
   nicht mehr verdrängen). ⌘1–⌘9 folgt derselben Semantik.
-- Dictation-Routing und „aktiver Agent-Chat" (AppState) hängen an `selectedSessionID` — durch
-  die Ein-Fokus-Pane-Regel ändert sich hier nichts (Regressionstest).
+- Dictation-Routing und „aktiver Agent-Chat" (AppState): im Grid-Modus liest
+  `syncActiveAgentChat` das neue `focusedPaneSessionID` statt `selectedSessionID`
+  (Regressionstest für den Single-Modus, wo weiterhin `selectedSessionID` gilt).
+- `PaneAssignmentResolver` bekommt den Status-**Snapshot** als Eingabe (pure Funktion — sie
+  liest `statusStore.statuses` nicht selbst). Recompute-Trigger: Status-Änderungen (debounced
+  über den bestehenden per-Item-Publisher-Mechanismus), Workspace-Änderungen, Preset-/
+  Ansicht-/Pin-Mutationen.
 - `AgentSessionRuntimeWatcher`: mehrere gleichzeitig sichtbare Live-Sessions sind bereits sein
   Normalfall (Sidebar) — keine Änderung; nur die vnode-Quellen der Pane-Sessions bleiben wie
   gehabt aktiv.

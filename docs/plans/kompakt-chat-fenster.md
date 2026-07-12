@@ -71,12 +71,16 @@ ergänzen sich (Jarvis = Missionskontrolle, Kompakt = Nahaufnahme eines Projekts
 
 ## Teil A — Store & Persistenz
 
-- `AgentUIState.AgentChatWindowState` (`AgentUIState.swift:13`) um zwei **optionale** Felder
-  erweitern: `isCompact: Bool` (Default `false`) und `expandedFrame: CGRect?` (Frame vor dem
-  Verkleinern, für die Rückverwandlung — auch über App-Neustarts, da `isRestorable = false`
-  gesetzt ist und macOS nichts für uns merkt). Via `decodeIfPresent` mit Defaults → **kein
-  Schema-Bump** nötig; `normalizedWindows` (`AgentUIState.swift:381`) bleibt unberührt (ein
-  kompaktes Fenster ist ein normales Fenster).
+- `AgentUIState.AgentChatWindowState` (`AgentUIState.swift:13`) um zwei Felder erweitern:
+  `isCompact: Bool` (Default `false`) und `expandedFrame` (Frame vor dem Verkleinern, für die
+  Rückverwandlung — auch über App-Neustarts, da `isRestorable = false` gesetzt ist und macOS
+  nichts für uns merkt). **Achtung (Verifikations-Befund 2026-07-12):** der Struct hat
+  synthetisiertes Codable — ein neues nicht-optionales Feld wirft bei alten Dateien
+  `keyNotFound`, und der `loadUIState`-Fallback (`AgentSessionStore.swift:55`) verwirft dann
+  still den kompletten Fenster-/Tab-State. Deshalb **manueller `init(from:)` + CodingKeys mit
+  `decodeIfPresent(...) ?? false`** für `AgentChatWindowState`. Kein Schema-Bump nötig;
+  `normalizedWindows` (`AgentUIState.swift:381`) kopiert/mutiert in place und verliert neue
+  Felder nicht (verifiziert).
 - `AgentWindowStore`: `isCompact(in:)` / `setCompact(_:in:expandedFrame:)` analog zu den
   bestehenden per-Fenster-Reads/Writes; Persistenz läuft über den vorhandenen
   `scheduleSave()`-Pfad.
@@ -97,8 +101,11 @@ ergänzen sich (Jarvis = Missionskontrolle, Kompakt = Nahaufnahme eines Projekts
   wiederherstellen (Fallback `.defaultSize`).
 - **Größen-Constraints nur im Kompakt-Zustand** setzen (`window.minSize` 340×480, `maxSize`
   z. B. 520×900), beim Expand zurücksetzen — so bleibt das große Fenster frei skalierbar.
-- Doppelklick-Titelzone (= `window.zoom`, `AgentChatChromeViews.swift:84`) im Kompakt-Zustand
-  auf „Expand" umdeuten statt Zoom — sonst springt das Fenster auf Bildschirmgröße.
+- Doppelklick-Titelzone im Kompakt-Zustand auf „Expand" umdeuten statt Zoom — sonst springt
+  das Fenster auf Bildschirmgröße. Verzweigung gehört in den Aufrufer `handleTitleBarMouse`
+  (`AgentChatsView+Shortcuts.swift:294`), nicht in die pure `TitleBarZoom`-Enum. Fallstrick:
+  im Kompakt-Zustand gibt es keinen Tab-Strip → das gesamte obere Band zählt als
+  Doppelklick-Zone; der Expand-/Pin-Button muss davon ausgenommen werden.
 
 ## Teil C — Kompakt-Layout
 
@@ -108,6 +115,9 @@ ergänzen sich (Jarvis = Missionskontrolle, Kompakt = Nahaufnahme eines Projekts
 - **Header**: Expand-Button, `ProjectAvatar` + Projektname (aus `selectedProjectID`),
   Working-Count-Chip (Anzahl `.working`-Sessions des Projekts — dauerhaft sichtbar).
   Projektwechsel per Menü am Projektnamen (alle Projekte, wie Sidebar-Reihenfolge).
+  **Empty-State** (Verifikations-Befund): `selectedProjectID` kann bei leerem Workspace nil
+  sein — dann „Kein Projekt"-Hinweis statt Liste, „+ Neuer Chat" disabled (die bestehenden
+  Create-Pfade sind ohnehin auf `selectedProject != nil` gegated).
 - **Chat-Liste**: flache Liste aller Sessions des aktuellen Projekts —
   **`SessionListButton` unverändert wiederverwenden** (inkl. Status-Publisher, Subagent-Chip,
   Relativzeiten). Keine Ordner-Hierarchie, keine Sonder-Row. Sortierung wie Sidebar.
