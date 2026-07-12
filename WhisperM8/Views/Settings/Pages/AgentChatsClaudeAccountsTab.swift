@@ -138,22 +138,20 @@ struct AgentChatsClaudeAccountsTab: View {
         return "Not logged in yet — click “Log in…” and finish the one-time browser login."
     }
 
-    /// Limit-Anzeige pro Account: 5h-/Wochen-Auslastung mit Reset-Zeiten,
-    /// farbcodiert nach Verbrauch. Dauerhaft sichtbar (kein Hover), dim wenn
-    /// die Daten nur aus dem Cache stammen.
+    /// Limit-Anzeige pro Account: zwei ausgerichtete Gauge-Zeilen (5h-Fenster
+    /// + Wochen-Limit) mit Kapsel-Balken, farbcodiertem Prozentwert und
+    /// Reset-Zeit. Feste Spaltenbreiten, damit die Balken über alle
+    /// Account-Zeilen hinweg eine vergleichbare Spalte bilden. Dauerhaft
+    /// sichtbar (kein Hover); Cache-Stände sind als solche markiert.
     @ViewBuilder
     private func usageView(for profile: ClaudeAccountProfile) -> some View {
         if let usage = usageByProfile[profile.name] {
-            HStack(spacing: 8) {
-                if let fiveHour = usage.fiveHourPercent {
-                    limitLabel(prefix: "5h", percent: fiveHour, resetsAt: usage.fiveHourResetsAt)
-                }
-                if let sevenDay = usage.sevenDayPercent {
-                    limitLabel(prefix: "wk", percent: sevenDay, resetsAt: usage.sevenDayResetsAt)
-                }
+            VStack(alignment: .leading, spacing: 5) {
+                limitGauge(label: "5h", percent: usage.fiveHourPercent, resetsAt: usage.fiveHourResetsAt)
+                limitGauge(label: "wk", percent: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt)
                 if !usage.isLive {
                     Text(cacheAgeText(usage.fetchedAt))
-                        .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+                        .font(.system(size: 9.5, weight: .regular))
                         .foregroundStyle(AppTheme.textTertiary)
                 }
             }
@@ -164,26 +162,57 @@ struct AgentChatsClaudeAccountsTab: View {
         }
     }
 
-    private func limitLabel(prefix: String, percent: Double, resetsAt: Date?) -> some View {
-        var text = "\(prefix) \(Int(percent.rounded()))%"
-        if let resetsAt {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "de_DE")
-            // Wochen-Reset liegt Tage voraus → Wochentag zeigen, 5h nur Uhrzeit
-            formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
-            text += " ↻\(formatter.string(from: resetsAt))"
+    private func limitGauge(label: String, percent: Double?, resetsAt: Date?) -> some View {
+        let color: Color = {
+            guard let percent else { return AppTheme.textTertiary }
+            if percent >= 80 { return AppTheme.statusError }
+            if percent >= 50 { return AppTheme.statusAwaiting }
+            return AppTheme.statusWorking
+        }()
+
+        return HStack(spacing: 7) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(AppTheme.textTertiary)
+                .frame(width: 18, alignment: .leading)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(AppTheme.textTertiary.opacity(0.18))
+                    .frame(width: gaugeWidth, height: 5)
+                if let percent {
+                    Capsule()
+                        .fill(color)
+                        .frame(width: max(3, gaugeWidth * min(percent, 100) / 100), height: 5)
+                }
+            }
+
+            Text(percent.map { "\(Int($0.rounded())) %" } ?? "—")
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundStyle(percent != nil ? color : AppTheme.textTertiary)
+                .frame(width: 38, alignment: .trailing)
+
+            Text(resetText(resetsAt))
+                .font(.system(size: 10, weight: .regular).monospacedDigit())
+                .foregroundStyle(AppTheme.textTertiary)
+                .frame(width: 66, alignment: .leading)
         }
-        let color: Color = percent >= 80 ? AppTheme.statusError
-            : percent >= 50 ? AppTheme.statusAwaiting
-            : AppTheme.textSecondary
-        return Text(text)
-            .font(.system(size: 11, weight: .medium, design: .monospaced))
-            .foregroundStyle(color)
+    }
+
+    private var gaugeWidth: CGFloat { 72 }
+
+    /// „→ 23:09" (5h-Fenster) bzw. „→ Sa 19:00" (Reset liegt > 24 h voraus).
+    private func resetText(_ resetsAt: Date?) -> String {
+        guard let resetsAt else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
+        return "→ \(formatter.string(from: resetsAt))"
     }
 
     private func cacheAgeText(_ fetchedAt: Date) -> String {
         let minutes = Int(Date().timeIntervalSince(fetchedAt) / 60)
-        return minutes < 1 ? "(cache)" : "(cache, \(minutes)m)"
+        return minutes < 1 ? "cache" : "cache · \(minutes) min alt"
     }
 
     // MARK: - Actions
