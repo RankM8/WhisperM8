@@ -33,7 +33,7 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ Sidebar │ [Tab][Tab][Tab][Tab]          ⊞ 1│2│2×2      │ ← Grid-Preset-Umschalter
+│ Sidebar │ [Tab][Tab][Tab]  [Projekt|Running] ⊞ 1│2│2×2 │ ← Ansicht- + Preset-Umschalter
 │         │──────────────────────────────────────────────│
 │ Projekte│ ● claude · api   ⎇main ✕ │ ● codex · api  ✕ │ ← Pane-Header: Status-Dot,
 │  + Rows │   (PTY, live)            │   (PTY, live)     │   Provider · Projekt, Branch,
@@ -46,8 +46,21 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
 
 - **Presets statt Freiform-Splits**: 1 (heute), 1×2, 2×1, 2×2. Deckt den realen Bedarf, hält
   Layout-Logik pur und testbar; freies Verschachteln (à la BridgeSpace 16er) ist V2-Option.
-- **Grid = Sichtfenster auf die Tabs**: die Panes zeigen eine Teilmenge der `openTabIDs`.
-  Tab-Klick füllt die fokussierte Pane; Drag eines Tabs auf eine Pane belegt sie gezielt
+- **Zwei Ansichten (Grid-Quelle), Umschalter in der Titelzone**:
+  - **„Projekt" (Default)** — die Panes befüllen sich automatisch mit den Chats des aktuellen
+    Projekts (`selectedProjectID`), Priorität `awaitingInput > working > zuletzt aktiv`. Bei
+    mehr Chats als Panes: Top-N nach Priorität + Chip „+N weitere" (Klick öffnet Sidebar).
+  - **„Running"** — laufende Sessions (`isLive`) über **alle** Projekte, gleiche Priorität;
+    Pane-Header zeigt zusätzlich ein Projekt-Badge, weil cross-project.
+  - Kein dritter „Manuell"-Modus: **Drag eines Tabs/Chats auf eine Pane pinnt sie** (📌 im
+    Pane-Header). Gepinnte Panes werden von der Automatik nie ersetzt; Pin lösen gibt den
+    Slot an die Automatik zurück.
+  - **Stabilitätsregeln** (sonst zappelt das Grid): die Fokus-Pane wird nie automatisch
+    ausgetauscht; die Automatik füllt nur leere Panes, ersetzt beendete Sessions und lässt
+    `awaitingInput` eine `idle`-Pane verdrängen — kein Reshuffle bei jedem Status-Tick.
+- **Panes sind von Tabs entkoppelt**: in den Auto-Ansichten zeigen Panes Sessions unabhängig
+  von `openTabIDs` (sonst würde die Automatik ständig Tabs öffnen/schließen). Tab-Klick
+  fokussiert die passende Pane bzw. pinnt die Session in die Fokus-Pane; Drag belegt gezielt
   (bestehende `DraggableSession`-Infrastruktur).
 - **Genau eine Pane ist fokussiert** (Akzent-Rahmen, dauerhaft sichtbar — kein Hover-only):
   sie empfängt Tastatur (PTY-Fokus), Dictation-Routing („aktiver Agent-Chat") und ist
@@ -57,17 +70,22 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
 ## Teil A — Store & Layout-Zustand
 
 - `AgentChatWindowState` um optionale Felder erweitern: `gridPreset: GridPreset` (Default
-  `.single`) und `paneSessionIDs: [UUID?]` (Slot→Session, `nil` = leere Pane). Invarianten in
-  `normalizedWindows` (`AgentUIState.swift:381`) ergänzen: Pane-Sessions ⊆ `openTabIDs`,
-  keine Session in zwei Panes, `selectedSessionID` ∈ Panes (bei `gridPreset != .single`).
+  `.single`), `paneSource: PaneSource` (`.project` Default | `.running`) und
+  `pinnedPaneSessionIDs: [UUID?]` (Slot→gepinnte Session, `nil` = Slot gehört der Automatik).
+  Die **automatisch** befüllten Panes werden NICHT persistiert — sie sind eine Ableitung aus
+  Workspace + Runtime-Status und werden zur Laufzeit berechnet. Invarianten in
+  `normalizedWindows` (`AgentUIState.swift:381`): keine Session in zwei Slots, Pins nur auf
+  existierende Sessions, `isCompact` erzwingt `gridPreset = .single`.
   `decodeIfPresent` mit Defaults → kein Schema-Bump.
-- Neue pure Logik `PaneAssignmentResolver` (analog `TabSelectionResolver`): Tab-Klick →
-  Ziel-Slot (fokussierte Pane), Tab-Close → Slot-Nachrücken aus unbelegten Tabs, Preset-Wechsel
-  → Slot-Erhalt (2×2→1×2 behält die ersten beiden, Rest bleibt als Tab offen). Unit-Tests
-  spiegeln die `TabSelectionResolver`-Testdatei.
-- `AgentWindowStore`: `gridPreset(in:)`/`setGridPreset`, `paneAssignment(in:)`/`assignPane`,
-  Persistenz über den vorhandenen `scheduleSave()`-Pfad. Tear-off/`removeWindow` räumen
-  Pane-Slots mit ab (Tests).
+- Neue pure Logik `PaneAssignmentResolver` (analog `TabSelectionResolver`): Eingabe =
+  Preset, Ansicht, Pins, Fokus-Slot, Kandidaten-Sessions mit Status/zuletzt-aktiv; Ausgabe =
+  Slot-Belegung. Kapselt Priorität (`awaitingInput > working > zuletzt aktiv`) und die
+  Stabilitätsregeln (Fokus-Pane nie tauschen, nur leere/beendete/idle-Slots ersetzen,
+  Preset-Wechsel behält vordere Slots). Unit-Tests spiegeln die
+  `TabSelectionResolver`-Testdatei.
+- `AgentWindowStore`: `gridPreset(in:)`/`setGridPreset`, `paneSource(in:)`/`setPaneSource`,
+  `pinnedPanes(in:)`/`pinPane`/`unpinPane`, Persistenz über den vorhandenen
+  `scheduleSave()`-Pfad. Tear-off/`removeWindow` räumen Pins mit ab (Tests).
 
 ## Teil B — Grid-Container & Pane-Chrome
 
@@ -80,10 +98,13 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
   Provider-Icon, Session-Name, Branch-Chip (Datenquelle wie Sidebar-Gruppenheader), Close (=
   Pane leeren, Tab bleibt offen). Leere Pane = Drop-Ziel „Tab hierher ziehen" + Plus für neuen
   Chat im Fenster-Projekt.
-- **Preset-Umschalter** in der Titelzone neben dem Tab-Strip (Symbole `rectangle`,
-  `rectangle.split.2x1`, `rectangle.split.1x2`, `square.grid.2x2`); Shortcut-Vorschlag
-  ⌘⌥1–⌘⌥4. Trennlinien zwischen Panes zunächst fix 50 % (verstellbare Splits = V2, Muster
-  `SidebarWidthResolver`).
+- **Ansicht-Umschalter** (Segmented Control „Projekt | Running") + **Preset-Umschalter** in
+  der Titelzone neben dem Tab-Strip (Symbole `rectangle`, `rectangle.split.2x1`,
+  `rectangle.split.1x2`, `square.grid.2x2`); Shortcut-Vorschlag ⌘⌥1–⌘⌥4. In der
+  Running-Ansicht trägt jeder Pane-Header zusätzlich ein Projekt-Badge. Trennlinien zwischen
+  Panes zunächst fix 50 % (verstellbare Splits = V2, Muster `SidebarWidthResolver`).
+- **Gepinnte Pane**: 📌-Indikator im Pane-Header (dauerhaft sichtbar), Klick löst den Pin;
+  Drag auf eine Pane setzt ihn. Automatik-Panes zeigen keinen Pin.
 - Drop-Ziel pro Pane über die bestehende `DraggableSession`-Transferable; Cross-Window-Drop
   funktioniert wie beim Tab-Strip (Quell-Auswahl live aus dem Store).
 
@@ -91,8 +112,9 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
 
 - Klick irgendwo in eine Pane → `selectedSessionID = pane.sessionID` + `makeFirstResponder`
   auf deren Terminal-View; Fokus-Rahmen via Akzent (dauerhaft, nicht nur bei Key-Window).
-- Tab-Strip-Verhalten im Grid: Klick auf Tab, der schon in einer Pane liegt → diese Pane
-  fokussieren; sonst → fokussierte Pane ersetzt ihren Inhalt. ⌘1–⌘9 folgt derselben Semantik.
+- Tab-Strip-Verhalten im Grid: Klick auf Tab, dessen Session schon in einer Pane liegt →
+  diese Pane fokussieren; sonst → Session in die Fokus-Pane **pinnen** (Automatik darf sie
+  nicht mehr verdrängen). ⌘1–⌘9 folgt derselben Semantik.
 - Dictation-Routing und „aktiver Agent-Chat" (AppState) hängen an `selectedSessionID` — durch
   die Ein-Fokus-Pane-Regel ändert sich hier nichts (Regressionstest).
 - `AgentSessionRuntimeWatcher`: mehrere gleichzeitig sichtbare Live-Sessions sind bereits sein
@@ -119,8 +141,13 @@ Zukunftsoption über die Transcript-Reader (Chat-Look Variante E), siehe „Offe
 2. **Block-Ansicht statt roher TUI** für nicht-fokussierte Panes (read-only Transcript-Tail im
    Chat-Look, Variante E) — spart Rendering und liest sich bei kleinen Panes besser, kostet
    aber einen zweiten Darstellungspfad. Empfehlung: V2, erst Perf-Daten aus V1 abwarten.
-3. **Verstellbare Split-Verhältnisse** (V1 fix 50 % vs. Divider-Drag)?
+3. ~~**Verstellbare Split-Verhältnisse**~~ — **entschieden 2026-07-12: V1 fix 50 %**,
+   Divider-Drag = V2.
 4. **Preset-Shortcuts** ⌘⌥1–4 okay? (⌘1–9 = Tabs, ⌘⌥←/→ = Tab-Wechsel sind belegt.)
+
+Bereits entschieden (2026-07-12): **Grid-Ansichten** — Default „Projekt" (alle Chats des
+aktuellen Projekts, auto-befüllt), Umschalter auf „Running" (laufende Sessions aller
+Projekte); Pin-per-Drag statt drittem Manuell-Modus (Empfehlung, im Plan festgeschrieben).
 
 ## Verifikation
 
