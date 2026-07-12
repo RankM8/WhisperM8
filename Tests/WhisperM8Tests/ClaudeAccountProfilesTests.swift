@@ -401,3 +401,40 @@ final class ClaudeAccountUsageFetcherTests: XCTestCase {
         XCTAssertNil(ClaudeAccountUsageFetcher.parseUsage(Data("kaputt".utf8), fetchedAt: Date(), isLive: true))
     }
 }
+
+extension ClaudeAccountUsageFetcherTests {
+    func testParseUsageExtractsModelScopedWeeklyLimit() throws {
+        // Reale Antwort-Form des oauth/usage-Endpoints (verifiziert 2026-07-12):
+        // limits[] enthaelt session, weekly_all und weekly_scoped (Fable).
+        let json = """
+        {"five_hour": {"utilization": 18.0, "resets_at": "2026-07-12T20:09:59.933524+00:00"},
+         "seven_day": {"utilization": 10.0, "resets_at": "2026-07-18T15:59:59.933546+00:00"},
+         "limits": [
+           {"kind": "session", "group": "session", "percent": 18, "resets_at": "2026-07-12T20:09:59.933524+00:00", "scope": null},
+           {"kind": "weekly_all", "group": "weekly", "percent": 10, "resets_at": "2026-07-18T15:59:59.933546+00:00", "scope": null},
+           {"kind": "weekly_scoped", "group": "weekly", "percent": 18, "resets_at": "2026-07-18T15:59:59.933828+00:00",
+            "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null}}
+         ]}
+        """
+        let usage = try XCTUnwrap(
+            ClaudeAccountUsageFetcher.parseUsage(Data(json.utf8), fetchedAt: Date(), isLive: true)
+        )
+        XCTAssertEqual(usage.modelWeeklyPercent, 18)
+        XCTAssertEqual(usage.modelWeeklyLabel, "Fable")
+        XCTAssertNotNil(usage.modelWeeklyResetsAt)
+        // Die Basis-Fenster bleiben unangetastet
+        XCTAssertEqual(usage.fiveHourPercent, 18.0)
+        XCTAssertEqual(usage.sevenDayPercent, 10.0)
+    }
+
+    func testParseUsageWithoutLimitsArrayHasNoModelWeekly() throws {
+        let json = """
+        {"five_hour": {"utilization": 5.0, "resets_at": "2026-07-12T20:00:00Z"}}
+        """
+        let usage = try XCTUnwrap(
+            ClaudeAccountUsageFetcher.parseUsage(Data(json.utf8), fetchedAt: Date(), isLive: true)
+        )
+        XCTAssertNil(usage.modelWeeklyPercent)
+        XCTAssertNil(usage.modelWeeklyLabel)
+    }
+}

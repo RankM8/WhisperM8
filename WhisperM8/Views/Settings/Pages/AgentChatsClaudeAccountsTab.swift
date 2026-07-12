@@ -149,6 +149,13 @@ struct AgentChatsClaudeAccountsTab: View {
             VStack(alignment: .leading, spacing: 5) {
                 limitGauge(label: "5h", percent: usage.fiveHourPercent, resetsAt: usage.fiveHourResetsAt)
                 limitGauge(label: "wk", percent: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt)
+                if let modelPercent = usage.modelWeeklyPercent {
+                    limitGauge(
+                        label: usage.modelWeeklyLabel ?? "model",
+                        percent: modelPercent,
+                        resetsAt: usage.modelWeeklyResetsAt
+                    )
+                }
                 if !usage.isLive {
                     Text(cacheAgeText(usage.fetchedAt))
                         .font(.system(size: 9.5, weight: .regular))
@@ -174,7 +181,8 @@ struct AgentChatsClaudeAccountsTab: View {
             Text(label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AppTheme.textTertiary)
-                .frame(width: 18, alignment: .leading)
+                .lineLimit(1)
+                .frame(width: 34, alignment: .leading)
 
             ZStack(alignment: .leading) {
                 Capsule()

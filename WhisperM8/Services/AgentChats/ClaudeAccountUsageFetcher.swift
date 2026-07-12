@@ -1,11 +1,18 @@
 import Foundation
 
-/// Live-Limit-Stand eines Claude-Accounts (5h-Fenster + Wochen-Limit).
+/// Live-Limit-Stand eines Claude-Accounts (5h-Fenster + Wochen-Limit +
+/// modell-spezifisches Wochen-Limit, z. B. Fable).
 struct ClaudeAccountUsage: Equatable {
     var fiveHourPercent: Double?
     var fiveHourResetsAt: Date?
     var sevenDayPercent: Double?
     var sevenDayResetsAt: Date?
+    /// Modell-gescoptes Wochen-Limit (`limits[].kind == "weekly_scoped"`),
+    /// aktuell das Fable-Kontingent („halbes Wochen-Limit auf Fable 5").
+    var modelWeeklyPercent: Double?
+    var modelWeeklyResetsAt: Date?
+    /// Anzeigename des gescopten Modells (`scope.model.display_name`).
+    var modelWeeklyLabel: String?
     var fetchedAt: Date
     /// `true` = frisch vom Endpoint, `false` = aus dem Statusline-Cache.
     var isLive: Bool
@@ -91,12 +98,29 @@ struct ClaudeAccountUsageFetcher {
 
         let (fiveHour, fiveHourReset) = window("five_hour")
         let (sevenDay, sevenDayReset) = window("seven_day")
-        guard fiveHour != nil || sevenDay != nil else { return nil }
+
+        // Modell-gescoptes Wochen-Limit aus dem limits-Array (z. B. Fable:
+        // kind=weekly_scoped, scope.model.display_name="Fable").
+        var modelPercent: Double?
+        var modelReset: Date?
+        var modelLabel: String?
+        if let limits = obj["limits"] as? [[String: Any]],
+           let scoped = limits.first(where: { ($0["kind"] as? String) == "weekly_scoped" }) {
+            modelPercent = (scoped["percent"] as? Double) ?? (scoped["percent"] as? Int).map(Double.init)
+            modelReset = parseResetDate(scoped["resets_at"])
+            let scope = scoped["scope"] as? [String: Any]
+            modelLabel = ((scope?["model"] as? [String: Any])?["display_name"] as? String)
+        }
+
+        guard fiveHour != nil || sevenDay != nil || modelPercent != nil else { return nil }
         return ClaudeAccountUsage(
             fiveHourPercent: fiveHour,
             fiveHourResetsAt: fiveHourReset,
             sevenDayPercent: sevenDay,
             sevenDayResetsAt: sevenDayReset,
+            modelWeeklyPercent: modelPercent,
+            modelWeeklyResetsAt: modelReset,
+            modelWeeklyLabel: modelLabel,
             fetchedAt: fetchedAt,
             isLive: isLive
         )
