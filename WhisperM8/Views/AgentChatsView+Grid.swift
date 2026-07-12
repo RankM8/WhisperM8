@@ -74,7 +74,15 @@ extension AgentChatsView {
         .onChange(of: selectedSessionID) { previous, selected in
             guard let selected else { return }
             bringSelectionIntoGrid(selected, previous: previous)
+            // Fokus-Wechsel remountet die Pane-DetailView NICHT (stabile
+            // .id) — deren onAppear-Fokus feuert also nicht erneut. Die
+            // Tastatur explizit in die neue Fokus-Pane geben, sonst folgt
+            // nur der Akzent-Rahmen, das Tippen bliebe im alten Terminal.
+            terminalRegistry.controller(for: selected)?.focusTerminal()
         }
+        // Preset-Wechsel entfernt Panes ohne onHover(false) — Flag räumen,
+        // sonst selektiert ein Klick ins Leere eine unsichtbare Session.
+        .onChange(of: gridPreset) { _, _ in hoveredGridPaneID = nil }
         .onDisappear { hoveredGridPaneID = nil }
     }
 
@@ -196,6 +204,8 @@ extension AgentChatsView {
               let hovered = hoveredGridPaneID,
               hovered != selectedSessionID else { return }
         selectedSessionID = hovered
+        // Wie Tab-/Sidebar-Klick: einfacher Klick verwirft die Mehrfach-Auswahl.
+        multiSelection = []
     }
 
     private func bringSelectionIntoGrid(_ selected: UUID, previous: UUID?) {

@@ -1736,6 +1736,13 @@ struct AgentChatsView: View {
                 // den Detail-Bereich; Sidebar/Tab-Strip bleiben unverändert.
                 // Siehe AgentChatsView+Grid.swift.
                 gridWorkspace
+                    // Ctrl+Tab-Switcher auch im Grid: der keyDown-Monitor
+                    // aktiviert ihn layoutunabhängig — ohne Overlay wäre er
+                    // unsichtbar und würde trotzdem alle Tasten konsumieren.
+                    .overlay {
+                        if tabSwitcher != nil { tabSwitcherOverlay }
+                    }
+                    .animation(.easeOut(duration: 0.1), value: tabSwitcher != nil)
             } else if let selectedSession, let project = selectedSessionProject {
                 // Detail-Pfad (Subagent-Job vs. PTY) geteilt mit den
                 // Grid-Panes — siehe sessionDetailContent in +Grid.
