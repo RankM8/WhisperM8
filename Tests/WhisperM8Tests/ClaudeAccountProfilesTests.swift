@@ -166,3 +166,107 @@ final class ClaudeAccountProfilesTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Move to Account (Transcript-Umzug)
+
+extension ClaudeAccountProfilesTests {
+    private func makeTranscript(inRoot root: URL, cwd: String, sessionID: String, withSubagents: Bool = false) throws -> URL {
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        let dir = root.appendingPathComponent(encoded, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("\(sessionID).jsonl")
+        try "{\"sessionId\": \"\(sessionID)\"}\n".write(to: file, atomically: true, encoding: .utf8)
+        if withSubagents {
+            let subagents = dir.appendingPathComponent(sessionID, isDirectory: true)
+                .appendingPathComponent("subagents", isDirectory: true)
+            try FileManager.default.createDirectory(at: subagents, withIntermediateDirectories: true)
+            try "{}".write(to: subagents.appendingPathComponent("agent-1.jsonl"), atomically: true, encoding: .utf8)
+        }
+        return file
+    }
+
+    private var mainProjectsRoot: URL {
+        home.appendingPathComponent(".claude/projects", isDirectory: true)
+    }
+
+    func testMoveTranscriptFromMainToProfile() throws {
+        let service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "firma")
+        let cwd = "/Users/x/repos/demo"
+        let source = try makeTranscript(inRoot: mainProjectsRoot, cwd: cwd, sessionID: "abc-123", withSubagents: true)
+
+        let moved = try service.moveTranscript(externalSessionID: "abc-123", cwd: cwd, toProfile: "firma")
+
+        XCTAssertTrue(moved)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        let targetDir = home.appendingPathComponent(".claude-profiles/firma/projects/\(encoded)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: targetDir.appendingPathComponent("abc-123.jsonl").path))
+        // Subagent-Ordner wandert mit
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: targetDir.appendingPathComponent("abc-123/subagents/agent-1.jsonl").path
+        ))
+    }
+
+    func testMoveTranscriptBackToMain() throws {
+        let service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "firma")
+        let cwd = "/Users/x/repos/demo"
+        let profileRoot = home.appendingPathComponent(".claude-profiles/firma/projects", isDirectory: true)
+        _ = try makeTranscript(inRoot: profileRoot, cwd: cwd, sessionID: "abc-123")
+
+        let moved = try service.moveTranscript(externalSessionID: "abc-123", cwd: cwd, toProfile: nil)
+
+        XCTAssertTrue(moved)
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: mainProjectsRoot.appendingPathComponent("\(encoded)/abc-123.jsonl").path
+        ))
+    }
+
+    func testMoveTranscriptWithoutFileReturnsFalse() throws {
+        let service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "firma")
+
+        XCTAssertFalse(try service.moveTranscript(externalSessionID: "fehlt", cwd: "/x", toProfile: "firma"))
+    }
+
+    func testMoveTranscriptToMissingProfileThrows() {
+        let service = ClaudeAccountProfiles(homeDirectory: home)
+
+        XCTAssertThrowsError(
+            try service.moveTranscript(externalSessionID: "abc", cwd: "/x", toProfile: "geloescht")
+        ) { error in
+            XCTAssertEqual(
+                error as? ClaudeAccountProfiles.MoveError,
+                .targetProfileMissing("geloescht")
+            )
+        }
+    }
+
+    func testMoveTranscriptRefusesToOverwriteTarget() throws {
+        let service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "firma")
+        let cwd = "/Users/x/repos/demo"
+        _ = try makeTranscript(inRoot: mainProjectsRoot, cwd: cwd, sessionID: "abc-123")
+        let profileRoot = home.appendingPathComponent(".claude-profiles/firma/projects", isDirectory: true)
+        _ = try makeTranscript(inRoot: profileRoot, cwd: cwd, sessionID: "abc-123")
+
+        // Gleiche Session-ID existiert im Ziel → niemals ueberschreiben.
+        // (Quelle main → Ziel firma; der Locator findet main zuerst.)
+        XCTAssertThrowsError(
+            try service.moveTranscript(externalSessionID: "abc-123", cwd: cwd, toProfile: "firma")
+        )
+    }
+
+    func testMoveTranscriptAlreadyInTargetIsNoOp() throws {
+        let service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "firma")
+        let cwd = "/Users/x/repos/demo"
+        let profileRoot = home.appendingPathComponent(".claude-profiles/firma/projects", isDirectory: true)
+        let file = try makeTranscript(inRoot: profileRoot, cwd: cwd, sessionID: "abc-123")
+
+        XCTAssertFalse(try service.moveTranscript(externalSessionID: "abc-123", cwd: cwd, toProfile: "firma"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+    }
+}

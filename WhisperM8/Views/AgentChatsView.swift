@@ -1171,6 +1171,7 @@ struct AgentChatsView: View {
             }
             .disabled(session.externalSessionID == nil)
             forkMenuItem(session)
+            moveToAccountMenu(session)
             tabColorMenu(for: session)
             Divider()
             Button(archiveLabel(for: session), systemImage: archiveIcon(for: session)) {
@@ -1209,6 +1210,7 @@ struct AgentChatsView: View {
             }
             .disabled(session.externalSessionID == nil)
             forkMenuItem(session)
+            moveToAccountMenu(session)
             Divider()
             Button(pinLabel(for: session), systemImage: "pin") {
                 togglePinSelection(session)
@@ -2523,6 +2525,7 @@ struct AgentChatsView: View {
             }
             .disabled(session.externalSessionID == nil)
             forkMenuItem(session)
+            moveToAccountMenu(session)
             Divider()
             Button(
                 multiSelection.contains(session.id) && multiSelection.count > 1

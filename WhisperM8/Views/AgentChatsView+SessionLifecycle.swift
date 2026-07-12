@@ -130,6 +130,79 @@ extension AgentChatsView {
         }
     }
 
+    // MARK: - Move to Account (Claude Multi-Account)
+
+    /// `true` für Sessions, die zu einem anderen Claude-Account umziehen
+    /// können: normale Claude-Chats (kein Background/AgentView/Terminal).
+    /// Laufend-Check passiert erst beim Klick — das Menü bleibt sichtbar,
+    /// damit der Zustand nicht versteckt wird.
+    func canMoveToAccount(_ session: AgentChatSession) -> Bool {
+        session.provider == .claude && session.effectiveKind == .chat
+    }
+
+    /// Untermenü „Zu Account verschieben": listet alle Profile außer dem
+    /// aktuellen der Session. Disabled solange die Session läuft — unter
+    /// einem laufenden Prozess das Transcript wegzuverschieben wäre
+    /// Datenverlust-Roulette.
+    @ViewBuilder
+    func moveToAccountMenu(_ session: AgentChatSession) -> some View {
+        if canMoveToAccount(session) {
+            let currentProfile = session.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName
+            let isRunning = terminalRegistry.controller(for: session.id)?.isRunning == true
+            Menu("Zu Account verschieben", systemImage: "person.crop.circle.badge.checkmark") {
+                ForEach(ClaudeAccountProfiles().profiles()) { profile in
+                    if profile.name != currentProfile {
+                        Button(moveTargetLabel(profile)) {
+                            moveSession(session, toProfileNamed: profile.name)
+                        }
+                        .disabled(!profile.isLoggedIn)
+                    }
+                }
+                if isRunning {
+                    Divider()
+                    Text("Session läuft — zuerst stoppen")
+                }
+            }
+            .disabled(isRunning)
+        }
+    }
+
+    private func moveTargetLabel(_ profile: ClaudeAccountProfile) -> String {
+        if let email = profile.emailAddress {
+            return "\(profile.name) (\(email))"
+        }
+        return "\(profile.name) (nicht eingeloggt)"
+    }
+
+    /// Verschiebt einen Chat zu einem anderen Claude-Account: Transcript in
+    /// den Ziel-Profil-Root bewegen (der Verlauf ist nicht account-gebunden,
+    /// nur sein Ablageort zählt), dann den Profil-Stempel der Session
+    /// aktualisieren. Ab dem nächsten Resume läuft der Chat unter dem
+    /// Ziel-Account und verbraucht dessen Kontingent.
+    func moveSession(_ session: AgentChatSession, toProfileNamed targetName: String) {
+        guard canMoveToAccount(session) else { return }
+        guard terminalRegistry.controller(for: session.id)?.isRunning != true else {
+            errorMessage = "„\(session.title)“ läuft noch — bitte zuerst stoppen, dann verschieben."
+            return
+        }
+        let profileName: String? = targetName == ClaudeAccountProfiles.mainProfileName ? nil : targetName
+        do {
+            // Ohne externalSessionID gibt es (noch) kein Transcript — dann
+            // reicht der Stempel; der Chat startet direkt im Ziel-Account.
+            if let externalID = session.externalSessionID, !externalID.isEmpty,
+               let project = workspace.projects.first(where: { $0.id == session.projectID }) {
+                try ClaudeAccountProfiles().moveTranscript(
+                    externalSessionID: externalID,
+                    cwd: session.subagentCwd ?? project.path,
+                    toProfile: profileName
+                )
+            }
+            try store.setClaudeSessionProfile(id: session.id, profileName: profileName)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func markSession(_ id: UUID, status: AgentChatStatus) {
         do {
             if status == .closed || status == .archived {

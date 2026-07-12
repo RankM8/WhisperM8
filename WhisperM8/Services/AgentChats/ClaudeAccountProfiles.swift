@@ -219,6 +219,80 @@ struct ClaudeAccountProfiles {
         return profile(named: name)
     }
 
+    // MARK: - Chat zu anderem Account verschieben
+
+    enum MoveError: LocalizedError, Equatable {
+        case targetProfileMissing(String)
+        case targetTranscriptExists(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .targetProfileMissing(let name):
+                return "Account profile “\(name)” does not exist."
+            case .targetTranscriptExists(let path):
+                return "A transcript with this session ID already exists in the target account: \(path)"
+            }
+        }
+    }
+
+    /// Verschiebt das Transcript einer Session in den `projects/`-Root des
+    /// Ziel-Profils (`nil` = main) — der lokale Verlauf ist nicht account-
+    /// gebunden, nur sein Ablageort entscheidet, unter welchem Account
+    /// `--resume` ihn findet. Verschieben statt Kopieren: eine Kopie wuerde
+    /// der Multi-Root-Indexer doppelt adoptieren. Der Subagent-Ordner
+    /// (`<id>/` neben der JSONL) wandert mit.
+    ///
+    /// - Returns: `true` wenn eine Datei bewegt wurde, `false` wenn (noch)
+    ///   kein Transcript existiert oder es schon im Ziel-Root liegt — der
+    ///   Caller stempelt die Session in beiden Faellen um.
+    @discardableResult
+    func moveTranscript(
+        externalSessionID: String,
+        cwd: String,
+        toProfile targetName: String?
+    ) throws -> Bool {
+        let target = targetName ?? Self.mainProfileName
+        guard target == Self.mainProfileName
+                || fileManager.fileExists(atPath: configDir(forProfile: target).path) else {
+            throw MoveError.targetProfileMissing(target)
+        }
+
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        let targetDir = configDir(forProfile: target)
+            .appendingPathComponent("projects", isDirectory: true)
+            .appendingPathComponent(encoded, isDirectory: true)
+        let targetFile = targetDir.appendingPathComponent("\(externalSessionID).jsonl")
+
+        // Quelle ueber alle Roots suchen (main + Profile).
+        var sourceFile: URL?
+        for root in claudeProjectsRoots() {
+            let candidate = root
+                .appendingPathComponent(encoded, isDirectory: true)
+                .appendingPathComponent("\(externalSessionID).jsonl")
+            if fileManager.fileExists(atPath: candidate.path) {
+                sourceFile = candidate
+                break
+            }
+        }
+        guard let sourceFile else { return false }
+        guard sourceFile.path != targetFile.path else { return false }
+        guard !fileManager.fileExists(atPath: targetFile.path) else {
+            throw MoveError.targetTranscriptExists(targetFile.path)
+        }
+
+        try fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
+        try fileManager.moveItem(at: sourceFile, to: targetFile)
+
+        // Subagent-Transcripts liegen als Ordner `<id>/` neben der JSONL.
+        let sourceSubagents = sourceFile.deletingPathExtension()
+        if fileManager.fileExists(atPath: sourceSubagents.path) {
+            let targetSubagents = targetFile.deletingPathExtension()
+            try? fileManager.moveItem(at: sourceSubagents, to: targetSubagents)
+        }
+        Logger.agentStore.notice("claude_transcript_moved session=\(externalSessionID, privacy: .public) target=\(target, privacy: .public)")
+        return true
+    }
+
     // MARK: - Usage-Snapshot (Anzeige)
 
     /// Cache-Pfad identisch zur Statusline (`statusline-command.sh`) — bewusst

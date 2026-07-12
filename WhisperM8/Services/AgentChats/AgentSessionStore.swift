@@ -272,6 +272,16 @@ struct AgentSessionStore {
         }
     }
 
+    /// Stempelt eine Session auf ein anderes Claude-Account-Profil um
+    /// („Move to account"). NUR die Metadaten — das Transcript muss der
+    /// Caller vorher via `ClaudeAccountProfiles.moveTranscript` verschieben,
+    /// sonst zeigt der Stempel auf einen Root ohne Datei.
+    func setClaudeSessionProfile(id: UUID, profileName: String?) throws {
+        try updateSession(id: id) { session in
+            session.claudeProfileName = profileName
+        }
+    }
+
     // MARK: - Drag-and-Drop reordering
 
     /// Schreibt fortlaufende `sortIndex`-Werte (0…n-1) anhand der gegebenen
