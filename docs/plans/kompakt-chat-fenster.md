@@ -1,6 +1,9 @@
 # Plan: Kompakt-Chat-Fenster („Make window small" mit Projekt-Chat-Übersicht)
 
-Stand: 2026-07-12 · Status: **Plan-Entwurf, in Beratung** · Vorbild: BridgeMind BridgeSpace
+Stand: 2026-07-12 · Status: **VERWORFEN** (User-Feedback 2026-07-12: Feature beruhte auf einem
+Missverständnis der ursprünglichen Anfrage — gewollt war nur die Grid-View. Umsetzung war
+komplett gebaut und wurde revertiert, siehe Commits `58a5635`/Revert-Paar; Wiederaufnahme nur
+auf expliziten Wunsch) · Vorbild: BridgeMind BridgeSpace
 (<https://www.bridgemind.ai/products/bridgespace>) — deren Desktop-App bietet einen kompakten
 Chat-Workspace mit Session-Liste, aus dem heraus man zwischen allen Chats wechselt, ohne das
 große Arbeitsfenster zu brauchen.

@@ -1,9 +1,11 @@
 # Plan: Split-Grid — mehrere Agent-Sessions nebeneinander in einem Fenster
 
-Stand: 2026-07-12 · Status: **Plan-Entwurf, in Beratung** · Vorbild: BridgeMind BridgeSpace
-(2×2-Terminal-Grid, siehe Screenshot-Analyse unten). Schwester-Plan:
-[`kompakt-chat-fenster.md`](kompakt-chat-fenster.md) (dort: ein Chat klein; hier: viele Chats
-gleichzeitig groß).
+Stand: 2026-07-12 · Status: **V1 (simpel) UMGESETZT 2026-07-12** — Presets 1/1×2/2×1/2×2 über
+die offenen Tabs, Fokus-Pane mit Akzentrahmen, Bring-into-View-Swap, kein Auto-Launch/-Fokus
+für Nebenpanes (`suppressesAutoActivation`). Die Ansichten-Automatik („Projekt"/„Running",
+Pin-per-Drag) und Drag-auf-Pane sind **V2, offen**. Der Schwester-Plan
+[`kompakt-chat-fenster.md`](kompakt-chat-fenster.md) ist verworfen.
+Vorbild: BridgeMind BridgeSpace (2×2-Terminal-Grid, siehe Screenshot-Analyse unten).
 
 ## Context
 
