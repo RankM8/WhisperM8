@@ -69,73 +69,151 @@ struct AgentChatsClaudeAccountsTab: View {
 
     // MARK: - Rows
 
+    /// Dashboard-Zeile: Radio-Auswahl (Klick = aktiv) · Identitäts-Spalte
+    /// fester Breite · Gauge-Spalte (fluchtet dadurch über alle Zeilen) ·
+    /// ⋯-Menü für die seltenen Verwaltungs-Aktionen. Die Daten tragen die
+    /// Seite, destruktive Buttons dominieren sie nicht mehr.
     @ViewBuilder
     private func profileRow(_ profile: ClaudeAccountProfile) -> some View {
         let isActive = profile.name == activeProfileName
 
-        SettingsRow(
-            title: profile.isMain ? "\(profile.name) · Main account" : profile.name,
-            subtitle: profileSubtitle(profile)
-        ) {
-            HStack(spacing: 10) {
-                usageView(for: profile)
+        HStack(alignment: .top, spacing: 14) {
+            radioButton(for: profile, isActive: isActive)
+                .padding(.top, 2)
 
-                if !profile.isMain {
-                    Button {
-                        renameProfile(profile)
-                    } label: {
-                        Image(systemName: "pencil")
-                    }
-                    .buttonStyle(SettingsButtonStyle.standard)
-                    .help("Rename profile (keeps the login — the Keychain entry moves along)")
-                }
+            identityColumn(for: profile, isActive: isActive)
+                .frame(width: 230, alignment: .leading)
 
-                if !profile.isLoggedIn {
-                    Button("Log in…") {
-                        openLoginTerminal(for: profile)
-                    }
-                    .buttonStyle(SettingsButtonStyle.standard)
-                    .help("Opens Terminal with this profile — complete the one-time browser login there.")
-                }
+            gaugeColumn(for: profile)
+                .frame(minWidth: 215, alignment: .leading)
 
+            Spacer(minLength: 8)
+
+            manageMenu(for: profile, isActive: isActive)
+        }
+        .padding(.vertical, 11)
+        .padding(.horizontal, 2)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(AppTheme.border)
+                .frame(height: 1)
+        }
+    }
+
+    /// Radio-Indikator: gefüllt = aktiver Account, Klick macht den Account
+    /// aktiv. Ersetzt den „Set Active"-Button — Auswahl ist EIN Klick.
+    private func radioButton(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
+        Button {
+            guard !isActive else { return }
+            setActive(profile)
+        } label: {
+            ZStack {
+                Circle()
+                    .strokeBorder(
+                        isActive ? AppTheme.statusWorking : AppTheme.textTertiary.opacity(0.55),
+                        lineWidth: 1.5
+                    )
+                    .frame(width: 15, height: 15)
                 if isActive {
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(AppTheme.statusWorking)
-                            .frame(width: 8, height: 8)
-                        Text("Active")
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                } else {
-                    Button("Set Active") {
-                        setActive(profile)
-                    }
-                    .buttonStyle(SettingsButtonStyle.standard)
+                    Circle()
+                        .fill(AppTheme.statusWorking)
+                        .frame(width: 7, height: 7)
                 }
+            }
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!profile.isLoggedIn)
+        .help(isActive
+            ? "Active account for new Claude chats"
+            : profile.isLoggedIn
+                ? "Use this account for new Claude chats"
+                : "Log in first (⋯ menu)")
+    }
 
-                if !profile.isMain {
-                    Button("Remove…") {
-                        removeProfile(profile)
-                    }
-                    .buttonStyle(SettingsButtonStyle.destructive)
-                    .disabled(isActive)
-                    .help(isActive
-                        ? "Switch to another account before removing this profile."
-                        : "Removes the profile folder. The Keychain login stays until you delete it manually.")
+    private func identityColumn(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 7) {
+                Text(profile.name)
+                    .font(.system(size: 13.5, weight: isActive ? .semibold : .regular))
+                    .foregroundStyle(isActive ? AppTheme.statusWorking : AppTheme.textPrimary)
+
+                if profile.isMain {
+                    Text("main")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .overlay(Capsule().strokeBorder(AppTheme.border, lineWidth: 1))
                 }
+            }
+
+            if let email = profile.emailAddress {
+                Text(email)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(AppTheme.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                // Org nur wenn sie mehr sagt als „<email>'s Organization"
+                if let org = profile.organizationName, !org.isEmpty,
+                   !org.hasSuffix("'s Organization"), !org.hasSuffix("’s Organization") {
+                    Text(org)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } else {
+                Text("Not logged in")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(AppTheme.statusAwaiting)
             }
         }
     }
 
-    private func profileSubtitle(_ profile: ClaudeAccountProfile) -> String {
-        if let email = profile.emailAddress {
-            if let org = profile.organizationName, !org.isEmpty {
-                return "\(email) · \(org)"
+    /// Gauge-Spalte; für nicht eingeloggte Profile sitzt hier der sichtbare
+    /// Login-Einstieg (die einzige Aktion, die ein frisches Profil braucht).
+    @ViewBuilder
+    private func gaugeColumn(for profile: ClaudeAccountProfile) -> some View {
+        if profile.isLoggedIn {
+            usageView(for: profile)
+        } else {
+            Button("Log in…") {
+                openLoginTerminal(for: profile)
             }
-            return email
+            .buttonStyle(SettingsButtonStyle.standard)
+            .help("Opens Terminal with this profile — complete the one-time browser login there.")
         }
-        return "Not logged in yet — click “Log in…” and finish the one-time browser login."
+    }
+
+    /// ⋯-Menü: dauerhaft sichtbar (kein Hover-only), bündelt die seltenen
+    /// Verwaltungs-Aktionen. Destruktives nur hier, nie als Flächen-Button.
+    @ViewBuilder
+    private func manageMenu(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
+        if !profile.isMain || !profile.isLoggedIn {
+            Menu {
+                if !profile.isLoggedIn {
+                    Button("Log in…") { openLoginTerminal(for: profile) }
+                }
+                if !profile.isMain {
+                    Button("Rename…") { renameProfile(profile) }
+                    Divider()
+                    Button("Remove…", role: .destructive) { removeProfile(profile) }
+                        .disabled(isActive)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .frame(width: 26, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Rename, log in, remove")
+        }
     }
 
     /// Limit-Anzeige pro Account: zwei ausgerichtete Gauge-Zeilen (5h-Fenster
