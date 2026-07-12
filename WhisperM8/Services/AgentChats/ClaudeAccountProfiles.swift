@@ -13,6 +13,9 @@ struct ClaudeAccountProfile: Identifiable, Equatable {
     var emailAddress: String?
     var organizationName: String?
     var displayName: String?
+    /// Menschlich lesbarer Abo-Plan („Max 20×", „Team Premium", „Pro", …),
+    /// abgeleitet aus den oauthAccount-Feldern. `nil` wenn nicht eingeloggt.
+    var planDisplayName: String?
 
     var id: String { name }
     var isMain: Bool { name == ClaudeAccountProfiles.mainProfileName }
@@ -71,6 +74,7 @@ struct ClaudeAccountProfiles {
             profile.emailAddress = account.email
             profile.organizationName = account.organization
             profile.displayName = account.displayName
+            profile.planDisplayName = account.plan
         }
         return profile
     }
@@ -91,7 +95,7 @@ struct ClaudeAccountProfiles {
         return configDir(forProfile: name).appendingPathComponent(".claude.json", isDirectory: false)
     }
 
-    private func accountInfo(forProfile name: String) -> (email: String?, organization: String?, displayName: String?)? {
+    private func accountInfo(forProfile name: String) -> (email: String?, organization: String?, displayName: String?, plan: String?)? {
         guard let data = try? Data(contentsOf: claudeJSONURL(forProfile: name)),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let account = obj["oauthAccount"] as? [String: Any] else {
@@ -100,8 +104,58 @@ struct ClaudeAccountProfiles {
         return (
             account["emailAddress"] as? String,
             account["organizationName"] as? String,
-            account["displayName"] as? String
+            account["displayName"] as? String,
+            Self.planLabel(
+                organizationType: account["organizationType"] as? String,
+                seatTier: account["seatTier"] as? String,
+                userRateLimitTier: account["userRateLimitTier"] as? String,
+                organizationRateLimitTier: account["organizationRateLimitTier"] as? String
+            )
         )
+    }
+
+    /// Leitet den Anzeige-Plan aus den oauthAccount-Feldern ab. Beobachtete
+    /// Kombinationen (2026-07-12): `claude_max` + Org-Tier `…max_20x`/`…max_5x`
+    /// → „Max 20×"/„Max 5×"; `claude_team` + `seatTier=team_tier_1` (User-Tier
+    /// `…max_5x`) → „Team Premium". Unbekannte Werte werden lesbar
+    /// durchgereicht statt verschluckt.
+    static func planLabel(
+        organizationType: String?,
+        seatTier: String?,
+        userRateLimitTier: String?,
+        organizationRateLimitTier: String?
+    ) -> String? {
+        guard let organizationType, !organizationType.isEmpty else { return nil }
+
+        // „20×"/„5×" aus dem spezifischsten Rate-Limit-Tier ziehen
+        let tier = userRateLimitTier ?? organizationRateLimitTier ?? ""
+        let multiplier: String? = {
+            guard let range = tier.range(of: #"max_(\d+)x"#, options: .regularExpression) else { return nil }
+            return tier[range].replacingOccurrences(of: "max_", with: "").replacingOccurrences(of: "x", with: "×")
+        }()
+
+        switch organizationType {
+        case "claude_max":
+            return multiplier.map { "Max \($0)" } ?? "Max"
+        case "claude_pro":
+            return "Pro"
+        case "claude_team":
+            switch seatTier {
+            case "team_tier_1":
+                return "Team Premium"
+            case nil, "":
+                return "Team"
+            case .some(let raw):
+                return "Team \(raw.replacingOccurrences(of: "team_tier_", with: "Tier "))"
+            }
+        case "claude_enterprise":
+            return "Enterprise"
+        default:
+            // z. B. "claude_free" → "Free"
+            return organizationType
+                .replacingOccurrences(of: "claude_", with: "")
+                .capitalized
+        }
     }
 
     // MARK: - Aktives Profil

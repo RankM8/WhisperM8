@@ -438,3 +438,81 @@ extension ClaudeAccountUsageFetcherTests {
         XCTAssertNil(usage.modelWeeklyLabel)
     }
 }
+
+// MARK: - Plan-Ableitung
+
+extension ClaudeAccountProfilesTests {
+    func testPlanLabelMapsObservedCombinations() {
+        // Reale Kombinationen vom 2026-07-12 (vier eingeloggte Accounts)
+        XCTAssertEqual(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: "claude_max", seatTier: nil,
+                userRateLimitTier: nil, organizationRateLimitTier: "default_claude_max_20x"
+            ),
+            "Max 20×"
+        )
+        XCTAssertEqual(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: "claude_max", seatTier: nil,
+                userRateLimitTier: nil, organizationRateLimitTier: "default_claude_max_5x"
+            ),
+            "Max 5×"
+        )
+        XCTAssertEqual(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: "claude_team", seatTier: "team_tier_1",
+                userRateLimitTier: "default_claude_max_5x", organizationRateLimitTier: "default_raven"
+            ),
+            "Team Premium"
+        )
+    }
+
+    func testPlanLabelHandlesFurtherPlans() {
+        XCTAssertEqual(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: "claude_pro", seatTier: nil,
+                userRateLimitTier: nil, organizationRateLimitTier: nil
+            ),
+            "Pro"
+        )
+        XCTAssertEqual(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: "claude_team", seatTier: nil,
+                userRateLimitTier: nil, organizationRateLimitTier: nil
+            ),
+            "Team"
+        )
+        XCTAssertEqual(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: "claude_enterprise", seatTier: nil,
+                userRateLimitTier: nil, organizationRateLimitTier: nil
+            ),
+            "Enterprise"
+        )
+        // Unbekannte Typen lesbar durchreichen, nie verschlucken
+        XCTAssertEqual(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: "claude_free", seatTier: nil,
+                userRateLimitTier: nil, organizationRateLimitTier: nil
+            ),
+            "Free"
+        )
+        XCTAssertNil(
+            ClaudeAccountProfiles.planLabel(
+                organizationType: nil, seatTier: nil,
+                userRateLimitTier: nil, organizationRateLimitTier: nil
+            )
+        )
+    }
+
+    func testProfileCarriesPlanFromClaudeJSON() throws {
+        let dir = try makeProfileDir("firma")
+        let json = """
+        {"oauthAccount": {"emailAddress": "a@b.de", "organizationType": "claude_max",
+         "organizationRateLimitTier": "default_claude_max_20x"}}
+        """
+        try json.write(to: dir.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(service.profile(named: "firma").planDisplayName, "Max 20×")
+    }
+}

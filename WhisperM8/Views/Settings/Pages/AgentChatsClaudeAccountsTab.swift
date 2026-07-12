@@ -138,6 +138,15 @@ struct AgentChatsClaudeAccountsTab: View {
                     .font(.system(size: 13.5, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(isActive ? AppTheme.statusWorking : AppTheme.textPrimary)
 
+                if let plan = profile.planDisplayName {
+                    Text(plan)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1.5)
+                        .background(AppTheme.textTertiary.opacity(0.12), in: Capsule())
+                }
+
                 if profile.isMain {
                     Text("main")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
