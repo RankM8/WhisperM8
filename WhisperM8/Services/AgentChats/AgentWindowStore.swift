@@ -172,6 +172,29 @@ final class AgentWindowStore {
         updateWindow(windowID) { $0.selectedProjectID = projectID }
     }
 
+    // MARK: - Kompakt-Modus (pro Fenster)
+
+    /// `true`, wenn das Fenster im Kompakt-Zustand (Projekt-Cockpit) ist.
+    func isCompact(in windowID: UUID) -> Bool { window(for: windowID).isCompact }
+
+    /// Frame vor dem Verkleinern — Ziel der Rueckverwandlung. Der Aufrufer
+    /// liest ihn VOR `setCompact(false, …)`, denn das Vergroessern leert ihn.
+    func expandedFrame(in windowID: UUID) -> AgentWindowFrame? {
+        window(for: windowID).expandedFrame
+    }
+
+    /// Schaltet den Kompakt-Zustand eines Fensters. Beim Verkleinern merkt
+    /// sich das Fenster den uebergebenen Frame (fuer die Rueckverwandlung,
+    /// auch ueber Neustarts); beim Vergroessern wird er geleert. Idempotent
+    /// bezueglich `compact` — erneutes Verkleinern ohne neuen Frame behaelt
+    /// den gemerkten.
+    func setCompact(_ compact: Bool, in windowID: UUID, expandedFrame: AgentWindowFrame? = nil) {
+        updateWindow(windowID) { window in
+            window.isCompact = compact
+            window.expandedFrame = compact ? (expandedFrame ?? window.expandedFrame) : nil
+        }
+    }
+
     /// Entfernt ein leeres Sekundaerfenster aus dem State. Gibt `true` zurueck,
     /// wenn tatsaechlich entfernt wurde (Aufrufer kann dann das NSWindow zu).
     @discardableResult
