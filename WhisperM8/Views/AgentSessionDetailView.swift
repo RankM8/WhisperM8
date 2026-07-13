@@ -112,7 +112,7 @@ struct AgentSessionDetailView: View {
         .onAppear {
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
-                    prepareCommand()
+                    launchAfterCacheWarmup()
                 }
                 // Direkt nach dem Mount Tastaturfokus auf das Terminal setzen,
                 // damit der User sofort tippen kann und nicht im Sidebar-Filter
@@ -131,7 +131,7 @@ struct AgentSessionDetailView: View {
             countBeforeEarlierLoad = nil
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
-                    prepareCommand()
+                    launchAfterCacheWarmup()
                 }
                 // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
                 controller?.focusTerminal()
@@ -250,7 +250,7 @@ struct AgentSessionDetailView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Button {
-                prepareCommand()
+                launchAfterCacheWarmup()
             } label: {
                 Label("Neue Shell starten", systemImage: "play.fill")
                     .font(.system(size: 11, weight: .medium))
@@ -278,15 +278,68 @@ struct AgentSessionDetailView: View {
         guard let request, request.sessionID == session.id else { return }
         switch request.kind {
         case .start:
-            prepareCommand()
+            launchAfterCacheWarmup()
         case .restart:
             restartTerminal()
         }
     }
 
-    private func prepareCommand() {
+    /// Wärmt die beim Launch blockierenden Caches (Login-Shell-PATH via
+    /// `zsh -l`, `which`-Lookup des CLI-Binaries) off-main vor. Falls eine
+    /// gespeicherte Claude-Resume-ID repariert werden muss, läuft auch der
+    /// dafür nötige JSONL-Scan hier — `prepareCommand()` bleibt dadurch auf
+    /// dem MainActor frei von blockierendem Datei-I/O.
+    private func launchAfterCacheWarmup() {
+        let commandName: String? = session.isTerminal
+            ? nil
+            : (session.provider == .claude ? "claude" : "codex")
+        let launchSession = session
+        let projectPath = project.path
+        Task.detached(priority: .userInitiated) {
+            _ = LoginShellEnvironment.shared.path
+            if let commandName {
+                _ = AgentCommandBuilder.commandPath(commandName)
+            }
+
+            let resumeRepairPreparation: ResumeRepairPreparation
+            if !launchSession.isAgentView,
+               !launchSession.isTerminal,
+               launchSession.provider == .claude,
+               launchSession.hasLaunchedInitialPrompt,
+               let externalID = launchSession.externalSessionID,
+               !externalID.isEmpty,
+               !ClaudeTranscriptReader.transcriptExists(forCwd: projectPath, sessionID: externalID) {
+                // Nur einen Snapshot des persistenten Caches laden und lokal
+                // erweitern. Kein Save hier: Ein paralleler globaler Scan darf
+                // nicht durch einen älteren Snapshot überschrieben werden.
+                var cache = AgentSessionIndexCacheStore().load()
+                let indexedSessions = ClaudeSessionIndexer()
+                    .indexedSessionResult(limit: 500, cache: &cache)
+                    .sessions
+                resumeRepairPreparation = .scanResult(indexedSessions)
+            } else {
+                resumeRepairPreparation = .noRepairNeeded
+            }
+
+            await MainActor.run {
+                // Der Warmup kann bei kaltem Cache Sekunden dauern: Wurde die
+                // Session inzwischen gelöscht oder archiviert, darf KEIN
+                // Prozess mehr starten — sonst liefe ein unsichtbarer PTY
+                // weiter bzw. markLaunched() setzte eine archivierte Session
+                // wieder auf .running (Verify-Befund 2026-07-13).
+                guard let currentSession = store.loadWorkspace().sessions
+                    .first(where: { $0.id == launchSession.id }),
+                    currentSession.status != .archived else { return }
+                prepareCommand(resumeRepairPreparation: resumeRepairPreparation)
+            }
+        }
+    }
+
+    private func prepareCommand(resumeRepairPreparation: ResumeRepairPreparation) {
         do {
-            let launchSession = try repairedSessionForLaunch()
+            let launchSession = try repairedSessionForLaunch(
+                resumeRepairPreparation: resumeRepairPreparation
+            )
             // Claude-Hook-Bridge: VOR dem Command-Build die Settings-Datei
             // erzeugen und `--settings <path>` als extra-Argument liefern.
             // Codex bekommt das nicht (kein Hook-API).
@@ -336,7 +389,9 @@ struct AgentSessionDetailView: View {
         }
     }
 
-    private func repairedSessionForLaunch() throws -> AgentChatSession {
+    private func repairedSessionForLaunch(
+        resumeRepairPreparation: ResumeRepairPreparation
+    ) throws -> AgentChatSession {
         // Agent View und Terminal haben keine externe Session-ID — kein
         // Repair noetig (Terminals resumen nie, jede Shell ist frisch).
         guard !session.isAgentView, !session.isTerminal else {
@@ -349,19 +404,16 @@ struct AgentSessionDetailView: View {
             return session
         }
 
-        // FAST PATH: wenn die JSONL fuer die gespeicherte externalSessionID
-        // bereits an der erwarteten Stelle liegt, gilt die ID als valide —
-        // kein Scan ueber 2000+ Files noetig. Das ist der 99%-Fall und
-        // verhindert den 2-Sekunden-UI-Block beim Resume-Klick.
-        if ClaudeTranscriptReader.transcriptExists(forCwd: project.path, sessionID: externalID) {
+        // FAST PATH: Der vorgeschaltete Detached-Task hat die JSONL bereits
+        // per Stat geprüft. Im 99%-Fall ist damit kein Indexer-Scan nötig.
+        guard case let .scanResult(indexedSessions) = resumeRepairPreparation else {
             return session
         }
 
         // SLOW PATH: gespeicherte ID hat keine entsprechende JSONL — vielleicht
         // wurde sie von Claude per `/resume` umgebogen, oder das Transcript
-        // wurde manuell geloescht. Erst jetzt machen wir den teuren
-        // Indexer-Scan ueber alle Projekte und versuchen einen Repair.
-        let indexedSessions = ClaudeSessionIndexer().indexedSessions(limit: 500)
+        // wurde manuell geloescht. Der teure Scan wurde off-main vorbereitet;
+        // nur die serialisierte Store-Reparatur läuft auf dem MainActor.
         let repair = try store.repairResumeStateBeforeLaunch(
             localSessionID: session.id,
             projectPath: project.path,
@@ -415,7 +467,7 @@ struct AgentSessionDetailView: View {
 
     private func restartTerminal() {
         terminalRegistry.terminate(sessionID: session.id)
-        prepareCommand()
+        launchAfterCacheWarmup()
     }
 
     /// Übernimmt den von der Shell gemeldeten Titel (OSC 0/2) als Tab-Titel.
@@ -477,7 +529,14 @@ struct AgentSessionDetailView: View {
     }
 
     private func bindExternalSessionIDWhenAvailable() {
-        Task { @MainActor in
+        let localSessionID = session.id
+        let provider = session.provider
+        let projectPath = project.path
+        let store = store
+        let onExternalSessionIDBound = onExternalSessionIDBound
+        let onStateChanged = onStateChanged
+
+        Task.detached(priority: .utility) {
             let retryDelays: [UInt64] = [
                 250_000_000,
                 500_000_000,
@@ -485,31 +544,67 @@ struct AgentSessionDetailView: View {
                 2_000_000_000,
                 4_000_000_000
             ]
+            // Ein lokaler Cache für den gesamten Retry-Loop: Nach Versuch 1
+            // liefern unveränderte JSONLs fast nur noch Cache-Treffer.
+            var cache = AgentSessionIndexCacheStore().load()
 
             for delay in retryDelays {
                 try? await Task.sleep(nanoseconds: delay)
                 guard !Task.isCancelled else { return }
 
-                do {
-                    let indexedSessions = CodexSessionIndexer().indexedSessions(limit: 20)
-                        + ClaudeSessionIndexer().indexedSessions(limit: 20)
-                    if try store.bindLatestIndexedSession(
-                        localSessionID: session.id,
-                        provider: session.provider,
-                        projectPath: project.path,
-                        indexedSessions: indexedSessions
-                    ) != nil {
-                        onExternalSessionIDBound(session.id)
-                        onStateChanged()
-                        return
-                    }
-                } catch {
-                    errorMessage = error.localizedDescription
-                    return
+                // Der Hook ist die schnellere und genauere Quelle. Immer den
+                // frischen Store lesen; `session` ist nur ein View-Snapshot.
+                let currentSession = store.loadWorkspace().sessions
+                    .first(where: { $0.id == localSessionID })
+                guard let currentSession,
+                      currentSession.externalSessionID == nil else { return }
+
+                let indexedSessions: [IndexedAgentSession]
+                switch provider {
+                case .claude:
+                    indexedSessions = ClaudeSessionIndexer()
+                        .indexedSessionResult(limit: 20, cache: &cache)
+                        .sessions
+                case .codex:
+                    indexedSessions = CodexSessionIndexer()
+                        .indexedSessionResult(limit: 20, cache: &cache)
+                        .sessions
                 }
+
+                let shouldStop = await MainActor.run {
+                    // Der Hook kann während des Scans gewonnen haben. Dann
+                    // weder erneut binden noch doppelte UI-Callbacks senden.
+                    let freshSession = store.loadWorkspace().sessions
+                        .first(where: { $0.id == localSessionID })
+                    guard let freshSession,
+                          freshSession.externalSessionID == nil else { return true }
+
+                    do {
+                        if try store.bindLatestIndexedSession(
+                            localSessionID: localSessionID,
+                            provider: provider,
+                            projectPath: projectPath,
+                            indexedSessions: indexedSessions
+                        ) != nil {
+                            onExternalSessionIDBound(localSessionID)
+                            onStateChanged()
+                            return true
+                        }
+                        return false
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        return true
+                    }
+                }
+                if shouldStop { return }
             }
         }
     }
+}
+
+private enum ResumeRepairPreparation {
+    case noRepairNeeded
+    case scanResult([IndexedAgentSession])
 }
 
 /// Wird vom Launch-Guard geworfen, wenn für eine resumebare Session in KEINEM

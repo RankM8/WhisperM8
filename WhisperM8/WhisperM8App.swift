@@ -248,6 +248,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             CLISymlinkInstaller.installIfNeeded()
         }
 
+        // Prewarm: Login-Shell-PATH (`zsh -l`, bei schwerer .zshrc bis zu
+        // Sekunden) und die `which claude/codex`-Lookups einmalig off-main
+        // auflösen. Beide Helfer cachen prozessweit (NSLock-geschützt) —
+        // ohne Prewarm zahlt der ERSTE Chat-Start diese Spawns synchron auf
+        // dem Main Thread und die App friert sichtbar ein.
+        Task.detached(priority: .utility) {
+            _ = LoginShellEnvironment.shared.path
+            _ = AgentCommandBuilder.commandPath("claude")
+            _ = AgentCommandBuilder.commandPath("codex")
+        }
+
         // Sessions-Scan automatisch: einmal direkt beim Launch, danach bei
         // jeder Foreground-Reaktivierung (mit 30 s Cooldown). Der ScanCoordinator
         // installiert seinen eigenen `didBecomeActive`-Observer.
