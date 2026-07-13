@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 @testable import WhisperM8
@@ -5,8 +6,8 @@ import XCTest
 final class AgentWorkspaceStoreTests: XCTestCase {
     private final class PersistSpy: @unchecked Sendable {
         private let lock = NSLock()
-        private(set) var saved: [AgentWorkspace] = []
-        var failNextSave = false
+        private var saved: [AgentWorkspace] = []
+        private var failNextSave = false
 
         func persist(_ workspace: AgentWorkspace) throws {
             lock.lock()
@@ -22,6 +23,18 @@ final class AgentWorkspaceStoreTests: XCTestCase {
             lock.lock()
             defer { lock.unlock() }
             return saved.count
+        }
+
+        var savedWorkspaces: [AgentWorkspace] {
+            lock.lock()
+            defer { lock.unlock() }
+            return saved
+        }
+
+        func failNext() {
+            lock.lock()
+            failNextSave = true
+            lock.unlock()
         }
     }
 
@@ -158,40 +171,126 @@ final class AgentWorkspaceStoreTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.01)
         }
         XCTAssertEqual(spy.saveCount, 1, "5 Mutationen müssen zu genau einem Save gebündelt werden")
-        XCTAssertEqual(spy.saved.last?.sessions.count, 5)
+        XCTAssertEqual(spy.savedWorkspaces.last?.sessions.count, 5)
     }
 
-    func testFlushWritesImmediately() throws {
+    func testFlushReturnsWithoutWaitingForPersistAndWritesAsynchronously() throws {
         let spy = PersistSpy()
+        let persistStarted = expectation(description: "Asynchroner Persist hat begonnen")
+        let persistFinished = expectation(description: "Asynchroner Persist ist abgeschlossen")
+        let allowPersist = DispatchSemaphore(value: 0)
         let store = AgentWorkspaceStore(
             loadInitial: { .empty },
-            persist: { try spy.persist($0) },
+            persist: { workspace in
+                persistStarted.fulfill()
+                _ = allowPersist.wait(timeout: .now() + 2)
+                try spy.persist(workspace)
+                persistFinished.fulfill()
+            },
             policy: .debounced(10)
         )
 
-        try store.mutate { $0.sessions.append(self.makeSession()) }
+        try store.mutate { $0.sessions.append(self.makeSession(title: "Neuester Stand")) }
         XCTAssertEqual(spy.saveCount, 0)
 
+        let startedAt = Date()
         store.flush()
+        XCTAssertLessThan(
+            Date().timeIntervalSince(startedAt),
+            0.1,
+            "flush darf nicht auf den injizierten Persist warten"
+        )
+
+        wait(for: [persistStarted], timeout: 1)
+        XCTAssertEqual(spy.saveCount, 0, "Der blockierte Persist darf noch nicht abgeschlossen sein")
+        allowPersist.signal()
+        wait(for: [persistFinished], timeout: 1)
         XCTAssertEqual(spy.saveCount, 1)
+        XCTAssertEqual(spy.savedWorkspaces.count, 1)
+        XCTAssertEqual(spy.savedWorkspaces.first?.sessions.first?.title, "Neuester Stand")
+    }
+
+    func testFlushPersistsOnlyLatestOfTwoQuickMutations() throws {
+        let spy = PersistSpy()
+        let persisted = expectation(description: "Neuester Stand persistiert")
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { workspace in
+                try spy.persist(workspace)
+                persisted.fulfill()
+            },
+            policy: .debounced(10)
+        )
+
+        try store.mutate { $0.sessions.append(self.makeSession(title: "Alt")) }
+        try store.mutate { $0.sessions[0].title = "Neu" }
+        store.flush()
+
+        wait(for: [persisted], timeout: 1)
+        XCTAssertEqual(spy.saveCount, 1, "Schnelle Mutationen muessen in genau einem Write landen")
+        XCTAssertEqual(spy.savedWorkspaces.first?.sessions.first?.title, "Neu")
     }
 
     func testFailedDebouncedSaveRetriesOnNextFlush() throws {
         let spy = PersistSpy()
+        let firstAttempt = expectation(description: "Erster Persist-Versuch schlaegt fehl")
+        let retrySucceeded = expectation(description: "Zweiter Persist-Versuch gelingt")
         let store = AgentWorkspaceStore(
             loadInitial: { .empty },
-            persist: { try spy.persist($0) },
+            persist: { workspace in
+                defer {
+                    if spy.saveCount == 0 {
+                        firstAttempt.fulfill()
+                    } else {
+                        retrySucceeded.fulfill()
+                    }
+                }
+                try spy.persist(workspace)
+            },
             policy: .debounced(10)
         )
 
         try store.mutate { $0.sessions.append(self.makeSession()) }
-        spy.failNextSave = true
+        spy.failNext()
         store.flush()
+        wait(for: [firstAttempt], timeout: 1)
         XCTAssertEqual(spy.saveCount, 0, "Fehlgeschlagener Save zählt nicht")
 
         // dirty-Flag muss gesetzt geblieben sein → Retry beim nächsten Flush.
         store.flush()
+        wait(for: [retrySucceeded], timeout: 1)
         XCTAssertEqual(spy.saveCount, 1)
+    }
+
+    func testWillTerminateDrainCompletesBeforeNotificationReturns() throws {
+        let spy = PersistSpy()
+        let notificationCenter = NotificationCenter()
+        let persistStarted = expectation(description: "Persist vor Terminate gestartet")
+        let allowPersist = DispatchSemaphore(value: 0)
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { workspace in
+                persistStarted.fulfill()
+                _ = allowPersist.wait(timeout: .now() + 2)
+                try spy.persist(workspace)
+            },
+            policy: .debounced(10),
+            notificationCenter: notificationCenter
+        )
+
+        try store.mutate { $0.sessions.append(self.makeSession(title: "Vor Terminate")) }
+        store.flush()
+        wait(for: [persistStarted], timeout: 1)
+
+        // Der laufende Drain hat dirty bereits zurueckgesetzt. Terminate muss
+        // trotzdem auf genau diesen noch nicht abgeschlossenen Write warten.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.05) {
+            allowPersist.signal()
+        }
+        notificationCenter.post(name: NSApplication.willTerminateNotification, object: nil)
+
+        XCTAssertEqual(spy.saveCount, 1, "Terminate muss ausstehende Aenderungen vor Rueckkehr sichern")
+        XCTAssertEqual(spy.savedWorkspaces.first?.sessions.first?.title, "Vor Terminate")
     }
 }
 

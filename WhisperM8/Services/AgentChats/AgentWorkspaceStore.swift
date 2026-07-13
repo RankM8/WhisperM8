@@ -39,6 +39,7 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     /// jetzt laufen sie einmal beim Initial-Load und nach jeder Mutation.
     private let normalize: (AgentWorkspace) -> AgentWorkspace
     private let policy: PersistencePolicy
+    private let notificationCenter: NotificationCenter
 
     /// Debounce-Zustand: serielle Queue + rearmierbarer WorkItem.
     private let flushQueue = DispatchQueue(label: "com.whisperm8.app.workspace-flush", qos: .utility)
@@ -66,27 +67,29 @@ final class AgentWorkspaceStore: @unchecked Sendable {
         loadInitial: @escaping () -> AgentWorkspace,
         persist: @escaping (AgentWorkspace) throws -> Void,
         normalize: @escaping (AgentWorkspace) -> AgentWorkspace = { $0 },
-        policy: PersistencePolicy = .immediate
+        policy: PersistencePolicy = .immediate,
+        notificationCenter: NotificationCenter = .default
     ) {
         self.loadInitial = loadInitial
         self.persist = persist
         self.normalize = normalize
         self.policy = policy
+        self.notificationCenter = notificationCenter
 
         if case .debounced = policy {
             // App-Ende darf keine gepufferten Änderungen verlieren.
-            terminateObserver = NotificationCenter.default.addObserver(
+            terminateObserver = notificationCenter.addObserver(
                 forName: NSApplication.willTerminateNotification,
                 object: nil,
                 queue: nil
             ) { [weak self] _ in
-                self?.flush(reason: "terminate")
+                self?.flushSync(reason: "terminate")
             }
 
             // Sicherheitsnetz gegen nicht-graceful Quit: Force-Quit/Crash kündigt
             // sich oft durch Fokusverlust an. Bei Resign-Active gepufferte
             // Änderungen sofort sichern (flush ist No-op, wenn nichts dirty ist).
-            resignObserver = NotificationCenter.default.addObserver(
+            resignObserver = notificationCenter.addObserver(
                 forName: NSApplication.didResignActiveNotification,
                 object: nil,
                 queue: nil
@@ -98,10 +101,10 @@ final class AgentWorkspaceStore: @unchecked Sendable {
 
     deinit {
         if let terminateObserver {
-            NotificationCenter.default.removeObserver(terminateObserver)
+            notificationCenter.removeObserver(terminateObserver)
         }
         if let resignObserver {
-            NotificationCenter.default.removeObserver(resignObserver)
+            notificationCenter.removeObserver(resignObserver)
         }
     }
 
@@ -154,15 +157,56 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     /// (Datenverlust-Diagnose): "debounce" (Timer), "terminate" (App-Ende),
     /// "create"/"delete" (strukturelle Mutation, crash-safe sofort).
     func flush(reason: String = "debounce") {
+        // Die Test-Policy behaelt ihre bisherige Semantik: Mutationen
+        // persistieren synchron, flush selbst ist ein vollstaendiger No-op.
+        guard case .debounced = policy else { return }
+
         lock.lock()
         pendingFlush?.cancel()
         pendingFlush = nil
-        guard dirty, canonical != nil else {
-            lock.unlock()
-            return
-        }
         lock.unlock()
 
+        // Auch strukturelle Sofort-Flushes umgehen nur das Debounce-Intervall,
+        // nie die Utility-Queue: JSON-Encoding und atomare Writes duerfen den
+        // MainActor nicht blockieren. Immer enqueueen: Falls ein laufender
+        // Persist gerade fehlschlaegt, setzt dessen Catch dirty erst danach
+        // wieder; der seriell nachgeordnete Drain muss diesen Retry sehen.
+        //
+        // BEWUSSTER TRADE-OFF (2026-07-13): "crash-safe sofort" heisst seit
+        // dem Async-Umbau "sofort enqueued", nicht "vor Rueckkehr auf Disk".
+        // Ein SIGKILL im Millisekunden-Fenster bis zum Drain verliert die
+        // letzte strukturelle Mutation — vorher blockierte dafuer der Main
+        // Thread pro Flush 50-200 ms (3-MB-Encode, der eigentliche
+        // Chat-Start-Freeze). Abgefedert wird das doppelt: graceful Quit
+        // wartet ueber flushSync/willTerminate, und verlorene Sessions
+        // adoptiert der Indexer-Scan aus den externen Transcripts zurueck
+        // (Superset-Prinzip). Restrisiko: backgroundShortID-Bindungen.
+        flushQueue.async { [weak self] in
+            self?.drain(reason: reason)
+        }
+    }
+
+    /// Ausschliesslich fuer willTerminate: NotificationCenter stellt den
+    /// Observer synchron auf dem Main Thread zu, daher muss vor der Rueckkehr
+    /// auch der serielle Persist-Drain abgeschlossen sein.
+    private func flushSync(reason: String) {
+        lock.lock()
+        pendingFlush?.cancel()
+        pendingFlush = nil
+        lock.unlock()
+
+        // Der Drain dispatcht selbst nie auf Main; flushQueue ist eine eigene
+        // Utility-Queue. sync muss auch bei dirty=false stattfinden: Ein Drain
+        // kann den Snapshot bereits beansprucht haben und noch im Write sein.
+        // So wartet Terminate verlustfrei, ohne einen zyklischen MainActor-Wait.
+        flushQueue.sync {
+            drain(reason: reason)
+        }
+    }
+
+    /// Laeuft ausnahmslos auf flushQueue. persistLock schuetzt weiterhin auch
+    /// gegen bereits gestartete Drains und zieht erst danach canonical neu.
+    private func drain(reason: String) {
         // Persist serialisieren: unter persistLock den NEUESTEN Stand ziehen —
         // ein parallel gestarteter zweiter Flush wartet hier und sieht danach
         // dirty=false (oder einen neueren Stand). So kann nie ein älterer
