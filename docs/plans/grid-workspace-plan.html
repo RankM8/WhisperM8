@@ -141,9 +141,9 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
 <div class="wrap">
 
 <header class="top">
-  <div class="status-chip">Vollständiger Umsetzungsplan · Stand 2026-07-13 · Basis: 5 Codex-Konsultationen + User-Entscheidungen</div>
+  <div class="status-chip">Vollständiger Umsetzungsplan · Stand 2026-07-13 · Review eingearbeitet (Jobs 01bde5b9 · 14d92786 · ff489fdb)</div>
   <h1>Grid-<em>Workspaces</em>: benannte Chat-Gruppen, Slots, Drag &amp; Drop, 2–9 Panes</h1>
-  <p class="lede">Workspaces sind benannte, kuratierte Chat-Gruppen: sichtbar als eigener Sidebar-Abschnitt, öffenbar als Slot-Grid, laufend anpassbar per Drag &amp; Drop. Produktgrundsätze: <b>Ein Klick navigiert, ein Drop kuratiert</b> — und <b>ein Drop blockiert nie</b> (das Grid wächst automatisch bis 3×3).</p>
+  <p class="lede">Workspaces sind benannte, kuratierte Chat-Gruppen: sichtbar als eigener Sidebar-Abschnitt, öffenbar als Slot-Grid, laufend anpassbar per Drag &amp; Drop. Produktgrundsätze: <b>Ein Klick navigiert, ein Drop kuratiert</b> — <b>ein Drop blockiert nie, bis 3×3 erreicht ist</b> (das Grid wächst automatisch; auf der Endstufe bleibt gezieltes Ersetzen immer möglich) — und <b>ein Workspace ist in genau einem Fenster live</b> (Single-Owner, kein stilles Stehlen von Terminals).</p>
 </header>
 
 <!-- ============ 01 FEATURE-ÜBERBLICK ============ -->
@@ -151,17 +151,18 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
   <h2><span class="idx">01 — ÜBERBLICK</span>Alle Features, die gebaut werden</h2>
   <table class="t">
     <tr><th>#</th><th>Feature</th><th>Paket</th></tr>
-    <tr><td>F1</td><td><b>perf.grid-Signposts + 4-Pane-Benchmark</b> — Budgets für Grid-Aufbau (50 ms), Fokuswechsel (33 ms), Divider-Tick (16 ms), Streaming-Frame (16,7 ms)</td><td><span class="pill pk1">Paket 1</span></td></tr>
-    <tr><td>F2</td><td><b>Divider-Drag entkoppelt</b> — Live-Wert lokal, Persistenz-Commit beim Loslassen, Pane-/PTY-Resize im 33–50-ms-Hybrid-Takt</td><td><span class="pill pk1">Paket 1</span></td></tr>
-    <tr><td>F3</td><td><b>SwiftTerm-Fork-Rebase</b> — PTY-Backpressure (#574, Anti-Freeze) + Resize-Fix (#573: 30–70 ms → 0,3 ms)</td><td><span class="pill pk1">Paket 1</span></td></tr>
-    <tr><td>F4</td><td><b>Workspace-Entities</b> — benannte, projektübergreifende Chat-Gruppen mit eigenem Slot-Layout (Kapazität, Belegung, Splits), global persistiert; Chat darf in mehreren Workspaces sein; Fenster referenziert den aktiven Workspace</td><td><span class="pill pk2">Paket 2</span></td></tr>
-    <tr><td>F5</td><td><b>Sidebar-Abschnitt WORKSPACES</b> — einklappbar, volle Chat-Listen-Optik (Gruppen-Header + SessionListButton-Rows mit Live-Status); Klick auf Header/⊞ = Grid öffnen, Klick auf Chat-Row = normal laden; unsichtbar bei null Workspaces</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F1</td><td><b>perf.grid-Signposts + Cast-Replay-Benchmark (4/6/9 Panes)</b> — Budgets für Grid-Aufbau (50 ms), Fokuswechsel (33 ms), Divider-Tick (16 ms), Streaming-Frame (16,7 ms); Freigabe-Gates als p95, nicht als Einzelwerte</td><td><span class="pill pk1">Paket 1</span></td></tr>
+    <tr><td>F2</td><td><b>Divider-Drag entkoppelt</b> — eigenes Grid-Subview mit lokalem Live-Wert, Persistenz-Commit beim Loslassen, Pane-/PTY-Resize im 33-ms-Coalescing-Takt</td><td><span class="pill pk1">Paket 1</span></td></tr>
+    <tr><td>F3</td><td><b>SwiftTerm-Rebase auf v1.14.0</b> — enthält #573 (Resize), #574 (PTY-Backpressure) und #548 (Metal-Reparenting) bereits upstream; Fork neu auf das Tag aufsetzen, nur unsere 2 Selection-Patches klein neu implementieren</td><td><span class="pill pk1">Paket 1</span></td></tr>
+    <tr><td>F4</td><td><b>Workspace-Entities</b> — benannte, projektübergreifende Chat-Gruppen mit eigenem Slot-Layout (Kapazität, Belegung, Splits), global persistiert (Schema v4); Chat darf in mehreren Workspaces sein; Fenster referenziert den aktiven Workspace; <b>Single-Owner:</b> ein Workspace ist höchstens in einem Fenster live</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F5</td><td><b>Sidebar-Abschnitt WORKSPACES</b> — einklappbar, volle Chat-Listen-Optik (Gruppen-Header + SessionListButton-Rows mit Live-Status); Klick auf Header/⊞ = Grid öffnen, Klick auf Chat-Row = normal laden; Umbenennen, Farbe, Löschen und Reorder der Workspaces; unsichtbar bei null Workspaces</td><td><span class="pill pk2">Paket 2</span></td></tr>
     <tr><td>F6</td><td><b>Slot-Grid mit stabilen Positionen</b> — feste Slots, leere Slots bleiben sichtbar, nichts rückt nach; Verdrängungs-Automatik ersatzlos entfernt</td><td><span class="pill pk2">Paket 2</span></td></tr>
     <tr><td>F7</td><td><b>Volles Drag &amp; Drop</b> — Pane-Header ziehen = tauschen/verschieben; Tab/Sidebar-Chat auf Pane = ersetzen, auf leeren Slot = einfügen; Drag auf eine Workspace-Gruppe in der Sidebar = aufnehmen; Kontextmenü „Im Workspace platzieren → Slot N" als präziser Weg ohne Drag</td><td><span class="pill pk2">Paket 2</span></td></tr>
-    <tr><td>F8</td><td><b>Auto-Wachsen</b> — volles Grid + Drop → Erweitern-Zone, Stufe wächst 2→3→4→6→9; nie automatisches Schrumpfen</td><td><span class="pill pk2">Paket 2</span></td></tr>
-    <tr><td>F9</td><td><b>Einzelansicht-Navigation</b> — Klick auf einen Chat außerhalb des Workspace ändert das Grid nie; „Zurück zum Workspace ‹Name›" stellt es exakt wieder her; Maximize/Minimize bleiben</td><td><span class="pill pk2">Paket 2</span></td></tr>
-    <tr><td>F10</td><td><b>Kapazitäten 6 (3×2) und 9 (3×3)</b> — Fraction-Arrays für Splits, Freischaltung nach grünem Benchmark; Mindest-Pane 240 pt als natürliche Grenze</td><td><span class="pill pk3">Paket 3</span></td></tr>
-    <tr><td>F11</td><td><b>Feed-Drosselung nicht-fokussierter Panes</b> (20–30 Hz, ohne Fork) + <b>Metal-Renderer per A/B zum Default</b>; danach datengetrieben: Monitor-Router, Occlusion-Pause</td><td><span class="pill pk3">Paket 3</span></td></tr>
+    <tr><td>F8</td><td><b>Auto-Wachsen</b> — volles Grid + Drop → Erweitern-Zone, Stufe wächst 2→3→4→6→9; nie automatisches Schrumpfen; auf der vollen Endstufe 3×3 wird ein Gruppen-Drop klar abgelehnt (gezieltes Ersetzen auf eine Pane bleibt immer möglich)</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F9</td><td><b>Einzelansicht-Navigation + Fokus-Modell</b> — Klick auf einen Chat außerhalb des Workspace ändert das Grid nie; „Zurück zum Workspace ‹Name›" stellt es exakt wieder her; Maximize/Minimize bleiben; Dictation routet über das Key-Window; Tastatur-Fokuswechsel zwischen Panes</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F10</td><td><b>Kapazitäten 6 (3×2) und 9 (3×3)</b> — Fraction-Arrays für Splits, Freischaltung erst nach echtem 9-Live-Terminal-Test (nicht nur 4-Pane-Benchmark); Mindest-Pane 240 pt als natürliche Grenze</td><td><span class="pill pk3">Paket 3</span></td></tr>
+    <tr><td>F11</td><td><b>Feed-Drosselung nicht-fokussierter Panes</b> (12,5 Hz / 80 ms, 256-KiB-Puffergrenze, nie Byte-Verlust, Flush vor Fokuswechsel) + <b>Metal-Renderer per A/B zum Default</b>; danach datengetrieben: Monitor-Router, Occlusion-Pause</td><td><span class="pill pk3">Paket 3</span></td></tr>
+    <tr><td>F12</td><td><b>Transcript-LRU-Cache + schnelles Re-Attach</b> — geteilter Cache über alle Panes, begrenzte Lade-Parallelität, frame-basiertes zellquantisiertes Terminal-Layout; Ziel: Workspace-Wechsel &lt;100 ms bei bis zu 9 Panes</td><td><span class="pill pk3">Paket 3</span></td></tr>
   </table>
 </section>
 
@@ -177,6 +178,8 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
     <span class="key">Header → Pane = tauschen</span>
     <span class="key">Drop auf Gruppe = aufnehmen</span>
     <span class="key">voll + Drop = wächst</span>
+    <span class="key">Dblklick Gruppen-Name = umbenennen</span>
+    <span class="key">Verkleinern = 2× klicken (Vorschau)</span>
     <div class="cap-picker" id="cap">
       <button data-c="2">2</button><button data-c="3">3</button>
       <button data-c="4">2×2</button><button data-c="6">3×2</button>
@@ -206,8 +209,8 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
       <span class="tag">Grundsatz 1</span>
       <h3>Ein Klick navigiert, ein Drop kuratiert</h3>
       <ul>
-        <li>Sidebar-/Tab-Klick auf einen Chat außerhalb des aktiven Workspace ändert das Grid <b>nie</b> — Einzelansicht öffnet sich, „Zurück zum Workspace ‹Name›" stellt es exakt wieder her</li>
-        <li>Klick auf einen Chat, der IM aktiven Grid liegt → dessen Pane wird fokussiert</li>
+        <li><b>Quellenunabhängige Klickregel:</b> Ist der Chat im gerade sichtbaren Workspace platziert, fokussiert jeder einfache Klick (Projekt-Row, Workspace-Row, Tab) dessen Pane; andernfalls öffnet er die Einzelansicht</li>
+        <li>Navigation verändert <b>nie</b> Slots oder den gespeicherten Pane-Fokus — „Zurück zum Workspace ‹Name›" stellt das Grid exakt wieder her</li>
         <li>Nur Drops und der Platzieren-Befehl verändern die Belegung; <code>bringSelectionIntoGrid</code> + Verdrängungs-Automatik werden ersatzlos entfernt</li>
       </ul>
     </div>
@@ -216,8 +219,27 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
       <h3>Stabile Positionen + Auto-Wachsen</h3>
       <ul>
         <li>Feste Slots; ⊖ leert nur den Slot (Tab + Prozess bleiben), nichts rückt nach</li>
-        <li><b>Ein Drop blockiert nie:</b> volles Grid + Drop → Erweitern-Zone → nächste Stufe (2→3→4→6→9), neuer Chat in den ersten neuen Slot</li>
-        <li>Nie automatisches Schrumpfen — verkleinern nur über den Kapazitäts-Picker (zeigt vorher, welche Chats den Workspace verlassen)</li>
+        <li><b>Ein Drop blockiert nie — bis 3×3:</b> volles Grid + Drop → Erweitern-Zone → nächste Stufe (2→3→4→6→9), neuer Chat in den ersten neuen Slot; auf der Endstufe wird ein Gruppen-Drop mit Erklärung abgelehnt, gezieltes Ersetzen bleibt</li>
+        <li>Nie automatisches Schrumpfen — Verkleinern nur über den Kapazitäts-Picker mit <b>Vorschau + Bestätigung</b>; die bestätigte Entfernen-Liste wird beim Anwenden abgeglichen, eine veraltete Bestätigung entfernt nie inzwischen neu platzierte Chats</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Multi-Window &amp; Fokus</span>
+      <h3>Single-Owner, kein stilles Stehlen</h3>
+      <ul>
+        <li>Ein Workspace ist in genau <b>einem</b> Fenster live; zweiter Öffnungsversuch fokussiert das Besitzerfenster (<code>.alreadyActive</code>) und mutiert nichts — auch überlappende Workspaces rendern eine Session nie doppelt</li>
+        <li>Liegt ein Slot-Chat als Tab in einem anderen Fenster, wird die Aktivierung blockiert (<code>.blockedByWindowOwnership</code>) statt Terminal-Views zu reparenten; Übernahme nur als expliziter, atomarer Transfer-Befehl</li>
+        <li>Im Grid ist <code>selectedSessionID</code> der Pane-Fokus (nur belegte Slots gültig); Dictation routet über das Key-Window (ephemeres <code>keyAgentChatWindowID</code>) — Selektion in Nicht-Key-Fenstern ändert das Routing nie</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Löschen &amp; Leerzustände</span>
+      <h3>Deterministisch statt undefiniert</h3>
+      <ul>
+        <li>Workspace löschen: Entity + alle Fenster-Referenzen (<code>activeWorkspaceID</code>, <code>showsGrid</code>, Fokus, Rücksprungziel) in <b>einer</b> Mutation bereinigt — Tabs, Chats und Prozesse bleiben unangetastet</li>
+        <li>Letzter Chat entfernt: Workspace bleibt als <code>0/N</code> bestehen (Kapazität unverändert), Pane-Fokus und Dictation-Kontext werden <code>nil</code></li>
+        <li>Fokussierte Pane entfernt/archiviert: Fallback auf den nächsten belegten Slot, sonst den vorherigen, sonst <code>nil</code></li>
+        <li>Archivieren leert die Slots in allen Workspaces am Index (Restore fügt <b>nicht</b> automatisch wieder ein); geschlossene, resumierbare Chats bleiben dagegen normale Slot-Mitglieder</li>
       </ul>
     </div>
     <div class="box">
@@ -236,8 +258,9 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
       <ul>
         <li>Eigener einklappbarer Abschnitt <b>unter GEPINNT, über den Projekten</b>; unsichtbar bei null Workspaces</li>
         <li>Volle Chat-Listen-Optik: Gruppen-Header (Farbe/Initial + Name + Zähler + ⊞) und darunter unveränderte <code>SessionListButton</code>-Rows (Live-Status, Kontextmenü, Slot-Nummer als Badge)</li>
-        <li>Anlegen: ＋ im Abschnitts-Header, „Neuer Workspace aus Auswahl" (Multi-Select), Umbenennen/Farbe/Löschen per Kontextmenü — Löschen löscht nie Chats</li>
-        <li><b>Projektübergreifend</b> (Arbeitskontexte, keine Projektstruktur) und <b>Mehrfach-Mitgliedschaft</b> erlaubt (Referenzen, wie Playlists)</li>
+        <li>Anlegen: ＋ im Abschnitts-Header, „Neuer Workspace aus Auswahl" (Multi-Select, max. 9 — Überzählige werden benannt abgelehnt), Umbenennen/Farbe/Löschen per Kontextmenü, Reorder per Drag — Löschen löscht nie Chats</li>
+        <li><b>Workspace-bewusste Aktionen:</b> „Aus Workspace entfernen" innerhalb einer Gruppe wirkt auf genau diese Gruppe; das Slot-Badge (S1–S9) zeigt die Platzierung im jeweiligen Workspace — auf Projekt-Rows nur die des aktiven</li>
+        <li><b>Projektübergreifend</b> (Arbeitskontexte, keine Projektstruktur) und <b>Mehrfach-Mitgliedschaft</b> erlaubt (Referenzen, wie Playlists) — aber nie gleichzeitig in zwei Fenstern gerendert</li>
       </ul>
     </div>
   </div>
@@ -246,7 +269,7 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
 <!-- ============ 04 KAPAZITÄT ============ -->
 <section>
   <h2><span class="idx">04 — KAPAZITÄT</span>2 bis 9 Panes pro Workspace</h2>
-  <p class="sub">Jeder Workspace merkt sich Kapazität, Belegung und Split-Verhältnisse selbst. Stufen wachsen automatisch beim Reinwerfen und sind manuell im Grid-Chrome wählbar; auf kleinen Fenstern blendet der Picker unpassende Stufen aus (Mindest-Pane ~240 pt).</p>
+  <p class="sub">Jeder Workspace merkt sich Kapazität, Belegung und Split-Verhältnisse selbst. Stufen wachsen automatisch beim Reinwerfen und sind manuell im Grid-Chrome wählbar; auf kleinen Fenstern blendet der Picker unpassende Stufen aus (Mindest-Pane ~240 pt). <b>Fraction-Schema:</b> pro Achse positive Gewichte mit Summe 1 und exakt Spalten-/Zeilenanzahl Einträgen; ungültige Achsen werden gleichverteilt repariert, bei Kapazitätswechsel bleibt eine Achse erhalten, wenn ihre Elementzahl gleich bleibt. Öffnet ein gespeicherter 3×3-Workspace in einem zu kleinen Fenster, wird die Fenster-Mindestgröße angehoben statt Panes unter 240 pt zu quetschen.</p>
   <table class="t">
     <tr><th>Stufe</th><th>Layout</th><th>Mindest-Fensterbreite</th><th>Status</th></tr>
     <tr><td><b>2</b> / <b>3</b> / <b>4</b></td><td>1×2 · 2 oben + 1 breit · 2×2</td><td>~480 pt</td><td>Paket 2</td></tr>
@@ -258,16 +281,18 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
 <!-- ============ 05 PERFORMANCE ============ -->
 <section>
   <h2><span class="idx">05 — PERFORMANCE</span>Das Messprogramm (Voraussetzung für 6–9)</h2>
-  <p class="sub">Befund der beiden Performance-Konsultationen: Der dominante Hotspot ist der ungepufferte Divider-Drag-Pfad (jeder Maus-Tick invalidiert den Fenster-Body, <code>headerTabs</code> wird ~12× neu berechnet), und unser SwiftTerm-Fork verpasst zwei kritische Upstream-Fixes.</p>
+  <p class="sub">Befund der Performance-Konsultationen + Blaupause (Job <code>ff489fdb</code>): Der dominante Hotspot ist der ungepufferte Divider-Drag-Pfad (jeder Maus-Tick invalidiert den Fenster-Body, <code>headerTabs</code> wird ~12× neu berechnet). Wichtigster neuer Fund: <b>SwiftTerm v1.14.0</b> (10. Juli 2026) enthält #573/#574/#548 bereits — statt Cherry-Picks wird der Fork neu auf das Tag aufgesetzt, nur unsere 2 Selection-Patches werden klein neu implementiert (2 der 4 lokalen Patches sind upstream obsolet). Metal allein löst den Main-Thread-Engpass nicht.</p>
   <table class="t">
     <tr><th></th><th>Maßnahme</th><th>Effekt</th></tr>
-    <tr><td><span class="pill p0">P0</span></td><td>perf.grid-Signposts + fester 4-Pane-Benchmark</td><td>Jede weitere Maßnahme wird belegbar</td></tr>
-    <tr><td><span class="pill p0">P0</span></td><td>Divider-Drag entkoppeln (lokaler Live-Wert, Commit bei DragEnd, 33–50-ms-Resize-Hybrid)</td><td>Body-Re-Eval pro Maus-Tick + Reflow-Stürme weg</td></tr>
-    <tr><td><span class="pill p0">P0</span></td><td>SwiftTerm-Rebase: PTY-Backpressure (#574) + Resize-Fix (#573)</td><td>Anti-Freeze; Divider-Drag ×N Panes wird billig</td></tr>
-    <tr><td><span class="pill p1">P1</span></td><td>Feed-Drosselung nicht-fokussierter Panes (20–30 Hz via dataReceived-Override)</td><td>Halbiert Frame-Arbeit; macht 6–9 realistisch</td></tr>
-    <tr><td><span class="pill p1">P1</span></td><td>Metal-Renderer per A/B zum Default (perFrameAggregated vs. perRowPersistent)</td><td>CoreText-CPU-Last runter</td></tr>
-    <tr><td><span class="pill p2">P2</span></td><td>Geteilter NSEvent-Monitor-Router · Occlusion-Pause · headerTabs-Snapshot</td><td>Datengetriebene Aufräumarbeiten</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td>perf.grid-Signposts + Cast-Replay-Benchmark (asciinema/termcast-Fixture statt <code>yes</code>; Matrix 4/6/9 Panes, realistic + burst, 3 Renderer)</td><td>Jede weitere Maßnahme wird belegbar; Freigabe-Gates als p95</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td>Divider-Drag entkoppeln (eigenes Grid-Subview, lokaler Live-Wert, Commit bei DragEnd, 33-ms-Task-Coalescing, zellquantisiertes Layout)</td><td>Body-Re-Eval pro Maus-Tick + Reflow-Stürme weg</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td>SwiftTerm-Rebase auf v1.14.0 + 2 Selection-Restpatches (Resize #573, PTY-Backpressure #574, Metal-Reparenting #548 upstream enthalten)</td><td>Anti-Freeze; Divider-Drag ×N Panes wird billig; Leak-Fixes gratis</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td>Feed-Drosselung nicht-fokussierter Panes (12,5 Hz / 80 ms, 256-KiB-Grenze, phasenversetzt, Flush vor Fokuswechsel — nie Byte-Verlust)</td><td>Parser-/Render-Arbeit skaliert nicht mehr linear; macht 6–9 realistisch</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td>Transcript-LRU-Cache (geteilt, max. 2 parallele Reads) + frame-basiertes Re-Attach ohne Constraint-Churn</td><td>Workspace-Wechsel &lt;100 ms; Fokus-Pane interaktiv &lt;50 ms</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td>Metal-Renderer per A/B zum Default (perFrameAggregated vs. perRowPersistent, RSS/GPU-Memory bei 9 Instanzen prüfen)</td><td>CoreText-CPU-Last runter — nur datengetrieben</td></tr>
+    <tr><td><span class="pill p2">P2</span></td><td>Geteilter NSEvent-Monitor-Router · Occlusion-Pause · Lazy-Hydration in 2er-Batches (nur falls Messung &gt;50 ms zeigt)</td><td>Datengetriebene Aufräumarbeiten</td></tr>
   </table>
+  <p class="sub" style="margin-top:14px;">Freigabe-Gates (p95, auf dem langsamsten unterstützten Gerät): <code>grid.build</code> ≤50 ms · Workspace-Wechsel bis interaktiv ≤100 ms · Fokus ≤33 ms · angewandter Divider-Tick ≤16 ms · Streaming-Flush ≤16,7 ms · keine Main-Thread-Stalls &gt;100 ms. Kapazitäten 6/9 werden erst nach einem echten 9-Live-Terminal-Test freigeschaltet (RAM, Fokuswechsel, Resize, Streaming) — ein 4-Pane-Benchmark reicht nicht.</p>
 </section>
 
 <!-- ============ 06 TECHNIK ============ -->
@@ -278,18 +303,19 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
       <span class="tag">Datenmodell</span>
       <h3>Workspace als Entity, nicht Fenster-Zustand</h3>
       <ul>
-        <li><code>AgentGridWorkspace { id, name, colorHex, slots: [UUID?], capacity, columnFractions, rowFractions }</code> — global in <code>agent-ui-state.json</code>, Liste + Reihenfolge</li>
-        <li>Fenster referenziert nur <code>activeWorkspaceID</code> + <code>showsGrid</code>; die bisherigen <code>gridSessionIDs</code> werden einmalig in einen Default-Workspace migriert (Legacy-Key bleibt lesbar)</li>
-        <li>Manueller Decoder mit decodeIfPresent (etabliertes Muster gegen den dokumentierten Tab-State-Totalverlust); Normalisierung: geschlossene/archivierte Sessions werden am Slot-Index zu <code>nil</code> — nie kompaktiert</li>
-        <li>Slots referenzieren Sessions (nicht Tabs) — Öffnen eines Workspace stellt fehlende Tabs her</li>
+        <li><code>AgentGridWorkspace { id, name, colorHex, slots: [UUID?], capacity, columnFractions, rowFractions }</code> — global in <code>agent-ui-state.json</code>, Array-Reihenfolge = Sidebar-Reihenfolge (keine zweite Order-Liste)</li>
+        <li>Fenster referenziert nur <code>activeWorkspaceID</code> + <code>showsGrid</code>; <b>Migration v3→v4:</b> pro Legacy-Fenster mit Grid entsteht ein eigener Workspace („Grid", „Grid 2", …) — leere Mitgliedschaft wird vorher über die heutige <code>visibleMembers</code>-Logik materialisiert, <code>showsGrid</code>, Tab-Reihenfolge und die globalen <code>@AppStorage</code>-Splits werden übernommen; idempotent, Legacy-Key bleibt lesbar, wird nie mehr encodiert</li>
+        <li>Manueller Decoder mit decodeIfPresent (etabliertes Muster gegen den dokumentierten Tab-State-Totalverlust); Normalisierung: <b>nur fehlende und archivierte</b> Sessions werden am Slot-Index zu <code>nil</code> — geschlossene (resumierbare) Chats bleiben; nie kompaktiert</li>
+        <li>Slots referenzieren Sessions (nicht Tabs) — Aktivieren materialisiert fehlende Tabs in Slot-Reihenfolge hinten, ohne bestehende Tabs zu schließen oder umzusortieren; Prozesse startet es nie</li>
       </ul>
     </div>
     <div class="box">
       <span class="tag">Drag &amp; Drop</span>
-      <h3>DropDelegate-Muster + Slot-Herkunft</h3>
+      <h3>DropDelegate-Muster + eindeutige Herkunft</h3>
       <ul>
         <li><code>GridPaneDropDelegate</code> nach dem bewährten TabReorderDropDelegate-Muster; pure <code>GridDropZoneResolver</code>- und <code>WorkspaceSlotOps</code>-Logik (Swap/Replace/Insert/Grow), unit-getestet</li>
-        <li><code>DraggableSession</code> + optionales <code>sourceGridSlotIndex</code> (alte Payloads bleiben decodierbar); Sidebar-Workspace-Gruppen werden Drop-Ziele</li>
+        <li><code>DraggableSession</code> + <code>sourceWindowID</code>/<code>sourceWorkspaceID</code>/<code>sourceSlotIndex</code> (alte Payloads bleiben decodierbar) — nur mit passender Workspace-Herkunft ist ein Drop Swap/Move, sonst Add/Place; Sidebar-Workspace-Gruppen werden Drop-Ziele</li>
+        <li>Jeder Drop liest den Workspace auf dem MainActor neu und läuft als <b>eine</b> Store-Mutation (Add + Auto-Grow + Tab-Materialisierung + Fokus atomar); zwei schnelle Drops wachsen dadurch genau einmal</li>
         <li>Drag-Quelle: nur Pane-Header; Doppelklick-Maximize bleibt; Fokus nach Slot-Mutation explizit neu setzen; Frames atomar committen (CATransaction)</li>
       </ul>
     </div>
@@ -305,8 +331,26 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
       <span class="tag">SwiftTerm</span>
       <h3>Kein Prozessverlust, keine Überraschungen</h3>
       <ul>
-        <li>PTY/Scrollback hängen an der sessionID-Registry — Workspace-Wechsel und Slot-Tausch sind reine Re-Attaches (verifiziert)</li>
+        <li>PTY/Scrollback hängen an der sessionID-Registry — Workspace-Wechsel und Slot-Tausch sind reine Re-Attaches (verifiziert); off-workspace bleiben nur Controller/PTY erhalten, keine NSViews im Window</li>
         <li>Nur die Fokus-Pane bekommt Auto-Launch/-Fokus (<code>suppressesAutoActivation</code> bleibt); Workspace-Öffnen startet nie ungefragt Prozesse</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Store-API &amp; Persistenz</span>
+      <h3>Ein Owner, atomare Mutationen, kein stiller Verlust</h3>
+      <ul>
+        <li><code>AgentWindowStore</code> bleibt alleiniger Owner des UI-States (kein separater Workspace-Store) — Aktivierung, Tab-Eigentum, Fensterselektion und Slot-Belegung ändern sich in <b>einer</b> Mutation</li>
+        <li><code>activate()</code> liefert Konflikt-Ergebnisse (<code>.alreadyActive(ownerWindow)</code>, <code>.blockedByWindowOwnership</code>) statt Teilmutationen; <code>setCapacity</code> verlangt die bestätigte Eviction-Liste (<code>expectedEvictedSessionIDs</code>)</li>
+        <li>Save-Fehler nicht mehr per <code>try?</code> verschlucken: loggen, dirty behalten, beim nächsten Debounce/Flush erneut versuchen; Workspace-Delete und bestätigter Shrink flushen sofort; <code>stateRevision</code>-Guard gegen Debounce-Races</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Testplan</span>
+      <h3>Die Matrix steht schon (Robustheits-Spez)</h3>
+      <ul>
+        <li>~90 benannte Tests in 5 Dateien: <code>AgentGridWorkspaceTests</code>, <code>AgentUIStateTests</code> (Migration), <code>WorkspaceSlotOpsTests</code>, <code>AgentWindowStoreTests</code>, <code>AgentChatFocusRoutingTests</code> + <code>…CascadeTests</code></li>
+        <li>Deckt Codable-Abwärtskompatibilität, v3→v4-Migration, alle Invarianten, Slot-Ops inkl. Auto-Grow-Kanten, Multi-Window-Politik, Archiv-/Delete-Kaskaden</li>
+        <li>Volltext der Spezifikation: Codex-Job <code>14d92786</code> (<code>whisperm8 agent status 14d92786</code>)</li>
       </ul>
     </div>
   </div>
@@ -317,9 +361,9 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
   <h2><span class="idx">07 — REIHENFOLGE</span>Drei Pakete, einzeln shipbar</h2>
   <table class="t">
     <tr><th>Paket</th><th>Inhalt</th><th>Aufwand</th></tr>
-    <tr><td><span class="pill pk1">Paket 1</span><br><b>Perf-Fundament</b></td><td>F1 Signposts + Benchmark · F2 Divider-Entkopplung · F3 SwiftTerm-Rebase</td><td>~1–2 Tage</td></tr>
-    <tr><td><span class="pill pk2">Paket 2</span><br><b>Workspaces</b></td><td>F4 Entities + Migration · F5 Sidebar-Abschnitt · F6 Slot-Grid · F7 Drag &amp; Drop · F8 Auto-Wachsen · F9 Einzelansicht-Navigation — inkl. Kapazitäten 2/3/4</td><td>~7–11 Tage</td></tr>
-    <tr><td><span class="pill pk3">Paket 3</span><br><b>Skalierung</b></td><td>F10 Kapazitäten 6/9 (Fraction-Arrays, Freischaltung nach Benchmark) · F11 Feed-Drosselung + Metal-A/B, danach P2-Maßnahmen datengetrieben</td><td>~2–3 Tage</td></tr>
+    <tr><td><span class="pill pk1">Paket 1</span><br><b>Perf-Fundament</b></td><td>F1 Signposts + Cast-Replay-Benchmark · F2 Divider-Entkopplung (eigenes Grid-Subview) · F3 SwiftTerm-Rebase auf v1.14.0</td><td>~2–3 Tage</td></tr>
+    <tr><td><span class="pill pk2">Paket 2</span><br><b>Workspaces</b></td><td>F4 Entities + v4-Migration + Single-Owner · F5 Sidebar-Abschnitt inkl. Rename/Farbe/Delete/Reorder · F6 Slot-Grid · F7 Drag &amp; Drop (eindeutige Payload, atomare Drops) · F8 Auto-Wachsen · F9 Einzelansicht + Key-Window-Dictation-Routing + Tastatur-Fokus — inkl. Kapazitäten 2/3/4 und der ~90-Tests-Matrix</td><td>~10–14 Tage</td></tr>
+    <tr><td><span class="pill pk3">Paket 3</span><br><b>Skalierung</b></td><td>F10 Kapazitäten 6/9 (Fraction-Arrays, Freischaltung nach echtem 9-Live-Test) · F11 Feed-Drosselung + Metal-A/B · F12 Transcript-LRU + schnelles Re-Attach, danach P2-Maßnahmen datengetrieben</td><td>~3–4 Tage</td></tr>
   </table>
   <div class="cols" style="margin-top:14px;">
     <div class="box wide">
@@ -327,15 +371,27 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
       <h3>Erst messen, dann umbauen, dann skalieren</h3>
       <ul>
         <li>Paket 1 ist klein, sofort spürbar (Divider-Drag) und misst Paket 2+3 gleich mit</li>
-        <li>Paket 2 baut direkt auf Workspace-Entities — kein Zwischenschritt über Fenster-Slots, der sofort wieder migriert werden müsste</li>
-        <li>Paket 3 schaltet 6–9 erst frei, wenn der Benchmark zeigt, dass 9 streamende TUIs die Budgets halten</li>
+        <li>Paket 2 baut direkt auf Workspace-Entities — kein Zwischenschritt über Fenster-Slots, der sofort wieder migriert werden müsste; die Schätzung wurde nach dem Review angehoben (Ownership-Koordination, Key-Window-Routing, mehrfenstrige Migration und Persistenz-Härtung sind jetzt eingepreist)</li>
+        <li>Paket 3 schaltet 6–9 erst frei, wenn der 9-Live-Terminal-Test zeigt, dass die Budgets halten</li>
       </ul>
     </div>
   </div>
 </section>
 
+<!-- ============ 08 REVIEW ============ -->
+<section>
+  <h2><span class="idx">08 — REVIEW-ERGEBNIS</span>Adversarialer Review + Robustheits-Spez: eingearbeitet</h2>
+  <p class="sub">Drei Codex-Jobs haben den Plan vor Baubeginn geprüft: adversarialer Review (<code>01bde5b9</code>, 5 Blocker + 9 Majors — alle oben in Abschnitte 01/03/04/06/07 eingearbeitet), Robustheits-Spezifikation (<code>14d92786</code>, Datenmodell/Invarianten/Store-API/Test-Matrix) und Performance-Blaupause (<code>ff489fdb</code>, SwiftTerm v1.14.0 + Umsetzungsreihenfolge). Drei Produktfragen wurden dabei entschieden:</p>
+  <table class="t">
+    <tr><th>Entscheidung</th><th>Gewählt</th><th>Begründung</th></tr>
+    <tr><td><b>A · Multi-Window</b></td><td>Single-Owner: Workspace live in genau einem Fenster, zweiter Versuch fokussiert das Besitzerfenster</td><td>Beide Reviews einig; eine Terminal-View lebt nur in einer Hierarchie — kein stilles Stehlen, kein Read-only-Spiegel</td></tr>
+    <tr><td><b>B · Mitgliedschaft = Belegung</b></td><td>Slots-only, max. 9; „ein Drop blockiert nie" gilt ehrlich bis 3×3</td><td>Bewusst gegen das Overflow-Modell („12 Chats · 9 platziert"): deutlich einfacher, und mehr als 9 gerenderte Terminals sind ohnehin das Performance-Limit</td></tr>
+    <tr><td><b>C · Archivieren</b></td><td>Slot wird <code>nil</code> in allen Workspaces; Restore fügt nicht automatisch wieder ein</td><td>Konsistent mit dem Prune-Verhalten aller übrigen UI-Referenzen (Tabs, Pins, Unread); geschlossene Chats bleiben dagegen Slot-Mitglieder</td></tr>
+  </table>
+</section>
+
 <footer>
-  WhisperM8 · Grid-Workspace-Plan (vollständig) · 2026-07-13 · Codex-Konsultationen: UX 510e8456 · Recherche b778a065 · Machbarkeit 5a85b81b · Perf-Recherche dc7409f5 · Perf-Code d4450222 · Textplan: <code>docs/plans/split-grid-agenten.md</code> · Vorgänger: <code>grid-maximize-minimize-konzept.html</code>
+  WhisperM8 · Grid-Workspace-Plan (vollständig, review-geprüft) · 2026-07-13 · Konsultationen: UX 510e8456 · Recherche b778a065 · Machbarkeit 5a85b81b · Perf dc7409f5/d4450222 · Review 01bde5b9 · Robustheit 14d92786 · Perf-Blaupause ff489fdb · <code>docs/plans/split-grid-agenten.md</code> dokumentiert den Ist-Stand (V2.1) und ist durch diesen Plan abgelöst · Vorgänger: <code>grid-maximize-minimize-konzept.html</code>
 </footer>
 </div>
 
@@ -414,8 +470,10 @@ function addToWorkspace(w, id) {
 }
 function handleSlotDrop(targetIndex, payload) {
   const w = ws();
-  const { id, fromSlot } = payload;
+  const { id } = payload;
   const targetID = w.slots[targetIndex];
+  // Slot-Herkunft zählt nur bei passender Workspace-Herkunft (sonst Add/Place statt Move)
+  const fromSlot = payload.wsId === w.id ? payload.fromSlot : null;
   if (fromSlot !== null && fromSlot !== undefined && fromSlot >= 0) {
     if (targetIndex === fromSlot) return;
     w.slots[fromSlot] = targetID;
@@ -438,10 +496,10 @@ function handleSlotDrop(targetIndex, payload) {
 }
 
 // ================= Drag-Helfer =================
-function makeDragSource(el, id, fromSlot) {
+function makeDragSource(el, id, fromSlot, wsId) {
   el.draggable = true;
   el.addEventListener("dragstart", e => {
-    e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot }));
+    e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot, wsId: wsId || null }));
     e.dataTransfer.effectAllowed = "move";
     e.stopPropagation();
     const w = ws();
@@ -529,6 +587,11 @@ function renderSidebar() {
         toast("Workspace „" + w.name + "“ als Grid geöffnet");
         render();
       });
+      head.addEventListener("dblclick", e => {
+        e.stopPropagation();
+        const neu = window.prompt("Workspace umbenennen:", w.name);
+        if (neu && neu.trim()) { w.name = neu.trim(); toast("Umbenannt in „" + w.name + "“"); render(); }
+      });
       g.appendChild(head);
       w.slots.forEach((id, i) => {
         if (!id) return;
@@ -536,7 +599,17 @@ function renderSidebar() {
         const row = document.createElement("div");
         row.className = "srow" + (view.mode === "single" && view.id === id ? " sel" : "");
         row.innerHTML = '<span class="sdot ' + c.dot + '"></span><span class="nm">' + c.name + '</span><span class="slotno">S' + (i + 1) + "</span>";
-        row.addEventListener("click", e => { e.stopPropagation(); openSingle(id); });
+        // Quellenunabhängige Klickregel: liegt der Chat im sichtbaren Workspace → Pane fokussieren
+        row.addEventListener("click", e => {
+          e.stopPropagation();
+          if (view.mode === "grid" && w.id === activeWS) {
+            focusID = id;
+            toast("Fokus auf Pane — Chat liegt im sichtbaren Workspace");
+            render();
+          } else {
+            openSingle(id);
+          }
+        });
         makeDragSource(row, id, null);
         g.appendChild(row);
       });
@@ -652,7 +725,7 @@ function renderContent() {
         '<button class="pbtn" data-max title="Maximieren">⤢</button>' +
         '<button class="pbtn" data-rm title="Aus dem Workspace (Tab bleibt)">⊖</button></div>' +
         '<div class="pterm">' + c.lines.join("<br>") + "</div>";
-      makeDragSource(el.querySelector(".phead"), id, i);
+      makeDragSource(el.querySelector(".phead"), id, i, w.id);
       el.querySelector("[data-rm]").addEventListener("click", e => {
         e.stopPropagation();
         w.slots[i] = null;
@@ -686,9 +759,23 @@ $grow.addEventListener("drop", e => {
     if (payload && payload.id) { addToWorkspace(ws(), payload.id); focusID = payload.id; view = { mode: "grid" }; render(); }
   } catch (_) {}
 });
+// Verkleinern verlangt Vorschau + Bestätigung (Muster: expectedEvictedSessionIDs)
+let pendingShrink = null; // { wsId, cap, evicted: "a,b" }
 document.querySelectorAll("#cap button").forEach(b =>
   b.addEventListener("click", () => {
-    setCapacity(ws(), parseInt(b.dataset.c, 10));
+    const w = ws();
+    const c = parseInt(b.dataset.c, 10);
+    if (c < w.capacity) {
+      const evicted = w.slots.slice(c).filter(Boolean);
+      const key = evicted.join(",");
+      if (evicted.length && !(pendingShrink && pendingShrink.wsId === w.id && pendingShrink.cap === c && pendingShrink.evicted === key)) {
+        pendingShrink = { wsId: w.id, cap: c, evicted: key };
+        toast("Verkleinern auf " + capLabel(c) + " entfernt: " + evicted.map(id => CHATS[id].name).join(", ") + " — erneut klicken zum Bestätigen (Tabs bleiben offen)");
+        return;
+      }
+    }
+    pendingShrink = null;
+    setCapacity(w, c);
     view = { mode: "grid" };
     render();
   })
