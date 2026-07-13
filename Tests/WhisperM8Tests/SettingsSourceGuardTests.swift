@@ -14,10 +14,10 @@ final class SettingsSourceGuardTests: XCTestCase {
             "agentSidebarScope",
             "agentSidebarLayout",
             "agentSidebarWidth",
-            // Grid-Split-Verhältnisse: Layout-State wie die Sidebar-Breite,
-            // bewusst keine Settings-Präferenz (Drag direkt an der Trennlinie).
-            "agentGridColumnFraction",
-            "agentGridRowFraction",
+            // Die früheren Grid-Split-Keys (agentGridColumnFraction/-Row)
+            // sind keine @AppStorage mehr — Splits leben seit Schema v4 am
+            // Workspace-Entity; die v3→v4-Migration liest die Alt-Keys nur
+            // noch direkt aus UserDefaults (AgentSessionStore.loadUIState).
             "agentTranscriptViewMode"
         ]
         let allowedKeys = declaredPreferenceKeys.union(documentedUIStateKeys)

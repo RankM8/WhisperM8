@@ -12,6 +12,12 @@ struct AgentChatsWindowAccessor: NSViewRepresentable {
     /// entscheidet der Empfänger — `AgentWindowStore.handleWindowWillClose`
     /// via Suspend-Flag.
     var onWillClose: (() -> Void)? = nil
+    /// Key-Window-Tracking fürs Dictation-Routing: `didBecomeKey`/
+    /// `didResignKey` des aufgelösten Fensters →
+    /// `AgentWindowStore.windowDidBecomeKey/ResignKey` (das globale
+    /// Dictation-Ziel folgt ausschließlich dem Key-Fenster).
+    var onBecomeKey: (() -> Void)? = nil
+    var onResignKey: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -51,37 +57,62 @@ struct AgentChatsWindowAccessor: NSViewRepresentable {
                 ? NSColor(srgbRed: 0.058, green: 0.060, blue: 0.064, alpha: 1)
                 : NSColor.white
         }
-        if let onWillClose {
-            coordinator.observeWillClose(of: window, handler: onWillClose)
+        if onWillClose != nil || onBecomeKey != nil || onResignKey != nil {
+            coordinator.observe(
+                window: window,
+                onWillClose: onWillClose,
+                onBecomeKey: onBecomeKey,
+                onResignKey: onResignKey
+            )
         }
+        // Fenster ist beim Aufbau oft schon key, BEVOR der Observer hängt —
+        // den Anfangszustand explizit melden, sonst routet Dictation bis zum
+        // ersten Fokuswechsel ins Leere.
+        if window.isKeyWindow { onBecomeKey?() }
         onResolve?(window)
     }
 
-    /// Hält den willClose-Observer über Re-Configures hinweg (`updateNSView`
+    /// Hält die Fenster-Observer über Re-Configures hinweg (`updateNSView`
     /// feuert mehrfach mit demselben Fenster — ohne Coordinator würde jeder
-    /// Durchlauf einen weiteren Observer stapeln) und baut ihn bei
+    /// Durchlauf weitere Observer stapeln) und baut sie bei
     /// Fensterwechsel oder View-Abbau ab.
     final class Coordinator {
         private var observedWindow: NSWindow?
-        private var observer: NSObjectProtocol?
+        private var observers: [NSObjectProtocol] = []
 
-        func observeWillClose(of window: NSWindow, handler: @escaping () -> Void) {
+        func observe(
+            window: NSWindow,
+            onWillClose: (() -> Void)?,
+            onBecomeKey: (() -> Void)?,
+            onResignKey: (() -> Void)?
+        ) {
             guard observedWindow !== window else { return }
-            removeObserver()
+            removeObservers()
             observedWindow = window
-            observer = NotificationCenter.default.addObserver(
-                forName: NSWindow.willCloseNotification,
-                object: window,
-                queue: .main
-            ) { _ in handler() }
+            let center = NotificationCenter.default
+            if let onWillClose {
+                observers.append(center.addObserver(
+                    forName: NSWindow.willCloseNotification, object: window, queue: .main
+                ) { _ in onWillClose() })
+            }
+            if let onBecomeKey {
+                observers.append(center.addObserver(
+                    forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+                ) { _ in onBecomeKey() })
+            }
+            if let onResignKey {
+                observers.append(center.addObserver(
+                    forName: NSWindow.didResignKeyNotification, object: window, queue: .main
+                ) { _ in onResignKey() })
+            }
         }
 
-        private func removeObserver() {
-            if let observer { NotificationCenter.default.removeObserver(observer) }
-            observer = nil
+        private func removeObservers() {
+            observers.forEach { NotificationCenter.default.removeObserver($0) }
+            observers = []
             observedWindow = nil
         }
 
-        deinit { removeObserver() }
+        deinit { removeObservers() }
     }
 }

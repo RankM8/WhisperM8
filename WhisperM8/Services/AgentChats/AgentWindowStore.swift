@@ -202,18 +202,6 @@ final class AgentWindowStore {
         updateWindow(windowID) { $0.showsGrid = shows }
     }
 
-    /// ÜBERGANGS-Bridge (bis Paket 2d das Grid auf Workspace-Entities
-    /// umstellt): fensterlokale Grid-Mitgliedschaft aus der v3-Ära. Wird
-    /// nicht mehr persistiert — die v4-Migration überführt sie in
-    /// `gridWorkspaces`.
-    func gridSessionIDs(in windowID: UUID) -> [UUID] {
-        window(for: windowID).legacyGridSessionIDs
-    }
-
-    func setGridSessionIDs(_ ids: [UUID], in windowID: UUID) {
-        updateWindow(windowID) { $0.legacyGridSessionIDs = ids }
-    }
-
     // MARK: - Grid-Workspaces: Reads (global, Schema v4)
 
     var gridWorkspaces: [AgentGridWorkspace] { state.gridWorkspaces }
@@ -416,6 +404,28 @@ final class AgentWindowStore {
         guard swapped else { return false }
         mutateGridWorkspace(workspaceID) { $0 = updated }
         return true
+    }
+
+    /// Persistiert das Spalten-Split-Verhältnis (Commit am Drag-Ende — die
+    /// Live-Werte hält `AgentGridSplitContainer` lokal). `firstFraction` ist
+    /// der Anteil der ERSTEN Spalte; gilt für die 2-Spalten-Layouts 2/3/4,
+    /// die 3-Achsen-Layouts (6/9, Paket 3) setzen die Vektoren direkt.
+    func setGridColumnSplit(ofGridWorkspace workspaceID: UUID, firstFraction: Double) {
+        guard let entity = gridWorkspace(id: workspaceID),
+              entity.columnFractions.count == 2,
+              entity.columnFractions.first != firstFraction else { return }
+        mutateGridWorkspace(workspaceID) {
+            $0.columnFractions = [firstFraction, 1 - firstFraction]
+        }
+    }
+
+    func setGridRowSplit(ofGridWorkspace workspaceID: UUID, firstFraction: Double) {
+        guard let entity = gridWorkspace(id: workspaceID),
+              entity.rowFractions.count == 2,
+              entity.rowFractions.first != firstFraction else { return }
+        mutateGridWorkspace(workspaceID) {
+            $0.rowFractions = [firstFraction, 1 - firstFraction]
+        }
     }
 
     /// Welche Sessions würde ein Wechsel auf `capacity` entfernen (geordnet).

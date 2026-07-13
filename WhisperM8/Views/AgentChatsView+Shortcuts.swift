@@ -41,8 +41,32 @@ extension AgentChatsView {
             guard let event = handleTabSwitcherKeyDown(event) else { return nil }
             guard let event = handleNewChatShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
+            guard let event = handleGridFocusShortcut(event) else { return nil }
             return handleCloseTabShortcut(event)
         }
+    }
+
+    /// Verarbeitet ⌃⌘←/→/↑/↓ als Pane-Fokuswechsel im sichtbaren Grid
+    /// (Plan F9: vollständige Bedienung ohne Maus). Nur bei aktivem Grid —
+    /// sonst fällt das Event unverändert durch. Pfeiltasten tragen
+    /// `.function`/`.numericPad`-Flags, daher Contains-Prüfung statt
+    /// Gleichheit (Muster `TabNavShortcut`).
+    private func handleGridFocusShortcut(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow, isGridActive else { return event }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers.contains(.control), modifiers.contains(.command),
+              !modifiers.contains(.option), !modifiers.contains(.shift) else { return event }
+        let direction: GridFocusDirection?
+        switch event.keyCode {
+        case 123: direction = .left
+        case 124: direction = .right
+        case 125: direction = .down
+        case 126: direction = .up
+        default: direction = nil
+        }
+        guard let direction else { return event }
+        moveGridFocus(direction)
+        return nil
     }
 
     func removeCloseTabShortcut() {

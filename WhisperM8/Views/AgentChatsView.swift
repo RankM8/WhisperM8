@@ -69,7 +69,26 @@ struct AgentChatsView: View {
     }
     var selectedSessionID: UUID? {
         get { windowStore.selectedSession(in: windowID) }
-        nonmutating set { windowStore.setSelectedSession(newValue, in: windowID) }
+        nonmutating set {
+            // Quellenunabhängige Klickregel (Plan-Abschnitt 03): Liegt der
+            // Chat im gerade SICHTBAREN Workspace, fokussiert jeder einfache
+            // Klick (Projekt-Row, Workspace-Row, Tab, ⌘1–9, Ctrl+Tab) dessen
+            // Pane; andernfalls öffnet er die Einzelansicht — die Slots
+            // bleiben dabei IMMER unverändert (Klick navigiert, Drop kuratiert).
+            guard let newValue else {
+                windowStore.setSelectedSession(nil, in: windowID)
+                return
+            }
+            if isGridActive, let entity = activeGridWorkspaceEntity {
+                if entity.slotIndex(of: newValue) != nil {
+                    windowStore.setGridFocusedSession(newValue, in: windowID)
+                } else {
+                    windowStore.showSingleSession(newValue, in: windowID)
+                }
+            } else {
+                windowStore.setSelectedSession(newValue, in: windowID)
+            }
+        }
     }
     var expandedProjectIDs: Set<UUID> {
         get { Set(windowStore.expandedProjectIDs) }
@@ -121,12 +140,10 @@ struct AgentChatsView: View {
     /// für den Fokus-Wechsel (Muster `isHoveringTabStrip`, kein Koordinaten-
     /// Hit-Test). internal, da Monitor (+Shortcuts) und +Grid es nutzen.
     @State var hoveredGridPaneID: UUID?
-    /// Split-Verhältnisse der Grid-Trennlinien (Spalten/Zeilen) — global
-    /// über alle Fenster wie die Sidebar-Breite (@AppStorage-Konvention);
-    /// angewendet wird nie der Rohwert, sondern das Clamping des
-    /// `GridSplitResolver` gegen die aktuelle Fläche. internal für +Grid.
-    @AppStorage("agentGridColumnFraction") var gridColumnFraction: Double = GridSplitResolver.defaultFraction
-    @AppStorage("agentGridRowFraction") var gridRowFraction: Double = GridSplitResolver.defaultFraction
+    // Die Grid-Split-Verhältnisse leben seit Schema v4 am Workspace-Entity
+    // (AgentGridWorkspace.columnFractions/rowFractions); die alten globalen
+    // @AppStorage-Keys agentGridColumnFraction/agentGridRowFraction liest
+    // nur noch die v3→v4-Migration (AgentSessionStore.loadUIState).
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
 
@@ -442,7 +459,15 @@ struct AgentChatsView: View {
             // Tabs) → Fenster + Tabs aus dem Store, sonst stellt der
             // Launch-Restore es beim naechsten Start wieder her. Quit/
             // Profilwechsel sind via suspendCloseTracking ausgenommen.
-            onWillClose: { windowStore.handleWindowWillClose(windowID) }
+            onWillClose: { windowStore.handleWindowWillClose(windowID) },
+            // Dictation routet ausschliesslich ueber das Key-Fenster —
+            // Selektionen in Nicht-Key-Fenstern aendern das Ziel nie
+            // (Multi-Window-Politik, Plan-Abschnitt 03).
+            onBecomeKey: {
+                windowStore.windowDidBecomeKey(windowID)
+                syncActiveAgentChat()
+            },
+            onResignKey: { windowStore.windowDidResignKey(windowID) }
         ))
         .coordinateSpace(.named(Self.windowCoordinateSpaceName))
         .ignoresSafeArea(.all, edges: .top)
@@ -572,8 +597,18 @@ struct AgentChatsView: View {
             removeTabStripScrollMonitor()
             removeTabDragEndMonitor()
             removeTabSwitcherFlagsMonitor()
-            // Window zu → kein aktiver Chat mehr für Recording-Coordinator.
-            AppState.shared.activeAgentChat = nil
+            // Window zu → Routing nur räumen, wenn ES das Ziel besass: das
+            // Verschwinden eines NICHT-key-Fensters darf das Dictation-Ziel
+            // des aktiv genutzten Fensters nicht löschen (Multi-Window-
+            // Politik). Stale Refs auf Chats, die nirgends mehr offen sind,
+            // werden ebenfalls geräumt.
+            if windowStore.keyAgentChatWindowID == windowID {
+                windowStore.windowDidResignKey(windowID)
+                AppState.shared.activeAgentChat = nil
+            } else if let ref = AppState.shared.activeAgentChat,
+                      windowStore.windowID(containingTab: ref.sessionID) == nil {
+                AppState.shared.activeAgentChat = nil
+            }
         }
         .onChange(of: selectedSessionID) { _, newValue in
             // Externe Selektion (Sidebar-Row, Tab-Klick, ⌘1–⌘9) mitten im
@@ -770,6 +805,13 @@ struct AgentChatsView: View {
     /// Spiegelt die aktuelle Selection (Session + Projekt) in `AppState.activeAgentChat`.
     /// Wird beim Recording-Start vom Coordinator gelesen und ins Context-Bundle übernommen.
     private func syncActiveAgentChat() {
+        // Key-Window-Routing: Ist ein ANDERES Agent-Chats-Fenster key, darf
+        // dieses Fenster das globale Dictation-Ziel nicht überschreiben —
+        // sonst würde jede Selektion eines Hintergrund-Fensters (Restore,
+        // Cross-Window-Drop) das Ziel des aktiv genutzten Fensters kapern.
+        // Ohne key Agent-Fenster (App im Hintergrund, Single-Window-Start)
+        // bleibt das bisherige Verhalten: die letzte Selektion routet.
+        if let key = windowStore.keyAgentChatWindowID, key != windowID { return }
         guard let project = selectedProject,
               let session = selectedSession,
               session.status != .archived
@@ -2148,9 +2190,9 @@ struct AgentChatsView: View {
                     .help("In \(projectOpenTarget.label) öffnen · Pfeil für Auswahl")
                 }
 
-                // Minimize: aus der Einzelansicht zurück ins Grid mit allen
-                // offenen Tabs (Gegenstück zum ⤢ im Pane-Header).
-                minimizeToGridButton
+                // Zurück ins Grid: stellt den referenzierten Workspace exakt
+                // wieder her (Gegenstück zum ⤢ im Pane-Header).
+                returnToWorkspaceButton
             }
             .fixedSize()
         }
@@ -2541,17 +2583,7 @@ struct AgentChatsView: View {
             ) {
                 moveSelectionToNewWindow(session)
             }
-            if headerTabs.count > 1 {
-                if isGridActive, gridSessions.contains(where: { $0.id == session.id }) {
-                    Button("Aus dem Grid entfernen", systemImage: "minus.circle") {
-                        removeSessionFromGrid(session.id)
-                    }
-                } else {
-                    Button("Im Grid zeigen", systemImage: "square.grid.2x2") {
-                        showSessionInGrid(session.id)
-                    }
-                }
-            }
+            workspaceMembershipMenu(for: session)
             Divider()
             Button(
                 pinLabel(for: session),

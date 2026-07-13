@@ -1,166 +1,229 @@
 import AppKit
 import SwiftUI
 
-/// Split-Grid (Maximize/Minimize-Konzept, docs/plans/grid-maximize-minimize-konzept.html):
-/// `showsGrid` zeigt ALLE offenen Tabs als bündige Panes — Layout automatisch
-/// aus der Tab-Anzahl (`AgentGridAutoLayout`), 1-px-Divider, kein Padding,
-/// keine Rundungen. Jede Pane trägt ein Maximize-Control (→ Einzelansicht),
-/// die Chat-Statuszeile der Einzelansicht das Minimize-Control (→ Grid).
-/// Manuelle Raster-Presets gibt es nicht mehr. Fokus-Pane = `selectedSessionID`
-/// (2-px-Inset-Akzent); nur sie bekommt Auto-Launch/Auto-Fokus, Klick in eine
-/// Pane verschiebt die Selektion.
+/// Grid-Workspaces (docs/plans/grid-workspace-plan.html): Das Fenster
+/// referenziert einen globalen `AgentGridWorkspace` (`activeWorkspaceID`);
+/// `showsGrid` zeigt dessen SLOTS als bündige Panes — feste Positionen,
+/// leere Slots bleiben sichtbar, nichts rückt nach, keine Verdrängungs-
+/// Automatik. Layout aus der Kapazität (2 = 1×2 · 3 = 2+1 · 4 = 2×2),
+/// Splits am Entity persistiert. Fokus-Pane = `selectedSessionID`
+/// (2-px-Inset-Akzent); nur sie bekommt Auto-Launch/Auto-Fokus. Klick auf
+/// einen Chat außerhalb des Workspace öffnet die Einzelansicht — „Zurück
+/// zum Workspace ‹Name›" stellt das Grid exakt wieder her.
 extension AgentChatsView {
     var showsGrid: Bool {
         get { windowStore.showsGrid(in: windowID) }
         nonmutating set { windowStore.setShowsGrid(newValue, in: windowID) }
     }
 
-    /// Explizite Grid-Mitgliedschaft (leer = Default „alle offenen Tabs,
-    /// max. 4"). Gepflegt über ⊖ im Pane-Header, Tab-Kontextmenü und Drag
-    /// aufs Grid — bewusst kein Settings-Eintrag (Arbeitskontext).
-    var gridSessionIDs: [UUID] {
-        get { windowStore.gridSessionIDs(in: windowID) }
-        nonmutating set { windowStore.setGridSessionIDs(newValue, in: windowID) }
+    /// Der Workspace, den dieses Fenster referenziert (Grid sichtbar ODER
+    /// Rücksprungziel der Einzelansicht).
+    var activeGridWorkspaceEntity: AgentGridWorkspace? {
+        windowStore.activeGridWorkspace(in: windowID)
     }
 
-    /// Grid nur sinnvoll ab 2 Panes — sonst zeigt `mainWorkspace`
-    /// weiterhin die Einzelansicht, auch wenn `showsGrid` true ist.
-    var isGridActive: Bool { showsGrid && gridSessions.count > 1 }
+    /// Grid nur mit gültiger Workspace-Referenz — auch ein leerer Workspace
+    /// (0/N) zeigt sein Grid (sichtbare leere Slots sind die Drop-Ziele).
+    var isGridActive: Bool { showsGrid && activeGridWorkspaceEntity != nil }
 
-    var gridAutoLayout: AgentGridAutoLayout {
-        AgentGridAutoLayout.forTabCount(gridSessions.count)
+    // MARK: - Workspace-Mitgliedschaft (Kontextmenü / Drops)
+
+    /// Nimmt einen Chat in einen Workspace auf (erster freier Slot bzw.
+    /// Auto-Wachsen). Volle Endstufe/Konflikte meldet der Store als Wert —
+    /// hier nur ins Log, die Sidebar-Flows (2c) zeigen die Meldung.
+    func addSessionToWorkspace(_ sessionID: UUID, workspaceID: UUID) {
+        let result = windowStore.addSession(sessionID, toGridWorkspace: workspaceID)
+        switch result {
+        case .full:
+            Logger.debug("Workspace voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen")
+        case .rejected:
+            Logger.debug("Chat kann nicht aufgenommen werden (archiviert/anderes Fenster)")
+        default:
+            break
+        }
     }
 
-    /// Die sichtbaren Panes: Grid-Mitglieder in Tab-Reihenfolge (leere/
-    /// degenerierte Mitgliedschaft = die ersten 4 offenen Tabs).
-    var gridSessions: [AgentChatSession] {
-        let visible = Set(AgentGridLayout.visibleMembers(
-            orderedTabIDs: headerTabs.map(\.id),
-            membership: gridSessionIDs
-        ))
-        return headerTabs.filter { visible.contains($0.id) }
+    /// ⊖ im Pane-Header / Kontextmenü: leert NUR den Slot — Tab und Prozess
+    /// bleiben, nichts rückt nach (Fokus-Fallback macht der Store).
+    func removeSessionFromWorkspace(_ sessionID: UUID, workspaceID: UUID) {
+        windowStore.removeSession(sessionID, fromGridWorkspace: workspaceID)
     }
 
-    // MARK: - Mitgliedschaft pflegen
+    /// Workspace-bewusste Kontextmenü-Einträge (Tabs + Sidebar-Rows):
+    /// „Zu Workspace hinzufügen →", präzises Platzieren ohne Drag
+    /// („Im Workspace platzieren → Slot N") und Entfernen je Mitgliedschaft
+    /// (bei Mehrfach-Mitgliedschaft als Untermenü je Workspace).
+    @ViewBuilder
+    func workspaceMembershipMenu(for session: AgentChatSession) -> some View {
+        let workspaces = windowStore.gridWorkspaces
+        if !workspaces.isEmpty {
+            Menu {
+                ForEach(workspaces) { entity in
+                    Button {
+                        addSessionToWorkspace(session.id, workspaceID: entity.id)
+                    } label: {
+                        Label(
+                            entity.name,
+                            systemImage: entity.slotIndex(of: session.id) != nil
+                                ? "checkmark" : "square.grid.2x2"
+                        )
+                    }
+                    .disabled(entity.slotIndex(of: session.id) != nil)
+                }
+            } label: {
+                Label("Zu Workspace hinzufügen", systemImage: "square.grid.2x2")
+            }
 
-    /// Tab-Kontextmenü „Im Grid zeigen": Mitglied werden + Grid öffnen.
-    func showSessionInGrid(_ sessionID: UUID) {
-        openTab(sessionID)
-        addSessionToGrid(sessionID)
+            // Präziser Weg ohne Drag: gezielt in einen Slot des SICHTBAREN
+            // Workspace platzieren (ersetzt/tauscht wie ein Slot-Drop).
+            if isGridActive, let entity = activeGridWorkspaceEntity {
+                Menu {
+                    ForEach(0 ..< entity.capacity, id: \.self) { index in
+                        Button {
+                            _ = windowStore.addSession(
+                                session.id, toGridWorkspace: entity.id, at: index
+                            )
+                        } label: {
+                            Text(slotPlacementLabel(entity: entity, index: index))
+                        }
+                        .disabled(entity.slots[index] == session.id)
+                    }
+                } label: {
+                    Label("Im Workspace platzieren", systemImage: "square.grid.3x3.topleft.filled")
+                }
+            }
+
+            // Entfernen ist workspace-bewusst: genau die gemeinte Gruppe.
+            let containing = workspaces.filter { $0.slotIndex(of: session.id) != nil }
+            if containing.count == 1, let only = containing.first {
+                Button("Aus Workspace „\(only.name)“ entfernen", systemImage: "minus.circle") {
+                    removeSessionFromWorkspace(session.id, workspaceID: only.id)
+                }
+            } else if containing.count > 1 {
+                Menu {
+                    ForEach(containing) { entity in
+                        Button(entity.name) {
+                            removeSessionFromWorkspace(session.id, workspaceID: entity.id)
+                        }
+                    }
+                } label: {
+                    Label("Aus Workspace entfernen", systemImage: "minus.circle")
+                }
+            }
+        }
+    }
+
+    private func slotPlacementLabel(entity: AgentGridWorkspace, index: Int) -> String {
+        guard let occupantID = entity.slots[index] else { return "Slot \(index + 1) (frei)" }
+        let occupantName = workspace.sessions.first { $0.id == occupantID }?.title ?? "belegt"
+        return "Slot \(index + 1) — ersetzt „\(occupantName)“"
+    }
+
+    // MARK: - Maximize / Zurück zum Workspace
+
+    /// Pane-Maximize: dieser Chat groß in der Einzelansicht — die
+    /// Workspace-Referenz und die Slots bleiben unverändert.
+    func maximizePane(_ sessionID: UUID) {
+        windowStore.showSingleSession(sessionID, in: windowID)
+        multiSelection = []
+    }
+
+    /// „Zurück zum Workspace ‹Name›" aus der Einzelansicht: stellt das Grid
+    /// exakt wieder her (Slots + Fokus repariert der Store).
+    func returnToWorkspace() {
         beginGridBuildMeasurement()
-        showsGrid = true
+        let result = windowStore.returnToActiveGrid(in: windowID)
+        switch result {
+        case .alreadyActive(let owner):
+            // Sollte für das eigene Rücksprungziel nie passieren — defensiv:
+            // Besitzerfenster nach vorn.
+            focusWindow(owner)
+        case .blockedByWindowOwnership(let conflicts):
+            Logger.debug("Zurück zum Workspace blockiert: \(conflicts.count) Chat(s) leben als Tab in anderen Fenstern")
+        default:
+            break
+        }
     }
+
+    /// Control für die Chat-Statuszeile der Einzelansicht — nur sichtbar,
+    /// wenn ein Rücksprungziel existiert.
+    @ViewBuilder
+    var returnToWorkspaceButton: some View {
+        if !isGridActive, let entity = activeGridWorkspaceEntity {
+            HeaderIconButton(
+                systemImage: "square.grid.2x2",
+                help: "Zurück zum Workspace „\(entity.name)“"
+            ) {
+                returnToWorkspace()
+            }
+        }
+    }
+
+    /// Bringt ein anderes Agent-Chats-Fenster nach vorn (Konflikt-Routing
+    /// der Single-Owner-Politik) — über den Session-Fokus-Pfad des
+    /// WindowRequestCenter (dasselbe Routing wie ein Notification-Klick).
+    func focusWindow(_ ownerWindowID: UUID) {
+        let owner = windowStore.window(for: ownerWindowID)
+        guard let session = owner.selectedSessionID ?? owner.openTabIDs.first else { return }
+        WindowRequestCenter.shared.requestSessionFocus(sessionID: session)
+    }
+
+    // MARK: - perf.grid
 
     /// perf.grid: Aufbau-Messung am ÜBERGANG starten (vor dem Mount — die
     /// Panes attachen während `makeNSView`, also bevor ein Parent-`onAppear`
     /// feuern würde). Erwartet werden nur Panes mit lebendem Controller;
     /// Offline-Panes rendern Transcript-Views und attachen nie.
     func beginGridBuildMeasurement() {
-        GridPerformanceTracker.shared.beginBuild(
-            expectedPaneIDs: Set(
-                gridSessions.map(\.id).filter { terminalRegistry.controller(for: $0) != nil }
-            )
-        )
-    }
-
-    /// Nimmt einen Chat in die Grid-Auswahl auf. Eine leere (Default-)
-    /// Mitgliedschaft wird dabei zuerst materialisiert — „alle sichtbaren
-    /// plus der neue", nicht „nur der neue". Bei voller Kapazität weicht
-    /// das älteste Mitglied, das weder das neue noch das fokussierte ist.
-    func addSessionToGrid(_ sessionID: UUID) {
-        var membership = gridSessionIDs
-        if membership.isEmpty { membership = gridSessions.map(\.id) }
-        gridSessionIDs = AgentGridLayout.membershipAdding(
-            sessionID,
-            membership: membership,
-            focused: selectedSessionID
-        )
-    }
-
-    /// ⊖ im Pane-Header / Kontextmenü: nimmt den Chat NUR aus dem Grid —
-    /// der Tab bleibt offen. Bleibt nur ein Mitglied übrig, wird es
-    /// maximiert und die Auswahl zurückgesetzt (ein 1-Pane-Grid ist
-    /// sinnlos; der nächste Minimize startet wieder mit dem Default).
-    func removeSessionFromGrid(_ sessionID: UUID) {
-        var membership = gridSessionIDs
-        if membership.isEmpty { membership = gridSessions.map(\.id) }
-        membership.removeAll { $0 == sessionID }
-
-        if membership.count <= 1 {
-            if let remaining = membership.first {
-                selectedSessionID = remaining
-            }
-            gridSessionIDs = []
-            showsGrid = false
-            return
-        }
-        gridSessionIDs = membership
-        if selectedSessionID == sessionID {
-            selectedSessionID = headerTabs.first { membership.contains($0.id) }?.id
-        }
-    }
-
-    // MARK: - Maximize / Minimize
-
-    /// Pane-Maximize: dieser Chat groß in der Einzelansicht.
-    func maximizePane(_ sessionID: UUID) {
-        selectedSessionID = sessionID
-        multiSelection = []
-        showsGrid = false
-    }
-
-    /// Minimize aus der Einzelansicht: zurück ins Grid mit allen offenen
-    /// Tabs. Selektion/Fokus bleiben unangetastet.
-    func minimizeToGrid() {
-        beginGridBuildMeasurement()
-        showsGrid = true
-    }
-
-    /// Minimize-Control für die Chat-Statuszeile der Einzelansicht — nur
-    /// sichtbar, wenn ein Grid überhaupt etwas zeigen würde (≥ 2 Tabs).
-    @ViewBuilder
-    var minimizeToGridButton: some View {
-        if headerTabs.count > 1, !isGridActive {
-            HeaderIconButton(
-                systemImage: "square.grid.2x2",
-                help: "Alle Chats im Grid zeigen"
-            ) {
-                minimizeToGrid()
-            }
-        }
+        let expected = activeGridWorkspaceEntity?.occupiedSessionIDs
+            .filter { terminalRegistry.controller(for: $0) != nil } ?? []
+        GridPerformanceTracker.shared.beginBuild(expectedPaneIDs: Set(expected))
     }
 
     // MARK: - Grid-Container (bündig, 1-px-Divider)
 
+    @ViewBuilder
     var gridWorkspace: some View {
+        if let entity = activeGridWorkspaceEntity {
+            gridWorkspaceContent(entity: entity)
+        } else {
+            // Von mainWorkspace nie ohne Entity aufgerufen (isGridActive) —
+            // defensiver Fallback.
+            Color.clear
+        }
+    }
+
+    private func gridWorkspaceContent(entity: AgentGridWorkspace) -> some View {
         // Snapshot GENAU EINMAL pro Body-Eval — die Pane-Closure des
-        // Containers darf `gridSessions`/`headerTabs` nicht pro Slot neu
-        // berechnen (Blaupause ff489fdb: bis zu 9 Slots).
-        let sessions = gridSessions
+        // Containers darf die Session-Map nicht pro Slot neu berechnen.
+        let sessionsByID = Dictionary(
+            workspace.sessions.map { ($0.id, $0) },
+            uniquingKeysWith: { a, _ in a }
+        )
         return AgentGridSplitContainer(
-            layout: AgentGridAutoLayout.forTabCount(sessions.count),
-            persistedColumnFraction: gridColumnFraction,
-            persistedRowFraction: gridRowFraction,
-            commitColumnFraction: { gridColumnFraction = $0 },
-            commitRowFraction: { gridRowFraction = $0 },
+            layout: AgentGridAutoLayout.forTabCount(entity.capacity),
+            persistedColumnFraction: entity.columnFractions.first ?? GridSplitResolver.defaultFraction,
+            persistedRowFraction: entity.rowFractions.first ?? GridSplitResolver.defaultFraction,
+            commitColumnFraction: { fraction in
+                windowStore.setGridColumnSplit(ofGridWorkspace: entity.id, firstFraction: fraction)
+            },
+            commitRowFraction: { fraction in
+                windowStore.setGridRowSplit(ofGridWorkspace: entity.id, firstFraction: fraction)
+            },
             onHandleHoverChanged: { hovering in
                 // Griff-Hover unterdrückt das Pane-Klick-Routing — ein
                 // Drag-Start soll nicht nebenbei die Selektion verschieben.
                 if hovering { hoveredGridPaneID = nil }
             },
-            pane: { index in gridSlot(index, sessions: sessions) }
+            pane: { index in gridSlot(index, entity: entity, sessionsByID: sessionsByID) }
         )
         // Der 1-px-„Gap" zwischen den Panes IST die Trennlinie — gleiche
         // Farbe wie die übrigen Chrome-Divider. Kein Außen-Padding, keine
         // Karten: die Panes nutzen die volle Fläche.
         .background(AgentTheme.border)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Selektion außerhalb des Sichtfensters (Tab-Klick, ⌘1–9, Sidebar):
-        // den Tab per Identity-Swap ins Grid holen — er übernimmt den Slot
-        // des zuvor fokussierten Tabs (pure Logik, AgentGridLayout).
-        .onChange(of: selectedSessionID) { previous, selected in
+        .onChange(of: selectedSessionID) { _, selected in
             guard let selected else { return }
-            bringSelectionIntoGrid(selected, previous: previous)
             // Fokus-Wechsel remountet die Pane-DetailView NICHT (stabile
             // .id) — deren onAppear-Fokus feuert also nicht erneut. Die
             // Tastatur explizit in die neue Fokus-Pane geben, sonst folgt
@@ -174,55 +237,71 @@ extension AgentChatsView {
                 controller.focusTerminal()
             }
         }
-        // Layout-Wechsel (Tab-Anzahl) entfernt Panes ohne onHover(false) —
-        // Flag räumen, sonst selektiert ein Klick ins Leere eine
-        // unsichtbare Session.
-        .onChange(of: headerTabs.count) { _, _ in hoveredGridPaneID = nil }
-        // Grid-EINTRITT (Minimize-Klick, Launch-Restore): die Selektion ins
-        // Sichtfenster holen — der onChange-Swap oben greift nur bei
-        // SelektionsWECHSELN, nicht wenn der fokussierte Tab beim Aufbau
-        // schon außerhalb der ersten N liegt.
-        .onAppear {
-            if let selected = selectedSessionID {
-                bringSelectionIntoGrid(selected, previous: nil)
-            }
-        }
+        // Slot-Änderungen (⊖, Drops, Kapazität) entfernen Panes ohne
+        // onHover(false) — Flag räumen, sonst selektiert ein Klick ins
+        // Leere eine unsichtbare Session.
+        .onChange(of: entity.slots) { _, _ in hoveredGridPaneID = nil }
         .onDisappear { hoveredGridPaneID = nil }
-        // Tab aufs Grid ziehen = in die Auswahl aufnehmen (Cross-Window-
-        // Drags holen den Tab zuerst in dieses Fenster; DraggableSession
-        // trägt die Quell-Fenster-ID).
+        // Tab/Sidebar-Chat aufs Grid ziehen = aufnehmen (erster freier
+        // Slot / Auto-Wachsen). Cross-Window-Drags holen den Tab zuerst in
+        // dieses Fenster — der Drop IST der explizite Transfer-Befehl.
+        // Gezielte Slot-Drops (ersetzen/tauschen) kommen mit Paket 2e.
         .dropDestination(for: DraggableSession.self) { items, _ in
             guard let dropped = items.first else { return false }
             let source = dropped.sourceWindowID ?? windowID
             if source != windowID {
                 windowStore.moveTab(dropped.sessionID, from: source, to: windowID, before: nil)
             }
-            addSessionToGrid(dropped.sessionID)
+            addSessionToWorkspace(dropped.sessionID, workspaceID: entity.id)
             return true
         }
     }
 
-    /// Pane für einen Slot-Index — der Session-Snapshot kommt vom Aufrufer
-    /// (genau eine `gridSessions`-Berechnung pro Body-Eval, siehe
-    /// `gridWorkspace`).
+    /// Pane für einen Slot-Index — Session-Map kommt als Snapshot vom
+    /// Aufrufer (genau eine Berechnung pro Body-Eval).
     @ViewBuilder
-    private func gridSlot(_ index: Int, sessions: [AgentChatSession]) -> some View {
-        if index < sessions.count {
-            gridPane(for: sessions[index])
+    private func gridSlot(
+        _ index: Int,
+        entity: AgentGridWorkspace,
+        sessionsByID: [UUID: AgentChatSession]
+    ) -> some View {
+        if entity.slots.indices.contains(index),
+           let sessionID = entity.slots[index],
+           let session = sessionsByID[sessionID] {
+            gridPane(for: session, workspaceID: entity.id)
         } else {
-            // Nur erreichbar, wenn Tabs zwischen Body-Evals schließen —
-            // das Auto-Layout passt die Slot-Zahl im nächsten Tick an.
-            Rectangle()
-                .fill(AgentTheme.background)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            gridEmptySlot(index)
         }
     }
 
-    private func gridPane(for session: AgentChatSession) -> some View {
+    /// Sichtbar leerer Slot — stabile Position, Drop-Ziel (Paket 2e).
+    private func gridEmptySlot(_ index: Int) -> some View {
+        VStack(spacing: 3) {
+            Text("Slot \(index + 1)")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Text("Chat hier ablegen")
+                .font(.system(size: 11))
+                .foregroundStyle(AgentTheme.textTertiary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(
+                    AgentTheme.border,
+                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AgentTheme.background)
+    }
+
+    private func gridPane(for session: AgentChatSession, workspaceID: UUID) -> some View {
         let isFocused = session.id == selectedSession?.id
         let project = workspace.projects.first { $0.id == session.projectID }
         return VStack(spacing: 0) {
-            gridPaneHeader(session, project: project, isFocused: isFocused)
+            gridPaneHeader(session, project: project, isFocused: isFocused, workspaceID: workspaceID)
             if let project {
                 sessionDetailContent(
                     for: session,
@@ -267,7 +346,12 @@ extension AgentChatsView {
         }
     }
 
-    private func gridPaneHeader(_ session: AgentChatSession, project: AgentProject?, isFocused: Bool) -> some View {
+    private func gridPaneHeader(
+        _ session: AgentChatSession,
+        project: AgentProject?,
+        isFocused: Bool,
+        workspaceID: UUID
+    ) -> some View {
         HStack(spacing: 8) {
             SessionLiveStatusDot(
                 sessionID: session.id,
@@ -295,9 +379,9 @@ extension AgentChatsView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Diesen Chat maximieren")
+            .help("Diesen Chat maximieren („Zurück zum Workspace“ stellt das Grid wieder her)")
             Button {
-                removeSessionFromGrid(session.id)
+                removeSessionFromWorkspace(session.id, workspaceID: workspaceID)
             } label: {
                 Image(systemName: "minus")
                     .font(.system(size: 9, weight: .bold))
@@ -307,10 +391,9 @@ extension AgentChatsView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            // Bewusst KEIN Tab-Schließen im Pane-Header — ⊖ nimmt den Chat
-            // nur aus dem Grid; Tabs schließt man in der Tab-Leiste (✕, ⌘W,
-            // Mittelklick).
-            .help("Aus dem Grid nehmen (Tab bleibt offen)")
+            // Bewusst KEIN Tab-Schließen im Pane-Header — ⊖ leert nur den
+            // Slot; Tabs schließt man in der Tab-Leiste (✕, ⌘W, Mittelklick).
+            .help("Aus dem Workspace nehmen (Slot bleibt frei, Tab bleibt offen)")
         }
         .padding(.horizontal, 10)
         .frame(height: 28)
@@ -323,7 +406,7 @@ extension AgentChatsView {
         .onTapGesture(count: 2) { maximizePane(session.id) }
     }
 
-    // MARK: - Selektion
+    // MARK: - Selektion / Tastatur
 
     /// leftMouseDown-Hook (siehe Monitor in +Shortcuts): Klick in eine
     /// nicht-fokussierte Pane verschiebt die Selektion dorthin. Beobachtend —
@@ -338,27 +421,33 @@ extension AgentChatsView {
         multiSelection = []
     }
 
-    private func bringSelectionIntoGrid(_ selected: UUID, previous: UUID?) {
-        guard isGridActive else { return }
-        let visible = gridSessions.map(\.id)
-        guard !visible.contains(selected),
-              headerTabs.contains(where: { $0.id == selected }) else { return }
-        if gridSessionIDs.isEmpty {
-            // Default-Modus („alle Tabs"): Identity-Swap in der Tab-Reihenfolge.
-            if let newOrder = AgentGridLayout.orderBringingIntoView(
-                selected: selected,
-                openTabIDs: openTabIDs,
-                visibleIDs: visible,
-                previousSelected: previous
-            ) {
-                openTabIDs = newOrder
+    /// Tastatur-Fokuswechsel zwischen Panes (⌘⌥-Pfeile, siehe +Shortcuts):
+    /// bewegt den Fokus geometrisch über das Slot-Raster; leere Slots
+    /// werden übersprungen (nächster belegter in der Richtung).
+    func moveGridFocus(_ direction: GridFocusDirection) {
+        guard isGridActive, let entity = activeGridWorkspaceEntity else { return }
+        let columns = AgentGridWorkspace.columns(forCapacity: entity.capacity)
+        let currentIndex = selectedSessionID.flatMap { entity.slotIndex(of: $0) } ?? 0
+        var index = currentIndex
+        while true {
+            let next: Int
+            switch direction {
+            case .left: next = index - 1
+            case .right: next = index + 1
+            case .up: next = index - columns
+            case .down: next = index + columns
             }
-        } else {
-            // Explizite Auswahl: neu selektierte Chats (Sidebar, ⌘1–9, neuer
-            // Tab) werden automatisch Mitglied — sonst fühlte sich das Grid
-            // „kaputt" an, weil die Selektion unsichtbar bliebe.
-            addSessionToGrid(selected)
+            guard entity.slots.indices.contains(next) else { return }
+            index = next
+            if let target = entity.slots[index] {
+                selectedSessionID = target
+                return
+            }
         }
+    }
+
+    enum GridFocusDirection {
+        case left, right, up, down
     }
 
     // MARK: - Geteilter Session-Detail-Pfad
