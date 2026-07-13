@@ -440,16 +440,20 @@ struct AgentChatsClaudeAccountsTab: View {
     private func removeProfile(_ profile: ClaudeAccountProfile) {
         let alert = NSAlert()
         alert.messageText = "Remove account profile “\(profile.name)”?"
-        alert.informativeText = "Deletes \(profile.configDir.path) including its chat history. The Keychain login entry is kept — remove it via Keychain Access if you want it gone. Sessions that ran under this profile can no longer be resumed."
+        alert.informativeText = "Moves \(profile.configDir.path) — including its chat history — to the Trash, so you can restore it if needed. The Keychain login entry is kept — remove it via Keychain Access if you want it gone. Sessions that ran under this profile can no longer be resumed while the folder is in the Trash."
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Move to Trash")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         do {
-            try FileManager.default.removeItem(at: profile.configDir)
+            // Papierkorb statt endgültigem Löschen (Review-Befund 2026-07-13):
+            // im Config-Dir liegt unter projects/ die komplette Chat-Historie
+            // des Accounts — ein Fehlklick darf sie nicht unwiederbringlich
+            // vernichten.
+            try FileManager.default.trashItem(at: profile.configDir, resultingItemURL: nil)
             reload()
-            showFeedback("Profile “\(profile.name)” removed.", tone: .secondary)
+            showFeedback("Profile “\(profile.name)” moved to Trash.", tone: .secondary)
         } catch {
             showFeedback("Could not remove profile: \(error.localizedDescription)", tone: .error)
         }

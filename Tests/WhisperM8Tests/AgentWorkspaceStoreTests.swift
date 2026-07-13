@@ -194,3 +194,70 @@ final class AgentWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(spy.saveCount, 1)
     }
 }
+
+// MARK: - Repository: Generation-Backups + Recovery-Load
+
+extension AgentWorkspaceStoreTests {
+    private func makeRepoDir() -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8RepoBackup-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    func testRepositoryRecoversFromCorruptMainFileViaGenerationBackup() throws {
+        let dir = makeRepoDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fileURL = dir.appendingPathComponent("AgentSessions.json")
+        var repo = AgentWorkspaceRepository(fileURL: fileURL)
+        repo.generationBackupMinInterval = 0
+
+        let project = AgentProject(name: "Repo", path: "/tmp/repo")
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "ext-recovery-1",
+            title: "Wichtiger Chat"
+        )
+        try repo.save(AgentWorkspace(projects: [project], sessions: [session]))
+
+        // Hauptdatei korrumpieren (abgeschnittener Write / Stromausfall).
+        try Data("KAPUTT{{{".utf8).write(to: fileURL)
+
+        let loaded = repo.load(migrate: { $0 })
+        XCTAssertEqual(
+            loaded.sessions.first?.externalSessionID, "ext-recovery-1",
+            "Decode-Fehler der Hauptdatei muss aus dem Generation-Backup heilen, nicht mit leerem Workspace starten"
+        )
+        // Die korrupte Datei ist quarantaenisiert.
+        let entries = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        XCTAssertTrue(entries.contains { $0.contains("decode-failed") })
+    }
+
+    func testRepositoryRotatesGenerationBackups() throws {
+        let dir = makeRepoDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fileURL = dir.appendingPathComponent("AgentSessions.json")
+        var repo = AgentWorkspaceRepository(fileURL: fileURL)
+        repo.generationBackupMinInterval = 0
+
+        let project = AgentProject(name: "Repo", path: "/tmp/repo")
+        for title in ["Erster", "Zweiter", "Dritter"] {
+            let session = AgentChatSession(provider: .claude, projectID: project.id, title: title)
+            try repo.save(AgentWorkspace(projects: [project], sessions: [session]))
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let newest = try decoder.decode(
+            AgentWorkspace.self,
+            from: Data(contentsOf: repo.generationBackupURL(1))
+        )
+        let older = try decoder.decode(
+            AgentWorkspace.self,
+            from: Data(contentsOf: repo.generationBackupURL(2))
+        )
+        XCTAssertEqual(newest.sessions.first?.title, "Dritter")
+        XCTAssertEqual(older.sessions.first?.title, "Zweiter")
+    }
+}

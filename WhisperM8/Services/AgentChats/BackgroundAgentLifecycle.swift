@@ -207,10 +207,12 @@ enum BackgroundAgentLifecycle {
     /// sie ohne Subprocess unit-testbar ist.
     ///
     /// Heuristik: Exit 0 → alive. Sonst durchsuchen wir stderr/stdout nach
-    /// einem von wenigen Markern, die der Supervisor bei "id existiert nicht"
-    /// druckt (Doku-Beispiele: "no such session", "unknown short id",
-    /// "not found"). Findet sich keiner: `error` — die Session bleibt lokal
-    /// gespeichert, der User bekommt einen Hinweis.
+    /// einem von wenigen SPEZIFISCHEN Markern, die der Supervisor bei
+    /// "id existiert nicht" druckt. Das frühere blanke "not found" war zu
+    /// breit (Review-Befund 2026-07-13): ein beliebiger "file/config not
+    /// found"-Fehler klassifizierte einen existierenden Agenten als verwaist
+    /// — und die Folgekette (forget → Prune) koppelte den Chat ab. Findet
+    /// sich kein Marker: `error` — die Session bleibt lokal gespeichert.
     static func classifyHealthCheck(exitCode: Int32, stderr: String) -> HealthCheck {
         if exitCode == 0 { return .alive }
         let haystack = stderr.lowercased()
@@ -219,7 +221,8 @@ enum BackgroundAgentLifecycle {
             "no such short id",
             "unknown short id",
             "unknown session",
-            "not found",
+            "session not found",
+            "agent not found",
             "no background agent",
             "no session with id"
         ]

@@ -354,6 +354,10 @@ final class AgentSessionStatusCoordinator {
                 Logger.claudeBinding.info("binding_launch_id_set localID=\(localID.uuidString, privacy: .public) old=\(old ?? "nil", privacy: .public) new=\(newID, privacy: .public)")
             }
             if didChange {
+                // Crash-safe: das Binding ist die wichtigste Einzelmutation —
+                // geht es im Debounce-Fenster verloren, ist die Session nach
+                // App-Tod eine unsichtbare Waise (Review-Befund 2026-07-13).
+                store.flushNow(reason: "binding")
                 terminalExternalIDUpdater(localID, newID)
                 attachWatch(sessionID: localID)
             }

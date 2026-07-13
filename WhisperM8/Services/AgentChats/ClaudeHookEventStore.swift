@@ -73,21 +73,33 @@ final class ClaudeHookEventStore {
         }
         defer { try? handle.close() }
 
+        var baseOffset = cursor.offset
         do {
             try handle.seek(toOffset: cursor.offset)
         } catch {
             // Datei wurde verkleinert oder umbenannt - reset Cursor.
-            newCursor.offset = 0
+            baseOffset = 0
             try? handle.seek(toOffset: 0)
         }
 
         let data = handle.readDataToEndOfFile()
-        let newOffset = cursor.offset + UInt64(data.count)
-        newCursor.offset = newOffset
+        // Cursor nur bis zum letzten VOLLSTÄNDIGEN Newline vorschieben
+        // (Review-Befund 2026-07-13): der Hook-Append `(cat; echo) >> file`
+        // ist nicht atomar — ein halb geschriebener letzter Record würde
+        // sonst dauerhaft übersprungen. Bei SessionStart wäre das ein
+        // verlorenes Binding. Die Restbytes liest der nächste Aufruf erneut.
+        let completeLength: Int
+        if let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) {
+            completeLength = lastNewline - data.startIndex + 1
+        } else {
+            completeLength = 0
+        }
+        newCursor.offset = baseOffset + UInt64(completeLength)
         cursors[url] = newCursor
 
-        guard !data.isEmpty,
-              let text = String(data: data, encoding: .utf8) else {
+        let completeData = data.prefix(completeLength)
+        guard !completeData.isEmpty,
+              let text = String(data: completeData, encoding: .utf8) else {
             return []
         }
         return Self.parseLines(text)

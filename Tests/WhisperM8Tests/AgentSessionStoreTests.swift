@@ -452,7 +452,7 @@ final class AgentSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.loadWorkspace().sessions.first?.externalSessionID, "valid-claude-id")
     }
 
-    func testAgentSessionStoreResetsInvalidClaudeResumeIDWhenNoConversationExists() throws {
+    func testAgentSessionStoreKeepsBindingWhenNoConversationExists() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8AgentClaudeReset-\(UUID().uuidString)", isDirectory: true)
         let fileURL = root.appendingPathComponent("workspace.json")
@@ -482,13 +482,15 @@ final class AgentSessionStoreTests: XCTestCase {
             now: createdAt.addingTimeInterval(300)
         )
         let repaired = try XCTUnwrap(result?.session)
-        let command = try AgentCommandBuilder(commandResolver: { _ in "/usr/local/bin/claude" })
-            .command(for: repaired, project: project)
 
+        // Negative Evidenz (kein Transcript gefunden) darf die Bindung NICHT
+        // löschen — nur Auto-Launch wird entschärft; der Caller stoppt den
+        // Launch mit sichtbarer Meldung (AgentResumeTranscriptMissingError).
         XCTAssertEqual(result?.outcome, .resetInvalid("missing-claude-id"))
-        XCTAssertNil(repaired.externalSessionID)
-        XCTAssertFalse(repaired.hasLaunchedInitialPrompt)
-        XCTAssertFalse(command.arguments.contains("--resume"))
+        XCTAssertEqual(repaired.externalSessionID, "missing-claude-id")
+        XCTAssertTrue(repaired.hasLaunchedInitialPrompt)
+        XCTAssertFalse(repaired.shouldLaunchOnOpen ?? false)
+        XCTAssertEqual(store.loadWorkspace().sessions.first?.externalSessionID, "missing-claude-id")
     }
 
     func testAgentSessionStoreSkipsClaudeWorktreeSessions() throws {
@@ -565,10 +567,20 @@ final class AgentSessionStoreTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        // Altersgrenze: nur ALTE ungebundene Sessions werden geräumt —
+        // frische könnten noch auf Hook-Binding/Indexer-Adoption warten.
         let unresumable = AgentChatSession(
             provider: .claude,
             projectID: project.id,
             title: "Claude Chat",
+            status: .closed,
+            hasLaunchedInitialPrompt: true,
+            createdAt: Date().addingTimeInterval(-7200)
+        )
+        let freshUnbound = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Frischer Chat",
             status: .closed,
             hasLaunchedInitialPrompt: true
         )
@@ -581,13 +593,15 @@ final class AgentSessionStoreTests: XCTestCase {
             hasLaunchedInitialPrompt: true
         )
         let store = AgentSessionStore(fileURL: fileURL)
-        try store.saveWorkspace(AgentWorkspace(projects: [project], sessions: [unresumable, resumable]))
+        try store.saveWorkspace(AgentWorkspace(projects: [project], sessions: [unresumable, freshUnbound, resumable]))
 
         try store.mergeIndexedSessions([])
 
         let sessions = store.loadWorkspace().sessions
-        XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions.first?.id, resumable.id)
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertFalse(sessions.contains { $0.id == unresumable.id })
+        XCTAssertTrue(sessions.contains { $0.id == freshUnbound.id }, "Frische ungebundene Session darf nicht vor der Adoption geräumt werden")
+        XCTAssertTrue(sessions.contains { $0.id == resumable.id })
     }
 
     func testAgentSessionStoreKeepsManualClaudeSessionWithoutExternalIDDuringRecoveryStart() throws {
@@ -628,7 +642,8 @@ final class AgentSessionStoreTests: XCTestCase {
             projectID: project.id,
             title: "Claude Chat",
             status: .closed,
-            hasLaunchedInitialPrompt: true
+            hasLaunchedInitialPrompt: true,
+            createdAt: Date().addingTimeInterval(-7200)
         )
         let resumable = AgentChatSession(
             provider: .claude,
@@ -829,5 +844,150 @@ final class AgentSessionStoreTests: XCTestCase {
         XCTAssertEqual(merged?.status, .archived)
         XCTAssertEqual(merged?.archivedAt, archivedAtBefore)
         XCTAssertEqual(store.loadWorkspace().sessions.count, 1, "Merge darf keine Duplikat-Session anlegen")
+    }
+
+    func testMergeIndexedSessionsHealsStaleClaudeProfileStamp() throws {
+        // Stempel-Selbstheilung: der Indexer kennt den realen Ablageort des
+        // Transcripts. Weicht der gespeicherte Account-Stempel davon ab
+        // (main ↔ Profil), muss der Merge ihn korrigieren — sonst liefe der
+        // nächste Resume unterm falschen CLAUDE_CONFIG_DIR.
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let projectPath = FileManager.default.temporaryDirectory.path
+        let store = AgentSessionStore(fileURL: fileURL)
+        var session = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Main-Chat",
+            claudeProfileName: "PowerUser"
+        )
+        session.externalSessionID = "ext-stale-stamp-1"
+        session.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(session)
+
+        // Scan findet das Transcript real unter main (claudeProfileName=nil).
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "ext-stale-stamp-1",
+                cwd: projectPath,
+                title: "Main-Chat",
+                createdAt: Date(),
+                lastActivityAt: Date(),
+                claudeProfileName: nil
+            )
+        ])
+        XCTAssertNil(store.loadWorkspace().sessions.first?.claudeProfileName)
+
+        // Und die Gegenrichtung: Transcript real unter einem Profil-Root.
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "ext-stale-stamp-1",
+                cwd: projectPath,
+                title: "Main-Chat",
+                createdAt: Date(),
+                lastActivityAt: Date(),
+                claudeProfileName: "PowerUser"
+            )
+        ])
+        XCTAssertEqual(store.loadWorkspace().sessions.first?.claudeProfileName, "PowerUser")
+    }
+
+    func testMergeAdoptionWindowIsTwoSided() throws {
+        // Review-Befund 2026-07-13: das ±5s-Fenster hatte real nur eine
+        // Untergrenze — eine BELIEBIG später gestartete Session konnte einen
+        // alten ungebundenen Tab kapern.
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let projectPath = FileManager.default.temporaryDirectory.path
+        let store = AgentSessionStore(fileURL: fileURL)
+        let createdAt = Date().addingTimeInterval(-600)
+        var session = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Alter ungebundener Tab"
+        )
+        session.createdAt = createdAt
+        session.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(session)
+
+        // Indexer-Session 10 Minuten SPÄTER erstellt → darf NICHT adoptieren.
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "ext-viel-spaeter",
+                cwd: projectPath,
+                title: "Fremder späterer Chat",
+                createdAt: Date(),
+                lastActivityAt: Date()
+            )
+        ])
+        let adopted = store.loadWorkspace().sessions.first { $0.id == session.id }
+        XCTAssertNil(adopted?.externalSessionID, "Session außerhalb des ±5s-Fensters darf nicht adoptiert werden")
+
+        // Innerhalb des Fensters (±5s) klappt die Adoption weiterhin.
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "ext-zeitnah",
+                cwd: projectPath,
+                title: "Zeitnaher Chat",
+                createdAt: createdAt.addingTimeInterval(2),
+                lastActivityAt: Date()
+            )
+        ])
+        let bound = store.loadWorkspace().sessions.first { $0.id == session.id }
+        XCTAssertEqual(bound?.externalSessionID, "ext-zeitnah")
+    }
+
+    func testMergeDeduplicatesSameExternalSessionIDAcrossRoots() throws {
+        // Dieselbe externalSessionID aus zwei Roots (kopierte Transcripts):
+        // der Merge darf nicht flip-floppen — bei vorhandenem Stempel gewinnt
+        // der stempel-konforme Kandidat.
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let projectPath = FileManager.default.temporaryDirectory.path
+        let store = AgentSessionStore(fileURL: fileURL)
+        var session = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Chat",
+            claudeProfileName: "PowerUser"
+        )
+        session.externalSessionID = "ext-dupe-1"
+        session.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(session)
+
+        let base = Date()
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "ext-dupe-1",
+                cwd: projectPath,
+                title: "Chat",
+                createdAt: base,
+                // main-Kopie ist sogar aktueller — der Stempel-Match gewinnt trotzdem.
+                lastActivityAt: base.addingTimeInterval(60),
+                claudeProfileName: nil
+            ),
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "ext-dupe-1",
+                cwd: projectPath,
+                title: "Chat",
+                createdAt: base,
+                lastActivityAt: base,
+                claudeProfileName: "PowerUser"
+            ),
+        ])
+        XCTAssertEqual(
+            store.loadWorkspace().sessions.first { $0.id == session.id }?.claudeProfileName,
+            "PowerUser",
+            "Bei Duplikaten über Roots hinweg muss der stempel-konforme Kandidat gewinnen (kein Flip-Flop)"
+        )
     }
 }

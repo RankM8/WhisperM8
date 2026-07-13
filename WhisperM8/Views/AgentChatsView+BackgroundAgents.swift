@@ -94,14 +94,30 @@ extension AgentChatsView {
             }
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)
         } catch {
-            // Spawn fehlgeschlagen — Stub-Session ist nutzlos (kein Attach
-            // moeglich ohne Short-ID), also wieder loeschen statt als
-            // "Session noch nicht gestartet"-Geist liegen lassen.
             spawningBackgroundSessions.remove(session.id)
-            try? store.deleteSession(id: session.id)
-            openTabIDs.removeAll { $0 == session.id }
-            if selectedSessionID == session.id {
-                selectedSessionID = openTabIDs.first
+            // Mehrdeutige Fehler (Timeout, Short-ID nicht geparst): der
+            // Supervisor kann den Agenten TROTZDEM angelegt haben — die
+            // Stub-Session bleibt dann als sichtbarer Fehlerzustand erhalten,
+            // statt die Zuordnung zu einem real laufenden Agenten zu löschen
+            // (Review-Befund 2026-07-13). Nur bei definitivem Nicht-Start
+            // (Projekt fehlt, claude fehlt, Exit != 0) wird aufgeräumt.
+            let spawnDefinitelyFailed: Bool
+            switch error as? BackgroundAgentSpawner.SpawnError {
+            case .timedOut?, .shortIDNotFound?:
+                spawnDefinitelyFailed = false
+            default:
+                spawnDefinitelyFailed = true
+            }
+            if spawnDefinitelyFailed {
+                try? store.deleteSession(id: session.id)
+                openTabIDs.removeAll { $0 == session.id }
+                if selectedSessionID == session.id {
+                    selectedSessionID = openTabIDs.first
+                }
+            } else {
+                try? store.updateSession(id: session.id) { updated in
+                    updated.status = .closed
+                }
             }
             errorMessage = "Hintergrund-Agent konnte nicht gestartet werden: \(error.localizedDescription)"
         }
@@ -181,7 +197,12 @@ extension AgentChatsView {
         try? store.updateSession(id: id) { session in
             session.status = .archived
             session.archivedAt = Date()
-            session.backgroundShortID = nil
+            // Short-ID bewusst BEHALTEN (Review-Befund 2026-07-13): mit
+            // genullter ID griffe `removeOrphanBackgroundSessions` und
+            // löschte die archivierte Session komplett — ein fehlklassifizierter
+            // Health-Check würde so einen echten Chat abkoppeln. Mit ID bleibt
+            // sie als Archiv-Eintrag erhalten; ein Attach-Versuch scheitert
+            // dann ehrlich statt still.
         }
         openTabIDs.removeAll { $0 == id }
         pinnedSessionIDs.removeAll { $0 == id }

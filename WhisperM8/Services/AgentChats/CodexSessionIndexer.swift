@@ -5,12 +5,12 @@ struct CodexSessionIndexer {
         .appendingPathComponent(".codex", isDirectory: true)
         .appendingPathComponent("sessions", isDirectory: true)
 
-    func indexedSessions(limit: Int = 200) -> [IndexedAgentSession] {
+    func indexedSessions(limit: Int = 1000) -> [IndexedAgentSession] {
         indexedSessionResult(limit: limit).sessions
     }
 
     func indexedSessionResult(
-        limit: Int = 200,
+        limit: Int = 1000,
         cache: inout AgentSessionIndexCache
     ) -> AgentSessionIndexResult {
         var stats = AgentSessionIndexStats(provider: .codex)
@@ -21,7 +21,7 @@ struct CodexSessionIndexer {
         return AgentSessionIndexResult(sessions: sessions, stats: stats)
     }
 
-    func indexedSessionResult(limit: Int = 200) -> AgentSessionIndexResult {
+    func indexedSessionResult(limit: Int = 1000) -> AgentSessionIndexResult {
         var cache = AgentSessionIndexCache()
         return indexedSessionResult(limit: limit, cache: &cache)
     }

@@ -166,10 +166,24 @@ final class BackgroundAgentLifecycleTests: XCTestCase {
         XCTAssertEqual(
             BackgroundAgentLifecycle.classifyHealthCheck(
                 exitCode: 1,
-                stderr: "claude: NOT FOUND."
+                stderr: "claude: SESSION NOT FOUND."
             ),
             .unknown
         )
+    }
+
+    func testHealthCheckDoesNotTreatGenericNotFoundAsUnknownSession() {
+        // Review-Befund 2026-07-13: ein blanker "not found"-Match hat fremde
+        // Fehler ("config file not found") als verwaiste Session gedeutet —
+        // die Folgekette koppelte dann einen existierenden Background-Chat ab.
+        if case .error = BackgroundAgentLifecycle.classifyHealthCheck(
+            exitCode: 1,
+            stderr: "error: config file not found at ~/.claude/settings.json"
+        ) {
+            // erwartet: konservatives .error, KEIN .unknown
+        } else {
+            XCTFail("Generischer not-found-Fehler darf nicht als verwaiste Session klassifiziert werden")
+        }
     }
 
     func testHealthCheckErrorForUnclassifiedFailure() {

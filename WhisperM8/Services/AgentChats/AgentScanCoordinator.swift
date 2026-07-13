@@ -77,18 +77,42 @@ final class AgentScanCoordinator {
     /// - sonst: starte Scan
     func requestScan(reason: Reason) {
         if inFlight {
-            Logger.agentPerformance.debug("agent_scan_skipped reason=\(reason.rawValue, privacy: .public) cause=in-flight")
+            // NICHT verwerfen (Review-Befund 2026-07-13): Eine Datei, die
+            // NACH dem Enumerator-Durchlauf des laufenden Scans entsteht,
+            // hat evtl. nur diesen einen FSEvent — verworfen bliebe sie bis
+            // zum nächsten Foreground-Scan unsichtbar. Als pending merken;
+            // markScanCompleted holt den Scan nach.
+            pendingReason = pendingReason ?? reason
+            Logger.agentPerformance.debug("agent_scan_deferred reason=\(reason.rawValue, privacy: .public) cause=in-flight")
             return
         }
         if reason != .manual, let last = lastCompletedAt {
             let elapsed = Date().timeIntervalSince(last)
             let limit = reason == .fsEvent ? fsEventCooldown : cooldown
             if elapsed < limit {
-                Logger.agentPerformance.debug("agent_scan_skipped reason=\(reason.rawValue, privacy: .public) cause=cooldown elapsed=\(Int(elapsed))s")
+                pendingReason = pendingReason ?? reason
+                scheduleCooldownRetry(after: limit - elapsed)
+                Logger.agentPerformance.debug("agent_scan_deferred reason=\(reason.rawValue, privacy: .public) cause=cooldown elapsed=\(Int(elapsed))s")
                 return
             }
         }
         startScan(reason: reason)
+    }
+
+    /// Merker für einen während in-flight/cooldown angeforderten Scan.
+    private var pendingReason: Reason?
+    private var cooldownRetryScheduled = false
+
+    private func scheduleCooldownRetry(after delay: TimeInterval) {
+        guard !cooldownRetryScheduled else { return }
+        cooldownRetryScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(delay, 1)) { [weak self] in
+            guard let self else { return }
+            self.cooldownRetryScheduled = false
+            guard let reason = self.pendingReason else { return }
+            self.pendingReason = nil
+            self.requestScan(reason: reason)
+        }
     }
 
     private func startScan(reason: Reason) {
@@ -127,6 +151,12 @@ final class AgentScanCoordinator {
     private func markScanCompleted() {
         inFlight = false
         lastCompletedAt = Date()
+        // Während des Laufs angeforderte Scans nachholen — requestScan
+        // landet dabei im Cooldown-Pfad und plant den Retry zeitgenau.
+        if let reason = pendingReason {
+            pendingReason = nil
+            requestScan(reason: reason)
+        }
         NotificationCenter.default.post(
             name: Self.scanRunningChangedNotification,
             object: nil,

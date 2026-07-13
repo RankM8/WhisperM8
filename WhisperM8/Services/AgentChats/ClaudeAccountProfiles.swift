@@ -455,13 +455,27 @@ struct ClaudeAccountProfiles {
         }
 
         try fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
-        try fileManager.moveItem(at: sourceFile, to: targetFile)
 
         // Subagent-Transcripts liegen als Ordner `<id>/` neben der JSONL.
+        // Konflikt VOR dem Haupt-Move pruefen und den Ordner-Move NICHT
+        // best-effort verschlucken (Review-Befund 2026-07-13): ein halber
+        // Umzug (JSONL im Ziel, Subagent-Verlaeufe in der Quelle) waere
+        // stiller Datenversatz — bei Fehlern rollt der Haupt-Move zurueck.
         let sourceSubagents = sourceFile.deletingPathExtension()
-        if fileManager.fileExists(atPath: sourceSubagents.path) {
-            let targetSubagents = targetFile.deletingPathExtension()
-            try? fileManager.moveItem(at: sourceSubagents, to: targetSubagents)
+        let targetSubagents = targetFile.deletingPathExtension()
+        let hasSubagents = fileManager.fileExists(atPath: sourceSubagents.path)
+        if hasSubagents, fileManager.fileExists(atPath: targetSubagents.path) {
+            throw MoveError.targetTranscriptExists(targetSubagents.path)
+        }
+
+        try fileManager.moveItem(at: sourceFile, to: targetFile)
+        if hasSubagents {
+            do {
+                try fileManager.moveItem(at: sourceSubagents, to: targetSubagents)
+            } catch {
+                try? fileManager.moveItem(at: targetFile, to: sourceFile)
+                throw error
+            }
         }
         Logger.agentStore.notice("claude_transcript_moved session=\(externalSessionID, privacy: .public) target=\(target, privacy: .public)")
         return true

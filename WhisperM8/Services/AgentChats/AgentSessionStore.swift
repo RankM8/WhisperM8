@@ -405,6 +405,9 @@ struct AgentSessionStore {
             workspace.sessions.remove(at: index)
             return true
         }
+        // Crash-safe: strukturelle Loeschung sofort persistieren (Review-
+        // Befund 2026-07-13: Doku versprach das, der Code tat es nicht).
+        workspaceStore.flush(reason: "delete-session")
     }
 
     /// Entfernt ein Projekt samt all seiner Sessions aus dem Workspace.
@@ -422,6 +425,7 @@ struct AgentSessionStore {
             workspace.projects.removeAll { $0.id == id }
             return true
         }
+        workspaceStore.flush(reason: "delete-project")
     }
 
     func markStaleRunningSessionsClosed(excluding activeSessionIDs: Set<UUID> = []) throws {
@@ -502,6 +506,16 @@ struct AgentSessionStore {
             workspace.sessions[index].lastActivityAt = Date()
             return true
         }
+        // Crash-safe: ohne persistierte Short-ID ist der Background-Agent
+        // nach einem App-Tod nicht mehr attachbar — sofort sichern.
+        workspaceStore.flush(reason: "background-short-id")
+    }
+
+    /// Erzwingt einen sofortigen Persist (Debounce-Bypass) — fuer Mutationen,
+    /// deren Verlust bei Crash strukturell schadet (Binding, Launch-Flag).
+    /// No-op, wenn nichts dirty ist.
+    func flushNow(reason: String) {
+        workspaceStore.flush(reason: reason)
     }
 
     @discardableResult
@@ -512,7 +526,7 @@ struct AgentSessionStore {
         indexedSessions: [IndexedAgentSession]
     ) throws -> AgentChatSession? {
         guard !Self.isClaudeWorktreePath(projectPath) else { return nil }
-        return try mutateWorkspace { workspace in
+        let bound: AgentChatSession? = try mutateWorkspace { workspace in
             guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }) else {
                 return nil
             }
@@ -550,6 +564,11 @@ struct AgentSessionStore {
             }
             return workspace.sessions[index]
         }
+        // Crash-safe: frisch gebundene externe ID sofort persistieren.
+        if bound?.externalSessionID != nil {
+            workspaceStore.flush(reason: "binding")
+        }
+        return bound
     }
 
     @discardableResult
@@ -603,11 +622,14 @@ struct AgentSessionStore {
                 )
             }
 
-            workspace.sessions[index].externalSessionID = nil
-            workspace.sessions[index].hasLaunchedInitialPrompt = false
-            workspace.sessions[index].status = .closed
+            // KEIN destruktiver Reset mehr (Review-Befund 2026-07-13): Negative
+            // Evidenz (Transcript gerade nicht auffindbar — kann auch ein
+            // transienter I/O-/Mount-/Rechte-Fehler sein) darf die Bindung
+            // NICHT löschen. externalSessionID/hasLaunchedInitialPrompt bleiben
+            // erhalten; nur Auto-Launch wird entschärft. Der Caller stoppt den
+            // Launch mit sichtbarer Meldung — taucht das Transcript wieder auf,
+            // resumed der nächste Start ganz normal.
             workspace.sessions[index].shouldLaunchOnOpen = false
-            workspace.sessions[index].lastActivityAt = now
             return AgentResumeRepairResult(
                 session: workspace.sessions[index],
                 outcome: .resetInvalid(currentExternalID)
@@ -648,7 +670,44 @@ struct AgentSessionStore {
                     .filter { $0.isSubagentJob }
                     .compactMap(\.externalSessionID)
             )
+            // Duplikat-Schutz (Review-Befund 2026-07-13): dieselbe
+            // externalSessionID kann in MEHREREN Roots liegen (extern
+            // kopierte Transcripts). Ohne Dedup ueberschriebe der Merge
+            // denselben Datensatz in Scan-Reihenfolge mehrfach — Stempel-
+            // Flip-Flop und Dauer-Persistenz. Bevorzugt wird der Kandidat,
+            // dessen Root zum vorhandenen Stempel passt (Stabilitaet),
+            // sonst die juengste Aktivitaet.
+            var chosenByKey: [String: IndexedAgentSession] = [:]
+            var duplicateKeys = Set<String>()
             for indexed in indexedSessions {
+                let key = "\(indexed.provider.rawValue)|\(indexed.externalSessionID)"
+                guard let existing = chosenByKey[key] else {
+                    chosenByKey[key] = indexed
+                    continue
+                }
+                duplicateKeys.insert(key)
+                let stamp = workspace.sessions.first(where: {
+                    $0.provider == indexed.provider && $0.externalSessionID == indexed.externalSessionID
+                })?.claudeProfileName
+                if existing.claudeProfileName == stamp, indexed.claudeProfileName != stamp {
+                    // existing behalten
+                } else if indexed.claudeProfileName == stamp, existing.claudeProfileName != stamp {
+                    chosenByKey[key] = indexed
+                } else if indexed.lastActivityAt > existing.lastActivityAt {
+                    chosenByKey[key] = indexed
+                }
+            }
+            for key in duplicateKeys {
+                Logger.agentStore.warning("agent_index_duplicate_session key=\(key, privacy: .public) — Transcript liegt in mehreren Roots, Merge nutzt einen stabilen Kandidaten")
+            }
+            var emittedKeys = Set<String>()
+            let dedupedSessions = indexedSessions.compactMap { indexed -> IndexedAgentSession? in
+                let key = "\(indexed.provider.rawValue)|\(indexed.externalSessionID)"
+                guard chosenByKey[key] == indexed, !emittedKeys.contains(key) else { return nil }
+                emittedKeys.insert(key)
+                return indexed
+            }
+            for indexed in dedupedSessions {
                 guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
                 guard !subagentThreadIDs.contains(indexed.externalSessionID) else { continue }
                 let projectPath = Self.canonicalProjectPath(indexed.cwd)
@@ -671,19 +730,40 @@ struct AgentSessionStore {
                     if workspace.sessions[index].title.isEmpty {
                         workspace.sessions[index].title = indexed.title
                     }
-                } else if let index = workspace.sessions.firstIndex(where: {
-                    $0.provider == indexed.provider
-                        // Terminals (Platzhalter-Provider, kein Transcript)
-                        // dürfen im ±5s-Fenster keine fremde JSONL kapern.
-                        // Bewusst NUR Terminals ausschließen — die übrigen
-                        // Kinds behalten ihr bisheriges Adoptionsverhalten.
-                        && $0.effectiveKind != .terminal
-                        && $0.externalSessionID == nil
-                        && $0.projectID == project.id
-                        && $0.hasLaunchedInitialPrompt
-                        && $0.createdAt <= indexed.createdAt.addingTimeInterval(5)
-                        && indexed.createdAt >= $0.createdAt.addingTimeInterval(-5)
-                }) {
+                    // Stempel-Selbstheilung: der Indexer kennt den REALEN
+                    // Ablageort des Transcripts (main- vs. Profil-Root).
+                    // Weicht der gespeicherte Account-Stempel davon ab, liefe
+                    // ein Resume unterm falschen CLAUDE_CONFIG_DIR („No
+                    // conversation found") — die Platte gewinnt.
+                    if indexed.provider == .claude,
+                       workspace.sessions[index].claudeProfileName != indexed.claudeProfileName {
+                        workspace.sessions[index].claudeProfileName = indexed.claudeProfileName
+                    }
+                } else if let index = workspace.sessions.indices
+                    .filter({ idx in
+                        let candidate = workspace.sessions[idx]
+                        return candidate.provider == indexed.provider
+                            // Terminals (Platzhalter-Provider, kein Transcript)
+                            // dürfen im ±5s-Fenster keine fremde JSONL kapern.
+                            // Bewusst NUR Terminals ausschließen — die übrigen
+                            // Kinds behalten ihr bisheriges Adoptionsverhalten.
+                            && candidate.effectiveKind != .terminal
+                            && candidate.externalSessionID == nil
+                            && candidate.projectID == project.id
+                            && candidate.hasLaunchedInitialPrompt
+                            // ECHTES ±5s-Fenster (Review-Befund 2026-07-13):
+                            // die frühere Formulierung hatte nur eine
+                            // Untergrenze — eine beliebig später gestartete
+                            // Session konnte einen alten ungebundenen Tab
+                            // kapern.
+                            && abs(indexed.createdAt.timeIntervalSince(candidate.createdAt)) <= 5
+                    })
+                    // Bei mehreren Kandidaten (parallele Starts) gewinnt der
+                    // zeitlich NÄCHSTE — nicht die Workspace-Reihenfolge.
+                    .min(by: { lhs, rhs in
+                        abs(indexed.createdAt.timeIntervalSince(workspace.sessions[lhs].createdAt))
+                            < abs(indexed.createdAt.timeIntervalSince(workspace.sessions[rhs].createdAt))
+                    }) {
                     workspace.sessions[index].externalSessionID = indexed.externalSessionID
                     workspace.sessions[index].lastActivityAt = max(indexed.lastActivityAt, workspace.sessions[index].lastActivityAt)
                     if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
@@ -953,6 +1033,11 @@ struct AgentSessionStore {
     }
 
     private static func removeUnresumableClaudeSessions(from workspace: inout AgentWorkspace) {
+        // Altersgrenze (Review-Befund 2026-07-13): frisch gestartete Sessions
+        // sind oft transient ungebunden (SessionStart-Hook/Indexer-Adoption
+        // noch unterwegs) — der Prune darf nur echte Alt-Leichen räumen,
+        // nie eine Session, deren Transcript gleich adoptiert würde.
+        let cutoff = Date().addingTimeInterval(-3600)
         workspace.sessions.removeAll { session in
             session.provider == .claude
                 && session.hasLaunchedInitialPrompt
@@ -962,6 +1047,7 @@ struct AgentSessionStore {
                 && session.shouldLaunchOnOpen != true
                 && session.status != .running
                 && session.status != .pending
+                && session.createdAt < cutoff
         }
     }
 
@@ -1035,14 +1121,19 @@ struct AgentSessionStore {
                 && abs(indexed.createdAt.timeIntervalSince(session.createdAt)) <= maxCreationDistance
         }
 
-        return candidates.sorted { lhs, rhs in
-            let lhsDistance = abs(lhs.createdAt.timeIntervalSince(session.createdAt))
-            let rhsDistance = abs(rhs.createdAt.timeIntervalSince(session.createdAt))
-            if lhsDistance != rhsDistance {
-                return lhsDistance < rhsDistance
+        // Auto-Rebind NUR bei genau EINEM Kandidaten (Review-Befund
+        // 2026-07-13): Die Heuristik kennt weder Profil noch Inhalt — bei
+        // mehreren zeitlich plausiblen Sessions desselben Projekts könnte sie
+        // einen FREMDEN Chat kapern, dessen existierendes Transcript dann auch
+        // den finalen Launch-Guard passiert und den echten Verlauf verdeckt.
+        // Mehrdeutigkeit → kein Rebind; der Caller stoppt sichtbar.
+        guard candidates.count == 1 else {
+            if candidates.count > 1 {
+                Logger.agentStore.warning("resume_rebind_ambiguous session=\(currentExternalID, privacy: .public) candidates=\(candidates.count)")
             }
-            return lhs.lastActivityAt > rhs.lastActivityAt
-        }.first
+            return nil
+        }
+        return candidates[0]
     }
 
     /// P1: Beide Primitive laufen über den serialisierten In-Memory-Kern.

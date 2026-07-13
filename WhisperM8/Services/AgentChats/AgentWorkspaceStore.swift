@@ -44,6 +44,17 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     private let flushQueue = DispatchQueue(label: "com.whisperm8.app.workspace-flush", qos: .utility)
     private var pendingFlush: DispatchWorkItem?
     private var dirty = false
+    /// Zeitpunkt der ersten noch ungesicherten Mutation — Basis der harten
+    /// Max-Latenz: Dauermutationen im Abstand < Debounce-Intervall dürfen den
+    /// Write nicht beliebig hinauszögern (Review-Befund 2026-07-13).
+    private var firstDirtyAt: Date?
+    static let maxDebounceLatency: TimeInterval = 2.0
+    /// Serialisiert die eigentlichen Persist-Aufrufe: Zwei parallel gestartete
+    /// Flushes könnten sonst in beliebiger Reihenfolge schreiben — beendet
+    /// sich der ÄLTERE Snapshot zuletzt, regressiert die Datei, ohne wieder
+    /// dirty zu sein (Review-Befund 2026-07-13). Unter diesem Lock wird immer
+    /// der NEUESTE canonical-Stand gezogen und geschrieben.
+    private let persistLock = NSLock()
     private var terminateObserver: NSObjectProtocol?
     private var resignObserver: NSObjectProtocol?
 
@@ -146,11 +157,26 @@ final class AgentWorkspaceStore: @unchecked Sendable {
         lock.lock()
         pendingFlush?.cancel()
         pendingFlush = nil
+        guard dirty, canonical != nil else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
+        // Persist serialisieren: unter persistLock den NEUESTEN Stand ziehen —
+        // ein parallel gestarteter zweiter Flush wartet hier und sieht danach
+        // dirty=false (oder einen neueren Stand). So kann nie ein älterer
+        // Snapshot einen neueren Write überholen.
+        persistLock.lock()
+        defer { persistLock.unlock() }
+
+        lock.lock()
         guard dirty, let workspace = canonical else {
             lock.unlock()
             return
         }
         dirty = false
+        firstDirtyAt = nil
         lock.unlock()
 
         do {
@@ -166,6 +192,7 @@ final class AgentWorkspaceStore: @unchecked Sendable {
             Logger.agentStore.error("agent_store_flush_failed reason=\(reason, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             lock.lock()
             dirty = true
+            if firstDirtyAt == nil { firstDirtyAt = Date() }
             lock.unlock()
         }
     }
@@ -186,12 +213,20 @@ final class AgentWorkspaceStore: @unchecked Sendable {
             try persist(workspace)
         case .debounced(let interval):
             dirty = true
+            let now = Date()
+            if firstDirtyAt == nil { firstDirtyAt = now }
             pendingFlush?.cancel()
             let workItem = DispatchWorkItem { [weak self] in
                 self?.flush()
             }
             pendingFlush = workItem
-            flushQueue.asyncAfter(deadline: .now() + interval, execute: workItem)
+            // Harte Max-Latenz: das Rearmieren darf den Write nur bis
+            // `firstDirtyAt + maxDebounceLatency` hinauszögern — sonst bliebe
+            // bei Dauermutationen (< interval Abstand) beliebig lange alles
+            // nur im Speicher (Crash = Verlust weit über 0,5 s hinaus).
+            let latestAllowed = (firstDirtyAt ?? now).addingTimeInterval(Self.maxDebounceLatency)
+            let delay = max(0, min(now.addingTimeInterval(interval), latestAllowed).timeIntervalSince(now))
+            flushQueue.asyncAfter(deadline: .now() + delay, execute: workItem)
         }
     }
 }
