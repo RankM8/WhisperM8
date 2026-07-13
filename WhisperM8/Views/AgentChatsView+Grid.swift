@@ -1,73 +1,102 @@
 import AppKit
 import SwiftUI
 
-/// Split-Grid: zeigt die ersten N offenen Tabs gleichzeitig als Panes
-/// (Presets 1 · 1×2 · 2×1 · 2×2, fixe 50%-Splits). Reine Präsentation der
-/// Tab-Liste — Sidebar und Tab-Strip bleiben unverändert, es gibt keinen
-/// zusätzlichen Slot-Zustand. Fokus-Pane = `selectedSessionID` (Akzent-
-/// Rahmen); nur sie bekommt Auto-Launch/Auto-Fokus, Klick in eine Pane
-/// verschiebt die Selektion. Plan: docs/plans/split-grid-agenten.md (V1).
+/// Split-Grid (Maximize/Minimize-Konzept, docs/plans/grid-maximize-minimize-konzept.html):
+/// `showsGrid` zeigt ALLE offenen Tabs als bündige Panes — Layout automatisch
+/// aus der Tab-Anzahl (`AgentGridAutoLayout`), 1-px-Divider, kein Padding,
+/// keine Rundungen. Jede Pane trägt ein Maximize-Control (→ Einzelansicht),
+/// die Chat-Statuszeile der Einzelansicht das Minimize-Control (→ Grid).
+/// Manuelle Raster-Presets gibt es nicht mehr. Fokus-Pane = `selectedSessionID`
+/// (2-px-Inset-Akzent); nur sie bekommt Auto-Launch/Auto-Fokus, Klick in eine
+/// Pane verschiebt die Selektion.
 extension AgentChatsView {
-    var gridPreset: AgentGridPreset {
-        get { windowStore.gridPreset(in: windowID) }
-        nonmutating set { windowStore.setGridPreset(newValue, in: windowID) }
+    var showsGrid: Bool {
+        get { windowStore.showsGrid(in: windowID) }
+        nonmutating set { windowStore.setShowsGrid(newValue, in: windowID) }
+    }
+
+    /// Grid nur sinnvoll ab 2 Tabs — bei einem Tab zeigt `mainWorkspace`
+    /// weiterhin die Einzelansicht, auch wenn `showsGrid` true ist.
+    var isGridActive: Bool { showsGrid && headerTabs.count > 1 }
+
+    var gridAutoLayout: AgentGridAutoLayout {
+        AgentGridAutoLayout.forTabCount(headerTabs.count)
     }
 
     /// Die sichtbaren Panes: Präfix der Tab-Bar-Reihenfolge.
     var gridSessions: [AgentChatSession] {
-        Array(headerTabs.prefix(gridPreset.paneCount))
+        Array(headerTabs.prefix(gridAutoLayout.paneCount))
     }
 
-    // MARK: - Preset-Umschalter (Titelzone)
+    // MARK: - Maximize / Minimize
 
-    var gridPresetSwitcher: some View {
-        HStack(spacing: 2) {
-            gridPresetButton(.single, icon: "rectangle", help: "Einzelansicht")
-            gridPresetButton(.cols2, icon: "rectangle.split.2x1", help: "2 Chats nebeneinander")
-            gridPresetButton(.rows2, icon: "rectangle.split.1x2", help: "2 Chats übereinander")
-            gridPresetButton(.grid2x2, icon: "square.split.2x2", help: "4 Chats im 2×2-Grid")
+    /// Pane-Maximize: dieser Chat groß in der Einzelansicht.
+    func maximizePane(_ sessionID: UUID) {
+        selectedSessionID = sessionID
+        multiSelection = []
+        showsGrid = false
+    }
+
+    /// Minimize aus der Einzelansicht: zurück ins Grid mit allen offenen
+    /// Tabs. Selektion/Fokus bleiben unangetastet.
+    func minimizeToGrid() {
+        showsGrid = true
+    }
+
+    /// Minimize-Control für die Chat-Statuszeile der Einzelansicht — nur
+    /// sichtbar, wenn ein Grid überhaupt etwas zeigen würde (≥ 2 Tabs).
+    @ViewBuilder
+    var minimizeToGridButton: some View {
+        if headerTabs.count > 1, !isGridActive {
+            HeaderIconButton(
+                systemImage: "square.grid.2x2",
+                help: "Alle Chats im Grid zeigen"
+            ) {
+                minimizeToGrid()
+            }
         }
     }
 
-    private func gridPresetButton(_ preset: AgentGridPreset, icon: String, help: String) -> some View {
-        TitlebarIconButton(systemImage: icon, help: help, isActive: gridPreset == preset) {
-            gridPreset = preset
-        }
-    }
-
-    // MARK: - Grid-Container
+    // MARK: - Grid-Container (bündig, 1-px-Divider)
 
     var gridWorkspace: some View {
         Group {
-            switch gridPreset {
+            switch gridAutoLayout {
             case .single:
+                // Von mainWorkspace nie mit 1 Tab aufgerufen (isGridActive) —
+                // defensiver Fallback.
                 EmptyView()
             case .cols2:
-                HStack(spacing: 8) {
+                HStack(spacing: 1) {
                     gridSlot(0)
                     gridSlot(1)
                 }
-            case .rows2:
-                VStack(spacing: 8) {
-                    gridSlot(0)
-                    gridSlot(1)
-                }
-            case .grid2x2:
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
+            case .twoPlusOne:
+                VStack(spacing: 1) {
+                    HStack(spacing: 1) {
                         gridSlot(0)
                         gridSlot(1)
                     }
-                    HStack(spacing: 8) {
+                    gridSlot(2)
+                }
+            case .grid2x2:
+                VStack(spacing: 1) {
+                    HStack(spacing: 1) {
+                        gridSlot(0)
+                        gridSlot(1)
+                    }
+                    HStack(spacing: 1) {
                         gridSlot(2)
                         gridSlot(3)
                     }
                 }
             }
         }
-        .padding(10)
+        // Der 1-px-„Gap" zwischen den Panes IST die Trennlinie — gleiche
+        // Farbe wie die übrigen Chrome-Divider. Kein Außen-Padding, keine
+        // Karten: die Panes nutzen die volle Fläche.
+        .background(AgentTheme.border)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AgentTheme.background)
         // Selektion außerhalb des Sichtfensters (Tab-Klick, ⌘1–9, Sidebar):
         // den Tab per Identity-Swap ins Grid holen — er übernimmt den Slot
         // des zuvor fokussierten Tabs (pure Logik, AgentGridLayout).
@@ -80,9 +109,19 @@ extension AgentChatsView {
             // nur der Akzent-Rahmen, das Tippen bliebe im alten Terminal.
             terminalRegistry.controller(for: selected)?.focusTerminal()
         }
-        // Preset-Wechsel entfernt Panes ohne onHover(false) — Flag räumen,
-        // sonst selektiert ein Klick ins Leere eine unsichtbare Session.
-        .onChange(of: gridPreset) { _, _ in hoveredGridPaneID = nil }
+        // Layout-Wechsel (Tab-Anzahl) entfernt Panes ohne onHover(false) —
+        // Flag räumen, sonst selektiert ein Klick ins Leere eine
+        // unsichtbare Session.
+        .onChange(of: headerTabs.count) { _, _ in hoveredGridPaneID = nil }
+        // Grid-EINTRITT (Minimize-Klick, Launch-Restore): die Selektion ins
+        // Sichtfenster holen — der onChange-Swap oben greift nur bei
+        // SelektionsWECHSELN, nicht wenn der fokussierte Tab beim Aufbau
+        // schon außerhalb der ersten N liegt.
+        .onAppear {
+            if let selected = selectedSessionID {
+                bringSelectionIntoGrid(selected, previous: nil)
+            }
+        }
         .onDisappear { hoveredGridPaneID = nil }
     }
 
@@ -92,25 +131,12 @@ extension AgentChatsView {
         if index < sessions.count {
             gridPane(for: sessions[index])
         } else {
-            gridEmptySlot
+            // Nur erreichbar, wenn Tabs zwischen Body-Evals schließen —
+            // das Auto-Layout passt die Slot-Zahl im nächsten Tick an.
+            Rectangle()
+                .fill(AgentTheme.background)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    private var gridEmptySlot: some View {
-        RoundedRectangle(cornerRadius: 8)
-            .strokeBorder(AgentTheme.border, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-            .background(AgentTheme.background)
-            .overlay {
-                VStack(spacing: 6) {
-                    Image(systemName: "rectangle.dashed")
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(AgentTheme.textTertiary)
-                    Text("Kein weiterer Tab offen")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AgentTheme.textTertiary)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func gridPane(for session: AgentChatSession) -> some View {
@@ -123,26 +149,26 @@ extension AgentChatsView {
                     for: session,
                     project: project,
                     // Nur die Fokus-Pane darf Prozesse starten und den
-                    // Tastatur-Fokus ziehen — sonst spawnt ein Preset-Wechsel
+                    // Tastatur-Fokus ziehen — sonst spawnt der Grid-Aufbau
                     // bis zu 4 PTYs und die Panes kämpfen um den Fokus.
                     suppressesAutoActivation: !isFocused
                 )
                 .id(session.id)
-                .padding(6)
             } else {
                 ContentUnavailableView("Projekt fehlt", systemImage: "questionmark.folder")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(AgentTheme.background)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(
-                    isFocused ? AgentTheme.accent.opacity(0.8) : AgentTheme.border,
-                    lineWidth: isFocused ? 2 : 1
-                )
-        )
+        // Fokus als 2-px-Inset auf der bündigen Pane — dauerhaft sichtbar,
+        // kein Karten-Rahmen (Divider kommen aus dem 1-px-Gap).
+        .overlay {
+            if isFocused {
+                Rectangle()
+                    .strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Hover-Flag fürs Klick-Routing (Muster `isHoveringTabStrip`): der
         // leftMouseDown-Monitor setzt die Selektion auf die gehoverte Pane,
@@ -174,6 +200,18 @@ extension AgentChatsView {
             }
             Spacer(minLength: 6)
             Button {
+                maximizePane(session.id)
+            } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .frame(width: 16, height: 16)
+                    .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Diesen Chat maximieren")
+            Button {
                 closeTab(session)
             } label: {
                 Image(systemName: "xmark")
@@ -190,7 +228,11 @@ extension AgentChatsView {
         .frame(height: 28)
         .background(isFocused ? AgentTheme.header : AgentTheme.header.opacity(0.55))
         .contentShape(Rectangle())
-        .onTapGesture { selectedSessionID = session.id }
+        // Doppelklick auf den Header = schneller Maximize-Weg. Der einfache
+        // Klick (Fokus) läuft über den leftMouseDown-Monitor — bewusst KEIN
+        // zusätzliches Single-Tap-Gesture, das würde den Doppelklick um die
+        // Erkennungs-Verzögerung ausbremsen.
+        .onTapGesture(count: 2) { maximizePane(session.id) }
     }
 
     // MARK: - Selektion
@@ -200,7 +242,7 @@ extension AgentChatsView {
     /// das Event läuft unverändert weiter ans Terminal.
     func handleGridPaneMouseDown(_ event: NSEvent) {
         guard let hostWindow, event.window === hostWindow,
-              gridPreset != .single,
+              isGridActive,
               let hovered = hoveredGridPaneID,
               hovered != selectedSessionID else { return }
         selectedSessionID = hovered
@@ -209,7 +251,7 @@ extension AgentChatsView {
     }
 
     private func bringSelectionIntoGrid(_ selected: UUID, previous: UUID?) {
-        guard gridPreset != .single else { return }
+        guard isGridActive else { return }
         if let newOrder = AgentGridLayout.orderBringingIntoView(
             selected: selected,
             openTabIDs: openTabIDs,

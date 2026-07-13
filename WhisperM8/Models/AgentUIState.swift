@@ -16,10 +16,12 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
     var selectedSessionID: UUID?
     var selectedProjectID: UUID?
     var isPrimary: Bool
-    /// Grid-Ansicht des Fensters: wie viele der offenen Tabs gleichzeitig
-    /// als Panes sichtbar sind (1 = heutige Einzelansicht). Reine
-    /// Präsentation der Tab-Liste — kein zusätzlicher Slot-Zustand.
-    var gridPreset: AgentGridPreset
+    /// Grid-Ansicht des Fensters: `true` = alle offenen Tabs als bündige
+    /// Panes (Layout automatisch aus der Tab-Anzahl), `false` = der
+    /// selektierte Tab füllt den Content (Default, heutiges Verhalten).
+    /// Umgeschaltet über Maximize (Pane) / Minimize (Chat-Statuszeile) —
+    /// es gibt bewusst keine manuellen Raster-Presets mehr.
+    var showsGrid: Bool
 
     init(
         id: UUID = UUID(),
@@ -27,23 +29,25 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         selectedSessionID: UUID? = nil,
         selectedProjectID: UUID? = nil,
         isPrimary: Bool = false,
-        gridPreset: AgentGridPreset = .single
+        showsGrid: Bool = false
     ) {
         self.id = id
         self.openTabIDs = openTabIDs
         self.selectedSessionID = selectedSessionID
         self.selectedProjectID = selectedProjectID
         self.isPrimary = isPrimary
-        self.gridPreset = gridPreset
+        self.showsGrid = showsGrid
     }
 
     enum CodingKeys: String, CodingKey {
         case id, openTabIDs, selectedSessionID, selectedProjectID, isPrimary
-        case gridPreset
+        case showsGrid
+        // Preset-Ära (kurzlebiges V1, 2026-07-12) — nur noch fürs Decoding.
+        case legacyGridPreset = "gridPreset"
     }
 
     /// Manueller Decoder statt Synthese: synthetisiertes Codable nutzt KEINE
-    /// Property-Defaults — ein fehlender `gridPreset`-Key in Bestandsdateien
+    /// Property-Defaults — ein fehlender `showsGrid`-Key in Bestandsdateien
     /// wuerde `keyNotFound` werfen, und der `loadUIState`-Fallback verwirft
     /// dann still den kompletten Fenster-/Tab-State des Users.
     init(from decoder: Decoder) throws {
@@ -53,38 +57,25 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         selectedSessionID = try c.decodeIfPresent(UUID.self, forKey: .selectedSessionID)
         selectedProjectID = try c.decodeIfPresent(UUID.self, forKey: .selectedProjectID)
         isPrimary = try c.decodeIfPresent(Bool.self, forKey: .isPrimary) ?? false
-        gridPreset = try c.decodeIfPresent(AgentGridPreset.self, forKey: .gridPreset) ?? .single
-    }
-}
-
-/// Grid-Preset der Tab-Ansicht eines Fensters. Unbekannte Raw-Werte aus
-/// zukuenftigen Versionen fallen beim Decoding auf `.single` (siehe
-/// `init(from:)` in `AgentChatWindowState` — decodeIfPresent wirft dort
-/// nicht, weil der Key dann fehlt; bei UNGUELTIGEM Wert schuetzt der
-/// failable `init(rawValue:)`-Umweg unten).
-enum AgentGridPreset: String, Codable, CaseIterable {
-    /// Einzelansicht (heutiges Verhalten).
-    case single
-    /// Zwei Panes nebeneinander (1 Zeile × 2 Spalten).
-    case cols2
-    /// Zwei Panes uebereinander (2 Zeilen × 1 Spalte).
-    case rows2
-    /// Vier Panes (2 × 2).
-    case grid2x2
-
-    var paneCount: Int {
-        switch self {
-        case .single: 1
-        case .cols2, .rows2: 2
-        case .grid2x2: 4
+        if let shows = try c.decodeIfPresent(Bool.self, forKey: .showsGrid) {
+            showsGrid = shows
+        } else {
+            // Migration der Preset-Ära: "single" → Einzelansicht, jedes
+            // andere Raster → Grid. Fehlt beides: Default Einzelansicht.
+            let legacy = try c.decodeIfPresent(String.self, forKey: .legacyGridPreset)
+            showsGrid = legacy.map { $0 != "single" } ?? false
         }
     }
 
-    /// Robust gegen unbekannte Werte aus neueren App-Versionen: nie werfen,
-    /// sondern auf `.single` fallen.
-    init(from decoder: Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
-        self = AgentGridPreset(rawValue: raw) ?? .single
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(openTabIDs, forKey: .openTabIDs)
+        try c.encodeIfPresent(selectedSessionID, forKey: .selectedSessionID)
+        try c.encodeIfPresent(selectedProjectID, forKey: .selectedProjectID)
+        try c.encode(isPrimary, forKey: .isPrimary)
+        try c.encode(showsGrid, forKey: .showsGrid)
+        // legacyGridPreset wird bewusst nicht mehr geschrieben.
     }
 }
 

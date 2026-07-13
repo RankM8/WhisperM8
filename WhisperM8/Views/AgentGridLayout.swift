@@ -1,5 +1,36 @@
 import Foundation
 
+/// Automatisch gewähltes Grid-Layout — abgeleitet aus der Tab-Anzahl,
+/// kein manuelles Preset mehr (Maximize/Minimize-Konzept 2026-07-13).
+enum AgentGridAutoLayout: Equatable {
+    /// 1 Tab: Einzelansicht (Grid zeigt dasselbe wie maximiert).
+    case single
+    /// 2 Tabs: zwei Spalten.
+    case cols2
+    /// 3 Tabs: zwei oben, einer unten in voller Breite.
+    case twoPlusOne
+    /// 4+ Tabs: 2×2 (mehr Tabs laufen über den Bring-into-View-Swap).
+    case grid2x2
+
+    static func forTabCount(_ count: Int) -> AgentGridAutoLayout {
+        switch count {
+        case ...1: .single
+        case 2: .cols2
+        case 3: .twoPlusOne
+        default: .grid2x2
+        }
+    }
+
+    var paneCount: Int {
+        switch self {
+        case .single: 1
+        case .cols2: 2
+        case .twoPlusOne: 3
+        case .grid2x2: 4
+        }
+    }
+}
+
 /// Pure Slot-Logik der Grid-Ansicht: die Panes zeigen die ersten N offenen
 /// Tabs in Anzeige-Reihenfolge. Kein eigener Slot-Zustand — alles leitet
 /// sich aus `openTabIDs` ab (eine Wahrheit, persistiert wie bisher).

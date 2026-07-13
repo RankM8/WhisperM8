@@ -172,14 +172,16 @@ final class AgentWindowStore {
         updateWindow(windowID) { $0.selectedProjectID = projectID }
     }
 
-    // MARK: - Grid-Preset (pro Fenster)
+    // MARK: - Grid-Ansicht (pro Fenster)
 
-    func gridPreset(in windowID: UUID) -> AgentGridPreset {
-        window(for: windowID).gridPreset
+    /// `true` = alle offenen Tabs als Panes (Maximize/Minimize-Toggle),
+    /// `false` = Einzelansicht des selektierten Tabs (Default).
+    func showsGrid(in windowID: UUID) -> Bool {
+        window(for: windowID).showsGrid
     }
 
-    func setGridPreset(_ preset: AgentGridPreset, in windowID: UUID) {
-        updateWindow(windowID) { $0.gridPreset = preset }
+    func setShowsGrid(_ shows: Bool, in windowID: UUID) {
+        updateWindow(windowID) { $0.showsGrid = shows }
     }
 
     /// Entfernt ein leeres Sekundaerfenster aus dem State. Gibt `true` zurueck,

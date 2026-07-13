@@ -1734,10 +1734,10 @@ struct AgentChatsView: View {
         VStack(spacing: 0) {
             projectChatStrip
 
-            if gridPreset != .single, !headerTabs.isEmpty {
-                // Split-Grid: mehrere offene Tabs gleichzeitig — ersetzt nur
-                // den Detail-Bereich; Sidebar/Tab-Strip bleiben unverändert.
-                // Siehe AgentChatsView+Grid.swift.
+            if isGridActive {
+                // Split-Grid: alle offenen Tabs als bündige Panes — ersetzt
+                // nur den Detail-Bereich; Sidebar/Tab-Strip bleiben
+                // unverändert. Siehe AgentChatsView+Grid.swift.
                 gridWorkspace
                     // Ctrl+Tab-Switcher auch im Grid: der keyDown-Monitor
                     // aktiviert ihn layoutunabhängig — ohne Overlay wäre er
@@ -2071,8 +2071,6 @@ struct AgentChatsView: View {
                 // visueller Clutter im Titlebar-Bereich kostet mehr als er
                 // hier liefert.
 
-                gridPresetSwitcher
-
                 TitlebarIconButton(systemImage: "sidebar.right", help: isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen", isActive: isInspectorVisible) {
                     isInspectorVisible.toggle()
                 }
@@ -2143,6 +2141,10 @@ struct AgentChatsView: View {
                     .fixedSize()
                     .help("In \(projectOpenTarget.label) öffnen · Pfeil für Auswahl")
                 }
+
+                // Minimize: aus der Einzelansicht zurück ins Grid mit allen
+                // offenen Tabs (Gegenstück zum ⤢ im Pane-Header).
+                minimizeToGridButton
             }
             .fixedSize()
         }

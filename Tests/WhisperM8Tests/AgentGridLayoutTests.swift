@@ -95,26 +95,28 @@ final class AgentGridLayoutTests: XCTestCase {
         XCTAssertEqual(order, [archived, c, b, a])
     }
 
-    // MARK: - AgentGridPreset
+    // MARK: - AgentGridAutoLayout
 
-    func testPaneCounts() {
-        XCTAssertEqual(AgentGridPreset.single.paneCount, 1)
-        XCTAssertEqual(AgentGridPreset.cols2.paneCount, 2)
-        XCTAssertEqual(AgentGridPreset.rows2.paneCount, 2)
-        XCTAssertEqual(AgentGridPreset.grid2x2.paneCount, 4)
+    func testAutoLayoutForTabCount() {
+        XCTAssertEqual(AgentGridAutoLayout.forTabCount(0), .single)
+        XCTAssertEqual(AgentGridAutoLayout.forTabCount(1), .single)
+        XCTAssertEqual(AgentGridAutoLayout.forTabCount(2), .cols2)
+        XCTAssertEqual(AgentGridAutoLayout.forTabCount(3), .twoPlusOne)
+        XCTAssertEqual(AgentGridAutoLayout.forTabCount(4), .grid2x2)
+        XCTAssertEqual(AgentGridAutoLayout.forTabCount(9), .grid2x2,
+                       "5+ Tabs bleiben 2×2 — Rest läuft über den Bring-into-View-Swap")
     }
 
-    func testUnknownPresetRawValueDecodesAsSingle() throws {
-        let decoded = try JSONDecoder().decode(
-            AgentGridPreset.self,
-            from: Data("\"grid4x4\"".utf8)
-        )
-        XCTAssertEqual(decoded, .single, "unbekannte Werte aus neueren Versionen fallen auf .single")
+    func testAutoLayoutPaneCounts() {
+        XCTAssertEqual(AgentGridAutoLayout.single.paneCount, 1)
+        XCTAssertEqual(AgentGridAutoLayout.cols2.paneCount, 2)
+        XCTAssertEqual(AgentGridAutoLayout.twoPlusOne.paneCount, 3)
+        XCTAssertEqual(AgentGridAutoLayout.grid2x2.paneCount, 4)
     }
 
-    // MARK: - Persistenz (AgentChatWindowState)
+    // MARK: - Persistenz (AgentChatWindowState.showsGrid)
 
-    func testWindowStateWithoutGridPresetDecodesAsSingle() throws {
+    func testWindowStateWithoutShowsGridDecodesAsFalse() throws {
         // Bestandsdatei ohne das Feld darf NICHT keyNotFound werfen — der
         // loadUIState-Fallback würde sonst den kompletten Tab-State verwerfen.
         let windowID = UUID()
@@ -127,25 +129,49 @@ final class AgentGridLayoutTests: XCTestCase {
                       "isPrimary": true}]}
         """
         let decoded = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
-        XCTAssertEqual(decoded.windowState(for: windowID).gridPreset, .single)
+        XCTAssertFalse(decoded.windowState(for: windowID).showsGrid)
         XCTAssertEqual(decoded.windowState(for: windowID).openTabIDs, [tabID])
     }
 
-    func testGridPresetRoundTripsViaJSON() throws {
+    func testLegacyGridPresetMigratesToShowsGrid() throws {
+        // Preset-Ära (V1, 2026-07-12): "single" → Einzelansicht, jedes
+        // andere Raster → Grid.
+        let gridWindowID = UUID()
+        let singleWindowID = UUID()
+        let json = """
+        {"schemaVersion": 3,
+         "primaryWindowID": "\(gridWindowID.uuidString)",
+         "windows": [
+           {"id": "\(gridWindowID.uuidString)", "openTabIDs": [],
+            "isPrimary": true, "gridPreset": "grid2x2"},
+           {"id": "\(singleWindowID.uuidString)",
+            "openTabIDs": ["\(UUID().uuidString)"], "gridPreset": "single"}
+         ]}
+        """
+        let decoded = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
+        XCTAssertTrue(decoded.windowState(for: gridWindowID).showsGrid, "Raster-Preset → Grid")
+        XCTAssertFalse(decoded.windowState(for: singleWindowID).showsGrid, "single → Einzelansicht")
+    }
+
+    func testShowsGridRoundTripsAndDropsLegacyKey() throws {
         let window = AgentChatWindowState(
             openTabIDs: [UUID(), UUID()],
             isPrimary: true,
-            gridPreset: .grid2x2
+            showsGrid: true
         )
         let original = AgentUIState(windows: [window], primaryWindowID: window.id)
         let encoded = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AgentUIState.self, from: encoded)
-        XCTAssertEqual(decoded.windowState(for: window.id).gridPreset, .grid2x2)
+        XCTAssertTrue(decoded.windowState(for: window.id).showsGrid)
         XCTAssertEqual(decoded, original)
+
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let windows = try XCTUnwrap(object["windows"] as? [[String: Any]])
+        XCTAssertNil(windows.first?["gridPreset"], "Legacy-Key wird nicht mehr geschrieben")
     }
 
     @MainActor
-    func testStoreGridPresetSurvivesTabMutations() {
+    func testStoreShowsGridSurvivesTabMutations() {
         let persistence = AgentSessionStore(
             fileURL: FileManager.default.temporaryDirectory
                 .appendingPathComponent("wm8-grid-ws-\(UUID().uuidString).json"),
@@ -154,10 +180,10 @@ final class AgentGridLayoutTests: XCTestCase {
         )
         let store = AgentWindowStore(persistence: persistence)
         let w = store.primaryWindowID
-        store.setGridPreset(.cols2, in: w)
+        store.setShowsGrid(true, in: w)
         store.openTab(UUID(), in: w)
         store.openTab(UUID(), in: w)
-        XCTAssertEqual(store.gridPreset(in: w), .cols2,
-                       "Tab-Mutationen (normalizedWindows) verlieren das Preset nicht")
+        XCTAssertTrue(store.showsGrid(in: w),
+                      "Tab-Mutationen (normalizedWindows) verlieren den Grid-Zustand nicht")
     }
 }
