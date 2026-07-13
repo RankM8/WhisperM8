@@ -1,13 +1,13 @@
 # Plan: Split-Grid — mehrere Agent-Sessions nebeneinander in einem Fenster
 
-> **ABGELÖST (2026-07-13):** Dieses Dokument beschreibt den **Ist-Stand** (V2.1, umgesetzt)
-> und ist keine normative Spezifikation mehr. Der verbindliche Plan für den Nachfolger
-> (Grid-Workspaces: benannte Gruppen, stabile Slots, Drag & Drop, 2–9 Panes, Single-Owner
-> pro Fenster) ist [`grid-workspace-plan.html`](grid-workspace-plan.html) — review-geprüft
-> durch drei Codex-Jobs (01bde5b9 · 14d92786 · ff489fdb). Abweichungen zwischen beiden
-> Dokumenten (z. B. Verdrängungs-Automatik, max. 4 Panes, `focusedPaneSessionID`) sind
-> gewollt: Der HTML-Plan gewinnt. Die V3-Ideen unten („Projekt"/„Running"-Automatik) sind
-> gestrichen bzw. auf später verschoben.
+> **ABGELÖST + NACHFOLGER UMGESETZT (2026-07-13):** Dieses Dokument beschreibt den
+> V2.1-Zwischenstand und ist reine Historie. Der Nachfolger (Grid-Workspaces: benannte
+> Gruppen, stabile Slots, Drag & Drop, 2–9 Panes, Single-Owner pro Fenster) ist nach
+> [`grid-workspace-plan.html`](grid-workspace-plan.html) **vollständig umgesetzt**
+> (Pakete 1–3 bis Commit `c6313fd`; Schema v4 migriert die hier beschriebenen
+> `gridSessionIDs` automatisch in Workspace-Entities). Abweichungen zwischen beiden
+> Dokumenten sind gewollt: Der HTML-Plan gewinnt. Die V3-Ideen unten
+> („Projekt"/„Running"-Automatik) sind gestrichen bzw. auf später verschoben.
 
 Stand: 2026-07-13 · Status: **V2.1 (Grid-Mitgliedschaft) UMGESETZT 2026-07-13** — das Grid
 zeigt eine explizite, pro Fenster persistierte Auswahl (`gridSessionIDs`; leer = alle offenen
