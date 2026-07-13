@@ -24,6 +24,8 @@ make dmg          # Create distributable DMG
 
 `make dev` uses `rsync` into the existing bundle on purpose: deleting and recopying the bundle would make macOS TCC revoke mic/accessibility/screen permissions. Run `scripts/setup-codesign-cert.sh` once for a persistent local signing identity (otherwise ad-hoc signing re-prompts TCC on every rebuild).
 
+**WICHTIG — wenn du als Agent-Chat IN der WhisperM8-App läufst** (der übliche Fall: die Session wurde aus der App heraus gestartet): führe NIEMALS `make dev`, `make kill`, `make run` oder `make clean-install` aus. Diese Targets killen die laufende App — und damit deine eigene Session samt aller anderen offenen Chats des Users. Baue und teste nur mit `swift build` / `swift test`; den Neustart der App (`make dev`) macht der User selbst im Terminal.
+
 ### Tests
 
 ```bash
