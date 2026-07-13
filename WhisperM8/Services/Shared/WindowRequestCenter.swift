@@ -51,6 +51,17 @@ struct AgentSessionFocusRequest: Equatable {
     let isPrimaryWindow: Bool
 }
 
+/// Reiner FENSTER-Fokus-Wunsch (Single-Owner-Konflikt-Routing: „Workspace
+/// läuft dort drüben") — bringt das Fenster nach vorn, OHNE dessen
+/// Selektion/Ansicht zu mutieren (Entscheidung A; der frühere Umweg über
+/// eine Session navigierte im Besitzerfenster und scheiterte bei leeren
+/// Fenstern ganz — Review-Finding).
+struct AgentWindowFocusRequest: Equatable {
+    let requestID: UUID
+    let windowID: UUID
+    let isPrimaryWindow: Bool
+}
+
 @MainActor
 final class WindowRequestCenter: ObservableObject {
     static let shared = WindowRequestCenter()
@@ -70,6 +81,8 @@ final class WindowRequestCenter: ObservableObject {
     /// Tab + Selektion sind zu diesem Zeitpunkt bereits im `AgentWindowStore`
     /// gesetzt (SSoT — die Views folgen von selbst).
     @Published private(set) var sessionFocusRequest: AgentSessionFocusRequest?
+    /// Letzter reiner Fenster-Fokus-Wunsch (kein State-Mutieren).
+    @Published private(set) var windowFocusRequest: AgentWindowFocusRequest?
 
     /// Ob das Agent-Chats-Primärfenster angezeigt werden darf. In den Menüleisten-Profilen
     /// (`AppUsageProfile` ohne Agent Chats) wird der automatische Launch-Open unterdrückt;
@@ -114,6 +127,15 @@ final class WindowRequestCenter: ObservableObject {
     /// geöffnet + selektiert). Einstieg für den Notification-Klick.
     func requestSessionFocus(sessionID: UUID) {
         let windowStore = AgentWindowStore.shared
+        // Stale-Guard (Review-Finding): eine veraltete Notification auf eine
+        // inzwischen archivierte/gelöschte Session darf den UI-State nicht
+        // mutieren (Ghost-Tab, verlassenes Grid) — kommentarlos ignorieren.
+        let workspace = AgentSessionStore().loadWorkspace()
+        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+              session.status != .archived else {
+            Logger.debug("session_focus_request ignoriert — Session fehlt/archiviert")
+            return
+        }
         let targetWindowID = windowStore.windowID(containingTab: sessionID)
             ?? windowStore.primaryWindowID
         let isPrimary = targetWindowID == windowStore.primaryWindowID
@@ -129,21 +151,35 @@ final class WindowRequestCenter: ObservableObject {
         // Projekt-Gruppe aufklappen und bei Subagent-Kindern die Parent-
         // Gruppe explizit öffnen (die implizite Offenhaltung über die
         // Selektion endet mit dem nächsten Tab-Wechsel).
-        let workspace = AgentSessionStore().loadWorkspace()
-        if let session = workspace.sessions.first(where: { $0.id == sessionID }) {
-            windowStore.expandProject(session.projectID)
-            if session.isSubagentJob,
-               let parentExternalID = session.subagentParentSessionID,
-               let parent = workspace.sessions.first(where: {
-                   !$0.isSubagentJob && $0.externalSessionID == parentExternalID
-               }) {
-                windowStore.expandSubagentChildren(parent.id)
-            }
+        windowStore.expandProject(session.projectID)
+        if session.isSubagentJob,
+           let parentExternalID = session.subagentParentSessionID,
+           let parent = workspace.sessions.first(where: {
+               !$0.isSubagentJob && $0.externalSessionID == parentExternalID
+           }) {
+            windowStore.expandSubagentChildren(parent.id)
         }
         sessionFocusRequest = AgentSessionFocusRequest(
             requestID: UUID(),
             sessionID: sessionID,
             windowID: targetWindowID,
+            isPrimaryWindow: isPrimary
+        )
+    }
+
+    /// Bringt ein konkretes Agent-Chats-Fenster nach vorn, ohne dessen
+    /// Selektion/Ansicht anzufassen (Single-Owner-Konflikt-Routing —
+    /// funktioniert auch für Fenster ohne Tabs).
+    func requestWindowFocus(windowID: UUID) {
+        let windowStore = AgentWindowStore.shared
+        guard windowStore.hasWindow(windowID) else { return }
+        let isPrimary = windowID == windowStore.primaryWindowID
+        if isPrimary {
+            allowsAgentChatsPrimaryWindow = true
+        }
+        windowFocusRequest = AgentWindowFocusRequest(
+            requestID: UUID(),
+            windowID: windowID,
             isPrimaryWindow: isPrimary
         )
     }
@@ -186,6 +222,16 @@ struct WindowRequestHandler: View {
             .onReceive(requestCenter.$sessionFocusRequest.compactMap { $0 }.removeDuplicates()) { request in
                 // Notification-Klick: Ziel-Fenster öffnen bzw. fokussieren —
                 // Tab/Selektion stehen bereits im AgentWindowStore.
+                if request.isPrimaryWindow {
+                    openWindow(id: WindowRequest.agentChats.targetWindowID)
+                } else {
+                    openWindow(id: WindowRequest.agentChatWindowGroupID, value: request.windowID)
+                }
+                WindowActivationService.activateApp()
+            }
+            .onReceive(requestCenter.$windowFocusRequest.compactMap { $0 }.removeDuplicates()) { request in
+                // Reiner Fenster-Fokus (Single-Owner-Routing): nach vorn,
+                // KEINE State-Mutation.
                 if request.isPrimaryWindow {
                     openWindow(id: WindowRequest.agentChats.targetWindowID)
                 } else {

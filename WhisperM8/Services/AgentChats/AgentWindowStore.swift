@@ -295,6 +295,7 @@ final class AgentWindowStore {
                 where state.windows[index].activeWorkspaceID == workspaceID {
                 state.windows[index].activeWorkspaceID = nil
                 state.windows[index].showsGrid = false
+                state.windows[index].gridFocusSessionID = nil
             }
         }
         flush()
@@ -326,10 +327,12 @@ final class AgentWindowStore {
 
     /// Nimmt eine Session in den Workspace auf (Semantik siehe
     /// `WorkspaceSlotOps.add`). Unbekannte/archivierte Sessions werden
-    /// abgewiesen; gehört die Session als Tab einem ANDEREN Fenster als dem
-    /// Besitzerfenster des Workspace, ebenso (kein Terminal-Stehlen).
-    /// Im Besitzerfenster wird der Tab materialisiert und (bei sichtbarem
-    /// Grid) fokussiert — alles in EINER Mutation.
+    /// abgewiesen. Gehört die Session als Tab einem ANDEREN Fenster, wird
+    /// die MITGLIEDSCHAFT trotzdem aufgenommen, aber weder Tab noch Fokus
+    /// angefasst (kein Terminal-Stehlen — der Render-Guard zeigt im
+    /// Besitzerfenster den Übernahme-Platzhalter). Sonst wird der Tab im
+    /// Besitzerfenster materialisiert und (bei sichtbarem Grid) fokussiert —
+    /// alles in EINER Mutation.
     @discardableResult
     func addSession(
         _ sessionID: UUID,
@@ -343,11 +346,6 @@ final class AgentWindowStore {
         let domain = persistence.loadWorkspace()
         guard let session = domain.sessions.first(where: { $0.id == sessionID }),
               session.status != .archived else { return .rejected }
-        if let owner = windowID(owningGridWorkspace: workspaceID),
-           let host = windowID(containingTab: sessionID),
-           host != owner {
-            return .rejected
-        }
 
         let (updated, result) = WorkspaceSlotOps.add(sessionID, to: entity, at: targetSlot)
         switch result {
@@ -362,12 +360,19 @@ final class AgentWindowStore {
             state.gridWorkspaces[index] = updated
             guard let ownerID = state.windows.first(where: { $0.activeWorkspaceID == workspaceID })?.id
             else { return }
+            // Tab-Materialisierung nur, wenn KEIN anderes Fenster den Tab
+            // hält (sonst bleibt die Pane ein Übernahme-Platzhalter).
+            let foreignHost = state.windows.first {
+                $0.id != ownerID && $0.openTabIDs.contains(sessionID)
+            }
+            guard foreignHost == nil else { return }
             var window = state.windowState(for: ownerID)
             if !window.openTabIDs.contains(sessionID) {
                 window.openTabIDs.append(sessionID)
             }
             if focusIfActive, window.showsGrid {
                 window.selectedSessionID = sessionID
+                window.gridFocusSessionID = sessionID
             }
             state.upsertWindow(window)
         }
@@ -463,7 +468,14 @@ final class AgentWindowStore {
             var window = state.windowState(for: ownerID)
             if window.showsGrid, let selected = window.selectedSessionID,
                updated.slotIndex(of: selected) == nil {
-                window.selectedSessionID = updated.occupiedSessionIDs.first
+                // Deterministischer Fallback wie beim Entfernen: vom ALTEN
+                // Fokus-Index aus nächster belegter Slot, sonst vorheriger
+                // (nicht pauschal der erste — Review-Finding).
+                let oldIndex = entity.slotIndex(of: selected) ?? 0
+                let anchor = min(oldIndex, max(0, updated.slots.count - 1))
+                let fallback = Self.gridFocusFallback(in: updated, removedIndex: anchor)
+                window.selectedSessionID = fallback
+                window.gridFocusSessionID = fallback
             }
             state.upsertWindow(window)
         }
@@ -473,16 +485,16 @@ final class AgentWindowStore {
 
     // MARK: - Grid-Workspaces: Fenster-/Fokus-Mutationen
 
-    /// Aktiviert einen Workspace als Grid des Fensters (Single-Owner).
-    /// Materialisiert fehlende Slot-Tabs in Slot-Reihenfolge HINTEN, ohne
-    /// bestehende Tabs zu schließen oder umzusortieren; startet nie
-    /// Prozesse. Konflikte kommen als Ergebnis zurück, nie als Teilmutation.
-    ///
-    /// Besitz-Feinheiten: Hält ein ANDERES Fenster den Workspace nur als
-    /// verborgenes Rücksprungziel (`showsGrid == false`), wird der Besitz
-    /// still übertragen — es rendert nichts, das gestohlen werden könnte,
-    /// und ein leeres Besitzerfenster wäre sonst nicht fokussierbar
-    /// (Review-Finding). Sichtbare Grids bleiben exklusiv.
+    /// Aktiviert einen Workspace als Grid des Fensters (Single-Owner,
+    /// Entscheidung A strikt: JEDER vorhandene Besitzer — sichtbar oder als
+    /// verborgenes Rücksprungziel — liefert `.alreadyActive`, die UI
+    /// fokussiert dieses Fenster über seine Fenster-ID). Materialisiert
+    /// fehlende Slot-Tabs in Slot-Reihenfolge HINTEN, ohne bestehende Tabs
+    /// zu schließen oder umzusortieren; startet nie Prozesse. Konflikte
+    /// kommen als Ergebnis zurück, NIE als Teilmutation — sämtliche
+    /// Prüfungen laufen vor der ersten Mutation (Review-Blocker: der
+    /// frühere Hidden-Owner-Clear lief vor der Konfliktprüfung und
+    /// zerstörte bei Ablehnung das Rücksprungziel des Besitzers).
     @discardableResult
     func activateGridWorkspace(_ workspaceID: UUID, in windowID: UUID) -> GridActivationResult {
         guard let entity = gridWorkspace(id: workspaceID), hasWindow(windowID) else {
@@ -490,7 +502,7 @@ final class AgentWindowStore {
         }
         // Tab-Ownership-Konflikt: Slot-Chats, die als Tab in einem ANDEREN
         // Fenster leben, würden beim Materialisieren gestohlen. Gilt auch
-        // für den idempotenten Re-Aktivierungs-Pfad (Review-Blocker 1).
+        // für den idempotenten Re-Aktivierungs-Pfad.
         var conflicts: [UUID: UUID] = [:]
         for sessionID in entity.occupiedSessionIDs {
             if let host = self.windowID(containingTab: sessionID), host != windowID {
@@ -498,41 +510,22 @@ final class AgentWindowStore {
             }
         }
 
-        let current = window(for: windowID)
-        if current.activeWorkspaceID == workspaceID {
-            guard conflicts.isEmpty else {
-                return .blockedByWindowOwnership(conflicts)
-            }
-            updateWindow(windowID) { window in
-                window.showsGrid = true
-                Self.materializeSlotTabs(&window, entity: entity)
-                Self.repairGridFocus(&window, entity: entity)
-            }
-            return .alreadyActiveHere
-        }
         if let owner = self.windowID(owningGridWorkspace: workspaceID), owner != windowID {
-            if window(for: owner).showsGrid {
-                return .alreadyActive(ownerWindowID: owner)
-            }
-            // Verborgene Referenz: Besitz still übernehmen (eine Mutation —
-            // der alte Owner verliert nur sein Rücksprungziel).
-            mutate { state in
-                if let index = state.windows.firstIndex(where: { $0.id == owner }) {
-                    state.windows[index].activeWorkspaceID = nil
-                    state.windows[index].gridFocusSessionID = nil
-                }
-            }
+            return .alreadyActive(ownerWindowID: owner)
         }
         guard conflicts.isEmpty else {
             return .blockedByWindowOwnership(conflicts)
         }
+
+        let current = window(for: windowID)
+        let alreadyHere = current.activeWorkspaceID == workspaceID
         updateWindow(windowID) { window in
             window.activeWorkspaceID = workspaceID
             window.showsGrid = true
             Self.materializeSlotTabs(&window, entity: entity)
             Self.repairGridFocus(&window, entity: entity)
         }
-        return .activated
+        return alreadyHere ? .alreadyActiveHere : .activated
     }
 
     /// Einzelansicht öffnen/selektieren — die Workspace-Referenz UND der
@@ -560,7 +553,22 @@ final class AgentWindowStore {
         if let entity = activeGridWorkspace(in: windowID),
            window(for: windowID).showsGrid,
            entity.slotIndex(of: sessionID) != nil {
-            setGridFocusedSession(sessionID, in: windowID)
+            // Slot ohne Tab (z. B. Tab geschlossen, Mitgliedschaft blieb):
+            // Tab materialisieren + fokussieren in EINER Mutation — sonst
+            // verwürfe die Normalisierung die Selektion sofort wieder.
+            // Hält ein ANDERES Fenster den Tab, bleibt der Slot ein
+            // Übernahme-Platzhalter (kein Stehlen; die View routet solche
+            // Klicks vorab zum Besitzerfenster).
+            let host = self.windowID(containingTab: sessionID)
+            if host == nil {
+                updateWindow(windowID) { window in
+                    window.openTabIDs.append(sessionID)
+                    window.selectedSessionID = sessionID
+                    window.gridFocusSessionID = sessionID
+                }
+            } else if host == windowID {
+                setGridFocusedSession(sessionID, in: windowID)
+            }
         } else {
             showSingleSession(sessionID, in: windowID)
         }

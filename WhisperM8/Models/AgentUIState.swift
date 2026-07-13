@@ -264,6 +264,11 @@ struct AgentUIState: Codable, Equatable {
             windows = Self.normalizedWindows(
                 windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces
             )
+            // Nachbedingung „immer leer" gilt auch für v4-Dateien, die den
+            // Legacy-Key (hand-editiert/fremd) noch tragen.
+            for index in windows.indices {
+                windows[index].legacyGridSessionIDs = []
+            }
             syncLegacyWindowMirror()
             legacyOpenTabIDsByProject = [:]
             legacySelectedSessionIDByProject = [:]
@@ -350,11 +355,22 @@ struct AgentUIState: Codable, Equatable {
             workspace.sessions.filter { $0.status != .archived }.map(\.id)
         )
         var usedNames = Set(gridWorkspaces.map(\.name))
-        let ordered = rawWindows.sorted { lhs, rhs in
-            if lhs.id == primaryWindowID { return true }
-            if rhs.id == primaryWindowID { return false }
-            return lhs.id.uuidString < rhs.id.uuidString
-        }
+        // STABILE Sortierung (primaryRank, UUID, Eingabe-Index) — der frühere
+        // Comparator war bei doppelten Fenster-IDs in beiden Richtungen
+        // `true` und damit undeterministisch (Review-Finding).
+        let ordered = rawWindows.enumerated().sorted { lhs, rhs in
+            let lhsPrimary = lhs.element.id == primaryWindowID
+            let rhsPrimary = rhs.element.id == primaryWindowID
+            if lhsPrimary != rhsPrimary { return lhsPrimary }
+            if lhs.element.id != rhs.element.id {
+                return lhs.element.id.uuidString < rhs.element.id.uuidString
+            }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+        // Nur die ERSTE Roh-Occurrence einer Fenster-ID bindet ihre Entity —
+        // weitere Entities derselben (korrupten) ID bleiben bewusst
+        // besitzerlos statt sich gegenseitig zu überschreiben.
+        var boundWindowIDs = Set<UUID>()
 
         for raw in ordered {
             let hadLegacyMembers = !raw.legacyGridSessionIDs.isEmpty
@@ -392,7 +408,8 @@ struct AgentUIState: Codable, Equatable {
                 )
             )
             gridWorkspaces.append(entity)
-            if let index = windows.firstIndex(where: { $0.id == raw.id }) {
+            if boundWindowIDs.insert(raw.id).inserted,
+               let index = windows.firstIndex(where: { $0.id == raw.id }) {
                 windows[index].activeWorkspaceID = entity.id
                 // showsGrid bleibt unverändert — auch ein verborgenes Grid
                 // behält seine Referenz („Zurück zum Workspace").
@@ -441,6 +458,20 @@ struct AgentUIState: Codable, Equatable {
         let liveSessionIDs = Set(
             workspace.sessions.filter { $0.status != .archived }.map(\.id)
         )
+        // Fokus-Anker VOR der Slot-Bereinigung sichern: Verliert ein Fenster
+        // seinen fokussierten Slot (Archiv/Delete), gilt der deterministische
+        // Fallback „nächster belegter Slot, sonst vorheriger" — dafür braucht
+        // es den URSPRÜNGLICHEN Index (Review-Finding: pauschal „erster
+        // belegter" war falsch).
+        var focusAnchors: [UUID: (workspaceID: UUID, index: Int)] = [:]
+        for window in windows {
+            guard let workspaceID = window.activeWorkspaceID,
+                  let entity = gridWorkspaces.first(where: { $0.id == workspaceID }),
+                  let focus = window.gridFocusSessionID ?? window.selectedSessionID,
+                  let index = entity.slotIndex(of: focus) else { continue }
+            focusAnchors[window.id] = (workspaceID, index)
+        }
+
         gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces).map { entity in
             var copy = entity
             // Indexstabil: toter Verweis wird am eigenen Index nil — nie
@@ -450,6 +481,26 @@ struct AgentUIState: Codable, Equatable {
                 return slot
             }
             return copy
+        }
+
+        // Anker anwenden: Ist der verankerte Fokus kein Slot mehr, vom alten
+        // Index aus vorwärts, dann rückwärts suchen. `gridFocusSessionID`
+        // trägt das Ergebnis; die Normalisierung spiegelt es bei sichtbarem
+        // Grid in die Selektion.
+        for index in windows.indices {
+            guard let anchor = focusAnchors[windows[index].id],
+                  let entity = gridWorkspaces.first(where: { $0.id == anchor.workspaceID })
+            else { continue }
+            if let focus = windows[index].gridFocusSessionID ?? windows[index].selectedSessionID,
+               entity.slotIndex(of: focus) != nil {
+                continue
+            }
+            let fallback = entity.slots[anchor.index...].compactMap { $0 }.first
+                ?? entity.slots[..<anchor.index].compactMap { $0 }.last
+            windows[index].gridFocusSessionID = fallback
+            if windows[index].showsGrid {
+                windows[index].selectedSessionID = fallback
+            }
         }
 
         let cleanedGlobal = Self.deduplicated(openTabIDs.filter { liveSessionIDs.contains($0) })

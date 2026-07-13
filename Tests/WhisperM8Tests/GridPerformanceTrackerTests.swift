@@ -91,9 +91,10 @@ final class GridPerformanceTrackerTests: XCTestCase {
     func testFocusAppliedEndsMeasurement() {
         let violations = ViolationCounter()
         let tracker = makeTracker(violations: violations)
-        tracker.beginFocusSwitch()
+        let target = UUID()
+        tracker.beginFocusSwitch(target: target)
         XCTAssertTrue(tracker.hasActiveFocusMeasurement)
-        tracker.focusApplied()
+        tracker.focusApplied(sessionID: target)
         XCTAssertFalse(tracker.hasActiveFocusMeasurement)
         XCTAssertEqual(violations.count, 0)
     }
@@ -101,7 +102,7 @@ final class GridPerformanceTrackerTests: XCTestCase {
     func testFocusAppliedWithoutBeginIsNoOp() {
         let violations = ViolationCounter()
         let tracker = makeTracker(violations: violations)
-        tracker.focusApplied()
+        tracker.focusApplied(sessionID: UUID())
         XCTAssertFalse(tracker.hasActiveFocusMeasurement)
         XCTAssertEqual(violations.count, 0)
     }
@@ -109,20 +110,28 @@ final class GridPerformanceTrackerTests: XCTestCase {
     func testAbortFocusSwitchCancelsWithoutViolation() async throws {
         let violations = ViolationCounter()
         let tracker = makeTracker(violations: violations, timeout: .milliseconds(50))
-        tracker.beginFocusSwitch()
-        tracker.abortFocusSwitch()
+        let target = UUID()
+        tracker.beginFocusSwitch(target: target)
+        tracker.abortFocusSwitch(sessionID: target)
         XCTAssertFalse(tracker.hasActiveFocusMeasurement)
         // Auch der Timeout darf danach nichts mehr bewerten.
         try await Task.sleep(for: .milliseconds(120))
         XCTAssertEqual(violations.count, 0)
     }
 
-    func testOverlappingFocusSwitchCancelsPreviousMeasurement() {
+    func testStaleFocusCallbackCannotFinishNewGeneration() {
+        // Review-Finding: der verspätete async-Callback des ALTEN Fokusziels
+        // (A) darf die neue Messung (B) weder beenden noch abbrechen.
         let violations = ViolationCounter()
         let tracker = makeTracker(violations: violations)
-        tracker.beginFocusSwitch()
-        tracker.beginFocusSwitch()
-        tracker.focusApplied()
+        let a = UUID(); let b = UUID()
+        tracker.beginFocusSwitch(target: a)
+        tracker.beginFocusSwitch(target: b)
+        tracker.focusApplied(sessionID: a)
+        XCTAssertTrue(tracker.hasActiveFocusMeasurement, "B läuft weiter")
+        tracker.abortFocusSwitch(sessionID: a)
+        XCTAssertTrue(tracker.hasActiveFocusMeasurement, "auch Abort ist zielgebunden")
+        tracker.focusApplied(sessionID: b)
         XCTAssertFalse(tracker.hasActiveFocusMeasurement)
         XCTAssertEqual(violations.count, 0)
     }

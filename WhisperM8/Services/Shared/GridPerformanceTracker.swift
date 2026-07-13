@@ -30,6 +30,10 @@ final class GridPerformanceTracker {
     private var focusToken: PerformanceBudget.Token?
     private var focusGeneration = 0
     private var focusTimeout: Task<Void, Never>?
+    /// Ziel-Session der laufenden Fokus-Messung — verspätete Callbacks
+    /// eines FRÜHEREN Fokusziels (async `focusTerminal` des alten Terminals)
+    /// dürfen die neue Messung weder beenden noch abbrechen.
+    private var focusTargetSessionID: UUID?
 
     init() {}
 
@@ -97,13 +101,17 @@ final class GridPerformanceTracker {
     /// Fokuswechsel im Grid beginnt (Selektions-Handler). Nur aufrufen, wenn
     /// die Ziel-Session ein lebendes Terminal HAT — sonst endet die Messung
     /// zwangsläufig im Timeout und produziert Fake-Verletzungen. Ende meldet
-    /// `focusApplied()` aus `focusTerminal()` nach erfolgreichem
-    /// `makeFirstResponder`; Fehlschläge brechen via `abortFocusSwitch()` ab.
-    func beginFocusSwitch() {
+    /// `focusApplied(sessionID:)` aus `focusTerminal()` nach erfolgreichem
+    /// `makeFirstResponder`; Fehlschläge brechen via
+    /// `abortFocusSwitch(sessionID:)` ab. Die Session-Bindung schützt vor
+    /// verspäteten Callbacks eines FRÜHEREN Ziels (zwei schnelle
+    /// Fokuswechsel; Review-Finding).
+    func beginFocusSwitch(target sessionID: UUID) {
         if let token = focusToken { focusBudget.cancel(token) }
         focusTimeout?.cancel()
         focusGeneration += 1
         let generation = focusGeneration
+        focusTargetSessionID = sessionID
 
         focusToken = focusBudget.begin()
         let timeout = timeout
@@ -114,19 +122,20 @@ final class GridPerformanceTracker {
         }
     }
 
-    /// Fokus ist angewendet. Aufrufe ohne laufende Messung (Einzelansicht,
-    /// onAppear-Fokus) sind no-ops — und verspätete Aufrufe können dank
-    /// Generation-Bindung keine neuere Messung schließen.
-    func focusApplied() {
-        guard focusToken != nil else { return }
+    /// Fokus ist angewendet. Aufrufe ohne laufende Messung ODER für ein
+    /// anderes als das aktuelle Ziel (Einzelansicht, onAppear-Fokus, alter
+    /// async-Callback) sind no-ops.
+    func focusApplied(sessionID: UUID) {
+        guard focusToken != nil, focusTargetSessionID == sessionID else { return }
         PerfSignposts.grid.emitEvent("grid.focus.applied")
         finishFocusSwitch(generation: focusGeneration)
     }
 
     /// Fokusziel nicht anwendbar (kein Window, `makeFirstResponder`
-    /// abgelehnt): Messung verwerfen statt in den Timeout zu laufen.
-    func abortFocusSwitch() {
-        guard let token = focusToken else { return }
+    /// abgelehnt): Messung verwerfen statt in den Timeout zu laufen —
+    /// ebenfalls nur für das AKTUELLE Ziel.
+    func abortFocusSwitch(sessionID: UUID) {
+        guard let token = focusToken, focusTargetSessionID == sessionID else { return }
         focusToken = nil
         focusTimeout?.cancel()
         focusTimeout = nil

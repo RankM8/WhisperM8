@@ -764,6 +764,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             terminal.send([0x03])
             usleep(180_000)
         }
+        // Gepufferte PTY-Bytes (Feed-Drosselung) VOR dem Terminieren
+        // verarbeiten — sonst könnten die letzten ≤80 ms Output einer
+        // gedrosselten Hintergrund-Pane verloren gehen (Review-Finding:
+        // „nie Byte-Verlust" hatte am Teardown eine Lücke).
+        terminal.flushPendingOutput()
         terminal.terminate()
         isRunning = false
         releaseEventMonitors()
@@ -797,20 +802,27 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// noch gar nicht in der Window-Hierarchie sein, und `makeFirstResponder`
     /// greift ins Leere.
     func focusTerminal() {
+        let sessionID = sessionID
         DispatchQueue.main.async { [weak self] in
             guard let self,
                   let window = self.terminal.window else {
                 // perf.grid: Ziel nicht anwendbar — Messung verwerfen statt
-                // in den Timeout zu laufen (no-op ohne laufende Messung).
-                GridPerformanceTracker.shared.abortFocusSwitch()
+                // in den Timeout zu laufen (no-op ohne laufende Messung
+                // bzw. für ein anderes als das aktuelle Ziel).
+                GridPerformanceTracker.shared.abortFocusSwitch(sessionID: sessionID)
                 return
             }
+            // FIFO-Garantie der Feed-Drosselung: den Rückstand VOR dem
+            // Tastaturfokus verarbeiten, damit der User den echten Stand
+            // sieht (deckt auch Fokuspfade ab, die nicht über
+            // setOutputPriority laufen — z. B. den Finder-Drop).
+            terminal.flushPendingOutput()
             if window.makeFirstResponder(self.terminal) {
                 // perf.grid: Fokuswechsel-Messung abschließen (no-op
                 // außerhalb einer laufenden Grid-Messung).
-                GridPerformanceTracker.shared.focusApplied()
+                GridPerformanceTracker.shared.focusApplied(sessionID: sessionID)
             } else {
-                GridPerformanceTracker.shared.abortFocusSwitch()
+                GridPerformanceTracker.shared.abortFocusSwitch(sessionID: sessionID)
             }
         }
     }
@@ -920,6 +932,12 @@ struct AgentTerminalView: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
+        // Gepufferte Bytes einer gedrosselten Pane vor dem Abbau verarbeiten
+        // (der Controller lebt in der Registry weiter — der Scrollback muss
+        // vollständig sein).
+        nsView.subviews
+            .compactMap { $0 as? QuietableTerminalView }
+            .forEach { $0.flushPendingOutput() }
         nsView.subviews.forEach { $0.removeFromSuperview() }
     }
 

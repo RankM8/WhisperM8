@@ -9,6 +9,9 @@ struct GridSlotDropArea<Content: View>: View {
     let slotIndex: Int
     /// Titel des aktuellen Slot-Inhalts (`nil` = leerer Slot).
     let occupiedTitle: String?
+    /// Meldet dem Grid, ob DIESE Zone gerade Drop-Ziel ist (unterdrückt die
+    /// Growzone, solange der Cursor über einer Pane hängt).
+    var onTargetedChanged: ((Bool) -> Void)? = nil
     let onDrop: (DraggableSession) -> Bool
     @ViewBuilder let content: () -> Content
 
@@ -34,7 +37,14 @@ struct GridSlotDropArea<Content: View>: View {
             .dropDestination(for: DraggableSession.self) { items, _ in
                 guard let dropped = items.first else { return false }
                 return onDrop(dropped)
-            } isTargeted: { isTargeted = $0 }
+            } isTargeted: { targeted in
+                guard targeted != isTargeted else { return }
+                isTargeted = targeted
+                onTargetedChanged?(targeted)
+            }
+            .onDisappear {
+                if isTargeted { onTargetedChanged?(false) }
+            }
     }
 
     private var dropLabel: String {

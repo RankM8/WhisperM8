@@ -169,7 +169,7 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.window(for: second), before.1)
     }
 
-    func testHiddenReferenceIsTakenOverBySecondWindow() throws {
+    func testHiddenReferenceSecondWindowReturnsExistingOwnerWithoutMutation() throws {
         let (store, persistence) = makeStore()
         let primary = store.primaryWindowID
         let tab = try seedSession(persistence)
@@ -180,11 +180,18 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         store.showSingleSession(try seedSession(persistence), in: primary)
         XCTAssertFalse(store.showsGrid(in: primary))
 
-        // … dann darf ein anderes Fenster den Besitz still übernehmen
-        // (es rendert nichts, das gestohlen werden könnte).
-        XCTAssertEqual(store.activateGridWorkspace(id, in: second), .activated)
-        XCTAssertEqual(store.window(for: second).activeWorkspaceID, id)
-        XCTAssertNil(store.window(for: primary).activeWorkspaceID)
+        // … Entscheidung A strikt: AUCH die verborgene Referenz zählt als
+        // Besitz — kein stilles Übernehmen, keinerlei Mutation (das
+        // Besitzerfenster wird über seine Fenster-ID fokussiert).
+        let before = (store.window(for: primary), store.window(for: second))
+        XCTAssertEqual(
+            store.activateGridWorkspace(id, in: second),
+            .alreadyActive(ownerWindowID: primary)
+        )
+        XCTAssertEqual(store.window(for: primary), before.0)
+        XCTAssertEqual(store.window(for: second), before.1)
+        XCTAssertEqual(store.window(for: primary).activeWorkspaceID, id,
+                       "Rücksprungziel des Besitzers bleibt intakt")
     }
 
     func testDisjointWorkspacesCanBeActiveInDifferentWindows() throws {
@@ -275,19 +282,28 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.gridWorkspace(id: id)?.occupiedSessionIDs, [])
     }
 
-    func testAddToActiveWorkspaceBlockedByOtherWindowOwnership() throws {
+    func testAddSessionWithForeignTabAddsMembershipWithoutStealing() throws {
         let (store, persistence) = makeStore()
         let primary = store.primaryWindowID
         let session = try seedSession(persistence)
         store.openTab(session, in: primary)
-        _ = store.detachToNewWindow(session, from: primary) // Tab lebt in W2
+        let second = store.detachToNewWindow(session, from: primary) // Tab lebt in W2
         let anchor = try seedSession(persistence)
         store.openTab(anchor, in: primary)
         let id = store.createGridWorkspace(name: "G", activateIn: primary)
+        let focusBefore = store.selectedSession(in: primary)
 
-        XCTAssertEqual(store.addSession(session, toGridWorkspace: id), .rejected,
-                       "Slot-Chat als Tab eines anderen Fensters → kein Stehlen")
-        XCTAssertEqual(store.gridWorkspace(id: id)?.occupiedSessionIDs, [])
+        // Mitgliedschaft wird aufgenommen (Render-Guard zeigt im Owner den
+        // Übernahme-Platzhalter) — aber weder Tab noch Fokus werden
+        // angefasst (kein Terminal-Stehlen).
+        XCTAssertEqual(
+            store.addSession(session, toGridWorkspace: id),
+            .added(slotIndex: 0, grewTo: nil)
+        )
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots.first ?? nil, session)
+        XCTAssertTrue(store.openTabIDs(in: second).contains(session), "Tab bleibt in W2")
+        XCTAssertFalse(store.openTabIDs(in: primary).contains(session), "kein Tab im Owner")
+        XCTAssertEqual(store.selectedSession(in: primary), focusBefore, "Fokus unverändert")
     }
 
     func testTargetedReplaceKeepsDisplacedSessionAsTab() throws {
@@ -400,7 +416,9 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
             .applied
         )
         XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [ids[0], ids[1]])
-        XCTAssertEqual(store.selectedSession(in: w), ids[0], "Fokus repariert")
+        // Deterministischer Fallback vom ALTEN Fokus (Slot 4) aus: nächster/
+        // vorheriger belegter Slot innerhalb der neuen Kapazität → Slot 2.
+        XCTAssertEqual(store.selectedSession(in: w), ids[1], "Fokus repariert (next/prev)")
     }
 
     // MARK: - Key-Window-/Dictation-Routing

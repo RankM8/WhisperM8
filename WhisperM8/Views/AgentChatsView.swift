@@ -78,6 +78,14 @@ struct AgentChatsView: View {
                 windowStore.setSelectedSession(nil, in: windowID)
                 return
             }
+            // Lebt der Chat als Tab in einem ANDEREN Fenster, wird DORT
+            // navigiert und das Fenster nach vorn geholt — ein lokales
+            // Öffnen würde den Tab über die globale Deduplizierung still
+            // stehlen (Review-Finding; Chrome-Semantik wie Notification-Klick).
+            if let host = windowStore.windowID(containingTab: newValue), host != windowID {
+                WindowRequestCenter.shared.requestSessionFocus(sessionID: newValue)
+                return
+            }
             windowStore.navigateToSession(newValue, in: windowID)
         }
     }
@@ -142,6 +150,13 @@ struct AgentChatsView: View {
     /// Ein Session-Drag schwebt über dem Grid — steuert die Growzone
     /// („voll + Drop = wächst", Plan F8). internal für +Grid.
     @State var gridDropTargeted = false
+    /// Anzahl gerade getargeteter Slot-Drop-Zonen: solange der Cursor über
+    /// einer Pane hängt, erscheint KEINE Growzone (deren safeAreaInset
+    /// würde die Slots unter dem Cursor wegschieben — Review-Finding).
+    @State var gridSlotDropTargetCount = 0
+    /// Aktuell gedrosselte Panes (F11) — Diff-Registry, damit entfernte/
+    /// ersetzte Sessions und Workspace-Wechsel nie gedrosselt zurückbleiben.
+    @State var throttledGridPaneIDs: Set<UUID> = []
     /// Ausstehende Verkleinerung (Kapazitäts-Picker): erst die Vorschau
     /// bestätigen, dann wird mit exakt dieser Eviction-Liste angewendet.
     @State var gridShrinkRequest: GridShrinkRequest?

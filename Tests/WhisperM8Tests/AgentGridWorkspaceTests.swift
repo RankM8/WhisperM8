@@ -546,6 +546,47 @@ final class AgentGridWorkspaceTests: XCTestCase {
         XCTAssertFalse(state.windowState(for: window.id).showsGrid)
     }
 
+    func testPruneFocusFallsBackToNextThenPreviousSlot() {
+        // Regel „nächster belegter Slot, sonst vorheriger" (Review-Finding:
+        // pauschal „erster" war falsch). [A, B, C], Fokus B, B archiviert →
+        // Fokus C (nicht A).
+        let a = makeSession(); let b = makeSession(status: .archived); let c = makeSession()
+        let entity = AgentGridWorkspace(slots: [a.id, b.id, c.id], capacity: 3)
+        let window = AgentChatWindowState(
+            openTabIDs: [a.id, b.id, c.id],
+            selectedSessionID: b.id,
+            isPrimary: true,
+            showsGrid: true,
+            activeWorkspaceID: entity.id,
+            gridFocusSessionID: b.id
+        )
+        var state = AgentUIState(
+            windows: [window], primaryWindowID: window.id, gridWorkspaces: [entity]
+        )
+        state.prune(workspace: makeWorkspace(sessions: [a, b, c]))
+        XCTAssertEqual(state.gridWorkspaces[0].slots, [a.id, nil, c.id])
+        XCTAssertEqual(state.windowState(for: window.id).selectedSessionID, c.id,
+                       "nächster belegter Slot gewinnt")
+
+        // Letzter Slot fokussiert + archiviert → vorheriger.
+        let d = makeSession(); let e = makeSession(status: .archived)
+        let entity2 = AgentGridWorkspace(slots: [d.id, e.id], capacity: 2)
+        let window2 = AgentChatWindowState(
+            openTabIDs: [d.id, e.id],
+            selectedSessionID: e.id,
+            isPrimary: true,
+            showsGrid: true,
+            activeWorkspaceID: entity2.id,
+            gridFocusSessionID: e.id
+        )
+        var state2 = AgentUIState(
+            windows: [window2], primaryWindowID: window2.id, gridWorkspaces: [entity2]
+        )
+        state2.prune(workspace: makeWorkspace(sessions: [d, e]))
+        XCTAssertEqual(state2.windowState(for: window2.id).selectedSessionID, d.id,
+                       "kein nächster → vorheriger belegter Slot")
+    }
+
     // MARK: - Gemerkter Pane-Fokus (gridFocusSessionID)
 
     func testGridFocusSurvivesHiddenGridAndInvalidatesWithSlot() {

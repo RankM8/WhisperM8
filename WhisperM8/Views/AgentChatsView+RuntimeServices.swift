@@ -93,7 +93,14 @@ extension AgentChatsView {
             expandedProjectIDs.insert(selectedProjectID)
         }
         if selectedSessionID == nil || !liveIDs.contains(selectedSessionID!) {
-            selectedSessionID = openTabIDs.first
+            // Im SICHTBAREN Grid nie auf einen beliebigen Tab zurückfallen:
+            // ein Nicht-Slot würde über die Klickregel-Bridge in die
+            // Einzelansicht wechseln und den 0/N-Leerzustand zerstören
+            // (Review-Finding). Den reparierten Slot-Fokus/nil belässt die
+            // Store-Normalisierung.
+            if !isGridActive {
+                selectedSessionID = openTabIDs.first
+            }
         }
     }
 

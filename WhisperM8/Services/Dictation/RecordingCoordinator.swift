@@ -118,11 +118,16 @@ final class RecordingCoordinator {
         contextSourceApp = NSWorkspace.shared.frontmostApplication
 
         // Auto-Inject des Agent-Chat-Refs nur, wenn WhisperM8 selbst frontmost war
-        // beim Recording-Start. Wenn der User in Cursor/VS Code/Browser arbeitet,
-        // ist der Chat-Kontext irrelevant — wir wollen ihn nicht „aufzwingen".
+        // beim Recording-Start UND das Key-Fenster ein Agent-Chats-Fenster
+        // ist — Settings/Onboarding dürfen den letzten Chat nicht als
+        // Diktatkontext erben (Review-Finding). Wenn der User in Cursor/
+        // VS Code/Browser arbeitet, ist der Chat-Kontext bewusst irrelevant.
         let activeAgentChat: AgentChatContextRef?
         if contextSourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
-            activeAgentChat = appState.activeAgentChat
+            let keyAgentWindow = await MainActor.run {
+                AgentWindowStore.shared.keyAgentChatWindowID
+            }
+            activeAgentChat = keyAgentWindow != nil ? appState.activeAgentChat : nil
         } else {
             activeAgentChat = nil
         }

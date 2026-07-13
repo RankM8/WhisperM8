@@ -102,4 +102,17 @@ final class GridSplitResolverTests: XCTestCase {
             base
         )
     }
+
+    func testTrackSizesClampEachTrackToMinPane() {
+        // Gespeichertes 0,1-Gewicht + verkleinertes Fenster: die Spur darf
+        // nicht unter 240 pt fallen (Review-Finding: erster Drag-Tick sprang
+        // sonst zur Clamp-Grenze).
+        let sizes = GridSplitResolver.trackSizes(total: 1001, fractions: [0.1, 0.9])
+        XCTAssertEqual(sizes[0], 240)
+        XCTAssertEqual(sizes[1], 760)
+        // Zu kleine Fläche für alle Mindest-Panes → gleichmäßig quetschen.
+        let squeezed = GridSplitResolver.trackSizes(total: 401, fractions: [0.1, 0.9])
+        XCTAssertEqual(squeezed[0], 200)
+        XCTAssertEqual(squeezed[1], 200)
+    }
 }

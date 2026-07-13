@@ -50,13 +50,54 @@ enum GridSplitResolver {
     /// Punktgrößen aller Spuren einer Achse aus dem Gewichts-Vektor
     /// (Summe 1, siehe `AgentGridWorkspace.normalizedFractions`). Die letzte
     /// Spur nimmt den Rundungsrest — die Summe passt exakt in `total`.
+    /// Jede Spur wird auf `minPane` geclampt, solange die Fläche das
+    /// hergibt (Review-Finding: gespeicherte kleine Gewichte quetschten
+    /// Panes beim Fenster-Verkleinern unter die Mindestgröße, der erste
+    /// Drag-Tick sprang dann zur Clamp-Grenze); reicht die Fläche nicht
+    /// für alle Mindest-Panes, quetschen sich alle gleichmäßig.
     static func trackSizes(total: CGFloat, fractions: [Double]) -> [CGFloat] {
         guard !fractions.isEmpty else { return [] }
-        let usable = max(0, total - divider * CGFloat(fractions.count - 1))
-        var sizes = fractions.map { (usable * CGFloat($0)).rounded() }
+        let count = fractions.count
+        let usable = max(0, total - divider * CGFloat(count - 1))
+        let clamped = clampedTrackFractions(fractions, usable: usable)
+        var sizes = clamped.map { (usable * CGFloat($0)).rounded() }
         let assigned = sizes.dropLast().reduce(0, +)
         sizes[sizes.count - 1] = max(0, usable - assigned)
         return sizes
+    }
+
+    /// Projiziert Gewichte auf den zulässigen Bereich (jede Spur ≥
+    /// `minPane/usable`): Defizite der Unter-Minimum-Spuren werden
+    /// proportional von den übrigen abgezogen. Zu kleine Gesamtfläche →
+    /// Gleichverteilung (alle quetschen sich gleichmäßig, wie beim
+    /// 2er-Split).
+    static func clampedTrackFractions(_ fractions: [Double], usable: CGFloat) -> [Double] {
+        let count = fractions.count
+        guard count > 1 else { return fractions }
+        guard usable > minPane * CGFloat(count) else {
+            return Array(repeating: 1.0 / Double(count), count: count)
+        }
+        let minFraction = Double(minPane / usable)
+        var result = fractions
+        // Iterativ (max. count Runden): Clampen kann weitere Spuren unter
+        // das Minimum drücken.
+        for _ in 0 ..< count {
+            let deficits = result.map { max(0, minFraction - $0) }
+            let totalDeficit = deficits.reduce(0, +)
+            if totalDeficit <= 0.0001 { break }
+            let donors = result.enumerated().filter { $0.element > minFraction }
+            let donorSurplus = donors.reduce(0.0) { $0 + ($1.element - minFraction) }
+            guard donorSurplus > 0 else { break }
+            for index in result.indices {
+                if result[index] < minFraction {
+                    result[index] = minFraction
+                } else if result[index] > minFraction {
+                    let share = (result[index] - minFraction) / donorSurplus
+                    result[index] -= totalDeficit * share
+                }
+            }
+        }
+        return result
     }
 
     /// Gewichte während eines Drags des Dividers `dividerIndex` (zwischen

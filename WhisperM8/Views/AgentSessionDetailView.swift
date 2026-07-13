@@ -53,6 +53,9 @@ struct AgentSessionDetailView: View {
     @State private var historyState = TranscriptHistoryState.idle
     /// Message-Zahl vor dem laufenden Nachladen — für das „✓ N"-Delta.
     @State private var countBeforeEarlierLoad: Int?
+    /// Nachgeholter Fokus-Launch (Grid-Fokuswechsel) läuft bereits — schützt
+    /// vor doppelter Hook-Vorbereitung bei schnellem Fokus-Hin-und-Her.
+    @State private var focusLaunchInFlight = false
 
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
@@ -145,13 +148,23 @@ struct AgentSessionDetailView: View {
         // Fokus-Pane (suppressesAutoActivation false), holt sie Launch +
         // Tastaturfokus GENAU EINMAL nach — die View remountet beim
         // Fokuswechsel nicht (stabile .id), onAppear feuert also nicht
-        // erneut (Review-Finding: Offline-Panes starteten nie).
+        // erneut (Review-Finding: Offline-Panes starteten nie). Der Launch
+        // läuft nur ohne existierenden Controller UND ohne bereits laufende
+        // Vorbereitung — ein schnelles Hin-und-Her darf die Hook-Vorbereitung
+        // nicht doppelt anstoßen (Review-Finding: doppeltes SessionStart-
+        // Tracking).
         .onChange(of: suppressesAutoActivation) { wasSuppressed, isSuppressed in
             guard wasSuppressed, !isSuppressed else { return }
-            if session.shouldLaunchOnOpen == true, controller?.isRunning != true {
+            if session.shouldLaunchOnOpen == true,
+               controller == nil,
+               !focusLaunchInFlight {
+                focusLaunchInFlight = true
                 launchAfterCacheWarmup()
             }
             controller?.focusTerminal()
+        }
+        .onChange(of: terminalRegistry.controller(for: session.id) != nil) { _, hasController in
+            if hasController { focusLaunchInFlight = false }
         }
     }
 

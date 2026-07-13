@@ -169,22 +169,22 @@ extension AgentChatsView {
     }
 
     /// Bringt ein anderes Agent-Chats-Fenster nach vorn (Konflikt-Routing
-    /// der Single-Owner-Politik) — über den Session-Fokus-Pfad des
-    /// WindowRequestCenter (dasselbe Routing wie ein Notification-Klick).
+    /// der Single-Owner-Politik) — reiner Fenster-Fokus über die
+    /// Fenster-ID, OHNE die Ansicht des Besitzers zu mutieren; funktioniert
+    /// auch für Fenster ohne Tabs (Review-Findings).
     func focusWindow(_ ownerWindowID: UUID) {
-        let owner = windowStore.window(for: ownerWindowID)
-        guard let session = owner.selectedSessionID ?? owner.openTabIDs.first else { return }
-        WindowRequestCenter.shared.requestSessionFocus(sessionID: session)
+        WindowRequestCenter.shared.requestWindowFocus(windowID: ownerWindowID)
     }
 
     // MARK: - perf.grid
 
     /// perf.grid: Aufbau-Messung am ÜBERGANG starten (vor dem Mount — die
     /// Panes attachen während `makeNSView`, also bevor ein Parent-`onAppear`
-    /// feuern würde). Erwartet werden nur Panes mit lebendem Controller;
-    /// Offline-Panes rendern Transcript-Views und attachen nie.
-    func beginGridBuildMeasurement() {
-        let expected = activeGridWorkspaceEntity?.occupiedSessionIDs
+    /// feuern würde). Erwartet werden nur Panes der ZIEL-Entity mit lebendem
+    /// Controller; Offline-Panes rendern Transcript-Views und attachen nie.
+    func beginGridBuildMeasurement(for entity: AgentGridWorkspace? = nil) {
+        let target = entity ?? activeGridWorkspaceEntity
+        let expected = target?.occupiedSessionIDs
             .filter { terminalRegistry.controller(for: $0) != nil } ?? []
         GridPerformanceTracker.shared.beginBuild(expectedPaneIDs: Set(expected))
     }
@@ -232,11 +232,16 @@ extension AgentChatsView {
         .background(AgentTheme.border)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Kapazitäts-Picker (F10): manuelles Wählen der Stufe; Verkleinern
-        // nur mit Vorschau + Bestätigung.
-        .overlay(alignment: .topTrailing) {
-            gridCapacityPicker(entity: entity)
-                .padding(.top, 6)
-                .padding(.trailing, 8)
+        // nur mit Vorschau + Bestätigung. GeometryReader misst die
+        // TATSÄCHLICHE Grid-Fläche (nicht das Fenster — Sidebar/Inspector
+        // gehen sonst in die Passt-Rechnung ein; Review-Finding).
+        .overlay {
+            GeometryReader { geo in
+                gridCapacityPicker(entity: entity, available: geo.size)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 6)
+                    .padding(.trailing, 8)
+            }
         }
         .onChange(of: selectedSessionID) { _, selected in
             guard let selected else { return }
@@ -251,8 +256,9 @@ extension AgentChatsView {
                 // perf.grid: Fokuswechsel nur messen, wenn ein Terminal
                 // existiert — Offline-/Subagent-Panes würden zwangsläufig
                 // in den Timeout laufen (Fake-Verletzungen). Ende in
-                // focusTerminal nach erfolgreichem makeFirstResponder.
-                GridPerformanceTracker.shared.beginFocusSwitch()
+                // focusTerminal nach erfolgreichem makeFirstResponder;
+                // session-gebunden gegen verspätete Alt-Callbacks.
+                GridPerformanceTracker.shared.beginFocusSwitch(target: selected)
                 controller.focusTerminal()
             }
         }
@@ -269,9 +275,10 @@ extension AgentChatsView {
         .onDisappear {
             hoveredGridPaneID = nil
             gridDropTargeted = false
-            // Einzelansicht/Workspace-Wechsel: keine Pane darf gedrosselt
+            gridSlotDropTargetCount = 0
+            // Einzelansicht/Fenster zu: keine Pane darf gedrosselt
             // zurückbleiben (der Rückstand wird dabei geflusht).
-            resetGridOutputPriorities(entity: entity)
+            resetGridOutputPriorities()
         }
         // Growzone (F8): Drag über dem Grid + alle Slots belegt + nächste
         // Stufe existiert → Erweitern-Zone als eigener Bereich UNTER dem
@@ -280,7 +287,12 @@ extension AgentChatsView {
         // Auf der Endstufe 3×3 erscheint sie NICHT (Gruppen-Drop wird
         // benannt abgelehnt; gezieltes Ersetzen bleibt).
         .safeAreaInset(edge: .bottom, spacing: 0) {
+            // Nur wenn KEINE Slot-Zone getargetet ist — sonst schöbe der
+            // Inset die Pane unter dem Cursor weg und derselbe Drop träfe
+            // plötzlich die Growzone statt des gezielten Ersetzens
+            // (Review-Finding).
             if gridDropTargeted,
+               gridSlotDropTargetCount == 0,
                entity.firstFreeSlotIndex == nil,
                let next = AgentGridWorkspace.nextCapacity(after: entity.capacity) {
                 gridGrowZone(entity: entity, nextCapacity: next)
@@ -311,12 +323,11 @@ extension AgentChatsView {
     }
 
     /// Kompakter Stufen-Picker im Grid-Chrome (2 · 3 · 4 · 6 · 9). Stufen,
-    /// die nicht in die aktuelle Fensterfläche passen (~240 pt je Spalte,
-    /// ~200 pt je Zeile), werden ausgeblendet — die aktuelle Stufe bleibt
-    /// immer sichtbar.
-    func gridCapacityPicker(entity: AgentGridWorkspace) -> some View {
-        let available = hostWindow?.contentLayoutRect.size ?? .zero
-        return HStack(spacing: 2) {
+    /// die nicht in die übergebene GRID-Fläche passen (~240 pt je Spalte,
+    /// ~200 pt je Zeile, inkl. 1-px-Divider), werden ausgeblendet — die
+    /// aktuelle Stufe bleibt immer sichtbar.
+    func gridCapacityPicker(entity: AgentGridWorkspace, available: CGSize) -> some View {
+        HStack(spacing: 2) {
             ForEach(AgentGridWorkspace.allowedCapacities, id: \.self) { stage in
                 if stage == entity.capacity || capacityStageFits(stage, in: available) {
                     Button {
@@ -351,8 +362,8 @@ extension AgentChatsView {
         guard size.width > 0, size.height > 0 else { return true }
         let columns = CGFloat(AgentGridWorkspace.columns(forCapacity: stage))
         let rows = CGFloat(AgentGridWorkspace.rows(forCapacity: stage))
-        return columns * GridSplitResolver.minPane <= size.width
-            && rows * 200 <= size.height
+        return columns * GridSplitResolver.minPane + (columns - 1) <= size.width
+            && rows * 200 + (rows - 1) <= size.height
     }
 
     /// Stufe wählen: Wachsen wendet sofort an; Verkleinern zeigt die
@@ -427,32 +438,27 @@ extension AgentChatsView {
     // MARK: - Drop-Handling
 
     /// Drop auf Gruppe/Growzone: aufnehmen (erster freier Slot, sonst
-    /// Auto-Wachsen). Cross-Window-Drags holen den Tab explizit in dieses
-    /// Fenster — aber erst NACH den mutationsfreien Pre-Checks, und ein
-    /// dennoch abgelehnter Add rollt die Übernahme zurück (Review-Finding:
-    /// kein halb ausgeführter Drop).
+    /// Auto-Wachsen). Reihenfolge OHNE Rollback-Bedarf (Review-Blocker:
+    /// der frühere adopt-zuerst-Pfad konnte bei Ablehnung ein geleertes
+    /// Quellfenster nicht wiederherstellen): ZUERST die Mitgliedschaft
+    /// (lehnt sie ab, wurde nichts anderes mutiert), erst bei Erfolg die
+    /// explizite Tab-Übernahme ins Besitzerfenster.
     @discardableResult
     func handleGridGroupDrop(_ payload: DraggableSession, workspaceID: UUID) -> Bool {
         guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
         if entity.slotIndex(of: payload.sessionID) != nil {
             return true // schon Mitglied — nichts zu tun, nichts zu übernehmen
         }
-        if entity.firstFreeSlotIndex == nil,
-           AgentGridWorkspace.nextCapacity(after: entity.capacity) == nil {
-            errorMessage = "„\(entity.name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
-            return false
-        }
-
-        let adoptedFrom = adoptCrossWindowTabIfNeeded(payload)
         let result = windowStore.addSession(payload.sessionID, toGridWorkspace: workspaceID)
         switch result {
         case .added, .alreadyMember, .replaced, .swapped:
+            adoptTabAfterSuccessfulDrop(payload.sessionID, workspaceID: workspaceID)
             return true
-        case .full, .rejected:
-            rollbackAdoption(payload.sessionID, to: adoptedFrom)
-            if case .full = result {
-                errorMessage = "„\(entity.name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
-            }
+        case .full:
+            errorMessage = "„\(entity.name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
+            return false
+        case .rejected:
+            errorMessage = "Der Chat kann nicht in „\(entity.name)“ aufgenommen werden (archiviert oder unbekannt)."
             return false
         }
     }
@@ -460,8 +466,6 @@ extension AgentChatsView {
     /// Gezielter Slot-Drop (Pane oder leerer Slot) — Semantik über den
     /// puren `GridDropZoneResolver`, ausgeführt als EINE Store-Mutation
     /// gegen den FRISCH gelesenen Workspace (nie den Body-Snapshot).
-    /// Die Übernahme eines Cross-Window-Tabs passiert erst nach der
-    /// Auflösung; scheitert der Add danach, wird sie zurückgerollt.
     func handleGridSlotDrop(_ payload: DraggableSession, targetSlot: Int, workspaceID: UUID) -> Bool {
         guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
         switch GridDropZoneResolver.action(
@@ -476,15 +480,14 @@ extension AgentChatsView {
         case .swapSlots(let first, let second):
             return windowStore.swapSlots(inGridWorkspace: workspaceID, first, second)
         case .place:
-            let adoptedFrom = adoptCrossWindowTabIfNeeded(payload)
             let result = windowStore.addSession(
                 payload.sessionID, toGridWorkspace: workspaceID, at: targetSlot
             )
             switch result {
             case .rejected, .full:
-                rollbackAdoption(payload.sessionID, to: adoptedFrom)
                 return false
             default:
+                adoptTabAfterSuccessfulDrop(payload.sessionID, workspaceID: workspaceID)
                 return true
             }
         case .none:
@@ -492,44 +495,46 @@ extension AgentChatsView {
         }
     }
 
-    /// Cross-Window-Drag: Tab explizit in dieses Fenster übernehmen, damit
-    /// der Store-Add nicht am Tab-Ownership-Konflikt scheitert. Deckt auch
-    /// Payloads OHNE `sourceWindowID` ab (Projekt-Rows, ältere Builds) —
-    /// maßgeblich ist, wo der Tab wirklich lebt. Liefert das Quellfenster
-    /// für einen etwaigen Rollback.
-    @discardableResult
-    private func adoptCrossWindowTabIfNeeded(_ payload: DraggableSession) -> UUID? {
-        guard let host = windowStore.windowID(containingTab: payload.sessionID),
-              host != windowID else { return nil }
-        windowStore.moveTab(payload.sessionID, from: host, to: windowID, before: nil)
-        return host
-    }
-
-    /// Abgelehnter Drop nach einer Tab-Übernahme: Tab zurück ins
-    /// Quellfenster (sofern es noch existiert — sonst bleibt er hier, das
-    /// ist der kleinere Schaden gegenüber einem verlorenen Tab).
-    private func rollbackAdoption(_ sessionID: UUID, to sourceWindowID: UUID?) {
-        guard let sourceWindowID, windowStore.hasWindow(sourceWindowID) else { return }
-        windowStore.moveTab(sessionID, from: windowID, to: sourceWindowID, before: nil)
+    /// Nach ERFOLGREICHER Mitgliedschafts-Mutation: hält ein anderes Fenster
+    /// den Tab, wird er explizit ins Besitzerfenster des Ziel-Workspace
+    /// übernommen (der Drop IST der Transfer-Befehl) — aber nur, wenn DIESES
+    /// Fenster der Besitzer ist; fremde Workspaces behalten die reine
+    /// Mitgliedschaft und zeigen den Übernahme-Platzhalter. Fokus folgt.
+    private func adoptTabAfterSuccessfulDrop(_ sessionID: UUID, workspaceID: UUID) {
+        guard windowStore.windowID(owningGridWorkspace: workspaceID) == windowID else { return }
+        if let host = windowStore.windowID(containingTab: sessionID), host != windowID {
+            windowStore.moveTab(sessionID, from: host, to: windowID, before: nil)
+        }
+        windowStore.navigateToSession(sessionID, in: windowID)
     }
 
     // MARK: - Feed-Drosselung (F11)
 
     /// Hintergrund-Panes des sichtbaren Grids drosseln (~12,5 Hz), die
     /// Fokus-Pane verarbeitet sofort (Umschalten flusht FIFO-treu).
+    /// DIFF-basiert über `throttledGridPaneIDs`: Sessions, die den Workspace
+    /// verlassen (⊖, Ersetzen, Shrink, Workspace-Wechsel), werden explizit
+    /// entdrosselt — sonst blieben sie dauerhaft gedrosselt, auch in der
+    /// Einzelansicht (Review-Finding).
     func applyGridOutputPriorities(entity: AgentGridWorkspace, focused: UUID?) {
-        for sessionID in entity.occupiedSessionIDs {
-            terminalRegistry.controller(for: sessionID)?
-                .setOutputPriority(sessionID == focused ? .focusedVisible : .backgroundVisible)
-        }
-    }
-
-    /// Grid verschwindet (Einzelansicht, Workspace-Wechsel): alle Panes
-    /// zurück auf sofortige Verarbeitung.
-    func resetGridOutputPriorities(entity: AgentGridWorkspace) {
-        for sessionID in entity.occupiedSessionIDs {
+        let shouldThrottle = Set(entity.occupiedSessionIDs.filter { $0 != focused })
+        for sessionID in throttledGridPaneIDs.subtracting(shouldThrottle) {
             terminalRegistry.controller(for: sessionID)?.setOutputPriority(.focusedVisible)
         }
+        for sessionID in shouldThrottle {
+            terminalRegistry.controller(for: sessionID)?.setOutputPriority(.backgroundVisible)
+        }
+        throttledGridPaneIDs = shouldThrottle
+    }
+
+    /// Grid verschwindet (Einzelansicht, Fenster zu): ALLE gedrosselten
+    /// Panes zurück auf sofortige Verarbeitung (Registry-basiert — nicht
+    /// nur die aktuellen Entity-Slots).
+    func resetGridOutputPriorities() {
+        for sessionID in throttledGridPaneIDs {
+            terminalRegistry.controller(for: sessionID)?.setOutputPriority(.focusedVisible)
+        }
+        throttledGridPaneIDs = []
     }
 
     /// Pane für einen Slot-Index — Session-Map kommt als Snapshot vom
@@ -545,6 +550,9 @@ extension AgentChatsView {
         GridSlotDropArea(
             slotIndex: index,
             occupiedTitle: occupied.flatMap { sessionsByID[$0]?.title },
+            onTargetedChanged: { targeted in
+                gridSlotDropTargetCount = max(0, gridSlotDropTargetCount + (targeted ? 1 : -1))
+            },
             onDrop: { payload in
                 handleGridSlotDrop(payload, targetSlot: index, workspaceID: entity.id)
             }

@@ -135,8 +135,7 @@ extension AgentChatsView {
         .draggable(DraggableWorkspace(workspaceID: entity.id))
         .dropDestination(for: DraggableWorkspace.self) { items, _ in
             guard let dropped = items.first, dropped.workspaceID != entity.id else { return false }
-            reorderWorkspace(dropped.workspaceID, before: entity.id)
-            return true
+            return reorderWorkspace(dropped.workspaceID, before: entity.id)
         }
     }
 
@@ -214,12 +213,20 @@ extension AgentChatsView {
     /// Header-/⊞-Klick: Workspace als Grid öffnen. Single-Owner-Konflikte
     /// werden als Werte gemeldet — kein stilles Stehlen.
     func activateWorkspaceFromSidebar(_ entity: AgentGridWorkspace) {
-        beginGridBuildMeasurement()
+        let wasVisibleHere = isGridActive
+            && windowStore.window(for: windowID).activeWorkspaceID == entity.id
         switch windowStore.activateGridWorkspace(entity.id, in: windowID) {
         case .activated, .alreadyActiveHere:
+            // perf.grid: NACH der Aktivierung mit der ZIEL-Entity messen —
+            // vorher stünden die IDs des alten Workspace in der Erwartung
+            // (500-ms-Fake-Verletzungen; Review-Finding). Ein Klick auf den
+            // bereits sichtbaren Workspace attached nichts → keine Messung.
+            if !wasVisibleHere {
+                beginGridBuildMeasurement(for: entity)
+            }
             multiSelection = []
         case .alreadyActive(let owner):
-            // Ein anderes Fenster zeigt den Workspace bereits — dieses
+            // Ein anderes Fenster besitzt den Workspace bereits — dieses
             // Fenster nach vorn holen statt Terminals zu stehlen.
             focusWindow(owner)
         case .blockedByWindowOwnership(let conflicts):
@@ -233,8 +240,10 @@ extension AgentChatsView {
     /// die sichtbaren leeren Slots sind die Drop-Ziele fürs Befüllen.
     func createWorkspaceFromSidebar() {
         let name = nextFreeWorkspaceName()
-        beginGridBuildMeasurement()
-        windowStore.createGridWorkspace(name: name, activateIn: windowID)
+        let id = windowStore.createGridWorkspace(name: name, activateIn: windowID)
+        if let entity = windowStore.gridWorkspace(id: id) {
+            beginGridBuildMeasurement(for: entity)
+        }
     }
 
     /// Multi-Select-Aktion „Neuer Workspace aus Auswahl" (max. 9 —
@@ -279,11 +288,18 @@ extension AgentChatsView {
         return "Workspace \(suffix)"
     }
 
-    private func reorderWorkspace(_ movedID: UUID, before targetID: UUID) {
-        var order = windowStore.gridWorkspaces.map(\.id).filter { $0 != movedID }
-        let insertAt = order.firstIndex(of: targetID) ?? order.endIndex
+    @discardableResult
+    private func reorderWorkspace(_ movedID: UUID, before targetID: UUID) -> Bool {
+        // Stale Payloads (Quelle/Ziel während des Drags gelöscht) ohne
+        // Mutation ablehnen — der End-Fallback würde sonst unerwartet
+        // umsortieren (Review-Finding).
+        let current = windowStore.gridWorkspaces.map(\.id)
+        guard current.contains(movedID), current.contains(targetID) else { return false }
+        var order = current.filter { $0 != movedID }
+        guard let insertAt = order.firstIndex(of: targetID) else { return false }
         order.insert(movedID, at: insertAt)
         windowStore.reorderGridWorkspaces(orderedIDs: order)
+        return true
     }
 
     // MARK: - Umbenennen-Sheet

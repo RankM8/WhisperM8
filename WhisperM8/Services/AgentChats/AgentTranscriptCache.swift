@@ -39,6 +39,10 @@ actor AgentTranscriptCache {
     private var activeReads = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private let clock = ContinuousClock()
+    /// Invalidierungs-Generation: `invalidate`/`removeAll` erhöhen sie — ein
+    /// Read, der VOR der Invalidierung startete, darf sein Ergebnis danach
+    /// nicht mehr in den Cache zurückschreiben (Review-Finding).
+    private var generation = 0
 
     init(maxEntries: Int = 24, maxConcurrentReads: Int = 2) {
         self.maxEntries = maxEntries
@@ -75,13 +79,15 @@ actor AgentTranscriptCache {
     }
 
     /// Externe Invalidierung (FSEvent/Statuswechsel) — der nächste Lookup
-    /// lädt frisch.
+    /// lädt frisch; laufende Reads schreiben ihr Ergebnis nicht mehr zurück.
     func invalidate(externalSessionID: String) {
         entries = entries.filter { $0.key.externalSessionID != externalSessionID }
+        generation += 1
     }
 
     func removeAll() {
         entries = [:]
+        generation += 1
     }
 
     // MARK: - Intern
@@ -90,6 +96,7 @@ actor AgentTranscriptCache {
         key: Key,
         identity: (size: UInt64, modified: Date)?
     ) async -> AgentChatTranscript? {
+        let startedGeneration = generation
         await acquireReadSlot()
         defer { releaseReadSlot() }
 
@@ -97,7 +104,11 @@ actor AgentTranscriptCache {
             Self.read(key: key)
         }.value
 
-        if let identity {
+        // Nur cachen, wenn zwischenzeitlich keine Invalidierung lief —
+        // sonst würde ein alter Read den frisch geleerten Eintrag
+        // wiederbeleben. (Ändert sich die Datei WÄHREND des Reads, heilt
+        // der nächste Lookup über den Identitäts-Vergleich.)
+        if let identity, startedGeneration == generation {
             entries[key] = Entry(
                 transcript: transcript,
                 fileSize: identity.size,
@@ -114,16 +125,23 @@ actor AgentTranscriptCache {
             activeReads += 1
             return
         }
+        // Der Slot wird beim Handoff ÜBERTRAGEN (releaseReadSlot
+        // dekrementiert dann nicht) — ein resumter Waiter darf nicht
+        // erneut inkrementieren, sonst könnte ein Dritter, der zwischen
+        // Resume und Fortsetzung synchron eintritt, das Limit überschreiten
+        // (Actor-Reentrancy; Review-Finding).
         await withCheckedContinuation { continuation in
             waiters.append(continuation)
         }
-        activeReads += 1
     }
 
     private func releaseReadSlot() {
-        activeReads -= 1
         if !waiters.isEmpty {
+            // Slot direkt an den nächsten Waiter übergeben — `activeReads`
+            // bleibt konstant, kein Fenster für Überbelegung.
             waiters.removeFirst().resume()
+        } else {
+            activeReads -= 1
         }
     }
 

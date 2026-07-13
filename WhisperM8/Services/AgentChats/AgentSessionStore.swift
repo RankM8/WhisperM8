@@ -74,7 +74,6 @@ struct AgentSessionStore {
         // migrierten Workspace-Entities (0 = Key existiert nicht → Default).
         let legacyColumn = UserDefaults.standard.double(forKey: "agentGridColumnFraction")
         let legacyRow = UserDefaults.standard.double(forKey: "agentGridRowFraction")
-        let decoded = state
         state.migrateIfNeeded(
             workspace: workspace,
             legacySplits: (
@@ -83,11 +82,30 @@ struct AgentSessionStore {
             )
         )
         state.prune(workspace: workspace)
-        // Jede tatsächliche Reparatur/Migration sofort festschreiben — sonst
-        // würde dieselbe Normalisierung bei jedem Start erneut erzeugt (und
-        // eine frische primaryWindowID pro Load divergieren).
-        if needsPersist || state != decoded {
-            try? saveUIState(state)
+        // Jede tatsächliche Reparatur sofort festschreiben — Vergleich gegen
+        // die KANONISCHE Re-Encodierung der Datei-Bytes (deterministisch:
+        // wir schreiben selbst prettyPrinted+sortedKeys): Das erfasst auch
+        // Decoder-Reparaturen, die einem `state != decoded`-Vergleich
+        // entgingen, weil `init(from:)` bereits normalisiert (z. B. eine
+        // fehlende Entity-ID, die sonst bei JEDEM Start neu erzeugt würde —
+        // Review-Finding). Sonst würde dieselbe Normalisierung bei jedem
+        // Start erneut erzeugt (und eine frische primaryWindowID pro Load
+        // divergieren).
+        let diskData = try? Data(contentsOf: uiStateFileURL)
+        let canonical: Data? = {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            return try? encoder.encode(state)
+        }()
+        if needsPersist || diskData == nil || canonical == nil || diskData != canonical {
+            do {
+                try saveUIState(state)
+            } catch {
+                // Nicht verschlucken (Review-Finding): loggen — der Store
+                // persistiert bei der nächsten Mutation erneut; bis dahin
+                // lebt der reparierte State im Speicher.
+                Logger.debug("AgentUIState repair-save failed: \(error.localizedDescription)")
+            }
         }
         return state
     }
