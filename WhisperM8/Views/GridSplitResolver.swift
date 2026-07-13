@@ -60,7 +60,11 @@ enum GridSplitResolver {
         let count = fractions.count
         let usable = max(0, total - divider * CGFloat(count - 1))
         let clamped = clampedTrackFractions(fractions, usable: usable)
-        var sizes = clamped.map { (usable * CGFloat($0)).rounded() }
+        // floor statt round: Aufrunden der vorderen Spuren könnte die letzte
+        // (Rest-)Spur trotz geclampter Gewichte unter minPane drücken
+        // (Re-Verifikations-Finding); der Floor-Überschuss von maximal
+        // count−1 pt landet in der letzten Spur und ist unsichtbar.
+        var sizes = clamped.map { floor(usable * CGFloat($0)) }
         let assigned = sizes.dropLast().reduce(0, +)
         sizes[sizes.count - 1] = max(0, usable - assigned)
         return sizes

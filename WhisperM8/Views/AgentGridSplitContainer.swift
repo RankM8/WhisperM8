@@ -154,7 +154,16 @@ struct AgentGridSplitContainer<Pane: View>: View {
         GridSplitHandle(
             axis: .column,
             onDragChanged: { translation in
-                if drag.columnBase == nil { drag.columnBase = effectiveColumnFractions }
+                if drag.columnBase == nil {
+                    // Drag-Basis = derselbe GECLAMPTE Vektor, den das Layout
+                    // rendert — sonst bewegt sich der Griff erst, wenn die
+                    // Translation die Clamp-Differenz aufgeholt hat
+                    // (Re-Verifikations-Finding).
+                    let usable = max(1, totalWidth - GridSplitResolver.divider * CGFloat(layout.columns - 1))
+                    drag.columnBase = GridSplitResolver.clampedTrackFractions(
+                        effectiveColumnFractions, usable: usable
+                    )
+                }
                 guard let base = drag.columnBase else { return }
                 drag.liveColumns = GridSplitResolver.fractionsDuringDrag(
                     base: base, dividerIndex: dividerIndex,
@@ -178,7 +187,12 @@ struct AgentGridSplitContainer<Pane: View>: View {
         GridSplitHandle(
             axis: .row,
             onDragChanged: { translation in
-                if drag.rowBase == nil { drag.rowBase = effectiveRowFractions }
+                if drag.rowBase == nil {
+                    let usable = max(1, totalHeight - GridSplitResolver.divider * CGFloat(layout.rows - 1))
+                    drag.rowBase = GridSplitResolver.clampedTrackFractions(
+                        effectiveRowFractions, usable: usable
+                    )
+                }
                 guard let base = drag.rowBase else { return }
                 drag.liveRows = GridSplitResolver.fractionsDuringDrag(
                     base: base, dividerIndex: dividerIndex,

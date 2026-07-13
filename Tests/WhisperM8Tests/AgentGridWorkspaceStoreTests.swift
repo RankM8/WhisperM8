@@ -209,25 +209,31 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.showsGrid(in: second))
     }
 
-    func testActivationBlockedWhenSlotSessionBelongsToOtherWindow() throws {
+    func testActivationSkipsForeignHostedSlotsInsteadOfBlocking() throws {
         let (store, persistence) = makeStore()
         let primary = store.primaryWindowID
         let hostage = try seedSession(persistence)
         store.openTab(hostage, in: primary)
         let second = store.detachToNewWindow(hostage, from: primary)
         // hostage ist jetzt Tab von `second`; Workspace soll in primary auf.
-        let id = store.createGridWorkspace(name: "Blockiert", slots: [hostage])
+        let own = try seedSession(persistence)
+        let id = store.createGridWorkspace(name: "Offen", slots: [hostage, own])
 
-        XCTAssertEqual(
-            store.activateGridWorkspace(id, in: primary),
-            .blockedByWindowOwnership([hostage: second]),
-            "kein Terminal-Stehlen, keine Teilmutation"
-        )
-        XCTAssertNil(store.window(for: primary).activeWorkspaceID)
-        XCTAssertFalse(store.showsGrid(in: primary))
+        // Fremd-Tabs blockieren die Aktivierung NICHT mehr (sonst könnten
+        // zwei Fremd-Mitgliedschaften einen Workspace dauerhaft unöffenbar
+        // machen) — sie werden schlicht nicht materialisiert; der
+        // Render-Guard zeigt den Übernahme-Platzhalter.
+        XCTAssertEqual(store.activateGridWorkspace(id, in: primary), .activated)
+        XCTAssertTrue(store.showsGrid(in: primary))
+        XCTAssertFalse(store.openTabIDs(in: primary).contains(hostage),
+                       "fremd-gehosteter Slot wird NICHT als Tab gestohlen")
+        XCTAssertTrue(store.openTabIDs(in: second).contains(hostage), "Tab bleibt in W2")
+        XCTAssertTrue(store.openTabIDs(in: primary).contains(own), "eigener Slot materialisiert")
+        XCTAssertEqual(store.selectedSession(in: primary), own,
+                       "Fokus fällt auf den eigenen (renderbaren) Slot")
     }
 
-    func testReactivationWithForeignTabIsBlockedToo() throws {
+    func testReactivationWithForeignTabActivatesWithPlaceholder() throws {
         let (store, persistence) = makeStore()
         let primary = store.primaryWindowID
         let s = try seed(persistence, count: 2)
@@ -237,13 +243,33 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         let second = store.detachToNewWindow(s[1], from: primary)
         store.showSingleSession(s[0], in: primary)
 
-        // … der idempotente Re-Aktivierungs-Pfad darf ihn NICHT
-        // zurückstehlen (Review-Blocker: alreadyActiveHere ohne Prüfung).
-        XCTAssertEqual(
-            store.activateGridWorkspace(id, in: primary),
-            .blockedByWindowOwnership([s[1]: second])
-        )
-        XCTAssertFalse(store.showsGrid(in: primary))
+        // … die Rückkehr bleibt möglich; der abgewanderte Slot wird nicht
+        // zurückgestohlen (Platzhalter), der eigene bleibt renderbar.
+        XCTAssertEqual(store.activateGridWorkspace(id, in: primary), .alreadyActiveHere)
+        XCTAssertTrue(store.showsGrid(in: primary))
+        XCTAssertTrue(store.openTabIDs(in: second).contains(s[1]), "kein Zurückstehlen")
+        XCTAssertEqual(store.selectedSession(in: primary), s[0])
+    }
+
+    func testMultiForeignHostWorkspaceStaysOpenable() throws {
+        // Re-Verifikations-Blocker: X ist Tab in W2, Y in W3 — der (unowned)
+        // Workspace muss trotzdem in JEDEM Fenster öffenbar bleiben.
+        let (store, persistence) = makeStore()
+        let primary = store.primaryWindowID
+        let x = try seedSession(persistence)
+        let y = try seedSession(persistence)
+        store.openTab(x, in: primary)
+        let w2 = store.detachToNewWindow(x, from: primary)
+        store.openTab(y, in: primary)
+        let w3 = store.detachToNewWindow(y, from: primary)
+        let id = store.createGridWorkspace(name: "Geteilt", slots: [x, y])
+
+        XCTAssertEqual(store.activateGridWorkspace(id, in: primary), .activated)
+        XCTAssertTrue(store.showsGrid(in: primary))
+        XCTAssertTrue(store.openTabIDs(in: w2).contains(x))
+        XCTAssertTrue(store.openTabIDs(in: w3).contains(y))
+        XCTAssertFalse(store.openTabIDs(in: primary).contains(x))
+        XCTAssertFalse(store.openTabIDs(in: primary).contains(y))
     }
 
     func testActivateIsIdempotentForOwnerWindow() throws {

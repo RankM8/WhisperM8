@@ -35,7 +35,7 @@ actor AgentTranscriptCache {
     private let maxConcurrentReads: Int
 
     private var entries: [Key: Entry] = [:]
-    private var inFlight: [Key: Task<AgentChatTranscript?, Never>] = [:]
+    private var inFlight: [Key: (generation: Int, task: Task<AgentChatTranscript?, Never>)] = [:]
     private var activeReads = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private let clock = ContinuousClock()
@@ -65,16 +65,24 @@ actor AgentTranscriptCache {
         }
         PerfSignposts.grid.emitEvent("grid.transcript.cacheMiss")
 
-        if let running = inFlight[key] {
-            return await running.value
+        // Laufende Reads nur teilen, wenn sie aus der AKTUELLEN Generation
+        // stammen — nach einer Invalidierung darf ein neuer Lookup nicht das
+        // Ergebnis eines vor der Invalidierung gestarteten Reads erhalten
+        // (Re-Verifikations-Finding); der alte Task läuft aus, cached aber
+        // nichts mehr.
+        if let running = inFlight[key], running.generation == generation {
+            return await running.task.value
         }
 
+        let startGeneration = generation
         let task = Task<AgentChatTranscript?, Never> { [weak self] in
             await self?.performRead(key: key, identity: identity)
         }
-        inFlight[key] = task
+        inFlight[key] = (startGeneration, task)
         let result = await task.value
-        inFlight[key] = nil
+        if inFlight[key]?.generation == startGeneration {
+            inFlight[key] = nil
+        }
         return result
     }
 
@@ -120,6 +128,11 @@ actor AgentTranscriptCache {
         return transcript
     }
 
+    /// Bekannte Grenze (bewusst): Waiter sind nicht cancellation-fähig —
+    /// die Aufrufer sind fire-and-forget-Loads der Detail-Views, die nie
+    /// cancelled werden; ein abgebrochener Task würde lediglich einen
+    /// Slot-Handoff verzögern, nicht leaken (der Read läuft aus und gibt
+    /// den Slot regulär weiter).
     private func acquireReadSlot() async {
         if activeReads < maxConcurrentReads {
             activeReads += 1

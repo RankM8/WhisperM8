@@ -484,9 +484,14 @@ struct AgentUIState: Codable, Equatable {
         }
 
         // Anker anwenden: Ist der verankerte Fokus kein Slot mehr, vom alten
-        // Index aus vorwärts, dann rückwärts suchen. `gridFocusSessionID`
-        // trägt das Ergebnis; die Normalisierung spiegelt es bei sichtbarem
-        // Grid in die Selektion.
+        // Index aus vorwärts, dann rückwärts suchen — bevorzugt unter den
+        // Slots, die diesem Fenster als TAB gehören (fremd-gehostete/
+        // tablose Slots sind nur Platzhalter; die Selektions-Invariante
+        // würde einen solchen Fallback sofort verwerfen und pauschal beim
+        // ersten Slot landen — Re-Verifikations-Finding). Gibt es keinen
+        // eigenen Kandidaten, zählt die reine Belegung (Erinnerung).
+        // `gridFocusSessionID` trägt das Ergebnis; die Normalisierung
+        // spiegelt es bei sichtbarem Grid in die Selektion.
         for index in windows.indices {
             guard let anchor = focusAnchors[windows[index].id],
                   let entity = gridWorkspaces.first(where: { $0.id == anchor.workspaceID })
@@ -495,8 +500,13 @@ struct AgentUIState: Codable, Equatable {
                entity.slotIndex(of: focus) != nil {
                 continue
             }
-            let fallback = entity.slots[anchor.index...].compactMap { $0 }.first
-                ?? entity.slots[..<anchor.index].compactMap { $0 }.last
+            let ownTabs = Set(windows[index].openTabIDs)
+            let after = entity.slots[anchor.index...].compactMap { $0 }
+            let before = entity.slots[..<anchor.index].compactMap { $0 }
+            let fallback = after.first { ownTabs.contains($0) }
+                ?? before.last { ownTabs.contains($0) }
+                ?? after.first
+                ?? before.last
             windows[index].gridFocusSessionID = fallback
             if windows[index].showsGrid {
                 windows[index].selectedSessionID = fallback

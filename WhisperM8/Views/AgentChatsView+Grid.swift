@@ -140,8 +140,14 @@ extension AgentChatsView {
     /// „Zurück zum Workspace ‹Name›" aus der Einzelansicht: stellt das Grid
     /// exakt wieder her (Slots + Fokus repariert der Store).
     func returnToWorkspace() {
-        beginGridBuildMeasurement()
         let result = windowStore.returnToActiveGrid(in: windowID)
+        // Messung erst NACH erfolgreicher Aktivierung — eine abgelehnte
+        // Rückkehr liefe sonst in den 500-ms-Timeout (Fake-Verletzung).
+        if case .alreadyActiveHere = result {
+            beginGridBuildMeasurement()
+        } else if case .activated = result {
+            beginGridBuildMeasurement()
+        }
         switch result {
         case .alreadyActive(let owner):
             // Sollte für das eigene Rücksprungziel nie passieren — defensiv:

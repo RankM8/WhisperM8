@@ -488,33 +488,30 @@ final class AgentWindowStore {
     /// Aktiviert einen Workspace als Grid des Fensters (Single-Owner,
     /// Entscheidung A strikt: JEDER vorhandene Besitzer — sichtbar oder als
     /// verborgenes Rücksprungziel — liefert `.alreadyActive`, die UI
-    /// fokussiert dieses Fenster über seine Fenster-ID). Materialisiert
-    /// fehlende Slot-Tabs in Slot-Reihenfolge HINTEN, ohne bestehende Tabs
-    /// zu schließen oder umzusortieren; startet nie Prozesse. Konflikte
-    /// kommen als Ergebnis zurück, NIE als Teilmutation — sämtliche
-    /// Prüfungen laufen vor der ersten Mutation (Review-Blocker: der
-    /// frühere Hidden-Owner-Clear lief vor der Konfliktprüfung und
-    /// zerstörte bei Ablehnung das Rücksprungziel des Besitzers).
+    /// fokussiert dieses Fenster über seine Fenster-ID).
+    ///
+    /// Slot-Chats, die als Tab in einem ANDEREN Fenster leben, blockieren
+    /// die Aktivierung NICHT (Re-Verifikations-Blocker: zwei Fremd-Tab-
+    /// Mitgliedschaften machten einen Workspace sonst dauerhaft unöffenbar) —
+    /// sie werden schlicht nicht materialisiert: der Render-Guard zeigt für
+    /// sie den Übernahme-Platzhalter, der Transfer bleibt eine explizite
+    /// Aktion. Eigene Tabs werden in Slot-Reihenfolge HINTEN ergänzt, ohne
+    /// bestehende Tabs zu schließen oder umzusortieren; startet nie Prozesse.
     @discardableResult
     func activateGridWorkspace(_ workspaceID: UUID, in windowID: UUID) -> GridActivationResult {
         guard let entity = gridWorkspace(id: workspaceID), hasWindow(windowID) else {
             return .rejected
         }
-        // Tab-Ownership-Konflikt: Slot-Chats, die als Tab in einem ANDEREN
-        // Fenster leben, würden beim Materialisieren gestohlen. Gilt auch
-        // für den idempotenten Re-Aktivierungs-Pfad.
-        var conflicts: [UUID: UUID] = [:]
-        for sessionID in entity.occupiedSessionIDs {
-            if let host = self.windowID(containingTab: sessionID), host != windowID {
-                conflicts[sessionID] = host
-            }
-        }
-
         if let owner = self.windowID(owningGridWorkspace: workspaceID), owner != windowID {
             return .alreadyActive(ownerWindowID: owner)
         }
-        guard conflicts.isEmpty else {
-            return .blockedByWindowOwnership(conflicts)
+
+        // Fremd-gehostete Slots ermitteln (werden NICHT materialisiert).
+        var foreignHosted = Set<UUID>()
+        for sessionID in entity.occupiedSessionIDs {
+            if let host = self.windowID(containingTab: sessionID), host != windowID {
+                foreignHosted.insert(sessionID)
+            }
         }
 
         let current = window(for: windowID)
@@ -522,7 +519,7 @@ final class AgentWindowStore {
         updateWindow(windowID) { window in
             window.activeWorkspaceID = workspaceID
             window.showsGrid = true
-            Self.materializeSlotTabs(&window, entity: entity)
+            Self.materializeSlotTabs(&window, entity: entity, skipping: foreignHosted)
             Self.repairGridFocus(&window, entity: entity)
         }
         return alreadyHere ? .alreadyActiveHere : .activated
@@ -651,11 +648,15 @@ final class AgentWindowStore {
 
     /// Fehlende Slot-Tabs in Slot-Reihenfolge hinten anhängen — bestehende
     /// Tabs bleiben unberührt (weder geschlossen noch umsortiert).
+    /// `skipping`: fremd-gehostete Sessions (deren Tab gehört einem anderen
+    /// Fenster — kein Stehlen, der Render-Guard zeigt den Platzhalter).
     private static func materializeSlotTabs(
-        _ window: inout AgentChatWindowState, entity: AgentGridWorkspace
+        _ window: inout AgentChatWindowState,
+        entity: AgentGridWorkspace,
+        skipping foreignHosted: Set<UUID> = []
     ) {
         for sessionID in entity.occupiedSessionIDs
-            where !window.openTabIDs.contains(sessionID) {
+            where !window.openTabIDs.contains(sessionID) && !foreignHosted.contains(sessionID) {
             window.openTabIDs.append(sessionID)
         }
     }

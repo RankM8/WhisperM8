@@ -259,13 +259,16 @@ extension AgentChatsView {
         if sessionIDs.count > 9 {
             errorMessage = "Ein Workspace zeigt höchstens 9 Chats — die ersten 9 der Auswahl wurden aufgenommen, \(sessionIDs.count - 9) nicht."
         }
-        beginGridBuildMeasurement()
-        windowStore.createGridWorkspace(
+        let id = windowStore.createGridWorkspace(
             name: nextFreeWorkspaceName(),
             capacity: AgentGridWorkspace.smallestCapacity(fitting: accepted.count),
             slots: accepted.map { $0 },
             activateIn: windowID
         )
+        // Messung mit der NEUEN Entity (nicht dem alten Workspace).
+        if let entity = windowStore.gridWorkspace(id: id) {
+            beginGridBuildMeasurement(for: entity)
+        }
         multiSelection = []
     }
 

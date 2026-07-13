@@ -33,6 +33,11 @@ final class GridPerformanceTracker {
     /// Ziel-Session der laufenden Fokus-Messung — verspätete Callbacks
     /// eines FRÜHEREN Fokusziels (async `focusTerminal` des alten Terminals)
     /// dürfen die neue Messung weder beenden noch abbrechen.
+    /// Bekannte Restungenauigkeit (bewusst): kehrt DASSELBE Ziel innerhalb
+    /// des async-Fensters zurück (A→B→A), kann der alte A-Callback die neue
+    /// A-Messung minimal zu früh schließen — ein reiner Messfehler, kein
+    /// Funktionsfehler; ein durchgereichtes Generations-Ticket stünde nicht
+    /// im Verhältnis zum Nutzen.
     private var focusTargetSessionID: UUID?
 
     init() {}
