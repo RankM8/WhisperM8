@@ -380,7 +380,7 @@ function render() {
       });
       el.querySelector("[data-max]").addEventListener("click", e => {
         e.stopPropagation();
-        toast("Maximiert " + c.name + " — „Zurück zum Workspace" stellt das Grid exakt wieder her");
+        toast("Maximiert " + c.name + " — „Zurück zum Workspace“ stellt das Grid exakt wieder her");
         focusID = id; render();
       });
       el.addEventListener("click", () => { focusID = id; render(); });
