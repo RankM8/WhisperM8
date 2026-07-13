@@ -59,6 +59,7 @@ extension AgentChatsView {
             }
             .buttonStyle(.plain)
             .help("Neuer Workspace")
+            .accessibilityLabel("Neuen Workspace anlegen")
         }
         .foregroundStyle(AgentTheme.textTertiary)
         .padding(.horizontal, 14)
@@ -80,11 +81,12 @@ extension AgentChatsView {
                 }
             }
         }
-        // Drop auf die Gruppe = aufnehmen (erster freier Slot/Auto-Wachsen).
+        // Drop auf die Gruppe = aufnehmen (erster freier Slot/Auto-Wachsen);
+        // Ablehnungen (volle Endstufe, archiviert) laufen sichtbar über den
+        // gemeinsamen Drop-Pfad statt still `true` zu melden.
         .dropDestination(for: DraggableSession.self) { items, _ in
             guard let dropped = items.first else { return false }
-            addSessionToWorkspace(dropped.sessionID, workspaceID: entity.id)
-            return true
+            return handleGridGroupDrop(dropped, workspaceID: entity.id)
         }
     }
 
@@ -166,14 +168,17 @@ extension AgentChatsView {
             Button("Aus Workspace „\(entity.name)“ entfernen", systemImage: "minus.circle") {
                 removeSessionFromWorkspace(session.id, workspaceID: entity.id)
             }
-            workspaceMembershipMenu(for: session)
+            // Ohne Entfernen-Teil — der Eintrag für DIESE Gruppe steht schon
+            // direkt darüber (Review-Finding: doppelte Einträge).
+            workspaceMembershipMenu(for: session, includeRemoval: false)
         }
+        // Sidebar-Quelle = Add/Place-Semantik: bewusst OHNE Slot-Herkunft
+        // (die trägt nur der Pane-Header — sonst würde ein Row-Drag im
+        // eigenen Grid als Move/Swap statt als Sidebar-Drop aufgelöst).
         .draggable(DraggableSession(
             sessionID: session.id,
             sourceProjectID: session.projectID,
-            sourceWindowID: windowID,
-            sourceWorkspaceID: entity.id,
-            sourceSlotIndex: slotIndex
+            sourceWindowID: windowID
         ))
     }
 

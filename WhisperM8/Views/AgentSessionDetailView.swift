@@ -141,6 +141,18 @@ struct AgentSessionDetailView: View {
         .onChange(of: actionRequest) { _, request in
             handleActionRequest(request)
         }
+        // Grid-Fokusmodell (Plan F9): Wird eine bisher unterdrückte Pane zur
+        // Fokus-Pane (suppressesAutoActivation false), holt sie Launch +
+        // Tastaturfokus GENAU EINMAL nach — die View remountet beim
+        // Fokuswechsel nicht (stabile .id), onAppear feuert also nicht
+        // erneut (Review-Finding: Offline-Panes starteten nie).
+        .onChange(of: suppressesAutoActivation) { wasSuppressed, isSuppressed in
+            guard wasSuppressed, !isSuppressed else { return }
+            if session.shouldLaunchOnOpen == true, controller?.isRunning != true {
+                launchAfterCacheWarmup()
+            }
+            controller?.focusTerminal()
+        }
     }
 
     /// Laedt das Transcript fuer die aktuelle Session aus der JSONL-Datei

@@ -36,7 +36,9 @@ extension AgentChatsView {
         } else {
             selectedProjectID = project.id
             expandedProjectIDs.insert(project.id)
-            openTab(sessionID)
+            // Bewusst KEIN separates openTab davor — die Selektions-Bridge
+            // (navigateToSession) materialisiert den Tab selbst und wahrt
+            // die Grid-Klickregel (Review-Finding: Doppel-Mutation).
             selectedSessionID = sessionID
             multiSelection = []
             AppPreferences.shared.agentDefaultProjectPath = project.path

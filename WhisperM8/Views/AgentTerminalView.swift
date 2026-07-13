@@ -68,6 +68,65 @@ final class QuietableTerminalView: LocalProcessTerminalView {
         super.bell(source: source)
     }
 
+    // MARK: - Feed-Drosselung (Plan F11)
+
+    /// Render-Priorität der Pane: nur `.focusedVisible` verarbeitet Bytes
+    /// sofort; Hintergrund-Panes bündeln auf ~12,5 Hz (`TerminalFeedBatcher`).
+    enum OutputPriority {
+        case focusedVisible
+        case backgroundVisible
+    }
+
+    /// Flush-Intervall der Hintergrund-Panes (~12,5 Hz)…
+    private static let flushInterval: TimeInterval = 0.080
+    /// …phasenversetzt auf einem 16-ms-Raster, damit acht Hintergrund-Panes
+    /// nicht alle 80 ms gleichzeitig feuern.
+    private lazy var flushPhaseOffset: TimeInterval =
+        Double(abs(ObjectIdentifier(self).hashValue) % 5) * 0.016
+
+    private lazy var feedBatcher = TerminalFeedBatcher(
+        feed: { [weak self] bytes, batched in
+            self?.feedDirect(bytes, batched: batched)
+        },
+        scheduleFlush: { [weak self] fire in
+            let workItem = DispatchWorkItem(block: fire)
+            let delay = Self.flushInterval + (self?.flushPhaseOffset ?? 0)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+            return { workItem.cancel() }
+        }
+    )
+
+    private func feedDirect(_ bytes: ArraySlice<UInt8>, batched: Bool) {
+        if batched {
+            // Misst Parser + Render-Scheduling eines gebündelten Flushes
+            // (grid.streamingFrame, Budget 16,7 ms) — keine GPU-Zeit.
+            let token = PerfBudgets.gridStreamingFrame.begin()
+            super.dataReceived(slice: bytes)
+            PerfBudgets.gridStreamingFrame.end(token)
+            PerfSignposts.grid.emitEvent("grid.streaming.flush")
+        } else {
+            super.dataReceived(slice: bytes)
+        }
+    }
+
+    /// Alle PTY-Bytes laufen durch den Batcher — im Fokus-Modus reicht er
+    /// direkt durch (kein Verhaltensunterschied zu vorher).
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        assert(Thread.isMainThread)
+        feedBatcher.receive(slice)
+    }
+
+    /// Fokuswechsel im Grid: Hintergrund-Panes drosseln, die Fokus-Pane
+    /// flusht ihren Rückstand sofort (Reihenfolge bleibt FIFO).
+    func setOutputPriority(_ priority: OutputPriority) {
+        feedBatcher.isThrottling = priority != .focusedVisible
+    }
+
+    /// Teardown: gepufferte Bytes nicht verlieren, solange die View lebt.
+    func flushPendingOutput() {
+        feedBatcher.flushPending()
+    }
+
     /// Wird AUSSCHLIESSLICH vom Output-Pfad (`Terminal.scroll()`) gerufen —
     /// SwiftTerm hat fuer User-getriggerte Scrolls einen anderen Code-Pfad,
     /// der diese Variante nicht feuert. Damit ist hier garantiert: jedes
@@ -754,6 +813,13 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
                 GridPerformanceTracker.shared.abortFocusSwitch()
             }
         }
+    }
+
+    /// Feed-Drosselung der Pane (Grid-Fokusmodell, Plan F11): Hintergrund-
+    /// Panes bündeln PTY-Bytes auf ~12,5 Hz, die Fokus-Pane verarbeitet
+    /// sofort (Umschalten flusht den Rückstand FIFO-treu).
+    func setOutputPriority(_ priority: QuietableTerminalView.OutputPriority) {
+        terminal.setOutputPriority(priority)
     }
 
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}

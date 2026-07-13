@@ -121,7 +121,10 @@ final class WindowRequestCenter: ObservableObject {
             allowsAgentChatsPrimaryWindow = true
         }
         // Tab + Selektion im SSoT setzen — idempotent, die Fenster folgen.
-        windowStore.openTab(sessionID, in: targetWindowID, select: true)
+        // Über die zentrale Klickregel: im sichtbaren Grid wird die Pane
+        // fokussiert, sonst öffnet die Einzelansicht (nie an der Grid-
+        // Invariante vorbei einen Nicht-Slot selektieren).
+        windowStore.navigateToSession(sessionID, in: targetWindowID)
         // Sidebar-Reveal: Selektion allein macht die Row nicht sichtbar —
         // Projekt-Gruppe aufklappen und bei Subagent-Kindern die Parent-
         // Gruppe explizit öffnen (die implizite Offenhaltung über die

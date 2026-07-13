@@ -230,7 +230,10 @@ final class AgentWindowStore {
 
     /// Legt einen Workspace an (ans Array-Ende = unten in der Sidebar) und
     /// aktiviert ihn optional sofort im Fenster. Name/Farbe/Kapazität
-    /// normalisiert die Entity selbst (leerer Name → Default).
+    /// normalisiert die Entity selbst (leerer Name → Default); `slots`
+    /// werden wie bei `addSession` gegen den Domain-Workspace validiert —
+    /// unbekannte/archivierte Sessions werden am Index `nil` (die Slot-
+    /// Invariante lässt sich nicht über Create umgehen).
     @discardableResult
     func createGridWorkspace(
         name: String,
@@ -239,8 +242,17 @@ final class AgentWindowStore {
         slots: [UUID?] = [],
         activateIn windowID: UUID? = nil
     ) -> UUID {
+        let eligible = Set(
+            persistence.loadWorkspace().sessions
+                .filter { $0.status != .archived }
+                .map(\.id)
+        )
+        let validatedSlots = slots.map { slot -> UUID? in
+            guard let slot, eligible.contains(slot) else { return nil }
+            return slot
+        }
         let entity = AgentGridWorkspace(
-            name: name, colorHex: colorHex, slots: slots, capacity: capacity
+            name: name, colorHex: colorHex, slots: validatedSlots, capacity: capacity
         )
         mutate { $0.gridWorkspaces.append(entity) }
         if let windowID {
@@ -406,26 +418,19 @@ final class AgentWindowStore {
         return true
     }
 
-    /// Persistiert das Spalten-Split-Verhältnis (Commit am Drag-Ende — die
-    /// Live-Werte hält `AgentGridSplitContainer` lokal). `firstFraction` ist
-    /// der Anteil der ERSTEN Spalte; gilt für die 2-Spalten-Layouts 2/3/4,
-    /// die 3-Achsen-Layouts (6/9, Paket 3) setzen die Vektoren direkt.
-    func setGridColumnSplit(ofGridWorkspace workspaceID: UUID, firstFraction: Double) {
+    /// Persistiert die Spalten-Gewichte (Commit am Drag-Ende — die
+    /// Live-Werte hält `AgentGridSplitContainer` lokal). Falsche Länge/
+    /// ungültige Werte repariert die Entity-Normalisierung achsenweise.
+    func setGridColumnFractions(ofGridWorkspace workspaceID: UUID, _ fractions: [Double]) {
         guard let entity = gridWorkspace(id: workspaceID),
-              entity.columnFractions.count == 2,
-              entity.columnFractions.first != firstFraction else { return }
-        mutateGridWorkspace(workspaceID) {
-            $0.columnFractions = [firstFraction, 1 - firstFraction]
-        }
+              entity.columnFractions != fractions else { return }
+        mutateGridWorkspace(workspaceID) { $0.columnFractions = fractions }
     }
 
-    func setGridRowSplit(ofGridWorkspace workspaceID: UUID, firstFraction: Double) {
+    func setGridRowFractions(ofGridWorkspace workspaceID: UUID, _ fractions: [Double]) {
         guard let entity = gridWorkspace(id: workspaceID),
-              entity.rowFractions.count == 2,
-              entity.rowFractions.first != firstFraction else { return }
-        mutateGridWorkspace(workspaceID) {
-            $0.rowFractions = [firstFraction, 1 - firstFraction]
-        }
+              entity.rowFractions != fractions else { return }
+        mutateGridWorkspace(workspaceID) { $0.rowFractions = fractions }
     }
 
     /// Welche Sessions würde ein Wechsel auf `capacity` entfernen (geordnet).
@@ -472,13 +477,32 @@ final class AgentWindowStore {
     /// Materialisiert fehlende Slot-Tabs in Slot-Reihenfolge HINTEN, ohne
     /// bestehende Tabs zu schließen oder umzusortieren; startet nie
     /// Prozesse. Konflikte kommen als Ergebnis zurück, nie als Teilmutation.
+    ///
+    /// Besitz-Feinheiten: Hält ein ANDERES Fenster den Workspace nur als
+    /// verborgenes Rücksprungziel (`showsGrid == false`), wird der Besitz
+    /// still übertragen — es rendert nichts, das gestohlen werden könnte,
+    /// und ein leeres Besitzerfenster wäre sonst nicht fokussierbar
+    /// (Review-Finding). Sichtbare Grids bleiben exklusiv.
     @discardableResult
     func activateGridWorkspace(_ workspaceID: UUID, in windowID: UUID) -> GridActivationResult {
         guard let entity = gridWorkspace(id: workspaceID), hasWindow(windowID) else {
             return .rejected
         }
+        // Tab-Ownership-Konflikt: Slot-Chats, die als Tab in einem ANDEREN
+        // Fenster leben, würden beim Materialisieren gestohlen. Gilt auch
+        // für den idempotenten Re-Aktivierungs-Pfad (Review-Blocker 1).
+        var conflicts: [UUID: UUID] = [:]
+        for sessionID in entity.occupiedSessionIDs {
+            if let host = self.windowID(containingTab: sessionID), host != windowID {
+                conflicts[sessionID] = host
+            }
+        }
+
         let current = window(for: windowID)
         if current.activeWorkspaceID == workspaceID {
+            guard conflicts.isEmpty else {
+                return .blockedByWindowOwnership(conflicts)
+            }
             updateWindow(windowID) { window in
                 window.showsGrid = true
                 Self.materializeSlotTabs(&window, entity: entity)
@@ -487,12 +511,16 @@ final class AgentWindowStore {
             return .alreadyActiveHere
         }
         if let owner = self.windowID(owningGridWorkspace: workspaceID), owner != windowID {
-            return .alreadyActive(ownerWindowID: owner)
-        }
-        var conflicts: [UUID: UUID] = [:]
-        for sessionID in entity.occupiedSessionIDs {
-            if let host = self.windowID(containingTab: sessionID), host != windowID {
-                conflicts[sessionID] = host
+            if window(for: owner).showsGrid {
+                return .alreadyActive(ownerWindowID: owner)
+            }
+            // Verborgene Referenz: Besitz still übernehmen (eine Mutation —
+            // der alte Owner verliert nur sein Rücksprungziel).
+            mutate { state in
+                if let index = state.windows.firstIndex(where: { $0.id == owner }) {
+                    state.windows[index].activeWorkspaceID = nil
+                    state.windows[index].gridFocusSessionID = nil
+                }
             }
         }
         guard conflicts.isEmpty else {
@@ -507,8 +535,9 @@ final class AgentWindowStore {
         return .activated
     }
 
-    /// Einzelansicht öffnen/selektieren — die Workspace-Referenz bleibt
-    /// („Zurück zum Workspace"), Slots bleiben unverändert.
+    /// Einzelansicht öffnen/selektieren — die Workspace-Referenz UND der
+    /// gemerkte Pane-Fokus bleiben („Zurück zum Workspace" stellt exakt
+    /// wieder her), Slots bleiben unverändert.
     func showSingleSession(_ sessionID: UUID, in windowID: UUID) {
         updateWindow(windowID) { window in
             if !window.openTabIDs.contains(sessionID) {
@@ -516,6 +545,24 @@ final class AgentWindowStore {
             }
             window.selectedSessionID = sessionID
             window.showsGrid = false
+        }
+    }
+
+    /// ZENTRALE Klick-/Fokus-Navigation (quellenunabhängige Klickregel,
+    /// Plan-Abschnitt 03): Liegt der Chat im SICHTBAREN Workspace dieses
+    /// Fensters, wird seine Pane fokussiert; sonst öffnet die Einzelansicht
+    /// (Tab wird materialisiert). Slots bleiben IMMER unverändert. Alle
+    /// Selektions-Pfade (Sidebar, Tabs, ⌘1–9, Ctrl+Tab, Notification-Fokus)
+    /// laufen hier durch — nie an der Bridge vorbei `openTab(select:)`
+    /// verwenden (Review-Finding: das konnte im sichtbaren Grid einen
+    /// Nicht-Slot selektieren).
+    func navigateToSession(_ sessionID: UUID, in windowID: UUID) {
+        if let entity = activeGridWorkspace(in: windowID),
+           window(for: windowID).showsGrid,
+           entity.slotIndex(of: sessionID) != nil {
+            setGridFocusedSession(sessionID, in: windowID)
+        } else {
+            showSingleSession(sessionID, in: windowID)
         }
     }
 
@@ -530,32 +577,55 @@ final class AgentWindowStore {
         return activateGridWorkspace(workspaceID, in: windowID)
     }
 
-    /// Pane-Fokus im sichtbaren Grid — akzeptiert nur belegte Slots.
+    /// Pane-Fokus im sichtbaren Grid — akzeptiert nur belegte Slots. Merkt
+    /// den Fokus zusätzlich am Fenster (`gridFocusSessionID`), damit die
+    /// Einzelansicht ihn nicht zerstört („Zurück" stellt EXAKT diese Pane
+    /// wieder her).
     func setGridFocusedSession(_ sessionID: UUID, in windowID: UUID) {
         guard let entity = activeGridWorkspace(in: windowID),
               window(for: windowID).showsGrid,
               entity.slotIndex(of: sessionID) != nil else { return }
-        updateWindow(windowID) { $0.selectedSessionID = sessionID }
+        updateWindow(windowID) { window in
+            window.selectedSessionID = sessionID
+            window.gridFocusSessionID = sessionID
+        }
     }
 
     // MARK: - Key-Window-Routing (ephemer, fürs Dictation)
 
-    /// Das Agent-Chats-Fenster, das zuletzt Key wurde — Dictation routet
-    /// ausschließlich über dieses Fenster (Selektionen in Nicht-Key-Fenstern
-    /// ändern das Routing nie). Ephemer, nie persistiert.
+    /// Das Agent-Chats-Fenster, das GERADE Key ist. Ephemer, nie persistiert.
     private(set) var keyAgentChatWindowID: UUID?
+
+    /// Das Fenster, das das globale Dictation-Ziel besitzt: das zuletzt
+    /// Key gewordene Agent-Chats-Fenster. Bleibt beim `resignKey` GESETZT
+    /// (der User wechselt oft in eine andere App und diktiert dann per
+    /// globalem Hotkey in seinen letzten Chat) — nur ein ANDERES Fenster,
+    /// das Key wird, oder das Schließen des Besitzers übernimmt/räumt es.
+    /// Damit kann eine Hintergrund-Mutation eines Nicht-Key-Fensters das
+    /// Ziel nie kapern (Review-Finding 8).
+    private(set) var dictationWindowID: UUID?
 
     func windowDidBecomeKey(_ windowID: UUID) {
         keyAgentChatWindowID = windowID
+        dictationWindowID = windowID
     }
 
-    /// Löscht das Routing nur, wenn GENAU dieses Fenster noch eingetragen
+    /// Löscht den Key-Status nur, wenn GENAU dieses Fenster noch eingetragen
     /// ist — ein `resignKey` des alten Fensters nach dem `becomeKey` des
-    /// neuen darf das neue nicht wegräumen.
+    /// neuen darf das neue nicht wegräumen. `dictationWindowID` bleibt.
     func windowDidResignKey(_ windowID: UUID) {
         if keyAgentChatWindowID == windowID {
             keyAgentChatWindowID = nil
         }
+    }
+
+    /// Fenster verschwindet endgültig: Dictation-Besitz aufgeben, damit das
+    /// nächste Key-Fenster (bzw. niemand) übernimmt.
+    func windowDidCloseForDictation(_ windowID: UUID) {
+        if dictationWindowID == windowID {
+            dictationWindowID = nil
+        }
+        windowDidResignKey(windowID)
     }
 
     // MARK: - Grid-Workspaces: Helfer
@@ -583,15 +653,24 @@ final class AgentWindowStore {
     }
 
     /// Fokus-Invariante im sichtbaren Grid: Selektion muss ein belegter Slot
-    /// sein — sonst erster belegter Slot; leerer Workspace → `nil`.
+    /// sein — bevorzugt der gemerkte Pane-Fokus (`gridFocusSessionID`, damit
+    /// „Zurück zum Workspace" exakt wiederherstellt), sonst erster belegter
+    /// Slot; leerer Workspace → `nil`.
     private static func repairGridFocus(
         _ window: inout AgentChatWindowState, entity: AgentGridWorkspace
     ) {
         if let selected = window.selectedSessionID,
            entity.slotIndex(of: selected) != nil {
+            window.gridFocusSessionID = selected
+            return
+        }
+        if let remembered = window.gridFocusSessionID,
+           entity.slotIndex(of: remembered) != nil {
+            window.selectedSessionID = remembered
             return
         }
         window.selectedSessionID = entity.occupiedSessionIDs.first
+        window.gridFocusSessionID = window.selectedSessionID
     }
 
     /// Deterministischer Fokus-Fallback nach Entfernen des fokussierten
@@ -752,19 +831,26 @@ final class AgentWindowStore {
         pruned.prune(workspace: workspace, capTabs: false)
         guard pruned != state else { return }
         state = pruned
+        dirtyRevision += 1
         scheduleSave()
     }
 
     /// Erzwingt sofortiges Persistieren (z. B. vor App-Terminierung,
-    /// Workspace-Delete, bestätigtem Capacity-Shrink). Fehler werden
-    /// geloggt, nicht verschluckt — der Zustand bleibt dirty und der
-    /// nächste Debounce/Flush versucht es erneut.
+    /// Workspace-Delete, bestätigtem Capacity-Shrink). Reconciled vorher
+    /// gegen den aktuellen Domain-Workspace — ein später Background-Delete
+    /// repariert den Sidecar damit spätestens beim Terminieren (Spez
+    /// 14d92786). Fehler werden geloggt UND mit Abstand erneut versucht,
+    /// nicht verschluckt.
     func flush() {
+        var pruned = state
+        pruned.prune(workspace: persistence.loadWorkspace(), capTabs: false)
+        if pruned != state {
+            state = pruned
+            dirtyRevision += 1
+        }
         saveTask?.cancel()
-        do {
-            try persistence.saveUIState(state)
-        } catch {
-            Logger.debug("AgentUIState flush failed: \(error.localizedDescription)")
+        if !performSave() {
+            scheduleRetry()
         }
     }
 
@@ -789,32 +875,55 @@ final class AgentWindowStore {
 
     private func mutate(_ block: (inout AgentUIState) -> Void) {
         block(&state)
+        dirtyRevision += 1
         scheduleSave()
+    }
+
+    /// Dirty-Tracking (Spez 14d92786): `savedRevision` folgt `dirtyRevision`
+    /// erst nach ERFOLGREICHEM Write — ein fehlgeschlagener Flush/Save lässt
+    /// den Zustand nachweisbar dirty und der Retry greift.
+    @ObservationIgnored private var dirtyRevision = 0
+    @ObservationIgnored private var savedRevision = -1
+
+    /// Schreibt den AKTUELLEN State (nie einen Alt-Snapshot — eine Mutation
+    /// während des Debounce-Fensters kann so nie von einem älteren Write
+    /// überholt werden). `true` bei Erfolg.
+    @discardableResult
+    private func performSave() -> Bool {
+        let revision = dirtyRevision
+        do {
+            try persistence.saveUIState(state)
+            savedRevision = revision
+            return true
+        } catch {
+            Logger.debug("AgentUIState save failed: \(error.localizedDescription) — retry in 5s")
+            return false
+        }
     }
 
     private func scheduleSave() {
         saveTask?.cancel()
-        let persistence = persistence
         let debounce = saveDebounce
         saveTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: debounce)
             guard !Task.isCancelled, let self else { return }
-            do {
-                // Bewusst der AKTUELLE State statt eines Alt-Snapshots:
-                // eine Mutation während des Debounce-Fensters kann so nie
-                // von einem älteren Write überholt werden (Robustheits-Spez
-                // 14d92786, stateRevision-Garantie auf dem MainActor).
-                try persistence.saveUIState(self.state)
-            } catch {
-                // Nicht verschlucken: loggen, dirty lassen, mit Abstand
-                // erneut versuchen (Dauerfehler wie „Disk voll" sollen
-                // nicht im 400-ms-Takt spammen).
-                Logger.debug("AgentUIState save failed: \(error.localizedDescription) — retry in 5s")
-                self.saveTask = Task { @MainActor [weak self] in
-                    try? await Task.sleep(for: .seconds(5))
-                    guard !Task.isCancelled else { return }
-                    self?.scheduleSave()
-                }
+            if !self.performSave() {
+                self.scheduleRetry()
+            }
+        }
+    }
+
+    /// Dauerfehler („Disk voll") sollen nicht im 400-ms-Takt spammen —
+    /// Retry mit 5-s-Abstand, solange der Zustand dirty ist. Eine neue
+    /// Mutation storniert den Retry und übernimmt mit ihrem Debounce.
+    private func scheduleRetry() {
+        saveTask?.cancel()
+        saveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, let self else { return }
+            guard self.savedRevision < self.dirtyRevision else { return }
+            if !self.performSave() {
+                self.scheduleRetry()
             }
         }
     }

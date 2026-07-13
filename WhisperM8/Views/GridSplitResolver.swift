@@ -44,4 +44,44 @@ enum GridSplitResolver {
         let usable = max(1, total - divider)
         return clampedFraction(Double((startFirstSize + translation) / usable), total: total)
     }
+
+    // MARK: - Mehrspurige Achsen (Kapazitäten 6/9, Plan F10)
+
+    /// Punktgrößen aller Spuren einer Achse aus dem Gewichts-Vektor
+    /// (Summe 1, siehe `AgentGridWorkspace.normalizedFractions`). Die letzte
+    /// Spur nimmt den Rundungsrest — die Summe passt exakt in `total`.
+    static func trackSizes(total: CGFloat, fractions: [Double]) -> [CGFloat] {
+        guard !fractions.isEmpty else { return [] }
+        let usable = max(0, total - divider * CGFloat(fractions.count - 1))
+        var sizes = fractions.map { (usable * CGFloat($0)).rounded() }
+        let assigned = sizes.dropLast().reduce(0, +)
+        sizes[sizes.count - 1] = max(0, usable - assigned)
+        return sizes
+    }
+
+    /// Gewichte während eines Drags des Dividers `dividerIndex` (zwischen
+    /// Spur i und i+1): verschiebt Anteil NUR zwischen den beiden Nachbarn
+    /// (alle übrigen Spuren bleiben exakt), geclampt auf `minPane` je Seite.
+    /// Ist das Nachbar-Paar zu klein für zwei Mindest-Panes, bleibt der
+    /// Basis-Vektor unverändert.
+    static func fractionsDuringDrag(
+        base: [Double],
+        dividerIndex: Int,
+        translation: CGFloat,
+        total: CGFloat
+    ) -> [Double] {
+        guard base.indices.contains(dividerIndex),
+              base.indices.contains(dividerIndex + 1) else { return base }
+        let usable = max(1, total - divider * CGFloat(base.count - 1))
+        let combined = base[dividerIndex] + base[dividerIndex + 1]
+        let combinedPoints = usable * CGFloat(combined)
+        guard combinedPoints > minPane * 2 else { return base }
+
+        let currentFirst = usable * CGFloat(base[dividerIndex])
+        let newFirst = min(max(currentFirst + translation, minPane), combinedPoints - minPane)
+        var next = base
+        next[dividerIndex] = Double(newFirst / usable)
+        next[dividerIndex + 1] = combined - next[dividerIndex]
+        return next
+    }
 }

@@ -369,6 +369,9 @@ struct HeaderIconButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        // Symbol-Only-Control: der Hilfetext ist zugleich das
+        // VoiceOver-Label (sonst liest VoiceOver nur den Symbolnamen vor).
+        .accessibilityLabel(help)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
     }

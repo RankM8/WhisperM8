@@ -5,6 +5,8 @@ import XCTest
 /// Store-Ebene der Grid-Workspaces: Entity-CRUD, Aktivierung mit
 /// Single-Owner-Politik, Tab-Materialisierung, Fokus-Reparatur und
 /// Key-Window-Routing (Testmatrix aus der Robustheits-Spez 14d92786).
+/// Alle Slot-/Tab-Sessions sind im Domain-Workspace geseedet — Create/Add
+/// validieren dagegen, und der Flush-Prune räumt unbekannte IDs weg.
 @MainActor
 final class AgentGridWorkspaceStoreTests: XCTestCase {
     private func tempURL(_ prefix: String) -> URL {
@@ -17,7 +19,7 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         return (AgentWindowStore(persistence: persistence), persistence)
     }
 
-    /// Session im Domain-Workspace anlegen (addSession validiert dagegen).
+    /// Session im Domain-Workspace anlegen (Create/Add validieren dagegen).
     @discardableResult
     private func seedSession(
         _ persistence: AgentSessionStore,
@@ -36,6 +38,10 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         return session.id
     }
 
+    private func seed(_ persistence: AgentSessionStore, count: Int) throws -> [UUID] {
+        try (0 ..< count).map { _ in try seedSession(persistence) }
+    }
+
     // MARK: - Entity-CRUD
 
     func testCreateGridWorkspaceAppendsInSidebarOrder() {
@@ -43,6 +49,17 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         let first = store.createGridWorkspace(name: "Alpha")
         let second = store.createGridWorkspace(name: "Beta")
         XCTAssertEqual(store.gridWorkspaces.map(\.id), [first, second])
+    }
+
+    func testCreateGridWorkspaceValidatesSlotsAgainstDomain() throws {
+        let (store, persistence) = makeStore()
+        let live = try seedSession(persistence)
+        let archived = try seedSession(persistence, status: .archived)
+        let unknown = UUID()
+        let id = store.createGridWorkspace(name: "Validiert", slots: [live, archived, unknown])
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots,
+                       [live, nil],
+                       "unbekannt/archiviert → nil; leere Tail-Slots kappt die Kapazität")
     }
 
     func testRenameGridWorkspaceTrimsAndRejectsEmptyName() {
@@ -63,19 +80,19 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(store.setGridWorkspaceColor(id, colorHex: "blau"))
     }
 
-    func testDeleteGridWorkspaceClearsAllWindowReferencesButKeepsTabs() {
-        let (store, _) = makeStore()
+    func testDeleteGridWorkspaceClearsAllWindowReferencesButKeepsTabs() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let a = UUID(); let b = UUID()
-        store.openTab(a, in: w); store.openTab(b, in: w)
-        let id = store.createGridWorkspace(name: "Weg", slots: [a, b], activateIn: w)
+        let s = try seed(persistence, count: 2)
+        store.openTab(s[0], in: w); store.openTab(s[1], in: w)
+        let id = store.createGridWorkspace(name: "Weg", slots: [s[0], s[1]], activateIn: w)
         XCTAssertTrue(store.showsGrid(in: w))
 
         XCTAssertTrue(store.deleteGridWorkspace(id))
         XCTAssertNil(store.gridWorkspace(id: id))
         XCTAssertNil(store.window(for: w).activeWorkspaceID)
         XCTAssertFalse(store.showsGrid(in: w))
-        XCTAssertEqual(store.openTabIDs(in: w), [a, b], "Tabs bleiben unangetastet")
+        XCTAssertEqual(store.openTabIDs(in: w), [s[0], s[1]], "Tabs bleiben unangetastet")
     }
 
     func testReorderGridWorkspacesCannotDropOmittedEntities() {
@@ -91,41 +108,40 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
 
     // MARK: - Aktivierung (Single-Owner)
 
-    func testActivateMaterializesMissingTabsInSlotOrder() {
-        let (store, _) = makeStore()
+    func testActivateMaterializesMissingTabsInSlotOrder() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let existing = UUID()
+        let existing = try seedSession(persistence)
         store.openTab(existing, in: w)
-        let s1 = UUID(); let s2 = UUID()
-        let id = store.createGridWorkspace(name: "G", slots: [s1, s2])
+        let s = try seed(persistence, count: 2)
+        let id = store.createGridWorkspace(name: "G", slots: [s[0], s[1]])
 
         XCTAssertEqual(store.activateGridWorkspace(id, in: w), .activated)
-        XCTAssertEqual(store.openTabIDs(in: w), [existing, s1, s2],
+        XCTAssertEqual(store.openTabIDs(in: w), [existing, s[0], s[1]],
                        "bestehender Prefix bleibt, Slots hinten in Slot-Reihenfolge")
         XCTAssertTrue(store.showsGrid(in: w))
-        XCTAssertEqual(store.selectedSession(in: w), s1, "Fokus auf ersten belegten Slot")
+        XCTAssertEqual(store.selectedSession(in: w), s[0], "Fokus auf ersten belegten Slot")
     }
 
-    func testWorkspaceSwitchKeepsTabsFromPreviousWorkspace() {
-        let (store, _) = makeStore()
+    func testWorkspaceSwitchKeepsTabsFromPreviousWorkspace() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let a1 = UUID(); let a2 = UUID(); let b1 = UUID()
-        let wsA = store.createGridWorkspace(name: "A", slots: [a1, a2], activateIn: w)
-        _ = wsA
-        let wsB = store.createGridWorkspace(name: "B", slots: [b1])
+        let s = try seed(persistence, count: 3)
+        _ = store.createGridWorkspace(name: "A", slots: [s[0], s[1]], activateIn: w)
+        let wsB = store.createGridWorkspace(name: "B", slots: [s[2]])
 
         XCTAssertEqual(store.activateGridWorkspace(wsB, in: w), .activated)
-        XCTAssertEqual(store.openTabIDs(in: w), [a1, a2, b1], "A-Tabs bleiben offen")
+        XCTAssertEqual(store.openTabIDs(in: w), [s[0], s[1], s[2]], "A-Tabs bleiben offen")
         XCTAssertEqual(store.window(for: w).activeWorkspaceID, wsB)
-        XCTAssertEqual(store.selectedSession(in: w), b1)
+        XCTAssertEqual(store.selectedSession(in: w), s[2])
     }
 
-    func testActivateRetainsFocusedSessionWhenItIsInTargetSlots() {
-        let (store, _) = makeStore()
+    func testActivateRetainsFocusedSessionWhenItIsInTargetSlots() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let shared = UUID(); let other = UUID()
-        let wsA = store.createGridWorkspace(name: "A", slots: [other, shared], activateIn: w)
-        _ = wsA
+        let shared = try seedSession(persistence)
+        let other = try seedSession(persistence)
+        _ = store.createGridWorkspace(name: "A", slots: [other, shared], activateIn: w)
         store.setGridFocusedSession(shared, in: w)
         let wsB = store.createGridWorkspace(name: "B", slots: [shared])
 
@@ -133,13 +149,16 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedSession(in: w), shared, "gemeinsamer Fokus bleibt")
     }
 
-    func testSameWorkspaceSecondWindowReturnsExistingOwner() {
-        let (store, _) = makeStore()
+    func testSameVisibleWorkspaceSecondWindowReturnsExistingOwner() throws {
+        let (store, persistence) = makeStore()
         let primary = store.primaryWindowID
-        let tab = UUID()
+        let tab = try seedSession(persistence)
         store.openTab(tab, in: primary)
         let second = store.detachToNewWindow(tab, from: primary)
+        let anchor = try seedSession(persistence)
+        store.openTab(anchor, in: primary)
         let id = store.createGridWorkspace(name: "Exklusiv", activateIn: primary)
+        XCTAssertTrue(store.showsGrid(in: primary), "Owner zeigt das Grid")
 
         let before = (store.window(for: primary), store.window(for: second))
         XCTAssertEqual(
@@ -150,14 +169,32 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.window(for: second), before.1)
     }
 
-    func testDisjointWorkspacesCanBeActiveInDifferentWindows() {
-        let (store, _) = makeStore()
+    func testHiddenReferenceIsTakenOverBySecondWindow() throws {
+        let (store, persistence) = makeStore()
         let primary = store.primaryWindowID
-        let tab = UUID()
+        let tab = try seedSession(persistence)
         store.openTab(tab, in: primary)
         let second = store.detachToNewWindow(tab, from: primary)
-        let wsA = store.createGridWorkspace(name: "A", slots: [UUID()])
-        let wsB = store.createGridWorkspace(name: "B", slots: [UUID()])
+        let id = store.createGridWorkspace(name: "Versteckt", activateIn: primary)
+        // Owner verbirgt das Grid (nur Rücksprung-Referenz) …
+        store.showSingleSession(try seedSession(persistence), in: primary)
+        XCTAssertFalse(store.showsGrid(in: primary))
+
+        // … dann darf ein anderes Fenster den Besitz still übernehmen
+        // (es rendert nichts, das gestohlen werden könnte).
+        XCTAssertEqual(store.activateGridWorkspace(id, in: second), .activated)
+        XCTAssertEqual(store.window(for: second).activeWorkspaceID, id)
+        XCTAssertNil(store.window(for: primary).activeWorkspaceID)
+    }
+
+    func testDisjointWorkspacesCanBeActiveInDifferentWindows() throws {
+        let (store, persistence) = makeStore()
+        let primary = store.primaryWindowID
+        let tab = try seedSession(persistence)
+        store.openTab(tab, in: primary)
+        let second = store.detachToNewWindow(tab, from: primary)
+        let wsA = store.createGridWorkspace(name: "A", slots: [try seedSession(persistence)])
+        let wsB = store.createGridWorkspace(name: "B", slots: [try seedSession(persistence)])
 
         XCTAssertEqual(store.activateGridWorkspace(wsA, in: primary), .activated)
         XCTAssertEqual(store.activateGridWorkspace(wsB, in: second), .activated)
@@ -165,10 +202,10 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.showsGrid(in: second))
     }
 
-    func testActivationBlockedWhenSlotSessionBelongsToOtherWindow() {
-        let (store, _) = makeStore()
+    func testActivationBlockedWhenSlotSessionBelongsToOtherWindow() throws {
+        let (store, persistence) = makeStore()
         let primary = store.primaryWindowID
-        let hostage = UUID()
+        let hostage = try seedSession(persistence)
         store.openTab(hostage, in: primary)
         let second = store.detachToNewWindow(hostage, from: primary)
         // hostage ist jetzt Tab von `second`; Workspace soll in primary auf.
@@ -183,10 +220,29 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(store.showsGrid(in: primary))
     }
 
-    func testActivateIsIdempotentForOwnerWindow() {
-        let (store, _) = makeStore()
+    func testReactivationWithForeignTabIsBlockedToo() throws {
+        let (store, persistence) = makeStore()
+        let primary = store.primaryWindowID
+        let s = try seed(persistence, count: 2)
+        store.openTab(s[0], in: primary)
+        let id = store.createGridWorkspace(name: "G", slots: [s[0], s[1]], activateIn: primary)
+        // Slot-Chat wandert als Tab in ein zweites Fenster …
+        let second = store.detachToNewWindow(s[1], from: primary)
+        store.showSingleSession(s[0], in: primary)
+
+        // … der idempotente Re-Aktivierungs-Pfad darf ihn NICHT
+        // zurückstehlen (Review-Blocker: alreadyActiveHere ohne Prüfung).
+        XCTAssertEqual(
+            store.activateGridWorkspace(id, in: primary),
+            .blockedByWindowOwnership([s[1]: second])
+        )
+        XCTAssertFalse(store.showsGrid(in: primary))
+    }
+
+    func testActivateIsIdempotentForOwnerWindow() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let s = UUID()
+        let s = try seedSession(persistence)
         let id = store.createGridWorkspace(name: "Idem", slots: [s], activateIn: w)
         store.showSingleSession(s, in: w) // Grid verbergen, Referenz bleibt
         XCTAssertEqual(store.activateGridWorkspace(id, in: w), .alreadyActiveHere)
@@ -225,7 +281,7 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         let session = try seedSession(persistence)
         store.openTab(session, in: primary)
         _ = store.detachToNewWindow(session, from: primary) // Tab lebt in W2
-        let anchor = UUID()
+        let anchor = try seedSession(persistence)
         store.openTab(anchor, in: primary)
         let id = store.createGridWorkspace(name: "G", activateIn: primary)
 
@@ -251,10 +307,11 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
 
     // MARK: - Einzelansicht / Rücksprung / Fokus
 
-    func testShowSingleExternalSessionPreservesWorkspaceSlotsAndReference() {
-        let (store, _) = makeStore()
+    func testShowSingleExternalSessionPreservesWorkspaceSlotsAndReference() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let s1 = UUID(); let external = UUID()
+        let s1 = try seedSession(persistence)
+        let external = try seedSession(persistence)
         let id = store.createGridWorkspace(name: "G", slots: [s1], activateIn: w)
         let entityBefore = store.gridWorkspace(id: id)
 
@@ -265,65 +322,67 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.gridWorkspace(id: id), entityBefore, "Slots unverändert")
     }
 
-    func testReturnToWorkspaceRestoresGridAndSlotFocus() {
-        let (store, _) = makeStore()
+    func testReturnToWorkspaceRestoresExactPaneFocus() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let s1 = UUID(); let external = UUID()
-        let id = store.createGridWorkspace(name: "G", slots: [s1], activateIn: w)
-        _ = id
+        let s = try seed(persistence, count: 3)
+        let external = try seedSession(persistence)
+        _ = store.createGridWorkspace(name: "G", slots: s.map { $0 }, activateIn: w)
+        // Pane 2 fokussieren, dann in die Einzelansicht wechseln …
+        store.setGridFocusedSession(s[1], in: w)
         store.showSingleSession(external, in: w)
 
+        // … „Zurück" stellt EXAKT diese Pane wieder her (nicht Slot 1).
         XCTAssertEqual(store.returnToActiveGrid(in: w), .alreadyActiveHere)
         XCTAssertTrue(store.showsGrid(in: w))
-        XCTAssertEqual(store.selectedSession(in: w), s1,
-                       "externe Selektion ist kein Slot → erster belegter Slot")
+        XCTAssertEqual(store.selectedSession(in: w), s[1],
+                       "gemerkter Pane-Fokus überlebt die Einzelansicht")
     }
 
-    func testSetGridFocusedSessionAcceptsOnlyOccupiedSlots() {
-        let (store, _) = makeStore()
+    func testSetGridFocusedSessionAcceptsOnlyOccupiedSlots() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let s1 = UUID(); let s2 = UUID(); let external = UUID()
+        let s = try seed(persistence, count: 2)
+        let external = try seedSession(persistence)
         store.openTab(external, in: w)
-        _ = store.createGridWorkspace(name: "G", slots: [s1, s2], activateIn: w)
+        _ = store.createGridWorkspace(name: "G", slots: [s[0], s[1]], activateIn: w)
 
-        store.setGridFocusedSession(s2, in: w)
-        XCTAssertEqual(store.selectedSession(in: w), s2)
+        store.setGridFocusedSession(s[1], in: w)
+        XCTAssertEqual(store.selectedSession(in: w), s[1])
         store.setGridFocusedSession(external, in: w)
-        XCTAssertEqual(store.selectedSession(in: w), s2, "Nicht-Slot wird ignoriert")
+        XCTAssertEqual(store.selectedSession(in: w), s[1], "Nicht-Slot wird ignoriert")
     }
 
-    func testRemoveFocusedSessionFallsBackToNextOccupiedSlot() {
-        let (store, _) = makeStore()
+    func testRemoveFocusedSessionFallsBackToNextOccupiedSlot() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let s1 = UUID(); let s2 = UUID(); let s3 = UUID()
-        let id = store.createGridWorkspace(name: "G", slots: [s1, s2, s3], activateIn: w)
-        store.setGridFocusedSession(s2, in: w)
+        let s = try seed(persistence, count: 3)
+        let id = store.createGridWorkspace(name: "G", slots: s.map { $0 }, activateIn: w)
+        store.setGridFocusedSession(s[1], in: w)
 
-        XCTAssertTrue(store.removeSession(s2, fromGridWorkspace: id))
-        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s1, nil, s3])
-        XCTAssertEqual(store.selectedSession(in: w), s3, "nächster belegter Slot")
-        XCTAssertTrue(store.openTabIDs(in: w).contains(s2), "Tab bleibt offen")
+        XCTAssertTrue(store.removeSession(s[1], fromGridWorkspace: id))
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], nil, s[2]])
+        XCTAssertEqual(store.selectedSession(in: w), s[2], "nächster belegter Slot")
+        XCTAssertTrue(store.openTabIDs(in: w).contains(s[1]), "Tab bleibt offen")
     }
 
-    func testRemoveLastSessionLeavesEmptyWorkspaceWithNilFocusFallback() {
-        let (store, _) = makeStore()
+    func testRemoveLastSessionLeavesEmptyWorkspaceWithNilFocusFallback() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let only = UUID()
+        let only = try seedSession(persistence)
         let id = store.createGridWorkspace(name: "G", slots: [only], activateIn: w)
 
         XCTAssertTrue(store.removeSession(only, fromGridWorkspace: id))
         XCTAssertEqual(store.gridWorkspace(id: id)?.capacity, 2, "Workspace bleibt als 0/N")
         XCTAssertEqual(store.gridWorkspace(id: id)?.occupiedSessionIDs, [])
-        // Fokus fällt auf nil zurück; normalizedWindows hält die Selektion
-        // danach in den offenen Tabs (der Tab von `only` ist noch offen).
     }
 
     // MARK: - Kapazität (Store-Ebene)
 
-    func testSetCapacityShrinkRequiresConfirmationAndRepairsFocus() {
-        let (store, _) = makeStore()
+    func testSetCapacityShrinkRequiresConfirmationAndRepairsFocus() throws {
+        let (store, persistence) = makeStore()
         let w = store.primaryWindowID
-        let ids = (0 ..< 4).map { _ in UUID() }
+        let ids = try seed(persistence, count: 4)
         let id = store.createGridWorkspace(name: "G", slots: ids.map { $0 }, activateIn: w)
         store.setGridFocusedSession(ids[3], in: w)
 
@@ -344,7 +403,7 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedSession(in: w), ids[0], "Fokus repariert")
     }
 
-    // MARK: - Key-Window-Routing
+    // MARK: - Key-Window-/Dictation-Routing
 
     func testKeyWindowRoutingFollowsBecomeAndGuardedResign() {
         let (store, _) = makeStore()
@@ -359,6 +418,21 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertNil(store.keyAgentChatWindowID)
     }
 
+    func testDictationWindowSurvivesResignButNotClose() {
+        let (store, _) = makeStore()
+        let w1 = UUID(); let w2 = UUID()
+        store.windowDidBecomeKey(w1)
+        store.windowDidResignKey(w1)
+        XCTAssertEqual(store.dictationWindowID, w1,
+                       "App-Wechsel (resign) behält das Dictation-Ziel")
+        store.windowDidBecomeKey(w2)
+        XCTAssertEqual(store.dictationWindowID, w2, "neues Key-Fenster übernimmt")
+        store.windowDidCloseForDictation(w2)
+        XCTAssertNil(store.dictationWindowID)
+        store.windowDidCloseForDictation(w1)
+        XCTAssertNil(store.dictationWindowID, "fremdes Close ist ein No-op")
+    }
+
     // MARK: - Persistenz
 
     func testGridWorkspacesPersistAndReload() throws {
@@ -366,9 +440,14 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         let persistence = AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL)
         let store = AgentWindowStore(persistence: persistence)
         let w = store.primaryWindowID
-        let s = UUID()
-        store.openTab(s, in: w)
-        let id = store.createGridWorkspace(name: "Persistiert", slots: [s], activateIn: w)
+        var session = AgentChatSession(
+            id: UUID(), provider: .claude, projectID: UUID(), title: "Chat",
+            lastActivityAt: Date(timeIntervalSince1970: 1_000), createdManually: true
+        )
+        session.status = .closed
+        _ = try persistence.upsertSession(session)
+        store.openTab(session.id, in: w)
+        let id = store.createGridWorkspace(name: "Persistiert", slots: [session.id], activateIn: w)
         store.flush()
 
         let reloaded = AgentWindowStore(
@@ -376,6 +455,20 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         )
         XCTAssertEqual(reloaded.gridWorkspaces.map(\.id), [id])
         XCTAssertEqual(reloaded.gridWorkspace(id: id)?.name, "Persistiert")
+        XCTAssertEqual(reloaded.gridWorkspace(id: id)?.slots.first ?? nil, session.id)
         XCTAssertEqual(reloaded.window(for: w).activeWorkspaceID, id)
+    }
+
+    func testFlushPrunesStaleReferencesAgainstDomain() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let live = try seedSession(persistence)
+        store.openTab(live, in: w)
+        // Stale Tab (Session existiert nicht) landet über den rohen
+        // Tab-Pfad im State …
+        store.openTab(UUID(), in: w)
+        // … der Flush reconciled gegen den Domain-Workspace.
+        store.flush()
+        XCTAssertEqual(store.openTabIDs(in: w), [live])
     }
 }

@@ -27,6 +27,11 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
     /// EINEM Fenster zugeordnet (Single-Owner — eine Terminal-View lebt nur
     /// in einer Hierarchie).
     var activeWorkspaceID: UUID?
+    /// Gemerkter Pane-Fokus des referenzierten Workspace — überlebt die
+    /// Einzelansicht („Zurück zum Workspace" stellt EXAKT diese Pane wieder
+    /// her, nicht den ersten belegten Slot). Nur beim sichtbaren Grid wird
+    /// er in `selectedSessionID` gespiegelt.
+    var gridFocusSessionID: UUID?
     /// v3-Altbestand (fensterlokale Grid-Mitgliedschaft) — wird nur noch
     /// dekodiert als Input der v4-Migration (→ globale Workspace-Entities),
     /// nie mehr encodiert. Nach `migrateIfNeeded` immer leer.
@@ -40,6 +45,7 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         isPrimary: Bool = false,
         showsGrid: Bool = false,
         activeWorkspaceID: UUID? = nil,
+        gridFocusSessionID: UUID? = nil,
         legacyGridSessionIDs: [UUID] = []
     ) {
         self.id = id
@@ -49,6 +55,7 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         self.isPrimary = isPrimary
         self.showsGrid = showsGrid
         self.activeWorkspaceID = activeWorkspaceID
+        self.gridFocusSessionID = gridFocusSessionID
         self.legacyGridSessionIDs = legacyGridSessionIDs
     }
 
@@ -56,6 +63,7 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         case id, openTabIDs, selectedSessionID, selectedProjectID, isPrimary
         case showsGrid
         case activeWorkspaceID
+        case gridFocusSessionID
         // v3-Ära (fensterlokale Mitgliedschaft) — nur noch fürs Decoding.
         case legacyGridSessionIDs = "gridSessionIDs"
         // Preset-Ära (kurzlebiges V1, 2026-07-12) — nur noch fürs Decoding.
@@ -82,6 +90,7 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
             showsGrid = legacy.map { $0 != "single" } ?? false
         }
         activeWorkspaceID = try c.decodeIfPresent(UUID.self, forKey: .activeWorkspaceID)
+        gridFocusSessionID = try c.decodeIfPresent(UUID.self, forKey: .gridFocusSessionID)
         legacyGridSessionIDs = try c.decodeIfPresent([UUID].self, forKey: .legacyGridSessionIDs) ?? []
     }
 
@@ -94,6 +103,7 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         try c.encode(isPrimary, forKey: .isPrimary)
         try c.encode(showsGrid, forKey: .showsGrid)
         try c.encodeIfPresent(activeWorkspaceID, forKey: .activeWorkspaceID)
+        try c.encodeIfPresent(gridFocusSessionID, forKey: .gridFocusSessionID)
         // legacyGridSessionIDs/legacyGridPreset werden bewusst nicht mehr
         // geschrieben — v4 persistiert die Mitgliedschaft in den globalen
         // Workspace-Entities.
@@ -296,13 +306,23 @@ struct AgentUIState: Codable, Equatable {
                 )
             ]
         }
+        // ROH-Snapshot der v3-Fenster VOR der globalen Tab-Normalisierung —
+        // die dedupliziert Tabs fensterübergreifend und würde bei (korrupten)
+        // Mehrfach-Fenster-Dateien Legacy-Mitglieder verlieren, BEVOR die
+        // Migration sie in Entities überführen kann (Review-Finding 5).
+        let rawV3Windows = schemaVersion < 4 ? windows : []
         gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces)
         windows = Self.normalizedWindows(
-            windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces
+            windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces,
+            // Vor der v4-Migration darf `showsGrid` ohne Workspace-Referenz
+            // noch nicht repariert werden — die Migration braucht das Flag.
+            enforceGridReference: schemaVersion >= 4
         )
 
         if schemaVersion < 4 {
-            migrateGridWorkspacesFromV3(workspace: workspace, legacySplits: legacySplits)
+            migrateGridWorkspacesFromV3(
+                rawWindows: rawV3Windows, workspace: workspace, legacySplits: legacySplits
+            )
             windows = Self.normalizedWindows(
                 windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces
             )
@@ -316,10 +336,13 @@ struct AgentUIState: Codable, Equatable {
 
     /// v3 → v4: pro Legacy-Fenster mit Grid-Zustand entsteht ein eigener
     /// Workspace — zwei Fenster mit unterschiedlichen `gridSessionIDs` können
-    /// nicht verlustfrei in EINE Entity migriert werden. Fenster werden in
-    /// normalisierter Reihenfolge verarbeitet (Primaerfenster zuerst, danach
-    /// UUID-sortiert — `normalizedWindows` lief unmittelbar davor).
+    /// nicht verlustfrei in EINE Entity migriert werden. Arbeitet auf den
+    /// ROHEN v3-Fensterdaten (vor der globalen Tab-Deduplizierung), in
+    /// deterministischer Reihenfolge (Primaerfenster zuerst, dann UUID).
+    /// Fenster, die die Normalisierung entfernt hat, hinterlassen ihre
+    /// Entity ohne Besitzer (verlustfrei; per Sidebar wieder öffenbar).
     private mutating func migrateGridWorkspacesFromV3(
+        rawWindows: [AgentChatWindowState],
         workspace: AgentWorkspace,
         legacySplits: (column: Double, row: Double)?
     ) {
@@ -327,25 +350,27 @@ struct AgentUIState: Codable, Equatable {
             workspace.sessions.filter { $0.status != .archived }.map(\.id)
         )
         var usedNames = Set(gridWorkspaces.map(\.name))
+        let ordered = rawWindows.sorted { lhs, rhs in
+            if lhs.id == primaryWindowID { return true }
+            if rhs.id == primaryWindowID { return false }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
 
-        for index in windows.indices {
-            let window = windows[index]
-            let hadLegacyMembers = !window.legacyGridSessionIDs.isEmpty
+        for raw in ordered {
+            let hadLegacyMembers = !raw.legacyGridSessionIDs.isEmpty
             // Entity nur für Fenster mit Grid-Zustand — sichtbar ODER
             // konfigurierte Mitgliedschaft (verborgenes Grid bleibt als
             // Rücksprungziel erhalten). Fenster ohne Grid-Zustand erhalten
             // keinen künstlichen Workspace.
-            guard window.showsGrid || hadLegacyMembers else {
-                windows[index].legacyGridSessionIDs = []
-                continue
-            }
+            guard raw.showsGrid || hadLegacyMembers else { continue }
 
-            // Live-Tabs: dedupliziert (normalizedWindows), existent, nicht
-            // archiviert. Mitglieder in TAB-Reihenfolge materialisieren —
+            // Live-Tabs aus den ROHEN Fensterdaten: fensterlokal dedupliziert,
+            // existent, nicht archiviert. Mitglieder in TAB-Reihenfolge —
             // die sichtbare Reihenfolge folgte den Tabs, nicht der
             // Membership-Liste.
-            let liveTabs = window.openTabIDs.filter { liveSessionIDs.contains($0) }
-            let legacySet = Set(window.legacyGridSessionIDs)
+            let liveTabs = Self.deduplicated(raw.openTabIDs)
+                .filter { liveSessionIDs.contains($0) }
+            let legacySet = Set(raw.legacyGridSessionIDs)
             let explicit = liveTabs.filter { legacySet.contains($0) }
             // Degenerierte Mitgliedschaft (≤1 gültiges Mitglied) hieß im
             // alten Modell „Default: erste 4 Tabs" — exakt so materialisieren.
@@ -367,9 +392,14 @@ struct AgentUIState: Codable, Equatable {
                 )
             )
             gridWorkspaces.append(entity)
-            windows[index].activeWorkspaceID = entity.id
-            // showsGrid bleibt unverändert — auch ein verborgenes Grid
-            // behält seine Referenz („Zurück zum Workspace").
+            if let index = windows.firstIndex(where: { $0.id == raw.id }) {
+                windows[index].activeWorkspaceID = entity.id
+                // showsGrid bleibt unverändert — auch ein verborgenes Grid
+                // behält seine Referenz („Zurück zum Workspace").
+                windows[index].legacyGridSessionIDs = []
+            }
+        }
+        for index in windows.indices {
             windows[index].legacyGridSessionIDs = []
         }
     }
@@ -403,11 +433,12 @@ struct AgentUIState: Codable, Equatable {
     /// wird nur beim Load.
     mutating func prune(workspace: AgentWorkspace, capTabs: Bool = true) {
         let liveProjectIDs = Set(workspace.projects.map(\.id))
-        let liveSessionIDs = Set(workspace.sessions.map(\.id))
-        // Workspace-Slots referenzieren nur existierende, NICHT-archivierte
-        // Sessions — `.closed` ist eine normale, resumierbare Session und
-        // bleibt Slot-Mitglied (Review-Blocker 4 des Plan-Reviews).
-        let slotEligibleSessionIDs = Set(
+        // ALLE UI-Referenzen (Tabs, Pins, Unread, Selektionen, Slots) zeigen
+        // nur auf existierende, NICHT-archivierte Sessions — `.closed` ist
+        // eine normale, resumierbare Session und bleibt überall erhalten
+        // (Spez 14d92786; Archivieren räumt damit auch Tabs/Pins zentral,
+        // nicht nur über die View-Kaskade).
+        let liveSessionIDs = Set(
             workspace.sessions.filter { $0.status != .archived }.map(\.id)
         )
         gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces).map { entity in
@@ -415,7 +446,7 @@ struct AgentUIState: Codable, Equatable {
             // Indexstabil: toter Verweis wird am eigenen Index nil — nie
             // kompaktieren, nie schrumpfen.
             copy.slots = copy.slots.map { slot in
-                guard let slot, slotEligibleSessionIDs.contains(slot) else { return nil }
+                guard let slot, liveSessionIDs.contains(slot) else { return nil }
                 return slot
             }
             return copy
@@ -594,7 +625,8 @@ struct AgentUIState: Codable, Equatable {
     private static func normalizedWindows(
         _ windows: [AgentChatWindowState],
         primaryWindowID: UUID,
-        gridWorkspaces: [AgentGridWorkspace] = []
+        gridWorkspaces: [AgentGridWorkspace] = [],
+        enforceGridReference: Bool = true
     ) -> [AgentChatWindowState] {
         // 1. Doppelte Fenster-IDs entfernen, Primaerfenster garantieren.
         var seenWindowIDs = Set<UUID>()
@@ -639,6 +671,47 @@ struct AgentUIState: Codable, Equatable {
                     || !claimedWorkspaces.insert(workspaceID).inserted {
                     normalized[index].activeWorkspaceID = nil
                     normalized[index].showsGrid = false
+                }
+            }
+            // showsGrid ohne (gültige) Referenz ist ein illegaler Zustand —
+            // ein Grid entsteht ausschließlich über activateGridWorkspace.
+            // Nur die Pre-Migration-Normalisierung lässt das durch (die
+            // v3→v4-Migration braucht das rohe Flag).
+            if enforceGridReference,
+               normalized[index].showsGrid,
+               normalized[index].activeWorkspaceID == nil {
+                normalized[index].showsGrid = false
+            }
+            // Gemerkter Pane-Fokus: nur gültig mit Referenz und solange die
+            // Session ein belegter Slot des referenzierten Workspace ist.
+            if let workspaceID = normalized[index].activeWorkspaceID {
+                if let focus = normalized[index].gridFocusSessionID,
+                   let entity = gridWorkspaces.first(where: { $0.id == workspaceID }),
+                   entity.slotIndex(of: focus) == nil {
+                    normalized[index].gridFocusSessionID = nil
+                }
+            } else {
+                normalized[index].gridFocusSessionID = nil
+            }
+            // Fokus-Invariante im SICHTBAREN Grid: Selektion muss ein
+            // belegter Slot sein — bevorzugt der gemerkte Pane-Fokus, sonst
+            // erster belegter Slot, bei leerem Workspace nil (Spez 14d92786).
+            // Kandidaten sind nur Slots, die auch Tabs DIESES Fensters sind
+            // (Render-Ownership) — sonst bräche die Reparatur die
+            // Tab-Invariante der Selektion.
+            if normalized[index].showsGrid,
+               let workspaceID = normalized[index].activeWorkspaceID,
+               let entity = gridWorkspaces.first(where: { $0.id == workspaceID }) {
+                let ownedSlots = entity.occupiedSessionIDs.filter { tabSet.contains($0) }
+                let remembered = normalized[index].gridFocusSessionID
+                if let selected = normalized[index].selectedSessionID,
+                   ownedSlots.contains(selected) {
+                    normalized[index].gridFocusSessionID = selected
+                } else if let remembered, ownedSlots.contains(remembered) {
+                    normalized[index].selectedSessionID = remembered
+                } else {
+                    normalized[index].selectedSessionID = ownedSlots.first
+                    normalized[index].gridFocusSessionID = ownedSlots.first
                 }
             }
         }

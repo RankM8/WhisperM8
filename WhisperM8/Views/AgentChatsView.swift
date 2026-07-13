@@ -70,24 +70,15 @@ struct AgentChatsView: View {
     var selectedSessionID: UUID? {
         get { windowStore.selectedSession(in: windowID) }
         nonmutating set {
-            // Quellenunabhängige Klickregel (Plan-Abschnitt 03): Liegt der
-            // Chat im gerade SICHTBAREN Workspace, fokussiert jeder einfache
-            // Klick (Projekt-Row, Workspace-Row, Tab, ⌘1–9, Ctrl+Tab) dessen
-            // Pane; andernfalls öffnet er die Einzelansicht — die Slots
-            // bleiben dabei IMMER unverändert (Klick navigiert, Drop kuratiert).
+            // Quellenunabhängige Klickregel (Plan-Abschnitt 03) — zentral im
+            // Store (`navigateToSession`): Chat im sichtbaren Workspace →
+            // Pane-Fokus, sonst Einzelansicht; Slots bleiben IMMER
+            // unverändert (Klick navigiert, Drop kuratiert).
             guard let newValue else {
                 windowStore.setSelectedSession(nil, in: windowID)
                 return
             }
-            if isGridActive, let entity = activeGridWorkspaceEntity {
-                if entity.slotIndex(of: newValue) != nil {
-                    windowStore.setGridFocusedSession(newValue, in: windowID)
-                } else {
-                    windowStore.showSingleSession(newValue, in: windowID)
-                }
-            } else {
-                windowStore.setSelectedSession(newValue, in: windowID)
-            }
+            windowStore.navigateToSession(newValue, in: windowID)
         }
     }
     var expandedProjectIDs: Set<UUID> {
@@ -502,6 +493,20 @@ struct AgentChatsView: View {
         )) {
             renameWorkspaceSheet
         }
+        // Benannte Ablehnungen (volles 3×3, blockierte Aktivierung,
+        // PhpStorm-/Restore-Fehler) sichtbar machen — errorMessage hatte
+        // zuvor keinen Leser (Review-Finding).
+        .alert(
+            "Hinweis",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
         .confirmationDialog(
             "Workspace löschen?",
             isPresented: Binding(
@@ -633,12 +638,12 @@ struct AgentChatsView: View {
             removeTabDragEndMonitor()
             removeTabSwitcherFlagsMonitor()
             // Window zu → Routing nur räumen, wenn ES das Ziel besass: das
-            // Verschwinden eines NICHT-key-Fensters darf das Dictation-Ziel
-            // des aktiv genutzten Fensters nicht löschen (Multi-Window-
-            // Politik). Stale Refs auf Chats, die nirgends mehr offen sind,
-            // werden ebenfalls geräumt.
-            if windowStore.keyAgentChatWindowID == windowID {
-                windowStore.windowDidResignKey(windowID)
+            // Verschwinden eines NICHT-besitzenden Fensters darf das
+            // Dictation-Ziel des aktiv genutzten Fensters nicht löschen
+            // (Multi-Window-Politik). Stale Refs auf Chats, die nirgends
+            // mehr offen sind, werden ebenfalls geräumt.
+            if windowStore.dictationWindowID == windowID {
+                windowStore.windowDidCloseForDictation(windowID)
                 AppState.shared.activeAgentChat = nil
             } else if let ref = AppState.shared.activeAgentChat,
                       windowStore.windowID(containingTab: ref.sessionID) == nil {
@@ -840,13 +845,14 @@ struct AgentChatsView: View {
     /// Spiegelt die aktuelle Selection (Session + Projekt) in `AppState.activeAgentChat`.
     /// Wird beim Recording-Start vom Coordinator gelesen und ins Context-Bundle übernommen.
     private func syncActiveAgentChat() {
-        // Key-Window-Routing: Ist ein ANDERES Agent-Chats-Fenster key, darf
-        // dieses Fenster das globale Dictation-Ziel nicht überschreiben —
-        // sonst würde jede Selektion eines Hintergrund-Fensters (Restore,
-        // Cross-Window-Drop) das Ziel des aktiv genutzten Fensters kapern.
-        // Ohne key Agent-Fenster (App im Hintergrund, Single-Window-Start)
-        // bleibt das bisherige Verhalten: die letzte Selektion routet.
-        if let key = windowStore.keyAgentChatWindowID, key != windowID { return }
+        // Key-Window-Routing: Das globale Dictation-Ziel besitzt das ZULETZT
+        // key gewesene Agent-Fenster (`dictationWindowID` — bleibt beim
+        // App-Wechsel gesetzt: der User diktiert oft per globalem Hotkey aus
+        // einer anderen App in seinen letzten Chat). Andere Fenster dürfen
+        // es NIE überschreiben — auch nicht, wenn gerade kein Agent-Fenster
+        // key ist (Review-Finding: Hintergrund-Mutationen kaperten sonst
+        // das Ziel).
+        if let route = windowStore.dictationWindowID, route != windowID { return }
         guard let project = selectedProject,
               let session = selectedSession,
               session.status != .archived
@@ -1226,12 +1232,17 @@ struct AgentChatsView: View {
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
             onSelect: {
                 handleSidebarRowClick(session.id, order: order) {
-                    openTab(session.id)
                     selectedSessionID = session.id
                 }
             },
             onClose: { requestArchive([session]) }
         )
+        // Sidebar-Quelle für Grid-/Workspace-Drops (Add/Place-Semantik).
+        .draggable(DraggableSession(
+            sessionID: session.id,
+            sourceProjectID: session.projectID,
+            sourceWindowID: windowID
+        ))
         .contextMenu {
             Button(pinLabel(for: session), systemImage: "pin.slash") {
                 togglePinSelection(session)
@@ -1269,12 +1280,17 @@ struct AgentChatsView: View {
             onSelect: {
                 handleSidebarRowClick(session.id, order: order) {
                     selectedProjectID = session.projectID
-                    openTab(session.id)
                     selectedSessionID = session.id
                 }
             },
             onClose: { requestArchive([session]) }
         )
+        // Sidebar-Quelle für Grid-/Workspace-Drops (Add/Place-Semantik).
+        .draggable(DraggableSession(
+            sessionID: session.id,
+            sourceProjectID: session.projectID,
+            sourceWindowID: windowID
+        ))
         .contextMenu {
             Button("Umbenennen…", systemImage: "pencil") {
                 beginRename(session)

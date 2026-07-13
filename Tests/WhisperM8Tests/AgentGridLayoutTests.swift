@@ -64,12 +64,18 @@ final class AgentGridLayoutTests: XCTestCase {
     }
 
     func testShowsGridRoundTripsAndDropsLegacyKey() throws {
+        // showsGrid ist nur mit gültiger Workspace-Referenz legal
+        // (Invariante seit Schema v4).
+        let entity = AgentGridWorkspace(name: "G")
         let window = AgentChatWindowState(
             openTabIDs: [UUID(), UUID()],
             isPrimary: true,
-            showsGrid: true
+            showsGrid: true,
+            activeWorkspaceID: entity.id
         )
-        let original = AgentUIState(windows: [window], primaryWindowID: window.id)
+        let original = AgentUIState(
+            windows: [window], primaryWindowID: window.id, gridWorkspaces: [entity]
+        )
         let encoded = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AgentUIState.self, from: encoded)
         XCTAssertTrue(decoded.windowState(for: window.id).showsGrid)
@@ -78,6 +84,17 @@ final class AgentGridLayoutTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         let windows = try XCTUnwrap(object["windows"] as? [[String: Any]])
         XCTAssertNil(windows.first?["gridPreset"], "Legacy-Key wird nicht mehr geschrieben")
+    }
+
+    func testShowsGridWithoutWorkspaceIsRepairedToFalse() {
+        let window = AgentChatWindowState(
+            openTabIDs: [UUID()],
+            isPrimary: true,
+            showsGrid: true // ohne activeWorkspaceID → illegal
+        )
+        let state = AgentUIState(windows: [window], primaryWindowID: window.id)
+        XCTAssertFalse(state.windowState(for: window.id).showsGrid,
+                       "Grid ohne Workspace-Referenz wird repariert")
     }
 
     func testGridSessionIDsDecodeDefaultAndAreNeverEncoded() throws {
@@ -134,7 +151,10 @@ final class AgentGridLayoutTests: XCTestCase {
         )
         let store = AgentWindowStore(persistence: persistence)
         let w = store.primaryWindowID
-        store.setShowsGrid(true, in: w)
+        // Grid entsteht nur über die Aktivierung eines Workspace (Invariante
+        // seit Schema v4); ein nacktes setShowsGrid(true) wird repariert.
+        _ = store.createGridWorkspace(name: "G", activateIn: w)
+        XCTAssertTrue(store.showsGrid(in: w))
         store.openTab(UUID(), in: w)
         store.openTab(UUID(), in: w)
         XCTAssertTrue(store.showsGrid(in: w),

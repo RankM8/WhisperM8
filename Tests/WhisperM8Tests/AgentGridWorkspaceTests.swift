@@ -473,4 +473,104 @@ final class AgentGridWorkspaceTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
         XCTAssertTrue(decoded.gridWorkspaces.isEmpty)
     }
+
+    func testV3MigrationSelectsHigherCapacityStages() throws {
+        for (memberCount, expectedCapacity) in [(5, 6), (7, 9)] {
+            let s = (0 ..< memberCount).map { _ in makeSession() }
+            let windowID = UUID()
+            let json = v3JSON(
+                windowID: windowID, tabIDs: s.map(\.id), showsGrid: true,
+                gridSessionIDs: s.map(\.id)
+            )
+            var state = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
+            state.migrateIfNeeded(workspace: makeWorkspace(sessions: s))
+            XCTAssertEqual(state.gridWorkspaces[0].capacity, expectedCapacity,
+                           "\(memberCount) Mitglieder → Stufe \(expectedCapacity)")
+            XCTAssertEqual(state.gridWorkspaces[0].occupiedSessionIDs, s.map(\.id))
+        }
+    }
+
+    // MARK: - Kaskaden (Archiv/Delete → alle UI-Referenzen)
+
+    func testLoadPruneUsesNonArchivedSessionsForAllUIReferences() {
+        let live = makeSession()
+        let archived = makeSession(status: .archived)
+        let entity = AgentGridWorkspace(slots: [archived.id, live.id], capacity: 2)
+        var state = AgentUIState(
+            openTabIDs: [archived.id, live.id],
+            pinnedSessionIDs: [archived.id],
+            selectedSessionID: archived.id,
+            unreadSubagentSessionIDs: [archived.id],
+            gridWorkspaces: [entity]
+        )
+        state.prune(workspace: makeWorkspace(sessions: [live, archived]))
+
+        XCTAssertEqual(state.openTabIDs, [live.id], "archivierte Tabs werden geräumt")
+        XCTAssertTrue(state.pinnedSessionIDs.isEmpty, "archivierte Pins werden geräumt")
+        XCTAssertTrue(state.unreadSubagentSessionIDs.isEmpty)
+        XCTAssertEqual(state.gridWorkspaces[0].slots, [nil, live.id])
+        XCTAssertNotEqual(state.selectedSessionID, archived.id)
+    }
+
+    func testRestoreArchivedSessionDoesNotResurrectOldSlots() {
+        var session = makeSession(status: .archived)
+        let entity = AgentGridWorkspace(slots: [session.id, nil], capacity: 2)
+        var state = AgentUIState(gridWorkspaces: [entity])
+        state.prune(workspace: makeWorkspace(sessions: [session]))
+        XCTAssertEqual(state.gridWorkspaces[0].slots, [nil, nil], "Archiv leert den Slot")
+
+        // Restore (Status wieder .closed) fügt NICHT automatisch wieder ein.
+        session.status = .closed
+        state.prune(workspace: makeWorkspace(sessions: [session]))
+        XCTAssertEqual(state.gridWorkspaces[0].slots, [nil, nil],
+                       "Wiederaufnahme nur über explizites Hinzufügen")
+    }
+
+    func testDeleteWorkspaceNeverDeletesSessionsOrTabs() {
+        let live = makeSession()
+        let entity = AgentGridWorkspace(slots: [live.id, nil], capacity: 2)
+        let window = AgentChatWindowState(
+            openTabIDs: [live.id],
+            isPrimary: true,
+            showsGrid: true,
+            activeWorkspaceID: entity.id
+        )
+        var state = AgentUIState(
+            windows: [window], primaryWindowID: window.id, gridWorkspaces: [entity]
+        )
+        state.gridWorkspaces.removeAll { $0.id == entity.id }
+        state.prune(workspace: makeWorkspace(sessions: [live]))
+        XCTAssertEqual(state.windowState(for: window.id).openTabIDs, [live.id],
+                       "Tabs überleben das Entity-Löschen")
+        XCTAssertNil(state.windowState(for: window.id).activeWorkspaceID)
+        XCTAssertFalse(state.windowState(for: window.id).showsGrid)
+    }
+
+    // MARK: - Gemerkter Pane-Fokus (gridFocusSessionID)
+
+    func testGridFocusSurvivesHiddenGridAndInvalidatesWithSlot() {
+        let a = makeSession(); let b = makeSession()
+        let entity = AgentGridWorkspace(slots: [a.id, b.id], capacity: 2)
+        var window = AgentChatWindowState(
+            openTabIDs: [a.id, b.id],
+            selectedSessionID: b.id,
+            isPrimary: true,
+            showsGrid: false, // Einzelansicht — Referenz + Fokus bleiben
+            activeWorkspaceID: entity.id,
+            gridFocusSessionID: b.id
+        )
+        var state = AgentUIState(
+            windows: [window], primaryWindowID: window.id, gridWorkspaces: [entity]
+        )
+        XCTAssertEqual(state.windowState(for: window.id).gridFocusSessionID, b.id)
+
+        // Slot von b wird geleert → der gemerkte Fokus ist ungültig.
+        var emptied = entity
+        emptied.slots[1] = nil
+        window = state.windowState(for: window.id)
+        state = AgentUIState(
+            windows: [window], primaryWindowID: window.id, gridWorkspaces: [emptied]
+        )
+        XCTAssertNil(state.windowState(for: window.id).gridFocusSessionID)
+    }
 }

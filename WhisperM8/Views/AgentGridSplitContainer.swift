@@ -9,14 +9,17 @@ import SwiftUI
 /// `@MainActor`-Task-Schleife übernimmt den jeweils neuesten Wert alle 33 ms
 /// in das gelesene `applied…`-Paar (Latest-Value-Sampling), persistiert wird
 /// genau einmal beim Loslassen über die Commit-Closures.
+///
+/// Seit Paket 3 (F10) arbeitet der Container mit GEWICHTS-VEKTOREN pro Achse
+/// (2–3 Spuren, Kapazitäten 2/3/4/6/9): Divider `i` verschiebt Anteil nur
+/// zwischen den Spuren `i` und `i+1` (`GridSplitResolver.fractionsDuringDrag`).
 struct AgentGridSplitContainer<Pane: View>: View {
     let layout: AgentGridAutoLayout
-    /// Persistierte Wunschwerte (Quelle: @AppStorage beim Aufrufer; ab
-    /// Paket 2 die Fraction-Arrays des Workspace-Entities).
-    let persistedColumnFraction: Double
-    let persistedRowFraction: Double
-    let commitColumnFraction: (Double) -> Void
-    let commitRowFraction: (Double) -> Void
+    /// Persistierte Gewichts-Vektoren (Quelle: `AgentGridWorkspace`).
+    let persistedColumnFractions: [Double]
+    let persistedRowFractions: [Double]
+    let commitColumnFractions: ([Double]) -> Void
+    let commitRowFractions: ([Double]) -> Void
     /// Griff-Hover unterdrückt beim Aufrufer das Pane-Klick-Routing.
     let onHandleHoverChanged: (Bool) -> Void
     @ViewBuilder let pane: (Int) -> Pane
@@ -24,21 +27,32 @@ struct AgentGridSplitContainer<Pane: View>: View {
     /// Live-Zustand eines aktiven Drags — bewusst ein Referenztyp mit platten
     /// Feldern: Mutationen triggern keine SwiftUI-Invalidierung.
     final class DragState {
-        var columnBase: CGFloat?
-        var rowBase: CGFloat?
-        var liveColumn: Double?
-        var liveRow: Double?
+        var columnBase: [Double]?
+        var rowBase: [Double]?
+        var liveColumns: [Double]?
+        var liveRows: [Double]?
         var sampler: Task<Void, Never>?
     }
 
     @State private var drag = DragState()
-    /// Die von den Pane-Frames gelesenen Werte — höchstens alle 33 ms gesetzt.
-    /// `nil` außerhalb eines Drags (dann gelten die persistierten Werte).
-    @State private var appliedColumnFraction: Double?
-    @State private var appliedRowFraction: Double?
+    /// Die von den Pane-Frames gelesenen Vektoren — höchstens alle 33 ms
+    /// gesetzt. `nil` außerhalb eines Drags (dann gelten die persistierten).
+    @State private var appliedColumnFractions: [Double]?
+    @State private var appliedRowFractions: [Double]?
 
-    private var effectiveColumnFraction: Double { appliedColumnFraction ?? persistedColumnFraction }
-    private var effectiveRowFraction: Double { appliedRowFraction ?? persistedRowFraction }
+    private var effectiveColumnFractions: [Double] {
+        let fractions = appliedColumnFractions ?? persistedColumnFractions
+        return fractions.count == layout.columns
+            ? fractions
+            : AgentGridWorkspace.equalFractions(count: layout.columns)
+    }
+
+    private var effectiveRowFractions: [Double] {
+        let fractions = appliedRowFractions ?? persistedRowFractions
+        return fractions.count == layout.rows
+            ? fractions
+            : AgentGridWorkspace.equalFractions(count: layout.rows)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -46,14 +60,14 @@ struct AgentGridSplitContainer<Pane: View>: View {
         }
         // Nach einem Commit läuft der neue persistierte Wert durch den
         // Parent zurück — erst DANN darf `applied…` losgelassen werden
-        // (sonst fiele `effectiveFraction` für einen Frame auf den alten
-        // persistierten Wert zurück). Externe Änderungen (anderes Fenster,
+        // (sonst fiele der effektive Wert für einen Frame auf den alten
+        // persistierten zurück). Externe Änderungen (anderes Fenster,
         // Doppelklick-Reset) übernehmen wir ebenso, solange kein Drag läuft.
-        .onChange(of: persistedColumnFraction) { _, _ in
-            if drag.columnBase == nil { appliedColumnFraction = nil }
+        .onChange(of: persistedColumnFractions) { _, _ in
+            if drag.columnBase == nil { appliedColumnFractions = nil }
         }
-        .onChange(of: persistedRowFraction) { _, _ in
-            if drag.rowBase == nil { appliedRowFraction = nil }
+        .onChange(of: persistedRowFractions) { _, _ in
+            if drag.rowBase == nil { appliedRowFractions = nil }
         }
         .onDisappear { cancelSampler() }
     }
@@ -62,106 +76,121 @@ struct AgentGridSplitContainer<Pane: View>: View {
 
     @ViewBuilder
     private func arrangement(in size: CGSize) -> some View {
-        let colW = GridSplitResolver.firstSize(total: size.width, fraction: effectiveColumnFraction)
-        let rowH = GridSplitResolver.firstSize(total: size.height, fraction: effectiveRowFraction)
-        switch layout {
-        case .single:
-            // Vom Aufrufer nie mit 1 Pane verwendet (isGridActive) —
-            // defensiver Fallback.
-            EmptyView()
-        case .cols2:
-            HStack(spacing: 1) {
-                pane(0).frame(width: colW)
-                pane(1)
+        let colSizes = GridSplitResolver.trackSizes(
+            total: size.width, fractions: effectiveColumnFractions
+        )
+        let rowSizes = GridSplitResolver.trackSizes(
+            total: size.height, fractions: effectiveRowFractions
+        )
+        gridBody(colSizes: colSizes, rowSizes: rowSizes)
+            .overlay {
+                columnHandles(colSizes: colSizes, rowSizes: rowSizes, totalWidth: size.width)
             }
-            .overlay(alignment: .leading) {
-                columnHandle(totalWidth: size.width).offset(x: colW - 4)
+            .overlay {
+                rowHandles(rowSizes: rowSizes, totalHeight: size.height)
             }
-        case .twoPlusOne:
-            VStack(spacing: 1) {
+    }
+
+    @ViewBuilder
+    private func gridBody(colSizes: [CGFloat], rowSizes: [CGFloat]) -> some View {
+        let columns = layout.columns
+        let rows = layout.rows
+        VStack(spacing: 1) {
+            ForEach(0 ..< rows, id: \.self) { row in
                 HStack(spacing: 1) {
-                    pane(0).frame(width: colW)
-                    pane(1)
+                    // twoPlusOne: die untere Pane läuft in voller Breite durch.
+                    if layout == .twoPlusOne, row == 1 {
+                        pane(2)
+                    } else {
+                        ForEach(0 ..< columns, id: \.self) { column in
+                            let index = row * columns + column
+                            if column < columns - 1 {
+                                pane(index).frame(width: colSizes[column])
+                            } else {
+                                // Letzte Spur füllt — nimmt den Rundungsrest.
+                                pane(index)
+                            }
+                        }
+                    }
                 }
-                .frame(height: rowH)
-                // Spalten-Griff nur über der oberen Reihe — die untere Pane
-                // läuft in voller Breite durch.
-                .overlay(alignment: .leading) {
-                    columnHandle(totalWidth: size.width).offset(x: colW - 4)
-                }
-                pane(2)
-            }
-            .overlay(alignment: .top) {
-                rowHandle(totalHeight: size.height).offset(y: rowH - 4)
-            }
-        case .grid2x2:
-            VStack(spacing: 1) {
-                HStack(spacing: 1) {
-                    pane(0).frame(width: colW)
-                    pane(1)
-                }
-                .frame(height: rowH)
-                HStack(spacing: 1) {
-                    pane(2).frame(width: colW)
-                    pane(3)
-                }
-            }
-            // EIN Verhältnis pro Achse: der Spalten-Griff verschiebt beide
-            // Reihen gemeinsam — das Grid bleibt ein Raster.
-            .overlay(alignment: .leading) {
-                columnHandle(totalWidth: size.width).offset(x: colW - 4)
-            }
-            .overlay(alignment: .top) {
-                rowHandle(totalHeight: size.height).offset(y: rowH - 4)
+                .frame(height: row < rows - 1 ? rowSizes[row] : nil)
             }
         }
     }
 
-    private func columnHandle(totalWidth: CGFloat) -> some View {
+    /// Spalten-Griffe an jeder inneren Spaltengrenze. Bei `twoPlusOne` nur
+    /// über der oberen Reihe (unten läuft die Pane in voller Breite durch).
+    @ViewBuilder
+    private func columnHandles(colSizes: [CGFloat], rowSizes: [CGFloat], totalWidth: CGFloat) -> some View {
+        ForEach(0 ..< max(0, layout.columns - 1), id: \.self) { dividerIndex in
+            let offset = cumulativeOffset(colSizes, upTo: dividerIndex)
+            columnHandle(dividerIndex: dividerIndex, totalWidth: totalWidth)
+                .frame(height: layout == .twoPlusOne ? rowSizes.first : nil)
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: layout == .twoPlusOne ? .infinity : nil,
+                    alignment: layout == .twoPlusOne ? .topLeading : .leading
+                )
+                .offset(x: offset - 4)
+        }
+    }
+
+    @ViewBuilder
+    private func rowHandles(rowSizes: [CGFloat], totalHeight: CGFloat) -> some View {
+        ForEach(0 ..< max(0, layout.rows - 1), id: \.self) { dividerIndex in
+            rowHandle(dividerIndex: dividerIndex, totalHeight: totalHeight)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .offset(y: cumulativeOffset(rowSizes, upTo: dividerIndex) - 4)
+        }
+    }
+
+    /// x/y-Position des Dividers `index`: Summe der Spuren davor plus die
+    /// bereits passierten 1-px-Divider.
+    private func cumulativeOffset(_ sizes: [CGFloat], upTo dividerIndex: Int) -> CGFloat {
+        sizes.prefix(dividerIndex + 1).reduce(0, +) + CGFloat(dividerIndex)
+    }
+
+    private func columnHandle(dividerIndex: Int, totalWidth: CGFloat) -> some View {
         GridSplitHandle(
             axis: .column,
             onDragChanged: { translation in
-                if drag.columnBase == nil {
-                    drag.columnBase = GridSplitResolver.firstSize(
-                        total: totalWidth, fraction: effectiveColumnFraction
-                    )
-                }
+                if drag.columnBase == nil { drag.columnBase = effectiveColumnFractions }
                 guard let base = drag.columnBase else { return }
-                drag.liveColumn = GridSplitResolver.fractionDuringDrag(
-                    startFirstSize: base, translation: translation, total: totalWidth
+                drag.liveColumns = GridSplitResolver.fractionsDuringDrag(
+                    base: base, dividerIndex: dividerIndex,
+                    translation: translation, total: totalWidth
                 )
                 startSamplerIfNeeded()
             },
             onDragEnded: { endDrag(axis: .column) },
             onDoubleClick: {
-                // Sofort lokal auf hälftig, Commit läuft hinterher (onChange
-                // räumt `applied` nach dem Roundtrip).
-                appliedColumnFraction = GridSplitResolver.defaultFraction
-                commitColumnFraction(GridSplitResolver.defaultFraction)
+                // Sofort lokal auf Gleichverteilung, Commit läuft hinterher
+                // (onChange räumt `applied` nach dem Roundtrip).
+                let equal = AgentGridWorkspace.equalFractions(count: layout.columns)
+                appliedColumnFractions = equal
+                commitColumnFractions(equal)
             },
             onHoverChanged: onHandleHoverChanged
         )
     }
 
-    private func rowHandle(totalHeight: CGFloat) -> some View {
+    private func rowHandle(dividerIndex: Int, totalHeight: CGFloat) -> some View {
         GridSplitHandle(
             axis: .row,
             onDragChanged: { translation in
-                if drag.rowBase == nil {
-                    drag.rowBase = GridSplitResolver.firstSize(
-                        total: totalHeight, fraction: effectiveRowFraction
-                    )
-                }
+                if drag.rowBase == nil { drag.rowBase = effectiveRowFractions }
                 guard let base = drag.rowBase else { return }
-                drag.liveRow = GridSplitResolver.fractionDuringDrag(
-                    startFirstSize: base, translation: translation, total: totalHeight
+                drag.liveRows = GridSplitResolver.fractionsDuringDrag(
+                    base: base, dividerIndex: dividerIndex,
+                    translation: translation, total: totalHeight
                 )
                 startSamplerIfNeeded()
             },
             onDragEnded: { endDrag(axis: .row) },
             onDoubleClick: {
-                appliedRowFraction = GridSplitResolver.defaultFraction
-                commitRowFraction(GridSplitResolver.defaultFraction)
+                let equal = AgentGridWorkspace.equalFractions(count: layout.rows)
+                appliedRowFractions = equal
+                commitRowFractions(equal)
             },
             onHoverChanged: onHandleHoverChanged
         )
@@ -187,16 +216,16 @@ struct AgentGridSplitContainer<Pane: View>: View {
     /// (Zuweisung + folgender SwiftUI/AppKit-Layout-Pass bis zum nächsten
     /// Main-Queue-Turn).
     private func applyLatestLiveValues() {
-        let nextColumn = drag.liveColumn
-        let nextRow = drag.liveRow
-        let columnChanged = nextColumn != nil && nextColumn != appliedColumnFraction
-        let rowChanged = nextRow != nil && nextRow != appliedRowFraction
-        guard columnChanged || rowChanged else { return }
+        let nextColumns = drag.liveColumns
+        let nextRows = drag.liveRows
+        let columnsChanged = nextColumns != nil && nextColumns != appliedColumnFractions
+        let rowsChanged = nextRows != nil && nextRows != appliedRowFractions
+        guard columnsChanged || rowsChanged else { return }
 
         PerfSignposts.grid.emitEvent("grid.divider.layoutTick")
         let token = PerfBudgets.gridDividerTick.begin()
-        if columnChanged, let nextColumn { appliedColumnFraction = nextColumn }
-        if rowChanged, let nextRow { appliedRowFraction = nextRow }
+        if columnsChanged, let nextColumns { appliedColumnFractions = nextColumns }
+        if rowsChanged, let nextRows { appliedRowFractions = nextRows }
         DispatchQueue.main.async {
             PerfBudgets.gridDividerTick.end(token)
         }
@@ -212,19 +241,19 @@ struct AgentGridSplitContainer<Pane: View>: View {
     private func endDrag(axis: DragAxis) {
         switch axis {
         case .column:
-            if let live = drag.liveColumn {
-                appliedColumnFraction = live
-                commitColumnFraction(live)
+            if let live = drag.liveColumns {
+                appliedColumnFractions = live
+                commitColumnFractions(live)
             }
             drag.columnBase = nil
-            drag.liveColumn = nil
+            drag.liveColumns = nil
         case .row:
-            if let live = drag.liveRow {
-                appliedRowFraction = live
-                commitRowFraction(live)
+            if let live = drag.liveRows {
+                appliedRowFractions = live
+                commitRowFractions(live)
             }
             drag.rowBase = nil
-            drag.liveRow = nil
+            drag.liveRows = nil
         }
         PerfSignposts.grid.emitEvent("grid.divider.commit")
         if drag.columnBase == nil, drag.rowBase == nil {

@@ -230,6 +230,19 @@ final class WorkspaceSlotOpsTests: XCTestCase {
         XCTAssertEqual(updated.rowFractions, [0.6, 0.4], "unveränderte Achse bleibt")
     }
 
+    func testCapacityGrowSixToNineKeepsColumnsResetsRows() {
+        // 6 (3×2) → 9 (3×3): Spalten behalten ihre Gewichte (3→3),
+        // Zeilen werden gleichverteilt neu initialisiert (2→3).
+        var original = workspace(slots: [], capacity: 6)
+        original.columnFractions = [0.2, 0.3, 0.5]
+        original.rowFractions = [0.6, 0.4]
+        let (updated, result) = WorkspaceSlotOps.setCapacity(of: original, to: 9)
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.columnFractions, [0.2, 0.3, 0.5], "unveränderte Achse bleibt")
+        XCTAssertEqual(updated.rowFractions.count, 3)
+        XCTAssertEqual(updated.rowFractions[0], 1.0 / 3.0, accuracy: 0.0001)
+    }
+
     func testInvalidExplicitCapacityIsRejected() {
         let original = workspace(slots: [], capacity: 4)
         let (updated, result) = WorkspaceSlotOps.setCapacity(of: original, to: 5)
