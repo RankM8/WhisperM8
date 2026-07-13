@@ -72,12 +72,15 @@ extension AgentChatsView {
     @ViewBuilder
     private func workspaceGroup(_ entity: AgentGridWorkspace) -> some View {
         let isActiveHere = windowStore.window(for: windowID).activeWorkspaceID == entity.id && isGridActive
+        let isCollapsed = windowStore.isGridWorkspaceCollapsed(entity.id)
         VStack(alignment: .leading, spacing: 1) {
-            workspaceGroupHeader(entity, isActiveHere: isActiveHere)
-            ForEach(Array(entity.slots.enumerated()), id: \.offset) { index, slot in
-                if let sessionID = slot,
-                   let session = workspace.sessions.first(where: { $0.id == sessionID }) {
-                    workspaceRow(session, entity: entity, slotIndex: index)
+            workspaceGroupHeader(entity, isActiveHere: isActiveHere, isCollapsed: isCollapsed)
+            if !isCollapsed {
+                ForEach(Array(entity.slots.enumerated()), id: \.offset) { index, slot in
+                    if let sessionID = slot,
+                       let session = workspace.sessions.first(where: { $0.id == sessionID }) {
+                        workspaceRow(session, entity: entity, slotIndex: index)
+                    }
                 }
             }
         }
@@ -90,10 +93,33 @@ extension AgentChatsView {
         }
     }
 
-    private func workspaceGroupHeader(_ entity: AgentGridWorkspace, isActiveHere: Bool) -> some View {
-        Button {
-            activateWorkspaceFromSidebar(entity)
-        } label: {
+    private func workspaceGroupHeader(
+        _ entity: AgentGridWorkspace,
+        isActiveHere: Bool,
+        isCollapsed: Bool
+    ) -> some View {
+        HStack(spacing: 6) {
+            // Chevron = NUR ein-/ausklappen (eigener Button — der Rest des
+            // Headers öffnet das Grid; verschachtelte Buttons würden sich
+            // die Klicks streitig machen).
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    windowStore.toggleGridWorkspaceCollapsed(entity.id)
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    .frame(width: 14, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isCollapsed ? "Chats einblenden" : "Chats ausblenden")
+            .accessibilityLabel(isCollapsed
+                ? "Chats von \(entity.name) einblenden"
+                : "Chats von \(entity.name) ausblenden")
+
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color(hex: entity.colorHex))
@@ -117,16 +143,19 @@ extension AgentChatsView {
                     .foregroundStyle(isActiveHere ? AgentTheme.accent : AgentTheme.textTertiary)
                     .help("Als Grid öffnen")
             }
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
-            .background(
-                isActiveHere ? AgentTheme.accentTint : Color.clear,
-                in: RoundedRectangle(cornerRadius: 6)
-            )
-            .padding(.horizontal, 8)
             .contentShape(Rectangle())
+            .onTapGesture { activateWorkspaceFromSidebar(entity) }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Workspace \(entity.name) als Grid öffnen")
         }
-        .buttonStyle(.plain)
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
+        .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
+        .background(
+            isActiveHere ? AgentTheme.accentTint : Color.clear,
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .padding(.horizontal, 8)
         .help("Workspace „\(entity.name)“ als Grid öffnen")
         .contextMenu { workspaceContextMenu(entity) }
         // Sidebar-Reorder: Gruppen-Header ziehen, auf einen anderen Header

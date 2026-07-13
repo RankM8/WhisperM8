@@ -133,6 +133,9 @@ struct AgentChatsView: View {
     /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
     /// dauerhaft oben Platz belegen.
     @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
+    /// Chats-Sektion (alle Projekt-Gruppen bzw. die flache Liste) ein-/
+    /// ausgeklappt — Muster GEPINNT; eine aktive Suche überstimmt.
+    @AppStorage("agentChatsSectionCollapsed") private var chatsSectionCollapsed = false
     /// Workspaces-Sektion ein-/ausgeklappt (persistiert, Muster GEPINNT).
     /// internal, da die Sektion in +Workspaces lebt.
     @AppStorage("agentWorkspacesSectionCollapsed") var workspacesSectionCollapsed = false
@@ -1116,16 +1119,22 @@ struct AgentChatsView: View {
                     // unsichtbar bei null Workspaces (siehe +Workspaces).
                     workspacesSidebarSection
 
-                    if (!visiblePinned.isEmpty || !windowStore.gridWorkspaces.isEmpty),
-                       !chatListIsEmpty {
-                        sidebarSectionLabel("Chats")
+                    // CHATS als klappbare Sektion (Muster GEPINNT). Eine
+                    // aktive Suche überstimmt den Collapse — sonst wären
+                    // Treffer unsichtbar.
+                    let chatCount = sidebarLayout == .flat
+                        ? flatSessions.count
+                        : visibleProjects.reduce(0) { $0 + (sessionsByProject[$1.id]?.count ?? 0) }
+                    let showChatList = !chatsSectionCollapsed || !trimmedQuery.isEmpty
+                    if !chatListIsEmpty {
+                        chatsSectionHeader(count: chatCount)
                     }
 
-                    if sidebarLayout == .flat {
+                    if showChatList, sidebarLayout == .flat {
                         ForEach(flatSessions) { session in
                             flatRow(session, order: flatSessions.map(\.id))
                         }
-                    } else {
+                    } else if showChatList {
                     ForEach(visibleProjects) { project in
                         ProjectChatGroup(
                             project: project,
@@ -1217,6 +1226,37 @@ struct AgentChatsView: View {
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 2)
+    }
+
+    /// Klappbarer „Chats"-Header (Chevron + Anzahl) — blendet die komplette
+    /// Projekt-/Flachliste ein/aus (Muster Gepinnt-Header). Zustand via
+    /// @AppStorage persistiert; die Suche überstimmt den Collapse.
+    private func chatsSectionHeader(count: Int) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { chatsSectionCollapsed.toggle() }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .rotationEffect(.degrees(chatsSectionCollapsed ? 0 : 90))
+                Text("CHATS")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.6)
+                if chatsSectionCollapsed {
+                    Text("\(count)")
+                        .font(.system(size: 9, weight: .bold).monospacedDigit())
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(AgentTheme.textTertiary)
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(chatsSectionCollapsed ? "Chats einblenden" : "Chats ausblenden")
+        .accessibilityLabel(chatsSectionCollapsed ? "Chat-Liste einblenden" : "Chat-Liste ausblenden")
     }
 
     /// Klappbarer „Gepinnt"-Header (Chevron + Anzahl) — blendet die gepinnten

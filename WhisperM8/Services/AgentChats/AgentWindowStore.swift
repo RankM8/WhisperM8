@@ -226,6 +226,21 @@ final class AgentWindowStore {
         gridWorkspace(id: workspaceID)?.slotIndex(of: sessionID)
     }
 
+    /// Sidebar: Workspace-Gruppe ein-/ausgeklappt (persistiert, global).
+    func isGridWorkspaceCollapsed(_ workspaceID: UUID) -> Bool {
+        state.collapsedGridWorkspaceIDs.contains(workspaceID)
+    }
+
+    func toggleGridWorkspaceCollapsed(_ workspaceID: UUID) {
+        mutate { state in
+            if let index = state.collapsedGridWorkspaceIDs.firstIndex(of: workspaceID) {
+                state.collapsedGridWorkspaceIDs.remove(at: index)
+            } else {
+                state.collapsedGridWorkspaceIDs.append(workspaceID)
+            }
+        }
+    }
+
     // MARK: - Grid-Workspaces: Entity-Mutationen
 
     /// Legt einen Workspace an (ans Array-Ende = unten in der Sidebar) und
@@ -291,6 +306,7 @@ final class AgentWindowStore {
         guard gridWorkspace(id: workspaceID) != nil else { return false }
         mutate { state in
             state.gridWorkspaces.removeAll { $0.id == workspaceID }
+            state.collapsedGridWorkspaceIDs.removeAll { $0 == workspaceID }
             for index in state.windows.indices
                 where state.windows[index].activeWorkspaceID == workspaceID {
                 state.windows[index].activeWorkspaceID = nil

@@ -138,6 +138,10 @@ struct AgentUIState: Codable, Equatable {
     /// Globale Grid-Workspaces (Schema v4). Die Array-Reihenfolge IST die
     /// Sidebar-Reihenfolge — bewusst keine zweite Order-Liste.
     var gridWorkspaces: [AgentGridWorkspace]
+    /// In der Sidebar EINGEKLAPPTE Workspace-Gruppen (nur der Header bleibt
+    /// sichtbar). Global wie die Pins; `decodeIfPresent` mit Default `[]`,
+    /// kein Schema-Bump — ältere Builds ignorieren das Feld.
+    var collapsedGridWorkspaceIDs: [UUID]
 
     /// v1-Altbestand — wird nur noch dekodiert (Input für die Migration),
     /// nie mehr encodiert. Nach `migrateToV2IfNeeded` immer leer.
@@ -163,6 +167,7 @@ struct AgentUIState: Codable, Equatable {
         case windows
         case primaryWindowID
         case gridWorkspaces
+        case collapsedGridWorkspaceIDs
         // v1-Keys, nur fürs Decoding
         case openTabIDsByProject
         case selectedSessionIDByProject
@@ -179,6 +184,7 @@ struct AgentUIState: Codable, Equatable {
         windows: [AgentChatWindowState] = [],
         primaryWindowID: UUID? = nil,
         gridWorkspaces: [AgentGridWorkspace] = [],
+        collapsedGridWorkspaceIDs: [UUID] = [],
         legacyOpenTabIDsByProject: [UUID: [UUID]] = [:],
         legacySelectedSessionIDByProject: [UUID: UUID] = [:]
     ) {
@@ -192,6 +198,7 @@ struct AgentUIState: Codable, Equatable {
         self.unreadSubagentSessionIDs = unreadSubagentSessionIDs
         self.primaryWindowID = resolvedPrimaryWindowID
         self.gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces)
+        self.collapsedGridWorkspaceIDs = collapsedGridWorkspaceIDs
         if windows.isEmpty {
             self.windows = [
                 AgentChatWindowState(
@@ -227,6 +234,7 @@ struct AgentUIState: Codable, Equatable {
             ?? windows.first(where: \.isPrimary)?.id
             ?? UUID()
         gridWorkspaces = try c.decodeIfPresent([AgentGridWorkspace].self, forKey: .gridWorkspaces) ?? []
+        collapsedGridWorkspaceIDs = try c.decodeIfPresent([UUID].self, forKey: .collapsedGridWorkspaceIDs) ?? []
         legacyOpenTabIDsByProject = try c.decodeIfPresent([UUID: [UUID]].self, forKey: .openTabIDsByProject) ?? [:]
         legacySelectedSessionIDByProject = try c.decodeIfPresent([UUID: UUID].self, forKey: .selectedSessionIDByProject) ?? [:]
     }
@@ -243,6 +251,7 @@ struct AgentUIState: Codable, Equatable {
         try c.encode(windows, forKey: .windows)
         try c.encode(primaryWindowID, forKey: .primaryWindowID)
         try c.encode(gridWorkspaces, forKey: .gridWorkspaces)
+        try c.encode(collapsedGridWorkspaceIDs, forKey: .collapsedGridWorkspaceIDs)
         // v1-Felder werden bewusst nicht mehr geschrieben.
     }
 
@@ -553,6 +562,10 @@ struct AgentUIState: Codable, Equatable {
         )
         unreadSubagentSessionIDs = Self.deduplicated(
             unreadSubagentSessionIDs.filter { liveSessionIDs.contains($0) }
+        )
+        let knownWorkspaceIDs = Set(gridWorkspaces.map(\.id))
+        collapsedGridWorkspaceIDs = Self.deduplicated(
+            collapsedGridWorkspaceIDs.filter { knownWorkspaceIDs.contains($0) }
         )
 
         if let sid = selectedSessionID, !liveSessionIDs.contains(sid) {

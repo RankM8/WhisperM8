@@ -11,6 +11,7 @@ final class SettingsSourceGuardTests: XCTestCase {
         let documentedUIStateKeys: Set<String> = [
             "agentPinnedSectionCollapsed",
             "agentWorkspacesSectionCollapsed",
+            "agentChatsSectionCollapsed",
             "agentProjectOpenTarget",
             "agentSidebarScope",
             "agentSidebarLayout",

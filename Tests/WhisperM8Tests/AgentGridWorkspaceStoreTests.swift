@@ -447,6 +447,27 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedSession(in: w), ids[1], "Fokus repariert (next/prev)")
     }
 
+    func testWorkspaceCollapseTogglesPersistsAndPrunes() throws {
+        let wsURL = tempURL("ws"); let uiURL = tempURL("ui")
+        let persistence = AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL)
+        let store = AgentWindowStore(persistence: persistence)
+        let id = store.createGridWorkspace(name: "Klappbar")
+
+        XCTAssertFalse(store.isGridWorkspaceCollapsed(id))
+        store.toggleGridWorkspaceCollapsed(id)
+        XCTAssertTrue(store.isGridWorkspaceCollapsed(id))
+        store.flush()
+
+        let reloaded = AgentWindowStore(
+            persistence: AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL)
+        )
+        XCTAssertTrue(reloaded.isGridWorkspaceCollapsed(id), "Collapse überlebt den Neustart")
+
+        // Löschen räumt auch den Collapse-Eintrag (kein Geist im Sidecar).
+        XCTAssertTrue(reloaded.deleteGridWorkspace(id))
+        XCTAssertFalse(reloaded.isGridWorkspaceCollapsed(id))
+    }
+
     // MARK: - Key-Window-/Dictation-Routing
 
     func testKeyWindowRoutingFollowsBecomeAndGuardedResign() {
