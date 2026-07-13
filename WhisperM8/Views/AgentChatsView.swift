@@ -127,11 +127,6 @@ struct AgentChatsView: View {
     /// `GridSplitResolver` gegen die aktuelle Fläche. internal für +Grid.
     @AppStorage("agentGridColumnFraction") var gridColumnFraction: Double = GridSplitResolver.defaultFraction
     @AppStorage("agentGridRowFraction") var gridRowFraction: Double = GridSplitResolver.defaultFraction
-    /// Punktgröße der ersten Spalte/Zeile beim Drag-Beginn — Basis, auf die
-    /// die kumulative Gesten-Translation addiert wird (Muster
-    /// `sidebarDragBaseWidth`). `nil` außerhalb eines Drags.
-    @State var gridColumnDragBase: CGFloat?
-    @State var gridRowDragBase: CGFloat?
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
 

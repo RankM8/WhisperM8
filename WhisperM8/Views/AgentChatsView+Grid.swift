@@ -119,9 +119,23 @@ extension AgentChatsView {
     // MARK: - Grid-Container (bündig, 1-px-Divider)
 
     var gridWorkspace: some View {
-        GeometryReader { geo in
-            gridArrangement(in: geo.size)
-        }
+        // Snapshot GENAU EINMAL pro Body-Eval — die Pane-Closure des
+        // Containers darf `gridSessions`/`headerTabs` nicht pro Slot neu
+        // berechnen (Blaupause ff489fdb: bis zu 9 Slots).
+        let sessions = gridSessions
+        return AgentGridSplitContainer(
+            layout: AgentGridAutoLayout.forTabCount(sessions.count),
+            persistedColumnFraction: gridColumnFraction,
+            persistedRowFraction: gridRowFraction,
+            commitColumnFraction: { gridColumnFraction = $0 },
+            commitRowFraction: { gridRowFraction = $0 },
+            onHandleHoverChanged: { hovering in
+                // Griff-Hover unterdrückt das Pane-Klick-Routing — ein
+                // Drag-Start soll nicht nebenbei die Selektion verschieben.
+                if hovering { hoveredGridPaneID = nil }
+            },
+            pane: { index in gridSlot(index, sessions: sessions) }
+        )
         // Der 1-px-„Gap" zwischen den Panes IST die Trennlinie — gleiche
         // Farbe wie die übrigen Chrome-Divider. Kein Außen-Padding, keine
         // Karten: die Panes nutzen die volle Fläche.
@@ -132,6 +146,9 @@ extension AgentChatsView {
         // des zuvor fokussierten Tabs (pure Logik, AgentGridLayout).
         .onChange(of: selectedSessionID) { previous, selected in
             guard let selected else { return }
+            // perf.grid: Fokuswechsel messen (Ende in focusTerminal nach
+            // makeFirstResponder; Safety-Timeout im Tracker).
+            GridPerformanceTracker.shared.beginFocusSwitch()
             bringSelectionIntoGrid(selected, previous: previous)
             // Fokus-Wechsel remountet die Pane-DetailView NICHT (stabile
             // .id) — deren onAppear-Fokus feuert also nicht erneut. Die
@@ -148,6 +165,13 @@ extension AgentChatsView {
         // SelektionsWECHSELN, nicht wenn der fokussierte Tab beim Aufbau
         // schon außerhalb der ersten N liegt.
         .onAppear {
+            // perf.grid: Aufbau messen — erwartet werden nur Panes mit
+            // lebendem Controller (Offline-Panes attachen nie).
+            GridPerformanceTracker.shared.beginBuild(
+                expectedPaneIDs: Set(
+                    gridSessions.map(\.id).filter { terminalRegistry.controller(for: $0) != nil }
+                )
+            )
             if let selected = selectedSessionID {
                 bringSelectionIntoGrid(selected, previous: nil)
             }
@@ -167,115 +191,11 @@ extension AgentChatsView {
         }
     }
 
-    /// Layout mit variablen Split-Verhältnissen: die erste Spalte/Zeile
-    /// bekommt eine explizite Punktgröße (geclampter Wunschwert), der Rest
-    /// füllt. Die Griffe liegen als Overlays exakt auf den 1-px-Dividern.
+    /// Pane für einen Slot-Index — der Session-Snapshot kommt vom Aufrufer
+    /// (genau eine `gridSessions`-Berechnung pro Body-Eval, siehe
+    /// `gridWorkspace`).
     @ViewBuilder
-    private func gridArrangement(in size: CGSize) -> some View {
-        let colW = GridSplitResolver.firstSize(total: size.width, fraction: gridColumnFraction)
-        let rowH = GridSplitResolver.firstSize(total: size.height, fraction: gridRowFraction)
-        switch gridAutoLayout {
-        case .single:
-            // Von mainWorkspace nie mit 1 Pane aufgerufen (isGridActive) —
-            // defensiver Fallback.
-            EmptyView()
-        case .cols2:
-            HStack(spacing: 1) {
-                gridSlot(0).frame(width: colW)
-                gridSlot(1)
-            }
-            .overlay(alignment: .leading) {
-                columnSplitHandle(totalWidth: size.width).offset(x: colW - 4)
-            }
-        case .twoPlusOne:
-            VStack(spacing: 1) {
-                HStack(spacing: 1) {
-                    gridSlot(0).frame(width: colW)
-                    gridSlot(1)
-                }
-                .frame(height: rowH)
-                // Spalten-Griff nur über der oberen Reihe — die untere Pane
-                // läuft in voller Breite durch.
-                .overlay(alignment: .leading) {
-                    columnSplitHandle(totalWidth: size.width).offset(x: colW - 4)
-                }
-                gridSlot(2)
-            }
-            .overlay(alignment: .top) {
-                rowSplitHandle(totalHeight: size.height).offset(y: rowH - 4)
-            }
-        case .grid2x2:
-            VStack(spacing: 1) {
-                HStack(spacing: 1) {
-                    gridSlot(0).frame(width: colW)
-                    gridSlot(1)
-                }
-                .frame(height: rowH)
-                HStack(spacing: 1) {
-                    gridSlot(2).frame(width: colW)
-                    gridSlot(3)
-                }
-            }
-            // EIN Verhältnis pro Achse: der Spalten-Griff verschiebt beide
-            // Reihen gemeinsam — das Grid bleibt ein Raster.
-            .overlay(alignment: .leading) {
-                columnSplitHandle(totalWidth: size.width).offset(x: colW - 4)
-            }
-            .overlay(alignment: .top) {
-                rowSplitHandle(totalHeight: size.height).offset(y: rowH - 4)
-            }
-        }
-    }
-
-    private func columnSplitHandle(totalWidth: CGFloat) -> some View {
-        GridSplitHandle(
-            axis: .column,
-            onDragChanged: { translation in
-                if gridColumnDragBase == nil {
-                    gridColumnDragBase = GridSplitResolver.firstSize(
-                        total: totalWidth, fraction: gridColumnFraction
-                    )
-                }
-                guard let base = gridColumnDragBase else { return }
-                gridColumnFraction = GridSplitResolver.fractionDuringDrag(
-                    startFirstSize: base, translation: translation, total: totalWidth
-                )
-            },
-            onDragEnded: { gridColumnDragBase = nil },
-            onDoubleClick: { gridColumnFraction = GridSplitResolver.defaultFraction },
-            onHoverChanged: { hovering in
-                // Griff-Hover unterdrückt das Pane-Klick-Routing — ein
-                // Drag-Start soll nicht nebenbei die Selektion verschieben.
-                if hovering { hoveredGridPaneID = nil }
-            }
-        )
-    }
-
-    private func rowSplitHandle(totalHeight: CGFloat) -> some View {
-        GridSplitHandle(
-            axis: .row,
-            onDragChanged: { translation in
-                if gridRowDragBase == nil {
-                    gridRowDragBase = GridSplitResolver.firstSize(
-                        total: totalHeight, fraction: gridRowFraction
-                    )
-                }
-                guard let base = gridRowDragBase else { return }
-                gridRowFraction = GridSplitResolver.fractionDuringDrag(
-                    startFirstSize: base, translation: translation, total: totalHeight
-                )
-            },
-            onDragEnded: { gridRowDragBase = nil },
-            onDoubleClick: { gridRowFraction = GridSplitResolver.defaultFraction },
-            onHoverChanged: { hovering in
-                if hovering { hoveredGridPaneID = nil }
-            }
-        )
-    }
-
-    @ViewBuilder
-    private func gridSlot(_ index: Int) -> some View {
-        let sessions = gridSessions
+    private func gridSlot(_ index: Int, sessions: [AgentChatSession]) -> some View {
         if index < sessions.count {
             gridPane(for: sessions[index])
         } else {

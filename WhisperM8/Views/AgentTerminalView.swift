@@ -742,6 +742,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             guard let self,
                   let window = self.terminal.window else { return }
             window.makeFirstResponder(self.terminal)
+            // perf.grid: Fokuswechsel-Messung abschließen (no-op außerhalb
+            // einer laufenden Grid-Messung).
+            GridPerformanceTracker.shared.focusApplied()
         }
     }
 
@@ -862,6 +865,10 @@ struct AgentTerminalView: NSViewRepresentable {
             terminal.topAnchor.constraint(equalTo: container.topAnchor),
             terminal.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
+
+        // perf.grid: erwartete Pane hängt in der Hierarchie (no-op außerhalb
+        // einer laufenden grid.build-Messung).
+        GridPerformanceTracker.shared.didAttach(sessionID: controller.sessionID)
     }
 }
 

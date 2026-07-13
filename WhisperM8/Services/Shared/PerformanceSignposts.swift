@@ -10,6 +10,7 @@ enum PerfSignposts {
     static let recording = OSSignposter(subsystem: subsystem, category: "perf.recording")
     static let store = OSSignposter(subsystem: subsystem, category: "perf.store")
     static let sidebar = OSSignposter(subsystem: subsystem, category: "perf.sidebar")
+    static let grid = OSSignposter(subsystem: subsystem, category: "perf.grid")
 }
 
 /// Budget-Überwachung um ein os_signpost-Intervall: misst die Dauer, emittiert
@@ -102,4 +103,16 @@ enum PerfBudgets {
     static let sidebarWorkspaceLoad = PerformanceBudget(name: "sidebar.workspaceLoad", budget: 0.050, signposter: PerfSignposts.sidebar)
     static let sidebarBackgroundIndex = PerformanceBudget(name: "sidebar.backgroundIndex", budget: 2.000, signposter: PerfSignposts.sidebar)
     static let sidebarStatusPoll = PerformanceBudget(name: "sidebar.statusPoll", budget: 0.100, signposter: PerfSignposts.sidebar)
+
+    // Grid-Workspace (Budgets aus docs/plans/grid-workspace-plan.html, Abschnitt 05;
+    // Freigabe-Gates sind p95-Werte, Einzelverletzungen sind Hinweise, keine Fehler).
+    /// Grid-Aufbau: showsGrid → alle erwarteten Terminal-Panes attached.
+    static let gridBuild = PerformanceBudget(name: "grid.build", budget: 0.050, signposter: PerfSignposts.grid)
+    /// Pane-Fokuswechsel: Selektionsänderung → makeFirstResponder angewendet.
+    static let gridFocusSwitch = PerformanceBudget(name: "grid.focusSwitch", budget: 0.033, signposter: PerfSignposts.grid)
+    /// Ein ANGEWANDTER (coalesced) Divider-Layout-Tick inkl. Folge-Layout —
+    /// nicht jeder Maus-Event (die werden gesammelt).
+    static let gridDividerTick = PerformanceBudget(name: "grid.dividerTick", budget: 0.016, signposter: PerfSignposts.grid)
+    /// Ein Streaming-Flush einer Pane (Parser + Render-Scheduling, keine GPU-Zeit).
+    static let gridStreamingFrame = PerformanceBudget(name: "grid.streamingFrame", budget: 0.0167, signposter: PerfSignposts.grid)
 }
