@@ -163,6 +163,10 @@ struct AgentChatsView: View {
     /// Ausstehende Verkleinerung (Kapazitäts-Picker): erst die Vorschau
     /// bestätigen, dann wird mit exakt dieser Eviction-Liste angewendet.
     @State var gridShrinkRequest: GridShrinkRequest?
+    /// Gemessene Grid-Fläche — der Kapazitäts-Picker sitzt seit dem Umzug in
+    /// die Header-Zeile außerhalb des Grids und braucht die Fläche weiterhin,
+    /// um nicht passende Stufen auszublenden.
+    @State var gridAreaSize: CGSize = .zero
     // Die Grid-Split-Verhältnisse leben seit Schema v4 am Workspace-Entity
     // (AgentGridWorkspace.columnFractions/rowFractions); die alten globalen
     // @AppStorage-Keys agentGridColumnFraction/agentGridRowFraction liest
@@ -2256,9 +2260,19 @@ struct AgentChatsView: View {
             .padding(.horizontal, 8)
             .frame(height: 28)
 
-            activeChatStatusRow
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+            // Im sichtbaren Grid ersetzt die Workspace-Zeile (Name + Belegung
+            // + Kapazitäts-Picker) den Chat-Header — die Pane-Header tragen
+            // die Session-Infos bereits, und der Picker verdeckt so keine
+            // Pane mehr (vorher Overlay über der rechten oberen Pane).
+            if isGridActive, let entity = activeGridWorkspaceEntity {
+                gridWorkspaceStatusRow(entity: entity)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+            } else {
+                activeChatStatusRow
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+            }
         }
         .background(AgentTheme.header)
     }

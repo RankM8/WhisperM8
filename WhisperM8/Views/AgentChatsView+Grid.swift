@@ -237,16 +237,16 @@ extension AgentChatsView {
         // Karten: die Panes nutzen die volle Fläche.
         .background(AgentTheme.border)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Kapazitäts-Picker (F10): manuelles Wählen der Stufe; Verkleinern
-        // nur mit Vorschau + Bestätigung. GeometryReader misst die
-        // TATSÄCHLICHE Grid-Fläche (nicht das Fenster — Sidebar/Inspector
-        // gehen sonst in die Passt-Rechnung ein; Review-Finding).
-        .overlay {
+        // Grid-Fläche messen (nicht das Fenster — Sidebar/Inspector gehen
+        // sonst in die Passt-Rechnung ein; Review-Finding). Der Kapazitäts-
+        // Picker sitzt seit dem Umzug in die Workspace-Header-Zeile
+        // (gridWorkspaceStatusRow) außerhalb des Grids, damit er keine Pane
+        // mehr verdeckt — die Fläche braucht er weiterhin.
+        .background {
             GeometryReader { geo in
-                gridCapacityPicker(entity: entity, available: geo.size)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, 6)
-                    .padding(.trailing, 8)
+                Color.clear
+                    .onAppear { gridAreaSize = geo.size }
+                    .onChange(of: geo.size) { _, size in gridAreaSize = size }
             }
         }
         .onChange(of: selectedSessionID) { _, selected in
@@ -313,6 +313,35 @@ extension AgentChatsView {
         .dropDestination(for: DraggableSession.self) { _, _ in
             false
         } isTargeted: { gridDropTargeted = $0 }
+    }
+
+    // MARK: - Workspace-Header-Zeile (ersetzt den Chat-Header im Grid)
+
+    /// Header-Zeile der Grid-Ansicht: Workspace-Identität links, Kapazitäts-
+    /// Picker rechts. Ersetzt `activeChatStatusRow` — die Session-Infos
+    /// stehen im Grid bereits an jeder Pane, und der Picker lag vorher als
+    /// Overlay ÜBER der rechten oberen Pane (verdeckte deren Header).
+    func gridWorkspaceStatusRow(entity: AgentGridWorkspace) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color(hex: entity.colorHex))
+            Text(entity.name)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AgentTheme.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity) belegt")
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(AgentTheme.textTertiary)
+
+            Spacer(minLength: 8)
+
+            gridCapacityPicker(entity: entity, available: gridAreaSize)
+        }
+        // Gleiche Mindesthöhe wie der zweizeilige Chat-Header — der Wechsel
+        // Grid ↔ Einzelansicht soll das Layout darunter nicht springen lassen.
+        .frame(minHeight: 30)
     }
 
     // MARK: - Kapazitäts-Picker (F10)
