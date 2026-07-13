@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid-View: Maximize/Minimize-Konzept — WhisperM8</title>
+<style>
+:root {
+  --bg: #101114;
+  --panel: #1C1E23;
+  --card: #23252C;
+  --hover: #2A2C34;
+  --border: #2E3138;
+  --border-soft: #26282F;
+  --text: #E8E9ED;
+  --text-soft: #A6A9B3;
+  --text-mute: #686C78;
+  --indigo: #6E6ADE;
+  --indigo-soft: rgba(110,106,222,.16);
+  --green: #4CC38A;
+  --amber: #E0A33E;
+  --doc-bg: #0B0C0E;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--doc-bg); color: var(--text);
+  font-family: var(--sans); font-size: 15px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1060px; margin: 0 auto; padding: 0 28px 80px; }
+a { color: var(--indigo); }
+code { font-family: var(--mono); font-size: .85em; background: var(--card); border: 1px solid var(--border-soft); border-radius: 4px; padding: 1px 5px; }
+
+header.top { padding: 56px 0 28px; }
+.status-chip { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--amber); border: 1px solid rgba(224,163,62,.4); background: rgba(224,163,62,.08); border-radius: 999px; padding: 4px 12px; margin-bottom: 16px; }
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
+h1 em { color: var(--indigo); font-style: normal; }
+.lede { color: var(--text-soft); font-size: 17px; max-width: 760px; margin: 0; }
+
+section { margin-top: 52px; }
+h2 { font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 6px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
+h2 .idx { font-family: var(--mono); font-size: 11px; color: var(--indigo); letter-spacing: .12em; display: block; margin-bottom: 6px; }
+.sub { color: var(--text-soft); margin: 0 0 22px; max-width: 760px; }
+
+/* ---------- App-Mockup ---------- */
+.mock-hint { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--text-soft); margin-bottom: 10px; flex-wrap: wrap; }
+.mock-hint .key { font-family: var(--mono); font-size: 11px; background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; color: var(--text); }
+.tabcount { display: inline-flex; gap: 2px; background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 2px; margin-left: auto; }
+.tabcount button { font-family: var(--sans); font-size: 12px; border: 0; background: transparent; color: var(--text-mute); padding: 3px 10px; border-radius: 5px; cursor: pointer; }
+.tabcount button.on { background: var(--indigo-soft); color: var(--text); box-shadow: inset 0 0 0 1px rgba(110,106,222,.4); }
+
+.app {
+  background: var(--bg); border: 1px solid #000; border-radius: 12px;
+  overflow: hidden; box-shadow: 0 30px 70px -30px rgba(0,0,0,.8);
+  font-size: 13px; user-select: none;
+}
+.titlebar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--border-soft); }
+.dots { display: flex; gap: 6px; }
+.dots span { width: 11px; height: 11px; border-radius: 50%; }
+.dots span:nth-child(1) { background: #F0605B; } .dots span:nth-child(2) { background: #F5BE4F; } .dots span:nth-child(3) { background: #61C554; }
+.tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+.tab { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 7px; font-size: 12px; color: var(--text-soft); border: 1px solid transparent; white-space: nowrap; cursor: pointer; }
+.tab.active { background: var(--card); color: var(--text); border-color: var(--border); }
+.sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.sdot.g { background: var(--green); box-shadow: 0 0 6px rgba(76,195,138,.55); }
+.sdot.a { background: var(--amber); box-shadow: 0 0 6px rgba(224,163,62,.5); }
+.sdot.i { background: var(--text-mute); box-shadow: none; }
+.tb-right { display: flex; gap: 6px; align-items: center; }
+.tb-btn { width: 25px; height: 22px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text-soft); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.tb-btn.ghost { opacity: .35; text-decoration: line-through; }
+
+.shell { display: grid; grid-template-columns: 168px 1fr; height: 480px; }
+.side { background: var(--panel); border-right: 1px solid var(--border-soft); padding: 10px 8px; font-size: 12px; color: var(--text-soft); }
+.side .t { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-mute); padding: 6px 8px; }
+.side .row { padding: 5px 8px; border-radius: 6px; display: flex; gap: 7px; align-items: center; }
+.side .row.sel { background: var(--hover); color: var(--text); }
+
+.content { position: relative; min-width: 0; background: var(--bg); }
+/* Grid: bündig, 1px-Divider, KEIN Padding, KEINE Rundungen */
+.grid { display: grid; width: 100%; height: 100%; gap: 1px; background: var(--border-soft); }
+.pane { display: flex; flex-direction: column; background: var(--bg); min-width: 0; min-height: 0; position: relative; cursor: default; }
+.pane.focus::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 2px var(--indigo); }
+.phead { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 28px; background: var(--panel); border-bottom: 1px solid var(--border-soft); flex: none; }
+.phead .name { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane:not(.focus) .phead .name { color: var(--text-soft); font-weight: 400; }
+.phead .spring { flex: 1; }
+.pbtn { width: 20px; height: 18px; border-radius: 4px; border: 0; background: transparent; color: var(--text-mute); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; }
+.pbtn:hover { background: var(--hover); color: var(--text); }
+.pbtn.max { color: var(--text-soft); }
+.pterm { flex: 1; min-height: 0; overflow: hidden; font-family: var(--mono); font-size: 10.5px; line-height: 1.6; padding: 8px 12px; color: var(--text-soft); }
+.pterm .p { color: var(--indigo); } .pterm .ok { color: var(--green); } .pterm .wn { color: var(--amber); } .pterm .dim { color: var(--text-mute); }
+.pterm .add { display: block; background: rgba(76,195,138,.13); color: #9ADFBB; }
+.pterm .del { display: block; background: rgba(229,100,90,.13); color: #F0A29B; }
+
+/* Maximiert: Chat-Statuszeile wie im Einzelmodus + Minimize-Control */
+.single { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.chatbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border-soft); background: var(--bg); flex: none; }
+.chatbar .meta { min-width: 0; }
+.chatbar .meta b { display: block; font-size: 13px; }
+.chatbar .meta span { font-family: var(--mono); font-size: 10.5px; color: var(--text-mute); }
+.chatbar .spring { flex: 1; }
+.chatbar .cbtn { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text-soft); font-size: 11.5px; cursor: pointer; }
+.chatbar .cbtn:hover { background: var(--hover); color: var(--text); }
+.chatbar .cbtn.mini { border-color: rgba(110,106,222,.45); color: var(--indigo); }
+.single .pterm { font-size: 12px; }
+
+.badge-live { position: absolute; right: 10px; bottom: 10px; font-family: var(--mono); font-size: 10px; color: var(--text-mute); background: var(--panel); border: 1px solid var(--border-soft); padding: 3px 9px; border-radius: 999px; pointer-events: none; }
+
+/* ---------- Doku-Blöcke ---------- */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.box { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; }
+.box.wide { grid-column: 1 / -1; }
+.box h3 { margin: 0 0 10px; font-size: 14.5px; }
+.box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--indigo); text-transform: uppercase; display: block; margin-bottom: 6px; }
+.box ul { margin: 0; padding: 0 0 0 2px; list-style: none; font-size: 13.5px; color: var(--text-soft); }
+.box li { padding: 5px 0 5px 16px; position: relative; }
+.box li::before { content: "›"; position: absolute; left: 0; color: var(--indigo); }
+.box b { color: var(--text); }
+@media (max-width: 820px) { .cols { grid-template-columns: 1fr; } .shell { grid-template-columns: 1fr; } .side { display: none; } }
+
+table.opts { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
+table.opts th, table.opts td { text-align: left; padding: 11px 14px; border: 1px solid var(--border-soft); vertical-align: top; }
+table.opts th { background: var(--panel); font-size: 12px; font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-mute); font-weight: 500; }
+table.opts td { color: var(--text-soft); background: rgba(255,255,255,.012); }
+table.opts td b { color: var(--text); }
+tr.rec td { background: rgba(110,106,222,.07); }
+.rec-pill { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; background: var(--indigo-soft); color: var(--indigo); border-radius: 999px; padding: 2px 8px; margin-left: 8px; }
+
+.before-after { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ba { border: 1px solid var(--border-soft); border-radius: 12px; overflow: hidden; }
+.ba .cap { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; padding: 8px 14px; background: var(--panel); color: var(--text-mute); }
+.ba .demo { height: 150px; background: var(--bg); position: relative; }
+.ba.old .demo { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ba.old .cell { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.ba.old .cell.f { box-shadow: inset 0 0 0 2px var(--indigo); }
+.ba.new .demo { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border-soft); }
+.ba.new .cell { background: var(--panel); position: relative; }
+.ba.new .cell.f::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 2px var(--indigo); }
+@media (max-width: 820px) { .before-after { grid-template-columns: 1fr; } }
+
+footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border-soft); color: var(--text-mute); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="status-chip">Konzept zur Abstimmung · noch NICHT implementiert</div>
+  <h1>Grid-View: <em>Maximize / Minimize</em> statt Raster-Buttons</h1>
+  <p class="lede">Der Wechsel zwischen „ein Chat groß" und „alle aktiven Chats im Grid" wandert an die Chats selbst: jede Pane bekommt ein Maximize-Control, der große Chat ein Minimize-Control. Das Grid wird dicht — bündige Panes, 1-px-Trennlinien, kein Außen-Padding, keine Rundungen. Der Raster-Umschalter oben entfällt als primärer Weg.</p>
+</header>
+
+<!-- ============ 01 INTERAKTIVER MOCKUP ============ -->
+<section>
+  <h2><span class="idx">01 — INTERAKTIVER MOCKUP</span>Klick es durch: <em>Grid ↔ Groß</em></h2>
+  <p class="sub">Das ist klickbar. Im Grid: <b>⤢ auf einer Pane</b> (oder Doppelklick auf ihren Header) macht den Chat groß. Im großen Chat: <b>„⤡ Grid"</b> rechts in der Chat-Leiste bringt alle aktiven Chats zurück. Einfacher Klick in eine Pane fokussiert sie nur (Indigo-Rahmen). Rechts kannst du simulieren, wie sich das Layout automatisch an die Tab-Anzahl anpasst.</p>
+
+  <div class="mock-hint">
+    <span>Steuerung:</span>
+    <span class="key">⤢ = maximieren</span>
+    <span class="key">⤡ = zurück ins Grid</span>
+    <span class="key">Klick = Fokus</span>
+    <div class="tabcount" id="tabcount">
+      <button data-n="2">2 Tabs</button>
+      <button data-n="3">3 Tabs</button>
+      <button data-n="4" class="on">4 Tabs</button>
+    </div>
+  </div>
+
+  <div class="app">
+    <div class="titlebar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="tabs" id="tabs"></div>
+      <div class="tb-right">
+        <span class="tb-btn ghost" title="Raster-Umschalter: entfällt als primärer Weg">⊞</span>
+        <span class="tb-btn">◫</span>
+      </div>
+    </div>
+    <div class="shell">
+      <aside class="side">
+        <div class="t">Projekte</div>
+        <div class="row sel"><span class="sdot g"></span> whisperm8</div>
+        <div class="row"><span class="sdot i"></span> rankm8</div>
+        <div class="t" style="margin-top:8px;">Gepinnt</div>
+        <div class="row"><span class="sdot g"></span> Release 2.9</div>
+      </aside>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+
+  <div class="cols" style="margin-top:14px;">
+    <div class="box">
+      <span class="tag">Im Grid</span>
+      <h3>Jede Pane: Status · Titel · ⤢ · ✕</h3>
+      <ul>
+        <li><b>⤢ Maximize</b> ist neben dem Schließen-X dauerhaft sichtbar (kein Hover-only)</li>
+        <li><b>Doppelklick auf den Pane-Header</b> = schneller Maximize-Weg</li>
+        <li>Einfacher Klick (Header oder Terminal) = nur Fokus, wie heute</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Im großen Chat</span>
+      <h3>Chat-Leiste: „⤡ Grid" rechts</h3>
+      <ul>
+        <li><b>⤡ Minimize</b> sitzt in der bestehenden Chat-Statuszeile (bei Restart/…-Menü)</li>
+        <li>Führt IMMER zurück ins Grid mit <b>allen offenen Tabs</b> — Layout automatisch</li>
+        <li>Bei nur einem offenen Tab ist ⤡ ausgeblendet (Grid = Einzelansicht)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 ZUSTANDSMODELL ============ -->
+<section>
+  <h2><span class="idx">02 — ZUSTANDSMODELL</span>Zwei Zustände, <em>ein Toggle.</em></h2>
+  <p class="sub">Heute ist <code>gridPreset</code> (single/1×2/2×1/2×2) der Modus, den der User manuell wählt. Neu ist die Frage nur noch: <b>ist gerade ein Chat maximiert — ja oder nein?</b> Das Grid-Layout selbst wählt die App automatisch aus der Tab-Anzahl.</p>
+  <div class="cols">
+    <div class="box">
+      <span class="tag">Zustand pro Fenster (persistiert)</span>
+      <h3>„maximiert" statt „Preset"</h3>
+      <ul>
+        <li><b>Maximiert</b> (Default, entspricht heute): der selektierte Tab füllt den Content — exakt die heutige Einzelansicht</li>
+        <li><b>Grid</b>: alle offenen Tabs als bündige Panes, Layout automatisch</li>
+        <li>Fokus-Pane bleibt <code>selectedSessionID</code> — Dictation-Routing, Tastatur-Fokus-Fix und Klick-Routing aus dem Review bleiben unverändert</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Auto-Layout aus Tab-Anzahl</span>
+      <h3>Kein Raster mehr wählen</h3>
+      <ul>
+        <li><b>1 Tab</b> → Einzelansicht (Grid-Zustand zeigt dasselbe)</li>
+        <li><b>2 Tabs</b> → 2 Spalten</li>
+        <li><b>3 Tabs</b> → 2 oben, 1 unten in voller Breite</li>
+        <li><b>4 Tabs</b> → 2×2</li>
+        <li><b>5+ Tabs</b> → V1: die ersten 4 + Rest über Tab-Leiste (Bring-into-View-Swap wie heute); 3×2 für 5–6 als V2-Option</li>
+      </ul>
+    </div>
+    <div class="box wide">
+      <span class="tag">Was garantiert NICHT bricht</span>
+      <h3>Die drei Review-Fixes bleiben konzeptionell erhalten</h3>
+      <ul>
+        <li><b>Ctrl+Tab-Overlay</b> rendert weiterhin über beiden Zuständen (Grid und maximiert)</li>
+        <li><b>Terminal-Fokus folgt dem Fokus-Wechsel</b> — Maximize/Minimize ändern nur das Layout, nie die Selektion; der explizite <code>focusTerminal</code>-Pfad bleibt</li>
+        <li><b>Hover-/Klick-Routing</b> (beobachtender leftMouseDown-Monitor) bleibt; Maximize-/Close-Buttons liegen wie bisher über dem Routing (Button gewinnt)</li>
+        <li>Nebenpanes weiterhin ohne Auto-Launch/Auto-Fokus (<code>suppressesAutoActivation</code>)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 DICHTE ============ -->
+<section>
+  <h2><span class="idx">03 — DICHTE</span>Bündig statt <em>Karten-Look.</em></h2>
+  <p class="sub">Dein Befund aus den Screenshots: zu viel Luft. Weg damit — Panes teilen sich 1-px-Linien wie Sidebar und Titelzone, der Content nutzt jede verfügbare Fläche.</p>
+  <div class="before-after">
+    <div class="ba old">
+      <div class="cap">Heute — Karten mit Luft</div>
+      <div class="demo"><div class="cell f"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+    </div>
+    <div class="ba new">
+      <div class="cap">Ziel — bündig, 1-px-Divider</div>
+      <div class="demo"><div class="cell f"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+    </div>
+  </div>
+  <div class="cols" style="margin-top:14px;">
+    <div class="box wide">
+      <span class="tag">Konkrete Streichliste (heutiger Code)</span>
+      <h3>Was im Grid-Pfad entfällt</h3>
+      <ul>
+        <li><code>gridWorkspace</code>: <code>.padding(10)</code> und <code>spacing: 8</code> → <b>0 / 1-px-Divider</b> (Farbe wie Sidebar-Trennung)</li>
+        <li><code>gridPane</code>: <code>.padding(6)</code>, <code>RoundedRectangle(cornerRadius: 8)</code>-Clip und -Border → <b>ersatzlos</b>; Terminal läuft bis an die Trennlinie</li>
+        <li>Fokus-Anzeige: statt Rahmen um eine Karte ein <b>2-px-Inset-Rahmen</b> auf der bündigen Pane (im Mockup oben zu sehen) — Zustand bleibt dauerhaft sichtbar</li>
+        <li>Pane-Header bleibt (28 px): er trägt Status, Titel, ⤢ und ✕ — das ist der Platz, der sich lohnt</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 OPTIONEN & EMPFEHLUNG ============ -->
+<section>
+  <h2><span class="idx">04 — OPTIONEN</span>Modell-Varianten und das <em>Schicksal der Raster-Buttons.</em></h2>
+  <table class="opts">
+    <tr><th style="width:190px;">Option</th><th>Verhalten</th><th>Trade-offs</th></tr>
+    <tr class="rec">
+      <td><b>B — Auto-Grid</b><span class="rec-pill">Empfehlung</span></td>
+      <td>Nur noch „maximiert ↔ Grid". Grid-Layout automatisch aus der Tab-Anzahl (Tabelle oben). <b>Raster-Buttons entfallen komplett.</b></td>
+      <td><b>+</b> Genau der gewünschte Ein-Klick-Flow, null Konfiguration, kein UI-Clutter.<br><b>−</b> Kein manuelles „nur 2 von 4 zeigen" — wer weniger Panes will, schließt Tabs bzw. maximiert. Altes <code>gridPreset</code> wird migriert (single→maximiert, Rest→Grid).</td>
+    </tr>
+    <tr>
+      <td><b>A — Presets + Maximize obendrauf</b></td>
+      <td>Presets bleiben wie heute, zusätzlich merkt sich das Fenster beim Maximize das vorherige Preset und stellt es beim Minimize wieder her.</td>
+      <td><b>+</b> Kleinster Eingriff, manuelle Kontrolle bleibt.<br><b>−</b> Zwei konkurrierende Steuerungen (Buttons oben UND Pane-Controls) — genau das, was du nicht willst; mehr Zustand (Preset + maximiert).</td>
+    </tr>
+    <tr>
+      <td><b>C — Auto-Grid + versteckter Override</b></td>
+      <td>Wie B, aber das Auto-Layout lässt sich sekundär übersteuern (Kontextmenü der Tab-Leiste oder Defaults-Schalter), z. B. „3 Tabs als 3 Spalten".</td>
+      <td><b>+</b> Fluchtweg, falls das Auto-Layout im Alltag doch mal falsch liegt.<br><b>−</b> Versteckte Optionen altern schlecht; mehr Testfläche. Nur nachrüsten, wenn B im Alltag Grenzen zeigt.</td>
+    </tr>
+  </table>
+  <div class="cols" style="margin-top:14px;">
+    <div class="box wide">
+      <span class="tag">Empfehlung im Klartext</span>
+      <h3>Option B — und die Raster-Buttons ersatzlos raus</h3>
+      <ul>
+        <li>Dein Flow braucht exakt zwei Gesten: <b>⤡ „zeig mir alle"</b> und <b>⤢ „den hier groß"</b>. Alles andere ist ableitbar — ein manuelles Raster beantwortet eine Frage, die dann niemand mehr stellt.</li>
+        <li>Verstecken statt löschen (Debug-Flag) lohnt nicht: der Preset-Code ist klein, die Migration trivial, und toter UI-Zustand in <code>agent-ui-state.json</code> ist genau die Sorte Altlast, die später Decoder-Sonderfälle produziert.</li>
+        <li>Sollte sich im Alltag zeigen, dass Auto-Layout nicht reicht, ist Option C als Aufsatz auf B jederzeit nachrüstbar — andersherum (erst A, dann aufräumen) wird es teurer.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  WhisperM8 · Grid-Maximize/Minimize-Konzept · 2026-07-13 · Textplan: <code>docs/plans/split-grid-agenten.md</code> (V2-Abschnitt folgt nach Freigabe) · Keine App-Änderung bis zur Freigabe.
+</footer>
+</div>
+
+<script>
+// ---------- Demo-Daten ----------
+const CHATS = [
+  { id: "a", name: "BridgeMind-Features analysieren", dot: "g", lines: [
+    '<span class="dim">●</span> Read src/auth/TokenService.swift <span class="dim">(168 Zeilen)</span>',
+    '<span class="del">-  let fresh = try await rotate(token)</span>',
+    '<span class="add">+  let fresh = try await rotateShared(token)</span>',
+    '<span class="dim">●</span> swift test --filter TokenServiceTests',
+    '  <span class="ok">✓ 12 passed, 0 failed (8.4s)</span>',
+    '<span class="p">❯</span> <span class="dim">Prompt …</span>'
+  ]},
+  { id: "b", name: "Session-Resume und Storage-Bug", dot: "g", lines: [
+    '<span class="p">❯</span> git check-ignore .playwright-mcp/…',
+    '<span class="dim">└</span> .playwright-mcp/console-2026-07-13.log',
+    '<span class="ok">Erledigt — steht in der .gitignore (183088b)</span>',
+    '<span class="p">❯</span> <span class="dim">ok ich mach jetzt make dev …</span>'
+  ]},
+  { id: "c", name: "Dashboard-Dev-Server starten", dot: "a", lines: [
+    '<span class="dim">●</span> npm run dev -- --port 4321',
+    '  <span class="dim">→ astro dev server läuft</span>',
+    '<span class="wn">? Server neu starten? (y/n)</span>'
+  ]},
+  { id: "d", name: "Plugin-Übersicht und Skill-Audit", dot: "i", lines: [
+    '<span class="dim">●</span> doc-system v5.1 committet',
+    '<span class="dim">Zusammenfassung · vor 15 Std.</span>',
+    '<span class="dim">(kein laufender Prozess — Transcript-Ansicht)</span>'
+  ]}
+];
+
+let tabCount = 4;
+let maximized = false;      // false = Grid, true = ein Chat groß
+let focusID = "a";
+
+const $tabs = document.getElementById("tabs");
+const $content = document.getElementById("content");
+
+function chats() { return CHATS.slice(0, tabCount); }
+
+function gridTemplate(n) {
+  // Auto-Layout: 2 → 2 Spalten · 3 → 2 oben + 1 volle Breite unten · 4 → 2×2
+  if (n <= 1) return { cols: "1fr", areas: null };
+  if (n === 2) return { cols: "1fr 1fr", rows: "1fr", areas: null };
+  if (n === 3) return { cols: "1fr 1fr", rows: "1fr 1fr", areas: '"p0 p1" "p2 p2"' };
+  return { cols: "1fr 1fr", rows: "1fr 1fr", areas: null };
+}
+
+function render() {
+  // Tabs
+  $tabs.innerHTML = chats().map(c =>
+    `<span class="tab ${c.id === focusID ? "active" : ""}" data-id="${c.id}">
+       <span class="sdot ${c.dot}"></span>${c.name.split(" ")[0]}…</span>`
+  ).join("");
+  $tabs.querySelectorAll(".tab").forEach(t =>
+    t.addEventListener("click", () => { focusID = t.dataset.id; render(); })
+  );
+
+  const list = chats();
+  if (!list.some(c => c.id === focusID)) focusID = list[0].id;
+
+  if (maximized || list.length === 1) {
+    const c = list.find(x => x.id === focusID);
+    $content.innerHTML = `
+      <div class="single">
+        <div class="chatbar">
+          <span class="sdot ${c.dot}"></span>
+          <div class="meta"><b>${c.name}</b><span>whisperm8 · main · Claude Code</span></div>
+          <div class="spring"></div>
+          <button class="cbtn">↻ Restart</button>
+          <button class="cbtn">⋯</button>
+          ${list.length > 1 ? '<button class="cbtn mini" id="minBtn" title="Zurück ins Grid — alle aktiven Chats">⤡&nbsp;Grid</button>' : ""}
+        </div>
+        <div class="pterm">${c.lines.join("<br>")}<br><span class="p">❯</span></div>
+        <div class="badge-live">maximiert · Minimize = zurück ins Grid</div>
+      </div>`;
+    const btn = document.getElementById("minBtn");
+    if (btn) btn.addEventListener("click", () => { maximized = false; render(); });
+  } else {
+    const t = gridTemplate(list.length);
+    const panes = list.map((c, i) => `
+      <div class="pane ${c.id === focusID ? "focus" : ""}" data-id="${c.id}" style="${t.areas ? `grid-area: p${i};` : ""}">
+        <div class="phead" data-id="${c.id}">
+          <span class="sdot ${c.dot}"></span>
+          <span class="name">${c.name}</span>
+          <span class="spring"></span>
+          <button class="pbtn max" data-max="${c.id}" title="Diesen Chat maximieren">⤢</button>
+          <button class="pbtn" title="Tab schließen">✕</button>
+        </div>
+        <div class="pterm">${c.lines.join("<br>")}</div>
+      </div>`).join("");
+    $content.innerHTML = `
+      <div class="grid" style="grid-template-columns:${t.cols}; ${t.rows ? `grid-template-rows:${t.rows};` : ""} ${t.areas ? `grid-template-areas:${t.areas};` : ""}">
+        ${panes}
+      </div>
+      <div class="badge-live">Grid · bündig, 1-px-Divider · ⤢ maximiert</div>`;
+    $content.querySelectorAll(".pane").forEach(p => {
+      p.addEventListener("click", () => { focusID = p.dataset.id; render(); });
+    });
+    $content.querySelectorAll(".phead").forEach(h => {
+      h.addEventListener("dblclick", () => { focusID = h.dataset.id; maximized = true; render(); });
+    });
+    $content.querySelectorAll("[data-max]").forEach(b => {
+      b.addEventListener("click", (e) => { e.stopPropagation(); focusID = b.dataset.max; maximized = true; render(); });
+    });
+  }
+}
+
+document.querySelectorAll("#tabcount button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#tabcount button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    tabCount = parseInt(b.dataset.n, 10);
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>
