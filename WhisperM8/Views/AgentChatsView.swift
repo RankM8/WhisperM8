@@ -148,6 +148,9 @@ struct AgentChatsView: View {
     /// für den Fokus-Wechsel (Muster `isHoveringTabStrip`, kein Koordinaten-
     /// Hit-Test). internal, da Monitor (+Shortcuts) und +Grid es nutzen.
     @State var hoveredGridPaneID: UUID?
+    /// Ein Session-Drag schwebt über dem Grid — steuert die Growzone
+    /// („voll + Drop = wächst", Plan F8). internal für +Grid.
+    @State var gridDropTargeted = false
     // Die Grid-Split-Verhältnisse leben seit Schema v4 am Workspace-Entity
     // (AgentGridWorkspace.columnFractions/rowFractions); die alten globalen
     // @AppStorage-Keys agentGridColumnFraction/agentGridRowFraction liest

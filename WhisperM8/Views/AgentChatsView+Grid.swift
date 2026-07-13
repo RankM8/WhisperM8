@@ -241,36 +241,134 @@ extension AgentChatsView {
         // onHover(false) — Flag räumen, sonst selektiert ein Klick ins
         // Leere eine unsichtbare Session.
         .onChange(of: entity.slots) { _, _ in hoveredGridPaneID = nil }
-        .onDisappear { hoveredGridPaneID = nil }
-        // Tab/Sidebar-Chat aufs Grid ziehen = aufnehmen (erster freier
-        // Slot / Auto-Wachsen). Cross-Window-Drags holen den Tab zuerst in
-        // dieses Fenster — der Drop IST der explizite Transfer-Befehl.
-        // Gezielte Slot-Drops (ersetzen/tauschen) kommen mit Paket 2e.
+        .onDisappear {
+            hoveredGridPaneID = nil
+            gridDropTargeted = false
+        }
+        // Growzone (F8): Drag über dem Grid + alle Slots belegt + nächste
+        // Stufe existiert → Erweitern-Zone am unteren Rand. Auf der
+        // Endstufe 3×3 erscheint sie NICHT (Gruppen-Drop wird benannt
+        // abgelehnt; gezieltes Ersetzen bleibt).
+        .overlay(alignment: .bottom) {
+            if gridDropTargeted,
+               entity.firstFreeSlotIndex == nil,
+               let next = AgentGridWorkspace.nextCapacity(after: entity.capacity) {
+                gridGrowZone(entity: entity, nextCapacity: next)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: gridDropTargeted)
+        // Tab/Sidebar-Chat aufs Grid ziehen (Divider/Ränder) = aufnehmen
+        // (erster freier Slot / Auto-Wachsen); die Panes selbst haben
+        // eigene Slot-Drop-Zonen (ersetzen/tauschen/einfügen).
         .dropDestination(for: DraggableSession.self) { items, _ in
             guard let dropped = items.first else { return false }
-            let source = dropped.sourceWindowID ?? windowID
-            if source != windowID {
-                windowStore.moveTab(dropped.sessionID, from: source, to: windowID, before: nil)
-            }
-            addSessionToWorkspace(dropped.sessionID, workspaceID: entity.id)
+            return handleGridGroupDrop(dropped, workspaceID: entity.id)
+        } isTargeted: { gridDropTargeted = $0 }
+    }
+
+    /// Erweitern-Zone: Drop wächst auf die nächste Stufe (der Store
+    /// platziert in den ersten NEUEN Slot).
+    private func gridGrowZone(entity: AgentGridWorkspace, nextCapacity: Int) -> some View {
+        GridGrowDropZone(
+            label: "＋ Hier ablegen — „\(entity.name)“ erweitert auf \(Self.capacityLabel(nextCapacity))",
+            onDrop: { dropped in handleGridGroupDrop(dropped, workspaceID: entity.id) }
+        )
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
+    }
+
+    static func capacityLabel(_ capacity: Int) -> String {
+        switch capacity {
+        case 2: return "1×2"
+        case 3: return "2+1"
+        case 4: return "2×2"
+        case 6: return "3×2"
+        case 9: return "3×3"
+        default: return "\(capacity)"
+        }
+    }
+
+    // MARK: - Drop-Handling
+
+    /// Drop auf Grid-Fläche/Gruppe/Growzone: aufnehmen (erster freier Slot,
+    /// sonst Auto-Wachsen). Cross-Window-Drags holen den Tab zuerst in
+    /// dieses Fenster — der Drop IST der explizite Transfer-Befehl.
+    @discardableResult
+    func handleGridGroupDrop(_ payload: DraggableSession, workspaceID: UUID) -> Bool {
+        adoptCrossWindowTabIfNeeded(payload)
+        let result = windowStore.addSession(payload.sessionID, toGridWorkspace: workspaceID)
+        switch result {
+        case .full:
+            let name = windowStore.gridWorkspace(id: workspaceID)?.name ?? "Workspace"
+            errorMessage = "„\(name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
+            return false
+        case .rejected:
+            return false
+        case .added, .alreadyMember, .replaced, .swapped:
             return true
         }
     }
 
+    /// Gezielter Slot-Drop (Pane oder leerer Slot) — Semantik über den
+    /// puren `GridDropZoneResolver`, ausgeführt als EINE Store-Mutation
+    /// gegen den FRISCH gelesenen Workspace (nie den Body-Snapshot).
+    func handleGridSlotDrop(_ payload: DraggableSession, targetSlot: Int, workspaceID: UUID) -> Bool {
+        adoptCrossWindowTabIfNeeded(payload)
+        guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
+        switch GridDropZoneResolver.action(
+            sessionID: payload.sessionID,
+            sourceWorkspaceID: payload.sourceWorkspaceID,
+            sourceSlotIndex: payload.sourceSlotIndex,
+            targetSlot: targetSlot,
+            workspace: entity
+        ) {
+        case .moveSlot(let from, let to):
+            return windowStore.moveSlot(inGridWorkspace: workspaceID, from: from, to: to)
+        case .swapSlots(let first, let second):
+            return windowStore.swapSlots(inGridWorkspace: workspaceID, first, second)
+        case .place:
+            let result = windowStore.addSession(
+                payload.sessionID, toGridWorkspace: workspaceID, at: targetSlot
+            )
+            switch result {
+            case .rejected, .full: return false
+            default: return true
+            }
+        case .none:
+            return false
+        }
+    }
+
+    /// Cross-Window-Drag: Tab explizit in dieses Fenster übernehmen, damit
+    /// der Store-Add nicht am Tab-Ownership-Konflikt scheitert.
+    private func adoptCrossWindowTabIfNeeded(_ payload: DraggableSession) {
+        guard let source = payload.sourceWindowID, source != windowID,
+              windowStore.windowID(containingTab: payload.sessionID) == source else { return }
+        windowStore.moveTab(payload.sessionID, from: source, to: windowID, before: nil)
+    }
+
     /// Pane für einen Slot-Index — Session-Map kommt als Snapshot vom
-    /// Aufrufer (genau eine Berechnung pro Body-Eval).
+    /// Aufrufer (genau eine Berechnung pro Body-Eval). Jeder Slot (belegt
+    /// wie leer) ist ein gezieltes Drop-Ziel mit benannter Aktion.
     @ViewBuilder
     private func gridSlot(
         _ index: Int,
         entity: AgentGridWorkspace,
         sessionsByID: [UUID: AgentChatSession]
     ) -> some View {
-        if entity.slots.indices.contains(index),
-           let sessionID = entity.slots[index],
-           let session = sessionsByID[sessionID] {
-            gridPane(for: session, workspaceID: entity.id)
-        } else {
-            gridEmptySlot(index)
+        let occupied = entity.slots.indices.contains(index) ? entity.slots[index] : nil
+        GridSlotDropArea(
+            slotIndex: index,
+            occupiedTitle: occupied.flatMap { sessionsByID[$0]?.title },
+            onDrop: { payload in
+                handleGridSlotDrop(payload, targetSlot: index, workspaceID: entity.id)
+            }
+        ) {
+            if let sessionID = occupied, let session = sessionsByID[sessionID] {
+                gridPane(for: session, workspaceID: entity.id, slotIndex: index)
+            } else {
+                gridEmptySlot(index)
+            }
         }
     }
 
@@ -297,11 +395,14 @@ extension AgentChatsView {
         .background(AgentTheme.background)
     }
 
-    private func gridPane(for session: AgentChatSession, workspaceID: UUID) -> some View {
+    private func gridPane(for session: AgentChatSession, workspaceID: UUID, slotIndex: Int) -> some View {
         let isFocused = session.id == selectedSession?.id
         let project = workspace.projects.first { $0.id == session.projectID }
         return VStack(spacing: 0) {
-            gridPaneHeader(session, project: project, isFocused: isFocused, workspaceID: workspaceID)
+            gridPaneHeader(
+                session, project: project, isFocused: isFocused,
+                workspaceID: workspaceID, slotIndex: slotIndex
+            )
             if let project {
                 sessionDetailContent(
                     for: session,
@@ -350,7 +451,8 @@ extension AgentChatsView {
         _ session: AgentChatSession,
         project: AgentProject?,
         isFocused: Bool,
-        workspaceID: UUID
+        workspaceID: UUID,
+        slotIndex: Int
     ) -> some View {
         HStack(spacing: 8) {
             SessionLiveStatusDot(
@@ -404,6 +506,16 @@ extension AgentChatsView {
         // zusätzliches Single-Tap-Gesture, das würde den Doppelklick um die
         // Erkennungs-Verzögerung ausbremsen.
         .onTapGesture(count: 2) { maximizePane(session.id) }
+        // Drag-Quelle NUR der Pane-Header (F7) — mit voller Herkunft:
+        // gleicher Workspace = tauschen/verschieben, anderes Ziel =
+        // aufnehmen/platzieren.
+        .draggable(DraggableSession(
+            sessionID: session.id,
+            sourceProjectID: session.projectID,
+            sourceWindowID: windowID,
+            sourceWorkspaceID: workspaceID,
+            sourceSlotIndex: slotIndex
+        ))
     }
 
     // MARK: - Selektion / Tastatur
