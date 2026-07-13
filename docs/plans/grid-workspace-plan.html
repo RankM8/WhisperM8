@@ -89,6 +89,9 @@ tr.hl td { background: rgba(110,106,222,.07); }
 .badge { position: absolute; right: 10px; bottom: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--text-mute); background: var(--panel); border: 1px solid var(--border-soft); padding: 2px 8px; border-radius: 999px; pointer-events: none; z-index: 6; }
 .toast { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 9; background: var(--card); border: 1px solid var(--border); color: var(--text-soft); font-size: 12px; padding: 6px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.show { opacity: 1; }
+.growzone { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 8; display: none; align-items: center; justify-content: center; height: 44px; border: 1.5px dashed var(--indigo); border-radius: 10px; background: rgba(110,106,222,.12); color: var(--text); font-size: 12px; font-weight: 600; }
+.growzone.show { display: flex; }
+.growzone.hot { background: rgba(110,106,222,.28); }
 
 footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); color: var(--text-mute); font-size: 13px; }
 .pill { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
@@ -115,6 +118,7 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
     <span class="key">Chip → Pane = ersetzen</span>
     <span class="key">Header → Pane = tauschen</span>
     <span class="key">→ leerer Slot = einfügen</span>
+    <span class="key">volles Grid + Drop = wächst</span>
     <div class="cap-picker" id="cap">
       <button data-c="2">2</button><button data-c="3">3</button>
       <button data-c="4" class="on">2×2</button><button data-c="6">3×2</button>
@@ -126,8 +130,9 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
     <div class="chipbar" id="chips"><span class="lbl">Tabs</span></div>
     <div class="gridwrap">
       <div class="wsgrid" id="grid"></div>
-      <div class="badge">Slots bleiben stabil — nichts rückt nach, keine Automatik</div>
+      <div class="badge">Slots bleiben stabil — nichts rückt nach, keine Verdrängung</div>
       <div class="toast" id="toast"></div>
+      <div class="growzone" id="growzone">＋ Hier ablegen — Grid erweitern</div>
     </div>
   </div>
 
@@ -139,6 +144,7 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
         <li><b>Feste Slots</b> mit expliziter Belegung; leere Slots bleiben sichtbar als Drop-Fläche — Positionen sind stabil, nichts kollabiert</li>
         <li><b>Sidebar-/Tab-Klick auf einen Chat außerhalb des Workspace ändert das Grid NIE:</b> Einzelansicht öffnet sich, „Zurück zum Workspace" stellt exakt das Grid wieder her. Die Verdrängungs-Automatik (bringSelectionIntoGrid) wird ersatzlos entfernt</li>
         <li><b>Ersetzen</b> nimmt den alten Chat nur aus dem Workspace — Tab und Prozess laufen weiter</li>
+        <li><b>Auto-Wachsen — ein Drop blockiert nie:</b> Ist das Grid voll, erscheint beim Hineinziehen eine „Grid erweitern"-Zone; der Drop wächst zur nächsten Stufe (2→3→4→6→9), der neue Chat landet im ersten neuen Slot. <b>Geschrumpft wird nie automatisch</b> (stabile Positionen!) — verkleinern nur über den Picker</li>
         <li><b>Kontextmenü „Im Workspace platzieren → Slot N"</b> als präziser Weg ohne Drag (auch für Bulk)</li>
         <li>Drop-Feedback benennt die Aktion konkret: „X durch Y ersetzen", „Tauschen", Akzent-Kontur auf leeren Slots; unbeteiligte Panes dimmen</li>
         <li>Maximize/Minimize (⤢/Grid-Button) und verschiebbare Trennlinien bleiben wie gebaut; Trennlinien sind KEINE Drop-Ziele (Resize und Einfügen nie auf derselben Fläche)</li>
@@ -150,7 +156,7 @@ footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border
 <!-- ============ 02 KAPAZITÄT ============ -->
 <section>
   <h2><span class="idx">02 — KAPAZITÄT</span>Mehr als 4? Ja — bis 3×3.</h2>
-  <p class="sub">Das bisherige 4er-Limit war eine konservative Setzung (TUI-Lesbarkeit + ungemessene Performance), keine technische Grenze. Mit dem Slot-Modell und dem Performance-Paket unten fällt sie. Neue Kapazitätsstufen, im Grid-Chrome wählbar:</p>
+  <p class="sub">Das bisherige 4er-Limit war eine konservative Setzung (TUI-Lesbarkeit + ungemessene Performance), keine technische Grenze. Mit dem Slot-Modell und dem Performance-Paket unten fällt sie. Die Stufen wachsen <b>automatisch beim Reinwerfen</b> (siehe Regel oben) und sind zusätzlich manuell im Grid-Chrome wählbar:</p>
   <table class="t">
     <tr><th>Stufe</th><th>Layout</th><th>Mindest-Fensterbreite (240 pt/Pane)</th><th>Hinweis</th></tr>
     <tr><td><b>2</b></td><td>1×2 (nebeneinander)</td><td>~480 pt</td><td>heutiges Verhalten</td></tr>
@@ -341,7 +347,13 @@ function render() {
     el.addEventListener("dragstart", e => {
       e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot: null }));
       e.dataTransfer.effectAllowed = "move";
+      // Auto-Wachsen: volles Grid + externer Chat im Drag → Erweitern-Zone.
+      if (!inWS && slots.every(s => s) && nextCapacity() !== null) {
+        $grow.textContent = "＋ Hier ablegen — Grid erweitert auf " + capLabel(nextCapacity());
+        $grow.classList.add("show");
+      }
     });
+    el.addEventListener("dragend", () => $grow.classList.remove("show", "hot"));
     el.addEventListener("click", () => {
       if (inWS) { focusID = id; render(); }
       else { toast("Klick navigiert nur — Einzelansicht würde öffnen, Grid bleibt unverändert. Zum Platzieren: ziehen."); }
@@ -412,6 +424,32 @@ function render() {
     $grid.appendChild(el);
   });
 }
+
+// ---------- Auto-Wachsen: „Ein Drop blockiert nie" ----------
+const STAGES = [2, 3, 4, 6, 9];
+const $grow = document.getElementById("growzone");
+function nextCapacity() {
+  const i = STAGES.indexOf(capacity);
+  return i >= 0 && i < STAGES.length - 1 ? STAGES[i + 1] : null;
+}
+function capLabel(c) { return { 2: "1×2", 3: "2+1", 4: "2×2", 6: "3×2", 9: "3×3" }[c]; }
+$grow.addEventListener("dragover", e => { e.preventDefault(); $grow.classList.add("hot"); });
+$grow.addEventListener("dragleave", () => $grow.classList.remove("hot"));
+$grow.addEventListener("drop", e => {
+  e.preventDefault();
+  $grow.classList.remove("show", "hot");
+  try {
+    const payload = JSON.parse(e.dataTransfer.getData("text/plain"));
+    const next = nextCapacity();
+    if (!payload || !payload.id || next === null) return;
+    setCapacity(next);
+    const free = slots.indexOf(null);
+    slots[free] = payload.id;
+    focusID = payload.id;
+    toast("Grid auf " + capLabel(capacity) + " erweitert — " + CHATS[payload.id].name + " in Slot " + (free + 1));
+    render();
+  } catch (_) {}
+});
 
 document.querySelectorAll("#cap button").forEach(b =>
   b.addEventListener("click", () => setCapacity(parseInt(b.dataset.c, 10)))
