@@ -14,6 +14,10 @@ final class SettingsSourceGuardTests: XCTestCase {
             "agentSidebarScope",
             "agentSidebarLayout",
             "agentSidebarWidth",
+            // Grid-Split-Verhältnisse: Layout-State wie die Sidebar-Breite,
+            // bewusst keine Settings-Präferenz (Drag direkt an der Trennlinie).
+            "agentGridColumnFraction",
+            "agentGridRowFraction",
             "agentTranscriptViewMode"
         ]
         let allowedKeys = declaredPreferenceKeys.union(documentedUIStateKeys)

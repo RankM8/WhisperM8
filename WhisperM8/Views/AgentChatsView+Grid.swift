@@ -119,37 +119,8 @@ extension AgentChatsView {
     // MARK: - Grid-Container (bündig, 1-px-Divider)
 
     var gridWorkspace: some View {
-        Group {
-            switch gridAutoLayout {
-            case .single:
-                // Von mainWorkspace nie mit 1 Tab aufgerufen (isGridActive) —
-                // defensiver Fallback.
-                EmptyView()
-            case .cols2:
-                HStack(spacing: 1) {
-                    gridSlot(0)
-                    gridSlot(1)
-                }
-            case .twoPlusOne:
-                VStack(spacing: 1) {
-                    HStack(spacing: 1) {
-                        gridSlot(0)
-                        gridSlot(1)
-                    }
-                    gridSlot(2)
-                }
-            case .grid2x2:
-                VStack(spacing: 1) {
-                    HStack(spacing: 1) {
-                        gridSlot(0)
-                        gridSlot(1)
-                    }
-                    HStack(spacing: 1) {
-                        gridSlot(2)
-                        gridSlot(3)
-                    }
-                }
-            }
+        GeometryReader { geo in
+            gridArrangement(in: geo.size)
         }
         // Der 1-px-„Gap" zwischen den Panes IST die Trennlinie — gleiche
         // Farbe wie die übrigen Chrome-Divider. Kein Außen-Padding, keine
@@ -194,6 +165,112 @@ extension AgentChatsView {
             addSessionToGrid(dropped.sessionID)
             return true
         }
+    }
+
+    /// Layout mit variablen Split-Verhältnissen: die erste Spalte/Zeile
+    /// bekommt eine explizite Punktgröße (geclampter Wunschwert), der Rest
+    /// füllt. Die Griffe liegen als Overlays exakt auf den 1-px-Dividern.
+    @ViewBuilder
+    private func gridArrangement(in size: CGSize) -> some View {
+        let colW = GridSplitResolver.firstSize(total: size.width, fraction: gridColumnFraction)
+        let rowH = GridSplitResolver.firstSize(total: size.height, fraction: gridRowFraction)
+        switch gridAutoLayout {
+        case .single:
+            // Von mainWorkspace nie mit 1 Pane aufgerufen (isGridActive) —
+            // defensiver Fallback.
+            EmptyView()
+        case .cols2:
+            HStack(spacing: 1) {
+                gridSlot(0).frame(width: colW)
+                gridSlot(1)
+            }
+            .overlay(alignment: .leading) {
+                columnSplitHandle(totalWidth: size.width).offset(x: colW - 4)
+            }
+        case .twoPlusOne:
+            VStack(spacing: 1) {
+                HStack(spacing: 1) {
+                    gridSlot(0).frame(width: colW)
+                    gridSlot(1)
+                }
+                .frame(height: rowH)
+                // Spalten-Griff nur über der oberen Reihe — die untere Pane
+                // läuft in voller Breite durch.
+                .overlay(alignment: .leading) {
+                    columnSplitHandle(totalWidth: size.width).offset(x: colW - 4)
+                }
+                gridSlot(2)
+            }
+            .overlay(alignment: .top) {
+                rowSplitHandle(totalHeight: size.height).offset(y: rowH - 4)
+            }
+        case .grid2x2:
+            VStack(spacing: 1) {
+                HStack(spacing: 1) {
+                    gridSlot(0).frame(width: colW)
+                    gridSlot(1)
+                }
+                .frame(height: rowH)
+                HStack(spacing: 1) {
+                    gridSlot(2).frame(width: colW)
+                    gridSlot(3)
+                }
+            }
+            // EIN Verhältnis pro Achse: der Spalten-Griff verschiebt beide
+            // Reihen gemeinsam — das Grid bleibt ein Raster.
+            .overlay(alignment: .leading) {
+                columnSplitHandle(totalWidth: size.width).offset(x: colW - 4)
+            }
+            .overlay(alignment: .top) {
+                rowSplitHandle(totalHeight: size.height).offset(y: rowH - 4)
+            }
+        }
+    }
+
+    private func columnSplitHandle(totalWidth: CGFloat) -> some View {
+        GridSplitHandle(
+            axis: .column,
+            onDragChanged: { translation in
+                if gridColumnDragBase == nil {
+                    gridColumnDragBase = GridSplitResolver.firstSize(
+                        total: totalWidth, fraction: gridColumnFraction
+                    )
+                }
+                guard let base = gridColumnDragBase else { return }
+                gridColumnFraction = GridSplitResolver.fractionDuringDrag(
+                    startFirstSize: base, translation: translation, total: totalWidth
+                )
+            },
+            onDragEnded: { gridColumnDragBase = nil },
+            onDoubleClick: { gridColumnFraction = GridSplitResolver.defaultFraction },
+            onHoverChanged: { hovering in
+                // Griff-Hover unterdrückt das Pane-Klick-Routing — ein
+                // Drag-Start soll nicht nebenbei die Selektion verschieben.
+                if hovering { hoveredGridPaneID = nil }
+            }
+        )
+    }
+
+    private func rowSplitHandle(totalHeight: CGFloat) -> some View {
+        GridSplitHandle(
+            axis: .row,
+            onDragChanged: { translation in
+                if gridRowDragBase == nil {
+                    gridRowDragBase = GridSplitResolver.firstSize(
+                        total: totalHeight, fraction: gridRowFraction
+                    )
+                }
+                guard let base = gridRowDragBase else { return }
+                gridRowFraction = GridSplitResolver.fractionDuringDrag(
+                    startFirstSize: base, translation: translation, total: totalHeight
+                )
+            },
+            onDragEnded: { gridRowDragBase = nil },
+            onDoubleClick: { gridRowFraction = GridSplitResolver.defaultFraction },
+            onHoverChanged: { hovering in
+                if hovering { hoveredGridPaneID = nil }
+            }
+        )
     }
 
     @ViewBuilder

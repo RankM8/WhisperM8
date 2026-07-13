@@ -121,6 +121,17 @@ struct AgentChatsView: View {
     /// für den Fokus-Wechsel (Muster `isHoveringTabStrip`, kein Koordinaten-
     /// Hit-Test). internal, da Monitor (+Shortcuts) und +Grid es nutzen.
     @State var hoveredGridPaneID: UUID?
+    /// Split-Verhältnisse der Grid-Trennlinien (Spalten/Zeilen) — global
+    /// über alle Fenster wie die Sidebar-Breite (@AppStorage-Konvention);
+    /// angewendet wird nie der Rohwert, sondern das Clamping des
+    /// `GridSplitResolver` gegen die aktuelle Fläche. internal für +Grid.
+    @AppStorage("agentGridColumnFraction") var gridColumnFraction: Double = GridSplitResolver.defaultFraction
+    @AppStorage("agentGridRowFraction") var gridRowFraction: Double = GridSplitResolver.defaultFraction
+    /// Punktgröße der ersten Spalte/Zeile beim Drag-Beginn — Basis, auf die
+    /// die kumulative Gesten-Translation addiert wird (Muster
+    /// `sidebarDragBaseWidth`). `nil` außerhalb eines Drags.
+    @State var gridColumnDragBase: CGFloat?
+    @State var gridRowDragBase: CGFloat?
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
 
