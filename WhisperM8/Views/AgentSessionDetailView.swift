@@ -195,15 +195,20 @@ struct AgentSessionDetailView: View {
         // der bestehende Inhalt stehen (kein Flackern).
         if cachedTranscript == nil { isLoadingTranscript = true }
         Task.detached(priority: .userInitiated) {
-            // Tail-Read statt Voll-Parse: bounded Memory + bounded Zeit,
-            // egal wie groß die JSONL ist.
-            let transcript: AgentChatTranscript?
-            switch provider {
-            case .claude:
-                transcript = ClaudeTranscriptReader.readTail(cwd: cwd, sessionID: externalID, tailBytes: tailBytes)
-            case .codex:
-                transcript = CodexTranscriptReader.readTail(sessionID: externalID, tailBytes: tailBytes)
-            }
+            // Geteilter LRU-Cache (Plan F12): Workspace-Wechsel mounten bis
+            // zu 9 Offline-Panes — Cache-Hits liefern sofort, Misses teilen
+            // sich den Read (global max. 2 parallel) statt CPU und SSD
+            // gleichzeitig zu fluten. Frische via Datei-Identität
+            // (Größe + mtime); Tail-Read bleibt bounded, egal wie groß die
+            // JSONL ist.
+            let transcript = await AgentTranscriptCache.shared.transcript(
+                for: AgentTranscriptCache.Key(
+                    provider: provider,
+                    externalSessionID: externalID,
+                    cwd: cwd,
+                    tailBytes: tailBytes
+                )
+            )
             await MainActor.run {
                 // Falls der User waehrend des Loads umgeschaltet hat,
                 // diese Antwort verwerfen.

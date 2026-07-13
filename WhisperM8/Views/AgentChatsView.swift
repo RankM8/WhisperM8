@@ -142,6 +142,9 @@ struct AgentChatsView: View {
     /// Ein Session-Drag schwebt über dem Grid — steuert die Growzone
     /// („voll + Drop = wächst", Plan F8). internal für +Grid.
     @State var gridDropTargeted = false
+    /// Ausstehende Verkleinerung (Kapazitäts-Picker): erst die Vorschau
+    /// bestätigen, dann wird mit exakt dieser Eviction-Liste angewendet.
+    @State var gridShrinkRequest: GridShrinkRequest?
     // Die Grid-Split-Verhältnisse leben seit Schema v4 am Workspace-Entity
     // (AgentGridWorkspace.columnFractions/rowFractions); die alten globalen
     // @AppStorage-Keys agentGridColumnFraction/agentGridRowFraction liest
@@ -492,6 +495,21 @@ struct AgentChatsView: View {
             set: { if !$0 { renameWorkspaceTargetID = nil } }
         )) {
             renameWorkspaceSheet
+        }
+        .confirmationDialog(
+            "Workspace verkleinern?",
+            isPresented: Binding(
+                get: { gridShrinkRequest != nil },
+                set: { if !$0 { gridShrinkRequest = nil } }
+            ),
+            presenting: gridShrinkRequest
+        ) { request in
+            Button("Verkleinern — \(request.evictedTitles.count) \(request.evictedTitles.count == 1 ? "Chat verlässt" : "Chats verlassen") den Workspace", role: .destructive) {
+                commitGridShrink(request)
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { request in
+            Text("Es verlassen: \(request.evictedTitles.joined(separator: ", ")). Tabs und Prozesse bleiben erhalten — nur die Slots werden entfernt.")
         }
         // Benannte Ablehnungen (volles 3×3, blockierte Aktivierung,
         // PhpStorm-/Restore-Fehler) sichtbar machen — errorMessage hatte

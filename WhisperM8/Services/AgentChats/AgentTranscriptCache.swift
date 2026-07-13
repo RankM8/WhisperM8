@@ -1,0 +1,167 @@
+import Foundation
+
+/// Geteilter Transcript-Cache (Plan F12, Blaupause ff489fdb): Workspace-
+/// Wechsel mounten bis zu 9 Offline-Panes gleichzeitig — ohne Cache liefe
+/// je Mount ein eigener 512-KiB-Tail-Read + Parse. Der Cache teilt
+/// Ergebnisse UND laufende Reads (mehrere Mounts derselben Session warten
+/// auf denselben Task) und begrenzt die Lese-Parallelität global auf 2,
+/// damit 9 Parses nicht CPU und SSD gleichzeitig fluten.
+///
+/// Frische: der Eintrag trägt Datei-Identität (Größe + mtime); ein Lookup
+/// stattet die Datei (1 syscall) und lädt bei Abweichung neu. Ein größeres
+/// Lesefenster (`loadEarlierHistory`) ist ein eigener Key und ersetzt den
+/// kleineren Eintrag nicht unkontrolliert.
+actor AgentTranscriptCache {
+    static let shared = AgentTranscriptCache()
+
+    struct Key: Hashable {
+        let provider: AgentProvider
+        let externalSessionID: String
+        let cwd: String
+        let tailBytes: Int
+    }
+
+    private struct Entry {
+        let transcript: AgentChatTranscript?
+        let fileSize: UInt64
+        let fileModified: Date
+        var lastAccess: ContinuousClock.Instant
+    }
+
+    /// Obergrenze der gehaltenen Einträge (LRU) — 24 ≈ zwei volle
+    /// 9er-Workspaces plus Wechselreserve.
+    private let maxEntries: Int
+    /// Max. gleichzeitige Datei-Reads (CPU/SSD-Schutz).
+    private let maxConcurrentReads: Int
+
+    private var entries: [Key: Entry] = [:]
+    private var inFlight: [Key: Task<AgentChatTranscript?, Never>] = [:]
+    private var activeReads = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private let clock = ContinuousClock()
+
+    init(maxEntries: Int = 24, maxConcurrentReads: Int = 2) {
+        self.maxEntries = maxEntries
+        self.maxConcurrentReads = maxConcurrentReads
+    }
+
+    /// Transcript für die Session — Cache-Hit sofort, Miss lädt (geteilt
+    /// mit parallelen Anfragen desselben Keys, global gedrosselt).
+    func transcript(for key: Key) async -> AgentChatTranscript? {
+        let identity = Self.fileIdentity(for: key)
+
+        if var entry = entries[key],
+           let identity,
+           entry.fileSize == identity.size,
+           entry.fileModified == identity.modified {
+            entry.lastAccess = clock.now
+            entries[key] = entry
+            PerfSignposts.grid.emitEvent("grid.transcript.cacheHit")
+            return entry.transcript
+        }
+        PerfSignposts.grid.emitEvent("grid.transcript.cacheMiss")
+
+        if let running = inFlight[key] {
+            return await running.value
+        }
+
+        let task = Task<AgentChatTranscript?, Never> { [weak self] in
+            await self?.performRead(key: key, identity: identity)
+        }
+        inFlight[key] = task
+        let result = await task.value
+        inFlight[key] = nil
+        return result
+    }
+
+    /// Externe Invalidierung (FSEvent/Statuswechsel) — der nächste Lookup
+    /// lädt frisch.
+    func invalidate(externalSessionID: String) {
+        entries = entries.filter { $0.key.externalSessionID != externalSessionID }
+    }
+
+    func removeAll() {
+        entries = [:]
+    }
+
+    // MARK: - Intern
+
+    private func performRead(
+        key: Key,
+        identity: (size: UInt64, modified: Date)?
+    ) async -> AgentChatTranscript? {
+        await acquireReadSlot()
+        defer { releaseReadSlot() }
+
+        let transcript = await Task.detached(priority: .utility) {
+            Self.read(key: key)
+        }.value
+
+        if let identity {
+            entries[key] = Entry(
+                transcript: transcript,
+                fileSize: identity.size,
+                fileModified: identity.modified,
+                lastAccess: clock.now
+            )
+            evictIfNeeded()
+        }
+        return transcript
+    }
+
+    private func acquireReadSlot() async {
+        if activeReads < maxConcurrentReads {
+            activeReads += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+        activeReads += 1
+    }
+
+    private func releaseReadSlot() {
+        activeReads -= 1
+        if !waiters.isEmpty {
+            waiters.removeFirst().resume()
+        }
+    }
+
+    private func evictIfNeeded() {
+        guard entries.count > maxEntries else { return }
+        let sorted = entries.sorted { $0.value.lastAccess < $1.value.lastAccess }
+        for (key, _) in sorted.prefix(entries.count - maxEntries) {
+            entries.removeValue(forKey: key)
+        }
+    }
+
+    private static func transcriptURL(for key: Key) -> URL? {
+        switch key.provider {
+        case .claude:
+            return ClaudeTranscriptReader.transcriptURL(forCwd: key.cwd, sessionID: key.externalSessionID)
+        case .codex:
+            return CodexTranscriptReader.transcriptURL(forSessionID: key.externalSessionID)
+        }
+    }
+
+    private static func fileIdentity(for key: Key) -> (size: UInt64, modified: Date)? {
+        guard let url = transcriptURL(for: key),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? UInt64,
+              let modified = attributes[.modificationDate] as? Date else { return nil }
+        return (size, modified)
+    }
+
+    private static func read(key: Key) -> AgentChatTranscript? {
+        switch key.provider {
+        case .claude:
+            return ClaudeTranscriptReader.readTail(
+                cwd: key.cwd, sessionID: key.externalSessionID, tailBytes: key.tailBytes
+            )
+        case .codex:
+            return CodexTranscriptReader.readTail(
+                sessionID: key.externalSessionID, tailBytes: key.tailBytes
+            )
+        }
+    }
+}

@@ -231,6 +231,13 @@ extension AgentChatsView {
         // Karten: die Panes nutzen die volle Fläche.
         .background(AgentTheme.border)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Kapazitäts-Picker (F10): manuelles Wählen der Stufe; Verkleinern
+        // nur mit Vorschau + Bestätigung.
+        .overlay(alignment: .topTrailing) {
+            gridCapacityPicker(entity: entity)
+                .padding(.top, 6)
+                .padding(.trailing, 8)
+        }
         .onChange(of: selectedSessionID) { _, selected in
             guard let selected else { return }
             // F11: alter Fokus wird Hintergrund (drosselt), neuer Fokus
@@ -288,6 +295,111 @@ extension AgentChatsView {
         .dropDestination(for: DraggableSession.self) { _, _ in
             false
         } isTargeted: { gridDropTargeted = $0 }
+    }
+
+    // MARK: - Kapazitäts-Picker (F10)
+
+    /// Ausstehende Verkleinerung — trägt die BESTÄTIGTE Eviction-Liste
+    /// (`expectedEvictedSessionIDs`-Muster: eine veraltete Bestätigung kann
+    /// keine inzwischen neu platzierten Chats entfernen).
+    struct GridShrinkRequest: Identifiable {
+        let id = UUID()
+        let workspaceID: UUID
+        let capacity: Int
+        let evictedIDs: [UUID]
+        let evictedTitles: [String]
+    }
+
+    /// Kompakter Stufen-Picker im Grid-Chrome (2 · 3 · 4 · 6 · 9). Stufen,
+    /// die nicht in die aktuelle Fensterfläche passen (~240 pt je Spalte,
+    /// ~200 pt je Zeile), werden ausgeblendet — die aktuelle Stufe bleibt
+    /// immer sichtbar.
+    func gridCapacityPicker(entity: AgentGridWorkspace) -> some View {
+        let available = hostWindow?.contentLayoutRect.size ?? .zero
+        return HStack(spacing: 2) {
+            ForEach(AgentGridWorkspace.allowedCapacities, id: \.self) { stage in
+                if stage == entity.capacity || capacityStageFits(stage, in: available) {
+                    Button {
+                        requestCapacityChange(entity: entity, to: stage)
+                    } label: {
+                        Text(Self.capacityLabel(stage))
+                            .font(.system(size: 10, weight: stage == entity.capacity ? .bold : .medium).monospacedDigit())
+                            .foregroundStyle(stage == entity.capacity ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                stage == entity.capacity ? AgentTheme.accentTint : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 5)
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Kapazität \(Self.capacityLabel(stage))")
+                    .accessibilityLabel("Kapazität auf \(Self.capacityLabel(stage)) setzen")
+                }
+            }
+        }
+        .padding(3)
+        .background(AgentTheme.header.opacity(0.92), in: RoundedRectangle(cornerRadius: 7))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(AgentTheme.border, lineWidth: 1)
+        }
+    }
+
+    private func capacityStageFits(_ stage: Int, in size: CGSize) -> Bool {
+        guard size.width > 0, size.height > 0 else { return true }
+        let columns = CGFloat(AgentGridWorkspace.columns(forCapacity: stage))
+        let rows = CGFloat(AgentGridWorkspace.rows(forCapacity: stage))
+        return columns * GridSplitResolver.minPane <= size.width
+            && rows * 200 <= size.height
+    }
+
+    /// Stufe wählen: Wachsen wendet sofort an; Verkleinern zeigt die
+    /// Vorschau (welche Chats verlassen den Workspace) und verlangt die
+    /// Bestätigung.
+    func requestCapacityChange(entity: AgentGridWorkspace, to stage: Int) {
+        guard stage != entity.capacity else { return }
+        if stage > entity.capacity {
+            _ = windowStore.setCapacity(ofGridWorkspace: entity.id, to: stage)
+            return
+        }
+        let evicted = windowStore.previewCapacityChange(of: entity.id, to: stage)
+        guard !evicted.isEmpty else {
+            _ = windowStore.setCapacity(ofGridWorkspace: entity.id, to: stage)
+            return
+        }
+        let titles = evicted.map { id in
+            workspace.sessions.first { $0.id == id }?.title ?? "Chat"
+        }
+        gridShrinkRequest = GridShrinkRequest(
+            workspaceID: entity.id,
+            capacity: stage,
+            evictedIDs: evicted,
+            evictedTitles: titles
+        )
+    }
+
+    /// Bestätigte Verkleinerung anwenden — stimmt die Liste nicht mehr
+    /// (zwischenzeitlicher Drop), lehnt der Store ab und die neue Vorschau
+    /// erscheint.
+    func commitGridShrink(_ request: GridShrinkRequest) {
+        let result = windowStore.setCapacity(
+            ofGridWorkspace: request.workspaceID,
+            to: request.capacity,
+            expectedEvictedSessionIDs: request.evictedIDs
+        )
+        if case .confirmationRequired(let current) = result {
+            let titles = current.map { id in
+                workspace.sessions.first { $0.id == id }?.title ?? "Chat"
+            }
+            gridShrinkRequest = GridShrinkRequest(
+                workspaceID: request.workspaceID,
+                capacity: request.capacity,
+                evictedIDs: current,
+                evictedTitles: titles
+            )
+        }
     }
 
     /// Erweitern-Zone: Drop wächst auf die nächste Stufe (der Store
