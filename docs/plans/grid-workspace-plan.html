@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Grid-Workspace: Slots, Drag &amp; Drop, 2–9 Panes — WhisperM8 Plan</title>
+<title>Grid-Workspace: der vollständige Plan — WhisperM8</title>
 <style>
 :root {
   --bg: #101114; --panel: #1C1E23; --card: #23252C; --hover: #2A2C34;
@@ -17,7 +17,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--doc-bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
-.wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 80px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px 80px; }
 a { color: var(--indigo); }
 code { font-family: var(--mono); font-size: .85em; background: var(--card); border: 1px solid var(--border-soft); border-radius: 4px; padding: 1px 5px; }
 
@@ -25,25 +25,23 @@ header.top { padding: 52px 0 26px; }
 .status-chip { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--amber); border: 1px solid rgba(224,163,62,.4); background: rgba(224,163,62,.08); border-radius: 999px; padding: 4px 12px; margin-bottom: 16px; }
 h1 { font-size: 33px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
 h1 em { color: var(--indigo); font-style: normal; }
-.lede { color: var(--text-soft); font-size: 16.5px; max-width: 800px; margin: 0; }
+.lede { color: var(--text-soft); font-size: 16.5px; max-width: 820px; margin: 0; }
 
 section { margin-top: 50px; }
 h2 { font-size: 21px; font-weight: 650; margin: 0 0 6px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
 h2 .idx { font-family: var(--mono); font-size: 11px; color: var(--indigo); letter-spacing: .12em; display: block; margin-bottom: 6px; }
-.sub { color: var(--text-soft); margin: 0 0 20px; max-width: 800px; }
+.sub { color: var(--text-soft); margin: 0 0 20px; max-width: 820px; }
 
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .box { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; }
 .box.wide { grid-column: 1 / -1; }
 .box h3 { margin: 0 0 10px; font-size: 14.5px; }
 .box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--indigo); text-transform: uppercase; display: block; margin-bottom: 6px; }
-.box ul, .box ol { margin: 0; padding: 0 0 0 2px; list-style: none; font-size: 13.5px; color: var(--text-soft); }
+.box ul { margin: 0; padding: 0 0 0 2px; list-style: none; font-size: 13.5px; color: var(--text-soft); }
 .box li { padding: 5px 0 5px 18px; position: relative; }
 .box ul li::before { content: "›"; position: absolute; left: 0; color: var(--indigo); }
-.box ol { counter-reset: n; }
-.box ol li::before { counter-increment: n; content: counter(n) "."; position: absolute; left: 0; color: var(--indigo); font-family: var(--mono); font-size: 11px; top: 8px; }
 .box b { color: var(--text); }
-@media (max-width: 840px) { .cols { grid-template-columns: 1fr; } }
+@media (max-width: 880px) { .cols { grid-template-columns: 1fr; } }
 
 table.t { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
 table.t th, table.t td { text-align: left; padding: 10px 13px; border: 1px solid var(--border-soft); vertical-align: top; }
@@ -51,388 +49,633 @@ table.t th { background: var(--panel); font-family: var(--mono); font-size: 11px
 table.t td { color: var(--text-soft); background: rgba(255,255,255,.012); }
 table.t td b { color: var(--text); }
 tr.hl td { background: rgba(110,106,222,.07); }
+.pill { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.pill.p0 { background: rgba(229,100,90,.15); color: var(--red); }
+.pill.p1 { background: rgba(224,163,62,.15); color: var(--amber); }
+.pill.p2 { background: rgba(76,195,138,.12); color: var(--green); }
+.pill.pk1 { background: rgba(110,106,222,.15); color: var(--indigo); }
+.pill.pk2 { background: rgba(76,195,138,.12); color: var(--green); }
+.pill.pk3 { background: rgba(224,163,62,.15); color: var(--amber); }
 
 /* ---------- Demo ---------- */
-.demo-hint { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--text-soft); margin-bottom: 10px; flex-wrap: wrap; }
+.demo-hint { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-soft); margin-bottom: 10px; flex-wrap: wrap; }
 .demo-hint .key { font-family: var(--mono); font-size: 11px; background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; color: var(--text); }
 .cap-picker { display: inline-flex; gap: 2px; background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 2px; margin-left: auto; }
 .cap-picker button { font-family: var(--sans); font-size: 12px; border: 0; background: transparent; color: var(--text-mute); padding: 3px 10px; border-radius: 5px; cursor: pointer; }
 .cap-picker button.on { background: var(--indigo-soft); color: var(--text); box-shadow: inset 0 0 0 1px rgba(110,106,222,.4); }
 
-.demo { background: var(--bg); border: 1px solid #000; border-radius: 12px; overflow: hidden; box-shadow: 0 30px 70px -30px rgba(0,0,0,.8); user-select: none; }
-.chipbar { display: flex; gap: 6px; align-items: center; padding: 9px 12px; background: var(--panel); border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
-.chipbar .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-mute); margin-right: 4px; }
-.chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 7px; font-size: 12px; color: var(--text-soft); background: var(--card); border: 1px solid var(--border); cursor: grab; white-space: nowrap; }
-.chip.inws { opacity: .45; }
-.chip .slotno { font-family: var(--mono); font-size: 9px; color: var(--indigo); }
+.demo { background: var(--bg); border: 1px solid #000; border-radius: 12px; overflow: hidden; box-shadow: 0 30px 70px -30px rgba(0,0,0,.8); user-select: none; display: grid; grid-template-columns: 232px 1fr; min-height: 540px; }
+
+/* Sidebar */
+.side { background: var(--panel); border-right: 1px solid var(--border-soft); padding: 10px 8px; font-size: 12px; overflow-y: auto; }
+.side .sect { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-mute); padding: 10px 8px 5px; display: flex; align-items: center; gap: 6px; }
+.side .sect .plus { margin-left: auto; width: 16px; height: 16px; border-radius: 4px; border: 1px dashed var(--border); color: var(--text-mute); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; }
+.wsgroup { border-radius: 8px; margin-bottom: 2px; }
+.wsgroup.active { background: var(--indigo-soft); }
+.wsgroup.dropc { outline: 1.5px dashed var(--indigo); outline-offset: -1px; }
+.wshead { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.wshead:hover { background: var(--hover); }
+.wshead .avatar { width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; flex: none; }
+.wshead .nm { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wshead .cnt { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--text-mute); }
+.wshead .gridbtn { width: 18px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--text-mute); }
+.wshead:hover .gridbtn, .wsgroup.active .gridbtn { color: var(--indigo); }
+.srow { display: flex; align-items: center; gap: 7px; padding: 4px 8px 4px 20px; border-radius: 7px; color: var(--text-soft); cursor: pointer; font-size: 11.5px; }
+.srow:hover { background: var(--hover); }
+.srow.sel { background: var(--indigo-soft); color: var(--text); }
+.srow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.srow .slotno { font-family: var(--mono); font-size: 8.5px; color: var(--indigo); }
+.projhead { display: flex; align-items: center; gap: 7px; padding: 6px 8px; color: var(--text); font-weight: 600; font-size: 12px; }
+.projhead .avatar { width: 15px; height: 15px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 700; color: #fff; }
 .sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
 .sdot.g { background: var(--green); box-shadow: 0 0 6px rgba(76,195,138,.55); }
-.sdot.a { background: var(--amber); } .sdot.i { background: var(--text-mute); }
+.sdot.a { background: var(--amber); } .sdot.i { background: var(--text-mute); box-shadow: none; }
 
-.gridwrap { position: relative; height: 460px; }
+/* Main */
+.main { display: flex; flex-direction: column; min-width: 0; }
+.chipbar { display: flex; gap: 6px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+.chipbar .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-mute); margin-right: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 7px; font-size: 11.5px; color: var(--text-soft); background: var(--card); border: 1px solid var(--border); cursor: grab; white-space: nowrap; }
+.chip.inws { opacity: .5; }
+.chip .slotno { font-family: var(--mono); font-size: 8.5px; color: var(--indigo); }
+
+.gridwrap { position: relative; flex: 1; min-height: 0; }
 .wsgrid { display: grid; width: 100%; height: 100%; gap: 1px; background: var(--border-soft); }
 .slot { background: var(--bg); display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
 .slot.focus::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 2px var(--indigo); }
-.slot.dropc::before { content: attr(data-droplabel); position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(110,106,222,.18); color: var(--text); font-size: 12.5px; font-weight: 600; pointer-events: none; }
-.phead { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 26px; background: var(--panel); border-bottom: 1px solid var(--border-soft); flex: none; cursor: grab; }
-.phead .name { font-weight: 600; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot.dropc::before { content: attr(data-droplabel); position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(110,106,222,.18); color: var(--text); font-size: 12px; font-weight: 600; pointer-events: none; }
+.phead { display: flex; align-items: center; gap: 7px; padding: 0 9px; height: 25px; background: var(--panel); border-bottom: 1px solid var(--border-soft); flex: none; cursor: grab; }
+.phead .name { font-weight: 600; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot:not(.focus) .phead .name { color: var(--text-soft); font-weight: 400; }
 .phead .spring { flex: 1; }
 .pbtn { width: 18px; height: 16px; border-radius: 4px; border: 0; background: transparent; color: var(--text-mute); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; }
 .pbtn:hover { background: var(--hover); color: var(--text); }
-.pterm { flex: 1; min-height: 0; overflow: hidden; font-family: var(--mono); font-size: 10px; line-height: 1.55; padding: 7px 10px; color: var(--text-soft); }
+.pterm { flex: 1; min-height: 0; overflow: hidden; font-family: var(--mono); font-size: 9.5px; line-height: 1.55; padding: 7px 10px; color: var(--text-soft); }
 .pterm .p { color: var(--indigo); } .pterm .ok { color: var(--green); } .pterm .wn { color: var(--amber); } .pterm .dim { color: var(--text-mute); }
 .slot.empty { align-items: center; justify-content: center; background: var(--panel); }
-.slot.empty .hintbox { border: 1.5px dashed var(--border); border-radius: 10px; padding: 16px 22px; text-align: center; color: var(--text-mute); font-size: 11.5px; }
-.slot.empty .hintbox b { display: block; color: var(--text-soft); font-size: 12px; margin-bottom: 2px; }
+.slot.empty .hintbox { border: 1.5px dashed var(--border); border-radius: 10px; padding: 14px 20px; text-align: center; color: var(--text-mute); font-size: 11px; }
+.slot.empty .hintbox b { display: block; color: var(--text-soft); font-size: 11.5px; margin-bottom: 2px; }
 .slot.empty.dropc .hintbox { border-color: var(--indigo); }
 .badge { position: absolute; right: 10px; bottom: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--text-mute); background: var(--panel); border: 1px solid var(--border-soft); padding: 2px 8px; border-radius: 999px; pointer-events: none; z-index: 6; }
-.toast { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 9; background: var(--card); border: 1px solid var(--border); color: var(--text-soft); font-size: 12px; padding: 6px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 9; background: var(--card); border: 1px solid var(--border); color: var(--text-soft); font-size: 12px; padding: 6px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90%; text-align: center; }
 .toast.show { opacity: 1; }
-.growzone { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 8; display: none; align-items: center; justify-content: center; height: 44px; border: 1.5px dashed var(--indigo); border-radius: 10px; background: rgba(110,106,222,.12); color: var(--text); font-size: 12px; font-weight: 600; }
+.growzone { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 8; display: none; align-items: center; justify-content: center; height: 42px; border: 1.5px dashed var(--indigo); border-radius: 10px; background: rgba(110,106,222,.12); color: var(--text); font-size: 12px; font-weight: 600; }
 .growzone.show { display: flex; }
 .growzone.hot { background: rgba(110,106,222,.28); }
 
+/* Einzelansicht */
+.single { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.chatbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border-soft); background: var(--bg); flex: none; }
+.chatbar .meta b { display: block; font-size: 12.5px; }
+.chatbar .meta span { font-family: var(--mono); font-size: 10px; color: var(--text-mute); }
+.chatbar .spring { flex: 1; }
+.cbtn { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text-soft); font-size: 11.5px; cursor: pointer; }
+.cbtn:hover { background: var(--hover); color: var(--text); }
+.cbtn.back { border-color: rgba(110,106,222,.45); color: var(--indigo); }
+.single .pterm { font-size: 11.5px; }
+
 footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); color: var(--text-mute); font-size: 13px; }
-.pill { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
-.pill.p0 { background: rgba(229,100,90,.15); color: var(--red); }
-.pill.p1 { background: rgba(224,163,62,.15); color: var(--amber); }
-.pill.p2 { background: rgba(76,195,138,.12); color: var(--green); }
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <header class="top">
-  <div class="status-chip">Umsetzungsplan · abgestimmt, Basis: 5 Codex-Konsultationen · 2026-07-13</div>
-  <h1>Grid-<em>Workspace</em>: feste Slots, echtes Drag &amp; Drop, 2–9 Panes</h1>
-  <p class="lede">Das Grid wird vom Tab-Ausschnitt zum kuratierten Workspace: Du bestimmst, welcher Chat in welchem Slot liegt, sortierst per Drag um, ersetzt gezielt per Reinschieben — und keine Automatik verdrängt mehr irgendetwas. Produktgrundsatz: <b>Ein Klick navigiert, ein Drop kuratiert.</b> Kapazität neu: bis 3×3 = 9 Panes.</p>
+  <div class="status-chip">Vollständiger Umsetzungsplan · Stand 2026-07-13 · Basis: 5 Codex-Konsultationen + User-Entscheidungen</div>
+  <h1>Grid-<em>Workspaces</em>: benannte Chat-Gruppen, Slots, Drag &amp; Drop, 2–9 Panes</h1>
+  <p class="lede">Workspaces sind benannte, kuratierte Chat-Gruppen: sichtbar als eigener Sidebar-Abschnitt, öffenbar als Slot-Grid, laufend anpassbar per Drag &amp; Drop. Produktgrundsätze: <b>Ein Klick navigiert, ein Drop kuratiert</b> — und <b>ein Drop blockiert nie</b> (das Grid wächst automatisch bis 3×3).</p>
 </header>
 
-<!-- ============ 01 DEMO ============ -->
+<!-- ============ 01 FEATURE-ÜBERBLICK ============ -->
 <section>
-  <h2><span class="idx">01 — INTERAKTIVER MOCKUP</span>Zieh es dir zurecht</h2>
-  <p class="sub">Alles echt draggable: <b>Chips oben</b> (deine Tabs) auf eine Pane ziehen = <b>ersetzen</b>, auf einen leeren Slot = <b>einfügen</b>. <b>Pane-Header</b> auf eine andere Pane ziehen = <b>tauschen</b>, auf einen leeren Slot = <b>verschieben</b>. Klick auf eine Pane = Fokus. ⊖ leert den Slot (Tab bleibt). Rechts die Kapazität — bis 3×3.</p>
+  <h2><span class="idx">01 — ÜBERBLICK</span>Alle Features, die gebaut werden</h2>
+  <table class="t">
+    <tr><th>#</th><th>Feature</th><th>Paket</th></tr>
+    <tr><td>F1</td><td><b>perf.grid-Signposts + 4-Pane-Benchmark</b> — Budgets für Grid-Aufbau (50 ms), Fokuswechsel (33 ms), Divider-Tick (16 ms), Streaming-Frame (16,7 ms)</td><td><span class="pill pk1">Paket 1</span></td></tr>
+    <tr><td>F2</td><td><b>Divider-Drag entkoppelt</b> — Live-Wert lokal, Persistenz-Commit beim Loslassen, Pane-/PTY-Resize im 33–50-ms-Hybrid-Takt</td><td><span class="pill pk1">Paket 1</span></td></tr>
+    <tr><td>F3</td><td><b>SwiftTerm-Fork-Rebase</b> — PTY-Backpressure (#574, Anti-Freeze) + Resize-Fix (#573: 30–70 ms → 0,3 ms)</td><td><span class="pill pk1">Paket 1</span></td></tr>
+    <tr><td>F4</td><td><b>Workspace-Entities</b> — benannte, projektübergreifende Chat-Gruppen mit eigenem Slot-Layout (Kapazität, Belegung, Splits), global persistiert; Chat darf in mehreren Workspaces sein; Fenster referenziert den aktiven Workspace</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F5</td><td><b>Sidebar-Abschnitt WORKSPACES</b> — einklappbar, volle Chat-Listen-Optik (Gruppen-Header + SessionListButton-Rows mit Live-Status); Klick auf Header/⊞ = Grid öffnen, Klick auf Chat-Row = normal laden; unsichtbar bei null Workspaces</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F6</td><td><b>Slot-Grid mit stabilen Positionen</b> — feste Slots, leere Slots bleiben sichtbar, nichts rückt nach; Verdrängungs-Automatik ersatzlos entfernt</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F7</td><td><b>Volles Drag &amp; Drop</b> — Pane-Header ziehen = tauschen/verschieben; Tab/Sidebar-Chat auf Pane = ersetzen, auf leeren Slot = einfügen; Drag auf eine Workspace-Gruppe in der Sidebar = aufnehmen; Kontextmenü „Im Workspace platzieren → Slot N" als präziser Weg ohne Drag</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F8</td><td><b>Auto-Wachsen</b> — volles Grid + Drop → Erweitern-Zone, Stufe wächst 2→3→4→6→9; nie automatisches Schrumpfen</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F9</td><td><b>Einzelansicht-Navigation</b> — Klick auf einen Chat außerhalb des Workspace ändert das Grid nie; „Zurück zum Workspace ‹Name›" stellt es exakt wieder her; Maximize/Minimize bleiben</td><td><span class="pill pk2">Paket 2</span></td></tr>
+    <tr><td>F10</td><td><b>Kapazitäten 6 (3×2) und 9 (3×3)</b> — Fraction-Arrays für Splits, Freischaltung nach grünem Benchmark; Mindest-Pane 240 pt als natürliche Grenze</td><td><span class="pill pk3">Paket 3</span></td></tr>
+    <tr><td>F11</td><td><b>Feed-Drosselung nicht-fokussierter Panes</b> (20–30 Hz, ohne Fork) + <b>Metal-Renderer per A/B zum Default</b>; danach datengetrieben: Monitor-Router, Occlusion-Pause</td><td><span class="pill pk3">Paket 3</span></td></tr>
+  </table>
+</section>
+
+<!-- ============ 02 DEMO ============ -->
+<section>
+  <h2><span class="idx">02 — INTERAKTIVER MOCKUP</span>Die komplette UI zum Anfassen</h2>
+  <p class="sub">Links die Sidebar mit dem neuen <b>WORKSPACES</b>-Abschnitt (unter Gepinnt, über den Projekten). Klick auf einen Workspace-Header öffnet sein Grid; Klick auf eine Chat-Row lädt den Chat normal (Einzelansicht mit „Zurück zum Workspace"). Alles draggable: Chips/Sidebar-Chats auf Panes (ersetzen), auf leere Slots (einfügen), auf Workspace-Gruppen (aufnehmen); Pane-Header aufeinander (tauschen). Volles Grid + Drop = wächst automatisch.</p>
 
   <div class="demo-hint">
+    <span class="key">Header-Klick = Grid</span>
+    <span class="key">Row-Klick = Einzelansicht</span>
     <span class="key">Chip → Pane = ersetzen</span>
     <span class="key">Header → Pane = tauschen</span>
-    <span class="key">→ leerer Slot = einfügen</span>
-    <span class="key">volles Grid + Drop = wächst</span>
+    <span class="key">Drop auf Gruppe = aufnehmen</span>
+    <span class="key">voll + Drop = wächst</span>
     <div class="cap-picker" id="cap">
       <button data-c="2">2</button><button data-c="3">3</button>
-      <button data-c="4" class="on">2×2</button><button data-c="6">3×2</button>
+      <button data-c="4">2×2</button><button data-c="6">3×2</button>
       <button data-c="9">3×3</button>
     </div>
   </div>
 
   <div class="demo">
-    <div class="chipbar" id="chips"><span class="lbl">Tabs</span></div>
-    <div class="gridwrap">
-      <div class="wsgrid" id="grid"></div>
-      <div class="badge">Slots bleiben stabil — nichts rückt nach, keine Verdrängung</div>
-      <div class="toast" id="toast"></div>
-      <div class="growzone" id="growzone">＋ Hier ablegen — Grid erweitern</div>
+    <aside class="side" id="side"></aside>
+    <div class="main">
+      <div class="chipbar" id="chips"><span class="lbl">Tabs</span></div>
+      <div class="gridwrap">
+        <div id="content" style="position:absolute; inset:0;"></div>
+        <div class="badge" id="badge"></div>
+        <div class="toast" id="toast"></div>
+        <div class="growzone" id="growzone">＋ Hier ablegen — Grid erweitern</div>
+      </div>
     </div>
   </div>
+</section>
 
-  <div class="cols" style="margin-top:14px;">
-    <div class="box wide">
-      <span class="tag">Regeln (aus der UX-Konsultation, verbindlich für die Umsetzung)</span>
-      <h3>„Ein Klick navigiert, ein Drop kuratiert"</h3>
+<!-- ============ 03 REGELN ============ -->
+<section>
+  <h2><span class="idx">03 — REGELN</span>Die verbindliche Interaktions-Spezifikation</h2>
+  <div class="cols">
+    <div class="box">
+      <span class="tag">Grundsatz 1</span>
+      <h3>Ein Klick navigiert, ein Drop kuratiert</h3>
       <ul>
-        <li><b>Feste Slots</b> mit expliziter Belegung; leere Slots bleiben sichtbar als Drop-Fläche — Positionen sind stabil, nichts kollabiert</li>
-        <li><b>Sidebar-/Tab-Klick auf einen Chat außerhalb des Workspace ändert das Grid NIE:</b> Einzelansicht öffnet sich, „Zurück zum Workspace" stellt exakt das Grid wieder her. Die Verdrängungs-Automatik (bringSelectionIntoGrid) wird ersatzlos entfernt</li>
-        <li><b>Ersetzen</b> nimmt den alten Chat nur aus dem Workspace — Tab und Prozess laufen weiter</li>
-        <li><b>Auto-Wachsen — ein Drop blockiert nie:</b> Ist das Grid voll, erscheint beim Hineinziehen eine „Grid erweitern"-Zone; der Drop wächst zur nächsten Stufe (2→3→4→6→9), der neue Chat landet im ersten neuen Slot. <b>Geschrumpft wird nie automatisch</b> (stabile Positionen!) — verkleinern nur über den Picker</li>
-        <li><b>Kontextmenü „Im Workspace platzieren → Slot N"</b> als präziser Weg ohne Drag (auch für Bulk)</li>
-        <li>Drop-Feedback benennt die Aktion konkret: „X durch Y ersetzen", „Tauschen", Akzent-Kontur auf leeren Slots; unbeteiligte Panes dimmen</li>
-        <li>Maximize/Minimize (⤢/Grid-Button) und verschiebbare Trennlinien bleiben wie gebaut; Trennlinien sind KEINE Drop-Ziele (Resize und Einfügen nie auf derselben Fläche)</li>
+        <li>Sidebar-/Tab-Klick auf einen Chat außerhalb des aktiven Workspace ändert das Grid <b>nie</b> — Einzelansicht öffnet sich, „Zurück zum Workspace ‹Name›" stellt es exakt wieder her</li>
+        <li>Klick auf einen Chat, der IM aktiven Grid liegt → dessen Pane wird fokussiert</li>
+        <li>Nur Drops und der Platzieren-Befehl verändern die Belegung; <code>bringSelectionIntoGrid</code> + Verdrängungs-Automatik werden ersatzlos entfernt</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Grundsatz 2</span>
+      <h3>Stabile Positionen + Auto-Wachsen</h3>
+      <ul>
+        <li>Feste Slots; ⊖ leert nur den Slot (Tab + Prozess bleiben), nichts rückt nach</li>
+        <li><b>Ein Drop blockiert nie:</b> volles Grid + Drop → Erweitern-Zone → nächste Stufe (2→3→4→6→9), neuer Chat in den ersten neuen Slot</li>
+        <li>Nie automatisches Schrumpfen — verkleinern nur über den Kapazitäts-Picker (zeigt vorher, welche Chats den Workspace verlassen)</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Drag &amp; Drop-Matrix</span>
+      <h3>Quelle × Ziel</h3>
+      <ul>
+        <li><b>Pane-Header → belegte Pane:</b> tauschen · <b>→ leerer Slot:</b> verschieben (Quellslot wird leer)</li>
+        <li><b>Tab/Sidebar-Chat → belegte Pane:</b> gezielt ersetzen (ersetzter Chat bleibt als Tab) · <b>→ leerer Slot:</b> einfügen</li>
+        <li><b>Chat → Workspace-Gruppe (Sidebar):</b> aufnehmen (erster freier Slot, sonst Auto-Wachsen)</li>
+        <li>Drop-Feedback benennt die Aktion („X durch Y ersetzen", „Tauschen"); Trennlinien sind KEINE Drop-Ziele (Resize-Griffe bleiben)</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Sidebar-Workspaces</span>
+      <h3>Wie Projekte, eigener Reiter</h3>
+      <ul>
+        <li>Eigener einklappbarer Abschnitt <b>unter GEPINNT, über den Projekten</b>; unsichtbar bei null Workspaces</li>
+        <li>Volle Chat-Listen-Optik: Gruppen-Header (Farbe/Initial + Name + Zähler + ⊞) und darunter unveränderte <code>SessionListButton</code>-Rows (Live-Status, Kontextmenü, Slot-Nummer als Badge)</li>
+        <li>Anlegen: ＋ im Abschnitts-Header, „Neuer Workspace aus Auswahl" (Multi-Select), Umbenennen/Farbe/Löschen per Kontextmenü — Löschen löscht nie Chats</li>
+        <li><b>Projektübergreifend</b> (Arbeitskontexte, keine Projektstruktur) und <b>Mehrfach-Mitgliedschaft</b> erlaubt (Referenzen, wie Playlists)</li>
       </ul>
     </div>
   </div>
 </section>
 
-<!-- ============ 02 KAPAZITÄT ============ -->
+<!-- ============ 04 KAPAZITÄT ============ -->
 <section>
-  <h2><span class="idx">02 — KAPAZITÄT</span>Mehr als 4? Ja — bis 3×3.</h2>
-  <p class="sub">Das bisherige 4er-Limit war eine konservative Setzung (TUI-Lesbarkeit + ungemessene Performance), keine technische Grenze. Mit dem Slot-Modell und dem Performance-Paket unten fällt sie. Die Stufen wachsen <b>automatisch beim Reinwerfen</b> (siehe Regel oben) und sind zusätzlich manuell im Grid-Chrome wählbar:</p>
+  <h2><span class="idx">04 — KAPAZITÄT</span>2 bis 9 Panes pro Workspace</h2>
+  <p class="sub">Jeder Workspace merkt sich Kapazität, Belegung und Split-Verhältnisse selbst. Stufen wachsen automatisch beim Reinwerfen und sind manuell im Grid-Chrome wählbar; auf kleinen Fenstern blendet der Picker unpassende Stufen aus (Mindest-Pane ~240 pt).</p>
   <table class="t">
-    <tr><th>Stufe</th><th>Layout</th><th>Mindest-Fensterbreite (240 pt/Pane)</th><th>Hinweis</th></tr>
-    <tr><td><b>2</b></td><td>1×2 (nebeneinander)</td><td>~480 pt</td><td>heutiges Verhalten</td></tr>
-    <tr><td><b>3</b></td><td>2 oben + 1 breit</td><td>~480 pt</td><td>heutiges Verhalten</td></tr>
-    <tr><td><b>4</b></td><td>2×2</td><td>~480 pt</td><td>heutiges Verhalten</td></tr>
-    <tr class="hl"><td><b>6</b></td><td>3×2 (3 Spalten, 2 Zeilen)</td><td>~720 pt</td><td>neu — nach Performance-Paket 1</td></tr>
-    <tr class="hl"><td><b>9</b></td><td>3×3</td><td>~720 pt breit, ~600 pt hoch</td><td>neu — nach Performance-Paket 1</td></tr>
+    <tr><th>Stufe</th><th>Layout</th><th>Mindest-Fensterbreite</th><th>Status</th></tr>
+    <tr><td><b>2</b> / <b>3</b> / <b>4</b></td><td>1×2 · 2 oben + 1 breit · 2×2</td><td>~480 pt</td><td>Paket 2</td></tr>
+    <tr class="hl"><td><b>6</b></td><td>3×2</td><td>~720 pt</td><td>Paket 3 — nach grünem Benchmark</td></tr>
+    <tr class="hl"><td><b>9</b></td><td>3×3</td><td>~720 pt breit, ~600 pt hoch</td><td>Paket 3 — nach grünem Benchmark</td></tr>
   </table>
-  <div class="cols" style="margin-top:14px;">
-    <div class="box">
-      <span class="tag">Natürliche Grenze</span>
-      <h3>Mindest-Pane statt Hardcap</h3>
-      <ul>
-        <li>Pro Pane gelten ~240 pt Mindestbreite (GridSplitResolver.minPane) — auf kleinen Fenstern blendet der Kapazitäts-Picker Stufen aus, die nicht passen, statt Matchbox-Terminals zu rendern</li>
-        <li>8 (4×2) lassen wir bewusst weg: 4 Spalten unterschreiten auf üblichen Fenstern die Lesbarkeit; 3×3 deckt „viele auf einmal" ab. Nachrüstbar, falls du es brauchst</li>
-      </ul>
-    </div>
-    <div class="box">
-      <span class="tag">Trennlinien bei 3 Spalten/Zeilen</span>
-      <h3>Splits werden Arrays</h3>
-      <ul>
-        <li>Heute: EIN Verhältnis pro Achse. Bei 3 Spalten werden daraus zwei Divider pro Achse → <code>GridSplitResolver</code> wird auf Fraction-Arrays verallgemeinert (pure Logik + Tests, gleiche Clamping-Regeln)</li>
-        <li>Doppelklick auf eine Linie = diese Achse zurück auf Gleichverteilung</li>
-      </ul>
-    </div>
-  </div>
 </section>
 
-<!-- ============ 03 PERFORMANCE ============ -->
+<!-- ============ 05 PERFORMANCE ============ -->
 <section>
-  <h2><span class="idx">03 — PERFORMANCE</span>Voraussetzung für 6–9 Panes: das Messprogramm</h2>
-  <p class="sub">Zwei Codex-Analysen (Code + externe Recherche) sind sich einig: Der dominante Hotspot ist der ungepufferte Divider-Drag-Pfad, nicht das Streaming. Und unser SwiftTerm-Fork verpasst zwei Upstream-Fixes, die genau die BridgeSpace-artigen Freezes verhindern. Priorisiert:</p>
+  <h2><span class="idx">05 — PERFORMANCE</span>Das Messprogramm (Voraussetzung für 6–9)</h2>
+  <p class="sub">Befund der beiden Performance-Konsultationen: Der dominante Hotspot ist der ungepufferte Divider-Drag-Pfad (jeder Maus-Tick invalidiert den Fenster-Body, <code>headerTabs</code> wird ~12× neu berechnet), und unser SwiftTerm-Fork verpasst zwei kritische Upstream-Fixes.</p>
   <table class="t">
     <tr><th></th><th>Maßnahme</th><th>Effekt</th></tr>
-    <tr><td><span class="pill p0">P0</span></td><td><b>perf.grid-Signposts + 4-Pane-Benchmark</b> (Budgets: Grid-Aufbau 50 ms, Fokuswechsel 33 ms, Divider-Tick 16 ms, Streaming-Frame 16,7 ms)</td><td>Erst messen — jede weitere Maßnahme wird belegbar</td></tr>
-    <tr><td><span class="pill p0">P0</span></td><td><b>Divider-Drag entkoppeln:</b> Live-Wert lokal, @AppStorage-Commit erst beim Loslassen (Sidebar-Muster); Pane-/PTY-Resize auf 33–50-ms-Takt (Hybrid), finaler Flush</td><td>Beseitigt Body-Re-Eval pro Maus-Tick + Reflow-Stürme</td></tr>
-    <tr><td><span class="pill p0">P0</span></td><td><b>SwiftTerm-Fork rebasen</b> (mind. PR #574 PTY-Backpressure + PR #573 Resize-Fix: 30–70 ms → 0,3 ms)</td><td>Verhindert Freeze-/Speicherpfad, Divider-Drag ×N Panes wird billig</td></tr>
-    <tr><td><span class="pill p1">P1</span></td><td><b>Feed-Drosselung nicht-fokussierter Panes</b> (20–30 Hz statt 60, via dataReceived-Override — kein Fork nötig); Fokus-Pane volle Rate, Flush bei Fokuswechsel</td><td>Halbiert Frame-Arbeit im 4er-Grid; macht 6–9 realistisch</td></tr>
-    <tr><td><span class="pill p1">P1</span></td><td><b>Metal-Renderer per A/B zum Default</b> (perFrameAggregated vs. perRowPersistent mit echten TUIs messen)</td><td>CoreText-CPU-Last runter</td></tr>
-    <tr><td><span class="pill p2">P2</span></td><td>Geteilter NSEvent-Monitor-Router (heute 2 Monitore PRO Terminal-Controller), Occlusion-Pause bei verdecktem Fenster, headerTabs-Snapshot statt ~12 Neuberechnungen pro Body-Eval</td><td>Aufräumarbeiten, datengetrieben</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td>perf.grid-Signposts + fester 4-Pane-Benchmark</td><td>Jede weitere Maßnahme wird belegbar</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td>Divider-Drag entkoppeln (lokaler Live-Wert, Commit bei DragEnd, 33–50-ms-Resize-Hybrid)</td><td>Body-Re-Eval pro Maus-Tick + Reflow-Stürme weg</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td>SwiftTerm-Rebase: PTY-Backpressure (#574) + Resize-Fix (#573)</td><td>Anti-Freeze; Divider-Drag ×N Panes wird billig</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td>Feed-Drosselung nicht-fokussierter Panes (20–30 Hz via dataReceived-Override)</td><td>Halbiert Frame-Arbeit; macht 6–9 realistisch</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td>Metal-Renderer per A/B zum Default (perFrameAggregated vs. perRowPersistent)</td><td>CoreText-CPU-Last runter</td></tr>
+    <tr><td><span class="pill p2">P2</span></td><td>Geteilter NSEvent-Monitor-Router · Occlusion-Pause · headerTabs-Snapshot</td><td>Datengetriebene Aufräumarbeiten</td></tr>
   </table>
 </section>
 
-<!-- ============ 04 TECHNIK ============ -->
+<!-- ============ 06 TECHNIK ============ -->
 <section>
-  <h2><span class="idx">04 — TECHNIK</span>Wie es gebaut wird (Machbarkeit verifiziert)</h2>
+  <h2><span class="idx">06 — TECHNIK</span>Wie es gebaut wird (Machbarkeit gegen den Code verifiziert)</h2>
   <div class="cols">
     <div class="box">
       <span class="tag">Datenmodell</span>
-      <h3>gridSlots: [UUID?] statt Mitglieder-Liste</h3>
+      <h3>Workspace als Entity, nicht Fenster-Zustand</h3>
       <ul>
-        <li>Neuer JSON-Key, Länge 2–9; <code>nil</code> = leerer Slot. <code>gridSessionIDs</code> wird nur noch als Legacy gelesen (Migration in Bildschirm-Reihenfolge)</li>
-        <li>Manueller Decoder mit decodeIfPresent (etabliertes Muster gegen den dokumentierten Tab-State-Totalverlust)</li>
-        <li><code>normalizedWindows</code>: geschlossene Tabs werden am Index zu <code>nil</code> — <b>nicht</b> kompaktiert, Positionen bleiben stabil</li>
+        <li><code>AgentGridWorkspace { id, name, colorHex, slots: [UUID?], capacity, columnFractions, rowFractions }</code> — global in <code>agent-ui-state.json</code>, Liste + Reihenfolge</li>
+        <li>Fenster referenziert nur <code>activeWorkspaceID</code> + <code>showsGrid</code>; die bisherigen <code>gridSessionIDs</code> werden einmalig in einen Default-Workspace migriert (Legacy-Key bleibt lesbar)</li>
+        <li>Manueller Decoder mit decodeIfPresent (etabliertes Muster gegen den dokumentierten Tab-State-Totalverlust); Normalisierung: geschlossene/archivierte Sessions werden am Slot-Index zu <code>nil</code> — nie kompaktiert</li>
+        <li>Slots referenzieren Sessions (nicht Tabs) — Öffnen eines Workspace stellt fehlende Tabs her</li>
       </ul>
     </div>
     <div class="box">
       <span class="tag">Drag &amp; Drop</span>
       <h3>DropDelegate-Muster + Slot-Herkunft</h3>
       <ul>
-        <li><code>GridPaneDropDelegate</code> nach dem bewährten TabReorderDropDelegate-Muster (liefert Zonen + Move-Semantik); pure <code>GridDropZoneResolver</code>-Logik, unit-getestet</li>
-        <li><code>DraggableSession</code> bekommt optionales <code>sourceGridSlotIndex</code> → eindeutige Swap- vs. Replace-Entscheidung; alte Payloads bleiben decodierbar</li>
-        <li>Drag-Quelle: nur der Pane-Header (Terminal-Selektion bleibt ungestört); Doppelklick-Maximize bleibt</li>
+        <li><code>GridPaneDropDelegate</code> nach dem bewährten TabReorderDropDelegate-Muster; pure <code>GridDropZoneResolver</code>- und <code>WorkspaceSlotOps</code>-Logik (Swap/Replace/Insert/Grow), unit-getestet</li>
+        <li><code>DraggableSession</code> + optionales <code>sourceGridSlotIndex</code> (alte Payloads bleiben decodierbar); Sidebar-Workspace-Gruppen werden Drop-Ziele</li>
+        <li>Drag-Quelle: nur Pane-Header; Doppelklick-Maximize bleibt; Fokus nach Slot-Mutation explizit neu setzen; Frames atomar committen (CATransaction)</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Sidebar</span>
+      <h3>Wiederverwendung statt Neubau</h3>
+      <ul>
+        <li>Abschnitt nach dem GEPINNT-Muster (einklappbar, persistiert); Gruppen nach dem <code>ProjectChatGroup</code>-/<code>ArchiveProjectGroup</code>-Muster; Rows = unveränderte <code>SessionListButton</code></li>
+        <li>Slot-Badge in der Row (S1–S9) zeigt die Platzierung; Kontextmenü erweitert um „Zu Workspace hinzufügen →" / „Aus Workspace entfernen"</li>
       </ul>
     </div>
     <div class="box">
       <span class="tag">SwiftTerm</span>
-      <h3>Tausch ohne Prozessverlust</h3>
+      <h3>Kein Prozessverlust, keine Überraschungen</h3>
       <ul>
-        <li>PTY/Scrollback hängen an der sessionID-Registry, nicht am Slot — Swap = zwei Re-Attaches, kein Neustart (verifiziert)</li>
-        <li>Härtung: Fokus nach Slot-Mutation explizit neu setzen (selectedSessionID ändert sich beim Tausch nicht) + Frames atomar in einer CATransaction committen (kein Flackern)</li>
-      </ul>
-    </div>
-    <div class="box">
-      <span class="tag">Was entfällt</span>
-      <h3>Aufräumen</h3>
-      <ul>
-        <li><code>bringSelectionIntoGrid</code> + Verdrängungs-Automatik: ersatzlos raus</li>
-        <li>Ganzflächiges Grid-dropDestination → ersetzt durch per-Slot-Ziele</li>
-        <li>Degenerierte-Mitgliedschaft-Heuristik („≤1 → Default") → leere Slots sind jetzt legal</li>
+        <li>PTY/Scrollback hängen an der sessionID-Registry — Workspace-Wechsel und Slot-Tausch sind reine Re-Attaches (verifiziert)</li>
+        <li>Nur die Fokus-Pane bekommt Auto-Launch/-Fokus (<code>suppressesAutoActivation</code> bleibt); Workspace-Öffnen startet nie ungefragt Prozesse</li>
       </ul>
     </div>
   </div>
 </section>
 
-<!-- ============ 05 PAKETE ============ -->
+<!-- ============ 07 PAKETE ============ -->
 <section>
-  <h2><span class="idx">05 — REIHENFOLGE</span>Drei Pakete, einzeln shipbar</h2>
+  <h2><span class="idx">07 — REIHENFOLGE</span>Drei Pakete, einzeln shipbar</h2>
   <table class="t">
     <tr><th>Paket</th><th>Inhalt</th><th>Aufwand</th></tr>
-    <tr><td><b>1 — Perf-Fundament</b></td><td>perf.grid-Signposts + Benchmark, Divider-Drag-Entkopplung (lokaler Live-Wert, 33–50-ms-Resize-Hybrid), SwiftTerm-Fork-Rebase (#573/#574)</td><td>~1–2 Tage</td></tr>
-    <tr><td><b>2 — Slot-Workspace</b></td><td>gridSlots-Modell + Migration, Drag &amp; Drop (Swap/Replace/Insert), leere Slots, Automatik-Entfernung, Einzelansicht mit „Zurück zum Workspace", Kontextmenü-Platzierung, Kapazitäts-Picker 2/3/4</td><td>~5–8 Tage</td></tr>
-    <tr><td><b>3 — Skalierung</b></td><td>Kapazitäten 6 + 9 (Fraction-Arrays für Splits), Feed-Drosselung nicht-fokussierter Panes, Metal-A/B → Default; Freischaltung 6–9 nach grünem Benchmark</td><td>~2–3 Tage</td></tr>
+    <tr><td><span class="pill pk1">Paket 1</span><br><b>Perf-Fundament</b></td><td>F1 Signposts + Benchmark · F2 Divider-Entkopplung · F3 SwiftTerm-Rebase</td><td>~1–2 Tage</td></tr>
+    <tr><td><span class="pill pk2">Paket 2</span><br><b>Workspaces</b></td><td>F4 Entities + Migration · F5 Sidebar-Abschnitt · F6 Slot-Grid · F7 Drag &amp; Drop · F8 Auto-Wachsen · F9 Einzelansicht-Navigation — inkl. Kapazitäten 2/3/4</td><td>~7–11 Tage</td></tr>
+    <tr><td><span class="pill pk3">Paket 3</span><br><b>Skalierung</b></td><td>F10 Kapazitäten 6/9 (Fraction-Arrays, Freischaltung nach Benchmark) · F11 Feed-Drosselung + Metal-A/B, danach P2-Maßnahmen datengetrieben</td><td>~2–3 Tage</td></tr>
   </table>
   <div class="cols" style="margin-top:14px;">
     <div class="box wide">
       <span class="tag">Warum diese Reihenfolge</span>
       <h3>Erst messen, dann umbauen, dann skalieren</h3>
       <ul>
-        <li>Paket 1 ist klein, sofort spürbar (Divider-Drag) und misst die Pakete 2+3 gleich mit</li>
-        <li>Paket 2 ist der eigentliche Workspace-Umbau — dein Kernanliegen</li>
-        <li>Paket 3 schaltet 6–9 Panes erst frei, wenn der Benchmark zeigt, dass 9 streamende TUIs die Budgets halten — kein Blindflug</li>
+        <li>Paket 1 ist klein, sofort spürbar (Divider-Drag) und misst Paket 2+3 gleich mit</li>
+        <li>Paket 2 baut direkt auf Workspace-Entities — kein Zwischenschritt über Fenster-Slots, der sofort wieder migriert werden müsste</li>
+        <li>Paket 3 schaltet 6–9 erst frei, wenn der Benchmark zeigt, dass 9 streamende TUIs die Budgets halten</li>
       </ul>
     </div>
   </div>
 </section>
 
 <footer>
-  WhisperM8 · Grid-Workspace-Plan · 2026-07-13 · Basis: 5 Codex-Konsultationen (UX 510e8456 · Recherche b778a065 · Machbarkeit 5a85b81b · Perf-Recherche dc7409f5 · Perf-Code d4450222) · Textplan: <code>docs/plans/split-grid-agenten.md</code> · Vorgänger-Konzept: <code>grid-maximize-minimize-konzept.html</code>
+  WhisperM8 · Grid-Workspace-Plan (vollständig) · 2026-07-13 · Codex-Konsultationen: UX 510e8456 · Recherche b778a065 · Machbarkeit 5a85b81b · Perf-Recherche dc7409f5 · Perf-Code d4450222 · Textplan: <code>docs/plans/split-grid-agenten.md</code> · Vorgänger: <code>grid-maximize-minimize-konzept.html</code>
 </footer>
 </div>
 
 <script>
-// ---------- Demo-Zustand ----------
-const CHATS = {
-  a: { name: "BridgeMind-Features", dot: "g", lines: ['<span class="dim">●</span> swift test --filter Grid', '  <span class="ok">✓ 22 passed (0.4s)</span>', '<span class="p">❯</span> <span class="dim">Prompt …</span>'] },
-  b: { name: "Session-Resume-Bug", dot: "g", lines: ['<span class="p">❯</span> git check-ignore .playwright-mcp/', '<span class="ok">Erledigt (183088b)</span>'] },
-  c: { name: "Dashboard-Dev-Server", dot: "a", lines: ['<span class="dim">●</span> npm run dev -- --port 4321', '<span class="wn">? Server neu starten? (y/n)</span>'] },
-  d: { name: "Plugin-Audit", dot: "i", lines: ['<span class="dim">Zusammenfassung · vor 15 Std.</span>', '<span class="dim">(Transcript-Ansicht)</span>'] },
-  e: { name: "Jira-Zugriff AKQ", dot: "g", lines: ['<span class="dim">●</span> curl -s api/board/AKQ …', '  <span class="ok">✓ 12 Tickets gelesen</span>'] },
-  f: { name: "Release 2.9", dot: "i", lines: ['<span class="dim">●</span> make dmg', '<span class="dim">(wartet)</span>'] }
+// ================= Demo-Daten =================
+const PROJECTS = {
+  wm8: { name: "whisperm8", color: "#6E6ADE", initial: "W" },
+  hb: { name: "heartbeat", color: "#E0655A", initial: "H" },
+  akq: { name: "akquise-ai", color: "#3E8E63", initial: "A" }
 };
+const CHATS = {
+  a: { name: "BridgeMind-Features", proj: "wm8", dot: "g", lines: ['<span class="dim">●</span> swift test --filter Grid', '  <span class="ok">✓ 22 passed (0.4s)</span>', '<span class="p">❯</span> <span class="dim">Prompt …</span>'] },
+  b: { name: "Session-Resume-Bug", proj: "wm8", dot: "g", lines: ['<span class="p">❯</span> git check-ignore .playwright-mcp/', '<span class="ok">Erledigt (183088b)</span>'] },
+  c: { name: "Dashboard-Dev-Server", proj: "wm8", dot: "a", lines: ['<span class="dim">●</span> npm run dev -- --port 4321', '<span class="wn">? Server neu starten? (y/n)</span>'] },
+  d: { name: "Plugin-Audit", proj: "wm8", dot: "i", lines: ['<span class="dim">Zusammenfassung · vor 15 Std.</span>', '<span class="dim">(Transcript-Ansicht)</span>'] },
+  e: { name: "Jira-Zugriff AKQ", proj: "akq", dot: "g", lines: ['<span class="dim">●</span> curl -s api/board/AKQ …', '  <span class="ok">✓ 12 Tickets gelesen</span>'] },
+  f: { name: "Lead-Scoring Rebase", proj: "hb", dot: "g", lines: ['<span class="dim">●</span> phpunit --filter PollApify', '  <span class="ok">✓ grün nach Rebase</span>'] },
+  g: { name: "Release 2.9", proj: "wm8", dot: "i", lines: ['<span class="dim">●</span> make dmg', '<span class="dim">(wartet)</span>'] },
+  h: { name: "WAB-Berichte", proj: "hb", dot: "i", lines: ['<span class="dim">Nacharbeitung · vor 7 Std.</span>'] }
+};
+const STAGES = [2, 3, 4, 6, 9];
 const LAYOUTS = { 2: {cols:2,rows:1}, 3: {cols:2,rows:2,special3:true}, 4: {cols:2,rows:2}, 6: {cols:3,rows:2}, 9: {cols:3,rows:3} };
 
-let capacity = 4;
-let slots = ["a", "b", "c", null];   // Slot-Belegung — Positionen stabil
+// ================= Zustand =================
+let workspaces = [
+  { id: "w1", name: "Release-Woche", color: "#6E6ADE", capacity: 4, slots: ["a", "c", "f", null] },
+  { id: "w2", name: "Recherche", color: "#3E8E63", capacity: 2, slots: ["e", "d"] }
+];
+let activeWS = "w1";
+let view = { mode: "grid" };            // oder { mode: "single", id }
 let focusID = "a";
+let wsCollapsed = false;
 
-const $grid = document.getElementById("grid");
+const $side = document.getElementById("side");
 const $chips = document.getElementById("chips");
+const $content = document.getElementById("content");
+const $badge = document.getElementById("badge");
 const $toast = document.getElementById("toast");
+const $grow = document.getElementById("growzone");
 let toastTimer = null;
+
+function ws() { return workspaces.find(w => w.id === activeWS); }
 function toast(msg) {
   $toast.textContent = msg;
   $toast.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => $toast.classList.remove("show"), 1800);
+  toastTimer = setTimeout(() => $toast.classList.remove("show"), 2200);
 }
+function capLabel(c) { return { 2: "1×2", 3: "2+1", 4: "2×2", 6: "3×2", 9: "3×3" }[c]; }
+function nextCapacity(w) {
+  const i = STAGES.indexOf(w.capacity);
+  return i >= 0 && i < STAGES.length - 1 ? STAGES[i + 1] : null;
+}
+function slotIndexIn(w, id) { return w.slots.indexOf(id); }
 
-function setCapacity(c) {
-  capacity = c;
+// ================= Workspace-Operationen (pure) =================
+function setCapacity(w, c) {
   const next = new Array(c).fill(null);
-  for (let i = 0; i < Math.min(c, slots.length); i++) next[i] = slots[i];
-  // Beim Verkleinern: hintere belegte Slots verlassen den Workspace (Tabs bleiben).
-  slots = next;
-  render();
+  for (let i = 0; i < Math.min(c, w.slots.length); i++) next[i] = w.slots[i];
+  w.slots = next;
+  w.capacity = c;
 }
-
-function slotIndexOf(id) { return slots.indexOf(id); }
-
-function handleDrop(targetIndex, payload) {
+function addToWorkspace(w, id) {
+  if (slotIndexIn(w, id) >= 0) { toast(CHATS[id].name + " ist schon in „" + w.name + "“"); return; }
+  let free = w.slots.indexOf(null);
+  if (free < 0) {
+    const nc = nextCapacity(w);
+    if (nc === null) { toast("„" + w.name + "“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen"); return; }
+    setCapacity(w, nc);
+    free = w.slots.indexOf(null);
+    toast("„" + w.name + "“ auf " + capLabel(w.capacity) + " erweitert — " + CHATS[id].name + " in Slot " + (free + 1));
+  } else {
+    toast(CHATS[id].name + " → „" + w.name + "“, Slot " + (free + 1));
+  }
+  w.slots[free] = id;
+}
+function handleSlotDrop(targetIndex, payload) {
+  const w = ws();
   const { id, fromSlot } = payload;
-  const targetID = slots[targetIndex];
+  const targetID = w.slots[targetIndex];
   if (fromSlot !== null && fromSlot !== undefined && fromSlot >= 0) {
-    // Pane-Drag: tauschen bzw. in leeren Slot verschieben
     if (targetIndex === fromSlot) return;
-    slots[fromSlot] = targetID;   // null bei leerem Ziel -> Quellslot wird leer
-    slots[targetIndex] = id;
+    w.slots[fromSlot] = targetID;
+    w.slots[targetIndex] = id;
     toast(targetID ? "Getauscht: Slot " + (fromSlot + 1) + " ⇄ Slot " + (targetIndex + 1) : "Verschoben nach Slot " + (targetIndex + 1));
   } else {
-    // Chip-Drag (Tab/Sidebar): ersetzen bzw. leeren Slot belegen
-    const existing = slotIndexOf(id);
+    const existing = slotIndexIn(w, id);
     if (existing >= 0) {
-      slots[existing] = targetID;
-      slots[targetIndex] = id;
-      toast("Getauscht: bereits im Workspace");
+      w.slots[existing] = targetID;
+      w.slots[targetIndex] = id;
+      toast("Getauscht — war schon im Workspace");
     } else {
-      slots[targetIndex] = id;
+      w.slots[targetIndex] = id;
       toast(targetID ? CHATS[targetID].name + " durch " + CHATS[id].name + " ersetzt (Tab bleibt offen)" : CHATS[id].name + " in Slot " + (targetIndex + 1));
     }
   }
   focusID = id;
+  view = { mode: "grid" };
   render();
 }
 
-function render() {
-  // Kapazitäts-Picker
-  document.querySelectorAll("#cap button").forEach(b => b.classList.toggle("on", parseInt(b.dataset.c, 10) === capacity));
+// ================= Drag-Helfer =================
+function makeDragSource(el, id, fromSlot) {
+  el.draggable = true;
+  el.addEventListener("dragstart", e => {
+    e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot }));
+    e.dataTransfer.effectAllowed = "move";
+    e.stopPropagation();
+    const w = ws();
+    if (fromSlot === null && view.mode === "grid" && slotIndexIn(w, id) < 0 && w.slots.every(s => s) && nextCapacity(w) !== null) {
+      $grow.textContent = "＋ Hier ablegen — „" + w.name + "“ erweitert auf " + capLabel(nextCapacity(w));
+      $grow.classList.add("show");
+    }
+  });
+  el.addEventListener("dragend", () => $grow.classList.remove("show", "hot"));
+}
+function makeSlotDropTarget(el, index, occupied) {
+  el.addEventListener("dragover", e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    el.dataset.droplabel = occupied ? "Ersetzen / Tauschen" : "In Slot " + (index + 1) + " einfügen";
+    el.classList.add("dropc");
+  });
+  el.addEventListener("dragleave", () => el.classList.remove("dropc"));
+  el.addEventListener("drop", e => {
+    e.preventDefault();
+    el.classList.remove("dropc");
+    try {
+      const payload = JSON.parse(e.dataTransfer.getData("text/plain"));
+      if (payload && payload.id) handleSlotDrop(index, payload);
+    } catch (_) {}
+  });
+}
 
-  // Chips
+// ================= Rendering =================
+function render() {
+  renderSidebar();
+  renderChips();
+  renderContent();
+  document.querySelectorAll("#cap button").forEach(b => b.classList.toggle("on", parseInt(b.dataset.c, 10) === ws().capacity));
+}
+
+function renderSidebar() {
+  $side.innerHTML = "";
+  // GEPINNT (statisch)
+  const pin = document.createElement("div");
+  pin.innerHTML = '<div class="sect">⚲ Gepinnt · 1</div>';
+  const pinRow = document.createElement("div");
+  pinRow.className = "srow";
+  pinRow.innerHTML = '<span class="sdot i"></span><span class="nm">Release 2.9</span>';
+  pinRow.addEventListener("click", () => openSingle("g"));
+  makeDragSource(pinRow, "g", null);
+  pin.appendChild(pinRow);
+  $side.appendChild(pin);
+
+  // WORKSPACES
+  const sect = document.createElement("div");
+  sect.className = "sect";
+  sect.innerHTML = (wsCollapsed ? "▸" : "▾") + " Workspaces · " + workspaces.length + '<span class="plus" title="Neuer Workspace">＋</span>';
+  sect.style.cursor = "pointer";
+  sect.addEventListener("click", e => {
+    if (e.target.classList.contains("plus")) {
+      const w = { id: "w" + (workspaces.length + 1), name: "Workspace " + (workspaces.length + 1), color: "#E0A33E", capacity: 2, slots: [null, null] };
+      workspaces.push(w);
+      activeWS = w.id;
+      view = { mode: "grid" };
+      toast("Neuer Workspace angelegt — Chats per Drag auf die Gruppe aufnehmen");
+    } else {
+      wsCollapsed = !wsCollapsed;
+    }
+    render();
+  });
+  $side.appendChild(sect);
+
+  if (!wsCollapsed) {
+    workspaces.forEach(w => {
+      const g = document.createElement("div");
+      g.className = "wsgroup" + (w.id === activeWS && view.mode === "grid" ? " active" : "");
+      const head = document.createElement("div");
+      head.className = "wshead";
+      head.innerHTML =
+        '<span class="avatar" style="background:' + w.color + '">' + w.name.charAt(0).toUpperCase() + "</span>" +
+        '<span class="nm">' + w.name + "</span>" +
+        '<span class="cnt">' + w.slots.filter(Boolean).length + "/" + w.capacity + "</span>" +
+        '<span class="gridbtn" title="Grid öffnen">⊞</span>';
+      head.addEventListener("click", () => {
+        activeWS = w.id;
+        view = { mode: "grid" };
+        const first = w.slots.find(Boolean);
+        if (first) focusID = first;
+        toast("Workspace „" + w.name + "“ als Grid geöffnet");
+        render();
+      });
+      g.appendChild(head);
+      w.slots.forEach((id, i) => {
+        if (!id) return;
+        const c = CHATS[id];
+        const row = document.createElement("div");
+        row.className = "srow" + (view.mode === "single" && view.id === id ? " sel" : "");
+        row.innerHTML = '<span class="sdot ' + c.dot + '"></span><span class="nm">' + c.name + '</span><span class="slotno">S' + (i + 1) + "</span>";
+        row.addEventListener("click", e => { e.stopPropagation(); openSingle(id); });
+        makeDragSource(row, id, null);
+        g.appendChild(row);
+      });
+      // Drop auf die Gruppe = aufnehmen
+      g.addEventListener("dragover", e => { e.preventDefault(); g.classList.add("dropc"); });
+      g.addEventListener("dragleave", () => g.classList.remove("dropc"));
+      g.addEventListener("drop", e => {
+        e.preventDefault();
+        g.classList.remove("dropc");
+        try {
+          const payload = JSON.parse(e.dataTransfer.getData("text/plain"));
+          if (payload && payload.id) { addToWorkspace(w, payload.id); render(); }
+        } catch (_) {}
+      });
+      $side.appendChild(g);
+    });
+  }
+
+  // CHATS (Projekte)
+  const chatsSect = document.createElement("div");
+  chatsSect.className = "sect";
+  chatsSect.textContent = "Chats";
+  $side.appendChild(chatsSect);
+  Object.keys(PROJECTS).forEach(pid => {
+    const p = PROJECTS[pid];
+    const head = document.createElement("div");
+    head.className = "projhead";
+    head.innerHTML = '<span class="avatar" style="background:' + p.color + '">' + p.initial + "</span>" + p.name;
+    $side.appendChild(head);
+    Object.keys(CHATS).filter(id => CHATS[id].proj === pid).forEach(id => {
+      const c = CHATS[id];
+      const row = document.createElement("div");
+      row.className = "srow" + (view.mode === "single" && view.id === id ? " sel" : "");
+      row.innerHTML = '<span class="sdot ' + c.dot + '"></span><span class="nm">' + c.name + "</span>";
+      row.addEventListener("click", () => {
+        const w = ws();
+        if (view.mode === "grid" && slotIndexIn(w, id) >= 0) {
+          focusID = id;
+          toast("Fokus auf Pane — Chat liegt im aktiven Workspace");
+          render();
+        } else {
+          openSingle(id);
+        }
+      });
+      makeDragSource(row, id, null);
+      $side.appendChild(row);
+    });
+  });
+}
+
+function openSingle(id) {
+  view = { mode: "single", id };
+  focusID = id;
+  toast("Klick navigiert: Einzelansicht — der Workspace bleibt unverändert");
+  render();
+}
+
+function renderChips() {
   $chips.querySelectorAll(".chip").forEach(c => c.remove());
+  const w = ws();
   Object.keys(CHATS).forEach(id => {
-    const inWS = slotIndexOf(id) >= 0;
+    const inWS = slotIndexIn(w, id) >= 0;
     const el = document.createElement("span");
     el.className = "chip" + (inWS ? " inws" : "");
-    el.draggable = true;
-    el.innerHTML = '<span class="sdot ' + CHATS[id].dot + '"></span>' + CHATS[id].name + (inWS ? ' <span class="slotno">S' + (slotIndexOf(id) + 1) + "</span>" : "");
-    el.addEventListener("dragstart", e => {
-      e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot: null }));
-      e.dataTransfer.effectAllowed = "move";
-      // Auto-Wachsen: volles Grid + externer Chat im Drag → Erweitern-Zone.
-      if (!inWS && slots.every(s => s) && nextCapacity() !== null) {
-        $grow.textContent = "＋ Hier ablegen — Grid erweitert auf " + capLabel(nextCapacity());
-        $grow.classList.add("show");
-      }
-    });
-    el.addEventListener("dragend", () => $grow.classList.remove("show", "hot"));
+    el.innerHTML = '<span class="sdot ' + CHATS[id].dot + '"></span>' + CHATS[id].name + (inWS ? ' <span class="slotno">S' + (slotIndexIn(w, id) + 1) + "</span>" : "");
     el.addEventListener("click", () => {
-      if (inWS) { focusID = id; render(); }
-      else { toast("Klick navigiert nur — Einzelansicht würde öffnen, Grid bleibt unverändert. Zum Platzieren: ziehen."); }
+      if (view.mode === "grid" && inWS) { focusID = id; render(); }
+      else openSingle(id);
     });
+    makeDragSource(el, id, null);
     $chips.appendChild(el);
   });
+}
 
-  // Grid
-  const L = LAYOUTS[capacity];
-  $grid.style.gridTemplateColumns = "repeat(" + L.cols + ", 1fr)";
-  $grid.style.gridTemplateRows = "repeat(" + L.rows + ", 1fr)";
-  $grid.innerHTML = "";
-  slots.forEach((id, i) => {
+function renderContent() {
+  const w = ws();
+  $content.innerHTML = "";
+  if (view.mode === "single") {
+    const c = CHATS[view.id];
     const el = document.createElement("div");
-    const isLast3 = LAYOUTS[capacity].special3 && i === 2;
-    if (isLast3) el.style.gridColumn = "1 / -1";
+    el.className = "single";
+    el.innerHTML =
+      '<div class="chatbar"><span class="sdot ' + c.dot + '"></span>' +
+      '<div class="meta"><b>' + c.name + "</b><span>" + PROJECTS[c.proj].name + " · Claude Code</span></div>" +
+      '<span class="spring"></span><button class="cbtn">↻ Restart</button>' +
+      '<button class="cbtn back" id="backbtn">⊞ Zurück zum Workspace „' + w.name + "“</button></div>" +
+      '<div class="pterm">' + c.lines.join("<br>") + '<br><span class="p">❯</span></div>';
+    $content.appendChild(el);
+    document.getElementById("backbtn").addEventListener("click", () => {
+      view = { mode: "grid" };
+      toast("Workspace „" + w.name + "“ exakt wiederhergestellt");
+      render();
+    });
+    $badge.textContent = "Einzelansicht — Grid bleibt unverändert im Hintergrund";
+    return;
+  }
+
+  $badge.textContent = "Workspace „" + w.name + "“ · Slots stabil, keine Verdrängung";
+  const L = LAYOUTS[w.capacity];
+  const grid = document.createElement("div");
+  grid.className = "wsgrid";
+  grid.style.gridTemplateColumns = "repeat(" + L.cols + ", 1fr)";
+  grid.style.gridTemplateRows = "repeat(" + L.rows + ", 1fr)";
+  w.slots.forEach((id, i) => {
+    const el = document.createElement("div");
+    if (L.special3 && i === 2) el.style.gridColumn = "1 / -1";
     if (id) {
       const c = CHATS[id];
       el.className = "slot" + (id === focusID ? " focus" : "");
       el.innerHTML =
-        '<div class="phead" draggable="true"><span class="sdot ' + c.dot + '"></span>' +
-        '<span class="name">' + c.name + "</span><span class=\"spring\"></span>" +
+        '<div class="phead"><span class="sdot ' + c.dot + '"></span>' +
+        '<span class="name">' + c.name + '</span><span class="spring"></span>' +
         '<button class="pbtn" data-max title="Maximieren">⤢</button>' +
         '<button class="pbtn" data-rm title="Aus dem Workspace (Tab bleibt)">⊖</button></div>' +
         '<div class="pterm">' + c.lines.join("<br>") + "</div>";
-      el.querySelector(".phead").addEventListener("dragstart", e => {
-        e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot: i }));
-        e.dataTransfer.effectAllowed = "move";
-        e.stopPropagation();
-      });
+      makeDragSource(el.querySelector(".phead"), id, i);
       el.querySelector("[data-rm]").addEventListener("click", e => {
         e.stopPropagation();
-        slots[i] = null;   // Slot bleibt leer bestehen — nichts rückt nach
-        toast(c.name + " aus dem Workspace genommen — Slot " + (i + 1) + " bleibt frei, Tab bleibt offen");
+        w.slots[i] = null;
+        toast(c.name + " aus „" + w.name + "“ genommen — Slot " + (i + 1) + " bleibt frei, Tab bleibt offen");
         render();
       });
       el.querySelector("[data-max]").addEventListener("click", e => {
         e.stopPropagation();
-        toast("Maximiert " + c.name + " — „Zurück zum Workspace“ stellt das Grid exakt wieder her");
-        focusID = id; render();
+        openSingle(id);
       });
       el.addEventListener("click", () => { focusID = id; render(); });
+      el.querySelector(".phead").addEventListener("dblclick", () => openSingle(id));
     } else {
       el.className = "slot empty";
       el.innerHTML = '<div class="hintbox"><b>Slot ' + (i + 1) + "</b>Chat hier ablegen</div>";
     }
-    // Drop-Ziel (belegte UND leere Slots)
-    el.addEventListener("dragover", e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      let label = "Hier ablegen";
-      try {
-        // Kein Zugriff auf Payload bei dragover — Label generisch je nach Ziel:
-        label = id ? "Ersetzen / Tauschen" : "In Slot " + (i + 1) + " einfügen";
-      } catch (_) {}
-      el.dataset.droplabel = label;
-      el.classList.add("dropc");
-    });
-    el.addEventListener("dragleave", () => el.classList.remove("dropc"));
-    el.addEventListener("drop", e => {
-      e.preventDefault();
-      el.classList.remove("dropc");
-      try {
-        const payload = JSON.parse(e.dataTransfer.getData("text/plain"));
-        if (payload && payload.id) handleDrop(i, payload);
-      } catch (_) {}
-    });
-    $grid.appendChild(el);
+    makeSlotDropTarget(el, i, !!id);
+    grid.appendChild(el);
   });
+  $content.appendChild(grid);
 }
 
-// ---------- Auto-Wachsen: „Ein Drop blockiert nie" ----------
-const STAGES = [2, 3, 4, 6, 9];
-const $grow = document.getElementById("growzone");
-function nextCapacity() {
-  const i = STAGES.indexOf(capacity);
-  return i >= 0 && i < STAGES.length - 1 ? STAGES[i + 1] : null;
-}
-function capLabel(c) { return { 2: "1×2", 3: "2+1", 4: "2×2", 6: "3×2", 9: "3×3" }[c]; }
+// ================= Growzone + Picker =================
 $grow.addEventListener("dragover", e => { e.preventDefault(); $grow.classList.add("hot"); });
 $grow.addEventListener("dragleave", () => $grow.classList.remove("hot"));
 $grow.addEventListener("drop", e => {
@@ -440,19 +683,15 @@ $grow.addEventListener("drop", e => {
   $grow.classList.remove("show", "hot");
   try {
     const payload = JSON.parse(e.dataTransfer.getData("text/plain"));
-    const next = nextCapacity();
-    if (!payload || !payload.id || next === null) return;
-    setCapacity(next);
-    const free = slots.indexOf(null);
-    slots[free] = payload.id;
-    focusID = payload.id;
-    toast("Grid auf " + capLabel(capacity) + " erweitert — " + CHATS[payload.id].name + " in Slot " + (free + 1));
-    render();
+    if (payload && payload.id) { addToWorkspace(ws(), payload.id); focusID = payload.id; view = { mode: "grid" }; render(); }
   } catch (_) {}
 });
-
 document.querySelectorAll("#cap button").forEach(b =>
-  b.addEventListener("click", () => setCapacity(parseInt(b.dataset.c, 10)))
+  b.addEventListener("click", () => {
+    setCapacity(ws(), parseInt(b.dataset.c, 10));
+    view = { mode: "grid" };
+    render();
+  })
 );
 render();
 </script>
