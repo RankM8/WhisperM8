@@ -740,11 +740,19 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func focusTerminal() {
         DispatchQueue.main.async { [weak self] in
             guard let self,
-                  let window = self.terminal.window else { return }
-            window.makeFirstResponder(self.terminal)
-            // perf.grid: Fokuswechsel-Messung abschließen (no-op außerhalb
-            // einer laufenden Grid-Messung).
-            GridPerformanceTracker.shared.focusApplied()
+                  let window = self.terminal.window else {
+                // perf.grid: Ziel nicht anwendbar — Messung verwerfen statt
+                // in den Timeout zu laufen (no-op ohne laufende Messung).
+                GridPerformanceTracker.shared.abortFocusSwitch()
+                return
+            }
+            if window.makeFirstResponder(self.terminal) {
+                // perf.grid: Fokuswechsel-Messung abschließen (no-op
+                // außerhalb einer laufenden Grid-Messung).
+                GridPerformanceTracker.shared.focusApplied()
+            } else {
+                GridPerformanceTracker.shared.abortFocusSwitch()
+            }
         }
     }
 

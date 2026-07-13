@@ -47,7 +47,20 @@ extension AgentChatsView {
     func showSessionInGrid(_ sessionID: UUID) {
         openTab(sessionID)
         addSessionToGrid(sessionID)
+        beginGridBuildMeasurement()
         showsGrid = true
+    }
+
+    /// perf.grid: Aufbau-Messung am ÜBERGANG starten (vor dem Mount — die
+    /// Panes attachen während `makeNSView`, also bevor ein Parent-`onAppear`
+    /// feuern würde). Erwartet werden nur Panes mit lebendem Controller;
+    /// Offline-Panes rendern Transcript-Views und attachen nie.
+    func beginGridBuildMeasurement() {
+        GridPerformanceTracker.shared.beginBuild(
+            expectedPaneIDs: Set(
+                gridSessions.map(\.id).filter { terminalRegistry.controller(for: $0) != nil }
+            )
+        )
     }
 
     /// Nimmt einen Chat in die Grid-Auswahl auf. Eine leere (Default-)
@@ -99,6 +112,7 @@ extension AgentChatsView {
     /// Minimize aus der Einzelansicht: zurück ins Grid mit allen offenen
     /// Tabs. Selektion/Fokus bleiben unangetastet.
     func minimizeToGrid() {
+        beginGridBuildMeasurement()
         showsGrid = true
     }
 
@@ -146,15 +160,19 @@ extension AgentChatsView {
         // des zuvor fokussierten Tabs (pure Logik, AgentGridLayout).
         .onChange(of: selectedSessionID) { previous, selected in
             guard let selected else { return }
-            // perf.grid: Fokuswechsel messen (Ende in focusTerminal nach
-            // makeFirstResponder; Safety-Timeout im Tracker).
-            GridPerformanceTracker.shared.beginFocusSwitch()
             bringSelectionIntoGrid(selected, previous: previous)
             // Fokus-Wechsel remountet die Pane-DetailView NICHT (stabile
             // .id) — deren onAppear-Fokus feuert also nicht erneut. Die
             // Tastatur explizit in die neue Fokus-Pane geben, sonst folgt
             // nur der Akzent-Rahmen, das Tippen bliebe im alten Terminal.
-            terminalRegistry.controller(for: selected)?.focusTerminal()
+            if let controller = terminalRegistry.controller(for: selected) {
+                // perf.grid: Fokuswechsel nur messen, wenn ein Terminal
+                // existiert — Offline-/Subagent-Panes würden zwangsläufig
+                // in den Timeout laufen (Fake-Verletzungen). Ende in
+                // focusTerminal nach erfolgreichem makeFirstResponder.
+                GridPerformanceTracker.shared.beginFocusSwitch()
+                controller.focusTerminal()
+            }
         }
         // Layout-Wechsel (Tab-Anzahl) entfernt Panes ohne onHover(false) —
         // Flag räumen, sonst selektiert ein Klick ins Leere eine
@@ -165,13 +183,6 @@ extension AgentChatsView {
         // SelektionsWECHSELN, nicht wenn der fokussierte Tab beim Aufbau
         // schon außerhalb der ersten N liegt.
         .onAppear {
-            // perf.grid: Aufbau messen — erwartet werden nur Panes mit
-            // lebendem Controller (Offline-Panes attachen nie).
-            GridPerformanceTracker.shared.beginBuild(
-                expectedPaneIDs: Set(
-                    gridSessions.map(\.id).filter { terminalRegistry.controller(for: $0) != nil }
-                )
-            )
             if let selected = selectedSessionID {
                 bringSelectionIntoGrid(selected, previous: nil)
             }

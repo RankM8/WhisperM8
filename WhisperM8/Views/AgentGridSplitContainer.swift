@@ -44,6 +44,17 @@ struct AgentGridSplitContainer<Pane: View>: View {
         GeometryReader { geo in
             arrangement(in: geo.size)
         }
+        // Nach einem Commit läuft der neue persistierte Wert durch den
+        // Parent zurück — erst DANN darf `applied…` losgelassen werden
+        // (sonst fiele `effectiveFraction` für einen Frame auf den alten
+        // persistierten Wert zurück). Externe Änderungen (anderes Fenster,
+        // Doppelklick-Reset) übernehmen wir ebenso, solange kein Drag läuft.
+        .onChange(of: persistedColumnFraction) { _, _ in
+            if drag.columnBase == nil { appliedColumnFraction = nil }
+        }
+        .onChange(of: persistedRowFraction) { _, _ in
+            if drag.rowBase == nil { appliedRowFraction = nil }
+        }
         .onDisappear { cancelSampler() }
     }
 
@@ -123,7 +134,9 @@ struct AgentGridSplitContainer<Pane: View>: View {
             },
             onDragEnded: { endDrag(axis: .column) },
             onDoubleClick: {
-                appliedColumnFraction = nil
+                // Sofort lokal auf hälftig, Commit läuft hinterher (onChange
+                // räumt `applied` nach dem Roundtrip).
+                appliedColumnFraction = GridSplitResolver.defaultFraction
                 commitColumnFraction(GridSplitResolver.defaultFraction)
             },
             onHoverChanged: onHandleHoverChanged
@@ -147,7 +160,7 @@ struct AgentGridSplitContainer<Pane: View>: View {
             },
             onDragEnded: { endDrag(axis: .row) },
             onDoubleClick: {
-                appliedRowFraction = nil
+                appliedRowFraction = GridSplitResolver.defaultFraction
                 commitRowFraction(GridSplitResolver.defaultFraction)
             },
             onHoverChanged: onHandleHoverChanged
@@ -191,22 +204,27 @@ struct AgentGridSplitContainer<Pane: View>: View {
 
     private enum DragAxis { case column, row }
 
-    /// Drag-Ende: finalen Live-Wert sofort anwenden, genau EINMAL
-    /// persistieren, Live-State räumen. `applied…` geht zurück auf `nil` —
-    /// der soeben committete persistierte Wert ist identisch, es gibt keinen
-    /// sichtbaren Sprung.
+    /// Drag-Ende: finalen Live-Wert ZUERST lokal anwenden (endet der Drag
+    /// vor dem nächsten 33-ms-Tick, war er noch nie in `applied…`), dann
+    /// genau EINMAL persistieren. `applied…` bleibt gesetzt, bis der neue
+    /// persistierte Wert durch den Parent zurückläuft (`onChange` im Body) —
+    /// kein Ein-Frame-Rückfall auf den alten Wert.
     private func endDrag(axis: DragAxis) {
         switch axis {
         case .column:
-            if let live = drag.liveColumn { commitColumnFraction(live) }
+            if let live = drag.liveColumn {
+                appliedColumnFraction = live
+                commitColumnFraction(live)
+            }
             drag.columnBase = nil
             drag.liveColumn = nil
-            appliedColumnFraction = nil
         case .row:
-            if let live = drag.liveRow { commitRowFraction(live) }
+            if let live = drag.liveRow {
+                appliedRowFraction = live
+                commitRowFraction(live)
+            }
             drag.rowBase = nil
             drag.liveRow = nil
-            appliedRowFraction = nil
         }
         PerfSignposts.grid.emitEvent("grid.divider.commit")
         if drag.columnBase == nil, drag.rowBase == nil {

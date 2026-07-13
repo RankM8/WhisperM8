@@ -70,6 +70,16 @@ struct PerformanceBudget {
         }
     }
 
+    /// Bricht eine Messung ab: schließt das Signpost-Intervall, OHNE die
+    /// Dauer gegen das Budget zu bewerten — für überholte/verworfene
+    /// Messungen (z. B. ein Fokusziel, das nie anwendbar wurde). Idempotent
+    /// wie `end`.
+    func cancel(_ token: Token) {
+        guard !token.ended else { return }
+        token.ended = true
+        signposter.endInterval(name, token.state)
+    }
+
     func withInterval<T>(_ body: () throws -> T) rethrows -> T {
         let token = begin()
         defer { end(token) }

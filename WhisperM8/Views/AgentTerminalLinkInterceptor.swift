@@ -60,4 +60,11 @@ final class AgentTerminalLinkInterceptor: @preconcurrency TerminalViewDelegate {
     // `bell` + `iTermContent` bewusst NICHT überschrieben → SwiftTerm-Extension-
     // Defaults greifen (identisch zur Basis; der hörbare Bell wird ohnehin auf
     // Terminal-Delegate-Ebene in QuietableTerminalView abgefangen).
+    //
+    // `clipboardRead` (neu in SwiftTerm 1.14, OSC-52-LESEN) wird bewusst
+    // NICHT an die Basis weitergereicht: deren Implementierung gäbe jeder
+    // TUI den Klartext-Inhalt der Zwischenablage (Passwörter!). Der
+    // Extension-Default verweigert mit `nil` — gewollte Sicherheits-
+    // Entscheidung, kein Versehen. Clipboard-SCHREIBEN (`clipboardCopy`,
+    // OSC 52 copy) bleibt erlaubt, siehe oben.
 }
