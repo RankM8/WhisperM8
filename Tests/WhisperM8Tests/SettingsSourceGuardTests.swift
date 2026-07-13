@@ -10,6 +10,7 @@ final class SettingsSourceGuardTests: XCTestCase {
         let declaredPreferenceKeys = try extractPreferenceKeyRawValues(from: appPreferencesURL)
         let documentedUIStateKeys: Set<String> = [
             "agentPinnedSectionCollapsed",
+            "agentWorkspacesSectionCollapsed",
             "agentProjectOpenTarget",
             "agentSidebarScope",
             "agentSidebarLayout",

@@ -961,6 +961,9 @@ struct PinnedSessionRow: View {
     /// `true` wenn das Transkript dieser Session nicht mehr auf der Platte
     /// liegt — toter Zeiger, ausgegraut + Hinweis (siehe `SessionListButton`).
     var isMissingTranscript: Bool = false
+    /// Slot-Platzierung in einer Workspace-Gruppe („S1"–„S9") — nur die
+    /// Workspace-Sektion setzt das; Gepinnt-Rows bleiben unverändert.
+    var slotBadge: String? = nil
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -986,6 +989,13 @@ struct PinnedSessionRow: View {
                     .help(isMissingTranscript ? "Transkript von Claude gelöscht – nicht mehr resumebar" : session.title)
 
                 Spacer(minLength: 0)
+
+                if let slotBadge {
+                    Text(slotBadge)
+                        .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                        .foregroundStyle(AgentTheme.accent)
+                        .help("Slot-Position im Workspace")
+                }
 
                 trailingIndicator
                     .frame(minWidth: 28, alignment: .trailing)

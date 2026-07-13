@@ -134,6 +134,14 @@ struct AgentChatsView: View {
     /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
     /// dauerhaft oben Platz belegen.
     @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
+    /// Workspaces-Sektion ein-/ausgeklappt (persistiert, Muster GEPINNT).
+    /// internal, da die Sektion in +Workspaces lebt.
+    @AppStorage("agentWorkspacesSectionCollapsed") var workspacesSectionCollapsed = false
+    /// Umbenennen-Sheet für Workspace-Gruppen (analog renameTargetID).
+    @State var renameWorkspaceTargetID: UUID?
+    @State var renameWorkspaceDraft = ""
+    /// Löschen-Bestätigung für Workspace-Gruppen (analog projectPendingDeletion).
+    @State var workspacePendingDeletion: AgentGridWorkspace?
     /// Tear-off: die Detach-Drop-Zone (Content) ist gerade Drop-Ziel.
     @State private var detachZoneTargeted = false
     /// Grid-Ansicht: Pane, über der die Maus gerade schwebt — Klick-Routing
@@ -190,7 +198,9 @@ struct AgentChatsView: View {
     /// IDs abgeschlossener Sessions, deren Transkript nicht mehr auf der Platte
     /// liegt („tote Zeiger"). Off-main berechnet (`refreshMissingTranscripts`),
     /// driftet die Sidebar zum Ausgrauen + Hinweis. Ephemeral, nicht persistiert.
-    @State private var missingTranscriptIDs: Set<UUID> = []
+    // internal, da die Workspace-Sektion (+Workspaces) die Rows ebenfalls
+    // mit dem Missing-Transcript-Zustand rendert.
+    @State var missingTranscriptIDs: Set<UUID> = []
     @State private var missingTranscriptTask: Task<Void, Never>?
     /// Das NSWindow des Agent-Chats-Fensters — vom `AgentChatsWindowAccessor`
     /// aufgelöst. Dient als Scope-Anker für den Cmd-W-Monitor (nur Events
@@ -482,6 +492,28 @@ struct AgentChatsView: View {
             set: { if !$0 { renameProjectTargetID = nil } }
         )) {
             renameProjectSheet
+        }
+        .sheet(isPresented: Binding(
+            get: { renameWorkspaceTargetID != nil },
+            set: { if !$0 { renameWorkspaceTargetID = nil } }
+        )) {
+            renameWorkspaceSheet
+        }
+        .confirmationDialog(
+            "Workspace löschen?",
+            isPresented: Binding(
+                get: { workspacePendingDeletion != nil },
+                set: { if !$0 { workspacePendingDeletion = nil } }
+            ),
+            presenting: workspacePendingDeletion
+        ) { entity in
+            Button("Löschen: \(entity.name)", role: .destructive) {
+                windowStore.deleteGridWorkspace(entity.id)
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { entity in
+            let count = entity.occupiedSessionIDs.count
+            Text("Entfernt nur die Gruppe „\(entity.name)“ — ihre \(count) \(count == 1 ? "Chat bleibt" : "Chats bleiben") samt Tabs und laufenden Prozessen erhalten.")
         }
         .confirmationDialog(
             "Projekt löschen?",
@@ -1036,9 +1068,15 @@ struct AgentChatsView: View {
                                 pinnedRow(session, order: visiblePinned.map(\.id))
                             }
                         }
-                        if !chatListIsEmpty {
-                            sidebarSectionLabel("Chats")
-                        }
+                    }
+
+                    // WORKSPACES: unter GEPINNT, über den Projekten —
+                    // unsichtbar bei null Workspaces (siehe +Workspaces).
+                    workspacesSidebarSection
+
+                    if (!visiblePinned.isEmpty || !windowStore.gridWorkspaces.isEmpty),
+                       !chatListIsEmpty {
+                        sidebarSectionLabel("Chats")
                     }
 
                     if sidebarLayout == .flat {
@@ -2584,6 +2622,7 @@ struct AgentChatsView: View {
                 moveSelectionToNewWindow(session)
             }
             workspaceMembershipMenu(for: session)
+            newWorkspaceFromSelectionButton(for: session)
             Divider()
             Button(
                 pinLabel(for: session),

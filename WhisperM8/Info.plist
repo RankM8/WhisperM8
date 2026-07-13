@@ -44,6 +44,18 @@
 			<key>UTTypeTagSpecification</key>
 			<dict/>
 		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>WhisperM8 Agent Grid Workspace</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.whisperm8.app.agent-grid-workspace</string>
+			<key>UTTypeTagSpecification</key>
+			<dict/>
+		</dict>
 	</array>
 </dict>
 </plist>
