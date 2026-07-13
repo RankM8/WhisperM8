@@ -152,12 +152,19 @@ final class AgentSessionSummarizer {
     }
 
     /// Transcript-URL der Session (Claude braucht das Projekt-cwd).
+    /// Claude: Multi-Root-Suche über main + alle Account-Profile — sonst
+    /// bekämen Profil-Sessions nie eine Zusammenfassung bzw. der
+    /// „Veraltet"-Chip liefe gegen einen nicht existierenden main-Pfad.
     func transcriptURL(for session: AgentChatSession) -> URL? {
         guard let externalID = session.externalSessionID, !externalID.isEmpty else { return nil }
         switch session.provider {
         case .claude:
             guard let project = store.loadWorkspace().projects.first(where: { $0.id == session.projectID }) else { return nil }
-            return ClaudeTranscriptReader.transcriptURL(forCwd: project.path, sessionID: externalID)
+            return AgentTranscriptLocator.locate(
+                provider: .claude,
+                externalSessionID: externalID,
+                cwd: AgentSessionStore.canonicalProjectPath(project.path)
+            )
         case .codex:
             return CodexTranscriptReader.transcriptURL(forSessionID: externalID)
         }

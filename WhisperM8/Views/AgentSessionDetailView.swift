@@ -60,6 +60,30 @@ struct AgentSessionDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Launch-/Repair-Fehler sichtbar machen (Review-Befund 2026-07-13:
+            // errorMessage wurde gesetzt, aber nie gerendert — abgebrochene
+            // Launches wirkten wie ein No-op bzw. verschwundener Verlauf).
+            if let errorMessage {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                    Text(errorMessage)
+                        .font(.system(size: 12))
+                        .foregroundStyle(AgentTheme.textPrimary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        self.errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(10)
+                .background(Color.yellow.opacity(0.12))
+            }
             if let controller {
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
@@ -353,8 +377,14 @@ struct AgentSessionDetailView: View {
                 onExternalSessionIDBound(session.id)
                 onStateChanged()
             case .resetInvalid(let oldID):
-                Logger.claudeBinding.notice("resume_reset_invalid localID=\(session.id.uuidString, privacy: .public) old=\(oldID, privacy: .public)")
+                Logger.claudeBinding.notice("resume_transcript_missing localID=\(session.id.uuidString, privacy: .public) old=\(oldID, privacy: .public)")
                 onStateChanged()
+                // Ehrlich statt still: der Verlauf ist gerade nicht auffindbar —
+                // Launch stoppen und den Zustand zeigen. Die Bindung bleibt
+                // ERHALTEN (kein Reset): taucht das Transcript wieder auf
+                // (transienter I/O-Fehler, externes Volume, Wiederherstellung),
+                // resumed der nächste Start ganz normal.
+                throw AgentResumeTranscriptMissingError(externalSessionID: oldID)
             }
         }
 
@@ -362,24 +392,22 @@ struct AgentSessionDetailView: View {
         // real existierendes Transkript. Der Indexer kann per mtime/size-Cache
         // eine laengst geloeschte ODER nie geschriebene ID noch als gueltig
         // melden (-> Repair-Outcome `.unchanged`) — wir vertrauen nur der echten
-        // `<id>.jsonl`-Datei. Fehlt sie, wird statt "No conversation found" eine
-        // FRISCHE Session im selben Tab gestartet (extID/launched zuruecksetzen,
-        // Claude vergibt eine neue ID, die `bindExternalSessionIDWhenAvailable`
-        // danach an das real geschriebene Transkript bindet).
+        // `<id>.jsonl`-Datei (Multi-Root-Suche über main + alle Profile).
+        // Fehlt sie überall, wird der Launch mit klarer Meldung GESTOPPT — kein
+        // „No conversation found" im Terminal, kein stiller Fresh-Start. Die
+        // Bindung bleibt bewusst UNANGETASTET: negative Evidenz kann transient
+        // sein, und ein gelöschter Verlauf soll als solcher sichtbar bleiben
+        // statt kommentarlos durch eine leere Session ersetzt zu werden.
         let candidate = repair?.session ?? session
         if candidate.hasLaunchedInitialPrompt,
            let ext = candidate.externalSessionID, !ext.isEmpty,
            !ClaudeTranscriptReader.transcriptExists(forCwd: project.path, sessionID: ext) {
-            Logger.claudeBinding.notice("resume_guard_fresh_start localID=\(session.id.uuidString, privacy: .public) deadID=\(ext, privacy: .public)")
+            Logger.claudeBinding.notice("resume_guard_transcript_missing localID=\(session.id.uuidString, privacy: .public) deadID=\(ext, privacy: .public)")
             try? store.updateSession(id: session.id) { updated in
-                updated.externalSessionID = nil
-                updated.hasLaunchedInitialPrompt = false
+                updated.shouldLaunchOnOpen = false
             }
             onStateChanged()
-            var fresh = candidate
-            fresh.externalSessionID = nil
-            fresh.hasLaunchedInitialPrompt = false
-            return fresh
+            throw AgentResumeTranscriptMissingError(externalSessionID: ext)
         }
 
         return candidate
@@ -413,6 +441,10 @@ struct AgentSessionDetailView: View {
                 updated.shouldLaunchOnOpen = false
                 updated.initialPrompt = nil
             }
+            // Crash-safe: der Launch-Marker entscheidet, ob die Indexer-
+            // Adoption die Session nach einem App-Tod wiederfindet — nicht
+            // dem 0,5-s-Debounce überlassen (Review-Befund 2026-07-13).
+            store.flushNow(reason: "launch")
             // Agent View hat keine externe Session-ID — kein binding noetig.
             // Terminals ebenfalls nicht: das Binding würde sonst die zeitlich
             // nächste indizierte Claude-/Codex-Session „kapern" (gleicher
@@ -477,5 +509,23 @@ struct AgentSessionDetailView: View {
                 }
             }
         }
+    }
+}
+
+/// Wird vom Launch-Guard geworfen, wenn für eine resumebare Session in KEINEM
+/// Account-Root (main + Profile, inkl. Session-ID-Fallback) mehr eine
+/// Transcript-Datei existiert. Der Launch stoppt mit dieser Meldung; die
+/// Bindung der Session bleibt bewusst erhalten — Chat-Verlust darf nie
+/// lautlos passieren (Vorfall 2026-07-13).
+struct AgentResumeTranscriptMissingError: LocalizedError {
+    let externalSessionID: String
+
+    var errorDescription: String? {
+        "Chat-Verlauf momentan nicht auffindbar: Für Session \(externalSessionID) "
+            + "existiert weder unter ~/.claude/projects noch in einem Account-Profil "
+            + "(~/.claude-profiles/*/projects) eine Transcript-Datei. Falls sie "
+            + "gelöscht wurde, lege für neue Arbeit einen neuen Chat an — dieser "
+            + "Tab behält seine Zuordnung und resumed automatisch wieder, sobald "
+            + "die Datei wieder auftaucht."
     }
 }

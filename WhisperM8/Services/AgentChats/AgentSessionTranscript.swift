@@ -298,10 +298,18 @@ enum AgentTranscriptStatusDecider {
 /// CWD. Beide CLIs schreiben deterministisch genug, dass wir das ohne
 /// Indexer-Roundtrip lokalisieren können.
 enum AgentTranscriptLocator {
-    static func locate(provider: AgentProvider, externalSessionID: String, cwd: String) -> URL? {
+    /// - Parameter globFallback: `false` überspringt den Session-ID-Glob
+    ///   (Stufe 2) — für Hot-Paths wie den Runtime-Watcher, die im Takt
+    ///   auflösen und keine Directory-Listings pro Tick leisten sollen.
+    static func locate(
+        provider: AgentProvider,
+        externalSessionID: String,
+        cwd: String,
+        globFallback: Bool = true
+    ) -> URL? {
         switch provider {
         case .claude:
-            return locateClaude(externalSessionID: externalSessionID, cwd: cwd)
+            return locateClaude(externalSessionID: externalSessionID, cwd: cwd, globFallback: globFallback)
         case .codex:
             return locateCodex(externalSessionID: externalSessionID)
         }
@@ -323,20 +331,92 @@ enum AgentTranscriptLocator {
         return result
     }
 
-    private static func locateClaude(externalSessionID: String, cwd: String) -> URL? {
-        // Multi-Account: das Transcript kann unter ~/.claude/projects ODER
-        // unter einem Profil-Root (~/.claude-profiles/<name>/projects) liegen —
-        // alle Roots pruefen, main zuerst.
+    private static func locateClaude(externalSessionID: String, cwd: String, globFallback: Bool = true) -> URL? {
+        locateClaude(
+            externalSessionID: externalSessionID,
+            cwd: cwd,
+            roots: ClaudeAccountProfiles().claudeProjectsRoots(),
+            globFallback: globFallback
+        )
+    }
+
+    /// Zweistufiger Claude-Lookup, mit injizierbaren Roots testbar.
+    ///
+    /// Stufe 1 (99%-Fall): deterministischer Pfad `<root>/<encoded-cwd>/<id>.jsonl`
+    /// über alle Roots (main + Profile), main zuerst.
+    ///
+    /// Stufe 2 (Verteidigungslinie): flache Suche nach `<id>.jsonl` über ALLE
+    /// Projekt-Ordner aller Roots. `encodeClaudeCwd` repliziert Claudes
+    /// Pfad-Encoding — ändert Anthropic das Schema oder wurde der Projekt-
+    /// Ordner umbenannt/verschoben, findet Stufe 1 nichts, obwohl die Datei
+    /// existiert. Die Session-ID (UUID) ist dateiweit eindeutig, der
+    /// Ordnername nicht — deshalb ist der Glob sicher. Läuft nur bei
+    /// Stufe-1-Miss (selten); Kosten: ein Directory-Listing pro Root.
+    static func locateClaude(
+        externalSessionID: String,
+        cwd: String,
+        roots: [URL],
+        fileManager: FileManager = .default,
+        globFallback: Bool = true
+    ) -> URL? {
         let encoded = encodeClaudeCwd(cwd)
-        for root in ClaudeAccountProfiles().claudeProjectsRoots() {
+        let fileName = "\(externalSessionID).jsonl"
+        for root in roots {
             let url = root
                 .appendingPathComponent(encoded)
-                .appendingPathComponent("\(externalSessionID).jsonl")
-            if FileManager.default.fileExists(atPath: url.path) {
+                .appendingPathComponent(fileName)
+            if fileManager.fileExists(atPath: url.path) {
                 return url
             }
         }
+        guard globFallback else { return nil }
+
+        for root in roots {
+            guard let projectDirs = try? fileManager.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            for dir in projectDirs where dir.lastPathComponent != encoded {
+                let candidate = dir.appendingPathComponent(fileName)
+                guard fileManager.fileExists(atPath: candidate.path) else { continue }
+                // Kandidaten-Verifikation (Review-Befund 2026-07-13): Der
+                // Fund über die Session-ID allein könnte eine kopierte/
+                // fremde Datei sein. Nur akzeptieren, wenn der JSONL-Kopf
+                // denselben cwd traegt wie erwartet — sonst koennten Resume,
+                // Reader und Summarizer den FALSCHEN Chat erwischen.
+                guard transcriptHeadMatchesCwd(candidate, expectedCwd: cwd) else {
+                    Logger.agentStore.warning(
+                        "claude_transcript_fallback_cwd_mismatch session=\(externalSessionID, privacy: .public) dir=\(dir.lastPathComponent, privacy: .public)"
+                    )
+                    continue
+                }
+                Logger.agentStore.notice(
+                    "claude_transcript_located_by_fallback session=\(externalSessionID, privacy: .public) dir=\(dir.lastPathComponent, privacy: .public) expected=\(encoded, privacy: .public)"
+                )
+                return candidate
+            }
+        }
         return nil
+    }
+
+    /// `true` wenn der Kopf der JSONL (erste 200 Zeilen / 1 MiB) einen
+    /// `cwd`-Eintrag traegt, der dem erwarteten cwd entspricht. Konservativ:
+    /// kein `cwd` im Kopf → kein Match. Gleiche Bounded-Read-Strategie wie
+    /// der Indexer.
+    static func transcriptHeadMatchesCwd(_ url: URL, expectedCwd: String) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 1_048_576),
+              let text = String(data: data, encoding: .utf8) else { return false }
+        let expected = URL(fileURLWithPath: expectedCwd).standardizedFileURL.path
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true).prefix(200) {
+            guard let lineData = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  let cwd = obj["cwd"] as? String else { continue }
+            return URL(fileURLWithPath: cwd).standardizedFileURL.path == expected
+        }
+        return false
     }
 
     /// P3 S4: Einmal gefundene Codex-Pfade sind stabil (Dateien wandern

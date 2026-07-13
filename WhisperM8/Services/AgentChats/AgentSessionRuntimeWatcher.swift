@@ -373,10 +373,15 @@ final class AgentSessionRuntimeWatcher {
         guard let externalSessionID = entry.externalSessionID, !externalSessionID.isEmpty else {
             return nil
         }
+        // globFallback aus: der Watcher loest im 1.5s-Takt (teils MainActor)
+        // auf — LIVE geschriebene Transcripts liegen immer am deterministischen
+        // Pfad; der Glob-Fallback ist Sache von Resume/Reader, nicht des
+        // Status-Trackings.
         return AgentTranscriptLocator.locate(
             provider: entry.provider,
             externalSessionID: externalSessionID,
-            cwd: entry.cwd
+            cwd: entry.cwd,
+            globFallback: false
         )
     }
 

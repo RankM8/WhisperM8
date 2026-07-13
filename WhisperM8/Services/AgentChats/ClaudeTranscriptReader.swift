@@ -43,8 +43,19 @@ enum ClaudeTranscriptReader {
     /// workflow-/subagent-lastigen Sessions anlegt) zählt bewusst NICHT:
     /// `claude --resume` braucht die JSONL, nicht das Begleitverzeichnis.
     /// Grundlage für die „nie --resume ohne Transkript"-Garantie beim Launch.
+    ///
+    /// Multi-Account: sucht über ALLE Account-Roots (main + Profile) inkl.
+    /// Session-ID-Fallback des Locators. Vorher prüfte diese Funktion NUR
+    /// `~/.claude/projects` — der Launch-Guard hat dadurch Sessions, deren
+    /// Transcript in einem Profil-Root lag, fälschlich als „tot" resettet
+    /// und ihren Verlauf abgekoppelt (Vorfall 2026-07-13).
     static func transcriptExists(forCwd cwd: String, sessionID: String) -> Bool {
-        let url = transcriptURL(forCwd: cwd, sessionID: sessionID)
+        let canonical = AgentSessionStore.canonicalProjectPath(cwd)
+        guard let url = AgentTranscriptLocator.locate(
+            provider: .claude, externalSessionID: sessionID, cwd: canonical
+        ) else {
+            return false
+        }
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
         return exists && !isDirectory.boolValue
@@ -52,10 +63,13 @@ enum ClaudeTranscriptReader {
 
     /// Liest das Transcript fuer eine (cwd, sessionID)-Kombi. Liefert `nil`
     /// wenn die Datei nicht existiert; wirft NICHT bei kaputten Zeilen — die
-    /// werden uebersprungen und geloggt.
+    /// werden uebersprungen und geloggt. Sucht wie `transcriptExists` über
+    /// alle Account-Roots.
     static func read(cwd: String, sessionID: String) -> AgentChatTranscript? {
-        let url = transcriptURL(forCwd: cwd, sessionID: sessionID)
-        guard FileManager.default.fileExists(atPath: url.path) else {
+        let canonical = AgentSessionStore.canonicalProjectPath(cwd)
+        guard let url = AgentTranscriptLocator.locate(
+            provider: .claude, externalSessionID: sessionID, cwd: canonical
+        ) else {
             return nil
         }
         return read(fileURL: url)
@@ -88,10 +102,15 @@ enum ClaudeTranscriptReader {
 
     /// P3 S6: Bounded Tail-Read — parst nur die letzten `tailBytes` statt der
     /// ganzen Datei (Transcripts können >50 MB groß sein). Für Konsumenten,
-    /// die nur das Gesprächsende brauchen (Diktat-Kontext-Tail).
+    /// die nur das Gesprächsende brauchen (Diktat-Kontext-Tail). Sucht wie
+    /// `transcriptExists` über alle Account-Roots.
     static func readTail(cwd: String, sessionID: String, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript? {
-        let url = transcriptURL(forCwd: cwd, sessionID: sessionID)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let canonical = AgentSessionStore.canonicalProjectPath(cwd)
+        guard let url = AgentTranscriptLocator.locate(
+            provider: .claude, externalSessionID: sessionID, cwd: canonical
+        ) else {
+            return nil
+        }
         return readTail(fileURL: url, tailBytes: tailBytes)
     }
 
