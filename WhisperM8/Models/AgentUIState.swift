@@ -16,12 +16,19 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
     var selectedSessionID: UUID?
     var selectedProjectID: UUID?
     var isPrimary: Bool
-    /// Grid-Ansicht des Fensters: `true` = alle offenen Tabs als bündige
-    /// Panes (Layout automatisch aus der Tab-Anzahl), `false` = der
-    /// selektierte Tab füllt den Content (Default, heutiges Verhalten).
-    /// Umgeschaltet über Maximize (Pane) / Minimize (Chat-Statuszeile) —
-    /// es gibt bewusst keine manuellen Raster-Presets mehr.
+    /// Grid-Ansicht des Fensters: `true` = offene Tabs als bündige Panes
+    /// (Layout automatisch aus der Pane-Anzahl), `false` = der selektierte
+    /// Tab füllt den Content (Default, heutiges Verhalten). Umgeschaltet
+    /// über Maximize (Pane) / Minimize (Chat-Statuszeile) — es gibt bewusst
+    /// keine manuellen Raster-Presets mehr.
     var showsGrid: Bool
+    /// Explizite Grid-Mitgliedschaft: WELCHE offenen Tabs das Grid zeigt.
+    /// Leer (bzw. degeneriert auf ≤1 Mitglied) = Default „alle offenen
+    /// Tabs, max. 4". Gepflegt direkt am Grid (⊖ im Pane-Header, Tab-
+    /// Kontextmenü, Drag aufs Grid) — bewusst KEIN Settings-Eintrag, das
+    /// ist Arbeitskontext. Invariante (normalizedWindows): Mitglieder ⊆
+    /// openTabIDs dieses Fensters, dedupliziert.
+    var gridSessionIDs: [UUID]
 
     init(
         id: UUID = UUID(),
@@ -29,7 +36,8 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         selectedSessionID: UUID? = nil,
         selectedProjectID: UUID? = nil,
         isPrimary: Bool = false,
-        showsGrid: Bool = false
+        showsGrid: Bool = false,
+        gridSessionIDs: [UUID] = []
     ) {
         self.id = id
         self.openTabIDs = openTabIDs
@@ -37,11 +45,13 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         self.selectedProjectID = selectedProjectID
         self.isPrimary = isPrimary
         self.showsGrid = showsGrid
+        self.gridSessionIDs = gridSessionIDs
     }
 
     enum CodingKeys: String, CodingKey {
         case id, openTabIDs, selectedSessionID, selectedProjectID, isPrimary
         case showsGrid
+        case gridSessionIDs
         // Preset-Ära (kurzlebiges V1, 2026-07-12) — nur noch fürs Decoding.
         case legacyGridPreset = "gridPreset"
     }
@@ -65,6 +75,7 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
             let legacy = try c.decodeIfPresent(String.self, forKey: .legacyGridPreset)
             showsGrid = legacy.map { $0 != "single" } ?? false
         }
+        gridSessionIDs = try c.decodeIfPresent([UUID].self, forKey: .gridSessionIDs) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -75,6 +86,7 @@ struct AgentChatWindowState: Identifiable, Codable, Equatable, Hashable {
         try c.encodeIfPresent(selectedProjectID, forKey: .selectedProjectID)
         try c.encode(isPrimary, forKey: .isPrimary)
         try c.encode(showsGrid, forKey: .showsGrid)
+        try c.encode(gridSessionIDs, forKey: .gridSessionIDs)
         // legacyGridPreset wird bewusst nicht mehr geschrieben.
     }
 }
@@ -455,6 +467,11 @@ struct AgentUIState: Codable, Equatable {
                !normalized[index].openTabIDs.contains(selected) {
                 normalized[index].selectedSessionID = normalized[index].openTabIDs.first
             }
+            // Grid-Mitglieder folgen den Tabs: geschlossene/abgewanderte
+            // Tabs fliegen automatisch aus der Grid-Auswahl.
+            let tabSet = Set(normalized[index].openTabIDs)
+            normalized[index].gridSessionIDs = deduplicated(normalized[index].gridSessionIDs)
+                .filter { tabSet.contains($0) }
         }
         return normalized
     }

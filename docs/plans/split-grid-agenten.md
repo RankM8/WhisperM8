@@ -1,6 +1,12 @@
 # Plan: Split-Grid — mehrere Agent-Sessions nebeneinander in einem Fenster
 
-Stand: 2026-07-13 · Status: **V2 (Maximize/Minimize) UMGESETZT 2026-07-13** — die manuellen
+Stand: 2026-07-13 · Status: **V2.1 (Grid-Mitgliedschaft) UMGESETZT 2026-07-13** — das Grid
+zeigt eine explizite, pro Fenster persistierte Auswahl (`gridSessionIDs`; leer = alle offenen
+Tabs, max. 4): ⊖ im Pane-Header nimmt einen Chat nur aus dem Grid (Tab bleibt offen; letzter
+verbleibender wird maximiert + Auswahl zurückgesetzt), Tab-Kontextmenü „Im Grid zeigen"/„Aus
+dem Grid entfernen", Tab-Drag aufs Grid nimmt auf (cross-window inklusive), neu selektierte
+Chats werden automatisch Mitglied (Verdrängung: ältestes nicht-fokussiertes bei >4). Kein
+Settings-Eintrag — alles am Ort des Geschehens. Darunter: **V2 (Maximize/Minimize)** — die manuellen
 Raster-Presets aus V1 sind wieder entfernt (User-Feedback: doppelte Steuerung). Stattdessen:
 `showsGrid`-Toggle pro Fenster, Grid-Layout automatisch aus der Tab-Anzahl (2→Spalten,
 3→zwei oben + einer volle Breite, 4+→2×2 mit Bring-into-View-Swap), Maximize-Control in jedem

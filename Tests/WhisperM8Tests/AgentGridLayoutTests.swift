@@ -114,6 +114,62 @@ final class AgentGridLayoutTests: XCTestCase {
         XCTAssertEqual(AgentGridAutoLayout.grid2x2.paneCount, 4)
     }
 
+    // MARK: - Grid-Mitgliedschaft (visibleMembers / membershipAdding)
+
+    func testEmptyMembershipFallsBackToFirstFourTabs() {
+        let ids = [UUID(), UUID(), UUID(), UUID(), UUID()]
+        XCTAssertEqual(
+            AgentGridLayout.visibleMembers(orderedTabIDs: ids, membership: []),
+            Array(ids.prefix(4)),
+            "leere Mitgliedschaft = Default „alle offenen Tabs, max. 4\""
+        )
+    }
+
+    func testMembershipShowsOnlyMembersInTabOrder() {
+        let a = UUID(); let b = UUID(); let c = UUID(); let d = UUID()
+        XCTAssertEqual(
+            AgentGridLayout.visibleMembers(orderedTabIDs: [a, b, c, d], membership: [d, b]),
+            [b, d],
+            "Mitglieder erscheinen in TAB-Reihenfolge, nicht in Aufnahme-Reihenfolge"
+        )
+    }
+
+    func testDegenerateMembershipFallsBackToDefault() {
+        let a = UUID(); let b = UUID(); let c = UUID()
+        // Nur noch ein Mitglied übrig (z. B. weil die anderen Tabs
+        // geschlossen wurden) → Default statt 1-Pane-Grid.
+        XCTAssertEqual(
+            AgentGridLayout.visibleMembers(orderedTabIDs: [a, b, c], membership: [b]),
+            [a, b, c]
+        )
+        // Mitglieder zeigen auf lauter geschlossene Tabs → Default.
+        XCTAssertEqual(
+            AgentGridLayout.visibleMembers(orderedTabIDs: [a, b], membership: [UUID(), UUID()]),
+            [a, b]
+        )
+    }
+
+    func testMembershipAddingAppendsAndDeduplicates() {
+        let a = UUID(); let b = UUID(); let c = UUID()
+        XCTAssertEqual(
+            AgentGridLayout.membershipAdding(c, membership: [a, b], focused: a),
+            [a, b, c]
+        )
+        XCTAssertEqual(
+            AgentGridLayout.membershipAdding(b, membership: [a, b], focused: a),
+            [a, b],
+            "erneutes Hinzufügen erzeugt kein Duplikat"
+        )
+    }
+
+    func testMembershipAddingEvictsOldestNonFocusedWhenFull() {
+        let a = UUID(); let b = UUID(); let c = UUID(); let d = UUID(); let e = UUID()
+        let result = AgentGridLayout.membershipAdding(e, membership: [a, b, c, d], focused: b)
+        XCTAssertEqual(result, [b, c, d, e],
+                       "a (ältestes, nicht fokussiert) weicht; Fokus b und Neuzugang e bleiben")
+        XCTAssertEqual(result.count, AgentGridLayout.maxPanes)
+    }
+
     // MARK: - Persistenz (AgentChatWindowState.showsGrid)
 
     func testWindowStateWithoutShowsGridDecodesAsFalse() throws {
@@ -168,6 +224,65 @@ final class AgentGridLayoutTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         let windows = try XCTUnwrap(object["windows"] as? [[String: Any]])
         XCTAssertNil(windows.first?["gridPreset"], "Legacy-Key wird nicht mehr geschrieben")
+    }
+
+    func testGridSessionIDsDecodeDefaultAndRoundTrip() throws {
+        // Bestandsdatei ohne das Feld → leere Auswahl (Default-Verhalten).
+        let windowID = UUID()
+        let json = """
+        {"schemaVersion": 3,
+         "primaryWindowID": "\(windowID.uuidString)",
+         "windows": [{"id": "\(windowID.uuidString)", "openTabIDs": [], "isPrimary": true}]}
+        """
+        let decoded = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
+        XCTAssertTrue(decoded.windowState(for: windowID).gridSessionIDs.isEmpty)
+
+        // Roundtrip mit expliziter Auswahl.
+        let a = UUID(); let b = UUID()
+        let window = AgentChatWindowState(
+            openTabIDs: [a, b],
+            isPrimary: true,
+            showsGrid: true,
+            gridSessionIDs: [a, b]
+        )
+        let original = AgentUIState(windows: [window], primaryWindowID: window.id)
+        let redecoded = try JSONDecoder().decode(
+            AgentUIState.self,
+            from: JSONEncoder().encode(original)
+        )
+        XCTAssertEqual(redecoded.windowState(for: window.id).gridSessionIDs, [a, b])
+        XCTAssertEqual(redecoded, original)
+    }
+
+    func testNormalizationDropsGridMembersWithoutTab() {
+        let a = UUID(); let b = UUID(); let stale = UUID()
+        let window = AgentChatWindowState(
+            openTabIDs: [a, b],
+            isPrimary: true,
+            gridSessionIDs: [a, stale, a] // Duplikat + toter Verweis
+        )
+        // init → normalizedWindows räumt auf.
+        let state = AgentUIState(windows: [window], primaryWindowID: window.id)
+        XCTAssertEqual(state.windowState(for: window.id).gridSessionIDs, [a],
+                       "Mitglieder ⊆ Tabs, dedupliziert")
+    }
+
+    @MainActor
+    func testStoreCloseTabRemovesGridMember() {
+        let persistence = AgentSessionStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("wm8-gridm-ws-\(UUID().uuidString).json"),
+            uiStateFileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("wm8-gridm-ui-\(UUID().uuidString).json")
+        )
+        let store = AgentWindowStore(persistence: persistence)
+        let w = store.primaryWindowID
+        let a = UUID(); let b = UUID(); let c = UUID()
+        store.openTab(a, in: w); store.openTab(b, in: w); store.openTab(c, in: w)
+        store.setGridSessionIDs([a, b, c], in: w)
+        store.closeTab(b, in: w)
+        XCTAssertEqual(store.gridSessionIDs(in: w), [a, c],
+                       "Tab-Schließen entfernt das Grid-Mitglied automatisch")
     }
 
     @MainActor

@@ -15,17 +15,76 @@ extension AgentChatsView {
         nonmutating set { windowStore.setShowsGrid(newValue, in: windowID) }
     }
 
-    /// Grid nur sinnvoll ab 2 Tabs — bei einem Tab zeigt `mainWorkspace`
-    /// weiterhin die Einzelansicht, auch wenn `showsGrid` true ist.
-    var isGridActive: Bool { showsGrid && headerTabs.count > 1 }
-
-    var gridAutoLayout: AgentGridAutoLayout {
-        AgentGridAutoLayout.forTabCount(headerTabs.count)
+    /// Explizite Grid-Mitgliedschaft (leer = Default „alle offenen Tabs,
+    /// max. 4"). Gepflegt über ⊖ im Pane-Header, Tab-Kontextmenü und Drag
+    /// aufs Grid — bewusst kein Settings-Eintrag (Arbeitskontext).
+    var gridSessionIDs: [UUID] {
+        get { windowStore.gridSessionIDs(in: windowID) }
+        nonmutating set { windowStore.setGridSessionIDs(newValue, in: windowID) }
     }
 
-    /// Die sichtbaren Panes: Präfix der Tab-Bar-Reihenfolge.
+    /// Grid nur sinnvoll ab 2 Panes — sonst zeigt `mainWorkspace`
+    /// weiterhin die Einzelansicht, auch wenn `showsGrid` true ist.
+    var isGridActive: Bool { showsGrid && gridSessions.count > 1 }
+
+    var gridAutoLayout: AgentGridAutoLayout {
+        AgentGridAutoLayout.forTabCount(gridSessions.count)
+    }
+
+    /// Die sichtbaren Panes: Grid-Mitglieder in Tab-Reihenfolge (leere/
+    /// degenerierte Mitgliedschaft = die ersten 4 offenen Tabs).
     var gridSessions: [AgentChatSession] {
-        Array(headerTabs.prefix(gridAutoLayout.paneCount))
+        let visible = Set(AgentGridLayout.visibleMembers(
+            orderedTabIDs: headerTabs.map(\.id),
+            membership: gridSessionIDs
+        ))
+        return headerTabs.filter { visible.contains($0.id) }
+    }
+
+    // MARK: - Mitgliedschaft pflegen
+
+    /// Tab-Kontextmenü „Im Grid zeigen": Mitglied werden + Grid öffnen.
+    func showSessionInGrid(_ sessionID: UUID) {
+        openTab(sessionID)
+        addSessionToGrid(sessionID)
+        showsGrid = true
+    }
+
+    /// Nimmt einen Chat in die Grid-Auswahl auf. Eine leere (Default-)
+    /// Mitgliedschaft wird dabei zuerst materialisiert — „alle sichtbaren
+    /// plus der neue", nicht „nur der neue". Bei voller Kapazität weicht
+    /// das älteste Mitglied, das weder das neue noch das fokussierte ist.
+    func addSessionToGrid(_ sessionID: UUID) {
+        var membership = gridSessionIDs
+        if membership.isEmpty { membership = gridSessions.map(\.id) }
+        gridSessionIDs = AgentGridLayout.membershipAdding(
+            sessionID,
+            membership: membership,
+            focused: selectedSessionID
+        )
+    }
+
+    /// ⊖ im Pane-Header / Kontextmenü: nimmt den Chat NUR aus dem Grid —
+    /// der Tab bleibt offen. Bleibt nur ein Mitglied übrig, wird es
+    /// maximiert und die Auswahl zurückgesetzt (ein 1-Pane-Grid ist
+    /// sinnlos; der nächste Minimize startet wieder mit dem Default).
+    func removeSessionFromGrid(_ sessionID: UUID) {
+        var membership = gridSessionIDs
+        if membership.isEmpty { membership = gridSessions.map(\.id) }
+        membership.removeAll { $0 == sessionID }
+
+        if membership.count <= 1 {
+            if let remaining = membership.first {
+                selectedSessionID = remaining
+            }
+            gridSessionIDs = []
+            showsGrid = false
+            return
+        }
+        gridSessionIDs = membership
+        if selectedSessionID == sessionID {
+            selectedSessionID = headerTabs.first { membership.contains($0.id) }?.id
+        }
     }
 
     // MARK: - Maximize / Minimize
@@ -123,6 +182,18 @@ extension AgentChatsView {
             }
         }
         .onDisappear { hoveredGridPaneID = nil }
+        // Tab aufs Grid ziehen = in die Auswahl aufnehmen (Cross-Window-
+        // Drags holen den Tab zuerst in dieses Fenster; DraggableSession
+        // trägt die Quell-Fenster-ID).
+        .dropDestination(for: DraggableSession.self) { items, _ in
+            guard let dropped = items.first else { return false }
+            let source = dropped.sourceWindowID ?? windowID
+            if source != windowID {
+                windowStore.moveTab(dropped.sessionID, from: source, to: windowID, before: nil)
+            }
+            addSessionToGrid(dropped.sessionID)
+            return true
+        }
     }
 
     @ViewBuilder
@@ -212,9 +283,9 @@ extension AgentChatsView {
             .buttonStyle(.plain)
             .help("Diesen Chat maximieren")
             Button {
-                closeTab(session)
+                removeSessionFromGrid(session.id)
             } label: {
-                Image(systemName: "xmark")
+                Image(systemName: "minus")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .frame(width: 16, height: 16)
@@ -222,7 +293,10 @@ extension AgentChatsView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Tab schließen")
+            // Bewusst KEIN Tab-Schließen im Pane-Header — ⊖ nimmt den Chat
+            // nur aus dem Grid; Tabs schließt man in der Tab-Leiste (✕, ⌘W,
+            // Mittelklick).
+            .help("Aus dem Grid nehmen (Tab bleibt offen)")
         }
         .padding(.horizontal, 10)
         .frame(height: 28)
@@ -252,13 +326,24 @@ extension AgentChatsView {
 
     private func bringSelectionIntoGrid(_ selected: UUID, previous: UUID?) {
         guard isGridActive else { return }
-        if let newOrder = AgentGridLayout.orderBringingIntoView(
-            selected: selected,
-            openTabIDs: openTabIDs,
-            visibleIDs: gridSessions.map(\.id),
-            previousSelected: previous
-        ) {
-            openTabIDs = newOrder
+        let visible = gridSessions.map(\.id)
+        guard !visible.contains(selected),
+              headerTabs.contains(where: { $0.id == selected }) else { return }
+        if gridSessionIDs.isEmpty {
+            // Default-Modus („alle Tabs"): Identity-Swap in der Tab-Reihenfolge.
+            if let newOrder = AgentGridLayout.orderBringingIntoView(
+                selected: selected,
+                openTabIDs: openTabIDs,
+                visibleIDs: visible,
+                previousSelected: previous
+            ) {
+                openTabIDs = newOrder
+            }
+        } else {
+            // Explizite Auswahl: neu selektierte Chats (Sidebar, ⌘1–9, neuer
+            // Tab) werden automatisch Mitglied — sonst fühlte sich das Grid
+            // „kaputt" an, weil die Selektion unsichtbar bliebe.
+            addSessionToGrid(selected)
         }
     }
 

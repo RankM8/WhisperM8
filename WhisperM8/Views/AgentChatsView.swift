@@ -2535,6 +2535,17 @@ struct AgentChatsView: View {
             ) {
                 moveSelectionToNewWindow(session)
             }
+            if headerTabs.count > 1 {
+                if isGridActive, gridSessions.contains(where: { $0.id == session.id }) {
+                    Button("Aus dem Grid entfernen", systemImage: "minus.circle") {
+                        removeSessionFromGrid(session.id)
+                    }
+                } else {
+                    Button("Im Grid zeigen", systemImage: "square.grid.2x2") {
+                        showSessionInGrid(session.id)
+                    }
+                }
+            }
             Divider()
             Button(
                 pinLabel(for: session),

@@ -184,6 +184,16 @@ final class AgentWindowStore {
         updateWindow(windowID) { $0.showsGrid = shows }
     }
 
+    /// Explizite Grid-Mitgliedschaft des Fensters (leer = Default „alle
+    /// offenen Tabs, max. 4"). Invarianten stellt `normalizedWindows` her.
+    func gridSessionIDs(in windowID: UUID) -> [UUID] {
+        window(for: windowID).gridSessionIDs
+    }
+
+    func setGridSessionIDs(_ ids: [UUID], in windowID: UUID) {
+        updateWindow(windowID) { $0.gridSessionIDs = ids }
+    }
+
     /// Entfernt ein leeres Sekundaerfenster aus dem State. Gibt `true` zurueck,
     /// wenn tatsaechlich entfernt wurde (Aufrufer kann dann das NSWindow zu).
     @discardableResult

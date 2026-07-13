@@ -36,9 +36,48 @@ enum AgentGridAutoLayout: Equatable {
 /// sich aus `openTabIDs` ab (eine Wahrheit, persistiert wie bisher).
 /// Unit-getestet in `AgentGridLayoutTests`.
 enum AgentGridLayout {
+    /// Harte Obergrenze der gleichzeitig sichtbaren Panes — mehr ist bei
+    /// roher TUI nicht mehr lesbar.
+    static let maxPanes = 4
+
     /// Die sichtbaren Panes: Präfix der (gefilterten) Tab-Liste.
     static func visibleIDs(_ orderedTabIDs: [UUID], paneCount: Int) -> [UUID] {
         Array(orderedTabIDs.prefix(max(0, paneCount)))
+    }
+
+    /// Sichtbare Panes unter Berücksichtigung der expliziten Mitgliedschaft:
+    /// Mitglieder in **Tab-Reihenfolge** (Reorder der Leiste ordnet auch das
+    /// Grid), gekappt auf `cap`. Leere ODER degenerierte (≤ 1 Treffer)
+    /// Mitgliedschaft fällt auf den Default „alle offenen Tabs" zurück —
+    /// das heilt auch verwaiste Reste, wenn Mitglieds-Tabs geschlossen wurden.
+    static func visibleMembers(
+        orderedTabIDs: [UUID],
+        membership: [UUID],
+        cap: Int = AgentGridLayout.maxPanes
+    ) -> [UUID] {
+        let memberSet = Set(membership)
+        let filtered = orderedTabIDs.filter { memberSet.contains($0) }
+        guard filtered.count > 1 else { return Array(orderedTabIDs.prefix(cap)) }
+        return Array(filtered.prefix(cap))
+    }
+
+    /// Mitgliedschaft nach „Hinzufügen": das neue Mitglied kommt ans Ende;
+    /// bei voller Kapazität weicht das älteste Mitglied, das weder das neue
+    /// noch das fokussierte ist (die Pane, mit der gerade gearbeitet wird,
+    /// verschwindet nie durch eine Aufnahme).
+    static func membershipAdding(
+        _ id: UUID,
+        membership: [UUID],
+        focused: UUID?,
+        cap: Int = AgentGridLayout.maxPanes
+    ) -> [UUID] {
+        var members = membership.filter { $0 != id }
+        members.append(id)
+        while members.count > cap {
+            guard let evictIndex = members.firstIndex(where: { $0 != id && $0 != focused }) else { break }
+            members.remove(at: evictIndex)
+        }
+        return members
     }
 
     /// Reihenfolge, die einen NICHT sichtbaren selektierten Tab ins
