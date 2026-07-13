@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid-Workspace: Slots, Drag &amp; Drop, 2–9 Panes — WhisperM8 Plan</title>
+<style>
+:root {
+  --bg: #101114; --panel: #1C1E23; --card: #23252C; --hover: #2A2C34;
+  --border: #2E3138; --border-soft: #26282F;
+  --text: #E8E9ED; --text-soft: #A6A9B3; --text-mute: #686C78;
+  --indigo: #6E6ADE; --indigo-soft: rgba(110,106,222,.16);
+  --green: #4CC38A; --amber: #E0A33E; --red: #E5645A;
+  --doc-bg: #0B0C0E;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--doc-bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 80px; }
+a { color: var(--indigo); }
+code { font-family: var(--mono); font-size: .85em; background: var(--card); border: 1px solid var(--border-soft); border-radius: 4px; padding: 1px 5px; }
+
+header.top { padding: 52px 0 26px; }
+.status-chip { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--amber); border: 1px solid rgba(224,163,62,.4); background: rgba(224,163,62,.08); border-radius: 999px; padding: 4px 12px; margin-bottom: 16px; }
+h1 { font-size: 33px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
+h1 em { color: var(--indigo); font-style: normal; }
+.lede { color: var(--text-soft); font-size: 16.5px; max-width: 800px; margin: 0; }
+
+section { margin-top: 50px; }
+h2 { font-size: 21px; font-weight: 650; margin: 0 0 6px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
+h2 .idx { font-family: var(--mono); font-size: 11px; color: var(--indigo); letter-spacing: .12em; display: block; margin-bottom: 6px; }
+.sub { color: var(--text-soft); margin: 0 0 20px; max-width: 800px; }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.box { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; }
+.box.wide { grid-column: 1 / -1; }
+.box h3 { margin: 0 0 10px; font-size: 14.5px; }
+.box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--indigo); text-transform: uppercase; display: block; margin-bottom: 6px; }
+.box ul, .box ol { margin: 0; padding: 0 0 0 2px; list-style: none; font-size: 13.5px; color: var(--text-soft); }
+.box li { padding: 5px 0 5px 18px; position: relative; }
+.box ul li::before { content: "›"; position: absolute; left: 0; color: var(--indigo); }
+.box ol { counter-reset: n; }
+.box ol li::before { counter-increment: n; content: counter(n) "."; position: absolute; left: 0; color: var(--indigo); font-family: var(--mono); font-size: 11px; top: 8px; }
+.box b { color: var(--text); }
+@media (max-width: 840px) { .cols { grid-template-columns: 1fr; } }
+
+table.t { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
+table.t th, table.t td { text-align: left; padding: 10px 13px; border: 1px solid var(--border-soft); vertical-align: top; }
+table.t th { background: var(--panel); font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-mute); font-weight: 500; }
+table.t td { color: var(--text-soft); background: rgba(255,255,255,.012); }
+table.t td b { color: var(--text); }
+tr.hl td { background: rgba(110,106,222,.07); }
+
+/* ---------- Demo ---------- */
+.demo-hint { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--text-soft); margin-bottom: 10px; flex-wrap: wrap; }
+.demo-hint .key { font-family: var(--mono); font-size: 11px; background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; color: var(--text); }
+.cap-picker { display: inline-flex; gap: 2px; background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 2px; margin-left: auto; }
+.cap-picker button { font-family: var(--sans); font-size: 12px; border: 0; background: transparent; color: var(--text-mute); padding: 3px 10px; border-radius: 5px; cursor: pointer; }
+.cap-picker button.on { background: var(--indigo-soft); color: var(--text); box-shadow: inset 0 0 0 1px rgba(110,106,222,.4); }
+
+.demo { background: var(--bg); border: 1px solid #000; border-radius: 12px; overflow: hidden; box-shadow: 0 30px 70px -30px rgba(0,0,0,.8); user-select: none; }
+.chipbar { display: flex; gap: 6px; align-items: center; padding: 9px 12px; background: var(--panel); border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+.chipbar .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-mute); margin-right: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 7px; font-size: 12px; color: var(--text-soft); background: var(--card); border: 1px solid var(--border); cursor: grab; white-space: nowrap; }
+.chip.inws { opacity: .45; }
+.chip .slotno { font-family: var(--mono); font-size: 9px; color: var(--indigo); }
+.sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.sdot.g { background: var(--green); box-shadow: 0 0 6px rgba(76,195,138,.55); }
+.sdot.a { background: var(--amber); } .sdot.i { background: var(--text-mute); }
+
+.gridwrap { position: relative; height: 460px; }
+.wsgrid { display: grid; width: 100%; height: 100%; gap: 1px; background: var(--border-soft); }
+.slot { background: var(--bg); display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+.slot.focus::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 2px var(--indigo); }
+.slot.dropc::before { content: attr(data-droplabel); position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(110,106,222,.18); color: var(--text); font-size: 12.5px; font-weight: 600; pointer-events: none; }
+.phead { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 26px; background: var(--panel); border-bottom: 1px solid var(--border-soft); flex: none; cursor: grab; }
+.phead .name { font-weight: 600; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot:not(.focus) .phead .name { color: var(--text-soft); font-weight: 400; }
+.phead .spring { flex: 1; }
+.pbtn { width: 18px; height: 16px; border-radius: 4px; border: 0; background: transparent; color: var(--text-mute); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; }
+.pbtn:hover { background: var(--hover); color: var(--text); }
+.pterm { flex: 1; min-height: 0; overflow: hidden; font-family: var(--mono); font-size: 10px; line-height: 1.55; padding: 7px 10px; color: var(--text-soft); }
+.pterm .p { color: var(--indigo); } .pterm .ok { color: var(--green); } .pterm .wn { color: var(--amber); } .pterm .dim { color: var(--text-mute); }
+.slot.empty { align-items: center; justify-content: center; background: var(--panel); }
+.slot.empty .hintbox { border: 1.5px dashed var(--border); border-radius: 10px; padding: 16px 22px; text-align: center; color: var(--text-mute); font-size: 11.5px; }
+.slot.empty .hintbox b { display: block; color: var(--text-soft); font-size: 12px; margin-bottom: 2px; }
+.slot.empty.dropc .hintbox { border-color: var(--indigo); }
+.badge { position: absolute; right: 10px; bottom: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--text-mute); background: var(--panel); border: 1px solid var(--border-soft); padding: 2px 8px; border-radius: 999px; pointer-events: none; z-index: 6; }
+.toast { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 9; background: var(--card); border: 1px solid var(--border); color: var(--text-soft); font-size: 12px; padding: 6px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); color: var(--text-mute); font-size: 13px; }
+.pill { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.pill.p0 { background: rgba(229,100,90,.15); color: var(--red); }
+.pill.p1 { background: rgba(224,163,62,.15); color: var(--amber); }
+.pill.p2 { background: rgba(76,195,138,.12); color: var(--green); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="status-chip">Umsetzungsplan · abgestimmt, Basis: 5 Codex-Konsultationen · 2026-07-13</div>
+  <h1>Grid-<em>Workspace</em>: feste Slots, echtes Drag &amp; Drop, 2–9 Panes</h1>
+  <p class="lede">Das Grid wird vom Tab-Ausschnitt zum kuratierten Workspace: Du bestimmst, welcher Chat in welchem Slot liegt, sortierst per Drag um, ersetzt gezielt per Reinschieben — und keine Automatik verdrängt mehr irgendetwas. Produktgrundsatz: <b>Ein Klick navigiert, ein Drop kuratiert.</b> Kapazität neu: bis 3×3 = 9 Panes.</p>
+</header>
+
+<!-- ============ 01 DEMO ============ -->
+<section>
+  <h2><span class="idx">01 — INTERAKTIVER MOCKUP</span>Zieh es dir zurecht</h2>
+  <p class="sub">Alles echt draggable: <b>Chips oben</b> (deine Tabs) auf eine Pane ziehen = <b>ersetzen</b>, auf einen leeren Slot = <b>einfügen</b>. <b>Pane-Header</b> auf eine andere Pane ziehen = <b>tauschen</b>, auf einen leeren Slot = <b>verschieben</b>. Klick auf eine Pane = Fokus. ⊖ leert den Slot (Tab bleibt). Rechts die Kapazität — bis 3×3.</p>
+
+  <div class="demo-hint">
+    <span class="key">Chip → Pane = ersetzen</span>
+    <span class="key">Header → Pane = tauschen</span>
+    <span class="key">→ leerer Slot = einfügen</span>
+    <div class="cap-picker" id="cap">
+      <button data-c="2">2</button><button data-c="3">3</button>
+      <button data-c="4" class="on">2×2</button><button data-c="6">3×2</button>
+      <button data-c="9">3×3</button>
+    </div>
+  </div>
+
+  <div class="demo">
+    <div class="chipbar" id="chips"><span class="lbl">Tabs</span></div>
+    <div class="gridwrap">
+      <div class="wsgrid" id="grid"></div>
+      <div class="badge">Slots bleiben stabil — nichts rückt nach, keine Automatik</div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+  <div class="cols" style="margin-top:14px;">
+    <div class="box wide">
+      <span class="tag">Regeln (aus der UX-Konsultation, verbindlich für die Umsetzung)</span>
+      <h3>„Ein Klick navigiert, ein Drop kuratiert"</h3>
+      <ul>
+        <li><b>Feste Slots</b> mit expliziter Belegung; leere Slots bleiben sichtbar als Drop-Fläche — Positionen sind stabil, nichts kollabiert</li>
+        <li><b>Sidebar-/Tab-Klick auf einen Chat außerhalb des Workspace ändert das Grid NIE:</b> Einzelansicht öffnet sich, „Zurück zum Workspace" stellt exakt das Grid wieder her. Die Verdrängungs-Automatik (bringSelectionIntoGrid) wird ersatzlos entfernt</li>
+        <li><b>Ersetzen</b> nimmt den alten Chat nur aus dem Workspace — Tab und Prozess laufen weiter</li>
+        <li><b>Kontextmenü „Im Workspace platzieren → Slot N"</b> als präziser Weg ohne Drag (auch für Bulk)</li>
+        <li>Drop-Feedback benennt die Aktion konkret: „X durch Y ersetzen", „Tauschen", Akzent-Kontur auf leeren Slots; unbeteiligte Panes dimmen</li>
+        <li>Maximize/Minimize (⤢/Grid-Button) und verschiebbare Trennlinien bleiben wie gebaut; Trennlinien sind KEINE Drop-Ziele (Resize und Einfügen nie auf derselben Fläche)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 KAPAZITÄT ============ -->
+<section>
+  <h2><span class="idx">02 — KAPAZITÄT</span>Mehr als 4? Ja — bis 3×3.</h2>
+  <p class="sub">Das bisherige 4er-Limit war eine konservative Setzung (TUI-Lesbarkeit + ungemessene Performance), keine technische Grenze. Mit dem Slot-Modell und dem Performance-Paket unten fällt sie. Neue Kapazitätsstufen, im Grid-Chrome wählbar:</p>
+  <table class="t">
+    <tr><th>Stufe</th><th>Layout</th><th>Mindest-Fensterbreite (240 pt/Pane)</th><th>Hinweis</th></tr>
+    <tr><td><b>2</b></td><td>1×2 (nebeneinander)</td><td>~480 pt</td><td>heutiges Verhalten</td></tr>
+    <tr><td><b>3</b></td><td>2 oben + 1 breit</td><td>~480 pt</td><td>heutiges Verhalten</td></tr>
+    <tr><td><b>4</b></td><td>2×2</td><td>~480 pt</td><td>heutiges Verhalten</td></tr>
+    <tr class="hl"><td><b>6</b></td><td>3×2 (3 Spalten, 2 Zeilen)</td><td>~720 pt</td><td>neu — nach Performance-Paket 1</td></tr>
+    <tr class="hl"><td><b>9</b></td><td>3×3</td><td>~720 pt breit, ~600 pt hoch</td><td>neu — nach Performance-Paket 1</td></tr>
+  </table>
+  <div class="cols" style="margin-top:14px;">
+    <div class="box">
+      <span class="tag">Natürliche Grenze</span>
+      <h3>Mindest-Pane statt Hardcap</h3>
+      <ul>
+        <li>Pro Pane gelten ~240 pt Mindestbreite (GridSplitResolver.minPane) — auf kleinen Fenstern blendet der Kapazitäts-Picker Stufen aus, die nicht passen, statt Matchbox-Terminals zu rendern</li>
+        <li>8 (4×2) lassen wir bewusst weg: 4 Spalten unterschreiten auf üblichen Fenstern die Lesbarkeit; 3×3 deckt „viele auf einmal" ab. Nachrüstbar, falls du es brauchst</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Trennlinien bei 3 Spalten/Zeilen</span>
+      <h3>Splits werden Arrays</h3>
+      <ul>
+        <li>Heute: EIN Verhältnis pro Achse. Bei 3 Spalten werden daraus zwei Divider pro Achse → <code>GridSplitResolver</code> wird auf Fraction-Arrays verallgemeinert (pure Logik + Tests, gleiche Clamping-Regeln)</li>
+        <li>Doppelklick auf eine Linie = diese Achse zurück auf Gleichverteilung</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 PERFORMANCE ============ -->
+<section>
+  <h2><span class="idx">03 — PERFORMANCE</span>Voraussetzung für 6–9 Panes: das Messprogramm</h2>
+  <p class="sub">Zwei Codex-Analysen (Code + externe Recherche) sind sich einig: Der dominante Hotspot ist der ungepufferte Divider-Drag-Pfad, nicht das Streaming. Und unser SwiftTerm-Fork verpasst zwei Upstream-Fixes, die genau die BridgeSpace-artigen Freezes verhindern. Priorisiert:</p>
+  <table class="t">
+    <tr><th></th><th>Maßnahme</th><th>Effekt</th></tr>
+    <tr><td><span class="pill p0">P0</span></td><td><b>perf.grid-Signposts + 4-Pane-Benchmark</b> (Budgets: Grid-Aufbau 50 ms, Fokuswechsel 33 ms, Divider-Tick 16 ms, Streaming-Frame 16,7 ms)</td><td>Erst messen — jede weitere Maßnahme wird belegbar</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td><b>Divider-Drag entkoppeln:</b> Live-Wert lokal, @AppStorage-Commit erst beim Loslassen (Sidebar-Muster); Pane-/PTY-Resize auf 33–50-ms-Takt (Hybrid), finaler Flush</td><td>Beseitigt Body-Re-Eval pro Maus-Tick + Reflow-Stürme</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td><b>SwiftTerm-Fork rebasen</b> (mind. PR #574 PTY-Backpressure + PR #573 Resize-Fix: 30–70 ms → 0,3 ms)</td><td>Verhindert Freeze-/Speicherpfad, Divider-Drag ×N Panes wird billig</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td><b>Feed-Drosselung nicht-fokussierter Panes</b> (20–30 Hz statt 60, via dataReceived-Override — kein Fork nötig); Fokus-Pane volle Rate, Flush bei Fokuswechsel</td><td>Halbiert Frame-Arbeit im 4er-Grid; macht 6–9 realistisch</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td><b>Metal-Renderer per A/B zum Default</b> (perFrameAggregated vs. perRowPersistent mit echten TUIs messen)</td><td>CoreText-CPU-Last runter</td></tr>
+    <tr><td><span class="pill p2">P2</span></td><td>Geteilter NSEvent-Monitor-Router (heute 2 Monitore PRO Terminal-Controller), Occlusion-Pause bei verdecktem Fenster, headerTabs-Snapshot statt ~12 Neuberechnungen pro Body-Eval</td><td>Aufräumarbeiten, datengetrieben</td></tr>
+  </table>
+</section>
+
+<!-- ============ 04 TECHNIK ============ -->
+<section>
+  <h2><span class="idx">04 — TECHNIK</span>Wie es gebaut wird (Machbarkeit verifiziert)</h2>
+  <div class="cols">
+    <div class="box">
+      <span class="tag">Datenmodell</span>
+      <h3>gridSlots: [UUID?] statt Mitglieder-Liste</h3>
+      <ul>
+        <li>Neuer JSON-Key, Länge 2–9; <code>nil</code> = leerer Slot. <code>gridSessionIDs</code> wird nur noch als Legacy gelesen (Migration in Bildschirm-Reihenfolge)</li>
+        <li>Manueller Decoder mit decodeIfPresent (etabliertes Muster gegen den dokumentierten Tab-State-Totalverlust)</li>
+        <li><code>normalizedWindows</code>: geschlossene Tabs werden am Index zu <code>nil</code> — <b>nicht</b> kompaktiert, Positionen bleiben stabil</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Drag &amp; Drop</span>
+      <h3>DropDelegate-Muster + Slot-Herkunft</h3>
+      <ul>
+        <li><code>GridPaneDropDelegate</code> nach dem bewährten TabReorderDropDelegate-Muster (liefert Zonen + Move-Semantik); pure <code>GridDropZoneResolver</code>-Logik, unit-getestet</li>
+        <li><code>DraggableSession</code> bekommt optionales <code>sourceGridSlotIndex</code> → eindeutige Swap- vs. Replace-Entscheidung; alte Payloads bleiben decodierbar</li>
+        <li>Drag-Quelle: nur der Pane-Header (Terminal-Selektion bleibt ungestört); Doppelklick-Maximize bleibt</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">SwiftTerm</span>
+      <h3>Tausch ohne Prozessverlust</h3>
+      <ul>
+        <li>PTY/Scrollback hängen an der sessionID-Registry, nicht am Slot — Swap = zwei Re-Attaches, kein Neustart (verifiziert)</li>
+        <li>Härtung: Fokus nach Slot-Mutation explizit neu setzen (selectedSessionID ändert sich beim Tausch nicht) + Frames atomar in einer CATransaction committen (kein Flackern)</li>
+      </ul>
+    </div>
+    <div class="box">
+      <span class="tag">Was entfällt</span>
+      <h3>Aufräumen</h3>
+      <ul>
+        <li><code>bringSelectionIntoGrid</code> + Verdrängungs-Automatik: ersatzlos raus</li>
+        <li>Ganzflächiges Grid-dropDestination → ersetzt durch per-Slot-Ziele</li>
+        <li>Degenerierte-Mitgliedschaft-Heuristik („≤1 → Default") → leere Slots sind jetzt legal</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 PAKETE ============ -->
+<section>
+  <h2><span class="idx">05 — REIHENFOLGE</span>Drei Pakete, einzeln shipbar</h2>
+  <table class="t">
+    <tr><th>Paket</th><th>Inhalt</th><th>Aufwand</th></tr>
+    <tr><td><b>1 — Perf-Fundament</b></td><td>perf.grid-Signposts + Benchmark, Divider-Drag-Entkopplung (lokaler Live-Wert, 33–50-ms-Resize-Hybrid), SwiftTerm-Fork-Rebase (#573/#574)</td><td>~1–2 Tage</td></tr>
+    <tr><td><b>2 — Slot-Workspace</b></td><td>gridSlots-Modell + Migration, Drag &amp; Drop (Swap/Replace/Insert), leere Slots, Automatik-Entfernung, Einzelansicht mit „Zurück zum Workspace", Kontextmenü-Platzierung, Kapazitäts-Picker 2/3/4</td><td>~5–8 Tage</td></tr>
+    <tr><td><b>3 — Skalierung</b></td><td>Kapazitäten 6 + 9 (Fraction-Arrays für Splits), Feed-Drosselung nicht-fokussierter Panes, Metal-A/B → Default; Freischaltung 6–9 nach grünem Benchmark</td><td>~2–3 Tage</td></tr>
+  </table>
+  <div class="cols" style="margin-top:14px;">
+    <div class="box wide">
+      <span class="tag">Warum diese Reihenfolge</span>
+      <h3>Erst messen, dann umbauen, dann skalieren</h3>
+      <ul>
+        <li>Paket 1 ist klein, sofort spürbar (Divider-Drag) und misst die Pakete 2+3 gleich mit</li>
+        <li>Paket 2 ist der eigentliche Workspace-Umbau — dein Kernanliegen</li>
+        <li>Paket 3 schaltet 6–9 Panes erst frei, wenn der Benchmark zeigt, dass 9 streamende TUIs die Budgets halten — kein Blindflug</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  WhisperM8 · Grid-Workspace-Plan · 2026-07-13 · Basis: 5 Codex-Konsultationen (UX 510e8456 · Recherche b778a065 · Machbarkeit 5a85b81b · Perf-Recherche dc7409f5 · Perf-Code d4450222) · Textplan: <code>docs/plans/split-grid-agenten.md</code> · Vorgänger-Konzept: <code>grid-maximize-minimize-konzept.html</code>
+</footer>
+</div>
+
+<script>
+// ---------- Demo-Zustand ----------
+const CHATS = {
+  a: { name: "BridgeMind-Features", dot: "g", lines: ['<span class="dim">●</span> swift test --filter Grid', '  <span class="ok">✓ 22 passed (0.4s)</span>', '<span class="p">❯</span> <span class="dim">Prompt …</span>'] },
+  b: { name: "Session-Resume-Bug", dot: "g", lines: ['<span class="p">❯</span> git check-ignore .playwright-mcp/', '<span class="ok">Erledigt (183088b)</span>'] },
+  c: { name: "Dashboard-Dev-Server", dot: "a", lines: ['<span class="dim">●</span> npm run dev -- --port 4321', '<span class="wn">? Server neu starten? (y/n)</span>'] },
+  d: { name: "Plugin-Audit", dot: "i", lines: ['<span class="dim">Zusammenfassung · vor 15 Std.</span>', '<span class="dim">(Transcript-Ansicht)</span>'] },
+  e: { name: "Jira-Zugriff AKQ", dot: "g", lines: ['<span class="dim">●</span> curl -s api/board/AKQ …', '  <span class="ok">✓ 12 Tickets gelesen</span>'] },
+  f: { name: "Release 2.9", dot: "i", lines: ['<span class="dim">●</span> make dmg', '<span class="dim">(wartet)</span>'] }
+};
+const LAYOUTS = { 2: {cols:2,rows:1}, 3: {cols:2,rows:2,special3:true}, 4: {cols:2,rows:2}, 6: {cols:3,rows:2}, 9: {cols:3,rows:3} };
+
+let capacity = 4;
+let slots = ["a", "b", "c", null];   // Slot-Belegung — Positionen stabil
+let focusID = "a";
+
+const $grid = document.getElementById("grid");
+const $chips = document.getElementById("chips");
+const $toast = document.getElementById("toast");
+let toastTimer = null;
+function toast(msg) {
+  $toast.textContent = msg;
+  $toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $toast.classList.remove("show"), 1800);
+}
+
+function setCapacity(c) {
+  capacity = c;
+  const next = new Array(c).fill(null);
+  for (let i = 0; i < Math.min(c, slots.length); i++) next[i] = slots[i];
+  // Beim Verkleinern: hintere belegte Slots verlassen den Workspace (Tabs bleiben).
+  slots = next;
+  render();
+}
+
+function slotIndexOf(id) { return slots.indexOf(id); }
+
+function handleDrop(targetIndex, payload) {
+  const { id, fromSlot } = payload;
+  const targetID = slots[targetIndex];
+  if (fromSlot !== null && fromSlot !== undefined && fromSlot >= 0) {
+    // Pane-Drag: tauschen bzw. in leeren Slot verschieben
+    if (targetIndex === fromSlot) return;
+    slots[fromSlot] = targetID;   // null bei leerem Ziel -> Quellslot wird leer
+    slots[targetIndex] = id;
+    toast(targetID ? "Getauscht: Slot " + (fromSlot + 1) + " ⇄ Slot " + (targetIndex + 1) : "Verschoben nach Slot " + (targetIndex + 1));
+  } else {
+    // Chip-Drag (Tab/Sidebar): ersetzen bzw. leeren Slot belegen
+    const existing = slotIndexOf(id);
+    if (existing >= 0) {
+      slots[existing] = targetID;
+      slots[targetIndex] = id;
+      toast("Getauscht: bereits im Workspace");
+    } else {
+      slots[targetIndex] = id;
+      toast(targetID ? CHATS[targetID].name + " durch " + CHATS[id].name + " ersetzt (Tab bleibt offen)" : CHATS[id].name + " in Slot " + (targetIndex + 1));
+    }
+  }
+  focusID = id;
+  render();
+}
+
+function render() {
+  // Kapazitäts-Picker
+  document.querySelectorAll("#cap button").forEach(b => b.classList.toggle("on", parseInt(b.dataset.c, 10) === capacity));
+
+  // Chips
+  $chips.querySelectorAll(".chip").forEach(c => c.remove());
+  Object.keys(CHATS).forEach(id => {
+    const inWS = slotIndexOf(id) >= 0;
+    const el = document.createElement("span");
+    el.className = "chip" + (inWS ? " inws" : "");
+    el.draggable = true;
+    el.innerHTML = '<span class="sdot ' + CHATS[id].dot + '"></span>' + CHATS[id].name + (inWS ? ' <span class="slotno">S' + (slotIndexOf(id) + 1) + "</span>" : "");
+    el.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot: null }));
+      e.dataTransfer.effectAllowed = "move";
+    });
+    el.addEventListener("click", () => {
+      if (inWS) { focusID = id; render(); }
+      else { toast("Klick navigiert nur — Einzelansicht würde öffnen, Grid bleibt unverändert. Zum Platzieren: ziehen."); }
+    });
+    $chips.appendChild(el);
+  });
+
+  // Grid
+  const L = LAYOUTS[capacity];
+  $grid.style.gridTemplateColumns = "repeat(" + L.cols + ", 1fr)";
+  $grid.style.gridTemplateRows = "repeat(" + L.rows + ", 1fr)";
+  $grid.innerHTML = "";
+  slots.forEach((id, i) => {
+    const el = document.createElement("div");
+    const isLast3 = LAYOUTS[capacity].special3 && i === 2;
+    if (isLast3) el.style.gridColumn = "1 / -1";
+    if (id) {
+      const c = CHATS[id];
+      el.className = "slot" + (id === focusID ? " focus" : "");
+      el.innerHTML =
+        '<div class="phead" draggable="true"><span class="sdot ' + c.dot + '"></span>' +
+        '<span class="name">' + c.name + "</span><span class=\"spring\"></span>" +
+        '<button class="pbtn" data-max title="Maximieren">⤢</button>' +
+        '<button class="pbtn" data-rm title="Aus dem Workspace (Tab bleibt)">⊖</button></div>' +
+        '<div class="pterm">' + c.lines.join("<br>") + "</div>";
+      el.querySelector(".phead").addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/plain", JSON.stringify({ id, fromSlot: i }));
+        e.dataTransfer.effectAllowed = "move";
+        e.stopPropagation();
+      });
+      el.querySelector("[data-rm]").addEventListener("click", e => {
+        e.stopPropagation();
+        slots[i] = null;   // Slot bleibt leer bestehen — nichts rückt nach
+        toast(c.name + " aus dem Workspace genommen — Slot " + (i + 1) + " bleibt frei, Tab bleibt offen");
+        render();
+      });
+      el.querySelector("[data-max]").addEventListener("click", e => {
+        e.stopPropagation();
+        toast("Maximiert " + c.name + " — „Zurück zum Workspace" stellt das Grid exakt wieder her");
+        focusID = id; render();
+      });
+      el.addEventListener("click", () => { focusID = id; render(); });
+    } else {
+      el.className = "slot empty";
+      el.innerHTML = '<div class="hintbox"><b>Slot ' + (i + 1) + "</b>Chat hier ablegen</div>";
+    }
+    // Drop-Ziel (belegte UND leere Slots)
+    el.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      let label = "Hier ablegen";
+      try {
+        // Kein Zugriff auf Payload bei dragover — Label generisch je nach Ziel:
+        label = id ? "Ersetzen / Tauschen" : "In Slot " + (i + 1) + " einfügen";
+      } catch (_) {}
+      el.dataset.droplabel = label;
+      el.classList.add("dropc");
+    });
+    el.addEventListener("dragleave", () => el.classList.remove("dropc"));
+    el.addEventListener("drop", e => {
+      e.preventDefault();
+      el.classList.remove("dropc");
+      try {
+        const payload = JSON.parse(e.dataTransfer.getData("text/plain"));
+        if (payload && payload.id) handleDrop(i, payload);
+      } catch (_) {}
+    });
+    $grid.appendChild(el);
+  });
+}
+
+document.querySelectorAll("#cap button").forEach(b =>
+  b.addEventListener("click", () => setCapacity(parseInt(b.dataset.c, 10)))
+);
+render();
+</script>
+</body>
+</html>
