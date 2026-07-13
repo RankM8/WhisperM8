@@ -919,16 +919,13 @@ struct AgentTerminalView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let container = AgentTerminalContainerView(frame: .zero)
-        container.terminal = controller.terminal
-        attach(controller.terminal, to: container)
+        container.configure(terminal: controller.terminal, sessionID: controller.sessionID)
         return container
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        if let container = nsView as? AgentTerminalContainerView {
-            container.terminal = controller.terminal
-        }
-        attach(controller.terminal, to: nsView)
+        guard let container = nsView as? AgentTerminalContainerView else { return }
+        container.configure(terminal: controller.terminal, sessionID: controller.sessionID)
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
@@ -939,28 +936,6 @@ struct AgentTerminalView: NSViewRepresentable {
             .compactMap { $0 as? QuietableTerminalView }
             .forEach { $0.flushPendingOutput() }
         nsView.subviews.forEach { $0.removeFromSuperview() }
-    }
-
-    private func attach(_ terminal: LocalProcessTerminalView, to container: NSView) {
-        container.subviews
-            .filter { $0 !== terminal }
-            .forEach { $0.removeFromSuperview() }
-
-        guard terminal.superview !== container else { return }
-        terminal.removeFromSuperview()
-        terminal.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(terminal)
-
-        NSLayoutConstraint.activate([
-            terminal.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            terminal.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            terminal.topAnchor.constraint(equalTo: container.topAnchor),
-            terminal.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
-
-        // perf.grid: erwartete Pane hängt in der Hierarchie (no-op außerhalb
-        // einer laufenden grid.build-Messung).
-        GridPerformanceTracker.shared.didAttach(sessionID: controller.sessionID)
     }
 }
 
@@ -976,6 +951,7 @@ struct AgentTerminalView: NSViewRepresentable {
 /// getrennt.
 final class AgentTerminalContainerView: NSView {
     weak var terminal: LocalProcessTerminalView?
+    private var sessionID: UUID?
 
     /// Prevent clicks in the terminal wrapper from moving the hidden-titlebar
     /// window while the user selects/copies terminal text.
@@ -989,6 +965,57 @@ final class AgentTerminalContainerView: NSView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         registerForDraggedTypes([.fileURL])
+    }
+
+    // MARK: - Terminal-Adoption (fenster-gebunden + selbstheilend)
+
+    /// Grid-Pane und Einzelansicht teilen sich EIN Terminal-NSView pro
+    /// Controller. Beim Ansichtswechsel (Maximize, „Zurück zum Workspace")
+    /// existieren kurzzeitig mehrere SwiftUI-Hosts für dasselbe Terminal —
+    /// attachte jeder Host sofort (wie früher in makeNSView), konnte ein
+    /// verworfener Zwischen-Host das Terminal an sich ziehen und sein
+    /// dismantleNSView es ersatzlos aus der Hierarchie werfen: sichtbarer,
+    /// aber leerer Container (live per View-Dump belegt, 2026-07-13).
+    /// Deshalb adoptiert NUR ein Host, der tatsächlich im Fenster hängt
+    /// (viewDidMoveToWindow), und `layout()` heilt jede Rest-Verwaisung —
+    /// beides O(1)-Pointer-Vergleiche, kein Polling.
+    func configure(terminal: LocalProcessTerminalView, sessionID: UUID) {
+        self.terminal = terminal
+        self.sessionID = sessionID
+        adoptTerminalIfNeeded()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        adoptTerminalIfNeeded()
+    }
+
+    override func layout() {
+        super.layout()
+        adoptTerminalIfNeeded()
+    }
+
+    private func adoptTerminalIfNeeded() {
+        guard window != nil, let terminal else { return }
+        // Fremde Reste (z. B. Terminal eines früheren Controllers) räumen.
+        subviews
+            .filter { $0 !== terminal }
+            .forEach { $0.removeFromSuperview() }
+        guard terminal.superview !== self else { return }
+        terminal.removeFromSuperview()
+        terminal.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(terminal)
+        NSLayoutConstraint.activate([
+            terminal.leadingAnchor.constraint(equalTo: leadingAnchor),
+            terminal.trailingAnchor.constraint(equalTo: trailingAnchor),
+            terminal.topAnchor.constraint(equalTo: topAnchor),
+            terminal.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+        // perf.grid: erwartete Pane hängt in der Hierarchie (no-op außerhalb
+        // einer laufenden grid.build-Messung).
+        if let sessionID {
+            GridPerformanceTracker.shared.didAttach(sessionID: sessionID)
+        }
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
