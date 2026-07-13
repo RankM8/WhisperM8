@@ -93,17 +93,35 @@ struct AgentSessionStore {
         }
     }
 
-    func upsertProject(path: String, name: String? = nil, color: String? = nil, createdManually: Bool = false) throws -> AgentProject {
+    func upsertProject(
+        path: String,
+        name: String? = nil,
+        color: String? = nil,
+        createdManually: Bool = false,
+        touchUpdatedAt: Bool = false
+    ) throws -> AgentProject {
         let standardizedPath = Self.canonicalProjectPath(path)
         // Git-Lookup VOR der Mutation — die Closure läuft unter dem
         // prozessweiten Store-Lock, dort darf kein Subprozess laufen.
         let branch = Self.currentGitBranch(at: standardizedPath)
         return try mutateWorkspace { workspace in
             if let index = workspace.projects.firstIndex(where: { $0.path == standardizedPath }) {
-                workspace.projects[index].updatedAt = Date()
-                workspace.projects[index].lastBranch = branch
-                if createdManually {
-                    workspace.projects[index].createdManually = true
+                var updated = workspace.projects[index]
+                var changed = false
+                if updated.lastBranch != branch {
+                    updated.lastBranch = branch
+                    changed = true
+                }
+                if createdManually, updated.createdManually != true {
+                    updated.createdManually = true
+                    changed = true
+                }
+                // Nur echte Chat-Erstellungen ziehen ein bestehendes Projekt
+                // in der Recency-Sortierung nach oben. Indexer-/Merge-Treffer
+                // bleiben dagegen vollständig idempotent.
+                if changed || touchUpdatedAt {
+                    updated.updatedAt = Date()
+                    workspace.projects[index] = updated
                 }
                 return workspace.projects[index]
             }
@@ -193,8 +211,16 @@ struct AgentSessionStore {
     func updateSession(id: UUID, _ update: (inout AgentChatSession) -> Void) throws {
         try mutateWorkspaceIfChanged { workspace in
             guard let index = workspace.sessions.firstIndex(where: { $0.id == id }) else { return false }
-            update(&workspace.sessions[index])
-            workspace.sessions[index].lastActivityAt = Date()
+            let original = workspace.sessions[index]
+            var updated = original
+            update(&updated)
+            guard updated != original else { return false }
+            // Ein vom Aufrufer fachlich gesetzter Aktivitätszeitpunkt (etwa
+            // aus Transcript-mtime) gewinnt gegenüber dem Komfort-Bump.
+            if updated.lastActivityAt == original.lastActivityAt {
+                updated.lastActivityAt = Date()
+            }
+            workspace.sessions[index] = updated
             return true
         }
     }
@@ -460,7 +486,11 @@ struct AgentSessionStore {
         forkSourceSessionID: String? = nil,
         claudeProfileName: String? = nil
     ) throws -> AgentChatSession {
-        let project = try upsertProject(path: projectPath, createdManually: createdManually)
+        let project = try upsertProject(
+            path: projectPath,
+            createdManually: createdManually,
+            touchUpdatedAt: true
+        )
         let session = AgentChatSession(
             provider: provider,
             projectID: project.id,
@@ -725,9 +755,14 @@ struct AgentSessionStore {
                 }
 
                 if let index = workspace.sessions.firstIndex(where: { $0.provider == indexed.provider && $0.externalSessionID == indexed.externalSessionID }) {
-                    workspace.sessions[index].projectID = project.id
-                    workspace.sessions[index].lastActivityAt = indexed.lastActivityAt
-                    if workspace.sessions[index].title.isEmpty {
+                    if workspace.sessions[index].projectID != project.id {
+                        workspace.sessions[index].projectID = project.id
+                    }
+                    if workspace.sessions[index].lastActivityAt != indexed.lastActivityAt {
+                        workspace.sessions[index].lastActivityAt = indexed.lastActivityAt
+                    }
+                    if workspace.sessions[index].title.isEmpty,
+                       workspace.sessions[index].title != indexed.title {
                         workspace.sessions[index].title = indexed.title
                     }
                     // Stempel-Selbstheilung: der Indexer kennt den REALEN
@@ -764,9 +799,18 @@ struct AgentSessionStore {
                         abs(indexed.createdAt.timeIntervalSince(workspace.sessions[lhs].createdAt))
                             < abs(indexed.createdAt.timeIntervalSince(workspace.sessions[rhs].createdAt))
                     }) {
-                    workspace.sessions[index].externalSessionID = indexed.externalSessionID
-                    workspace.sessions[index].lastActivityAt = max(indexed.lastActivityAt, workspace.sessions[index].lastActivityAt)
-                    if workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty {
+                    if workspace.sessions[index].externalSessionID != indexed.externalSessionID {
+                        workspace.sessions[index].externalSessionID = indexed.externalSessionID
+                    }
+                    let mergedLastActivityAt = max(
+                        indexed.lastActivityAt,
+                        workspace.sessions[index].lastActivityAt
+                    )
+                    if workspace.sessions[index].lastActivityAt != mergedLastActivityAt {
+                        workspace.sessions[index].lastActivityAt = mergedLastActivityAt
+                    }
+                    if (workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty),
+                       workspace.sessions[index].title != indexed.title {
                         workspace.sessions[index].title = indexed.title
                     }
                     // Profil nachtragen, falls das Transcript unter einem
@@ -988,24 +1032,11 @@ struct AgentSessionStore {
         }
     }
 
+    /// Direkter `.git/HEAD`-Read statt `git branch --show-current`-Spawn —
+    /// läuft u. a. bei jedem `createSession` synchron auf dem Main Thread,
+    /// ein Subprozess mit `waitUntilExit()` fror dort die UI sichtbar ein.
     private static func currentGitBranch(at path: String) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", path, "branch", "--show-current"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            let branch = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return branch?.isEmpty == false ? branch : nil
-        } catch {
-            return nil
-        }
+        GitBranchReader.currentBranch(at: path)
     }
 
     // Forwarder auf AgentProjectPath (Logik dort) — haelt bestehende

@@ -23,6 +23,133 @@ final class AgentSessionStoreTests: XCTestCase {
         XCTAssertEqual(workspace.sessions.first?.initialPrompt, "Prompt")
     }
 
+    func testUpdateSessionNoOpLeavesWorkspaceUnchanged() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Unverändert"
+        )
+        let before = store.loadWorkspace()
+
+        try store.updateSession(id: session.id) { _ in }
+
+        XCTAssertEqual(store.loadWorkspace(), before)
+    }
+
+    func testUpdateSessionChangeBumpsLastActivityAt() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        var session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Vorher"
+        )
+        let oldActivity = Date(timeIntervalSince1970: 100)
+        session.lastActivityAt = oldActivity
+        _ = try store.upsertSession(session)
+
+        try store.updateSession(id: session.id) { $0.title = "Nachher" }
+
+        let updated = try XCTUnwrap(store.loadWorkspace().sessions.first)
+        XCTAssertEqual(updated.title, "Nachher")
+        XCTAssertGreaterThan(updated.lastActivityAt, oldActivity)
+    }
+
+    func testUpdateSessionKeepsExplicitLastActivityAt() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Vorher"
+        )
+        let explicitActivity = Date(timeIntervalSince1970: 200)
+
+        try store.updateSession(id: session.id) { updated in
+            updated.title = "Nachher"
+            updated.lastActivityAt = explicitActivity
+        }
+
+        XCTAssertEqual(store.loadWorkspace().sessions.first?.lastActivityAt, explicitActivity)
+    }
+
+    func testUpsertProjectWithIdenticalDataIsNoOp() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8-Upsert-NoOp-\(UUID().uuidString)")
+            .path
+        let first = try store.upsertProject(path: path, name: "Projekt")
+        let before = store.loadWorkspace()
+
+        let second = try store.upsertProject(path: path, name: "Projekt")
+
+        XCTAssertEqual(second, first)
+        XCTAssertEqual(store.loadWorkspace(), before)
+        XCTAssertEqual(second.updatedAt, first.updatedAt)
+    }
+
+    func testCreateSessionTouchesExistingProjectUpdatedAt() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8-Create-Touch-\(UUID().uuidString)")
+            .path
+        let project = try store.upsertProject(path: path)
+        var workspace = store.loadWorkspace()
+        let oldUpdatedAt = Date(timeIntervalSince1970: 100)
+        workspace.projects[0].updatedAt = oldUpdatedAt
+        try store.saveWorkspace(workspace)
+
+        _ = try store.createSession(
+            provider: .codex,
+            projectPath: path,
+            title: "Neue Session"
+        )
+
+        let updatedProject = try XCTUnwrap(
+            store.loadWorkspace().projects.first(where: { $0.id == project.id })
+        )
+        XCTAssertGreaterThan(updatedProject.updatedAt, oldUpdatedAt)
+    }
+
+    func testMergeIndexedSessionsWithIdenticalValuesIsNoOp() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let indexed = IndexedAgentSession(
+            provider: .codex,
+            externalSessionID: "identischer-merge",
+            cwd: FileManager.default.temporaryDirectory
+                .appendingPathComponent("WhisperM8-Merge-NoOp-\(UUID().uuidString)")
+                .path,
+            title: "Indexer-Session",
+            model: "gpt-5.5",
+            reasoningEffort: "medium",
+            createdAt: Date(timeIntervalSince1970: 100),
+            lastActivityAt: Date(timeIntervalSince1970: 200)
+        )
+        try store.mergeIndexedSessions([indexed])
+        let before = store.loadWorkspace()
+
+        try store.mergeIndexedSessions([indexed])
+
+        XCTAssertEqual(store.loadWorkspace(), before)
+    }
+
     func testAgentSessionStoreLoadsLegacyWorkspaceWithoutRecentSessionFields() throws {
         let fileURL = makeTempStoreURL()
         defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
