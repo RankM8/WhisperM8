@@ -30,3 +30,6 @@ dist/
 *.env
 secrets/
 .claude/worktrees/
+
+# Playwright-MCP-Artefakte (Browser-QA-Sessions: Console-Logs, Page-Snapshots)
+.playwright-mcp/
