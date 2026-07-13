@@ -52,6 +52,14 @@ help:
 #   The app must not be running during sync (we kill it first), otherwise
 #   rsync may fail to replace the executable and codesign mismatches can
 #   surface at next launch.
+#
+# Why `env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open`?
+#   `open` forwards the caller's environment to the launched app. A dev shell
+#   sourcing ccs.zsh exports CLAUDE_CONFIG_DIR (active Claude account profile);
+#   inherited by WhisperM8 it would shift every spawned `claude` to the wrong
+#   projects/ root — resumes of main-stamped sessions then fail with
+#   "No conversation found" (incident 2026-07-13). The app strips the variable
+#   too (LoginShellEnvironment); this is belt-and-braces at the launch site.
 # ------------------------------------------------------------------------------
 dev: kill
 	@echo "🔄 Building $(APP_NAME) (release)..."
@@ -63,7 +71,7 @@ dev: kill
 	@$(MAKE) _bundle BUILD=release
 	@$(MAKE) _install_bundle
 	@echo "✅ Updated $(INSTALLED_APP)"
-	@open "$(INSTALLED_APP)"
+	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)"
 
 # Backwards-compatible alias.
 dev-reinstall: dev
@@ -87,7 +95,7 @@ run: kill
 	@echo "Building debug..."
 	@swift build
 	@$(MAKE) _bundle BUILD=debug
-	@open "$(APP_BUNDLE)"
+	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(APP_BUNDLE)"
 
 # Same in-place strategy as `dev`, but without launching afterwards.
 install: kill build

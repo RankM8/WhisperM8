@@ -139,4 +139,22 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertEqual(envDict["HOME"], "/Users/test")
         XCTAssertTrue(envDict["PATH"]?.contains("/usr/bin") ?? false)
     }
+
+    func testStripsInheritedClaudeConfigDirSoAccountRoutingStaysExplicit() {
+        // WURZEL-Regression (2026-07-13): Wird die App aus einem Terminal
+        // gestartet, in dem ccs.zsh das aktive Account-Profil exportiert hat
+        // (CLAUDE_CONFIG_DIR=~/.claude-profiles/<name>), erben ALLE gespawnten
+        // `claude`-Prozesse diesen Profil-Root. Main-gestempelte Sessions
+        // (claudeProfileName=nil) bekommen keinen Override — ihr `--resume`
+        // sucht dann im falschen projects/-Root und meldet „No conversation
+        // found". Account-Routing darf NUR über explizite per-Launch-Overrides
+        // laufen, nie über geerbtes Env.
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let envDict = env.processEnvironment(base: [
+            "CLAUDE_CONFIG_DIR": "/Users/test/.claude-profiles/PowerUser",
+            "HOME": "/Users/test"
+        ])
+        XCTAssertNil(envDict["CLAUDE_CONFIG_DIR"])
+        XCTAssertEqual(envDict["HOME"], "/Users/test")
+    }
 }

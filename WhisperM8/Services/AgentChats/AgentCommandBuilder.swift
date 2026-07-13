@@ -65,6 +65,13 @@ struct AgentCommandBuilder {
         ClaudeAccountProfiles().environmentOverrides(forProfile: profileName)
     }
 
+    /// Lokalisiert das Claude-Transcript einer Session ueber ALLE Account-
+    /// Roots (main + Profile) — (externalSessionID, cwd) → JSONL-URL.
+    /// Default: echter Datei-Lookup, im Test ueberschreibbar.
+    var claudeTranscriptLocator: (String, String) -> URL? = { externalSessionID, cwd in
+        AgentTranscriptLocator.locate(provider: .claude, externalSessionID: externalSessionID, cwd: cwd)
+    }
+
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
     /// Default liest `$SHELL` (von launchd auch für GUI-Apps gesetzt) und
     /// fällt auf `/bin/zsh` zurück, wenn die Variable fehlt oder auf kein
@@ -225,7 +232,9 @@ struct AgentCommandBuilder {
         // Account-Profil der Session (Multi-Account): laeuft die Session unter
         // einem Zusatz-Account, bekommt der Launch dessen CLAUDE_CONFIG_DIR.
         // Der Stempel ist Session-stabil — Resume MUSS unter demselben
-        // Config-Dir laufen, unter dem die Session erstellt wurde.
+        // Config-Dir laufen, unter dem die Session erstellt wurde. (Fuer
+        // Resumes wird der Stempel unten zusaetzlich gegen den realen
+        // Transcript-Ablageort verifiziert — die Platte ist SSoT.)
         let profileEnvironment = claudeProfileEnvironmentResolver(session.claudeProfileName)
 
         // Claude Agents View ist ein separater Subcommand (`claude agents`)
@@ -278,6 +287,9 @@ struct AgentCommandBuilder {
         // damit sie auch beim Resume durchgehen.
         arguments.append(contentsOf: extraArgumentsResolver(.claude))
 
+        // Resume-Ziel bestimmen: Fork-Quelle vor gebundener eigener ID.
+        var resumeSessionID: String?
+        var isFork = false
         if let forkSource = session.forkSourceSessionID, !forkSource.isEmpty,
            (session.externalSessionID?.isEmpty ?? true) {
             // Fork: vom Stand der Quell-Session resumen, aber in eine NEUE
@@ -285,12 +297,13 @@ struct AgentCommandBuilder {
             // solange die eigene ID noch nicht gebunden ist — sobald der
             // SessionStart-Hook `externalSessionID` gesetzt hat, läuft der
             // Resume über die neue Fork-ID (Pfad unten).
-            arguments.append(contentsOf: ["--resume", forkSource, "--fork-session"])
+            resumeSessionID = forkSource
+            isFork = true
         } else if session.hasLaunchedInitialPrompt,
                   let externalSessionID = session.externalSessionID,
                   !externalSessionID.isEmpty {
             // Resume NUR mit einer real von Claude vergebenen, gebundenen ID.
-            arguments.append(contentsOf: ["--resume", externalSessionID])
+            resumeSessionID = externalSessionID
         }
         // Sonst: frischer Start OHNE `--session-id`. Claude vergibt die Session-
         // ID selbst; SessionStart-Hook + Indexer-Merge binden die REALE, von
@@ -298,6 +311,32 @@ struct AgentCommandBuilder {
         // `--session-id` war die Wurzel der „No conversation found"-Fehler —
         // Claude persistierte nicht zuverlässig unter der vorgegebenen ID, und
         // beim Resume zeigte die ID dann ins Leere.
+
+        // Resume-Selbstheilung: `claude --resume` sucht das Transcript NUR im
+        // `projects/`-Root seines Config-Dirs. Zeigt der Session-Stempel auf
+        // einen anderen Root als den, in dem die JSONL wirklich liegt (z. B.
+        // veralteter Stempel, extern verschobenes Transcript, historischer
+        // Env-Leak), waere der Chat „No conversation found" — deshalb schlaegt
+        // der REALE Ablageort den Stempel. Kein Fund (z. B. Transcript noch
+        // nicht geschrieben) → Stempel wie bisher.
+        var effectiveProfileEnvironment = profileEnvironment
+        if let resumeSessionID,
+           let transcript = claudeTranscriptLocator(resumeSessionID, project.path) {
+            let actualProfile = ClaudeAccountProfiles.profileName(forTranscriptPath: transcript.path)
+            if actualProfile != session.claudeProfileName {
+                Logger.agentStore.warning(
+                    "claude_profile_stamp_mismatch session=\(resumeSessionID, privacy: .public) stamped=\(session.claudeProfileName ?? "main", privacy: .public) actual=\(actualProfile ?? "main", privacy: .public) — Launch folgt dem realen Transcript-Root"
+                )
+                effectiveProfileEnvironment = claudeProfileEnvironmentResolver(actualProfile)
+            }
+        }
+
+        if let resumeSessionID {
+            arguments.append(contentsOf: ["--resume", resumeSessionID])
+            if isFork {
+                arguments.append("--fork-session")
+            }
+        }
 
         if !session.hasLaunchedInitialPrompt,
            let initialPrompt = session.initialPrompt,
@@ -310,7 +349,7 @@ struct AgentCommandBuilder {
             arguments: arguments,
             workingDirectory: project.path,
             keyboardProfile: .claudeCodeChat,
-            environmentOverrides: profileEnvironment
+            environmentOverrides: effectiveProfileEnvironment
         )
     }
 

@@ -430,6 +430,73 @@ extension AgentCommandBuilderTests {
         XCTAssertTrue(command.environmentOverrides.isEmpty)
     }
 
+    func testClaudeResumeFollowsActualTranscriptRootOverStaleStamp() throws {
+        // Resume-Selbstheilung: liegt die JSONL real unter einem Profil-Root,
+        // der Stempel behauptet aber main (oder umgekehrt), muss der Launch
+        // dem realen Ablageort folgen — sonst „No conversation found".
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { profileName in
+            profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
+        }
+        // Transcript liegt real im PowerUser-Root …
+        builder.claudeTranscriptLocator = { sessionID, _ in
+            URL(fileURLWithPath: "/Users/test/.claude-profiles/PowerUser/projects/-repo/\(sessionID).jsonl")
+        }
+
+        // … aber die Session ist auf main (nil) gestempelt.
+        let staleMainSession = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "ext-1",
+            title: "Chat",
+            hasLaunchedInitialPrompt: true,
+            claudeProfileName: nil
+        )
+        let command = try builder.command(for: staleMainSession, project: project)
+        XCTAssertEqual(command.environmentOverrides, ["CLAUDE_CONFIG_DIR": "/profiles/PowerUser"])
+        XCTAssertTrue(command.arguments.contains("--resume"))
+
+        // Umgekehrt: Stempel „firma", Transcript real unter main → kein Override.
+        builder.claudeTranscriptLocator = { sessionID, _ in
+            URL(fileURLWithPath: "/Users/test/.claude/projects/-repo/\(sessionID).jsonl")
+        }
+        let staleProfileSession = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "ext-2",
+            title: "Chat",
+            hasLaunchedInitialPrompt: true,
+            claudeProfileName: "firma"
+        )
+        let mainCommand = try builder.command(for: staleProfileSession, project: project)
+        XCTAssertTrue(mainCommand.environmentOverrides.isEmpty)
+    }
+
+    func testClaudeResumeKeepsStampWhenTranscriptNotLocatable() throws {
+        // Kein Transcript auffindbar (noch nicht geschrieben) → Stempel
+        // bleibt maßgeblich, wie bisher.
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { profileName in
+            profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
+        }
+        builder.claudeTranscriptLocator = { _, _ in nil }
+
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "ext-3",
+            title: "Chat",
+            hasLaunchedInitialPrompt: true,
+            claudeProfileName: "firma"
+        )
+        let command = try builder.command(for: session, project: project)
+        XCTAssertEqual(command.environmentOverrides, ["CLAUDE_CONFIG_DIR": "/profiles/firma"])
+    }
+
     func testCodexCommandNeverGetsClaudeProfileEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })

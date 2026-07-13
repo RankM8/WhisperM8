@@ -107,6 +107,17 @@ final class LoginShellEnvironment: @unchecked Sendable {
             env.removeValue(forKey: key)
         }
 
+        // Ebenfalls WURZEL-FIX: geerbtes `CLAUDE_CONFIG_DIR` entfernen. Wird
+        // WhisperM8 aus einem Terminal gestartet (`make dev`), in dem ccs.zsh
+        // das aktive Account-Profil exportiert hat (~/.claude-profiles/<name>),
+        // erbt JEDER von uns gespawnte `claude` diesen Profil-Root — auch
+        // Sessions, deren Stempel (`claudeProfileName`) auf main zeigt. Deren
+        // `--resume` sucht dann im falschen `projects/`-Root → „No conversation
+        // found", der Chat wirkt verloren. Account-Routing läuft ausschließlich
+        // über die expliziten per-Launch-Overrides (`ClaudeAccountProfiles.
+        // environmentOverrides`), nie über geerbtes Env.
+        env.removeValue(forKey: "CLAUDE_CONFIG_DIR")
+
         env["PATH"] = path
 
         if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {
