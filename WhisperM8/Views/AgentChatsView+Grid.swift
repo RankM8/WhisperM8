@@ -225,6 +225,12 @@ extension AgentChatsView {
                     suppressesAutoActivation: !isFocused
                 )
                 .id(session.id)
+                // INNEN-Padding wie die Einzelansicht (mainWorkspace) — die
+                // Dichte-Vorgabe betrifft nur die Abstände ZWISCHEN den
+                // Panes, nicht den Leseabstand des Terminal-Inhalts.
+                .padding(.top, 14)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
             } else {
                 ContentUnavailableView("Projekt fehlt", systemImage: "questionmark.folder")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
