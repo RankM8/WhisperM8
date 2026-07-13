@@ -107,7 +107,7 @@ final class AgentUIStateTests: XCTestCase {
         }
         """
         var state = try JSONDecoder().decode(AgentUIState.self, from: v1JSON.data(using: .utf8)!)
-        state.migrateToV2IfNeeded(workspace: workspace)
+        state.migrateIfNeeded(workspace: workspace)
 
         XCTAssertEqual(state.schemaVersion, AgentUIState.currentSchemaVersion)
         XCTAssertEqual(state.openTabIDs, [s1, s2, s3], "Projekt-Reihenfolge (sortIndex), innerhalb v1-Reihenfolge")
@@ -127,7 +127,7 @@ final class AgentUIStateTests: XCTestCase {
             schemaVersion: 1,
             legacyOpenTabIDsByProject: [pid: [s1]]
         )
-        state.migrateToV2IfNeeded(workspace: workspace)
+        state.migrateIfNeeded(workspace: workspace)
         XCTAssertEqual(state.openTabIDs, [s1])
         XCTAssertEqual(state.selectedSessionID, s1)
     }
@@ -136,7 +136,7 @@ final class AgentUIStateTests: XCTestCase {
         let tab = UUID()
         var state = AgentUIState(openTabIDs: [tab], selectedSessionID: tab)
         state.legacyOpenTabIDsByProject = [UUID(): [UUID()]] // darf nichts bewirken
-        state.migrateToV2IfNeeded(workspace: makeWorkspace(projects: [], sessions: []))
+        state.migrateIfNeeded(workspace: makeWorkspace(projects: [], sessions: []))
         XCTAssertEqual(state.openTabIDs, [tab])
         XCTAssertTrue(state.legacyOpenTabIDsByProject.isEmpty, "Legacy-Reste werden geleert")
     }
@@ -304,7 +304,7 @@ final class AgentUIStateTests: XCTestCase {
         }
         """
         var state = try JSONDecoder().decode(AgentUIState.self, from: v2JSON.data(using: .utf8)!)
-        state.migrateToV2IfNeeded(workspace: workspace)
+        state.migrateIfNeeded(workspace: workspace)
 
         XCTAssertEqual(state.schemaVersion, AgentUIState.currentSchemaVersion)
         XCTAssertEqual(state.windows.count, 1, "genau ein Primaerfenster nach v2→v3")

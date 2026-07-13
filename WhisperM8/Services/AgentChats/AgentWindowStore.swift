@@ -184,14 +184,16 @@ final class AgentWindowStore {
         updateWindow(windowID) { $0.showsGrid = shows }
     }
 
-    /// Explizite Grid-Mitgliedschaft des Fensters (leer = Default „alle
-    /// offenen Tabs, max. 4"). Invarianten stellt `normalizedWindows` her.
+    /// ÜBERGANGS-Bridge (bis Paket 2d das Grid auf Workspace-Entities
+    /// umstellt): fensterlokale Grid-Mitgliedschaft aus der v3-Ära. Wird
+    /// nicht mehr persistiert — die v4-Migration überführt sie in
+    /// `gridWorkspaces`.
     func gridSessionIDs(in windowID: UUID) -> [UUID] {
-        window(for: windowID).gridSessionIDs
+        window(for: windowID).legacyGridSessionIDs
     }
 
     func setGridSessionIDs(_ ids: [UUID], in windowID: UUID) {
-        updateWindow(windowID) { $0.gridSessionIDs = ids }
+        updateWindow(windowID) { $0.legacyGridSessionIDs = ids }
     }
 
     /// Entfernt ein leeres Sekundaerfenster aus dem State. Gibt `true` zurueck,

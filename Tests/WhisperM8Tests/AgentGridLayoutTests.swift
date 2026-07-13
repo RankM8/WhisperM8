@@ -235,23 +235,26 @@ final class AgentGridLayoutTests: XCTestCase {
          "windows": [{"id": "\(windowID.uuidString)", "openTabIDs": [], "isPrimary": true}]}
         """
         let decoded = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
-        XCTAssertTrue(decoded.windowState(for: windowID).gridSessionIDs.isEmpty)
+        XCTAssertTrue(decoded.windowState(for: windowID).legacyGridSessionIDs.isEmpty)
 
-        // Roundtrip mit expliziter Auswahl.
+        // v3-Key `gridSessionIDs` wird noch DEKODIERT (Migrations-Input),
+        // aber nie mehr encodiert — v4 persistiert die Mitgliedschaft in den
+        // globalen Workspace-Entities.
         let a = UUID(); let b = UUID()
         let window = AgentChatWindowState(
             openTabIDs: [a, b],
             isPrimary: true,
             showsGrid: true,
-            gridSessionIDs: [a, b]
+            legacyGridSessionIDs: [a, b]
         )
         let original = AgentUIState(windows: [window], primaryWindowID: window.id)
-        let redecoded = try JSONDecoder().decode(
-            AgentUIState.self,
-            from: JSONEncoder().encode(original)
+        let encoded = try JSONEncoder().encode(original)
+        XCTAssertFalse(
+            String(decoding: encoded, as: UTF8.self).contains("gridSessionIDs"),
+            "Legacy-Key darf nicht mehr geschrieben werden"
         )
-        XCTAssertEqual(redecoded.windowState(for: window.id).gridSessionIDs, [a, b])
-        XCTAssertEqual(redecoded, original)
+        let redecoded = try JSONDecoder().decode(AgentUIState.self, from: encoded)
+        XCTAssertTrue(redecoded.windowState(for: window.id).legacyGridSessionIDs.isEmpty)
     }
 
     func testNormalizationDropsGridMembersWithoutTab() {
@@ -259,11 +262,11 @@ final class AgentGridLayoutTests: XCTestCase {
         let window = AgentChatWindowState(
             openTabIDs: [a, b],
             isPrimary: true,
-            gridSessionIDs: [a, stale, a] // Duplikat + toter Verweis
+            legacyGridSessionIDs: [a, stale, a] // Duplikat + toter Verweis
         )
         // init → normalizedWindows räumt auf.
         let state = AgentUIState(windows: [window], primaryWindowID: window.id)
-        XCTAssertEqual(state.windowState(for: window.id).gridSessionIDs, [a],
+        XCTAssertEqual(state.windowState(for: window.id).legacyGridSessionIDs, [a],
                        "Mitglieder ⊆ Tabs, dedupliziert")
     }
 

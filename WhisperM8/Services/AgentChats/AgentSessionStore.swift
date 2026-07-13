@@ -70,9 +70,23 @@ struct AgentSessionStore {
         if state.schemaVersion < AgentUIState.currentSchemaVersion {
             needsPersist = true
         }
-        state.migrateToV2IfNeeded(workspace: workspace)
+        // v3→v4 übernimmt die bisherigen globalen @AppStorage-Splits in die
+        // migrierten Workspace-Entities (0 = Key existiert nicht → Default).
+        let legacyColumn = UserDefaults.standard.double(forKey: "agentGridColumnFraction")
+        let legacyRow = UserDefaults.standard.double(forKey: "agentGridRowFraction")
+        let decoded = state
+        state.migrateIfNeeded(
+            workspace: workspace,
+            legacySplits: (
+                column: legacyColumn > 0 ? legacyColumn : 0.5,
+                row: legacyRow > 0 ? legacyRow : 0.5
+            )
+        )
         state.prune(workspace: workspace)
-        if needsPersist {
+        // Jede tatsächliche Reparatur/Migration sofort festschreiben — sonst
+        // würde dieselbe Normalisierung bei jedem Start erneut erzeugt (und
+        // eine frische primaryWindowID pro Load divergieren).
+        if needsPersist || state != decoded {
             try? saveUIState(state)
         }
         return state
