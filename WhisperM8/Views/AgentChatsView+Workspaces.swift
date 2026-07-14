@@ -105,11 +105,13 @@ extension AgentChatsView {
                         )
                         workspaceRow(session, entity: entity, slotIndex: index, split: split)
                         if let split {
-                            workspaceSubagentChildren(
+                            subagentChildrenRows(
                                 parent: session,
-                                entity: entity,
                                 children: children,
-                                split: split
+                                split: split,
+                                extraLeadingInset: 10,
+                                isFinishedExpanded: workspaceFinishedSubagentParentIDs.contains(session.id),
+                                onToggleFinished: { toggleWorkspaceFinishedSubagents(session.id) }
                             )
                         }
                     }
@@ -249,109 +251,17 @@ extension AgentChatsView {
         ))
     }
 
-    // MARK: - Subagent-Kinder (Variante D, wie ProjectChatGroup)
+    // MARK: - Subagent-Kinder (geteilt — siehe +SubagentChildren)
 
-    /// Eingerückte Subagent-Kind-Zeilen unter einer Workspace-Row: Stufe 1
-    /// (Chip-Chevron, geteilt mit der Chat-Liste über den Store) zeigt die
-    /// aktiven Kinder; Fertige stehen hinter der „N fertig"-Zeile (Stufe 2,
-    /// lokaler State). Ein selektiertes Kind erzwingt die Expansion.
-    @ViewBuilder
-    private func workspaceSubagentChildren(
-        parent: AgentChatSession,
-        entity: AgentGridWorkspace,
-        children: [AgentChatSession],
-        split: SubagentChildSplit
-    ) -> some View {
-        let isTopExpanded = windowStore.expandedSubagentParentIDs.contains(parent.id)
-            || children.contains { $0.id == selectedSessionID }
-        if isTopExpanded {
-            ForEach(split.visible) { child in
-                workspaceSubagentChildRow(child)
-            }
-            if !split.hidden.isEmpty {
-                let finishedOpen = workspaceFinishedSubagentParentIDs.contains(parent.id)
-                workspaceSubagentFooterRow(parentID: parent.id, split: split, isExpanded: finishedOpen)
-                if finishedOpen {
-                    ForEach(split.hidden) { child in
-                        workspaceSubagentChildRow(child)
-                    }
-                }
-            }
+    /// Stufe-2-Toggle der WORKSPACE-Sektion (Fertige hinter der Fußzeile) —
+    /// eigener View-State pro Sektion, die Darstellung liefert die geteilte
+    /// `subagentChildrenRows`-Komponente.
+    func toggleWorkspaceFinishedSubagents(_ parentID: UUID) {
+        if workspaceFinishedSubagentParentIDs.contains(parentID) {
+            workspaceFinishedSubagentParentIDs.remove(parentID)
+        } else {
+            workspaceFinishedSubagentParentIDs.insert(parentID)
         }
-    }
-
-    /// Kind-Zeile — dieselbe Row wie in der Chat-Liste (`SessionListButton`
-    /// mit Subagent-Einzug), plus der Workspace-Einzug der Gruppen-Rows.
-    /// Bewusst ohne Drag&Drop (Kinder kleben an ihrem Parent).
-    @ViewBuilder
-    private func workspaceSubagentChildRow(_ child: AgentChatSession) -> some View {
-        SessionListButton(
-            session: child,
-            isSelected: selectedSessionID == child.id,
-            isMultiSelected: false,
-            isOpenTab: openTabIDs.contains(child.id),
-            accentColorHex: workspace.projects.first { $0.id == child.projectID }?.color,
-            statusStore: runtimeStatusStore,
-            isAutoRenaming: false,
-            isMissingTranscript: false,
-            indentAsSubagent: true,
-            isUnreadSubagentResult: windowStore.unreadSubagentSessionIDs.contains(child.id),
-            onSelect: {
-                selectedSessionID = child.id
-                multiSelection = []
-            },
-            onClose: { requestArchive([child]) }
-        )
-        .equatable()
-        .padding(.leading, 10)
-        .contextMenu {
-            Button("Umbenennen…", systemImage: "pencil") {
-                beginRename(child)
-            }
-            Divider()
-            Button("Archivieren", systemImage: "archivebox") {
-                requestArchive([child])
-            }
-        }
-    }
-
-    /// „N fertig"-Fußzeile (Stufe 2) — Layout wie in `ProjectChatGroup`
-    /// (52 pt Subagent-Ebene) plus der 10-pt-Workspace-Einzug.
-    private func workspaceSubagentFooterRow(
-        parentID: UUID,
-        split: SubagentChildSplit,
-        isExpanded: Bool
-    ) -> some View {
-        Button {
-            if workspaceFinishedSubagentParentIDs.contains(parentID) {
-                workspaceFinishedSubagentParentIDs.remove(parentID)
-            } else {
-                workspaceFinishedSubagentParentIDs.insert(parentID)
-            }
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 6.5, weight: .semibold))
-                Text("\(split.hidden.count) fertig")
-                    .font(.system(size: 9.5))
-                    .monospacedDigit()
-                if split.hiddenUnreadCount > 0 {
-                    Circle()
-                        .fill(Color.blue)
-                        .frame(width: 5, height: 5)
-                }
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(AgentTheme.textTertiary)
-            .padding(.leading, 62)
-            .padding(.trailing, 8)
-            .frame(minHeight: 22, maxHeight: 22)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("\(split.hidden.count) fertige Subagents"
-            + (split.hiddenUnreadCount > 0 ? " · \(split.hiddenUnreadCount) ungelesen" : "")
-            + " — klicken zum \(isExpanded ? "Einklappen" : "Anzeigen")")
     }
 
     @ViewBuilder

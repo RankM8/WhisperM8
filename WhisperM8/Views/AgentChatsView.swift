@@ -172,6 +172,10 @@ struct AgentChatsView: View {
     /// `finishedExpandedParentIDs` in `ProjectChatGroup`; Stufe 1 teilt sich
     /// beide Sektionen über `windowStore.expandedSubagentParentIDs`.
     @State var workspaceFinishedSubagentParentIDs: Set<UUID> = []
+    /// Stufe 2 der Subagent-Expansion für GEPINNT + flache Listenansicht
+    /// (ein Set reicht: `flatSessions` schließt gepinnte Rows aus, ein
+    /// Parent erscheint also nie in beiden Sektionen gleichzeitig).
+    @State var listFinishedSubagentParentIDs: Set<UUID> = []
     // Die Grid-Split-Verhältnisse leben seit Schema v4 am Workspace-Entity
     // (AgentGridWorkspace.columnFractions/rowFractions); die alten globalen
     // @AppStorage-Keys agentGridColumnFraction/agentGridRowFraction liest
@@ -1119,7 +1123,27 @@ struct AgentChatsView: View {
                         pinnedSectionHeader(count: visiblePinned.count)
                         if !pinnedSectionCollapsed {
                             ForEach(visiblePinned) { session in
-                                pinnedRow(session, order: visiblePinned.map(\.id))
+                                // Subagent-Kinder wie in der Chat-Liste: Split
+                                // EINMAL pro Parent, Chip an der Row, Kinder
+                                // über die geteilte Komponente darunter.
+                                let children = subagentChildren.byParentLocalID[session.id] ?? []
+                                let split = children.isEmpty ? nil : AgentSidebarModelBuilder.subagentChildSplit(
+                                    children: children,
+                                    erroredIDs: erroredSubagentIDs,
+                                    workingIDs: workingSubagentIDs,
+                                    unreadIDs: windowStore.unreadSubagentSessionIDs,
+                                    selectedID: selectedSessionID
+                                )
+                                pinnedRow(session, order: visiblePinned.map(\.id), split: split)
+                                if let split {
+                                    subagentChildrenRows(
+                                        parent: session,
+                                        children: children,
+                                        split: split,
+                                        isFinishedExpanded: listFinishedSubagentParentIDs.contains(session.id),
+                                        onToggleFinished: { toggleListFinishedSubagents(session.id) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1147,7 +1171,28 @@ struct AgentChatsView: View {
 
                     if showChatList, sidebarLayout == .flat {
                         ForEach(flatSessions) { session in
-                            flatRow(session, order: flatSessions.map(\.id))
+                            // Subagent-Kinder auch in der flachen Ansicht —
+                            // `flatSessions` filtert sie aus der Hauptliste,
+                            // gerendert werden sie unter ihrem Parent (sonst
+                            // wären sie hier komplett unsichtbar).
+                            let children = subagentChildren.byParentLocalID[session.id] ?? []
+                            let split = children.isEmpty ? nil : AgentSidebarModelBuilder.subagentChildSplit(
+                                children: children,
+                                erroredIDs: erroredSubagentIDs,
+                                workingIDs: workingSubagentIDs,
+                                unreadIDs: windowStore.unreadSubagentSessionIDs,
+                                selectedID: selectedSessionID
+                            )
+                            flatRow(session, order: flatSessions.map(\.id), split: split)
+                            if let split {
+                                subagentChildrenRows(
+                                    parent: session,
+                                    children: children,
+                                    split: split,
+                                    isFinishedExpanded: listFinishedSubagentParentIDs.contains(session.id),
+                                    onToggleFinished: { toggleListFinishedSubagents(session.id) }
+                                )
+                            }
                         }
                     } else if showChatList {
                     ForEach(visibleProjects) { project in
@@ -1310,7 +1355,11 @@ struct AgentChatsView: View {
     /// Auto-Titel, Farbe, Archivieren). Gepinnte Chats sind projektübergreifend —
     /// das Repo-Badge stellt die Zuordnung her.
     @ViewBuilder
-    private func pinnedRow(_ session: AgentChatSession, order: [UUID]) -> some View {
+    private func pinnedRow(
+        _ session: AgentChatSession,
+        order: [UUID],
+        split: SubagentChildSplit? = nil
+    ) -> some View {
         PinnedSessionRow(
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
@@ -1318,6 +1367,12 @@ struct AgentChatsView: View {
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
+            runningChildCount: split?.workingCount ?? 0,
+            erroredChildCount: split?.erroredCount ?? 0,
+            unreadChildCount: split?.hiddenUnreadCount ?? 0,
+            childCount: split?.totalCount ?? 0,
+            isChildrenExpanded: windowStore.expandedSubagentParentIDs.contains(session.id),
+            onToggleChildren: { windowStore.toggleSubagentChildren(session.id) },
             onSelect: {
                 handleSidebarRowClick(session.id, order: order) {
                     selectedSessionID = session.id
@@ -1353,11 +1408,25 @@ struct AgentChatsView: View {
         }
     }
 
+    /// Stufe-2-Toggle (Fertige hinter der Fußzeile) für GEPINNT + flache
+    /// Liste — Pendant zu `toggleWorkspaceFinishedSubagents`.
+    func toggleListFinishedSubagents(_ parentID: UUID) {
+        if listFinishedSubagentParentIDs.contains(parentID) {
+            listFinishedSubagentParentIDs.remove(parentID)
+        } else {
+            listFinishedSubagentParentIDs.insert(parentID)
+        }
+    }
+
     /// Zeile der flachen (ungruppierten) Ansicht: Repo-Badge + Titel + Status
     /// (`PinnedSessionRow` wiederverwendet, da projektübergreifend). Kontextmenü
     /// wie eine normale Chat-Zeile, nur „Anpinnen" statt „Loslösen".
     @ViewBuilder
-    private func flatRow(_ session: AgentChatSession, order: [UUID]) -> some View {
+    private func flatRow(
+        _ session: AgentChatSession,
+        order: [UUID],
+        split: SubagentChildSplit? = nil
+    ) -> some View {
         PinnedSessionRow(
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
@@ -1365,6 +1434,12 @@ struct AgentChatsView: View {
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
+            runningChildCount: split?.workingCount ?? 0,
+            erroredChildCount: split?.erroredCount ?? 0,
+            unreadChildCount: split?.hiddenUnreadCount ?? 0,
+            childCount: split?.totalCount ?? 0,
+            isChildrenExpanded: windowStore.expandedSubagentParentIDs.contains(session.id),
+            onToggleChildren: { windowStore.toggleSubagentChildren(session.id) },
             onSelect: {
                 handleSidebarRowClick(session.id, order: order) {
                     selectedProjectID = session.projectID
