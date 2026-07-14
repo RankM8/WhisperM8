@@ -194,6 +194,10 @@ private struct AgentChatsSecondaryWindowRoot: View {
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    /// Hält die SIGTERM-DispatchSource am Leben (Installation in
+    /// `applicationDidFinishLaunching`, Begründung dort).
+    private var sigtermSource: DispatchSourceSignal?
+
     /// Onboarding nötig, wenn eine der zwei essenziellen System-Permissions
     /// (Mikrofon + Accessibility) fehlt. Bewusst permission-basiert statt Flag —
     /// siehe Kommentar in `applicationDidFinishLaunching`.
@@ -214,6 +218,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // SIGTERM (z. B. `make dev` / `pkill`) in einen regulären AppKit-Quit
+        // umleiten: Das Default-Verhalten beendet den Prozess wortlos — OHNE
+        // applicationShouldTerminate/willTerminate und damit ohne die
+        // Terminate-Flushes der debounced Stores (AgentWorkspaceStore,
+        // AgentWindowStore). Frisch angelegte Chats und Tab-State gingen so
+        // beim Dev-Neustart verloren. SIG_IGN + DispatchSource ist dasselbe
+        // Muster wie im Agent-Supervisor (AgentSuperviseCommand).
+        signal(SIGTERM, SIG_IGN)
+        let sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        sigterm.setEventHandler {
+            NSApp.terminate(nil)
+        }
+        sigterm.resume()
+        sigtermSource = sigterm
+
         // Agent-Notifications: Delegate VOR der Permission-Anfrage setzen,
         // damit Banner auch im Vordergrund erscheinen und Klicks zum
         // richtigen Chat routen (siehe UNUserNotificationCenterDelegate unten).

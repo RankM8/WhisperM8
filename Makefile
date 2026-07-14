@@ -49,9 +49,11 @@ help:
 #   Trailing slashes matter: `src/` (with slash) means "contents of src",
 #   so the resulting destination is dst/* — a true in-place update.
 #
-#   The app must not be running during sync (we kill it first), otherwise
-#   rsync may fail to replace the executable and codesign mismatches can
-#   surface at next launch.
+#   The app must not be running during sync, otherwise rsync may fail to
+#   replace the executable and codesign mismatches can surface at next launch.
+#   The kill happens LATE — after the build, right before the sync: so the
+#   app stays usable (and keeps flushing its stores) during the whole build,
+#   and the actual downtime shrinks to the ~1-2s of kill+rsync+launch.
 #
 # Why `env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open`?
 #   `open` forwards the caller's environment to the launched app. A dev shell
@@ -61,16 +63,7 @@ help:
 #   "No conversation found" (incident 2026-07-13). The app strips the variable
 #   too (LoginShellEnvironment); this is belt-and-braces at the launch site.
 # ------------------------------------------------------------------------------
-dev: kill
-	@echo "🔄 Building $(APP_NAME) (release)..."
-	@rm -rf "$(APP_BUNDLE)"
-	@find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true
-	@swift build -c release
-	@scripts/patch-resource-accessors.sh release
-	@swift build -c release --disable-sandbox
-	@$(MAKE) _bundle BUILD=release
-	@$(MAKE) _install_bundle
-	@echo "✅ Updated $(INSTALLED_APP)"
+dev: install
 	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)"
 
 # Backwards-compatible alias.
@@ -79,28 +72,43 @@ dev-reinstall: dev
 # ------------------------------------------------------------------------------
 # Build / install (without launching)
 # ------------------------------------------------------------------------------
+# Resource-Accessor-Patch (Details: scripts/patch-resource-accessors.sh):
+# Der zweite `swift build` laeuft nur noch, wenn das Skript tatsaechlich etwas
+# gepatcht hat (Exit 3). Im Normalfall sind die Accessors vom letzten Lauf
+# noch gepatcht + schreibgeschuetzt (444) — SwiftPM ueberspringt dann "Write
+# sources", der erste Build linkt bereits die gepatchte Variante, und der
+# komplette zweite Build-Durchlauf entfaellt.
 build:
-	@echo "Building release..."
-	@find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true
+	@echo "🔨 Building $(APP_NAME) (release)..."
+	@rm -rf "$(APP_BUNDLE)"
 	@swift build -c release
-	@scripts/patch-resource-accessors.sh release
-	@swift build -c release --disable-sandbox
+	@scripts/patch-resource-accessors.sh release; status=$$?; \
+	if [ $$status -eq 3 ]; then \
+		echo "♻️  Resource-Accessors frisch gepatcht — Rebuild..."; \
+		swift build -c release --disable-sandbox; \
+	elif [ $$status -ne 0 ]; then \
+		exit $$status; \
+	fi
 	@$(MAKE) _bundle BUILD=release
 	@echo "Done: $(APP_BUNDLE)"
 
 # Quick debug iteration: bundle stays in the project directory, gets its own
 # TCC entry separate from /Applications. Useful for frontend-only changes
 # where you don't want to touch the installed app's permissions at all.
-run: kill
+run:
 	@echo "Building debug..."
+	@rm -rf "$(APP_BUNDLE)"
 	@swift build
 	@$(MAKE) _bundle BUILD=debug
+	@$(MAKE) kill
 	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(APP_BUNDLE)"
 
 # Same in-place strategy as `dev`, but without launching afterwards.
-install: kill build
+# Kill erst NACH dem Build (unmittelbar vor dem Sync) — minimale Downtime.
+install: build
+	@$(MAKE) kill
 	@$(MAKE) _install_bundle
-	@echo "Installed: $(INSTALLED_APP)"
+	@echo "✅ Installed: $(INSTALLED_APP)"
 
 # ------------------------------------------------------------------------------
 # CLI-Symlink: ~/.local/bin/whisperm8 → App-Binary im Bundle.
@@ -125,15 +133,38 @@ _install_bundle:
 	@# einem in-place rsync nicht aktiv. `-f` zwingt Re-Registrierung.
 	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$(INSTALLED_APP)" 2>/dev/null || true
 
-# pkill -x matcht app-gestartete Instanzen auf manchen Systemen NICHT
-# (Prozessname != "$(APP_NAME)") — eine ueberlebende Alt-Instanz blockiert
-# dann den Single-Instance-Check und die frisch deployte App beendet sich
-# sofort wieder. Daher zusaetzlich PID-Lookup ueber den vollen Binary-Pfad.
+# Nur GUI-Instanzen beenden — und zwar graceful:
+# - Match ueber argv[0] (ps args) statt Prozessname: `pkill -x $(APP_NAME)`
+#   traefe auch die Agent-Supervisor (gleiches Binary via
+#   Bundle.main.executablePath — SIGTERM heisst dort "laufenden Codex-Turn
+#   abbrechen", siehe AgentSuperviseCommand). Supervisor werden ueber ihr
+#   `agent-supervise`-Argument ausgenommen; CLI-Aufrufe laufen ueber den
+#   lowercase-Symlink ~/.local/bin/whisperm8 und matchen case-sensitiv nicht.
+#   argv[0]-Match faengt auch app-gestartete Instanzen, deren Prozessname
+#   auf manchen Systemen nicht "$(APP_NAME)" ist (frueherer pkill-x-Blindfleck).
+# - SIGTERM zuerst: der AppDelegate leitet es in einen regulaeren AppKit-Quit
+#   um (inkl. Flush der debounced Stores) — sonst verlieren frisch angelegte
+#   Chats/Tab-State ihre Persistenz.
+# - Warten, bis der Prozess wirklich weg ist: der Single-Instance-Check der
+#   frisch gestarteten App und der rsync brauchen ein totes Bundle. SIGKILL
+#   nur als letzte Eskalation nach 5 s.
+GUI_PIDS = ps -axww -o pid=,args= | awk '$$2 ~ /\/$(APP_NAME)$$/ && $$0 !~ /agent-supervise/ {print $$1}'
+
 kill:
-	@pkill -x $(APP_NAME) 2>/dev/null || true
-	@for pid in $$(ps -axo pid,comm | awk '$$2 ~ /$(APP_NAME).app\/Contents\/MacOS\/$(APP_NAME)$$/ {print $$1}'); do \
-		kill $$pid 2>/dev/null || true; \
-	done
+	@pids="$$($(GUI_PIDS))"; \
+	if [ -n "$$pids" ]; then \
+		echo "🛑 Stopping $(APP_NAME) (SIGTERM, graceful)..."; \
+		kill $$pids 2>/dev/null || true; \
+		i=0; \
+		while [ -n "$$($(GUI_PIDS))" ] && [ $$i -lt 50 ]; do \
+			sleep 0.1; i=$$((i+1)); \
+		done; \
+		leftover="$$($(GUI_PIDS))"; \
+		if [ -n "$$leftover" ]; then \
+			echo "⚠️  $(APP_NAME) reagiert nicht auf SIGTERM — SIGKILL."; \
+			kill -9 $$leftover 2>/dev/null || true; \
+		fi; \
+	fi
 
 clean:
 	@echo "Cleaning build artifacts..."
