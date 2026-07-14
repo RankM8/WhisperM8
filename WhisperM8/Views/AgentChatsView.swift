@@ -2428,7 +2428,9 @@ struct AgentChatsView: View {
         }
     }
 
-    private var projectOpenTarget: ProjectOpenTarget {
+    // `internal` statt `private`: auch die Grid-Pane-Header (+Grid,
+    // Repo-öffnen-Button) nutzen Ziel + Öffnen-Aktion.
+    var projectOpenTarget: ProjectOpenTarget {
         ProjectOpenTarget(rawValue: projectOpenTargetRaw) ?? .phpStorm
     }
 
@@ -2873,8 +2875,9 @@ struct AgentChatsView: View {
         openProject(selectedProject, in: .phpStorm)
     }
 
-    /// Öffnet das Projektverzeichnis im gewählten Ziel.
-    private func openProject(_ project: AgentProject, in target: ProjectOpenTarget) {
+    /// Öffnet das Projektverzeichnis im gewählten Ziel. `internal` statt
+    /// `private`: auch die Grid-Pane-Header (+Grid) öffnen darüber.
+    func openProject(_ project: AgentProject, in target: ProjectOpenTarget) {
         switch target {
         case .finder:
             NSWorkspace.shared.open(URL(fileURLWithPath: project.path))

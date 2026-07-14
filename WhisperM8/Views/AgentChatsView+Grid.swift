@@ -747,6 +747,24 @@ extension AgentChatsView {
                     .help(project.name)
             }
             Spacer(minLength: 6)
+            // Repo im Editor öffnen (PhpStorm etc.) — nutzt dasselbe
+            // gemerkte Öffnen-Ziel wie der IDE-Opener im Chat-Header
+            // (projectOpenTarget); der ist im Grid ausgeblendet.
+            if let project {
+                Button {
+                    openProject(project, in: projectOpenTarget)
+                } label: {
+                    Image(systemName: projectOpenTarget.systemImage)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .frame(width: 16, height: 16)
+                        .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("\(project.name) in \(projectOpenTarget.label) öffnen")
+                .accessibilityLabel("\(project.name) in \(projectOpenTarget.label) öffnen")
+            }
             // Start/Resume/Restart direkt an der Pane — der Chat-Header (wo
             // die Aktion sonst sitzt) ist im Grid ausgeblendet. Gleicher
             // Pfad wie dort: sessionActionRequest, die Detail-View der Pane
