@@ -628,6 +628,77 @@ struct SubagentRoad: View {
     }
 }
 
+/// Subagent-Chip an einer Parent-Row — „Agenten-Straße, randlos" (B4,
+/// beschlossen 2026-07-10, Prototyp docs/design/subagent-chip-strasse-
+/// varianten.html): kein Kasten, kein Fertig-Bruch, keine Segmentleiste.
+/// Grammatik: läuft etwas → Straße (1 Balken = 1 laufender Agent,
+/// Deckel 6, Lauflicht links → rechts) + grüne Laufzahl; Ruhe → nur die
+/// graue Bestandszahl. Fehler = roter Stand-Balken + Zahl, Ungelesen =
+/// blauer Punkt. Das Chevron bleibt der Button (klappt ALLE Kinder auf/zu).
+/// Geteilt zwischen `SessionListButton` (Chat-Liste) und
+/// `PinnedSessionRow` (Workspace-Rows) — eine Optik, eine Pflege-Stelle.
+struct SubagentChildrenChip: View {
+    let childCount: Int
+    let runningChildCount: Int
+    let erroredChildCount: Int
+    let unreadChildCount: Int
+    let isChildrenExpanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: isChildrenExpanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 6.5, weight: .bold))
+                .foregroundStyle(runningChildCount > 0 ? AgentTheme.statusWorking : AgentTheme.textTertiary)
+            if runningChildCount > 0 {
+                SubagentRoad(barCount: min(runningChildCount, 6))
+                Text("\(runningChildCount)")
+                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .foregroundStyle(AgentTheme.statusWorking)
+            } else {
+                Text("\(childCount)")
+                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textTertiary)
+            }
+            if erroredChildCount > 0 {
+                Capsule()
+                    .fill(AgentTheme.statusError)
+                    .frame(width: 2, height: 7)
+                Text("\(erroredChildCount)")
+                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .foregroundStyle(AgentTheme.statusError)
+            }
+            if unreadChildCount > 0 {
+                Circle()
+                    .fill(Color.blue)
+                    .frame(width: 4, height: 4)
+            }
+        }
+        // Randlos, aber die Klick-Fläche bleibt in voller Chip-Größe
+        // erhalten (Padding ohne Optik).
+        .padding(.horizontal, 2)
+        .padding(.vertical, 1.5)
+        .fixedSize()
+        .contentShape(Rectangle())
+        .onTapGesture { onToggle() }
+        .help(helpText)
+        .accessibilityLabel(helpText)
+    }
+
+    private var helpText: String {
+        var parts: [String] = []
+        if runningChildCount > 0 {
+            parts.append("\(runningChildCount) von \(childCount) Subagents laufen")
+        } else {
+            parts.append("\(childCount) Subagents")
+        }
+        if erroredChildCount > 0 { parts.append("\(erroredChildCount) fehlgeschlagen") }
+        if unreadChildCount > 0 { parts.append("\(unreadChildCount) ungelesen") }
+        return parts.joined(separator: " · ")
+            + " — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")"
+    }
+}
+
 struct SessionListButton: View {
     let session: AgentChatSession
     let isSelected: Bool
@@ -831,64 +902,18 @@ struct SessionListButton: View {
         }
     }
 
-    /// Subagent-Chip an der Parent-Row — „Agenten-Straße, randlos" (B4,
-    /// beschlossen 2026-07-10, Prototyp docs/design/subagent-chip-strasse-
-    /// varianten.html): kein Kasten, kein Fertig-Bruch, keine Segmentleiste.
-    /// Grammatik: läuft etwas → Straße (1 Balken = 1 laufender Agent,
-    /// Deckel 6, Lauflicht links → rechts) + grüne Laufzahl; Ruhe → nur die
-    /// graue Bestandszahl. Fehler = roter Stand-Balken + Zahl, Ungelesen =
-    /// blauer Punkt. Das Chevron bleibt der Button (klappt ALLE Kinder auf/zu).
+    /// Subagent-Chip an der Parent-Row — geteilte Komponente
+    /// (`SubagentChildrenChip`), damit Chat-Liste und Workspace-Rows
+    /// dieselbe Optik tragen.
     private var subagentChildrenChip: some View {
-        HStack(spacing: 4) {
-            Image(systemName: isChildrenExpanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: 6.5, weight: .bold))
-                .foregroundStyle(runningChildCount > 0 ? AgentTheme.statusWorking : AgentTheme.textTertiary)
-            if runningChildCount > 0 {
-                SubagentRoad(barCount: min(runningChildCount, 6))
-                Text("\(runningChildCount)")
-                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
-                    .foregroundStyle(AgentTheme.statusWorking)
-            } else {
-                Text("\(childCount)")
-                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
-                    .foregroundStyle(AgentTheme.textTertiary)
-            }
-            if erroredChildCount > 0 {
-                Capsule()
-                    .fill(AgentTheme.statusError)
-                    .frame(width: 2, height: 7)
-                Text("\(erroredChildCount)")
-                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
-                    .foregroundStyle(AgentTheme.statusError)
-            }
-            if unreadChildCount > 0 {
-                Circle()
-                    .fill(Color.blue)
-                    .frame(width: 4, height: 4)
-            }
-        }
-        // Randlos, aber die Klick-Fläche bleibt in voller Chip-Größe
-        // erhalten (Padding ohne Optik).
-        .padding(.horizontal, 2)
-        .padding(.vertical, 1.5)
-        .fixedSize()
-        .contentShape(Rectangle())
-        .onTapGesture { onToggleChildren?() }
-        .help(chipHelpText)
-        .accessibilityLabel(chipHelpText)
-    }
-
-    private var chipHelpText: String {
-        var parts: [String] = []
-        if runningChildCount > 0 {
-            parts.append("\(runningChildCount) von \(childCount) Subagents laufen")
-        } else {
-            parts.append("\(childCount) Subagents")
-        }
-        if erroredChildCount > 0 { parts.append("\(erroredChildCount) fehlgeschlagen") }
-        if unreadChildCount > 0 { parts.append("\(unreadChildCount) ungelesen") }
-        return parts.joined(separator: " · ")
-            + " — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")"
+        SubagentChildrenChip(
+            childCount: childCount,
+            runningChildCount: runningChildCount,
+            erroredChildCount: erroredChildCount,
+            unreadChildCount: unreadChildCount,
+            isChildrenExpanded: isChildrenExpanded,
+            onToggle: { onToggleChildren?() }
+        )
     }
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
@@ -964,6 +989,14 @@ struct PinnedSessionRow: View {
     /// Slot-Platzierung in einer Workspace-Gruppe („S1"–„S9") — nur die
     /// Workspace-Sektion setzt das; Gepinnt-Rows bleiben unverändert.
     var slotBadge: String? = nil
+    /// Subagent-Chip (Grammatik wie `SessionListButton`) — nur die
+    /// Workspace-Sektion setzt das; ohne Kinder bleibt die Row unverändert.
+    var runningChildCount: Int = 0
+    var erroredChildCount: Int = 0
+    var unreadChildCount: Int = 0
+    var childCount: Int = 0
+    var isChildrenExpanded: Bool = false
+    var onToggleChildren: (() -> Void)?
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -987,6 +1020,17 @@ struct PinnedSessionRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(isMissingTranscript ? "Transkript von Claude gelöscht – nicht mehr resumebar" : session.title)
+
+                if childCount > 0 {
+                    SubagentChildrenChip(
+                        childCount: childCount,
+                        runningChildCount: runningChildCount,
+                        erroredChildCount: erroredChildCount,
+                        unreadChildCount: unreadChildCount,
+                        isChildrenExpanded: isChildrenExpanded,
+                        onToggle: { onToggleChildren?() }
+                    )
+                }
 
                 Spacer(minLength: 0)
 

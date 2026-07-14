@@ -12,13 +12,22 @@ extension AgentChatsView {
     // MARK: - Sektion
 
     @ViewBuilder
-    var workspacesSidebarSection: some View {
+    func workspacesSidebarSection(
+        subagentChildrenByParent: [UUID: [AgentChatSession]],
+        workingSubagentIDs: Set<UUID>,
+        erroredSubagentIDs: Set<UUID>
+    ) -> some View {
         let workspaces = windowStore.gridWorkspaces
         if !workspaces.isEmpty {
             workspacesSectionHeader(count: workspaces.count)
             if !workspacesSectionCollapsed {
                 ForEach(workspaces) { entity in
-                    workspaceGroup(entity)
+                    workspaceGroup(
+                        entity,
+                        subagentChildrenByParent: subagentChildrenByParent,
+                        workingSubagentIDs: workingSubagentIDs,
+                        erroredSubagentIDs: erroredSubagentIDs
+                    )
                 }
             }
         }
@@ -70,7 +79,12 @@ extension AgentChatsView {
     // MARK: - Gruppe
 
     @ViewBuilder
-    private func workspaceGroup(_ entity: AgentGridWorkspace) -> some View {
+    private func workspaceGroup(
+        _ entity: AgentGridWorkspace,
+        subagentChildrenByParent: [UUID: [AgentChatSession]],
+        workingSubagentIDs: Set<UUID>,
+        erroredSubagentIDs: Set<UUID>
+    ) -> some View {
         let isActiveHere = windowStore.window(for: windowID).activeWorkspaceID == entity.id && isGridActive
         let isCollapsed = windowStore.isGridWorkspaceCollapsed(entity.id)
         VStack(alignment: .leading, spacing: 1) {
@@ -79,7 +93,25 @@ extension AgentChatsView {
                 ForEach(Array(entity.slots.enumerated()), id: \.offset) { index, slot in
                     if let sessionID = slot,
                        let session = workspace.sessions.first(where: { $0.id == sessionID }) {
-                        workspaceRow(session, entity: entity, slotIndex: index)
+                        // Split EINMAL pro Parent (Muster ProjectChatGroup) —
+                        // speist Chip UND Kinder-Aufteilung.
+                        let children = subagentChildrenByParent[session.id] ?? []
+                        let split = children.isEmpty ? nil : AgentSidebarModelBuilder.subagentChildSplit(
+                            children: children,
+                            erroredIDs: erroredSubagentIDs,
+                            workingIDs: workingSubagentIDs,
+                            unreadIDs: windowStore.unreadSubagentSessionIDs,
+                            selectedID: selectedSessionID
+                        )
+                        workspaceRow(session, entity: entity, slotIndex: index, split: split)
+                        if let split {
+                            workspaceSubagentChildren(
+                                parent: session,
+                                entity: entity,
+                                children: children,
+                                split: split
+                            )
+                        }
                     }
                 }
             }
@@ -171,7 +203,8 @@ extension AgentChatsView {
     private func workspaceRow(
         _ session: AgentChatSession,
         entity: AgentGridWorkspace,
-        slotIndex: Int
+        slotIndex: Int,
+        split: SubagentChildSplit? = nil
     ) -> some View {
         let rowOrder = entity.occupiedSessionIDs
         return PinnedSessionRow(
@@ -182,6 +215,12 @@ extension AgentChatsView {
             statusStore: runtimeStatusStore,
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
             slotBadge: "S\(slotIndex + 1)",
+            runningChildCount: split?.workingCount ?? 0,
+            erroredChildCount: split?.erroredCount ?? 0,
+            unreadChildCount: split?.hiddenUnreadCount ?? 0,
+            childCount: split?.totalCount ?? 0,
+            isChildrenExpanded: windowStore.expandedSubagentParentIDs.contains(session.id),
+            onToggleChildren: { windowStore.toggleSubagentChildren(session.id) },
             onSelect: {
                 handleSidebarRowClick(session.id, order: rowOrder) {
                     // Quellenunabhängige Klickregel via Bridge: im sichtbaren
@@ -208,6 +247,111 @@ extension AgentChatsView {
             sourceProjectID: session.projectID,
             sourceWindowID: windowID
         ))
+    }
+
+    // MARK: - Subagent-Kinder (Variante D, wie ProjectChatGroup)
+
+    /// Eingerückte Subagent-Kind-Zeilen unter einer Workspace-Row: Stufe 1
+    /// (Chip-Chevron, geteilt mit der Chat-Liste über den Store) zeigt die
+    /// aktiven Kinder; Fertige stehen hinter der „N fertig"-Zeile (Stufe 2,
+    /// lokaler State). Ein selektiertes Kind erzwingt die Expansion.
+    @ViewBuilder
+    private func workspaceSubagentChildren(
+        parent: AgentChatSession,
+        entity: AgentGridWorkspace,
+        children: [AgentChatSession],
+        split: SubagentChildSplit
+    ) -> some View {
+        let isTopExpanded = windowStore.expandedSubagentParentIDs.contains(parent.id)
+            || children.contains { $0.id == selectedSessionID }
+        if isTopExpanded {
+            ForEach(split.visible) { child in
+                workspaceSubagentChildRow(child)
+            }
+            if !split.hidden.isEmpty {
+                let finishedOpen = workspaceFinishedSubagentParentIDs.contains(parent.id)
+                workspaceSubagentFooterRow(parentID: parent.id, split: split, isExpanded: finishedOpen)
+                if finishedOpen {
+                    ForEach(split.hidden) { child in
+                        workspaceSubagentChildRow(child)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Kind-Zeile — dieselbe Row wie in der Chat-Liste (`SessionListButton`
+    /// mit Subagent-Einzug), plus der Workspace-Einzug der Gruppen-Rows.
+    /// Bewusst ohne Drag&Drop (Kinder kleben an ihrem Parent).
+    @ViewBuilder
+    private func workspaceSubagentChildRow(_ child: AgentChatSession) -> some View {
+        SessionListButton(
+            session: child,
+            isSelected: selectedSessionID == child.id,
+            isMultiSelected: false,
+            isOpenTab: openTabIDs.contains(child.id),
+            accentColorHex: workspace.projects.first { $0.id == child.projectID }?.color,
+            statusStore: runtimeStatusStore,
+            isAutoRenaming: false,
+            isMissingTranscript: false,
+            indentAsSubagent: true,
+            isUnreadSubagentResult: windowStore.unreadSubagentSessionIDs.contains(child.id),
+            onSelect: {
+                selectedSessionID = child.id
+                multiSelection = []
+            },
+            onClose: { requestArchive([child]) }
+        )
+        .equatable()
+        .padding(.leading, 10)
+        .contextMenu {
+            Button("Umbenennen…", systemImage: "pencil") {
+                beginRename(child)
+            }
+            Divider()
+            Button("Archivieren", systemImage: "archivebox") {
+                requestArchive([child])
+            }
+        }
+    }
+
+    /// „N fertig"-Fußzeile (Stufe 2) — Layout wie in `ProjectChatGroup`
+    /// (52 pt Subagent-Ebene) plus der 10-pt-Workspace-Einzug.
+    private func workspaceSubagentFooterRow(
+        parentID: UUID,
+        split: SubagentChildSplit,
+        isExpanded: Bool
+    ) -> some View {
+        Button {
+            if workspaceFinishedSubagentParentIDs.contains(parentID) {
+                workspaceFinishedSubagentParentIDs.remove(parentID)
+            } else {
+                workspaceFinishedSubagentParentIDs.insert(parentID)
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 6.5, weight: .semibold))
+                Text("\(split.hidden.count) fertig")
+                    .font(.system(size: 9.5))
+                    .monospacedDigit()
+                if split.hiddenUnreadCount > 0 {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 5, height: 5)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(AgentTheme.textTertiary)
+            .padding(.leading, 62)
+            .padding(.trailing, 8)
+            .frame(minHeight: 22, maxHeight: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("\(split.hidden.count) fertige Subagents"
+            + (split.hiddenUnreadCount > 0 ? " · \(split.hiddenUnreadCount) ungelesen" : "")
+            + " — klicken zum \(isExpanded ? "Einklappen" : "Anzeigen")")
     }
 
     @ViewBuilder

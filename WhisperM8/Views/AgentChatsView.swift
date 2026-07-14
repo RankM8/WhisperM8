@@ -167,6 +167,11 @@ struct AgentChatsView: View {
     /// die Header-Zeile außerhalb des Grids und braucht die Fläche weiterhin,
     /// um nicht passende Stufen auszublenden.
     @State var gridAreaSize: CGSize = .zero
+    /// Stufe 2 der Subagent-Expansion in der WORKSPACE-Sektion (Fertige
+    /// hinter der Welle-Zeile) — lokaler View-State wie das Pendant
+    /// `finishedExpandedParentIDs` in `ProjectChatGroup`; Stufe 1 teilt sich
+    /// beide Sektionen über `windowStore.expandedSubagentParentIDs`.
+    @State var workspaceFinishedSubagentParentIDs: Set<UUID> = []
     // Die Grid-Split-Verhältnisse leben seit Schema v4 am Workspace-Entity
     // (AgentGridWorkspace.columnFractions/rowFractions); die alten globalen
     // @AppStorage-Keys agentGridColumnFraction/agentGridRowFraction liest
@@ -1121,7 +1126,13 @@ struct AgentChatsView: View {
 
                     // WORKSPACES: unter GEPINNT, über den Projekten —
                     // unsichtbar bei null Workspaces (siehe +Workspaces).
-                    workspacesSidebarSection
+                    // Bekommt dieselben Subagent-Mengen wie die Chat-Liste,
+                    // damit Workspace-Rows Chip + Kind-Zeilen zeigen.
+                    workspacesSidebarSection(
+                        subagentChildrenByParent: subagentChildren.byParentLocalID,
+                        workingSubagentIDs: workingSubagentIDs,
+                        erroredSubagentIDs: erroredSubagentIDs
+                    )
 
                     // CHATS als klappbare Sektion (Muster GEPINNT). Eine
                     // aktive Suche überstimmt den Collapse — sonst wären
@@ -2774,7 +2785,9 @@ struct AgentChatsView: View {
         .disabled(!hasID || busy)
     }
 
-    private func beginRename(_ session: AgentChatSession) {
+    // `internal` statt `private`: auch die Workspace-Sektion (+Workspaces,
+    // Subagent-Kind-Kontextmenü) startet das Umbenennen.
+    func beginRename(_ session: AgentChatSession) {
         renameTargetID = session.id
         renameDraft = session.title
     }
