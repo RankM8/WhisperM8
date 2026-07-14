@@ -730,10 +730,11 @@ extension AgentChatsView {
         workspaceID: UUID,
         slotIndex: Int
     ) -> some View {
-        HStack(spacing: 8) {
+        let isProcessRunning = terminalRegistry.controller(for: session.id)?.isRunning == true
+        return HStack(spacing: 8) {
             SessionLiveStatusDot(
                 sessionID: session.id,
-                isProcessRunning: terminalRegistry.controller(for: session.id)?.isRunning == true,
+                isProcessRunning: isProcessRunning,
                 statusStore: runtimeStatusStore
             )
             Text(session.title)
@@ -746,6 +747,32 @@ extension AgentChatsView {
                     .help(project.name)
             }
             Spacer(minLength: 6)
+            // Start/Resume/Restart direkt an der Pane — der Chat-Header (wo
+            // die Aktion sonst sitzt) ist im Grid ausgeblendet. Gleicher
+            // Pfad wie dort: sessionActionRequest, die Detail-View der Pane
+            // filtert per Session-ID. Subagent-Jobs haben eigene Controls.
+            if !session.isSubagentJob || jobRuntimeModel.isTakenOver(session.id) {
+                Button {
+                    sessionActionRequest = AgentSessionActionRequest(
+                        sessionID: session.id,
+                        kind: isProcessRunning ? .restart : .start
+                    )
+                } label: {
+                    Image(systemName: isProcessRunning ? "arrow.clockwise" : "play.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .frame(width: 16, height: 16)
+                        .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(isProcessRunning
+                    ? "Restart — Terminal neu starten"
+                    : (session.externalSessionID == nil ? "Start" : "Resume"))
+                .accessibilityLabel(isProcessRunning
+                    ? "\(session.title) neu starten"
+                    : "\(session.title) fortsetzen")
+            }
             Button {
                 maximizePane(session.id)
             } label: {
