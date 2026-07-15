@@ -75,13 +75,23 @@ dev-reinstall: dev
 # Resource-Accessor-Patch (Details: scripts/patch-resource-accessors.sh):
 # Der zweite `swift build` laeuft nur noch, wenn das Skript tatsaechlich etwas
 # gepatcht hat (Exit 3). Im Normalfall sind die Accessors vom letzten Lauf
-# noch gepatcht + schreibgeschuetzt (444) — SwiftPM ueberspringt dann "Write
-# sources", der erste Build linkt bereits die gepatchte Variante, und der
-# komplette zweite Build-Durchlauf entfaellt.
+# noch gepatcht + schreibgeschuetzt (444) — der erste Build linkt dann bereits
+# die gepatchte Variante, und der komplette zweite Build-Durchlauf entfaellt.
+# WICHTIG: beide Builds mit --disable-sandbox (dieselben Flags wie der
+# fruehere finale Build) — bei konsistenten Flags laesst SwiftPM die
+# schreibgeschuetzten Accessors in Ruhe (verifiziert: Folge-Build 0.17s).
+# Self-Healing: Wird eine 444-Accessor-Datei extern angefasst (mtime!),
+# will SwiftPM sie beim Planen neu schreiben und scheitert hart mit
+# "error: invalid access". Dann: entsperren, einmal regenerieren lassen —
+# der Patch+Rebuild-Pfad (Exit 3) greift danach automatisch.
 build:
 	@echo "🔨 Building $(APP_NAME) (release)..."
 	@rm -rf "$(APP_BUNDLE)"
-	@swift build -c release
+	@swift build -c release --disable-sandbox || { \
+		echo "♻️  Build fehlgeschlagen — entsperre Resource-Accessors und versuche Regeneration (Self-Healing)..."; \
+		find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
+		swift build -c release --disable-sandbox; \
+	}
 	@scripts/patch-resource-accessors.sh release; status=$$?; \
 	if [ $$status -eq 3 ]; then \
 		echo "♻️  Resource-Accessors frisch gepatcht — Rebuild..."; \
