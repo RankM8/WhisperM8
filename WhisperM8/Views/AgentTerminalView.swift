@@ -769,9 +769,36 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // gedrosselten Hintergrund-Pane verloren gehen (Review-Finding:
         // „nie Byte-Verlust" hatte am Teardown eine Lücke).
         terminal.flushPendingOutput()
+        // Terminal-Stand JETZT sichern — nach dem Flush steht der komplette
+        // Exit-Output (inkl. `claude --resume …`-Hinweis) im Normal-Buffer,
+        // und die Registry entfernt den Controller direkt nach terminate().
+        captureTerminalSnapshot()
         terminal.terminate()
         isRunning = false
         releaseEventMonitors()
+    }
+
+    /// Persistiert den sichtbaren Terminal-Stand als Snapshot (Stufe 1:
+    /// Plaintext). Beendete Chats zeigen damit das echte Terminal-Ende
+    /// statt das JSONL-Transcript laden zu müssen. Bewusst der NORMAL-
+    /// Buffer: Claude/Codex verlassen beim Exit den Alternate Screen —
+    /// der Resume-Hinweis landet im normalen Scrollback. Idempotent
+    /// (ein Snapshot pro Prozesslauf; terminate() und processTerminated
+    /// feuern beide).
+    private var didCaptureSnapshot = false
+
+    private func captureTerminalSnapshot() {
+        guard hasStarted, !didCaptureSnapshot else { return }
+        didCaptureSnapshot = true
+        // Buffer-Extraktion muss auf dem Main-Thread laufen (Terminal ist
+        // ein UI-Objekt); der Datei-Write geht off-main.
+        let data = terminal.getTerminal().getBufferAsData(kind: .normal)
+        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
+        // Synchron (≤ ~300 KB, atomar): die Detail-View prüft direkt nach
+        // onTerminated auf den Snapshot — ein async-Write würde dort einen
+        // Race verlieren und der frisch beendete Chat fiele einmalig auf
+        // die Transcript-Ansicht zurück.
+        TerminalSnapshotStore.shared.save(sessionID: sessionID, text: text)
     }
 
     /// P6 S4: Die app-weiten NSEvent-Monitore (Keyboard-Shortcuts +
@@ -908,6 +935,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         Task { @MainActor in
             self.exitCode = exitCode
             self.isRunning = false
+            // Selbst-Exit (User tippt Ctrl+C/exit in der TUI): letzte
+            // gepufferte Bytes verarbeiten, dann den Terminal-Stand sichern.
+            // Nach terminate() ist das ein No-op (didCaptureSnapshot).
+            self.terminal.flushPendingOutput()
+            self.captureTerminalSnapshot()
             self.releaseEventMonitors()
             self.onTerminated(exitCode)
         }

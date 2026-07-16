@@ -466,6 +466,11 @@ struct AgentSessionStore {
         // Crash-safe: strukturelle Loeschung sofort persistieren (Review-
         // Befund 2026-07-13: Doku versprach das, der Code tat es nicht).
         workspaceStore.flush(reason: "delete-session")
+        // Terminal-Snapshot-Sidecar mit entsorgen (I/O bewusst NACH der
+        // Mutation, nie in der Closure).
+        DispatchQueue.global(qos: .utility).async {
+            TerminalSnapshotStore.shared.delete(sessionID: id)
+        }
     }
 
     /// Entfernt ein Projekt samt all seiner Sessions aus dem Workspace.
@@ -475,15 +480,24 @@ struct AgentSessionStore {
     /// landen als auto-importierte (nicht-manuelle) Sessions und tauchen
     /// daher nicht wieder in der Sidebar auf.
     func deleteProject(id: UUID) throws {
+        // IDs VOR der Mutation einsammeln (reines Lesen), Snapshot-I/O danach.
+        var removedSessionIDs: [UUID] = []
         try mutateWorkspaceIfChanged { workspace in
             let hasProject = workspace.projects.contains { $0.id == id }
             let hasSessions = workspace.sessions.contains { $0.projectID == id }
             guard hasProject || hasSessions else { return false }
+            removedSessionIDs = workspace.sessions.filter { $0.projectID == id }.map(\.id)
             workspace.sessions.removeAll { $0.projectID == id }
             workspace.projects.removeAll { $0.id == id }
             return true
         }
         workspaceStore.flush(reason: "delete-project")
+        if !removedSessionIDs.isEmpty {
+            let ids = removedSessionIDs
+            DispatchQueue.global(qos: .utility).async {
+                TerminalSnapshotStore.shared.delete(sessionIDs: ids)
+            }
+        }
     }
 
     func markStaleRunningSessionsClosed(excluding activeSessionIDs: Set<UUID> = []) throws {

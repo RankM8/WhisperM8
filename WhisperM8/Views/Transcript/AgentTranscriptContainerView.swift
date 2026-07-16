@@ -20,18 +20,26 @@ struct AgentTranscriptContainerView: View {
     /// Summary-Karte über der Timeline (Chat-Sessions; Subagents haben die
     /// Ergebnis-Karte in ihrer eigenen Detail-View).
     var showsSummaryCard: Bool = false
+    /// Persistierter Terminal-Stand der beendeten Session (Stufe 1,
+    /// Plaintext) — schaltet den „Terminal"-Modus frei. `nil` = kein
+    /// Snapshot vorhanden (Legacy-Sessions), Modi Chat|Roh wie bisher.
+    var terminalSnapshot: TerminalSnapshot? = nil
 
     /// Global gemerkter Modus — wer Roh bevorzugt, bekommt Roh überall.
-    @AppStorage("agentTranscriptViewMode") private var storedMode = TranscriptViewMode.chat.rawValue
+    /// Default „terminal": beendete Chats sehen wie beendete Terminals aus;
+    /// ohne Snapshot löst der Modus auf Chat auf (`mode`-Getter).
+    @AppStorage("agentTranscriptViewMode") private var storedMode = TranscriptViewMode.terminal.rawValue
     /// Runden-Projektion, off-main gebaut (volle Transcripts können groß sein).
     @State private var timeline: TranscriptTimeline = .empty
 
     enum TranscriptViewMode: String, CaseIterable {
+        case terminal
         case chat
         case raw
 
         var label: String {
             switch self {
+            case .terminal: return "Terminal"
             case .chat: return "Chat"
             case .raw: return "Roh"
             }
@@ -39,7 +47,15 @@ struct AgentTranscriptContainerView: View {
     }
 
     private var mode: TranscriptViewMode {
-        TranscriptViewMode(rawValue: storedMode) ?? .chat
+        let resolved = TranscriptViewMode(rawValue: storedMode) ?? .chat
+        // Terminal-Modus nur mit vorhandenem Snapshot — sonst Chat.
+        if resolved == .terminal, terminalSnapshot == nil { return .chat }
+        return resolved
+    }
+
+    /// Modi im Umschalter: „Terminal" erscheint nur, wenn ein Snapshot da ist.
+    private var availableModes: [TranscriptViewMode] {
+        terminalSnapshot == nil ? [.chat, .raw] : TranscriptViewMode.allCases
     }
 
     private var isEmpty: Bool {
@@ -48,14 +64,16 @@ struct AgentTranscriptContainerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !isEmpty {
+            if !isEmpty || terminalSnapshot != nil {
                 headerStrip
             }
-            if showsSummaryCard, !isEmpty {
+            if showsSummaryCard, !isEmpty, mode != .terminal {
                 SessionSummaryCard(session: session)
                     .background(AgentTheme.background)
             }
-            if isEmpty || mode == .raw {
+            if mode == .terminal, let terminalSnapshot {
+                TerminalSnapshotView(snapshot: terminalSnapshot)
+            } else if isEmpty || mode == .raw {
                 AgentChatTranscriptView(
                     transcript: transcript,
                     session: session,
@@ -126,7 +144,7 @@ struct AgentTranscriptContainerView: View {
                 get: { mode },
                 set: { storedMode = $0.rawValue }
             )) {
-                ForEach(TranscriptViewMode.allCases, id: \.self) { candidate in
+                ForEach(availableModes, id: \.self) { candidate in
                     Text(candidate.label).tag(candidate)
                 }
             }
@@ -147,6 +165,11 @@ struct AgentTranscriptContainerView: View {
     }
 
     private var metaLabel: String {
+        // Terminal-Modus mit (noch) ungeladenem Transcript: kein irreführendes
+        // „0 Nachrichten" — der Load ist bewusst deferred (Performance).
+        if mode == .terminal, transcript == nil {
+            return "Terminal-Stand"
+        }
         let messages = transcript?.messages.count ?? 0
         var parts = ["\(messages) Nachrichten"]
         if mode == .chat, !timeline.isEmpty {
