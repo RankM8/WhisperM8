@@ -18,6 +18,29 @@ enum TranscriptRenderLimits {
     /// Steps, die eine aufgeklappte Aktivitätszeile maximal rendert.
     static let expandedSteps = 400
 
+    // Topologie-Budgets (Hang-Fix 2026-07-16, Codex-Befund d5252179): Die
+    // Zeichen-Caps deckeln nur Text-GRÖSSE — die ANZAHL der Layout-Knoten
+    // pro Zeile (Markdown-Blöcke, Listen-Items, Tabellen-Zellen, Roh-Blöcke)
+    // blieb unbegrenzt und trieb die StackLayout-Rekursion in den Hang.
+
+    /// Markdown-Blöcke, die eine Antwort maximal rendert.
+    static let maxMarkdownBlocks = 200
+    /// Einträge pro Markdown-Liste.
+    static let maxListItems = 200
+    /// Tabellen über diesen Grenzen fallen auf den Monospace-Block zurück
+    /// (ein Text statt Zeilen×Spalten Grid-Zellen).
+    static let maxTableRows = 120
+    static let maxTableColumns = 16
+    /// Blöcke, die eine Roh-Ansicht-Message maximal rendert.
+    static let maxRawBlocksPerMessage = 80
+
+    /// `true`, wenn die Tabelle das Zell-Budget sprengt und als Monospace-
+    /// Fallback gerendert werden soll.
+    static func tableExceedsBudget(_ table: MarkdownTable) -> Bool {
+        let columns = max(table.headers.count, table.rows.first?.count ?? 0)
+        return table.rows.count > maxTableRows || columns > maxTableColumns
+    }
+
     struct Clipped {
         let text: String
         /// Abgeschnittene Zeichen (0 = nichts geclippt).

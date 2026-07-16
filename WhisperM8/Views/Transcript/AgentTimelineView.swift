@@ -20,56 +20,98 @@ struct AgentTimelineView: View {
     /// Vergrößert das Tail-Lesefenster des Owners (explizites Nachladen).
     var onLoadEarlierHistory: (() -> Void)?
 
-    /// Runden-Windowing analog zum Message-Windowing der Roh-Ansicht:
+    /// Runden-Windowing mit HARTER Obergrenze (Hang-Fix 2026-07-16):
     /// `.defaultScrollAnchor(.bottom)` zwingt SwiftUI, alle Item-Höhen
-    /// vorauszuberechnen — bei hunderten Runden würde der Initial-Layout-Pass
-    /// den Main-Thread blockieren.
+    /// vorauszuberechnen — das bisherige, additiv wachsende Fenster ließ
+    /// einen einzigen Layout-Pass bei langen Chats auf Minuten anwachsen
+    /// (Apple-Hang-Report: 186 s). Jetzt fallen beim Hochblättern die
+    /// neuesten Runden aus dem Render-Baum (`TranscriptWindow`), der
+    /// Scroll-Anker wird per ScrollViewReader wiederhergestellt.
     private static let initialRoundWindow = 40
     private static let roundBatchIncrement = 40
+    private static let maxRenderedRounds = 160
 
-    @State private var visibleCount: Int = initialRoundWindow
+    @State private var window = TranscriptWindow(
+        initialSize: initialRoundWindow,
+        batchSize: roundBatchIncrement,
+        maxSize: maxRenderedRounds
+    )
+    /// Erste Runden-ID des letzten Sync-Stands — unterscheidet Kopf-Wachstum
+    /// (Disk-Nachladen prependet ältere Runden) von Tail-Wachstum (Live).
+    @State private var firstRoundID: String?
 
     private var visibleRounds: ArraySlice<TranscriptRound> {
-        let rounds = timeline.rounds
-        guard !rounds.isEmpty else { return [] }
-        return rounds[max(0, rounds.count - visibleCount)...]
+        window.slice(of: timeline.rounds)
     }
 
     private var hiddenEarlierCount: Int {
-        max(0, timeline.rounds.count - visibleRounds.count)
+        window.hiddenEarlierCount
     }
 
     var body: some View {
-        ScrollView(.vertical) {
-            LazyVStack(alignment: .leading, spacing: 4) {
-                if showsHistorySection {
-                    historySection
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    if showsHistorySection {
+                        historySection(proxy: proxy)
+                    }
+                    ForEach(visibleRounds) { round in
+                        TimelineRoundView(
+                            round: round,
+                            isLatest: round.id == timeline.rounds.last?.id,
+                            isLiveRound: isWorking && round.id == timeline.rounds.last?.id
+                        )
+                        .equatable()
+                    }
+                    if window.hiddenLaterCount > 0 {
+                        laterSection(proxy: proxy)
+                    }
+                    if isWorking {
+                        liveActivityIndicator
+                            .padding(.top, 6)
+                    }
                 }
-                ForEach(visibleRounds) { round in
-                    TimelineRoundView(
-                        round: round,
-                        isLatest: round.id == timeline.rounds.last?.id,
-                        isLiveRound: isWorking && round.id == timeline.rounds.last?.id
-                    )
-                    .equatable()
-                }
-                if isWorking {
-                    liveActivityIndicator
-                        .padding(.top, 6)
-                }
+                .padding(.horizontal, 22)
+                .padding(.vertical, 18)
+                .frame(maxWidth: 660)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
-            .frame(maxWidth: 660)
-            .frame(maxWidth: .infinity)
+            .defaultScrollAnchor(.bottom)
         }
-        .defaultScrollAnchor(.bottom)
-        .onChange(of: timeline.rounds.count) { old, new in
-            // Nur bei schrumpfender Rundenzahl (Session-Wechsel) resetten —
-            // Wachstum ist Live-Append oder nachgeladener Verlauf, dort muss
-            // das (präventiv geweitete) Fenster erhalten bleiben.
-            if new < old {
-                visibleCount = Self.initialRoundWindow
+        .onAppear {
+            syncWindow()
+        }
+        .onChange(of: timeline.rounds.count) { _, _ in
+            syncWindow()
+        }
+    }
+
+    /// Fenster mit dem aktuellen Timeline-Stand abgleichen. Kopf- vs.
+    /// Tail-Wachstum wird über die Identität der ersten Runde erkannt —
+    /// Disk-Nachladen prependet (erste ID ändert sich), Live-Streaming
+    /// appendet (erste ID bleibt).
+    private func syncWindow() {
+        let rounds = timeline.rounds
+        defer { firstRoundID = rounds.first?.id }
+        if window.total == 0 || rounds.count < window.total {
+            window.reset(total: rounds.count)
+            return
+        }
+        if rounds.count > window.total, let known = firstRoundID, known != rounds.first?.id {
+            window.updateForHeadGrowth(total: rounds.count)
+        } else {
+            window.updateForTailChange(total: rounds.count)
+        }
+    }
+
+    /// Blättert nach oben und hält die bislang oberste Runde im Viewport —
+    /// ohne Anker würde der Inhalt unter dem Cursor wegspringen.
+    private func pageUp(proxy: ScrollViewProxy) {
+        let anchorID = visibleRounds.first?.id
+        window.pageUp()
+        if let anchorID {
+            DispatchQueue.main.async {
+                proxy.scrollTo(anchorID, anchor: .top)
             }
         }
     }
@@ -86,7 +128,7 @@ struct AgentTimelineView: View {
     /// Vier Zustände (Prototyp Rev 2): Button → Spinner → „✓ N geladen" →
     /// „Anfang der Konversation". Sichtbares Feedback für JEDEN Klick.
     @ViewBuilder
-    private var historySection: some View {
+    private func historySection(proxy: ScrollViewProxy) -> some View {
         VStack(spacing: 7) {
             if history.isLoading {
                 HStack(spacing: 8) {
@@ -104,13 +146,12 @@ struct AgentTimelineView: View {
                 }
                 if hiddenEarlierCount > 0 {
                     TranscriptHistoryPill(title: "\(hiddenEarlierCount) frühere Runden anzeigen", detail: nil) {
-                        visibleCount = min(timeline.rounds.count, visibleCount + Self.roundBatchIncrement)
+                        pageUp(proxy: proxy)
                     }
                 } else if canLoadFromDisk {
                     TranscriptHistoryPill(title: "Früheren Verlauf laden", detail: loadHint) {
-                        // Fenster präventiv weiten, damit die nachgeladenen
-                        // Runden direkt sichtbar sind.
-                        visibleCount += Self.roundBatchIncrement
+                        // Das Aufdecken der nachgeladenen Runden übernimmt
+                        // syncWindow (Kopf-Wachstums-Pfad) nach dem Reload.
                         onLoadEarlierHistory?()
                     }
                 } else if history.reachedStart {
@@ -120,6 +161,28 @@ struct AgentTimelineView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 10)
+    }
+
+    /// Gegenstück am unteren Rand, sobald das Fenster nach oben geblättert
+    /// wurde: zurück zu den neuesten Runden (Tail-Fenster + ans Ende
+    /// scrollen).
+    @ViewBuilder
+    private func laterSection(proxy: ScrollViewProxy) -> some View {
+        VStack(spacing: 7) {
+            TranscriptHistoryPill(
+                title: "Zu den neuesten Runden",
+                detail: "\(window.hiddenLaterCount) ausgeblendet"
+            ) {
+                window.jumpToTail()
+                if let lastID = timeline.rounds.last?.id {
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 10)
     }
 
     /// Pulsierender „arbeitet"-Hinweis unter der letzten Runde — die

@@ -19,35 +19,40 @@ struct AgentChatTranscriptView: View {
     var loadHint: String?
     var onLoadEarlierHistory: (() -> Void)?
 
-    /// Wie viele Messages initial ueber `ForEach` ausgegeben werden.
-    /// SwiftUI's LazyVStack mit `.defaultScrollAnchor(.bottom)` muss intern
-    /// jede Item-Hoehe vorausberechnen um die Scroll-Position am Ende zu
-    /// landen. Bei >1000 Messages kollabiert dadurch der Main-Thread im
-    /// Initial-Layout-Pass. Wir loesen das mit einem expliziten Window —
-    /// Default 300 Messages, "Earlier"-Button laedt weitere Batches.
+    /// Message-Windowing mit HARTER Obergrenze (Hang-Fix 2026-07-16, analog
+    /// zur Timeline): `.defaultScrollAnchor(.bottom)` berechnet alle
+    /// Item-Hoehen voraus; das bisherige additiv wachsende Fenster liess
+    /// Layout-Paesse bei langen Chats auf Minuten anwachsen. Jetzt schiebt
+    /// `TranscriptWindow` einen begrenzten Ausschnitt ueber die Liste.
     private static let initialMessageWindow = 300
     private static let messageBatchIncrement = 300
+    private static let maxRenderedMessages = 600
 
-    @State private var visibleCount: Int = initialMessageWindow
+    @State private var window = TranscriptWindow(
+        initialSize: initialMessageWindow,
+        batchSize: messageBatchIncrement,
+        maxSize: maxRenderedMessages
+    )
+    /// Erste Message-ID des letzten Sync-Stands — unterscheidet Kopf-
+    /// Wachstum (Disk-Nachladen) von Tail-Wachstum (Live-Append).
+    @State private var firstMessageID: UUID?
 
     /// Sichere Liste der Messages — leer falls Transcript fehlt.
     private var allMessages: [AgentChatMessage] {
         transcript?.messages ?? []
     }
 
-    /// Die tatsaechlich gerenderten Messages — Suffix von allMessages.
+    /// Die tatsaechlich gerenderten Messages — Fenster-Ausschnitt.
     private var visibleMessages: ArraySlice<AgentChatMessage> {
-        guard !allMessages.isEmpty else { return [] }
-        let start = max(0, allMessages.count - visibleCount)
-        return allMessages[start..<allMessages.count]
+        window.slice(of: allMessages)
     }
 
     private var hasMoreEarlier: Bool {
-        visibleMessages.count < allMessages.count
+        window.hiddenEarlierCount > 0
     }
 
     private var hiddenEarlierCount: Int {
-        max(0, allMessages.count - visibleMessages.count)
+        window.hiddenEarlierCount
     }
 
     private var isReallyEmpty: Bool {
@@ -61,31 +66,62 @@ struct AgentChatTranscriptView: View {
             if isReallyEmpty {
                 emptyState
             } else {
-                ScrollView(.vertical) {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        if hasMoreEarlier || canLoadEarlierHistory || history.isLoading
-                            || history.lastLoadedDelta != nil || history.reachedStart {
-                            historySection
-                                .padding(.horizontal, 16)
-                                .padding(.top, 8)
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical) {
+                        LazyVStack(alignment: .leading, spacing: 14) {
+                            if hasMoreEarlier || canLoadEarlierHistory || history.isLoading
+                                || history.lastLoadedDelta != nil || history.reachedStart {
+                                historySection(proxy: proxy)
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 8)
+                            }
+                            ForEach(visibleMessages) { message in
+                                messageRow(message)
+                                    .padding(.horizontal, 16)
+                            }
+                            if window.hiddenLaterCount > 0 {
+                                laterSection(proxy: proxy)
+                                    .padding(.horizontal, 16)
+                            }
                         }
-                        ForEach(visibleMessages) { message in
-                            messageRow(message)
-                                .padding(.horizontal, 16)
-                        }
+                        .padding(.vertical, 14)
                     }
-                    .padding(.vertical, 14)
+                    .defaultScrollAnchor(.bottom)
                 }
-                .defaultScrollAnchor(.bottom)
             }
         }
         .background(AgentTheme.background)
-        .onChange(of: allMessages.count) { old, new in
-            // Nur bei SCHRUMPFENDEM Transcript (Session-Wechsel) resetten.
-            // Wachstum = Live-Append oder nachgeladener Verlauf — da muss
-            // das (ggf. praeventiv geweitete) Fenster erhalten bleiben.
-            if new < old {
-                visibleCount = Self.initialMessageWindow
+        .onAppear {
+            syncWindow()
+        }
+        .onChange(of: allMessages.count) { _, _ in
+            syncWindow()
+        }
+    }
+
+    /// Fenster mit dem Message-Bestand abgleichen (Kopf- vs. Tail-Wachstum
+    /// via Identitaet der ersten Message — Disk-Nachladen prependet).
+    private func syncWindow() {
+        let messages = allMessages
+        defer { firstMessageID = messages.first?.id }
+        if window.total == 0 || messages.count < window.total {
+            window.reset(total: messages.count)
+            return
+        }
+        if messages.count > window.total, let known = firstMessageID, known != messages.first?.id {
+            window.updateForHeadGrowth(total: messages.count)
+        } else {
+            window.updateForTailChange(total: messages.count)
+        }
+    }
+
+    /// Nach oben blaettern und die bisher oberste Message als Anker halten.
+    private func pageUp(proxy: ScrollViewProxy) {
+        let anchorID = visibleMessages.first?.id
+        window.pageUp()
+        if let anchorID {
+            DispatchQueue.main.async {
+                proxy.scrollTo(anchorID, anchor: .top)
             }
         }
     }
@@ -98,7 +134,7 @@ struct AgentChatTranscriptView: View {
 
     /// Vier Zustände, identisch zur Timeline (geteilte Bausteine).
     @ViewBuilder
-    private var historySection: some View {
+    private func historySection(proxy: ScrollViewProxy) -> some View {
         VStack(spacing: 7) {
             if history.isLoading {
                 HStack(spacing: 8) {
@@ -116,17 +152,35 @@ struct AgentChatTranscriptView: View {
                 }
                 if hasMoreEarlier {
                     TranscriptHistoryPill(title: "\(hiddenEarlierCount) frühere Nachrichten anzeigen", detail: nil) {
-                        visibleCount = min(allMessages.count, visibleCount + Self.messageBatchIncrement)
+                        pageUp(proxy: proxy)
                     }
                 } else if canLoadEarlierHistory {
                     TranscriptHistoryPill(title: "Früheren Verlauf laden", detail: loadHint) {
-                        // Fenster praeventiv weiten, damit die nachgeladenen
-                        // Messages direkt sichtbar sind.
-                        visibleCount += Self.messageBatchIncrement
+                        // Das Aufdecken der nachgeladenen Messages übernimmt
+                        // syncWindow (Kopf-Wachstums-Pfad) nach dem Reload.
                         onLoadEarlierHistory?()
                     }
                 } else if history.reachedStart {
                     TranscriptHistoryStartMarker()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Rücksprung ans Ende, wenn nach oben geblättert wurde.
+    @ViewBuilder
+    private func laterSection(proxy: ScrollViewProxy) -> some View {
+        VStack(spacing: 7) {
+            TranscriptHistoryPill(
+                title: "Zu den neuesten Nachrichten",
+                detail: "\(window.hiddenLaterCount) ausgeblendet"
+            ) {
+                window.jumpToTail()
+                if let lastID = allMessages.last?.id {
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
                 }
             }
         }
@@ -258,8 +312,14 @@ struct AgentChatTranscriptView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(message.blocks.enumerated()), id: \.offset) { _, block in
+                // Topologie-Budget: Messages mit hunderten Blöcken deckeln.
+                ForEach(Array(message.blocks.prefix(TranscriptRenderLimits.maxRawBlocksPerMessage).enumerated()), id: \.offset) { _, block in
                     blockView(block, role: message.role)
+                }
+                if message.blocks.count > TranscriptRenderLimits.maxRawBlocksPerMessage {
+                    Text("… \(message.blocks.count - TranscriptRenderLimits.maxRawBlocksPerMessage) weitere Blöcke abgeschnitten")
+                        .font(.system(size: 10))
+                        .foregroundStyle(AgentTheme.textTertiary)
                 }
             }
             .padding(12)

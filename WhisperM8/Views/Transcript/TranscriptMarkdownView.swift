@@ -24,8 +24,15 @@ struct TranscriptMarkdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+            // Topologie-Budget: nicht nur Zeichen, auch die BLOCK-Anzahl
+            // deckeln — jeder Block ist ein eigener Layout-Teilbaum.
+            ForEach(Array(blocks.prefix(TranscriptRenderLimits.maxMarkdownBlocks).enumerated()), id: \.offset) { index, block in
                 blockView(block, isFirst: index == 0)
+            }
+            if blocks.count > TranscriptRenderLimits.maxMarkdownBlocks {
+                Text("… \(blocks.count - TranscriptRenderLimits.maxMarkdownBlocks) weitere Blöcke — vollständig in der Roh-Ansicht")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
             }
             if truncatedCount > 0 {
                 Text(TranscriptRenderLimits.truncationHint(truncatedCount))
@@ -74,7 +81,8 @@ struct TranscriptMarkdownView: View {
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(AgentTheme.border, lineWidth: 1))
         case .list(let items, let ordered):
             VStack(alignment: .leading, spacing: 5) {
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                // Topologie-Budget: jedes Item = HStack + Marker + Text.
+                ForEach(Array(items.prefix(TranscriptRenderLimits.maxListItems).enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         if ordered {
                             Text("\(index + 1).")
@@ -92,6 +100,11 @@ struct TranscriptMarkdownView: View {
                             .foregroundStyle(AgentTheme.textPrimary)
                             .lineSpacing(2)
                     }
+                }
+                if items.count > TranscriptRenderLimits.maxListItems {
+                    Text("… \(items.count - TranscriptRenderLimits.maxListItems) weitere Einträge — vollständig in der Roh-Ansicht")
+                        .font(.system(size: 10))
+                        .foregroundStyle(AgentTheme.textTertiary)
                 }
             }
             .padding(.leading, 2)
@@ -118,7 +131,10 @@ struct TranscriptMarkdownView: View {
 
     @ViewBuilder
     private func tableView(_ raw: String) -> some View {
-        if let table = MarkdownTable.parse(raw) {
+        // Topologie-Budget: Riesen-Tabellen (Zeilen × Spalten Grid-Zellen,
+        // jede Zelle ein AttributedString-Text) sprengen den Layout-Pass —
+        // dann lieber EIN Monospace-Text (unten der bestehende Fallback).
+        if let table = MarkdownTable.parse(raw), !TranscriptRenderLimits.tableExceedsBudget(table) {
             ScrollView(.horizontal, showsIndicators: false) {
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 0, verticalSpacing: 0) {
                     if !table.headers.isEmpty {
