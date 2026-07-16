@@ -72,7 +72,8 @@ struct SubagentJobDetailView: View {
                 transcript: transcript,
                 session: session,
                 isWorking: snapshot?.isActive == true,
-                onLoadEarlierHistory: { loadEarlierHistory() },
+                onLoadEarlierHistory: transcriptTailBytes < Self.maxTailBytes
+                    ? { loadEarlierHistory() } : nil,
                 history: historyState,
                 loadHint: nil
             )
@@ -608,13 +609,18 @@ struct SubagentJobDetailView: View {
         }
     }
 
+    /// Obergrenze des ×4-Fensters — Begründung siehe
+    /// `AgentSessionDetailView.maxTailBytes`.
+    private static let maxTailBytes = 32 * 1024 * 1024
+
     /// Explizites Nachladen älteren Verlaufs (×4-Fenster) mit Feedback-Zustand.
     private func loadEarlierHistory() {
         guard transcript?.hasTruncatedHead == true, countBeforeEarlierLoad == nil,
+              transcriptTailBytes < Self.maxTailBytes,
               let url = cachedTranscriptURL else { return }
         countBeforeEarlierLoad = transcript?.messages.count ?? 0
         historyState = TranscriptHistoryState(isLoading: true, lastLoadedDelta: nil, reachedStart: false)
-        transcriptTailBytes *= 4
+        transcriptTailBytes = min(transcriptTailBytes * 4, Self.maxTailBytes)
         reloadTranscript(from: url)
     }
 

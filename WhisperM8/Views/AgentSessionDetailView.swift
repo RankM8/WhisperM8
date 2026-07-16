@@ -48,6 +48,11 @@ struct AgentSessionDetailView: View {
     /// froren die App beim Voll-Read ein — mehr Verlauf holt der User
     /// explizit nach (×4-Eskalation pro Klick).
     private static let initialTailBytes = 512 * 1024
+    /// Obergrenze des Nachlade-Fensters: ×4-Wachstum lief sonst unbegrenzt
+    /// (512 KB → … → 128 MB) — ein voll geparster 100-MB-Chat killt die App
+    /// über Speicher + Timeline-Build. 32 MiB decken monatelange Verläufe;
+    /// darüber verschwindet der Nachlade-Button.
+    private static let maxTailBytes = 32 * 1024 * 1024
     @State private var transcriptTailBytes = AgentSessionDetailView.initialTailBytes
     /// Feedback-Zustand des Nachladens (Spinner/„✓ N geladen"/Anfang).
     @State private var historyState = TranscriptHistoryState.idle
@@ -105,7 +110,8 @@ struct AgentSessionDetailView: View {
                 AgentTranscriptContainerView(
                     transcript: cachedTranscript,
                     session: session,
-                    onLoadEarlierHistory: { loadEarlierHistory() },
+                    onLoadEarlierHistory: transcriptTailBytes < Self.maxTailBytes
+                        ? { loadEarlierHistory() } : nil,
                     history: historyState,
                     loadHint: tailWindowHint,
                     showsSummaryCard: !session.isSubagentJob
@@ -246,10 +252,11 @@ struct AgentSessionDetailView: View {
     /// Explizite User-Aktion — so bleibt auch ein 50-MB-Chat beherrschbar
     /// (512 KB → 2 MB → 8 MB → …), statt beim Öffnen alles zu parsen.
     private func loadEarlierHistory() {
-        guard cachedTranscript?.hasTruncatedHead == true, countBeforeEarlierLoad == nil else { return }
+        guard cachedTranscript?.hasTruncatedHead == true, countBeforeEarlierLoad == nil,
+              transcriptTailBytes < Self.maxTailBytes else { return }
         countBeforeEarlierLoad = cachedTranscript?.messages.count ?? 0
         historyState = TranscriptHistoryState(isLoading: true, lastLoadedDelta: nil, reachedStart: false)
-        transcriptTailBytes *= 4
+        transcriptTailBytes = min(transcriptTailBytes * 4, Self.maxTailBytes)
         loadTranscriptIfNeeded()
     }
 
@@ -259,7 +266,7 @@ struct AgentSessionDetailView: View {
         formatter.allowedUnits = [.useKB, .useMB]
         formatter.countStyle = .binary
         let current = formatter.string(fromByteCount: Int64(transcriptTailBytes))
-        let next = formatter.string(fromByteCount: Int64(transcriptTailBytes * 4))
+        let next = formatter.string(fromByteCount: Int64(min(transcriptTailBytes * 4, Self.maxTailBytes)))
         return "\(current) → \(next)"
     }
 

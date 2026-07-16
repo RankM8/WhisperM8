@@ -278,11 +278,19 @@ struct AgentChatTranscriptView: View {
     private func blockView(_ block: AgentChatBlock, role: AgentChatMessage.Role) -> some View {
         switch block {
         case .text(let text):
-            Text(text)
+            // Render-Deckel (siehe TranscriptRenderLimits): ungedeckelte
+            // Megabyte-Texte frieren das CoreText-Layout beim Scrollen ein.
+            let clipped = TranscriptRenderLimits.clip(text, max: TranscriptRenderLimits.rawBlockChars)
+            Text(clipped.text)
                 .font(.system(size: 13))
                 .foregroundStyle(AgentTheme.textPrimary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
+            if clipped.isTruncated {
+                Text("… \(clipped.truncatedCount) weitere Zeichen abgeschnitten")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
+            }
         case .toolUse(let name, let input):
             toolUseBlock(name: name, input: input)
         case .toolResult(let content, let isError):
@@ -305,7 +313,9 @@ struct AgentChatTranscriptView: View {
             }
             .foregroundStyle(AgentTheme.textSecondary)
             if !input.isEmpty {
-                Text(input)
+                // Cap wie beim Tool-Ergebnis: Write/Edit-Inputs tragen ganze
+                // Dateien.
+                Text(TranscriptRenderLimits.clip(input, max: TranscriptRenderLimits.rawBlockChars).text)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textPrimary)
                     .textSelection(.enabled)
@@ -366,7 +376,7 @@ struct AgentChatTranscriptView: View {
     @ViewBuilder
     private func thinkingBlock(_ text: String) -> some View {
         DisclosureGroup {
-            Text(text)
+            Text(TranscriptRenderLimits.clip(text, max: TranscriptRenderLimits.rawBlockChars).text)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .textSelection(.enabled)
@@ -413,11 +423,17 @@ struct AgentChatTranscriptView: View {
         }
     }
 
-    private func timeLabel(_ date: Date) -> String {
+    /// Statisch — `DateFormatter()` pro Aufruf war ein Scroll-Hotspot
+    /// (Formatter-Erzeugung kostet Millisekunden, lief pro Message-Zeile).
+    private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private func timeLabel(_ date: Date) -> String {
+        Self.timeFormatter.string(from: date)
     }
 
     private func byteCountLabel(_ bytes: Int) -> String {

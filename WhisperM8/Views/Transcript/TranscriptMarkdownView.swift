@@ -8,11 +8,29 @@ import SwiftUI
 struct TranscriptMarkdownView: View {
     let text: String
 
+    /// Parse-Ergebnis wird im Init aufgelöst (Cache-Hit = Lookup statt
+    /// Re-Parse pro Body-Aufruf) und der Input vorher hart gedeckelt —
+    /// Megabyte-Texte haben sonst CoreText-Layouts erzeugt, die die App
+    /// beim Scrollen eingefroren haben (siehe TranscriptRenderLimits).
+    private let blocks: [MarkdownBlock]
+    private let truncatedCount: Int
+
+    init(text: String) {
+        self.text = text
+        let clipped = TranscriptRenderLimits.clip(text, max: TranscriptRenderLimits.markdownChars)
+        self.truncatedCount = clipped.truncatedCount
+        self.blocks = MarkdownRenderCache.shared.blocks(for: clipped.text)
+    }
+
     var body: some View {
-        let blocks = MarkdownBlockParser.parse(text)
         VStack(alignment: .leading, spacing: 9) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                 blockView(block, isFirst: index == 0)
+            }
+            if truncatedCount > 0 {
+                Text(TranscriptRenderLimits.truncationHint(truncatedCount))
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -158,11 +176,10 @@ struct TranscriptMarkdownView: View {
 
     /// Inline-Markdown (fett, `code`, Links) tolerant auflösen. Zeilenumbrüche
     /// innerhalb des Blocks bleiben erhalten (`inlineOnlyPreservingWhitespace`).
+    /// Über den Prozess-Cache — `AttributedString(markdown:)` ist zu teuer,
+    /// um pro Body-Aufruf zu laufen.
     private func inlineText(_ raw: String) -> Text {
-        if let attributed = try? AttributedString(
-            markdown: raw,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) {
+        if let attributed = MarkdownRenderCache.shared.inlineAttributed(for: raw) {
             return Text(attributed)
         }
         return Text(raw)

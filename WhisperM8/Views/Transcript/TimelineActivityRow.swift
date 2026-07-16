@@ -31,8 +31,17 @@ struct TimelineActivityRow: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(steps) { step in
+                    // Render-Deckel: Runden aus langen autonomen Läufen können
+                    // tausende Steps tragen — die würden hier als plain VStack
+                    // alle auf einmal layoutet.
+                    ForEach(steps.prefix(TranscriptRenderLimits.expandedSteps)) { step in
                         TimelineStepRow(step: step)
+                    }
+                    if steps.count > TranscriptRenderLimits.expandedSteps {
+                        Text("… \(steps.count - TranscriptRenderLimits.expandedSteps) weitere Steps — vollständig in der Roh-Ansicht")
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                            .padding(.top, 4)
                     }
                 }
                 .padding(.leading, 14)

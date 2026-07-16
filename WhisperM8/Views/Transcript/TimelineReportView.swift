@@ -38,10 +38,15 @@ struct TimelineReportView: View {
     }
 
     /// Schneller Vor-Check + toleranter Parse: nur Texte, die wie ein
-    /// Report-JSON aussehen, durchlaufen den Decoder.
+    /// Report-JSON aussehen, durchlaufen den Decoder. Der Vor-Check ist
+    /// allokationsfrei (kein `trimmingCharacters`-Copy) — er läuft pro
+    /// Antwort bei jedem Body-Aufruf der Timeline.
     static func parseIfReport(_ text: String) -> AgentReport? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("{") || trimmed.hasPrefix("```") else { return nil }
+        let whitespace = CharacterSet.whitespacesAndNewlines
+        guard let first = text.unicodeScalars.first(where: { !whitespace.contains($0) }) else {
+            return nil
+        }
+        guard first == "{" || first == "`" else { return nil }
         return AgentReport.parse(lastMessage: text)
     }
 }

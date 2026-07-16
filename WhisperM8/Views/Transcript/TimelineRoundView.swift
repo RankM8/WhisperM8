@@ -67,8 +67,13 @@ struct TimelineRoundView: View, Equatable {
 
     @ViewBuilder
     private func promptBubble(_ prompt: TranscriptPrompt) -> some View {
+        // Harter Render-Deckel: riesige injizierte Prompts (System-Prompt-
+        // Dumps, gepastete Blobs) haben als EIN ungedeckelter Text das
+        // CoreText-Layout beim Hochscrollen sekundenlang blockiert und die
+        // App gekillt. Voller Inhalt bleibt in der Roh-Ansicht.
+        let clipped = TranscriptRenderLimits.clip(prompt.text, max: TranscriptRenderLimits.promptChars)
         VStack(alignment: .trailing, spacing: 3) {
-            Text(prompt.text)
+            Text(clipped.text)
                 .font(.system(size: 13.5))
                 .foregroundStyle(AgentTheme.textPrimary)
                 .lineSpacing(2.5)
@@ -95,6 +100,13 @@ struct TimelineRoundView: View, Equatable {
                     }
                 }
                 .frame(maxWidth: 460, alignment: .trailing)
+
+            if clipped.isTruncated {
+                Text(TranscriptRenderLimits.truncationHint(clipped.truncatedCount))
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .padding(.trailing, 5)
+            }
 
             ForEach(Array(prompt.attachments.enumerated()), id: \.offset) { _, attachment in
                 Text("📷 Bild angehängt · \(attachment.mediaType) · \(byteLabel(attachment.byteSize))")
@@ -194,7 +206,9 @@ struct TeammateMessageBlock: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                Text(message.raw)
+                // Render-Deckel wie überall: Teammate-Payloads können ganze
+                // JSON-Dumps sein.
+                Text(TranscriptRenderLimits.clip(message.raw, max: TranscriptRenderLimits.rawBlockChars).text)
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .textSelection(.enabled)
