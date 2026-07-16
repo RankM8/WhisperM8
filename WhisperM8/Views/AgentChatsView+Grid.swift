@@ -789,7 +789,9 @@ extension AgentChatsView {
                     : (session.externalSessionID == nil ? "Start" : "Resume"))
                 .accessibilityLabel(isProcessRunning
                     ? "\(session.title) neu starten"
-                    : "\(session.title) fortsetzen")
+                    : (session.externalSessionID == nil
+                        ? "\(session.title) starten"
+                        : "\(session.title) fortsetzen"))
             }
             Button {
                 maximizePane(session.id)
@@ -839,6 +841,16 @@ extension AgentChatsView {
             sourceWorkspaceID: workspaceID,
             sourceSlotIndex: slotIndex
         ))
+        // Vereinheitlichtes Session-Kontextmenü — bewusst am HEADER, nicht
+        // am Terminal-Inhalt (dort gehört der Rechtsklick dem PTY). Die
+        // Header-Buttons bleiben als Schnellzugriff unverändert.
+        .contextMenu {
+            sessionContextMenu(
+                session,
+                context: .gridPane,
+                removalWorkspace: windowStore.gridWorkspace(id: workspaceID)
+            )
+        }
     }
 
     // MARK: - Selektion / Tastatur

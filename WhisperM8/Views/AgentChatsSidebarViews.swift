@@ -16,12 +16,15 @@ struct ProjectChatGroup: View {
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
     var onCloseSession: (AgentChatSession) -> Void
-    var onPinSession: (UUID) -> Void
-    var onForkSession: (AgentChatSession) -> Void
-    var onRenameRequest: (AgentChatSession) -> Void
-    var onAutoNameRequest: (AgentChatSession) -> Void
     var onRename: (UUID, String) -> Void
-    var onSetColor: (UUID, String?) -> Void
+    /// Vereinheitlichtes Kontextmenü der Chat-Zeilen — von der Call-Site
+    /// injiziert (`sessionContextMenu(_:context:)` in +SessionMenus), damit
+    /// die Menü-Definition an EINER Stelle lebt und diese View keine acht
+    /// Einzel-Closures für Menü-Aktionen braucht. AnyView, weil der Inhalt
+    /// nur bei geöffnetem Menü gebaut wird — kein Render-Hot-Path.
+    var sessionMenu: (AgentChatSession) -> AnyView
+    /// Dito für die eingerückten Subagent-Kind-Zeilen (reduziertes Menü).
+    var subagentChildMenu: (AgentChatSession) -> AnyView
     // P4: Wert-Daten statt Closures — Closures werden pro Parent-Render neu
     // gebaut und verhindern jedes Memoizing; Sets + die stabile
     // Store-Referenz lassen die Rows per Equatable skippen.
@@ -259,12 +262,6 @@ struct ProjectChatGroup: View {
             + " — klicken zum \(isExpanded ? "Einklappen" : "Anzeigen")")
     }
 
-    /// Anzahl der Sessions, auf die eine Bulk-Aktion wirken würde (die Auswahl,
-    /// wenn `session` Teil davon ist, sonst 1) — für die „N"-Menü-Labels.
-    private func bulkCount(_ session: AgentChatSession) -> Int {
-        multiSelection.contains(session.id) && multiSelection.count > 1 ? multiSelection.count : 1
-    }
-
     /// Eingerückte Kind-Zeile eines Subagent-Jobs. Bewusst OHNE Drag&Drop
     /// (Kinder kleben an ihrem Parent) und mit reduziertem Kontextmenü.
     @ViewBuilder
@@ -285,13 +282,7 @@ struct ProjectChatGroup: View {
         )
         .equatable()
         .contextMenu {
-            Button("Umbenennen…", systemImage: "pencil") {
-                onRenameRequest(child)
-            }
-            Divider()
-            Button("Archivieren", systemImage: "archivebox") {
-                onCloseSession(child)
-            }
+            subagentChildMenu(child)
         }
     }
 
@@ -352,49 +343,7 @@ struct ProjectChatGroup: View {
         }
         .animation(.easeOut(duration: 0.1), value: dropTargetedSessionID)
         .contextMenu {
-            Button("Umbenennen…", systemImage: "pencil") {
-                onRenameRequest(session)
-            }
-            Button("Titel automatisch generieren", systemImage: "sparkles") {
-                onAutoNameRequest(session)
-            }
-            .disabled(session.externalSessionID == nil)
-            if session.isForkable {
-                Button("Forken", systemImage: "arrow.triangle.branch") {
-                    onForkSession(session)
-                }
-            }
-            Divider()
-            Button(bulkCount(session) > 1 ? "\(bulkCount(session)) anpinnen" : "Anpinnen", systemImage: "pin") {
-                onPinSession(session.id)
-            }
-            Divider()
-            Menu(bulkCount(session) > 1 ? "Farbe für \(bulkCount(session)) Tabs" : "Tab-Farbe") {
-                ForEach(AgentChatColor.palette, id: \.self) { color in
-                    Button {
-                        onSetColor(session.id, color)
-                    } label: {
-                        Label {
-                            Text(AgentChatColorName.label(for: color))
-                        } icon: {
-                            Image(nsImage: colorSwatchImage(hex: color))
-                        }
-                    }
-                }
-                Divider()
-                Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
-                    onSetColor(session.id, nil)
-                }
-            }
-            Divider()
-            Button(
-                bulkCount(session) > 1
-                    ? "\(bulkCount(session)) archivieren"
-                    : (session.isTerminal ? "Terminal schließen" : "Archivieren"),
-                systemImage: bulkCount(session) == 1 && session.isTerminal ? "xmark.circle" : "archivebox"
-            ) {
-                onCloseSession(session)
-            }
+            sessionMenu(session)
         }
     }
 

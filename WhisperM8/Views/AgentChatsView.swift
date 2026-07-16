@@ -1222,12 +1222,9 @@ struct AgentChatsView: View {
                                 createDefaultSession()
                             },
                             onCloseSession: { archiveSelection(forID: $0.id) },
-                            onPinSession: { togglePinSelection(forID: $0) },
-                            onForkSession: { forkSession($0) },
-                            onRenameRequest: { beginRename($0) },
-                            onAutoNameRequest: { forceAutoNameSession($0) },
                             onRename: renameSession,
-                            onSetColor: { setColorForSelection(forID: $0, color: $1) },
+                            sessionMenu: { AnyView(sessionContextMenu($0, context: .sidebarRow)) },
+                            subagentChildMenu: { AnyView(sessionContextMenu($0, context: .subagentChild)) },
                             statusStore: runtimeStatusStore,
                             autoRenamingSessionIDs: autoRenamingSessionIDs,
                             missingTranscriptSessionIDs: missingTranscriptIDs,
@@ -1387,24 +1384,7 @@ struct AgentChatsView: View {
             sourceWindowID: windowID
         ))
         .contextMenu {
-            Button(pinLabel(for: session), systemImage: "pin.slash") {
-                togglePinSelection(session)
-            }
-            Divider()
-            Button("Umbenennen…", systemImage: "pencil") {
-                beginRename(session)
-            }
-            Button("Titel automatisch generieren", systemImage: "sparkles") {
-                forceAutoNameSession(session)
-            }
-            .disabled(session.externalSessionID == nil)
-            forkMenuItem(session)
-            moveToAccountMenu(session)
-            tabColorMenu(for: session)
-            Divider()
-            Button(archiveLabel(for: session), systemImage: archiveIcon(for: session)) {
-                archiveSelection(session)
-            }
+            sessionContextMenu(session, context: .sidebarRow)
         }
     }
 
@@ -1455,24 +1435,7 @@ struct AgentChatsView: View {
             sourceWindowID: windowID
         ))
         .contextMenu {
-            Button("Umbenennen…", systemImage: "pencil") {
-                beginRename(session)
-            }
-            Button("Titel automatisch generieren", systemImage: "sparkles") {
-                forceAutoNameSession(session)
-            }
-            .disabled(session.externalSessionID == nil)
-            forkMenuItem(session)
-            moveToAccountMenu(session)
-            Divider()
-            Button(pinLabel(for: session), systemImage: "pin") {
-                togglePinSelection(session)
-            }
-            tabColorMenu(for: session)
-            Divider()
-            Button(archiveLabel(for: session), systemImage: archiveIcon(for: session)) {
-                archiveSelection(session)
-            }
+            sessionContextMenu(session, context: .sidebarRow)
         }
     }
 
@@ -2140,7 +2103,7 @@ struct AgentChatsView: View {
                                         )
                                     }
                                     .contextMenu {
-                                        sessionManagementMenu(session)
+                                        sessionContextMenu(session, context: .tab)
                                     }
                                     // Tab-Frame im Inhalts-Space messen → Einfüge-Linie.
                                     .background(
@@ -2686,38 +2649,7 @@ struct AgentChatsView: View {
             .buttonStyle(.plain)
 
             Menu {
-                Button(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start Terminal" : "Resume Terminal"), systemImage: isRunning ? "arrow.clockwise" : "play.fill") {
-                    sessionActionRequest = AgentSessionActionRequest(
-                        sessionID: session.id,
-                        kind: isRunning ? .restart : .start
-                    )
-                }
-                Button("Umbenennen…", systemImage: "pencil") {
-                    beginRename(session)
-                }
-                Button("Titel automatisch generieren", systemImage: "sparkles") {
-                    forceAutoNameSession(session)
-                }
-                .disabled(session.externalSessionID == nil)
-                forkMenuItem(session)
-                Divider()
-                Button(
-                    pinnedSessionIDs.contains(session.id) ? "Loslösen" : "Anpinnen",
-                    systemImage: pinnedSessionIDs.contains(session.id) ? "pin.slash" : "pin"
-                ) {
-                    togglePin(session.id)
-                }
-                tabColorMenu(for: session)
-                Divider()
-                Button("Tab schließen", systemImage: "xmark.square") {
-                    closeTab(session)
-                }
-                Button(
-                    session.isTerminal ? "Terminal schließen" : "Archivieren",
-                    systemImage: session.isTerminal ? "xmark.circle" : "archivebox"
-                ) {
-                    requestArchive([session])
-                }
+                sessionContextMenu(session, context: .headerMenu)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 11, weight: .medium))
@@ -2738,7 +2670,8 @@ struct AgentChatsView: View {
     /// fehlgeschlagen ist. `canAutoRenameTitle` bleibt aktiv: wenn der User
     /// manuell umbenannt hat (`titleIsAutoGenerated == false`), schreiben wir
     /// trotzdem nichts.
-    private func forceAutoNameSession(_ session: AgentChatSession) {
+    // `internal`: wird vom vereinheitlichten Kontextmenü (+SessionMenus) gerufen.
+    func forceAutoNameSession(_ session: AgentChatSession) {
         guard let autoNamer else { return }
         guard let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
             return
@@ -2790,77 +2723,9 @@ struct AgentChatsView: View {
         }
     }
 
-    @ViewBuilder
-    private func sessionManagementMenu(_ session: AgentChatSession) -> some View {
-        Group {
-            Button(bulkLabel("Tab schließen", "%d Tabs schließen", for: session), systemImage: "xmark.square") {
-                closeTabsInSelection(session)
-            }
-            Divider()
-            Button("Umbenennen…", systemImage: "pencil") {
-                beginRename(session)
-            }
-            Button("Titel automatisch generieren", systemImage: "sparkles") {
-                forceAutoNameSession(session)
-            }
-            .disabled(session.externalSessionID == nil)
-            forkMenuItem(session)
-            moveToAccountMenu(session)
-            Divider()
-            Button(
-                multiSelection.contains(session.id) && multiSelection.count > 1
-                    ? "\(multiSelection.count) Tabs in neues Fenster"
-                    : "In neues Fenster verschieben",
-                systemImage: "macwindow.badge.plus"
-            ) {
-                moveSelectionToNewWindow(session)
-            }
-            workspaceMembershipMenu(for: session)
-            newWorkspaceFromSelectionButton(for: session)
-            Divider()
-            Button(
-                pinLabel(for: session),
-                systemImage: pinnedSessionIDs.contains(session.id) ? "pin.slash" : "pin"
-            ) {
-                togglePinSelection(session)
-            }
-            tabColorMenu(for: session)
-            if session.isBackgroundChat {
-                Divider()
-                backgroundLifecycleMenuItems(session)
-            }
-            Divider()
-            Button(archiveLabel(for: session), systemImage: archiveIcon(for: session)) {
-                archiveSelection(session)
-            }
-        }
-    }
-
-    /// Lifecycle-Aktionen, die nur fuer `.backgroundChat`-Sessions Sinn
-    /// ergeben. Werden in `sessionManagementMenu` nur fuer Background-Tabs
-    /// eingehaengt. Disabled-Zustand: Aktion laeuft bereits oder Short-ID
-    /// noch nicht bekannt (Spawn pending oder fehlgeschlagen).
-    @ViewBuilder
-    private func backgroundLifecycleMenuItems(_ session: AgentChatSession) -> some View {
-        let hasID = session.hasBackgroundShortID
-        let busy = pendingLifecycleSessions.contains(session.id)
-        Button("Logs anzeigen", systemImage: "doc.text.magnifyingglass") {
-            showBackgroundLogs(for: session)
-        }
-        .disabled(!hasID || busy)
-        Button("Stoppen", systemImage: "stop.circle") {
-            performBackgroundLifecycle(.stop, on: session)
-        }
-        .disabled(!hasID || busy)
-        Button("Respawn", systemImage: "arrow.clockwise.circle") {
-            performBackgroundLifecycle(.respawn, on: session)
-        }
-        .disabled(!hasID || busy)
-        Button("Vom Supervisor entfernen", systemImage: "trash", role: .destructive) {
-            performBackgroundLifecycle(.rm, on: session)
-        }
-        .disabled(!hasID || busy)
-    }
+    // Das Session-Kontextmenü (früher `sessionManagementMenu` +
+    // `backgroundLifecycleMenuItems` hier) lebt jetzt vereinheitlicht in
+    // AgentChatsView+SessionMenus.swift (`sessionContextMenu(_:context:)`).
 
     // `internal` statt `private`: auch die Workspace-Sektion (+Workspaces,
     // Subagent-Kind-Kontextmenü) startet das Umbenennen.

@@ -234,12 +234,11 @@ extension AgentChatsView {
         )
         .padding(.leading, 10)
         .contextMenu {
-            Button("Aus Workspace „\(entity.name)“ entfernen", systemImage: "minus.circle") {
-                removeSessionFromWorkspace(session.id, workspaceID: entity.id)
-            }
-            // Ohne Entfernen-Teil — der Eintrag für DIESE Gruppe steht schon
-            // direkt darüber (Review-Finding: doppelte Einträge).
-            workspaceMembershipMenu(for: session, includeRemoval: false)
+            // Vollmenü mit „Aus Workspace „X" entfernen" als Kopf; das
+            // Mitgliedschaftsmenü kommt ohne Entfernen-Teil (Policy:
+            // includesMembershipRemoval == false — Review-Finding doppelte
+            // Einträge bleibt damit behoben).
+            sessionContextMenu(session, context: .workspaceRow, removalWorkspace: entity)
         }
         // Sidebar-Quelle = Add/Place-Semantik: bewusst OHNE Slot-Herkunft
         // (die trägt nur der Pane-Header — sonst würde ein Row-Drag im
@@ -275,11 +274,19 @@ extension AgentChatsView {
             renameWorkspaceTargetID = entity.id
         }
         Menu {
+            // Farbnamen + echte Farbswatches wie im Tab-/Projekt-Farbmenü
+            // (vorher rohe Hex-Strings mit einheitlichem circle.fill).
             ForEach(AgentProjectColor.palette, id: \.self) { hex in
                 Button {
                     windowStore.setGridWorkspaceColor(entity.id, colorHex: hex)
                 } label: {
-                    Label(hex == entity.colorHex ? "Aktiv" : hex, systemImage: "circle.fill")
+                    Label {
+                        Text(hex == entity.colorHex
+                            ? "\(AgentChatColorName.label(for: hex)) (aktiv)"
+                            : AgentChatColorName.label(for: hex))
+                    } icon: {
+                        Image(nsImage: colorSwatchImage(hex: hex))
+                    }
                 }
             }
         } label: {

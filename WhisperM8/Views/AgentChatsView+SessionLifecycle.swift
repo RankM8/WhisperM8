@@ -234,12 +234,18 @@ extension AgentChatsView {
     }
 
     /// Wiederverwendetes „Tab-Farbe"-Submenu (8er-Palette + Provider-Reset).
+    /// `allowsBulk: false` (strikt-singuläre Kontexte, z. B. Einzelansicht)
+    /// färbt nur DIESE Session — ohne „Farbe für N Tabs"-Überraschung.
     @ViewBuilder
-    func tabColorMenu(for session: AgentChatSession) -> some View {
-        Menu(bulkLabel("Tab-Farbe", "Farbe für %d Tabs", for: session)) {
+    func tabColorMenu(for session: AgentChatSession, allowsBulk: Bool = true) -> some View {
+        Menu(allowsBulk ? bulkLabel("Tab-Farbe", "Farbe für %d Tabs", for: session) : "Tab-Farbe") {
             ForEach(AgentChatColor.palette, id: \.self) { color in
                 Button {
-                    setColorForSelection(session, color: color)
+                    if allowsBulk {
+                        setColorForSelection(session, color: color)
+                    } else {
+                        setSessionColor(id: session.id, color: color)
+                    }
                 } label: {
                     Label {
                         Text(AgentChatColorName.label(for: color))
@@ -250,7 +256,11 @@ extension AgentChatsView {
             }
             Divider()
             Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
-                setColorForSelection(session, color: nil)
+                if allowsBulk {
+                    setColorForSelection(session, color: nil)
+                } else {
+                    setSessionColor(id: session.id, color: nil)
+                }
             }
         }
     }

@@ -74,14 +74,18 @@ extension AgentChatsView {
     func bulkLabel(_ single: String, _ pluralFormat: String, for session: AgentChatSession) -> String {
         bulkLabel(single, pluralFormat, forID: session.id)
     }
-    /// „Archivieren"-Label, Terminal-bewusst: ein einzelnes Shell-Terminal
-    /// wird nicht archiviert, sondern geschlossen — das Label sagt das ehrlich.
+    /// „Archivieren"-Label, Terminal-bewusst: Terminals werden geschlossen
+    /// statt archiviert (`requestArchive` teilt auf) — das Label sagt das
+    /// ehrlich, auch bei gemischter Bulk-Auswahl.
     func archiveLabel(for session: AgentChatSession) -> String {
-        bulkLabel(
-            session.isTerminal ? "Terminal schließen" : "Archivieren",
-            "%d Chats archivieren",
-            for: session
-        )
+        let group = sessions(in: actionGroup(forID: session.id))
+        guard group.count > 1 else {
+            return session.isTerminal ? "Terminal schließen" : "Archivieren"
+        }
+        let terminals = group.filter(\.isTerminal).count
+        if terminals == 0 { return "\(group.count) Chats archivieren" }
+        if terminals == group.count { return "\(group.count) Terminals schließen" }
+        return "\(group.count) schließen/archivieren"
     }
     /// Icon zum `archiveLabel` (einzelnes Terminal → X statt Archivbox).
     func archiveIcon(for session: AgentChatSession) -> String {
