@@ -381,6 +381,24 @@ final class AgentTerminalRegistry: ObservableObject {
         }
         return ids
     }
+
+    /// App-Quit: Terminal-Staende ALLER noch laufenden PTYs sichern, bevor
+    /// AppKit die Fenster abbaut und die Kind-Prozesse mit dem App-Prozess
+    /// sterben. Ohne diesen Pfad haetten genau die beim Quit (Cmd+Q,
+    /// `make dev`/SIGTERM) noch offenen Chats keinen Snapshot —
+    /// terminate()/processTerminated feuern hier nie. Graceful wie im
+    /// Einzel-terminate() (2x Ctrl+C, damit die TUI Resume-Hinweis und
+    /// JSONL-Flush schafft), aber mit einer GEMEINSAMEN Wartezeit fuer alle
+    /// Chats: der Quit kostet konstant ~260 ms statt 260 ms pro Chat.
+    func captureAllSnapshotsForAppQuit() {
+        let running = runningControllers
+        guard !running.isEmpty else { return }
+        for controller in running { controller.sendInterruptForAppQuit() }
+        usleep(80_000)
+        for controller in running { controller.sendInterruptForAppQuit() }
+        usleep(180_000)
+        for controller in running { controller.captureSnapshotForAppQuit() }
+    }
 }
 
 /// Welche TUI laeuft im PTY? Bestimmt die Byte-Sequenzen, die wir fuer
@@ -799,6 +817,23 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // Race verlieren und der frisch beendete Chat fiele einmalig auf
         // die Transcript-Ansicht zurück.
         TerminalSnapshotStore.shared.save(sessionID: sessionID, text: text)
+    }
+
+    /// App-Quit-Pfad (Registry): Ctrl+C ans PTY, damit die TUI ihre eigene
+    /// Exit-Routine faehrt (Resume-Hinweis, JSONL-Flush). Die Wartezeiten
+    /// liegen bewusst in der Registry — EINE gemeinsame Pause fuer alle
+    /// Chats statt 260 ms pro Chat wie im Einzel-terminate().
+    func sendInterruptForAppQuit() {
+        guard isRunning else { return }
+        terminal.send([0x03])
+    }
+
+    /// App-Quit-Pfad (Registry): letzten gepufferten Output verarbeiten und
+    /// den Terminal-Stand sichern. Idempotent — falls die TUI auf das Ctrl+C
+    /// schon selbst beendet hat, hat processTerminated bereits gesichert.
+    func captureSnapshotForAppQuit() {
+        terminal.flushPendingOutput()
+        captureTerminalSnapshot()
     }
 
     /// P6 S4: Die app-weiten NSEvent-Monitore (Keyboard-Shortcuts +

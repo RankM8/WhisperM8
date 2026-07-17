@@ -341,7 +341,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// nicht aus dem Store werfen, sonst waere der Launch-Restore nach jedem
     /// Neustart leer. Nie zurueckgenommen — der Prozess endet.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        MainActor.assumeIsolated { AgentWindowStore.shared.suspendCloseTracking() }
+        MainActor.assumeIsolated {
+            AgentWindowStore.shared.suspendCloseTracking()
+            // Terminal-Staende der noch laufenden Chats einfrieren, solange
+            // die Terminal-Views noch leben — nach diesem Hook baut AppKit
+            // die Fenster ab und die PTY-Kinder sterben ohne Capture.
+            AgentTerminalRegistry.shared.captureAllSnapshotsForAppQuit()
+        }
         return .terminateNow
     }
 
