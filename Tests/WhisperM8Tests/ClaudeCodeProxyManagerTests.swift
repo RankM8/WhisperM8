@@ -67,7 +67,10 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertNoThrow(try manager.ensureRunning(port: 19_001).get())
         XCTAssertEqual(launch?.0, "/usr/local/bin/claude-code-proxy")
         XCTAssertEqual(launch?.1, ["serve", "--no-monitor", "--port", "19001"])
-        XCTAssertEqual(launch?.2, ["PATH": "/login-shell/bin"])
+        XCTAssertEqual(launch?.2, [
+            "CCP_BIND_ADDRESS": "127.0.0.1",
+            "PATH": "/login-shell/bin",
+        ])
 
         manager.stopIfSelfStarted()
         XCTAssertTrue(didTerminate)
@@ -91,8 +94,12 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
     }
 
     func testEnsureRunningReportsProxyThatNeverBecomesReachable() {
+        var terminationCount = 0
         let manager = makeManager(
             reachability: { _ in false },
+            launcher: { _, _, _ in
+                Self.processHandle { terminationCount += 1 }
+            },
             retryAttempts: 1
         )
 
@@ -100,6 +107,10 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             manager.ensureRunning(port: 18_765),
             equals: .notReachable(port: 18_765)
         )
+        XCTAssertEqual(terminationCount, 1)
+
+        manager.stopIfSelfStarted()
+        XCTAssertEqual(terminationCount, 1, "Fehlerpfad darf keinen Handle registriert lassen")
     }
 
     func testEnsureRunningReportsRouterStartFailureAfterReachableProxy() {
@@ -116,6 +127,100 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             manager.ensureRunning(port: 18_765),
             equals: .routerStartFailed("router kaputt")
         )
+    }
+
+    func testRouterFailureTerminatesProcessStartedBySameAttempt() {
+        var probes = 0
+        var terminationCount = 0
+        let manager = makeManager(
+            reachability: { _ in
+                probes += 1
+                return probes >= 2
+            },
+            launcher: { _, _, _ in
+                Self.processHandle { terminationCount += 1 }
+            },
+            routerStarter: { _ in
+                .failure(NSError(domain: "test", code: 8, userInfo: [
+                    NSLocalizedDescriptionKey: "router kaputt",
+                ]))
+            },
+            retryAttempts: 1
+        )
+
+        assertFailure(
+            manager.ensureRunning(port: 18_765),
+            equals: .routerStartFailed("router kaputt")
+        )
+        XCTAssertEqual(terminationCount, 1)
+
+        manager.stopIfSelfStarted()
+        XCTAssertEqual(terminationCount, 1, "Router-Fehler muss den Handle entfernen")
+    }
+
+    func testNewLaunchTerminatesPreviouslyRegisteredUnhealthyProcess() throws {
+        var probeResults = [false, true, false, true]
+        var firstTerminationCount = 0
+        var secondTerminationCount = 0
+        var launches = 0
+        let manager = makeManager(
+            reachability: { _ in probeResults.removeFirst() },
+            launcher: { _, _, _ in
+                launches += 1
+                if launches == 1 {
+                    return Self.processHandle { firstTerminationCount += 1 }
+                }
+                return Self.processHandle { secondTerminationCount += 1 }
+            },
+            retryAttempts: 1
+        )
+
+        try manager.ensureRunning(port: 18_765).get()
+        try manager.ensureRunning(port: 18_765).get()
+
+        XCTAssertEqual(firstTerminationCount, 1)
+        XCTAssertEqual(secondTerminationCount, 0)
+        manager.stopIfSelfStarted()
+        XCTAssertEqual(secondTerminationCount, 1)
+    }
+
+    func testHealthProbeDecisionRequiresStatusJSONHeaderAndSignatureBody() {
+        let healthyBody = Data(#"{"ok":true}"#.utf8)
+        XCTAssertTrue(ClaudeCodeProxyManager.isHealthyProbeResponse(
+            statusCode: 200,
+            contentType: "application/json; charset=utf-8",
+            body: healthyBody
+        ))
+        XCTAssertFalse(ClaudeCodeProxyManager.isHealthyProbeResponse(
+            statusCode: 503,
+            contentType: "application/json",
+            body: healthyBody
+        ))
+        XCTAssertFalse(ClaudeCodeProxyManager.isHealthyProbeResponse(
+            statusCode: 200,
+            contentType: "text/plain",
+            body: healthyBody
+        ))
+        XCTAssertFalse(ClaudeCodeProxyManager.isHealthyProbeResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(#"{"service":"fremd"}"#.utf8)
+        ))
+    }
+
+    func testRunCommandDrainsLargeStdoutAndStderrConcurrently() throws {
+        let result = try ClaudeCodeProxyManager.runCommand(
+            executable: "/bin/sh",
+            arguments: [
+                "-c",
+                "/usr/bin/yes o | /usr/bin/head -c 200000; /usr/bin/yes e | /usr/bin/head -c 200000 >&2",
+            ],
+            environment: ["PATH": "/usr/bin:/bin"]
+        )
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(result.stdout.utf8.count, 200_000)
+        XCTAssertEqual(result.stderr.utf8.count, 200_000)
     }
 
     func testWillTerminateStopsOnlySelfStartedProxy() throws {

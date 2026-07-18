@@ -462,9 +462,12 @@ struct AgentSessionDetailView: View {
             )
             let hasGPTModelStamp = !(launchSession.claudeBackendModel?
                 .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            let hasGPTSubagentModel = !AppPreferences.shared.claudeGPTSubagentModel
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let launchDecision = ClaudeGPTLaunchGuard.decision(
                 for: launchGuardResult,
-                hasGPTModelStamp: hasGPTModelStamp
+                hasGPTModelStamp: hasGPTModelStamp,
+                hasGPTSubagentModel: hasGPTSubagentModel
             )
             if launchDecision.presentsGPTFallbackAlert {
                 presentGPTBackendFallbackAlert()

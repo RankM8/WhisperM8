@@ -22,7 +22,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertEqual(ClaudeGPTMixRouter.upstream(for: Data()), .anthropic)
     }
 
-    func testHeaderFilterRemovesExactHopByHopSetAndReplacesHost() {
+    func testAnthropicHeadersKeepCredentialsAndReplaceHopByHopHeaders() {
         let hopByHop = [
             "Connection", "keep-alive", "Proxy-Authenticate", "proxy-authorization",
             "TE", "Trailers", "Transfer-Encoding", "Upgrade", "Host", "Content-Length",
@@ -31,20 +31,64 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
             ClaudeGPTMixRouter.HTTPHeader(name: $0, value: "entfernen")
         }
         headers.append(.init(name: "Authorization", value: "Bearer abo-oauth"))
+        headers.append(.init(name: "X-API-Key", value: "anthropic-key"))
         headers.append(.init(name: "anthropic-beta", value: "oauth-2025-04-20"))
+        headers.append(.init(name: "Anthropic-Version", value: "2023-06-01"))
 
         let result = ClaudeGPTMixRouter.upstreamHeaders(
             from: headers,
+            upstream: .anthropic,
             host: "api.anthropic.com",
             bodyLength: 17
         )
 
         XCTAssertEqual(result, [
             .init(name: "Authorization", value: "Bearer abo-oauth"),
+            .init(name: "X-API-Key", value: "anthropic-key"),
             .init(name: "anthropic-beta", value: "oauth-2025-04-20"),
+            .init(name: "Anthropic-Version", value: "2023-06-01"),
             .init(name: "Host", value: "api.anthropic.com"),
             .init(name: "Content-Length", value: "17"),
         ])
+    }
+
+    func testCodexHeadersStripAllAnthropicCredentialsCaseInsensitively() {
+        let headers: [ClaudeGPTMixRouter.HTTPHeader] = [
+            .init(name: "AUTHORIZATION", value: "Bearer abo-oauth"),
+            .init(name: "x-Api-Key", value: "anthropic-key"),
+            .init(name: "anthropic-beta", value: "oauth-2025-04-20"),
+            .init(name: "Anthropic-Version", value: "2023-06-01"),
+            .init(name: "ANTHROPIC-DANGEROUS-DIRECT-BROWSER-ACCESS", value: "true"),
+            .init(name: "Content-Type", value: "application/json"),
+        ]
+
+        XCTAssertEqual(
+            ClaudeGPTMixRouter.upstreamHeaders(
+                from: headers,
+                upstream: .codexProxy,
+                host: "127.0.0.1:18765",
+                bodyLength: 9
+            ),
+            [
+                .init(name: "Content-Type", value: "application/json"),
+                .init(name: "Host", value: "127.0.0.1:18765"),
+                .init(name: "Content-Length", value: "9"),
+            ]
+        )
+    }
+
+    func testHeaderFilterRemovesTokensNamedByConnectionHeader() {
+        let headers: [ClaudeGPTMixRouter.HTTPHeader] = [
+            .init(name: "Connection", value: "keep-alive, X-Trace, x-private"),
+            .init(name: "X-Trace", value: "entfernen"),
+            .init(name: "X-PRIVATE", value: "auch entfernen"),
+            .init(name: "Content-Type", value: "application/json"),
+        ]
+
+        XCTAssertEqual(
+            ClaudeGPTMixRouter.filteredHeaders(headers),
+            [.init(name: "Content-Type", value: "application/json")]
+        )
     }
 
     func testRequestHeadParserReadsRequestLineHeadersAndContentLength() throws {
@@ -90,20 +134,44 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
 
     func testLaunchGuardPureDecisionSelectsRouterOrFallbackBuilderMode() {
         XCTAssertEqual(
-            ClaudeGPTLaunchGuard.decision(for: .ready, hasGPTModelStamp: true),
+            ClaudeGPTLaunchGuard.decision(
+                for: .ready,
+                hasGPTModelStamp: true,
+                hasGPTSubagentModel: false
+            ),
             ClaudeGPTLaunchDecision(usesRouter: true, presentsGPTFallbackAlert: false)
         )
         XCTAssertEqual(
-            ClaudeGPTLaunchGuard.decision(for: .unavailable, hasGPTModelStamp: true),
+            ClaudeGPTLaunchGuard.decision(
+                for: .unavailable,
+                hasGPTModelStamp: true,
+                hasGPTSubagentModel: false
+            ),
             ClaudeGPTLaunchDecision(usesRouter: false, presentsGPTFallbackAlert: true)
         )
         XCTAssertEqual(
-            ClaudeGPTLaunchGuard.decision(for: .unavailable, hasGPTModelStamp: false),
+            ClaudeGPTLaunchGuard.decision(
+                for: .unavailable,
+                hasGPTModelStamp: false,
+                hasGPTSubagentModel: false
+            ),
             ClaudeGPTLaunchDecision(usesRouter: false, presentsGPTFallbackAlert: false)
         )
         XCTAssertEqual(
-            ClaudeGPTLaunchGuard.decision(for: .notNeeded, hasGPTModelStamp: true),
+            ClaudeGPTLaunchGuard.decision(
+                for: .notNeeded,
+                hasGPTModelStamp: true,
+                hasGPTSubagentModel: true
+            ),
             ClaudeGPTLaunchDecision(usesRouter: false, presentsGPTFallbackAlert: false)
+        )
+        XCTAssertEqual(
+            ClaudeGPTLaunchGuard.decision(
+                for: .unavailable,
+                hasGPTModelStamp: false,
+                hasGPTSubagentModel: true
+            ),
+            ClaudeGPTLaunchDecision(usesRouter: false, presentsGPTFallbackAlert: true)
         )
     }
 
@@ -151,6 +219,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
 
         XCTAssertEqual(codexMock.lastRequest?.path, "/v1/messages")
         XCTAssertEqual(codexMock.lastRequest?.jsonModel, "gpt-5.6-sol")
+        XCTAssertNil(codexMock.lastRequest?.header(named: "authorization"))
+        XCTAssertNil(codexMock.lastRequest?.header(named: "anthropic-beta"))
         XCTAssertEqual(anthropicMock.lastRequest?.path, "/v1/messages")
         XCTAssertEqual(anthropicMock.lastRequest?.jsonModel, "claude-fable-5")
         XCTAssertEqual(anthropicMock.lastRequest?.header(named: "authorization"), "Bearer abo-oauth")

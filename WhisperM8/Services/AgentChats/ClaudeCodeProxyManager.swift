@@ -1,5 +1,4 @@
 import AppKit
-import Darwin
 import Foundation
 
 enum ClaudeCodeProxyError: LocalizedError, Equatable {
@@ -19,6 +18,54 @@ enum ClaudeCodeProxyError: LocalizedError, Equatable {
         case .routerStartFailed(let reason):
             return "Der GPT-Mix-Router konnte nicht gestartet werden: \(reason)"
         }
+    }
+}
+
+private final class ClaudeCodeProxyProbeDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        // Eine Umleitung ist keine lokale Proxy-Signatur und darf die Probe
+        // insbesondere nicht zu einem fremden HTTP-Ziel weitertragen.
+        completionHandler(nil)
+    }
+}
+
+private final class ClaudeCodeProxyProbeResult {
+    private let lock = NSLock()
+    private var storage = false
+
+    var value: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func store(_ value: Bool) {
+        lock.lock()
+        storage = value
+        lock.unlock()
+    }
+}
+
+private final class ClaudeCodeProxyCommandOutput {
+    private let lock = NSLock()
+    private var storage = Data()
+
+    var data: Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func store(_ data: Data) {
+        lock.lock()
+        storage = data
+        lock.unlock()
     }
 }
 
@@ -162,25 +209,37 @@ final class ClaudeCodeProxyManager {
         ensureLock.lock()
         defer { ensureLock.unlock() }
 
+        var processStartedForThisAttempt: ClaudeCodeProxyProcessHandle?
         if !isReachable(port: port) {
+            // Ein registrierter, aber nicht mehr gesunder Prozess darf weder
+            // weiterleben noch durch einen neuen Handle verdeckt werden.
+            replaceSelfStartedProcess(with: nil)
+
             guard let executable = commandResolver("claude-code-proxy") else {
                 return .failure(.binaryMissing)
             }
 
             let process: ClaudeCodeProxyProcessHandle
             do {
+                var environment = environmentResolver()
+                // Die echte Loopback-Garantie liefert das Binary selbst: der
+                // raine-Proxy bindet hart auf 127.0.0.1 (verifiziert per lsof;
+                // `serve` kennt keinen --host/--bind-Flag). CCP_BIND_ADDRESS
+                // setzen wir nur als Defense-in-Depth — falls eine kuenftige
+                // Version oder ein alternativer Proxy die Variable auswertet,
+                // erzwingt sie ebenfalls loopback statt 0.0.0.0.
+                environment["CCP_BIND_ADDRESS"] = "127.0.0.1"
                 process = try processLauncher(
                     executable,
                     ["serve", "--no-monitor", "--port", String(port)],
-                    environmentResolver()
+                    environment
                 )
             } catch {
                 return .failure(.startFailed(error.localizedDescription))
             }
 
-            processLock.lock()
-            selfStartedProcess = process
-            processLock.unlock()
+            replaceSelfStartedProcess(with: process)
+            processStartedForThisAttempt = process
 
             var becameReachable = false
             for _ in 0..<max(0, retryAttempts) {
@@ -192,6 +251,7 @@ final class ClaudeCodeProxyManager {
             }
 
             if !becameReachable, !isReachable(port: port) {
+                discardSelfStartedProcess(process)
                 return .failure(.notReachable(port: port))
             }
         }
@@ -200,6 +260,9 @@ final class ClaudeCodeProxyManager {
         case .success:
             return .success(())
         case .failure(let error):
+            if let processStartedForThisAttempt {
+                discardSelfStartedProcess(processStartedForThisAttempt)
+            }
             return .failure(.routerStartFailed(error.localizedDescription))
         }
     }
@@ -207,14 +270,7 @@ final class ClaudeCodeProxyManager {
     func stopIfSelfStarted() {
         routerStopper()
 
-        processLock.lock()
-        let process = selfStartedProcess
-        selfStartedProcess = nil
-        processLock.unlock()
-
-        if process?.isRunning == true {
-            process?.terminate()
-        }
+        replaceSelfStartedProcess(with: nil)
     }
 
     func authStatus() -> ClaudeCodeProxyAuthStatus {
@@ -348,53 +404,100 @@ final class ClaudeCodeProxyManager {
         }
     }
 
-    /// Kurzer non-blocking TCP-Connect; damit blockiert ein toter Port den
-    /// Main-Thread hoechstens 400 ms statt des systemweiten Connect-Timeouts.
+    /// Registriert genau einen von WhisperM8 gestarteten Prozess. Ein alter
+    /// Handle wird vor dem Vergessen beendet, damit App-Quit nichts verliert.
+    private func replaceSelfStartedProcess(with replacement: ClaudeCodeProxyProcessHandle?) {
+        processLock.lock()
+        let previous = selfStartedProcess
+        selfStartedProcess = replacement
+        processLock.unlock()
+
+        if previous !== replacement, previous?.isRunning == true {
+            previous?.terminate()
+        }
+    }
+
+    private func discardSelfStartedProcess(_ process: ClaudeCodeProxyProcessHandle) {
+        processLock.lock()
+        if selfStartedProcess === process {
+            selfStartedProcess = nil
+        }
+        processLock.unlock()
+
+        if process.isRunning {
+            process.terminate()
+        }
+    }
+
+    /// Der raine-Proxy besitzt mit `/healthz` eine eindeutige Probe. Nur die
+    /// dokumentierte Kombination aus 200, JSON und `{ "ok": true }` gilt als
+    /// gesund; ein beliebiger Listener auf dem Port reicht nicht mehr aus.
     static func isReachable(port: Int) -> Bool {
-        guard (1...65_535).contains(port) else { return false }
+        guard
+            (1...65_535).contains(port),
+            let url = URL(string: "http://127.0.0.1:\(port)/healthz")
+        else { return false }
 
-        let socketFD = socket(AF_INET, SOCK_STREAM, 0)
-        guard socketFD >= 0 else { return false }
-        defer { close(socketFD) }
+        var request = URLRequest(url: url, timeoutInterval: 0.4)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let currentFlags = fcntl(socketFD, F_GETFL, 0)
-        guard currentFlags >= 0, fcntl(socketFD, F_SETFL, currentFlags | O_NONBLOCK) >= 0 else {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 0.4
+        configuration.timeoutIntervalForResource = 0.4
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        let delegate = ClaudeCodeProxyProbeDelegate()
+        let delegateQueue = OperationQueue()
+        delegateQueue.maxConcurrentOperationCount = 1
+        let session = URLSession(
+            configuration: configuration,
+            delegate: delegate,
+            delegateQueue: delegateQueue
+        )
+        let result = ClaudeCodeProxyProbeResult()
+        let finished = DispatchSemaphore(value: 0)
+        let task = session.dataTask(with: request) { data, response, error in
+            let response = response as? HTTPURLResponse
+            result.store(error == nil && isHealthyProbeResponse(
+                statusCode: response?.statusCode,
+                contentType: response?.value(forHTTPHeaderField: "Content-Type"),
+                body: data ?? Data()
+            ))
+            finished.signal()
+        }
+        task.resume()
+
+        guard finished.wait(timeout: .now() + 0.5) == .success else {
+            task.cancel()
+            session.invalidateAndCancel()
             return false
         }
+        session.finishTasksAndInvalidate()
+        return result.value
+    }
 
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = in_port_t(UInt16(port).bigEndian)
-        guard inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1 else {
+    static func isHealthyProbeResponse(
+        statusCode: Int?,
+        contentType: String?,
+        body: Data
+    ) -> Bool {
+        guard statusCode == 200 else { return false }
+        let mediaType = contentType?
+            .split(separator: ";", maxSplits: 1)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard mediaType?.caseInsensitiveCompare("application/json") == .orderedSame else {
             return false
         }
-
-        let connectResult = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(socketFD, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        if connectResult == 0 {
-            return true
-        }
-        guard errno == EINPROGRESS else { return false }
-
-        var pollDescriptor = pollfd(fd: socketFD, events: Int16(POLLOUT), revents: 0)
-        guard Darwin.poll(&pollDescriptor, 1, 400) > 0 else { return false }
-
-        var socketError: Int32 = 0
-        var optionLength = socklen_t(MemoryLayout<Int32>.size)
-        guard Darwin.getsockopt(
-            socketFD,
-            SOL_SOCKET,
-            SO_ERROR,
-            &socketError,
-            &optionLength
-        ) == 0 else {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: body),
+            let dictionary = object as? [String: Any],
+            dictionary["ok"] as? Bool == true
+        else {
             return false
         }
-        return socketError == 0
+        return true
     }
 
     private static func launchProcess(
@@ -417,7 +520,7 @@ final class ClaudeCodeProxyManager {
         )
     }
 
-    private static func runCommand(
+    static func runCommand(
         executable: String,
         arguments: [String],
         environment: [String: String]
@@ -432,18 +535,27 @@ final class ClaudeCodeProxyManager {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         try process.run()
+
+        let stdout = ClaudeCodeProxyCommandOutput()
+        let stderr = ClaudeCodeProxyCommandOutput()
+        let readers = DispatchGroup()
+        readers.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stdout.store(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+            readers.leave()
+        }
+        readers.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stderr.store(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+            readers.leave()
+        }
         process.waitUntilExit()
+        readers.wait()
 
         return ClaudeCodeProxyCommandResult(
             exitCode: process.terminationStatus,
-            stdout: String(
-                data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            ) ?? "",
-            stderr: String(
-                data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            ) ?? ""
+            stdout: String(data: stdout.data, encoding: .utf8) ?? "",
+            stderr: String(data: stderr.data, encoding: .utf8) ?? ""
         )
     }
 

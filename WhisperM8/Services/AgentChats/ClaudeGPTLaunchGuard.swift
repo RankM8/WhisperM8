@@ -17,7 +17,8 @@ enum ClaudeGPTLaunchGuard {
     /// zurueckfallen und wann der User einen deutlichen Hinweis sehen muss.
     static func decision(
         for result: ClaudeGPTLaunchGuardResult,
-        hasGPTModelStamp: Bool
+        hasGPTModelStamp: Bool,
+        hasGPTSubagentModel: Bool
     ) -> ClaudeGPTLaunchDecision {
         switch result {
         case .ready:
@@ -33,7 +34,7 @@ enum ClaudeGPTLaunchGuard {
         case .unavailable:
             return ClaudeGPTLaunchDecision(
                 usesRouter: false,
-                presentsGPTFallbackAlert: hasGPTModelStamp
+                presentsGPTFallbackAlert: hasGPTModelStamp || hasGPTSubagentModel
             )
         }
     }

@@ -51,6 +51,11 @@ final class ClaudeGPTMixRouter {
         case lengthRequired
     }
 
+    private enum ListenerStartAction {
+        case complete(Result<Void, Error>)
+        case start(NWListener, generation: UInt64)
+    }
+
     typealias UpstreamURLResolver = (Upstream) -> URL
 
     private static let hopByHopHeaderNames: Set<String> = [
@@ -70,11 +75,12 @@ final class ClaudeGPTMixRouter {
 
     private let upstreamURLResolver: UpstreamURLResolver
     private let listenerQueue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.listener")
-    private let stateLock = NSLock()
+    private let lifecycleQueue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.lifecycle")
     private var listener: NWListener?
     private var requestedPort: Int?
     private var boundPortStorage: Int?
     private var connections: [UUID: ClientConnection] = [:]
+    private var generation: UInt64 = 0
 
     init(upstreamURLResolver: @escaping UpstreamURLResolver = { upstream in
         switch upstream {
@@ -99,9 +105,7 @@ final class ClaudeGPTMixRouter {
     }
 
     var listeningPort: Int? {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        return boundPortStorage
+        lifecycleQueue.sync { boundPortStorage }
     }
 
     @discardableResult
@@ -110,31 +114,41 @@ final class ClaudeGPTMixRouter {
             return .failure(ClaudeGPTMixRouterError.invalidPort(port))
         }
 
-        stateLock.lock()
-        if listener != nil {
-            let runningPort = requestedPort ?? port
-            stateLock.unlock()
-            return runningPort == port
-                ? .success(())
-                : .failure(ClaudeGPTMixRouterError.alreadyRunning(port: runningPort))
+        let action: ListenerStartAction = lifecycleQueue.sync {
+            if listener != nil {
+                let runningPort = requestedPort ?? port
+                return .complete(
+                    runningPort == port
+                        ? .success(())
+                        : .failure(ClaudeGPTMixRouterError.alreadyRunning(port: runningPort))
+                )
+            }
+
+            let parameters = NWParameters.tcp
+            parameters.requiredLocalEndpoint = .hostPort(
+                host: NWEndpoint.Host("127.0.0.1"),
+                port: networkPort
+            )
+
+            do {
+                let newListener = try NWListener(using: parameters)
+                generation &+= 1
+                listener = newListener
+                requestedPort = port
+                return .start(newListener, generation: generation)
+            } catch {
+                return .complete(.failure(
+                    ClaudeGPTMixRouterError.listenerFailed(error.localizedDescription)
+                ))
+            }
         }
 
-        let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(
-            host: NWEndpoint.Host("127.0.0.1"),
-            port: networkPort
-        )
-
-        let newListener: NWListener
-        do {
-            newListener = try NWListener(using: parameters)
-        } catch {
-            stateLock.unlock()
-            return .failure(ClaudeGPTMixRouterError.listenerFailed(error.localizedDescription))
+        guard case .start(let newListener, let startGeneration) = action else {
+            guard case .complete(let result) = action else {
+                return .failure(ClaudeGPTMixRouterError.startTimedOut)
+            }
+            return result
         }
-        listener = newListener
-        requestedPort = port
-        stateLock.unlock()
 
         let readySemaphore = DispatchSemaphore(value: 0)
         let startupLock = NSLock()
@@ -152,31 +166,56 @@ final class ClaudeGPTMixRouter {
         }
 
         newListener.stateUpdateHandler = { [weak self, weak newListener] state in
-            switch state {
-            case .ready:
-                self?.stateLock.lock()
-                self?.boundPortStorage = newListener?.port.map { Int($0.rawValue) }
-                self?.stateLock.unlock()
-                completeStartup(.success(()))
-            case .failed(let error):
+            guard let self else {
                 completeStartup(.failure(
-                    ClaudeGPTMixRouterError.listenerFailed(error.localizedDescription)
+                    ClaudeGPTMixRouterError.listenerFailed("Router wurde freigegeben.")
                 ))
-            case .cancelled:
-                completeStartup(.failure(
-                    ClaudeGPTMixRouterError.listenerFailed("Listener wurde beendet.")
-                ))
-            default:
-                break
+                return
+            }
+            self.lifecycleQueue.async {
+                let isCurrent = self.generation == startGeneration
+                    && self.listener === newListener
+                switch state {
+                case .ready where isCurrent:
+                    self.boundPortStorage = newListener?.port.map { Int($0.rawValue) }
+                    completeStartup(.success(()))
+                case .ready:
+                    completeStartup(.failure(
+                        ClaudeGPTMixRouterError.listenerFailed("Listener wurde ersetzt.")
+                    ))
+                case .failed(let error):
+                    if isCurrent {
+                        self.detachFailedListener()
+                    }
+                    completeStartup(.failure(
+                        ClaudeGPTMixRouterError.listenerFailed(error.localizedDescription)
+                    ))
+                case .cancelled:
+                    if isCurrent {
+                        self.detachFailedListener()
+                    }
+                    completeStartup(.failure(
+                        ClaudeGPTMixRouterError.listenerFailed("Listener wurde beendet.")
+                    ))
+                default:
+                    break
+                }
             }
         }
-        newListener.newConnectionHandler = { [weak self] connection in
-            self?.accept(connection)
+        newListener.newConnectionHandler = { [weak self, weak newListener] connection in
+            guard self?.accept(
+                connection,
+                from: newListener,
+                generation: startGeneration
+            ) == true else {
+                connection.cancel()
+                return
+            }
         }
         newListener.start(queue: listenerQueue)
 
         guard readySemaphore.wait(timeout: .now() + 3) == .success else {
-            stop()
+            stop(generation: startGeneration)
             return .failure(ClaudeGPTMixRouterError.startTimedOut)
         }
 
@@ -184,23 +223,46 @@ final class ClaudeGPTMixRouter {
         let result = startupResult ?? .failure(ClaudeGPTMixRouterError.startTimedOut)
         startupLock.unlock()
         if case .failure = result {
-            stop()
+            stop(generation: startGeneration)
         }
         return result
     }
 
     func stop() {
-        stateLock.lock()
-        let listener = self.listener
-        self.listener = nil
+        let stopped = lifecycleQueue.sync { detachCurrentListener() }
+
+        stopped.listener?.cancel()
+        stopped.connections.forEach { $0.cancel() }
+    }
+
+    private func stop(generation expectedGeneration: UInt64) {
+        let stopped: (listener: NWListener?, connections: [ClientConnection])? = lifecycleQueue.sync {
+            guard generation == expectedGeneration else { return nil }
+            return detachCurrentListener()
+        }
+
+        stopped?.listener?.cancel()
+        stopped?.connections.forEach { $0.cancel() }
+    }
+
+    /// Nur auf `lifecycleQueue` aufrufen. Die Generation verhindert, dass
+    /// ein alter Startfehler einen inzwischen neu gestarteten Listener stoppt.
+    private func detachCurrentListener() -> (listener: NWListener?, connections: [ClientConnection]) {
+        generation &+= 1
+        let stoppedListener = listener
+        listener = nil
         requestedPort = nil
         boundPortStorage = nil
         let activeConnections = Array(connections.values)
         connections.removeAll()
-        stateLock.unlock()
+        return (stoppedListener, activeConnections)
+    }
 
-        listener?.cancel()
-        activeConnections.forEach { $0.cancel() }
+    /// Nur auf `lifecycleQueue` aufrufen. Bei einem asynchronen Listenerfehler
+    /// werden auch alle bereits angenommenen Verbindungen idempotent beendet.
+    private func detachFailedListener() {
+        let stopped = detachCurrentListener()
+        stopped.connections.forEach { $0.cancel() }
     }
 
     static func model(in body: Data) -> String? {
@@ -222,15 +284,33 @@ final class ClaudeGPTMixRouter {
     }
 
     static func filteredHeaders(_ headers: [HTTPHeader]) -> [HTTPHeader] {
-        headers.filter { !hopByHopHeaderNames.contains($0.name.lowercased()) }
+        let connectionTokens = Set(headers
+            .filter { $0.name.caseInsensitiveCompare("connection") == .orderedSame }
+            .flatMap { header in
+                header.value.split(separator: ",").map {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                }
+            }
+            .filter { !$0.isEmpty })
+        let blockedNames = hopByHopHeaderNames.union(connectionTokens)
+        return headers.filter { !blockedNames.contains($0.name.lowercased()) }
     }
 
     static func upstreamHeaders(
         from headers: [HTTPHeader],
+        upstream: Upstream,
         host: String,
         bodyLength: Int
     ) -> [HTTPHeader] {
         var result = filteredHeaders(headers)
+        if upstream == .codexProxy {
+            result.removeAll { header in
+                let name = header.name.lowercased()
+                return name == "authorization"
+                    || name == "x-api-key"
+                    || name.hasPrefix("anthropic-")
+            }
+        }
         result.append(HTTPHeader(name: "Host", value: host))
         if bodyLength > 0 {
             result.append(HTTPHeader(name: "Content-Length", value: String(bodyLength)))
@@ -299,23 +379,33 @@ final class ClaudeGPTMixRouter {
         ))
     }
 
-    private func accept(_ connection: NWConnection) {
+    private func accept(
+        _ connection: NWConnection,
+        from sourceListener: NWListener?,
+        generation expectedGeneration: UInt64
+    ) -> Bool {
         let id = UUID()
-        let client = ClientConnection(
-            connection: connection,
-            upstreamURLResolver: upstreamURLResolver,
-            onFinish: { [weak self] in self?.removeConnection(id: id) }
-        )
-        stateLock.lock()
-        connections[id] = client
-        stateLock.unlock()
+        let client: ClientConnection? = lifecycleQueue.sync {
+            guard generation == expectedGeneration, listener === sourceListener else {
+                return nil
+            }
+            let client = ClientConnection(
+                connection: connection,
+                upstreamURLResolver: upstreamURLResolver,
+                onFinish: { [weak self] in self?.removeConnection(id: id) }
+            )
+            connections[id] = client
+            return client
+        }
+        guard let client else { return false }
         client.start()
+        return true
     }
 
     private func removeConnection(id: UUID) {
-        stateLock.lock()
-        connections.removeValue(forKey: id)
-        stateLock.unlock()
+        lifecycleQueue.async { [weak self] in
+            self?.connections.removeValue(forKey: id)
+        }
     }
 }
 
@@ -344,18 +434,23 @@ private extension ClaudeGPTMixRouter {
         }
 
         func start() {
-            connection.stateUpdateHandler = { [weak self] state in
-                if case .failed = state { self?.finish() }
-                if case .cancelled = state { self?.finish() }
+            queue.async { [weak self] in
+                guard let self, !self.didFinish else { return }
+                self.connection.stateUpdateHandler = { [weak self] state in
+                    if case .failed = state { self?.finish() }
+                    if case .cancelled = state { self?.finish() }
+                }
+                self.connection.start(queue: self.queue)
+                self.receiveMore()
             }
-            connection.start(queue: queue)
-            receiveMore()
         }
 
         func cancel() {
-            upstreamTask?.cancel()
-            connection.cancel()
-            finish()
+            queue.async { [weak self] in
+                guard let self, !self.didFinish else { return }
+                self.connection.cancel()
+                self.finish()
+            }
         }
 
         private func receiveMore() {
@@ -426,6 +521,7 @@ private extension ClaudeGPTMixRouter {
             let host = Self.hostHeader(for: baseURL)
             let forwardedHeaders = ClaudeGPTMixRouter.upstreamHeaders(
                 from: requestHead.headers,
+                upstream: upstream,
                 host: host,
                 bodyLength: body.count
             )
@@ -436,13 +532,14 @@ private extension ClaudeGPTMixRouter {
             for header in forwardedHeaders {
                 headerFields[header.name] = header.value
             }
-            // `allHTTPHeaderFields` behaelt insbesondere Authorization; der
-            // OAuth-Header wird weder interpretiert noch neu erzeugt.
+            // Die pure Filterfunktion entscheidet zielabhaengig, ob Claude-OAuth
+            // erhalten bleibt oder vor dem lokalen Codex-Proxy entfernt wird.
             request.allHTTPHeaderFields = headerFields
 
             requestModel = model
             requestUpstream = upstream
             let task = StreamingUpstreamTask(
+                callbackQueue: queue,
                 onResponse: { [weak self] response in self?.receive(response: response) },
                 onData: { [weak self] data in self?.receive(upstreamData: data) },
                 onCompletion: { [weak self] error in self?.completeUpstream(error: error) }
@@ -562,6 +659,7 @@ private extension ClaudeGPTMixRouter {
     }
 
     final class StreamingUpstreamTask: NSObject, URLSessionDataDelegate {
+        private let callbackQueue: DispatchQueue
         private let onResponse: (HTTPURLResponse) -> Void
         private let onData: (Data) -> Void
         private let onCompletion: (Error?) -> Void
@@ -569,10 +667,12 @@ private extension ClaudeGPTMixRouter {
         private var task: URLSessionDataTask?
 
         init(
+            callbackQueue: DispatchQueue,
             onResponse: @escaping (HTTPURLResponse) -> Void,
             onData: @escaping (Data) -> Void,
             onCompletion: @escaping (Error?) -> Void
         ) {
+            self.callbackQueue = callbackQueue
             self.onResponse = onResponse
             self.onData = onData
             self.onCompletion = onCompletion
@@ -586,6 +686,9 @@ private extension ClaudeGPTMixRouter {
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             let delegateQueue = OperationQueue()
             delegateQueue.maxConcurrentOperationCount = 1
+            // URLSession- und NWConnection-Callbacks teilen absichtlich genau
+            // dieselbe Queue; damit sind Completion und Cancel streng geordnet.
+            delegateQueue.underlyingQueue = callbackQueue
             let session = URLSession(
                 configuration: configuration,
                 delegate: self,
