@@ -228,7 +228,7 @@ final class ClaudeCodeProxyManager {
             // weiterleben noch durch einen neuen Handle verdeckt werden.
             replaceSelfStartedProcess(with: nil)
 
-            guard let executable = commandResolver("claude-code-proxy") else {
+            guard let executable = resolvedBinaryPath() else {
                 return .failure(.binaryMissing)
             }
 
@@ -300,7 +300,7 @@ final class ClaudeCodeProxyManager {
     }
 
     func authStatus() -> ClaudeCodeProxyAuthStatus {
-        guard let executable = commandResolver("claude-code-proxy") else {
+        guard let executable = resolvedBinaryPath() else {
             return .unknown
         }
         do {
@@ -315,8 +315,18 @@ final class ClaudeCodeProxyManager {
         }
     }
 
+    /// PATH-Binary gewinnt (Power-User-Override); Fallback ist das von
+    /// WhisperM8 verwaltete Binary aus dem Managed Download
+    /// (`~/Library/Application Support/WhisperM8/bin/`).
     func resolvedBinaryPath() -> String? {
-        commandResolver("claude-code-proxy")
+        if let fromPath = commandResolver("claude-code-proxy") {
+            return fromPath
+        }
+        let managed = ClaudeCodeProxyBinaryInstaller().binaryURL
+        guard FileManager.default.isExecutableFile(atPath: managed.path) else {
+            return nil
+        }
+        return managed.path
     }
 
     /// Startet den Device-Code-Flow als langlebigen Prozess. Der Manager

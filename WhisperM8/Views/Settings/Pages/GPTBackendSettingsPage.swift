@@ -19,6 +19,9 @@ struct GPTBackendSettingsPage: View {
     @State private var isDeviceLoginRunning = false
     @State private var isSetupRunning = false
     @State private var setupProgressText: String?
+    @State private var isUpdateWorking = false
+    @State private var availableUpdate: String?
+    @State private var updateStatusText: String?
 
     private let proxyManager = ClaudeCodeProxyManager.shared
     private let modelSuggestions = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra"]
@@ -69,6 +72,29 @@ struct GPTBackendSettingsPage: View {
                     .buttonStyle(SettingsButtonStyle.standard)
                     .disabled(!backendEnabled || isRefreshing)
                 }
+
+                SettingsButtonRow(
+                    title: "Proxy-Binary",
+                    subtitle: binaryManagementSubtitle
+                ) {
+                    if let availableUpdate {
+                        Button(isUpdateWorking ? "Installiere…" : "Update auf v\(availableUpdate)") {
+                            installBinaryUpdate(availableUpdate)
+                        }
+                        .buttonStyle(SettingsButtonStyle.primary)
+                        .disabled(isUpdateWorking)
+                    }
+
+                    Button(isUpdateWorking && availableUpdate == nil ? "Prüfe…" : "Nach Update suchen") {
+                        checkForBinaryUpdate()
+                    }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .disabled(!backendEnabled || isUpdateWorking)
+                }
+
+                if let updateStatusText {
+                    SettingsHelpText(updateStatusText)
+                }
             }
         }
         .task(id: backendEnabled) {
@@ -111,7 +137,7 @@ struct GPTBackendSettingsPage: View {
         SettingsSection("Einrichtung") {
             SettingsButtonRow(
                 title: "Geführte Einrichtung",
-                subtitle: "Führt alle Schritte nacheinander aus: Binary prüfen → Proxy & Router starten → ChatGPT-Login (Device-Code, öffnet die Code-Anzeige unten)."
+                subtitle: "Führt alle Schritte nacheinander aus: Binary prüfen (fehlt es, lädt WhisperM8 v\(ClaudeCodeProxyBinaryInstaller.knownGoodVersion) checksummen-verifiziert aus dem GitHub-Release) → Proxy & Router starten → ChatGPT-Login (Device-Code, öffnet die Code-Anzeige unten)."
             ) {
                 Button(isSetupRunning ? "Läuft…" : "Jetzt komplett einrichten") {
                     runFullSetup(startLoginIfNeeded: true)
@@ -131,7 +157,7 @@ struct GPTBackendSettingsPage: View {
             SettingsStatusRow(
                 title: "Binary",
                 subtitle: didRefresh && binaryPath == nil
-                    ? "Installieren mit `brew install` oder aus dem GitHub-Release raine/claude-code-proxy."
+                    ? "„Jetzt komplett einrichten“ lädt es automatisch; alternativ manuell aus dem GitHub-Release raine/claude-code-proxy in den PATH."
                     : nil,
                 tone: didRefresh ? (binaryPath == nil ? .error : .ok) : .off,
                 detail: binaryPath.map { "Gefunden: \($0)" } ?? (didRefresh ? "Fehlt" : "Wird geprüft…")
@@ -312,6 +338,57 @@ struct GPTBackendSettingsPage: View {
         }
     }
 
+    private var binaryManagementSubtitle: String {
+        let installer = ClaudeCodeProxyBinaryInstaller()
+        if let managed = installer.installedManagedVersion() {
+            return "Verwaltet von WhisperM8: v\(managed) (\(installer.binaryURL.path)). Ein PATH-Binary hätte Vorrang."
+        }
+        return "Kein verwaltetes Binary — es zählt die PATH-Installation. „Nach Update suchen“ vergleicht mit dem neuesten GitHub-Release."
+    }
+
+    private func checkForBinaryUpdate() {
+        guard !isUpdateWorking else { return }
+        isUpdateWorking = true
+        updateStatusText = nil
+        availableUpdate = nil
+
+        Task {
+            defer { isUpdateWorking = false }
+            let installer = ClaudeCodeProxyBinaryInstaller()
+            do {
+                let latest = try await installer.latestVersion()
+                let baseline = installer.installedManagedVersion()
+                    ?? ClaudeCodeProxyBinaryInstaller.knownGoodVersion
+                if latest == baseline {
+                    updateStatusText = "Aktuell: v\(latest) ist die neueste Version."
+                } else {
+                    availableUpdate = latest
+                    updateStatusText = "Neuere Version verfügbar (installiert/getestet: v\(baseline)). Update wird gegen die Release-Checksumme verifiziert."
+                }
+            } catch {
+                updateStatusText = error.localizedDescription
+            }
+        }
+    }
+
+    private func installBinaryUpdate(_ version: String) {
+        guard !isUpdateWorking else { return }
+        isUpdateWorking = true
+        updateStatusText = nil
+
+        Task {
+            defer { isUpdateWorking = false }
+            do {
+                let url = try await ClaudeCodeProxyBinaryInstaller().install(version: version)
+                availableUpdate = nil
+                updateStatusText = "v\(version) installiert: \(url.path). Ein laufender Proxy nutzt das Update nach „Proxy stoppen“ + Neustart."
+                refreshStatus()
+            } catch {
+                updateStatusText = error.localizedDescription
+            }
+        }
+    }
+
     /// Ein-Klick-Einrichtung: läuft den `GPTBackendSetupRunner` sequenziell
     /// durch und spiegelt jeden Schritt in `setupProgressText`. Fehlt am Ende
     /// nur der Login, startet `startLoginIfNeeded` direkt den
@@ -326,7 +403,7 @@ struct GPTBackendSettingsPage: View {
 
         Task {
             let outcome = await Task.detached(priority: .userInitiated) {
-                runner.run(port: selectedPort) { step, state in
+                await runner.run(port: selectedPort) { step, state in
                     let text: String?
                     switch state {
                     case .running:

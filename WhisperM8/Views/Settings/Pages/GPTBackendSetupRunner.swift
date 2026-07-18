@@ -41,6 +41,11 @@ struct GPTBackendSetupRunner {
     var binaryResolver: () -> String? = {
         ClaudeCodeProxyManager.shared.resolvedBinaryPath()
     }
+    /// Managed Download der known-good-Version, wenn kein Binary gefunden
+    /// wird — liefert den installierten Pfad.
+    var binaryInstaller: () async throws -> String = {
+        try await ClaudeCodeProxyBinaryInstaller().installKnownGood().path
+    }
     var proxyStarter: (Int) -> Result<Void, ClaudeCodeProxyError> = { port in
         ClaudeCodeProxyManager.shared.ensureRunning(port: port)
     }
@@ -51,13 +56,22 @@ struct GPTBackendSetupRunner {
     /// Führt die Schritte sequenziell aus. `onStep` wird für jede
     /// Zustandsänderung gerufen (running → ok/failed) — die UI spiegelt
     /// das 1:1 als Schrittliste.
-    func run(port: Int, onStep: (Step, StepState) -> Void) -> Outcome {
+    func run(port: Int, onStep: (Step, StepState) -> Void) async -> Outcome {
         onStep(.binary, .running)
-        guard let binaryPath = binaryResolver() else {
-            onStep(.binary, .failed(
-                "claude-code-proxy nicht gefunden. Installation: `brew install raine/claude-code-proxy/claude-code-proxy` oder GitHub-Release nach ~/.local/bin."
-            ))
-            return .failed(.binary)
+        let binaryPath: String
+        if let resolved = binaryResolver() {
+            binaryPath = resolved
+        } else {
+            // Kein PATH- und kein verwaltetes Binary → Managed Download der
+            // gepinnten known-good-Version (Checksummen-verifiziert).
+            do {
+                binaryPath = try await binaryInstaller()
+            } catch {
+                onStep(.binary, .failed(
+                    "Automatische Installation fehlgeschlagen: \(error.localizedDescription)"
+                ))
+                return .failed(.binary)
+            }
         }
         onStep(.binary, .ok(binaryPath))
 

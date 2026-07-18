@@ -9,6 +9,11 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
     private typealias Step = GPTBackendSetupRunner.Step
     private typealias StepState = GPTBackendSetupRunner.StepState
 
+    private enum TestError: Error, LocalizedError {
+        case downloadBlocked
+        var errorDescription: String? { "Download blockiert (Test)" }
+    }
+
     private func makeRunner(
         binary: String? = "/usr/local/bin/claude-code-proxy",
         proxy: Result<Void, ClaudeCodeProxyError> = .success(()),
@@ -16,6 +21,8 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
     ) -> GPTBackendSetupRunner {
         var runner = GPTBackendSetupRunner()
         runner.binaryResolver = { binary }
+        // Tests dürfen nie den echten Managed Download treffen.
+        runner.binaryInstaller = { throw TestError.downloadBlocked }
         runner.proxyStarter = { _ in proxy }
         runner.authChecker = { auth }
         return runner
@@ -24,16 +31,16 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
     private func collect(
         _ runner: GPTBackendSetupRunner,
         port: Int = 18_765
-    ) -> (GPTBackendSetupRunner.Outcome, [(Step, StepState)]) {
+    ) async -> (GPTBackendSetupRunner.Outcome, [(Step, StepState)]) {
         var events: [(Step, StepState)] = []
-        let outcome = runner.run(port: port) { step, state in
+        let outcome = await runner.run(port: port) { step, state in
             events.append((step, state))
         }
         return (outcome, events)
     }
 
-    func testHappyPathRunsAllStepsAndEndsReady() {
-        let (outcome, events) = collect(makeRunner())
+    func testHappyPathRunsAllStepsAndEndsReady() async {
+        let (outcome, events) = await collect(makeRunner())
 
         XCTAssertEqual(outcome, .ready)
         XCTAssertEqual(events.map(\.0), [.binary, .binary, .proxy, .proxy, .auth, .auth])
@@ -45,7 +52,35 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
         XCTAssertTrue(authDetail.contains("user@example.com"))
     }
 
-    func testMissingBinaryAbortsBeforeProxyStart() {
+    func testMissingBinaryFallsBackToManagedInstall() async {
+        var installerCalled = false
+        var runner = makeRunner(binary: nil)
+        runner.binaryInstaller = {
+            installerCalled = true
+            return "/managed/bin/claude-code-proxy"
+        }
+
+        let (outcome, events) = await collect(runner)
+
+        XCTAssertEqual(outcome, .ready)
+        XCTAssertTrue(installerCalled, "Fehlendes Binary muss den Managed Download auslösen")
+        XCTAssertEqual(events[1].1, .ok("/managed/bin/claude-code-proxy"))
+    }
+
+    func testInstallerNotCalledWhenBinaryExists() async {
+        var installerCalled = false
+        var runner = makeRunner()
+        runner.binaryInstaller = {
+            installerCalled = true
+            return "/managed/bin/claude-code-proxy"
+        }
+
+        _ = await collect(runner)
+
+        XCTAssertFalse(installerCalled, "PATH-Binary hat Vorrang vor dem Managed Download")
+    }
+
+    func testInstallerFailureAbortsBeforeProxyStart() async {
         var proxyStarted = false
         var runner = makeRunner(binary: nil)
         runner.proxyStarter = { _ in
@@ -53,17 +88,17 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
             return .success(())
         }
 
-        let (outcome, events) = collect(runner)
+        let (outcome, events) = await collect(runner)
 
         XCTAssertEqual(outcome, .failed(.binary))
         XCTAssertFalse(proxyStarted, "Ohne Binary darf kein Startversuch erfolgen")
         guard case .failed(let message) = events.last?.1 else {
-            return XCTFail("Letztes Event muss der Binary-Fehler sein")
+            return XCTFail("Letztes Event muss der Installations-Fehler sein")
         }
-        XCTAssertTrue(message.contains("claude-code-proxy"))
+        XCTAssertTrue(message.contains("Download blockiert"))
     }
 
-    func testProxyStartFailureAbortsBeforeAuthCheck() {
+    func testProxyStartFailureAbortsBeforeAuthCheck() async {
         var authChecked = false
         var runner = makeRunner(proxy: .failure(.routerStartFailed("Port belegt")))
         runner.authChecker = {
@@ -71,7 +106,7 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
             return .unknown
         }
 
-        let (outcome, events) = collect(runner)
+        let (outcome, events) = await collect(runner)
 
         XCTAssertEqual(outcome, .failed(.proxy))
         XCTAssertFalse(authChecked, "Nach Proxy-Fehler darf kein Auth-Check laufen")
@@ -81,8 +116,8 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
         XCTAssertTrue(message.contains("Port belegt"))
     }
 
-    func testMissingLoginYieldsNeedsDeviceLogin() {
-        let (outcome, events) = collect(makeRunner(auth: .notAuthenticated))
+    func testMissingLoginYieldsNeedsDeviceLogin() async {
+        let (outcome, events) = await collect(makeRunner(auth: .notAuthenticated))
 
         XCTAssertEqual(outcome, .needsDeviceLogin)
         guard case .failed(let message) = events.last?.1 else {
@@ -91,8 +126,8 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
         XCTAssertTrue(message.contains("Device-Code-Login"))
     }
 
-    func testUnknownAuthIsAHardFailure() {
-        let (outcome, _) = collect(makeRunner(auth: .unknown))
+    func testUnknownAuthIsAHardFailure() async {
+        let (outcome, _) = await collect(makeRunner(auth: .unknown))
         XCTAssertEqual(outcome, .failed(.auth))
     }
 }
