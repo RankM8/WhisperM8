@@ -6,6 +6,7 @@ enum ClaudeCodeProxyError: LocalizedError, Equatable {
     case binaryMissing
     case startFailed(String)
     case notReachable(port: Int)
+    case routerStartFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,8 @@ enum ClaudeCodeProxyError: LocalizedError, Equatable {
             return "Der GPT-Proxy konnte nicht gestartet werden: \(reason)"
         case .notReachable(let port):
             return "Der GPT-Proxy ist nach dem Start auf 127.0.0.1:\(port) nicht erreichbar."
+        case .routerStartFailed(let reason):
+            return "Der GPT-Mix-Router konnte nicht gestartet werden: \(reason)"
         }
     }
 }
@@ -79,12 +82,17 @@ final class ClaudeCodeProxyManager {
         _ onOutput: @escaping (String) -> Void,
         _ onCompletion: @escaping (Int32) -> Void
     ) throws -> ClaudeCodeProxyProcessHandle
+    typealias RouterStarter = (_ port: Int) -> Result<Void, Error>
+    typealias RouterStopper = () -> Void
 
     private let commandResolver: (String) -> String?
     private let reachabilityResolver: (Int) -> Bool
     private let processLauncher: ProcessLauncher
     private let commandRunner: CommandRunner
     private let deviceLoginLauncher: DeviceLoginLauncher
+    private let routerStarter: RouterStarter
+    private let routerStopper: RouterStopper
+    private let routerPortResolver: () -> Int
     private let environmentResolver: () -> [String: String]
     private let sleepResolver: (TimeInterval) -> Void
     private let retryAttempts: Int
@@ -102,6 +110,9 @@ final class ClaudeCodeProxyManager {
         processLauncher: @escaping ProcessLauncher = ClaudeCodeProxyManager.launchProcess,
         commandRunner: @escaping CommandRunner = ClaudeCodeProxyManager.runCommand,
         deviceLoginLauncher: @escaping DeviceLoginLauncher = ClaudeCodeProxyManager.launchDeviceLogin,
+        routerStarter: @escaping RouterStarter = { ClaudeGPTMixRouter.shared.start(port: $0) },
+        routerStopper: @escaping RouterStopper = { ClaudeGPTMixRouter.shared.stop() },
+        routerPortResolver: @escaping () -> Int = { AppPreferences.shared.claudeGPTRouterPort },
         environmentResolver: @escaping () -> [String: String] = {
             LoginShellEnvironment.shared.processEnvironment()
         },
@@ -115,6 +126,9 @@ final class ClaudeCodeProxyManager {
         self.processLauncher = processLauncher
         self.commandRunner = commandRunner
         self.deviceLoginLauncher = deviceLoginLauncher
+        self.routerStarter = routerStarter
+        self.routerStopper = routerStopper
+        self.routerPortResolver = routerPortResolver
         self.environmentResolver = environmentResolver
         self.sleepResolver = sleepResolver
         self.retryAttempts = retryAttempts
@@ -142,52 +156,57 @@ final class ClaudeCodeProxyManager {
     }
 
     func ensureRunning(port: Int) -> Result<Void, ClaudeCodeProxyError> {
-        if isReachable(port: port) {
-            return .success(())
-        }
-
         // Zwei gleichzeitige Chat-Starts duerfen nicht zwei Proxy-Prozesse
-        // erzeugen. Der zweite Aufrufer prueft nach dem Lock erneut.
+        // oder Router-Listener erzeugen. Beide Lifecycle-Schritte werden als
+        // atomare Startsequenz serialisiert: zuerst Proxy, dann Router.
         ensureLock.lock()
         defer { ensureLock.unlock() }
 
-        if isReachable(port: port) {
-            return .success(())
-        }
-
-        guard let executable = commandResolver("claude-code-proxy") else {
-            return .failure(.binaryMissing)
-        }
-
-        let process: ClaudeCodeProxyProcessHandle
-        do {
-            process = try processLauncher(
-                executable,
-                ["serve", "--no-monitor", "--port", String(port)],
-                environmentResolver()
-            )
-        } catch {
-            return .failure(.startFailed(error.localizedDescription))
-        }
-
-        processLock.lock()
-        selfStartedProcess = process
-        processLock.unlock()
-
-        for _ in 0..<max(0, retryAttempts) {
-            if isReachable(port: port) {
-                return .success(())
+        if !isReachable(port: port) {
+            guard let executable = commandResolver("claude-code-proxy") else {
+                return .failure(.binaryMissing)
             }
-            sleepResolver(retryDelay)
+
+            let process: ClaudeCodeProxyProcessHandle
+            do {
+                process = try processLauncher(
+                    executable,
+                    ["serve", "--no-monitor", "--port", String(port)],
+                    environmentResolver()
+                )
+            } catch {
+                return .failure(.startFailed(error.localizedDescription))
+            }
+
+            processLock.lock()
+            selfStartedProcess = process
+            processLock.unlock()
+
+            var becameReachable = false
+            for _ in 0..<max(0, retryAttempts) {
+                if isReachable(port: port) {
+                    becameReachable = true
+                    break
+                }
+                sleepResolver(retryDelay)
+            }
+
+            if !becameReachable, !isReachable(port: port) {
+                return .failure(.notReachable(port: port))
+            }
         }
 
-        if isReachable(port: port) {
+        switch routerStarter(routerPortResolver()) {
+        case .success:
             return .success(())
+        case .failure(let error):
+            return .failure(.routerStartFailed(error.localizedDescription))
         }
-        return .failure(.notReachable(port: port))
     }
 
     func stopIfSelfStarted() {
+        routerStopper()
+
         processLock.lock()
         let process = selfStartedProcess
         selfStartedProcess = nil

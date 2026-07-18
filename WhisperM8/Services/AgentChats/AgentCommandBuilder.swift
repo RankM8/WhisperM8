@@ -69,8 +69,8 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTBackendEnabled
     }
 
-    var gptBackendPortResolver: () -> Int = {
-        AppPreferences.shared.claudeGPTBackendPort
+    var gptRouterPortResolver: () -> Int = {
+        AppPreferences.shared.claudeGPTRouterPort
     }
 
     var gptSubagentModelResolver: () -> String = {
@@ -249,6 +249,36 @@ struct AgentCommandBuilder {
         // Transcript-Ablageort verifiziert — die Platte ist SSoT.)
         let profileEnvironment = claudeProfileEnvironmentResolver(session.claudeProfileName)
 
+        let routerEnabled = gptBackendEnabledResolver()
+        let gptBackendModel: String? = {
+            guard routerEnabled else { return nil }
+            let model = session.claudeBackendModel?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return model.isEmpty ? nil : model
+        }()
+
+        // Der Router gilt bewusst fuer jede Claude-PTY-Session. So koennen
+        // auch Sessions ohne GPT-Stempel spaeter per `/model` wechseln und
+        // konfigurierte GPT-Subagents verwenden.
+        let applyRouterEnvironment: ([String: String], Bool) -> [String: String] = {
+            baseEnvironment, includesGPTTuning in
+            guard routerEnabled else { return baseEnvironment }
+
+            var environment = baseEnvironment
+            environment["ANTHROPIC_BASE_URL"] = "http://127.0.0.1:\(gptRouterPortResolver())"
+            let subagentModel = gptSubagentModelResolver()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !subagentModel.isEmpty {
+                environment["CLAUDE_CODE_SUBAGENT_MODEL"] = subagentModel
+            }
+            if includesGPTTuning {
+                environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "gpt-5.4-mini"
+                environment["CLAUDE_CODE_ALWAYS_ENABLE_EFFORT"] = "1"
+                environment["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"] = "3"
+            }
+            return environment
+        }
+
         // Claude Agents View ist ein separater Subcommand (`claude agents`)
         // mit eigener TUI fuer Background-Sessions. Kein --resume,
         // kein --session-id, keine Hook-Bridge — das ist ein
@@ -262,7 +292,7 @@ struct AgentCommandBuilder {
                 arguments: arguments,
                 workingDirectory: project.path,
                 keyboardProfile: .claudeAgentsView,
-                environmentOverrides: profileEnvironment
+                environmentOverrides: applyRouterEnvironment(profileEnvironment, false)
             )
         }
 
@@ -287,16 +317,9 @@ struct AgentCommandBuilder {
                 // Attach landet in einer normalen Claude-Chat-Session, also
                 // selbes Keyboard-Profil wie ein interaktiver `.chat`.
                 keyboardProfile: .claudeCodeChat,
-                environmentOverrides: profileEnvironment
+                environmentOverrides: applyRouterEnvironment(profileEnvironment, false)
             )
         }
-
-        let gptBackendModel: String? = {
-            guard gptBackendEnabledResolver() else { return nil }
-            let model = session.claudeBackendModel?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return model.isEmpty ? nil : model
-        }()
 
         var arguments: [String] = []
         // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
@@ -366,23 +389,10 @@ struct AgentCommandBuilder {
             arguments.append(initialPrompt)
         }
 
-        if gptBackendModel != nil {
-            effectiveProfileEnvironment.merge([
-                "ANTHROPIC_BASE_URL": "http://127.0.0.1:\(gptBackendPortResolver())",
-                "ANTHROPIC_AUTH_TOKEN": "whisperm8",
-                "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
-                "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-                "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
-            ]) { _, backendValue in backendValue }
-
-            let subagentModel = gptSubagentModelResolver()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !subagentModel.isEmpty {
-                // Direkte Anthropic-Sessions duerfen nie ein GPT-Modell fuer
-                // native Subagents erhalten, weil api.anthropic.com es ablehnt.
-                effectiveProfileEnvironment["CLAUDE_CODE_SUBAGENT_MODEL"] = subagentModel
-            }
-        }
+        effectiveProfileEnvironment = applyRouterEnvironment(
+            effectiveProfileEnvironment,
+            gptBackendModel != nil
+        )
 
         return AgentLaunchCommand(
             executablePath: executable,

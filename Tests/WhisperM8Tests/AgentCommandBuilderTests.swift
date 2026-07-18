@@ -387,7 +387,7 @@ final class AgentCommandBuilderTests: XCTestCase {
 // MARK: - Claude-GPT-Backend
 
 extension AgentCommandBuilderTests {
-    func testClaudeGPTBackendWithoutSessionStampKeepsExistingCommandUnchanged() throws {
+    func testClaudeGPTRouterWithoutSessionStampKeepsArgumentsAndAddsRouterEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.extraArgumentsResolver = { provider in
@@ -397,6 +397,8 @@ extension AgentCommandBuilderTests {
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
         }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 19_002 }
+        builder.gptSubagentModelResolver = { "" }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -413,6 +415,7 @@ extension AgentCommandBuilderTests {
         ])
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
         ])
     }
 
@@ -427,7 +430,7 @@ extension AgentCommandBuilderTests {
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
         }
         builder.gptBackendEnabledResolver = { true }
-        builder.gptBackendPortResolver = { 19_001 }
+        builder.gptRouterPortResolver = { 19_001 }
         builder.gptSubagentModelResolver = { "" }
         let session = AgentChatSession(
             provider: .claude,
@@ -449,7 +452,6 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
-            "ANTHROPIC_AUTH_TOKEN": "whisperm8",
             "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
@@ -462,7 +464,8 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in ["--verbose"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
-        builder.gptBackendPortResolver = { 18_765 }
+        builder.gptRouterPortResolver = { 18_766 }
+        builder.gptSubagentModelResolver = { "" }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -477,7 +480,8 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.arguments, [
             "--verbose", "--model", "gpt-5.6-terra", "--resume", "resume-1",
         ])
-        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18765")
+        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18766")
+        XCTAssertNil(command.environmentOverrides["ANTHROPIC_AUTH_TOKEN"])
     }
 
     func testClaudeGPTBackendAddsConfiguredSubagentModel() throws {
@@ -486,12 +490,12 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "gpt-5.6-luna" }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
-            title: "Claude",
-            claudeBackendModel: "gpt-5.6-terra"
+            title: "Claude"
         )
 
         let command = try builder.command(for: session, project: project)
@@ -508,6 +512,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "  \n " }
         let session = AgentChatSession(
             provider: .claude,
@@ -566,12 +571,14 @@ extension AgentCommandBuilderTests {
         ])
     }
 
-    func testClaudeGPTBackendDoesNotAffectAgentViewOrBackgroundAttach() throws {
+    func testClaudeGPTRouterAppliesToAgentViewAndBackgroundAttachWithoutChangingArguments() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 18_766 }
+        builder.gptSubagentModelResolver = { "gpt-5.6-sol" }
 
         let agentView = AgentChatSession(
             provider: .claude,
@@ -593,9 +600,15 @@ extension AgentCommandBuilderTests {
         let backgroundCommand = try builder.command(for: backgroundChat, project: project)
 
         XCTAssertEqual(agentViewCommand.arguments, ["agents"])
-        XCTAssertTrue(agentViewCommand.environmentOverrides.isEmpty)
+        XCTAssertEqual(agentViewCommand.environmentOverrides, [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
+            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol",
+        ])
         XCTAssertEqual(backgroundCommand.arguments, ["attach", "abcdef12"])
-        XCTAssertTrue(backgroundCommand.environmentOverrides.isEmpty)
+        XCTAssertEqual(backgroundCommand.environmentOverrides, [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
+            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol",
+        ])
     }
 }
 

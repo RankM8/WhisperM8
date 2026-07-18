@@ -396,6 +396,25 @@ struct AgentSessionDetailView: View {
                 _ = AgentCommandBuilder.commandPath(commandName)
             }
 
+            let launchGuardResult: ClaudeGPTLaunchGuardResult
+            if launchSession.provider == .claude,
+               !launchSession.isTerminal,
+               AppPreferences.shared.claudeGPTBackendEnabled {
+                switch ClaudeCodeProxyManager.shared.ensureRunning(
+                    port: AppPreferences.shared.claudeGPTBackendPort
+                ) {
+                case .success:
+                    launchGuardResult = .ready
+                case .failure(let error):
+                    Logger.claudeGPTRouter.error(
+                        "launch_guard_unavailable error=\(error.localizedDescription, privacy: .public)"
+                    )
+                    launchGuardResult = .unavailable
+                }
+            } else {
+                launchGuardResult = .notNeeded
+            }
+
             let resumeRepairPreparation: ResumeRepairPreparation
             if !launchSession.isAgentView,
                !launchSession.isTerminal,
@@ -425,20 +444,39 @@ struct AgentSessionDetailView: View {
                 guard let currentSession = store.loadWorkspace().sessions
                     .first(where: { $0.id == launchSession.id }),
                     currentSession.status != .archived else { return }
-                prepareCommand(resumeRepairPreparation: resumeRepairPreparation)
+                prepareCommand(
+                    resumeRepairPreparation: resumeRepairPreparation,
+                    launchGuardResult: launchGuardResult
+                )
             }
         }
     }
 
-    private func prepareCommand(resumeRepairPreparation: ResumeRepairPreparation) {
+    private func prepareCommand(
+        resumeRepairPreparation: ResumeRepairPreparation,
+        launchGuardResult: ClaudeGPTLaunchGuardResult
+    ) {
         do {
             let launchSession = try repairedSessionForLaunch(
                 resumeRepairPreparation: resumeRepairPreparation
             )
+            let hasGPTModelStamp = !(launchSession.claudeBackendModel?
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            let launchDecision = ClaudeGPTLaunchGuard.decision(
+                for: launchGuardResult,
+                hasGPTModelStamp: hasGPTModelStamp
+            )
+            if launchDecision.presentsGPTFallbackAlert {
+                presentGPTBackendFallbackAlert()
+            }
             // Claude-Hook-Bridge: VOR dem Command-Build die Settings-Datei
             // erzeugen und `--settings <path>` als extra-Argument liefern.
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
+            // Der Guard friert die Lifecycle-Entscheidung fuer genau diesen
+            // Launch ein. Bei Fehler baut derselbe pure Builder damit den
+            // bisherigen Direktbetrieb ohne Router-Env.
+            builder.gptBackendEnabledResolver = { launchDecision.usesRouter }
             // Hook-Bridge nur fuer normale interaktive Claude-Sessions —
             // Agent View ist ein Dashboard, hat keine eigene Session-ID
             // zum Tracken. Background-Chats werden bereits beim Spawn
@@ -482,6 +520,15 @@ struct AgentSessionDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func presentGPTBackendFallbackAlert() {
+        let alert = NSAlert()
+        alert.messageText = "GPT-Backend nicht erreichbar"
+        alert.informativeText = "Chat startet mit dem Claude-Standardmodell. Details in Einstellungen > GPT-Backend."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func repairedSessionForLaunch(

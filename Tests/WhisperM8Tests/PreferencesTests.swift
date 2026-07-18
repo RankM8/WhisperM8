@@ -251,6 +251,7 @@ final class PreferencesTests: XCTestCase {
             ("isTerminalBellEnabled", PreferenceKeys.isTerminalBellEnabled),
             ("codexExtraArguments", PreferenceKeys.codexExtraArguments),
             ("claudeExtraArguments", PreferenceKeys.claudeExtraArguments),
+            ("claudeGPTRouterPort", PreferenceKeys.claudeGPTRouterPort),
             ("appearanceOverride", PreferenceKeys.appearanceOverride),
             ("agentSidebarDragEnabled", PreferenceKeys.agentSidebarDragEnabled),
             ("agentEventDrivenWatchEnabled", PreferenceKeys.agentEventDrivenWatchEnabled),
@@ -263,7 +264,7 @@ final class PreferencesTests: XCTestCase {
             ("updateCheckEnabled", PreferenceKeys.updateCheckEnabled)
         ]
 
-        XCTAssertEqual(keys.count, 44)
+        XCTAssertEqual(keys.count, 45)
         for (expected, actual) in keys {
             XCTAssertEqual(actual, expected)
         }

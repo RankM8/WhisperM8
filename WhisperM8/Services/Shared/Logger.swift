@@ -18,6 +18,7 @@ enum Logger {
     static let terminalSnapshot = os.Logger(subsystem: subsystem, category: "terminal.snapshot")
     static let claudeBinding = os.Logger(subsystem: subsystem, category: "claude.binding")
     static let claudeRecovery = os.Logger(subsystem: subsystem, category: "claude.recovery")
+    static let claudeGPTRouter = os.Logger(subsystem: subsystem, category: "claude.gpt-router")
 
     // MARK: - Optional File Logging
 

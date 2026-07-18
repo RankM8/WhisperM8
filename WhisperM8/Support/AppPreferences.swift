@@ -269,6 +269,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendPort) }
     }
 
+    var claudeGPTRouterPort: Int {
+        get {
+            let value = defaults.integer(forKey: Keys.claudeGPTRouterPort)
+            return value > 0 ? value : 18_766
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTRouterPort) }
+    }
+
     var claudeGPTBackendDefaultModel: String {
         get { defaults.string(forKey: Keys.claudeGPTBackendDefaultModel) ?? "gpt-5.6-sol" }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendDefaultModel) }
@@ -434,6 +442,7 @@ enum PreferenceKeys {
     static let claudeExtraArguments = "claudeExtraArguments"
     static let claudeGPTBackendEnabled = "claudeGPTBackendEnabled"
     static let claudeGPTBackendPort = "claudeGPTBackendPort"
+    static let claudeGPTRouterPort = "claudeGPTRouterPort"
     static let claudeGPTBackendDefaultModel = "claudeGPTBackendDefaultModel"
     static let claudeGPTSubagentModel = "claudeGPTSubagentModel"
     static let appearanceOverride = "appearanceOverride"

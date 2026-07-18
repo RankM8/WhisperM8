@@ -17,16 +17,23 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
 
     func testEnsureRunningReturnsImmediatelyForReachableProxy() {
         var didLaunch = false
+        var routerPort: Int?
         let manager = makeManager(
             reachability: { _ in true },
             launcher: { _, _, _ in
                 didLaunch = true
                 return Self.processHandle()
-            }
+            },
+            routerStarter: { port in
+                routerPort = port
+                return .success(())
+            },
+            routerPort: { 18_766 }
         )
 
         XCTAssertNoThrow(try manager.ensureRunning(port: 18_765).get())
         XCTAssertFalse(didLaunch)
+        XCTAssertEqual(routerPort, 18_766)
     }
 
     func testEnsureRunningReportsMissingBinary() {
@@ -42,6 +49,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         var probes = 0
         var launch: (String, [String], [String: String])?
         var didTerminate = false
+        var didStopRouter = false
         let manager = makeManager(
             reachability: { _ in
                 probes += 1
@@ -51,6 +59,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
                 launch = (executable, arguments, environment)
                 return Self.processHandle(terminate: { didTerminate = true })
             },
+            routerStopper: { didStopRouter = true },
             environment: { ["PATH": "/login-shell/bin"] },
             retryAttempts: 2
         )
@@ -62,6 +71,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
 
         manager.stopIfSelfStarted()
         XCTAssertTrue(didTerminate)
+        XCTAssertTrue(didStopRouter)
     }
 
     func testEnsureRunningReportsLaunchFailure() {
@@ -89,6 +99,22 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         assertFailure(
             manager.ensureRunning(port: 18_765),
             equals: .notReachable(port: 18_765)
+        )
+    }
+
+    func testEnsureRunningReportsRouterStartFailureAfterReachableProxy() {
+        let manager = makeManager(
+            reachability: { _ in true },
+            routerStarter: { _ in
+                .failure(NSError(domain: "test", code: 8, userInfo: [
+                    NSLocalizedDescriptionKey: "router kaputt",
+                ]))
+            }
+        )
+
+        assertFailure(
+            manager.ensureRunning(port: 18_765),
+            equals: .routerStartFailed("router kaputt")
         )
     }
 
@@ -207,6 +233,9 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         deviceLoginLauncher: @escaping ClaudeCodeProxyManager.DeviceLoginLauncher = { _, _, _, _, _ in
             processHandle()
         },
+        routerStarter: @escaping ClaudeCodeProxyManager.RouterStarter = { _ in .success(()) },
+        routerStopper: @escaping ClaudeCodeProxyManager.RouterStopper = {},
+        routerPort: @escaping () -> Int = { 18_766 },
         environment: @escaping () -> [String: String] = { [:] },
         retryAttempts: Int = 1,
         notificationCenter: NotificationCenter = NotificationCenter()
@@ -217,6 +246,9 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             processLauncher: launcher,
             commandRunner: commandRunner,
             deviceLoginLauncher: deviceLoginLauncher,
+            routerStarter: routerStarter,
+            routerStopper: routerStopper,
+            routerPortResolver: routerPort,
             environmentResolver: environment,
             sleepResolver: { _ in },
             retryAttempts: retryAttempts,
