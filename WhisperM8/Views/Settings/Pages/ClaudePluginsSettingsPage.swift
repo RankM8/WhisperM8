@@ -444,7 +444,6 @@ private struct PluginInstallSheet: View {
     let model: ClaudePluginManagerModel
 
     @Environment(\.dismiss) private var dismiss
-    @State private var scope: ClaudePluginCLI.Scope = .user
     @State private var configText = ""
 
     var body: some View {
@@ -455,12 +454,14 @@ private struct PluginInstallSheet: View {
                 .font(.system(size: 11.5))
                 .foregroundStyle(AppTheme.textSecondary)
 
-            Picker("Scope", selection: $scope) {
-                Text("User (all projects)").tag(ClaudePluginCLI.Scope.user)
-                Text("Project (committed)").tag(ClaudePluginCLI.Scope.project)
-                Text("Local (gitignored)").tag(ClaudePluginCLI.Scope.local)
-            }
-            .pickerStyle(.radioGroup)
+            // Bewusst NUR User-Scope: project/local schreiben relativ zum
+            // Arbeitsverzeichnis des CLI-Aufrufs — die App hat aber kein
+            // Projekt-cwd, ein Picker wuerde ins Leere installieren
+            // (Review-Befund 2026-07-19). Projekt-Scope: `claude plugin
+            // install --scope project` im Projekt-Terminal.
+            Text("Scope: User (all projects). For project-scoped installs run the CLI inside the project.")
+                .font(.system(size: 11))
+                .foregroundStyle(AppTheme.textTertiary)
 
             SettingsTextArea(
                 title: "Config (optional) — one per line as key=value",
@@ -475,7 +476,7 @@ private struct PluginInstallSheet: View {
                 Button("Install") {
                     let config = SettingsLineParsing.parseKeyValueLines(configText)
                     dismiss()
-                    Task { await model.install(plugin.pluginId, scope: scope, config: config) }
+                    Task { await model.install(plugin.pluginId, scope: .user, config: config) }
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
             }

@@ -11,6 +11,27 @@ import Foundation
 /// das Ziel-Profil. Achtung: App-erstellte Profile teilen `plugins/` per
 /// Symlink mit `main` (siehe `ClaudeAccountProfiles.sharedItems`) —
 /// Aenderungen wirken dann account-uebergreifend.
+/// Prozessweite FIFO-Serialisierung aller `claude plugin`-Aufrufe. Claudes
+/// Config-Dateien sind nicht lock-geschuetzt, und Model-Instanzen gibt es
+/// mehrfach (Plugin-Page, Context-Profile-Tab, mehrere Fenster) — die
+/// `isBusy`-Sperre der Models ist deshalb nur UI-Zucker; die harte Garantie
+/// "nie zwei claude-plugin-Prozesse parallel" liegt HIER, in der CLI-Schicht
+/// (Review-Befund 2026-07-19).
+actor ClaudePluginCLISerializer {
+    static let shared = ClaudePluginCLISerializer()
+    private var tail: Task<Void, Never> = Task {}
+
+    func run<T: Sendable>(_ operation: @escaping () async throws -> T) async throws -> T {
+        let previous = tail
+        let task = Task { () -> T in
+            await previous.value
+            return try await operation()
+        }
+        tail = Task { _ = try? await task.value }
+        return try await task.value
+    }
+}
+
 struct ClaudePluginCLI {
     enum Scope: String, CaseIterable, Identifiable {
         case user
@@ -142,10 +163,14 @@ struct ClaudePluginCLI {
         guard let executablePath = commandResolver("claude") else {
             throw CLIError.claudeNotFound
         }
-        return try await runner(
-            URL(fileURLWithPath: executablePath),
-            arguments,
-            environmentBuilder(accountProfile)
-        )
+        let runner = self.runner
+        let environment = environmentBuilder(accountProfile)
+        return try await ClaudePluginCLISerializer.shared.run {
+            try await runner(
+                URL(fileURLWithPath: executablePath),
+                arguments,
+                environment
+            )
+        }
     }
 }

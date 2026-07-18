@@ -21,8 +21,11 @@ final class ClaudeContextProfileStore {
     private let fileURL: URL
 
     /// Datei-Container mit Schema-Version fuer spaetere Migrationen.
-    /// Dekodierung lenient (fehlende Keys → Defaults), damit weder aeltere
-    /// App-Versionen noch Hand-Edits den Bestand verwerfen.
+    /// Dekodierung lenient (fehlende Keys → Defaults) und pro Profil
+    /// verlusttolerant: EIN unlesbares Profil (kaputte UUID, Hand-Edit)
+    /// verwirft nur sich selbst, nie den ganzen Bestand — sonst wuerde der
+    /// naechste upsert die Datei mit dem leeren Bestand ueberschreiben
+    /// (Review-Befund 2026-07-19).
     private struct FileContainer: Codable {
         static let currentSchemaVersion = 1
         var schemaVersion: Int
@@ -36,7 +39,17 @@ final class ClaudeContextProfileStore {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 0
-            profiles = try container.decodeIfPresent([ClaudeContextProfile].self, forKey: .profiles) ?? []
+            let lossy = try container.decodeIfPresent([FailableProfile].self, forKey: .profiles) ?? []
+            profiles = lossy.compactMap(\.profile)
+        }
+    }
+
+    /// Wrapper fuer element-weises tolerantes Dekodieren.
+    private struct FailableProfile: Decodable {
+        let profile: ClaudeContextProfile?
+
+        init(from decoder: Decoder) throws {
+            profile = try? ClaudeContextProfile(from: decoder)
         }
     }
 
@@ -53,8 +66,12 @@ final class ClaudeContextProfileStore {
 
     // MARK: - CRUD
 
-    /// Legt an oder aktualisiert (per ID) und persistiert sofort.
+    /// Legt an oder aktualisiert (per ID) und persistiert sofort. Schlaegt
+    /// die Persistenz fehl, wird die In-Memory-Aenderung zurueckgerollt —
+    /// sonst zeigte die UI einen Stand, den die Platte nie gesehen hat
+    /// (Review-Befund 2026-07-19).
     func upsert(_ profile: ClaudeContextProfile) throws {
+        let snapshot = profiles
         var updated = profile
         updated.updatedAt = Date()
         if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
@@ -62,12 +79,23 @@ final class ClaudeContextProfileStore {
         } else {
             profiles.append(updated)
         }
-        try persist()
+        do {
+            try persist()
+        } catch {
+            profiles = snapshot
+            throw error
+        }
     }
 
     func delete(id: UUID) throws {
+        let snapshot = profiles
         profiles.removeAll { $0.id == id }
-        try persist()
+        do {
+            try persist()
+        } catch {
+            profiles = snapshot
+            throw error
+        }
     }
 
     // MARK: - Aufloesung
@@ -104,7 +132,14 @@ final class ClaudeContextProfileStore {
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode(FileContainer.self, from: data).profiles
         } catch {
-            Logger.agentStore.warning("context_profiles_load_failed error=\(error.localizedDescription, privacy: .public)")
+            // Komplett unlesbare Datei (kein JSON): quarantaenisieren, damit
+            // der naechste persist() den Bestand nicht endgueltig plattmacht
+            // — der User kann das Backup von Hand retten.
+            let quarantine = fileURL.deletingLastPathComponent()
+                .appendingPathComponent("\(fileURL.lastPathComponent).decode-failed.bak")
+            try? FileManager.default.removeItem(at: quarantine)
+            try? FileManager.default.copyItem(at: fileURL, to: quarantine)
+            Logger.agentStore.warning("context_profiles_load_failed error=\(error.localizedDescription, privacy: .public) quarantined=\(quarantine.lastPathComponent, privacy: .public)")
             return []
         }
     }

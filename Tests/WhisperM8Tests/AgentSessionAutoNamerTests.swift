@@ -59,6 +59,29 @@ final class AgentSessionAutoNamerTests: XCTestCase {
         }
     }
 
+    func testAgentHeadlessCLIHandlesOutputLargerThanPipeBuffer() async throws {
+        // Regression Review-Befund 2026-07-19: Ausgaben > 64-KB-Pipe-Puffer
+        // liessen den Prozess beim Schreiben blockieren (Read erst im
+        // terminationHandler) → Timeout statt Ergebnis.
+        let output = try await AgentHeadlessCLI(timeout: 10).run(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "yes a | head -c 300000"],
+            environment: [:]
+        )
+        XCTAssertEqual(output.utf8.count, 300_000)
+    }
+
+    func testAgentHeadlessCLIDoesNotHangOnStdinReaders() async throws {
+        // stdin ist /dev/null: ein Befehl, der von stdin liest (z. B. ein
+        // Bestaetigungs-Prompt), bekommt sofort EOF statt ewig zu warten.
+        let output = try await AgentHeadlessCLI(timeout: 5).run(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "cat; echo done"],
+            environment: [:]
+        )
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "done")
+    }
+
     // MARK: - Auto-Title Flag
 
     func testCanAutoRenameTitleAllowsLegacyDefaultName() {

@@ -79,9 +79,40 @@ final class ClaudeContextProfileTests: XCTestCase {
         XCTAssertEqual(store.profiles.first?.isEmpty, true)
     }
 
-    func testLoadWithCorruptFileYieldsEmptyList() throws {
+    func testLoadWithCorruptFileYieldsEmptyListAndQuarantinesFile() throws {
         try "kein json".data(using: .utf8)!.write(to: fileURL)
         XCTAssertTrue(ClaudeContextProfileStore(fileURL: fileURL).profiles.isEmpty)
+        // Quarantaene-Backup: der naechste persist() darf den alten Bestand
+        // nicht endgueltig plattmachen (Review-Befund 2026-07-19).
+        let quarantine = tempDir.appendingPathComponent("profiles.json.decode-failed.bak")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: quarantine.path))
+    }
+
+    func testSingleBrokenProfileDoesNotDropTheWholeStore() throws {
+        // Ein Profil mit kaputter UUID → nur dieses eine faellt raus
+        // (Review-Befund 2026-07-19: vorher verwarf es den ganzen Bestand,
+        // und der naechste upsert ueberschrieb die Datei leer).
+        let json = """
+        { "schemaVersion": 1, "profiles": [
+            { "id": "NICHT-EINE-UUID", "name": "Kaputt" },
+            { "id": "1B671A64-40D5-491E-99B0-DA01FF1F3341", "name": "Heil" }
+        ] }
+        """
+        try json.data(using: .utf8)!.write(to: fileURL)
+        let store = ClaudeContextProfileStore(fileURL: fileURL)
+        XCTAssertEqual(store.profiles.map(\.name), ["Heil"])
+    }
+
+    func testFailedPersistRollsBackInMemoryState() throws {
+        // Parent-Pfad ist eine DATEI → createDirectory/persist muss scheitern;
+        // der In-Memory-Bestand darf danach nicht vom Disk-Stand abweichen.
+        let blockingFile = tempDir.appendingPathComponent("blocker")
+        try Data().write(to: blockingFile)
+        let unwritable = blockingFile.appendingPathComponent("profiles.json")
+        let store = ClaudeContextProfileStore(fileURL: unwritable)
+
+        XCTAssertThrowsError(try store.upsert(makeProfile()))
+        XCTAssertTrue(store.profiles.isEmpty)
     }
 
     // MARK: Store: Aufloesungs-Kette

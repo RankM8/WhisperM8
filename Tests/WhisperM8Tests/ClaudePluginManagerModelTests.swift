@@ -10,6 +10,8 @@ final class ClaudePluginManagerModelTests: XCTestCase {
         var listJSON = #"{"installed": [], "available": []}"#
         var detailsText = ""
         var shouldFail = false
+        var failOnList = false
+        var failOnDetails = false
     }
 
     private func makeModel(state: FakeCLIState) -> ClaudePluginManagerModel {
@@ -23,8 +25,18 @@ final class ClaudePluginManagerModelTests: XCTestCase {
                 throw AgentHeadlessCLIError.nonZeroExit(1, stderr: "boom")
             }
             if arguments.contains("marketplace") { return "[]" }
-            if arguments.contains("details") { return state.detailsText }
-            if arguments.contains("list") { return state.listJSON }
+            if arguments.contains("details") {
+                if state.failOnDetails {
+                    throw AgentHeadlessCLIError.nonZeroExit(1, stderr: "details boom")
+                }
+                return state.detailsText
+            }
+            if arguments.contains("list") {
+                if state.failOnList {
+                    throw AgentHeadlessCLIError.nonZeroExit(1, stderr: "list boom")
+                }
+                return state.listJSON
+            }
             return ""
         }
         model.cli = cli
@@ -102,6 +114,40 @@ final class ClaudePluginManagerModelTests: XCTestCase {
         await model.loadIfNeeded()
         XCTAssertEqual(model.enabledAlwaysOnTokenSum, 0)
         XCTAssertTrue(model.isTokenSumComplete) // keine enabled Plugins offen
+    }
+
+    func testSuccessfulMutationWithFailedReloadStillRequiresRestart() async {
+        // Review-Befund 2026-07-19: die Mutation IST passiert — ein
+        // fehlgeschlagener Reload darf weder restartRequired unterschlagen
+        // noch den Erfolg als Fehlschlag maskieren.
+        let state = FakeCLIState()
+        state.listJSON = installedFixture()
+        let model = makeModel(state: state)
+        await model.loadIfNeeded()
+
+        state.failOnList = true
+        await model.setEnabled(false, plugin: model.pluginList.installed[0])
+
+        XCTAssertTrue(model.restartRequired)
+        XCTAssertNotNil(model.lastError) // Reload-Fehler wird trotzdem gemeldet
+        XCTAssertFalse(model.isBusy)
+    }
+
+    func testFailedDetailsLoadCachesPlaceholderInsteadOfSpinningForever() async {
+        // Review-Befund 2026-07-19: Fehler beim Details-Fetch liess den
+        // Karten-Spinner ewig drehen (Cache blieb nil).
+        let state = FakeCLIState()
+        state.listJSON = installedFixture()
+        state.failOnDetails = true
+        let model = makeModel(state: state)
+        await model.loadIfNeeded()
+        let plugin = model.pluginList.installed[0]
+
+        await model.loadDetailsIfNeeded(for: plugin)
+
+        let cached = model.detailsCache[model.cacheKey(for: plugin)]
+        XCTAssertNotNil(cached)             // Platzhalter → UI zeigt "nicht verfuegbar"
+        XCTAssertNil(cached?.alwaysOnTokens)
     }
 
     func testSwitchAccountProfileClearsCacheAndReloads() async {

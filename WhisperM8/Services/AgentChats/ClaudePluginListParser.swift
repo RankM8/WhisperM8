@@ -43,6 +43,23 @@ struct ClaudeAvailablePlugin: Decodable, Equatable, Identifiable {
     var source: String?
 
     var id: String { pluginId }
+
+    /// `source` ist je nach Marketplace ein String ("./plugins/x") oder ein
+    /// strukturiertes Objekt (git/github-Quellen). Ein Objekt darf nicht den
+    /// gesamten Katalog-Decode brechen → tolerant auf nil degradieren
+    /// (Review-Befund 2026-07-19).
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        pluginId = try container.decode(String.self, forKey: .pluginId)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? pluginId
+        marketplaceName = try container.decodeIfPresent(String.self, forKey: .marketplaceName) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        source = try? container.decodeIfPresent(String.self, forKey: .source)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case pluginId, name, marketplaceName, description, source
+    }
 }
 
 /// Konfigurierter Marketplace aus `claude plugin marketplace list --json`.

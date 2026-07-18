@@ -30,83 +30,192 @@ struct AgentHeadlessCLI {
         arguments: [String],
         environment: [String: String]
     ) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+        let timeout = self.timeout
+        return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             process.executableURL = executable
             process.arguments = arguments
             process.environment = environment
+            // Kein stdin: headless Subcommands duerfen nie auf interaktive
+            // Eingaben warten (z. B. Bestaetigungs-Prompts) — EOF sofort.
+            process.standardInput = FileHandle.nullDevice
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            let completion = AgentHeadlessCLICompletion()
+            let state = AgentHeadlessCLIState(continuation: continuation)
+
+            // Streaming-Reads statt Lesen im terminationHandler: Pipes haben
+            // ~64 KB Puffer — grosse Ausgaben (z. B. `claude plugin list
+            // --available --json` mit hunderten Eintraegen) liessen den
+            // Prozess sonst beim Schreiben blockieren und nie terminieren
+            // (Review-Befund 2026-07-19).
+            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if data.isEmpty {
+                    handle.readabilityHandler = nil
+                    state.streamFinished(.stdout)
+                } else {
+                    state.append(data, to: .stdout)
+                }
+            }
+            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if data.isEmpty {
+                    handle.readabilityHandler = nil
+                    state.streamFinished(.stderr)
+                } else {
+                    state.append(data, to: .stderr)
+                }
+            }
 
             process.terminationHandler = { proc in
-                let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-                let stderr = String(data: stderrData, encoding: .utf8) ?? ""
-                guard proc.terminationStatus == 0 else {
-                    completion.finish(
-                        .failure(AgentHeadlessCLIError.nonZeroExit(proc.terminationStatus, stderr: stderr)),
-                        continuation: continuation
-                    )
-                    return
-                }
-                completion.finish(.success(stdout), continuation: continuation)
+                state.processExited(status: proc.terminationStatus)
             }
 
             do {
                 try process.run()
             } catch {
-                completion.finish(.failure(error), continuation: continuation)
+                stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                state.forceFinish(.failure(error))
                 return
             }
 
+            // Timeout-Kaskade: Die Continuation wird NICHT beim Timeout
+            // resumed, sondern erst wenn der Prozess wirklich beendet ist —
+            // sonst gilt der Aufruf als "fertig", waehrend das CLI noch auf
+            // Config-Dateien schreibt (Review-Befund 2026-07-19).
+            // 1) t:      timedOut markieren + SIGTERM
+            // 2) t+5s:   SIGKILL, falls noch am Leben
+            // 3) t+10s:  Failsafe — Continuation trotzdem freigeben, damit
+            //            ein unkillbarer Prozess den Caller nicht ewig haengt.
             let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-            completion.setWatchdog(timer)
+            state.setWatchdog(timer)
             timer.schedule(deadline: .now() + timeout)
             timer.setEventHandler { [weak process] in
-                completion.finish(.failure(AgentHeadlessCLIError.timedOut(timeout)), continuation: continuation)
+                state.markTimedOut(AgentHeadlessCLIError.timedOut(timeout))
                 if process?.isRunning == true {
                     process?.terminate()
                 }
+                let killTimer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+                state.setWatchdog(killTimer)
+                killTimer.schedule(deadline: .now() + 5)
+                killTimer.setEventHandler { [weak process] in
+                    if let process, process.isRunning {
+                        kill(process.processIdentifier, SIGKILL)
+                    }
+                    let failsafe = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+                    state.setWatchdog(failsafe)
+                    failsafe.schedule(deadline: .now() + 5)
+                    failsafe.setEventHandler {
+                        state.forceFinish(.failure(AgentHeadlessCLIError.timedOut(timeout)))
+                    }
+                    failsafe.resume()
+                }
+                killTimer.resume()
             }
             timer.resume()
         }
     }
 }
 
-private final class AgentHeadlessCLICompletion: @unchecked Sendable {
+/// Sammelt Streams + Exit-Status und resumed die Continuation genau einmal,
+/// sobald BEIDE Streams EOF gemeldet haben UND der Prozess beendet ist.
+/// Dadurch ist garantiert: (a) keine abgeschnittenen Ausgaben, (b) der
+/// Aufruf gilt erst als beendet, wenn der Subprozess wirklich tot ist.
+private final class AgentHeadlessCLIState: @unchecked Sendable {
+    enum Stream { case stdout, stderr }
+
     private let lock = NSLock()
+    private let continuation: CheckedContinuation<String, Error>
+    private var stdoutData = Data()
+    private var stderrData = Data()
+    private var finishedStreams: Set<Stream> = []
+    private var exitStatus: Int32?
+    private var timedOutError: AgentHeadlessCLIError?
     private var didFinish = false
-    private var watchdog: DispatchSourceTimer?
+    private var watchdogs: [DispatchSourceTimer] = []
+
+    init(continuation: CheckedContinuation<String, Error>) {
+        self.continuation = continuation
+    }
+
+    func append(_ data: Data, to stream: Stream) {
+        lock.lock()
+        defer { lock.unlock() }
+        switch stream {
+        case .stdout: stdoutData.append(data)
+        case .stderr: stderrData.append(data)
+        }
+    }
+
+    func streamFinished(_ stream: Stream) {
+        lock.lock()
+        finishedStreams.insert(stream)
+        let result = readyResultLocked()
+        lock.unlock()
+        if let result { finish(result) }
+    }
+
+    func processExited(status: Int32) {
+        lock.lock()
+        exitStatus = status
+        let result = readyResultLocked()
+        lock.unlock()
+        if let result { finish(result) }
+    }
+
+    func markTimedOut(_ error: AgentHeadlessCLIError) {
+        lock.lock()
+        if timedOutError == nil { timedOutError = error }
+        lock.unlock()
+    }
 
     func setWatchdog(_ watchdog: DispatchSourceTimer) {
         lock.lock()
-        guard !didFinish else {
+        if didFinish {
             lock.unlock()
             watchdog.cancel()
             return
         }
-        self.watchdog = watchdog
+        watchdogs.append(watchdog)
         lock.unlock()
     }
 
-    func finish(
-        _ result: Result<String, Error>,
-        continuation: CheckedContinuation<String, Error>
-    ) {
+    /// Sofort-Abschluss ohne auf Streams/Exit zu warten (Launch-Fehler,
+    /// Failsafe bei unkillbarem Prozess).
+    func forceFinish(_ result: Result<String, Error>) {
+        finish(result)
+    }
+
+    /// Nur unterm Lock aufrufen. Nil = noch nicht fertig.
+    private func readyResultLocked() -> Result<String, Error>? {
+        guard let exitStatus, finishedStreams.count == 2 else { return nil }
+        if let timedOutError {
+            return .failure(timedOutError)
+        }
+        guard exitStatus == 0 else {
+            let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+            return .failure(AgentHeadlessCLIError.nonZeroExit(exitStatus, stderr: stderr))
+        }
+        return .success(String(data: stdoutData, encoding: .utf8) ?? "")
+    }
+
+    private func finish(_ result: Result<String, Error>) {
         lock.lock()
         guard !didFinish else {
             lock.unlock()
             return
         }
         didFinish = true
-        watchdog?.cancel()
+        let pending = watchdogs
+        watchdogs = []
         lock.unlock()
+
+        for watchdog in pending { watchdog.cancel() }
 
         switch result {
         case .success(let output):

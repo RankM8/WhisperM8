@@ -75,8 +75,11 @@ final class ClaudePluginManagerModel {
             )
             detailsCache[key] = details
         } catch {
-            // Details sind Anzeige-Zucker — Fehler hier nicht als
-            // Seiten-Fehler eskalieren, die Karte zeigt "nicht verfuegbar".
+            // Details sind Anzeige-Zucker — Fehler nicht als Seiten-Fehler
+            // eskalieren. Leeren Platzhalter cachen, sonst dreht der Spinner
+            // der Karte ewig; die UI zeigt dann "nicht verfuegbar"
+            // (Review-Befund 2026-07-19).
+            detailsCache[key] = ClaudePluginDetails(components: [])
             Logger.agentStore.warning("plugin_details_failed plugin=\(plugin.id, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
         }
     }
@@ -85,10 +88,14 @@ final class ClaudePluginManagerModel {
 
     func setEnabled(_ enabled: Bool, plugin: ClaudeInstalledPlugin) async {
         await performMutation {
+            // Scope bewusst NICHT mitgeben (CLI: auto-detect): project/local
+            // brauchen ein Projektverzeichnis, das der App-Prozess nicht hat —
+            // ein explizites --scope liefe gegen das falsche cwd
+            // (Review-Befund 2026-07-19).
             try await self.cli.setEnabled(
                 enabled,
                 pluginID: plugin.id,
-                scope: ClaudePluginCLI.Scope(rawValue: plugin.scope),
+                scope: nil,
                 accountProfile: self.accountProfileName
             )
         }
@@ -107,9 +114,10 @@ final class ClaudePluginManagerModel {
 
     func uninstall(_ plugin: ClaudeInstalledPlugin) async {
         await performMutation {
+            // Scope auto-detect, gleiche Begruendung wie bei setEnabled.
             try await self.cli.uninstall(
                 plugin.id,
-                scope: ClaudePluginCLI.Scope(rawValue: plugin.scope),
+                scope: nil,
                 accountProfile: self.accountProfileName
             )
         }
@@ -161,11 +169,27 @@ final class ClaudePluginManagerModel {
 
     // MARK: - Internals
 
+    /// Mutation → SOFORT restartRequired (die Mutation IST passiert) →
+    /// danach Reload. Ein fehlgeschlagener Reload darf weder den Erfolg der
+    /// Mutation verschleiern noch den Restart-Hinweis unterschlagen
+    /// (Review-Befund 2026-07-19).
     private func performMutation(_ operation: @escaping () async throws -> Void) async {
-        await perform(markRestart: true) {
+        guard !isBusy else { return }
+        isBusy = true
+        lastError = nil
+        defer { isBusy = false }
+        do {
             try await operation()
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        restartRequired = true
+        do {
             self.pluginList = try await self.cli.listPlugins(accountProfile: self.accountProfileName)
             self.marketplaces = try await self.cli.marketplaces(accountProfile: self.accountProfileName)
+        } catch {
+            lastError = "Änderung ausgeführt, aber die Liste konnte nicht neu geladen werden: \(error.localizedDescription)"
         }
     }
 

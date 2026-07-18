@@ -73,6 +73,58 @@ final class ClaudePluginCLITests: XCTestCase {
         XCTAssertEqual(list.available[0].marketplaceName, "claude-code-plugins")
     }
 
+    func testParseAvailablePluginWithStructuredSourceDegrades() throws {
+        // `source` kann je nach Marketplace ein Objekt sein — das darf den
+        // Katalog-Decode nicht brechen (Review-Befund 2026-07-19).
+        let json = """
+        {
+          "installed": [],
+          "available": [
+            { "pluginId": "x@m", "name": "x", "marketplaceName": "m",
+              "source": { "source": "github", "repo": "a/b" } }
+          ]
+        }
+        """
+        let list = try ClaudePluginListParser.parse(Data(json.utf8))
+        XCTAssertEqual(list.available.map(\.pluginId), ["x@m"])
+        XCTAssertNil(list.available[0].source)
+    }
+
+    func testSerializerRunsOperationsStrictlySequentially() async throws {
+        // Prozessweite FIFO-Garantie: nie zwei Operationen gleichzeitig
+        // (Review-Befund 2026-07-19: isBusy war nur instanzlokal).
+        final class Box: @unchecked Sendable {
+            let lock = NSLock()
+            var active = 0
+            var maxActive = 0
+            var completed = 0
+        }
+        let box = Box()
+        let serializer = ClaudePluginCLISerializer()
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    _ = try? await serializer.run { () -> Int in
+                        box.lock.lock()
+                        box.active += 1
+                        box.maxActive = max(box.maxActive, box.active)
+                        box.lock.unlock()
+                        try? await Task.sleep(nanoseconds: 5_000_000)
+                        box.lock.lock()
+                        box.active -= 1
+                        box.completed += 1
+                        box.lock.unlock()
+                        return 0
+                    }
+                }
+            }
+        }
+
+        XCTAssertEqual(box.maxActive, 1)
+        XCTAssertEqual(box.completed, 8)
+    }
+
     func testParseMarketplaceVariants() throws {
         let json = """
         [
