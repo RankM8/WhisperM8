@@ -384,6 +384,160 @@ final class AgentCommandBuilderTests: XCTestCase {
     }
 }
 
+// MARK: - Claude-GPT-Backend
+
+extension AgentCommandBuilderTests {
+    func testClaudeGPTBackendWithoutSessionStampKeepsExistingCommandUnchanged() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { provider in
+            provider == .claude ? ["--dangerously-skip-permissions"] : []
+        }
+        builder.claudeProfileEnvironmentResolver = { _ in
+            ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
+        }
+        builder.gptBackendEnabledResolver = { true }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "claude-session",
+            title: "Claude",
+            hasLaunchedInitialPrompt: true,
+            claudeProfileName: "firma"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, [
+            "--dangerously-skip-permissions", "--resume", "claude-session",
+        ])
+        XCTAssertEqual(command.environmentOverrides, [
+            "CLAUDE_CONFIG_DIR": "/profiles/firma",
+        ])
+    }
+
+    func testClaudeGPTBackendAddsModelAfterExtraArgumentsAndMergesEnvironment() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraLaunchArguments = ["--settings", "/tmp/hooks.json"]
+        builder.extraArgumentsResolver = { provider in
+            provider == .claude ? ["--dangerously-skip-permissions"] : []
+        }
+        builder.claudeProfileEnvironmentResolver = { _ in
+            ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
+        }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptBackendPortResolver = { 19_001 }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            initialPrompt: "Los",
+            claudeProfileName: "firma",
+            claudeBackendModel: "gpt-5.6-sol"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, [
+            "--settings", "/tmp/hooks.json",
+            "--dangerously-skip-permissions",
+            "--model", "gpt-5.6-sol",
+            "Los",
+        ])
+        XCTAssertEqual(command.environmentOverrides, [
+            "CLAUDE_CONFIG_DIR": "/profiles/firma",
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
+            "ANTHROPIC_AUTH_TOKEN": "whisperm8",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+            "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
+        ])
+    }
+
+    func testClaudeGPTBackendCombinesModelAndResume() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in ["--verbose"] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptBackendPortResolver = { 18_765 }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "resume-1",
+            title: "Claude",
+            hasLaunchedInitialPrompt: true,
+            claudeBackendModel: "gpt-5.6-terra"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, [
+            "--verbose", "--model", "gpt-5.6-terra", "--resume", "resume-1",
+        ])
+        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18765")
+    }
+
+    func testClaudeGPTBackendKillSwitchIgnoresExistingSessionStamp() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in
+            ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
+        }
+        builder.gptBackendEnabledResolver = { false }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "resume-1",
+            title: "Claude",
+            hasLaunchedInitialPrompt: true,
+            claudeProfileName: "firma",
+            claudeBackendModel: "gpt-5.6-sol"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--resume", "resume-1"])
+        XCTAssertEqual(command.environmentOverrides, [
+            "CLAUDE_CONFIG_DIR": "/profiles/firma",
+        ])
+    }
+
+    func testClaudeGPTBackendDoesNotAffectAgentViewOrBackgroundAttach() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+
+        let agentView = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Agent View",
+            kind: .agentView,
+            claudeBackendModel: "gpt-5.6-sol"
+        )
+        let backgroundChat = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Background",
+            kind: .backgroundChat,
+            backgroundShortID: "abcdef12",
+            claudeBackendModel: "gpt-5.6-sol"
+        )
+
+        let agentViewCommand = try builder.command(for: agentView, project: project)
+        let backgroundCommand = try builder.command(for: backgroundChat, project: project)
+
+        XCTAssertEqual(agentViewCommand.arguments, ["agents"])
+        XCTAssertTrue(agentViewCommand.environmentOverrides.isEmpty)
+        XCTAssertEqual(backgroundCommand.arguments, ["attach", "abcdef12"])
+        XCTAssertTrue(backgroundCommand.environmentOverrides.isEmpty)
+    }
+}
+
 // MARK: - Claude-Account-Profile (CLAUDE_CONFIG_DIR-Injektion)
 
 extension AgentCommandBuilderTests {

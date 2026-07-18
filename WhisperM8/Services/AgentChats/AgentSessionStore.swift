@@ -530,7 +530,8 @@ struct AgentSessionStore {
         backgroundSubAgent: String? = nil,
         backgroundPermissionMode: String? = nil,
         forkSourceSessionID: String? = nil,
-        claudeProfileName: String? = nil
+        claudeProfileName: String? = nil,
+        claudeBackendModel: String? = nil
     ) throws -> AgentChatSession {
         let project = try upsertProject(
             path: projectPath,
@@ -553,7 +554,8 @@ struct AgentSessionStore {
             backgroundSubAgent: backgroundSubAgent,
             backgroundPermissionMode: backgroundPermissionMode,
             forkSourceSessionID: forkSourceSessionID,
-            claudeProfileName: claudeProfileName
+            claudeProfileName: claudeProfileName,
+            claudeBackendModel: claudeBackendModel
         )
         let stored = try upsertSession(session)
         // Crash-safe: strukturelle Erstellung SOFORT persistieren statt auf den

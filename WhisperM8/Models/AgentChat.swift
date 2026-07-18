@@ -301,6 +301,10 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// ein `--resume` funktioniert nur unter demselben Config-Dir, unter dem
     /// die Session entstanden ist.
     var claudeProfileName: String?
+    /// Session-stabiler Backend-Stempel fuer Claude Code. `nil` behaelt den
+    /// direkten Anthropic-Pfad; ein GPT-Modell wird nur bei aktivem globalem
+    /// Kill-Switch an den lokalen Proxy geroutet.
+    var claudeBackendModel: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -334,6 +338,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case subagentParentSessionID
         case subagentCwd
         case claudeProfileName
+        case claudeBackendModel
     }
 
     init(
@@ -367,7 +372,8 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         subagentJobShortID: String? = nil,
         subagentParentSessionID: String? = nil,
         subagentCwd: String? = nil,
-        claudeProfileName: String? = nil
+        claudeProfileName: String? = nil,
+        claudeBackendModel: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -400,6 +406,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.subagentParentSessionID = subagentParentSessionID
         self.subagentCwd = subagentCwd
         self.claudeProfileName = claudeProfileName
+        self.claudeBackendModel = claudeBackendModel
     }
 
     init(from decoder: Decoder) throws {
@@ -439,6 +446,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         subagentParentSessionID = try container.decodeIfPresent(String.self, forKey: .subagentParentSessionID)
         subagentCwd = try container.decodeIfPresent(String.self, forKey: .subagentCwd)
         claudeProfileName = try container.decodeIfPresent(String.self, forKey: .claudeProfileName)
+        claudeBackendModel = try container.decodeIfPresent(String.self, forKey: .claudeBackendModel)
     }
 
     var isManuallyCreated: Bool { createdManually == true }

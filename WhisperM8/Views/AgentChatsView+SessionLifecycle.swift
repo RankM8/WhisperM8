@@ -44,6 +44,13 @@ extension AgentChatsView {
             // Ein erzwungenes `--session-id` war die Wurzel der „No conversation
             // found"-Fehler (Claude persistierte nicht zuverlässig darunter).
             let externalSessionID: String? = nil
+            let backendDefault = AppPreferences.shared.claudeGPTBackendDefaultModel
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let claudeBackendModel = provider == .claude
+                && AppPreferences.shared.claudeGPTBackendEnabled
+                && !backendDefault.isEmpty
+                ? backendDefault
+                : nil
             let session = try store.createSession(
                 provider: provider,
                 projectPath: selectedProject.path,
@@ -57,7 +64,8 @@ extension AgentChatsView {
                 // Settings gewaehlten aktiven Profil (nil = Haupt-Account).
                 claudeProfileName: provider == .claude
                     ? ClaudeAccountProfiles().activeProfileNameOrNil()
-                    : nil
+                    : nil,
+                claudeBackendModel: claudeBackendModel
             )
             openTab(session.id)
             selectedSessionID = session.id
@@ -91,7 +99,8 @@ extension AgentChatsView {
                 forkSourceSessionID: sourceExternalID,
                 // Fork erbt das Account-Profil der Quelle — `--resume` der
                 // Quell-Session funktioniert nur unter deren Config-Dir.
-                claudeProfileName: source.claudeProfileName
+                claudeProfileName: source.claudeProfileName,
+                claudeBackendModel: source.claudeBackendModel
             )
             // Farbe der Quelle erben, damit Fork und Original visuell
             // zusammengehören.

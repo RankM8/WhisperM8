@@ -65,6 +65,14 @@ struct AgentCommandBuilder {
         ClaudeAccountProfiles().environmentOverrides(forProfile: profileName)
     }
 
+    var gptBackendEnabledResolver: () -> Bool = {
+        AppPreferences.shared.claudeGPTBackendEnabled
+    }
+
+    var gptBackendPortResolver: () -> Int = {
+        AppPreferences.shared.claudeGPTBackendPort
+    }
+
     /// Lokalisiert das Claude-Transcript einer Session ueber ALLE Account-
     /// Roots (main + Profile) — (externalSessionID, cwd) → JSONL-URL.
     /// Default: echter Datei-Lookup, im Test ueberschreibbar.
@@ -279,6 +287,13 @@ struct AgentCommandBuilder {
             )
         }
 
+        let gptBackendModel: String? = {
+            guard gptBackendEnabledResolver() else { return nil }
+            let model = session.claudeBackendModel?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return model.isEmpty ? nil : model
+        }()
+
         var arguments: [String] = []
         // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
         // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.
@@ -286,6 +301,9 @@ struct AgentCommandBuilder {
         // User-defined extras (z. B. --dangerously-skip-permissions) zuerst,
         // damit sie auch beim Resume durchgehen.
         arguments.append(contentsOf: extraArgumentsResolver(.claude))
+        if let gptBackendModel {
+            arguments.append(contentsOf: ["--model", gptBackendModel])
+        }
 
         // Resume-Ziel bestimmen: Fork-Quelle vor gebundener eigener ID.
         var resumeSessionID: String?
@@ -342,6 +360,16 @@ struct AgentCommandBuilder {
            let initialPrompt = session.initialPrompt,
            !initialPrompt.isEmpty {
             arguments.append(initialPrompt)
+        }
+
+        if gptBackendModel != nil {
+            effectiveProfileEnvironment.merge([
+                "ANTHROPIC_BASE_URL": "http://127.0.0.1:\(gptBackendPortResolver())",
+                "ANTHROPIC_AUTH_TOKEN": "whisperm8",
+                "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
+                "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+                "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
+            ]) { _, backendValue in backendValue }
         }
 
         return AgentLaunchCommand(

@@ -254,6 +254,32 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeExtraArguments) }
     }
 
+    /// Zentraler Kill-Switch: bei `false` werden vorhandene GPT-Stempel
+    /// ignoriert und Claude startet ohne Proxy-Argumente oder Proxy-Env.
+    var claudeGPTBackendEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.claudeGPTBackendEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendEnabled) }
+    }
+
+    var claudeGPTBackendPort: Int {
+        get {
+            let value = defaults.integer(forKey: Keys.claudeGPTBackendPort)
+            return value > 0 ? value : 18_765
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendPort) }
+    }
+
+    var claudeGPTBackendDefaultModel: String {
+        get { defaults.string(forKey: Keys.claudeGPTBackendDefaultModel) ?? "gpt-5.6-sol" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendDefaultModel) }
+    }
+
+    /// Leer bedeutet bewusst: kein Override fuer native Claude-Subagents.
+    var claudeGPTSubagentModel: String {
+        get { defaults.string(forKey: Keys.claudeGPTSubagentModel) ?? "" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTSubagentModel) }
+    }
+
     /// Opt-in für SwiftTerms Metal-GPU-Renderer (P6, Default: aus — erst
     /// benchmarken, die CPU-Parser-Gewinne aus SwiftTerm 1.9–1.11 sind
     /// bereits ohne Metal enthalten). Einschalten:
@@ -406,6 +432,10 @@ enum PreferenceKeys {
     static let isTerminalBellEnabled = "isTerminalBellEnabled"
     static let codexExtraArguments = "codexExtraArguments"
     static let claudeExtraArguments = "claudeExtraArguments"
+    static let claudeGPTBackendEnabled = "claudeGPTBackendEnabled"
+    static let claudeGPTBackendPort = "claudeGPTBackendPort"
+    static let claudeGPTBackendDefaultModel = "claudeGPTBackendDefaultModel"
+    static let claudeGPTSubagentModel = "claudeGPTSubagentModel"
     static let appearanceOverride = "appearanceOverride"
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"

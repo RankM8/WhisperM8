@@ -112,4 +112,35 @@ final class AgentSessionModelTests: XCTestCase {
         XCTAssertEqual(claude.runtimeDisplayText, "Claude · Claude Code")
         XCTAssertEqual(codex.runtimeDisplayText, "Codex · gpt-5.5 · medium")
     }
+
+    func testClaudeBackendModelRoundTripsViaJSON() throws {
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: UUID(),
+            title: "GPT Chat",
+            claudeBackendModel: "gpt-5.6-sol"
+        )
+
+        let encoded = try JSONEncoder().encode(session)
+        let decoded = try JSONDecoder().decode(AgentChatSession.self, from: encoded)
+
+        XCTAssertEqual(decoded.claudeBackendModel, "gpt-5.6-sol")
+    }
+
+    func testClaudeBackendModelIsAbsentAndNilForLegacyJSON() throws {
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: UUID(),
+            title: "Legacy"
+        )
+
+        let encoded = try JSONEncoder().encode(session)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertNil(object["claudeBackendModel"])
+
+        let decoded = try JSONDecoder().decode(AgentChatSession.self, from: encoded)
+        XCTAssertNil(decoded.claudeBackendModel)
+    }
 }
