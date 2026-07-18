@@ -7,6 +7,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case context
     case agentChats = "agent-chats"
     case gptBackend = "gpt-backend"
+    case claudePlugins = "claude-plugins"
     case cli
     case general
     case permissions
@@ -33,6 +34,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "Agent Chats"
         case .gptBackend:
             return "GPT-Backend"
+        case .claudePlugins:
+            return "Claude Plugins"
         case .cli:
             return "CLI & Skills"
         case .general:
@@ -60,6 +63,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "terminal"
         case .gptBackend:
             return "arrow.triangle.branch"
+        case .claudePlugins:
+            return "puzzlepiece.extension"
         case .cli:
             return "chevron.left.forwardslash.chevron.right"
         case .general:
@@ -87,6 +92,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "Configure the agent workspace and Claude Code hooks."
         case .gptBackend:
             return "Connect Claude Code sessions to GPT models through the local proxy."
+        case .claudePlugins:
+            return "Manage Claude Code plugins and marketplaces with projected token costs."
         case .cli:
             return "Command line access and installable agent skills."
         case .general:
@@ -117,7 +124,7 @@ struct SettingsView: View {
 
     private let pageGroups: [SettingsPageGroup] = [
         SettingsPageGroup(title: "Dictation", pages: [.recording, .transcription, .aiOutput, .context]),
-        SettingsPageGroup(title: "Agents", pages: [.agentChats, .gptBackend, .cli]),
+        SettingsPageGroup(title: "Agents", pages: [.agentChats, .gptBackend, .claudePlugins, .cli]),
         SettingsPageGroup(title: "App", pages: [.general, .permissions, .about]),
         SettingsPageGroup(title: "Workspace", pages: [.output])
     ]
@@ -233,6 +240,8 @@ struct SettingsView: View {
             agentChatsPage(page)
         case .gptBackend:
             GPTBackendSettingsPage()
+        case .claudePlugins:
+            ClaudePluginsSettingsPage()
         case .cli:
             // Phase 9b: migrierte V3-Seite (Inhalte 1:1, Kit-Optik, CopyCommandRows).
             CLISkillsSettingsPage()
