@@ -13,6 +13,7 @@ struct CLISkillsSettingsPage: View {
             // Skills zuerst: die installierbaren Karten sind die Hauptaktion
             // der Seite (User-Wunsch 2026-07-06), CLI-Details folgen darunter.
             agentSkillsSection
+            statuslineSection
             commandLineSection
             transcriptionQuickstartSection
             codexSubagentsQuickstartSection
@@ -112,6 +113,13 @@ struct CLISkillsSettingsPage: View {
                 )
             }
             .padding(.vertical, 10)
+        }
+    }
+
+    private var statuslineSection: some View {
+        SettingsSection("Statusline") {
+            StatuslineSettingsCard()
+                .padding(.vertical, 10)
         }
     }
 
@@ -303,6 +311,154 @@ private struct CLISkillSettingsCard: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(markdown, forType: .string)
         showFeedback("Copied")
+    }
+
+    private func showFeedback(_ text: String) {
+        feedbackMessage = text
+        withAnimation { feedback.trigger() }
+    }
+}
+
+private struct StatuslineSettingsCard: View {
+    @State private var status: StatuslineInstaller.Status = .missing
+    @State private var wiredCount = 0
+    @State private var totalConfigs = 0
+    @State private var script = ""
+    @State private var feedback: SettingsFeedbackState
+    @State private var feedbackMessage: String?
+    @State private var errorMessage: String?
+    @State private var isPreviewPresented = false
+    @State private var isReplaceConfirmPresented = false
+
+    @MainActor
+    init() {
+        self._feedback = State(initialValue: SettingsFeedbackState(duration: .milliseconds(2500)))
+    }
+
+    private var installer: StatuslineInstaller { StatuslineInstaller() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("WhisperM8 Statusline")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Text("~/.claude/\(StatuslineInstaller.scriptFileName)")
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(AppTheme.textSecondary)
+
+                SettingsHelpText("Claude Code status line: repo/branch, context usage with exact token count (incl. GPT sessions via the 272k window), model, effort, account usage limits, active subagents (Claude & GPT), and the active account profile.")
+
+                SettingsHelpText(wiringSummary)
+
+                if status == .foreign {
+                    SettingsHelpText("A custom status line script exists at the target path. Installing replaces it — save a copy first if you want to keep it.")
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(installButtonTitle) {
+                    if status == .foreign {
+                        isReplaceConfirmPresented = true
+                    } else {
+                        install(force: false)
+                    }
+                }
+                .buttonStyle(SettingsButtonStyle.primary)
+                .disabled(status == .current && wiredCount == totalConfigs)
+
+                Button("View") {
+                    isPreviewPresented = true
+                }
+                .buttonStyle(SettingsButtonStyle.standard)
+                .disabled(script.isEmpty)
+
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(script, forType: .string)
+                    showFeedback("Copied")
+                }
+                .buttonStyle(SettingsButtonStyle.standard)
+                .disabled(script.isEmpty)
+
+                if let feedbackMessage, feedback.isActive {
+                    Text(feedbackMessage)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(AppTheme.statusWorking)
+                        .transition(.opacity)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        }
+        .onAppear(perform: refresh)
+        .sheet(isPresented: $isPreviewPresented) {
+            CLISkillPreviewSheet(
+                title: "Statusline · \(StatuslineInstaller.scriptFileName)",
+                markdown: script.isEmpty ? "Statusline resource not found." : script
+            )
+        }
+        .confirmationDialog(
+            "Replace existing status line script?",
+            isPresented: $isReplaceConfirmPresented
+        ) {
+            Button("Replace", role: .destructive) { install(force: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The script at the target path was not installed by WhisperM8 and will be overwritten.")
+        }
+        .alert("Error", isPresented: .init(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var installButtonTitle: String {
+        switch status {
+        case .current:
+            return wiredCount == totalConfigs ? "Installed" : "Repair Settings"
+        case .outdated:
+            return "Update"
+        case .foreign:
+            return "Replace…"
+        case .missing:
+            return "Install"
+        }
+    }
+
+    private var wiringSummary: String {
+        guard totalConfigs > 0 else { return "" }
+        return "statusLine entry active in \(wiredCount) of \(totalConfigs) Claude configs (main + account profiles)."
+    }
+
+    private func refresh() {
+        status = installer.status()
+        wiredCount = installer.wiredSettingsCount()
+        totalConfigs = installer.settingsDirectories().count
+        if script.isEmpty {
+            script = (try? installer.bundledScript()) ?? ""
+        }
+    }
+
+    private func install(force: Bool) {
+        do {
+            try installer.install(force: force)
+            refresh()
+            showFeedback("Installed")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func showFeedback(_ text: String) {
