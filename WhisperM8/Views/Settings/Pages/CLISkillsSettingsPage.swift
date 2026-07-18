@@ -106,9 +106,9 @@ struct CLISkillsSettingsPage: View {
                 )
 
                 CLISkillSettingsCard(
-                    title: "Codex Subagent Skill",
+                    title: "GPT & Codex Subagent Skill",
                     definition: .codexAgent,
-                    summary: "Describes the Codex subagent system with commands, flags, exit codes, JSON formats, report contract, and workflows."
+                    summary: "Routes GPT subagent requests: native `gpt` agent type by default (WhisperM8 GPT backend), plus the full Codex CLI path — commands, flags, exit codes, image generation, and workflows."
                 )
             }
             .padding(.vertical, 10)

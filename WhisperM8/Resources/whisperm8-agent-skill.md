@@ -1,9 +1,60 @@
 ---
 name: codex-subagent
-description: Codex-Subagents über das whisperm8-CLI spawnen, steuern und verwalten — delegiere Implementierungen, Reviews, Second Opinions oder parallele Teilaufgaben an einen headless Codex-Agenten. Nutze diese Skill bei "frag Codex", "lass Codex das machen/reviewen", "Codex-Subagent", "zweite Meinung", "delegiere an Codex", wenn Subagent-Jobs verwaltet werden sollen (Status, Logs, Nachsteuern, Stoppen, Aufräumen) oder wenn Codex-Jobs als Steps in Claude Dynamic Workflows orchestriert werden.
+description: GPT-Subagents nutzen — standardmäßig NATIV über den Claude-Code-Agent-Typ `gpt` (WhisperM8 GPT-Backend), nur explizit als headless Codex-Job über das whisperm8-CLI. Nutze diese Skill bei "GPT-Subagent", "starte GPT-Agents", "lass GPT das machen/reviewen", "zweite Meinung", "frag Codex", "Codex-Subagent", "delegiere an Codex/GPT", bei Bild-Generierung via Codex, wenn Subagent-Jobs verwaltet werden sollen (Status, Logs, Nachsteuern, Stoppen, Aufräumen) oder wenn Codex-Jobs als Steps in Claude Dynamic Workflows orchestriert werden.
 ---
 
-# Codex-Subagents via `whisperm8 agent`
+# GPT-Subagents: nativ (Standard) oder Codex-CLI (explizit)
+
+Es gibt ZWEI Wege zu GPT-Subagents. **Standard ist der native Weg** über den
+Claude-Code-Agent-Typ `gpt` — schnell, in-session, volles Tool-Set. Das
+whisperm8-CLI ist die Spezial-Variante für alles, was nur Codex kann.
+
+## Wegweiser — welcher Weg wann
+
+| Anlass | Weg |
+|---|---|
+| Standard: "GPT-Subagent", zweite Meinung, Review, parallele Teilaufgabe | **NATIV** (`subagent_type: "gpt"`) |
+| Bilder generieren (codex-natives `image_gen`) | **CLI** — immer; nativ gibt es kein image_gen |
+| User sagt explizit "CLI", "whisperm8 agent", "Job" — oder `--cli` als Skill-Argument | **CLI** |
+| Detachte Langläufer: Sidebar-Sichtbarkeit in der App, überleben App-Neustart | **CLI** |
+| Browser-QA (Playwright-storageState), 1Password-Flows | **CLI** |
+| Steps in Claude Dynamic Workflows (codex-runner) | **CLI** |
+
+Skill-Argumente: `/codex-subagent <aufgabe>` → nativ. `/codex-subagent --cli
+<aufgabe>` → CLI erzwingen. Bild-Aufträge gehen unabhängig vom Argument immer
+über die CLI.
+
+## Nativer Weg (Standard): Agent-Typ `gpt`
+
+Das WhisperM8-GPT-Backend verwaltet eine Agent-Definition
+(`<config-dir>/agents/gpt.md`, Frontmatter `model: gpt-5.6-sol`) für das
+Main-Profil UND jedes Account-Profil; alle Requests laufen über den lokalen
+Mix-Router. Nutzung: normales Agent-Tool mit `subagent_type: "gpt"` — ein
+Spawn pro Teilaufgabe, parallele Fan-outs ausdrücklich erwünscht. Effort ist
+per Env immer aktiv (high thinking gemäß Session-Einstellung).
+
+Wenn der Spawn fehlschlägt („Agent type 'gpt' not found"):
+
+- Die Registry lädt beim **Session-Start** — Sessions, die älter sind als die
+  Agent-Definition, kennen den Typ nicht (nur PROJEKT-Level-Definitionen unter
+  `.claude/agents/` laden mid-session nach). Abhilfe: neue Session, oder
+  CLI-Weg als Fallback + Hinweis an den User.
+- GPT-Backend deaktiviert? `env | grep ANTHROPIC_BASE_URL` muss auf
+  `http://127.0.0.1:<router-port>` zeigen; sonst Settings → „GPT-Backend"
+  prüfen und den CLI-Weg nehmen.
+
+Gotchas (QA-verifiziert 2026-07-18):
+
+- **Selbstauskunft ist wertlos**: GPT-Subagents halten sich laut System-Prompt
+  für Claude/Opus. Modell-Beweis liefern nur die `"model"`-Felder im
+  Session-JSONL (`~/.claude*/projects/<cwd>/…jsonl`).
+- **Der `model`-Parameter des Agent-Tools hat eine Alias-Whitelist**
+  (sonnet/opus/haiku/fable) und lehnt GPT-Slugs ab — GPT geht NUR über den
+  Agent-TYP, nie über den Parameter.
+- Instruiere Subagents, ihr Ergebnis IMMER in der finalen Antwort zu melden —
+  sonst enden sie teils mit bloßer Idle-Meldung ohne Inhalt.
+
+# CLI-Weg (explizit): Codex-Subagents via `whisperm8 agent`
 
 ## Was das System ist
 
@@ -55,8 +106,8 @@ whisperm8 agent help                             # Hilfetext
 | `--allow-network` | Netzwerk in der Sandbox (u.a. `git push`, Paketinstallationen). Default aus — vorher den User fragen. |
 | `--config <key=value>` | Generischer Codex-Config-Override, wiederholbar — wird 1:1 als `-c` an codex exec durchgereicht und gilt auch für Folge-Turns (`send`). Kommt NACH den eingebauten Configs, übersteuert sie also (z.B. `--config tools.web_search=true`). Werte mit führendem `-` werden abgelehnt (Exit 1) — codex läse sie als Flag. |
 | `--playwright-storage-state <path>` | Browser-QA: startet den Playwright-MCP im Codex-Subagent isoliert mit dieser storageState-Datei (`--isolated --storage-state`). Relative Pfade werden relativ zu `--cd`/CWD aufgelöst; fehlt die Datei, bricht `run` sofort mit Exit 1 ab. Browser-Traffic braucht KEIN `--allow-network`. |
-| `--model <name>` | Codex-Modell-Override (z.B. `gpt-5.6-sol` — Frontier-Modell, Stand codex 0.144.0). Freier String, keine Whitelist — neue Modelle funktionieren sofort. |
-| `--effort <level>` | `model_reasoning_effort`-Override: minimal/low/medium/high/xhigh/max/ultra — modellabhängig (bis `ultra` nur gpt-5.6-sol/terra; gpt-5.6-luna bis `max`; ältere Modelle bis `xhigh`). Verfügbare Level pro Modell: `~/.codex/models_cache.json`. |
+| `--model <name>` | Codex-Modell-Override. **IMMER explizit `--model gpt-5.6-sol` setzen** (Frontier-Modell, Stand codex 0.144.0) — NIEMALS `gpt-5.5` oder älter, und nie weglassen (ohne Flag gilt die `~/.codex/config.toml`, deren Effort-Default niedrig ist). Freier String, keine Whitelist — neue Modelle funktionieren sofort. |
+| `--effort <level>` | `model_reasoning_effort`-Override: minimal/low/medium/high/xhigh/max/ultra — modellabhängig (bis `ultra` nur gpt-5.6-sol/terra; gpt-5.6-luna bis `max`; ältere Modelle bis `xhigh`). **IMMER explizit setzen, Standard `high`** (ohne Flag greift der config.toml-Default `low`); für die härtesten Verifikationen `xhigh`+. Verfügbare Level pro Modell: `~/.codex/models_cache.json`. |
 | `--parent <session-id>` | Claude-Session-ID des spawnenden Chats — nur nötig, wenn du eine echte ID kennst. OHNE das Flag ordnet WhisperM8 den Job automatisch über den Prozessbaum dem Chat zu, in dem du läufst (`$CLAUDE_SESSION_ID` existiert NICHT als Env-Variable — nicht verwenden). |
 
 ## Exit-Codes (verbindlich — kein Text-Parsing nötig)
@@ -112,6 +163,12 @@ whisperm8 agent help                             # Hilfetext
 
 ## Arbeitsregeln
 
+0. **Modellwahl ist festgelegt, nicht deine Entscheidung:** jeder `run`
+   bekommt `--model gpt-5.6-sol --effort high` (das beste verfügbare
+   Modell). NIEMALS `gpt-5.5` oder ein anderes älteres Modell wählen und
+   die Flags NIE weglassen — ohne sie zieht die `~/.codex/config.toml`
+   mit Effort `low`. Härteste Verifikationen/Adjudikationen: `--effort
+   xhigh` bis `ultra`. Abweichen nur, wenn der User es ausdrücklich sagt.
 1. **Parent-Zuordnung ist automatisch:** Läufst du in einem
    WhisperM8-Chat, erkennt das CLI den spawnenden Chat über den
    Prozessbaum — kein `--parent` nötig. (`$CLAUDE_SESSION_ID` ist als
@@ -217,6 +274,7 @@ Probe-Subagent:
 
 ```bash
 whisperm8 agent run --wait --json --cd /pfad/zum/repo \
+  --model gpt-5.6-sol --effort high \
   --playwright-storage-state .qa/auth/akquise-admin.storageState.json \
   "Browser-QA Preflight. Öffne https://akquise.test/admin/kunden mit Playwright-MCP. Prüfe: keine Weiterleitung zu /login oder auth.akquise.test, Titel AkquiseAI, sichtbarer Auth-Indikator Admin AkquiseAI oder admin@akquise.ai. Schreibe .qa/reports/preflight.md. Keine App-Daten ändern."
 ```
@@ -265,14 +323,16 @@ Verifier-Panel, Fan-out-Implementierung) und bekannte Grenzen:
 ```bash
 # 1) Second-Opinion-Review, synchron
 whisperm8 agent run --wait --json --sandbox read-only \
+  --model gpt-5.6-sol --effort high \
   "Reviewe den Diff von HEAD~3..HEAD auf Regressionen, Races und API-Brüche. Nur Analyse, keine Edits."
 
 # 2) Parallele Implementierung, isoliert (als Background-Task starten!)
 whisperm8 agent run --wait --json --worktree \
+  --model gpt-5.6-sol --effort high \
   "Implementiere <X> in <Datei>. Verifiziere mit 'swift test --filter <Y>'. Committe bei grün (Conventional Commit, deutsche Beschreibung)."
 
 # 3) Fire-and-forget mit späterem Abholen
-ID=$(whisperm8 agent run --json --cd /pfad/repo "…" | sed -E 's/.*"shortId":"([a-f0-9]+)".*/\1/')
+ID=$(whisperm8 agent run --json --cd /pfad/repo --model gpt-5.6-sol --effort high "…" | sed -E 's/.*"shortId":"([a-f0-9]+)".*/\1/')
 # … später:
 whisperm8 agent status "$ID" --json
 
@@ -283,6 +343,12 @@ whisperm8 agent send a3f81c2e --wait --json \
 
 ## Troubleshooting
 
+- **Shell-Parse-Error beim Inline-Prompt (`(eval):N: parse error`)**: Lange
+  deutsche Prompts mit typografischen Anführungszeichen (`„…"`) brechen die
+  zsh-Doppelquote-Umklammerung — das gerade Abschlusszeichen `"` beendet den
+  String. Robustes Muster: Prompt mit Write in eine Datei legen und per
+  `whisperm8 agent run … "$(cat /pfad/prompt.txt)"` übergeben (gelernt
+  2026-07-12, Doku-Nachsteuerungs-Job).
 - **Exit 4 „codex nicht gefunden/zu alt"**: Codex.app installieren oder
   `codex` in den PATH; Mindestversion siehe Fehlermeldung.
 - **`state: failed` mit `failureReason: "supervisor died …"`**: der
