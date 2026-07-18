@@ -1,10 +1,10 @@
 export const meta = {
   name: 'codex-verify',
-  description: 'Verifiziert Code mit Codex-Subagents: mehrere Finder-Perspektiven, jedes Finding von zwei adversarischen Refutern gegengeprüft',
-  whenToUse: 'Vor einem Merge oder nach einer heiklen Änderung. Bringt echte Modell-Diversität (Codex statt Claude) und killt Fehlbefunde durch adversarische Gegenprüfung. Args: {scope, effort, repo, dimensions} — alles optional.',
+  description: 'Verifiziert Code mit GPT-Subagents: mehrere Finder-Perspektiven, jedes Finding von zwei adversarischen Refutern gegengeprüft',
+  whenToUse: 'Vor einem Merge oder nach einer heiklen Änderung. Bringt echte Modell-Diversität (GPT statt Claude) und killt Fehlbefunde durch adversarische Gegenprüfung. Läuft standardmäßig NATIV über den Claude-Code-Agent-Typ `gpt` (WhisperM8 GPT-Backend); `runner: "codex-cli"` erzwingt den alten headless whisperm8-CLI-Pfad. Args: {scope, effort, repo, dimensions, runner} — alles optional.',
   phases: [
-    { title: 'Find', detail: 'Codex-Finder pro Perspektive, read-only' },
-    { title: 'Verify', detail: 'pro Finding 2 Codex-Refuter (Faktenlage + Reproduzierbarkeit)' },
+    { title: 'Find', detail: 'GPT-Finder pro Perspektive, read-only' },
+    { title: 'Verify', detail: 'pro Finding 2 GPT-Refuter (Faktenlage + Reproduzierbarkeit)' },
   ],
 }
 
@@ -30,15 +30,26 @@ const SCOPE = cfg.scope || 'die zuletzt geänderten Dateien (git diff HEAD~1) un
 // Fehlertypen) und damit echte Findings fälschlich widerlegt. `low` nur für
 // Smoke-Tests der Mechanik, nie für ein Urteil, dem man glaubt.
 const EFFORT = cfg.effort || 'high'
-const REPO = cfg.repo || null   // null = cwd des Wrappers (= Projekt-Root)
-// Der Subagent-Typ `codex-runner` (.claude/agents/) trägt den Wrapper-Kontrakt.
-// Er ist erst NACH einem Session-Neustart registriert — bis dahin (oder in
-// fremden Repos) `agentType: null` übergeben: dann wird der Kontrakt inline
-// in den Prompt gelegt und ein Sonnet-Agent genutzt.
-const AGENT_TYPE = cfg.agentType === null ? null : (cfg.agentType || 'codex-runner')
+const REPO = cfg.repo || null   // null = cwd (= Projekt-Root)
+
+// Runner-Modus:
+// - 'gpt' (Default): NATIV über den Claude-Code-Agent-Typ `gpt`
+//   (.claude/agents/, WhisperM8 GPT-Backend, gpt-5.6-sol). Der Agent macht
+//   das Review selbst und füllt das Schema direkt — kein CLI-Spawn, kein
+//   Relay-Parsing. Voraussetzung: GPT-Backend aktiv (Settings → GPT-Backend).
+// - 'codex-cli': alter Pfad über `whisperm8 agent run` (headless Codex-Job),
+//   gewrappt vom mechanischen `codex-runner`-Agent. Nur noch für den Fall,
+//   dass der native gpt-Agent-Typ nicht verfügbar ist (fremdes Repo ohne
+//   .claude/agents/gpt, Backend aus).
+const RUNNER = cfg.runner || 'gpt'
+// Nur für runner=codex-cli relevant: der Wrapper-Agent-Typ. `agentType: null`
+// → Kontrakt inline + Sonnet-Wrapper (wenn codex-runner nicht registriert ist).
+const CLI_AGENT_TYPE = cfg.agentType === null ? null : (cfg.agentType || 'codex-runner')
 
 // ---------------------------------------------------------------- Schemata
 
+// exitCode/state/reportStatus sind CLI-Artefakte — nur der codex-cli-Pfad
+// füllt sie; im nativen Modus bleiben sie weg. Deshalb nicht required.
 const FINDINGS = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -62,7 +73,7 @@ const FINDINGS = {
     },
     notes: { type: 'string' },
   },
-  required: ['exitCode', 'findings', 'notes'],
+  required: ['findings', 'notes'],
 }
 
 const VERDICT = {
@@ -74,10 +85,42 @@ const VERDICT = {
     reasoning: { type: 'string' },
     notes: { type: 'string' },
   },
-  required: ['exitCode', 'refuted', 'reasoning'],
+  required: ['refuted', 'reasoning'],
 }
 
-// ---------------------------------------------------------------- Bausteine
+// ---------------------------------------------------------------- Prompts
+
+/** Repo-Kontext für native Agents (die starten im Session-cwd). */
+const REPO_HINT = REPO ? `Arbeite im Repo ${REPO}. ` : ''
+
+const READ_ONLY = 'Nur Analyse — keine Edits, keine Commits, keine Writes. '
+
+const FINDER_AUFTRAG = d =>
+  `${REPO_HINT}${READ_ONLY}Code-Review mit maximaler Sorgfalt. ` +
+  `Untersuchungsgegenstand: ${SCOPE}. Perspektive "${d.key}": ${d.frage} ` +
+  'Melde nur echte Defekte mit konkretem Fehlerszenario — keine Stilfragen, keine Spekulation.'
+
+const REFUTER_AUFTRAG = (beschreibung, lens) =>
+  `${REPO_HINT}${READ_ONLY}Adversarische Gegenpruefung eines Code-Review-Findings. ` +
+  'Deine Aufgabe ist es, das Finding zu WIDERLEGEN. Sei streng: kannst du es nicht klar ' +
+  'bestaetigen, gilt es als widerlegt.\n\n' +
+  beschreibung + '\n\n' +
+  `Pruefauftrag (${lens.key}): ${lens.frage}`
+
+// -- Nativer Modus: der gpt-Agent füllt das Schema direkt aus. --------------
+
+const NATIVE_FINDER_SCHEMA_HINT =
+  ' Fülle das Schema direkt: pro Defekt ein findings-Eintrag (file, line, severity ' +
+  'critical|high|medium|low, title, claim = was genau falsch ist, failureScenario = ' +
+  'konkretes Szenario Eingabe/Zustand -> falsches Verhalten). Nichts Substanzielles ' +
+  'gefunden → leeres findings-Array. notes = "ok" oder kurze Einschränkungen.'
+
+const NATIVE_REFUTER_SCHEMA_HINT =
+  '\n\nFülle das Schema direkt: refuted=true wenn du das Finding widerlegst (oder es nicht ' +
+  'klar bestätigen kannst), refuted=false nur bei klarer Bestätigung. reasoning = Begründung ' +
+  'mit Code-Belegen (Datei:Zeile).'
+
+// -- codex-cli-Modus: CLI-Spawn + Relay-Parsing (Legacy-Pfad). --------------
 
 /** Baut den CLI-Befehl. Ohne --cd nutzt whisperm8 das cwd des Wrappers. */
 function codexRun(auftrag) {
@@ -94,14 +137,8 @@ const INLINE_KONTRAKT =
   '`; echo "EXIT:$?"` an. Erfinde nichts — gib ausschließlich wieder, was das CLI ausgegeben hat.\n\n'
 
 function wrap(cmd, relay) {
-  const kopf = AGENT_TYPE ? '' : INLINE_KONTRAKT
+  const kopf = CLI_AGENT_TYPE ? '' : INLINE_KONTRAKT
   return `${kopf}Führe genau diesen Befehl aus:\n\n${cmd}\n\n${relay}`
-}
-
-/** agent()-Optionen: Agent-Typ ODER günstiges Modell + inline-Kontrakt. */
-function runnerOpts(label, phaseName, schema) {
-  const base = { label, phase: phaseName, schema }
-  return AGENT_TYPE ? { ...base, agentType: AGENT_TYPE } : { ...base, model: 'sonnet', effort: 'low' }
 }
 
 const RELAY_FINDINGS =
@@ -114,13 +151,50 @@ const RELAY_VERDICT =
   'widerlegt bzw. mit WIDERLEGT geantwortet; false = BESTAETIGT), reasoning (= report.summary). ' +
   'Bei Fehler oder fehlendem Report: refuted=true und Ursache in notes.'
 
-/** Report-Vertrag für die Finder — ohne den ist summary unparsbar. */
-const FORMAT =
+/** Report-Vertrag für die CLI-Finder — ohne den ist summary unparsbar. */
+const CLI_FORMAT =
   ' Formatiere JEDES Finding im Report-summary exakt so, mehrere durch Leerzeile getrennt: ' +
   '"FINDING: <datei>:<zeile> | <critical|high|medium|low> | <titel> | <was genau falsch ist> | ' +
   '<konkretes Fehlerszenario: Eingabe/Zustand -> falsches Verhalten>". Findest du nichts ' +
-  'Substanzielles, schreibe genau "KEINE FINDINGS" ins summary. Melde nur echte Defekte mit ' +
-  'konkretem Fehlerszenario — keine Stilfragen, keine Spekulation. Nur Analyse, keine Edits.'
+  'Substanzielles, schreibe genau "KEINE FINDINGS" ins summary. Nur Analyse, keine Edits.'
+
+const CLI_REFUTER_FORMAT =
+  '\n\nSchreibe ins Report-summary zuerst genau eines der Woerter WIDERLEGT oder BESTAETIGT, ' +
+  'danach die Begruendung mit Code-Belegen (Datei:Zeile).'
+
+// -- Dispatcher: ein Interface, zwei Runner. --------------------------------
+
+function finderCall(d) {
+  if (RUNNER === 'gpt') {
+    return agent(FINDER_AUFTRAG(d) + NATIVE_FINDER_SCHEMA_HINT, {
+      label: `find:${d.key}`, phase: 'Find', schema: FINDINGS,
+      agentType: 'gpt', effort: EFFORT,
+    })
+  }
+  return agent(
+    wrap(codexRun(FINDER_AUFTRAG(d) + CLI_FORMAT), RELAY_FINDINGS),
+    cliOpts(`find:${d.key}`, 'Find', FINDINGS)
+  )
+}
+
+function refuterCall(beschreibung, lens, label) {
+  if (RUNNER === 'gpt') {
+    return agent(REFUTER_AUFTRAG(beschreibung, lens) + NATIVE_REFUTER_SCHEMA_HINT, {
+      label, phase: 'Verify', schema: VERDICT,
+      agentType: 'gpt', effort: EFFORT,
+    })
+  }
+  return agent(
+    wrap(codexRun(REFUTER_AUFTRAG(beschreibung, lens) + CLI_REFUTER_FORMAT), RELAY_VERDICT),
+    cliOpts(label, 'Verify', VERDICT)
+  )
+}
+
+/** codex-cli-Optionen: Wrapper-Agent-Typ ODER günstiges Modell + inline-Kontrakt. */
+function cliOpts(label, phaseName, schema) {
+  const base = { label, phase: phaseName, schema }
+  return CLI_AGENT_TYPE ? { ...base, agentType: CLI_AGENT_TYPE } : { ...base, model: 'sonnet', effort: 'low' }
+}
 
 const DEFAULT_DIMENSIONS = [
   { key: 'correctness', frage: 'Logikfehler, falsche Randfälle, verletzte Invarianten, Off-by-one, falsch behandelte Fehlerpfade.' },
@@ -139,7 +213,7 @@ const LENSES = [
 // ---------------------------------------------------------------- Ausführung
 
 const DIMENSIONS = cfg.dimensions || DEFAULT_DIMENSIONS
-log(`Scope: ${SCOPE} · Effort: ${EFFORT} · ${DIMENSIONS.length} Finder · Runner: ${AGENT_TYPE || 'sonnet (inline)'}`)
+log(`Scope: ${SCOPE} · Effort: ${EFFORT} · ${DIMENSIONS.length} Finder · Runner: ${RUNNER === 'gpt' ? 'gpt (nativ)' : (CLI_AGENT_TYPE || 'sonnet (inline)') + ' via whisperm8-CLI'}`)
 if (EFFORT === 'low') {
   log('WARNUNG: effort=low — Refuter halluzinieren auf dieser Stufe Code. Urteile sind unbrauchbar; nur als Smoke-Test verwenden.')
 }
@@ -147,13 +221,7 @@ if (EFFORT === 'low') {
 phase('Find')
 const results = await pipeline(
   DIMENSIONS,
-  d => agent(
-    wrap(codexRun(
-      `Code-Review mit maximaler Sorgfalt. Untersuchungsgegenstand: ${SCOPE}. ` +
-      `Perspektive "${d.key}": ${d.frage}${FORMAT}`
-    ), RELAY_FINDINGS),
-    runnerOpts(`find:${d.key}`, 'Find', FINDINGS)
-  ),
+  d => finderCall(d),
   (res, d) => {
     if (!res || !res.findings || res.findings.length === 0) {
       const grund = res && res.notes && res.notes !== 'ok' ? ` (${res.notes})` : ''
@@ -170,17 +238,9 @@ const results = await pipeline(
         `Behauptung: ${f.claim}\n` +
         `Behauptetes Fehlerszenario: ${f.failureScenario}`
       LENSES.forEach(lens => {
-        jobs.push(() => agent(
-          wrap(codexRun(
-            'Adversarische Gegenpruefung eines Code-Review-Findings. Deine Aufgabe ist es, das Finding zu ' +
-            'WIDERLEGEN. Sei streng: kannst du es nicht klar bestaetigen, gilt es als widerlegt.\n\n' +
-            beschreibung + '\n\n' +
-            `Pruefauftrag (${lens.key}): ${lens.frage}\n\n` +
-            'Nur Analyse, keine Edits. Schreibe ins Report-summary zuerst genau eines der Woerter ' +
-            'WIDERLEGT oder BESTAETIGT, danach die Begruendung mit Code-Belegen (Datei:Zeile).'
-          ), RELAY_VERDICT),
-          runnerOpts(`verify:${d.key}-${i + 1}:${lens.key}`, 'Verify', VERDICT)
-        ).then(v => ({ dimension: d.key, finding: f, lens: lens.key, verdict: v })))
+        jobs.push(() =>
+          refuterCall(beschreibung, lens, `verify:${d.key}-${i + 1}:${lens.key}`)
+            .then(v => ({ dimension: d.key, finding: f, lens: lens.key, verdict: v })))
       })
     })
     return parallel(jobs)
@@ -214,4 +274,4 @@ if (confirmed.length === 0 && plausible.length === 0) {
   log('Keine überlebenden Findings — das heißt "nichts gefunden", nicht "nichts da".')
 }
 
-return { scope: SCOPE, effort: EFFORT, confirmed, plausible, dropped }
+return { scope: SCOPE, effort: EFFORT, runner: RUNNER, confirmed, plausible, dropped }
