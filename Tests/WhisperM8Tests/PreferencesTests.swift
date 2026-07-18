@@ -50,6 +50,30 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.maxScreenshotsPerRecording, 20)
     }
 
+    func testClaudeGPTAutoCompactWindowClampsAndFallsBack() {
+        withIsolatedPreferences { preferences in
+            // Unset → getesteter Default (272k).
+            XCTAssertEqual(
+                preferences.claudeGPTAutoCompactWindow,
+                AppPreferences.claudeGPTDefaultAutoCompactWindow
+            )
+            // Tippfehler wie 2 720 000 wuerden die Kompaktierung faktisch
+            // abschalten → Clamp auf die Obergrenze.
+            preferences.claudeGPTAutoCompactWindow = 2_720_000
+            XCTAssertEqual(
+                preferences.claudeGPTAutoCompactWindow,
+                AppPreferences.claudeGPTAutoCompactWindowRange.upperBound
+            )
+            preferences.claudeGPTAutoCompactWindow = 5
+            XCTAssertEqual(
+                preferences.claudeGPTAutoCompactWindow,
+                AppPreferences.claudeGPTAutoCompactWindowRange.lowerBound
+            )
+            preferences.claudeGPTAutoCompactWindow = 300_000
+            XCTAssertEqual(preferences.claudeGPTAutoCompactWindow, 300_000)
+        }
+    }
+
     func testSavesAndLoadsValues() {
         withIsolatedPreferences { preferences in
             preferences.language = "en"

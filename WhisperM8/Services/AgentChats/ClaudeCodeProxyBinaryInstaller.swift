@@ -24,6 +24,12 @@ struct ClaudeCodeProxyBinaryInstaller {
     static let repository = "raine/claude-code-proxy"
     static let binaryName = "claude-code-proxy"
 
+    /// Serialisiert Binary-Replace + Versions-Stempel prozessweit — Setup-
+    /// Wizard und Settings-Update laufen sonst mit getrennten Instanzen
+    /// parallel auf dasselbe Ziel (Review-Befund 2026-07-19: Binary B mit
+    /// Stempel A möglich).
+    private static let installLock = NSLock()
+
     enum InstallerError: LocalizedError, Equatable {
         case checksumMismatch(expected: String, actual: String)
         case checksumUnavailable(String)
@@ -156,18 +162,48 @@ struct ClaudeCodeProxyBinaryInstaller {
         guard FileManager.default.fileExists(atPath: extracted.path) else {
             throw InstallerError.extractionFailed("Archiv enthält kein \(Self.binaryName)-Binary.")
         }
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o755], ofItemAtPath: extracted.path
-        )
         // Quarantäne-Attribut entfernen, falls die Download-Route eins
         // gesetzt hat — sonst blockiert Gatekeeper den Prozessstart.
         removeQuarantine(at: extracted)
 
+        // Stempel VORAB in eine Temp-Datei — scheitert der Write (voller
+        // Datenträger o. ä.), bricht die Installation ab, BEVOR das Binary
+        // ersetzt wurde. So können Binary und Stempel nie divergieren.
+        let stampStaging = workDir.appendingPathComponent("version-stamp", isDirectory: false)
+        try version.write(to: stampStaging, atomically: true, encoding: .utf8)
+
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        Self.installLock.lock()
+        defer { Self.installLock.unlock() }
         _ = try FileManager.default.replaceItemAt(binaryURL, withItemAt: extracted)
-        try version.write(to: versionStampURL, atomically: true, encoding: .utf8)
+        // Rechte NACH dem Replace setzen: replaceItemAt übernimmt auf Darwin
+        // die POSIX-Rechte des VORHANDENEN Ziels (Review-Befund 2026-07-19,
+        // empirisch belegt: 0600-Ziel blieb 0600) — ein vorab-chmod am
+        // entpackten File würde also verworfen.
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: binaryURL.path
+        )
+        _ = try FileManager.default.replaceItemAt(versionStampURL, withItemAt: stampStaging)
         Logger.debug("[Proxy] Binary v\(version) installiert: \(binaryURL.path)")
         return binaryURL
+    }
+
+    /// Numerischer Versionsvergleich (SemVer-artig, fehlende Komponenten = 0).
+    /// Der Update-Check bietet nur echte UPGRADES an — ein zurückgezogenes
+    /// Release darf nicht als „neuere Version“ zum Downgrade führen.
+    static func isVersion(_ candidate: String, newerThan baseline: String) -> Bool {
+        func components(_ raw: String) -> [Int] {
+            raw.split(separator: ".").map { Int($0.prefix(while: \.isNumber)) ?? 0 }
+        }
+        let a = components(candidate)
+        let b = components(baseline)
+        for index in 0..<max(a.count, b.count) {
+            let left = index < a.count ? a[index] : 0
+            let right = index < b.count ? b[index] : 0
+            if left != right { return left > right }
+        }
+        return false
     }
 
     private func expectedChecksum(version: String) async throws -> String {

@@ -22,6 +22,7 @@ struct GPTBackendSettingsPage: View {
     @State private var isUpdateWorking = false
     @State private var availableUpdate: String?
     @State private var updateStatusText: String?
+    @State private var refreshQueued = false
 
     private let proxyManager = ClaudeCodeProxyManager.shared
     private let modelSuggestions = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra"]
@@ -199,7 +200,10 @@ struct GPTBackendSettingsPage: View {
                     startDeviceLogin()
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
-                .disabled(isDeviceLoginRunning)
+                // Auch während des geführten Setups gesperrt: dessen
+                // Abschluss startet den Login ggf. selbst — ein zweiter
+                // Start würde den angezeigten Gerätecode invalidieren.
+                .disabled(isDeviceLoginRunning || isSetupRunning)
             }
 
             if let deviceCodeInfo {
@@ -347,7 +351,7 @@ struct GPTBackendSettingsPage: View {
     }
 
     private func checkForBinaryUpdate() {
-        guard !isUpdateWorking else { return }
+        guard !isUpdateWorking, !isSetupRunning else { return }
         isUpdateWorking = true
         updateStatusText = nil
         availableUpdate = nil
@@ -359,11 +363,13 @@ struct GPTBackendSettingsPage: View {
                 let latest = try await installer.latestVersion()
                 let baseline = installer.installedManagedVersion()
                     ?? ClaudeCodeProxyBinaryInstaller.knownGoodVersion
-                if latest == baseline {
-                    updateStatusText = "Aktuell: v\(latest) ist die neueste Version."
-                } else {
+                // Nur echte Upgrades anbieten — ein zurückgezogenes Release
+                // (latest < baseline) darf keinen Downgrade auslösen.
+                if ClaudeCodeProxyBinaryInstaller.isVersion(latest, newerThan: baseline) {
                     availableUpdate = latest
                     updateStatusText = "Neuere Version verfügbar (installiert/getestet: v\(baseline)). Update wird gegen die Release-Checksumme verifiziert."
+                } else {
+                    updateStatusText = "Aktuell: v\(baseline) (neuestes Release: v\(latest))."
                 }
             } catch {
                 updateStatusText = error.localizedDescription
@@ -372,7 +378,9 @@ struct GPTBackendSettingsPage: View {
     }
 
     private func installBinaryUpdate(_ version: String) {
-        guard !isUpdateWorking else { return }
+        // Gegensperre zum Setup-Wizard: nie zwei Installationen parallel
+        // auf dasselbe Binary (zusätzlich prozessweit via installLock).
+        guard !isUpdateWorking, !isSetupRunning else { return }
         isUpdateWorking = true
         updateStatusText = nil
 
@@ -394,7 +402,9 @@ struct GPTBackendSettingsPage: View {
     /// nur der Login, startet `startLoginIfNeeded` direkt den
     /// Device-Code-Flow (Code + URL erscheinen in der Login-Sektion).
     private func runFullSetup(startLoginIfNeeded: Bool) {
-        guard backendEnabled, !isSetupRunning else { return }
+        // Setup und Binary-Update schließen sich gegenseitig aus — beide
+        // können sonst parallel dasselbe Binary installieren.
+        guard backendEnabled, !isSetupRunning, !isUpdateWorking else { return }
         isSetupRunning = true
         operationError = nil
         setupProgressText = nil
@@ -420,12 +430,23 @@ struct GPTBackendSettingsPage: View {
             }.value
 
             isSetupRunning = false
+            // Toggle wurde während des Laufs deaktiviert: der Lauf hat den
+            // Proxy ggf. trotzdem gestartet — sauber zurückbauen und keinen
+            // Login/Status mehr anfassen (Review-Befund 2026-07-19).
+            guard backendEnabled else {
+                setupProgressText = nil
+                proxyManager.stopIfSelfStarted()
+                clearStatus()
+                return
+            }
             switch outcome {
             case .ready:
                 setupProgressText = nil
             case .needsDeviceLogin:
                 setupProgressText = nil
-                if startLoginIfNeeded {
+                // Nie einen bereits laufenden Login-Flow ersetzen — das
+                // würde den angezeigten Gerätecode invalidieren.
+                if startLoginIfNeeded, !isDeviceLoginRunning {
                     startDeviceLogin()
                 }
             case .failed:
@@ -437,7 +458,15 @@ struct GPTBackendSettingsPage: View {
     }
 
     private func refreshStatus() {
-        guard backendEnabled, !isRefreshing else { return }
+        guard backendEnabled else { return }
+        // Läuft bereits ein Refresh, wird EIN weiterer vorgemerkt statt
+        // verworfen: Der laufende hat seinen Snapshot womöglich VOR einer
+        // gerade abgeschlossenen Zustandsänderung (Proxy-Start) gezogen und
+        // würde sonst veraltet „nicht erreichbar" stehen lassen.
+        guard !isRefreshing else {
+            refreshQueued = true
+            return
+        }
         isRefreshing = true
         operationError = nil
         let checkedPort = port
@@ -456,6 +485,10 @@ struct GPTBackendSettingsPage: View {
             authStatus = snapshot.2
             didRefresh = true
             isRefreshing = false
+            if refreshQueued {
+                refreshQueued = false
+                refreshStatus()
+            }
         }
     }
 

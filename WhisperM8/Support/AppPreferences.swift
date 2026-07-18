@@ -301,10 +301,18 @@ struct AppPreferences {
     /// CLI nicht mit der 200k-Default-Annahme fuer unbekannte Modelle rechnet.
     static let claudeGPTDefaultAutoCompactWindow = 272_000
 
+    /// Geclampte Grenzen: Ein Tippfehler wie 2 720 000 wuerde die
+    /// Kompaktierung faktisch abschalten (Session stirbt am 272k-Serverlimit),
+    /// ein Mini-Wert wuerde dauerkompaktieren. 500k laesst Luft fuer
+    /// kuenftige groessere GPT-Fenster.
+    static let claudeGPTAutoCompactWindowRange = 10_000...500_000
+
     var claudeGPTAutoCompactWindow: Int {
         get {
             let value = defaults.integer(forKey: Keys.claudeGPTAutoCompactWindow)
-            return value > 0 ? value : Self.claudeGPTDefaultAutoCompactWindow
+            guard value > 0 else { return Self.claudeGPTDefaultAutoCompactWindow }
+            let range = Self.claudeGPTAutoCompactWindowRange
+            return min(max(value, range.lowerBound), range.upperBound)
         }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTAutoCompactWindow) }
     }

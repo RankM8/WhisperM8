@@ -137,6 +137,46 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
         XCTAssertTrue(content.contains("echo v2"))
     }
 
+    func testInstallRepairsBrokenPermissionsOnExistingTarget() async throws {
+        // replaceItemAt uebernimmt auf Darwin die POSIX-Rechte des ZIELS —
+        // ohne chmod NACH dem Replace bliebe ein 0600-Ziel unausfuehrbar.
+        let (tarball, digest) = try makeTarball()
+        let installer = makeInstaller { url in
+            if url.absoluteString.hasSuffix(".sha256") {
+                return Data("\(digest)  x.tar.gz\n".utf8)
+            }
+            return tarball
+        }
+        try FileManager.default.createDirectory(
+            at: installer.binaryURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("kaputt".utf8).write(to: installer.binaryURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: installer.binaryURL.path
+        )
+
+        _ = try await installer.install(version: "9.9.9")
+
+        let permissions = try FileManager.default
+            .attributesOfItem(atPath: installer.binaryURL.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o755)
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: installer.binaryURL.path))
+    }
+
+    // MARK: Versionsvergleich
+
+    func testVersionComparisonIsNumericNotLexicographic() {
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.22", newerThan: "0.1.21"))
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.isVersion("0.2.0", newerThan: "0.1.99"))
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.100", newerThan: "0.1.21"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.20", newerThan: "0.1.21"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.21", newerThan: "0.1.21"))
+        // Fehlende Komponenten zaehlen als 0.
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.isVersion("0.2", newerThan: "0.1.21"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1", newerThan: "0.1.0"))
+    }
+
     // MARK: Update-Check
 
     func testLatestVersionStripsTagPrefix() async throws {

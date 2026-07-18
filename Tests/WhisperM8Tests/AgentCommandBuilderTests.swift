@@ -493,6 +493,45 @@ extension AgentCommandBuilderTests {
         XCTAssertNil(command.environmentOverrides["ANTHROPIC_AUTH_TOKEN"])
     }
 
+    func testClaudeGPTBackendOmitsCompactWindowWhenUserOverridesToClaudeModel() throws {
+        // GPT-Stempel + explizites User-`--model claude-…` (last-flag-wins):
+        // die Session laeuft effektiv auf Claude — das 272k-Fenster wuerde
+        // die Kompaktierung dort ZU SPAET ausloesen und muss entfallen.
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in ["--model", "claude-opus-4-6"] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 18_766 }
+        builder.gptSubagentModelResolver = { "" }
+        builder.gptAutoCompactWindowResolver = { 272_000 }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-sol"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_AUTO_COMPACT_WINDOW"])
+        // Ein GPT-Override dagegen behaelt das Fenster.
+        builder.extraArgumentsResolver = { _ in ["--model", "gpt-5.6-terra"] }
+        let gptCommand = try builder.command(for: session, project: project)
+        XCTAssertEqual(
+            gptCommand.environmentOverrides["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "272000"
+        )
+    }
+
+    func testLastModelArgumentParsesLastFlagWins() {
+        XCTAssertNil(AgentCommandBuilder.lastModelArgument(in: []))
+        XCTAssertNil(AgentCommandBuilder.lastModelArgument(in: ["--verbose"]))
+        XCTAssertNil(AgentCommandBuilder.lastModelArgument(in: ["--model"]))
+        XCTAssertEqual(
+            AgentCommandBuilder.lastModelArgument(in: ["--model", "a", "--model", "b"]), "b"
+        )
+    }
+
     func testClaudeGPTBackendLetsUserModelFromExtraArgumentsWin() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })

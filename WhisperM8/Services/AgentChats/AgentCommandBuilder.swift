@@ -110,6 +110,20 @@ struct AgentCommandBuilder {
         )
     }
 
+    /// Letzter `--model`-Wert einer Argumentliste (claude parst
+    /// last-flag-wins). `nil`, wenn kein Override vorhanden ist.
+    static func lastModelArgument(in arguments: [String]) -> String? {
+        var result: String?
+        var index = 0
+        while index < arguments.count - 1 {
+            if arguments[index] == "--model" {
+                result = arguments[index + 1]
+            }
+            index += 1
+        }
+        return result
+    }
+
     /// Pure Auflösung der Login-Shell — separat, damit sie ohne echtes
     /// Filesystem testbar ist.
     static func resolveLoginShell(
@@ -317,8 +331,17 @@ struct AgentCommandBuilder {
                 // Reale 272k statt 200k-Default-Annahme fuer unbekannte
                 // Modelle — Auto-Compact-Schwelle und /context rechnen
                 // sonst mit dem falschen Fenster (Proxy-README-Empfehlung).
-                environment["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] =
-                    String(gptAutoCompactWindowResolver())
+                // AUSNAHME: ueberschreibt der User das Modell per Extra-Args
+                // mit einem Nicht-GPT-Modell (last-flag-wins), laeuft die
+                // Session effektiv auf Claude — das GPT-Fenster wuerde die
+                // Kompaktierung dann ZU SPAET ausloesen (Review 2026-07-19).
+                let userModelOverride = Self.lastModelArgument(
+                    in: extraArgumentsResolver(.claude)
+                )
+                if userModelOverride?.hasPrefix("gpt-") != false {
+                    environment["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] =
+                        String(gptAutoCompactWindowResolver())
+                }
             }
             return environment
         }
