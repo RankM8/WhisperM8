@@ -153,12 +153,59 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(ClaudeCodeProxyManager.parseAuthStatus("alles kaputt"), .unknown)
     }
 
+    func testDeviceCodeParserReadsVisitURLAndCodeFromFixture() {
+        let fixture = "Visit: https://auth.openai.com/codex/device\nEnter code: ABCD-EFGHI"
+
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.parseDeviceCodeInfo(fixture),
+            ClaudeCodeProxyDeviceCodeInfo(
+                visitURL: "https://auth.openai.com/codex/device",
+                code: "ABCD-EFGHI"
+            )
+        )
+    }
+
+    func testDeviceLoginStartsExpectedCommandAndForwardsParsedCodeInfo() {
+        var invocation: (String, [String], [String: String])?
+        var codeInfo: ClaudeCodeProxyDeviceCodeInfo?
+        var completionCode: Int32?
+        let manager = makeManager(
+            deviceLoginLauncher: { executable, arguments, environment, onOutput, onCompletion in
+                invocation = (executable, arguments, environment)
+                onOutput("Visit: https://auth.openai.com/codex/device\n")
+                onOutput("Enter code: ABCD-EFGHI\n")
+                onCompletion(0)
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/login-shell/bin"] }
+        )
+
+        XCTAssertNoThrow(try manager.startDeviceLogin(
+            onCodeInfo: { codeInfo = $0 },
+            onCompletion: { completionCode = $0 }
+        ).get())
+        XCTAssertEqual(invocation?.0, "/usr/local/bin/claude-code-proxy")
+        XCTAssertEqual(invocation?.1, ["codex", "auth", "device"])
+        XCTAssertEqual(invocation?.2, ["PATH": "/login-shell/bin"])
+        XCTAssertEqual(
+            codeInfo,
+            ClaudeCodeProxyDeviceCodeInfo(
+                visitURL: "https://auth.openai.com/codex/device",
+                code: "ABCD-EFGHI"
+            )
+        )
+        XCTAssertEqual(completionCode, 0)
+    }
+
     private func makeManager(
         commandResolver: @escaping (String) -> String? = { _ in "/usr/local/bin/claude-code-proxy" },
         reachability: @escaping (Int) -> Bool = { _ in false },
         launcher: @escaping ClaudeCodeProxyManager.ProcessLauncher = { _, _, _ in processHandle() },
         commandRunner: @escaping ClaudeCodeProxyManager.CommandRunner = { _, _, _ in
             ClaudeCodeProxyCommandResult(exitCode: 1, stdout: "", stderr: "")
+        },
+        deviceLoginLauncher: @escaping ClaudeCodeProxyManager.DeviceLoginLauncher = { _, _, _, _, _ in
+            processHandle()
         },
         environment: @escaping () -> [String: String] = { [:] },
         retryAttempts: Int = 1,
@@ -169,6 +216,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             reachabilityResolver: reachability,
             processLauncher: launcher,
             commandRunner: commandRunner,
+            deviceLoginLauncher: deviceLoginLauncher,
             environmentResolver: environment,
             sleepResolver: { _ in },
             retryAttempts: retryAttempts,

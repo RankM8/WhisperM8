@@ -73,6 +73,10 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTBackendPort
     }
 
+    var gptSubagentModelResolver: () -> String = {
+        AppPreferences.shared.claudeGPTSubagentModel
+    }
+
     /// Lokalisiert das Claude-Transcript einer Session ueber ALLE Account-
     /// Roots (main + Profile) — (externalSessionID, cwd) → JSONL-URL.
     /// Default: echter Datei-Lookup, im Test ueberschreibbar.
@@ -370,6 +374,14 @@ struct AgentCommandBuilder {
                 "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
                 "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
             ]) { _, backendValue in backendValue }
+
+            let subagentModel = gptSubagentModelResolver()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !subagentModel.isEmpty {
+                // Direkte Anthropic-Sessions duerfen nie ein GPT-Modell fuer
+                // native Subagents erhalten, weil api.anthropic.com es ablehnt.
+                effectiveProfileEnvironment["CLAUDE_CODE_SUBAGENT_MODEL"] = subagentModel
+            }
         }
 
         return AgentLaunchCommand(

@@ -31,6 +31,11 @@ struct ClaudeCodeProxyCommandResult: Equatable {
     var stderr: String
 }
 
+struct ClaudeCodeProxyDeviceCodeInfo: Equatable {
+    var visitURL: String
+    var code: String
+}
+
 /// Abstrakter Prozessgriff fuer den langlebigen Proxy. Tests koennen damit
 /// Start und Stop beobachten, ohne einen echten Subprozess zu erzeugen.
 final class ClaudeCodeProxyProcessHandle {
@@ -55,6 +60,8 @@ final class ClaudeCodeProxyProcessHandle {
 /// Verwaltet ausschliesslich den von WhisperM8 gestarteten GPT-Proxy. Bereits
 /// extern laufende Instanzen werden erkannt, aber niemals uebernommen/beendet.
 final class ClaudeCodeProxyManager {
+    static let shared = ClaudeCodeProxyManager()
+
     typealias ProcessLauncher = (
         _ executable: String,
         _ arguments: [String],
@@ -65,11 +72,19 @@ final class ClaudeCodeProxyManager {
         _ arguments: [String],
         _ environment: [String: String]
     ) throws -> ClaudeCodeProxyCommandResult
+    typealias DeviceLoginLauncher = (
+        _ executable: String,
+        _ arguments: [String],
+        _ environment: [String: String],
+        _ onOutput: @escaping (String) -> Void,
+        _ onCompletion: @escaping (Int32) -> Void
+    ) throws -> ClaudeCodeProxyProcessHandle
 
     private let commandResolver: (String) -> String?
     private let reachabilityResolver: (Int) -> Bool
     private let processLauncher: ProcessLauncher
     private let commandRunner: CommandRunner
+    private let deviceLoginLauncher: DeviceLoginLauncher
     private let environmentResolver: () -> [String: String]
     private let sleepResolver: (TimeInterval) -> Void
     private let retryAttempts: Int
@@ -78,6 +93,7 @@ final class ClaudeCodeProxyManager {
     private let ensureLock = NSLock()
     private let processLock = NSLock()
     private var selfStartedProcess: ClaudeCodeProxyProcessHandle?
+    private var deviceLoginProcess: ClaudeCodeProxyProcessHandle?
     private var terminateObserver: NSObjectProtocol?
 
     init(
@@ -85,6 +101,7 @@ final class ClaudeCodeProxyManager {
         reachabilityResolver: @escaping (Int) -> Bool = { ClaudeCodeProxyManager.isReachable(port: $0) },
         processLauncher: @escaping ProcessLauncher = ClaudeCodeProxyManager.launchProcess,
         commandRunner: @escaping CommandRunner = ClaudeCodeProxyManager.runCommand,
+        deviceLoginLauncher: @escaping DeviceLoginLauncher = ClaudeCodeProxyManager.launchDeviceLogin,
         environmentResolver: @escaping () -> [String: String] = {
             LoginShellEnvironment.shared.processEnvironment()
         },
@@ -97,6 +114,7 @@ final class ClaudeCodeProxyManager {
         self.reachabilityResolver = reachabilityResolver
         self.processLauncher = processLauncher
         self.commandRunner = commandRunner
+        self.deviceLoginLauncher = deviceLoginLauncher
         self.environmentResolver = environmentResolver
         self.sleepResolver = sleepResolver
         self.retryAttempts = retryAttempts
@@ -109,6 +127,7 @@ final class ClaudeCodeProxyManager {
             queue: nil
         ) { [weak self] _ in
             self?.stopIfSelfStarted()
+            self?.stopDeviceLogin()
         }
     }
 
@@ -195,6 +214,63 @@ final class ClaudeCodeProxyManager {
         }
     }
 
+    func resolvedBinaryPath() -> String? {
+        commandResolver("claude-code-proxy")
+    }
+
+    /// Startet den Device-Code-Flow als langlebigen Prozess. Der Manager
+    /// puffert Chunks, weil URL und Code auch mitten in einer Pipe-Lieferung
+    /// getrennt werden koennen.
+    @discardableResult
+    func startDeviceLogin(
+        onCodeInfo: @escaping (ClaudeCodeProxyDeviceCodeInfo) -> Void,
+        onCompletion: @escaping (Int32) -> Void
+    ) -> Result<Void, ClaudeCodeProxyError> {
+        guard let executable = resolvedBinaryPath() else {
+            return .failure(.binaryMissing)
+        }
+
+        let outputLock = NSLock()
+        var accumulatedOutput = ""
+        var didPublishCode = false
+        var didComplete = false
+
+        do {
+            let process = try deviceLoginLauncher(
+                executable,
+                ["codex", "auth", "device"],
+                environmentResolver(),
+                { chunk in
+                    outputLock.lock()
+                    accumulatedOutput += chunk
+                    let info = didPublishCode ? nil : Self.parseDeviceCodeInfo(accumulatedOutput)
+                    if info != nil { didPublishCode = true }
+                    outputLock.unlock()
+
+                    if let info {
+                        onCodeInfo(info)
+                    }
+                },
+                { [weak self] exitCode in
+                    guard let self else { return }
+                    self.processLock.lock()
+                    didComplete = true
+                    self.deviceLoginProcess = nil
+                    self.processLock.unlock()
+                    onCompletion(exitCode)
+                }
+            )
+            processLock.lock()
+            if !didComplete {
+                deviceLoginProcess = process
+            }
+            processLock.unlock()
+            return .success(())
+        } catch {
+            return .failure(.startFailed(error.localizedDescription))
+        }
+    }
+
     /// Der Parser bleibt bewusst tolerant gegen zusaetzliche Statuszeilen des
     /// externen Tools; Account und Ablauf muessen jedoch beide vorhanden sein.
     static func parseAuthStatus(_ output: String) -> ClaudeCodeProxyAuthStatus {
@@ -219,6 +295,38 @@ final class ClaudeCodeProxyManager {
             return .unknown
         }
         return .authenticated(account: account, expires: expires)
+    }
+
+    static func parseDeviceCodeInfo(_ output: String) -> ClaudeCodeProxyDeviceCodeInfo? {
+        var visitURL: String?
+        var code: String?
+
+        for line in output.split(whereSeparator: \.isNewline) {
+            let value = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+            if value.hasPrefix("Visit:") {
+                visitURL = String(value.dropFirst("Visit:".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if value.hasPrefix("Enter code:") {
+                code = String(value.dropFirst("Enter code:".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        guard let visitURL, !visitURL.isEmpty, let code, !code.isEmpty else {
+            return nil
+        }
+        return ClaudeCodeProxyDeviceCodeInfo(visitURL: visitURL, code: code)
+    }
+
+    private func stopDeviceLogin() {
+        processLock.lock()
+        let process = deviceLoginProcess
+        deviceLoginProcess = nil
+        processLock.unlock()
+
+        if process?.isRunning == true {
+            process?.terminate()
+        }
     }
 
     /// Kurzer non-blocking TCP-Connect; damit blockiert ein toter Port den
@@ -317,6 +425,49 @@ final class ClaudeCodeProxyManager {
                 data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
                 encoding: .utf8
             ) ?? ""
+        )
+    }
+
+    private static func launchDeviceLogin(
+        executable: String,
+        arguments: [String],
+        environment: [String: String],
+        onOutput: @escaping (String) -> Void,
+        onCompletion: @escaping (Int32) -> Void
+    ) throws -> ClaudeCodeProxyProcessHandle {
+        let process = Process()
+        let outputPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        process.environment = environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            if let chunk = String(data: data, encoding: .utf8) {
+                onOutput(chunk)
+            }
+        }
+        process.terminationHandler = { completedProcess in
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            onCompletion(completedProcess.terminationStatus)
+        }
+        do {
+            try process.run()
+        } catch {
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            throw error
+        }
+
+        return ClaudeCodeProxyProcessHandle(
+            isRunning: { process.isRunning },
+            terminate: { process.terminate() }
         )
     }
 }

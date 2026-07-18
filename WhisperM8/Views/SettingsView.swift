@@ -6,6 +6,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case aiOutput = "ai-output"
     case context
     case agentChats = "agent-chats"
+    case gptBackend = "gpt-backend"
     case cli
     case general
     case permissions
@@ -30,6 +31,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "Context & Privacy"
         case .agentChats:
             return "Agent Chats"
+        case .gptBackend:
+            return "GPT-Backend"
         case .cli:
             return "CLI & Skills"
         case .general:
@@ -55,6 +58,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "magnifyingglass"
         case .agentChats:
             return "terminal"
+        case .gptBackend:
+            return "arrow.triangle.branch"
         case .cli:
             return "chevron.left.forwardslash.chevron.right"
         case .general:
@@ -80,6 +85,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "What WhisperM8 may capture alongside your voice — and what happens to it."
         case .agentChats:
             return "Configure the agent workspace and Claude Code hooks."
+        case .gptBackend:
+            return "Connect Claude Code sessions to GPT models through the local proxy."
         case .cli:
             return "Command line access and installable agent skills."
         case .general:
@@ -110,7 +117,7 @@ struct SettingsView: View {
 
     private let pageGroups: [SettingsPageGroup] = [
         SettingsPageGroup(title: "Dictation", pages: [.recording, .transcription, .aiOutput, .context]),
-        SettingsPageGroup(title: "Agents", pages: [.agentChats, .cli]),
+        SettingsPageGroup(title: "Agents", pages: [.agentChats, .gptBackend, .cli]),
         SettingsPageGroup(title: "App", pages: [.general, .permissions, .about]),
         SettingsPageGroup(title: "Workspace", pages: [.output])
     ]
@@ -224,6 +231,8 @@ struct SettingsView: View {
             ContextPrivacySettingsPage()
         case .agentChats:
             agentChatsPage(page)
+        case .gptBackend:
+            GPTBackendSettingsPage()
         case .cli:
             // Phase 9b: migrierte V3-Seite (Inhalte 1:1, Kit-Optik, CopyCommandRows).
             CLISkillsSettingsPage()

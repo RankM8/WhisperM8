@@ -428,6 +428,7 @@ extension AgentCommandBuilderTests {
         }
         builder.gptBackendEnabledResolver = { true }
         builder.gptBackendPortResolver = { 19_001 }
+        builder.gptSubagentModelResolver = { "" }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -477,6 +478,66 @@ extension AgentCommandBuilderTests {
             "--verbose", "--model", "gpt-5.6-terra", "--resume", "resume-1",
         ])
         XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18765")
+    }
+
+    func testClaudeGPTBackendAddsConfiguredSubagentModel() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptSubagentModelResolver = { "gpt-5.6-luna" }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-terra"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(
+            command.environmentOverrides["CLAUDE_CODE_SUBAGENT_MODEL"],
+            "gpt-5.6-luna"
+        )
+    }
+
+    func testClaudeGPTBackendOmitsWhitespaceOnlySubagentModel() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptSubagentModelResolver = { "  \n " }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-sol"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_SUBAGENT_MODEL"])
+    }
+
+    func testClaudeDirectBackendOmitsConfiguredSubagentModel() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { false }
+        builder.gptSubagentModelResolver = { "gpt-5.6-sol" }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-terra"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_SUBAGENT_MODEL"])
     }
 
     func testClaudeGPTBackendKillSwitchIgnoresExistingSessionStamp() throws {
