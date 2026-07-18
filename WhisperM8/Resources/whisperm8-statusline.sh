@@ -9,6 +9,13 @@
 # Benötigt: jq, git; Usage-Limits optional (curl + macOS-Keychain).
 input=$(cat)
 
+# jq ist eine harte Voraussetzung (macOS < 15 liefert es nicht mit) —
+# ohne jq lieber eine klare Zeile als ein Schwall "command not found".
+if ! command -v jq >/dev/null 2>&1; then
+    echo "whisperm8-statusline: jq fehlt (brew install jq)"
+    exit 0
+fi
+
 # ── Profil-Kontext (Account-Switcher via CLAUDE_CONFIG_DIR) ──────────────
 # Läuft die Session mit CLAUDE_CONFIG_DIR (Zusatz-Account), zeigen alle
 # account-bezogenen Teile (Usage-Limits, Account-Name) DIESES Profil.
@@ -88,10 +95,14 @@ cost_display=$(LANG=C awk -v c="$cost" 'BEGIN {printf "$%.2f", c}')
 hourly_display=""
 weekly_display=""
 
-# Pro Profil eigener Cache — sonst zeigt Account B die Limits von Account A
-usage_cache="/tmp/claude-usage-cache-${ccs_profile}.json"
-usage_lock="/tmp/claude-usage-fetch-${ccs_profile}.lock"
-usage_cooldown="/tmp/claude-usage-cooldown-${ccs_profile}"
+# Pro Profil eigener Cache — sonst zeigt Account B die Limits von Account A.
+# Bewusst $TMPDIR (macOS: privates per-User-Verzeichnis) statt /tmp:
+# weltschreibbare, vorhersagbare /tmp-Pfade wären auf Multi-User-Macs
+# lesbar für andere und via vorab platzierter Symlinks angreifbar.
+tmp_base="${TMPDIR:-/tmp/}"
+usage_cache="${tmp_base}claude-usage-cache-${ccs_profile}.json"
+usage_lock="${tmp_base}claude-usage-fetch-${ccs_profile}.lock"
+usage_cooldown="${tmp_base}claude-usage-cooldown-${ccs_profile}"
 usage_cache_ttl=1800  # 30 Minuten
 usage_cooldown_ttl=600  # 10 Min Cooldown nach fehlgeschlagenem Fetch
 
@@ -137,8 +148,11 @@ if [ "$cache_age" -ge "$usage_cache_ttl" ] && [ "$in_cooldown" = false ] && ! [ 
         access_token=""
         [ -n "$keychain_service" ] && access_token=$(security find-generic-password -s "$keychain_service" -w 2>/dev/null | jq -r '.claudeAiOauth.accessToken // empty')
         if [ -n "$access_token" ]; then
-            resp=$(curl -s --max-time 5 "https://api.anthropic.com/api/oauth/usage" \
-                -H "Authorization: Bearer $access_token" \
+            # Token via stdin-Header (-H @-) statt Prozessargument — Argumente
+            # sind in der Prozessliste für lokale Beobachter sichtbar.
+            resp=$(printf 'Authorization: Bearer %s\n' "$access_token" | \
+                curl -s --max-time 5 "https://api.anthropic.com/api/oauth/usage" \
+                -H @- \
                 -H "Content-Type: application/json" \
                 -H "User-Agent: claude-code/2.1.71" \
                 -H "anthropic-version: 2023-06-01" \
@@ -150,6 +164,10 @@ if [ "$cache_age" -ge "$usage_cache_ttl" ] && [ "$in_cooldown" = false ] && ! [ 
                 # Rate-Limited: Cooldown setzen
                 touch "$usage_cooldown"
             fi
+        else
+            # Kein Token (ausgeloggtes Profil): ebenfalls Cooldown — sonst
+            # spawnt jeder Statusline-Refresh erneut security+jq.
+            touch "$usage_cooldown"
         fi
     ) &
 fi

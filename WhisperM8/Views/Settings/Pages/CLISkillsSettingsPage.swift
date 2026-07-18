@@ -323,12 +323,14 @@ private struct StatuslineSettingsCard: View {
     @State private var status: StatuslineInstaller.Status = .missing
     @State private var wiredCount = 0
     @State private var totalConfigs = 0
+    @State private var foreignSettings = 0
     @State private var script = ""
     @State private var feedback: SettingsFeedbackState
     @State private var feedbackMessage: String?
     @State private var errorMessage: String?
     @State private var isPreviewPresented = false
     @State private var isReplaceConfirmPresented = false
+    @State private var isForeignSettingsConfirmPresented = false
 
     @MainActor
     init() {
@@ -361,8 +363,10 @@ private struct StatuslineSettingsCard: View {
                 Button(installButtonTitle) {
                     if status == .foreign {
                         isReplaceConfirmPresented = true
+                    } else if foreignSettings > 0, wiredCount < totalConfigs {
+                        isForeignSettingsConfirmPresented = true
                     } else {
-                        install(force: false)
+                        install()
                     }
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
@@ -409,10 +413,19 @@ private struct StatuslineSettingsCard: View {
             "Replace existing status line script?",
             isPresented: $isReplaceConfirmPresented
         ) {
-            Button("Replace", role: .destructive) { install(force: true) }
+            Button("Replace Script", role: .destructive) { install(replaceScript: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The script at the target path was not installed by WhisperM8 and will be overwritten.")
+            Text("The script at the target path was not installed by WhisperM8 and will be overwritten. Custom statusLine entries in settings.json are NOT touched by this.")
+        }
+        .confirmationDialog(
+            "Replace custom statusLine entries?",
+            isPresented: $isForeignSettingsConfirmPresented
+        ) {
+            Button("Replace Entries", role: .destructive) { install(replaceSettings: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(foreignSettings) config(s) point to a different status line command. Replacing switches them to the WhisperM8 status line.")
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -427,7 +440,8 @@ private struct StatuslineSettingsCard: View {
     private var installButtonTitle: String {
         switch status {
         case .current:
-            return wiredCount == totalConfigs ? "Installed" : "Repair Settings"
+            if wiredCount == totalConfigs { return "Installed" }
+            return foreignSettings > 0 ? "Repair Settings…" : "Repair Settings"
         case .outdated:
             return "Update"
         case .foreign:
@@ -439,21 +453,29 @@ private struct StatuslineSettingsCard: View {
 
     private var wiringSummary: String {
         guard totalConfigs > 0 else { return "" }
-        return "statusLine entry active in \(wiredCount) of \(totalConfigs) Claude configs (main + account profiles)."
+        var text = "statusLine entry active in \(wiredCount) of \(totalConfigs) Claude configs (main + account profiles; symlinked profiles follow main automatically)."
+        if foreignSettings > 0 {
+            text += " \(foreignSettings) config(s) use a different status line command."
+        }
+        return text
     }
 
     private func refresh() {
         status = installer.status()
         wiredCount = installer.wiredSettingsCount()
         totalConfigs = installer.settingsDirectories().count
+        foreignSettings = installer.foreignSettingsCount()
         if script.isEmpty {
             script = (try? installer.bundledScript()) ?? ""
         }
     }
 
-    private func install(force: Bool) {
+    private func install(replaceScript: Bool = false, replaceSettings: Bool = false) {
         do {
-            try installer.install(force: force)
+            try installer.install(
+                replaceForeignScript: replaceScript,
+                replaceForeignSettings: replaceSettings
+            )
             refresh()
             showFeedback("Installed")
         } catch {

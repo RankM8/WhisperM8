@@ -116,8 +116,49 @@ final class StatuslineInstallerTests: XCTestCase {
         // Datei unverändert.
         XCTAssertEqual(try String(contentsOf: installer.scriptURL, encoding: .utf8), foreign)
 
-        try installer.install(force: true)
+        try installer.install(replaceForeignScript: true)
         XCTAssertEqual(installer.status(), .current)
+    }
+
+    func testProfileSettingsSymlinkIsPreservedAndCountsViaMain() throws {
+        // Reale Profil-Anlage: settings.json ist ein Symlink auf Main
+        // (ClaudeAccountProfiles.sharedItems). Der Installer darf ihn nie
+        // durch eine echte Datei ersetzen.
+        let mainSettings = mainConfigDir.appendingPathComponent("settings.json")
+        try Data("{}".utf8).write(to: mainSettings)
+        let profileSettings = profileDir.appendingPathComponent("settings.json")
+        try FileManager.default.createSymbolicLink(
+            at: profileSettings, withDestinationURL: mainSettings
+        )
+
+        let installer = makeInstaller()
+        try installer.install()
+
+        let values = try profileSettings.resourceValues(forKeys: [.isSymbolicLinkKey])
+        XCTAssertEqual(values.isSymbolicLink, true, "Symlink muss Symlink bleiben")
+        let mainEntry = try XCTUnwrap(try settingsJSON(in: mainConfigDir)["statusLine"] as? [String: Any])
+        XCTAssertEqual(mainEntry["command"] as? String, "~/.claude/statusline-command.sh")
+        // Symlink liest transparent durch → beide Configs gelten als verdrahtet.
+        XCTAssertEqual(installer.wiredSettingsCount(), 2)
+        XCTAssertEqual(installer.foreignSettingsCount(), 0)
+    }
+
+    func testCorruptSettingsJSONAbortsInsteadOfOverwriting() throws {
+        let mainSettings = mainConfigDir.appendingPathComponent("settings.json")
+        let corrupt = "{not-json"
+        try Data(corrupt.utf8).write(to: mainSettings)
+
+        let installer = makeInstaller()
+        XCTAssertThrowsError(try installer.install()) { error in
+            XCTAssertEqual(
+                error as? StatuslineInstaller.InstallError,
+                .corruptSettings(path: mainSettings.path)
+            )
+        }
+        XCTAssertEqual(
+            try String(contentsOf: mainSettings, encoding: .utf8), corrupt,
+            "Kaputtes JSON darf nicht überschrieben werden"
+        )
     }
 
     func testForeignStatusLineCommandSurvivesWithoutForce() throws {
@@ -132,11 +173,17 @@ final class StatuslineInstallerTests: XCTestCase {
         let mainEntry = try XCTUnwrap(try settingsJSON(in: mainConfigDir)["statusLine"] as? [String: Any])
         XCTAssertEqual(mainEntry["command"] as? String, "/eigenes/statusline.sh")
         XCTAssertEqual(installer.wiredSettingsCount(), 1)
+        XCTAssertEqual(installer.foreignSettingsCount(), 1)
 
-        try installer.install(force: true)
+        // Skript-Ersetzung allein darf fremde Einträge NICHT kapern.
+        try installer.install(replaceForeignScript: true)
+        XCTAssertEqual(installer.foreignSettingsCount(), 1)
+
+        try installer.install(replaceForeignSettings: true)
         let forcedEntry = try XCTUnwrap(try settingsJSON(in: mainConfigDir)["statusLine"] as? [String: Any])
         XCTAssertEqual(forcedEntry["command"] as? String, "~/.claude/statusline-command.sh")
         XCTAssertEqual(installer.wiredSettingsCount(), 2)
+        XCTAssertEqual(installer.foreignSettingsCount(), 0)
     }
 
     func testMissingProfileDirectoryIsSkipped() throws {

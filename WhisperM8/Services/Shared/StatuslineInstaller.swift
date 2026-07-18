@@ -41,6 +41,7 @@ struct StatuslineInstaller {
     enum InstallError: LocalizedError, Equatable {
         case resourceMissing
         case foreignScript(path: String)
+        case corruptSettings(path: String)
 
         var errorDescription: String? {
             switch self {
@@ -48,6 +49,8 @@ struct StatuslineInstaller {
                 return "Statusline-Ressource fehlt im App-Bundle (\(StatuslineInstaller.resourceName).sh)."
             case .foreignScript(let path):
                 return "Am Zielpfad liegt ein eigenes Statusline-Skript (\(path)). Installation würde es ersetzen."
+            case .corruptSettings(let path):
+                return "\(path) ist kein lesbares JSON — Datei bitte prüfen; sie wird nicht überschrieben."
             }
         }
     }
@@ -98,7 +101,9 @@ struct StatuslineInstaller {
         return .current
     }
 
-    /// Anzahl der settings.json, deren statusLine bereits auf unser Skript zeigt.
+    /// Anzahl der settings.json, deren statusLine bereits auf unser Skript
+    /// zeigt. Symlinks (Profil → Main) lesen transparent durch und zählen
+    /// damit automatisch als verdrahtet, sobald Main verdrahtet ist.
     func wiredSettingsCount() -> Int {
         settingsDirectories().filter { directory in
             guard let entry = readStatusLineEntry(in: directory) else { return false }
@@ -106,15 +111,33 @@ struct StatuslineInstaller {
         }.count
     }
 
+    /// Anzahl der settings.json mit FREMDEM statusLine-Command (weder leer
+    /// noch unseres) — die UI braucht dafür eine eigene Bestätigung.
+    func foreignSettingsCount() -> Int {
+        settingsDirectories().filter { directory in
+            guard !settingsIsSymlink(in: directory),
+                  let entry = readStatusLineEntry(in: directory),
+                  let command = entry["command"] as? String else { return false }
+            return command != settingsCommand
+        }.count
+    }
+
     // MARK: - Installation
 
-    /// Installiert Skript + settings.json-Einträge. `force` ersetzt auch ein
-    /// markerloses User-Skript und biegt fremde statusLine-Commands um.
+    /// Installiert Skript + settings.json-Einträge.
+    /// - `replaceForeignScript`: ersetzt auch ein markerloses User-Skript.
+    /// - `replaceForeignSettings`: biegt fremde statusLine-Commands um.
+    /// Beides sind GETRENNTE Entscheidungen — die UI bestätigt sie einzeln
+    /// (Review-Befund 2026-07-19: force darf fremde Einträge nicht als
+    /// Beifang der Skript-Ersetzung kapern).
     @discardableResult
-    func install(force: Bool = false) throws -> URL {
+    func install(
+        replaceForeignScript: Bool = false,
+        replaceForeignSettings: Bool = false
+    ) throws -> URL {
         let content = try bundledScript()
 
-        if !force, status() == .foreign {
+        if !replaceForeignScript, status() == .foreign {
             throw InstallError.foreignScript(path: scriptURL.path)
         }
 
@@ -128,7 +151,7 @@ struct StatuslineInstaller {
         )
 
         for directory in settingsDirectories() {
-            try wireSettings(in: directory, force: force)
+            try wireSettings(in: directory, overwriteForeignEntry: replaceForeignSettings)
         }
         Logger.debug("[Statusline] installiert: \(scriptURL.path)")
         return scriptURL
@@ -138,6 +161,18 @@ struct StatuslineInstaller {
 
     private func settingsURL(in directory: URL) -> URL {
         directory.appendingPathComponent("settings.json", isDirectory: false)
+    }
+
+    /// Profile teilen ihre settings.json als Symlink auf Main
+    /// (`ClaudeAccountProfiles.sharedItems`). Ein atomarer Write würde den
+    /// Symlink durch eine echte Datei ersetzen und das Profil dauerhaft von
+    /// den gemeinsamen Settings abkoppeln (Review-Befund 2026-07-19, auf
+    /// realen Profilen verifiziert) — Symlinks werden deshalb NIE beschrieben;
+    /// der Eintrag kommt über das Symlink-Ziel (Main) an.
+    private func settingsIsSymlink(in directory: URL) -> Bool {
+        let values = try? settingsURL(in: directory)
+            .resourceValues(forKeys: [.isSymbolicLinkKey])
+        return values?.isSymbolicLink == true
     }
 
     private func readStatusLineEntry(in directory: URL) -> [String: Any]? {
@@ -150,12 +185,18 @@ struct StatuslineInstaller {
 
     /// Setzt den statusLine-Eintrag, ohne andere Schlüssel anzufassen.
     /// Existiert bereits ein Eintrag mit anderem Command, bleibt er ohne
-    /// `force` stehen (kein stilles Kapern einer fremden Statusline).
-    private func wireSettings(in directory: URL, force: Bool) throws {
+    /// `overwriteForeignEntry` stehen (kein stilles Kapern einer fremden
+    /// Statusline). Unparsebares JSON bricht ab, statt die Datei auf einen
+    /// nur-statusLine-Inhalt zu reduzieren.
+    private func wireSettings(in directory: URL, overwriteForeignEntry: Bool) throws {
+        guard !settingsIsSymlink(in: directory) else { return }
+
         let url = settingsURL(in: directory)
         var object: [String: Any] = [:]
-        if let data = try? Data(contentsOf: url),
-           let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let data = try? Data(contentsOf: url) {
+            guard let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw InstallError.corruptSettings(path: url.path)
+            }
             object = existing
         } else if !FileManager.default.fileExists(atPath: directory.path) {
             // Kein Config-Dir → kein Profil-Root, nichts anlegen.
@@ -164,7 +205,7 @@ struct StatuslineInstaller {
 
         if let entry = object["statusLine"] as? [String: Any],
            let command = entry["command"] as? String,
-           command != settingsCommand, !force {
+           command != settingsCommand, !overwriteForeignEntry {
             return
         }
 
