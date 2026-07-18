@@ -438,6 +438,7 @@ extension AgentCommandBuilderTests {
         builder.gptRouterPortResolver = { 19_001 }
         builder.gptSubagentModelResolver = { "" }
         builder.gptDefaultModelResolver = { "" }
+        builder.gptAutoCompactWindowResolver = { 250_000 }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -462,6 +463,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "250000",
         ])
     }
 

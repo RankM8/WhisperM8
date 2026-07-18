@@ -6,6 +6,8 @@ struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTBackendPort) private var port = 18_765
     @AppStorage(PreferenceKeys.claudeGPTBackendDefaultModel) private var defaultModel = ""
     @AppStorage(PreferenceKeys.claudeGPTSubagentModel) private var subagentModel = ""
+    @AppStorage(PreferenceKeys.claudeGPTAutoCompactWindow) private var autoCompactWindow =
+        AppPreferences.claudeGPTDefaultAutoCompactWindow
 
     @State private var binaryPath: String?
     @State private var proxyReachable: Bool?
@@ -189,6 +191,21 @@ struct GPTBackendSettingsPage: View {
                 text: $subagentModel,
                 offersSuggestions: true
             )
+
+            SettingsRow(
+                title: "Kontextfenster (CLAUDE_CODE_AUTO_COMPACT_WINDOW)",
+                subtitle: "Reales Token-Fenster der GPT-Modelle für GPT-Sessions; steuert Auto-Kompaktierung und Kontext-Anzeige. 272000 = ChatGPT-Limit für GPT-5.6 (serverseitig, nicht erhöhbar)."
+            ) {
+                TextField(
+                    String(AppPreferences.claudeGPTDefaultAutoCompactWindow),
+                    value: $autoCompactWindow,
+                    format: .number.grouping(.never)
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .multilineTextAlignment(.trailing)
+                .frame(width: 100)
+            }
         }
     }
 

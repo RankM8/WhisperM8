@@ -84,6 +84,14 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTBackendDefaultModel
     }
 
+    /// Reales GPT-Kontextfenster fuer `CLAUDE_CODE_AUTO_COMPACT_WINDOW`.
+    /// Nur GPT-gestempelte Sessions bekommen die Variable — sie wirkt
+    /// prozessweit, und in Misch-Sessions (Claude-Main) soll die
+    /// Claude-Default-Annahme unangetastet bleiben.
+    var gptAutoCompactWindowResolver: () -> Int = {
+        AppPreferences.shared.claudeGPTAutoCompactWindow
+    }
+
     /// Lokalisiert das Claude-Transcript einer Session ueber ALLE Account-
     /// Roots (main + Profile) — (externalSessionID, cwd) → JSONL-URL.
     /// Default: echter Datei-Lookup, im Test ueberschreibbar.
@@ -291,6 +299,11 @@ struct AgentCommandBuilder {
             if includesGPTTuning {
                 environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "gpt-5.4-mini"
                 environment["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"] = "3"
+                // Reale 272k statt 200k-Default-Annahme fuer unbekannte
+                // Modelle — Auto-Compact-Schwelle und /context rechnen
+                // sonst mit dem falschen Fenster (Proxy-README-Empfehlung).
+                environment["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] =
+                    String(gptAutoCompactWindowResolver())
             }
             return environment
         }

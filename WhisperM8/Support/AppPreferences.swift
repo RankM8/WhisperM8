@@ -295,6 +295,20 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTSubagentModel) }
     }
 
+    /// Reales Kontextfenster der GPT-Modelle (ChatGPT-Limit fuer GPT-5.6:
+    /// 272k laut Codex-models_cache und Proxy-README). Wird GPT-gestempelten
+    /// Sessions als `CLAUDE_CODE_AUTO_COMPACT_WINDOW` mitgegeben, damit die
+    /// CLI nicht mit der 200k-Default-Annahme fuer unbekannte Modelle rechnet.
+    static let claudeGPTDefaultAutoCompactWindow = 272_000
+
+    var claudeGPTAutoCompactWindow: Int {
+        get {
+            let value = defaults.integer(forKey: Keys.claudeGPTAutoCompactWindow)
+            return value > 0 ? value : Self.claudeGPTDefaultAutoCompactWindow
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTAutoCompactWindow) }
+    }
+
     /// Opt-in für SwiftTerms Metal-GPU-Renderer (P6, Default: aus — erst
     /// benchmarken, die CPU-Parser-Gewinne aus SwiftTerm 1.9–1.11 sind
     /// bereits ohne Metal enthalten). Einschalten:
@@ -452,6 +466,7 @@ enum PreferenceKeys {
     static let claudeGPTRouterPort = "claudeGPTRouterPort"
     static let claudeGPTBackendDefaultModel = "claudeGPTBackendDefaultModel"
     static let claudeGPTSubagentModel = "claudeGPTSubagentModel"
+    static let claudeGPTAutoCompactWindow = "claudeGPTAutoCompactWindow"
     static let appearanceOverride = "appearanceOverride"
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"

@@ -256,6 +256,7 @@ final class PreferencesTests: XCTestCase {
             ("claudeGPTRouterPort", PreferenceKeys.claudeGPTRouterPort),
             ("claudeGPTBackendDefaultModel", PreferenceKeys.claudeGPTBackendDefaultModel),
             ("claudeGPTSubagentModel", PreferenceKeys.claudeGPTSubagentModel),
+            ("claudeGPTAutoCompactWindow", PreferenceKeys.claudeGPTAutoCompactWindow),
             ("appearanceOverride", PreferenceKeys.appearanceOverride),
             ("agentSidebarDragEnabled", PreferenceKeys.agentSidebarDragEnabled),
             ("agentEventDrivenWatchEnabled", PreferenceKeys.agentEventDrivenWatchEnabled),
@@ -268,7 +269,7 @@ final class PreferencesTests: XCTestCase {
             ("updateCheckEnabled", PreferenceKeys.updateCheckEnabled)
         ]
 
-        XCTAssertEqual(keys.count, 49)
+        XCTAssertEqual(keys.count, 50)
         for (expected, actual) in keys {
             XCTAssertEqual(actual, expected)
         }
