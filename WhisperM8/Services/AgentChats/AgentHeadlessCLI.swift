@@ -47,30 +47,6 @@ struct AgentHeadlessCLI {
 
             let state = AgentHeadlessCLIState(continuation: continuation)
 
-            // Streaming-Reads statt Lesen im terminationHandler: Pipes haben
-            // ~64 KB Puffer — grosse Ausgaben (z. B. `claude plugin list
-            // --available --json` mit hunderten Eintraegen) liessen den
-            // Prozess sonst beim Schreiben blockieren und nie terminieren
-            // (Review-Befund 2026-07-19).
-            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if data.isEmpty {
-                    handle.readabilityHandler = nil
-                    state.streamFinished(.stdout)
-                } else {
-                    state.append(data, to: .stdout)
-                }
-            }
-            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if data.isEmpty {
-                    handle.readabilityHandler = nil
-                    state.streamFinished(.stderr)
-                } else {
-                    state.append(data, to: .stderr)
-                }
-            }
-
             process.terminationHandler = { proc in
                 state.processExited(status: proc.terminationStatus)
             }
@@ -78,10 +54,25 @@ struct AgentHeadlessCLI {
             do {
                 try process.run()
             } catch {
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
                 state.forceFinish(.failure(error))
                 return
+            }
+
+            // Blockierende Reader auf eigenen Queues statt Lesen im
+            // terminationHandler: `readDataToEndOfFile` konsumiert den
+            // ~64-KB-Pipe-Puffer fortlaufend — grosse Ausgaben (z. B.
+            // `claude plugin list --available --json` mit hunderten
+            // Eintraegen) liessen den Prozess sonst beim Schreiben blockieren
+            // und nie terminieren (Review-Befund 2026-07-19). Bewusst KEIN
+            // `readabilityHandler`: dessen EOF-Callback ist unzuverlaessig,
+            // wenn ein Stream leer bleibt oder Daten und EOF zusammenfallen.
+            DispatchQueue.global(qos: .utility).async {
+                let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                state.streamFinished(.stdout, data: data)
+            }
+            DispatchQueue.global(qos: .utility).async {
+                let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                state.streamFinished(.stderr, data: data)
             }
 
             // Timeout-Kaskade: Die Continuation wird NICHT beim Timeout
@@ -143,17 +134,12 @@ private final class AgentHeadlessCLIState: @unchecked Sendable {
         self.continuation = continuation
     }
 
-    func append(_ data: Data, to stream: Stream) {
+    func streamFinished(_ stream: Stream, data: Data) {
         lock.lock()
-        defer { lock.unlock() }
         switch stream {
-        case .stdout: stdoutData.append(data)
-        case .stderr: stderrData.append(data)
+        case .stdout: stdoutData = data
+        case .stderr: stderrData = data
         }
-    }
-
-    func streamFinished(_ stream: Stream) {
-        lock.lock()
         finishedStreams.insert(stream)
         let result = readyResultLocked()
         lock.unlock()
