@@ -220,11 +220,16 @@ final class AgentJobWorkspaceSyncTests: XCTestCase {
     /// wird beim nächsten Sync auf die echten Werte korrigiert.
     func testKnownJobSessionModelIsCorrectedOnLaterSync() throws {
         let job = makeJob()
-        // Erster Sync ohne bekannte Defaults → Init-Fallback (gpt-5.5).
-        try store.mergeSubagentJobs([job], codexConfigDefaults: .empty)
+        // Erster Sync ohne bekannte Defaults → injizierter Fallback
+        // (simuliert den alten Legacy-Stand gpt-5.5).
+        try store.mergeSubagentJobs(
+            [job],
+            codexConfigDefaults: .empty,
+            fallbackModelRaw: "gpt-5.5"
+        )
         XCTAssertEqual(
             store.loadWorkspace().sessions.first { $0.subagentJobShortID == job.shortId }?.model,
-            CodexPostProcessingModel.defaultModel.rawValue
+            "gpt-5.5"
         )
 
         // Späterer Sync kennt die config.toml-Defaults → korrigiert.

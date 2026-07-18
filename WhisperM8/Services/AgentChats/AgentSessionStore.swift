@@ -912,7 +912,8 @@ struct AgentSessionStore {
         _ jobs: [AgentJobState],
         activityBumpShortIds: Set<String> = [],
         resolvedParentExternalByShortId: [String: String] = [:],
-        codexConfigDefaults: CodexGlobalConfigDefaults = CodexGlobalConfigReader.shared.defaults()
+        codexConfigDefaults: CodexGlobalConfigDefaults = CodexGlobalConfigReader.shared.defaults(),
+        fallbackModelRaw: String = AppPreferences.shared.resolvedCodexDefaultModelRaw()
     ) throws {
         // Branch-Lookups VOR der Mutation (kein Subprozess unter dem
         // Store-Lock) — nur für Fallback-Projekte, die es noch nicht gibt.
@@ -1016,8 +1017,10 @@ struct AgentSessionStore {
                             externalSessionID: job.codexThreadID,
                             title: Self.subagentSessionTitle(from: job.intent),
                             // Echte Job-Parameter statt App-Defaults; nur wenn
-                            // beides unbekannt ist, greift der Init-Fallback.
-                            model: jobModel ?? CodexPostProcessingModel.defaultModel.rawValue,
+                            // beides unbekannt ist, greift der aufgelöste
+                            // App-Default (auto → Frontier-Modell) — nie der
+                            // starre Legacy-Wert gpt-5.5.
+                            model: jobModel ?? fallbackModelRaw,
                             reasoningEffort: jobEffort ?? CodexReasoningEffort.defaultEffort.rawValue,
                             status: .closed,
                             // Resume-Pfad ohne Sonderfall (Übernahme):
