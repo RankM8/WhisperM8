@@ -149,7 +149,7 @@ Minimalbeispiel (Verifier-Panel):
 phase('Verify')
 const verdicts = await parallel(findings.map(f => () =>
   agent(wrapperPrompt(
-    'whisperm8 agent run --wait --json --sandbox read-only --effort low --cd ' + REPO +
+    'whisperm8 agent run --wait --json --sandbox read-only --model gpt-5.6-sol --effort high --cd ' + REPO +
     ' "Widerlege oder bestätige: ' + f.claim + '. Nur Analyse, Urteil ins summary."'),
     { model: 'sonnet', effort: 'low', schema: RESULT, phase: 'Verify' })))
 ```
