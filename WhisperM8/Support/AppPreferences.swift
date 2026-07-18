@@ -277,8 +277,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTRouterPort) }
     }
 
+    /// Kanonisches GPT-Standardmodell (immer mit High-Effort gedacht) —
+    /// Fallback fuer die /model-Picker-Option und die verwaltete
+    /// Agent-Definition, wenn kein eigenes Standard-Modell konfiguriert ist.
+    static let claudeGPTCanonicalModel = "gpt-5.6-sol"
+
     var claudeGPTBackendDefaultModel: String {
-        get { defaults.string(forKey: Keys.claudeGPTBackendDefaultModel) ?? "gpt-5.6-sol" }
+        // Leer = kein GPT-Stempel: neue Claude-Chats starten mit den
+        // Claude-Modellen; GPT nur, wenn hier explizit ein Modell steht.
+        get { defaults.string(forKey: Keys.claudeGPTBackendDefaultModel) ?? "" }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendDefaultModel) }
     }
 

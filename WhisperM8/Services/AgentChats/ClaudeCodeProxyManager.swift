@@ -69,6 +69,12 @@ private final class ClaudeCodeProxyCommandOutput {
     }
 }
 
+/// Traegt einen Prozess-Handle in Completion-Closures, die vor dem Launch
+/// erzeugt werden. Zugriff ausschliesslich unter dem processLock des Managers.
+private final class ClaudeCodeProxyHandleBox {
+    var value: ClaudeCodeProxyProcessHandle?
+}
+
 enum ClaudeCodeProxyAuthStatus: Equatable {
     case authenticated(account: String, expires: String)
     case notAuthenticated
@@ -140,6 +146,7 @@ final class ClaudeCodeProxyManager {
     private let routerStarter: RouterStarter
     private let routerStopper: RouterStopper
     private let routerPortResolver: () -> Int
+    private let agentDefinitionSyncer: () -> Void
     private let environmentResolver: () -> [String: String]
     private let sleepResolver: (TimeInterval) -> Void
     private let retryAttempts: Int
@@ -155,11 +162,16 @@ final class ClaudeCodeProxyManager {
         commandResolver: @escaping (String) -> String? = { AgentCommandBuilder.commandPath($0) },
         reachabilityResolver: @escaping (Int) -> Bool = { ClaudeCodeProxyManager.isReachable(port: $0) },
         processLauncher: @escaping ProcessLauncher = ClaudeCodeProxyManager.launchProcess,
-        commandRunner: @escaping CommandRunner = ClaudeCodeProxyManager.runCommand,
+        commandRunner: @escaping CommandRunner = {
+            try ClaudeCodeProxyManager.runCommand(executable: $0, arguments: $1, environment: $2)
+        },
         deviceLoginLauncher: @escaping DeviceLoginLauncher = ClaudeCodeProxyManager.launchDeviceLogin,
         routerStarter: @escaping RouterStarter = { ClaudeGPTMixRouter.shared.start(port: $0) },
         routerStopper: @escaping RouterStopper = { ClaudeGPTMixRouter.shared.stop() },
         routerPortResolver: @escaping () -> Int = { AppPreferences.shared.claudeGPTRouterPort },
+        agentDefinitionSyncer: @escaping () -> Void = {
+            ClaudeGPTAgentDefinitionInstaller().syncFromPreferences()
+        },
         environmentResolver: @escaping () -> [String: String] = {
             LoginShellEnvironment.shared.processEnvironment()
         },
@@ -176,6 +188,7 @@ final class ClaudeCodeProxyManager {
         self.routerStarter = routerStarter
         self.routerStopper = routerStopper
         self.routerPortResolver = routerPortResolver
+        self.agentDefinitionSyncer = agentDefinitionSyncer
         self.environmentResolver = environmentResolver
         self.sleepResolver = sleepResolver
         self.retryAttempts = retryAttempts
@@ -258,6 +271,9 @@ final class ClaudeCodeProxyManager {
 
         switch routerStarter(routerPortResolver()) {
         case .success:
+            // Backend ist einsatzbereit → verwaltete `gpt`-Agent-Definition
+            // abgleichen (idempotent; ein Read + Vergleich im Normalfall).
+            agentDefinitionSyncer()
             return .success(())
         case .failure(let error):
             if let processStartedForThisAttempt {
@@ -268,8 +284,18 @@ final class ClaudeCodeProxyManager {
     }
 
     func stopIfSelfStarted() {
-        routerStopper()
+        // Der In-Process-Router versorgt bereits laufende PTY-Sessions
+        // (ANTHROPIC_BASE_URL ist beim Spawn eingefroren). Er faellt deshalb
+        // nur zusammen mit einem tatsaechlich selbst gestarteten Proxy —
+        // laeuft der Proxy extern, bleibt der Router unangetastet, wie es
+        // der Settings-Button verspricht.
+        processLock.lock()
+        let hasSelfStartedProcess = selfStartedProcess != nil
+        processLock.unlock()
 
+        if hasSelfStartedProcess {
+            routerStopper()
+        }
         replaceSelfStartedProcess(with: nil)
     }
 
@@ -305,10 +331,18 @@ final class ClaudeCodeProxyManager {
             return .failure(.binaryMissing)
         }
 
+        // Ein noch laufender frueherer Login-Prozess wird zuerst beendet —
+        // sonst liefe er verwaist weiter und ueberlebte den App-Quit.
+        stopDeviceLogin()
+
         let outputLock = NSLock()
         var accumulatedOutput = ""
         var didPublishCode = false
         var didComplete = false
+        // Identifiziert den Prozess, zu dem der Completion-Callback gehoert.
+        // Spaete Callbacks alter Prozesse duerfen den Nachfolger nicht aus
+        // dem Tracking werfen. Zugriff ausschliesslich unter processLock.
+        let registeredHandle = ClaudeCodeProxyHandleBox()
 
         do {
             let process = try deviceLoginLauncher(
@@ -330,12 +364,15 @@ final class ClaudeCodeProxyManager {
                     guard let self else { return }
                     self.processLock.lock()
                     didComplete = true
-                    self.deviceLoginProcess = nil
+                    if let handle = registeredHandle.value, self.deviceLoginProcess === handle {
+                        self.deviceLoginProcess = nil
+                    }
                     self.processLock.unlock()
                     onCompletion(exitCode)
                 }
             )
             processLock.lock()
+            registeredHandle.value = process
             if !didComplete {
                 deviceLoginProcess = process
             }
@@ -523,7 +560,8 @@ final class ClaudeCodeProxyManager {
     static func runCommand(
         executable: String,
         arguments: [String],
-        environment: [String: String]
+        environment: [String: String],
+        timeout: TimeInterval = 30
     ) throws -> ClaudeCodeProxyCommandResult {
         let process = Process()
         let stdoutPipe = Pipe()
@@ -534,6 +572,8 @@ final class ClaudeCodeProxyManager {
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         try process.run()
 
         let stdout = ClaudeCodeProxyCommandOutput()
@@ -549,8 +589,20 @@ final class ClaudeCodeProxyManager {
             stderr.store(stderrPipe.fileHandleForReading.readDataToEndOfFile())
             readers.leave()
         }
-        process.waitUntilExit()
-        readers.wait()
+
+        // Haengende CLIs hart begrenzen (erst SIGTERM, dann SIGKILL):
+        // waitUntilExit kennt keine Frist, und ein blockierter Status-Check
+        // hielte sonst z. B. den Settings-Refresh dauerhaft fest.
+        if exited.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            if exited.wait(timeout: .now() + 2) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                exited.wait()
+            }
+        }
+        // Nach Prozessende schliessen sich die Pipes normalerweise sofort;
+        // haelt ein vererbtes Kind sie offen, liefern wir, was bereits da ist.
+        _ = readers.wait(timeout: .now() + 2)
 
         return ClaudeCodeProxyCommandResult(
             exitCode: process.terminationStatus,

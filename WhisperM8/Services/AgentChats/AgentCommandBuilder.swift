@@ -77,6 +77,13 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTSubagentModel
     }
 
+    /// Konfiguriertes GPT-Standardmodell (leer = keins). Speist die
+    /// /model-Picker-Option (`ANTHROPIC_CUSTOM_MODEL_OPTION`); Fallback ist
+    /// das kanonische Modell, damit GPT auch ohne Konfiguration waehlbar ist.
+    var gptDefaultModelResolver: () -> String = {
+        AppPreferences.shared.claudeGPTBackendDefaultModel
+    }
+
     /// Lokalisiert das Claude-Transcript einer Session ueber ALLE Account-
     /// Roots (main + Profile) — (externalSessionID, cwd) → JSONL-URL.
     /// Default: echter Datei-Lookup, im Test ueberschreibbar.
@@ -266,6 +273,16 @@ struct AgentCommandBuilder {
 
             var environment = baseEnvironment
             environment["ANTHROPIC_BASE_URL"] = "http://127.0.0.1:\(gptRouterPortResolver())"
+            // GPT ist in JEDER Router-Session als /model-Picker-Option
+            // registriert — waehlbar, ohne Standard zu sein. Effort-Steuerung
+            // ist immer aktiv, damit GPT-Modelle mit High-Thinking laufen
+            // (das Level selbst kommt aus der Claude-Code-Einstellung).
+            let pickerModel = gptDefaultModelResolver()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            environment["ANTHROPIC_CUSTOM_MODEL_OPTION"] = pickerModel.isEmpty
+                ? AppPreferences.claudeGPTCanonicalModel
+                : pickerModel
+            environment["CLAUDE_CODE_ALWAYS_ENABLE_EFFORT"] = "1"
             let subagentModel = gptSubagentModelResolver()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !subagentModel.isEmpty {
@@ -273,7 +290,6 @@ struct AgentCommandBuilder {
             }
             if includesGPTTuning {
                 environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "gpt-5.4-mini"
-                environment["CLAUDE_CODE_ALWAYS_ENABLE_EFFORT"] = "1"
                 environment["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"] = "3"
             }
             return environment
@@ -325,12 +341,14 @@ struct AgentCommandBuilder {
         // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
         // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.
         arguments.append(contentsOf: extraLaunchArguments)
-        // User-defined extras (z. B. --dangerously-skip-permissions) zuerst,
-        // damit sie auch beim Resume durchgehen.
-        arguments.append(contentsOf: extraArgumentsResolver(.claude))
+        // GPT-Stempel VOR den User-Extras: ein explizites `--model` aus den
+        // claudeExtraArguments behaelt so das letzte Wort (last-flag-wins).
         if let gptBackendModel {
             arguments.append(contentsOf: ["--model", gptBackendModel])
         }
+        // User-defined extras (z. B. --dangerously-skip-permissions) vor dem
+        // Resume-Block, damit sie auch beim Resume durchgehen.
+        arguments.append(contentsOf: extraArgumentsResolver(.claude))
 
         // Resume-Ziel bestimmen: Fork-Quelle vor gebundener eigener ID.
         var resumeSessionID: String?

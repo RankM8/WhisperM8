@@ -296,6 +296,17 @@ final class ClaudeGPTMixRouter {
         return headers.filter { !blockedNames.contains($0.name.lowercased()) }
     }
 
+    /// Header fuer die Weitergabe der Upstream-Antwort an den Client:
+    /// Hop-by-Hop-Header raus, und Content-Encoding ebenfalls — URLSession
+    /// hat den Body bereits transparent dekodiert (der Upstream-Request geht
+    /// ohne Client-Accept-Encoding raus, URLSession verhandelt selbst). Der
+    /// Header wuerde den Client sonst Klartext entpacken lassen.
+    static func responseHeaders(_ headers: [HTTPHeader]) -> [HTTPHeader] {
+        filteredHeaders(headers).filter {
+            $0.name.caseInsensitiveCompare("content-encoding") != .orderedSame
+        }
+    }
+
     static func upstreamHeaders(
         from headers: [HTTPHeader],
         upstream: Upstream,
@@ -310,6 +321,16 @@ final class ClaudeGPTMixRouter {
                     || name == "x-api-key"
                     || name.hasPrefix("anthropic-")
             }
+        }
+        // Accept-Encoding des Clients wird NICHT weitergereicht: URLSession
+        // verhandelt die Kompression selbst und dekomprimiert transparent —
+        // in der Praxis auch dann, wenn der Request einen eigenen
+        // Accept-Encoding-Header traegt. Der Client bekaeme sonst Klartext
+        // mit weitergereichtem "Content-Encoding: gzip" und scheitert beim
+        // Entpacken (ZlibError). Gegenstueck: `responseHeaders` entfernt
+        // Content-Encoding aus der Antwort.
+        result.removeAll {
+            $0.name.caseInsensitiveCompare("accept-encoding") == .orderedSame
         }
         result.append(HTTPHeader(name: "Host", value: host))
         if bodyLength > 0 {
@@ -420,6 +441,10 @@ private extension ClaudeGPTMixRouter {
         private var upstreamTask: StreamingUpstreamTask?
         private var didFinish = false
         private var didSendResponseHead = false
+        // Synchron beim ersten Fehler-Response gesetzt (didFinish folgt erst
+        // asynchron in der Send-Completion) — verhindert, dass die Receive-
+        // Schleife eine zweite Response auf denselben Socket schreibt.
+        private var didScheduleResponse = false
         private var requestModel: String?
         private var requestUpstream: Upstream?
 
@@ -463,7 +488,9 @@ private extension ClaudeGPTMixRouter {
                     self.buffer.append(data)
                     self.consumeBuffer()
                 }
-                guard !self.didFinish, self.upstreamTask == nil else { return }
+                guard !self.didFinish, !self.didScheduleResponse, self.upstreamTask == nil else {
+                    return
+                }
                 if error != nil || isComplete {
                     self.sendSimpleResponse(status: 400, reason: "Bad Request")
                 } else {
@@ -555,7 +582,7 @@ private extension ClaudeGPTMixRouter {
                 guard let name = key as? String else { return nil }
                 return HTTPHeader(name: name, value: String(describing: value))
             }
-            let forwarded = ClaudeGPTMixRouter.filteredHeaders(headers)
+            let forwarded = ClaudeGPTMixRouter.responseHeaders(headers)
             var head = "HTTP/1.1 \(response.statusCode) \(Self.reasonPhrase(response.statusCode))\r\n"
             for header in forwarded {
                 head += "\(header.name): \(header.value)\r\n"
@@ -595,7 +622,8 @@ private extension ClaudeGPTMixRouter {
         }
 
         private func sendSimpleResponse(status: Int, reason: String) {
-            guard !didFinish else { return }
+            guard !didFinish, !didSendResponseHead, !didScheduleResponse else { return }
+            didScheduleResponse = true
             let body = Data("\(status) \(reason)\n".utf8)
             let head = Data(
                 "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8

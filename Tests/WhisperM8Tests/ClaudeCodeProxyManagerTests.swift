@@ -208,6 +208,82 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         ))
     }
 
+    func testEnsureRunningSyncsAgentDefinitionOnSuccess() throws {
+        var syncCount = 0
+        let manager = makeManager(
+            reachability: { _ in true },
+            agentDefinitionSyncer: { syncCount += 1 }
+        )
+
+        try manager.ensureRunning(port: 18_765).get()
+
+        XCTAssertEqual(syncCount, 1, "Erfolgreicher Backend-Start muss die gpt-Agent-Definition abgleichen")
+    }
+
+    func testStopIfSelfStartedLeavesRouterAloneWithoutSelfStartedProxy() throws {
+        var didStopRouter = false
+        let manager = makeManager(
+            reachability: { _ in true },
+            routerStopper: { didStopRouter = true }
+        )
+        try manager.ensureRunning(port: 18_765).get()
+
+        manager.stopIfSelfStarted()
+
+        XCTAssertFalse(
+            didStopRouter,
+            "Externer Proxy: der Router versorgt laufende Sessions und muss weiterlaufen"
+        )
+    }
+
+    func testSecondDeviceLoginTerminatesFirstProcessAndLateCompletionKeepsTracking() throws {
+        let notificationCenter = NotificationCenter()
+        var firstTerminated = false
+        var secondTerminated = false
+        var completions: [(Int32) -> Void] = []
+        var launches = 0
+        let manager = makeManager(
+            deviceLoginLauncher: { _, _, _, _, onCompletion in
+                launches += 1
+                completions.append(onCompletion)
+                if launches == 1 {
+                    return Self.processHandle(terminate: { firstTerminated = true })
+                }
+                return Self.processHandle(terminate: { secondTerminated = true })
+            },
+            notificationCenter: notificationCenter
+        )
+
+        XCTAssertNoThrow(try manager.startDeviceLogin(
+            onCodeInfo: { _ in },
+            onCompletion: { _ in }
+        ).get())
+        XCTAssertNoThrow(try manager.startDeviceLogin(
+            onCodeInfo: { _ in },
+            onCompletion: { _ in }
+        ).get())
+        XCTAssertTrue(firstTerminated, "Zweiter Login muss den ersten Prozess beenden")
+
+        // Spaete Completion des ERSTEN Prozesses darf das Tracking des
+        // zweiten nicht loeschen — sonst wuerde der App-Quit ihn verlieren.
+        completions[0](143)
+        notificationCenter.post(name: NSApplication.willTerminateNotification, object: nil)
+        XCTAssertTrue(secondTerminated)
+    }
+
+    func testRunCommandTerminatesHangingProcessAfterTimeout() throws {
+        let start = Date()
+        let result = try ClaudeCodeProxyManager.runCommand(
+            executable: "/bin/sleep",
+            arguments: ["60"],
+            environment: [:],
+            timeout: 0.5
+        )
+
+        XCTAssertLessThan(Date().timeIntervalSince(start), 10)
+        XCTAssertNotEqual(result.exitCode, 0)
+    }
+
     func testRunCommandDrainsLargeStdoutAndStderrConcurrently() throws {
         let result = try ClaudeCodeProxyManager.runCommand(
             executable: "/bin/sh",
@@ -341,6 +417,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         routerStarter: @escaping ClaudeCodeProxyManager.RouterStarter = { _ in .success(()) },
         routerStopper: @escaping ClaudeCodeProxyManager.RouterStopper = {},
         routerPort: @escaping () -> Int = { 18_766 },
+        agentDefinitionSyncer: @escaping () -> Void = {},
         environment: @escaping () -> [String: String] = { [:] },
         retryAttempts: Int = 1,
         notificationCenter: NotificationCenter = NotificationCenter()
@@ -354,6 +431,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             routerStarter: routerStarter,
             routerStopper: routerStopper,
             routerPortResolver: routerPort,
+            agentDefinitionSyncer: agentDefinitionSyncer,
             environmentResolver: environment,
             sleepResolver: { _ in },
             retryAttempts: retryAttempts,

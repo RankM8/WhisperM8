@@ -52,6 +52,47 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         ])
     }
 
+    func testUpstreamHeadersDropClientAcceptEncoding() {
+        // URLSession dekomprimiert transparent — auch wenn der Request ein
+        // eigenes Accept-Encoding traegt. Der Client-Header darf deshalb NICHT
+        // upstream weitergereicht werden, sonst kommt Klartext mit
+        // "Content-Encoding: gzip" beim Client an (ZlibError in Claude Code).
+        let headers: [ClaudeGPTMixRouter.HTTPHeader] = [
+            .init(name: "accept-encoding", value: "gzip, br"),
+            .init(name: "Content-Type", value: "application/json"),
+        ]
+
+        XCTAssertEqual(
+            ClaudeGPTMixRouter.upstreamHeaders(
+                from: headers,
+                upstream: .anthropic,
+                host: "api.anthropic.com",
+                bodyLength: 0
+            ),
+            [
+                .init(name: "Content-Type", value: "application/json"),
+                .init(name: "Host", value: "api.anthropic.com"),
+            ]
+        )
+    }
+
+    func testResponseHeadersStripContentEncodingAndHopByHop() {
+        let headers: [ClaudeGPTMixRouter.HTTPHeader] = [
+            .init(name: "Content-Encoding", value: "gzip"),
+            .init(name: "Transfer-Encoding", value: "chunked"),
+            .init(name: "Content-Type", value: "application/json"),
+            .init(name: "anthropic-ratelimit-requests-remaining", value: "99"),
+        ]
+
+        XCTAssertEqual(
+            ClaudeGPTMixRouter.responseHeaders(headers),
+            [
+                .init(name: "Content-Type", value: "application/json"),
+                .init(name: "anthropic-ratelimit-requests-remaining", value: "99"),
+            ]
+        )
+    }
+
     func testCodexHeadersStripAllAnthropicCredentialsCaseInsensitively() {
         let headers: [ClaudeGPTMixRouter.HTTPHeader] = [
             .init(name: "AUTHORIZATION", value: "Bearer abo-oauth"),
@@ -253,6 +294,83 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertNil(unusedUpstream.lastRequest)
     }
 
+    func testRouterSendsExactlyOneResponseForMalformedRequestWithHalfClose() throws {
+        let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
+        defer { unusedUpstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(unusedUpstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        // Kaputter Request-Head + Half-Close im selben Austausch: die
+        // Receive-Schleife darf nach der ersten 400 keine zweite Response
+        // auf denselben Socket schreiben.
+        let response = try Self.exchange(
+            port: try XCTUnwrap(router.listeningPort),
+            request: Data("KAPUTT\r\n\r\n".utf8),
+            halfCloseAfterSend: true
+        )
+
+        let text = String(decoding: response, as: UTF8.self)
+        XCTAssertTrue(text.hasPrefix("HTTP/1.1 400"))
+        XCTAssertEqual(
+            text.components(separatedBy: "HTTP/1.1 400").count - 1,
+            1,
+            "Genau eine Response pro Socket"
+        )
+    }
+
+    func testRouterDeliversPlaintextWhenUpstreamCompressesWithGzip() throws {
+        // Reproduziert den QA-Befund „ZlibError bei Fable/Subagents": Upstream
+        // antwortet gzip-komprimiert; URLSession dekodiert transparent. Der
+        // Client muss Klartext OHNE Content-Encoding-Header bekommen — sonst
+        // versucht Claude Code, Klartext zu entpacken.
+        let plaintext = Data(#"{"id":"msg_1","content":"klartext"}"#.utf8)
+        let gzipped = try Self.gzipCompress(plaintext)
+        var raw = Data(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Encoding: gzip\r\nContent-Length: \(gzipped.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        raw.append(gzipped)
+        let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [], rawResponse: raw)
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: try XCTUnwrap(router.listeningPort),
+            body: Data(#"{"model":"claude-fable-5","messages":[]}"#.utf8),
+            authorization: "Bearer abo-oauth"
+        )
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 200"))
+        XCTAssertFalse(
+            response.head.localizedCaseInsensitiveContains("Content-Encoding"),
+            "Content-Encoding darf nach transparenter Dekodierung nicht weitergereicht werden"
+        )
+        XCTAssertEqual(response.body, plaintext, "Client muss dekodierten Klartext erhalten")
+    }
+
+    private static func gzipCompress(_ data: Data) throws -> Data {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+        process.arguments = ["-c"]
+        let inputPipe = Pipe()
+        let outputPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardOutput = outputPipe
+        try process.run()
+        inputPipe.fileHandleForWriting.write(data)
+        inputPipe.fileHandleForWriting.closeFile()
+        let compressed = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0, !compressed.isEmpty else {
+            throw TestHTTPError.invalidResponse
+        }
+        return compressed
+    }
+
     private static func sendRawRequest(
         port: Int,
         body: Data,
@@ -271,7 +389,11 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         return (head, try decodeChunkedBody(encodedBody))
     }
 
-    private static func exchange(port: Int, request: Data) throws -> Data {
+    private static func exchange(
+        port: Int,
+        request: Data,
+        halfCloseAfterSend: Bool = false
+    ) throws -> Data {
         let fileDescriptor = socket(AF_INET, SOCK_STREAM, 0)
         guard fileDescriptor >= 0 else { throw TestHTTPError.socketFailed }
         defer { close(fileDescriptor) }
@@ -298,6 +420,9 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
                 guard count > 0 else { throw TestHTTPError.socketFailed }
                 sent += count
             }
+        }
+        if halfCloseAfterSend {
+            shutdown(fileDescriptor, SHUT_WR)
         }
 
         var response = Data()
@@ -352,6 +477,7 @@ private final class LocalHTTPMockServer {
 
     private let status: Int
     private let responseChunks: [Data]
+    private let rawResponse: Data?
     private let queue = DispatchQueue(label: "com.whisperm8.tests.http-mock")
     private let lock = NSLock()
     private var listener: NWListener?
@@ -365,9 +491,10 @@ private final class LocalHTTPMockServer {
         return lastRequestStorage
     }
 
-    init(status: Int, responseChunks: [Data]) throws {
+    init(status: Int, responseChunks: [Data], rawResponse: Data? = nil) throws {
         self.status = status
         self.responseChunks = responseChunks
+        self.rawResponse = rawResponse
 
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
@@ -421,7 +548,15 @@ private final class LocalHTTPMockServer {
                 self.lock.lock()
                 self.lastRequestStorage = request
                 self.lock.unlock()
-                self.sendResponse(connection: connection, chunkIndex: -1)
+                if let rawResponse = self.rawResponse {
+                    // Vorgefertigte Antwort byte-genau senden (z. B. echtes
+                    // gzip mit Content-Encoding-Header), dann schliessen.
+                    connection.send(content: rawResponse, completion: .contentProcessed { _ in
+                        connection.cancel()
+                    })
+                } else {
+                    self.sendResponse(connection: connection, chunkIndex: -1)
+                }
             } else if error == nil, !isComplete {
                 self.receive(connection: connection, buffer: nextBuffer)
             } else {

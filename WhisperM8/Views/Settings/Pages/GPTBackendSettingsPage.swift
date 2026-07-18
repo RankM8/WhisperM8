@@ -4,7 +4,7 @@ import SwiftUI
 struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTBackendEnabled) private var backendEnabled = false
     @AppStorage(PreferenceKeys.claudeGPTBackendPort) private var port = 18_765
-    @AppStorage(PreferenceKeys.claudeGPTBackendDefaultModel) private var defaultModel = "gpt-5.6-sol"
+    @AppStorage(PreferenceKeys.claudeGPTBackendDefaultModel) private var defaultModel = ""
     @AppStorage(PreferenceKeys.claudeGPTSubagentModel) private var subagentModel = ""
 
     @State private var binaryPath: String?
@@ -69,6 +69,19 @@ struct GPTBackendSettingsPage: View {
             } else {
                 clearStatus()
             }
+            // Verwaltete `gpt`-Agent-Definition folgt dem Backend-Zustand:
+            // aktiv → anlegen/aktualisieren, deaktiviert → entfernen.
+            ClaudeGPTAgentDefinitionInstaller().sync(
+                backendEnabled: backendEnabled,
+                model: defaultModel
+            )
+        }
+        .onChange(of: defaultModel) { _, newModel in
+            guard backendEnabled else { return }
+            ClaudeGPTAgentDefinitionInstaller().sync(
+                backendEnabled: true,
+                model: newModel
+            )
         }
     }
 
@@ -163,16 +176,16 @@ struct GPTBackendSettingsPage: View {
 
             editableModelRow(
                 title: "Standard-Modell für neue Claude-Chats",
-                subtitle: "Frei editierbar; die Liste enthält nur Vorschläge.",
-                placeholder: "gpt-5.6-sol",
+                subtitle: "Leer = neue Chats starten wie gewohnt mit Claude; GPT nur, wenn hier ein Modell steht. Frei editierbar; die Liste enthält nur Vorschläge.",
+                placeholder: "Leer = Claude (Standard)",
                 text: $defaultModel,
                 offersSuggestions: true
             )
 
             editableModelRow(
                 title: "Subagent-Modell (CLAUDE_CODE_SUBAGENT_MODEL)",
-                subtitle: "Leer bedeutet: kein Override für native Subagents und Workflows.",
-                placeholder: "Leer = aus",
+                subtitle: "Zwangs-Override: erzwingt dieses Modell für ALLE nativen Subagents. Empfehlung: leer lassen — GPT-Subagents stehen ohnehin über den Agent-Typ »gpt« bereit, den Claude pro Aufgabe wählen kann.",
+                placeholder: "Leer = aus (empfohlen)",
                 text: $subagentModel,
                 offersSuggestions: true
             )
