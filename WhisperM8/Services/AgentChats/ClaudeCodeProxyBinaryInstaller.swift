@@ -176,15 +176,17 @@ struct ClaudeCodeProxyBinaryInstaller {
 
         Self.installLock.lock()
         defer { Self.installLock.unlock() }
-        // Alten Stempel VOR dem Binary-Replace entfernen: schlägt der
-        // Stempel-Write danach fehl (praktisch relevant: voller Datenträger),
-        // ist der Zustand „Stempel fehlt" (installedManagedVersion → nil, UI
-        // zeigt „kein verwaltetes Binary") statt „Stempel zeigt die FALSCHE
-        // Version". Ein neues Binary mit veraltetem Stempel — die
-        // irreführendste Divergenz — entsteht so nicht. (Ein per chflags
-        // immutabler Stempel überlebt das try? und bliebe divergent; das ist
-        // ein absurder Edge-Case, den wir bewusst nicht abfangen.)
-        try? FileManager.default.removeItem(at: versionStampURL)
+        // Alten Stempel VOR dem Binary-Replace entfernen — und zwar mit `try`,
+        // nicht `try?`: Lässt er sich nicht entfernen (z. B. immutabel per
+        // chflags), bricht die Installation ab, BEVOR das Binary getauscht
+        // wird. So kann nie ein neues Binary neben einem veralteten Stempel
+        // stehen (die irreführendste Divergenz). Schlägt danach der
+        // Stempel-Write fehl (voller Datenträger), ist der schlimmste
+        // Zustand „Stempel fehlt" → installedManagedVersion nil, UI zeigt
+        // „kein verwaltetes Binary" statt einer falschen Version.
+        if FileManager.default.fileExists(atPath: versionStampURL.path) {
+            try FileManager.default.removeItem(at: versionStampURL)
+        }
         _ = try FileManager.default.replaceItemAt(binaryURL, withItemAt: extracted)
         // Rechte NACH dem Replace setzen: replaceItemAt übernimmt auf Darwin
         // die POSIX-Rechte des VORHANDENEN Ziels (Review-Befund 2026-07-19,

@@ -164,6 +164,51 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.isExecutableFile(atPath: installer.binaryURL.path))
     }
 
+    func testUnremovableOldStampAbortsBeforeBinarySwap() async throws {
+        // Ein immutabler alter Stempel (chflags uchg) lässt sich nicht
+        // entfernen — die Installation muss VOR dem Binary-Tausch abbrechen,
+        // damit nie ein neues Binary neben dem alten Stempel steht.
+        let (first, firstDigest) = try makeTarball(binaryContent: "#!/bin/sh\necho v1\n")
+        let (second, secondDigest) = try makeTarball(binaryContent: "#!/bin/sh\necho v2\n")
+        var current = (first, firstDigest)
+        let installer = makeInstaller { url in
+            if url.absoluteString.hasSuffix(".sha256") {
+                return Data("\(current.1)  x.tar.gz\n".utf8)
+            }
+            return current.0
+        }
+
+        _ = try await installer.install(version: "9.9.8")
+        XCTAssertEqual(installer.installedManagedVersion(), "9.9.8")
+
+        // Alten Stempel immutabel machen; im Cleanup zwingend zurücksetzen,
+        // sonst scheitert tearDown am Löschen des Temp-Verzeichnisses.
+        setImmutable(true, at: installer.versionStampURL)
+        defer { setImmutable(false, at: installer.versionStampURL) }
+
+        current = (second, secondDigest)
+        do {
+            _ = try await installer.install(version: "9.9.9")
+            XCTFail("Unentfernbarer Stempel muss die Installation abbrechen")
+        } catch {
+            // erwartet
+        }
+
+        // Binary UND Stempel sind unverändert der alte Stand — keine Divergenz.
+        let content = try String(contentsOf: installer.binaryURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("echo v1"), "Binary darf nicht getauscht sein")
+        XCTAssertEqual(installer.installedManagedVersion(), "9.9.8")
+    }
+
+    private func setImmutable(_ immutable: Bool, at url: URL) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/chflags")
+        process.arguments = [immutable ? "uchg" : "nouchg", url.path]
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+        process.waitUntilExit()
+    }
+
     // MARK: Versionsvergleich
 
     func testVersionComparisonIsNumericNotLexicographic() {
