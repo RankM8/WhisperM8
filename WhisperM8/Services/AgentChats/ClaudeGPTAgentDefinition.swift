@@ -23,8 +23,16 @@ struct ClaudeGPTAgentDefinitionInstaller {
     /// werden ueberschrieben oder entfernt.
     static let managedMarker = "managed-by: whisperm8-gpt-backend"
 
-    var fileURL: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude/agents/gpt.md")
+    /// Ziel-Dateien: `<config-dir>/agents/gpt.md` fuer `main` UND jedes
+    /// Zusatzprofil. Claude Code liest User-Level-Agents aus dem
+    /// `CLAUDE_CONFIG_DIR` der jeweiligen Session — Profil-Sessions sehen
+    /// `~/.claude/agents/` NICHT (QA-Befund 2026-07-18: der gpt-Typ fehlte
+    /// in allen Sessions mit Account-Profil).
+    var fileURLs: [URL] = ClaudeAccountProfiles().profiles().map { profile in
+        profile.configDir
+            .appendingPathComponent("agents", isDirectory: true)
+            .appendingPathComponent("gpt.md", isDirectory: false)
+    }
 
     static func definitionContent(model: String) -> String {
         """
@@ -39,11 +47,17 @@ struct ClaudeGPTAgentDefinitionInstaller {
         """
     }
 
-    /// Idempotenter Abgleich von Soll (Backend-Zustand + Modell) und Platte.
-    /// Leeres Modell faellt auf das kanonische GPT-Modell zurueck, damit der
-    /// Agent-Typ auch ohne konfiguriertes Standard-Modell funktioniert.
+    /// Idempotenter Abgleich von Soll (Backend-Zustand + Modell) und Platte —
+    /// fuer alle Config-Roots. Rueckgabe je Root, in fileURLs-Reihenfolge.
     @discardableResult
-    func sync(backendEnabled: Bool, model rawModel: String) -> SyncOutcome {
+    func sync(backendEnabled: Bool, model rawModel: String) -> [SyncOutcome] {
+        fileURLs.map { sync(backendEnabled: backendEnabled, model: rawModel, at: $0) }
+    }
+
+    /// Abgleich einer einzelnen Ziel-Datei. Leeres Modell faellt auf das
+    /// kanonische GPT-Modell zurueck, damit der Agent-Typ auch ohne
+    /// konfiguriertes Standard-Modell funktioniert.
+    private func sync(backendEnabled: Bool, model rawModel: String, at fileURL: URL) -> SyncOutcome {
         let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = trimmed.isEmpty ? AppPreferences.claudeGPTCanonicalModel : trimmed
         let fileManager = FileManager.default
