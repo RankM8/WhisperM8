@@ -1,7 +1,7 @@
 # Claudex: GPT-5.6 als Backend für Claude-Code-Sessions in WhisperM8
 
-**Stand:** 2026-07-18 · **Status:** UMGESETZT — Slices 0–4 committet (`30c4661`, `12fe54f`, `204e7d8`),
-Testsuite komplett grün; adversariales Codex-Review gelaufen; manuelle QA durch den User (make dev) offen
+**Stand:** 2026-07-18 · **Status:** KERNFUNKTION UMGESETZT UND E2E-VALIDIERT — Slices 0–4 committet (`30c4661`, `12fe54f`, `204e7d8`); Härtung gemäß P0/P1-Findings noch offen.
+Testsuite komplett grün; adversariales Codex-Review und native GPT-E2E-Smoke-Tests durchgeführt. Einzelne manuelle QA-Punkte bleiben in der [QA-CHECKLISTE.md](QA-CHECKLISTE.md) offen. Der vollständige 32-Agent-Review mit 24 verifizierten Findings, Priorisierung und Fix-Paketen steht in [REVIEW-2026-07-18.md](REVIEW-2026-07-18.md).
 **Vorarbeit:** Recherche + End-to-End-Beweis am 2026-07-18 (siehe Memory `claudex-gpt56-in-claude-code`):
 `claude --model gpt-5.6-sol` läuft über raine/claude-code-proxy (Codex-Subscription-OAuth, eigener
 Keychain-Grant, koexistiert mit der Codex CLI); Modell-Mix Parent=Terra/Subagent=Sol in einer Session

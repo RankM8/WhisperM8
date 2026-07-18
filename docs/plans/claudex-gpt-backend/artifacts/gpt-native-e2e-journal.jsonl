@@ -1,0 +1,8 @@
+{"type":"started","key":"v2:46c549b4861c2a48e54c664e63fc7a86b5fa245c29a9fe99af757b79b320544f","agentId":"ab942ac7a5f51873d"}
+{"type":"started","key":"v2:b234b1a2ca757e388b705f79db641bac64b4dcc0f8af1500c3cebfb3a644c160","agentId":"a1b03ceef6afa950e"}
+{"type":"started","key":"v2:9dbbeaf0fe537028fc449db5c5ef2a5d6393c9472ebb217fb13ac01f1e9dd1a0","agentId":"a87635cbafe789a7d"}
+{"type":"result","key":"v2:9dbbeaf0fe537028fc449db5c5ef2a5d6393c9472ebb217fb13ac01f1e9dd1a0","agentId":"a87635cbafe789a7d","result":{"baseURL":"http://127.0.0.1:18766","ergebnis":1517,"id":"alpha"}}
+{"type":"result","key":"v2:b234b1a2ca757e388b705f79db641bac64b4dcc0f8af1500c3cebfb3a644c160","agentId":"a1b03ceef6afa950e","result":{"baseURL":"http://127.0.0.1:18766","ergebnis":2491,"id":"beta"}}
+{"type":"result","key":"v2:46c549b4861c2a48e54c664e63fc7a86b5fa245c29a9fe99af757b79b320544f","agentId":"ab942ac7a5f51873d","result":{"baseURL":"http://127.0.0.1:18766","ergebnis":899,"id":"gamma"}}
+{"type":"started","key":"v2:4e27b4339f31f202bfd091342ad54b7ae69603c9b211c8b30ca871c81209f088","agentId":"a0eb4ffeda90f26bd"}
+{"type":"result","key":"v2:4e27b4339f31f202bfd091342ad54b7ae69603c9b211c8b30ca871c81209f088","agentId":"a0eb4ffeda90f26bd","result":{"falsch":[],"fazit":"Alle drei Workflow-Test-Ergebnisse und sämtliche baseURLs entsprechen den Erwartungen.","korrekt":3}}
