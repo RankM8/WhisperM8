@@ -18,7 +18,7 @@ whisperm8-CLI ist die Spezial-Variante für alles, was nur Codex kann.
 | User sagt explizit "CLI", "whisperm8 agent", "Job" — oder `--cli` als Skill-Argument | **CLI** |
 | Detachte Langläufer: Sidebar-Sichtbarkeit in der App, überleben App-Neustart | **CLI** |
 | Browser-QA (Playwright-storageState), 1Password-Flows | **CLI** |
-| Steps in Claude Dynamic Workflows (codex-runner) | **CLI** |
+| Steps in Claude Dynamic Workflows | **NATIV**: `agent(prompt, {agentType: "gpt", schema})` — inkl. Structured Output E2E-validiert (2026-07-18). CLI/codex-runner nur für Codex-Spezifisches (Bilder, detachte Jobs) |
 
 Skill-Argumente: `/codex-subagent <aufgabe>` → nativ. `/codex-subagent --cli
 <aufgabe>` → CLI erzwingen. Bild-Aufträge gehen unabhängig vom Argument immer
