@@ -17,6 +17,8 @@ struct GPTBackendSettingsPage: View {
     @State private var operationError: String?
     @State private var deviceCodeInfo: ClaudeCodeProxyDeviceCodeInfo?
     @State private var isDeviceLoginRunning = false
+    @State private var isSetupRunning = false
+    @State private var setupProgressText: String?
 
     private let proxyManager = ClaudeCodeProxyManager.shared
     private let modelSuggestions = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra"]
@@ -35,6 +37,10 @@ struct GPTBackendSettingsPage: View {
             }
 
             if backendEnabled {
+                if setupNeeded {
+                    setupSection
+                }
+
                 statusSection
 
                 if authStatus == .notAuthenticated {
@@ -67,7 +73,10 @@ struct GPTBackendSettingsPage: View {
         }
         .task(id: backendEnabled) {
             if backendEnabled {
-                refreshStatus()
+                // Aktivierung = sofort betriebsbereit machen: Binary prüfen,
+                // Proxy + Router hochfahren, Auth-Status ermitteln. Der
+                // Device-Code-Login bleibt ein bewusster Klick (Browser-Flow).
+                runFullSetup(startLoginIfNeeded: false)
             } else {
                 clearStatus()
             }
@@ -84,6 +93,36 @@ struct GPTBackendSettingsPage: View {
                 backendEnabled: true,
                 model: newModel
             )
+        }
+    }
+
+    /// Setup unvollständig, sobald ein Baustein fehlt — erst dann zeigt die
+    /// Seite die geführte Einrichtung. Vor dem ersten Refresh (didRefresh
+    /// false) bleibt sie versteckt, um Flackern beim Öffnen zu vermeiden.
+    private var setupNeeded: Bool {
+        guard didRefresh else { return isSetupRunning }
+        if binaryPath == nil { return true }
+        if proxyReachable != true { return true }
+        if case .authenticated = authStatus { return false }
+        return true
+    }
+
+    private var setupSection: some View {
+        SettingsSection("Einrichtung") {
+            SettingsButtonRow(
+                title: "Geführte Einrichtung",
+                subtitle: "Führt alle Schritte nacheinander aus: Binary prüfen → Proxy & Router starten → ChatGPT-Login (Device-Code, öffnet die Code-Anzeige unten)."
+            ) {
+                Button(isSetupRunning ? "Läuft…" : "Jetzt komplett einrichten") {
+                    runFullSetup(startLoginIfNeeded: true)
+                }
+                .buttonStyle(SettingsButtonStyle.primary)
+                .disabled(isSetupRunning || isDeviceLoginRunning)
+            }
+
+            if let setupProgressText {
+                SettingsHelpText(setupProgressText)
+            }
         }
     }
 
@@ -270,6 +309,53 @@ struct GPTBackendSettingsPage: View {
             return .warn
         case .unknown:
             return .off
+        }
+    }
+
+    /// Ein-Klick-Einrichtung: läuft den `GPTBackendSetupRunner` sequenziell
+    /// durch und spiegelt jeden Schritt in `setupProgressText`. Fehlt am Ende
+    /// nur der Login, startet `startLoginIfNeeded` direkt den
+    /// Device-Code-Flow (Code + URL erscheinen in der Login-Sektion).
+    private func runFullSetup(startLoginIfNeeded: Bool) {
+        guard backendEnabled, !isSetupRunning else { return }
+        isSetupRunning = true
+        operationError = nil
+        setupProgressText = nil
+        let selectedPort = port
+        let runner = GPTBackendSetupRunner()
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) {
+                runner.run(port: selectedPort) { step, state in
+                    let text: String?
+                    switch state {
+                    case .running:
+                        text = "\(step.title)…"
+                    case .failed(let message):
+                        text = "\(step.title): \(message)"
+                    case .ok, .pending:
+                        text = nil
+                    }
+                    if let text {
+                        Task { @MainActor in setupProgressText = text }
+                    }
+                }
+            }.value
+
+            isSetupRunning = false
+            switch outcome {
+            case .ready:
+                setupProgressText = nil
+            case .needsDeviceLogin:
+                setupProgressText = nil
+                if startLoginIfNeeded {
+                    startDeviceLogin()
+                }
+            case .failed:
+                // Detailtext steht bereits in setupProgressText.
+                break
+            }
+            refreshStatus()
         }
     }
 

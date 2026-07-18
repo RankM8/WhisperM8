@@ -296,6 +296,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         AgentSessionSummarizer.shared.runStartupReconciliation(
             openTabIDs: AgentWindowStore.shared.openTabIDsAtLaunch
         )
+        // GPT-Backend: aktivierter Toggle heißt betriebsbereit — Proxy und
+        // Router direkt beim App-Start hochfahren statt erst beim ersten
+        // Chat-Launch. Detached, damit der Launch-Pfad nicht auf `which`/
+        // Healthcheck wartet; Fehler zeigt die Settings-Seite beim Öffnen.
+        if AppPreferences.shared.claudeGPTBackendEnabled {
+            Task.detached(priority: .utility) {
+                _ = ClaudeCodeProxyManager.shared.ensureRunning(
+                    port: AppPreferences.shared.claudeGPTBackendPort
+                )
+            }
+        }
 
         // Routing: Onboarding nur, wenn die zwei essenziellen System-Permissions
         // (Mikrofon + Accessibility) noch nicht erteilt sind. Ohne diese ist die
