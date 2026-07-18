@@ -69,11 +69,22 @@ enum ClaudeHookSettingsBuilder {
 
     /// Schreibt die Settings atomisch nach `outURL` mit POSIX-0600.
     static func writeSettingsFile(eventFilePath: String, to outURL: URL) throws {
+        try write(settings: makeSettings(eventFilePath: eventFilePath), to: outURL)
+    }
+
+    /// Generische Variante: schreibt ein beliebiges Settings-Dict atomisch
+    /// mit POSIX-0600 und deterministischer Serialisierung. Genutzt vom
+    /// Compose-Pfad, der Hook- und Context-Profil-Fragmente in EINE Datei
+    /// merged (`ClaudeHookBridge.prepareSettingsFile`).
+    static func write(settings: [String: Any], to outURL: URL) throws {
         try FileManager.default.createDirectory(
             at: outURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let data = try serializedSettings(eventFilePath: eventFilePath)
+        let data = try JSONSerialization.data(
+            withJSONObject: settings,
+            options: [.prettyPrinted, .sortedKeys]
+        )
         try data.write(to: outURL, options: .atomic)
         try? FileManager.default.setAttributes(
             [.posixPermissions: 0o600],

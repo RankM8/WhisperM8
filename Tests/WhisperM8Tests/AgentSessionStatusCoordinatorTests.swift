@@ -205,15 +205,53 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(sounds.played, ["Submarine"])
     }
 
-    func testDisabledHooksYieldNoLaunchArguments() throws {
+    /// 4-Fälle-Matrix der Settings-Vorbereitung (Hooks-Preference ×
+    /// Context-Profil): welche Datei entsteht, welche Keys sie enthält und
+    /// ob die Hook-Bridge tracken darf.
+    func testPrepareLaunchSettingsMatrix() throws {
         let (coordinator, sessionID, _, _, preferences) = try makeCoordinator()
+        let profile = ClaudeContextProfile(
+            name: "Coding",
+            deniedMcpServers: ["claude.ai Gmail"],
+            environment: ["ENABLE_CLAUDEAI_MCP_SERVERS": "false"]
+        )
 
-        let enabledArgs = coordinator.prepareLaunchArguments(localSessionID: sessionID)
-        XCTAssertEqual(enabledArgs.first, "--settings")
+        func settingsKeys(_ path: String?) throws -> Set<String> {
+            let path = try XCTUnwrap(path)
+            let data = try Data(contentsOf: URL(fileURLWithPath: path))
+            let dict = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            return Set(dict.keys)
+        }
 
+        // Hooks an + Profil → hooks UND Profil-Keys in EINER Datei, Tracking an.
+        let both = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: profile)
+        XCTAssertEqual(both.settingsArguments.first, "--settings")
+        XCTAssertTrue(both.hooksActive)
+        XCTAssertEqual(try settingsKeys(both.settingsFilePath), ["hooks", "deniedMcpServers", "env"])
+
+        // Hooks an + kein Profil → nur hooks (heutiges Verhalten).
+        let hooksOnly = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: nil)
+        XCTAssertTrue(hooksOnly.hooksActive)
+        XCTAssertEqual(try settingsKeys(hooksOnly.settingsFilePath), ["hooks"])
+
+        // Hooks aus + Profil → NUR Profil-Keys, kein Tracking.
         preferences.value.hooksEnabled = false
-        XCTAssertTrue(coordinator.prepareLaunchArguments(localSessionID: sessionID).isEmpty)
-        XCTAssertNil(coordinator.prepareBackgroundSettingsFile(localSessionID: sessionID))
+        let profileOnly = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: profile)
+        XCTAssertFalse(profileOnly.hooksActive)
+        XCTAssertEqual(try settingsKeys(profileOnly.settingsFilePath), ["deniedMcpServers", "env"])
+
+        // Hooks aus + kein Profil → keine Datei, keine Args.
+        let nothing = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: nil)
+        XCTAssertNil(nothing.settingsFilePath)
+        XCTAssertTrue(nothing.settingsArguments.isEmpty)
+        XCTAssertFalse(nothing.hooksActive)
+
+        // Leeres Profil zählt wie kein Profil.
+        let empty = coordinator.prepareLaunchSettings(
+            localSessionID: sessionID,
+            contextProfile: ClaudeContextProfile(name: "Leer")
+        )
+        XCTAssertNil(empty.settingsFilePath)
     }
 
     // MARK: Prozessende

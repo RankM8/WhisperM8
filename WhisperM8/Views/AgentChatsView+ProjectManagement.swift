@@ -92,6 +92,16 @@ extension AgentChatsView {
         if let error = viewModel.setProjectColor(id: id, color: color) { errorMessage = error }
     }
 
+    /// Weist dem Projekt sein Default-Context-Profil zu (nil = kein Overlay).
+    /// Wirkt auf NEUE Sessions — bestehende behalten ihren Session-Stempel.
+    func setProjectContextProfile(id: UUID, profileID: UUID?) {
+        do {
+            try store.setProjectContextProfile(id: id, profileID: profileID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Öffnet einen NSOpenPanel und speichert den absoluten Pfad als
     /// `customIconAbsolutePath` (Vorrang vor Auto-Detect-Pfad). Akzeptiert die
     /// üblichen Bildformate, die NSImage zuverlässig darstellt.

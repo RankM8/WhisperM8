@@ -922,8 +922,11 @@ extension AgentChatsView {
                 onExternalSessionIDBound: { sessionID in
                     AgentSessionStatusCoordinator.shared.externalSessionIDBound(sessionID: sessionID)
                 },
-                onPrepareClaudeHookArguments: { sessionID in
-                    AgentSessionStatusCoordinator.shared.prepareLaunchArguments(localSessionID: sessionID)
+                onPrepareLaunchSettings: { sessionID, contextProfile in
+                    AgentSessionStatusCoordinator.shared.prepareLaunchSettings(
+                        localSessionID: sessionID,
+                        contextProfile: contextProfile
+                    )
                 },
                 onClaudeHookLaunched: { sessionID in
                     AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: sessionID)

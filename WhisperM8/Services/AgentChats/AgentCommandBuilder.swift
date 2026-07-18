@@ -161,6 +161,13 @@ struct AgentCommandBuilder {
     /// (Phase 5). `nil` wenn kein zusaetzlicher Inject gewuenscht ist.
     var extraLaunchArguments: [String] = []
 
+    /// Zusaetzliche Env-Overrides fuer den PTY-Prozess — z. B. das Env eines
+    /// Context-Profils (`ClaudeContextSettingsBuilder.processEnvironmentOverlay`).
+    /// Prioritaet: LoginShellEnvironment < DIESE < Account-CLAUDE_CONFIG_DIR
+    /// < Router-Env. Ein Context-Profil kann Account-Routing und GPT-Router
+    /// damit nie kapern (reservierte Keys sind zusaetzlich vorgefiltert).
+    var extraEnvironmentOverrides: [String: String] = [:]
+
     func command(for session: AgentChatSession, project: AgentProject) throws -> AgentLaunchCommand {
         guard FileManager.default.fileExists(atPath: project.path) else {
             throw AgentCommandError.missingProject(project.path)
@@ -262,7 +269,15 @@ struct AgentCommandBuilder {
         // Config-Dir laufen, unter dem die Session erstellt wurde. (Fuer
         // Resumes wird der Stempel unten zusaetzlich gegen den realen
         // Transcript-Ablageort verifiziert — die Platte ist SSoT.)
-        let profileEnvironment = claudeProfileEnvironmentResolver(session.claudeProfileName)
+        // Das Context-Profil-Env liegt UNTER dem Account-Env — bei
+        // Key-Kollision gewinnt das Account-Profil.
+        let extraEnvironment = extraEnvironmentOverrides
+        let accountEnvironment: (String?) -> [String: String] = { profileName in
+            extraEnvironment.merging(
+                claudeProfileEnvironmentResolver(profileName)
+            ) { _, account in account }
+        }
+        let profileEnvironment = accountEnvironment(session.claudeProfileName)
 
         let routerEnabled = gptBackendEnabledResolver()
         let gptBackendModel: String? = {
@@ -403,7 +418,7 @@ struct AgentCommandBuilder {
                 Logger.agentStore.warning(
                     "claude_profile_stamp_mismatch session=\(resumeSessionID, privacy: .public) stamped=\(session.claudeProfileName ?? "main", privacy: .public) actual=\(actualProfile ?? "main", privacy: .public) — Launch folgt dem realen Transcript-Root"
                 )
-                effectiveProfileEnvironment = claudeProfileEnvironmentResolver(actualProfile)
+                effectiveProfileEnvironment = accountEnvironment(actualProfile)
             }
         }
 

@@ -29,10 +29,11 @@ struct AgentSessionDetailView: View {
     var onSessionLaunched: (UUID) -> Void = { _ in }
     var onSessionTerminated: (UUID, Int32?) -> Void = { _, _ in }
     var onExternalSessionIDBound: (UUID) -> Void = { _ in }
-    /// Wird gerufen direkt VOR dem Claude-Launch und liefert zusaetzliche
-    /// CLI-Argumente (typisch: `--settings <hook-settings-path>`). `nil`
-    /// erlaubt der View, im Test-Setup ohne Hook-Bridge zu laufen.
-    var onPrepareClaudeHookArguments: (UUID) -> [String] = { _ in [] }
+    /// Wird gerufen direkt VOR dem Claude-Launch: schreibt die
+    /// `--settings`-Datei (Hook-Bridge + Context-Profil-Overlay) und liefert
+    /// Args + hooksActive-Flag. Der Default erlaubt der View, im Test-Setup
+    /// ohne Coordinator zu laufen.
+    var onPrepareLaunchSettings: (UUID, ClaudeContextProfile?) -> AgentSessionStatusCoordinator.LaunchSettingsPreparation = { _, _ in .none }
     /// Wird gerufen direkt NACH dem Launch um Hook-Tail-Polling zu starten.
     var onClaudeHookLaunched: (UUID) -> Void = { _ in }
 
@@ -494,11 +495,20 @@ struct AgentSessionDetailView: View {
                 && !launchSession.isAgentView
                 && !launchSession.isBackgroundChat
                 && !launchSession.isTerminal
+            var launchPreparation = AgentSessionStatusCoordinator.LaunchSettingsPreparation.none
             if useHookBridge {
-                let hookArgs = onPrepareClaudeHookArguments(launchSession.id)
-                if !hookArgs.isEmpty {
-                    builder.extraLaunchArguments = hookArgs
-                }
+                // Context-Profil aufloesen (Session-Stempel > Projekt-Default;
+                // geloescht → kein Overlay) und zusammen mit den Hooks in die
+                // eine `--settings`-Datei composen. Das Profil-Env geht
+                // zusaetzlich als Prozess-Env mit (wirkt ab Prozessstart).
+                let contextProfile = ClaudeContextProfileStore.shared.resolvedProfile(
+                    sessionStamp: launchSession.contextProfileID,
+                    projectDefault: project.contextProfileID
+                )
+                launchPreparation = onPrepareLaunchSettings(launchSession.id, contextProfile)
+                builder.extraLaunchArguments = launchPreparation.settingsArguments
+                builder.extraEnvironmentOverrides =
+                    ClaudeContextSettingsBuilder.processEnvironmentOverlay(for: contextProfile)
             }
             let command = try builder.command(for: launchSession, project: project)
             let launchedController = terminalRegistry.startController(
@@ -516,7 +526,9 @@ struct AgentSessionDetailView: View {
                     applyShellTitle(title, sessionID: sessionID)
                 }
             }
-            if useHookBridge {
+            // Tracking nur bei aktiver Hook-Bridge — eine Settings-Datei kann
+            // seit Context-Profilen auch OHNE Hooks existieren.
+            if launchPreparation.hooksActive {
                 onClaudeHookLaunched(launchSession.id)
             }
             errorMessage = nil

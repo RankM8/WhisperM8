@@ -76,24 +76,41 @@ final class ClaudeHookBridge {
     /// (z. B. `claude --settings <path> --bg "<prompt>"` beim
     /// Background-Spawn). `nil` bei IO-Fehlern; der Caller faellt dann auf
     /// einen Launch ohne Hook-Bridge zurueck.
-    func prepareSettingsFile(localSessionID: UUID) -> String? {
+    ///
+    /// `contextFragment` (Context-Profil-Keys, siehe
+    /// `ClaudeContextSettingsBuilder`) wird mit dem Hook-Fragment in EINE
+    /// Datei gemerged — Claude nimmt nur ein `--settings`. Mit
+    /// `includeHooks: false` entsteht eine reine Profil-Datei ohne
+    /// Event-File-Setup (Hook-Bridge deaktiviert, Profil soll trotzdem
+    /// wirken). Sind beide Teile leer, gibt es nichts zu schreiben → nil.
+    func prepareSettingsFile(
+        localSessionID: UUID,
+        contextFragment: [String: Any]? = nil,
+        includeHooks: Bool = true
+    ) -> String? {
         let settingsURL = paths.settingsFileURL(localSessionID: localSessionID)
-        let eventURL = paths.eventFileURL(localSessionID: localSessionID)
+        var fragments: [[String: Any]] = []
         do {
-            try? FileManager.default.createDirectory(
-                at: paths.eventsDirectory,
-                withIntermediateDirectories: true
-            )
-            try? FileManager.default.removeItem(at: eventURL)
-            try Data().write(to: eventURL, options: .atomic)
-            try? FileManager.default.setAttributes(
-                [.posixPermissions: 0o600],
-                ofItemAtPath: eventURL.path
-            )
-            try ClaudeHookSettingsBuilder.writeSettingsFile(
-                eventFilePath: eventURL.path,
-                to: settingsURL
-            )
+            if includeHooks {
+                let eventURL = paths.eventFileURL(localSessionID: localSessionID)
+                try? FileManager.default.createDirectory(
+                    at: paths.eventsDirectory,
+                    withIntermediateDirectories: true
+                )
+                try? FileManager.default.removeItem(at: eventURL)
+                try Data().write(to: eventURL, options: .atomic)
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o600],
+                    ofItemAtPath: eventURL.path
+                )
+                fragments.append(ClaudeHookSettingsBuilder.makeSettings(eventFilePath: eventURL.path))
+            }
+            if let contextFragment, !contextFragment.isEmpty {
+                fragments.append(contextFragment)
+            }
+            let settings = ClaudeContextSettingsBuilder.merged(fragments)
+            guard !settings.isEmpty else { return nil }
+            try ClaudeHookSettingsBuilder.write(settings: settings, to: settingsURL)
             return settingsURL.path
         } catch {
             Logger.claudeBinding.warning("hook_prepare_failed localID=\(localSessionID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")

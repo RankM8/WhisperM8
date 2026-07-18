@@ -51,6 +51,7 @@ struct ProjectChatGroup: View {
     var onToggleSubagentChildren: (UUID) -> Void = { _ in }
     var onRenameProjectRequest: (AgentProject) -> Void
     var onSetProjectColor: (UUID, String) -> Void
+    var onSetProjectContextProfile: (UUID, UUID?) -> Void
     var onChooseProjectIcon: (AgentProject) -> Void
     var onAutoDetectProjectIcon: (AgentProject) -> Void
     var onClearProjectIcon: (UUID) -> Void
@@ -444,6 +445,7 @@ struct ProjectChatGroup: View {
                     }
                 }
             }
+            contextProfileMenu
             Divider()
             Button("Icon wählen…", systemImage: "photo") {
                 onChooseProjectIcon(project)
@@ -461,6 +463,45 @@ struct ProjectChatGroup: View {
             Divider()
             Button("Projekt löschen…", systemImage: "trash", role: .destructive) {
                 onDeleteProject(project)
+            }
+        }
+    }
+
+    /// Untermenü „Context-Profil": weist dem Projekt ein Default-Profil fuer
+    /// neue Claude-Sessions zu (Definition der Profile: Settings → Agent
+    /// Chats → Context Profiles). Geloeschte Referenzen werden als solche
+    /// angezeigt statt still zu verschwinden.
+    @ViewBuilder
+    private var contextProfileMenu: some View {
+        let profiles = ClaudeContextProfileStore.shared.profiles
+        if !profiles.isEmpty || project.contextProfileID != nil {
+            Menu("Context-Profil") {
+                Button {
+                    onSetProjectContextProfile(project.id, nil)
+                } label: {
+                    if project.contextProfileID == nil {
+                        Label("Kein Profil", systemImage: "checkmark")
+                    } else {
+                        Text("Kein Profil")
+                    }
+                }
+                Divider()
+                ForEach(profiles) { profile in
+                    Button {
+                        onSetProjectContextProfile(project.id, profile.id)
+                    } label: {
+                        if project.contextProfileID == profile.id {
+                            Label(profile.name, systemImage: "checkmark")
+                        } else {
+                            Text(profile.name)
+                        }
+                    }
+                }
+                if let assigned = project.contextProfileID,
+                   !profiles.contains(where: { $0.id == assigned }) {
+                    Divider()
+                    Text("Zugewiesenes Profil wurde gelöscht")
+                }
             }
         }
     }

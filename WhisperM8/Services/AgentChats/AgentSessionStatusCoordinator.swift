@@ -95,18 +95,44 @@ final class AgentSessionStatusCoordinator {
 
     // MARK: - Lifecycle-API (von den Views gerufen)
 
-    /// `--settings <path>` für einen interaktiven Claude-Launch — leer, wenn
-    /// Hooks deaktiviert sind (Launch läuft dann ohne Bridge, Status kommt
-    /// aus dem Transcript-Watcher).
-    func prepareLaunchArguments(localSessionID: UUID) -> [String] {
-        guard loadPreferences().hooksEnabled else { return [] }
-        return hookBridge.prepareLaunch(localSessionID: localSessionID)
+    /// Ergebnis der Launch-Settings-Vorbereitung. `hooksActive` sagt, ob die
+    /// Hook-Bridge tracken soll — seit Context-Profilen kann eine
+    /// Settings-Datei auch OHNE Hooks existieren (nur Profil-Keys), deshalb
+    /// ist `settingsFilePath != nil` KEIN gültiger Hooks-Indikator mehr.
+    struct LaunchSettingsPreparation {
+        var settingsFilePath: String?
+        var hooksActive: Bool
+
+        var settingsArguments: [String] {
+            guard let settingsFilePath else { return [] }
+            return ["--settings", settingsFilePath]
+        }
+
+        static let none = LaunchSettingsPreparation(settingsFilePath: nil, hooksActive: false)
     }
 
-    /// Settings-Pfad für den `claude --bg`-Spawn (Background-Agents).
-    func prepareBackgroundSettingsFile(localSessionID: UUID) -> String? {
-        guard loadPreferences().hooksEnabled else { return nil }
-        return hookBridge.prepareSettingsFile(localSessionID: localSessionID)
+    /// Zentrale Settings-Vorbereitung für interaktive UND Background-Launches.
+    /// Matrix (Hooks-Preference × Context-Profil):
+    /// - Hooks an,  Profil da   → Datei mit hooks + Profil-Keys
+    /// - Hooks an,  kein Profil → Datei nur mit hooks (heutiges Verhalten)
+    /// - Hooks aus, Profil da   → Datei NUR mit Profil-Keys, kein Tracking
+    /// - Hooks aus, kein Profil → keine Datei
+    func prepareLaunchSettings(
+        localSessionID: UUID,
+        contextProfile: ClaudeContextProfile?
+    ) -> LaunchSettingsPreparation {
+        let hooksEnabled = loadPreferences().hooksEnabled
+        let fragment = contextProfile.map { ClaudeContextSettingsBuilder.settingsFragment(for: $0) } ?? [:]
+        guard hooksEnabled || !fragment.isEmpty else { return .none }
+        let path = hookBridge.prepareSettingsFile(
+            localSessionID: localSessionID,
+            contextFragment: fragment,
+            includeHooks: hooksEnabled
+        )
+        return LaunchSettingsPreparation(
+            settingsFilePath: path,
+            hooksActive: hooksEnabled && path != nil
+        )
     }
 
     /// Beginnt das Event-File-Tracking nach erfolgtem Launch/Spawn.

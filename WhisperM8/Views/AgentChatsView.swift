@@ -1236,6 +1236,7 @@ struct AgentChatsView: View {
                             onToggleSubagentChildren: { windowStore.toggleSubagentChildren($0) },
                             onRenameProjectRequest: { beginRenameProject($0) },
                             onSetProjectColor: setProjectColor,
+                            onSetProjectContextProfile: setProjectContextProfile,
                             onChooseProjectIcon: { chooseProjectIcon($0) },
                             onAutoDetectProjectIcon: { reAutoDetectProjectIcon($0) },
                             onClearProjectIcon: { clearProjectIcon($0) },
@@ -2610,6 +2611,31 @@ struct AgentChatsView: View {
         .buttonStyle(.plain)
         .disabled(selectedProject == nil)
         .help("Neuen \(provider.displayName) Chat in \(selectedProject?.name ?? "—") öffnen")
+        .contextMenu {
+            newChatContextProfileMenu(provider: provider)
+        }
+    }
+
+    /// Rechtsklick auf „＋ Claude": Start mit explizitem Context-Profil —
+    /// Override nur fuer diesen einen Start, der Projekt-Default bleibt.
+    /// Codex kennt kein `--settings`, dort bleibt das Menue leer.
+    @ViewBuilder
+    private func newChatContextProfileMenu(provider: AgentProvider) -> some View {
+        if provider == .claude, let project = selectedProject {
+            let profiles = ClaudeContextProfileStore.shared.profiles
+            let defaultName = profiles.first { $0.id == project.contextProfileID }?.name
+            Button("Mit Projekt-Standard starten (\(defaultName ?? "kein Profil"))") {
+                createSession(provider: provider)
+            }
+            if !profiles.isEmpty {
+                Divider()
+                ForEach(profiles) { profile in
+                    Button("Mit Profil \(profile.name) starten") {
+                        createSession(provider: provider, contextProfileOverride: profile.id)
+                    }
+                }
+            }
+        }
     }
 
     private func selectedSessionHeaderControls(_ session: AgentChatSession) -> some View {

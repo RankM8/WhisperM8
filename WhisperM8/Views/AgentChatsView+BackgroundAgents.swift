@@ -41,7 +41,11 @@ extension AgentChatsView {
     /// 3. Attach — Short-ID auf Session schreiben + sessionActionRequest senden.
     @MainActor
     func dispatchBackgroundAgent(in project: AgentProject, request: BackgroundDispatchRequest) async {
-        // 1. Stub-Session anlegen (ohne Short-ID), Tab oeffnen.
+        // 1. Stub-Session anlegen (ohne Short-ID), Tab oeffnen. Das Context-
+        //    Profil des Projekts wird auf die Session gestempelt — der
+        //    Supervisor brennt die Spawn-Settings ein, Profil-Aenderungen
+        //    wirken bei Background-Agents erst ab Respawn.
+        let contextProfile = ClaudeContextProfileStore.shared.profile(id: project.contextProfileID)
         let session: AgentChatSession
         do {
             session = try store.createSession(
@@ -55,7 +59,8 @@ extension AgentChatsView {
                 shouldLaunchOnOpen: false,
                 kind: .backgroundChat,
                 backgroundSubAgent: request.subAgent,
-                backgroundPermissionMode: request.permissionMode
+                backgroundPermissionMode: request.permissionMode,
+                contextProfileID: contextProfile?.id
             )
         } catch {
             errorMessage = error.localizedDescription
@@ -65,12 +70,17 @@ extension AgentChatsView {
         openTab(session.id)
         selectedSessionID = session.id
 
-        // 2. Hook-Bridge vorbereiten — die Background-Session erbt die
-        //    Settings vom Supervisor, also muessen wir `--settings <path>`
-        //    schon beim Spawn-Subprocess setzen, nicht erst beim spaeteren
-        //    `claude attach`. `nil` (Hooks deaktiviert / IO-Fehler) → Spawn
-        //    ohne Settings — der Agent laeuft trotzdem, nur ohne Live-Events.
-        let settingsPath = AgentSessionStatusCoordinator.shared.prepareBackgroundSettingsFile(localSessionID: session.id)
+        // 2. Settings vorbereiten (Hook-Bridge + Context-Profil-Overlay) —
+        //    die Background-Session erbt die Settings vom Supervisor, also
+        //    muessen wir `--settings <path>` schon beim Spawn-Subprocess
+        //    setzen, nicht erst beim spaeteren `claude attach`. Kein Pfad
+        //    (Hooks aus + kein Profil / IO-Fehler) → Spawn ohne Settings —
+        //    der Agent laeuft trotzdem, nur ohne Live-Events/Overlay.
+        let launchPreparation = AgentSessionStatusCoordinator.shared.prepareLaunchSettings(
+            localSessionID: session.id,
+            contextProfile: contextProfile
+        )
+        let settingsPath = launchPreparation.settingsFilePath
 
         // 3. Spawn via BackgroundAgentSpawner.
         let extraArgs = AgentCommandBuilder.parseArguments(AppPreferences.shared.claudeExtraArguments)
@@ -89,7 +99,10 @@ extension AgentChatsView {
                 updated.hasLaunchedInitialPrompt = true
             }
             spawningBackgroundSessions.remove(session.id)
-            if settingsPath != nil {
+            // hooksActive statt `settingsPath != nil`: seit Context-Profilen
+            // kann die Settings-Datei auch ohne Hook-Keys existieren — dann
+            // darf kein Event-Tracking starten (Event-File existiert nicht).
+            if launchPreparation.hooksActive {
                 AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: session.id)
             }
             sessionActionRequest = AgentSessionActionRequest(sessionID: session.id, kind: .start)

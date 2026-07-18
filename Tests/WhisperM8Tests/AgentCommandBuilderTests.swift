@@ -778,3 +778,85 @@ extension AgentCommandBuilderTests {
         XCTAssertTrue(command.environmentOverrides.isEmpty)
     }
 }
+
+// MARK: - Context-Profil-Env (extraEnvironmentOverrides)
+
+extension AgentCommandBuilderTests {
+    /// Prioritaetskette der Env-Overrides: Profil-Env (Context-Profil) <
+    /// Account-CLAUDE_CONFIG_DIR < Router-Env. Reservierte Keys werden zwar
+    /// schon im ClaudeContextSettingsBuilder gefiltert — dieser Test sichert
+    /// die zweite Verteidigungslinie im Builder-Merge ab.
+    func testContextProfileEnvironmentLosesAgainstAccountAndRouter() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.extraEnvironmentOverrides = [
+            "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+            "CLAUDE_CONFIG_DIR": "/tmp/kapern",          // verliert gegen Account
+            "ANTHROPIC_BASE_URL": "http://evil"          // verliert gegen Router
+        ]
+        builder.claudeProfileEnvironmentResolver = { _ in
+            ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
+        }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 19_003 }
+        builder.gptSubagentModelResolver = { "" }
+        builder.gptDefaultModelResolver = { "" }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeProfileName: "firma"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.environmentOverrides["ENABLE_CLAUDEAI_MCP_SERVERS"], "false")
+        XCTAssertEqual(command.environmentOverrides["CLAUDE_CONFIG_DIR"], "/profiles/firma")
+        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:19003")
+    }
+
+    /// Ohne Router und ohne Account-Profil kommt das Profil-Env pur durch.
+    func testContextProfileEnvironmentPassesThroughWithoutConflicts() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.extraEnvironmentOverrides = ["ENABLE_TOOL_SEARCH": "auto"]
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { false }
+        let session = AgentChatSession(provider: .claude, projectID: project.id, title: "Claude")
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.environmentOverrides, ["ENABLE_TOOL_SEARCH": "auto"])
+    }
+
+    /// Der Resume-Selbstheilungs-Pfad (Stempel ≠ realer Transcript-Root)
+    /// darf das Context-Profil-Env nicht verlieren.
+    func testContextProfileEnvironmentSurvivesResumeRepair() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.extraEnvironmentOverrides = ["ENABLE_TOOL_SEARCH": "auto"]
+        builder.claudeProfileEnvironmentResolver = { profileName in
+            profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
+        }
+        // Transcript liegt real im Haupt-Account → Selbstheilung auf nil-Profil.
+        builder.claudeTranscriptLocator = { _, _ in
+            URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent(".claude/projects/x/ext-9.jsonl")
+        }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "ext-9",
+            title: "Chat",
+            hasLaunchedInitialPrompt: true,
+            claudeProfileName: "firma"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.environmentOverrides, ["ENABLE_TOOL_SEARCH": "auto"])
+    }
+}

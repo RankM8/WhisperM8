@@ -6,6 +6,7 @@ enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
     case workspace
     case notifications
     case claudeAccounts
+    case contextProfiles
     case claudeHooks
     case advanced
 
@@ -17,6 +18,8 @@ enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
             return "Notifications"
         case .claudeAccounts:
             return "Claude Accounts"
+        case .contextProfiles:
+            return "Context Profiles"
         case .claudeHooks:
             return "Claude Hooks"
         case .advanced:
@@ -57,6 +60,8 @@ struct AgentChatsSettingsPage: View {
             AgentChatsNotificationsSettingsTab()
         case .claudeAccounts:
             AgentChatsClaudeAccountsTab()
+        case .contextProfiles:
+            AgentChatsContextProfilesTab()
         case .claudeHooks:
             AgentChatsClaudeHooksSettingsTab()
         case .advanced:

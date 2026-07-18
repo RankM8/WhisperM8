@@ -171,6 +171,11 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
     /// fortlaufende `sortIndex`-Werte (0, 1, 2, …) und das Feld ist nicht
     /// mehr `nil`.
     var sortIndex: Int?
+    /// Default-Context-Profil (`ClaudeContextProfile`) fuer neue Claude-
+    /// Sessions dieses Projekts. `nil` = kein Overlay. Leniente Aufloesung
+    /// im `ClaudeContextProfileStore` — ein geloeschtes Profil blockiert
+    /// keinen Launch.
+    var contextProfileID: UUID?
 
     init(
         id: UUID = UUID(),
@@ -184,7 +189,8 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         iconRelativePath: String? = nil,
         customIconAbsolutePath: String? = nil,
         iconAutoLookupAttempted: Bool? = nil,
-        sortIndex: Int? = nil
+        sortIndex: Int? = nil,
+        contextProfileID: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -198,6 +204,7 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
         self.customIconAbsolutePath = customIconAbsolutePath
         self.iconAutoLookupAttempted = iconAutoLookupAttempted
         self.sortIndex = sortIndex
+        self.contextProfileID = contextProfileID
     }
 
     var isManuallyAdded: Bool { createdManually == true }
@@ -305,6 +312,12 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// direkten Anthropic-Pfad; ein GPT-Modell wird nur bei aktivem globalem
     /// Kill-Switch an den lokalen Proxy geroutet.
     var claudeBackendModel: String?
+    /// Context-Profil, mit dem die Session gestartet wurde. Beim Erstellen
+    /// aus Override/Projekt-Default gestempelt und danach stabil — Resume
+    /// bleibt so vorhersagbar, auch wenn der Projekt-Default spaeter
+    /// wechselt. Die Profil-WERTE werden trotzdem bei jedem Launch frisch
+    /// aus dem `ClaudeContextProfileStore` gelesen (Edits wirken).
+    var contextProfileID: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -339,6 +352,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case subagentCwd
         case claudeProfileName
         case claudeBackendModel
+        case contextProfileID
     }
 
     init(
@@ -373,7 +387,8 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         subagentParentSessionID: String? = nil,
         subagentCwd: String? = nil,
         claudeProfileName: String? = nil,
-        claudeBackendModel: String? = nil
+        claudeBackendModel: String? = nil,
+        contextProfileID: UUID? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -407,6 +422,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.subagentCwd = subagentCwd
         self.claudeProfileName = claudeProfileName
         self.claudeBackendModel = claudeBackendModel
+        self.contextProfileID = contextProfileID
     }
 
     init(from decoder: Decoder) throws {
@@ -447,6 +463,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         subagentCwd = try container.decodeIfPresent(String.self, forKey: .subagentCwd)
         claudeProfileName = try container.decodeIfPresent(String.self, forKey: .claudeProfileName)
         claudeBackendModel = try container.decodeIfPresent(String.self, forKey: .claudeBackendModel)
+        contextProfileID = try container.decodeIfPresent(UUID.self, forKey: .contextProfileID)
     }
 
     var isManuallyCreated: Bool { createdManually == true }
