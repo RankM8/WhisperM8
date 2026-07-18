@@ -1,67 +1,115 @@
 ---
-status: abgeschlossen
-updated: 2026-07-18 18:18
-description: Einstieg und vollständiger Dokumentindex zum zweirundigen Agent-Chats-Deep-Dive-Audit von WhisperM8.
-description_long: Fasst die bestätigten Stabilitäts-, Datenintegritäts-, Security-, Supervisor- und Transcript-Befunde sowie die Technologieentscheidungen zusammen und verlinkt alle Audit-Artefakte.
+status: aktiv
+updated: 2026-07-18
+description: Einstieg und Dokumentindex zum Agent-Chats-Deep-Dive mit drei Findings-Runden, verifizierten Feldvergleichen, Roadmap-Nachtrag und offenem Umsetzungs-Gate.
 ---
 
-# Ultra Deep Dive: Agent Chats & Stabilität (2026-07-18)
+# Ultra Deep Dive: Agent Chats & Stabilität (2026-07)
 
-> Status: **Audit abgeschlossen (2 Runden + Tech-Scan), Umsetzungsvorbereitung
-> abgeschlossen (Workflow 3)**. Die erste Verifikationsrunde bestätigte
-> C01–C16, die zweite N01–N16; keine der 32 adversarial geprüften Behauptungen
-> wurde widerlegt. Die Plan-Verifikation aus Runde 2 ist in die
-> [konsolidierte Roadmap](05-roadmap/refactor-roadmap.md) eingearbeitet.
-> Workflow 3 (Feldvergleich von sieben Referenz-Repositories + Schluss-
-> Verifikation) ist synthetisiert; Einstieg in die Umsetzungsphase:
-> [06-umsetzung/README.md](06-umsetzung/README.md).
+> **Status:** Die verifizierten Populationen C01–C16 und N01–N16 bleiben
+> bestätigt; Runde 3 bestätigt zusätzlich 20 primäre GPT-G-Findings und einen
+> separat live beobachteten Usage-/Kompaktierungsdefekt. Das Gesamtaudit ist
+> dennoch **nicht umsetzungsfreigegeben**: Die Schlussverifikation nennt fünf
+> P0-Lücken im Identitäts-/Recovery-Vertrag, und die Vollständigkeitskritik
+> verlangt unter anderem Traceability, Terminal-Snapshot-Verdicts, einen
+> gemeinsamen Termination-Contract sowie korrigierte Inventare und Tests
+> ([verifikation-schluss.md:27-45](06-umsetzung/verifikation-schluss.md);
+> [runde3-vollstaendigkeits-kritik.md:578-611](02-findings/runde3-vollstaendigkeits-kritik.md)).
+> Aktuelle Synthese: [06-umsetzung/README.md](06-umsetzung/README.md); Planung:
+> [Roadmap mit Runde-3-Nachtrag](05-roadmap/refactor-roadmap.md#nachtrag-runde-3--workflow-3).
 
-Multi-Agent-Audit des WhisperM8-Projekts (Fable-Finder + Codex-Refuter; Ablauf
-siehe [WORKPLAN.md](WORKPLAN.md)) mit Fokus auf Stabilität,
-Claude-/Codex-Integration, Diktat, Prozess- und Datenintegrität, Security,
-Performance, Wartbarkeit und aktuelle Technologieoptionen.
+Multi-Agent-Audit des WhisperM8-Projekts (Fable-Finder, Codex-Refuter und
+Workflow-3-Feldvergleich; Ablauf siehe [WORKPLAN.md](WORKPLAN.md)) mit Fokus auf
+Stabilität, Claude-/Codex-Integration, Diktat, Prozess- und Datenintegrität,
+Security, Performance, Wartbarkeit und Technologieoptionen.
 
 ## Kernergebnisse
 
-- **Der gemeldete Diktat-Crash ist erklärt:** Zwischen Formatprüfung und
-  `engine.start()` bleibt ein TOCTOU-Fenster für eine AVFoundation-
-  NSException; der Configuration-Change-Handler arbeitet nach `await` zudem auf
-  potenziell veralteter Engine-/Converter-Generation weiter (C01–C03).
-- **Runde 2 ergänzt konkrete Datenverlustpfade:** App-Quit kann eine laufende
-  Aufnahme verlieren (N02), doppelte oder inkompatible Output-Modi können
-  crashen beziehungsweise alle Custom-Modi überschreiben (N03/N04), und
-  Future-Schema- sowie fehlgeschlagene Keychain-Migrationen gefährden Session-
-  oder Credential-Daten (N05/N06).
-- **Der Codex-Supervisor-Vertrag ist nicht zuverlässig:** Der Detach erfolgt zu
-  spät (N07), unvollständige Turns können als Erfolg enden (N08), und ein
-  frühes Stop-Signal kann vor Prozessregistrierung verloren gehen (N14).
-- **Prozessidentität und Secrets brauchen harte Grenzen:** Eine veraltete
-  Terminal-PID kann im Race einen fremden Prozess treffen (N01), Agent-Kinder
-  erben heute fremde Parent-Secrets (N09), und ein Claude-OAuth-Secret landet
-  beim Profil-Rename in argv (N10).
-- **Diktat-Auslieferung ist nicht sicher an das ursprüngliche Ziel gebunden:**
-  Ein Fokuswechsel während Transkription oder Nachbearbeitung kann vertraulichen
-  Text in einen anderen Chat senden (N11).
-- **Job- und Transcript-Zustände haben belegte Lost-Update-/Drift-Lücken:**
-  Orphan-Korrektur und UI-Composer können neuere Jobzustände überschreiben
-  (N12/N13); parallele Tool-Resultate verlieren ihre Korrelation (N15), und
-  unbekannte aktuelle Codex-Events verschwinden lautlos (N16).
-- **Die Erstrunden-Befunde bleiben gültig:** Headless-Junk, falsches
-  Claude-cwd-Encoding, unvollständige Profilpropagation und kaperbare
-  Session-Bindung (C04–C09), fehlerhaftes PTY-Drain/Snapshotting (C10) sowie
-  bestätigte Store-, Merge-, Git-, Window- und Transcript-Hotspots (C11–C16)
-  sind weiterhin Teil der Roadmap.
-- **Technologiepfad:** Swift 6.3 mit Complete Concurrency Checking im
-  Swift-5-Modus jetzt adoptieren und Targets schrittweise migrieren;
-  `claude agents --json` profilbezogen als Background-SSoT adoptieren;
-  output-only Terminal-Recording jetzt, PTY-Broker und OSC-Protokolle erst
-  später hinter klaren Security-/Lifecycle-Gates.
-- **Nicht als Sofortlösung:** `swift-subprocess` erst nach stabilem 1.0 für
-  einfache headless Commands pilotieren; es ersetzt weder SwiftTerm/PTY noch
-  Supervisor- oder Environment-Policy. Ghostty, AUHAL und lokale
-  Transkriptionsbackends bleiben getrennte, optionale Spikes.
+### Verifizierte Basis aus Runde 1 und 2
+
+- **Diktat-Lifecycle:** C01–C03 belegen Crash-/Race-Risiken zwischen
+  Audioformatprüfung, `engine.start()` und Reconfiguration; N02 ergänzt den
+  Verlustpfad bei App-Quit.
+- **Daten- und Credential-Schutz:** N03–N06 betreffen doppelte beziehungsweise
+  inkompatible Output-Modi, Future-Schema-Downgrade und nichttransaktionale
+  Keychain-Migration.
+- **Supervisor und Prozessidentität:** N01, N07, N08 und N14 betreffen PID-Reuse,
+  Detach/Ready, semantische Turn-Finalität und verlorenen frühen Stop-Intent.
+- **Secrets und Zielbindung:** N09/N10 belegen zu breite Child-Environments und
+  Secret in argv; N11 bindet Auto-Paste nicht sicher an den Aufnahme-Intent.
+- **Store und Transcript:** N12/N13 belegen Lost Updates; N15/N16 fehlende
+  Provider-Korrelation und lautlos verschwindende unbekannte Events. C04–C16
+  bleiben Bestandteil der bestehenden Roadmap
+  ([verdicts.md](04-verifikation/verdicts.md);
+  [verdicts-runde2.md](04-verifikation/verdicts-runde2.md)).
+
+### Runde 3 / Workflow 3
+
+- **Identität ist der Kern-Umbau:** Die Feldanalyse bestätigt getrennte lokale
+  Chat-, Provider-Branch- und Prozess-/PTY-Identitäten plus Config-Root-Scope
+  sowie geplante→bestätigte Übergänge
+  ([verifikation-fable.md:125-140](03-vergleich/code-analysen/verifikation-fable.md)).
+  WhisperM8 bindet heute jede abweichende nichtleere Hook-ID ohne Fork-Parent-,
+  Claim-, Config-Root- oder Transcriptpfad-Guard
+  (`WhisperM8/Services/AgentChats/AgentSessionStatusCoordinator.swift:345-363`).
+- **Der Identitätsentwurf ist noch gesperrt:** Weg A/Weg B widersprechen sich,
+  eine Launch-ID wird gefordert, aber nicht zum Hook transportiert, und
+  `/branch`/`/rewind` fehlen in der Laufzeitmatrix. `SessionStart.source` wird
+  heute verworfen (`WhisperM8/Services/AgentChats/ClaudeHookEventStore.swift:121-136`;
+  [verifikation-schluss.md:86-130](06-umsetzung/verifikation-schluss.md)).
+- **GPT-Backend:** Bestätigt sind 4 Definition-/Settings-, 7 MixRouter-, 5
+  Proxy-Lifecycle- und 4 Security-Findings. Finder-G05 der
+  Definition-/Settings-Runde ist widerlegt; MixRouter-G01 behält einen
+  E2E-Teilvorbehalt. Der Roadmap-Nachtrag vergibt stabile IDs und Wellen
+  ([runde3-vollstaendigkeits-kritik.md:66-138](02-findings/runde3-vollstaendigkeits-kritik.md)).
+- **GPT-Ship-Blocker:** Background-Spawn kann Guard/Router-Environment umgehen,
+  Kill-Switch und Start/Stop teilen keinen atomaren Lifecycle, Health ist
+  imitierbar, und lokale Listener besitzen keine Client-Authentisierung
+  (`WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift:78-137,223-258`;
+  `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:218-300,469-537`;
+  `WhisperM8/Services/AgentChats/ClaudeGPTMixRouter.swift:403-423`).
+- **Usage/Kompaktierung:** Die Wirkung ist live bestätigt, die frühere Ursache
+  „keine Übersetzung“ jedoch korrigiert. Der Diagnose-Nachtrag belegt einen
+  pfadabhängigen Subagent-Vertrag; der GPT-spezifische Fensterwert ist als
+  Teilfix dokumentiert, Proxy-/CLI-E2E- und Upstream-Gate bleiben offen. Die
+  große Router-Fill-if-missing-Skizze ist nicht mehr das Ziel
+  ([gpt-usage-kompaktierung-fix-spec.md:145-235](06-umsetzung/gpt-usage-kompaktierung-fix-spec.md)).
+- **Terminal-Snapshots bleiben offen:** Für G01–G05 fehlt im aktuellen
+  Dokumentbestand eine dedizierte Runde-3-Verdictmatrix. Privacy/Retention,
+  Löschdurability und kaputter-Sidecar-Fallback sind deshalb keine abgeschlossene
+  bestätigte Population; die Existenzprüfung kann den JSONL-Fallback trotz
+  ungültigem Snapshot blockieren
+  (`WhisperM8/Services/AgentChats/TerminalSnapshotStore.swift:70-73,94-119`;
+  `WhisperM8/Views/AgentSessionDetailView.swift:201-225,255-260`).
+- **Regressionsschutz vor Refactor:** Die Feature-Inventare sind Referenzen, aber
+  noch zu korrigieren. Kategorie-1-Verträge werden vor dem Umbau getestet;
+  Kategorie-2-Bugs erhalten Rot→Grün-Tests mit dem jeweiligen Fix. Die aktuelle
+  Test-Spec lässt insbesondere C07 und mehrere Welle-1-Verträge aus
+  ([verifikation-schluss.md:256-329](06-umsetzung/verifikation-schluss.md)).
+- **Audit-Abdeckung ist nicht quellbaumweit:** Die mechanische Kritik findet 138
+  von 281 Swift-Dateien ohne Finder-Zuordnung und priorisiert Usage/Credentials,
+  CLI, Agent-Launch, Grid/Drag-Drop, Transcript-Rendering und Diktat-Provider für
+  einen risikobasierten Nachlauf. Diese Zahl ist ausdrücklich keine Defektzahl
+  ([runde3-vollstaendigkeits-kritik.md:323-380](02-findings/runde3-vollstaendigkeits-kritik.md)).
+
+## Freigabeautorität
+
+Die aktuelle Reihenfolge der Autorität lautet:
+
+1. [verifikation-schluss.md](06-umsetzung/verifikation-schluss.md) für
+   Identitäts-/Recovery-Specs und Inventar-/Testfreigabe;
+2. [runde3-vollstaendigkeits-kritik.md](02-findings/runde3-vollstaendigkeits-kritik.md)
+   für Gesamtvollständigkeit und „Go“-Gate;
+3. [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) für Wellen und stabile
+   Runde-3-Zuordnung;
+4. [06-umsetzung/README.md](06-umsetzung/README.md) als Synthese.
+
+`plan-review.md`, `verdicts-runde2.md` und frühere Statusformulierungen bleiben
+historische Eingaben; sie erteilen allein keine aktuelle Umsetzungsfreigabe.
 
 ## Dokumente
+
+### Plan, Subsysteme und Findings Runde 1/2
 
 | Bereich | Dokument | Inhalt |
 |---|---|---|
@@ -74,39 +122,88 @@ Performance, Wartbarkeit und aktuelle Technologieoptionen.
 | 01 Subsysteme | [runtime-status.md](01-subsysteme/runtime-status.md) | Statusquellen und Zustandsautomat |
 | 01 Subsysteme | [shared-infra.md](01-subsysteme/shared-infra.md) | Gemeinsame Infrastruktur und Updatepfade |
 | 01 Subsysteme | [terminal.md](01-subsysteme/terminal.md) | PTY, SwiftTerm, Controller und Snapshots |
-| 01 Subsysteme | [ui-shell.md](01-subsysteme/ui-shell.md) | Agent-Chats-Shell, Tabs, Grid und Fenster |
-| 02 Findings | [architektur-wartbarkeit-fable.md](02-findings/architektur-wartbarkeit-fable.md) | Architektur- und Wartbarkeitsbefunde |
-| 02 Findings | [claude-integration-codex.md](02-findings/claude-integration-codex.md) | Codex-Gegenprüfung der Claude-Integration |
-| 02 Findings | [claude-integration-fable.md](02-findings/claude-integration-fable.md) | Claude-CLI-Korrektheit, Bindung und Profile |
-| 02 Findings | [crash-diktat-codex.md](02-findings/crash-diktat-codex.md) | Codex-Gegenprüfung der Diktat-Crashpfade |
-| 02 Findings | [crash-diktat-fable.md](02-findings/crash-diktat-fable.md) | Diktat-Crashjagd und Ursachenranking |
-| 02 Findings | [memory-lifecycle-codex.md](02-findings/memory-lifecycle-codex.md) | Speicher-, Retain- und Lifecycle-Befunde |
+| 01 Subsysteme | [ui-shell.md](01-subsysteme/ui-shell.md) | Shell, Tabs, Grid und Fenster |
+| 02 Findings | [architektur-wartbarkeit-fable.md](02-findings/architektur-wartbarkeit-fable.md) | Architektur und Wartbarkeit |
+| 02 Findings | [claude-integration-codex.md](02-findings/claude-integration-codex.md) | Gegenprüfung Claude-Integration |
+| 02 Findings | [claude-integration-fable.md](02-findings/claude-integration-fable.md) | CLI-Korrektheit, Bindung und Profile |
+| 02 Findings | [crash-diktat-codex.md](02-findings/crash-diktat-codex.md) | Gegenprüfung Diktat-Crashpfade |
+| 02 Findings | [crash-diktat-fable.md](02-findings/crash-diktat-fable.md) | Diktat-Crashjagd |
+| 02 Findings | [memory-lifecycle-codex.md](02-findings/memory-lifecycle-codex.md) | Speicher und Lifecycle |
 | 02 Findings | [performance-codex.md](02-findings/performance-codex.md) | Ergänzende Performanceanalyse |
 | 02 Findings | [performance-fable.md](02-findings/performance-fable.md) | Merge-, Git-, Body- und Transcript-Hotspots |
-| 02 Findings | [races-agentchats-codex.md](02-findings/races-agentchats-codex.md) | Ergänzende Race- und Generation-Befunde |
+| 02 Findings | [races-agentchats-codex.md](02-findings/races-agentchats-codex.md) | Race- und Generation-Befunde |
 | 02 Findings | [races-agentchats-fable.md](02-findings/races-agentchats-fable.md) | PTY-, Store-, Hook- und Scan-Races |
 | 02 Findings | [robustheit-codex.md](02-findings/robustheit-codex.md) | Robustheit, Parserdrift und Recovery |
-| 02 Findings Runde 2 | [runde2-cli-supervisor-codex.md](02-findings/runde2-cli-supervisor-codex.md) | CLI-Supervisor, Detach, Exit und Stop |
-| 02 Findings Runde 2 | [runde2-grid-tabs-codex.md](02-findings/runde2-grid-tabs-codex.md) | Grid-, Tab- und Geometrieverhalten |
-| 02 Findings Runde 2 | [runde2-onboarding-permissions-codex.md](02-findings/runde2-onboarding-permissions-codex.md) | Onboarding, Berechtigungen und App-Quit |
-| 02 Findings Runde 2 | [runde2-postprocessing-codex.md](02-findings/runde2-postprocessing-codex.md) | Diktat-Nachbearbeitung und Output-Modi |
-| 02 Findings Runde 2 | [runde2-security-codex.md](02-findings/runde2-security-codex.md) | Environment-, argv-, Datei- und Link-Security |
-| 02 Findings Runde 2 | [runde2-settings-migration-codex.md](02-findings/runde2-settings-migration-codex.md) | Settings-, Schema- und Keychain-Migration |
-| 02 Findings Runde 2 | [runde2-tests-qualitaet-codex.md](02-findings/runde2-tests-qualitaet-codex.md) | Testabdeckung und fehlende Oracles |
-| 02 Findings Runde 2 | [runde2-transcript-rendering-codex.md](02-findings/runde2-transcript-rendering-codex.md) | Transcript-Parsing, Korrelation und Rendering |
-| 02 Findings Runde 2 | [runde2-vollstaendigkeits-kritik.md](02-findings/runde2-vollstaendigkeits-kritik.md) | Auditabdeckung, Widersprüche und Methodik |
-| 03 Vergleich | [claude-cli-oekosystem.md](03-vergleich/claude-cli-oekosystem.md) | CLI-Verträge, Bindung, Status und Multi-Account |
-| 03 Vergleich | [claude-session-manager.md](03-vergleich/claude-session-manager.md) | Vergleich nativer und externer Session-Manager |
-| 03 Vergleich | [diktat-apps.md](03-vergleich/diktat-apps.md) | Diktat-Apps, Audio-Lifecycle und Paste |
+| 02 Runde 2 | [runde2-cli-supervisor-codex.md](02-findings/runde2-cli-supervisor-codex.md) | CLI-Supervisor, Detach, Exit und Stop |
+| 02 Runde 2 | [runde2-grid-tabs-codex.md](02-findings/runde2-grid-tabs-codex.md) | Grid-, Tab- und Geometrieverhalten |
+| 02 Runde 2 | [runde2-onboarding-permissions-codex.md](02-findings/runde2-onboarding-permissions-codex.md) | Onboarding, Berechtigungen und App-Quit |
+| 02 Runde 2 | [runde2-postprocessing-codex.md](02-findings/runde2-postprocessing-codex.md) | Nachbearbeitung und Output-Modi |
+| 02 Runde 2 | [runde2-security-codex.md](02-findings/runde2-security-codex.md) | Environment-, argv-, Datei- und Link-Security |
+| 02 Runde 2 | [runde2-settings-migration-codex.md](02-findings/runde2-settings-migration-codex.md) | Settings, Schema und Keychain |
+| 02 Runde 2 | [runde2-tests-qualitaet-codex.md](02-findings/runde2-tests-qualitaet-codex.md) | Testabdeckung und Oracles |
+| 02 Runde 2 | [runde2-transcript-rendering-codex.md](02-findings/runde2-transcript-rendering-codex.md) | Transcript-Parsing und Rendering |
+| 02 Runde 2 | [runde2-vollstaendigkeits-kritik.md](02-findings/runde2-vollstaendigkeits-kritik.md) | Auditabdeckung und Blindstellen |
+
+### Vergleich, Tech-Scan und Workflow-3-Feldanalyse
+
+| Bereich | Dokument | Inhalt |
+|---|---|---|
+| 03 Vergleich | [claude-cli-oekosystem.md](03-vergleich/claude-cli-oekosystem.md) | CLI-Verträge, Status und Multi-Account |
+| 03 Vergleich | [claude-session-manager.md](03-vergleich/claude-session-manager.md) | Native und externe Session-Manager |
+| 03 Vergleich | [diktat-apps.md](03-vergleich/diktat-apps.md) | Diktat-Apps und Audio-Lifecycle |
 | 03 Vergleich | [swiftui-architektur.md](03-vergleich/swiftui-architektur.md) | Stores, Module, Persistenz und Tests |
-| 03 Vergleich | [terminal-pty.md](03-vergleich/terminal-pty.md) | Terminalkerne, Scroll, Auswahl und Teardown |
+| 03 Vergleich | [terminal-pty.md](03-vergleich/terminal-pty.md) | Terminalkerne und Teardown |
 | 03 Tech-Scan | [tech-claude-cli-2026.md](03-vergleich/tech-claude-cli-2026.md) | Aktuelle Claude-CLI-Hostschnittstellen |
-| 03 Tech-Scan | [tech-swift-stack-2026.md](03-vergleich/tech-swift-stack-2026.md) | Swift 6, swift-subprocess, Testing und SwiftPM |
-| 03 Tech-Scan | [tech-terminal-persistenz.md](03-vergleich/tech-terminal-persistenz.md) | Terminalkern, Recording, Broker und OSC |
-| 03 Vergleich | [workflow3-kandidaten.md](03-vergleich/workflow3-kandidaten.md) | Kandidaten und Bewertung für Workflow 3 |
-| 04 Verifikation | [verdicts.md](04-verifikation/verdicts.md) | Runde 1: C01–C16, alle bestätigt |
-| 04 Verifikation | [verdicts-runde2.md](04-verifikation/verdicts-runde2.md) | Runde 2: N01–N16 plus Plan-Verifikation |
-| 05 Roadmap | [plan-review.md](05-roadmap/plan-review.md) | Review von Prioritäten, Abhängigkeiten und Risiken |
-| 05 Roadmap | [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) | Konsolidierte, regressionsgesicherte Umsetzungswellen |
-| 03 Vergleich (Workflow 3) | [code-analysen/](03-vergleich/code-analysen/verifikation-fable.md) | Sieben Repo-Codeanalysen (agent-deck, superset, cmux, nimbalyst, claudecodeui, claude-code-log, claude-agent-sdk-python) + Schluss-Verifikation |
-| 06 Umsetzung | [06-umsetzung/README.md](06-umsetzung/README.md) | Einstieg Umsetzungsphase: verifizierte Feldvergleichs-Muster, Identitätsmodell als Kern-Umbau, Regressionsschutz-Vorgehen — Status: Umsetzungsvorbereitung abgeschlossen |
+| 03 Tech-Scan | [tech-swift-stack-2026.md](03-vergleich/tech-swift-stack-2026.md) | Swift 6, Subprocess, Testing und SwiftPM |
+| 03 Tech-Scan | [tech-terminal-persistenz.md](03-vergleich/tech-terminal-persistenz.md) | Recording, Broker und OSC |
+| Workflow 3 | [workflow3-kandidaten.md](03-vergleich/workflow3-kandidaten.md) | Kandidaten und Edge-Case-Landkarte |
+| Workflow 3 | [code-analysen/agent-deck.md](03-vergleich/code-analysen/agent-deck.md) | Fork-Datenmodell und Identitätsscope |
+| Workflow 3 | [code-analysen/superset.md](03-vergleich/code-analysen/superset.md) | Terminal-Adoption und Reaper |
+| Workflow 3 | [code-analysen/cmux.md](03-vergleich/code-analysen/cmux.md) | Fork-Guard und Runtime-Generation |
+| Workflow 3 | [code-analysen/nimbalyst.md](03-vergleich/code-analysen/nimbalyst.md) | Resume-Fehlerklassen und Reconciliation |
+| Workflow 3 | [code-analysen/claudecodeui.md](03-vergleich/code-analysen/claudecodeui.md) | Zwei-Spalten-Identität und Watcher-Merge |
+| Workflow 3 | [code-analysen/claude-code-log.md](03-vergleich/code-analysen/claude-code-log.md) | Transcript-DAG und Korrelation |
+| Workflow 3 | [code-analysen/claude-agent-sdk-python.md](03-vergleich/code-analysen/claude-agent-sdk-python.md) | Übergangsnorm und Flag-Härtung |
+| Workflow 3 | [code-analysen/verifikation-fable.md](03-vergleich/code-analysen/verifikation-fable.md) | Schluss-Verifikation der sieben Repo-Analysen |
+| Workflow 3 neu | [code-analysen/claude-code-router.md](03-vergleich/code-analysen/claude-code-router.md) | Router-/Gateway-Analyse |
+| Workflow 3 neu | [supervisor-detach-vertraege.md](03-vergleich/supervisor-detach-vertraege.md) | Ready/Detach, Waiter und Stop-Latch |
+| Workflow 3 neu | [jsonl-schema-drift.md](03-vergleich/jsonl-schema-drift.md) | Provider-IDs, Parse-Outcome und Drift |
+| Workflow 3 neu | [tech-observability-secrets.md](03-vergleich/tech-observability-secrets.md) | Crash-Observability und Secrets |
+| Workflow 3 neu | [proxy-muster-litellm.md](03-vergleich/proxy-muster-litellm.md) | Proxy-/SSE-Mustervergleich |
+
+### Runde 3: Findings und Verifikation
+
+| Bereich | Dokument | Inhalt / Urteil |
+|---|---|---|
+| 02 Runde 3 | [runde3-gpt-backend-definition-settings.md](02-findings/runde3-gpt-backend-definition-settings.md) | Skill, Definition und Settings |
+| 02 Runde 3 | [runde3-gpt-backend-mixrouter.md](02-findings/runde3-gpt-backend-mixrouter.md) | MixRouter-Protokoll und Ressourcen |
+| 02 Runde 3 | [runde3-gpt-backend-proxy.md](02-findings/runde3-gpt-backend-proxy.md) | Proxy-Lifecycle |
+| 02 Runde 3 | [runde3-gpt-backend-security.md](02-findings/runde3-gpt-backend-security.md) | Lokale Vertrauensgrenze |
+| 02 Runde 3 | [runde3-live-repro-usage-kompaktierung.md](02-findings/runde3-live-repro-usage-kompaktierung.md) | Live-Wirkung; ursprüngliche Ursache korrigiert |
+| 02 Runde 3 | [runde3-terminal-snapshots.md](02-findings/runde3-terminal-snapshots.md) | Fünf Findings; finale Runde-3-Matrix fehlt |
+| 02 Runde 3 | [runde3-vollstaendigkeits-kritik.md](02-findings/runde3-vollstaendigkeits-kritik.md) | Gesamtkritik und Freigabe-Gate |
+| 04 Runde 3 | [runde3-definition-settings.md](04-verifikation/runde3-definition-settings.md) | 4 bestätigt, 1 widerlegt |
+| 04 Runde 3 | [runde3-mixrouter.md](04-verifikation/runde3-mixrouter.md) | 7 bestätigt; G01 mit E2E-Teilvorbehalt |
+| 04 Runde 3 | [runde3-proxy.md](04-verifikation/runde3-proxy.md) | 5 bestätigt |
+| 04 Runde 3 | [runde3-security.md](04-verifikation/runde3-security.md) | 4 bestätigt; G03 abgestuft |
+| 04 Runde 3 | [runde3-recherche-muster.md](04-verifikation/runde3-recherche-muster.md) | Supervisor/JSONL/Observability/Secrets |
+| 04 Runde 3 | [runde3-recherche-proxy.md](04-verifikation/runde3-recherche-proxy.md) | Reale Proxy-Lücken und Widerlegungen |
+
+### Roadmap und Umsetzungsvorbereitung
+
+| Bereich | Dokument | Inhalt / aktueller Stand |
+|---|---|---|
+| 04 Verifikation | [verdicts.md](04-verifikation/verdicts.md) | Runde 1: C01–C16 |
+| 04 Verifikation | [verdicts-runde2.md](04-verifikation/verdicts-runde2.md) | Runde 2: N01–N16 und historischer Plan-Verdict |
+| 04 Verifikation | [nachpruefung-fable.md](04-verifikation/nachpruefung-fable.md) | Nachprüfung früherer Verdicts |
+| 05 Roadmap | [plan-review.md](05-roadmap/plan-review.md) | Historischer Review von Prioritäten und Risiken |
+| 05 Roadmap | [konsistenz-check-fable.md](05-roadmap/konsistenz-check-fable.md) | C/N-Konsistenz und alte Restlücken |
+| 05 Roadmap | [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) | Bestehende Wellen plus Runde-3-Nachtrag; kein Produkt-Go |
+| 06 Umsetzung | [README.md](06-umsetzung/README.md) | Aktuelle Workflow-3-Synthese und Gate |
+| 06 Umsetzung | [identitaetsmodell-spec.md](06-umsetzung/identitaetsmodell-spec.md) | Entwurf; Revision erforderlich |
+| 06 Umsetzung | [verlorene-chats-spec.md](06-umsetzung/verlorene-chats-spec.md) | Recovery-Spec; Binding-Teile gesperrt |
+| 06 Umsetzung neu | [feature-inventar-agentchats.md](06-umsetzung/feature-inventar-agentchats.md) | Breit, aber als Oracle noch zu korrigieren |
+| 06 Umsetzung neu | [feature-inventar-diktat.md](06-umsetzung/feature-inventar-diktat.md) | Nahezu freigabefähig; Ergänzungen offen |
+| 06 Umsetzung neu | [test-specs-welle0-1.md](06-umsetzung/test-specs-welle0-1.md) | Neu zu schneiden und zu vervollständigen |
+| 06 Umsetzung | [gpt-usage-kompaktierung-fix-spec.md](06-umsetzung/gpt-usage-kompaktierung-fix-spec.md) | Diagnose, Teilfix und offene E2E-/Upstream-Gates |
+| 06 Umsetzung neu | [verifikation-schluss.md](06-umsetzung/verifikation-schluss.md) | Aktuelles Urteil: nicht umsetzungsreif |

@@ -1,165 +1,226 @@
 ---
-status: abgeschlossen
+status: aktiv
 updated: 2026-07-18
-description: Einstieg in die Umsetzungsphase nach Workflow 3 — verifizierte Feldvergleichs-Muster, Identitätsmodell als Kern-Umbau, Regressionsschutz-Vorgehen und Dokumentindex.
-description_long: Synthese des Feldvergleichs von sieben Referenz-Repositories (agent-deck, superset, cmux, nimbalyst, claudecodeui, claude-code-log, claude-agent-sdk-python) nach adversarialer Schluss-Verifikation; leitet daraus den Identitätsmodell-Umbau für Fork/Resume und verlorene Chats sowie das Regressionsschutz-Vorgehen ab.
+description: Autoritative Workflow-3-Synthese mit verifizierten Feldmustern, gesperrtem Identitätsumbau, Regressionsschutz, GPT-Reviewstand und offenen Freigabemängeln.
 ---
 
-# Umsetzungsphase — Einstieg (Workflow 3)
+# Workflow 3 — Synthese und Umsetzungs-Gate
 
-Workflow 3 hat sieben Referenz-Repositories im Klon analysiert (je ein
-Codex-Analyst pro Repo, ohne WhisperM8-Lesezugriff) und die Ergebnisse
-anschließend adversarial gegen die Klone **und** gegen den echten
-WhisperM8-Code verifiziert
-([Schluss-Verifikation](../03-vergleich/code-analysen/verifikation-fable.md)).
-Zitat-Fidelität der Analysen: 12 von 12 Stichproben wörtlich bestätigt; kein
-Report empfiehlt einen SDK-/Eigen-Chat-UI-Umbau. Dieses Dokument fasst
-zusammen, was davon in die Umsetzung geht — und was ausdrücklich nicht.
+## Status
 
-## 1. Kurzfazit Feldvergleich — übertragbare Muster
+**Workflow 3 ist dokumentiert, aber nicht umsetzungsreif.** Die Schlussverifikation
+nennt fünf P0-Lücken und sperrt den Identitäts-/Recovery-Umbau
+([verifikation-schluss.md:27-45](verifikation-schluss.md)); die anschließende
+Vollständigkeitskritik verlangt zusätzlich eine deduplizierte
+Finding→Verdict→Roadmap-Matrix, die Runde-3-GPT-Pakete, eine geschlossene
+Terminal-Snapshot-Verifikation und eine eindeutige Freigabe-SSoT
+([runde3-vollstaendigkeits-kritik.md:46-220](../02-findings/runde3-vollstaendigkeits-kritik.md)).
+Kleine, nichtdestruktive Vorarbeiten sind nur in dem Umfang freigegeben, den die
+Schlussverifikation ausdrücklich nennt
+([verifikation-schluss.md:348-360](verifikation-schluss.md)).
 
-Nur Muster, die die Schluss-Verifikation als tragfähig bestätigt hat.
-Das stärkste Qualitätssignal ist die Konvergenz: Alle sieben Quellen landen
-unabhängig bei derselben Kernstruktur — **Wrapper-ID ≠ Claude-UUID ≠
-Prozessinkarnation, plus Account-Scope; Identitätsübergänge geplant →
-bestätigt.**
+## 1. Kurzfazit Feldvergleich
 
-| # | Muster | Beleg | Übernahme |
-|---|---|---|---|
-| 1 | **Fork als zweiphasiger, verifizierter Identitätsübergang mit Parent-ID-Guard.** `claude --resume <parent> --fork-session` feuert SessionStart mit der **Eltern**-ID; die Fork-ID entsteht erst beim ersten UserPromptSubmit. | [cmux](../03-vergleich/code-analysen/cmux.md) (Guard-Code + CLI-Issue), [agent-deck](../03-vergleich/code-analysen/agent-deck.md) (persistiertes Fork-Datenmodell), [sdk-python](../03-vergleich/code-analysen/claude-agent-sdk-python.md) (Übergangstabelle, `forkedFrom`) | Datenmodell aus agent-deck (prepared → spawned → identityVerified → committed), Flag-Mechanik aus cmux (**ohne** `--session-id`-Vorvergabe) |
-| 2 | **Drei getrennte Identitäten plus Account-Scope** (Chat-/Wrapper-ID, Claude-UUID, PTY-/Prozessinkarnation; Lookups nie ohne Config-Root-Filter). | Alle sieben Quellen unabhängig (agent-deck-Schema, superset-`terminalId`, cmux-Surface-Generation, claudecodeui-Zwei-Spalten-Modell, sdk-python-`SessionKey`) | Kern-Umbau, siehe Abschnitt 2 |
-| 3 | **Autoritative Fehlerklassifikation statt Heuristik:** „session expired" nur bei eindeutigem CLI-Fehler; JSONL-Miss ist Soft-Signal; nur eindeutige JSONL-Kandidaten binden; Zwei-Pass-Schonfrist vor destruktivem Aufräumen; Katalog gegen read-only-Wahrheit reconciliieren (`missing`/`discovered` statt Löschen). | [nimbalyst](../03-vergleich/code-analysen/nimbalyst.md) (Zustandstabelle, verifizierte Selbstkorrektur), [superset](../03-vergleich/code-analysen/superset.md) (Reaper), cmux/agent-deck, sdk-python | Fehler-Zustandstabelle in den Indexer/Coordinator übernehmen |
-| 4 | **Dubletten-Merge zwischen Watcher und Hook-Bindung:** Zwei-Spalten-Identität und transaktionales Merge, wenn der JSONL-Watcher die Session vor der Hook-Bindung anlegt; `subagents/`-Pfade beim Scan ausfiltern, sonst überschreibt Subagent-JSONL den Pfad der Hauptsession. | [claudecodeui](../03-vergleich/code-analysen/claudecodeui.md); Negativreferenz [nimbalyst](../03-vergleich/code-analysen/nimbalyst.md) (Import-Dublette durch App-ID-only-Upsert) | Direkt prüfenswert für `AgentSessionIndexer` + Hook-Bridge |
-| 5 | **Adoption statt Doppel-Spawn** nach Host-Neustart; Initialkommando nach Adoption nie erneut senden; persistente Terminal-Identität. | [superset](../03-vergleich/code-analysen/superset.md) (wörtlich verifiziert inkl. E2E-Test) | Als Prinzip für die Terminal-Snapshot-Roadmap; **nicht** als Broker-Neubau (siehe unten) |
-| 6 | **Transcript-Robustheit:** `uuid`/`parentUuid`-DAG mit Reparatur (fehlender Parent → Root, Zyklen brechen), `compact_boundary` = Multi-Root **derselben** Session (kein Sessionwechsel!), Tool-Korrelation über `(session_id, tool_use_id)` statt Nachbarschaft. | [claude-code-log](../03-vergleich/code-analysen/claude-code-log.md), branch-bewusstes Lesen aus [sdk-python](../03-vergleich/code-analysen/claude-agent-sdk-python.md) | `ClaudeTranscriptReader`-Härtung |
-| 7 | **Quick-Win Flag-Härtung:** `--resume=<uuid>` in equals-Form statt zwei Tokens (Injection-Schutz) plus UUID-Validierung von IDs, die aus Hook-Events gebunden werden. | [sdk-python](../03-vergleich/code-analysen/claude-agent-sdk-python.md) + eigener Verifikationsbefund gegen WhisperM8 | Sofort umsetzbar, klein, unabhängig vom Umbau |
+Übernommen werden nur Muster, die die adversariale
+[Schluss-Verifikation der sieben Repo-Analysen](../03-vergleich/code-analysen/verifikation-fable.md)
+als tragfähig belegt hat:
 
-**Nicht übernehmen** (von der Verifikation als fragwürdig markiert):
-
-- **`--session-id`-Vorvergabe** (agent-deck-Fork-Kommando, nimbalyst-Fresh-Start):
-  kollidiert frontal mit WhisperM8s Weg-B-Entscheidung
-  (`AgentCommandBuilder.swift:353-358` dokumentiert `--session-id` als Wurzel
-  der „No conversation found"-Fehler). Nur nach erneuter Verifikation gegen die
-  aktuelle CLI-Version — sonst cmux-Variante ohne Pinning.
-- **Externer PTY-Broker als P1** (superset): constraint-konform, aber de facto
-  ein Terminal-Stack-Neubau in Spannung zur gewählten
-  Terminal-Snapshot-Strategie (f448e02/a26d29f). Grundsatzentscheidung /
-  Fernziel, kein übertragbares Muster.
-- **SDK-Pfad-Mechaniken** (nimbalyst-SDK-Provider, claudecodeui-Runtime,
-  sdk-python-Transport): ausschließlich als **Invarianten-Norm** verwenden,
-  nie als Mechanik-Vorlage. Nimbalysts echter CLI-Pfad hat selbst **kein**
-  Fork-Muster.
-- **claude-code-log-Fixture-/Inkremental-Vorschläge**: Analysten-Eigenleistung
-  ohne Klon-Beleg — als Idee brauchbar, nicht als „so macht es die Referenz".
-- **Offline-Fork des SDK** (UUID-Neuschreibung): schreibende Operation auf
-  Transcript-Daten; für WhisperM8 bleibt `~/.claude/` read-only. Nur das
-  `forkedFrom`-**Lesen** ist übertragbar.
-
-## 2. Kern-Umbau: das Identitätsmodell
-
-Der konkreteste Befund des gesamten Vergleichs betrifft WhisperM8 direkt:
-`bindExternalSessionID` (`AgentSessionStatusCoordinator.swift:345-367`) bindet
-beim SessionStart-Hook **jede** gemeldete ID ohne Fork-Guard. Trifft das von
-cmux dokumentierte CLI-Verhalten zu, bindet ein Fork die **Eltern-ID** an den
-Fork-Chat — jeder spätere Resume öffnet dann den Elternzweig (Workflow-3-Risiko
-2). Solange Prozess, Workspace und Claude-Session in einem einzigen
-„Chat"-Status vermischt bleiben, sind verlorene Chats und Resume in den
-falschen Zweig strukturell möglich.
-
-### Ziel-Datenmodell
-
-Ein langlebiger Binding-Datensatz pro Chat mit mindestens: Provider,
-Config-Root (`CLAUDE_CONFIG_DIR` / Account), Session-ID, Eltern-/Root-ID
-(Fork-Lineage), autoritativer `transcript_path`, aktuelles cwd, Workspace-ID,
-letzte Dateigröße/MTime, Lifecycle-Zustand.
-
-### Grundregeln
-
-1. **Absicht ≠ Identität.** Launch-Argumente (`--resume`, `--fork-session`)
-   beschreiben die Absicht. Identität kommt ausschließlich aus einer
-   autoritativen Quelle (Hook-Event, validierte JSONL) und wird vor dem Binden
-   verifiziert (UUID-Format, Datei existiert, cwd plausibel).
-2. **Fork ist zweiphasig.** prepared → spawned → identityVerified → committed.
-   SessionStart-Events während eines Fork-Launches **nicht** binden; die
-   Child-ID erst über UserPromptSubmit bzw. neue JSONL bestätigen, dann
-   Ziel-ID, Transcriptpfad und Lineage **atomar** umhängen. Der Elternzweig
-   bleibt auffindbar; die UI zeigt „Fork von …".
-3. **Kein `--session-id`-Pinning.** Weg B bleibt: Claude vergibt die ID,
-   WhisperM8 bindet nach — jetzt auch beim Fork.
-4. **Forks entstehen auch zur Laufzeit** (`/branch`, `/rewind`): nicht nur
-   Startflags beobachten, sondern Hook-/Transcript-Identität während der
-   Session neu abgleichen.
-5. **Ein Writer pro `(configRoot, sessionID)`.** Paralleles Resume derselben
-   ID interleaved die Session; zweiter Attach heißt bewusst forken
-   (Writer-Lease).
-6. **„Chat verloren" ist kein Einzelzustand.** Mindestens sieben Fälle trennen
-   (siehe [workflow3-kandidaten.md](../03-vergleich/workflow3-kandidaten.md)
-   §3.3): gebunden / verborgen (Picker-Filter) / verwaist (cwd- oder
-   Config-Root-Wechsel) / logisch unvollständig (Compact, Parent-Chain) /
-   Fork-Bindung veraltet / temporär unlesbar (Tail) / wirklich gelöscht
-   (Retention, Purge). Der eigene Index löscht nie still aufgrund eines
-   einzelnen negativen Scans; `~/.claude/` bleibt read-only.
-7. **Quick-Win vorziehen:** equals-Form `--resume=<uuid>` + UUID-Validierung
-   beim Binden — unabhängig vom Umbau, sofort.
-
-### Vorbedingung vor dem Fix
-
-Das cmux-Verhalten („Fork-SessionStart meldet die Parent-ID") ist im Klon nur
-über Kommentar, Guard-Implementierung und Issue-Link belegt. Vor der Umsetzung
-einmal gegen die installierte CLI-Version reproduzieren: Fork starten,
-Hook-Event-File ansehen, Verhalten protokollieren.
-
-## 3. Regressionsschutz-Vorgehen
-
-Befund aus Runde 2
-([runde2-tests-qualitaet-codex.md](../02-findings/runde2-tests-qualitaet-codex.md)):
-**0 von 16** verifizierten Findings haben einen vollständigen Regressionstest.
-Der Identitäts-Umbau berührt genau die Pfade, die heute am schlechtesten
-abgesichert sind. Deshalb gilt: **erst Ist-Verhalten festhalten, dann umbauen.**
-
-### Vorgehen
-
-1. **Feature-Inventar** aller Agent-Chats-Verhalten erstellen (Quelle: die
-   neun Subsystem-Karten in `01-subsysteme/`), jedes Verhalten einer Kategorie
-   zuordnen:
-   - **Kategorie 1 — vom Identitäts-Umbau direkt berührt:** Spawn/Resume/
-     Bindung (`AgentCommandBuilder`, `bindExternalSessionID`), Hook-Bridge,
-     Indexer-Merge und Dubletten-Behandlung, Statusableitung
-     (working/awaitingInput/idle), Session-Wiederfinden nach Neustart,
-     Fork-/Branch-Verhalten, Account-/Profilwechsel.
-   - **Kategorie 2 — angrenzend:** Terminal-Lifecycle und Snapshots,
-     Tab-/Fenster-Bindung an Session-IDs, Auto-Naming, Diktat-Routing in
-     aktive Chats, Background-Agents.
-   - **Kategorie 3 — unabhängig:** Diktat-Pipeline im Übrigen, Output-Modi,
-     Settings.
-2. **Test-Specs für Kategorie 1 VOR dem Umbau** schreiben und als Tests
-   ausführbar machen: Das dokumentierte Ist-Verhalten ist das Oracle; wo ein
-   Test das Soll-Verhalten (Fork-Guard) beschreibt, wird er als
-   erwartet-fehlschlagend markiert, bis der Umbau ihn grün macht. Kategorie 2
-   erhält Specs vor dem Umbau, Tests spätestens mit der jeweiligen Welle;
-   Kategorie 3 bleibt bei bestehender Suite + manueller QA.
-3. **Infrastruktur:** die W0.1-Oracles der
-   [Roadmap](../05-roadmap/refactor-roadmap.md) (Fake-Home, ManualClock/
-   Sleeper, ProcessRunner-Spy, kontrollierbare File-Events) sind Voraussetzung —
-   Hook-Events, JSONL-Fixtures und Fork-Sequenzen müssen ohne echte CLI
-   simulierbar sein. Testkonvention bleibt DI über Closures/Kleinprotokolle.
-4. **Gates:** die verbindlichen Leitplanken der Roadmap gelten unverändert
-   (Regressions-Gate pro Maßnahme, exklusive Datei-Ownership, Verhaltens-
-   Oracles vor Refactor, `~/.claude/`/`~/.codex/` read-only — auch in Tests
-   nur über Fixtures im Fake-Home).
-
-## 4. Dokumente (Workflow 3)
-
-| Dokument | Inhalt |
+| Bestätigtes Muster | Konsequenz für WhisperM8 |
 |---|---|
-| [workflow3-kandidaten.md](../03-vergleich/workflow3-kandidaten.md) | Kandidaten-Ranking, Claude-Code-Interna, Edge-Case-Landkarte (Fork/Resume/„verloren"), Robustheitsregeln |
-| [code-analysen/agent-deck.md](../03-vergleich/code-analysen/agent-deck.md) | First-Class-Fork-Datenmodell, drei Identitäten, `CLAUDE_CONFIG_DIR`-Gruppen, UPSERT-Persistenz |
-| [code-analysen/superset.md](../03-vergleich/code-analysen/superset.md) | PTY-Adoption nach Host-Neustart, persistente Terminal-Identität, Zwei-Pass-Reaper, Statusentkopplung |
-| [code-analysen/cmux.md](../03-vergleich/code-analysen/cmux.md) | Fork-SessionStart-Guard (Parent-ID-Problem), Surface-ID ≠ Runtime-Generation, Hook-first/OSC-Fallback |
-| [code-analysen/nimbalyst.md](../03-vergleich/code-analysen/nimbalyst.md) | Resume-Fehlerklassifikation („session expired" nur autoritativ), Import-Dubletten-Lücke, Fokus-Gating |
-| [code-analysen/claudecodeui.md](../03-vergleich/code-analysen/claudecodeui.md) | Zwei-Spalten-Identität, transaktionales Dubletten-Merge, Subagent-Filter beim Scan |
-| [code-analysen/claude-code-log.md](../03-vergleich/code-analysen/claude-code-log.md) | `uuid`/`parentUuid`-DAG mit Reparatur, `compact_boundary`-Semantik, Tool-Korrelation |
-| [code-analysen/claude-agent-sdk-python.md](../03-vergleich/code-analysen/claude-agent-sdk-python.md) | Normative Übergangstabelle Neu/Resume/Continue/Fork, `forkedFrom`, Flag-Härtung, branch-bewusstes Lesen |
-| [code-analysen/verifikation-fable.md](../03-vergleich/code-analysen/verifikation-fable.md) | Adversariale Schluss-Verifikation aller sieben Analysen; tragfähige vs. fragwürdige Muster |
-| [claude-session-manager.md](../03-vergleich/claude-session-manager.md) · [claude-cli-oekosystem.md](../03-vergleich/claude-cli-oekosystem.md) | Runde-1-Vorarbeiten, die Workflow 3 vertieft |
-| [../05-roadmap/refactor-roadmap.md](../05-roadmap/refactor-roadmap.md) | Umsetzungswellen und Regressions-Gates aus dem Gesamtaudit — der Identitäts-Umbau fügt sich hier ein |
+| **Getrennte Identitäten plus Account-Scope:** lokale Chat-/Wrapper-ID, Claude-Branch-ID und Prozess-/PTY-Inkarnation sind verschiedene Schlüssel; Provider-IDs werden mit Config-Root/Account gescopet. Die Konvergenz aller sieben Quellen ist ausdrücklich verifiziert ([verifikation-fable.md:125-140](../03-vergleich/code-analysen/verifikation-fable.md)). | Das Identitätsmodell ist kein lokaler Binder-Fix, sondern der Kern-Umbau. Der aktuelle Code hält lokale Sessiondaten gemeinsam in `AgentChatSession` und die PTY-Registry besitzt Controller pro lokaler UUID (`WhisperM8/Models/AgentChat.swift:225-307`; `WhisperM8/Views/AgentTerminalView.swift:323-364`). |
+| **Fork/Resume als geplanter, danach bestätigter Übergang:** Fork braucht einen Parent-ID-Guard und einen atomaren Commit erst nach belastbarer Child-Evidenz; die konkrete Fork-Hook-Folge ist vor Umsetzung live zu reproduzieren ([verifikation-fable.md:53-65,136-140](../03-vergleich/code-analysen/verifikation-fable.md); [verifikation-schluss.md:124-127](verifikation-schluss.md)). | Spawn-Intent und beobachtete Provider-Identität dürfen nicht gleichgesetzt werden. Der heutige Binder übernimmt jede abweichende nichtleere Hook-ID ohne Fork-Parent-, Claim-, Config-Root- oder Transcriptpfad-Guard (`WhisperM8/Services/AgentChats/AgentSessionStatusCoordinator.swift:345-363`). |
+| **Autoritative Fehlerklassifikation und konservative Reconciliation:** JSONL-Miss ist ein Soft-Signal, Mehrdeutigkeit darf nicht binden, und destruktives Aufräumen braucht Schonfrist beziehungsweise Recovery-Zustand ([verifikation-fable.md:69-79,136-140](../03-vergleich/code-analysen/verifikation-fable.md)). | Kein stiller Fresh-Start und kein Prune aufgrund eines einzelnen negativen Scans. Der heutige Lazy-Fallback wählt den jüngsten Kandidaten nach Zeituntergrenze (`WhisperM8/Services/AgentChats/AgentSessionStore.swift:623-633`). |
+| **Watcher-/Hook-Dubletten transaktional zusammenführen und Transcriptstrukturen über Provider-IDs korrelieren:** Zwei-Spalten-Identität, Subagent-Filter und `uuid`/`parentUuid`-DAG sind als Referenzmuster belegt ([verifikation-fable.md:81-115](../03-vergleich/code-analysen/verifikation-fable.md)). | Merge und Transcript-Härtung folgen erst nach stabilen Identitäts- und Revisionsinvarianten; aktuelle Mehrfachkandidaten werden im ±5-Sekunden-Fenster nur nach zeitlicher Nähe gewählt (`WhisperM8/Services/AgentChats/AgentSessionStore.swift:825-850`). |
+| **Adoption statt Doppel-Spawn:** Eine persistente Terminalidentität und „Initialkommando nach Adoption nie erneut senden“ sind extern E2E-belegt ([verifikation-fable.md:39-51](../03-vergleich/code-analysen/verifikation-fable.md)). | Das Prinzip ist verwendbar; ein externer PTY-Broker ist dagegen ein eigenes Architekturprojekt und keine freigegebene P1-Übernahme ([verifikation-fable.md:142-146](../03-vergleich/code-analysen/verifikation-fable.md)). |
+
+Nicht als bestätigt übernommen werden `--session-id`-Vorvergabe, die konkrete
+Fork-Hook-Ereignisfolge ohne Live-Repro, ein externer PTY-Broker als kurzfristige
+Maßnahme oder SDK-/Eigen-UI-Mechanik. Die SDK-nahen Quellen dienen ausschließlich
+als Invarianten-Norm; WhisperM8 bleibt Host der echten Claude-/Codex-CLI im PTY
+([verifikation-fable.md:125-146](../03-vergleich/code-analysen/verifikation-fable.md);
+[verifikation-schluss.md:331-346](verifikation-schluss.md)).
+
+## 2. Identitätsmodell als Kern-Umbau
+
+Die fachlich bestätigte Zieltrennung lautet:
+
+1. **Lokaler Chat:** langlebige UI-/Workspace-Identität.
+2. **Launch-Generation:** pro Spawn neue Inkarnation mit Launchmodus, Profil,
+   Config-Root, cwd, Startzeit und eigener Hook-Generation.
+3. **Provider-Branch:** gescopeter Schlüssel aus Provider, Config-Root und
+   externer Session-ID; dazu autoritativer Transcriptpfad und Lineage-Evidenz.
+
+Die bestehende `identitaetsmodell-spec.md` ist dafür **nicht freigegeben**. Vor
+Implementierung müssen folgende Verträge gemeinsam revidiert werden:
+
+- capability-gegatete Wahl zwischen hostvergebener und providervergebener
+  Child-ID statt des Widerspruchs zwischen Weg A und Weg B
+  ([verifikation-schluss.md:88-110](verifikation-schluss.md));
+- launchspezifischer Hook-Envelope/Eventpfad mit Generation-Guard, erwarteter
+  Config-Root-Ableitung und atomarer Claim-API; der Hook transportiert heute
+  keine WhisperM8-Launch-ID (`WhisperM8/Services/AgentChats/ClaudeHookEventStore.swift:36-46,121-136`;
+  `WhisperM8/Services/AgentChats/ClaudeHookBridge.swift:27-41,218-229`);
+- vollständige Laufzeitmatrix für `/branch`, `/rewind`, `/clear`, `/resume` und
+  `/compact`; `SessionStart.source` wird heute beim Parsen verworfen
+  (`WhisperM8/Services/AgentChats/ClaudeHookEventStore.swift:121-136`);
+- JSONL-Recovery nur mit tatsächlich verfügbarer Evidenz; der Indexer liefert
+  heute keine autoritative Branch-Parent-ID
+  (`WhisperM8/Services/AgentChats/ClaudeSessionIndexer.swift:112-169`);
+- persistierte Recovery-Zustände und Writer-Lease pro gescopetem Provider-Key.
+
+Bis diese Punkte in **einem** Vertrag zusammengeführt sind, sind P0.3/P0.4 der
+Recovery-Spec und die Binding-Maßnahme der Roadmap gesperrt
+([verifikation-schluss.md:147-169,348-360](verifikation-schluss.md)).
+
+## 3. Regressionsschutz
+
+Die beiden Feature-Inventare sind Referenzen, derzeit aber noch keine
+uneingeschränkt freigegebenen Oracles:
+
+- Das Diktat-Inventar braucht noch CLI-Link/Skill sowie eine klare Abgrenzung der
+  geteilten App-Shell
+  ([verifikation-schluss.md:171-192](verifikation-schluss.md)).
+- Im Agent-Chats-Inventar müssen AC-41, AC-52 und AC-30 von vermeintlichen
+  Ist-Invarianten in heutige Bugs/Soll-Gates umklassifiziert werden. Zusätzlich
+  fehlen Worktree-Jobs, Sidebar-Usage, Agent-Chats-Settings, Theme-Sync und die
+  sichtbare GPT-Kontextfenster-Funktion
+  ([verifikation-schluss.md:194-254](verifikation-schluss.md)).
+
+Verbindliche Reihenfolge:
+
+1. **Inventare korrigieren und als Referenz einfrieren.** Jede betroffene
+   sichtbare Funktion erhält Codebeleg, Ist-Verhalten und Erhaltungs-/Soll-Gate.
+2. **Kategorie 1 vor Umbau testen:** Spawn, Resume/Fork, Hook-Generation,
+   Claim/Eindeutigkeit, Config-Root, Recovery und Laufzeit-Branchwechsel. Korrektes
+   Ist-Verhalten wird als Charakterisierungstest festgehalten; bestätigte Defekte
+   werden nicht als Invariante eingefroren.
+3. **Kategorie 2 zusammen mit dem Fix testen:** angrenzende Terminal-,
+   Multi-Window-, Background-, Auto-Naming- und Diktat-Routing-Verträge erhalten
+   Rot→Grün-Tests im jeweiligen Change.
+4. **Minimale Testnähte statt God-Spy:** One-shot-Prozesslauf und kontrollierbarer
+   langlebiger Child-Prozess werden getrennt injiziert. Das bestehende
+   `ProcessRunner`-Protokoll kann Environment, Handles oder Signale nicht
+   beobachten (`WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift:217-230`;
+   [verifikation-schluss.md:294-303](verifikation-schluss.md)).
+5. **C07 ist Pflicht-Oracle:** parallele Launches, belegte ID, mehrere Kandidaten,
+   Fork-Parent vor Child, spätes Alt-Event und gleiche UUID in zwei Config-Roots
+   müssen deterministisch abgedeckt sein
+   ([verifikation-schluss.md:281-303](verifikation-schluss.md)).
+
+Die aktuelle `test-specs-welle0-1.md` muss vor Verwendung neu geschnitten werden:
+Sie enthält Welle-2/3-Fälle, lässt aber Child-Environment, Headless-Prävention,
+die drei Welle-1-Quick-Wins und C07 aus; A02, A03 und B10 benötigen fachliche
+Korrekturen ([verifikation-schluss.md:267-329](verifikation-schluss.md)).
+
+## 4. GPT-Backend-Reviewstand
+
+Die Runde-3-Refuter bestätigen **20 primäre G-Findings**: vier zu
+Definition/Settings, sieben zum MixRouter, fünf zum Proxy-Lifecycle und vier zur
+Security. Finder-G05 aus Definition/Settings ist widerlegt. Hinzu kommt der live
+bestätigte Usage-/Kompaktierungsdefekt, dessen ursprüngliche Ursachenbehauptung
+korrigiert wurde
+([runde3-vollstaendigkeits-kritik.md:66-138](../02-findings/runde3-vollstaendigkeits-kritik.md)).
+Die eindeutigen IDs und Wellen stehen im
+[Roadmap-Nachtrag](../05-roadmap/refactor-roadmap.md#nachtrag-runde-3--workflow-3).
+
+Bestätigte Cluster:
+
+- **Lifecycle und Konfigurationsgeneration:** Start/Stop sind nicht gemeinsam
+  serialisiert, Crash-Recovery fehlt, Background-Spawn kann Guard/Environment
+  umgehen, Kill-Switch und Ports sind kein atomarer Snapshot
+  (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:218-300,469-557`;
+  `WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift:78-137,223-258`).
+- **Lokale Vertrauensgrenze:** Ein imitierbares konstantes Health-JSON legitimiert
+  Listener; Proxy und Router besitzen keine lokale Client-Authentisierung
+  (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:469-537`;
+  `WhisperM8/Services/AgentChats/ClaudeGPTMixRouter.swift:403-423`).
+- **Protokoll und Ressourcen:** Thinking-Historie, Tool-Result-Bilder,
+  Tokenzählung, lokale Fehler, Client-FIN, Parallel-/Bytebudgets sowie
+  Versions-/Capability-Grenze sind bestätigt; MixRouter-G01 behält einen
+  expliziten E2E-Teilvorbehalt
+  ([runde3-mixrouter.md:461-474](../04-verifikation/runde3-mixrouter.md)).
+- **Skill-/Definition-Ownership:** fremde Dateien können überschrieben werden,
+  Profilpropagation ist lückenhaft, Multi-Root-Sync ist nicht als Generation
+  serialisiert und Dateifehler bleiben unsichtbar
+  ([runde3-definition-settings.md:373-384](../04-verifikation/runde3-definition-settings.md)).
+- **Usage/Kompaktierung:** Ebene 1 (GPT-spezifisches Kontextfenster) ist laut
+  Diagnose-Nachtrag umgesetzt; offen bleiben Proxy-/CLI-E2E-Gate,
+  `message_start`-Usage und zwei Tool-Finish-Pfade. Die große Router-
+  Fill-if-missing-Skizze ist ausdrücklich nicht mehr das Ziel
+  ([gpt-usage-kompaktierung-fix-spec.md:145-235](gpt-usage-kompaktierung-fix-spec.md)).
+
+Reale, von den Recherche-Refutern bestätigte Ergänzungen werden nicht doppelt
+gezählt: Provider-ID und explizites Parse-Outcome ergänzen P1.11; Child-
+Environment braucht ein Kompatibilitäts-Gate; Supervisor-Ready/Detach und
+Stop-Latch bestätigen R2.4; Usage, Ownership, Client-FIN, Tool-Result-Bilder und
+lokale Fehler sind bereits in den G-Clustern enthalten
+([runde3-recherche-muster.md:465-477](../04-verifikation/runde3-recherche-muster.md);
+[runde3-recherche-proxy.md:309-364](../04-verifikation/runde3-recherche-proxy.md)).
+Nicht übernommen werden widerlegte oder nur als verfrüht bewertete Forderungen
+wie ein zweiter SSE-Transformator, zusätzliche GPT-Retries, MetricKit/KSCrash als
+W0-Pflicht oder ein gemeinsamer Scanner-Umbau vor den Parser-Oracles.
+
+## 5. Offene Mängel und Freigabe-Gate
+
+Vor einem „Go“ für Identitäts-, Terminal- oder GPT-Kernwellen fehlen mindestens:
+
+- eine deduplizierte Traceability-Matrix mit stabilen Runde-3-IDs, Verdict,
+  Maßnahme, Welle, Owner und Test-/Ship-Gate;
+- alle neun Nacharbeiten der Schlussverifikation, insbesondere Weg A/B,
+  Hook-Generation, Laufzeit-Branchwechsel, Inventarkorrektur und vollständige
+  W0/W1-Test-Specs;
+- eine dedizierte Terminal-Snapshot-G01–G05-Urteilsmatrix. Privacy/Retention,
+  Löschdurability und kaputter-Sidecar-Fallback sind noch nicht als geschlossene
+  aktuelle Maßnahmen verifiziert; die View deferiert derzeit allein wegen
+  Dateiexistenz und triggert nach `nil` keinen JSONL-Fallback
+  (`WhisperM8/Services/AgentChats/TerminalSnapshotStore.swift:70-73,94-119`;
+  `WhisperM8/Views/AgentSessionDetailView.swift:201-225,255-260`);
+- ein gemeinsamer App-Termination-Contract vor R2.1 und P0.7;
+- externe Proxy-Version/Capabilities und hermetische Golden-Fixtures sowie der
+  echte Fork-Hook-Live-Repro;
+- Statusentscheidungen für ältere Findings außerhalb C/N, den risikobasierten
+  Finder-Nachlauf, Privacy/Release/Codex-Parität sowie A11y/Locale/Langzeit-QA.
+
+Die vollständige Muss-/Parallel-Liste und das Freigabekriterium stehen in
+[runde3-vollstaendigkeits-kritik.md:546-611](../02-findings/runde3-vollstaendigkeits-kritik.md).
+
+## 6. Workflow-3-Dokumente
+
+| Phase | Dokument | Rolle / aktueller Stand |
+|---|---|---|
+| Einstieg | [workflow3-kandidaten.md](../03-vergleich/workflow3-kandidaten.md) | Kandidaten, Edge-Case-Landkarte und Rechercheaufträge |
+| Feldvergleich | [code-analysen/agent-deck.md](../03-vergleich/code-analysen/agent-deck.md) | Fork-Datenmodell und Identitätsscope |
+| Feldvergleich | [code-analysen/superset.md](../03-vergleich/code-analysen/superset.md) | Terminal-Adoption und Reaper |
+| Feldvergleich | [code-analysen/cmux.md](../03-vergleich/code-analysen/cmux.md) | Fork-Guard und Runtime-Generation |
+| Feldvergleich | [code-analysen/nimbalyst.md](../03-vergleich/code-analysen/nimbalyst.md) | Resume-Fehlerklassifikation und Reconciliation |
+| Feldvergleich | [code-analysen/claudecodeui.md](../03-vergleich/code-analysen/claudecodeui.md) | Zwei-Spalten-Identität und Watcher-Merge |
+| Feldvergleich | [code-analysen/claude-code-log.md](../03-vergleich/code-analysen/claude-code-log.md) | Transcript-DAG und Korrelation |
+| Feldvergleich | [code-analysen/claude-agent-sdk-python.md](../03-vergleich/code-analysen/claude-agent-sdk-python.md) | Übergangsnorm und Flag-Härtung |
+| Feldvergleich | [code-analysen/verifikation-fable.md](../03-vergleich/code-analysen/verifikation-fable.md) | Adversariale Schluss-Verifikation der sieben Analysen |
+| GPT-Vergleich | [code-analysen/claude-code-router.md](../03-vergleich/code-analysen/claude-code-router.md) | Router-/Gateway-Muster |
+| Forschung | [supervisor-detach-vertraege.md](../03-vergleich/supervisor-detach-vertraege.md) | Ready/Detach, Waiter, Stop-Latch |
+| Forschung | [jsonl-schema-drift.md](../03-vergleich/jsonl-schema-drift.md) | Provider-IDs, Parse-Outcome und Schema-Drift |
+| Forschung | [tech-observability-secrets.md](../03-vergleich/tech-observability-secrets.md) | Crash-Observability und Secret-Lifecycle |
+| Forschung | [proxy-muster-litellm.md](../03-vergleich/proxy-muster-litellm.md) | Proxy-/SSE-Vergleichsmuster |
+| Findings R3 | [runde3-gpt-backend-definition-settings.md](../02-findings/runde3-gpt-backend-definition-settings.md) | Definition, Skill und Settings |
+| Findings R3 | [runde3-gpt-backend-mixrouter.md](../02-findings/runde3-gpt-backend-mixrouter.md) | Übersetzung und Ressourcen |
+| Findings R3 | [runde3-gpt-backend-proxy.md](../02-findings/runde3-gpt-backend-proxy.md) | Proxy-Lifecycle |
+| Findings R3 | [runde3-gpt-backend-security.md](../02-findings/runde3-gpt-backend-security.md) | Lokale Vertrauensgrenze |
+| Findings R3 | [runde3-live-repro-usage-kompaktierung.md](../02-findings/runde3-live-repro-usage-kompaktierung.md) | Live-Wirkung bestätigt, ursprüngliche Ursache korrigiert |
+| Findings R3 | [runde3-terminal-snapshots.md](../02-findings/runde3-terminal-snapshots.md) | Fünf noch nicht geschlossen verifizierte Snapshot-Findings |
+| Kritik R3 | [runde3-vollstaendigkeits-kritik.md](../02-findings/runde3-vollstaendigkeits-kritik.md) | Freigabeblocker und Abdeckungslücken |
+| Verifikation R3 | [runde3-definition-settings.md](../04-verifikation/runde3-definition-settings.md) | 4 bestätigt, 1 widerlegt |
+| Verifikation R3 | [runde3-mixrouter.md](../04-verifikation/runde3-mixrouter.md) | 7 bestätigt, G01 mit E2E-Teilvorbehalt |
+| Verifikation R3 | [runde3-proxy.md](../04-verifikation/runde3-proxy.md) | 5 bestätigt |
+| Verifikation R3 | [runde3-security.md](../04-verifikation/runde3-security.md) | 4 bestätigt, G03 abgestuft |
+| Verifikation R3 | [runde3-recherche-muster.md](../04-verifikation/runde3-recherche-muster.md) | Supervisor/JSONL/Observability/Secrets |
+| Verifikation R3 | [runde3-recherche-proxy.md](../04-verifikation/runde3-recherche-proxy.md) | Reale Proxy-Lücken und Widerlegungen |
+| Roadmap | [refactor-roadmap.md](../05-roadmap/refactor-roadmap.md) | Bestehende Wellen plus Runde-3-Nachtrag; keine Umsetzungsfreigabe |
+| Umsetzung | [identitaetsmodell-spec.md](identitaetsmodell-spec.md) | Entwurf; Revision erforderlich |
+| Umsetzung | [verlorene-chats-spec.md](verlorene-chats-spec.md) | P0.1/P0.2 teilweise startbar; Binding-Teile gesperrt |
+| Umsetzung | [feature-inventar-agentchats.md](feature-inventar-agentchats.md) | Breit, aber als Oracle noch zu korrigieren |
+| Umsetzung | [feature-inventar-diktat.md](feature-inventar-diktat.md) | Nahezu freigabefähig; benannte Ergänzungen offen |
+| Umsetzung | [test-specs-welle0-1.md](test-specs-welle0-1.md) | Neu zu schneiden und zu vervollständigen |
+| Umsetzung | [gpt-usage-kompaktierung-fix-spec.md](gpt-usage-kompaktierung-fix-spec.md) | Diagnose präzisiert; Teilfix umgesetzt, E2E-/Upstream-Gate offen |
+| Umsetzung | [verifikation-schluss.md](verifikation-schluss.md) | Aktuelles Identitäts-/Recovery-Freigabeurteil: nicht umsetzungsreif |
+| Synthese | [README.md](README.md) | Dieses Dokument; kein Produkt-Go |

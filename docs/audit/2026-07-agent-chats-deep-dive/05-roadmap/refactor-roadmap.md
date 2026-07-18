@@ -1,8 +1,8 @@
 ---
 status: aktiv
-updated: 2026-07-18 18:18
-description: Konsolidierte Refactor- und Fix-Roadmap nach zwei adversarialen Verifikationsrunden und Technologie-Scan.
-description_long: Ordnet die bestätigten Findings C01–C16 und N01–N16 in ausführbare Wellen ein, verarbeitet die Plan-Verifikation aus Runde 2 und benennt für jede Maßnahme das Feature-Regressions-Gate.
+updated: 2026-07-18
+description: Konsolidierte Refactor- und Fix-Roadmap mit bestehenden C/N-Wellen und einem gesperrten Runde-3-/Workflow-3-Nachtrag für GPT-, Identitäts-, Terminal- und Recherchebefunde.
+description_long: Ordnet C01–C16 und N01–N16 sowie die bestätigten Runde-3-GPT-Findings und verifizierten Recherche-Lücken in ausführbare Wellen ein; die Identitäts-/Recovery- und Kernwellen bleiben bis zum dokumentierten Freigabe-Gate gesperrt.
 ---
 
 # Refactor-/Fix-Roadmap
@@ -480,3 +480,184 @@ ein Testbarkeitsdetail, keine offene Produktmaßnahme.
    die jeweils oben benannte manuelle macOS-QA.
 6. Eine Welle ist einzeln shipbar; optionale Technologie-Spikes bleiben hinter
    Feature Flags und dürfen bestehende Funktionen nicht ersetzen.
+
+## Nachtrag Runde 3 / Workflow 3
+
+### Status und Leseregel
+
+Dieser Nachtrag **ergänzt** die bestehenden Wellen; er schreibt sie nicht
+historisch um. Die vollständige Runde-3-Synthese ist
+[`06-umsetzung/README.md`](../06-umsetzung/README.md). Die eindeutigen Aliase hier
+lösen die vierfach wiederverwendeten Finder-IDs `G01` usw. für die Roadmap auf.
+
+**Keine Umsetzungsfreigabe:** Die Schlussverifikation urteilt „noch nicht
+umsetzungsreif“ und nennt fünf P0-Lücken
+([`verifikation-schluss.md:27-45`](../06-umsetzung/verifikation-schluss.md)). Die
+Vollständigkeitskritik verlangt zusätzlich Traceability, Terminal-Verdicts und
+ein gemeinsames Freigabe-Gate
+([`runde3-vollstaendigkeits-kritik.md:46-220`](../02-findings/runde3-vollstaendigkeits-kritik.md)).
+Die Einordnung in eine Welle ist daher eine Planungszuordnung, kein „Go“.
+
+### Sichtbare, verifikationsbedingte Übersteuerungen bestehender Wellen
+
+Die folgenden Punkte ändern keine historische Formulierung oben, **übersteuern
+sie aber verbindlich**, weil die Schlussverifikation den bisherigen Vertrag
+widerlegt oder als unimplementierbar bewertet:
+
+1. **ÄNDERUNG W0.1 — kein vollständiger `ProcessRunner`-God-Spy.** Der in W0.1
+   genannte „vollständige ProcessRunner-Spy“ wird in minimale Nähte getrennt:
+   one-shot argv/cwd/env/fertiges Resultat und kontrollierbarer langlebiger
+   Child-Prozess mit Spawnidentität, Ready/Exit und TERM/KILL. Das vorhandene
+   `ProcessRunner`-Protokoll exponiert weder Environment noch Handle oder
+   Signale (`WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift:217-230`;
+   [`verifikation-schluss.md:294-303`](../06-umsetzung/verifikation-schluss.md)).
+2. **ÄNDERUNG W0/W1 — C07 und fehlende Welle-1-Oracles vorziehen.** Vor W1-
+   Produktänderungen müssen C07, Child-Environment, Headless-Prävention,
+   Git-Stale-Result, WindowStore-Diff und Transcript-Cache abgedeckt sein. Die
+   aktuelle Test-Spec lässt diese Verträge aus
+   ([`verifikation-schluss.md:269-303`](../06-umsetzung/verifikation-schluss.md)).
+3. **ÄNDERUNG W1/W2 — ein gemeinsamer Termination-Contract zuerst.** R2.1 und
+   P0.7 ändern denselben App-Quit-Pfad und dürfen nicht als zwei unabhängige
+   Umbauten anlaufen. Der heutige App-Hook capturt synchron und antwortet sofort
+   `.terminateNow` (`WhisperM8/WhisperM8App.swift:343-351`); Recorder,
+   Terminal-Drain/Snapshot, Workspace-Flush und Proxy-Shutdown brauchen vor
+   beiden Maßnahmen einen gemeinsamen `.terminateLater`-/Reply-Vertrag.
+4. **ÄNDERUNG W2 — „erste passende Hook-ID bindet“ ist ausgesetzt.** P0.5/P0.6/
+   P1.3/P1.4 dürfen nicht auf dieser Formulierung implementiert werden. Vorher
+   sind capability-gegatete Weg-A/Weg-B-Strategie, launchspezifischer
+   Hook-Envelope, Generation-Guard, Config-Root-Ableitung, Claim-API,
+   Laufzeit-Branchwechsel und Recovery-Evidenz zu spezifizieren. Der Hook
+   transportiert heute keine WhisperM8-Launch-ID
+   (`WhisperM8/Services/AgentChats/ClaudeHookEventStore.swift:36-46,121-136`;
+   `WhisperM8/Services/AgentChats/ClaudeHookBridge.swift:27-41,218-229`).
+5. **ÄNDERUNG W2/W3 — externer History-Write bleibt gesperrt.** Der in der
+   Recovery-Spec erwogene Copy+Verify-Pfad in `~/.claude/` ist keine freigegebene
+   Maßnahme, solange die Datenhoheitsleitplanke nicht ausdrücklich entschieden
+   ist ([`verifikation-schluss.md:161-169`](../06-umsetzung/verifikation-schluss.md)).
+
+### Bestätigte GPT-Findings: eindeutige IDs und Wellen
+
+#### Definition, Skill und Settings
+
+Quelle und Verdictmatrix:
+[`runde3-definition-settings.md:373-384`](../04-verifikation/runde3-definition-settings.md).
+Finder-G05 ist **widerlegt** und erhält keine Maßnahme.
+
+| Stabile ID | Bestätigter Befund | Welle / Maßnahme | Gate |
+|---|---|---|---|
+| `R3-DEF-G01` | Generischer Skill-Zielname; Update überschreibt ohne Ownership-/Restore-Vertrag (`WhisperM8/Services/Shared/CLISkillExporter.swift:102-176`). | **W1:** Ownership-Marker, Fremddatei-Guard, Backup/Restore und sichtbarer Konflikt als eigener Change. | Fremde Datei bleibt bytegleich; nur eigene Generation darf aktualisiert/entfernt werden. |
+| `R3-DEF-G02` | Ein Profil, das vor dem Main-`skills`-Verzeichnis angelegt wurde, erhält einen später reparierten Symlink nicht zuverlässig (`WhisperM8/Services/AgentChats/ClaudeAccountProfiles.swift:225-275`). | **W1**, nach `R3-DEF-G01`: idempotente profilweite Reconciliation. | Main-Root vor/nach Profil, mehrere Config-Roots, fehlender/defekter/fremder Link. |
+| `R3-DEF-G03` | Detached Definition-Sync und Settings-/Proxy-Sync teilen keine Batch-Generation (`WhisperM8/Services/AgentChats/ClaudeGPTAgentDefinition.swift:50-103`; `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:218-277`). | **W1**, gemeinsam mit GPT-Lifecycle: generationengebundener Multi-Root-Plan/Commit. | Toggle/Portwechsel während Sync endet überall in genau einer aktuellen Generation. |
+| `R3-DEF-G04` | Read/Write/Remove-Fehler werden verschluckt oder falsch als Erfolg/No-op klassifiziert (`WhisperM8/Services/AgentChats/ClaudeGPTAgentDefinition.swift:60-94`). | **W1:** typed Result, sichtbarer Fehler, Retry/Reconciliation. | Permission-, Disk- und Remove-Fehler dürfen nie Erfolg melden. |
+
+#### Proxy-Lifecycle
+
+Quelle und Verdictmatrix:
+[`runde3-proxy.md:403-414`](../04-verifikation/runde3-proxy.md).
+
+| Stabile ID | Bestätigter Befund | Welle / Maßnahme | Gate |
+|---|---|---|---|
+| `R3-PROXY-G01` | Ensure gegen Stop/App-Quit ist nicht als ein Lifecycle serialisiert (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:218-300`). | **W1:** ein Proxy-/Router-Zustandsautomat unter einem Lifecycle-Owner. | Deterministische Start↔Stop↔Quit-Barrieren; nach Stop kein spätes Ready. |
+| `R3-PROXY-G02` | Proxy-Exit bleibt ohne Lifecycle-Recovery; Ownership kann stale bleiben (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:286-300,540-557`). | **W1**, nach G01: Exit-Monitor, Ownership-Clear, begrenzte Recovery. | Crash vor/nach Ready, PID-Reuse und App-Neustart. |
+| `R3-PROXY-G03` | `claude --bg` kann vor Guard/Router starten und erhält kein Router-/Profil-Environment (`WhisperM8/Views/AgentChatsView+BackgroundAgents.swift:68-95`; `WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift:78-137,223-258`). | **W1:** Spawn erst nach Ready-Generation; `P1.1`-Environment-Fabrik auf Background erweitern. **GPT-Ship-Blocker.** | Background GPT darf ohne aktuelle Ready-Generation nicht spawnen; Claude-Background bleibt unverändert. |
+| `R3-PROXY-G04` | Ein alter `.ready`-Snapshot überlebt Kill-Switch-Wechsel (`WhisperM8/Views/AgentSessionDetailView.swift:393-450,455-509`). | **W1:** Launch-Ticket an Konfigurationsgeneration binden und vor Spawn erneut prüfen. **GPT-Ship-Blocker.** | Toggle an jedem Suspension-Point verhindert den vorbereiteten GPT-Launch. |
+| `R3-PROXY-G05` | Backend-/Router-Port wird an mehreren Zeitpunkten live neu gelesen (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:218-283`; `WhisperM8/Services/AgentChats/ClaudeGPTMixRouter.swift:85-95,534-542`). | **W1:** immutable Endpoint-Snapshot je Generation. | Portwechsel während Ensure/Forward mischt keine Endpunkte. |
+
+#### Security
+
+Quelle und Verdictmatrix:
+[`runde3-security.md:27-39`](../04-verifikation/runde3-security.md). G03 bleibt
+bestätigt, ist im Refuter aber auf **niedrig** abgestuft.
+
+| Stabile ID | Bestätigter Befund | Welle / Maßnahme | Gate |
+|---|---|---|---|
+| `R3-SEC-G01` | Nachbildbares `/healthz` legitimiert einen fremden Listener (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:225-283,469-537`). | **W1:** Runtime-ID/PID/Startzeit plus Challenge-gebundene Health-Identität. **GPT-Ship-Blocker.** | Port-Hijack- und stale-PID-Fixtures dürfen nicht als eigene Instanz gelten. |
+| `R3-SEC-G02` | Lokale Listener exportieren die Codex-OAuth-Capability ohne Client-Authentisierung (`WhisperM8/Services/AgentChats/ClaudeGPTMixRouter.swift:127-134,403-423,534-575`). | **W1:** per-Generation lokales Client-Credential und Loopback-Bindungsprüfung. **GPT-Ship-Blocker.** | Unauthentisierter lokaler Client erhält keinen Forward; Claude-CLI mit Ticket funktioniert. |
+| `R3-SEC-G03` | Geerbtes `CCP_TRAFFIC_LOG` kann vollständiges Payload-Capture aktivieren (`WhisperM8/Services/Shared/LoginShellEnvironment.swift:91-137`; `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:237-249,545-552`). | **W1 / P1.1:** GPT-Prozessklasse allowlistet Environment; Diagnose nur explizit. | Parent-Canary fehlt im Kind; Opt-in-Diagnose setzt restriktive Dateirechte/Retention. |
+| `R3-SEC-G04` | Settings-Toggle sperrt neue Route, beendet Listener aber nicht (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:47-78,329-337`; `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:286-300`). | **W1**, im Lifecycle-Automaten: getrennte, dokumentierte Router-/Proxy-Shutdown-Policy. | Toggle beendet oder entprivilegiert Listener deterministisch; Re-enable ist sauber. |
+
+#### MixRouter und Übersetzungsvertrag
+
+Quelle und Verdictmatrix:
+[`runde3-mixrouter.md:461-474`](../04-verifikation/runde3-mixrouter.md).
+`R3-MIX-G01` ist code-seitig bestätigt, braucht vor einem verlustbehafteten
+Rewrite aber die dort geforderte echte Providerwechsel-Fixture.
+
+| Stabile ID | Bestätigter Befund | Welle / Maßnahme | Gate |
+|---|---|---|---|
+| `R3-MIX-G01` | Providerwechsel transportiert inkompatible Thinking-Historie; E2E-Teilvorbehalt bleibt. | **W0 Fixture, frühestens W2 Fix:** Fable→GPT→Fable-Golden-Contract; nur danach gezielte History-Normalisierung. | Kein Rewrite ohne echte CLI-/Proxy-Fixture; Tool-/Text-Historie bleibt vollständig. |
+| `R3-MIX-G02` | Bilder in `tool_result` werden verworfen; direkte User-Bilder bleiben erhalten. | **W3 / P1.11-Ergänzung:** Capability sichtbar machen oder Pixel erhalten. | E2E-Fixture für User-Bild und Tool-Result-Bild. |
+| `R3-MIX-G03` | `/count_tokens` kann lange alphanumerische Runs massiv unterschätzen. | **W1:** externen Token-Count-Vertrag qualifizieren und Proxy-Fix/Mindestversion festlegen. **GPT-Ship-Blocker für lange Sessions.** | Golden-Korpus einschließlich langer Runs gegen referenzierten Tokenizer. |
+| `R3-MIX-G04` | MixRouter-eigene Pre-Head-Fehler werden generischer Plaintext-502. | **W2:** Anthropic-kompatibles lokales Fehlerformat und terminaler SSE-Fehler, soweit sendbar. | Vor/nach Header, Timeout, Disconnect und Upstreamfehler. |
+| `R3-MIX-G05` | Client-Disconnect wird während Pre-Header-Denkphase nicht aktiv gelesen. | **W2:** paralleler bounded EOF-Read cancelt die Upstream-Task. | FIN während Denken beendet URLSession und Connection ohne Hänger. |
+| `R3-MIX-G06` | Kein globales Parallel-/Bytebudget; bis 64 MiB Body und eigene URLSession je Request (`WhisperM8/Services/AgentChats/ClaudeGPTMixRouter.swift:73-83,403-450,487-575,689-729`). | **W2:** globale Connection-/Bytebudgets, Backpressure und geteilte Session-Policy. | Überlast degradiert begrenzt; Claude-Route und normale Parallelität bleiben funktionsfähig. |
+| `R3-MIX-G07` | Produktiver Übersetzungsvertrag ist weder versioniert noch lokal gegen den echten Proxy getestet (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:218-283,469-537`; `Tests/WhisperM8Tests/ClaudeGPTMixRouterTests.swift:219-276,463-615`). | **W0 vor allen GPT-Fixes:** Manifest aus Repo/Tag/Hash/Semver/Capabilities plus hermetische Golden-Fixtures. **GPT-Ship-Blocker.** | Unbekannte Version/Capability degradiert sichtbar statt ungeprüft zu starten. |
+
+#### Live-Usage/Kompaktierung
+
+| Stabile ID | Bestätigter Befund | Welle / Maßnahme | Gate |
+|---|---|---|---|
+| `R3-LIVE-G01` | Subagent-Usage/Kompaktierung ist E2E gebrochen; die frühere Aussage „keine Übersetzung vorhanden“ ist widerlegt. Der Diagnose-Nachtrag lokalisiert den Standardpfad auf nullwertige `message_start`-Usage plus nicht gemergtes finales `message_delta`; zwei Tool-Finish-Pfade liefern zusätzlich `usage=None` ([`gpt-usage-kompaktierung-fix-spec.md:145-235`](../06-umsetzung/gpt-usage-kompaktierung-fix-spec.md)). | **W1:** Ebene 1 ist dokumentiert umgesetzt; offen sind echter Proxy-Terminalevent→Router→CLI/Transcript-Golden-Test, Upstream-Patch oder qualifizierte Mindestversion und enger Fallback. Die große Router-Fill-if-missing-Skizze entfällt. | Hauptchat **und** Modell-Subagent zeigen wachsende Usage und kompaktieren vor dem Limit; `/context` prüft auch die `[1m]`-/272k-Annahme. |
+
+### Verifizierte Recherche-Lücken und Zuordnung
+
+Die Recherche-Verdicts werden **nicht als weitere G-Findings doppelt gezählt**.
+Übernommen werden nur tragfähige beziehungsweise bestätigte Lücken; widerlegte,
+fragwürdige oder abgelehnte Forderungen bleiben draußen.
+
+| Verifizierte Lücke / Muster | Zuordnung | Roadmap-Folge |
+|---|---|---|
+| Ready-/Detach-Acceptance, Owner-/Waiter-Trennung, Prozess-/Protokoll-Finalität und Stop-Latch sind tragfähig ([`runde3-recherche-muster.md:157-254`](../04-verifikation/runde3-recherche-muster.md)). | **W1 / R2.4** | Kein neues Paket; R2.4-Gates ausdrücklich um Acceptance-Generation und Stop-vor-Registrierung ergänzen. Kein dauerhafter neuer Control-Broker. |
+| Provider-ID bis Timeline und explizites Parse-Outcome sind tragfähig (`WhisperM8/Models/AgentChatTranscript.swift:11-31`; `WhisperM8/Services/AgentChats/ClaudeTranscriptReader.swift:89-117`; [`runde3-recherche-muster.md:255-333`](../04-verifikation/runde3-recherche-muster.md)). | **W3 / P1.11** | `providerSessionID`/Korrelations-ID und `parsed|unknown|malformed` als Golden-Vertrag. Gemeinsamer Full-/Tail-Scanner bleibt bis W4 zurückgestellt. |
+| Child-Environment als Prozessklassen-Vertrag mit Kompatibilitäts-Gate ist tragfähig (`WhisperM8/Services/Shared/LoginShellEnvironment.swift:91-137`; [`runde3-recherche-muster.md:409-429`](../04-verifikation/runde3-recherche-muster.md)). | **W1 / P1.1** | PATH/TERM/Profil/MCP-Allowlist pro Prozessklasse; keine Parent-Secrets. |
+| Transaktionale Legacy-Keychain-Migration und Profil-Rename ohne Secret in argv sind tragfähig ([`runde3-recherche-muster.md:430-464`](../04-verifikation/runde3-recherche-muster.md)). | **W1 / R2.3 und P1.1** | Bestehende Maßnahmen bestätigt; Write+Readback sowie sicherer Transfer bleiben Gates. |
+| Validierter Execution-Plan ist als strukturelle Router-Grenze bestätigt, beim heutigen Zwei-Backend-Scope aber kein akuter Defekt ([`runde3-recherche-proxy.md:309-328`](../04-verifikation/runde3-recherche-proxy.md)). | **W4 / zurückgestellt** | Erst bei zusätzlicher Routingpolicy als typed Plan; kein W1-Big-Bang. |
+| Äußerer semantischer Streamabschluss ist im MixRouter lückenhaft, für GPT aber stark durch den Proxy mitigiert; Usage, Ownership, Tool-Result-Bilder, lokale Fehler und Client-FIN sind real ([`runde3-recherche-proxy.md:309-357`](../04-verifikation/runde3-recherche-proxy.md)). | **W0/W1/W2/W3** | Durch `R3-MIX-*`, `R3-PROXY-*`, `R3-SEC-*` und `R3-LIVE-G01` bereits abgedeckt; keine zweite Übersetzungsschicht und keine Doppelzählung. |
+
+Nicht aufgenommen werden MetricKit oder KSCrash als W0/P0-Produktpflicht, ein
+vorzeitiger gemeinsamer Scanner, Raw-Byte-Range/Oversize-Base64 in P1.11, ein
+neuer dauerhafter Supervisor-Control-Kanal oder zusätzliche GPT-Retries. Die
+Recherche-Verifikation bewertet diese Forderungen als fragwürdig oder lehnt sie
+ab ([`runde3-recherche-muster.md:35-55,465-477`](../04-verifikation/runde3-recherche-muster.md);
+[`runde3-recherche-proxy.md:359-364`](../04-verifikation/runde3-recherche-proxy.md)).
+
+### Noch nicht bestätigte Terminal-Snapshot-Population
+
+Die fünf Findings aus
+[`runde3-terminal-snapshots.md`](../02-findings/runde3-terminal-snapshots.md)
+werden **nicht** als bestätigte G-Population ausgegeben: Ein dedizierter
+Runde-3-Verdictbericht fehlt. Bis zur Urteilsmatrix gilt ein Ship-Stop für den
+betroffenen Termination-/Sidecar-Umbau. Bereits codebelegt und daher als offene
+Prüfpunkte zu verplanen sind:
+
+- Plaintext-Snapshot ohne TTL/Gesamtbudget (`WhisperM8/Services/AgentChats/TerminalSnapshotStore.swift:14-29,48-60,65-119`) — vorläufig **W2/T1**;
+- `delete` ohne Erfolgswert, Tombstone oder Retry (`WhisperM8/Services/AgentChats/TerminalSnapshotStore.swift:109-119`) — vorläufig **W2**;
+- Existenzcheck deferiert JSONL, obwohl `load` bei kaputtem/neuem Header `nil`
+  liefert (`WhisperM8/Services/AgentChats/TerminalSnapshotStore.swift:70-73,94-106`;
+  `WhisperM8/Views/AgentSessionDetailView.swift:201-225,255-260`) — vorläufig
+  **W2**, Rot→Grün-Gate vor T1.
+
+G01/G05 sind mit dem gemeinsamen Termination-/Drain-Contract abzugleichen; eine
+fünfzeilige finale Verdictmatrix entscheidet Schwere, Duplikate und endgültige
+Wellenzuordnung
+([`runde3-vollstaendigkeits-kritik.md:140-171,263-270`](../02-findings/runde3-vollstaendigkeits-kritik.md)).
+
+### Freigabe-Gate vor Runde-3-Kernwellen
+
+Vor dem ersten Produktchange an Identitäts-, Terminal- oder GPT-Kernwellen:
+
+- [ ] deduplizierte Finding→Verdict→Maßnahme-Matrix mit Ownern und Tests;
+- [ ] alle neun Nacharbeiten aus der Schlussverifikation geschlossen;
+- [ ] Terminal-G01–G05-Verdictmatrix und gemeinsamer Termination-Contract;
+- [ ] Proxy-/CLI-Version, Capabilities und Golden-Fixtures reproduzierbar
+      manifestiert;
+- [ ] Fork-Hook-Ereignisfolge live gegen die unterstützte CLI-Version belegt;
+- [ ] Inventare korrigiert; Kategorie-1-Tests vor Umbau, Kategorie-2-Tests mit Fix;
+- [ ] GPT-Ship-Blocker `R3-PROXY-G03/G04`, `R3-SEC-G01/G02`,
+      `R3-MIX-G03/G07` und `R3-LIVE-G01` geschlossen;
+- [ ] ältere kritische/hohe Findings außerhalb C/N besitzen einen sichtbaren
+      Status oder eine begründete Zurückstellung.
+
+Kleine, nichtdestruktive Vorarbeiten bleiben zulässig, soweit
+[`verifikation-schluss.md:348-360`](../06-umsetzung/verifikation-schluss.md) sie
+explizit freigibt. Eine Wellenzuordnung allein ersetzt dieses Gate nicht.
