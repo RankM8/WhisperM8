@@ -458,7 +458,13 @@ struct AgentSessionDetailView: View {
                 // wieder auf .running (Verify-Befund 2026-07-13).
                 guard let currentSession = store.loadWorkspace().sessions
                     .first(where: { $0.id == launchSession.id }),
-                    currentSession.status != .archived else { return }
+                    currentSession.status != .archived else {
+                    // R4-RESUME-01: abgebrochener Launch gibt den
+                    // Fokus-Trigger frei — sonst bleibt die Session
+                    // dauerhaft launch-verriegelt.
+                    focusLaunchInFlight = false
+                    return
+                }
                 prepareCommand(
                     resumeRepairPreparation: resumeRepairPreparation,
                     launchGuardResult: launchGuardResult
@@ -548,6 +554,11 @@ struct AgentSessionDetailView: View {
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+            // R4-RESUME-01: Fehlerpfad (z. B. fehlendes Resume-Transcript,
+            // Builder-Fehler) gibt den Launch-Trigger wieder frei — sonst
+            // blockiert `focusLaunchInFlight` jeden weiteren Versuch, bis
+            // irgendwann doch ein Controller erscheint.
+            focusLaunchInFlight = false
         }
     }
 
