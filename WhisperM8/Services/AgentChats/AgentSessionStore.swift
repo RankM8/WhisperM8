@@ -1177,12 +1177,32 @@ struct AgentSessionStore {
         }
     }
 
+    /// R4-AS-11: Doppelte lokale Session-IDs (defekter oder duplizierter
+    /// Bestand) deterministisch auf die jeweils ERSTE Row reduzieren — alle
+    /// Konsumenten suchen per `first(where:)`, die erste Row ist also die
+    /// ohnehin sichtbare. Ohne kontrollierten Dedup erreicht ein Duplikat
+    /// trap-faehige Vorbedingungen (z. B. `Dictionary(uniqueKeysWithValues:)`
+    /// im Summary-Startup-Planer).
+    static func dedupeDuplicateSessionIDs(from workspace: inout AgentWorkspace) {
+        var seen = Set<UUID>()
+        var duplicates = 0
+        workspace.sessions.removeAll { session in
+            if seen.insert(session.id).inserted { return false }
+            duplicates += 1
+            return true
+        }
+        if duplicates > 0 {
+            Logger.agentStore.notice("agent_store_duplicate_session_ids removed=\(duplicates)")
+        }
+    }
+
     /// Internal (statt private), weil die `AgentWorkspaceStoreRegistry` die
     /// Migration in den Initial-Load des Kerns injiziert.
     static func migratedWorkspace(_ workspace: AgentWorkspace) -> AgentWorkspace {
         var migrated = workspace
         let beforeCount = migrated.sessions.count
         migrated.schemaVersion = AgentWorkspace.currentSchemaVersion
+        dedupeDuplicateSessionIDs(from: &migrated)
         removeClaudeWorktreeProjectsAndSessions(from: &migrated)
         removeUnresumableClaudeSessions(from: &migrated)
         removeOrphanBackgroundSessions(from: &migrated)

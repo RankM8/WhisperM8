@@ -253,6 +253,31 @@ final class AgentSessionStoreTests: XCTestCase {
         XCTAssertFalse(remaining.contains(importedWithoutFlag.id))
     }
 
+    // R4-AS-11: doppelte lokale IDs werden beim Load/Normalize kontrolliert
+    // dedupliziert (erste Row gewinnt — die per `first(where:)` ohnehin
+    // sichtbare) und erreichen keinen trap-faehigen Konsumenten mehr.
+    func testMigratedWorkspaceDeduplicatesDuplicateSessionIDs() {
+        let sharedID = UUID()
+        var first = AgentChatSession(provider: .claude, projectID: UUID(), title: "Original")
+        first.id = sharedID
+        var duplicate = AgentChatSession(provider: .claude, projectID: UUID(), title: "Duplikat")
+        duplicate.id = sharedID
+        var unrelated = AgentChatSession(provider: .codex, projectID: UUID(), title: "Andere")
+        unrelated.lastActivityAt = Date()
+
+        let workspace = AgentWorkspace(
+            projects: [],
+            sessions: [first, duplicate, unrelated]
+        )
+        let migrated = AgentSessionStore.migratedWorkspace(workspace)
+
+        XCTAssertEqual(migrated.sessions.filter { $0.id == sharedID }.count, 1)
+        XCTAssertEqual(migrated.sessions.first { $0.id == sharedID }?.title, "Original",
+                       "deterministisch: die ERSTE Row ueberlebt")
+        XCTAssertTrue(migrated.sessions.contains { $0.id == unrelated.id },
+                      "eindeutige Rows bleiben unangetastet")
+    }
+
     func testRemoveOrphanBackgroundSessionsDropsClosedBgWithoutShortID() {
         let projectID = UUID()
         let kept = AgentChatSession(

@@ -155,4 +155,21 @@ final class SummaryStartupPlannerTests: XCTestCase {
         XCTAssertEqual(ids.count, 6)
         XCTAssertEqual(ids.first, sessions[0].id)
     }
+
+    // R4-AS-11: doppelte persistierte Session-IDs duerfen den Planer nie
+    // trappen (vorher: `Dictionary(uniqueKeysWithValues:)`-Precondition).
+    func testDuplicateSessionIDsDoNotTrapAndPlanOnce() {
+        let sharedID = UUID()
+        let first = session(id: sharedID)
+        var duplicate = session(id: sharedID)
+        duplicate.title = "Duplikat"
+
+        let ids = SummaryStartupPlanner.plan(
+            openTabIDs: [sharedID],
+            sessions: [first, duplicate],
+            now: Date(),
+            isStale: { _ in true }
+        )
+        XCTAssertEqual(ids, [sharedID], "eine Planung pro ID, kein Crash")
+    }
 }

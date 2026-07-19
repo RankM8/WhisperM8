@@ -14,7 +14,10 @@ enum SummaryStartupPlanner {
         maxCandidates: Int = 6,
         maxAge: TimeInterval = 7 * 24 * 3600
     ) -> [UUID] {
-        let sessionByID = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        // R4-AS-11: nie `uniqueKeysWithValues` auf persistierte IDs — ein
+        // duplizierter Bestand (defekte Datei, Merge-Fehler) trappt sonst den
+        // App-Start. Erste Row gewinnt, wie bei allen `first(where:)`-Lookups.
+        let sessionByID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var seen = Set<UUID>()
         let candidates = openTabIDs.compactMap { id -> AgentChatSession? in
             guard seen.insert(id).inserted, let session = sessionByID[id] else { return nil }
