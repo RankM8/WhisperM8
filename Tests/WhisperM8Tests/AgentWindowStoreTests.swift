@@ -323,6 +323,60 @@ final class AgentWindowStoreTests: XCTestCase {
         XCTAssertTrue(store.multiSelection(in: w1).isEmpty, "leere Menge raeumt den Eintrag auf")
     }
 
+    // MARK: - Diff-Gate (C14): No-op-Mutationen publizieren und speichern nicht
+
+    func testNoOpMutationsDoNotDirtyStore() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let s = UUID()
+        store.openTab(s, in: w)
+        let revision = store.dirtyRevision
+
+        // Identische Wiederholungen der typischen Hot-Caller: alles No-ops.
+        store.openTab(s, in: w)
+        store.selectTab(s, in: w)
+        store.setSelectedSession(s, in: w)
+        store.setOpenTabIDs([s], in: w)
+        store.reorderTab(s, before: nil, in: w)
+        store.setSelectedProject(nil, in: w)
+
+        XCTAssertEqual(store.dirtyRevision, revision,
+                       "No-op-Mutationen duerfen weder Revision noch Save ausloesen")
+    }
+
+    func testRealMutationBumpsRevisionExactlyOnce() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let a = UUID(), b = UUID()
+        store.openTab(a, in: w)
+        let revision = store.dirtyRevision
+
+        store.openTab(b, in: w)
+        XCTAssertEqual(store.dirtyRevision, revision + 1,
+                       "echte Aenderung erhoeht die Revision genau einmal")
+
+        store.selectTab(a, in: w)
+        XCTAssertEqual(store.dirtyRevision, revision + 2,
+                       "Selektionswechsel ist eine echte Aenderung")
+    }
+
+    func testNoOpGridWorkspaceMutationDoesNotDirtyStore() {
+        let store = makeStore()
+        let id = store.createGridWorkspace(name: "Test")
+        guard let fractions = store.gridWorkspace(id: id)?.columnFractions else {
+            XCTFail("frisch angelegter Workspace muss auffindbar sein")
+            return
+        }
+        let revision = store.dirtyRevision
+
+        // Kein Caller-Guard auf diesem Pfad — prueft das zentrale Gate in
+        // `mutate` fuer identische Werte.
+        store.setGridColumnFractions(ofGridWorkspace: id, fractions)
+
+        XCTAssertEqual(store.dirtyRevision, revision,
+                       "identische Fractions sind ein No-op ohne Revision/Save")
+    }
+
     func testMultiSelectionIsNotPersisted() {
         let wsURL = tempURL("ws")
         let uiURL = tempURL("ui")

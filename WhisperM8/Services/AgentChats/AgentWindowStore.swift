@@ -893,13 +893,24 @@ final class AgentWindowStore {
     /// Garantie in `normalizedWindows`).
     private func updateWindow(_ id: UUID, _ transform: (inout AgentChatWindowState) -> Void) {
         guard hasWindow(id) else { return }
-        var window = state.windowState(for: id)
+        let original = state.windowState(for: id)
+        var window = original
         transform(&window)
+        // Billiger Vorab-Guard fuer Hot-Caller (Selection-Reconcile, onChange):
+        // ein unveraendertes Fenster erspart Kopie + Vollvergleich in `mutate`.
+        guard window != original else { return }
         mutate { $0.upsertWindow(window) }
     }
 
+    /// Diff-gated wie `prune`: ohne effektive Aenderung weder State-Write
+    /// (= kein Cross-Window-Re-Render) noch Revision/Save. Der Block mutiert
+    /// eine Kopie; `state` wird nur bei echter Differenz genau einmal
+    /// geschrieben.
     private func mutate(_ block: (inout AgentUIState) -> Void) {
-        block(&state)
+        var updated = state
+        block(&updated)
+        guard updated != state else { return }
+        state = updated
         dirtyRevision += 1
         scheduleSave()
     }
@@ -907,7 +918,7 @@ final class AgentWindowStore {
     /// Dirty-Tracking (Spez 14d92786): `savedRevision` folgt `dirtyRevision`
     /// erst nach ERFOLGREICHEM Write — ein fehlgeschlagener Flush/Save lässt
     /// den Zustand nachweisbar dirty und der Retry greift.
-    @ObservationIgnored private var dirtyRevision = 0
+    @ObservationIgnored private(set) var dirtyRevision = 0
     @ObservationIgnored private var savedRevision = -1
 
     /// Schreibt den AKTUELLEN State (nie einen Alt-Snapshot — eine Mutation
