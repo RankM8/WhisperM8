@@ -270,6 +270,7 @@ historische Eingaben; sie erteilen allein keine aktuelle Umsetzungsfreigabe.
 | 05 Roadmap | [findings-matrix.md](05-roadmap/findings-matrix.md) | Historische deduplizierte C/N-/Runde-3-Matrix; durch Runde-4-Verifikation korrigiert |
 | 05 Roadmap | [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) | Bestehende Wellen plus Runde-3-/Runde-4-Nachtrag; kein Produkt-Go |
 | 06 Umsetzung | [README.md](06-umsetzung/README.md) | Aktuelle Workflow-3-Synthese und Gate |
+| 06 Umsetzung neu | [umsetzungslog.md](06-umsetzung/umsetzungslog.md) | Laufendes Log der umgesetzten Sofort-Fixes (C13/C14/C16, P0.4a, R4-AS-11, R4-RESUME-01); Gate unberührt |
 | 06 Umsetzung | [identitaetsmodell-spec.md](06-umsetzung/identitaetsmodell-spec.md) | Entwurf; Revision erforderlich |
 | 06 Umsetzung | [verlorene-chats-spec.md](06-umsetzung/verlorene-chats-spec.md) | Recovery-Spec; Binding-Teile gesperrt |
 | 06 Umsetzung neu | [feature-inventar-agentchats.md](06-umsetzung/feature-inventar-agentchats.md) | Breit, aber als Oracle noch zu korrigieren |
