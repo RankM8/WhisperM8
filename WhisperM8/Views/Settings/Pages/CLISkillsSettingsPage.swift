@@ -111,6 +111,12 @@ struct CLISkillsSettingsPage: View {
                     definition: .codexAgent,
                     summary: "Routes GPT subagent requests: native `gpt` agent type by default (WhisperM8 GPT backend), plus the full Codex CLI path — commands, flags, exit codes, image generation, and workflows."
                 )
+
+                CLISkillSettingsCard(
+                    title: "Agent Chats Skill (Jarvis)",
+                    definition: .chats,
+                    summary: "Lets any chat see and manage all your agent sessions via `whisperm8 chats` — overview, read transcripts, send prompts, wait for events, interrupt, rename/archive. Includes the supervisor loop and safety rules (send confirmation, one-hop)."
+                )
             }
             .padding(.vertical, 10)
         }

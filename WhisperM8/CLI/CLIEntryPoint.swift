@@ -33,6 +33,8 @@ enum CLIModeDetector {
         // dort ist argv0 das App-Binary (WhisperM8), nicht der Symlink,
         // deshalb muss das Keyword hier stehen.
         "agent", "agent-supervise",
+        // Agent-Chats-Verwaltung (Jarvis-CLI) — docs/plans/whisperm8-chats-cli/.
+        "chats",
     ]
 
     static func shouldRunCLI(_ arguments: [String]) -> Bool {
@@ -90,6 +92,8 @@ enum CLICommand {
             return await CLITranscribeCommand.run(arguments: Array(arguments.dropFirst()))
         case "agent":
             return await AgentCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "chats":
+            return await AgentChatsCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "agent-supervise":
             // Interner Detach-Modus — wird nur vom AgentSupervisorLauncher
             // gestartet, nie von Hand.
@@ -135,6 +139,7 @@ enum CLIHelp {
       whisperm8 transcribe <datei> [optionen]
       whisperm8 modes
       whisperm8 agent run [optionen] "<prompt>"   (Codex-Subagents — siehe `whisperm8 agent help`)
+      whisperm8 chats <befehl>                    (Agent-Sessions sehen/verwalten — siehe `whisperm8 chats help`)
       whisperm8 --help | --version
 
     TRANSCRIBE

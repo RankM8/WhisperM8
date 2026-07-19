@@ -283,6 +283,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // installiert seinen eigenen `didBecomeActive`-Observer.
         AgentScanCoordinator.shared.installLifecycleHooks()
         AgentScanCoordinator.shared.requestScan(reason: .launch)
+        // Control-Socket-Server für `whisperm8 chats send/open/new/…`. Off-main
+        // (die Server-eigene Utility-Queue bindet den Socket); der Handler
+        // hoppt selbst auf den MainActor. Kill-Switch:
+        // `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
+        AgentControlServer.shared.start(handler: AgentControlRequestHandler())
         // P2: FSEvents auf ~/.claude/projects + ~/.codex/sessions — extern
         // gestartete Sessions tauchen damit nach Sekunden auf statt erst beim
         // nächsten Foreground-Scan.

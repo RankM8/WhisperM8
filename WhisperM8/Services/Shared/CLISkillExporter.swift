@@ -48,7 +48,13 @@ struct CLISkillExporter {
             ]
         )
 
-        static let all: [SkillDefinition] = [.transcription, .codexAgent]
+        /// Agent-Chats-Verwaltung (`whisperm8 chats …`, „Jarvis").
+        static let chats = SkillDefinition(
+            name: "whisperm8-chats",
+            resourceName: "whisperm8-chats-skill"
+        )
+
+        static let all: [SkillDefinition] = [.transcription, .codexAgent, .chats]
     }
 
     /// Rückwärtskompatibler Alias (Tests/ältere Aufrufer).

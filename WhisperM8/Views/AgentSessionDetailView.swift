@@ -162,6 +162,20 @@ struct AgentSessionDetailView: View {
         .onChange(of: actionRequest) { _, request in
             handleActionRequest(request)
         }
+        // `whisperm8 chats resume`: Der Control-Handler setzt
+        // `shouldLaunchOnOpen = true` — ist der Tab aber BEREITS offen und
+        // selektiert, feuert weder onAppear noch der Session-ID-Wechsel
+        // (GPT-Review-Befund). Dieser Trigger holt den Launch dann nach;
+        // Guards wie beim Grid-Fokus-Nachholen (kein Controller, keine
+        // laufende Vorbereitung, nicht unterdrückt).
+        .onChange(of: session.shouldLaunchOnOpen) { wasSet, isSet in
+            guard isSet == true, wasSet != true,
+                  !suppressesAutoActivation,
+                  controller == nil,
+                  !focusLaunchInFlight else { return }
+            focusLaunchInFlight = true
+            launchAfterCacheWarmup()
+        }
         // Umschalten Terminal → Chat/Roh holt den aufgeschobenen
         // Transcript-Load nach (im Terminal-Modus wird kein JSONL gelesen).
         .onChange(of: transcriptViewMode) { _, _ in

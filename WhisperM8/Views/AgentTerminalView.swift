@@ -642,6 +642,40 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         terminal.send(txt: text)
     }
 
+    /// Sendet einen Prompt über den Control-Socket (`whisperm8 chats send`) in
+    /// die laufende TUI — im Gegensatz zu `sendUserText` mit **Bracketed
+    /// Paste** und optionalem Auto-Submit.
+    ///
+    /// Warum Bracketed Paste Pflicht ist: Claude/Codex-TUIs deuten in
+    /// bracketed-Paste-Modus eingebettete Newlines NICHT als Submit. Ohne den
+    /// `ESC[200~ … ESC[201~`-Wrap würde jede Zeile eines mehrzeiligen Prompts
+    /// sofort abgeschickt. Der Wrap garantiert: ein Block, ein Submit.
+    ///
+    /// `submit == true`: Return wird NACH einem kurzen Delay gesendet (die TUI
+    /// braucht einen Moment, um den Paste zu verarbeiten — dasselbe Muster wie
+    /// die 1,0-s-Grace im `AgentPromptRoutingService`).
+    func sendPrompt(_ text: String, submit: Bool) {
+        guard isRunning else { return }
+        terminal.send(txt: "\u{1B}[200~")
+        terminal.send(txt: text)
+        terminal.send(txt: "\u{1B}[201~")
+        guard submit else { return }
+        // 80 ms Delay, damit die TUI den Paste-Block verarbeitet hat, bevor das
+        // Return kommt (best-effort nach erfolgreichem Paste).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self, self.isRunning else { return }
+            self.terminal.send([0x0D])
+        }
+    }
+
+    /// Sendet ein einzelnes ESC an die laufende TUI — Claude/Codex-Abbruch des
+    /// aktuellen Turns (`whisperm8 chats interrupt`). Kein generisches
+    /// send-keys: bewusst nur dieses eine Signal.
+    func sendInterrupt() {
+        guard isRunning else { return }
+        terminal.send([0x1B])
+    }
+
     /// Wird gefeuert, wenn der Subprocess den Terminal-Titel per
     /// Escape-Sequenz setzt (OSC 0/2 — Shells melden so laufendes Kommando
     /// bzw. cwd). Genutzt von `.terminal`-Tabs für den Live-Tab-Titel;
@@ -763,6 +797,17 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             }
             environment.append(contentsOf: command.environmentOverrides.map { "\($0.key)=\($0.value)" })
         }
+        // Identität für `whisperm8 chats`: die Session weiß, WER fragt, wenn
+        // sie aus dem Chat heraus die CLI aufruft (Selbst-Send-Schutz,
+        // „(du)"-Markierung, Audit). Das Token beweist dem Control-Server, dass
+        // der Aufruf wirklich aus dieser PTY stammt. Beide gewinnen gegen
+        // etwaige gleichnamige Basis-/Override-Einträge (zuletzt gewinnt).
+        let token = AgentSessionTokenRegistry.shared.issueToken(for: sessionID)
+        environment.removeAll { entry in
+            entry.hasPrefix("WHISPERM8_SESSION_ID=") || entry.hasPrefix("WHISPERM8_SESSION_TOKEN=")
+        }
+        environment.append("WHISPERM8_SESSION_ID=\(sessionID.uuidString)")
+        environment.append("WHISPERM8_SESSION_TOKEN=\(token)")
         terminal.startProcess(
             executable: command.executablePath,
             args: command.arguments,

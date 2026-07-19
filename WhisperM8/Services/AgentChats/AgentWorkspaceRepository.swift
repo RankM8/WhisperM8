@@ -17,6 +17,23 @@ struct AgentWorkspaceRepository {
         PerfBudgets.storeLoad.withInterval { loadBody(migrate: migrate) }
     }
 
+    /// Garantiert schreibfreier Load für den CLI-Prozess (`whisperm8 chats`):
+    /// keine Migration, keine Quarantäne-Backups, keine Recovery-Writes.
+    /// Decode-Fehler → bestes dekodierbares Generation-Backup (read-only)
+    /// oder `.empty`. Die App nutzt weiterhin `load(migrate:)`.
+    func loadReadOnly() -> AgentWorkspace {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return .empty
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let data = try? Data(contentsOf: fileURL),
+           let workspace = try? decoder.decode(AgentWorkspace.self, from: data) {
+            return workspace
+        }
+        return loadNewestDecodableGenerationBackup() ?? .empty
+    }
+
     /// Eigentlicher Load — vom Signpost-Wrapper getrennt, damit die
     /// bestehende durationMs-Logzeile (log-stream-Schnittstelle laut
     /// CLAUDE.md) unverändert erhalten bleibt.
