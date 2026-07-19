@@ -10,6 +10,10 @@ struct ProjectDetailPanel: View {
     var onOpenPHPStorm: () -> Void
 
     @State private var status: GitProjectStatus?
+    /// Manueller Refresh-Zaehler: fliesst in die `.task(id:)`-Identitaet ein,
+    /// damit der Reload-Button einen neuen (und der alte einen gecancelten)
+    /// Ladevorgang bekommt.
+    @State private var gitRefreshToken = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -102,9 +106,10 @@ struct ProjectDetailPanel: View {
         }
         .padding(16)
         .background(AgentTheme.background)
-        .onAppear(perform: refreshGitStatus)
-        .onChange(of: project?.path) { _, _ in
-            refreshGitStatus()
+        // Off-main, abbrechbar, stale-safe (C13): `.task(id:)` cancelt beim
+        // Projektwechsel/Disappear automatisch den alten Ladevorgang.
+        .task(id: "\(gitRefreshToken)|\(project?.path ?? "")") {
+            await refreshGitStatus()
         }
     }
 
@@ -119,16 +124,20 @@ struct ProjectDetailPanel: View {
     }
 
     private func refreshPanel() {
-        refreshGitStatus()
+        gitRefreshToken += 1
         onRefresh()
     }
 
-    private func refreshGitStatus() {
-        guard let project else {
-            status = nil
-            return
-        }
-        status = GitProjectStatus(path: project.path)
+    private func refreshGitStatus() async {
+        // Alten Status sofort leeren — beim Projektwechsel darf nie der
+        // Git-Zustand des vorherigen Projekts stehen bleiben.
+        status = nil
+        guard let path = project?.path else { return }
+        let loaded = await GitProjectStatus.load(path: path)
+        // Stale-Guard: Ergebnis nur uebernehmen, wenn weder gecancelt noch
+        // das Projekt inzwischen gewechselt wurde.
+        guard !Task.isCancelled, project?.path == path else { return }
+        status = loaded
     }
 }
 
