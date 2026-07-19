@@ -141,13 +141,18 @@ final class AgentWindowStore {
     /// Ersetzt die komplette Tab-Liste eines Fensters. Bridge fuer die
     /// bisherigen `openTabIDs.append/remove/insert`-Aufrufstellen (Swift macht
     /// daraus get→modify→set). Invarianten stellt `upsertWindow` her.
+    /// Entfernte IDs landen in der Reopen-History — die View-Tab-Closes
+    /// (X-Button, ⌘W, Bulk) laufen genau ueber diese Bridge.
     func setOpenTabIDs(_ ids: [UUID], in windowID: UUID) {
+        let removed = openTabIDs(in: windowID).filter { !ids.contains($0) }
         updateWindow(windowID) { $0.openTabIDs = ids }
+        recordClosedTabs(removed, windowID: windowID)
     }
 
     /// Schliesst einen Tab. Selektion rueckt auf den vorherigen Tab (sonst den
     /// neuen letzten), nie ins Leere, solange noch Tabs da sind.
     func closeTab(_ sessionID: UUID, in windowID: UUID) {
+        let wasOpen = openTabIDs(in: windowID).contains(sessionID)
         updateWindow(windowID) { window in
             guard let index = window.openTabIDs.firstIndex(of: sessionID) else { return }
             window.openTabIDs.remove(at: index)
@@ -158,6 +163,53 @@ final class AgentWindowStore {
                     : window.openTabIDs.first
             }
         }
+        if wasOpen { recordClosedTabs([sessionID], windowID: windowID) }
+    }
+
+    // MARK: - Reopen-History (ephemer)
+
+    /// Ein Eintrag der Reopen-History: welcher Tab wurde in welchem Fenster
+    /// geschlossen.
+    struct ClosedTabRecord: Equatable {
+        var sessionID: UUID
+        var windowID: UUID
+    }
+
+    /// Zuletzt geschlossene Tabs (LIFO, Cap 20). Bewusst NICHT persistiert —
+    /// nach App-Neustart ist die Liste leer (ein „reopen" darf nie einen
+    /// Wochen-alten Zustand wiederbeleben). Gefuettert von `closeTab` (CLI-
+    /// und Store-Pfad) und der `setOpenTabIDs`-Bridge (View-Closes);
+    /// Fenster-Close mit Tabs (`removeWindow`) und die Workspace-GC (`prune`)
+    /// zeichnen bewusst nicht auf.
+    @ObservationIgnored private(set) var recentlyClosedTabs: [ClosedTabRecord] = []
+    private static let reopenHistoryCap = 20
+
+    private func recordClosedTabs(_ sessionIDs: [UUID], windowID: UUID) {
+        guard !sessionIDs.isEmpty else { return }
+        for id in sessionIDs {
+            recentlyClosedTabs.removeAll { $0.sessionID == id }
+            recentlyClosedTabs.append(ClosedTabRecord(sessionID: id, windowID: windowID))
+        }
+        if recentlyClosedTabs.count > Self.reopenHistoryCap {
+            recentlyClosedTabs.removeFirst(recentlyClosedTabs.count - Self.reopenHistoryCap)
+        }
+    }
+
+    /// Oeffnet den zuletzt geschlossenen Tab wieder (LIFO). Ueberspringt
+    /// Eintraege, die inzwischen ungueltig sind: Session weg/archiviert
+    /// (`isEligible` prueft der Aufrufer gegen den Workspace) oder Tab
+    /// bereits wieder offen. Existiert das Ursprungsfenster nicht mehr,
+    /// landet der Tab im Primaerfenster. `nil` = nichts wiederherstellbar.
+    @discardableResult
+    func reopenLastClosedTab(isEligible: (UUID) -> Bool = { _ in true }) -> ClosedTabRecord? {
+        while let entry = recentlyClosedTabs.popLast() {
+            guard isEligible(entry.sessionID),
+                  windowID(containingTab: entry.sessionID) == nil else { continue }
+            let target = hasWindow(entry.windowID) ? entry.windowID : state.primaryWindowID
+            openTab(entry.sessionID, in: target)
+            return ClosedTabRecord(sessionID: entry.sessionID, windowID: target)
+        }
+        return nil
     }
 
     /// Schließt den Tab der Session in dem Fenster, das ihn hält (eine Session
@@ -793,6 +845,15 @@ final class AgentWindowStore {
                 state.pinnedSessionIDs.append(sessionID)
             }
         }
+    }
+
+    /// Setzt den Pin-Zustand idempotent (CLI-`chats pin/unpin`).
+    /// `true` = Zustand hat sich tatsächlich geändert.
+    @discardableResult
+    func setPinned(_ sessionID: UUID, pinned: Bool) -> Bool {
+        guard state.pinnedSessionIDs.contains(sessionID) != pinned else { return false }
+        togglePin(sessionID)
+        return true
     }
 
     func setExpandedProjectIDs(_ ids: [UUID]) {

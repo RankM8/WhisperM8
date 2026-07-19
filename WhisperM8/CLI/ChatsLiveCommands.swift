@@ -325,7 +325,10 @@ enum ChatsCloseCommand {
             }
         }
 
-        let params: [String: Any] = ["targetSessionIDs": targetIDs.map(\.uuidString)]
+        let params: [String: Any] = [
+            "targetSessionIDs": targetIDs.map(\.uuidString),
+            "mode": options.mode,
+        ]
         switch ChatsLiveSupport.perform(method: "session.close", params: params) {
         case .failed(let code):
             return code
@@ -334,6 +337,8 @@ enum ChatsCloseCommand {
             let items = ChatsCloseSupport.items(from: response.result)
             if options.json {
                 CLIIO.out(ChatsOutput.encodeJSON(ChatsLiveSupport.jsonObject(from: response)))
+            } else if items.isEmpty {
+                CLIIO.out("Nichts zu schließen.")
             } else {
                 for item in items {
                     let fallback = UUID(uuidString: item.id).flatMap { labelByID[$0] }
@@ -341,6 +346,177 @@ enum ChatsCloseCommand {
                 }
             }
             return ChatsCloseSupport.exitCode(for: items)
+        }
+    }
+}
+
+// MARK: - reopen
+
+enum ChatsReopenCommand {
+    static func run(_ arguments: [String]) -> Int32 {
+        var json = false
+        for arg in arguments {
+            switch arg {
+            case "--json": json = true
+            default: CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage
+            }
+        }
+        switch ChatsLiveSupport.perform(method: "session.reopen", params: [:]) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            ChatsLiveSupport.printResult(response, json: json) { result in
+                "✓ Tab wiederhergestellt: \(result["target"]?["title"]?.stringValue ?? "?")"
+            }
+            return ChatsCLIExit.ok
+        }
+    }
+}
+
+// MARK: - pin / unpin
+
+enum ChatsPinCommand {
+    static func run(_ arguments: [String], pinned: Bool) -> Int32 {
+        let verb = pinned ? "pin" : "unpin"
+        let options: ChatsRefListOptions
+        do {
+            options = try ChatsCLIParser.parseRefList(arguments)
+        } catch {
+            CLIIO.err(error.localizedDescription)
+            CLIIO.err("Usage: whisperm8 chats \(verb) <ref> [<ref>…] [--json]")
+            return ChatsCLIExit.usage
+        }
+
+        // Wie close: alles-oder-nichts bei der Auflösung.
+        var targetIDs: [UUID] = []
+        var labelByID: [UUID: String] = [:]
+        for ref in options.refs {
+            switch ChatsLiveSupport.resolveTarget(ref: ref) {
+            case .resolved(let id, let label):
+                if !targetIDs.contains(id) { targetIDs.append(id) }
+                labelByID[id] = label
+            case .failed(let code):
+                return code
+            }
+        }
+
+        let params: [String: Any] = [
+            "targetSessionIDs": targetIDs.map(\.uuidString),
+            "pinned": pinned,
+        ]
+        switch ChatsLiveSupport.perform(method: "session.pin", params: params) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            let items = ChatsCloseSupport.items(from: response.result)
+            if options.json {
+                CLIIO.out(ChatsOutput.encodeJSON(ChatsLiveSupport.jsonObject(from: response)))
+            } else {
+                for item in items {
+                    let label = [item.project, item.title].compactMap { $0 }.joined(separator: "/")
+                    let name = label.isEmpty
+                        ? (UUID(uuidString: item.id).flatMap { labelByID[$0] } ?? item.id)
+                        : label
+                    switch item.outcome {
+                    case "pinned": CLIIO.out("📌 gepinnt: \(name)")
+                    case "unpinned": CLIIO.out("✓ Pin entfernt: \(name)")
+                    case "unchanged": CLIIO.out("– unverändert: \(name)")
+                    default: CLIIO.out("✗ nicht gefunden: \(name)")
+                    }
+                }
+            }
+            return ChatsCloseSupport.exitCode(for: items)
+        }
+    }
+}
+
+// MARK: - move
+
+enum ChatsMoveCommand {
+    static func run(_ arguments: [String]) -> Int32 {
+        var ref: String?
+        var windowRef: String?
+        var json = false
+        var index = 0
+        while index < arguments.count {
+            let arg = arguments[index]
+            switch arg {
+            case "--window":
+                index += 1
+                guard index < arguments.count else { CLIIO.err("--window erwartet einen Wert."); return ChatsCLIExit.usage }
+                windowRef = arguments[index]
+            case "--json": json = true
+            default:
+                if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
+                if ref == nil { ref = arg } else { CLIIO.err("Zu viele Argumente."); return ChatsCLIExit.usage }
+            }
+            index += 1
+        }
+        guard let ref, let windowRef else {
+            CLIIO.err("Usage: whisperm8 chats move <ref> --window <primary|fenster-id> [--json]")
+            return ChatsCLIExit.usage
+        }
+        let targetID: UUID
+        switch ChatsLiveSupport.resolveTarget(ref: ref) {
+        case .resolved(let id, _): targetID = id
+        case .failed(let code): return code
+        }
+        let params: [String: Any] = ["targetSessionID": targetID.uuidString, "windowRef": windowRef]
+        switch ChatsLiveSupport.perform(method: "session.move", params: params) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            ChatsLiveSupport.printResult(response, json: json) { result in
+                "✓ \(result["target"]?["title"]?.stringValue ?? ref) verschoben (Fenster \(ChatsWindowCommand.shortWindowID(result["windowID"]?.stringValue)))"
+            }
+            return ChatsCLIExit.ok
+        }
+    }
+}
+
+// MARK: - window (Fenster-Inventar)
+
+enum ChatsWindowCommand {
+    static func run(_ arguments: [String]) -> Int32 {
+        guard let sub = arguments.first else {
+            CLIIO.err("Usage: whisperm8 chats window list [--json]")
+            return ChatsCLIExit.usage
+        }
+        switch sub {
+        case "list":
+            return list(Array(arguments.dropFirst()))
+        default:
+            CLIIO.err("Unbekannter window-Befehl: \(sub) (list)")
+            return ChatsCLIExit.usage
+        }
+    }
+
+    static func shortWindowID(_ id: String?) -> String {
+        guard let id else { return "?" }
+        return String(id.replacingOccurrences(of: "-", with: "").lowercased().prefix(8))
+    }
+
+    private static func list(_ arguments: [String]) -> Int32 {
+        let json = arguments.contains("--json")
+        switch ChatsLiveSupport.perform(method: "window.list", params: [:]) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok, let windows = response.result?["windows"]?.arrayValue else {
+                return ChatsLiveSupport.mapError(response)
+            }
+            if json {
+                CLIIO.out(ChatsOutput.encodeJSON(ChatsLiveSupport.jsonObject(from: response)))
+            } else {
+                for window in windows {
+                    let short = shortWindowID(window["id"]?.stringValue)
+                    let primary = window["isPrimary"]?.boolValue == true ? " (primär)" : ""
+                    let titles = window["tabTitles"]?.arrayValue?.compactMap(\.stringValue) ?? []
+                    let preview = titles.prefix(4).joined(separator: " · ")
+                        + (titles.count > 4 ? " · …" : "")
+                    CLIIO.out("\(short)\(primary)  \(titles.count) Tabs  \(preview)")
+                }
+            }
+            return ChatsCLIExit.ok
         }
     }
 }
@@ -509,7 +685,7 @@ enum ChatsMutationCommand {
 enum ChatsWorkspaceCommand {
     static func run(_ arguments: [String]) -> Int32 {
         guard let sub = arguments.first else {
-            CLIIO.err("Usage: whisperm8 chats workspace list | rename <name|id> \"<neu>\"")
+            CLIIO.err("Usage: whisperm8 chats workspace list | rename <name|id> \"<neu>\" | add <name|id> <ref> [--slot N] | remove <name|id> <ref>")
             return ChatsCLIExit.usage
         }
         let rest = Array(arguments.dropFirst())
@@ -518,9 +694,67 @@ enum ChatsWorkspaceCommand {
             return list(rest)
         case "rename":
             return rename(rest)
+        case "add":
+            return membership(rest, add: true)
+        case "remove":
+            return membership(rest, add: false)
         default:
-            CLIIO.err("Unbekannter workspace-Befehl: \(sub) (list | rename)")
+            CLIIO.err("Unbekannter workspace-Befehl: \(sub) (list | rename | add | remove)")
             return ChatsCLIExit.usage
+        }
+    }
+
+    /// `workspace add <ws> <ref> [--slot N]` / `workspace remove <ws> <ref>`.
+    /// Nur die Slot-MITGLIEDSCHAFT ändert sich — Tabs und Prozesse bleiben
+    /// (identisch zur Sidebar-Aktion in der App).
+    private static func membership(_ arguments: [String], add: Bool) -> Int32 {
+        var positionals: [String] = []
+        var slot: Int?
+        var json = false
+        var index = 0
+        while index < arguments.count {
+            let arg = arguments[index]
+            switch arg {
+            case "--slot":
+                index += 1
+                guard add, index < arguments.count, let value = Int(arguments[index]), value >= 1 else {
+                    CLIIO.err(add ? "--slot erwartet eine Slot-Nummer >= 1." : "--slot gibt es nur bei add.")
+                    return ChatsCLIExit.usage
+                }
+                slot = value - 1    // menschlich 1-basiert → Slot-Index
+            case "--json": json = true
+            default:
+                if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
+                positionals.append(arg)
+            }
+            index += 1
+        }
+        guard positionals.count == 2 else {
+            CLIIO.err("Usage: whisperm8 chats workspace \(add ? "add" : "remove") <name|id> <ref>\(add ? " [--slot N]" : "")")
+            return ChatsCLIExit.usage
+        }
+        let workspaceRef = positionals[0]
+        let targetID: UUID
+        switch ChatsLiveSupport.resolveTarget(ref: positionals[1]) {
+        case .resolved(let id, _): targetID = id
+        case .failed(let code): return code
+        }
+        var params: [String: Any] = ["workspaceRef": workspaceRef, "targetSessionID": targetID.uuidString]
+        if let slot { params["slot"] = slot }
+        switch ChatsLiveSupport.perform(method: add ? "gridWorkspace.add" : "gridWorkspace.remove", params: params) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            ChatsLiveSupport.printResult(response, json: json) { result in
+                let name = result["workspace"]?["name"]?.stringValue ?? workspaceRef
+                switch result["outcome"]?.stringValue {
+                case "added": return "✓ in Workspace „\(name)\" aufgenommen"
+                case "alreadyMember": return "– schon Mitglied von „\(name)\""
+                case "removed": return "✓ aus Workspace „\(name)\" entfernt"
+                default: return "– war kein Mitglied von „\(name)\""
+                }
+            }
+            return ChatsCLIExit.ok
         }
     }
 

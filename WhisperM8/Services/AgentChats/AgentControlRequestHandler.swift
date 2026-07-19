@@ -41,6 +41,16 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await sessionOpen(request)
         case "session.close":
             return await sessionClose(request)
+        case "session.reopen":
+            return await sessionReopen(request)
+        case "session.pin":
+            return await sessionPin(request)
+        case "session.move":
+            return await sessionMove(request)
+        case "window.list":
+            return await windowList(request)
+        case "gridWorkspace.add", "gridWorkspace.remove":
+            return await gridWorkspaceMembership(request)
         case "session.resume":
             return await sessionResume(request)
         case "session.new":
@@ -279,19 +289,54 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return .failure(requestID: request.requestID, code: .invalid,
                             message: "targetSessionIDs fehlt/ungültig (Array von Session-UUIDs)")
         }
+        let mode = request.params["mode"]?.stringValue ?? "explicit"
+        guard mode == "explicit" || mode == "others" || mode == "right" else {
+            return .failure(requestID: request.requestID, code: .invalid,
+                            message: "mode muss explicit|others|right sein")
+        }
+        guard mode == "explicit" || parsedIDs.count == 1 else {
+            return .failure(requestID: request.requestID, code: .invalid,
+                            message: "mode \(mode) verlangt genau EINEN Anker-Tab")
+        }
         // Duplikate raus, Reihenfolge erhalten — ein doppelt gelistetes Ziel
         // würde sonst beim zweiten Mal fälschlich "alreadyClosed" melden.
         var deduped: [UUID] = []
         for id in parsedIDs where !deduped.contains(id) { deduped.append(id) }
-        let targetIDs = deduped
+        let requestedIDs = deduped
 
-        let items: [CloseOutcomeItem] = await MainActor.run {
+        enum CloseComputation {
+            case items([CloseOutcomeItem])
+            case failure(ChatsControlErrorCode, String)
+        }
+        // Auch die Opfer-Bestimmung von others/right lebt im selben
+        // MainActor-Block wie das Schließen — der Anker kann zwischen
+        // Berechnung und Mutation nicht das Fenster wechseln.
+        let computation: CloseComputation = await MainActor.run {
             let workspace = AgentWorkspaceUIModel.shared.workspace
             let windowStore = AgentWindowStore.shared
             let registry = AgentTerminalRegistry.shared
             let statusStore = AgentSessionStatusCoordinator.shared.statusStore
             let projectNames = Dictionary(uniqueKeysWithValues: workspace.projects.map { ($0.id, $0.name) })
-            return targetIDs.map { id in
+
+            let targetIDs: [UUID]
+            switch mode {
+            case "others", "right":
+                let anchor = requestedIDs[0]
+                guard let host = windowStore.windowID(containingTab: anchor) else {
+                    return .failure(.conflict, "Anker-Tab ist in keinem Fenster offen")
+                }
+                let tabs = windowStore.openTabIDs(in: host)
+                if mode == "others" {
+                    targetIDs = tabs.filter { $0 != anchor }
+                } else {
+                    let anchorIndex = tabs.firstIndex(of: anchor) ?? tabs.count
+                    targetIDs = Array(tabs.dropFirst(anchorIndex + 1))
+                }
+            default:
+                targetIDs = requestedIDs
+            }
+
+            return .items(targetIDs.map { id in
                 guard let session = workspace.sessions.first(where: { $0.id == id }),
                       session.status != .archived else {
                     return CloseOutcomeItem(id: id, outcome: "notFound")
@@ -305,7 +350,15 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     ptyRunning: registry.controller(for: id)?.isRunning ?? false,
                     runtimeStatus: statusStore.status(for: id)?.rawValue,
                     isPinned: windowStore.pinnedSessionIDs.contains(id))
-            }
+            })
+        }
+        let items: [CloseOutcomeItem]
+        switch computation {
+        case .failure(let code, let message):
+            await audit(request.actor, method: "close", target: nil, outcome: code.rawValue, prompt: nil)
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .items(let computed):
+            items = computed
         }
 
         // Audit pro tatsächlich geschlossenem Tab — genau die Mutationen sind
@@ -342,6 +395,266 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         var ptyRunning = false
         var runtimeStatus: String?
         var isPinned = false
+    }
+
+    // MARK: session.reopen
+
+    /// Stellt den zuletzt geschlossenen Tab wieder her (LIFO, ephemer —
+    /// App-Neustart leert die Liste). Gegenstück zum close-Fehlgriff:
+    /// nicht destruktiv, kein Guard. Sessions, die inzwischen archiviert
+    /// oder gelöscht wurden, überspringt die Store-Logik.
+    private func sessionReopen(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let outcome: SendOutcome = await MainActor.run {
+            let workspace = AgentWorkspaceUIModel.shared.workspace
+            let reopened = AgentWindowStore.shared.reopenLastClosedTab { id in
+                workspace.sessions.contains { $0.id == id && $0.status != .archived }
+            }
+            guard let reopened,
+                  let session = workspace.sessions.first(where: { $0.id == reopened.sessionID }) else {
+                return .failure(.notFound, "Keine zuletzt geschlossenen Tabs (die Liste ist ephemer und nach App-Neustart leer)")
+            }
+            return .success(session)
+        }
+        switch outcome {
+        case .failure(let code, let message):
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .success(let session):
+            let label = await sessionLabel(session.id)
+            await audit(request.actor, method: "reopen", target: label, outcome: "ok", prompt: nil)
+            return .success(requestID: request.requestID, result: .object([
+                "ok": true, "target": ["id": session.id.uuidString, "title": session.title],
+            ]))
+        }
+    }
+
+    // MARK: session.pin
+
+    /// Pin/Unpin (Sidebar-Sektion „Gepinnt") — Batch wie close, idempotent:
+    /// ein bereits passender Zustand ist "unchanged", kein Fehler.
+    private func sessionPin(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let rawIDs = request.params["targetSessionIDs"]?.arrayValue?.compactMap { $0.stringValue } ?? []
+        let parsedIDs = rawIDs.compactMap(UUID.init(uuidString:))
+        guard !rawIDs.isEmpty, parsedIDs.count == rawIDs.count else {
+            return .failure(requestID: request.requestID, code: .invalid,
+                            message: "targetSessionIDs fehlt/ungültig (Array von Session-UUIDs)")
+        }
+        guard let pinned = request.params["pinned"]?.boolValue else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "pinned fehlt (true|false)")
+        }
+        var deduped: [UUID] = []
+        for id in parsedIDs where !deduped.contains(id) { deduped.append(id) }
+        let targetIDs = deduped
+
+        let items: [CloseOutcomeItem] = await MainActor.run {
+            let workspace = AgentWorkspaceUIModel.shared.workspace
+            let windowStore = AgentWindowStore.shared
+            let projectNames = Dictionary(uniqueKeysWithValues: workspace.projects.map { ($0.id, $0.name) })
+            return targetIDs.map { id in
+                guard let session = workspace.sessions.first(where: { $0.id == id }),
+                      session.status != .archived else {
+                    return CloseOutcomeItem(id: id, outcome: "notFound")
+                }
+                let changed = windowStore.setPinned(id, pinned: pinned)
+                return CloseOutcomeItem(
+                    id: id, title: session.title, project: projectNames[session.projectID],
+                    outcome: changed ? (pinned ? "pinned" : "unpinned") : "unchanged",
+                    isPinned: pinned)
+            }
+        }
+        for item in items where item.outcome == "pinned" || item.outcome == "unpinned" {
+            let label = [item.project, item.title].compactMap { $0 }.joined(separator: "/")
+            await audit(request.actor, method: item.outcome, target: label, outcome: "ok", prompt: nil)
+        }
+        return .success(requestID: request.requestID, result: .object([
+            "ok": true,
+            "changedCount": items.filter { $0.outcome != "unchanged" && $0.outcome != "notFound" }.count,
+            "results": items.map { item -> [String: Any] in
+                var dict: [String: Any] = ["id": item.id.uuidString, "outcome": item.outcome]
+                if let title = item.title { dict["title"] = title }
+                if let project = item.project { dict["project"] = project }
+                return dict
+            },
+        ]))
+    }
+
+    // MARK: session.move
+
+    /// Verschiebt einen Tab in ein anderes, EXISTIERENDES Fenster (neue
+    /// Fenster kann nur die App-UI öffnen — die Scene gehört SwiftUI).
+    /// Nicht-offene Tabs werden im Ziel geöffnet (`moveTab`-Semantik).
+    private func sessionMove(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        guard let targetString = request.params["targetSessionID"]?.stringValue,
+              let targetID = UUID(uuidString: targetString) else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "targetSessionID fehlt/ungültig")
+        }
+        guard let windowRef = request.params["windowRef"]?.stringValue, !windowRef.isEmpty else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "windowRef fehlt (primary | Fenster-ID/Präfix)")
+        }
+        enum MoveOutcome { case ok(AgentChatSession, UUID); case fail(ChatsControlErrorCode, String) }
+        let outcome: MoveOutcome = await MainActor.run {
+            let workspace = AgentWorkspaceUIModel.shared.workspace
+            let windowStore = AgentWindowStore.shared
+            guard let session = workspace.sessions.first(where: { $0.id == targetID }),
+                  session.status != .archived else {
+                return .fail(.notFound, "Session nicht gefunden oder archiviert")
+            }
+            guard let destination = Self.resolveWindowRef(windowRef, store: windowStore) else {
+                return .fail(.notFound, "Kein Fenster gefunden für: \(windowRef) — `chats window list` zeigt die IDs")
+            }
+            let source = windowStore.windowID(containingTab: targetID) ?? destination
+            if source == destination, windowStore.openTabIDs(in: destination).contains(targetID) {
+                return .fail(.conflict, "Tab ist bereits in diesem Fenster")
+            }
+            windowStore.moveTab(targetID, from: source, to: destination, before: nil)
+            WindowRequestCenter.shared.requestWindowFocus(windowID: destination)
+            return .ok(session, destination)
+        }
+        switch outcome {
+        case .fail(let code, let message):
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .ok(let session, let destination):
+            let label = await sessionLabel(targetID)
+            await audit(request.actor, method: "move", target: label, outcome: "ok", prompt: nil)
+            return .success(requestID: request.requestID, result: .object([
+                "ok": true,
+                "target": ["id": session.id.uuidString, "title": session.title],
+                "windowID": destination.uuidString,
+            ]))
+        }
+    }
+
+    /// Fenster-Referenz: `primary` oder UUID/-Präfix (≥ 8 Hex-Zeichen,
+    /// eindeutig) über die Fenster im UI-State.
+    @MainActor
+    static func resolveWindowRef(_ ref: String, store: AgentWindowStore) -> UUID? {
+        if ref.lowercased() == "primary" { return store.primaryWindowID }
+        let allIDs = [store.primaryWindowID] + store.secondaryWindowIDs
+        if let uuid = UUID(uuidString: ref) {
+            return allIDs.first { $0 == uuid }
+        }
+        let normalized = ref.replacingOccurrences(of: "-", with: "").lowercased()
+        guard normalized.count >= 8 else { return nil }
+        let matches = allIDs.filter {
+            $0.uuidString.replacingOccurrences(of: "-", with: "").lowercased().hasPrefix(normalized)
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    // MARK: window.list
+
+    /// Fenster-Inventar für `chats window list` — Basis der `move`-Ziele.
+    private func windowList(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let windows = await MainActor.run { () -> [[String: Any]] in
+            let store = AgentWindowStore.shared
+            let workspace = AgentWorkspaceUIModel.shared.workspace
+            let titles = Dictionary(uniqueKeysWithValues: workspace.sessions.map { ($0.id, $0.title) })
+            let ids = [store.primaryWindowID] + store.secondaryWindowIDs
+            return ids.map { id in
+                let tabs = store.openTabIDs(in: id)
+                return [
+                    "id": id.uuidString,
+                    "isPrimary": id == store.primaryWindowID,
+                    "tabCount": tabs.count,
+                    "tabTitles": tabs.map { titles[$0] ?? "?" },
+                    "selectedTitle": store.selectedSession(in: id).flatMap { titles[$0] } ?? "",
+                ]
+            }
+        }
+        return .success(requestID: request.requestID, result: .object(["windows": windows]))
+    }
+
+    // MARK: gridWorkspace.add / .remove
+
+    /// Grid-Workspace-Mitgliedschaft (Slots). `add` nutzt die Slot-Semantik
+    /// von `WorkspaceSlotOps.add` (nächster freier Slot bzw. `--slot`),
+    /// `remove` leert nur den Slot — Tab und Prozess bleiben (identisch zur
+    /// Sidebar-Aktion in der App).
+    private func gridWorkspaceMembership(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        guard let workspaceRef = request.params["workspaceRef"]?.stringValue, !workspaceRef.isEmpty else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "workspaceRef fehlt")
+        }
+        guard let targetString = request.params["targetSessionID"]?.stringValue,
+              let targetID = UUID(uuidString: targetString) else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "targetSessionID fehlt/ungültig")
+        }
+        let slot = request.params["slot"].flatMap { json -> Int? in
+            if case .number(let value) = json { return Int(value) }
+            return nil
+        }
+        let isAdd = request.method == "gridWorkspace.add"
+
+        enum MembershipOutcome { case ok(String, AgentGridWorkspace); case fail(ChatsControlErrorCode, String) }
+        let outcome: MembershipOutcome = await MainActor.run {
+            let store = AgentWindowStore.shared
+            let workspaceEntity: AgentGridWorkspace
+            switch Self.resolveGridWorkspaceRef(workspaceRef, all: store.gridWorkspaces) {
+            case .success(let entity): workspaceEntity = entity
+            case .failure(let message): return .fail(.notFound, message)
+            }
+            if isAdd {
+                switch store.addSession(targetID, toGridWorkspace: workspaceEntity.id, at: slot) {
+                case .added, .replaced, .swapped:
+                    return .ok("added", workspaceEntity)
+                case .alreadyMember:
+                    return .ok("alreadyMember", workspaceEntity)
+                case .full:
+                    return .fail(.conflict, "Workspace „\(workspaceEntity.name)\" ist voll (Kapazität \(workspaceEntity.capacity)) — Slot mit --slot ersetzen oder Kapazität in der App erhöhen")
+                case .rejected:
+                    return .fail(.notFound, "Session nicht gefunden/archiviert oder Slot ungültig")
+                }
+            } else {
+                let removed = store.removeSession(targetID, fromGridWorkspace: workspaceEntity.id)
+                return .ok(removed ? "removed" : "notMember", workspaceEntity)
+            }
+        }
+        switch outcome {
+        case .fail(let code, let message):
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .ok(let result, let entity):
+            if result == "added" || result == "removed" {
+                let label = await sessionLabel(targetID)
+                await audit(request.actor, method: isAdd ? "workspace-add" : "workspace-remove",
+                            target: "\(entity.name) ← \(label)", outcome: "ok", prompt: nil)
+            }
+            return .success(requestID: request.requestID, result: .object([
+                "ok": true, "outcome": result,
+                "workspace": ["id": entity.id.uuidString, "name": entity.name],
+                "target": ["id": targetID.uuidString],
+            ]))
+        }
+    }
+
+    /// Ergebnis der Grid-Workspace-Auflösung (String taugt nicht als
+    /// `Result`-Error).
+    enum GridRefResolution {
+        case success(AgentGridWorkspace)
+        case failure(String)
+    }
+
+    /// Grid-Workspace-Referenz auflösen: exakte ID → exakter (normalisierter)
+    /// Name → eindeutiger Substring. Mehrdeutig/unbekannt → Fehlermeldung.
+    /// (Extrahiert aus `gridWorkspaceRename` — eine Auflösung für alle
+    /// Workspace-Befehle.)
+    static func resolveGridWorkspaceRef(
+        _ ref: String, all: [AgentGridWorkspace]
+    ) -> GridRefResolution {
+        if let id = UUID(uuidString: ref), let match = all.first(where: { $0.id == id }) {
+            return .success(match)
+        }
+        let norm = SessionRefResolver.normalize(ref)
+        let exact = all.filter { SessionRefResolver.normalize($0.name) == norm }
+        if exact.count == 1 { return .success(exact[0]) }
+        if exact.count > 1 {
+            return .failure("Workspace-Name \(ref) ist mehrdeutig (\(exact.count) exakte Treffer) — ID nutzen")
+        }
+        let matches = all.filter { SessionRefResolver.normalize($0.name).contains(norm) }
+        if matches.count > 1 {
+            return .failure("Workspace-Name \(ref) ist mehrdeutig (\(matches.count) Treffer) — genauer angeben oder ID nutzen")
+        }
+        guard let match = matches.first else {
+            return .failure("Kein Grid-Workspace gefunden für: \(ref)")
+        }
+        return .success(match)
     }
 
     // MARK: session.resume
@@ -518,33 +831,12 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         }
         enum GridOutcome { case ok(before: String, after: String); case fail(ChatsControlErrorCode, String) }
         let outcome: GridOutcome = await MainActor.run {
-            let all = AgentWindowStore.shared.gridWorkspaces
-            // Auflösung: exakte ID, sonst eindeutiger Name (case-insensitiv,
-            // normalisiert). Mehrdeutig → Fehler (nie raten).
-            let byID = UUID(uuidString: ref).flatMap { id in all.first { $0.id == id } }
-            let target: AgentGridWorkspace?
-            if let byID {
-                target = byID
-            } else {
-                let norm = SessionRefResolver.normalize(ref)
-                // Exakter (normalisierter) Match gewinnt VOR Substring —
-                // sonst wäre „Workspace" gegen „Workspace" + „Workspace 2"
-                // fälschlich mehrdeutig (GPT-Review).
-                let exact = all.filter { SessionRefResolver.normalize($0.name) == norm }
-                if exact.count == 1 {
-                    target = exact[0]
-                } else if exact.count > 1 {
-                    return .fail(.notFound, "Workspace-Name \(ref) ist mehrdeutig (\(exact.count) exakte Treffer) — ID nutzen")
-                } else {
-                    let matches = all.filter { SessionRefResolver.normalize($0.name).contains(norm) }
-                    if matches.count > 1 {
-                        return .fail(.notFound, "Workspace-Name \(ref) ist mehrdeutig (\(matches.count) Treffer) — genauer angeben oder ID nutzen")
-                    }
-                    target = matches.first
-                }
-            }
-            guard let workspace = target else {
-                return .fail(.notFound, "Kein Grid-Workspace gefunden für: \(ref)")
+            // Auflösung: exakte ID → exakter (normalisierter) Name →
+            // eindeutiger Substring. Mehrdeutig → Fehler (nie raten).
+            let workspace: AgentGridWorkspace
+            switch Self.resolveGridWorkspaceRef(ref, all: AgentWindowStore.shared.gridWorkspaces) {
+            case .success(let entity): workspace = entity
+            case .failure(let message): return .fail(.notFound, message)
             }
             let before = workspace.name
             guard AgentWindowStore.shared.renameGridWorkspace(workspace.id, to: newName) else {

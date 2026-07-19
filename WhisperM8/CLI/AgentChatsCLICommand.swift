@@ -54,6 +54,16 @@ enum AgentChatsCLICommand {
             return ChatsOpenCommand.run(rest)
         case "close":
             return ChatsCloseCommand.run(rest)
+        case "reopen":
+            return ChatsReopenCommand.run(rest)
+        case "pin":
+            return ChatsPinCommand.run(rest, pinned: true)
+        case "unpin":
+            return ChatsPinCommand.run(rest, pinned: false)
+        case "move":
+            return ChatsMoveCommand.run(rest)
+        case "window":
+            return ChatsWindowCommand.run(rest)
         case "resume":
             return ChatsResumeCommand.run(rest)
         case "new":
@@ -99,7 +109,17 @@ struct ChatsListOptions: Equatable {
 /// `close` nimmt bewusst NUR explizite Refs (auch mehrere) — kein `--all`,
 /// kein Filter-Flag: die Kandidatenauswahl trifft der Aufrufer (Jarvis) über
 /// `list --open --json` + Bestätigung, die CLI schließt nie pauschal.
+/// `--others`/`--right` sind die einzigen relativen Modi (Anker = genau eine
+/// Ref, Wirkung nur im Fenster des Ankers).
 struct ChatsCloseOptions: Equatable {
+    var refs: [String] = []
+    var json = false
+    var mode = "explicit"          // explicit | others | right
+}
+
+/// Refs + `--json` — gemeinsame Form der Batch-Befehle ohne Extra-Flags
+/// (`pin`, `unpin`).
+struct ChatsRefListOptions: Equatable {
     var refs: [String] = []
     var json = false
 }
@@ -180,6 +200,30 @@ enum ChatsCLIParser {
 
     static func parseClose(_ arguments: [String]) throws -> ChatsCloseOptions {
         var options = ChatsCloseOptions()
+        for arg in arguments {
+            switch arg {
+            case "--json": options.json = true
+            case "--others", "--right":
+                let mode = String(arg.dropFirst(2))
+                guard options.mode == "explicit" || options.mode == mode else {
+                    throw ParseError.invalidValue(flag: arg, value: options.mode,
+                                                  allowed: "entweder --others ODER --right")
+                }
+                options.mode = mode
+            default:
+                if arg.hasPrefix("-") { throw ParseError.unknownFlag(arg) }
+                options.refs.append(arg)
+            }
+        }
+        guard !options.refs.isEmpty else { throw ParseError.missingShortID }
+        if options.mode != "explicit", options.refs.count != 1 {
+            throw ParseError.tooManyPositionals
+        }
+        return options
+    }
+
+    static func parseRefList(_ arguments: [String]) throws -> ChatsRefListOptions {
+        var options = ChatsRefListOptions()
         for arg in arguments {
             switch arg {
             case "--json": options.json = true
@@ -606,6 +650,11 @@ enum ChatsCLIHelp {
       whisperm8 chats open <ref> [--json]
       whisperm8 chats close <ref> [<ref>…] [--json]      NUR den UI-Tab schließen — Session,
                                                          PTY, Pin und Transcript bleiben
+      whisperm8 chats close --others|--right <ref>       alle anderen / rechts vom Anker (dessen Fenster)
+      whisperm8 chats reopen [--json]                    zuletzt geschlossenen Tab wiederherstellen
+      whisperm8 chats pin <ref> [<ref>…] [--json]        Sidebar-Pin setzen (unpin: entfernen)
+      whisperm8 chats move <ref> --window <primary|id>   Tab in anderes (bestehendes) Fenster
+      whisperm8 chats window list [--json]               Fenster-Inventar (IDs für move)
       whisperm8 chats resume <ref> [--json]              geschlossenen Chat wieder hochfahren
       whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt "…"] [--json]
       whisperm8 chats rename <ref> "<titel>" [--json]
@@ -613,6 +662,8 @@ enum ChatsCLIHelp {
       whisperm8 chats archive <ref> [--force] [--json]
       whisperm8 chats workspace list [--json]            Grid-Workspaces (Sidebar-Sektion)
       whisperm8 chats workspace rename <name|id> "<neu>" [--json]
+      whisperm8 chats workspace add <name|id> <ref> [--slot N] [--json]
+      whisperm8 chats workspace remove <name|id> <ref> [--json]   nur Slot — Tab/Prozess bleiben
 
     REFERENZEN (<ref>)
       projekt/titel-fragment   Fuzzy, muss eindeutig sein (sonst Exit 3 + Kandidaten)

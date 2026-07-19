@@ -135,6 +135,82 @@ final class AgentWindowStoreTests: XCTestCase {
         XCTAssertTrue(store.openTabIDs(in: store.primaryWindowID).isEmpty)
     }
 
+    // MARK: - setPinned (CLI-`chats pin/unpin`)
+
+    func testSetPinnedIsIdempotent() {
+        let store = makeStore()
+        let s = UUID()
+        XCTAssertTrue(store.setPinned(s, pinned: true), "erster Pin aendert den Zustand")
+        XCTAssertTrue(store.pinnedSessionIDs.contains(s))
+        XCTAssertFalse(store.setPinned(s, pinned: true), "erneutes Pinnen ist ein No-op")
+        XCTAssertTrue(store.setPinned(s, pinned: false))
+        XCTAssertFalse(store.pinnedSessionIDs.contains(s))
+        XCTAssertFalse(store.setPinned(s, pinned: false), "Unpin ohne Pin ist ein No-op")
+    }
+
+    // MARK: - Reopen-History (CLI-`chats reopen`)
+
+    func testCloseTabRecordsReopenHistoryLIFO() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let a = UUID(); let b = UUID()
+        store.openTab(a, in: w); store.openTab(b, in: w)
+        store.closeTab(a, in: w)
+        store.closeTab(b, in: w)
+
+        XCTAssertEqual(store.reopenLastClosedTab()?.sessionID, b, "LIFO: zuletzt geschlossener zuerst")
+        XCTAssertEqual(store.openTabIDs(in: w), [b])
+        XCTAssertEqual(store.reopenLastClosedTab()?.sessionID, a)
+        XCTAssertNil(store.reopenLastClosedTab(), "leere History → nil")
+    }
+
+    func testSetOpenTabIDsBridgeRecordsClosuresButNotReorders() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let a = UUID(); let b = UUID(); let c = UUID()
+        store.openTab(a, in: w); store.openTab(b, in: w); store.openTab(c, in: w)
+
+        // Reorder (gleiche Menge) — darf NICHT als Close aufgezeichnet werden.
+        store.setOpenTabIDs([c, a, b], in: w)
+        XCTAssertNil(store.reopenLastClosedTab(), "Reorder ist kein Close")
+
+        // View-Close-Pfad: b verschwindet aus der Liste.
+        store.openTab(a, in: w)
+        store.setOpenTabIDs([c, a], in: w)
+        XCTAssertEqual(store.reopenLastClosedTab()?.sessionID, b)
+    }
+
+    func testReopenSkipsIneligibleAndAlreadyOpenTabs() {
+        let store = makeStore()
+        let w = store.primaryWindowID
+        let dead = UUID(); let alive = UUID()
+        store.openTab(dead, in: w); store.openTab(alive, in: w)
+        store.closeTab(dead, in: w)
+        store.closeTab(alive, in: w)
+
+        // alive wurde manuell wieder geoeffnet — reopen darf ihn ueberspringen
+        // und faellt auf den naechsten History-Eintrag zurueck.
+        store.openTab(alive, in: w)
+        let reopened = store.reopenLastClosedTab { $0 != dead }
+        XCTAssertNil(reopened, "offen (alive) uebersprungen, ineligible (dead) uebersprungen")
+        XCTAssertEqual(store.openTabIDs(in: w), [alive], "nichts doppelt geoeffnet")
+    }
+
+    func testReopenFallsBackToPrimaryWhenWindowIsGone() {
+        let store = makeStore()
+        let primary = store.primaryWindowID
+        let a = UUID(); let b = UUID()
+        store.openTab(a, in: primary); store.openTab(b, in: primary)
+        let secondary = store.detachToNewWindow(b, from: primary)
+        store.closeTab(b, in: secondary)         // leert das Sekundaerfenster …
+        store.removeWindowIfEmpty(secondary)      // … das daraufhin verschwindet
+
+        let reopened = store.reopenLastClosedTab()
+        XCTAssertEqual(reopened?.sessionID, b)
+        XCTAssertEqual(reopened?.windowID, primary, "Ursprungsfenster weg → Primaerfenster")
+        XCTAssertTrue(store.openTabIDs(in: primary).contains(b))
+    }
+
     func testReorderTabBeforeTarget() {
         let store = makeStore()
         let w = store.primaryWindowID

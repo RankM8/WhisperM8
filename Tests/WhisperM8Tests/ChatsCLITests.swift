@@ -403,6 +403,26 @@ final class ChatsCLIParserTests: XCTestCase {
                              "close kennt kein --force: es gibt nichts zu erzwingen")
     }
 
+    func testParseCloseModesRequireExactlyOneAnchor() throws {
+        let others = try ChatsCLIParser.parseClose(["--others", "whisperm8/audit"])
+        XCTAssertEqual(others.mode, "others")
+        XCTAssertEqual(others.refs, ["whisperm8/audit"])
+        XCTAssertEqual(try ChatsCLIParser.parseClose(["--right", "x"]).mode, "right")
+
+        XCTAssertThrowsError(try ChatsCLIParser.parseClose(["--others", "a", "b"]),
+                             "relative Modi brauchen genau EINEN Anker")
+        XCTAssertThrowsError(try ChatsCLIParser.parseClose(["--others", "--right", "a"]),
+                             "others und right schliessen sich aus")
+    }
+
+    func testParseRefListSharedShape() throws {
+        let parsed = try ChatsCLIParser.parseRefList(["a", "--json", "b"])
+        XCTAssertEqual(parsed.refs, ["a", "b"])
+        XCTAssertTrue(parsed.json)
+        XCTAssertThrowsError(try ChatsCLIParser.parseRefList([]))
+        XCTAssertThrowsError(try ChatsCLIParser.parseRefList(["a", "--force"]))
+    }
+
     func testParseShowAndTailRequireExactlyOneRef() {
         XCTAssertThrowsError(try ChatsCLIParser.parseShow([]))
         XCTAssertThrowsError(try ChatsCLIParser.parseShow(["a", "b"]))

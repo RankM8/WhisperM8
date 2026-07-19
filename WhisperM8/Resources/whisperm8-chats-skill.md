@@ -41,6 +41,11 @@ whisperm8 chats send <ref> -- "<prompt>"  [--if-status S,S] [--no-submit] [--for
 whisperm8 chats interrupt <ref> [--force]            # ein ESC an eine working-Session
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
 whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
+whisperm8 chats close --others|--right <ref>         # alle anderen / rechts vom Anker (dessen Fenster)
+whisperm8 chats reopen                               # zuletzt geschlossenen Tab wiederherstellen
+whisperm8 chats pin <ref> [<ref>…] | unpin …         # Sidebar-Pin setzen/entfernen (idempotent)
+whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehendes Fenster (window list zeigt IDs)
+whisperm8 chats window list                          # Fenster-Inventar
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
 whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"]
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
@@ -48,6 +53,8 @@ whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
 whisperm8 chats workspace list                       # Grid-Workspaces (Sidebar-Sektion WORKSPACES)
 whisperm8 chats workspace rename <name|id> "<neu>"   # Grid-Workspace umbenennen
+whisperm8 chats workspace add <name|id> <ref> [--slot N]    # Session in Grid-Slot aufnehmen
+whisperm8 chats workspace remove <name|id> <ref>     # nur Slot leeren — Tab/Prozess bleiben
 ```
 
 ## Referenzen (`<ref>`)
@@ -104,11 +111,14 @@ unterbrochen.
    bricht einen laufenden Turn ab — nur nach expliziter User-Freigabe (im
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte
    Titel), sobald der User es verlangt — kein Sonderschutz. `open`/`close`/
-   `new`/`resume`/`workspace rename` direkt aus einem klaren User-Auftrag
-   brauchen keine Extra-Frage (`close` ist nicht destruktiv); `new` aus
+   `reopen`/`pin`/`unpin`/`move`/`new`/`resume`/`workspace
+   rename|add|remove` direkt aus einem klaren User-Auftrag brauchen keine
+   Extra-Frage (alles UI-only, nicht destruktiv); `new` aus
    **Eigeninitiative** erst vorschlagen (Projekt + Initial-Prompt zeigen),
-   dann starten. Für BATCH-`close` („alle, die ich nicht brauche") gilt
-   Regel 6: erst Kandidatenliste bestätigen lassen.
+   dann starten. Für BATCH-`close` („alle, die ich nicht brauche") und
+   `close --others` gilt Regel 6: erst Kandidatenliste bestätigen lassen.
+   Nach einem versehentlichen Close: `reopen` stellt den letzten Tab wieder
+   her (LIFO, ephemer — gilt nur bis zum App-Neustart).
 3. **Nie `--force` oder `--if-status working` aus Eigeninitiative.** Nur wenn
    der User es in diesem konkreten Fall verlangt hat.
 4. **Ein-Hop-Regel.** Beginnt ein Prompt, den du bekommst, mit
@@ -166,6 +176,8 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
   `close ref1 ref2 …`. Bestätigt der User explizit auch einen
   working/gepinnten/eigenen Tab, ist das ok — close schließt immer nur die
   Ansicht. Danach melden: „N Tabs geschlossen, Sessions laufen weiter."
+  Will der User Keeps dauerhaft markieren → `pin`; ein Fehlgriff →
+  `reopen`. „Schließ alles außer X" → `close --others X` (nach Bestätigung).
 - **„Räum auf"** → `list --all` → Vorschlagsliste (rename/group/archive,
   Vorher→Nachher, Archives markiert) → EINE Batch-Bestätigung (Multi-Select) →
   ausgewählte Aktionen ausführen → Ergebnis melden. Tabs nur zumachen =

@@ -31,7 +31,7 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 | Befehl | Klasse | Pfad |
 |---|---|---|
 | `list`, `overview`, `show`, `tail`, `wait`, `audit` | Lesen | Disk (+ optionaler Live-Merge) |
-| `send`, `interrupt`, `open`, `close`, `resume`, `new`, `rename`, `group`, `archive` | Handeln | Socket → App |
+| `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `workspace …` | Handeln | Socket → App |
 
 `overview` = `list --sort attention --format board`. Alle Befehle mit `--json`
 (schemaVersion 1). Referenzen: `projekt/titel`, UUID-Präfix ≥ 8, `@self`.
@@ -97,21 +97,44 @@ bewusst schwache Schwester von `archive`. Contract:
   ich nicht brauche" trifft der Aufrufer (Jarvis) über `list --open --json`
   (liefert `isOpen`/`isPinned`/`isSelf`/Status) + Batch-Bestätigung — die
   CLI schließt nur explizit benannte Refs.
+- **Relative Modi:** `close --others <ref>` schließt alle anderen Tabs im
+  Fenster des Ankers, `close --right <ref>` die Tabs rechts davon (genau
+  eine Anker-Ref; Opferliste wird im selben MainActor-Block bestimmt wie
+  geschlossen — der Anker kann zwischendurch nicht das Fenster wechseln).
+  Anker ohne offenen Tab → Exit 4.
+
+## Weitere Tab-/Fenster-Befehle
+
+- **`reopen`** stellt den zuletzt geschlossenen Tab wieder her (LIFO, Cap 20).
+  Die History lebt ephemer im `AgentWindowStore` (bewusst nicht persistiert —
+  App-Neustart leert sie) und wird von `closeTab` UND der
+  `setOpenTabIDs`-View-Bridge gefüttert (X-Button/⌘W/Bulk); Fenster-Close mit
+  Tabs und die Workspace-GC zeichnen nicht auf. Inzwischen archivierte/
+  gelöschte oder wieder geöffnete Sessions werden übersprungen; existiert das
+  Ursprungsfenster nicht mehr, landet der Tab im Primärfenster.
+- **`pin <ref> [<ref>…]` / `unpin …`** setzen den Sidebar-Pin idempotent
+  (Batch wie close; Outcomes `pinned`/`unpinned`/`unchanged`/`notFound`).
+- **`move <ref> --window <primary|id>`** verschiebt einen Tab in ein anderes
+  BESTEHENDES Fenster (`AgentUIState.moveTab`-Semantik: nicht-offene Tabs
+  werden im Ziel geöffnet). Fenster-Refs: `primary` oder ID/-Präfix ≥ 8 aus
+  `window list`. Neue Fenster kann nur die App-UI öffnen (SwiftUI-Scene) —
+  CLI-detach bleibt Backlog.
+- **`workspace add <ws> <ref> [--slot N]` / `workspace remove <ws> <ref>`**
+  ändern NUR die Grid-Slot-Mitgliedschaft (`WorkspaceSlotOps`-Semantik; voller
+  Workspace → Exit 4). `--slot` ist 1-basiert. Tab und Prozess bleiben —
+  identisch zur Sidebar-Aktion.
 
 ### Backlog Tab-/Session-Management (Gap-Analyse 2026-07-19)
 
-Bewertung Nutzen/Sicherheit/Aufwand für weitere Jarvis-Management-Befehle —
-bewusst NICHT mit dem close-Feature umgesetzt (klein halten, Contract zuerst):
+Runde 2 (gleicher Tag) hat die Prioritäten 1–4 umgesetzt: `pin`/`unpin`,
+`close --others/--right`, `reopen`, `move` + `window list`,
+`workspace add/remove`. Verbleibend:
 
-| Kandidat | Nutzen | Risiko | Aufwand | Priorität |
-|---|---|---|---|---|
-| `pin <ref>` / `unpin <ref>` | hoch (Aufräum-Runden markieren Keeps direkt) | keins (UI-only, `togglePin` existiert) | S | **1** |
-| `close --others <ref>` / `--right <ref>` | mittel (Browser-Gewohnheit) | gering — braucht aber Fenster-Kontext-Semantik | S–M | 2 |
-| Restore zuletzt geschlossener Tabs (`reopen`) | mittel (Fehlgriff-Netz nach Batch-Close) | keins — reine UI; braucht Close-History im WindowStore | M | 3 |
-| `move <ref> --to-window <n>` / detach | niedrig via CLI (Drag existiert in der App) | Fenster-Referenzierung ohne stabile Namen fummelig | M | 4 |
-| `workspace add/remove <ref>` (Grid-Slots) | mittel | Slot-Invarianten + Owner-Fenster-Konflikte | M | 4 |
-| Dry-Run/`--plan` für Batch-Aktionen | niedrig — `list --open --json` IST der Plan-Schritt | — | — | nicht nötig |
-| Pauschales `close --all` | — | hoch (genau der gefährliche Pfad) | — | bewusst nie |
+| Kandidat | Status |
+|---|---|
+| CLI-detach in ein NEUES Fenster | offen — braucht einen Scene-Open-Request (`openWindow` gehört SwiftUI); Workaround: in der App per Drag |
+| Dry-Run/`--plan` für Batch-Aktionen | nicht nötig — `list --open --json` IST der Plan-Schritt |
+| Pauschales `close --all` | bewusst nie (gefährlicher Pfad; Kandidaten immer explizit) |
 
 ## wait
 

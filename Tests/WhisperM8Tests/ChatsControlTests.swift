@@ -294,6 +294,99 @@ final class ChatsCloseHandlerValidationTests: XCTestCase {
         XCTAssertFalse(empty.ok)
         XCTAssertEqual(empty.error?.code, "invalid")
     }
+
+    func testCloseRejectsBadModesBeforeTouchingState() async {
+        let handler = AgentControlRequestHandler()
+
+        let badMode = await handler.handle(ChatsControlRequest(
+            requestID: "m1", actor: ChatsControlActor(), method: "session.close",
+            params: .object(["targetSessionIDs": [UUID().uuidString], "mode": "banane"])))
+        XCTAssertEqual(badMode.error?.code, "invalid")
+
+        let twoAnchors = await handler.handle(ChatsControlRequest(
+            requestID: "m2", actor: ChatsControlActor(), method: "session.close",
+            params: .object(["targetSessionIDs": [UUID().uuidString, UUID().uuidString],
+                             "mode": "others"])))
+        XCTAssertEqual(twoAnchors.error?.code, "invalid",
+                       "others/right verlangen genau EINEN Anker")
+    }
+
+    func testPinAndMoveValidateParams() async {
+        let handler = AgentControlRequestHandler()
+
+        let pinWithoutFlag = await handler.handle(ChatsControlRequest(
+            requestID: "p1", actor: ChatsControlActor(), method: "session.pin",
+            params: .object(["targetSessionIDs": [UUID().uuidString]])))
+        XCTAssertEqual(pinWithoutFlag.error?.code, "invalid", "pinned true|false ist Pflicht")
+
+        let moveWithoutWindow = await handler.handle(ChatsControlRequest(
+            requestID: "p2", actor: ChatsControlActor(), method: "session.move",
+            params: .object(["targetSessionID": UUID().uuidString])))
+        XCTAssertEqual(moveWithoutWindow.error?.code, "invalid")
+
+        let membershipWithoutWorkspace = await handler.handle(ChatsControlRequest(
+            requestID: "p3", actor: ChatsControlActor(), method: "gridWorkspace.add",
+            params: .object(["targetSessionID": UUID().uuidString])))
+        XCTAssertEqual(membershipWithoutWorkspace.error?.code, "invalid")
+    }
+}
+
+// MARK: - Fenster- und Workspace-Referenzen (move / workspace add|remove)
+
+@MainActor
+final class ChatsWindowAndWorkspaceRefTests: XCTestCase {
+    private func makeStore() -> AgentWindowStore {
+        let dir = FileManager.default.temporaryDirectory
+        let persistence = AgentSessionStore(
+            fileURL: dir.appendingPathComponent("wm8-ref-ws-\(UUID().uuidString).json"),
+            uiStateFileURL: dir.appendingPathComponent("wm8-ref-ui-\(UUID().uuidString).json"))
+        return AgentWindowStore(persistence: persistence)
+    }
+
+    func testResolveWindowRefPrimaryPrefixAndMisses() {
+        let store = makeStore()
+        let primary = store.primaryWindowID
+        let a = UUID(); let b = UUID()
+        store.openTab(a, in: primary); store.openTab(b, in: primary)
+        let secondary = store.detachToNewWindow(b, from: primary)
+
+        XCTAssertEqual(AgentControlRequestHandler.resolveWindowRef("primary", store: store), primary)
+        XCTAssertEqual(AgentControlRequestHandler.resolveWindowRef("PRIMARY", store: store), primary)
+        XCTAssertEqual(AgentControlRequestHandler.resolveWindowRef(secondary.uuidString, store: store), secondary)
+        let prefix = String(secondary.uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(8))
+        XCTAssertEqual(AgentControlRequestHandler.resolveWindowRef(prefix, store: store), secondary)
+        XCTAssertNil(AgentControlRequestHandler.resolveWindowRef("abc", store: store), "Praefix < 8 Zeichen")
+        XCTAssertNil(AgentControlRequestHandler.resolveWindowRef(UUID().uuidString, store: store), "fremde ID")
+    }
+
+    func testResolveGridWorkspaceRefExactBeatsSubstring() {
+        let base = AgentGridWorkspace(name: "Workspace", colorHex: AgentGridWorkspace.defaultColorHex,
+                                      slots: [], capacity: 2)
+        let second = AgentGridWorkspace(name: "Workspace 2", colorHex: AgentGridWorkspace.defaultColorHex,
+                                        slots: [], capacity: 2)
+        let all = [base, second]
+
+        if case .success(let match) = AgentControlRequestHandler.resolveGridWorkspaceRef("Workspace", all: all) {
+            XCTAssertEqual(match.id, base.id, "exakter Name gewinnt vor Substring")
+        } else {
+            XCTFail("exakter Match darf nicht mehrdeutig sein")
+        }
+        if case .success(let match) = AgentControlRequestHandler.resolveGridWorkspaceRef(base.id.uuidString, all: all) {
+            XCTAssertEqual(match.id, base.id)
+        } else {
+            XCTFail("ID-Match fehlgeschlagen")
+        }
+        if case .failure = AgentControlRequestHandler.resolveGridWorkspaceRef("space", all: all) {
+            // mehrdeutiger Substring → Fehler, nie raten
+        } else {
+            XCTFail("mehrdeutiger Substring muss scheitern")
+        }
+        if case .failure = AgentControlRequestHandler.resolveGridWorkspaceRef("gibtsnicht", all: all) {
+            // unbekannt → Fehler
+        } else {
+            XCTFail("unbekannter Name muss scheitern")
+        }
+    }
 }
 
 // MARK: - In-Process-Socket-Roundtrip (Server + Client über Temp-Socket)
