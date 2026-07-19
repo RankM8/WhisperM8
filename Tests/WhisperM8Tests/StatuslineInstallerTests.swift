@@ -40,6 +40,14 @@ final class StatuslineInstallerTests: XCTestCase {
 
     // MARK: Ressource
 
+    /// Regression 2026-07-19: Default-Bundle war .main — dort liegt die
+    /// SwiftPM-Ressource nie (sie steckt im WhisperM8_WhisperM8.bundle),
+    /// jede Installation aus der App brach mit resourceMissing ab.
+    func testDefaultInstallerFindsBundledResource() throws {
+        let installer = StatuslineInstaller(homeDirectory: tempHome)
+        XCTAssertNoThrow(try installer.bundledScript())
+    }
+
     func testBundledScriptCarriesMarkerAndShebang() throws {
         let script = try makeInstaller().bundledScript()
         XCTAssertTrue(script.hasPrefix("#!/bin/bash"))

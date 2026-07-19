@@ -24,7 +24,10 @@ struct StatuslineInstaller {
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        bundle: Bundle = .main,
+        // .module, nicht .main: die .sh ist eine SwiftPM-Ressource und liegt
+        // in Contents/Resources/WhisperM8_WhisperM8.bundle/ — Bundle.main
+        // sucht nur flach in Contents/Resources und findet sie nie.
+        bundle: Bundle = .module,
         settingsDirectories: (() -> [URL])? = nil
     ) {
         self.homeDirectory = homeDirectory
