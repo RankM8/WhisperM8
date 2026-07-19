@@ -29,28 +29,12 @@ import Foundation
 ///   hoechstens `summary` — nur dann wird ein `.thinking`-Block erzeugt.
 enum CodexTranscriptReader {
 
-    /// Loest den JSONL-Pfad fuer eine (cwd, sessionID)-Kombi auf. Codex
-    /// ordnet die Files nach Datum, der Filename enthaelt aber die
-    /// Session-ID — wir scannen kurz alle Files und finden den match.
-    /// Resultat wird nicht gecached weil das nur on-demand passiert.
+    /// Loest den JSONL-Pfad fuer eine Session-ID auf. Codex ordnet die Files
+    /// nach Datum, der Filename enthaelt aber die Session-ID. Die Aufloesung
+    /// laeuft zentral ueber den gecachten `CodexTranscriptLocator` (C16) —
+    /// vorher stand hier ein rekursiver Voll-Walk pro Aufruf.
     static func transcriptURL(forSessionID sessionID: String) -> URL? {
-        let root = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex", isDirectory: true)
-            .appendingPathComponent("sessions", isDirectory: true)
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return nil
-        }
-        let suffix = "-\(sessionID).jsonl"
-        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
-            if url.lastPathComponent.hasSuffix(suffix) {
-                return url
-            }
-        }
-        return nil
+        CodexTranscriptLocator.url(forSessionID: sessionID)
     }
 
     /// Liest das Transcript fuer eine Session-ID. Liefert `nil` wenn die
