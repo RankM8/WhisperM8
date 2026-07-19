@@ -117,6 +117,12 @@ struct CLISkillsSettingsPage: View {
                     definition: .chats,
                     summary: "Lets any chat see and manage all your agent sessions via `whisperm8 chats` — overview, read transcripts, send prompts, wait for events, interrupt, rename/archive. Includes the supervisor loop and safety rules (send confirmation, one-hop)."
                 )
+
+                CLISkillSettingsCard(
+                    title: "GPT Coworker Skill",
+                    definition: .gptCoworker,
+                    summary: "Enables a session-wide delegation mode that proactively assigns well-defined implementation, planning, and review tasks to GPT subagents. Works together with the GPT & Codex Subagent Skill."
+                )
             }
             .padding(.vertical, 10)
         }

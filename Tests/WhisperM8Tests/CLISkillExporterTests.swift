@@ -46,6 +46,18 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertTrue(markdown.contains("Exit-Codes"))
     }
 
+    func testGPTCoworkerSkillResourceLoadsAndMatchesDefinitionName() throws {
+        let exporter = CLISkillExporter(
+            definition: .gptCoworker,
+            homeDirectory: tempHome,
+            bundle: .module
+        )
+        let markdown = try exporter.skillMarkdown()
+        XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
+        XCTAssertTrue(markdown.contains("name: gpt-coworker"))
+        XCTAssertEqual(exporter.definition.name, "gpt-coworker")
+    }
+
     func testAgentSkillInstallsIntoOwnFolder() throws {
         let exporter = makeAgentExporter()
         let destination = try exporter.installForClaudeCode()

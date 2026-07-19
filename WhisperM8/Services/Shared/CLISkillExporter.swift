@@ -54,7 +54,18 @@ struct CLISkillExporter {
             resourceName: "whisperm8-chats-skill"
         )
 
-        static let all: [SkillDefinition] = [.transcription, .codexAgent, .chats]
+        /// Session-weiter Delegations-Modus für GPT-Subagents.
+        static let gptCoworker = SkillDefinition(
+            name: "gpt-coworker",
+            resourceName: "whisperm8-gpt-coworker-skill"
+        )
+
+        static let all: [SkillDefinition] = [
+            .transcription,
+            .codexAgent,
+            .chats,
+            .gptCoworker,
+        ]
     }
 
     /// Rückwärtskompatibler Alias (Tests/ältere Aufrufer).
