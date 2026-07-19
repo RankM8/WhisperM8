@@ -160,6 +160,24 @@ final class AgentWindowStore {
         }
     }
 
+    /// Schließt den Tab der Session in dem Fenster, das ihn hält (eine Session
+    /// lebt in genau einem Fenster — `--window`-Optionen braucht deshalb
+    /// niemand). Reine UI-Mutation: Session, PTY, Pin und Grid-Mitgliedschaft
+    /// bleiben unangetastet; die Selektion rückt über `closeTab` auf den
+    /// Nachbar-Tab. Räumt die Session zusätzlich aus der ephemeren
+    /// Multi-Auswahl des Fensters (wie der View-Close, der geschlossene Tab
+    /// darf in keiner Gruppen-Aktion zurückbleiben). Gibt die Fenster-ID
+    /// zurück; `nil` = kein Fenster hatte den Tab offen (idempotenter No-op).
+    @discardableResult
+    func closeTabInHostingWindow(_ sessionID: UUID) -> UUID? {
+        guard let host = windowID(containingTab: sessionID) else { return nil }
+        closeTab(sessionID, in: host)
+        if var selection = multiSelectionByWindow[host], selection.remove(sessionID) != nil {
+            multiSelectionByWindow[host] = selection.isEmpty ? nil : selection
+        }
+        return host
+    }
+
     /// Reorder innerhalb desselben Fensters: `sessionID` landet vor `targetID`
     /// (oder ans Ende, wenn `targetID == nil`). No-op fuer unbekannte Fenster
     /// (siehe `updateWindow` — kein Create-on-mutate).

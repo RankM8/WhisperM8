@@ -243,6 +243,108 @@ enum ChatsOpenCommand {
     }
 }
 
+// MARK: - close
+
+/// Ergebnis eines close-Ziels, aus der Server-Response geparst. Pur und
+/// Equatable — Exit-Code-Ableitung und Zeilen-Format sind damit testbar.
+struct ChatsCloseResultItem: Equatable {
+    var id: String
+    var title: String?
+    var project: String?
+    var outcome: String     // closed | alreadyClosed | notFound
+    var ptyRunning: Bool
+    var runtimeStatus: String?
+    var isPinned: Bool
+}
+
+enum ChatsCloseSupport {
+    static func items(from result: ChatsControlJSON?) -> [ChatsCloseResultItem] {
+        guard let results = result?["results"]?.arrayValue else { return [] }
+        return results.map { entry in
+            ChatsCloseResultItem(
+                id: entry["id"]?.stringValue ?? "?",
+                title: entry["title"]?.stringValue,
+                project: entry["project"]?.stringValue,
+                outcome: entry["outcome"]?.stringValue ?? "notFound",
+                ptyRunning: entry["ptyRunning"]?.boolValue ?? false,
+                runtimeStatus: entry["runtimeStatus"]?.stringValue,
+                isPinned: entry["isPinned"]?.boolValue ?? false)
+        }
+    }
+
+    /// `alreadyClosed` ist idempotenter Erfolg (Batch-Retry darf nicht an
+    /// bereits geschlossenen Tabs scheitern); nur `notFound` schlägt fehl.
+    static func exitCode(for items: [ChatsCloseResultItem]) -> Int32 {
+        items.contains { $0.outcome == "notFound" } ? ChatsCLIExit.notFound : ChatsCLIExit.ok
+    }
+
+    /// Menschliche Ergebnis-Zeile pro Ziel. `fallbackLabel` = das Label aus
+    /// der CLI-seitigen Ref-Auflösung (der Server kennt bei notFound keins).
+    static func humanLine(for item: ChatsCloseResultItem, fallbackLabel: String?) -> String {
+        let label = [item.project, item.title].compactMap { $0 }.joined(separator: "/")
+        let name = label.isEmpty ? (fallbackLabel ?? item.id) : label
+        switch item.outcome {
+        case "closed":
+            var suffix = "Session bleibt erhalten"
+            if item.ptyRunning {
+                suffix = "läuft weiter" + (item.runtimeStatus.map { ", \($0)" } ?? "")
+            }
+            let pin = item.isPinned ? " · 📌 Pin bleibt" : ""
+            return "✓ Tab geschlossen: \(name) (\(suffix)\(pin))"
+        case "alreadyClosed":
+            return "– kein offener Tab: \(name)"
+        default:
+            return "✗ nicht gefunden: \(name)"
+        }
+    }
+}
+
+enum ChatsCloseCommand {
+    static func run(_ arguments: [String]) -> Int32 {
+        let options: ChatsCloseOptions
+        do {
+            options = try ChatsCLIParser.parseClose(arguments)
+        } catch {
+            CLIIO.err(error.localizedDescription)
+            CLIIO.err("Usage: whisperm8 chats close <ref> [<ref>…] [--json]")
+            return ChatsCLIExit.usage
+        }
+
+        // Alle Refs VOR dem Request auflösen — alles-oder-nichts: eine
+        // mehrdeutige oder unbekannte Ref bricht ab, BEVOR irgendein Tab
+        // schließt (Batch-Sicherheit für den Jarvis-Aufräum-Fall).
+        var targetIDs: [UUID] = []
+        var labelByID: [UUID: String] = [:]
+        for ref in options.refs {
+            switch ChatsLiveSupport.resolveTarget(ref: ref) {
+            case .resolved(let id, let label):
+                if !targetIDs.contains(id) { targetIDs.append(id) }
+                labelByID[id] = label
+            case .failed(let code):
+                return code
+            }
+        }
+
+        let params: [String: Any] = ["targetSessionIDs": targetIDs.map(\.uuidString)]
+        switch ChatsLiveSupport.perform(method: "session.close", params: params) {
+        case .failed(let code):
+            return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            let items = ChatsCloseSupport.items(from: response.result)
+            if options.json {
+                CLIIO.out(ChatsOutput.encodeJSON(ChatsLiveSupport.jsonObject(from: response)))
+            } else {
+                for item in items {
+                    let fallback = UUID(uuidString: item.id).flatMap { labelByID[$0] }
+                    CLIIO.out(ChatsCloseSupport.humanLine(for: item, fallbackLabel: fallback))
+                }
+            }
+            return ChatsCloseSupport.exitCode(for: items)
+        }
+    }
+}
+
 // MARK: - resume
 
 enum ChatsResumeCommand {

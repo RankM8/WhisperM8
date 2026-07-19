@@ -52,6 +52,8 @@ enum AgentChatsCLICommand {
             return ChatsInterruptCommand.run(rest)
         case "open":
             return ChatsOpenCommand.run(rest)
+        case "close":
+            return ChatsCloseCommand.run(rest)
         case "resume":
             return ChatsResumeCommand.run(rest)
         case "new":
@@ -91,6 +93,14 @@ struct ChatsListOptions: Equatable {
     var format = "table"           // table | board
     /// Zeilen-Deckel der Tabelle (Board kollabiert idle ohnehin). 0 = kein Limit.
     var limit = 50
+    var json = false
+}
+
+/// `close` nimmt bewusst NUR explizite Refs (auch mehrere) — kein `--all`,
+/// kein Filter-Flag: die Kandidatenauswahl trifft der Aufrufer (Jarvis) über
+/// `list --open --json` + Bestätigung, die CLI schließt nie pauschal.
+struct ChatsCloseOptions: Equatable {
+    var refs: [String] = []
     var json = false
 }
 
@@ -165,6 +175,20 @@ enum ChatsCLIParser {
             }
             index += 1
         }
+        return options
+    }
+
+    static func parseClose(_ arguments: [String]) throws -> ChatsCloseOptions {
+        var options = ChatsCloseOptions()
+        for arg in arguments {
+            switch arg {
+            case "--json": options.json = true
+            default:
+                if arg.hasPrefix("-") { throw ParseError.unknownFlag(arg) }
+                options.refs.append(arg)
+            }
+        }
+        guard !options.refs.isEmpty else { throw ParseError.missingShortID }
         return options
     }
 
@@ -580,6 +604,8 @@ enum ChatsCLIHelp {
       whisperm8 chats send <ref> [--] "<prompt>" [--if-status S,S] [--no-submit] [--force] [--json]
       whisperm8 chats interrupt <ref> [--force] [--json]   ESC an working-Session
       whisperm8 chats open <ref> [--json]
+      whisperm8 chats close <ref> [<ref>…] [--json]      NUR den UI-Tab schließen — Session,
+                                                         PTY, Pin und Transcript bleiben
       whisperm8 chats resume <ref> [--json]              geschlossenen Chat wieder hochfahren
       whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt "…"] [--json]
       whisperm8 chats rename <ref> "<titel>" [--json]

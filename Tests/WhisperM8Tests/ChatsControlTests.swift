@@ -216,6 +216,86 @@ final class ChatsIdempotencyTests: XCTestCase {
     }
 }
 
+// MARK: - session.close (Batch-Contract: Outcomes, Exit-Codes, Validierung)
+
+final class ChatsCloseSupportTests: XCTestCase {
+    private func item(_ outcome: String, ptyRunning: Bool = false,
+                      status: String? = nil, pinned: Bool = false) -> ChatsCloseResultItem {
+        ChatsCloseResultItem(id: UUID().uuidString, title: "T", project: "P", outcome: outcome,
+                             ptyRunning: ptyRunning, runtimeStatus: status, isPinned: pinned)
+    }
+
+    func testItemsParseFromServerResult() {
+        let result = ChatsControlJSON.object([
+            "ok": true,
+            "closedCount": 1,
+            "results": [
+                ["id": "A1", "outcome": "closed", "title": "Chat", "project": "whisperm8",
+                 "ptyRunning": true, "runtimeStatus": "working", "isPinned": true],
+                ["id": "B2", "outcome": "notFound", "ptyRunning": false, "isPinned": false],
+            ],
+        ])
+        let items = ChatsCloseSupport.items(from: result)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0], ChatsCloseResultItem(
+            id: "A1", title: "Chat", project: "whisperm8", outcome: "closed",
+            ptyRunning: true, runtimeStatus: "working", isPinned: true))
+        XCTAssertEqual(items[1].outcome, "notFound")
+        XCTAssertNil(items[1].title)
+    }
+
+    func testExitCodeIsOkUnlessAnyNotFound() {
+        XCTAssertEqual(ChatsCloseSupport.exitCode(for: [item("closed"), item("alreadyClosed")]),
+                       ChatsCLIExit.ok, "alreadyClosed ist idempotenter Erfolg")
+        XCTAssertEqual(ChatsCloseSupport.exitCode(for: [item("closed"), item("notFound")]),
+                       ChatsCLIExit.notFound)
+        XCTAssertEqual(ChatsCloseSupport.exitCode(for: []), ChatsCLIExit.ok)
+    }
+
+    func testHumanLinesReflectRuntimeAndPin() {
+        let running = ChatsCloseSupport.humanLine(
+            for: item("closed", ptyRunning: true, status: "working", pinned: true), fallbackLabel: nil)
+        XCTAssertTrue(running.contains("läuft weiter"), "Close bei laufender Session bleibt nur UI")
+        XCTAssertTrue(running.contains("working"))
+        XCTAssertTrue(running.contains("Pin bleibt"))
+
+        let idle = ChatsCloseSupport.humanLine(for: item("closed"), fallbackLabel: nil)
+        XCTAssertTrue(idle.contains("Session bleibt erhalten"))
+
+        let missing = ChatsCloseSupport.humanLine(
+            for: ChatsCloseResultItem(id: "X", title: nil, project: nil, outcome: "notFound",
+                                      ptyRunning: false, runtimeStatus: nil, isPinned: false),
+            fallbackLabel: "whisperm8/alt")
+        XCTAssertTrue(missing.contains("whisperm8/alt"), "notFound nutzt das CLI-Label")
+    }
+}
+
+final class ChatsCloseHandlerValidationTests: XCTestCase {
+    /// Der Parameter-Guard läuft VOR jedem App-State-Zugriff — kaputte
+    /// Requests werden abgewiesen, ohne dass irgendein Tab schließt.
+    func testCloseRejectsMissingOrMalformedTargetIDs() async {
+        let handler = AgentControlRequestHandler()
+
+        let missing = await handler.handle(ChatsControlRequest(
+            requestID: "c1", actor: ChatsControlActor(), method: "session.close"))
+        XCTAssertFalse(missing.ok)
+        XCTAssertEqual(missing.error?.code, "invalid")
+
+        let malformed = await handler.handle(ChatsControlRequest(
+            requestID: "c2", actor: ChatsControlActor(), method: "session.close",
+            params: .object(["targetSessionIDs": [UUID().uuidString, "keine-uuid"]])))
+        XCTAssertFalse(malformed.ok)
+        XCTAssertEqual(malformed.error?.code, "invalid",
+                       "eine einzige kaputte ID lehnt den ganzen Batch ab (alles-oder-nichts)")
+
+        let empty = await handler.handle(ChatsControlRequest(
+            requestID: "c3", actor: ChatsControlActor(), method: "session.close",
+            params: .object(["targetSessionIDs": [Any]()])))
+        XCTAssertFalse(empty.ok)
+        XCTAssertEqual(empty.error?.code, "invalid")
+    }
+}
+
 // MARK: - In-Process-Socket-Roundtrip (Server + Client über Temp-Socket)
 
 final class AgentControlServerRoundtripTests: XCTestCase {

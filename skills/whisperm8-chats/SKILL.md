@@ -40,6 +40,7 @@ Handeln (App muss laufen — sonst Exit 5). **Vor jeder dieser Aktionen: Regeln 
 whisperm8 chats send <ref> -- "<prompt>"  [--if-status S,S] [--no-submit] [--force]
 whisperm8 chats interrupt <ref> [--force]            # ein ESC an eine working-Session
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
+whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
 whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"]
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
@@ -73,6 +74,18 @@ wieder hochfahren macht `resume` (setzt Auto-Launch + Fokus → App startet mit
 `claude resume`/`codex resume`). Bei „mach den alten X-Chat wieder auf",
 „revive/resume Chat X" → `resume`.
 
+**Close vs. Archive — strikt trennen:**
+
+- `close` schließt AUSSCHLIESSLICH den UI-Tab. Die Session bleibt in der
+  Sidebar, ein laufendes PTY läuft weiter (erneutes Öffnen zeigt denselben
+  Terminal-Zustand), Pin und Transcript bleiben. Deshalb gibt es kein
+  `--force`: auch working/awaitingInput-Sessions dürfen geschlossen werden —
+  es geht nur die Ansicht zu, nie die Arbeit. Mehrere Refs = ein Batch;
+  bereits geschlossene Tabs sind kein Fehler (idempotent).
+- `archive` ist die stärkere Aktion: Session verschwindet aus Sidebar + Tabs,
+  ein laufendes Terminal wird TERMINIERT. Bei „schließ/räum die Tabs auf" →
+  `close`; nur bei „archivier X"/„weg damit" → `archive` (mit Bestätigung).
+
 ## Exit-Codes
 
 `0` ok · `1` Usage · `3` nicht gefunden/mehrdeutig · `4` Guard-Konflikt (z. B.
@@ -90,10 +103,12 @@ unterbrochen.
 2. **Vor `interrupt`, `archive`: ebenfalls bestätigen lassen.** `interrupt`
    bricht einen laufenden Turn ab — nur nach expliziter User-Freigabe (im
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte
-   Titel), sobald der User es verlangt — kein Sonderschutz. `open`/`new`/
-   `resume`/`workspace rename` direkt aus einem klaren User-Auftrag brauchen
-   keine Extra-Frage; `new` aus **Eigeninitiative** erst vorschlagen (Projekt +
-   Initial-Prompt zeigen), dann starten.
+   Titel), sobald der User es verlangt — kein Sonderschutz. `open`/`close`/
+   `new`/`resume`/`workspace rename` direkt aus einem klaren User-Auftrag
+   brauchen keine Extra-Frage (`close` ist nicht destruktiv); `new` aus
+   **Eigeninitiative** erst vorschlagen (Projekt + Initial-Prompt zeigen),
+   dann starten. Für BATCH-`close` („alle, die ich nicht brauche") gilt
+   Regel 6: erst Kandidatenliste bestätigen lassen.
 3. **Nie `--force` oder `--if-status working` aus Eigeninitiative.** Nur wenn
    der User es in diesem konkreten Fall verlangt hat.
 4. **Ein-Hop-Regel.** Beginnt ein Prompt, den du bekommst, mit
@@ -141,9 +156,20 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
   Ergebnis melden.
 - **Cross-Session:** „Vergleiche A und B, schick A den Folgeprompt" → `tail` A,
   `tail` B, dann `send` A (mit Bestätigung).
+- **„Schließ alle Tabs/Chats, die ich nicht brauche"** → `list --open --json`
+  → Kandidaten bestimmen. **Keep-Defaults** (nur Vorschlag, kein Verbot):
+  gepinnt (`isPinned`), `working`, `awaitingInput` und die eigene Session
+  (`isSelf`) bleiben standardmäßig offen; Close-Kandidaten sind die übrigen
+  offenen Tabs (idle/stopped). Vorher→Nachher-Liste zeigen (Keep vs. Close,
+  mit Status), EINE Batch-Bestätigung (Multi-Select) → danach GENAU die
+  bestätigten Refs in EINEM Aufruf schließen:
+  `close ref1 ref2 …`. Bestätigt der User explizit auch einen
+  working/gepinnten/eigenen Tab, ist das ok — close schließt immer nur die
+  Ansicht. Danach melden: „N Tabs geschlossen, Sessions laufen weiter."
 - **„Räum auf"** → `list --all` → Vorschlagsliste (rename/group/archive,
   Vorher→Nachher, Archives markiert) → EINE Batch-Bestätigung (Multi-Select) →
-  ausgewählte Aktionen ausführen → Ergebnis melden.
+  ausgewählte Aktionen ausführen → Ergebnis melden. Tabs nur zumachen =
+  `close`; `archive` nur, wenn die Session wirklich weg soll.
 - **„Unterbrich X"** → bestätigen lassen → `interrupt X --if-status working`
   (Default-Guard; ohne `--force` nur bei laufender Session).
 

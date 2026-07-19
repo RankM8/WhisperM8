@@ -39,6 +39,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await sessionInterrupt(request)
         case "session.open":
             return await sessionOpen(request)
+        case "session.close":
+            return await sessionClose(request)
         case "session.resume":
             return await sessionResume(request)
         case "session.new":
@@ -254,6 +256,92 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 "ok": true, "target": ["id": session.id.uuidString, "title": session.title],
             ]))
         }
+    }
+
+    // MARK: session.close
+
+    /// Schließt offene UI-Tabs — und NUR die. Bewusst kein Gegenstück zu
+    /// `workspace.archive`: die Session bleibt im Workspace, ein laufendes PTY
+    /// läuft weiter (Registry ist sessionID-basiert, erneutes Öffnen attached
+    /// an denselben Controller inkl. Scrollback), Pin und Grid-Mitgliedschaft
+    /// bleiben. Deshalb auch kein Status-Guard und kein `--force`: Schließen
+    /// ist nie destruktiv, egal ob das Ziel working oder awaitingInput ist.
+    ///
+    /// Batch-fähig (`targetSessionIDs`): alle Ziele werden in EINEM synchronen
+    /// MainActor-Block verarbeitet — ein konsistenter Snapshot, kein
+    /// Cross-Window-Race zwischen Prüfung und Mutation (analog Send-Pipeline).
+    /// Pro Ziel ein Outcome: `closed`, `alreadyClosed` (idempotent, kein
+    /// Fehler) oder `notFound` — die CLI leitet daraus den Exit-Code ab.
+    private func sessionClose(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let rawIDs = request.params["targetSessionIDs"]?.arrayValue?.compactMap { $0.stringValue } ?? []
+        let parsedIDs = rawIDs.compactMap(UUID.init(uuidString:))
+        guard !rawIDs.isEmpty, parsedIDs.count == rawIDs.count else {
+            return .failure(requestID: request.requestID, code: .invalid,
+                            message: "targetSessionIDs fehlt/ungültig (Array von Session-UUIDs)")
+        }
+        // Duplikate raus, Reihenfolge erhalten — ein doppelt gelistetes Ziel
+        // würde sonst beim zweiten Mal fälschlich "alreadyClosed" melden.
+        var deduped: [UUID] = []
+        for id in parsedIDs where !deduped.contains(id) { deduped.append(id) }
+        let targetIDs = deduped
+
+        let items: [CloseOutcomeItem] = await MainActor.run {
+            let workspace = AgentWorkspaceUIModel.shared.workspace
+            let windowStore = AgentWindowStore.shared
+            let registry = AgentTerminalRegistry.shared
+            let statusStore = AgentSessionStatusCoordinator.shared.statusStore
+            let projectNames = Dictionary(uniqueKeysWithValues: workspace.projects.map { ($0.id, $0.name) })
+            return targetIDs.map { id in
+                guard let session = workspace.sessions.first(where: { $0.id == id }),
+                      session.status != .archived else {
+                    return CloseOutcomeItem(id: id, outcome: "notFound")
+                }
+                let hostWindow = windowStore.closeTabInHostingWindow(id)
+                return CloseOutcomeItem(
+                    id: id,
+                    title: session.title,
+                    project: projectNames[session.projectID],
+                    outcome: hostWindow == nil ? "alreadyClosed" : "closed",
+                    ptyRunning: registry.controller(for: id)?.isRunning ?? false,
+                    runtimeStatus: statusStore.status(for: id)?.rawValue,
+                    isPinned: windowStore.pinnedSessionIDs.contains(id))
+            }
+        }
+
+        // Audit pro tatsächlich geschlossenem Tab — genau die Mutationen sind
+        // nachvollziehbar, No-ops und notFound spammen das Log nicht.
+        for item in items where item.outcome == "closed" {
+            let label = [item.project, item.title].compactMap { $0 }.joined(separator: "/")
+            await audit(request.actor, method: "close", target: label, outcome: "ok", prompt: nil)
+        }
+
+        return .success(requestID: request.requestID, result: .object([
+            "ok": true,
+            "closedCount": items.filter { $0.outcome == "closed" }.count,
+            "results": items.map { item -> [String: Any] in
+                var dict: [String: Any] = [
+                    "id": item.id.uuidString,
+                    "outcome": item.outcome,
+                    "ptyRunning": item.ptyRunning,
+                    "isPinned": item.isPinned,
+                ]
+                if let title = item.title { dict["title"] = title }
+                if let project = item.project { dict["project"] = project }
+                if let status = item.runtimeStatus { dict["runtimeStatus"] = status }
+                return dict
+            },
+        ]))
+    }
+
+    /// Outcome eines einzelnen close-Ziels (Server-Seite).
+    private struct CloseOutcomeItem {
+        var id: UUID
+        var title: String?
+        var project: String?
+        var outcome: String
+        var ptyRunning = false
+        var runtimeStatus: String?
+        var isPinned = false
     }
 
     // MARK: session.resume

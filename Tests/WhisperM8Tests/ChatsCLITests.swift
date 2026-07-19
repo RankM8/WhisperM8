@@ -384,6 +384,25 @@ final class ChatsCLIParserTests: XCTestCase {
         XCTAssertThrowsError(try ChatsCLIParser.parseList(["--project"]))
     }
 
+    func testParseCloseAcceptsMultipleRefsAndJSON() throws {
+        let single = try ChatsCLIParser.parseClose(["whisperm8/audit"])
+        XCTAssertEqual(single.refs, ["whisperm8/audit"])
+        XCTAssertFalse(single.json)
+
+        let batch = try ChatsCLIParser.parseClose(["a", "b/c", "--json", "d"])
+        XCTAssertEqual(batch.refs, ["a", "b/c", "d"], "Refs bleiben in Angabe-Reihenfolge")
+        XCTAssertTrue(batch.json)
+    }
+
+    func testParseCloseRejectsEmptyAndUnknownFlags() {
+        XCTAssertThrowsError(try ChatsCLIParser.parseClose([]))
+        XCTAssertThrowsError(try ChatsCLIParser.parseClose(["--json"]), "nur Flags, keine Refs")
+        XCTAssertThrowsError(try ChatsCLIParser.parseClose(["ref", "--all"]),
+                             "kein pauschaler --all-Pfad — Kandidaten waehlt der Aufrufer explizit")
+        XCTAssertThrowsError(try ChatsCLIParser.parseClose(["ref", "--force"]),
+                             "close kennt kein --force: es gibt nichts zu erzwingen")
+    }
+
     func testParseShowAndTailRequireExactlyOneRef() {
         XCTAssertThrowsError(try ChatsCLIParser.parseShow([]))
         XCTAssertThrowsError(try ChatsCLIParser.parseShow(["a", "b"]))

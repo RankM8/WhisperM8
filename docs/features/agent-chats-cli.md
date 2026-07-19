@@ -31,7 +31,7 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 | Befehl | Klasse | Pfad |
 |---|---|---|
 | `list`, `overview`, `show`, `tail`, `wait`, `audit` | Lesen | Disk (+ optionaler Live-Merge) |
-| `send`, `interrupt`, `open`, `new`, `rename`, `group`, `archive` | Handeln | Socket → App |
+| `send`, `interrupt`, `open`, `close`, `resume`, `new`, `rename`, `group`, `archive` | Handeln | Socket → App |
 
 `overview` = `list --sort attention --format board`. Alle Befehle mit `--json`
 (schemaVersion 1). Referenzen: `projekt/titel`, UUID-Präfix ≥ 8, `@self`.
@@ -67,6 +67,51 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
 Idempotenz-Cache (requestID, 60 s) verhindert Doppel-Paste bei Retry. Jeder Send
 bekommt die Marker-Zeile `[via whisperm8 chats · von <actor> · HH:MM]`
 vorangestellt (Ein-Hop-Regel im Skill).
+
+## close (Tab-Management)
+
+`chats close <ref> [<ref>…]` schließt AUSSCHLIESSLICH offene UI-Tabs — die
+bewusst schwache Schwester von `archive`. Contract:
+
+- **Nur UI:** `AgentWindowStore.closeTabInHostingWindow` entfernt den Tab aus
+  dem Fenster, das ihn hält (eine Session lebt in genau einem Fenster, daher
+  keine `--window`-Optionen). Session-Status, PTY-Prozess, Pin, Grid-Slot-
+  Mitgliedschaft und Transcript bleiben unangetastet; erneutes Öffnen attached
+  an denselben Terminal-Controller inkl. Scrollback.
+- **Kein Guard, kein `--force`:** auch working/awaitingInput-Ziele dürfen
+  geschlossen werden — es geht nur die Ansicht zu. Die Response meldet
+  `ptyRunning`/`runtimeStatus`/`isPinned` zur Information.
+- **Batch, alles-oder-nichts bei der Auflösung:** die CLI löst ALLE Refs vor
+  dem Request auf (mehrdeutig/unbekannt → Exit 3, nichts wird geschlossen).
+  Der Server verarbeitet alle Ziele in EINEM synchronen MainActor-Block
+  (`session.close`, `targetSessionIDs`-Array) — ein konsistenter Snapshot,
+  keine Cross-Window-Races. Pro Ziel ein Outcome: `closed`, `alreadyClosed`
+  (idempotent, kein Fehler) oder `notFound` (Server-autoritativ, z. B.
+  Debounce-Race). Exit 0, sofern kein `notFound`.
+- **Auswahl-Fallback:** war der geschlossene Tab selektiert, rückt die
+  Selektion auf den vorherigen Tab (sonst den neuen ersten); die Session
+  verlässt zudem die ephemere Multi-Auswahl des Fensters. Wird ein
+  Sekundärfenster leer, schließt es sich über den bestehenden reaktiven
+  Pfad (`onChange(of: openTabIDs)` → `closeWindowIfEmptyAndSecondary`).
+- **Kein pauschales `--all`:** die Kandidatenauswahl für „schließe alle, die
+  ich nicht brauche" trifft der Aufrufer (Jarvis) über `list --open --json`
+  (liefert `isOpen`/`isPinned`/`isSelf`/Status) + Batch-Bestätigung — die
+  CLI schließt nur explizit benannte Refs.
+
+### Backlog Tab-/Session-Management (Gap-Analyse 2026-07-19)
+
+Bewertung Nutzen/Sicherheit/Aufwand für weitere Jarvis-Management-Befehle —
+bewusst NICHT mit dem close-Feature umgesetzt (klein halten, Contract zuerst):
+
+| Kandidat | Nutzen | Risiko | Aufwand | Priorität |
+|---|---|---|---|---|
+| `pin <ref>` / `unpin <ref>` | hoch (Aufräum-Runden markieren Keeps direkt) | keins (UI-only, `togglePin` existiert) | S | **1** |
+| `close --others <ref>` / `--right <ref>` | mittel (Browser-Gewohnheit) | gering — braucht aber Fenster-Kontext-Semantik | S–M | 2 |
+| Restore zuletzt geschlossener Tabs (`reopen`) | mittel (Fehlgriff-Netz nach Batch-Close) | keins — reine UI; braucht Close-History im WindowStore | M | 3 |
+| `move <ref> --to-window <n>` / detach | niedrig via CLI (Drag existiert in der App) | Fenster-Referenzierung ohne stabile Namen fummelig | M | 4 |
+| `workspace add/remove <ref>` (Grid-Slots) | mittel | Slot-Invarianten + Owner-Fenster-Konflikte | M | 4 |
+| Dry-Run/`--plan` für Batch-Aktionen | niedrig — `list --open --json` IST der Plan-Schritt | — | — | nicht nötig |
+| Pauschales `close --all` | — | hoch (genau der gefährliche Pfad) | — | bewusst nie |
 
 ## wait
 
