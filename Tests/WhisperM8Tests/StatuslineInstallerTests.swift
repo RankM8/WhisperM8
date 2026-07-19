@@ -48,6 +48,17 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertNoThrow(try installer.bundledScript())
     }
 
+    /// Regression 2026-07-19: `profiles()` liefert `main` ebenfalls zurück.
+    /// Die Default-Ziele dürfen den Main-Config-Pfad deshalb nicht doppeln und
+    /// müssen Profile relativ zum injizierten Home ermitteln.
+    func testDefaultSettingsDirectoriesAreUniqueAndUseInjectedHome() {
+        let installer = StatuslineInstaller(homeDirectory: tempHome)
+        let paths = installer.settingsDirectories().map(\.standardizedFileURL.path)
+
+        XCTAssertEqual(Set(paths).count, paths.count)
+        XCTAssertEqual(paths, [mainConfigDir, profileDir].map(\.standardizedFileURL.path))
+    }
+
     func testBundledScriptCarriesMarkerAndShebang() throws {
         let script = try makeInstaller().bundledScript()
         XCTAssertTrue(script.hasPrefix("#!/bin/bash"))

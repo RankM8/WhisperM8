@@ -485,6 +485,7 @@ private struct StatuslineSettingsCard: View {
             refresh()
             showFeedback("Installed")
         } catch {
+            refresh()
             errorMessage = error.localizedDescription
         }
     }

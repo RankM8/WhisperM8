@@ -33,11 +33,14 @@ struct StatuslineInstaller {
         self.homeDirectory = homeDirectory
         self.bundle = bundle
         self.settingsDirectories = settingsDirectories ?? {
-            var directories = [
-                homeDirectory.appendingPathComponent(".claude", isDirectory: true)
-            ]
-            directories.append(contentsOf: ClaudeAccountProfiles().profiles().map(\.configDir))
-            return directories
+            let mainDirectory = homeDirectory.appendingPathComponent(".claude", isDirectory: true)
+            let profileDirectories = ClaudeAccountProfiles(homeDirectory: homeDirectory)
+                .profiles()
+                .map(\.configDir)
+            var seenPaths = Set<String>()
+            return ([mainDirectory] + profileDirectories).filter {
+                seenPaths.insert($0.standardizedFileURL.path).inserted
+            }
         }
     }
 
