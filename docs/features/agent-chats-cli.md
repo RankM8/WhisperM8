@@ -30,8 +30,8 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 
 | Befehl | Klasse | Pfad |
 |---|---|---|
-| `list`, `overview`, `show`, `tail`, `wait`, `audit` | Lesen | Disk (+ optionaler Live-Merge) |
-| `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `workspace …` | Handeln | Socket → App |
+| `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived` | Lesen | Disk (+ optionaler Live-Merge) |
+| `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
 
 `overview` = `list --sort attention --format board`. Alle Befehle mit `--json`
 (schemaVersion 1). Referenzen: `projekt/titel`, UUID-Präfix ≥ 8, `@self`.
@@ -123,6 +123,40 @@ bewusst schwache Schwester von `archive`. Contract:
   ändern NUR die Grid-Slot-Mitgliedschaft (`WorkspaceSlotOps`-Semantik; voller
   Workspace → Exit 4). `--slot` ist 1-basiert. Tab und Prozess bleiben —
   identisch zur Sidebar-Aktion.
+
+## Archiv: Suche + gezieltes Reaktivieren
+
+Strikte Aktions-Trennung (Produktsemantik, nie stillschweigend vermischt):
+
+| Aktion | Wirkung | Wirkung NICHT |
+|---|---|---|
+| `close` | UI-Tab zu | archiviert/löscht/stoppt nichts |
+| `archive` | Markierung `.archived` + `archivedAt`; laufendes Terminal wird terminiert (mit Guard/`--force`) | löscht keine Daten |
+| `unarchive` | NUR Markierung weg (`restoreSession`: Status `.closed`, `archivedAt` = nil) | öffnet keinen Tab, startet nichts |
+| `resume` | startet/verbindet eine NICHT archivierte Session | reaktiviert nie aus dem Archiv (Exit 4 + Hinweis) |
+
+- **`archived [query] [--project] [--group] [--provider] [--since D] [--until D]
+  [--content "text"] [--limit N] [--json]`** — Archiv-Browser, app-unabhängig
+  von Disk. `query` sucht normalisiert (Diakritika-/Trenner-tolerant) über
+  Projekt/Titel/Gruppe; Zeitraum gegen `archivedAt` (Alt-Daten ohne Feld:
+  `lastActivityAt`), `D` = `yyyy-MM-dd` oder relativ (`14d`, `8w`). Sortiert
+  neueste zuerst. Jeder Treffer zeigt die Transcript-Verfügbarkeit
+  (stat-billig, `ChatsStatusProbe`) — `⚠︎ kein Transcript` heißt: extern
+  verschoben/bereinigt, ein Resume startet eine frische CLI-Session ohne
+  Verlauf.
+- **`--content`** durchsucht das rohe Transcript-JSONL case-/diakritika-
+  insensitiv — erst NACH den Metadaten-Filtern (nur Kandidaten werden
+  gelesen). Dateien über dem 64-MB-Cap werden nur im Tail-Fenster durchsucht;
+  Treffer/Nicht-Treffer sind dann als `hitTruncated`/`missTruncated` markiert
+  (kein Beweis für Abwesenheit).
+- **`unarchive <ref> [--resume|--open]`** — Ref-Auflösung inkl. Archiv
+  (`includeArchived`), mehrdeutig → Exit 3 mit Kandidaten (nie raten). Der
+  Compound ist explizit: `--resume` = danach Auto-Launch + Fokus
+  (`session.resume`-Semantik), `--open` = danach nur Tab fokussieren.
+  Alles-oder-nichts: ist die Session-Art nicht resumebar (Terminal/agentView),
+  passiert bei `--resume` GAR NICHTS (auch kein Unarchive). Nicht archivierte
+  Ziele sind idempotenter Erfolg (`alreadyActive`); ein angefordertes
+  `--resume`/`--open` läuft dann trotzdem. Kein Pfad löscht Daten.
 
 ### Backlog Tab-/Session-Management (Gap-Analyse 2026-07-19)
 

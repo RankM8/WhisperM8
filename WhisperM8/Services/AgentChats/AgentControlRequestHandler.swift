@@ -57,6 +57,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await sessionNew(request)
         case "workspace.rename", "workspace.group", "workspace.archive":
             return await workspaceMutation(request)
+        case "workspace.unarchive":
+            return await workspaceUnarchive(request)
         case "gridWorkspace.list":
             return await gridWorkspaceList(request)
         case "gridWorkspace.rename":
@@ -670,9 +672,13 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         }
         let outcome: SendOutcome = await MainActor.run {
             let workspace = AgentWorkspaceUIModel.shared.workspace
-            guard let session = workspace.sessions.first(where: { $0.id == targetID }),
-                  session.status != .archived else {
-                return .failure(.notFound, "Session nicht gefunden oder archiviert (Archiv erst wiederherstellen)")
+            guard let session = workspace.sessions.first(where: { $0.id == targetID }) else {
+                return .failure(.notFound, "Session nicht gefunden")
+            }
+            // Strikte Aktions-Trennung: resume startet NIE eine archivierte
+            // Session — der explizite Compound dafür ist `unarchive --resume`.
+            guard session.status != .archived else {
+                return .failure(.conflict, "Session ist archiviert — `chats unarchive <ref> --resume` nutzen")
             }
             // Terminal-Sessions (reine Shell) und agentView haben kein Resume.
             if session.effectiveKind == .terminal || session.effectiveKind == .agentView {
@@ -804,6 +810,99 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return .success(requestID: request.requestID, result: .object([
                 "ok": true, "before": before, "after": after,
                 "target": ["id": targetString],
+            ]))
+        }
+    }
+
+    // MARK: workspace.unarchive
+
+    /// Entfernt NUR die Archiv-Markierung (`restoreSession`: Status →
+    /// `.closed`, `archivedAt` weg) — kein Tab, kein Start, kein Fokus.
+    /// Die strikte Aktions-Trennung (close ≠ archive ≠ unarchive ≠ resume)
+    /// wird nur über die EXPLIZITEN Flags `resume`/`open` kombiniert:
+    /// `resume` = danach Auto-Launch + Fokus (Semantik von `session.resume`),
+    /// `open` = danach nur Tab fokussieren. Alles-oder-nichts: ist `resume`
+    /// für die Session-Art nicht möglich (Terminal/agentView), passiert
+    /// GAR NICHTS — auch kein Unarchive (kein halber Compound).
+    ///
+    /// Nicht archivierte Ziele sind idempotenter Erfolg (`alreadyActive`) —
+    /// ein angefordertes `resume`/`open` läuft dann trotzdem (jede Aktion
+    /// tut genau ihr eigenes Ding). Datenverlust ist ausgeschlossen:
+    /// beide Pfade ändern ausschließlich Status/Zeitstempel/UI-Fokus.
+    private func workspaceUnarchive(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        guard let targetString = request.params["targetSessionID"]?.stringValue,
+              let targetID = UUID(uuidString: targetString) else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "targetSessionID fehlt/ungültig")
+        }
+        let wantsResume = request.params["resume"]?.boolValue ?? false
+        let wantsOpen = request.params["open"]?.boolValue ?? false
+        guard !(wantsResume && wantsOpen) else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "resume und open schließen sich aus")
+        }
+
+        enum UnarchiveOutcome {
+            case ok(AgentChatSession, outcome: String, resumed: Bool, opened: Bool)
+            case fail(ChatsControlErrorCode, String)
+        }
+        let result: UnarchiveOutcome = await MainActor.run {
+            let workspace = AgentWorkspaceUIModel.shared.workspace
+            guard let session = workspace.sessions.first(where: { $0.id == targetID }) else {
+                return .fail(.notFound, "Session nicht gefunden")
+            }
+            // Vorab-Guard VOR jeder Mutation: ein nicht-resumebarer Kind-Typ
+            // bricht den ganzen Compound ab, bevor irgendetwas passiert.
+            if wantsResume,
+               session.effectiveKind == .terminal || session.effectiveKind == .agentView {
+                return .fail(.unsupported, "Session-Art \(session.effectiveKind.displayName) ist nicht resumebar — `unarchive` ohne --resume nutzen")
+            }
+            let wasArchived = session.status == .archived
+            if wasArchived {
+                do {
+                    try AgentSessionStore().restoreSession(id: targetID)
+                } catch {
+                    return .fail(.internalError, "Entarchivieren fehlgeschlagen: \(error.localizedDescription)")
+                }
+            }
+            var resumed = false
+            var opened = false
+            if wantsResume {
+                let isRunning = AgentTerminalRegistry.shared.controller(for: targetID)?.isRunning ?? false
+                if !isRunning {
+                    do {
+                        try AgentSessionStore().updateSession(id: targetID) { $0.shouldLaunchOnOpen = true }
+                    } catch {
+                        // Unarchive ist bereits passiert und bleibt gültig
+                        // (kein Rollback einer gewollten Markierung) — nur der
+                        // Startteil wird als Fehler gemeldet.
+                        return .fail(.internalError, "Entarchiviert, aber Resume-Flag fehlgeschlagen: \(error.localizedDescription)")
+                    }
+                }
+                WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
+                NSApp.activate(ignoringOtherApps: true)
+                resumed = true
+            } else if wantsOpen {
+                WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
+                NSApp.activate(ignoringOtherApps: true)
+                opened = true
+            }
+            return .ok(session, outcome: wasArchived ? "unarchived" : "alreadyActive",
+                       resumed: resumed, opened: opened)
+        }
+
+        switch result {
+        case .fail(let code, let message):
+            await audit(request.actor, method: "unarchive", target: nil, outcome: code.rawValue, prompt: nil)
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .ok(let session, let outcome, let resumed, let opened):
+            let label = await sessionLabel(targetID)
+            let auditMethod = resumed ? "unarchive+resume" : opened ? "unarchive+open" : "unarchive"
+            await audit(request.actor, method: auditMethod, target: label, outcome: outcome, prompt: nil)
+            return .success(requestID: request.requestID, result: .object([
+                "ok": true,
+                "outcome": outcome,
+                "resumed": resumed,
+                "opened": opened,
+                "target": ["id": session.id.uuidString, "title": session.title],
             ]))
         }
     }

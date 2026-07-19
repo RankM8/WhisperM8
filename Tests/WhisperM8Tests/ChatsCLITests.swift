@@ -363,6 +363,131 @@ final class ChatsTailFormatterTests: XCTestCase {
     }
 }
 
+// MARK: - Archiv-Suche (chats archived) + unarchive
+
+final class ChatsArchivedSupportTests: XCTestCase {
+    private func archivedEntry(
+        title: String, project: String = "whisperm8", group: String? = nil,
+        provider: AgentProvider = .claude, archivedAt: Date? = nil,
+        lastActivityAt: Date = Date(timeIntervalSince1970: 1_000),
+        status: AgentChatStatus = .archived
+    ) -> ChatsSessionEntry {
+        ChatsSessionEntry(
+            session: AgentChatSession(
+                id: UUID(), provider: provider, projectID: UUID(), title: title,
+                status: status, groupName: group, lastActivityAt: lastActivityAt,
+                archivedAt: archivedAt),
+            projectName: project, projectPath: "/Users/tester/repos/\(project)")
+    }
+
+    func testFilterKeepsOnlyArchivedAndSortsByArchivedDateDesc() {
+        let now = Date()
+        let old = archivedEntry(title: "alt", archivedAt: now.addingTimeInterval(-3_600))
+        let fresh = archivedEntry(title: "frisch", archivedAt: now)
+        let active = archivedEntry(title: "aktiv", status: .running)
+        let result = ChatsArchivedSupport.filter(entries: [old, active, fresh])
+        XCTAssertEqual(result.map(\.session.title), ["frisch", "alt"], "nur archivierte, neueste zuerst")
+    }
+
+    func testFilterQueryMatchesTitleGroupAndProjectNormalized() {
+        let hit = archivedEntry(title: "Größen-Audit", group: "Qualität")
+        let other = archivedEntry(title: "Blogpost")
+        XCTAssertEqual(ChatsArchivedSupport.filter(entries: [hit, other], query: "grossen").count, 1,
+                       "Diakritika-tolerant über den Titel")
+        XCTAssertEqual(ChatsArchivedSupport.filter(entries: [hit, other], query: "qualitat").count, 1,
+                       "Gruppen-Match")
+        XCTAssertEqual(ChatsArchivedSupport.filter(entries: [hit, other], query: "whisperm8").count, 2,
+                       "Projekt-Match trifft beide")
+    }
+
+    func testFilterProviderGroupAndTimeWindow() {
+        let now = Date()
+        let codex = archivedEntry(title: "codex-job", provider: .codex, archivedAt: now.addingTimeInterval(-10 * 86_400))
+        let claude = archivedEntry(title: "claude-job", group: "seo", archivedAt: now.addingTimeInterval(-1 * 86_400))
+        let legacy = archivedEntry(title: "uralt-ohne-archivedAt", archivedAt: nil,
+                                   lastActivityAt: now.addingTimeInterval(-100 * 86_400))
+        let all = [codex, claude, legacy]
+
+        XCTAssertEqual(ChatsArchivedSupport.filter(entries: all, provider: "codex").map(\.session.title), ["codex-job"])
+        XCTAssertEqual(ChatsArchivedSupport.filter(entries: all, group: "seo").map(\.session.title), ["claude-job"])
+        let since = ChatsArchivedSupport.filter(entries: all, since: now.addingTimeInterval(-5 * 86_400))
+        XCTAssertEqual(since.map(\.session.title), ["claude-job"], "since gegen archivedAt")
+        let until = ChatsArchivedSupport.filter(entries: all, until: now.addingTimeInterval(-50 * 86_400))
+        XCTAssertEqual(until.map(\.session.title), ["uralt-ohne-archivedAt"],
+                       "ohne archivedAt zaehlt lastActivityAt (Alt-Daten)")
+    }
+
+    func testParseWhenAbsoluteAndRelative() {
+        let now = Date()
+        XCTAssertNotNil(ChatsArchivedSupport.parseWhen("2026-06-01", now: now))
+        let days = ChatsArchivedSupport.parseWhen("14d", now: now)
+        XCTAssertEqual(days.map { now.timeIntervalSince($0) } ?? 0, 14 * 86_400, accuracy: 1)
+        let weeks = ChatsArchivedSupport.parseWhen("2w", now: now)
+        XCTAssertEqual(weeks.map { now.timeIntervalSince($0) } ?? 0, 14 * 86_400, accuracy: 1)
+        XCTAssertNil(ChatsArchivedSupport.parseWhen("banane", now: now))
+        XCTAssertNil(ChatsArchivedSupport.parseWhen("d", now: now))
+        XCTAssertNil(ChatsArchivedSupport.parseWhen("07/2026", now: now))
+    }
+
+    func testContentMatchesCaseInsensitiveWithCapAndMissingFile() throws {
+        let dir = FileManager.default.temporaryDirectory
+        let file = dir.appendingPathComponent("wm8-archived-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try #"{"type":"assistant","text":"Der GRÖSSEN-Refactor ist fertig"}"#
+            .write(to: file, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(ChatsArchivedSupport.contentMatches(fileURL: file, query: "größen-refactor"), .hit)
+        XCTAssertEqual(ChatsArchivedSupport.contentMatches(fileURL: file, query: "nie-vorhanden"), .miss)
+        XCTAssertEqual(ChatsArchivedSupport.contentMatches(
+            fileURL: dir.appendingPathComponent("fehlt-\(UUID().uuidString)"), query: "x"), .unreadable)
+
+        // Cap: Treffer liegt VOR dem durchsuchten Tail-Fenster → missTruncated.
+        let big = dir.appendingPathComponent("wm8-archived-big-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: big) }
+        let head = "NADEL-AM-ANFANG\n"
+        let filler = String(repeating: "x", count: 4_096)
+        try (head + filler).write(to: big, atomically: true, encoding: .utf8)
+        XCTAssertEqual(ChatsArchivedSupport.contentMatches(fileURL: big, query: "nadel-am-anfang", capBytes: 1_024),
+                       .missTruncated, "Treffer ausserhalb des Caps ist kein Beweis fuer Abwesenheit")
+        XCTAssertEqual(ChatsArchivedSupport.contentMatches(fileURL: big, query: "xxxx", capBytes: 1_024),
+                       .hitTruncated, "Treffer im Tail einer angeschnittenen Datei wird markiert")
+    }
+}
+
+final class ChatsArchivedParserTests: XCTestCase {
+    func testParseArchivedFlagsAndQuery() throws {
+        let parsed = try ChatsCLIParser.parseArchived(
+            ["seo", "--project", "wolanin", "--group", "blog", "--provider", "codex",
+             "--since", "30d", "--until", "2026-07-01", "--content", "sitemap", "--limit", "10", "--json"])
+        XCTAssertEqual(parsed.query, "seo")
+        XCTAssertEqual(parsed.project, "wolanin")
+        XCTAssertEqual(parsed.group, "blog")
+        XCTAssertEqual(parsed.provider, "codex")
+        XCTAssertEqual(parsed.since, "30d")
+        XCTAssertEqual(parsed.until, "2026-07-01")
+        XCTAssertEqual(parsed.content, "sitemap")
+        XCTAssertEqual(parsed.limit, 10)
+        XCTAssertTrue(parsed.json)
+
+        XCTAssertThrowsError(try ChatsCLIParser.parseArchived(["a", "b"]), "nur EINE Query")
+        XCTAssertThrowsError(try ChatsCLIParser.parseArchived(["--provider", "banane"]))
+        XCTAssertThrowsError(try ChatsCLIParser.parseArchived(["--limit", "-1"]))
+    }
+
+    func testParseUnarchiveCompoundFlagsAreExclusive() throws {
+        let plain = try ChatsCLIParser.parseUnarchive(["whisperm8/alt"])
+        XCTAssertEqual(plain.ref, "whisperm8/alt")
+        XCTAssertFalse(plain.resume || plain.open)
+        XCTAssertTrue(try ChatsCLIParser.parseUnarchive(["x", "--resume"]).resume)
+        XCTAssertTrue(try ChatsCLIParser.parseUnarchive(["x", "--open", "--json"]).open)
+
+        XCTAssertThrowsError(try ChatsCLIParser.parseUnarchive([]))
+        XCTAssertThrowsError(try ChatsCLIParser.parseUnarchive(["a", "b"]))
+        XCTAssertThrowsError(try ChatsCLIParser.parseUnarchive(["x", "--resume", "--open"]),
+                             "Compound-Ziel muss eindeutig sein")
+    }
+}
+
 // MARK: - Parser + Workspace-Reader
 
 final class ChatsCLIParserTests: XCTestCase {

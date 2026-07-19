@@ -74,6 +74,10 @@ enum AgentChatsCLICommand {
             return ChatsMutationCommand.run(rest, kind: .group)
         case "archive":
             return ChatsMutationCommand.run(rest, kind: .archive)
+        case "archived":
+            return ChatsArchivedCommand.run(rest)
+        case "unarchive":
+            return ChatsUnarchiveCommand.run(rest)
         case "workspace":
             return ChatsWorkspaceCommand.run(rest)
         case "audit":
@@ -643,6 +647,9 @@ enum ChatsCLIHelp {
       whisperm8 chats wait [--ref R]… [--until attention|idle|statusChange]
                            [--since REV] [--timeout SEC] [--json]
       whisperm8 chats audit [--limit N] [--session <ref>] [--json]
+      whisperm8 chats archived [query] [--project P] [--group G] [--provider claude|codex]
+                               [--since D] [--until D] [--content "text"] [--limit N] [--json]
+                               Archiv durchsuchen (D: yyyy-MM-dd oder 14d/8w)
 
     HANDELN (App muss laufen — sonst Exit 5)
       whisperm8 chats send <ref> [--] "<prompt>" [--if-status S,S] [--no-submit] [--force] [--json]
@@ -660,6 +667,9 @@ enum ChatsCLIHelp {
       whisperm8 chats rename <ref> "<titel>" [--json]
       whisperm8 chats group <ref> "<gruppe>" | --clear [--json]
       whisperm8 chats archive <ref> [--force] [--json]
+      whisperm8 chats unarchive <ref> [--resume|--open] [--json]
+                               nur Archiv-Markierung entfernen; Start/Fokus NUR
+                               über die expliziten Flags (Compound)
       whisperm8 chats workspace list [--json]            Grid-Workspaces (Sidebar-Sektion)
       whisperm8 chats workspace rename <name|id> "<neu>" [--json]
       whisperm8 chats workspace add <name|id> <ref> [--slot N] [--json]

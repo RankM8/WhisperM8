@@ -33,6 +33,8 @@ whisperm8 chats tail <ref> [--turns N] [--chars N] [--raw] [--json]
 whisperm8 chats wait [--ref R]… [--until attention|idle|statusChange] \
                      [--since REV] [--timeout SEC] [--json]     # blockiert bis Ereignis
 whisperm8 chats audit [--limit N] [--session <ref>]
+whisperm8 chats archived [query] [--project P] [--group G] [--provider claude|codex] \
+                         [--since 30d|2026-06-01] [--until D] [--content "text"] [--json]
 ```
 
 Handeln (App muss laufen — sonst Exit 5). **Vor jeder dieser Aktionen: Regeln unten beachten.**
@@ -51,6 +53,7 @@ whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "�
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
 whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
+whisperm8 chats unarchive <ref> [--resume|--open]    # NUR Markierung weg; Start nur via Flag
 whisperm8 chats workspace list                       # Grid-Workspaces (Sidebar-Sektion WORKSPACES)
 whisperm8 chats workspace rename <name|id> "<neu>"   # Grid-Workspace umbenennen
 whisperm8 chats workspace add <name|id> <ref> [--slot N]    # Session in Grid-Slot aufnehmen
@@ -92,6 +95,29 @@ wieder hochfahren macht `resume` (setzt Auto-Launch + Fokus → App startet mit
 - `archive` ist die stärkere Aktion: Session verschwindet aus Sidebar + Tabs,
   ein laufendes Terminal wird TERMINIERT. Bei „schließ/räum die Tabs auf" →
   `close`; nur bei „archivier X"/„weg damit" → `archive` (mit Bestätigung).
+- `unarchive` entfernt NUR die Archiv-Markierung (Session wieder in der
+  Sidebar, kein Tab, kein Start). `resume` startet nie eine archivierte
+  Session (Exit 4) — der einzige, explizite Compound ist
+  `unarchive <ref> --resume` (reaktivieren + hochfahren) bzw. `--open`
+  (nur Tab fokussieren). Nichts davon löscht je Daten.
+
+## Archiv durchsuchen & reaktivieren
+
+Ablauf für „such mir den alten X-Chat" / „reaktiviere …":
+
+1. `archived <query> --json` (ggf. `--project`, `--group`, `--provider`,
+   `--since 30d`; Volltext im Transcript via `--content "text"` — bei sehr
+   großen Transcripts wird nur das 64-MB-Tail-Fenster durchsucht, die
+   Ausgabe markiert das).
+2. Kandidaten MIT Kontext zeigen: `projekt/titel`, Gruppe, „archiviert vor
+   X", und ob ein Transcript existiert (`⚠︎ kein Transcript` = extern
+   verschoben/bereinigt → Resume startet eine FRISCHE Session ohne
+   Verlauf — das dem User vorher sagen).
+3. **Nie raten:** mehrere Treffer → Auswahl vom User (AskUserQuestion);
+   mehrdeutige Refs geben ohnehin Exit 3 mit Kandidatenliste.
+4. Nach der Auswahl: `unarchive <ref> --resume` (weiterarbeiten) oder
+   `unarchive <ref>` (nur zurück in die Sidebar) bzw. `--open`
+   (ansehen ohne Start).
 
 ## Exit-Codes
 
@@ -111,9 +137,9 @@ unterbrochen.
    bricht einen laufenden Turn ab — nur nach expliziter User-Freigabe (im
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte
    Titel), sobald der User es verlangt — kein Sonderschutz. `open`/`close`/
-   `reopen`/`pin`/`unpin`/`move`/`new`/`resume`/`workspace
+   `reopen`/`pin`/`unpin`/`move`/`new`/`resume`/`unarchive`/`workspace
    rename|add|remove` direkt aus einem klaren User-Auftrag brauchen keine
-   Extra-Frage (alles UI-only, nicht destruktiv); `new` aus
+   Extra-Frage (alles UI-only bzw. nicht destruktiv); `new` aus
    **Eigeninitiative** erst vorschlagen (Projekt + Initial-Prompt zeigen),
    dann starten. Für BATCH-`close` („alle, die ich nicht brauche") und
    `close --others` gilt Regel 6: erst Kandidatenliste bestätigen lassen.
@@ -198,7 +224,8 @@ Lese-Befehle ohne Prompt freigeben, Mutationen bewusst nicht:
       "Bash(whisperm8 chats show:*)",
       "Bash(whisperm8 chats tail:*)",
       "Bash(whisperm8 chats wait:*)",
-      "Bash(whisperm8 chats audit:*)"
+      "Bash(whisperm8 chats audit:*)",
+      "Bash(whisperm8 chats archived:*)"
     ]
   }
 }

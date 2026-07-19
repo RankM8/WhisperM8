@@ -329,6 +329,20 @@ final class ChatsCloseHandlerValidationTests: XCTestCase {
             params: .object(["targetSessionID": UUID().uuidString])))
         XCTAssertEqual(membershipWithoutWorkspace.error?.code, "invalid")
     }
+
+    func testUnarchiveValidatesParamsBeforeTouchingState() async {
+        let handler = AgentControlRequestHandler()
+
+        let missing = await handler.handle(ChatsControlRequest(
+            requestID: "u1", actor: ChatsControlActor(), method: "workspace.unarchive"))
+        XCTAssertEqual(missing.error?.code, "invalid")
+
+        let both = await handler.handle(ChatsControlRequest(
+            requestID: "u2", actor: ChatsControlActor(), method: "workspace.unarchive",
+            params: .object(["targetSessionID": UUID().uuidString,
+                             "resume": true, "open": true])))
+        XCTAssertEqual(both.error?.code, "invalid", "resume und open schliessen sich aus")
+    }
 }
 
 // MARK: - Fenster- und Workspace-Referenzen (move / workspace add|remove)
