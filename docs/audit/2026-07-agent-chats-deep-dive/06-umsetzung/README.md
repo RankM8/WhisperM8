@@ -1,23 +1,29 @@
 ---
 status: aktiv
-updated: 2026-07-18
-description: Autoritative Workflow-3-Synthese mit verifizierten Feldmustern, gesperrtem Identitätsumbau, Regressionsschutz, GPT-Reviewstand und offenen Freigabemängeln.
+updated: 2026-07-19
+description: Autoritative Workflow-3-Synthese mit verifizierten Feldmustern, Runde-4-Abschlusskritik, gesperrtem Identitätsumbau und offenen Freigabemängeln.
 ---
 
 # Workflow 3 — Synthese und Umsetzungs-Gate
 
 ## Status
 
-**Workflow 3 ist dokumentiert, aber nicht umsetzungsreif.** Die Schlussverifikation
-nennt fünf P0-Lücken und sperrt den Identitäts-/Recovery-Umbau
-([verifikation-schluss.md:27-45](verifikation-schluss.md)); die anschließende
-Vollständigkeitskritik verlangt zusätzlich eine deduplizierte
-Finding→Verdict→Roadmap-Matrix, die Runde-3-GPT-Pakete, eine geschlossene
-Terminal-Snapshot-Verifikation und eine eindeutige Freigabe-SSoT
-([runde3-vollstaendigkeits-kritik.md:46-220](../02-findings/runde3-vollstaendigkeits-kritik.md)).
-Kleine, nichtdestruktive Vorarbeiten sind nur in dem Umfang freigegeben, den die
-Schlussverifikation ausdrücklich nennt
-([verifikation-schluss.md:348-360](verifikation-schluss.md)).
+**Workflow 3 ist dokumentiert, aber weiterhin nicht umsetzungsreif.** Die
+Runde-4-Abschlusskritik bewertet alle fünf P0-Blocker erneut: Keiner ist
+entschärft; P0 1 „Weg A gegen Weg B“ und P0 3 „Laufzeitwechsel durch
+`/branch`/`/rewind`“ sind unverändert, P0 2 „Launch-ID-Transport“, P0 4
+„Inventar als Oracle“ und P0 5 „Test-Spec für W0/W1 und C07“ sind verschärft
+([runde4-abschlusskritik.md:13-23](../02-findings/runde4-abschlusskritik.md)).
+Die verifizierte Matrix korrigiert außerdem den Altbestand: C04 ist als offener
+Hoch-Defekt widerlegt, N01 nicht bestätigt, C10/N07 nur teilbestätigt; die beiden
+Alt-Teilfixe sind ausdrücklich nicht geschlossen
+([runde4-findings-matrix.md:17-73](../04-verifikation/runde4-findings-matrix.md)).
+Damit gibt es weder ein Go für die Identitäts-/Recovery-Implementierung noch ein
+pauschales Go für Welle 0/1. Maßgeblich bleibt der Restweg G0–G6; kleine,
+nichtdestruktive Vorarbeiten sind weiterhin nur im bereits eng freigegebenen
+Umfang zulässig
+([runde4-abschlusskritik.md:25-78](../02-findings/runde4-abschlusskritik.md);
+[verifikation-schluss.md:348-360](verifikation-schluss.md)).
 
 ## 1. Kurzfazit Feldvergleich
 

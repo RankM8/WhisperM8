@@ -1,22 +1,22 @@
 ---
 status: aktiv
-updated: 2026-07-18
-description: Einstieg und Dokumentindex zum Agent-Chats-Deep-Dive mit drei Findings-Runden, verifizierten Feldvergleichen, Roadmap-Nachtrag und offenem Umsetzungs-Gate.
+updated: 2026-07-19
+description: Einstieg und Dokumentindex zum Agent-Chats-Deep-Dive mit vier Findings-Runden, verifizierter Findings-Matrix, Roadmap-Nachträgen und offenem Umsetzungs-Gate.
 ---
 
 # Ultra Deep Dive: Agent Chats & Stabilität (2026-07)
 
-> **Status:** Die verifizierten Populationen C01–C16 und N01–N16 bleiben
-> bestätigt; Runde 3 bestätigt zusätzlich 20 primäre GPT-G-Findings und einen
-> separat live beobachteten Usage-/Kompaktierungsdefekt. Das Gesamtaudit ist
-> dennoch **nicht umsetzungsfreigegeben**: Die Schlussverifikation nennt fünf
-> P0-Lücken im Identitäts-/Recovery-Vertrag, und die Vollständigkeitskritik
-> verlangt unter anderem Traceability, Terminal-Snapshot-Verdicts, einen
-> gemeinsamen Termination-Contract sowie korrigierte Inventare und Tests
-> ([verifikation-schluss.md:27-45](06-umsetzung/verifikation-schluss.md);
-> [runde3-vollstaendigkeits-kritik.md:578-611](02-findings/runde3-vollstaendigkeits-kritik.md)).
+> **Status:** Die verifizierte Runde-4-Matrix korrigiert den Altbestand: C04 ist
+> als offener Hoch-Defekt widerlegt, N01 nicht bestätigt, C10/N07 nur
+> teilbestätigt und die beiden dokumentierten Alt-Teilfixe bleiben offen
+> ([runde4-findings-matrix.md:17-73](04-verifikation/runde4-findings-matrix.md)).
+> Runde 4 auditiert zusätzlich Chats-CLI, Context-Profile, Plugin-Manager,
+> Statusline/Skills und GPT-Setup. Das Gesamtaudit ist weiterhin **nicht
+> umsetzungsfreigegeben**: Keiner der fünf P0-Blocker ist entschärft; P0 1 und 3
+> sind unverändert, P0 2, 4 und 5 verschärft
+> ([runde4-abschlusskritik.md:13-23](02-findings/runde4-abschlusskritik.md)).
 > Aktuelle Synthese: [06-umsetzung/README.md](06-umsetzung/README.md); Planung:
-> [Roadmap mit Runde-3-Nachtrag](05-roadmap/refactor-roadmap.md#nachtrag-runde-3--workflow-3).
+> [Roadmap mit Runde-4-Nachtrag](05-roadmap/refactor-roadmap.md#nachtrag-runde-4).
 
 Multi-Agent-Audit des WhisperM8-Projekts (Fable-Finder, Codex-Refuter und
 Workflow-3-Feldvergleich; Ablauf siehe [WORKPLAN.md](WORKPLAN.md)) mit Fokus auf
@@ -25,7 +25,7 @@ Security, Performance, Wartbarkeit und Technologieoptionen.
 
 ## Kernergebnisse
 
-### Verifizierte Basis aus Runde 1 und 2
+### Basis aus Runde 1 und 2, korrigiert durch Runde 4
 
 - **Diktat-Lifecycle:** C01–C03 belegen Crash-/Race-Risiken zwischen
   Audioformatprüfung, `engine.start()` und Reconfiguration; N02 ergänzt den
@@ -33,15 +33,17 @@ Security, Performance, Wartbarkeit und Technologieoptionen.
 - **Daten- und Credential-Schutz:** N03–N06 betreffen doppelte beziehungsweise
   inkompatible Output-Modi, Future-Schema-Downgrade und nichttransaktionale
   Keychain-Migration.
-- **Supervisor und Prozessidentität:** N01, N07, N08 und N14 betreffen PID-Reuse,
-  Detach/Ready, semantische Turn-Finalität und verlorenen frühen Stop-Intent.
+- **Supervisor und Prozessidentität:** N08 und N14 bestätigen Defekte bei
+  semantischer Turn-Finalität und verlorenem frühen Stop-Intent. N07 ist nur
+  teilbestätigt; N01 wurde an den angegebenen Stellen nicht bestätigt
+  ([runde4-findings-matrix.md:30-49](04-verifikation/runde4-findings-matrix.md)).
 - **Secrets und Zielbindung:** N09/N10 belegen zu breite Child-Environments und
   Secret in argv; N11 bindet Auto-Paste nicht sicher an den Aufnahme-Intent.
 - **Store und Transcript:** N12/N13 belegen Lost Updates; N15/N16 fehlende
-  Provider-Korrelation und lautlos verschwindende unbekannte Events. C04–C16
-  bleiben Bestandteil der bestehenden Roadmap
-  ([verdicts.md](04-verifikation/verdicts.md);
-  [verdicts-runde2.md](04-verifikation/verdicts-runde2.md)).
+  Provider-Korrelation und lautlos verschwindende unbekannte Events. C04 ist als
+  offener Hoch-Defekt widerlegt, C10 nur teilbestätigt; die übrigen bestätigten
+  C-Befunde bleiben Bestandteil der Roadmap
+  ([runde4-findings-matrix.md:17-29](04-verifikation/runde4-findings-matrix.md)).
 
 ### Runde 3 / Workflow 3
 
@@ -92,17 +94,61 @@ Security, Performance, Wartbarkeit und Technologieoptionen.
   einen risikobasierten Nachlauf. Diese Zahl ist ausdrücklich keine Defektzahl
   ([runde3-vollstaendigkeits-kritik.md:323-380](02-findings/runde3-vollstaendigkeits-kritik.md)).
 
+### Runde 4
+
+- **Chats-CLI:** Sechs hohe Befunde betreffen fehlende Actor-Autorisierung,
+  nicht authentisierten Serverkontakt, nicht retry-stabile Idempotenz, zwei
+  blinde `wait`-Verträge und abweichende Profilstempel. Der Server prüft heute
+  nur Same-EUID (`WhisperM8/Services/AgentChats/AgentControlServer.swift:228-239`),
+  während `wait` ein unveränderliches Entry-Array hält
+  (`WhisperM8/CLI/ChatsWaitEngine.swift:41-67,321-342`).
+- **Context-Profile:** Restriktions-Settings fallen bei Schreibfehlern offen aus,
+  Respawn verwendet ein altes Overlay und der Profilfilter kann bereinigte
+  `CLAUDE_CODE_*`-Identität wieder einführen
+  (`WhisperM8/Services/AgentChats/ClaudeHookBridge.swift:86-118`;
+  `WhisperM8/Services/AgentChats/BackgroundAgentLifecycle.swift:99-106,150-172`;
+  `WhisperM8/Services/AgentChats/ClaudeContextSettingsBuilder.swift:13-24,56-67`).
+- **Plugin-Manager:** Secrets können über freie `--config key=value`-Argumente
+  in argv gelangen, und Headless-Failsafe plus Serializer garantieren keine
+  Prozessbaum-Finalität (`WhisperM8/Services/AgentChats/ClaudePluginCLI.swift:91-101`;
+  `WhisperM8/Services/AgentChats/AgentHeadlessCLI.swift:78-111,174-190`).
+- **Statusline und Skills:** App-Bundle und Lookup-Ort driften auseinander,
+  externe Anzeigetexte werden mit `echo -e` erneut interpretiert, Settings-
+  Updates können Fremdwrites verlieren und Skill-Updates besitzen keinen
+  Ownership-Guard (`WhisperM8/Services/Shared/StatuslineInstaller.swift:24-27,70-76,190-216`;
+  `Makefile:217-245`; `WhisperM8/Resources/whisperm8-statusline.sh:36-56,232-249,369-429`;
+  `WhisperM8/Services/Shared/CLISkillExporter.swift:127-177`).
+- **GPT-Setup:** Nicht gepinnte Updates beziehen Payload und Hash aus derselben
+  Quelle; Setup/Refresh besitzen keine belastbare Generation
+  (`WhisperM8/Services/AgentChats/ClaudeCodeProxyBinaryInstaller.swift:123-150`;
+  `WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:404-492`).
+- **Breiter Delta-/Abdeckungsnachlauf:** Weitere bestätigte Hochbefunde betreffen
+  Paste-/Submit-Korrektheit, Future-Schema, Resume-/Startup-Lifecycle, doppelte
+  Session-IDs sowie blockierende Git-/ffmpeg-Pipes
+  (`WhisperM8/Views/AgentTerminalView.swift:649-667`;
+  `WhisperM8/Models/AgentChat.swift:602-627`;
+  `WhisperM8/Services/AgentChats/SummaryStartupPlanner.swift:9-20`;
+  `WhisperM8/Services/AgentChats/AgentWorktreeManager.swift:73-87`;
+  `WhisperM8/CLI/CLIAudioExtractor.swift:197-211`).
+- **Freigabefolge bleibt gesperrt:** Keiner der fünf P0-Blocker ist entschärft;
+  G0–G6 der Abschlusskritik und der Runde-4-Roadmap-Nachtrag bilden den
+  Restweg ([runde4-abschlusskritik.md:25-78](02-findings/runde4-abschlusskritik.md)).
+
 ## Freigabeautorität
 
 Die aktuelle Reihenfolge der Autorität lautet:
 
-1. [verifikation-schluss.md](06-umsetzung/verifikation-schluss.md) für
+1. [runde4-abschlusskritik.md](02-findings/runde4-abschlusskritik.md) für
+   P0-Status und den aktuellen Freigabeweg;
+2. [runde4-findings-matrix.md](04-verifikation/runde4-findings-matrix.md) für
+   den verifizierten Status der bisherigen kritisch/hoch-Population;
+3. [verifikation-schluss.md](06-umsetzung/verifikation-schluss.md) für
    Identitäts-/Recovery-Specs und Inventar-/Testfreigabe;
-2. [runde3-vollstaendigkeits-kritik.md](02-findings/runde3-vollstaendigkeits-kritik.md)
-   für Gesamtvollständigkeit und „Go“-Gate;
-3. [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) für Wellen und stabile
-   Runde-3-Zuordnung;
-4. [06-umsetzung/README.md](06-umsetzung/README.md) als Synthese.
+4. [runde3-vollstaendigkeits-kritik.md](02-findings/runde3-vollstaendigkeits-kritik.md)
+   für die historische Gesamtvollständigkeit;
+5. [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) für Wellen und die
+   Runde-3-/Runde-4-Zuordnung;
+6. [06-umsetzung/README.md](06-umsetzung/README.md) als Synthese.
 
 `plan-review.md`, `verdicts-runde2.md` und frühere Statusformulierungen bleiben
 historische Eingaben; sie erteilen allein keine aktuelle Umsetzungsfreigabe.
@@ -189,6 +235,29 @@ historische Eingaben; sie erteilen allein keine aktuelle Umsetzungsfreigabe.
 | 04 Runde 3 | [runde3-recherche-muster.md](04-verifikation/runde3-recherche-muster.md) | Supervisor/JSONL/Observability/Secrets |
 | 04 Runde 3 | [runde3-recherche-proxy.md](04-verifikation/runde3-recherche-proxy.md) | Reale Proxy-Lücken und Widerlegungen |
 
+### Runde 4: Findings, Refuter-Urteile und Abschlusskritik
+
+| Bereich | Dokument | Inhalt / Urteil |
+|---|---|---|
+| 02 Runde 4 | [runde4-abdeckung-services.md](02-findings/runde4-abdeckung-services.md) | Risikobasierter Nachlauf Services |
+| 02 Runde 4 | [runde4-abdeckung-views-cli.md](02-findings/runde4-abdeckung-views-cli.md) | Risikobasierter Nachlauf Views und CLI |
+| 02 Runde 4 | [runde4-chats-cli.md](02-findings/runde4-chats-cli.md) | Chats-CLI, Control-Socket und Wait |
+| 02 Runde 4 | [runde4-context-profile.md](02-findings/runde4-context-profile.md) | Context-Profile und Account-Scope |
+| 02 Runde 4 | [runde4-delta-auditierte-dateien.md](02-findings/runde4-delta-auditierte-dateien.md) | Delta der neu auditierten Dateien |
+| 02 Runde 4 | [runde4-gpt-setup.md](02-findings/runde4-gpt-setup.md) | GPT-Installation, Setup und Login |
+| 02 Runde 4 | [runde4-plugin-manager.md](02-findings/runde4-plugin-manager.md) | Plugin-Manager und Headless-CLI |
+| 02 Runde 4 | [runde4-statusline-skills.md](02-findings/runde4-statusline-skills.md) | Statusline, Installer und Skills |
+| 02 Runde 4 | [runde4-abschlusskritik.md](02-findings/runde4-abschlusskritik.md) | Fünf P0-Blocker: zwei unverändert, drei verschärft |
+| 04 Runde 4 | [runde4-abdeckung-services.md](04-verifikation/runde4-abdeckung-services.md) | 3 hohe und 2 mittlere Stichproben bestätigt |
+| 04 Runde 4 | [runde4-abdeckung-views-cli.md](04-verifikation/runde4-abdeckung-views-cli.md) | 1 hoher und 2 mittlere Befunde bestätigt |
+| 04 Runde 4 | [runde4-chats-cli.md](04-verifikation/runde4-chats-cli.md) | 6 hohe und 2 mittlere Befunde bestätigt |
+| 04 Runde 4 | [runde4-context-profile.md](04-verifikation/runde4-context-profile.md) | 3 hohe und 2 mittlere Befunde bestätigt |
+| 04 Runde 4 | [runde4-delta-auditiert.md](04-verifikation/runde4-delta-auditiert.md) | 10 bestätigt; eigene Schwere: 7 hoch, 3 mittel |
+| 04 Runde 4 | [runde4-gpt-setup.md](04-verifikation/runde4-gpt-setup.md) | 2 hohe und 2 mittlere Befunde bestätigt |
+| 04 Runde 4 | [runde4-plugin-manager.md](04-verifikation/runde4-plugin-manager.md) | 2 hohe und 2 mittlere Befunde bestätigt |
+| 04 Runde 4 | [runde4-statusline-skills.md](04-verifikation/runde4-statusline-skills.md) | 4 hohe, 2 mittlere und 1 niedriger Befund bestätigt |
+| 04 Runde 4 | [runde4-findings-matrix.md](04-verifikation/runde4-findings-matrix.md) | Verifizierte kritisch/hoch-Matrix und Alt-Teilfixe |
+
 ### Roadmap und Umsetzungsvorbereitung
 
 | Bereich | Dokument | Inhalt / aktueller Stand |
@@ -198,7 +267,8 @@ historische Eingaben; sie erteilen allein keine aktuelle Umsetzungsfreigabe.
 | 04 Verifikation | [nachpruefung-fable.md](04-verifikation/nachpruefung-fable.md) | Nachprüfung früherer Verdicts |
 | 05 Roadmap | [plan-review.md](05-roadmap/plan-review.md) | Historischer Review von Prioritäten und Risiken |
 | 05 Roadmap | [konsistenz-check-fable.md](05-roadmap/konsistenz-check-fable.md) | C/N-Konsistenz und alte Restlücken |
-| 05 Roadmap | [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) | Bestehende Wellen plus Runde-3-Nachtrag; kein Produkt-Go |
+| 05 Roadmap | [findings-matrix.md](05-roadmap/findings-matrix.md) | Historische deduplizierte C/N-/Runde-3-Matrix; durch Runde-4-Verifikation korrigiert |
+| 05 Roadmap | [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) | Bestehende Wellen plus Runde-3-/Runde-4-Nachtrag; kein Produkt-Go |
 | 06 Umsetzung | [README.md](06-umsetzung/README.md) | Aktuelle Workflow-3-Synthese und Gate |
 | 06 Umsetzung | [identitaetsmodell-spec.md](06-umsetzung/identitaetsmodell-spec.md) | Entwurf; Revision erforderlich |
 | 06 Umsetzung | [verlorene-chats-spec.md](06-umsetzung/verlorene-chats-spec.md) | Recovery-Spec; Binding-Teile gesperrt |

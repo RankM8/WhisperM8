@@ -1,8 +1,8 @@
 ---
 status: aktiv
-updated: 2026-07-18
-description: Konsolidierte Refactor- und Fix-Roadmap mit bestehenden C/N-Wellen und einem gesperrten Runde-3-/Workflow-3-Nachtrag für GPT-, Identitäts-, Terminal- und Recherchebefunde.
-description_long: Ordnet C01–C16 und N01–N16 sowie die bestätigten Runde-3-GPT-Findings und verifizierten Recherche-Lücken in ausführbare Wellen ein; die Identitäts-/Recovery- und Kernwellen bleiben bis zum dokumentierten Freigabe-Gate gesperrt.
+updated: 2026-07-19
+description: Konsolidierte Refactor- und Fix-Roadmap mit bestehenden C/N-Wellen sowie gesperrten Nachträgen für die verifizierten Befunde aus Runde 3 und 4.
+description_long: Ordnet C01–C16 und N01–N16 sowie die bestätigten Runde-3-/Runde-4-Findings und verifizierten Recherche-Lücken in ausführbare Wellen ein; die Identitäts-/Recovery- und Kernwellen bleiben bis zum dokumentierten Freigabe-Gate gesperrt.
 ---
 
 # Refactor-/Fix-Roadmap
@@ -661,3 +661,104 @@ Vor dem ersten Produktchange an Identitäts-, Terminal- oder GPT-Kernwellen:
 Kleine, nichtdestruktive Vorarbeiten bleiben zulässig, soweit
 [`verifikation-schluss.md:348-360`](../06-umsetzung/verifikation-schluss.md) sie
 explizit freigibt. Eine Wellenzuordnung allein ersetzt dieses Gate nicht.
+
+## Nachtrag Runde 4
+
+### Status, Leseregel und Freigabe
+
+Dieser Nachtrag ergänzt die bestehenden Wellen, ohne sie umzuschreiben. Er enthält
+nur Findings, denen der jeweilige Refuter ein ausdrückliches **BESTÄTIGT**-Urteil
+gegeben hat. Nur gezählte, nicht geprüfte oder widerlegte Runde-4-Einträge sind
+nicht aufgenommen. Die Abschlusskritik bleibt maßgeblich: Keiner der fünf
+P0-Blocker ist entschärft; P0 1 und 3 sind unverändert, P0 2, 4 und 5 verschärft
+([`runde4-abschlusskritik.md:13-23`](../02-findings/runde4-abschlusskritik.md)).
+Die folgende Zuordnung ist deshalb Planung, kein Produkt-Go.
+
+Wo Finder-IDs kollidieren, wird der Bericht als Alias ergänzt: `R4-PROFILE-01`
+aus dem Statusline-/Skill-Bericht heißt hier `R4-STATUS-PROFILE-01`; der
+gleichnamige Delta-Befund heißt `R4-DELTA-PROFILE-01` und ist inhaltlich dasselbe
+Problem wie `R4-CP-02`, also nur eine Maßnahme.
+
+### W0 — Oracles und Verträge vor Produktänderungen
+
+| Bestätigtes Finding | Wellen-Zuordnung und Gate |
+|---|---|
+| `R4-WAIT-01` | **W0 Oracle, W1 Fix:** `new → wait --ref` muss spätes Provider-Binding nachladen; heute hält `wait` ein unveränderliches Entry-Array (`WhisperM8/CLI/ChatsWaitEngine.swift:41-67,321-342`) und der Probe liefert ohne externe ID weder Revision noch Transcriptpfad (`WhisperM8/CLI/ChatsStatusProbe.swift:74-86`). |
+| `R4-WAIT-02` | **W0 Oracle, W1 Fix:** pro Session ein monotoner Cursor samt Zustandsübergang statt globalem Größenmaximum; Revision ist heute nur die Größe der jeweiligen Datei (`WhisperM8/CLI/ChatsStatusProbe.swift:137-153,186-193`), die Engine vergleicht alle Sessions mit einem Skalar (`WhisperM8/CLI/ChatsWaitEngine.swift:41-50,74-87`). |
+| `R4-SCHEMA-01` | **W0 Oracle, W1 Fix:** Future-Version-Sperre und Migration für `contextProfileID`; das Feld ist persistiert (`WhisperM8/Models/AgentChat.swift:178-207,320-466`), die Schema-Version bleibt 1 und wird beim Normalisieren überschrieben (`WhisperM8/Models/AgentChat.swift:602-627`; `WhisperM8/Services/AgentChats/AgentSessionStore.swift:1182-1189`). |
+| `R4-AS-11` | **W0 Oracle, W1 Fix:** doppelte lokale Session-IDs beim Load kontrolliert behandeln; der Planer verlangt derzeit per `Dictionary(uniqueKeysWithValues:)` Eindeutigkeit (`WhisperM8/Services/AgentChats/SummaryStartupPlanner.swift:9-20`), die Load-Migration validiert oder dedupliziert sie nicht (`WhisperM8/Services/AgentChats/AgentWorkspaceRepository.swift:50-64`; `WhisperM8/Services/AgentChats/AgentSessionStore.swift:1182-1196`). |
+
+### W1 — Aktiven Schaden und Sicherheitslücken stoppen
+
+| Bestätigtes Finding | Wellen-Zuordnung und Gate |
+|---|---|
+| `R4-AUTH-01` | **W1:** Control-Mutationen zentral an verifizierte Actor-Capability und zulässige Zielbeziehung binden; heute prüft der Server nur Same-EUID (`WhisperM8/Services/AgentChats/AgentControlServer.swift:228-239`) und der Handler keinen zentralen Auth-Guard (`WhisperM8/Services/AgentChats/AgentControlRequestHandler.swift:30-55`). |
+| `R4-AUTH-02` | **W1:** Client authentisiert Socket-Owner, Dateityp, Peer und Response-Korrelation vor Token-/Promptversand; derzeit werden weder `protocolVersion` noch `requestID` geprüft (`WhisperM8/CLI/ChatsControlClient.swift:23-40,50-98`). |
+| `R4-IDEM-01` | **W1:** stabile Request-ID über CLI-Retries und ein abfragbarer Outcome; heute erzeugt jeder Aufruf eine UUID (`WhisperM8/CLI/ChatsControlProtocol.swift:71-91`), während ein Server-Timeout die Mutation weiterlaufen lässt (`WhisperM8/Services/AgentChats/AgentControlServer.swift:295-318`). |
+| `R4-PROF-01` | **W1:** `session.new` muss Account-, Backend- und Context-Snapshot wie die UI stempeln; der Control-Pfad reicht diese Felder nicht weiter (`WhisperM8/Services/AgentChats/AgentChatLaunchService.swift:77-96`), obwohl sie Launch-Argumente und Environment bestimmen (`WhisperM8/Services/AgentChats/AgentCommandBuilder.swift:61-70,286-302,391-402`). |
+| `R4-CP-02` / `R4-DELTA-PROFILE-01` | **W1, eine deduplizierte Maßnahme:** angeforderte Restriktionsprofile müssen bei Settings-I/O fail-closed enden; `prepareSettingsFile` reduziert Fehler auf `nil` (`WhisperM8/Services/AgentChats/ClaudeHookBridge.swift:91-117`) und der Coordinator startet ohne Settings-Argumente weiter (`WhisperM8/Services/AgentChats/AgentSessionStatusCoordinator.swift:102-135`; `WhisperM8/Views/AgentSessionDetailView.swift:518-532`). |
+| `R4-CP-03` | **W1:** Background-Respawn muss das aktuelle Context-Overlay neu erzeugen oder eine unveränderliche Snapshot-Semantik deklarieren; der Respawn reicht heute nur die Short-ID weiter (`WhisperM8/Views/AgentChatsView+BackgroundAgents.swift:171-199`; `WhisperM8/Services/AgentChats/BackgroundAgentLifecycle.swift:99-106,150-172`). |
+| `R4-CP-05` | **W1 / P1.1:** der Environment-Filter sperrt die gesamte `CLAUDE_CODE_*`-Familie auch nach Profil-Overlay; derzeit filtert er nur einzelne Namen (`WhisperM8/Services/AgentChats/ClaudeContextSettingsBuilder.swift:13-24,56-67`), die Overrides gewinnen anschließend gegen das bereinigte Basis-Environment (`WhisperM8/Views/AgentTerminalView.swift:787-799`). |
+| `R4-GPTS-01` | **W1, GPT-Ship-Blocker:** Updates brauchen eine unabhängige Publisher-/Signatur-Vertrauenswurzel; für nicht gepinnte Versionen stammen Payload und Hash aus demselben Release (`WhisperM8/Services/AgentChats/ClaudeCodeProxyBinaryInstaller.swift:123-150`), und die UI installiert `releases/latest` direkt (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:353-395`). |
+| `R4-GPTL-02` | **W1:** Setup und Refresh erhalten Task-Identität, Generation und Cancellation; `runFullSetup` startet heute unstrukturierte Arbeit ohne Handle (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:404-456`), Refresh schreibt ohne Zustands-/Generationsprüfung zurück (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:460-492`). |
+| `R4-PLUG-01` | **W1:** secret-verdächtige Plugin-Konfiguration darf nicht in argv gelangen; freie `key=value`-Zeilen werden derzeit ungefiltert als `--config` serialisiert (`WhisperM8/Views/Settings/Kit/SettingsLineParsing.swift:13-22`; `WhisperM8/Services/AgentChats/ClaudePluginCLI.swift:91-101`). |
+| `R4-PLUG-02` | **W1:** Plugin-Operationen erst nach Prozessbaum- und Stream-Finalität freigeben; Timeout signalisiert nur das direkte Child und `forceFinish` umgeht EOF (`WhisperM8/Services/AgentChats/AgentHeadlessCLI.swift:78-111,174-190`), während der Serializer nur Swift-Tasks ordnet (`WhisperM8/Services/AgentChats/ClaudePluginCLI.swift:13-31,162-174`). |
+| `R4-STATUS-01` | **W1:** Statusline-Skript an den von `Bundle.main` gelesenen Root-Ort kopieren oder Lookup an SwiftPM-Ressourcen anpassen; der Installer liest dort (`WhisperM8/Services/Shared/StatuslineInstaller.swift:24-27,70-76`), der App-Bundle-Schritt kopiert das Skript nicht an diesen Root (`Makefile:217-245`). |
+| `R4-SHELL-01` | **W1:** Nutzdaten strikt per `printf` ausgeben und Steuerzeichen entfernen; Modell-, Repo-, MCP- und Profildaten laufen derzeit in ein gemeinsames `echo -e` (`WhisperM8/Resources/whisperm8-statusline.sh:36-56,232-249,369-429`). |
+| `R4-INSTALL-01` | **W1:** Statusline-Settings mit Lock/CAS oder Re-Read/Merge schreiben; heute liegt zwischen Vollsnapshot-Read und atomarem Replace keine Konfliktprüfung (`WhisperM8/Services/Shared/StatuslineInstaller.swift:190-216`). |
+| `R4-SKILL-01` | **W1:** Ownership-Marker, Fremddatei-Guard und Backup/Restore vor Skill-Update; Byteabweichung führt heute zum bedingungslosen Überschreiben verwalteter Namen (`WhisperM8/Services/Shared/CLISkillExporter.swift:127-177`; `WhisperM8/Views/Settings/Pages/CLISkillsSettingsPage.swift:269-295`). |
+| `R4-HCLI-02` | **W1:** Headless-Timeout beendet den Prozessbaum und wartet auf beide EOFs; aktuell signalisiert er nur die Child-PID und `forceFinish` umgeht die Abschlussinvariante (`WhisperM8/Services/AgentChats/AgentHeadlessCLI.swift:69-75,97-106,174-182`). |
+| `R4-CTRL-01` | **W1:** Prompt-Inhalt darf den Bracketed-Paste-Block nicht vorzeitig schließen; `sendPrompt` schreibt den Text heute ungefiltert zwischen die Kontrollsequenzen (`WhisperM8/Views/AgentTerminalView.swift:649-661`). |
+| `R4-CTRL-02` | **W1:** zielbezogene FIFO und bestätigtes Submit vor `ack: delivered`; Return folgt heute separat nach 80 ms (`WhisperM8/Views/AgentTerminalView.swift:657-667`), der Handler bestätigt vorher und mehrere Verbindungen laufen parallel (`WhisperM8/Services/AgentChats/AgentControlRequestHandler.swift:127-174`; `WhisperM8/Services/AgentChats/AgentControlServer.swift:27-34`). |
+| `R4-RESUME-01` | **W1:** `focusLaunchInFlight` auf jedem Fehlerpfad zurücksetzen; es wird vor dem Launch gesetzt (`WhisperM8/Views/AgentSessionDetailView.swift:171-177`), aber nur bei sichtbarem Controller geleert, nicht bei Launchfehlern (`WhisperM8/Views/AgentSessionDetailView.swift:203-205,545-551,624-633`). |
+| `R4-LIFE-01` | **W1:** Eager GPT-Startup an Preference-Generation und Quit-Barriere binden; der detached Task prüft den Toggle nur vorab (`WhisperM8/WhisperM8App.swift:304-313`), während Quit sofort beendet und Stop nicht über denselben Ensure-Lock serialisiert (`WhisperM8/WhisperM8App.swift:359-367`; `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:198-205,218-299`). |
+| `R4-AS-01` | **W1:** Theme-Settings gegen externe Writer per Lock/CAS oder Re-Read/Merge schützen; der Writer ersetzt einen einmal gelesenen Vollsnapshot ohne Konfliktprüfung (`WhisperM8/Services/AgentChats/ClaudeThemeWriter.swift:108-153`). |
+| `R4-AS-03` | **W1:** Git-Pipes parallel drainen und Deadline setzen; der Worktree-Runner wartet derzeit vor dem Lesen von stdout/stderr (`WhisperM8/Services/AgentChats/AgentWorktreeManager.swift:53-56,73-87`). |
+| `R4-VC-03` | **W1:** ffmpeg-stdout/stderr parallel drainen und Timeout/Termination definieren; der Parent wartet heute vor dem Lesen und stdout wird gar nicht konsumiert (`WhisperM8/CLI/CLIAudioExtractor.swift:197-211`). |
+
+### W2/W3 — Nachgelagerte Korrektheit und Härtung
+
+| Bestätigtes Finding | Wellen-Zuordnung und Gate |
+|---|---|
+| `R4-AUTH-03` / `R4-TOKEN-01` | **W2, eine deduplizierte Maßnahme:** PTY-Capability bei explizitem und natürlichem Ende widerrufen; beide Exitpfade rufen den vorhandenen Registry-Widerruf nicht auf (`WhisperM8/Views/AgentTerminalView.swift:820-842,1014-1025`; `WhisperM8/Services/AgentChats/AgentSessionTokenRegistry.swift:40-44`). |
+| `R4-SEC-01` | **W2:** Prompt und Token aus argv beziehungsweise vererbbarer Umgebung entfernen und Audit-Vorschauen redigieren; die heutigen Pfade exponieren beides und speichern die ersten 80 Zeichen (`WhisperM8/CLI/ChatsLiveCommands.swift:110-158,280-316`; `WhisperM8/Views/AgentTerminalView.swift:800-815`; `WhisperM8/Services/AgentChats/ChatsAuditLog.swift:85-94`). |
+| `R4-CP-01` | **W2:** Background-Agenten entweder profilbewusst starten oder die Main-Account-Grenze als explizite Capability erzwingen; der Dispatch persistiert kein Profil und der Spawner besitzt kein Environment (`WhisperM8/Views/AgentChatsView+BackgroundAgents.swift:43-64`; `WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift:78-112,223-258`). |
+| `R4-CP-04` | **W2:** Resume-Semantik für `nil`-Context festschreiben und testen; ein fehlender Legacy-Stempel wird zu `nil` dekodiert und fällt beim Resume auf den späteren Projekt-Default zurück (`WhisperM8/Models/AgentChat.swift:315-320,428-466`; `WhisperM8/Services/AgentChats/ClaudeContextProfileStore.swift:109-122`; `WhisperM8/Views/AgentSessionDetailView.swift:513-525`). |
+| `R4-GPTL-03` | **W2:** Toggle-off muss Device-Login und UI-State gemeinsam abbrechen; `clearStatus()` löscht heute nur Teile des Page-State und ruft keinen Manager-Teardown (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:101-108,514-550`; `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:336-346,443-451`). |
+| `R4-GPTI-05` | **W2:** Binary und Versionsstempel als crash-recoverbare Transaktion veröffentlichen; Lock und Staging verhindern Parallelmischung, aber Binary-Replace, `chmod` und Stempel-Replace bleiben separate crashbare Schritte (`WhisperM8/Services/AgentChats/ClaudeCodeProxyBinaryInstaller.swift:27-30,169-200`), und der Resolver akzeptiert ein ausführbares Managed Binary auch ohne Stempel (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:318-329`). |
+| `R4-PLUG-03` | **W2:** Detailcache an Profil und Generation binden; der Key enthält heute nur Plugin-ID/Version und ein Alt-Request darf nach Profilwechsel schreiben (`WhisperM8/Services/AgentChats/ClaudePluginManagerModel.swift:19-21,46-83,156-160`). |
+| `R4-PLUG-07` | **W3:** Loaded/Error/Unavailable explizit modellieren; leere Failure-Placeholder gelten heute als vollständig und entfernen den `(partial)`-Hinweis (`WhisperM8/Services/AgentChats/ClaudePluginManagerModel.swift:31-44,66-83`; `WhisperM8/Views/Settings/Pages/ClaudePluginsSettingsPage.swift:163-171`). |
+| `R4-STATUS-PROFILE-01` | **W2:** Shared-Item-Symlinks profilweit reconciliieren; `createProfile()` verlinkt nur bereits vorhandene Quellen und der spätere Export repariert Profile nicht (`WhisperM8/Services/AgentChats/ClaudeAccountProfiles.swift:227-272`; `WhisperM8/Services/Shared/CLISkillExporter.swift:107-124,151-179`). |
+| `R4-SHELL-02` | **W2:** Usage-Lock atomar claimen und Cache via temp+rename veröffentlichen; Prüfung, Lock-Erzeugung und Cache-Write sind heute getrennt (`WhisperM8/Resources/whisperm8-statusline.sh:125-177`). |
+| `R4-UI-01` | **W3:** Config-Roots vor Anzeige und Mutation deduplizieren; `~/.claude` wird sowohl direkt als auch über das Main-Profil aufgenommen (`WhisperM8/Services/Shared/StatuslineInstaller.swift:25-38`; `WhisperM8/Services/AgentChats/ClaudeAccountProfiles.swift:54-68,82-86`). |
+| `R4-HCLI-01` | **W2:** vor `SIGKILL` Prozessidentität erneut prüfen oder ein gehaltenes Prozess-/Gruppenhandle verwenden; aktuell liegen `isRunning`-Prüfung und Signal an rohe PID getrennt (`WhisperM8/Services/AgentChats/AgentHeadlessCLI.swift:97-100`). |
+| `R4-GPTCTX-01` | **W3:** UI-Grenze für das aktuelle Modell auf das reale 272.000-Limit begrenzen beziehungsweise modellabhängig machen; Preferences akzeptieren derzeit bis 500.000 (`WhisperM8/Support/AppPreferences.swift:298-315`), obwohl die UI 272.000 als nicht erhöhbar bezeichnet (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:265-266`). |
+| `R4-AS-04` | **W2:** File-Source-Callbacks an Generation/Identität binden; ein verspäteter Alt-Callback kann derzeit die neue Source über `self.stop()` abbrechen (`WhisperM8/Services/Shared/FileEventSource.swift:39-67`). |
+| `R4-AS-06` | **W2:** Double→Int nur nach Endlichkeits- und Bereichsprüfung; Usage und Exitcodes laufen heute durch eine trap-fähige Direktkonvertierung (`WhisperM8/Services/AgentChats/CodexExecEventParser.swift:49-70,89-94`). |
+| `R4-VC-02` | **W2:** Chunk-Dauer auf endliche, praktikable Werte und begrenzte Chunkzahl validieren; Parser und Dry-Run besitzen heute keine Endlichkeits-/Darstellbarkeitsprüfung (`WhisperM8/CLI/CLIArguments.swift:111-116`; `WhisperM8/CLI/CLITranscribe.swift:270-280`). |
+| `R4-VC-11` | **W1 trotz mittlerer Schwere:** Job-ID vor Read/Signal/Delete als unmittelbares Kind des Job-Roots validieren und Symlinks abwehren; der Parser akzeptiert `../...`, der Store hängt es direkt an und löscht rekursiv (`WhisperM8/CLI/AgentCLIArguments.swift:196-210`; `WhisperM8/Services/AgentChats/AgentJobStore.swift:56-67,182-188`). |
+
+### Verifizierte Alt-Fixstände
+
+- **Kein Alt-Finding ist als vollständig gefixt verifiziert; daher wird keines als
+  erledigt markiert.** Die Matrix bestätigt nur Teilfixe.
+- `R3-MIX-G07` bleibt **offen (Teilfix)**: Managed Installer und Hash-Pin sind mit
+  `0bdff8f`, `c6ac557`, `e445b65` und `1bd655f` belegt, der PATH-Vorrang bleibt
+  offen (`WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:318-329`;
+  [`runde4-findings-matrix.md:11-15,69-73`](../04-verifikation/runde4-findings-matrix.md)).
+- `R3-LIVE-G01` bleibt **offen (Teilfix)**: `17f76dc` belegt den 272k-
+  Fensterwert, nicht den Usage-Merge-/Golden-Test-Vertrag
+  (`WhisperM8/Services/AgentChats/AgentCommandBuilder.swift:328-344`;
+  [`runde4-findings-matrix.md:62-64`](../04-verifikation/runde4-findings-matrix.md)).
+- `C04` und `N01` werden ebenfalls nicht als erledigte Fixes etikettiert: Die
+  Runde-4-Matrix widerlegt beziehungsweise bestätigt die bisherigen
+  Defektbehauptungen nicht, ohne dafür einen Fix-Commit zu belegen
+  ([`runde4-findings-matrix.md:19-34`](../04-verifikation/runde4-findings-matrix.md)).
+
+### Runde-4-Freigabe-Gate
+
+Vor W0/W1 müssen G0–G5 der Abschlusskritik geschlossen, alle hohen Runde-4-
+Findings mit roten Oracles versehen und die fünf P0-Blocker formal abgenommen
+sein. Bis dahin gilt weiterhin kein pauschales Go; insbesondere die
+Identitäts-/Recovery-Pakete bleiben gesperrt
+([`runde4-abschlusskritik.md:25-78`](../02-findings/runde4-abschlusskritik.md)).
