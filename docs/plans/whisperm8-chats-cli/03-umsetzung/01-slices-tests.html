@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 05 · Slices, Tests &amp; Failure-Modes — whisperm8 chats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35); --ink-soft: oklch(0.42 0.02 35); --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78); --paper-2: oklch(0.945 0.012 72);
+  --line: oklch(0.80 0.02 70); --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28); --accent-soft: oklch(0.92 0.06 30); --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145); --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235); --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75); --amber-soft: oklch(0.94 0.06 80);
+  --wm-bg: #0c0e12; --wm-ink: #e8ebf0;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+nav.top { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter: saturate(160%) blur(10px); border-bottom: 1px solid var(--line-soft); }
+nav.top .inner { max-width: 1180px; margin: 0 auto; padding: 14px 32px; display: flex; gap: 14px; align-items: center; font-family: var(--mono); font-size: 12px; flex-wrap: wrap; }
+nav.top .brand { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 17px; color: var(--ink); text-decoration: none; }
+nav.top .brand span { color: var(--accent); }
+nav.top .crumb { color: var(--ink-mute); font-size: 11px; }
+nav.top .crumb b { color: var(--ink); font-weight: 500; }
+nav.top .nav-links { display: flex; gap: 2px; margin-left: 12px; flex-wrap: wrap; }
+nav.top a { color: var(--ink-soft); text-decoration: none; padding: 5px 9px; border-radius: 4px; }
+nav.top a:hover { color: var(--accent-deep); background: var(--accent-soft); }
+nav.top .spacer { flex: 1; }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px solid var(--accent); border-radius: 100px; letter-spacing: 0.06em; transform: rotate(-2deg); }
+.hero { padding: 70px 0 50px; }
+.hero .pretitle { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 26px; }
+.hero h1 { font-family: var(--serif); font-weight: 300; font-size: clamp(42px, 6.5vw, 84px); line-height: 0.94; letter-spacing: -0.03em; margin: 0 0 20px; }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.hero .lede { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(18px, 2.2vw, 26px); line-height: 1.4; max-width: 800px; color: var(--ink-soft); }
+.hero .meta { margin-top: 42px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-mute); border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.hero .meta b { display: block; color: var(--ink); font-weight: 500; font-family: var(--serif); font-style: italic; font-size: 18px; margin-bottom: 4px; }
+@media (max-width: 720px) { .hero .meta { grid-template-columns: 1fr 1fr; } }
+section { padding: 70px 0; border-top: 1px solid var(--line-soft); }
+section.alt { background: var(--paper-2); }
+.section-head { margin-bottom: 36px; max-width: 860px; }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.14em; display: block; margin-bottom: 12px; }
+.section-head h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(28px, 4vw, 46px); line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.section-kicker { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 17px; line-height: 1.5; max-width: 760px; margin-top: 14px; }
+.section-kicker code, .anno-box code, .states-grid code, .sidenote code, .slice code { font-family: var(--mono); font-size: 0.85em; font-style: normal; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+.slice { margin-top: 28px; border: 1.5px solid var(--line-soft); border-radius: 14px; overflow: hidden; background: var(--paper); }
+.slice .head { padding: 22px 28px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.slice .head .n { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 26px; color: var(--accent); }
+.slice .head h3 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: 24px; }
+.slice .head .scope-pill { margin-left: auto; font-family: var(--mono); font-size: 10px; padding: 3px 10px; border-radius: 100px; background: var(--ocean-soft); color: var(--ocean); letter-spacing: 0.06em; }
+.slice .body { padding: 20px 28px 24px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px 32px; }
+@media (max-width: 820px) { .slice .body { grid-template-columns: 1fr; } }
+.slice .cell .t { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+.slice .cell ol { margin: 0; padding-left: 20px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; }
+.slice .cell ol li { margin-bottom: 7px; }
+.slice .cell ol li b { color: var(--ink); font-weight: 500; }
+.slice .cell ul { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.slice .cell ul li { padding: 4px 0 4px 16px; position: relative; border-top: 1px solid var(--line-soft); }
+.slice .cell ul li:first-child { border-top: none; padding-top: 0; }
+.slice .cell ul li::before { content: "✓"; position: absolute; left: 0; color: var(--moss); font-family: var(--mono); font-size: 11px; }
+.states-grid { display: grid; grid-template-columns: 250px 1fr; gap: 0; margin-top: 8px; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.states-grid .row { display: contents; }
+.states-grid .row > div { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+.states-grid .row:last-child > div { border-bottom: none; }
+.states-grid .row .state-name { background: var(--paper-2); font-family: var(--mono); font-size: 11px; color: var(--ink); font-weight: 500; letter-spacing: 0.04em; border-right: 1px solid var(--line-soft); }
+.states-grid .row .state-desc { background: var(--paper); font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.states-grid .row .state-desc b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .states-grid { grid-template-columns: 1fr; } }
+.annotations { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anno-box { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 10px; padding: 18px 20px; }
+.anno-box.full { grid-column: 1 / -1; }
+.anno-box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+.anno-box h4 { margin: 0 0 8px; font-family: var(--serif); font-weight: 500; font-size: 16px; }
+.anno-box ul { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.anno-box ul li { padding: 4px 0 4px 16px; position: relative; border-top: 1px solid var(--line-soft); }
+.anno-box ul li:first-child { border-top: none; padding-top: 0; }
+.anno-box ul li::before { content: "›"; position: absolute; left: 0; color: var(--accent); font-family: var(--mono); }
+.anno-box ul li b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .annotations { grid-template-columns: 1fr; } }
+.gate { margin-top: 28px; background: var(--amber-soft); border: 1.5px solid var(--amber); border-radius: 14px; padding: 24px 28px; }
+.gate .t { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--amber); font-weight: 500; margin-bottom: 8px; }
+.gate h3 { margin: 0 0 10px; font-family: var(--serif); font-weight: 500; font-size: 22px; }
+.gate ul { margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; }
+.gate ul li { padding: 5px 0 5px 18px; position: relative; }
+.gate ul li::before { content: "⚑"; position: absolute; left: 0; color: var(--amber); }
+.sidenote { background: var(--paper-2); border-left: 3px solid var(--accent); padding: 18px 22px; margin: 28px 0 0; border-radius: 0 8px 8px 0; max-width: 860px; }
+.sidenote .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.sidenote p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--ink-soft); line-height: 1.5; font-weight: 300; }
+.back-hub { margin-top: 60px; padding: 36px 40px; background: var(--ink); color: var(--paper); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-decoration: none; transition: transform .15s ease; }
+.back-hub:hover { transform: translateY(-2px); }
+.back-hub .ttl { font-family: var(--mono); font-size: 10px; color: var(--accent-soft); letter-spacing: 0.14em; margin-bottom: 8px; }
+.back-hub h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.1; }
+.back-hub h3 em { color: var(--accent); font-style: italic; font-weight: 500; }
+.back-hub .arrow { font-family: var(--mono); font-size: 32px; color: var(--accent); font-weight: 300; }
+footer { padding: 50px 0 70px; border-top: 1px solid var(--line-soft); background: var(--paper-2); }
+footer .inner { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; gap: 16px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 16px; font-weight: 300; }
+@media print { nav.top { display: none; } section { page-break-inside: avoid; padding: 24px 0; } body { font-size: 11px; background: white; } a { color: var(--ink) !important; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <a href="../index.html" class="brand">WhisperM8 <span>✱</span> chats-CLI</a>
+    <span class="crumb">› <b>Paket 05 · Slices, Tests &amp; Failure-Modes</b></span>
+    <span class="nav-links">
+      <a href="#slices">Slices</a>
+      <a href="#gate">Go/No-Go</a>
+      <a href="#tests">Tests</a>
+      <a href="#failure">Failure</a>
+      <a href="#rollout">Rollout</a>
+    </span>
+    <span class="spacer"></span>
+    <span class="stamp">v1 · 2026-07-19</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pretitle">PAKET 05 ✱ UMSETZUNG ✱ v1</div>
+    <h1>Vier Slices bis <em>Jarvis.</em></h1>
+    <p class="lede">Jeder Slice endet benutzbar, jeder hat eine Definition of Done und konkrete Tasks mit den echten Ankerpunkten im Code. Nach Slice 1 steht das Go/No-Go — die riskanteste Annahme wird zuerst bewiesen.</p>
+    <div class="meta">
+      <div><b>Slice 1</b>Read-only, null App-Änderung</div>
+      <div><b>Slice 2</b>Socket + send + Identität</div>
+      <div><b>Slice 3</b>Mutationen + new + wait</div>
+      <div><b>Slice 4</b>Skill + Installer + Doku</div>
+    </div>
+  </div>
+</header>
+
+<section id="slices">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">00 ✱ SLICES</span>
+      <h2>Task-Listen mit <em>Code-Ankern.</em></h2>
+      <p class="section-kicker">Referenzen zeigen auf den heutigen Stand (Zeilennummern verschieben sich — die Symbolnamen sind der Anker). Tests laufen als <code>swift test</code>; als Agent-Chat in der App nie <code>make dev</code>/<code>make kill</code> ausführen.</p>
+    </div>
+
+    <div class="slice">
+      <div class="head"><span class="n">S1</span><h3>Read-only — Sehen ohne App-Änderung</h3><span class="scope-pill">NUR CLI + TESTS</span></div>
+      <div class="body">
+        <div class="cell"><div class="t">Tasks (Reihenfolge)</div>
+          <ol>
+            <li><b>Registrierung:</b> <code>"chats"</code> in <code>CLIModeDetector.recognizedCommands</code> + Case im <code>CLICommand.run</code>-Switch + Hilfetext-Absatz in <code>CLIHelp</code>.</li>
+            <li><b><code>AgentChatsCLICommand.swift</code></b> (CLI/): Dispatch, <code>ChatsCLIExit</code> (0/1/3/4/5/124/130), Parser je Subcommand nach dem <code>AgentCLIArguments</code>-Muster (nextValue, <code>--</code>-Trenner).</li>
+            <li><b><code>ChatsWorkspaceReader</code>:</b> <code>AgentWorkspaceRepository(fileURL:).load()</code> + direkter <code>JSONDecoder</code> auf <code>agent-ui-state.json</code> + Projekt-Join. Injizierbare Pfade für Tests.</li>
+            <li><b><code>SessionRefResolver</code></b> (pur, Paket 02): 5 Stufen, RefError mit Kandidaten.</li>
+            <li><b><code>ChatsStatusProbe</code>:</b> One-Shot-Pipeline Locator → <code>fileStat</code> → <code>readTail</code> → <code>AgentTranscriptParser.lastEvent</code> → <code>AgentTranscriptStatusDecider.decide</code>; TaskGroup-parallel; Background via <code>SupervisorJobReader</code>.</li>
+            <li><b><code>AttentionModelBuilder</code></b> (pur): Kategorien, Ränge, Counts.</li>
+            <li><b>Befehle:</b> <code>list</code> (+ Filter/Sort/Format), <code>overview</code> (Alias), <code>show</code>, <code>tail</code> (Turn-Formatter über die Reader-Ausgabe, <code>--chars</code>-Deckel). Alle mit <code>--json</code> (JSONSerialization + sortedKeys, Muster <code>AgentJobOutput</code>).</li>
+            <li><b><code>@self</code>/isSelf:</b> <code>WHISPERM8_SESSION_ID</code> lesen (Injection kommt erst in S2 — bis dahin greift der Env-Pfad nur in manuell präparierten Terminals; Tests injizieren die Variable).</li>
+          </ol>
+        </div>
+        <div class="cell"><div class="t">Definition of Done</div>
+          <ul>
+            <li><code>whisperm8 chats overview</code> zeigt in &lt; 2 s ein korrektes Board über den realen Workspace</li>
+            <li><code>list --json</code> validiert gegen das Schema aus Paket 01 (inkl. <code>live: false</code>, Capabilities konservativ)</li>
+            <li>Alle Resolver-/Decider-/Builder-Tests grün (Testplan unten)</li>
+            <li>Mehrdeutige Ref → Exit 3 mit Kandidaten, beweisbar im Terminal</li>
+            <li>Skill v0 (nur Lese-Abschnitt der SKILL.md) manuell installiert und im Selbstversuch benutzt</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="slice">
+      <div class="head"><span class="n">S2</span><h3>Socket + send — die Hände</h3><span class="scope-pill">APP + CLI</span></div>
+      <div class="body">
+        <div class="cell"><div class="t">Tasks</div>
+          <ol>
+            <li><b>Env-Injektion:</b> in <code>AgentTerminalController.start()</code> (vor <code>startProcess</code>, wo <code>sessionID</code> + Env-Array vorliegen): <code>WHISPERM8_SESSION_ID</code> + <code>WHISPERM8_SESSION_TOKEN</code> (32 Random-Bytes); Token-Registry im Server.</li>
+            <li><b><code>AgentControlServer</code></b> (Services/AgentChats/): BSD-UDS, 0700-Ordner <code>control/</code>, Discovery-Datei, flock-Lock, Stale-Handling, <code>getpeereid</code>, NDJSON-Codec, Limits (4 Conns, 5 s, 1 MiB), Utility-Queue + MainActor-Hop. Start beim App-Launch, Stop bei willTerminate, Kill-Switch-Default.</li>
+            <li><b>Endpoints:</b> <code>ping</code>, <code>sessions.live</code> (Runtime-Store + Terminal-Registry), <code>session.send</code> (atomare 5-Guard-Pipeline aus Paket 03, Idempotenz-Cache 60 s), <code>session.open</code> (<code>requestSessionFocus</code> + activate).</li>
+            <li><b><code>AgentTerminalController.sendPrompt(_:submit:)</code>:</b> Bracketed-Paste-Wrap + CR nach 80 ms; <code>sendUserText</code> bleibt unverändert für Diktat.</li>
+            <li><b>CLI:</b> <code>ControlSocketClient</code> (connect 2 s, request 5 s), Befehle <code>send</code>/<code>open</code>, Live-Merge in <code>list</code>/<code>overview</code>/<code>show</code> (<code>sessions.live</code>, <code>live: true</code>, <code>source: "app"</code>).</li>
+            <li><b>Audit:</b> App schreibt <code>chats-audit.jsonl</code> (Rotation 5 MB); CLI-Befehl <code>audit</code>.</li>
+          </ol>
+        </div>
+        <div class="cell"><div class="t">Definition of Done</div>
+          <ul>
+            <li>Mehrzeiliger Prompt landet als ein Block in der Ziel-TUI und submitted genau einmal (manuelle QA an Claude- und Codex-TUI)</li>
+            <li>Selbst-Send, working-Ziel, tote PTY → saubere Exit-4-Meldungen</li>
+            <li>Retry mit gleicher requestID → <code>ack: duplicate</code>, kein Doppel-Paste</li>
+            <li>App zu → Exit 5 in &lt; 2,5 s; Lese-Befehle unverändert</li>
+            <li>Server-Logik (Guards, Codec, Stale-Handling) unit-getestet mit In-Process-Fakes — ohne echte App</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="slice">
+      <div class="head"><span class="n">S3</span><h3>Mutationen + new + wait — Verwalten</h3><span class="scope-pill">APP + CLI</span></div>
+      <div class="body">
+        <div class="cell"><div class="t">Tasks</div>
+          <ol>
+            <li><b>Endpoints <code>workspace.rename/.group/.archive</code>:</b> Guards hoisted (manueller Titel, working/PTY-Check), dann <code>AgentSessionStore.renameSession</code>/<code>setSessionGroup</code>/<code>updateSession</code>; Vorher/Nachher in Antwort + Audit.</li>
+            <li><b><code>session.new</code>:</b> <code>AgentChatLaunchService</code> um Claude-Fall verallgemeinern; <code>upsertProject</code> → <code>createSession(shouldLaunchOnOpen: true)</code> → Fokus; Antwort mit Session-ID nach Persistenz-Enqueue.</li>
+            <li><b>CLI-Befehle</b> <code>rename</code>/<code>group</code>/<code>archive</code>/<code>new</code> inkl. <code>--force</code>/<code>--clear</code>-Flags.</li>
+            <li><b><code>ChatsWaitEngine</code>:</b> DispatchSource-Watches (O_EVTONLY) auf Transcripts + Hook-Event-Files, 300-ms-Debounce, Re-Locate bei delete/rename, 10-s-Fallback-Timer, Verzeichnis-Watch für neue Sessions, <code>--since</code>-Kurzschluss, Timeout/SIGINT-Exits.</li>
+            <li><b><code>wait</code>-Befehl</b> mit Event-JSON aus Paket 02.</li>
+          </ol>
+        </div>
+        <div class="cell"><div class="t">Definition of Done</div>
+          <ul>
+            <li>„Session stoppen → wait feuert in &lt; 45 s (30-s-Decider-Schwelle + Debounce)" reproduzierbar</li>
+            <li><code>wait --since</code> mit bereits eingetretenem Event kehrt sofort zurück</li>
+            <li>Archive bei working → Exit 4; nach Turn-Ende → ok; Undo-los, aber Vorher-Wert im Audit</li>
+            <li><code>new --prompt</code> erzeugt Session, Tab öffnet, Initial-Prompt läuft über den bestehenden Launch-Flow</li>
+            <li>Workspace-Datei auf Disk bleibt konsistent (Stichproben-Diff vor/nach Mutationen — nur App hat geschrieben)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="slice">
+      <div class="head"><span class="n">S4</span><h3>Skill + Polish — Verhalten</h3><span class="scope-pill">SKILL + DOKU</span></div>
+      <div class="body">
+        <div class="cell"><div class="t">Tasks</div>
+          <ol>
+            <li><b>SKILL.md final</b> (Volltext-Basis: Paket 04) unter <code>skills/whisperm8-chats/</code> im Repo; manuelle Installation dokumentiert.</li>
+            <li><b>Installer-Pfad in der App</b> (Settings → Agent Chats): kopiert den Skill ins User-Skills-Verzeichnis (Muster CLISymlinkInstaller/Statusline-Feature).</li>
+            <li><b>Allowlist-Empfehlung</b> in Doku + Skill (Lese-Befehle frei).</li>
+            <li><b><code>chats help</code></b> + Hilfetexte finalisieren; <code>--json</code>-Schemas in <code>docs/features/</code> dokumentieren (neue Feature-Seite „Agent-Chats-CLI").</li>
+            <li><b>Plan-Hygiene:</b> diesen Plan nach <code>docs/archive/</code> verschieben, <code>docs/plans/README.md</code> aktualisieren, Verweis in <code>jarvis-supervisor/</code> nachziehen.</li>
+            <li><b>Entscheidung <code>interrupt</code>:</b> mit Send-Erfahrung aus S2/S3 final entscheiden (bauen oder v2).</li>
+          </ol>
+        </div>
+        <div class="cell"><div class="t">Definition of Done</div>
+          <ul>
+            <li>Frischer Chat + „sei mein Jarvis" → Supervisor-Loop läuft ohne weitere Erklärung</li>
+            <li>Send-Gate greift: kein send ohne gezeigten Prompt + Bestätigung (Dialog-Muster aus Paket 04)</li>
+            <li>Feature-Doku existiert, Plan archiviert</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="gate" id="gate">
+      <div class="t">⚑ GO / NO-GO — NACH SLICE 1</div>
+      <h3>Die riskanteste Annahme zuerst beweisen</h3>
+      <ul>
+        <li><b>Qualität:</b> Beantwortet ein Chat mit <code>overview</code> + <code>tail</code> „was läuft, was braucht mich, was ist passiert?" inhaltlich korrekt — bei 5+ parallelen echten Sessions?</li>
+        <li><b>Status-Parität:</b> CLI-Schätzung vs. App-Sidebar über ~20 reale Sessions — Abweichungen nur in den dokumentierten Fällen (PTY-Wissen, awaitingInput-Präzision)?</li>
+        <li><b>Latenz:</b> Jeder Lese-Befehl &lt; 2 s beim realen Workspace?</li>
+        <li><b>Ergonomie:</b> Reichen die Refs (<code>projekt/titel</code>) im Alltag, oder braucht es Nachschärfung am Resolver?</li>
+        <li><b>No-Go-Antwort:</b> Falls die Transcript-Schätzung zu oft daneben liegt → Slice 2 vorziehen (Live-Merge über den Socket wird Pflicht statt Bonus) — der Plan bleibt sonst identisch.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="tests" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">01 ✱ TESTPLAN</span>
+      <h2>Unit, Integration, <em>Abnahme.</em></h2>
+      <p class="section-kicker">Konvention wie im Bestand: Dependency Injection über Closures und kleine Protokolle, thematische Testdateien unter <code>Tests/WhisperM8Tests/</code>, Fixtures als Ressourcen. Neue Dateien: <code>ChatsCLITests</code>, <code>SessionRefResolverTests</code>, <code>ChatsStatusProbeTests</code>, <code>AttentionModelBuilderTests</code>, <code>AgentControlServerTests</code>, <code>ChatsWaitEngineTests</code>.</p>
+    </div>
+    <div class="annotations">
+      <div class="anno-box">
+        <span class="tag">Unit · Pure Kerne</span>
+        <h4>Resolver, Status, Attention</h4>
+        <ul>
+          <li><b>Resolver:</b> alle 5 Stufen; Ambiguität; UUID-Präfix vs. Hex-Titel („cafebabe"); Umlaut-/Bindestrich-Normalisierung; <code>@self</code> ohne Env; archivierte außerhalb <code>--all</code>-Scope</li>
+          <li><b>StatusProbe:</b> Fixture-Transcripts je Provider für working/awaitingInput/idle/errored; 30-s/120-s-Schwellen mit injiziertem <code>now</code>; fehlendes Transcript → unknown + availability; Background via Fake-Job-Verzeichnis</li>
+          <li><b>AttentionBuilder:</b> Sortierung 1–5; 15-min-Fenster „frisch fertig"; Counts; leerer Workspace</li>
+          <li><b>Tail-Formatter:</b> Turn-Gruppierung, Tool-Use-Einzeiler, <code>--chars</code>-Kürzung mit stderr-Vermerk</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Unit · CLI-Vertrag</span>
+        <h4>Parser, JSON, Exit-Codes</h4>
+        <ul>
+          <li>Argv-Parser je Subcommand inkl. <code>--</code>-Trenner, unbekannte Flags → Exit 1</li>
+          <li><code>list --json</code>-Golden-File gegen das Paket-01-Schema (schemaVersion, live, counts, Capabilities)</li>
+          <li>Exit-Code-Mapping: RefError→3, Guard→4, Socket-Fehler→5, Timeout→124</li>
+          <li>Workspace-Reader: defekte JSON → Backup-Recovery-Pfad des Repository greift; UI-State-Read hat keine Schreib-Nebenwirkung (Datei-mtime unverändert!)</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Unit · Socket</span>
+        <h4>Server ohne App, Client ohne Server</h4>
+        <ul>
+          <li>NDJSON-Codec: Zeilengrenzen, 1-MiB-Limit, kaputtes JSON → error-Response</li>
+          <li>Send-Guards als pure Funktion (injizierte Fakes für Registry/Status): alle 5 Guards einzeln + Reihenfolge</li>
+          <li>Idempotenz: gleiche requestID → duplicate, Ablauf nach 60 s</li>
+          <li>Stale-Socket-Logik: EADDRINUSE + toter Lock → unlink+rebind; lebendiger Lock → Fehler</li>
+          <li>In-Process-Roundtrip: Server auf Temp-Socket + Client → ping/sessions.live/send-Konflikt</li>
+          <li>Token-Verifikation: gültig/falsch/fehlend → verified/unverified-Pfad</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Unit · Wait</span>
+        <h4>Event-Mechanik</h4>
+        <ul>
+          <li>Append an Fixture-Transcript → Event nach Debounce; Prädikat-Filter (attention vs. idle)</li>
+          <li><code>--since</code>: älteres Event → sofortige Rückkehr; neueres → blockiert</li>
+          <li>delete/rename → Re-Arm auf neue Datei; size-Rückgang → Neu-Ableitung statt Fehler</li>
+          <li>Timeout → 124; SIGINT-Handler → 130</li>
+          <li>Bracketed-Paste-Wrapping: genau ein <code>ESC[200~…ESC[201~</code>-Block + optionales CR (String-Assertion am Fake-Terminal)</li>
+        </ul>
+      </div>
+      <div class="anno-box full">
+        <span class="tag">Manuelle Abnahme (nach S3/S4, durch dich)</span>
+        <h4>Der Realitätscheck</h4>
+        <ul>
+          <li>5+ parallele Sessions: <code>overview</code> stimmt mit der Sidebar überein; eine Session stoppen → <code>wait</code> feuert; <code>tail</code> erklärt das Ergebnis</li>
+          <li>Send-Kette aus Dialog A (Paket 04): tail → Rückfrage → send → Ziel-TUI zeigt einen Block, ein Submit; Audit-Eintrag vorhanden</li>
+          <li>Cross-Session-Szene: zwei Chats vergleichen, Folgeprompt an einen senden — komplett aus einem dritten Chat heraus</li>
+          <li>„Räum auf": rename/group/archive-Runde; App-UI reflektiert alles live; AgentSessions.json konsistent</li>
+          <li>App beenden → Lese-Befehle degradieren sauber; App starten → <code>live: true</code> kehrt zurück; Socket überlebt App-Neustart (Stale-Handling)</li>
+          <li>Ein sandboxed Codex-Subagent ruft <code>chats list</code> (ok) und <code>chats send</code> (sauberer Exit 5/4) auf</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="failure">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">02 ✱ FAILURE-MATRIX</span>
+      <h2>Wenn es schiefgeht, geht es <em>definiert</em> schief.</h2>
+    </div>
+    <div class="states-grid">
+      <div class="row"><div class="state-name">APP LÄUFT NICHT</div><div class="state-desc">Lesen: voll funktionsfähig, <code>live: false</code>, Capabilities konservativ. Handeln: Exit 5 &lt; 2,5 s mit Fix-Hinweis. Skill degradiert auf Beobachten.</div></div>
+      <div class="row"><div class="state-name">APP STÜRZT WÄHREND REQUEST</div><div class="state-desc">Verbindung reißt → CLI meldet Exit 5 „Antwort unvollständig". Für send gilt: Zustand unklar → CLI sagt das explizit („möglicherweise gesendet — Audit prüfen nach App-Neustart"), niemals „nicht gesendet" behaupten.</div></div>
+      <div class="row"><div class="state-name">STALE SOCKET NACH CRASH</div><div class="state-desc">Neuer App-Start: EADDRINUSE → ping scheitert → lstat-Check → unlink + rebind. CLI vor App-Neustart: connect scheitert → Exit 5.</div></div>
+      <div class="row"><div class="state-name">PROTOKOLL-MISMATCH</div><div class="state-desc">Alte CLI-Instanz trifft neue App (oder umgekehrt): <code>protocolVersion</code>-Check im Handshake → klare Meldung „App und CLI-Version passen nicht — whisperm8-Symlink prüfen", Exit 5.</div></div>
+      <div class="row"><div class="state-name">TRANSCRIPT WEG/ROTIERT</div><div class="state-desc">Status unknown + availability-Feld; wait re-armt; kein Crash, kein Müll-Status. Kompaktierung (size schrumpft) → Neuableitung.</div></div>
+      <div class="row"><div class="state-name">ZIEL-TUI IN SONDERZUSTAND</div><div class="state-desc">Permission-Dialog, Vim-Mode, Menü offen: Guards fangen das nicht vollständig — der Paste landet im Composer, das CR bestätigt schlimmstenfalls einen Dialog. Restrisiko dokumentiert; Mitigation: Default <code>ifStatus awaitingInput,idle</code> + Skill zeigt Prompt vorher. (Hook-Events präzisieren awaitingInput-Typ in v2.)</div></div>
+      <div class="row"><div class="state-name">DOPPELTER SUPERVISOR</div><div class="state-desc">Zwei Chats senden ans gleiche Ziel: Serial-Queue im Server + Audit machen die Reihenfolge nachvollziehbar; zweiter Send sieht ggf. Status-Konflikt. Koordination bleibt Sache des Users (ein Supervisor-Chat als Konvention).</div></div>
+      <div class="row"><div class="state-name">WORKSPACE-SCHEMA-DRIFT</div><div class="state-desc">Neuere App schreibt Felder, die die CLI-Version nicht kennt: lenienter Decoder (Bestand) ignoriert Unbekanntes — CLI bleibt funktionsfähig. Umgekehrt: CLI = App-Binary, gleiche Modelle, kein Drift im Normalfall.</div></div>
+      <div class="row"><div class="state-name">RIESEN-WORKSPACE</div><div class="state-desc">100+ Sessions: Default-Scope (aktiv, 14 Tage) hält list klein; StatusProbe parallelisiert; wait deckelt bei 64 Watches mit Warnung.</div></div>
+      <div class="row"><div class="state-name">KEIN WHISPERM8-KONTEXT</div><div class="state-desc">Aufruf aus normalem Terminal: alles funktioniert, <code>actor: external</code> im Audit, <code>@self</code> → Exit 3 mit Erklärung.</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="rollout" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">03 ✱ ROLLOUT &amp; V2</span>
+      <h2>Nach der Umsetzung, und was bewusst <em>wartet.</em></h2>
+    </div>
+    <div class="annotations">
+      <div class="anno-box">
+        <span class="tag">Rollout-Schritte</span>
+        <h4>Doku-Hygiene (Slice 4, Teil der DoD)</h4>
+        <ul>
+          <li>Feature-Seite <code>docs/features/agent-chats-cli.md</code> (Ist-Zustand nach Konvention)</li>
+          <li>Dieser Plan → <code>docs/archive/</code>; <code>docs/plans/README.md</code>-Zeile aktualisieren</li>
+          <li><code>jarvis-supervisor/</code>-README: Ablöse-Verweis ist bereits gesetzt (heute); nach Umsetzung → komplett ins Archiv</li>
+          <li>CLAUDE.md: ein Satz unter „Agent Chats subsystem" zur CLI + Socket</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">V2-Kandidaten</span>
+        <h4>Bewusst nicht in v1</h4>
+        <ul>
+          <li><b><code>interrupt</code></b> — Entscheidung nach S2-Erfahrung (Paket 01)</li>
+          <li><b><code>watch</code></b> — NDJSON-Dauerstream für menschliche Terminals/TUIs; Agents reicht <code>wait --since</code></li>
+          <li><b>Push-Rückkanal Agent→Agent</b> — Ziel-Agent antwortet aktiv per send an den Absender: nur an den Absender, markiert, App-seitiger Loop-Guard über die Audit-Historie (z. B. max. 3 Hops pro Paar/10 min). v1-Dialog läuft bewusst über <code>send</code> + <code>wait</code> + <code>tail</code> (entschieden 2026-07-19)</li>
+          <li><b>Hook-präzises awaitingInput</b> im Send-Guard (PermissionRequest vs. Frage unterscheiden)</li>
+          <li><b>MCP-Wrapper</b> um den Socket (explizit abgewählt am 2026-07-19, Architektur hält die Tür offen)</li>
+          <li><b>Background-Agent-Verwaltung</b> (<code>claude --bg</code>-Lifecycle) — existiert als <code>whisperm8 agent</code>-Welt weiter</li>
+          <li><b>Cross-Machine</b> (SSH/Remote-Sessions) — außerhalb des Modells</li>
+        </ul>
+      </div>
+    </div>
+    <div class="sidenote">
+      <div class="label">Aufwandsbild (grob, zur Orientierung)</div>
+      <p>S1 ist der größte Einzelblock (CLI-Gerüst + 3 pure Kerne + Formatter), aber ohne App-Risiko. S2 ist der heikelste (Socket-Härtung + Send-Pipeline + manuelle TUI-QA). S3 ist Fleißarbeit auf bestehenden Store-Pfaden plus die WaitEngine. S4 ist Schreibarbeit. Reihenfolge ist fix — jede Stufe nutzt die vorige.</p>
+    </div>
+  </div>
+</section>
+
+<section style="border-top: none; padding-top: 0;">
+  <div class="wrap">
+    <a class="back-hub" href="../index.html">
+      <div>
+        <div class="ttl">ENDE DER LESE-REIHENFOLGE</div>
+        <h3>Zurück zum <em>Hub</em> — Abnahme-Checkliste in Sektion 06</h3>
+      </div>
+      <div class="arrow">←</div>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <div class="sig"><em>Paket 05 · Slices, Tests &amp; Failure-Modes</em> · Stand v1 · <a href="../index.html" style="color: var(--accent); text-decoration: none;">← Hub</a></div>
+      <div style="text-align: right;">WhisperM8<br>STAND 2026-07-19 ✱ v1</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('nav.top a[href^="#"]');
+  const sections = Array.from(document.querySelectorAll('section[id], div[id="gate"]')).filter(s => s.tagName === 'SECTION' || s.id === 'gate');
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => {
+      const id = l.getAttribute('href').slice(1);
+      if (id === current?.id) { l.style.color = 'var(--accent-deep)'; l.style.background = 'var(--accent-soft)'; }
+      else { l.style.color = ''; l.style.background = ''; }
+    });
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>

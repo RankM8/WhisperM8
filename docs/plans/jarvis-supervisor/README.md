@@ -1,5 +1,11 @@
 # Jarvis v1 — Plan-Dokumentation
 
+> **Abgelöst (2026-07-19):** Jarvis wird nicht als Inspector-UI gebaut, sondern
+> als CLI-Feature + Skill — Plan: [`../whisperm8-chats-cli/`](../whisperm8-chats-cli/).
+> Übernommen wurden Attention-Modell, Digest-/Tail-Routing und die
+> Bracketed-Paste-Send-Semantik; Brain, Reports-Datenmodell, Action-Queue und
+> das gesamte Inspector-UI entfallen. Diese Doku bleibt als Konzept-Referenz.
+
 Globaler Agent-Supervisor für WhisperM8: Status-Board, Codex-Brain-Chat und
 Review-first-Actions im rechten Inspector des Agent-Chats-Fensters.
 

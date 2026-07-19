@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>whisperm8 chats — CLI-Plan Hub — WhisperM8</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,800;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35); --ink-soft: oklch(0.42 0.02 35); --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78); --paper-2: oklch(0.945 0.012 72); --paper-3: oklch(0.910 0.015 70);
+  --line: oklch(0.80 0.02 70); --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28); --accent-soft: oklch(0.92 0.06 30); --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145); --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235); --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75); --amber-soft: oklch(0.94 0.06 80);
+  /* WhisperM8-Terminal-Palette (dunkles App-Theme) */
+  --wm-bg: #0c0e12; --wm-paper: #13161b; --wm-ink: #e8ebf0; --wm-mute: #8d98a6;
+  --wm-line: #23272e; --wm-green: #3ddc97; --wm-amber: #f2b13e; --wm-purple: #a78bfa; --wm-red: #ff6b6b;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+.wrap-wide { max-width: 1320px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap, .wrap-wide { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+
+nav.top { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter: saturate(160%) blur(10px); border-bottom: 1px solid var(--line-soft); }
+nav.top .inner { max-width: 1180px; margin: 0 auto; padding: 14px 32px; display: flex; gap: 18px; align-items: center; font-family: var(--mono); font-size: 12px; }
+nav.top .brand { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 17px; color: var(--ink); letter-spacing: -0.01em; }
+nav.top .brand span { color: var(--accent); }
+nav.top .crumb { color: var(--ink-mute); font-size: 11px; }
+nav.top .nav-links { display: flex; gap: 2px; margin-left: 16px; flex-wrap: wrap; }
+nav.top a { color: var(--ink-soft); text-decoration: none; padding: 5px 9px; border-radius: 4px; }
+nav.top a:hover { color: var(--accent-deep); background: var(--accent-soft); }
+nav.top .spacer { flex: 1; }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px solid var(--accent); border-radius: 100px; letter-spacing: 0.06em; transform: rotate(-2deg); }
+
+.hero { padding: 80px 0 50px; }
+.hero .pretitle { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 30px; }
+.hero h1 { font-family: var(--serif); font-weight: 300; font-size: clamp(52px, 9vw, 116px); line-height: 0.92; letter-spacing: -0.03em; margin: 0 0 22px; font-variation-settings: "opsz" 144; }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.hero .lede { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(20px, 2.4vw, 28px); line-height: 1.4; max-width: 820px; color: var(--ink-soft); }
+.hero .lede b { font-weight: 500; color: var(--ink); }
+.hero .meta { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; font-family: var(--mono); font-size: 12px; color: var(--ink-mute); border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.hero .meta b { display: block; color: var(--ink); font-weight: 500; font-family: var(--serif); font-style: italic; font-size: 22px; margin-bottom: 6px; }
+@media (max-width: 720px) { .hero .meta { grid-template-columns: 1fr; } }
+
+section { padding: 80px 0; border-top: 1px solid var(--line-soft); }
+section.alt { background: var(--paper-2); }
+.section-head { margin-bottom: 40px; max-width: 860px; }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.14em; display: block; margin-bottom: 14px; }
+.section-head h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(32px, 4.4vw, 54px); line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.section-kicker { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 18px; line-height: 1.5; max-width: 760px; margin-top: 16px; }
+.section-kicker code, .split code, .flow-node code { font-family: var(--mono); font-size: 0.85em; font-style: normal; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+
+/* Terminal-Demo */
+.term-frame { background: var(--wm-bg); border-radius: 14px; overflow: hidden; box-shadow: 0 30px 60px -30px color-mix(in srgb, var(--ink) 45%, transparent), 0 8px 24px -12px color-mix(in srgb, var(--ink) 25%, transparent); border: 1px solid #1a1e25; }
+.term-chrome { background: var(--wm-paper); padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--wm-line); }
+.term-chrome .dots { display: flex; gap: 5px; }
+.term-chrome .dots span { width: 10px; height: 10px; border-radius: 50%; }
+.term-chrome .dots span:nth-child(1) { background: #F88B7A; }
+.term-chrome .dots span:nth-child(2) { background: #F1C453; }
+.term-chrome .dots span:nth-child(3) { background: #5BC881; }
+.term-chrome .title { flex: 1; font-family: var(--mono); font-size: 11px; color: var(--wm-mute); text-align: center; }
+.term-tabs { display: flex; gap: 6px; padding: 12px 16px 0; background: var(--wm-bg); }
+.term-tab { font-family: var(--mono); font-size: 11px; color: var(--wm-mute); background: transparent; border: 1px solid var(--wm-line); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+.term-tab.active { color: var(--wm-green); border-color: var(--wm-green); }
+.term-body { padding: 18px 22px 24px; font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--wm-ink); overflow-x: auto; white-space: pre; }
+.term-body .p { color: var(--wm-green); }
+.term-body .cmd { color: var(--wm-ink); font-weight: 500; }
+.term-body .hd { color: var(--wm-mute); letter-spacing: 0.08em; }
+.term-body .aw { color: var(--wm-amber); }
+.term-body .er { color: var(--wm-red); }
+.term-body .ok { color: var(--wm-green); }
+.term-body .wk { color: var(--wm-purple); }
+.term-body .mu { color: var(--wm-mute); }
+.term-body .self { color: var(--wm-mute); font-style: italic; }
+
+/* Split (Trennung) */
+.split { margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; background: var(--ink); color: var(--paper); border-radius: 14px; overflow: hidden; }
+.split .col { padding: 30px 28px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid oklch(1 0 0 / 0.08); }
+.split .col:last-child { border-right: none; }
+.split .col:nth-child(1) { background: color-mix(in oklch, var(--ink) 86%, var(--moss)); }
+.split .col:nth-child(2) { background: color-mix(in oklch, var(--ink) 86%, var(--accent)); }
+.split .col:nth-child(3) { background: color-mix(in oklch, var(--ink) 86%, var(--ocean)); }
+.split .col .ttl { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; opacity: 0.85; }
+.split .col h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(22px, 2.4vw, 28px); line-height: 1.1; letter-spacing: -0.015em; }
+.split .col h3 em { font-style: italic; font-weight: 500; color: oklch(0.85 0.1 80); }
+.split .col p { margin: 0; font-size: 13.5px; line-height: 1.55; color: oklch(0.88 0.01 75); }
+.split .col ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.5; color: oklch(0.82 0.015 75); }
+.split .col ul li { padding: 5px 0 5px 16px; position: relative; border-top: 1px solid oklch(1 0 0 / 0.08); }
+.split .col ul li::before { content: "›"; position: absolute; left: 0; font-family: var(--mono); color: oklch(0.85 0.1 80); }
+.split .col code { background: oklch(1 0 0 / 0.12); color: oklch(0.92 0.02 75); }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } .split .col { border-right: none; border-bottom: 1px solid oklch(1 0 0 / 0.08); } }
+
+/* Datenfluss */
+.flow-grid { display: grid; grid-template-columns: 1fr 300px; gap: 28px; align-items: start; }
+@media (max-width: 860px) { .flow-grid { grid-template-columns: 1fr; } }
+.flow-chain { display: flex; flex-direction: column; }
+.flow-node { border-radius: 12px; padding: 20px 24px; }
+.flow-node .nt { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; margin-bottom: 6px; opacity: 0.8; }
+.flow-node h4 { margin: 0 0 4px; font-family: var(--serif); font-weight: 500; font-size: 19px; }
+.flow-node p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.flow-node.input { border: 1.5px dashed var(--accent); color: var(--ink); background: var(--paper); }
+.flow-node.process { background: var(--ocean); color: oklch(0.97 0.01 235); }
+.flow-node.process code { background: oklch(1 0 0 / 0.15); color: oklch(0.95 0.02 235); }
+.flow-node.output { background: var(--moss); color: oklch(0.97 0.01 145); }
+.flow-node.output code { background: oklch(1 0 0 / 0.15); color: oklch(0.95 0.02 145); }
+.flow-arrow { margin-left: 34px; border-left: 2px dashed var(--line); height: 42px; position: relative; display: flex; align-items: center; }
+.flow-arrow::after { content: "▾"; position: absolute; left: -7px; bottom: -8px; color: var(--ink-mute); }
+.flow-arrow .cap { font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); padding-left: 16px; letter-spacing: 0.05em; }
+.flow-split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .flow-split { grid-template-columns: 1fr; } }
+.flow-aside { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 12px; padding: 22px 24px; position: sticky; top: 90px; }
+.flow-aside .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+.flow-aside h4 { margin: 0 0 8px; font-family: var(--serif); font-weight: 500; font-size: 17px; }
+.flow-aside p { margin: 0 0 8px; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.flow-aside code { font-family: var(--mono); font-size: 11.5px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; color: var(--accent-deep); }
+
+/* Pakete */
+.pakete { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+@media (max-width: 780px) { .pakete { grid-template-columns: 1fr; } }
+.paket-card { position: relative; background: var(--paper); border: 1.5px solid var(--line-soft); border-radius: 14px; padding: 28px 28px 24px; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 14px; transition: .15s ease; }
+.paket-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 14px 30px -16px color-mix(in srgb, var(--ink) 25%, transparent); }
+.paket-card .paket-num { position: absolute; top: 18px; right: 22px; font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--ink-mute); }
+.paket-card .stage-badge { font-family: var(--mono); font-size: 10px; padding: 3px 10px; border-radius: 100px; background: var(--moss-soft); color: var(--moss); align-self: flex-start; letter-spacing: 0.06em; }
+.paket-card h3 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: 24px; line-height: 1.1; }
+.paket-card h3 em { color: var(--accent); font-style: italic; }
+.paket-card .desc { color: var(--ink-soft); font-size: 14.5px; line-height: 1.5; margin: 0; }
+.paket-card .contains { margin-top: auto; padding-top: 14px; border-top: 1px dashed var(--line-soft); display: flex; flex-wrap: wrap; gap: 4px; }
+.paket-card .contains .item { font-family: var(--mono); font-size: 10.5px; padding: 3px 8px; border-radius: 4px; background: var(--paper-2); color: var(--ink-soft); border: 1px solid var(--line-soft); }
+.paket-card .footer-row { display: flex; justify-content: flex-end; }
+.paket-card .footer-row .arrow { font-family: var(--mono); color: var(--accent); transition: transform .15s ease; }
+.paket-card:hover .footer-row .arrow { transform: translateX(4px); }
+
+/* Sprint-Liste */
+.sprint-list { margin-top: 16px; border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; }
+.sprint-row { display: grid; grid-template-columns: 170px 1fr 210px; gap: 20px; padding: 20px 24px; border-bottom: 1px solid var(--line-soft); background: var(--paper); align-items: baseline; }
+.sprint-row:last-child { border-bottom: none; }
+.sprint-row .num { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 19px; }
+.sprint-row .num span { display: block; font-family: var(--mono); font-style: normal; font-weight: 400; font-size: 10.5px; color: var(--ink-mute); margin-top: 3px; letter-spacing: 0.06em; }
+.sprint-row .scope { font-size: 14px; color: var(--ink-soft); line-height: 1.55; }
+.sprint-row .scope b { color: var(--ink); font-weight: 500; }
+.sprint-row .scope code { font-family: var(--mono); font-size: 11.5px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; color: var(--accent-deep); }
+.sprint-row .when { font-family: var(--mono); font-size: 11px; color: var(--moss); text-align: right; }
+.sprint-row.gate { background: var(--amber-soft); }
+.sprint-row.gate .when { color: var(--amber); }
+@media (max-width: 780px) { .sprint-row { grid-template-columns: 1fr; gap: 8px; } .sprint-row .when { text-align: left; } }
+
+/* Entschieden / Offen */
+.compact-list { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.compact-list .row { display: grid; grid-template-columns: 44px 1fr 190px; gap: 18px; padding: 18px 22px; background: var(--paper); border: 1px solid var(--line-soft); border-radius: 10px; align-items: start; }
+.compact-list .row .n { font-family: var(--serif); font-style: italic; font-size: 20px; color: var(--ink-mute); }
+.compact-list .row h4 { margin: 0 0 4px; font-family: var(--serif); font-weight: 500; font-size: 16.5px; }
+.compact-list .row p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
+.compact-list .row p code { font-family: var(--mono); font-size: 11.5px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; color: var(--accent-deep); }
+.compact-list .row .tag { font-family: var(--mono); font-size: 10px; text-align: right; color: var(--ink-mute); letter-spacing: 0.06em; line-height: 1.5; }
+.compact-list .row .tag b { display: block; font-size: 10.5px; letter-spacing: 0.1em; }
+.compact-list .row .tag.done b { color: var(--moss); }
+.compact-list .row .tag.open b { color: var(--amber); }
+@media (max-width: 720px) { .compact-list .row { grid-template-columns: 1fr; } .compact-list .row .tag { text-align: left; } }
+
+.sidenote { background: var(--paper-2); border-left: 3px solid var(--accent); padding: 18px 22px; margin: 28px 0 0; border-radius: 0 8px 8px 0; max-width: 860px; }
+.sidenote .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.sidenote p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--ink-soft); line-height: 1.5; font-weight: 300; }
+.sidenote code { font-family: var(--mono); font-size: 13px; font-style: normal; background: var(--paper); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+
+footer { padding: 60px 0 80px; border-top: 1px solid var(--line-soft); background: var(--paper-2); }
+footer .inner { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; gap: 16px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 17px; }
+@media print { nav.top { display: none; } section { page-break-inside: avoid; padding: 24px 0; } body { font-size: 11px; background: white; } a { color: var(--ink) !important; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <span class="brand">WhisperM8 <span>✱</span> chats-CLI</span>
+    <span class="crumb">› Hub</span>
+    <span class="nav-links">
+      <a href="#demo">Demo</a>
+      <a href="#trennung">Trennung</a>
+      <a href="#datenfluss">Datenfluss</a>
+      <a href="#pakete">Pakete</a>
+      <a href="#slices">Slices</a>
+      <a href="#entschieden">Entschieden</a>
+      <a href="#fragen">Offen</a>
+    </span>
+    <span class="spacer"></span>
+    <span class="stamp">v1 · 2026-07-19</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pretitle">PLAN-HUB ✱ STAND 2026-07-19 ✱ v1 ✱ LÖST JARVIS-SUPERVISOR REV 2 AB</div>
+    <h1>whisperm8 <em>chats.</em><br>
+      <small style="font-size: 0.30em; color: var(--ink-mute); font-style: normal; font-weight: 300; letter-spacing: 0;">Jarvis als CLI + Skill — kein UI, jeder Chat kann Supervisor sein.</small></h1>
+    <p class="lede">Jede Claude-Code-Session bekommt über die <b>CLI</b> Augen und Hände für alle anderen Sessions: sehen, was läuft — lesen, was passiert ist — Prompts senden, Sessions starten, Workspace aufräumen. Der <b>Skill</b> macht daraus Verhalten; das Permission-System von Claude Code macht daraus kontrollierte Autonomie.</p>
+    <div class="meta">
+      <div><b>Scope</b>CLI-Namespace <code>whisperm8 chats</code> (12 Befehle) + Control-Socket in der App + Claude-Code-Skill. Kein Jarvis-UI, kein MCP.</div>
+      <div><b>Basis</b>Jarvis-Supervisor-Plan Rev 2 (2026-07-04) — Brain, Reports, Action-Queue und Inspector-UI entfallen; Snapshot-, Attention- und Send-Konzepte werden übernommen.</div>
+      <div><b>Struktur</b>Hub + 5 Detail-Pakete in 3 Ordnern · 4 Vertical Slices · Go/No-Go nach Slice 1</div>
+    </div>
+  </div>
+</header>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">00 ✱ ZIELBILD</span>
+      <h2>So fühlt es sich <em>an.</em></h2>
+      <p class="section-kicker">Ein beliebiger Chat — hier ein dedizierter Supervisor-Chat — fragt per CLI den Zustand aller Sessions ab, liest den Tail einer fertigen Session und schickt ihr den Folgeprompt. Drei echte Ausgaben, umschaltbar:</p>
+    </div>
+    <div class="term-frame">
+      <div class="term-chrome">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <div class="title">WhisperM8 — Agent Chat „jarvis" — whisperm8/repos</div>
+      </div>
+      <div class="term-tabs">
+        <button class="term-tab active" data-demo="overview">chats overview</button>
+        <button class="term-tab" data-demo="tail">chats tail</button>
+        <button class="term-tab" data-demo="send">chats send</button>
+      </div>
+      <div class="term-body" id="demo-overview"><span class="p">❯</span> <span class="cmd">whisperm8 chats overview</span>
+
+<span class="hd">── BRAUCHT DICH ─────────────────────────── 2 ──</span>
+<span class="aw">◆ whisperm8/pill-redesign</span>      <span class="aw">awaitingInput</span>  <span class="mu">seit 4 min</span>
+  <span class="mu">„Soll ich Variante B mit dem Glas-Effekt umsetzen?"</span>
+<span class="er">✖ rankm8/gsc-sync</span>              <span class="er">errored</span>        <span class="mu">seit 12 min</span>
+  <span class="mu">„swift test: 2 Failures in GSCSnapshotTests …"</span>
+
+<span class="hd">── FRISCH FERTIG ────────────────────────── 1 ──</span>
+<span class="ok">● wolanin/seo-behandlungsseiten</span> <span class="ok">idle</span>          <span class="mu">seit 2 min</span>
+  <span class="mu">„Alle 6 Behandlungsseiten sind als Draft im WP …"</span>
+
+<span class="hd">── ARBEITET ─────────────────────────────── 2 ──</span>
+<span class="wk">▶ whisperm8/chats-cli-plan</span>     <span class="wk">working</span>       <span class="mu">seit 18 min</span>  <span class="self">(du)</span>
+<span class="wk">▶ marketing/creative-batch</span>     <span class="wk">working</span>       <span class="mu">seit 31 min</span>
+
+<span class="hd">── IDLE ─────────────────────────────────── 3 ── <span class="mu">(−−all zeigt sie)</span></span>
+</div>
+      <div class="term-body" id="demo-tail" style="display:none"><span class="p">❯</span> <span class="cmd">whisperm8 chats tail wolanin/seo −−turns 2</span>
+
+<span class="hd">wolanin/seo-behandlungsseiten · claude · idle · Transcript 2,1 MB</span>
+
+<span class="ok">[user · 14:32]</span>
+<span class="mu">Publishe die 6 Seiten als Draft und setz die Rank-Math-Metas.</span>
+
+<span class="ok">[assistant · 14:41]</span>
+<span class="mu">Alle 6 Behandlungsseiten sind als Draft im WordPress angelegt,
+ACF-Felder und Rank-Math-Metas gesetzt. Interne Verlinkung fehlt
+noch auf 2 Seiten — soll ich die Botox-Seite zuerst verlinken?</span>
+</div>
+      <div class="term-body" id="demo-send" style="display:none"><span class="p">❯</span> <span class="cmd">whisperm8 chats send wolanin/seo "Ja, verlinke zuerst die Botox-Seite, danach die Filler-Seite. Danach bitte Rank-Math-Score aller 6 Seiten als Tabelle."</span>
+
+<span class="ok">✓ gesendet</span> <span class="mu">an</span> wolanin/seo-behandlungsseiten <span class="mu">(PTY läuft, Status idle)</span>
+<span class="mu">  Prompt: 142 Zeichen · Bracketed Paste · Submit nach 80 ms</span>
+<span class="mu">  Audit:  jarvis → wolanin/seo-behandlungsseiten · 15:02:11</span>
+
+<span class="p">❯</span> <span class="cmd">whisperm8 chats wait −−ref wolanin/seo −−until attention −−timeout 1800 −−json</span>
+<span class="mu">{"event":"statusChanged","ref":"wolanin/seo-behandlungsseiten",
+ "from":"working","to":"awaitingInput","after":412}</span>
+</div>
+    </div>
+    <div class="sidenote">
+      <div class="label">Der Kern-Move</div>
+      <p>Der alte Jarvis-Plan hat ein Brain gebaut, weil <code>codex exec</code> kein Tool-Loop ist. Ein Claude-Code-Chat <b>ist</b> ein Tool-Loop — die CLI gibt ihm nur Augen und Hände. Damit wird die v2-Vision des alten Plans („Tools, damit auch externe Agents die Jarvis-Sicht nutzen") zur v1 — und das gesamte Brain-Kapitel entfällt.</p>
+    </div>
+  </div>
+</section>
+
+<section id="trennung" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">01 ✱ TRENNUNG</span>
+      <h2>Drei Schichten, klar <em>getrennt.</em></h2>
+      <p class="section-kicker">Was die CLI ohne App kann, was nur die laufende App kann, und was der Skill daraus macht. Die Grenze zwischen Spalte 1 und 2 ist die wichtigste Architektur-Entscheidung des Plans.</p>
+    </div>
+    <div class="split">
+      <div class="col">
+        <span class="ttl">LESE-PFAD ✱ APP-UNABHÄNGIG</span>
+        <h3>Disk-Reads <em>(immer verfügbar)</em></h3>
+        <p>Die CLI ist das App-Binary — alle Reader-Services laufen in-process. Sie liest Workspace-JSON read-only, parst Transcripts und leitet Runtime-Status selbst ab.</p>
+        <ul>
+          <li><code>list</code> · <code>overview</code> · <code>show</code> · <code>tail</code> · <code>wait</code> · <code>log</code></li>
+          <li>Quellen: <code>AgentSessions.json</code>, <code>agent-ui-state.json</code>, <code>~/.claude</code>, <code>~/.codex</code>, Jobs</li>
+          <li>Status-Ableitung one-shot über die pure <code>AgentSessionStateMachine</code></li>
+          <li>Funktioniert auch bei geschlossener App</li>
+        </ul>
+      </div>
+      <div class="col">
+        <span class="ttl">LIVE-PFAD ✱ NUR MIT APP</span>
+        <h3>Control-Socket <em>(die Hände)</em></h3>
+        <p>Alles, was PTYs berührt oder den Workspace mutiert, geht über einen Unix Domain Socket in der App. Die App bleibt Single Writer — die CLI schreibt nie selbst an <code>AgentSessions.json</code>.</p>
+        <ul>
+          <li><code>send</code> · <code>open</code> · <code>new</code> · <code>rename</code> · <code>group</code> · <code>archive</code></li>
+          <li>Socket: <code>control.sock</code> · JSON-Request/Response · 0600</li>
+          <li>Guards serverseitig: kein Send bei <code>working</code>, kein Selbst-Send, kein Archive bei laufender PTY</li>
+          <li>App zu? Klarer Fehler + Exit-Code, Lese-Pfad läuft weiter</li>
+        </ul>
+      </div>
+      <div class="col">
+        <span class="ttl">SKILL ✱ VERHALTEN &amp; AUTONOMIE</span>
+        <h3>whisperm8-chats <em>(die Regeln)</em></h3>
+        <p>Der Skill macht aus Befehlen Verhalten: wann welcher Befehl, wie adressieren, wie berichten — und vor jeder mutierenden Aktion die explizite Rückfrage beim User.</p>
+        <ul>
+          <li>Supervisor-Loop: <code>overview</code> → berichten → <code>wait</code> → reagieren</li>
+          <li>Vor <code>send</code>/<code>archive</code>: AskUserQuestion bzw. aktive Rückfrage — keine App-Notification nötig</li>
+          <li>Trigger: „was machen meine Chats", „sei mein Jarvis", „schick an …"</li>
+          <li>Empfohlene Allowlist: Lese-Befehle frei, Mutationen gated</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="datenfluss">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">02 ✱ DATENFLUSS</span>
+      <h2>Wie ein Befehl durch das System <em>läuft.</em></h2>
+      <p class="section-kicker">Vom Bash-Call im Chat bis zur Ziel-Session — mit der Weiche zwischen Disk-Read und Socket nach dem Parsen.</p>
+    </div>
+    <div class="flow-grid">
+      <div class="flow-chain">
+        <div class="flow-node input">
+          <div class="nt">INPUT ✱ IRGENDEIN CHAT</div>
+          <h4>Claude-Code-Session ruft die CLI</h4>
+          <p>Bash-Call im Tool-Loop, gated durch Claude-Code-Permissions. Die PTY-Env enthält <code>WHISPERM8_SESSION_ID</code> — die CLI weiß, wer fragt.</p>
+        </div>
+        <div class="flow-arrow"><span class="cap">argv → AgentChatsCLICommand · RefResolver löst „wolanin/seo" auf</span></div>
+        <div class="flow-node process">
+          <div class="nt">PROCESS ✱ CLI-PROZESS (= APP-BINARY)</div>
+          <h4>Parsen, auflösen, Weiche stellen</h4>
+          <p>Workspace read-only laden, <code>SessionRefResolver</code> matcht die Referenz, dann: Lese-Befehl → Disk, Mutation/Live → Socket.</p>
+        </div>
+        <div class="flow-split" style="margin-top: 14px;">
+          <div class="flow-node process" style="background: color-mix(in oklch, var(--ocean) 80%, black);">
+            <div class="nt">PFAD A ✱ DISK (APP EGAL)</div>
+            <h4>Read + Status-Ableitung</h4>
+            <p><code>AgentSessions.json</code>, Transcript-Tail via Reader, Status one-shot aus mtime + JSONL-Tail. Für <code>wait</code>: kqueue/FSEvents auf die Transcript-Dateien.</p>
+          </div>
+          <div class="flow-node process" style="background: color-mix(in oklch, var(--accent-deep) 92%, black);">
+            <div class="nt">PFAD B ✱ SOCKET (APP LÄUFT)</div>
+            <h4>control.sock → App</h4>
+            <p>JSON-Request mit <code>actor</code> (Session-ID des Aufrufers). App validiert Guards erneut, führt auf dem MainActor aus, antwortet mit Ergebnis oder Fehler.</p>
+          </div>
+        </div>
+        <div class="flow-arrow"><span class="cap">App: AgentTerminalRegistry / AgentSessionStore / Launch-Service</span></div>
+        <div class="flow-node output">
+          <div class="nt">OUTPUT ✱ WIRKUNG + ANTWORT</div>
+          <h4>Ziel-Session reagiert, CLI antwortet strukturiert</h4>
+          <p>Prompt landet als Bracketed Paste in der Ziel-PTY / Workspace ist mutiert / Tab geöffnet. stdout: Text oder <code>−−json</code>; Exit-Codes maschinenlesbar; Audit-Zeile geschrieben.</p>
+        </div>
+      </div>
+      <aside class="flow-aside">
+        <div class="tag">Querschnitt</div>
+        <h4>Identität &amp; Audit überall</h4>
+        <p>Jeder mutierende Request trägt den <code>actor</code> aus <code>WHISPERM8_SESSION_ID</code>. Damit: Selbst-Send-Schutz, „(du)"-Markierung in <code>list</code>, und ein Audit-Log (<code>chats-audit.jsonl</code>), das <code>chats log</code> anzeigt.</p>
+        <p style="margin-top: 12px;"><b>Konventionen geerbt</b> vom bestehenden <code>whisperm8 agent</code>: Ergebnis auf stdout, Fortschritt auf stderr, <code>−−json</code>-Objekte, Exit-Codes aus <code>AgentCLIExit</code>.</p>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section id="pakete" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">03 ✱ PAKETE</span>
+      <h2>Fünf Detail-Pakete, je <em>eine Datei.</em></h2>
+      <p class="section-kicker">Lineare Lese-Reihenfolge: 01 → 05, jede Seite verlinkt auf die nächste. Paket 01 ist die Abnahme-Grundlage für die Befehls-Oberfläche.</p>
+    </div>
+    <div class="pakete">
+      <a class="paket-card" href="01-cli/01-befehlsreferenz.html">
+        <span class="paket-num">01</span>
+        <span class="stage-badge">PAKET BEREIT</span>
+        <h3>Befehls<em>referenz</em></h3>
+        <p class="desc">Alle 12 Befehle als vollständige Spezifikation: Syntax, Flags, Text- und JSON-Output, Exit-Codes, Guards, Beispiel-Sessions als Terminal-Mockups.</p>
+        <div class="contains">
+          <span class="item">list</span><span class="item">overview</span><span class="item">show</span><span class="item">tail</span><span class="item">wait</span><span class="item">send</span><span class="item">open</span><span class="item">new</span><span class="item">rename</span><span class="item">group</span><span class="item">archive</span><span class="item">audit</span>
+        </div>
+        <div class="footer-row"><span class="arrow">→</span></div>
+      </a>
+      <a class="paket-card" href="01-cli/02-adressierung-status-wait.html">
+        <span class="paket-num">02</span>
+        <span class="stage-badge">PAKET BEREIT</span>
+        <h3>Adressierung, Status &amp; <em>wait</em></h3>
+        <p class="desc">Die puren, testbaren Kerne: SessionRefResolver (Fuzzy-Adressierung), CLI-seitige Runtime-Status-Ableitung, Attention-Modell und die Event-Mechanik hinter dem blockierenden wait.</p>
+        <div class="contains">
+          <span class="item">SessionRefResolver</span><span class="item">Status-One-Shot</span><span class="item">AttentionModel</span><span class="item">wait-Events</span><span class="item">kqueue/FSEvents</span>
+        </div>
+        <div class="footer-row"><span class="arrow">→</span></div>
+      </a>
+      <a class="paket-card" href="02-system/01-architektur.html">
+        <span class="paket-num">03</span>
+        <span class="stage-badge">PAKET BEREIT</span>
+        <h3>System-<em>Architektur</em></h3>
+        <p class="desc">Service-Landkarte alt/neu, Control-Socket-Protokoll (Endpoints, Versionierung, Sicherheit), Env-Injection beim PTY-Spawn, Datenquellen-Matrix und alle Gotchas.</p>
+        <div class="contains">
+          <span class="item">AgentControlServer</span><span class="item">control.sock</span><span class="item">WHISPERM8_SESSION_ID</span><span class="item">Single-Writer</span><span class="item">Audit-Log</span>
+        </div>
+        <div class="footer-row"><span class="arrow">→</span></div>
+      </a>
+      <a class="paket-card" href="02-system/02-skill.html">
+        <span class="paket-num">04</span>
+        <span class="stage-badge">PAKET BEREIT</span>
+        <h3>Skill-<em>Design</em></h3>
+        <p class="desc">Der whisperm8-chats-Skill komplett: Trigger, Verhaltensregeln, Autonomie-Stufen mit AskUserQuestion vor Mutationen, Supervisor-Loop-Muster und der SKILL.md-Volltext-Entwurf.</p>
+        <div class="contains">
+          <span class="item">SKILL.md-Entwurf</span><span class="item">Supervisor-Loop</span><span class="item">Autonomie-Regeln</span><span class="item">Allowlist</span><span class="item">Beispiel-Dialoge</span>
+        </div>
+        <div class="footer-row"><span class="arrow">→</span></div>
+      </a>
+      <a class="paket-card" href="03-umsetzung/01-slices-tests.html" style="grid-column: 1 / -1;">
+        <span class="paket-num">05</span>
+        <span class="stage-badge">PAKET BEREIT</span>
+        <h3>Slices, Tests &amp; <em>Failure-Modes</em></h3>
+        <p class="desc">Vier Vertical Slices mit konkreten Task-Listen und Definition-of-Done, Go/No-Go-Kriterien nach Slice 1, vollständiger Testplan (Unit + Integration + manuelle Abnahme) und die Failure-Matrix.</p>
+        <div class="contains">
+          <span class="item">Slice 1: Read-only</span><span class="item">Slice 2: Socket + send</span><span class="item">Slice 3: Mutationen + wait</span><span class="item">Slice 4: Skill + Polish</span><span class="item">Testplan</span><span class="item">Failure-Matrix</span>
+        </div>
+        <div class="footer-row"><span class="arrow">→</span></div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="slices">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">04 ✱ ROADMAP</span>
+      <h2>Vier Slices, jeder endet <em>benutzbar.</em></h2>
+      <p class="section-kicker">Slice 1 validiert die riskanteste Annahme (reichen Disk-Reads für brauchbare Supervisor-Antworten?) ganz ohne App-Änderung. Details und Task-Listen in Paket 05.</p>
+    </div>
+    <div class="sprint-list">
+      <div class="sprint-row">
+        <div class="num">Slice 1<span>READ-ONLY</span></div>
+        <div class="scope"><b>Sehen, ohne die App anzufassen.</b> <code>list</code> / <code>overview</code> / <code>show</code> / <code>tail</code>, SessionRefResolver, Status-One-Shot-Ableitung, <code>−−json</code>. Skill v0 (nur Lese-Befehle). Kein Socket, null App-Änderung.</div>
+        <div class="when">CLI-only · sofort nutzbar</div>
+      </div>
+      <div class="sprint-row gate">
+        <div class="num">GATE<span>GO / NO-GO</span></div>
+        <div class="scope"><b>Mit realem Workspace testen:</b> Beantwortet ein Chat mit <code>overview</code> + <code>tail</code> die Frage „was läuft, was braucht mich?" korrekt und schnell (&lt; 2 s pro Befehl)? Stimmt die Status-Ableitung mit der App-Anzeige überein?</div>
+        <div class="when">⚑ Abnahme durch dich</div>
+      </div>
+      <div class="sprint-row">
+        <div class="num">Slice 2<span>SOCKET + SEND</span></div>
+        <div class="scope"><b>Die Hände.</b> <code>AgentControlServer</code> (UDS) in der App, <code>WHISPERM8_SESSION_ID</code>-Injection beim PTY-Spawn, <code>send</code> mit Bracketed Paste + Guards, <code>open</code>. Audit-Log ab hier.</div>
+        <div class="when">App + CLI</div>
+      </div>
+      <div class="sprint-row">
+        <div class="num">Slice 3<span>MUTATIONEN + WAIT</span></div>
+        <div class="scope"><b>Verwalten.</b> <code>rename</code> / <code>group</code> / <code>archive</code> über den Socket (Store bleibt Single Writer), <code>new</code> (Session in der App starten), blockierendes <code>wait</code> mit Event-Ausgabe.</div>
+        <div class="when">App + CLI</div>
+      </div>
+      <div class="sprint-row">
+        <div class="num">Slice 4<span>SKILL + POLISH</span></div>
+        <div class="scope"><b>Verhalten.</b> Skill final (Supervisor-Loop, Autonomie-Regeln, Beispiel-Dialoge), Allowlist-Empfehlung, Hilfetexte, Doku unter <code>docs/features/</code>, Plan ins Archiv.</div>
+        <div class="when">Skill + Doku</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="entschieden" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">05 ✱ ENTSCHIEDEN</span>
+      <h2>Bereits <em>festgelegt.</em></h2>
+      <p class="section-kicker">Aus der Beratung vom 2026-07-19 — diese Punkte stehen und werden im Plan nicht erneut geöffnet.</p>
+    </div>
+    <div class="compact-list">
+      <div class="row">
+        <span class="n">01</span>
+        <div><h4>Namespace: <code style="font-size: 0.8em;">whisperm8 chats</code></h4><p>Beschreibend statt Codename. Kein <code>jarvis</code>-Alias in v1 — kann später kommen, wenn gewünscht. <code>agent</code> bleibt den Codex-Subagent-Jobs vorbehalten.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+      <div class="row">
+        <span class="n">02</span>
+        <div><h4>Send-Autonomie über den Skill, nicht über die App</h4><p>Der Skill schreibt vor: vor <code>send</code>/<code>archive</code> AskUserQuestion bzw. aktive Rückfrage im Chat. Keine Bestätigungs-Notification in der App — das Claude-Code-Permission-System ist das zweite Netz.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+      <div class="row">
+        <span class="n">03</span>
+        <div><h4>Kein MCP-Server</h4><p>CLI + Skill reichen. Der Socket ist trotzdem so geschnitten, dass ein MCP-Wrapper später möglich bliebe — aber er ist ausdrücklich nicht Teil dieses Plans.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+      <div class="row">
+        <span class="n">04</span>
+        <div><h4>Kein Jarvis-UI</h4><p>Inspector-Panel, Board-Views, Action-Queue-UI aus Rev 2 entfallen ersatzlos. Der alte Plan bleibt als Referenz unter <code>docs/plans/jarvis-supervisor/</code> liegen und wird als „abgelöst durch chats-CLI" markiert.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+      <div class="row">
+        <span class="n">05</span>
+        <div><h4>Send-Regeln (Alignment-Runde)</h4><p>Freigaben gelten pro Ziel-Session und pro Konversation, nie persistent. Alle drei Send-Arten sind erlaubt — Antworten, neue Aufträge, Steering via <code>--if-status working</code> — jeweils hinter dem Bestätigungs-Gate.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+      <div class="row">
+        <span class="n">06</span>
+        <div><h4>Kennzeichnung + Ein-Hop-Regel</h4><p>Die App stellt jedem Agent-Send automatisch eine Marker-Zeile voran (<code>[via whisperm8 chats · von … · HH:MM]</code>). Skill-Regel: Auf via-chats-Prompts wird nie eigenständig weitergesendet — Ketten enden nach einem Hop.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+      <div class="row">
+        <span class="n">07</span>
+        <div><h4>Agent-Dialog über Transcript</h4><p>Jarvis führt Dialoge via <code>send</code> → <code>wait</code> → <code>tail</code> — schleifensicher, null neue Mechanik. Ein Push-Rückkanal (Ziel-Agent promptet aktiv zurück) ist v2-Kandidat mit Loop-Guards.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+      <div class="row">
+        <span class="n">08</span>
+        <div><h4>Grenzen &amp; Ergonomie</h4><p><code>new</code> aus Eigeninitiative: vorschlagen ja, starten nur nach Bestätigung. Aufräumen: eine Batch-Bestätigung (Multi-Select, Archives markiert). Lesen: alle Projekte, kein Scoping. Supervisor-Loop läuft, bis du stoppst. Destruktives Maximum ist <code>archive</code> — kein delete, kein PTY-Kill, keine Settings.</p></div>
+        <div class="tag done"><b>ENTSCHIEDEN</b>2026-07-19</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="fragen">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">06 ✱ OFFENE PUNKTE</span>
+      <h2>Was noch zu klären <em>ist.</em></h2>
+      <p class="section-kicker">Nichts davon blockiert Slice 1. Die Punkte sind den Paketen zugeordnet, in denen sie detailliert sind.</p>
+    </div>
+    <div class="compact-list">
+      <div class="row">
+        <span class="n">01</span>
+        <div><h4>Interrupt-Befehl (<code style="font-size: 0.85em;">chats interrupt</code>)?</h4><p>Ein gezieltes ESC an eine arbeitende Session (kein generisches send-keys). Das GPT-Review argumentiert dafür; spezifiziert ist es in Paket 01. Empfehlung: nach Slice 2 mit Send-Erfahrung entscheiden.</p></div>
+        <div class="tag open"><b>VORSCHLAG: V2</b>Paket 01</div>
+      </div>
+      <div class="row">
+        <span class="n">02</span>
+        <div><h4>Wie viel darf <code style="font-size: 0.85em;">new</code>?</h4><p>V1-Scope: neue Session als Tab in der App (Projekt + optionaler Initial-Prompt). Background-Agents (<code>claude --bg</code>) kann der Agent heute schon direkt spawnen — bleibt außerhalb.</p></div>
+        <div class="tag open"><b>SCOPE-CHECK</b>Paket 01</div>
+      </div>
+      <div class="row">
+        <span class="n">03</span>
+        <div><h4>Status-Ableitung: Parität CLI ↔ App</h4><p>Die CLI leitet Status one-shot ab, die App event-driven. Bei Abweichungen gewinnt die App (sie sieht PTY-Zustand). Genaue Heuristik + Abgleich-Test in Paket 02; Parität ist Go/No-Go-Kriterium.</p></div>
+        <div class="tag open"><b>IN ARBEIT</b>Paket 02</div>
+      </div>
+      <div class="row">
+        <span class="n">04</span>
+        <div><h4>Socket-Protokoll-Version</h4><p>App und CLI sind dasselbe Binary — aber nach einem App-Update kann eine alte CLI-Instanz (Symlink zeigt auf neues Binary: unkritisch; laufende alte Prozesse: möglich) auf einen neuen Server treffen. Ein <code>version</code>-Feld im Handshake reicht.</p></div>
+        <div class="tag open"><b>DETAIL</b>Paket 03</div>
+      </div>
+    </div>
+    <div class="sidenote">
+      <div class="label">Abnahme</div>
+      <p>Wenn du die fünf Pakete durchgelesen hast und die Befehls-Oberfläche in Paket 01 so stehen lassen willst, ist der Plan abgenommen — Umsetzung startet mit Slice 1 aus Paket 05.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <div class="sig"><em>whisperm8 chats — v1 Hub</em><br>5 Pakete · 2026-07-19</div>
+      <div style="text-align: right;">WhisperM8<br>STAND 2026-07-19 ✱ v1</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('nav.top a[href^="#"]');
+  const sections = Array.from(document.querySelectorAll('section[id]'));
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => {
+      const id = l.getAttribute('href').slice(1);
+      if (id === current?.id) { l.style.color = 'var(--accent-deep)'; l.style.background = 'var(--accent-soft)'; }
+      else { l.style.color = ''; l.style.background = ''; }
+    });
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+
+  document.querySelectorAll('.term-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.term-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      ['overview', 'tail', 'send'].forEach(id => {
+        document.getElementById('demo-' + id).style.display = (id === tab.dataset.demo) ? '' : 'none';
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

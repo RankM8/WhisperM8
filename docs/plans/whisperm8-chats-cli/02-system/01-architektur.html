@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 03 · System-Architektur — whisperm8 chats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35); --ink-soft: oklch(0.42 0.02 35); --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78); --paper-2: oklch(0.945 0.012 72);
+  --line: oklch(0.80 0.02 70); --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28); --accent-soft: oklch(0.92 0.06 30); --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145); --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235); --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75); --amber-soft: oklch(0.94 0.06 80);
+  --wm-bg: #0c0e12; --wm-ink: #e8ebf0;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+nav.top { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter: saturate(160%) blur(10px); border-bottom: 1px solid var(--line-soft); }
+nav.top .inner { max-width: 1180px; margin: 0 auto; padding: 14px 32px; display: flex; gap: 14px; align-items: center; font-family: var(--mono); font-size: 12px; flex-wrap: wrap; }
+nav.top .brand { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 17px; color: var(--ink); text-decoration: none; }
+nav.top .brand span { color: var(--accent); }
+nav.top .crumb { color: var(--ink-mute); font-size: 11px; }
+nav.top .crumb b { color: var(--ink); font-weight: 500; }
+nav.top .nav-links { display: flex; gap: 2px; margin-left: 12px; flex-wrap: wrap; }
+nav.top a { color: var(--ink-soft); text-decoration: none; padding: 5px 9px; border-radius: 4px; }
+nav.top a:hover { color: var(--accent-deep); background: var(--accent-soft); }
+nav.top .spacer { flex: 1; }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px solid var(--accent); border-radius: 100px; letter-spacing: 0.06em; transform: rotate(-2deg); }
+.hero { padding: 70px 0 50px; }
+.hero .pretitle { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 26px; }
+.hero h1 { font-family: var(--serif); font-weight: 300; font-size: clamp(42px, 6.5vw, 84px); line-height: 0.94; letter-spacing: -0.03em; margin: 0 0 20px; }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.hero .lede { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(18px, 2.2vw, 26px); line-height: 1.4; max-width: 800px; color: var(--ink-soft); }
+.hero .meta { margin-top: 42px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-mute); border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.hero .meta b { display: block; color: var(--ink); font-weight: 500; font-family: var(--serif); font-style: italic; font-size: 18px; margin-bottom: 4px; }
+@media (max-width: 720px) { .hero .meta { grid-template-columns: 1fr 1fr; } }
+section { padding: 70px 0; border-top: 1px solid var(--line-soft); }
+section.alt { background: var(--paper-2); }
+.section-head { margin-bottom: 36px; max-width: 860px; }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.14em; display: block; margin-bottom: 12px; }
+.section-head h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(28px, 4vw, 46px); line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.section-kicker { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 17px; line-height: 1.5; max-width: 760px; margin-top: 14px; }
+.section-kicker code, .anno-box code, .states-grid code, .sidenote code, .svc-table code { font-family: var(--mono); font-size: 0.85em; font-style: normal; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+.annotations { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anno-box { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 10px; padding: 18px 20px; }
+.anno-box.full { grid-column: 1 / -1; }
+.anno-box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+.anno-box h4 { margin: 0 0 8px; font-family: var(--serif); font-weight: 500; font-size: 16px; }
+.anno-box ul { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.anno-box ul li { padding: 4px 0 4px 16px; position: relative; border-top: 1px solid var(--line-soft); }
+.anno-box ul li:first-child { border-top: none; padding-top: 0; }
+.anno-box ul li::before { content: "›"; position: absolute; left: 0; color: var(--accent); font-family: var(--mono); }
+.anno-box ul li b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .annotations { grid-template-columns: 1fr; } }
+.states-grid { display: grid; grid-template-columns: 240px 1fr; gap: 0; margin-top: 8px; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.states-grid .row { display: contents; }
+.states-grid .row > div { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+.states-grid .row:last-child > div { border-bottom: none; }
+.states-grid .row .state-name { background: var(--paper-2); font-family: var(--mono); font-size: 11px; color: var(--ink); font-weight: 500; letter-spacing: 0.04em; border-right: 1px solid var(--line-soft); }
+.states-grid .row .state-desc { background: var(--paper); font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.states-grid .row .state-desc b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .states-grid { grid-template-columns: 1fr; } }
+.data-shape { background: var(--wm-bg); color: var(--wm-ink); border-radius: 12px; padding: 24px 26px; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; overflow-x: auto; margin-top: 8px; }
+.data-shape .comment { color: #6f9e85; }
+.data-shape .key { color: #a8d8bd; }
+.data-shape .str { color: #ecc98a; }
+.data-shape .num { color: #f0a898; }
+.svc-table { margin-top: 8px; border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; font-size: 13.5px; }
+.svc-table .thead, .svc-table .trow { display: grid; grid-template-columns: 250px 90px 1fr; gap: 14px; padding: 12px 20px; align-items: baseline; }
+.svc-table .thead { background: var(--paper-2); font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--ink-mute); text-transform: uppercase; }
+.svc-table .trow { border-top: 1px solid var(--line-soft); background: var(--paper); }
+.svc-table .trow code { font-weight: 500; }
+.svc-table .trow .d { color: var(--ink-soft); }
+.svc-table .pill { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 100px; justify-self: start; }
+.svc-table .pill.neu { background: var(--accent-soft); color: var(--accent-deep); }
+.svc-table .pill.mod { background: var(--amber-soft); color: var(--amber); }
+.svc-table .pill.reuse { background: var(--moss-soft); color: var(--moss); }
+@media (max-width: 860px) { .svc-table .thead { display: none; } .svc-table .trow { grid-template-columns: 1fr; gap: 6px; } }
+.flow-chain { display: flex; flex-direction: column; max-width: 860px; }
+.flow-node { border-radius: 12px; padding: 18px 24px; }
+.flow-node .nt { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; margin-bottom: 5px; opacity: 0.8; }
+.flow-node h4 { margin: 0 0 4px; font-family: var(--serif); font-weight: 500; font-size: 18px; }
+.flow-node p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.flow-node.input { border: 1.5px dashed var(--accent); color: var(--ink); background: var(--paper); }
+.flow-node.process { background: var(--ocean); color: oklch(0.97 0.01 235); }
+.flow-node.process code { background: oklch(1 0 0 / 0.15); color: oklch(0.95 0.02 235); }
+.flow-node.output { background: var(--moss); color: oklch(0.97 0.01 145); }
+.flow-node.output code { background: oklch(1 0 0 / 0.15); color: oklch(0.95 0.02 145); }
+.flow-arrow { margin-left: 34px; border-left: 2px dashed var(--line); height: 38px; position: relative; display: flex; align-items: center; }
+.flow-arrow::after { content: "▾"; position: absolute; left: -7px; bottom: -8px; color: var(--ink-mute); }
+.flow-arrow .cap { font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); padding-left: 16px; letter-spacing: 0.05em; }
+.sidenote { background: var(--paper-2); border-left: 3px solid var(--accent); padding: 18px 22px; margin: 28px 0 0; border-radius: 0 8px 8px 0; max-width: 860px; }
+.sidenote .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.sidenote p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--ink-soft); line-height: 1.5; font-weight: 300; }
+.next-paket { margin-top: 60px; padding: 36px 40px; background: var(--ink); color: var(--paper); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-decoration: none; transition: transform .15s ease; }
+.next-paket:hover { transform: translateY(-2px); }
+.next-paket .left .ttl { font-family: var(--mono); font-size: 10px; color: var(--accent-soft); letter-spacing: 0.14em; margin-bottom: 8px; }
+.next-paket .left h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.1; }
+.next-paket .left h3 em { color: var(--accent); font-style: italic; font-weight: 500; }
+.next-paket .arrow { font-family: var(--mono); font-size: 32px; color: var(--accent); font-weight: 300; }
+footer { padding: 50px 0 70px; border-top: 1px solid var(--line-soft); background: var(--paper-2); }
+footer .inner { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; gap: 16px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 16px; font-weight: 300; }
+@media print { nav.top { display: none; } section { page-break-inside: avoid; padding: 24px 0; } body { font-size: 11px; background: white; } a { color: var(--ink) !important; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <a href="../index.html" class="brand">WhisperM8 <span>✱</span> chats-CLI</a>
+    <span class="crumb">› <b>Paket 03 · System-Architektur</b></span>
+    <span class="nav-links">
+      <a href="#uebersicht">Übersicht</a>
+      <a href="#landkarte">Landkarte</a>
+      <a href="#socket">Socket</a>
+      <a href="#identitaet">Identität</a>
+      <a href="#send">Send-Pipeline</a>
+      <a href="#gotchas">Gotchas</a>
+    </span>
+    <span class="spacer"></span>
+    <span class="stamp">v1 · 2026-07-19</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pretitle">PAKET 03 ✱ SYSTEM ✱ v1</div>
+    <h1>Ein Binary, zwei Rollen, ein <em>Socket.</em></h1>
+    <p class="lede">CLI und App sind derselbe Prozess-Code mit verschiedenen Einstiegen. Dieses Paket legt fest, wie sie miteinander reden: der <b>AgentControlServer</b> in der App, das NDJSON-Protokoll über den Unix Domain Socket, die Identitäts-Injektion beim PTY-Spawn — und die Gotchas, an denen so etwas sonst scheitert.</p>
+    <div class="meta">
+      <div><b>IPC</b>BSD-UDS · NDJSON · 0600</div>
+      <div><b>Identität</b><code>WHISPERM8_SESSION_ID</code> + Token</div>
+      <div><b>Single Writer</b>Workspace mutiert nur die App</div>
+      <div><b>Audit</b><code>chats-audit.jsonl</code>, App-geschrieben</div>
+    </div>
+  </div>
+</header>
+
+<section id="uebersicht">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">00 ✱ ÜBERSICHT</span>
+      <h2>Entscheidung: BSD-UDS statt <em>NWListener.</em></h2>
+      <p class="section-kicker">Das Repo hat mit dem <code>ClaudeGPTMixRouter</code> bereits einen NWListener-Loopback-HTTP-Server als Vorbild. Trotzdem fällt die Wahl für den Control-Socket auf einen klassischen BSD-Unix-Domain-Socket — aus drei Gründen.</p>
+    </div>
+    <div class="annotations">
+      <div class="anno-box">
+        <span class="tag">Warum UDS gewinnt</span>
+        <h4>Sicherheit ist hier Dateisystem-Sache</h4>
+        <ul>
+          <li><b>Zugriffskontrolle über Datei-Permissions</b> (0700-Ordner + 0600-Socket) statt „jeder lokale Prozess darf auf den TCP-Port" + Token-Tanz</li>
+          <li><b><code>getpeereid()</code></b> liefert die EUID des Gegenübers — Cross-User-Zugriff ist damit hart ausgeschlossen; NWListener exponiert den FD dafür nicht</li>
+          <li><b>Kein Port-Management:</b> kein „Port belegt", kein Firewall-Prompt, kein Erraten des Ports durch die CLI</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Wo NWListener bleibt</span>
+        <h4>MixRouter bleibt, wie er ist</h4>
+        <ul>
+          <li>Der MixRouter braucht HTTP+SSE-Streaming für Claude-Backends — dafür ist NWListener richtig; er wird nicht angefasst</li>
+          <li>Der Control-Socket ist Request/Response mit Kleinst-Payloads — dafür reichen ~200 Zeilen BSD-Socket + <code>DispatchSourceRead</code></li>
+          <li>SwiftNIO wäre für einen lokalen Ein-Client-RPC Overkill (GPT-Review, bestätigt)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="landkarte" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">01 ✱ SERVICE-LANDKARTE</span>
+      <h2>Was neu ist, was angefasst wird, was <em>bleibt.</em></h2>
+      <p class="section-kicker">Sieben neue Bausteine, drei kleine Modifikationen an Bestandscode, der Rest ist Wiederverwendung. Ablage: CLI-Teile unter <code>WhisperM8/CLI/</code>, App-Teile unter <code>Services/AgentChats/</code>.</p>
+    </div>
+    <div class="svc-table">
+      <div class="thead"><span>Baustein</span><span>Art</span><span>Aufgabe</span></div>
+      <div class="trow"><code>AgentChatsCLICommand</code><span class="pill neu">NEU</span><span class="d">Dispatch + Parser für alle <code>chats</code>-Subcommands (Muster: <code>AgentCLICommand</code>). Definiert <code>ChatsCLIExit</code> (0/1/3/4/5/124/130).</span></div>
+      <div class="trow"><code>ChatsWorkspaceReader</code><span class="pill neu">NEU</span><span class="d">Read-only-Sicht: <code>AgentWorkspaceRepository.load()</code> + direkter UI-State-Decode + Projekt-Join. Liefert die Session-Objekte für Resolver/List.</span></div>
+      <div class="trow"><code>SessionRefResolver</code><span class="pill neu">NEU</span><span class="d">Pure Referenz-Auflösung (Paket 02).</span></div>
+      <div class="trow"><code>ChatsStatusProbe</code><span class="pill neu">NEU</span><span class="d">One-Shot-Status pro Session: Locator → stat → Tail → Parser → Decider (Paket 02). Parallelisiert über TaskGroup.</span></div>
+      <div class="trow"><code>AttentionModelBuilder</code><span class="pill neu">NEU</span><span class="d">Pure Board-Struktur (Kategorien/Ränge/Counts) für list/overview (Paket 02).</span></div>
+      <div class="trow"><code>ChatsWaitEngine</code><span class="pill neu">NEU</span><span class="d">kqueue-Watches + Debounce + Re-Evaluation + Timeout (Paket 02).</span></div>
+      <div class="trow"><code>AgentControlServer</code><span class="pill neu">NEU</span><span class="d">UDS-Server in der App: accept-Loop, <code>getpeereid</code>-Check, NDJSON-Codec, Dispatch an MainActor-Handler, Idempotenz-Cache, Audit-Writer.</span></div>
+      <div class="trow"><code>ControlSocketClient</code><span class="pill neu">NEU</span><span class="d">CLI-Seite: connect, ein Request, eine Response, Timeout 5 s; Fehler → Exit 5. (Zählt zu AgentChatsCLICommand-Dateien.)</span></div>
+      <div class="trow"><code>AgentTerminalController</code><span class="pill mod">MOD</span><span class="d">+ <code>sendPrompt(_:submit:)</code> mit Bracketed-Paste-Wrap + CR-Delay; + Env-Injektion in <code>start()</code> (Identität, s. u.).</span></div>
+      <div class="trow"><code>AgentChatLaunchService</code><span class="pill mod">MOD</span><span class="d">Verallgemeinerung auf Claude (heute nur <code>openCodexChat</code>) für <code>chats new</code>.</span></div>
+      <div class="trow"><code>CLIEntryPoint</code><span class="pill mod">MOD</span><span class="d"><code>"chats"</code> in <code>recognizedCommands</code> + Dispatch-Switch + Hilfetext.</span></div>
+      <div class="trow"><code>Locator · Parser · Decider · Reader · SupervisorJobReader · AgentProjectPath · WindowRequestCenter · AgentSessionStore</code><span class="pill reuse">REUSE</span><span class="d">Unverändert wiederverwendet — die gesamte Lese- und Fokus-Infrastruktur existiert.</span></div>
+    </div>
+    <div class="sidenote">
+      <div class="label">Startpunkt des Servers</div>
+      <p>Der <code>AgentControlServer</code> startet beim App-Launch (analog <code>AgentScanCoordinator</code>), räumt beim <code>willTerminate</code> auf und ist per Default aktiv. Kill-Switch analog zum Event-Watcher: <code>defaults write com.whisperm8.app agentControlServerEnabled -bool NO</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="socket">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">02 ✱ PROTOKOLL</span>
+      <h2>NDJSON über einen abgesicherten <em>Socket.</em></h2>
+      <p class="section-kicker">Eine Zeile = ein JSON-Objekt (Newlines in Strings sind JSON-escaped — Nachrichtengrenzen sind damit sicher), max. 1 MiB pro Zeile, eine Response pro Request, Verbindung pro CLI-Aufruf. Debugbar mit <code>nc -U</code>.</p>
+    </div>
+    <div class="data-shape"><span class="comment">// Request (CLI → App) — eine Zeile</span>
+{ <span class="key">"protocolVersion"</span>: <span class="num">1</span>, <span class="key">"requestID"</span>: <span class="str">"f4e1a7c2-…"</span>,
+  <span class="key">"actor"</span>: { <span class="key">"sessionID"</span>: <span class="str">"9c11d3e2-…"</span>, <span class="key">"token"</span>: <span class="str">"kZx…"</span> },   <span class="comment">// beides null wenn außerhalb einer WhisperM8-PTY</span>
+  <span class="key">"method"</span>: <span class="str">"session.send"</span>,
+  <span class="key">"params"</span>: { <span class="key">"targetSessionID"</span>: <span class="str">"6f2b41a0-…"</span>, <span class="key">"prompt"</span>: <span class="str">"Ja, verlinke…"</span>,
+              <span class="key">"ifStatus"</span>: [<span class="str">"awaitingInput"</span>,<span class="str">"idle"</span>], <span class="key">"submit"</span>: <span class="num">true</span> } }
+
+<span class="comment">// Response (App → CLI) — eine Zeile</span>
+{ <span class="key">"protocolVersion"</span>: <span class="num">1</span>, <span class="key">"requestID"</span>: <span class="str">"f4e1a7c2-…"</span>, <span class="key">"ok"</span>: <span class="num">true</span>,
+  <span class="key">"result"</span>: { <span class="key">"ack"</span>: <span class="str">"delivered"</span>, <span class="key">"target"</span>: { <span class="key">"id"</span>: <span class="str">"6f2b…"</span>, <span class="key">"title"</span>: <span class="str">"seo-behandlungsseiten"</span> } } }
+
+<span class="comment">// Fehler-Response — code mappt auf Exit-Codes der CLI</span>
+{ <span class="key">"protocolVersion"</span>: <span class="num">1</span>, <span class="key">"requestID"</span>: <span class="str">"…"</span>, <span class="key">"ok"</span>: <span class="num">false</span>,
+  <span class="key">"error"</span>: { <span class="key">"code"</span>: <span class="str">"conflict"</span>,       <span class="comment">// notFound | conflict | selfSend | noPty | internal</span>
+             <span class="key">"message"</span>: <span class="str">"Ziel ist working (seit 31 min)"</span>,
+             <span class="key">"detail"</span>: { <span class="key">"currentStatus"</span>: <span class="str">"working"</span> } } }</div>
+    <div class="states-grid" style="margin-top: 28px;">
+      <div class="row"><div class="state-name">ping</div><div class="state-desc">Handshake: <code>{appVersion, protocolVersion, pid}</code>. CLI prüft <code>protocolVersion</code> — Mismatch → klarer Fehler statt stiller Inkompatibilität (Update-Fall: alter CLI-Prozess trifft neue App).</div></div>
+      <div class="row"><div class="state-name">sessions.live</div><div class="state-desc">Autoritative Runtime-Daten für die Lese-Befehle: <code>[{sessionID, runtimeStatus, since, isAttachedPTY, canSend}]</code> aus <code>AgentSessionRuntimeStatusStore</code> + <code>AgentTerminalRegistry</code>. <code>list</code>/<code>overview</code>/<code>show</code> mergen das über den Disk-Stand (<code>live: true</code>).</div></div>
+      <div class="row"><div class="state-name">session.send</div><div class="state-desc">Atomare Send-Pipeline (Abschnitt 04). Ack-Stufen: <code>delivered</code> (gepastet), <code>duplicate</code> (requestID im 60-s-Cache).</div></div>
+      <div class="row"><div class="state-name">session.open</div><div class="state-desc"><code>WindowRequestCenter.requestSessionFocus</code> + App aktivieren (<code>NSApp.activate</code>).</div></div>
+      <div class="row"><div class="state-name">session.new</div><div class="state-desc"><code>upsertProject</code> → <code>createSession(shouldLaunchOnOpen: true)</code> → Fokus-Request. Antwort nach Persistenz-Enqueue mit Session-ID.</div></div>
+      <div class="row"><div class="state-name">workspace.rename / .group / .archive</div><div class="state-desc">Guards prüfen (hoisted), dann <code>AgentSessionStore</code>-Mutation. Vorher/Nachher in die Antwort + Audit.</div></div>
+    </div>
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">Dateisystem-Härtung</span>
+        <h4>Socket-Lebenszyklus (GPT-Review übernommen)</h4>
+        <ul>
+          <li>Ordner <code>…/WhisperM8/control/</code> mit <b>0700</b>; Socket <code>control.sock</code> nach bind auf <b>0600</b> — der restriktive Elternordner schließt das bind→chmod-Fenster</li>
+          <li><b>sun_path-Limit (104 Bytes):</b> UTF-8-Bytelänge des Pfads vor bind prüfen; zu lang → Fallback <code>/private/tmp/whisperm8-&lt;uid&gt;/control.sock</code> (0700-Ordner), Pfad in Discovery-Datei <code>control/socket-path</code> publiziert; CLI liest erst die Discovery-Datei</li>
+          <li><b>Stale-Socket:</b> Server hält <code>flock</code> auf <code>control.lock</code>. Bei <code>EADDRINUSE</code>: erst connect+ping versuchen; nur wenn Connect scheitert UND <code>lstat</code> „Socket + eigene UID" bestätigt → unlink + einmal neu binden. Nie blind löschen</li>
+          <li><b>Shutdown:</b> nur unlinken, wenn dev+ino noch dem eigenen bind entsprechen</li>
+          <li>Pro Verbindung <code>getpeereid()</code>: Peer-EUID ≠ App-EUID → sofort schließen</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Server-Verhalten</span>
+        <h4>Klein, seriell, off-main</h4>
+        <ul>
+          <li>Accept + Read + JSON-Decode auf einer Utility-Queue — <b>nie</b> auf dem MainActor lesen/parsen</li>
+          <li>Validierte Commands hoppen per <code>await MainActor.run</code> in die Handler; Ergebnis zurück auf die Queue, Response schreiben, Verbindung schließen</li>
+          <li>Limits: max. 4 gleichzeitige Verbindungen, 5 s Read-Timeout, 1 MiB Zeile — alles darüber: Fehler-Response + close</li>
+          <li>Requests seriell ausführen (eine Handler-Queue): Mutationen sind selten und klein; Serialität ist das billigste Konsistenzmodell</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="identitaet" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">03 ✱ IDENTITÄT</span>
+      <h2>Wer ruft hier <em>eigentlich an?</em></h2>
+      <p class="section-kicker">Selbst-Send-Schutz und Audit brauchen eine Antwort auf „welche Session führt diesen Bash-Befehl aus?". Die App weiß es, weil sie die PTYs selbst spawnt.</p>
+    </div>
+    <div class="flow-chain">
+      <div class="flow-node process">
+        <div class="nt">BEIM PTY-SPAWN</div>
+        <h4>AgentTerminalController.start() injiziert zwei Variablen</h4>
+        <p>Direkt vor <code>startProcess</code> (Views/AgentTerminalView.swift:758 — die einzige Stelle, wo Env-Array und <code>sessionID</code> garantiert zusammen vorliegen): <code>WHISPERM8_SESSION_ID=&lt;uuid&gt;</code> + <code>WHISPERM8_SESSION_TOKEN=&lt;32 zufällige Bytes, base64&gt;</code>. Token wird im <code>AgentControlServer</code> registriert (in-memory, pro Controller-Lauf neu).</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">Kind-Prozesse (claude → bash → whisperm8) erben die Env</span></div>
+      <div class="flow-node process">
+        <div class="nt">BEIM CLI-AUFRUF</div>
+        <h4>CLI liest die Env und legt sie in den Request</h4>
+        <p><code>actor.sessionID</code> steuert <code>@self</code>, „(du)"-Markierung und Selbst-Send-Schutz. <code>actor.token</code> beweist der App: der Aufruf kommt wirklich aus dieser PTY — die nackte Session-ID wäre spoofbar (jeder Prozess des Users kann sie raten).</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">Server: Token bekannt und passend zur Session-ID?</span></div>
+      <div class="flow-node output">
+        <div class="nt">BEWERTUNG</div>
+        <h4>Verifiziert / Unverifiziert / Extern</h4>
+        <p>Token gültig → Actor verifiziert (Audit: <code>projekt/titel</code>). Session-ID ohne/mit falschem Token → Aufruf läuft, aber als <code>actor: "unverified"</code> im Audit; Selbst-Send-Schutz greift trotzdem über die ID. Ganz ohne Env (User-Terminal) → <code>actor: "external"</code>. <b>Ehrliche Einordnung:</b> Das ist Rechenschaft + Versehens-Schutz, keine Security-Boundary gegen einen absichtlich bösartigen Prozess desselben Users — der könnte auch direkt die App bedienen.</p>
+      </div>
+    </div>
+    <div class="sidenote">
+      <div class="label">Audit-Log</div>
+      <p><code>chats-audit.jsonl</code> im App-Support-Ordner, geschrieben <b>nur von der App</b> (eine Schreibstelle, kein Locking-Problem): <code>{at, actor, verified, method, target, outcome, promptChars, promptHead80}</code>. Rotation bei 5 MB → <code>.1</code>-Sidecar. Kein Prompt-Volltext — Privacy-Default; das Transcript der Ziel-Session hat den Volltext ohnehin.</p>
+    </div>
+  </div>
+</section>
+
+<section id="send">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">04 ✱ SEND-PIPELINE</span>
+      <h2>Der kritische Abschnitt, im <em>Detail.</em></h2>
+      <p class="section-kicker">Das TOCTOU-Problem aus dem GPT-Review, gelöst: Alle Prüfungen und der Paste passieren in einem synchronen MainActor-Block — zwischen Check und Injektion liegt kein await.</p>
+    </div>
+    <div class="flow-chain">
+      <div class="flow-node input">
+        <div class="nt">1 · EINGANG (Server-Queue)</div>
+        <h4>Decode + Idempotenz</h4>
+        <p><code>requestID</code> im 60-s-Cache? → sofort <code>ack: "duplicate"</code>, kein zweiter Paste. Sonst: Prompt-Länge validieren (≤ 100 kB), dann MainActor-Hop.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">await MainActor.run { … alles Folgende synchron … }</span></div>
+      <div class="flow-node process">
+        <div class="nt">2 · ATOMARE PRÜFUNG (MainActor, synchron)</div>
+        <h4>Fünf Guards, eine Reihenfolge</h4>
+        <p>① Session existiert + nicht archiviert (sonst <code>notFound</code>) → ② Ziel ≠ Actor-Session (sonst <code>selfSend</code>, kein Override) → ③ <code>AgentTerminalRegistry.controller(for:)</code> existiert + <code>isRunning</code> (sonst <code>noPty</code>) → ④ Runtime-Status ∈ <code>ifStatus</code> aus dem Request (sonst <code>conflict</code> + aktueller Status) → ⑤ Prompt nicht leer.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">alle Guards grün → im selben synchronen Block:</span></div>
+      <div class="flow-node process">
+        <div class="nt">3 · PASTE (MainActor, synchron)</div>
+        <h4>Bracketed Paste als ein Block</h4>
+        <p><code>controller.sendPrompt(text, submit:)</code> — neu in Slice 2: <code>ESC[200~</code> + Text + <code>ESC[201~</code> via <code>terminal.send(txt:)</code>. Der Wrap verhindert, dass die Claude/Codex-TUI jede Newline als Submit deutet. Requeue der <code>requestID</code> in den Idempotenz-Cache passiert <b>vor</b> dem Paste.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">submit == true → nach 80 ms (Task.sleep, außerhalb des kritischen Blocks):</span></div>
+      <div class="flow-node output">
+        <div class="nt">4 · SUBMIT + ANTWORT</div>
+        <h4>CR, Audit, delivered</h4>
+        <p>Ein <code>0x0d</code> an die PTY (Delay lässt die TUI den Paste verarbeiten — Muster analog zur bestehenden 1,0-s-Grace im <code>AgentPromptRoutingService</code>). Audit-Zeile schreiben, <code>ack: "delivered"</code> zurück. Der Submit ist best-effort nach erfolgreichem Paste — ein Fehler hier wird geloggt, ändert aber die Antwort nicht mehr (dokumentiert).</p>
+      </div>
+    </div>
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box full">
+        <span class="tag">Warum nicht AgentPromptRoutingService?</span>
+        <h4>Bewusste Trennung vom Diktat-Pfad</h4>
+        <ul>
+          <li>Der bestehende <code>route(text:toLocalSessionID:)</code> ist für Diktat gebaut: Fokus + Session-Start + Retries + <b>ohne</b> Submit — genau richtig für „User diktiert in seinen aktiven Chat"</li>
+          <li><code>chats send</code> braucht das Gegenteil: <b>kein</b> Fokus-Klau (der User arbeitet vielleicht woanders), <b>kein</b> Auto-Start einer toten Session, dafür atomare Guards + Submit</li>
+          <li>Beide teilen sich künftig <code>sendPrompt(_:submit:)</code> am Controller als gemeinsamen Baustein — mehr nicht</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="gotchas" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">05 ✱ GOTCHAS</span>
+      <h2>Woran es sonst <em>scheitert.</em></h2>
+    </div>
+    <div class="states-grid">
+      <div class="row"><div class="state-name">STORE-LOCK-REGEL</div><div class="state-desc">Mutation-Closures im <code>AgentWorkspaceStore</code> laufen unter dem prozessweiten Lock — <b>keine Subprozesse, kein I/O darin</b>. Alle Guard-Prüfungen vor dem <code>mutate</code>-Aufruf hoisten (bestehende Projektregel, gilt für alle workspace.*-Handler).</div></div>
+      <div class="row"><div class="state-name">NIE loadWorkspace() ZUM REFRESHEN</div><div class="state-desc">App-seitig observieren die Handler <code>AgentWorkspaceUIModel</code>; CLI-seitig liest <code>ChatsWorkspaceReader</code> nur die Repository-Disk-Funktion. <code>loadUIState()</code> ist tabu im CLI (persistiert als Nebenwirkung).</div></div>
+      <div class="row"><div class="state-name">CLI-PROZESS = APP-BINARY</div><div class="state-desc">Der CLI-Pfad darf <b>keine</b> App-Singletons anfassen, die Seiteneffekte starten (<code>AgentScanCoordinator</code>, Stores, Watcher). Nur die puren/statischen Bausteine + Repository. Review-Checkliste in Paket 05.</div></div>
+      <div class="row"><div class="state-name">SANDBOX-KINDER</div><div class="state-desc">Codex-Subagents laufen teils sandboxed (<code>--sandbox read-only</code>) — deren <code>whisperm8 chats</code>-Lese-Befehle funktionieren (Disk-Reads), aber der Socket-connect kann geblockt sein → sauberer Exit 5 mit Hinweis, kein Hänger (Connect-Timeout 2 s).</div></div>
+      <div class="row"><div class="state-name">LOGIN-SHELL-ENV</div><div class="state-desc">Falls App-Handler je Subprozesse spawnen (z. B. künftiges new mit Worktree): immer <code>LoginShellEnvironment</code>, nie ProcessInfo-Env (Projektregel). In v1 spawnen die Handler nichts.</div></div>
+      <div class="row"><div class="state-name">MAKE DEV IN EIGENER SESSION</div><div class="state-desc">Slice-2+-Tests brauchen die neue App. Wer als Agent-Chat IN WhisperM8 läuft, darf <code>make dev</code>/<code>make kill</code> nicht ausführen (killt die eigene Session, CLAUDE.md-Regel) — der User startet die App selbst neu. Für die Umsetzung heißt das: Socket-Tests als swift test mit In-Process-Server, nicht gegen die echte App.</div></div>
+      <div class="row"><div class="state-name">PERFORMANCE-BUDGETS</div><div class="state-desc">Neue Signpost-Kategorie nicht nötig; aber <code>sessions.live</code>-Handler und Send-Pipeline bleiben unter dem bestehenden <code>perf.store</code>-Mutations-Budget (30 ms) — nichts Teures auf dem MainActor.</div></div>
+      <div class="row"><div class="state-name">DISCOVERY-DATEI</div><div class="state-desc">CLI findet den Socket über <code>control/socket-path</code> (ein Pfad, eine Zeile). Fehlt die Datei → App lief nie / Feature aus → Exit 5 mit passender Meldung. Nicht raten, nicht mehrere Pfade probieren.</div></div>
+    </div>
+  </div>
+</section>
+
+<section style="border-top: none; padding-top: 0;">
+  <div class="wrap">
+    <a class="next-paket" href="02-skill.html">
+      <div class="left">
+        <div class="ttl">ALS NÄCHSTES</div>
+        <h3>Paket 04 — Skill-<em>Design</em></h3>
+        <div style="margin-top: 8px; font-size: 13px; color: oklch(0.78 0.02 75); max-width: 540px; line-height: 1.5;">Aus Befehlen wird Verhalten: der whisperm8-chats-Skill mit Autonomie-Regeln, Supervisor-Loop und SKILL.md-Volltext.</div>
+      </div>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <div class="sig"><em>Paket 03 · System-Architektur</em> · Stand v1 · <a href="../index.html" style="color: var(--accent); text-decoration: none;">← Hub</a></div>
+      <div style="text-align: right;">WhisperM8<br>STAND 2026-07-19 ✱ v1</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('nav.top a[href^="#"]');
+  const sections = Array.from(document.querySelectorAll('section[id]'));
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => {
+      const id = l.getAttribute('href').slice(1);
+      if (id === current?.id) { l.style.color = 'var(--accent-deep)'; l.style.background = 'var(--accent-soft)'; }
+      else { l.style.color = ''; l.style.background = ''; }
+    });
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>

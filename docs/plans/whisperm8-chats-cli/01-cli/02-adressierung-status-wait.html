@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 02 · Adressierung, Status &amp; wait — whisperm8 chats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35); --ink-soft: oklch(0.42 0.02 35); --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78); --paper-2: oklch(0.945 0.012 72);
+  --line: oklch(0.80 0.02 70); --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28); --accent-soft: oklch(0.92 0.06 30); --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145); --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235); --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75); --amber-soft: oklch(0.94 0.06 80);
+  --wm-bg: #0c0e12; --wm-paper: #13161b; --wm-ink: #e8ebf0; --wm-mute: #8d98a6;
+  --wm-line: #23272e; --wm-green: #3ddc97; --wm-amber: #f2b13e; --wm-purple: #a78bfa; --wm-red: #ff6b6b;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+nav.top { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter: saturate(160%) blur(10px); border-bottom: 1px solid var(--line-soft); }
+nav.top .inner { max-width: 1180px; margin: 0 auto; padding: 14px 32px; display: flex; gap: 14px; align-items: center; font-family: var(--mono); font-size: 12px; flex-wrap: wrap; }
+nav.top .brand { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 17px; color: var(--ink); text-decoration: none; }
+nav.top .brand span { color: var(--accent); }
+nav.top .crumb { color: var(--ink-mute); font-size: 11px; }
+nav.top .crumb b { color: var(--ink); font-weight: 500; }
+nav.top .nav-links { display: flex; gap: 2px; margin-left: 12px; flex-wrap: wrap; }
+nav.top a { color: var(--ink-soft); text-decoration: none; padding: 5px 9px; border-radius: 4px; }
+nav.top a:hover { color: var(--accent-deep); background: var(--accent-soft); }
+nav.top .spacer { flex: 1; }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px solid var(--accent); border-radius: 100px; letter-spacing: 0.06em; transform: rotate(-2deg); }
+.hero { padding: 70px 0 50px; }
+.hero .pretitle { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 26px; }
+.hero h1 { font-family: var(--serif); font-weight: 300; font-size: clamp(42px, 6.5vw, 84px); line-height: 0.94; letter-spacing: -0.03em; margin: 0 0 20px; }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.hero .lede { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(18px, 2.2vw, 26px); line-height: 1.4; max-width: 800px; color: var(--ink-soft); }
+.hero .meta { margin-top: 42px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-mute); border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.hero .meta b { display: block; color: var(--ink); font-weight: 500; font-family: var(--serif); font-style: italic; font-size: 18px; margin-bottom: 4px; }
+@media (max-width: 720px) { .hero .meta { grid-template-columns: 1fr 1fr; } }
+section { padding: 70px 0; border-top: 1px solid var(--line-soft); }
+section.alt { background: var(--paper-2); }
+.section-head { margin-bottom: 36px; max-width: 860px; }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.14em; display: block; margin-bottom: 12px; }
+.section-head h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(28px, 4vw, 46px); line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.section-kicker { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 17px; line-height: 1.5; max-width: 760px; margin-top: 14px; }
+.section-kicker code, .anno-box code, .states-grid code, .sidenote code, .flow-node code { font-family: var(--mono); font-size: 0.85em; font-style: normal; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+.annotations { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anno-box { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 10px; padding: 18px 20px; }
+.anno-box.full { grid-column: 1 / -1; }
+.anno-box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+.anno-box h4 { margin: 0 0 8px; font-family: var(--serif); font-weight: 500; font-size: 16px; }
+.anno-box ul { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.anno-box ul li { padding: 4px 0 4px 16px; position: relative; border-top: 1px solid var(--line-soft); }
+.anno-box ul li:first-child { border-top: none; padding-top: 0; }
+.anno-box ul li::before { content: "›"; position: absolute; left: 0; color: var(--accent); font-family: var(--mono); }
+.anno-box ul li b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .annotations { grid-template-columns: 1fr; } }
+.states-grid { display: grid; grid-template-columns: 230px 1fr; gap: 0; margin-top: 8px; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.states-grid .row { display: contents; }
+.states-grid .row > div { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+.states-grid .row:last-child > div { border-bottom: none; }
+.states-grid .row .state-name { background: var(--paper-2); font-family: var(--mono); font-size: 11px; color: var(--ink); font-weight: 500; letter-spacing: 0.04em; border-right: 1px solid var(--line-soft); }
+.states-grid .row .state-desc { background: var(--paper); font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.states-grid .row .state-desc b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .states-grid { grid-template-columns: 1fr; } }
+.data-shape { background: var(--wm-bg); color: var(--wm-ink); border-radius: 12px; padding: 24px 26px; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; overflow-x: auto; margin-top: 8px; }
+.data-shape .comment { color: #6f9e85; }
+.data-shape .key { color: #a8d8bd; }
+.data-shape .str { color: #ecc98a; }
+.data-shape .num { color: #f0a898; }
+.flow-chain { display: flex; flex-direction: column; max-width: 860px; }
+.flow-node { border-radius: 12px; padding: 18px 24px; }
+.flow-node .nt { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; margin-bottom: 5px; opacity: 0.8; }
+.flow-node h4 { margin: 0 0 4px; font-family: var(--serif); font-weight: 500; font-size: 18px; }
+.flow-node p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.flow-node.input { border: 1.5px dashed var(--accent); color: var(--ink); background: var(--paper); }
+.flow-node.process { background: var(--ocean); color: oklch(0.97 0.01 235); }
+.flow-node.process code { background: oklch(1 0 0 / 0.15); color: oklch(0.95 0.02 235); }
+.flow-node.output { background: var(--moss); color: oklch(0.97 0.01 145); }
+.flow-node.output code { background: oklch(1 0 0 / 0.15); color: oklch(0.95 0.02 145); }
+.flow-arrow { margin-left: 34px; border-left: 2px dashed var(--line); height: 38px; position: relative; display: flex; align-items: center; }
+.flow-arrow::after { content: "▾"; position: absolute; left: -7px; bottom: -8px; color: var(--ink-mute); }
+.flow-arrow .cap { font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); padding-left: 16px; letter-spacing: 0.05em; }
+.sidenote { background: var(--paper-2); border-left: 3px solid var(--accent); padding: 18px 22px; margin: 28px 0 0; border-radius: 0 8px 8px 0; max-width: 860px; }
+.sidenote .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.sidenote p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--ink-soft); line-height: 1.5; font-weight: 300; }
+.term-frame { background: var(--wm-bg); border-radius: 14px; overflow: hidden; box-shadow: 0 30px 60px -30px color-mix(in srgb, var(--ink) 45%, transparent); border: 1px solid #1a1e25; }
+.term-chrome { background: var(--wm-paper); padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--wm-line); }
+.term-chrome .dots { display: flex; gap: 5px; }
+.term-chrome .dots span { width: 10px; height: 10px; border-radius: 50%; }
+.term-chrome .dots span:nth-child(1) { background: #F88B7A; }
+.term-chrome .dots span:nth-child(2) { background: #F1C453; }
+.term-chrome .dots span:nth-child(3) { background: #5BC881; }
+.term-chrome .title { flex: 1; font-family: var(--mono); font-size: 11px; color: var(--wm-mute); text-align: center; }
+.term-body { padding: 18px 22px 24px; font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--wm-ink); overflow-x: auto; white-space: pre; }
+.term-body .p { color: var(--wm-green); }
+.term-body .cmd { color: var(--wm-ink); font-weight: 500; }
+.term-body .aw { color: var(--wm-amber); }
+.term-body .er { color: var(--wm-red); }
+.term-body .ok { color: var(--wm-green); }
+.term-body .wk { color: var(--wm-purple); }
+.term-body .mu { color: var(--wm-mute); }
+.mockup-block { margin-top: 48px; }
+.mockup-label { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.mockup-label .l { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.1em; font-weight: 500; }
+.mockup-label h3 { font-family: var(--serif); font-weight: 500; font-size: clamp(22px, 2.8vw, 30px); margin: 0; letter-spacing: -0.01em; }
+.mockup-label h3 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.next-paket { margin-top: 60px; padding: 36px 40px; background: var(--ink); color: var(--paper); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-decoration: none; transition: transform .15s ease; }
+.next-paket:hover { transform: translateY(-2px); }
+.next-paket .left .ttl { font-family: var(--mono); font-size: 10px; color: var(--accent-soft); letter-spacing: 0.14em; margin-bottom: 8px; }
+.next-paket .left h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.1; }
+.next-paket .left h3 em { color: var(--accent); font-style: italic; font-weight: 500; }
+.next-paket .arrow { font-family: var(--mono); font-size: 32px; color: var(--accent); font-weight: 300; }
+footer { padding: 50px 0 70px; border-top: 1px solid var(--line-soft); background: var(--paper-2); }
+footer .inner { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; gap: 16px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 16px; font-weight: 300; }
+@media print { nav.top { display: none; } section { page-break-inside: avoid; padding: 24px 0; } body { font-size: 11px; background: white; } a { color: var(--ink) !important; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <a href="../index.html" class="brand">WhisperM8 <span>✱</span> chats-CLI</a>
+    <span class="crumb">› <b>Paket 02 · Adressierung, Status &amp; wait</b></span>
+    <span class="nav-links">
+      <a href="#uebersicht">Übersicht</a>
+      <a href="#resolver">Resolver</a>
+      <a href="#status">Status</a>
+      <a href="#attention">Attention</a>
+      <a href="#wait">wait</a>
+      <a href="#edge">Edges</a>
+    </span>
+    <span class="spacer"></span>
+    <span class="stamp">v1 · 2026-07-19</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pretitle">PAKET 02 ✱ PURE KERNE ✱ v1</div>
+    <h1>Auflösen, ableiten, <em>warten.</em></h1>
+    <p class="lede">Die drei puren, unit-testbaren Kerne hinter dem Befehlsvertrag: der <b>SessionRefResolver</b>, die <b>One-Shot-Status-Ableitung</b> aus dem Transcript und das <b>Attention-Modell</b> — plus die Event-Mechanik, mit der <code style="font-family: var(--mono); font-size: 0.75em; font-style: normal;">wait</code> ohne App und ohne Polling blockiert.</p>
+    <div class="meta">
+      <div><b>Neu (pur)</b>SessionRefResolver · ChatsStatusProbe · AttentionModelBuilder · ChatsWaitEngine</div>
+      <div><b>Wiederverwendet</b>AgentTranscriptLocator · Parser · StatusDecider · Reader · SupervisorJobReader</div>
+      <div><b>MainActor nötig</b>Nichts — alles nonisolated/static</div>
+      <div><b>Tests</b>Fixture-Transcripts + Golden-Outputs</div>
+    </div>
+  </div>
+</header>
+
+<section id="uebersicht">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">00 ✱ ÜBERSICHT</span>
+      <h2>Warum diese drei Kerne <em>pur</em> sein müssen.</h2>
+      <p class="section-kicker">Alles in diesem Paket läuft im CLI-Prozess ohne App, ohne Store-Registry, ohne MainActor — und ist damit vollständig mit Fixtures testbar. Die Recherche hat bestätigt: die Bausteine existieren bereits als <code>nonisolated static</code>-Funktionen im Repo.</p>
+    </div>
+    <div class="annotations">
+      <div class="anno-box">
+        <span class="tag">Input</span>
+        <h4>Was reinkommt</h4>
+        <ul>
+          <li><b>Workspace:</b> <code>AgentWorkspaceRepository(fileURL:).load()</code> — reine Disk-Funktion mit Backup-Recovery. <b>Nicht</b> <code>AgentSessionStore.loadWorkspace()</code> (liest aus der In-Memory-Registry)</li>
+          <li><b>UI-State:</b> direkter <code>JSONDecoder</code> auf <code>agent-ui-state.json</code>. <b>Nicht</b> <code>loadUIState()</code> — die migriert und persistiert (!)</li>
+          <li><b>Transcripts:</b> <code>AgentTranscriptLocator</code> + Reader (Claude/Codex/Supervisor)</li>
+          <li><b>Umgebung:</b> <code>WHISPERM8_SESSION_ID</code> für <code>@self</code>/isSelf</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Output</span>
+        <h4>Was rausgeht</h4>
+        <ul>
+          <li><b>Aufgelöste Session</b> (oder Exit-3-Fehler mit Kandidaten)</li>
+          <li><b>Runtime-Status</b> + <code>source</code> + <code>revision</code> pro Session</li>
+          <li><b>Board-Struktur</b> (Kategorien, Ränge, Counts) für list/overview</li>
+          <li><b>wait-Event</b> (genau eines) mit from/to/afterSeconds</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="resolver" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">01 ✱ SESSIONREFRESOLVER</span>
+      <h2>Bequem für Menschen, exakt für <em>Maschinen.</em></h2>
+      <p class="section-kicker">tmux-Prinzip: Skripte adressieren nie heuristisch. Fuzzy ist erlaubt, aber nur wenn das Ergebnis eindeutig ist — sonst Exit 3 mit Kandidaten. Für Lese- und Schreib-Befehle gilt <b>derselbe</b> Resolver, dieselbe Strenge.</p>
+    </div>
+    <div class="states-grid">
+      <div class="row"><div class="state-name">STUFE 1 · @SELF</div><div class="state-desc"><code>@self</code> → Session-UUID aus <code>WHISPERM8_SESSION_ID</code>. Fehlt die Variable (Aufruf außerhalb einer WhisperM8-PTY): Exit 3 mit Erklärung.</div></div>
+      <div class="row"><div class="state-name">STUFE 2 · UUID EXAKT</div><div class="state-desc">Voll-UUID (case-insensitiv) → exakter Match auf <code>session.id</code>. Kein Fallthrough zu Fuzzy.</div></div>
+      <div class="row"><div class="state-name">STUFE 3 · UUID-PRÄFIX</div><div class="state-desc">Hex-String ≥ 8 Zeichen (Bindestriche optional) → Präfix-Match auf der UUID. Genau ein Treffer nötig; mehrere → Exit 3. Kürzere Präfixe werden als Titel-Fragment behandelt (Stufe 4/5).</div></div>
+      <div class="row"><div class="state-name">STUFE 4 · PROJEKT/TITEL</div><div class="state-desc"><code>projekt-fragment/titel-fragment</code> — beide Seiten normalisiert (lowercase, Diakritika gefaltet, Nicht-Alphanumerik → Trenner). Projekt matcht auf Name <b>oder</b> letztes Pfadsegment; Titel als Substring-, dann Subsequenz-Match. Eindeutig oder Exit 3.</div></div>
+      <div class="row"><div class="state-name">STUFE 5 · TITEL GLOBAL</div><div class="state-desc">Ohne <code>/</code>: Fragment gegen alle aktiven Sessions (Titel, dann Gruppenname). Eindeutig oder Exit 3 mit Kandidatenliste (max. 5, nach Aktivität sortiert).</div></div>
+      <div class="row"><div class="state-name">SCOPE</div><div class="state-desc">Default: aktive Sessions (<code>status != .archived</code>). <code>list/show/tail --all</code> erweitern auf archivierte; Mutations-Befehle sehen archivierte nie (Paket 01, Edge „archivierte Ziele").</div></div>
+    </div>
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">API</span>
+        <h4>Purer Kern, injizierbar</h4>
+        <ul>
+          <li><code>SessionRefResolver.resolve(ref: String, in: [AgentChatSession], projects: [AgentProject], selfID: UUID?) → Result&lt;AgentChatSession, RefError&gt;</code></li>
+          <li><code>RefError</code>: <code>.notFound</code>, <code>.ambiguous(candidates: [Candidate])</code>, <code>.noSelfContext</code> — mappt 1:1 auf Exit 3 + stderr-Text</li>
+          <li>Keine I/O, keine Uhrzeit — vollständig deterministisch testbar</li>
+          <li>Ablage: <code>WhisperM8/CLI/SessionRefResolver.swift</code> (CLI-only, aber pur genug für spätere App-Nutzung)</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Testfälle (Auszug, vollständig in Paket 05)</span>
+        <h4>Was der Resolver beweisen muss</h4>
+        <ul>
+          <li>„seo" bei zwei SEO-Sessions → ambiguous mit beiden Kandidaten</li>
+          <li>„wolanin/seo" → eindeutig, obwohl global mehrdeutig</li>
+          <li>8-Zeichen-Hex, das zufällig ein Wort ist („cafebabe") → UUID-Präfix gewinnt vor Titel-Match</li>
+          <li>Umlaute/Bindestriche: „behandlungsseiten" matcht „SEO-Behandlungsseiten"</li>
+          <li><code>@self</code> ohne Env-Variable → <code>.noSelfContext</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="status">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">02 ✱ STATUS-ONE-SHOT</span>
+      <h2>Der Status kommt aus dem <em>Transcript.</em></h2>
+      <p class="section-kicker">Die App leitet Runtime-Status event-driven ab — die CLI macht exakt dieselbe Ableitung one-shot, mit denselben puren Bausteinen. Kein Fork der Logik, kein Drift: gleiche Funktionen, gleiche Schwellen.</p>
+    </div>
+    <div class="flow-chain">
+      <div class="flow-node input">
+        <div class="nt">PRO SESSION</div>
+        <h4>Session → Transcript-Pfad</h4>
+        <p><code>AgentTranscriptLocator.locate</code>: Claude <code>&lt;root&gt;/&lt;encoded-cwd&gt;/&lt;externalSessionID&gt;.jsonl</code> (Roots: <code>~/.claude/projects</code> + <code>~/.claude-profiles/&lt;name&gt;/projects</code>, cwd via <code>canonicalProjectPath</code> normalisiert); Codex rekursiv über <code>~/.codex/sessions/YYYY/MM/DD/</code>; Background via <code>SupervisorJobReader</code> → <code>linkScanPath</code>.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">kein Pfad → runtime.status = unknown, availability erklärt warum</span></div>
+      <div class="flow-node process">
+        <div class="nt">STAT-FIRST</div>
+        <h4>fileStat → mtime + size</h4>
+        <p>Bestehendes <code>AgentSessionRuntimeWatcher.fileStat</code> (nonisolated static): 1 stat()-Syscall. <code>size</code> wird die <b>revision</b> im JSON-Output — monoton wachsend, vergleichbar zwischen CLI-Aufrufen und ideal für <code>wait --since</code>.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">nur wenn nötig: 64-KB-Tail lesen (readTail)</span></div>
+      <div class="flow-node process">
+        <div class="nt">PARSE + DECIDE</div>
+        <h4>lastEvent → Decision</h4>
+        <p><code>AgentTranscriptParser.lastEvent(in:provider:)</code> (Rückwärts-Scan) → <code>AgentTranscriptStatusDecider.decide(lastEvent:fileMTime:now:…)</code>. Schwellen aus dem Bestand: <b>idle nach 30 s</b> Ruhe, <b>workingStall nach 120 s</b>; <code>tool_use</code>/<code>pause_turn</code> zählen nicht als Turn-Ende.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">Ergebnis + Quelle markieren</span></div>
+      <div class="flow-node output">
+        <div class="nt">OUTPUT</div>
+        <h4>runtime {status, source, since, revision}</h4>
+        <p><code>source: "transcriptEstimate"</code> — außer die App läuft und liefert über den Socket ihren autoritativen Status (<code>source: "app"</code>, inkl. PTY-Wissen und Hook-Events). Background-Jobs: <code>source: "supervisorJob"</code> aus <code>state.json</code>.</p>
+      </div>
+    </div>
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">Parität CLI ↔ App</span>
+        <h4>Was der Schätzer nicht sehen kann</h4>
+        <ul>
+          <li><b>PTY-Existenz:</b> ob ein Terminal in der App läuft, weiß nur die App → offline sind <code>capabilities</code> konservativ (<code>canSend: false</code>) und <code>isAttachedPTY: null</code></li>
+          <li><b>Hook-Events:</b> <code>PermissionRequest</code>-präzises awaitingInput kommt aus der Hook-Bridge; der Transcript-Schätzer erkennt awaitingInput nur aus dem letzten Event-Typ — dokumentierte Unschärfe</li>
+          <li><b>Regel:</b> läuft die App, merged die CLI deren Status (ein Socket-Call <code>sessions.live</code>, Paket 03) — der Schätzer ist Fallback, nie Konkurrenz</li>
+          <li><b>Go/No-Go-Test:</b> 20 reale Sessions, CLI-Schätzung vs. App-Anzeige — Abweichungen nur in dokumentierten Fällen</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Performance</span>
+        <h4>Budget: &lt; 2 s für list bei 50 Sessions</h4>
+        <ul>
+          <li>stat-first: 50 stat()-Calls sind Rauschen; Tail-Reads nur für Sessions mit unklarem Zustand</li>
+          <li>Tail-Reads parallelisierbar (TaskGroup), Reader sind streamend und 50-MB-sicher</li>
+          <li>Kein Cache in v1 — ein CLI-Prozess lebt Millisekunden; <code>agent-index-cache.json</code> wird <b>nicht</b> angefasst</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="attention" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">03 ✱ ATTENTION-MODELL</span>
+      <h2>Sortiert nach „braucht <em>mich".</em></h2>
+      <p class="section-kicker">Direkt aus dem Jarvis-Plan Rev 2 übernommen — dieselben fünf Kategorien, jetzt als CLI-Board statt SwiftUI-View. Der Builder ist pur: Sessions + Status rein, Board-Struktur raus.</p>
+    </div>
+    <div class="states-grid">
+      <div class="row"><div class="state-name">1 · AWAITING INPUT</div><div class="state-desc">Session wartet auf den User (Frage, Permission-Prompt). Board-Gruppe <b>BRAUCHT DICH</b>, Symbol ◆ amber.</div></div>
+      <div class="row"><div class="state-name">2 · ERRORED</div><div class="state-desc">Turn mit Fehler beendet / Prozess gestorben. <b>BRAUCHT DICH</b>, Symbol ✖ rot.</div></div>
+      <div class="row"><div class="state-name">3 · FRISCH FERTIG</div><div class="state-desc"><code>working → idle/stopped</code> vor weniger als 15 min. Gruppe <b>FRISCH FERTIG</b>, Symbol ● grün. Kein persistiertes „gelesen"-Flag in v1 — das Zeitfenster ersetzt es (bewusste Vereinfachung gegenüber Rev 2).</div></div>
+      <div class="row"><div class="state-name">4 · WORKING</div><div class="state-desc">Arbeitet. Gruppe <b>ARBEITET</b>, Symbol ▶ violett, „seit N min" aus Turn-Start.</div></div>
+      <div class="row"><div class="state-name">5 · IDLE / REST</div><div class="state-desc">Alles andere (idle &gt; 15 min, stopped, unknown). Im Board eingeklappt: nur Anzahl + <code>--all</code>-Hinweis; in <code>list</code> normal gelistet.</div></div>
+    </div>
+    <div class="sidenote">
+      <div class="label">API</div>
+      <p><code>AttentionModelBuilder.build(sessions: [SessionWithRuntime], now: Date) → AttentionBoard</code> — liefert Kategorien, Ränge und Counts; <code>counts</code> landet 1:1 im JSON-Header von list/overview. Innerhalb einer Kategorie: Sortierung nach Statuswechsel-Zeitpunkt, neueste zuerst. Pur, kein I/O, <code>now</code> injiziert.</p>
+    </div>
+  </div>
+</section>
+
+<section id="wait">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">04 ✱ WAIT-ENGINE</span>
+      <h2>Blockieren ohne Polling, ohne <em>App.</em></h2>
+      <p class="section-kicker">wait ersetzt das gesamte Report-/Notification-System des alten Plans. Die Mechanik kombiniert kqueue-File-Watching (Muster: ClaudeHookBridge) mit dem Status-Decider — und einem Sicherheitsnetz-Timer.</p>
+    </div>
+    <div class="flow-chain">
+      <div class="flow-node input">
+        <div class="nt">SETUP</div>
+        <h4>Beobachtungsmenge bestimmen</h4>
+        <p>Ohne <code>--ref</code>: alle aktiven Sessions mit auffindbarem Transcript. Mit <code>--ref</code> (mehrfach): genau diese. Initial einmal Status ableiten — erfüllt schon jetzt das Prädikat (oder liegt ein Event nach <code>--since REV</code>), sofort Exit 0 mit Event.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">pro Transcript: DispatchSourceFileSystemObject (O_EVTONLY, .write/.extend/.delete/.rename)</span></div>
+      <div class="flow-node process">
+        <div class="nt">EVENT-LOOP</div>
+        <h4>Write → debounced Re-Evaluation</h4>
+        <p>Bei jedem Write (300 ms Debounce pro Datei): stat → bei Änderung Tail lesen → <code>lastEvent</code> → <code>decide</code> → Statusübergang gegen den letzten bekannten Zustand prüfen. Zusätzlich für Claude-Sessions: kqueue auf die Hook-Event-Files (<code>claude-session-events/&lt;id&gt;.jsonl</code>, falls vorhanden) — liefert <code>awaitingInput</code> präziser und schneller als der Transcript-Schätzer.</p>
+      </div>
+      <div class="flow-arrow"><span class="cap">delete/rename → Watch re-armen · Fallback-Timer alle 10 s (Missed-Event-Netz) · neue Sessions: Verzeichnis-Watch auf die Transcript-Roots</span></div>
+      <div class="flow-node output">
+        <div class="nt">AUFLÖSUNG</div>
+        <h4>Erstes passendes Event gewinnt</h4>
+        <p>Prädikat erfüllt → genau ein Event-JSON auf stdout, Exit 0, alle Watches abbauen. Timeout → Exit 124 (stumm bei <code>--json</code>, Hinweis auf stderr). SIGINT → Exit 130. Die 30-s-idle-Schwelle des Deciders bedeutet: „Turn fertig" wird ~30 s nach der letzten Transcript-Zeile gemeldet — akzeptierte Latenz, dokumentiert im Skill.</p>
+      </div>
+    </div>
+    <div class="mockup-block">
+      <div class="mockup-label"><span class="l">TERMINAL</span><h3>Der Supervisor-Loop in <em>drei Zeilen</em></h3></div>
+      <div class="term-frame">
+        <div class="term-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="title">wait im Loop</div></div>
+        <div class="term-body"><span class="p">❯</span> <span class="cmd">whisperm8 chats overview --json</span>   <span class="mu"># Runde 1: Lagebild, revision je Session merken</span>
+<span class="mu">{"schemaVersion":1, "counts":{"needsYou":0,"working":3,…}, …}</span>
+
+<span class="p">❯</span> <span class="cmd">whisperm8 chats wait --until attention --timeout 1800 --json</span>
+<span class="mu">… blockiert 7 Minuten …</span>
+<span class="mu">{"schemaVersion":1,"event":"statusChanged",</span>
+<span class="mu"> "session":{"id":"6f2b…","title":"pill-redesign","project":"whisperm8"},</span>
+<span class="mu"> "from":"working","to":"awaitingInput","afterSeconds":412,</span>
+<span class="mu"> "revision":1948210,"source":"hookEvent"}</span>
+
+<span class="p">❯</span> <span class="cmd">whisperm8 chats tail 6f2b41a0 --turns 1</span>   <span class="mu"># was will sie? → dann berichten/handeln</span></div>
+      </div>
+      <div class="annotations">
+        <div class="anno-box full">
+          <span class="tag">Lückenlosigkeit</span>
+          <h4>--since schließt das Fenster zwischen zwei waits</h4>
+          <ul>
+            <li>Zwischen Event-Ausgabe und dem nächsten <code>wait</code>-Aufruf können Statuswechsel passieren</li>
+            <li>Der Agent übergibt die höchste gesehene <code>revision</code>: <code>wait --since 1948210</code> → liegt bereits ein neueres passendes Event vor, kehrt wait <b>sofort</b> zurück statt zu blockieren</li>
+            <li>Revision = Transcript-Bytes: billig zu erheben, monoton, pro Session eindeutig — kein globaler Event-Log nötig (der wäre v2, falls je gebraucht)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="edge" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">05 ✱ EDGE-CASES</span>
+      <h2>Die unbequemen <em>Fälle.</em></h2>
+    </div>
+    <div class="states-grid">
+      <div class="row"><div class="state-name">TRANSCRIPT ROTIERT</div><div class="state-desc">Claude kompaktiert/ersetzt JSONL-Dateien: <code>.delete/.rename</code>-Event → Locator erneut ausführen, Watch auf neue Datei re-armen (Muster aus <code>AgentSessionRuntimeWatcher</code>). Revision kann dabei <b>schrumpfen</b> → wait behandelt size-Rückgang als „neue Datei, Zustand neu ableiten", nie als Fehler.</div></div>
+      <div class="row"><div class="state-name">SESSION OHNE EXTERNAL-ID</div><div class="state-desc">Frisch erstellt, noch kein Transcript-Schlüssel: Status <code>unknown</code>, in wait-Beobachtung ausgenommen; sobald der Verzeichnis-Watch die neue Datei sieht, wird nachgezogen.</div></div>
+      <div class="row"><div class="state-name">ZWEI SESSIONS, EIN CWD</div><div class="state-desc">Mehrere Sessions im selben Projektordner: Transcript-Zuordnung läuft über <code>externalSessionID</code> im Dateinamen — kein Kollisionsrisiko. Nur die Stufe-2-Glob-Suche (cwd-Header-Verifikation) braucht den Header-Check aus dem Bestand.</div></div>
+      <div class="row"><div class="state-name">CODEX-DATUMSGRENZE</div><div class="state-desc">Codex legt Transcripts unter <code>YYYY/MM/DD</code> an — ein über Mitternacht laufender Turn wechselt nie die Datei (Datei bleibt beim Start-Datum), aber der Locator-Scan muss rekursiv bleiben (ist er: Filename-Suffix-Match).</div></div>
+      <div class="row"><div class="state-name">HOOK-FILE FEHLT</div><div class="state-desc">Hook-Event-Files existieren nur für App-gestartete Claude-Sessions. wait nutzt sie opportunistisch (<code>source: "hookEvent"</code>), fällt sonst transparent auf Transcript-Watching zurück — kein Feature-Unterschied, nur Präzision/Latenz.</div></div>
+      <div class="row"><div class="state-name">UHRZEIT-ABHÄNGIGKEIT</div><div class="state-desc">Decider-Schwellen (30 s/120 s) hängen an <code>now</code> — im Test injiziert. Die CLI nutzt Wall-Clock; Zeitzonen egal (alles UTC-Vergleiche auf mtime).</div></div>
+      <div class="row"><div class="state-name">VIELE SESSIONS</div><div class="state-desc">Watch-Menge = aktive Sessions (Default-Scope, kein <code>--all</code>): typisch &lt; 20 FDs. kqueue-FD-Limit ist kein Thema; trotzdem Deckel bei 64 beobachteten Dateien mit stderr-Warnung.</div></div>
+    </div>
+  </div>
+</section>
+
+<section style="border-top: none; padding-top: 0;">
+  <div class="wrap">
+    <a class="next-paket" href="../02-system/01-architektur.html">
+      <div class="left">
+        <div class="ttl">ALS NÄCHSTES</div>
+        <h3>Paket 03 — System-<em>Architektur</em></h3>
+        <div style="margin-top: 8px; font-size: 13px; color: oklch(0.78 0.02 75); max-width: 540px; line-height: 1.5;">Service-Landkarte, Control-Socket-Protokoll, Env-Injection beim PTY-Spawn und die Gotchas, die den Unterschied machen.</div>
+      </div>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <div class="sig"><em>Paket 02 · Adressierung, Status &amp; wait</em> · Stand v1 · <a href="../index.html" style="color: var(--accent); text-decoration: none;">← Hub</a></div>
+      <div style="text-align: right;">WhisperM8<br>STAND 2026-07-19 ✱ v1</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('nav.top a[href^="#"]');
+  const sections = Array.from(document.querySelectorAll('section[id]'));
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => {
+      const id = l.getAttribute('href').slice(1);
+      if (id === current?.id) { l.style.color = 'var(--accent-deep)'; l.style.background = 'var(--accent-soft)'; }
+      else { l.style.color = ''; l.style.background = ''; }
+    });
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>

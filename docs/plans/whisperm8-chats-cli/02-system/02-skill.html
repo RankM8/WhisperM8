@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 04 · Skill-Design — whisperm8 chats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: oklch(0.22 0.02 35); --ink-soft: oklch(0.42 0.02 35); --ink-mute: oklch(0.62 0.02 35);
+  --paper: oklch(0.975 0.008 78); --paper-2: oklch(0.945 0.012 72);
+  --line: oklch(0.80 0.02 70); --line-soft: oklch(0.88 0.015 70);
+  --accent: oklch(0.62 0.20 28); --accent-soft: oklch(0.92 0.06 30); --accent-deep: oklch(0.40 0.18 28);
+  --moss: oklch(0.48 0.10 145); --moss-soft: oklch(0.92 0.05 145);
+  --ocean: oklch(0.46 0.13 235); --ocean-soft: oklch(0.93 0.04 235);
+  --amber: oklch(0.72 0.13 75); --amber-soft: oklch(0.94 0.06 80);
+  --wm-bg: #0c0e12; --wm-paper: #13161b; --wm-ink: #e8ebf0; --wm-mute: #8d98a6;
+  --wm-line: #23272e; --wm-green: #3ddc97; --wm-amber: #f2b13e; --wm-purple: #a78bfa; --wm-red: #ff6b6b;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 720px) { .wrap { padding: 0 20px; } }
+::selection { background: var(--accent); color: var(--paper); }
+nav.top { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter: saturate(160%) blur(10px); border-bottom: 1px solid var(--line-soft); }
+nav.top .inner { max-width: 1180px; margin: 0 auto; padding: 14px 32px; display: flex; gap: 14px; align-items: center; font-family: var(--mono); font-size: 12px; flex-wrap: wrap; }
+nav.top .brand { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 17px; color: var(--ink); text-decoration: none; }
+nav.top .brand span { color: var(--accent); }
+nav.top .crumb { color: var(--ink-mute); font-size: 11px; }
+nav.top .crumb b { color: var(--ink); font-weight: 500; }
+nav.top .nav-links { display: flex; gap: 2px; margin-left: 12px; flex-wrap: wrap; }
+nav.top a { color: var(--ink-soft); text-decoration: none; padding: 5px 9px; border-radius: 4px; }
+nav.top a:hover { color: var(--accent-deep); background: var(--accent-soft); }
+nav.top .spacer { flex: 1; }
+nav.top .stamp { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 4px 10px; border: 1px solid var(--accent); border-radius: 100px; letter-spacing: 0.06em; transform: rotate(-2deg); }
+.hero { padding: 70px 0 50px; }
+.hero .pretitle { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 26px; }
+.hero h1 { font-family: var(--serif); font-weight: 300; font-size: clamp(42px, 6.5vw, 84px); line-height: 0.94; letter-spacing: -0.03em; margin: 0 0 20px; }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.hero .lede { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(18px, 2.2vw, 26px); line-height: 1.4; max-width: 800px; color: var(--ink-soft); }
+.hero .meta { margin-top: 42px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-mute); border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.hero .meta b { display: block; color: var(--ink); font-weight: 500; font-family: var(--serif); font-style: italic; font-size: 18px; margin-bottom: 4px; }
+@media (max-width: 720px) { .hero .meta { grid-template-columns: 1fr 1fr; } }
+section { padding: 70px 0; border-top: 1px solid var(--line-soft); }
+section.alt { background: var(--paper-2); }
+.section-head { margin-bottom: 36px; max-width: 860px; }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.14em; display: block; margin-bottom: 12px; }
+.section-head h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(28px, 4vw, 46px); line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+.section-kicker { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 17px; line-height: 1.5; max-width: 760px; margin-top: 14px; }
+.section-kicker code, .anno-box code, .states-grid code, .sidenote code { font-family: var(--mono); font-size: 0.85em; font-style: normal; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--accent-deep); }
+.annotations { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anno-box { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 10px; padding: 18px 20px; }
+.anno-box.full { grid-column: 1 / -1; }
+.anno-box .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+.anno-box h4 { margin: 0 0 8px; font-family: var(--serif); font-weight: 500; font-size: 16px; }
+.anno-box ul { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.anno-box ul li { padding: 4px 0 4px 16px; position: relative; border-top: 1px solid var(--line-soft); }
+.anno-box ul li:first-child { border-top: none; padding-top: 0; }
+.anno-box ul li::before { content: "›"; position: absolute; left: 0; color: var(--accent); font-family: var(--mono); }
+.anno-box ul li b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .annotations { grid-template-columns: 1fr; } }
+.states-grid { display: grid; grid-template-columns: 230px 1fr; gap: 0; margin-top: 8px; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.states-grid .row { display: contents; }
+.states-grid .row > div { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+.states-grid .row:last-child > div { border-bottom: none; }
+.states-grid .row .state-name { background: var(--paper-2); font-family: var(--mono); font-size: 11px; color: var(--ink); font-weight: 500; letter-spacing: 0.04em; border-right: 1px solid var(--line-soft); }
+.states-grid .row .state-desc { background: var(--paper); font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.states-grid .row .state-desc b { color: var(--ink); font-weight: 500; }
+@media (max-width: 720px) { .states-grid { grid-template-columns: 1fr; } }
+.data-shape { background: var(--wm-bg); color: var(--wm-ink); border-radius: 12px; padding: 24px 26px; font-family: var(--mono); font-size: 12.5px; line-height: 1.62; overflow-x: auto; margin-top: 8px; white-space: pre; }
+.data-shape .comment { color: #6f9e85; }
+.data-shape .key { color: #a8d8bd; }
+.data-shape .str { color: #ecc98a; }
+.data-shape .hd { color: #8d98a6; }
+.chat-frame { background: var(--wm-bg); border-radius: 14px; overflow: hidden; box-shadow: 0 30px 60px -30px color-mix(in srgb, var(--ink) 45%, transparent); border: 1px solid #1a1e25; }
+.chat-chrome { background: var(--wm-paper); padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--wm-line); }
+.chat-chrome .dots { display: flex; gap: 5px; }
+.chat-chrome .dots span { width: 10px; height: 10px; border-radius: 50%; }
+.chat-chrome .dots span:nth-child(1) { background: #F88B7A; }
+.chat-chrome .dots span:nth-child(2) { background: #F1C453; }
+.chat-chrome .dots span:nth-child(3) { background: #5BC881; }
+.chat-chrome .title { flex: 1; font-family: var(--mono); font-size: 11px; color: var(--wm-mute); text-align: center; }
+.chat-body { padding: 20px 22px 24px; display: flex; flex-direction: column; gap: 14px; font-size: 13.5px; line-height: 1.6; }
+.chat-msg { max-width: 88%; border-radius: 10px; padding: 12px 16px; }
+.chat-msg .who { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; opacity: 0.7; }
+.chat-msg.user { align-self: flex-end; background: #1d2b3a; color: #dbe7f2; }
+.chat-msg.agent { align-self: flex-start; background: var(--wm-paper); color: var(--wm-ink); border: 1px solid var(--wm-line); }
+.chat-msg.tool { align-self: flex-start; background: transparent; border: 1px dashed var(--wm-line); color: var(--wm-mute); font-family: var(--mono); font-size: 11.5px; white-space: pre; overflow-x: auto; max-width: 100%; }
+.chat-msg.ask { align-self: flex-start; background: #2a2417; border: 1px solid #4a3b1a; color: #ecd9a8; }
+.chat-msg.ask .opt { font-family: var(--mono); font-size: 11.5px; margin-top: 8px; padding: 6px 10px; border: 1px solid #4a3b1a; border-radius: 6px; }
+.chat-msg.ask .opt.sel { background: #3a3020; border-color: var(--wm-amber); color: var(--wm-amber); }
+.chat-msg code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px; color: inherit; }
+.mockup-block { margin-top: 48px; }
+.mockup-label { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.mockup-label .l { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.1em; font-weight: 500; }
+.mockup-label h3 { font-family: var(--serif); font-weight: 500; font-size: clamp(22px, 2.8vw, 30px); margin: 0; letter-spacing: -0.01em; }
+.mockup-label h3 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.mockup-block .notes { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ink-soft); font-size: 15.5px; max-width: 760px; margin: 0 0 20px; line-height: 1.5; }
+.sidenote { background: var(--paper-2); border-left: 3px solid var(--accent); padding: 18px 22px; margin: 28px 0 0; border-radius: 0 8px 8px 0; max-width: 860px; }
+.sidenote .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.sidenote p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--ink-soft); line-height: 1.5; font-weight: 300; }
+.next-paket { margin-top: 60px; padding: 36px 40px; background: var(--ink); color: var(--paper); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-decoration: none; transition: transform .15s ease; }
+.next-paket:hover { transform: translateY(-2px); }
+.next-paket .left .ttl { font-family: var(--mono); font-size: 10px; color: var(--accent-soft); letter-spacing: 0.14em; margin-bottom: 8px; }
+.next-paket .left h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.1; }
+.next-paket .left h3 em { color: var(--accent); font-style: italic; font-weight: 500; }
+.next-paket .arrow { font-family: var(--mono); font-size: 32px; color: var(--accent); font-weight: 300; }
+footer { padding: 50px 0 70px; border-top: 1px solid var(--line-soft); background: var(--paper-2); }
+footer .inner { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; gap: 16px; }
+footer .sig { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 16px; font-weight: 300; }
+@media print { nav.top { display: none; } section { page-break-inside: avoid; padding: 24px 0; } body { font-size: 11px; background: white; } a { color: var(--ink) !important; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <a href="../index.html" class="brand">WhisperM8 <span>✱</span> chats-CLI</a>
+    <span class="crumb">› <b>Paket 04 · Skill-Design</b></span>
+    <span class="nav-links">
+      <a href="#uebersicht">Übersicht</a>
+      <a href="#autonomie">Autonomie</a>
+      <a href="#loop">Loop</a>
+      <a href="#skillmd">SKILL.md</a>
+      <a href="#dialoge">Dialoge</a>
+      <a href="#allowlist">Allowlist</a>
+    </span>
+    <span class="spacer"></span>
+    <span class="stamp">v1 · 2026-07-19</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="pretitle">PAKET 04 ✱ SKILL ✱ v1</div>
+    <h1>Aus Befehlen wird <em>Verhalten.</em></h1>
+    <p class="lede">Die CLI kann alles — der Skill entscheidet, wann sie was tut. Er macht jeden Chat auf Zuruf zum Beobachter, Zuarbeiter oder Dauer-Supervisor, und er kodiert die eine Regel, die du festgelegt hast: <b>vor jeder mutierenden Aktion wird gefragt.</b></p>
+    <div class="meta">
+      <div><b>Name</b><code>whisperm8-chats</code></div>
+      <div><b>Ort</b>User-Skills-Verzeichnis (App-Installer: Slice 4)</div>
+      <div><b>Send-Gate</b>AskUserQuestion / aktive Rückfrage</div>
+      <div><b>Stufen</b>Beobachten · Zuarbeiten · Supervisor</div>
+    </div>
+  </div>
+</header>
+
+<section id="uebersicht">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">00 ✱ ÜBERSICHT</span>
+      <h2>Ein Skill, drei <em>Rollen.</em></h2>
+      <p class="section-kicker">Der Skill triggert auf natürliche Formulierungen und wählt selbst die passende Rolle — eskaliert aber nie eigenmächtig von Beobachten zu Handeln.</p>
+    </div>
+    <div class="annotations">
+      <div class="anno-box">
+        <span class="tag">Trigger</span>
+        <h4>Wann der Skill lädt</h4>
+        <ul>
+          <li><b>Beobachten:</b> „was machen meine Chats", „läuft noch was?", „Status meiner Sessions", „wartet irgendwas auf mich?"</li>
+          <li><b>Zuarbeiten:</b> „schick an Chat X …", „antworte dem Wolanin-Chat", „starte einen Chat in Projekt Y", „räum meine Sessions auf"</li>
+          <li><b>Supervisor:</b> „sei mein Jarvis", „überwache meine Chats", „sag mir Bescheid, wenn was fertig ist"</li>
+          <li><b>Nicht triggern</b> bei: Codex-Subagent-Jobs (<code>codex-subagent</code>-Skill), Transkription (<code>whisperm8-transcription</code>)</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Abgrenzung</span>
+        <h4>Was der Skill bewusst nicht tut</h4>
+        <ul>
+          <li>Keine eigene Statuslogik — er vertraut <code>overview --json</code> und interpretiert nur</li>
+          <li>Kein Berichts-Spam: Er fasst zusammen, statt rohe CLI-Tabellen zu zitieren</li>
+          <li>Kein <code>--force</code> und kein <code>--if-status working</code> aus eigenem Antrieb — nur wenn der User es in diesem konkreten Fall verlangt hat</li>
+          <li>Keine Dauerschleife ohne expliziten Supervisor-Auftrag</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="autonomie" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">01 ✱ AUTONOMIE</span>
+      <h2>Drei Stufen, klare <em>Grenzen.</em></h2>
+      <p class="section-kicker">Die Entscheidung vom 2026-07-19: Send-Autonomie wird im Skill gelöst, nicht in der App. Konkret heißt das — zwei Verteidigungslinien: die Skill-Regel (fragen!) und das Claude-Code-Permission-System (Bash-Gate auf mutierende Befehle).</p>
+    </div>
+    <div class="states-grid">
+      <div class="row"><div class="state-name">STUFE A · BEOBACHTEN</div><div class="state-desc"><b>Default, keine Rückfrage nötig.</b> <code>list</code>, <code>overview</code>, <code>show</code>, <code>tail</code>, <code>audit</code>, <code>wait</code> — alles Lesende läuft frei. Der Skill fasst Ergebnisse zusammen (max. 5 Zeilen für ein Standard-Lagebild) und nennt bei degradiertem Modus („App läuft nicht") die Einschränkung.</div></div>
+      <div class="row"><div class="state-name">STUFE B · ZUARBEITEN</div><div class="state-desc"><b>Mutation nur nach Bestätigung im konkreten Fall.</b> Vor <code>send</code>: Prompt-Text wörtlich zeigen + Ziel nennen → <b>AskUserQuestion</b> (interaktiv) bzw. explizite Rückfrage im Chat-Text. Vor <code>archive</code>/<code>rename --force</code>: dasselbe. <code>open</code> und <code>new</code> gelten als leicht: kurz ankündigen reicht, wenn sie direkt aus dem User-Auftrag folgen; <code>new</code> aus <b>Eigeninitiative</b> wird vorgeschlagen (Projekt + Initial-Prompt zeigen) und erst nach Ja gestartet. <b>Aufräum-Runden:</b> eine Batch-Bestätigung per AskUserQuestion mit Multi-Select (Vorher→Nachher-Liste, Archives markiert) statt Einzelfragen.</div></div>
+      <div class="row"><div class="state-name">STUFE C · SUPERVISOR</div><div class="state-desc"><b>Nur nach explizitem Auftrag</b> („sei mein Jarvis"). Loop: overview → berichten → wait → bewerten → berichten/vorschlagen. Auch hier: Sends brauchen Bestätigung — <b>es sei denn</b>, der User hat für eine konkrete Ziel-Session pauschal freigegeben („du darfst dem Wolanin-Chat direkt antworten"). Diese Freigabe gilt pro Session und pro Konversation, nie global, und wird im Bericht erwähnt („habe direkt geantwortet, wie freigegeben").</div></div>
+      <div class="row"><div class="state-name">IMMER</div><div class="state-desc">Nie an <code>@self</code> senden (die CLI blockt es ohnehin — der Skill versucht es gar nicht erst). Exit 4/5 sauber erklären statt wegzuignorieren. Bei Exit 3 (mehrdeutig): Kandidaten dem User zeigen, nicht selbst raten.</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="loop">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">02 ✱ SUPERVISOR-LOOP</span>
+      <h2>Der Jarvis-<em>Rhythmus.</em></h2>
+      <p class="section-kicker">Das Herzstück der Stufe C — als festes Muster im Skill, damit jede Session denselben verlässlichen Rhythmus fährt.</p>
+    </div>
+    <div class="data-shape"><span class="hd"># Supervisor-Loop (SKILL.md-Auszug, Pseudocode)</span>
+
+<span class="comment">1. LAGEBILD   </span>overview --json → kompakt berichten (needsYou zuerst, dann Rest in 1 Zeile)
+<span class="comment">2. TRIAGE     </span>für jede needsYou-Session: tail --turns 1 → was will sie? → dem User
+              melden + konkreten Vorschlag machen (antworten? öffnen? ignorieren?)
+<span class="comment">3. WARTEN     </span>wait --until attention --since &lt;maxRevision&gt; --timeout 1800 --json
+              (bei Claude Code als langlaufender Bash-Call mit timeout ≥ 1810s)
+<span class="comment">4. EREIGNIS   </span>Event bewerten: awaitingInput → Triage wie 2 · idle/fertig → tail,
+              Ergebnis in 2 Sätzen melden · errored → tail + Fehler zusammenfassen
+<span class="comment">5. WEITER     </span>zurück zu 3. Exit 124 (Timeout)? → kurzes „alles ruhig, N working" +
+              zurück zu 3. User-Nachricht unterbricht den Loop jederzeit.</span></div>
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box">
+        <span class="tag">Ergonomie</span>
+        <h4>Berichte, die man lesen will</h4>
+        <ul>
+          <li><b>Ein Lagebild = max. 5 Zeilen.</b> Kein Tabellen-Dump — der User kann selbst <code>overview</code> tippen, wenn er die Rohdaten will</li>
+          <li>Immer <code>projekt/titel</code> als Name, nie UUIDs im Bericht</li>
+          <li>„Seit"-Angaben menschlich („seit 4 min", nicht ISO-Timestamps)</li>
+          <li>Bei „frisch fertig": das Ergebnis in einem Satz aus dem Tail, nicht nur „ist fertig"</li>
+        </ul>
+      </div>
+      <div class="anno-box">
+        <span class="tag">Technik</span>
+        <h4>Loop-Details</h4>
+        <ul>
+          <li><code>--since &lt;maxRevision&gt;</code> aus dem letzten overview/Event mitführen — keine verpassten Wechsel zwischen zwei waits</li>
+          <li>Bash-Timeout des Tool-Calls über dem wait-Timeout halten (1800 s wait → 1810 s+ Bash), sonst killt der Tool-Timeout das wait</li>
+          <li>Exit 5 mitten im Loop (App beendet): dem User melden, auf Lese-Modus degradieren, Loop mit reinem overview-Polling in großen Abständen fortsetzen oder auf Wunsch beenden</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="skillmd" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">03 ✱ SKILL.MD</span>
+      <h2>Der Volltext-<em>Entwurf.</em></h2>
+      <p class="section-kicker">Wird in Slice 4 finalisiert (Flag-Details können sich in der Umsetzung minimal schieben), aber Struktur und Regeln stehen hier fest. Kompakt gehalten — die CLI hat ihre eigene <code>--help</code>-Referenz, der Skill dupliziert sie nicht vollständig.</p>
+    </div>
+    <div class="data-shape"><span class="hd">---</span>
+<span class="key">name</span>: <span class="str">whisperm8-chats</span>
+<span class="key">description</span>: <span class="str">Alle WhisperM8-Agent-Sessions sehen und verwalten (Jarvis-Supervisor über
+  die whisperm8-CLI). Nutzen bei: "was machen meine Chats", "Status meiner Sessions",
+  "wartet was auf mich", "schick an Chat X", "antworte dem …-Chat", "starte einen
+  Chat in Projekt Y", "räum meine Sessions auf", "sei mein Jarvis", "überwache
+  meine Chats", "sag Bescheid wenn ein Chat fertig ist". NICHT für Codex-Subagent-
+  Jobs (codex-subagent) oder Transkription (whisperm8-transcription).</span>
+<span class="hd">---</span>
+
+<span class="hd"># WhisperM8 Chats — Sessions sehen und verwalten</span>
+
+Du kannst über `whisperm8 chats` alle Agent-Sessions des Users sehen und
+verwalten. Du läufst selbst in einer davon (`WHISPERM8_SESSION_ID`) — in
+Ausgaben bist du als "(du)" markiert; an dich selbst senden geht nicht.
+
+<span class="hd">## Befehle (Kurzreferenz)</span>
+
+Lesen (immer erlaubt, App optional):
+- `whisperm8 chats overview --json`   Lagebild, attention-sortiert
+- `whisperm8 chats list [--project P] [--all] --json`
+- `whisperm8 chats show &lt;ref&gt; --json`
+- `whisperm8 chats tail &lt;ref&gt; [--turns N] [--chars N]`
+- `whisperm8 chats wait [--ref R] [--until attention|idle] [--since REV]
+   [--timeout SEC] --json`   blockiert bis Ereignis; Bash-Timeout &gt; wait-Timeout!
+- `whisperm8 chats audit [--limit N]`
+
+Handeln (App muss laufen — sonst Exit 5):
+- `whisperm8 chats send &lt;ref&gt; -- "&lt;prompt&gt;"`   [--no-submit] [--if-status working]
+- `whisperm8 chats open &lt;ref&gt;`
+- `whisperm8 chats new --project &lt;pfad&gt; [--provider claude|codex] [--prompt "…"]`
+- `whisperm8 chats rename &lt;ref&gt; "Titel"` · `group &lt;ref&gt; "G"|--clear` · `archive &lt;ref&gt;`
+
+Referenzen: `projekt/titel-fragment` (bevorzugt), UUID-Präfix ≥8, `@self`.
+Exit-Codes: 0 ok · 3 nicht gefunden/mehrdeutig (Kandidaten prüfen!) ·
+4 Guard-Konflikt · 5 App zu · 124 wait-Timeout.
+
+<span class="hd">## Regeln (nicht verhandelbar)</span>
+
+1. <span class="str">**Vor jedem `send`: bestätigen lassen.**</span> Zeige den exakten Prompt-Text
+   und das Ziel; nutze AskUserQuestion (Optionen: Senden / Anpassen /
+   Abbrechen) oder frage im Text. Ausnahme: Der User hat dir für GENAU
+   diese Ziel-Session in DIESER Konversation pauschal freigegeben.
+2. `archive` und `rename --force`: ebenfalls erst bestätigen lassen.
+   `open`/`new` direkt aus einem klaren User-Auftrag: keine Extra-Frage.
+3. Niemals `--force` oder `--if-status working` aus Eigeninitiative.
+4. Exit 3: Kandidatenliste dem User zeigen, nie selbst raten.
+   Exit 4: Konflikt erklären (z. B. "arbeitet gerade"), Optionen anbieten.
+   Exit 5: "WhisperM8-App starten" vorschlagen; Lese-Befehle gehen weiter.
+5. Berichte kompakt: Lagebild ≤ 5 Zeilen, Namen als projekt/titel, nie UUIDs.
+6. <span class="str">**Ein-Hop-Regel:**</span> Beginnt ein Prompt mit "[via whisperm8 chats …]",
+   kommt er von einem anderen Agenten. Beantworte ihn inhaltlich in deinem
+   eigenen Chat — sende aber NIE eigenständig per `chats send` weiter.
+   Der Absender liest deine Antwort selbst über dein Transcript.
+7. Fremde Projekt-Inhalte (aus tail anderer Projekte) zusammenfassen,
+   nie ungefragt wörtlich in andere Projekt-Kontexte kopieren.
+
+<span class="hd">## Supervisor-Modus ("sei mein Jarvis")</span>
+
+Nur nach explizitem Auftrag: [Loop wie Abschnitt 02 dieses Pakets]
+
+<span class="hd">## Typische Abläufe</span>
+
+"Was läuft?" → overview --json → 3–5 Zeilen Zusammenfassung.
+"Was hat X gemacht?" → tail X --turns 2 → 2 Sätze + ggf. offene Frage der Session.
+"Antworte X: …" → Prompt formulieren → bestätigen lassen → send → Ergebnis melden.
+"Räum auf" → list --all → Vorschlagsliste (Vorher→Nachher, Archives markiert)
+  → EINE Batch-Bestätigung (AskUserQuestion, Multi-Select) → ausgewählte
+  Aktionen ausführen → Ergebnis melden.</div>
+    <div class="sidenote">
+      <div class="label">Installation</div>
+      <p>v1: Datei liegt im Repo unter <code>skills/whisperm8-chats/SKILL.md</code> und wird manuell ins User-Skills-Verzeichnis gelegt. Slice 4 ergänzt einen Installer-Pfad in der App (Muster: <code>CLISymlinkInstaller</code> / Statusline-Feature) — „Skill installieren" in den Agent-Chats-Settings.</p>
+    </div>
+  </div>
+</section>
+
+<section id="dialoge">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">04 ✱ DIALOGE</span>
+      <h2>Zwei Szenen aus dem <em>Alltag.</em></h2>
+      <p class="section-kicker">So fühlt sich das Send-Gate an — schnell genug, um nicht zu nerven, explizit genug, um nie zu überraschen.</p>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label"><span class="l">DIALOG A</span><h3>Zuarbeiten mit <em>Send-Gate</em></h3></div>
+      <p class="notes">Der User delegiert eine Antwort. Der Skill zeigt den Prompt wörtlich, fragt per AskUserQuestion, sendet erst nach der Auswahl.</p>
+      <div class="chat-frame">
+        <div class="chat-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="title">Agent Chat „jarvis" — Claude Code</div></div>
+        <div class="chat-body">
+          <div class="chat-msg user"><div class="who">Du</div>Der Wolanin-Chat wollte doch was von mir — kümmer dich drum, die Botox-Seite zuerst.</div>
+          <div class="chat-msg tool">❯ whisperm8 chats tail wolanin/seo --turns 1
+[assistant · 14:41] „… Interne Verlinkung fehlt noch auf 2 Seiten —
+soll ich die Botox-Seite zuerst verlinken?"</div>
+          <div class="chat-msg agent"><div class="who">Claude</div>Der Chat <b>wolanin/seo-behandlungsseiten</b> wartet seit 21 min auf genau diese Entscheidung. Ich würde ihm antworten:<br><br><i>„Ja, verlinke zuerst die Botox-Seite, danach die Filler-Seite. Gib mir am Ende den Rank-Math-Score aller 6 Seiten als Tabelle."</i></div>
+          <div class="chat-msg ask"><div class="who">Rückfrage</div>Prompt so an wolanin/seo senden?
+            <div class="opt sel">✓ Senden</div>
+            <div class="opt">Anpassen</div>
+            <div class="opt">Abbrechen</div>
+          </div>
+          <div class="chat-msg tool">❯ whisperm8 chats send wolanin/seo -- "Ja, verlinke zuerst die Botox-Seite, …"
+✓ gesendet (ack: delivered) · Audit 15:02:11</div>
+          <div class="chat-msg agent"><div class="who">Claude</div>Gesendet — der Chat arbeitet wieder. Ich sage dir Bescheid, wenn er fertig ist (<code>wait --ref wolanin/seo --until idle</code> läuft).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup-block">
+      <div class="mockup-label"><span class="l">DIALOG B</span><h3>Supervisor-Modus mit <em>wait-Ereignis</em></h3></div>
+      <p class="notes">Stufe C nach explizitem Auftrag: Der Loop meldet sich nur, wenn etwas passiert — und schlägt konkret vor, statt nur zu melden.</p>
+      <div class="chat-frame">
+        <div class="chat-chrome"><div class="dots"><span></span><span></span><span></span></div><div class="title">Agent Chat „jarvis" — Supervisor-Modus</div></div>
+        <div class="chat-body">
+          <div class="chat-msg user"><div class="who">Du</div>Sei mein Jarvis. Beim Marketing-Chat darfst du Routine-Antworten direkt senden.</div>
+          <div class="chat-msg agent"><div class="who">Claude</div>Übernommen. Lagebild: <b>2 arbeiten</b> (marketing/creative-batch 31 min, whisperm8/pill-redesign 4 min), <b>1 idle</b>. Nichts braucht dich. Ich beobachte — Freigabe für Direkt-Sends gilt nur für marketing/creative-batch.</div>
+          <div class="chat-msg tool">❯ whisperm8 chats wait --until attention --since 2184533 --timeout 1800 --json
+… 11 min später …
+{"event":"statusChanged","session":{"title":"pill-redesign",…},
+ "from":"working","to":"awaitingInput","afterSeconds":912,…}</div>
+          <div class="chat-msg agent"><div class="who">Claude</div><b>whisperm8/pill-redesign braucht dich:</b> Sie fragt, ob die Recording-Pill Variante B (Glas-Effekt) oder C (flach) umgesetzt werden soll — mit Screenshot-Vergleich im Chat. Das ist eine Design-Entscheidung, die sende ich nicht selbst. Öffnen? (<code>chats open</code>)</div>
+          <div class="chat-msg user"><div class="who">Du</div>Ja, öffne sie.</div>
+          <div class="chat-msg tool">❯ whisperm8 chats open whisperm8/pill-redesign
+✓ Session fokussiert</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="allowlist" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-num">05 ✱ ALLOWLIST</span>
+      <h2>Permissions als zweites <em>Netz.</em></h2>
+      <p class="section-kicker">Empfohlene Einträge für die Claude-Code-Settings — Lese-Befehle laufen ohne Prompt, jede Mutation bleibt ein sichtbarer Permission-Dialog (zusätzlich zur Skill-Rückfrage).</p>
+    </div>
+    <div class="data-shape"><span class="comment">// .claude/settings.json (User- oder Projekt-Ebene) — Empfehlung</span>
+{
+  <span class="key">"permissions"</span>: {
+    <span class="key">"allow"</span>: [
+      <span class="str">"Bash(whisperm8 chats list:*)"</span>,
+      <span class="str">"Bash(whisperm8 chats overview:*)"</span>,
+      <span class="str">"Bash(whisperm8 chats show:*)"</span>,
+      <span class="str">"Bash(whisperm8 chats tail:*)"</span>,
+      <span class="str">"Bash(whisperm8 chats wait:*)"</span>,
+      <span class="str">"Bash(whisperm8 chats audit:*)"</span>
+      <span class="comment">// send / open / new / rename / group / archive: bewusst NICHT
+      // in der Allowlist — jeder Aufruf bleibt ein Permission-Prompt.</span>
+    ]
+  }
+}</div>
+    <div class="annotations" style="margin-top: 28px;">
+      <div class="anno-box full">
+        <span class="tag">Zusammenspiel der Netze</span>
+        <h4>Wer schützt wovor?</h4>
+        <ul>
+          <li><b>Skill-Regel (AskUserQuestion):</b> schützt vor ungewollten Inhalten — du siehst den Prompt-Text, bevor er rausgeht</li>
+          <li><b>Permission-Prompt:</b> schützt vor ungewollten Aufrufen — auch wenn ein Skill-freier Chat die CLI entdeckt, bleibt jede Mutation sichtbar</li>
+          <li><b>CLI-Guards (Exit 4):</b> schützen vor technisch falschen Aktionen — Selbst-Send, working-Ziel, tote PTY — unabhängig davon, wer aufruft</li>
+          <li>Wer dem Supervisor-Chat maximal vertraut, kann <code>send</code> für eine Session-Konvention zusätzlich allowlisten — Default bleibt konservativ</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="border-top: none; padding-top: 0;">
+  <div class="wrap">
+    <a class="next-paket" href="../03-umsetzung/01-slices-tests.html">
+      <div class="left">
+        <div class="ttl">ALS NÄCHSTES</div>
+        <h3>Paket 05 — Slices, Tests &amp; <em>Failure-Modes</em></h3>
+        <div style="margin-top: 8px; font-size: 13px; color: oklch(0.78 0.02 75); max-width: 540px; line-height: 1.5;">Die konkreten Task-Listen pro Slice, der vollständige Testplan und die Failure-Matrix — damit die Umsetzung direkt starten kann.</div>
+      </div>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <div class="sig"><em>Paket 04 · Skill-Design</em> · Stand v1 · <a href="../index.html" style="color: var(--accent); text-decoration: none;">← Hub</a></div>
+      <div style="text-align: right;">WhisperM8<br>STAND 2026-07-19 ✱ v1</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('nav.top a[href^="#"]');
+  const sections = Array.from(document.querySelectorAll('section[id]'));
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) { if (s.offsetTop <= y) current = s; }
+    links.forEach(l => {
+      const id = l.getAttribute('href').slice(1);
+      if (id === current?.id) { l.style.color = 'var(--accent-deep)'; l.style.background = 'var(--accent-soft)'; }
+      else { l.style.color = ''; l.style.background = ''; }
+    });
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+</body>
+</html>
