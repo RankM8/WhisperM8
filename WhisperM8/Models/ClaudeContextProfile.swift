@@ -66,4 +66,12 @@ struct ClaudeContextProfile: Identifiable, Codable, Equatable, Hashable {
             && enabledPlugins.isEmpty
             && environment.isEmpty
     }
+
+    /// Sperrt dieses Profil den Server? Connectoren stehen in
+    /// `deniedMcpServers`, config-basierte Server in `disabledMcpjsonServers`.
+    func blocksServer(name: String, isConnector: Bool) -> Bool {
+        isConnector
+            ? deniedMcpServers.contains(name)
+            : disabledMcpjsonServers.contains(name)
+    }
 }

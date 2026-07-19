@@ -13,7 +13,13 @@ import Observation
 @MainActor
 @Observable
 final class ClaudePluginManagerModel {
+    /// Geteilte Instanz fuer Page + Profileditor — vermeidet doppelte
+    /// CLI-Laeufe und doppelte Caches (die harte Parallel-Sperre liegt
+    /// ohnehin im `ClaudePluginCLISerializer`).
+    static let shared = ClaudePluginManagerModel()
+
     var cli = ClaudePluginCLI()
+    var mcpInventory = ClaudeMCPInventory()
 
     private(set) var pluginList = ClaudePluginList(installed: [], available: [])
     private(set) var marketplaces: [ClaudeMarketplace] = []
@@ -28,6 +34,30 @@ final class ClaudePluginManagerModel {
     var accountProfileName: String?
 
     private var hasLoadedOnce = false
+
+    // MARK: - MCP-Inventar (separat vom Plugin-Busy — reines Lesen)
+
+    private(set) var mcpEntries: [ClaudeMCPServerEntry] = []
+    private(set) var isMCPLoading = false
+    private(set) var hasLoadedMCPOnce = false
+
+    /// Laedt das MCP-Inventar einmalig (Health-Checks sind langsam — Caller
+    /// zeigen einen Spinner; Refresh nur explizit).
+    func loadMCPInventoryIfNeeded() async {
+        guard !hasLoadedMCPOnce, !isMCPLoading else { return }
+        await refreshMCPInventory()
+    }
+
+    func refreshMCPInventory() async {
+        guard !isMCPLoading else { return }
+        isMCPLoading = true
+        defer { isMCPLoading = false }
+        mcpEntries = await mcpInventory.collect(
+            accountProfile: accountProfileName,
+            pluginList: hasLoadedOnce ? pluginList : nil
+        )
+        hasLoadedMCPOnce = true
+    }
 
     /// Summe der Always-on-Token aller enabled Plugins — nur aus dem Cache;
     /// nil-Anteile machen die Summe unvollstaendig (`isTokenSumComplete`).
@@ -156,6 +186,8 @@ final class ClaudePluginManagerModel {
     func switchAccountProfile(to name: String?) async {
         accountProfileName = name
         detailsCache = [:]
+        mcpEntries = []
+        hasLoadedMCPOnce = false
         await reload()
     }
 

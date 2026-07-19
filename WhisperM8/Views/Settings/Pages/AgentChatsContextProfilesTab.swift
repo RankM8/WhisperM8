@@ -10,9 +10,9 @@ struct AgentChatsContextProfilesTab: View {
     @State private var profileStore = ClaudeContextProfileStore.shared
     @State private var selectedProfileID: UUID?
     /// B4-Kopplung: installierte Plugins + deren MCP-Server als
-    /// Klick-Vorschlaege (Quelle: `claude plugin list --json`). Laedt lazy
-    /// beim Oeffnen des Tabs; ohne Claude-CLI bleiben die Chips einfach weg.
-    @State private var pluginModel = ClaudePluginManagerModel()
+    /// Klick-Vorschlaege. Geteilte Model-Instanz mit der Context-&-Plugins-
+    /// Seite — ein Cache, keine doppelten CLI-Laeufe.
+    @State private var pluginModel = ClaudePluginManagerModel.shared
 
     // Editor-Drafts — bewusst vom Store entkoppelt, gespeichert wird nur
     // per "Save"-Button (kein Live-Schreiben bei jedem Tastendruck).
@@ -191,8 +191,14 @@ struct AgentChatsContextProfilesTab: View {
     }
 
     private var connectorSuggestionRow: some View {
-        // Chips fuer haeufige Connectoren — Klick haengt die Zeile an.
-        FlowLayoutLite(items: Self.connectorSuggestions.filter { !draftDeniedLines.contains($0) }) { name in
+        // Chips: bevorzugt die REAL vorhandenen Connectoren aus dem
+        // MCP-Inventar (falls der MCP-Tab sie schon geladen hat), sonst die
+        // statische Liste gaengiger claude.ai-Connectoren.
+        let inventoryConnectors = pluginModel.mcpEntries
+            .filter(\.isDeniableConnector)
+            .map(\.name)
+        let source = inventoryConnectors.isEmpty ? Self.connectorSuggestions : inventoryConnectors
+        return FlowLayoutLite(items: source.filter { !draftDeniedLines.contains($0) }) { name in
             Button(name) {
                 draftDeniedServers = (draftDeniedLines + [name]).joined(separator: "\n")
             }

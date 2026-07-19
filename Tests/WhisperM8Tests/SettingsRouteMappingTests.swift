@@ -12,7 +12,7 @@ final class SettingsRouteMappingTests: XCTestCase {
             ("outputOverview", SettingsRouteTarget(page: .output, aiOutputTab: nil, agentChatsTab: nil)),
             ("history", SettingsRouteTarget(page: .output, aiOutputTab: nil, agentChatsTab: nil)),
             ("agentChats", SettingsRouteTarget(page: .agentChats, aiOutputTab: nil, agentChatsTab: .workspace)),
-            ("claudeCode", SettingsRouteTarget(page: .agentChats, aiOutputTab: nil, agentChatsTab: .claudeHooks)),
+            ("claudeCode", SettingsRouteTarget(page: .claudeHooks, aiOutputTab: nil, agentChatsTab: nil)),
             ("hotkey", SettingsRouteTarget(page: .recording, aiOutputTab: nil, agentChatsTab: nil)),
             ("audio", SettingsRouteTarget(page: .recording, aiOutputTab: nil, agentChatsTab: nil)),
             ("behavior", SettingsRouteTarget(page: .general, aiOutputTab: nil, agentChatsTab: nil))

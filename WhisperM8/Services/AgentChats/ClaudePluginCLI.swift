@@ -133,6 +133,15 @@ struct ClaudePluginCLI {
         try await run(["plugin", "prune"], accountProfile: accountProfile)
     }
 
+    // MARK: - MCP
+
+    /// `claude mcp list` — Text-Output (kein --json, verifiziert 2026-07-19)
+    /// mit Health-Checks; kann mehrere Sekunden dauern. Parsing macht
+    /// `ClaudeMCPInventory.parseMCPListOutput`.
+    func mcpList(accountProfile: String?) async throws -> String {
+        try await run(["mcp", "list"], accountProfile: accountProfile)
+    }
+
     // MARK: - Marketplaces
 
     func marketplaces(accountProfile: String?) async throws -> [ClaudeMarketplace] {

@@ -24,7 +24,9 @@ struct SettingsRouteTarget: Equatable {
         case "agentChats":
             return SettingsRouteTarget(page: .agentChats, aiOutputTab: nil, agentChatsTab: .workspace)
         case "claudeCode":
-            return SettingsRouteTarget(page: .agentChats, aiOutputTab: nil, agentChatsTab: .claudeHooks)
+            // Historische Route auf den alten „Claude Hooks"-Tab — seit dem
+            // IA-Umbau 2026-07-19 die eigene Hooks-Seite der CLAUDE-CODE-Sektion.
+            return SettingsRouteTarget(page: .claudeHooks, aiOutputTab: nil, agentChatsTab: nil)
         case "hotkey", "audio":
             return SettingsRouteTarget(page: .recording, aiOutputTab: nil, agentChatsTab: nil)
         case "behavior":

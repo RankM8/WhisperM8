@@ -12,6 +12,7 @@ final class ClaudePluginManagerModelTests: XCTestCase {
         var shouldFail = false
         var failOnList = false
         var failOnDetails = false
+        var mcpListText = ""
     }
 
     private func makeModel(state: FakeCLIState) -> ClaudePluginManagerModel {
@@ -24,6 +25,7 @@ final class ClaudePluginManagerModelTests: XCTestCase {
             if state.shouldFail {
                 throw AgentHeadlessCLIError.nonZeroExit(1, stderr: "boom")
             }
+            if arguments.first == "mcp" { return state.mcpListText }
             if arguments.contains("marketplace") { return "[]" }
             if arguments.contains("details") {
                 if state.failOnDetails {
@@ -148,6 +150,33 @@ final class ClaudePluginManagerModelTests: XCTestCase {
         let cached = model.detailsCache[model.cacheKey(for: plugin)]
         XCTAssertNotNil(cached)             // Platzhalter → UI zeigt "nicht verfuegbar"
         XCTAssertNil(cached?.alwaysOnTokens)
+    }
+
+    func testMCPInventoryLoadsLazilyAndResetsOnProfileSwitch() async {
+        let state = FakeCLIState()
+        state.mcpListText = "claude.ai Gmail: https://gmailmcp.googleapis.com/mcp/v1 - ✔ Connected"
+        let model = makeModel(state: state)
+        var inventory = ClaudeMCPInventory()
+        inventory.cli = model.cli
+        inventory.configJSONLoader = { _ in
+            #"{"mcpServers": {"imap-email": {"command": "node x"}}}"#.data(using: .utf8)
+        }
+        inventory.projectMCPJSONLoader = { _ in nil }
+        inventory.knownProjectPaths = { [] }
+        model.mcpInventory = inventory
+
+        await model.loadMCPInventoryIfNeeded()
+        XCTAssertEqual(model.mcpEntries.map(\.name).sorted(), ["claude.ai Gmail", "imap-email"])
+        XCTAssertTrue(model.hasLoadedMCPOnce)
+
+        // Zweiter Aufruf ist ein No-op (Cache).
+        let callsBefore = state.calls.count
+        await model.loadMCPInventoryIfNeeded()
+        XCTAssertEqual(state.calls.count, callsBefore)
+
+        await model.switchAccountProfile(to: "PowerUser")
+        XCTAssertTrue(model.mcpEntries.isEmpty)
+        XCTAssertFalse(model.hasLoadedMCPOnce)
     }
 
     func testSwitchAccountProfileClearsCacheAndReloads() async {

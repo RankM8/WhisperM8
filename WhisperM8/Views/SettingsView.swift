@@ -7,7 +7,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case context
     case agentChats = "agent-chats"
     case gptBackend = "gpt-backend"
+    case claudeAccounts = "claude-accounts"
     case claudePlugins = "claude-plugins"
+    case claudeHooks = "claude-hooks"
     case cli
     case general
     case permissions
@@ -34,8 +36,12 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "Agent Chats"
         case .gptBackend:
             return "GPT-Backend"
+        case .claudeAccounts:
+            return "Accounts"
         case .claudePlugins:
-            return "Claude Plugins"
+            return "Context & Plugins"
+        case .claudeHooks:
+            return "Hooks"
         case .cli:
             return "CLI & Skills"
         case .general:
@@ -63,8 +69,12 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "terminal"
         case .gptBackend:
             return "arrow.triangle.branch"
+        case .claudeAccounts:
+            return "person.2"
         case .claudePlugins:
             return "puzzlepiece.extension"
+        case .claudeHooks:
+            return "link"
         case .cli:
             return "chevron.left.forwardslash.chevron.right"
         case .general:
@@ -92,8 +102,12 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "Configure the agent workspace and Claude Code hooks."
         case .gptBackend:
             return "Connect Claude Code sessions to GPT models through the local proxy."
+        case .claudeAccounts:
+            return "Claude accounts and profiles (CLAUDE_CONFIG_DIR) for multi-account sessions."
         case .claudePlugins:
-            return "Manage Claude Code plugins and marketplaces with projected token costs."
+            return "Everything that eats context: MCP servers, plugins, marketplaces, and per-project context profiles."
+        case .claudeHooks:
+            return "Session hooks for live status — temporary --settings, your global config stays untouched."
         case .cli:
             return "Command line access and installable agent skills."
         case .general:
@@ -124,7 +138,8 @@ struct SettingsView: View {
 
     private let pageGroups: [SettingsPageGroup] = [
         SettingsPageGroup(title: "Dictation", pages: [.recording, .transcription, .aiOutput, .context]),
-        SettingsPageGroup(title: "Agents", pages: [.agentChats, .gptBackend, .claudePlugins, .cli]),
+        SettingsPageGroup(title: "Agents", pages: [.agentChats, .cli]),
+        SettingsPageGroup(title: "Claude Code", pages: [.claudeAccounts, .claudePlugins, .claudeHooks, .gptBackend]),
         SettingsPageGroup(title: "App", pages: [.general, .permissions, .about]),
         SettingsPageGroup(title: "Workspace", pages: [.output])
     ]
@@ -240,8 +255,12 @@ struct SettingsView: View {
             agentChatsPage(page)
         case .gptBackend:
             GPTBackendSettingsPage()
+        case .claudeAccounts:
+            ClaudeAccountsSettingsPage()
         case .claudePlugins:
             ClaudePluginsSettingsPage()
+        case .claudeHooks:
+            ClaudeHooksSettingsPage()
         case .cli:
             // Phase 9b: migrierte V3-Seite (Inhalte 1:1, Kit-Optik, CopyCommandRows).
             CLISkillsSettingsPage()

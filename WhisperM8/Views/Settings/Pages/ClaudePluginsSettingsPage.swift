@@ -1,24 +1,32 @@
 import SwiftUI
 
-/// Plugin-Manager: wrappt das `claude plugin`-CLI headless (Liste mit
-/// projizierten Token-Kosten, Enable/Disable, Install/Uninstall/Update,
-/// Marketplace-Verwaltung). Alle Mutationen laufen ueber das offizielle CLI
-/// (`ClaudePluginCLI`) — WhisperM8 schreibt nie selbst unter `~/.claude/`.
+/// „Context & Plugins" — die zentrale Seite der CLAUDE-CODE-Sektion fuer
+/// alles, was Kontext kostet: Uebersicht (Dashboard), MCP-Server-Inventar,
+/// Plugins mit Token-Kosten, Marketplaces und die Context-Profile. Alle
+/// Mutationen laufen ueber das offizielle CLI (`ClaudePluginCLI`) —
+/// WhisperM8 schreibt nie selbst unter `~/.claude/`.
 struct ClaudePluginsSettingsPage: View {
     private enum PageTab: String, CaseIterable, Hashable {
+        case overview
+        case mcpServers
         case plugins
         case marketplaces
+        case profiles
 
         var title: String {
             switch self {
+            case .overview: return "Übersicht"
+            case .mcpServers: return "MCP"
             case .plugins: return "Plugins"
             case .marketplaces: return "Marketplaces"
+            case .profiles: return "Profile"
             }
         }
     }
 
-    @State private var model = ClaudePluginManagerModel()
-    @State private var selectedTab: PageTab = .plugins
+    @State private var model = ClaudePluginManagerModel.shared
+    @State private var profileStore = ClaudeContextProfileStore.shared
+    @State private var selectedTab: PageTab = .overview
     @State private var expandedPluginIDs: Set<String> = []
     @State private var availableSearch = ""
     @State private var installTarget: ClaudeAvailablePlugin?
@@ -29,23 +37,207 @@ struct ClaudePluginsSettingsPage: View {
 
     var body: some View {
         SettingsPageContainer(
-            title: "Claude Plugins",
-            subtitle: "Manage Claude Code plugins and marketplaces via the official CLI. Token costs show what each plugin adds to every session."
+            title: "Context & Plugins",
+            subtitle: "Everything that eats session context: MCP servers, plugins with projected token costs, marketplaces, and per-project context profiles."
         ) {
             SettingsTabs(selection: $selectedTab, tabs: tabs)
             headerRows
             switch selectedTab {
+            case .overview:
+                overviewTab
+            case .mcpServers:
+                mcpServersTab
             case .plugins:
                 pluginsTab
             case .marketplaces:
                 marketplacesTab
+            case .profiles:
+                AgentChatsContextProfilesTab()
             }
         }
         .task {
             await model.loadIfNeeded()
         }
+        .task(id: selectedTab) {
+            // MCP-Inventar lazy: erst laden, wenn Übersicht/MCP-Tab offen ist
+            // (Health-Checks dauern Sekunden).
+            if selectedTab == .overview || selectedTab == .mcpServers {
+                await model.loadMCPInventoryIfNeeded()
+            }
+        }
         .sheet(item: $installTarget) { plugin in
             PluginInstallSheet(plugin: plugin, model: model)
+        }
+    }
+
+    // MARK: - Tab: Übersicht
+
+    @ViewBuilder
+    private var overviewTab: some View {
+        SettingsSection("Context budget") {
+            tokenSumRow
+
+            mcpCountRow
+
+            toolSearchRow
+        }
+
+        SettingsSection("Projects & profiles") {
+            let projects = AgentWorkspaceUIModel.shared.workspace.projects
+                .filter { $0.contextProfileID != nil }
+            if profileStore.profiles.isEmpty {
+                SettingsHelpText("No context profiles yet — create one in the Profile tab to hide connectors, MCP servers, or plugins per project.")
+            } else if projects.isEmpty {
+                SettingsHelpText("Profiles exist, but no project uses one yet. Assign a default via the project context menu in the Agent Chats sidebar.")
+            } else {
+                ForEach(projects) { project in
+                    SettingsRow(
+                        title: project.name,
+                        subtitle: project.path
+                    ) {
+                        Text(profileStore.profile(id: project.contextProfileID)?.name ?? "(Profil gelöscht)")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var mcpCountRow: some View {
+        let byOrigin = Dictionary(grouping: model.mcpEntries, by: \.origin)
+        let summary = ClaudeMCPServerOrigin.allCases
+            .compactMap { origin -> String? in
+                guard let count = byOrigin[origin]?.count, count > 0 else { return nil }
+                return "\(count) \(origin.badgeLabel)"
+            }
+            .joined(separator: " · ")
+        return SettingsStatusRow(
+            title: "MCP servers",
+            subtitle: "Connectors load in every session of this account; profiles can hide them per project.",
+            tone: model.hasLoadedMCPOnce ? .ok : .off,
+            detail: model.isMCPLoading
+                ? "Checking…"
+                : (model.hasLoadedMCPOnce ? (summary.isEmpty ? "none" : summary) : "Open the MCP tab to load")
+        )
+    }
+
+    private var toolSearchRow: some View {
+        let state = ClaudeGlobalSettingsProbe.toolSearchState()
+        return SettingsStatusRow(
+            title: "MCP Tool Search",
+            subtitle: "Defers MCP tool schemas until first use — the biggest context saver. Set via env ENABLE_TOOL_SEARCH in ~/.claude/settings.json.",
+            tone: state.isEnabled ? .ok : .warn,
+            detail: state.label
+        )
+    }
+
+    // MARK: - Tab: MCP-Server
+
+    @ViewBuilder
+    private var mcpServersTab: some View {
+        SettingsSection("MCP servers") {
+            SettingsRow(
+                title: "Inventory",
+                subtitle: "All sources merged: claude.ai connectors, user and project configs, plugin servers. Toggles below write into context profiles — nothing global is changed."
+            ) {
+                if model.isMCPLoading {
+                    ProgressView().controlSize(.small)
+                }
+                Button("Refresh") {
+                    Task { await model.refreshMCPInventory() }
+                }
+                .buttonStyle(SettingsButtonStyle.standard)
+                .disabled(model.isMCPLoading)
+            }
+
+            if model.mcpEntries.isEmpty && model.hasLoadedMCPOnce && !model.isMCPLoading {
+                SettingsHelpText("No MCP servers found for this account profile.")
+            }
+
+            ForEach(model.mcpEntries) { entry in
+                mcpServerRow(entry)
+            }
+        }
+    }
+
+    private func mcpServerRow(_ entry: ClaudeMCPServerEntry) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppTheme.textPrimary)
+                    badge(entry.origin.badgeLabel)
+                    if let pluginID = entry.pluginID {
+                        badge(pluginID)
+                    }
+                    if let projectPath = entry.projectPath {
+                        badge((projectPath as NSString).lastPathComponent)
+                    }
+                }
+                HStack(spacing: 8) {
+                    if let status = entry.status {
+                        Text(status)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(status.hasPrefix("✔") ? AppTheme.statusWorking : AppTheme.statusAwaiting)
+                    }
+                    Text(entry.detail)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                if !blockingProfileNames(entry).isEmpty {
+                    Text("Blocked in: \(blockingProfileNames(entry).joined(separator: ", "))")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+
+            Spacer()
+
+            mcpProfileMenu(entry)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func blockingProfileNames(_ entry: ClaudeMCPServerEntry) -> [String] {
+        profileStore.profiles
+            .filter { $0.blocksServer(name: entry.name, isConnector: entry.isDeniableConnector) }
+            .map(\.name)
+    }
+
+    /// Menü „In Profil sperren": pro Profil ein Häkchen-Toggle. Schreibt in
+    /// deniedMcpServers (Connector) bzw. disabledMcpjsonServers (Config).
+    @ViewBuilder
+    private func mcpProfileMenu(_ entry: ClaudeMCPServerEntry) -> some View {
+        if profileStore.profiles.isEmpty {
+            Text("No profiles")
+                .font(.system(size: 10.5))
+                .foregroundStyle(AppTheme.textTertiary)
+        } else {
+            Menu("Block in profile…") {
+                ForEach(profileStore.profiles) { profile in
+                    let blocked = profile.blocksServer(name: entry.name, isConnector: entry.isDeniableConnector)
+                    Button {
+                        try? profileStore.setServerBlocked(
+                            !blocked,
+                            serverName: entry.name,
+                            isConnector: entry.isDeniableConnector,
+                            profileID: profile.id
+                        )
+                    } label: {
+                        if blocked {
+                            Label(profile.name, systemImage: "checkmark")
+                        } else {
+                            Text(profile.name)
+                        }
+                    }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
     }
 
@@ -434,6 +626,34 @@ struct ClaudePluginsSettingsPage: View {
                 Task { await model.setEnabled(newValue, plugin: plugin) }
             }
         )
+    }
+}
+
+/// Liest den `ENABLE_TOOL_SEARCH`-Status aus der globalen
+/// `~/.claude/settings.json` (env-Block). Nur Anzeige — WhisperM8 schreibt
+/// die Datei nicht. Unset = Claude-Default (Tool Search an, ab v2.1.121).
+enum ClaudeGlobalSettingsProbe {
+    struct ToolSearchState {
+        let isEnabled: Bool
+        let label: String
+    }
+
+    static func toolSearchState(
+        settingsData: Data? = try? Data(
+            contentsOf: FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".claude/settings.json")
+        )
+    ) -> ToolSearchState {
+        guard let settingsData,
+              let root = (try? JSONSerialization.jsonObject(with: settingsData)) as? [String: Any],
+              let env = root["env"] as? [String: Any],
+              let raw = env["ENABLE_TOOL_SEARCH"] as? String else {
+            return ToolSearchState(isEnabled: true, label: "default (deferred)")
+        }
+        if raw.lowercased() == "false" {
+            return ToolSearchState(isEnabled: false, label: "off — all schemas upfront")
+        }
+        return ToolSearchState(isEnabled: true, label: raw)
     }
 }
 

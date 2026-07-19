@@ -98,6 +98,28 @@ final class ClaudeContextProfileStore {
         }
     }
 
+    // MARK: - MCP-Sperren (vom MCP-Tab der Context-&-Plugins-Seite genutzt)
+
+    /// Sperrt bzw. entsperrt einen MCP-Server in einem Profil. Connectoren
+    /// wandern nach `deniedMcpServers`, config-basierte Server nach
+    /// `disabledMcpjsonServers` — dieselbe Semantik wie der Settings-Overlay.
+    func setServerBlocked(
+        _ blocked: Bool,
+        serverName: String,
+        isConnector: Bool,
+        profileID: UUID
+    ) throws {
+        guard var profile = profile(id: profileID) else { return }
+        if isConnector {
+            profile.deniedMcpServers.removeAll { $0 == serverName }
+            if blocked { profile.deniedMcpServers.append(serverName) }
+        } else {
+            profile.disabledMcpjsonServers.removeAll { $0 == serverName }
+            if blocked { profile.disabledMcpjsonServers.append(serverName) }
+        }
+        try upsert(profile)
+    }
+
     // MARK: - Aufloesung
 
     /// Lenient: unbekannte/geloeschte ID → nil (Launch ohne Overlay).
