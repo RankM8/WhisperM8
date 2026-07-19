@@ -256,4 +256,79 @@ final class AgentSessionAutoNamerTests: XCTestCase {
         let updated = workspace.sessions.first { $0.id == session.id }
         XCTAssertEqual(updated?.lastTurnAt, timestamp)
     }
+
+    // MARK: - P0.4a: Hilfsläufe erzeugen keine importierbaren Sessions
+
+    func testClaudeTitleRunOptsOutOfSessionPersistence() async throws {
+        var capturedArgs: [String] = []
+        let generator = AgentTitleGenerator(
+            executableResolver: { _ in "/usr/bin/true" },
+            runner: { _, args, _ in
+                capturedArgs = args
+                return "Ein Titel"
+            }
+        )
+        _ = try await generator.generate(provider: .claude, excerpt: "excerpt")
+        XCTAssertTrue(capturedArgs.contains("--no-session-persistence"),
+                      "Claude-Printlauf darf keine Session persistieren")
+        XCTAssertTrue(capturedArgs.contains("-p"), "bleibt ein Printlauf")
+    }
+
+    func testCodexTitleRunIsEphemeral() async throws {
+        var capturedArgs: [String] = []
+        let generator = AgentTitleGenerator(
+            executableResolver: { _ in "/usr/bin/true" },
+            runner: { _, args, _ in
+                capturedArgs = args
+                return "Ein Titel"
+            }
+        )
+        _ = try await generator.generate(provider: .codex, excerpt: "excerpt")
+        XCTAssertTrue(capturedArgs.contains("--ephemeral"),
+                      "Codex-exec-Hilfslauf darf keine Rollout-Datei hinterlassen")
+        XCTAssertEqual(capturedArgs.first, "exec")
+        XCTAssertEqual(capturedArgs.last, AgentTitleGenerator.titlePrompt(for: "excerpt"),
+                       "Prompt bleibt letztes Positional-Argument")
+    }
+
+    func testRetryAfterUnknownOptionStripsOnlyTheRejectedFlag() {
+        let args = ["-p", "prompt", "--output-format", "text", "--no-session-persistence"]
+
+        let retry = AgentTitleGenerator.retryArgumentsAfterUnknownOption(
+            arguments: args,
+            stderr: "error: unknown option '--no-session-persistence'"
+        )
+        XCTAssertEqual(retry, ["-p", "prompt", "--output-format", "text"],
+                       "ältere CLI: genau das abgelehnte Flag entfernen")
+
+        XCTAssertNil(AgentTitleGenerator.retryArgumentsAfterUnknownOption(
+            arguments: args,
+            stderr: "some other failure"
+        ), "fremde Fehler lösen keinen Retry aus")
+
+        XCTAssertNil(AgentTitleGenerator.retryArgumentsAfterUnknownOption(
+            arguments: ["-p", "prompt"],
+            stderr: "error: unknown option '--no-session-persistence'"
+        ), "ohne gesetztes Flag kein Retry (Endlosschleifen-Schutz)")
+    }
+
+    func testHeadlessCLIRunsInGivenWorkingDirectory() async throws {
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wm8-headless-cwd-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        let stdout = try await AgentHeadlessCLI(timeout: 10).run(
+            executable: URL(fileURLWithPath: "/bin/pwd"),
+            arguments: [],
+            environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: scratch
+        )
+        XCTAssertEqual(
+            URL(fileURLWithPath: stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+                .resolvingSymlinksInPath().path,
+            scratch.resolvingSymlinksInPath().path,
+            "Hilfslauf läuft im Scratch-cwd, nicht im App-cwd"
+        )
+    }
 }

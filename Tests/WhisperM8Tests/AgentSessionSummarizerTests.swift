@@ -79,6 +79,22 @@ final class AgentSummaryGeneratorTests: XCTestCase {
         XCTAssertTrue(excerpt.count <= 6000)
         XCTAssertTrue(excerpt.contains("AGENT: "))
     }
+
+    // P0.4a: Summary-Hilfsläufe erzeugen keine importierbaren Sessions.
+    func testSummaryRunsOptOutOfSessionPersistence() async throws {
+        var capturedArgs: [[String]] = []
+        let generator = AgentSummaryGenerator(
+            executableResolver: { _ in "/usr/bin/true" },
+            runner: { _, args, _ in
+                capturedArgs.append(args)
+                return #"{"headline":"H","details":"D"}"#
+            }
+        )
+        _ = try await generator.generate(provider: .claude, prompt: "p")
+        _ = try await generator.generate(provider: .codex, prompt: "p")
+        XCTAssertTrue(capturedArgs[0].contains("--no-session-persistence"))
+        XCTAssertTrue(capturedArgs[1].contains("--ephemeral"))
+    }
 }
 
 final class SummaryStartupPlannerTests: XCTestCase {

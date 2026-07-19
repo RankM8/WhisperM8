@@ -28,7 +28,8 @@ struct AgentHeadlessCLI {
     func run(
         executable: URL,
         arguments: [String],
-        environment: [String: String]
+        environment: [String: String],
+        workingDirectory: URL? = nil
     ) async throws -> String {
         let timeout = self.timeout
         return try await withCheckedThrowingContinuation { continuation in
@@ -36,6 +37,11 @@ struct AgentHeadlessCLI {
             process.executableURL = executable
             process.arguments = arguments
             process.environment = environment
+            // Ohne explizites cwd erben Hilfslaeufe das App-cwd (oft "/") —
+            // provider-seitige Session-Artefakte landen dann im Root-Projekt.
+            if let workingDirectory {
+                process.currentDirectoryURL = workingDirectory
+            }
             // Kein stdin: headless Subcommands duerfen nie auf interaktive
             // Eingaben warten (z. B. Bestaetigungs-Prompts) — EOF sofort.
             process.standardInput = FileHandle.nullDevice

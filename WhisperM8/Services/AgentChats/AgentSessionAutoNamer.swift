@@ -138,9 +138,9 @@ struct AgentTitleGenerator {
         let args: [String]
         switch provider {
         case .claude:
-            args = ["-p", prompt, "--output-format", "text"]
+            args = ["-p", prompt, "--output-format", "text", "--no-session-persistence"]
         case .codex:
-            args = ["exec", "--skip-git-repo-check", prompt]
+            args = ["exec", "--skip-git-repo-check", "--ephemeral", prompt]
         }
         let env = LoginShellEnvironment.shared.processEnvironment()
         let stdout = try await runner(executable, args, env)
@@ -190,20 +190,48 @@ struct AgentTitleGenerator {
         return trimmed
     }
 
+    /// Persistenz-Opt-outs der Hilfsläufe (P0.4a): interne Printläufe dürfen
+    /// keine importierbaren Provider-Sessions hinterlassen.
+    static let sessionPersistenceOptOutFlags = ["--no-session-persistence", "--ephemeral"]
+
+    /// Kompatibilitäts-Gate: Lehnt eine ältere CLI eines der Opt-out-Flags als
+    /// unbekannte Option ab, liefert dies die argv für genau einen Retry ohne
+    /// das Flag (Ergebnis geht vor Junk-Schutz; sichtbar geloggt). Sonst `nil`.
+    static func retryArgumentsAfterUnknownOption(arguments: [String], stderr: String) -> [String]? {
+        guard let flag = sessionPersistenceOptOutFlags.first(where: {
+            arguments.contains($0) && stderr.contains($0)
+        }) else { return nil }
+        return arguments.filter { $0 != flag }
+    }
+
     /// Default-Process-Runner: spawned das CLI mit den gegebenen Args + ENV,
     /// wartet auf Exit, liefert stdout. Stderr wird in den Logs notiert.
+    /// Läuft mit Scratch-cwd (P0.4a) — ohne explizites cwd erben Hilfsläufe
+    /// das App-cwd ("/") und tauchen als Junk-Sessions im Root-Projekt auf.
     static func defaultRunner(
         executable: URL,
         arguments: [String],
         environment: [String: String]
     ) async throws -> String {
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisperm8-headless-scratch", isDirectory: true)
+        try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         do {
             return try await AgentHeadlessCLI().run(
                 executable: executable,
                 arguments: arguments,
-                environment: environment
+                environment: environment,
+                workingDirectory: scratch
             )
         } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr) {
+            if let retryArgs = retryArgumentsAfterUnknownOption(arguments: arguments, stderr: stderr) {
+                Logger.agentPerformance.warning(
+                    "headless_persistence_flag_unsupported — retry ohne Opt-out-Flag (ältere CLI)"
+                )
+                return try await defaultRunner(
+                    executable: executable, arguments: retryArgs, environment: environment
+                )
+            }
             Logger.agentPerformance.warning(
                 "auto_namer_subprocess_exit code=\(code) stderr=\(stderr.prefix(200), privacy: .public)"
             )

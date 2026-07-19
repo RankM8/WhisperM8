@@ -32,9 +32,9 @@ struct AgentSummaryGenerator {
         let args: [String]
         switch provider {
         case .claude:
-            args = ["-p", prompt, "--output-format", "text"]
+            args = ["-p", prompt, "--output-format", "text", "--no-session-persistence"]
         case .codex:
-            args = ["exec", "--skip-git-repo-check", prompt]
+            args = ["exec", "--skip-git-repo-check", "--ephemeral", prompt]
         }
         let stdout = try await runner(executable, args, LoginShellEnvironment.shared.processEnvironment())
         guard let output = Self.parseOutput(stdout) else {
