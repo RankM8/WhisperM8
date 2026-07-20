@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperM8 · Agent Chats — Mockup (Einzel-Chat, Header 1:1)</title>
+<style>
+/* ============================================================
+   DESIGN-TOKENS — 1:1 an der echten App (Light Mode) kalibriert.
+   ============================================================ */
+:root{
+  --font-ui: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+
+  /* Flächen */
+  --bg-toolbar:#f5f5f6;
+  --bg-sidebar:#f2f2f3;
+  --bg-header:#fbfbfc;
+  --bg-pane:#ffffff;
+  --bg-input:rgba(0,0,0,.05);
+  --border:#e4e4e7;
+
+  /* Text */
+  --tx-1:#1d1d1f;
+  --tx-2:#6e6e73;
+  --tx-3:#9b9ba1;
+
+  /* Status */
+  --ok:#34c759;
+  --busy:#ff9f0a;
+  --idle:#c9c9ce;
+
+  /* Projekt-/Gruppenfarbe */
+  --proj-blue:#3b82f6;
+
+  /* Maße */
+  --sidebar-w:395px;
+  --toolbar-h:38px;
+  --tab-h:28px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  font-family:var(--font-ui);font-size:13px;color:var(--tx-1);
+  background:#ffffff;display:flex;flex-direction:column;
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+
+/* ============================================================
+   Zeile 1 — Tab-Strip (volle Fensterbreite)
+   ============================================================ */
+.toolbar{
+  height:var(--toolbar-h);flex:none;background:var(--bg-toolbar);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:6px;padding:0 10px;
+}
+.traffic{display:flex;gap:7px;flex:none;margin-right:4px;}
+.traffic i{width:12px;height:12px;border-radius:50%;}
+.traffic i:nth-child(1){background:#ff5f57;}
+.traffic i:nth-child(2){background:#febc2e;}
+.traffic i:nth-child(3){background:#28c840;}
+.sysstat{
+  flex:none;font-size:11px;color:var(--tx-2);
+  border:1px solid rgba(0,0,0,.12);border-radius:6px;padding:2px 8px;
+  background:rgba(255,255,255,.6);
+}
+.strip-sep{flex:none;width:calc(var(--sidebar-w) - 230px);}
+.sb-toggle{flex:none;color:var(--tx-2);font-size:13px;padding:2px 4px;}
+
+.tabs{flex:1;min-width:0;display:flex;align-items:center;gap:2px;overflow:hidden;position:relative;}
+.tab{
+  height:var(--tab-h);display:flex;align-items:center;gap:6px;
+  padding:0 10px;border-radius:7px;color:var(--tx-2);
+  flex:0 1 auto;min-width:0;max-width:190px;cursor:default;position:relative;
+}
+.tab:hover{background:rgba(0,0,0,.045);}
+.tab.active{
+  background:#ffffff;color:var(--tx-1);
+  box-shadow:0 1px 2.5px rgba(0,0,0,.14), 0 0 0 .5px rgba(0,0,0,.05);
+}
+.tab .title{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tab .close{flex:none;color:var(--tx-3);font-size:11px;margin-left:2px;}
+.tab .close:hover{color:var(--tx-1);}
+.chip{
+  flex:none;width:17px;height:17px;border-radius:5px;
+  display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff;
+  background:var(--proj-blue);
+}
+.dot{flex:none;width:6px;height:6px;border-radius:50%;}
+.dot.ok{background:var(--ok);} .dot.busy{background:var(--busy);} .dot.idle{background:var(--idle);}
+.newtab{flex:none;color:var(--tx-2);font-size:15px;padding:0 7px;border-radius:6px;}
+.newtab:hover{background:rgba(0,0,0,.05);}
+.tool-ic{flex:none;color:var(--tx-2);font-size:13px;padding:2px 6px;border-radius:6px;}
+.tool-ic:hover{background:rgba(0,0,0,.05);}
+
+/* --- Tab-Gruppierung (Feature-Demo, per Schalter) --- */
+.grp{display:flex;align-items:center;gap:2px;min-width:0;}
+.grp-pill{
+  flex:none;height:19px;display:none;align-items:center;gap:4px;
+  border-radius:10px;padding:0 8px;margin-right:2px;
+  font-size:10.5px;font-weight:600;color:#fff;background:var(--proj-blue);
+  cursor:pointer;user-select:none;
+}
+.grp-pill .cnt{opacity:.8;font-weight:500;}
+body.grouped .grp-pill{display:flex;}
+body.grouped .grp .tab::after{
+  content:"";position:absolute;left:5px;right:5px;bottom:-2px;height:2px;
+  border-radius:1px;background:var(--proj-blue);
+}
+body.grouped .grp.collapsed .tab:not(.active){display:none;}
+
+/* ============================================================
+   Rumpf — Sidebar links, Chat rechts
+   ============================================================ */
+.body{flex:1;min-height:0;display:flex;}
+
+/* ---------- Sidebar ---------- */
+.sidebar{
+  width:var(--sidebar-w);flex:none;background:var(--bg-sidebar);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sb-top{padding:10px 14px 6px;display:flex;flex-direction:column;gap:8px;flex:none;}
+.newchat{
+  display:flex;align-items:center;gap:8px;background:#fff;
+  border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:6px 10px;font-weight:500;
+}
+.newchat .chip{width:16px;height:16px;font-size:9px;}
+.newchat .kbd{margin-left:auto;color:var(--tx-3);font-size:11px;font-weight:400;}
+.filter{background:var(--bg-input);border-radius:7px;padding:5px 9px;color:var(--tx-3);font-size:12px;}
+.seg{display:flex;align-items:center;background:var(--bg-input);border-radius:7px;padding:2px;}
+.seg span{flex:1;text-align:center;padding:3px 0;font-size:12px;color:var(--tx-2);border-radius:5px;}
+.seg span.on{background:#fff;color:var(--tx-1);box-shadow:0 1px 2px rgba(0,0,0,.1);}
+.sb-count{display:flex;justify-content:space-between;font-size:11px;color:var(--tx-3);padding:0 2px;}
+
+.sb-scroll{flex:1;overflow-y:auto;padding:2px 8px 10px;}
+.sb-scroll::-webkit-scrollbar{width:0;}
+.sect{display:flex;align-items:center;gap:5px;padding:11px 6px 4px;
+  font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tx-3);}
+.sect .plus{margin-left:auto;font-size:13px;font-weight:400;}
+
+.row{height:26px;display:flex;align-items:center;gap:7px;padding:0 6px;
+  border-radius:6px;min-width:0;cursor:default;}
+.row:hover{background:rgba(0,0,0,.04);}
+.row.sel{background:#dcdce1;}
+.row .ic{flex:none;color:var(--tx-3);font-size:11px;width:14px;text-align:center;}
+.row .title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.row.head .title{font-weight:600;}
+.row .meta{flex:none;font-size:11px;color:var(--tx-3);}
+.row .slot{flex:none;font-size:10px;font-weight:600;color:var(--tx-3);}
+.row .branch{flex:none;font-size:10px;color:var(--tx-3);font-family:var(--font-mono);}
+.row .badge{flex:none;font-size:9px;font-weight:700;color:#b46900;background:#ffe3b3;border-radius:3px;padding:1px 4px;}
+.row .close{flex:none;color:var(--tx-3);font-size:11px;}
+.row .dot{margin-left:auto;}
+.row .dot.inline{margin-left:0;}
+.indent{padding-left:26px;}
+.avatar{flex:none;width:16px;height:16px;border-radius:5px;display:grid;place-items:center;
+  font-size:9px;font-weight:700;color:#fff;}
+
+.sb-foot{flex:none;border-top:1px solid var(--border);display:flex;align-items:center;
+  gap:12px;padding:8px 14px;color:var(--tx-2);font-size:12px;}
+.sb-foot .icons{margin-left:auto;display:flex;gap:12px;color:var(--tx-3);}
+
+/* ---------- Chat-Bereich ---------- */
+.content{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg-pane);}
+
+/* Zeile 2 — Chat-Header (1:1 nach Screenshot) */
+.chat-h{
+  flex:none;display:flex;align-items:center;gap:8px;
+  padding:9px 16px;background:var(--bg-header);border-bottom:1px solid var(--border);
+}
+.chat-h .id{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.chat-h .line1{display:flex;align-items:center;gap:7px;}
+.chat-h .line1 .dot{width:8px;height:8px;}
+.chat-h .line1 .name{font-size:14px;font-weight:700;}
+.chat-h .line2{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--tx-3);}
+.chat-h .line2 svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.4;}
+.chat-h .line2 b{font-weight:600;color:var(--tx-2);}
+.chat-h .line2 .mono{font-family:var(--font-mono);font-size:10.5px;}
+.chat-h .acts{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none;}
+.btn{
+  display:flex;align-items:center;gap:5px;height:25px;padding:0 10px;
+  background:#fff;border:1px solid #d9d9de;border-radius:7px;
+  font-size:12px;color:var(--tx-1);cursor:default;
+}
+.btn:hover{background:#f7f7f8;}
+.btn .pfx{color:var(--tx-3);}
+.lbl{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--tx-2);}
+.lbl .dot{width:6px;height:6px;background:#3f3f46;}
+.hic{color:var(--tx-2);font-size:12.5px;padding:2px 5px;border-radius:6px;}
+.hic:hover{background:rgba(0,0,0,.05);}
+
+/* Terminal */
+.term{
+  flex:1;min-height:0;overflow:hidden;padding:14px 24px;
+  font-family:var(--font-mono);font-size:12px;line-height:1.55;color:#3d3d42;
+  white-space:pre-wrap;word-break:break-word;
+}
+.term .g{color:#2da44e;} .term .b{color:#0969da;} .term .o{color:#bc4c00;} .term .dim{color:#a5a5ab;}
+.term .usr{background:rgba(0,0,0,.055);display:inline-block;width:100%;padding:1px 7px;border-radius:3px;}
+
+/* Prompt + Statusline */
+.prompt{
+  flex:none;margin:0 16px 6px;border:1px solid rgba(0,0,0,.14);border-radius:8px;
+  padding:7px 11px;font-family:var(--font-mono);font-size:12px;color:var(--tx-2);
+}
+.statusline{
+  flex:none;padding:2px 18px 10px;font-family:var(--font-mono);font-size:10.5px;
+  color:var(--tx-2);line-height:1.7;
+}
+.statusline .proj{color:#bc4c00;}
+.statusline .bar{color:#2da44e;background:#dcf2e2;border-radius:2px;padding:0 2px;}
+.statusline .hl{color:#0969da;} .statusline .warn{color:#bc4c00;}
+
+/* ============================================================
+   Feature-Schalter: Tab-Gruppierung an/aus (Meta-UI, dezent)
+   ============================================================ */
+.toggle-wrap{
+  position:fixed;right:16px;bottom:16px;z-index:50;
+  display:flex;align-items:center;gap:8px;
+  background:rgba(28,28,30,.92);color:#f2f2f7;border-radius:20px;
+  padding:7px 12px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.3);
+  cursor:pointer;user-select:none;
+}
+.sw{width:34px;height:20px;border-radius:10px;background:#5a5a5e;position:relative;transition:background .15s;}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:#fff;transition:left .15s;}
+body.grouped .sw{background:var(--ok);}
+body.grouped .sw::after{left:16px;}
+</style>
+</head>
+<body>
+
+<!-- ===================== Zeile 1: Tab-Strip ===================== -->
+<div class="toolbar">
+  <div class="traffic"><i></i><i></i><i></i></div>
+  <div class="sysstat">⌸ 13 · 50.9% · 2.01 GB</div>
+  <div class="strip-sep"></div>
+  <div class="sb-toggle">⊡</div>
+
+  <div class="tabs">
+    <div class="tab" title="Agent View"><span class="title">ew</span></div>
+    <div class="grp" id="grpW">
+      <div class="grp-pill" title="Klick: Gruppe ein-/ausklappen">whisperm8 <span class="cnt">6</span></div>
+      <div class="tab"><span class="chip">W</span><span class="title">Modellwechsel zu GPT-5…</span><span class="dot ok"></span></div>
+      <div class="tab"><span class="chip">W</span><span class="title">WhisperM8-Projekt: Ses…</span><span class="dot ok"></span></div>
+      <div class="tab"><span class="chip">W</span><span class="title">Kontext- und Token-Nut…</span><span class="dot ok"></span></div>
+      <div class="tab"><span class="chip">W</span><span class="title">WhisperM8 Audit-Priorisi…</span><span class="dot ok"></span></div>
+      <div class="tab"><span class="chip">W</span><span class="title">Chats-CLI Tab- &amp; Archiv…</span><span class="dot ok"></span></div>
+      <div class="tab active"><span class="chip">W</span><span class="title">Claude Chat</span><span class="close">✕</span></div>
+    </div>
+    <div class="newtab">+</div>
+  </div>
+
+  <div class="tool-ic" style="margin-left:auto;">⊞</div>
+</div>
+
+<div class="body">
+
+  <!-- ===================== Sidebar ===================== -->
+  <aside class="sidebar">
+    <div class="sb-top">
+      <div class="newchat"><span class="chip">W</span> Neuer Chat <span class="kbd">⌘N ⌄ ⟳</span></div>
+      <div class="filter">⌕ Filter…</div>
+      <div class="seg"><span class="on">Aktiv</span><span>Zuletzt</span><span>Alle</span><span style="flex:0 0 26px;">☰</span></div>
+      <div class="sb-count"><span>16 von 912 Chats</span><span>Alle zeigen</span></div>
+    </div>
+
+    <div class="sb-scroll">
+      <div class="row"><span class="title">Lead-Liste Status-Dots Reihenfolge anpassen</span><span class="meta">2w</span></div>
+      <div class="row"><span class="avatar" style="background:#e8590c">H</span><span class="title">Tägliche Reporting-Pipeline automatisiert ausfü…</span><span class="meta">1w</span></div>
+      <div class="row"><span class="avatar" style="background:#1971c2">B</span><span class="title">Steuer 2024</span><span class="meta">3w</span></div>
+      <div class="row"><span class="avatar" style="background:#1971c2">B</span><span class="title">Steuer 2025</span><span class="meta">1w</span></div>
+
+      <div class="sect">▾ WORKSPACES <span class="plus">+</span></div>
+
+      <div class="row head"><span class="avatar" style="background:#12b5cb">K</span><span class="title">Kunden 360</span><span class="meta">2/2 ⊞</span></div>
+      <div class="row indent"><span class="avatar" style="background:#e64980">M</span><span class="title">Fitagon Meta-Ads Creatives</span><span class="meta">· 53</span><span class="slot">S1</span><span class="dot idle"></span></div>
+      <div class="row indent"><span class="avatar" style="background:#15aabf">C</span><span class="title">Wolanin SEO-Nachholplan</span><span class="meta">· 39</span><span class="slot">S2</span><span class="dot idle"></span></div>
+
+      <div class="row head"><span class="avatar" style="background:#3f3f46">A</span><span class="title">AKQ x ListM8</span><span class="meta">2/2 ⊞</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">AKQ Sprint-QA &amp; Jira-Tickets</span><span class="meta">› 22</span><span class="slot">S1</span><span class="dot ok"></span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">ListM8 Traefik Dev-Umgebung</span><span class="meta">› 12</span><span class="slot">S2</span><span class="dot busy"></span></div>
+
+      <div class="row head"><span class="avatar" style="background:var(--proj-blue)">W</span><span class="title">WhisperM8 Dev</span><span class="meta">4/4 ⊞</span></div>
+      <div class="row indent"><span class="ic">W</span><span class="title">WhisperM8 Audit-Priorisierung</span><span class="slot">S1</span><span class="dot idle"></span></div>
+      <div class="row indent"><span class="ic">W</span><span class="title">GPT-Backend Code-Review</span><span class="meta">· 2</span><span class="slot">S2</span><span class="dot idle"></span></div>
+      <div class="row indent"><span class="ic">W</span><span class="title">Chats-CLI Tab- &amp; Archiv-Management</span><span class="slot">S3</span><span class="dot ok"></span></div>
+      <div class="row indent"><span class="ic">W</span><span class="title">Agent View</span><span class="slot">S4</span><span class="dot idle"></span></div>
+
+      <div class="sect">▾ CHATS</div>
+
+      <div class="row head"><span class="avatar" style="background:#3f3f46">a</span><span class="title">akquise-ai</span><span class="branch">⑂ feat/sprint-2026-07</span><span class="meta">1</span></div>
+      <div class="row indent"><span class="dot ok inline"></span><span class="title">AKQ Sprint-QA &amp; Jira-Tickets</span><span class="meta">· 22</span></div>
+
+      <div class="row head"><span class="avatar" style="background:var(--proj-blue)">L</span><span class="title">ListM8</span><span class="branch">⑂ develop</span><span class="meta">1</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">ListM8 Traefik Dev-Umgebung</span><span class="meta">· 12</span><span class="dot busy"></span></div>
+
+      <div class="row head"><span class="avatar" style="background:var(--proj-blue)">w</span><span class="title">whisperm8</span><span class="branch">⑂ main</span><span class="meta">11</span></div>
+      <div class="row indent"><span class="dot ok inline"></span><span class="title">Chats-CLI Tab- &amp; Archiv-Management</span></div>
+      <div class="row indent sel"><span class="ic">✳</span><span class="title">Claude Chat</span><span class="close">✕</span></div>
+      <div class="row indent"><span class="dot busy inline"></span><span class="title">Jarvis-Modus für WhisperM8-Sessions</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">WhisperM8 Audit-Priorisierung</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">Kontext- und Token-Nutzung analysieren</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">GPT-Backend adversarischer Review</span><span class="meta">· 22</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">Modellwechsel zu GPT-5.6-Sol</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">Agents-Chat Deep-Dive</span><span class="meta">· 111</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">WhisperM8-Projekt: Session-Start</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">GPT-Backend Code-Review</span><span class="meta">· 2</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">Agent View</span><span class="badge">VIEW</span></div>
+
+      <div class="row head"><span class="avatar" style="background:#e64980">m</span><span class="title">marketing-rankm8</span><span class="branch">⑂ main</span><span class="meta">1</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">Fitagon Meta-Ads Creatives</span><span class="meta">· 53</span></div>
+
+      <div class="row head"><span class="avatar" style="background:#15aabf">C</span><span class="title">Copy</span><span class="branch">⑂ main</span><span class="meta">1</span></div>
+      <div class="row indent"><span class="ic">✳</span><span class="title">Wolanin SEO-Nachholplan</span><span class="meta">· 39</span></div>
+    </div>
+
+    <div class="sb-foot">⚙ Settings <span class="icons">▤ ✳ ◧ ⌗</span></div>
+  </aside>
+
+  <!-- ===================== Chat ===================== -->
+  <div class="content">
+
+    <!-- Header (1:1) -->
+    <div class="chat-h">
+      <div class="id">
+        <div class="line1"><span class="dot ok"></span><span class="name">Claude Chat</span></div>
+        <div class="line2">
+          <svg viewBox="0 0 16 16"><path d="M1.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1z"/></svg>
+          <b>whisperm8</b> <span>⑂ main</span> <span>·</span>
+          <span class="mono">/Users/giulianocosta/repos/whisperm8</span>
+        </div>
+      </div>
+      <div class="acts">
+        <div class="btn"><span class="pfx">+</span> ✳ Claude</div>
+        <div class="btn"><span class="pfx">+</span> ⊛ Codex</div>
+        <div class="lbl"><span class="dot"></span> Claude · Claude Code</div>
+        <div class="btn">↻ Restart</div>
+        <div class="hic">⋯</div>
+        <div class="hic">&lt;/&gt;</div>
+        <div class="hic">⌄</div>
+        <div class="hic">⌗</div>
+      </div>
+    </div>
+
+    <!-- Terminal-Inhalt (Platzhalter in App-Optik) -->
+    <div class="term"><span class="g">●</span> Write(docs/design/agent-chats-tabs-mockup.html)
+  ⎿ Wrote 575 lines to <b>docs/design/agent-chats-tabs-mockup.html</b>
+     1  <span class="b">&lt;!DOCTYPE html&gt;</span>
+     2  <span class="b">&lt;html lang="de"&gt;</span>
+     3  <span class="b">&lt;head&gt;</span>
+     4  <span class="b">&lt;meta charset="utf-8"&gt;</span>
+     <span class="dim">… +606 lines (ctrl+o to expand)</span>
+
+  <span class="dim">Called claude-in-chrome (ctrl+o to expand)</span>
+
+<span class="g">●</span> Bash(cd /Users/giulianocosta/repos/whisperm8/docs/design &amp;&amp; python3 -m http.server 8642)
+  ⎿ Running in the background (↓ to manage)
+
+<span class="g">●</span> Die Chrome-Extension ist gerade nicht verbunden, daher konnte ich das Mockup
+  nicht selbst screenshotten — das Markup ist aber simples Flex/Grid.
+
+  <b>Anschauen:</b> Einfach die Datei doppelklicken, oder im Browser öffnen:
+  <span class="b">http://localhost:8642/agent-chats-tabs-mockup.html</span>
+
+  Wenn du die Varianten angeschaut hast, sag mir, was dir gefällt/fehlt — dann
+  verfeinere ich die Gewinner-Variante und danach können wir über das
+  SwiftUI-Portieren reden.
+
+<span class="o">✳ Sautéed for 5m 2s · 1 shell still running</span>
+
+<span class="usr">❯ ne das ist Viel zu "verschachtelt" — design ist nicht wie in echt</span></div>
+
+    <div class="prompt">❯ █</div>
+
+    <div class="statusline">
+      <span class="proj">whisperm8</span> (main) ✕ ↑11 | [<span class="bar">█▁▁▁▁▁▁▁</span>] <span class="hl">10% 86k/1000k</span> | [Fable 5] | <span class="warn">high</span> | 4%/5h | 21%/week ↻Sa 19:00 | $4.45 | ⇄ <span class="warn">PowerUser</span> power-user@hea…
+      <br>▸▸ bypass permissions on <span class="dim">(shift+tab to cycle)</span> · 1 shell
+    </div>
+
+  </div>
+</div>
+
+<!-- Feature-Schalter: Tab-Gruppierung -->
+<div class="toggle-wrap" id="grpToggle">
+  Tab-Gruppen <span class="sw"></span>
+</div>
+
+<script>
+/* Gruppierung an/aus — Standard: aus (= 1:1 Ist-Zustand) */
+document.getElementById('grpToggle').addEventListener('click', () => {
+  document.body.classList.toggle('grouped');
+  if (!document.body.classList.contains('grouped')) {
+    document.querySelectorAll('.grp').forEach(g => g.classList.remove('collapsed'));
+  }
+});
+/* Pill-Klick: Gruppe ein-/ausklappen (nur bei aktivierter Gruppierung) */
+document.querySelectorAll('.grp-pill').forEach(p => {
+  p.addEventListener('click', e => {
+    e.stopPropagation();
+    p.closest('.grp').classList.toggle('collapsed');
+  });
+});
+</script>
+</body>
+</html>

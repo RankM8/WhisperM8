@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis-Panel — Mockup (rechte Seitenleiste Agent Chats)</title>
+<style>
+  /* ————— Grundgerüst im App-Look ————— */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    background: #e8e8ec;
+    color: #1d1d1f;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+    gap: 20px;
+  }
+
+  .stage { display: flex; gap: 20px; align-items: flex-start; }
+
+  /* Angedeuteter Chat-Bereich links (nur Kulisse) */
+  .chat-ghost {
+    width: 420px;
+    height: 780px;
+    border-radius: 12px;
+    background: repeating-linear-gradient(180deg, #f7f7f9 0 44px, #f1f1f4 44px 45px);
+    border: 1px solid #d9d9de;
+    opacity: .55;
+    position: relative;
+    overflow: hidden;
+  }
+  .chat-ghost::after {
+    content: "Aktiver Chat (Kulisse)";
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #a0a0a8; font-size: 15px; font-weight: 500;
+  }
+
+  /* ————— Das Jarvis-Panel ————— */
+  .panel {
+    width: 360px;
+    height: 780px;
+    background: #f5f5f7;
+    border: 1px solid #d9d9de;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,.08);
+  }
+
+  /* Kopf mit Tab-Umschalter: Project context | Jarvis */
+  .panel-head {
+    padding: 14px 16px 10px;
+    background: #fff;
+    border-bottom: 1px solid #e4e4e8;
+  }
+  .panel-title-row { display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-size: 16px; font-weight: 700; letter-spacing: -.2px; }
+  .refresh { color: #8e8e93; font-size: 14px; }
+  .panel-sub { color: #8e8e93; font-size: 11.5px; margin-top: 2px; }
+
+  .seg {
+    margin-top: 10px;
+    display: flex;
+    background: #ececf0;
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg button {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    padding: 5px 0;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6e6e73;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .seg .on {
+    background: #fff;
+    color: #1d1d1f;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08);
+  }
+
+  /* Scrollbereich */
+  .panel-body { flex: 1; overflow-y: auto; padding: 12px 12px 8px; }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e4e4e8;
+    border-radius: 10px;
+    padding: 11px 12px;
+    margin-bottom: 10px;
+  }
+  .card h3 {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8e8e93;
+    text-transform: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 9px;
+  }
+  .card h3 .ic { font-size: 12px; }
+
+  /* Jarvis-Statuszeile */
+  .jarvis-state { display: flex; align-items: center; gap: 9px; }
+  .orb {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, #9db8ff, #4a63e7 70%);
+    box-shadow: 0 0 0 4px rgba(74,99,231,.14);
+    position: relative; flex: none;
+  }
+  .orb::after {
+    content: ""; position: absolute; inset: -4px; border-radius: 50%;
+    border: 1.5px solid rgba(74,99,231,.35);
+    animation: pulse 2.4s ease-out infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(.8); opacity: .9; }
+    100% { transform: scale(1.35); opacity: 0; }
+  }
+  .jarvis-state b { font-size: 13px; display: block; }
+  .jarvis-state small { color: #8e8e93; font-size: 11px; }
+
+  /* Braucht-dich-Karten */
+  .need {
+    border-left: 3px solid #e0483e;
+    background: #fff;
+    border-radius: 8px;
+    border-top: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee;
+    padding: 9px 10px;
+    margin-bottom: 8px;
+  }
+  .need:last-child { margin-bottom: 0; }
+  .need.amber { border-left-color: #e5a733; }
+  .need .who {
+    font-size: 10.5px; font-weight: 600; color: #6e6e73;
+    display: flex; align-items: center; gap: 5px; margin-bottom: 3px;
+  }
+  .dotp { width: 7px; height: 7px; border-radius: 50%; background: #e0483e; flex: none; }
+  .amber .dotp { background: #e5a733; }
+  .need p { font-size: 12.5px; line-height: 1.45; }
+  .need .acts { display: flex; gap: 6px; margin-top: 8px; }
+  .btn {
+    font: inherit; font-size: 11.5px; font-weight: 600;
+    border: 0; border-radius: 7px; padding: 5px 10px; cursor: pointer;
+  }
+  .btn.pri { background: #1d1d1f; color: #fff; }
+  .btn.sec { background: #ececf0; color: #1d1d1f; }
+
+  /* Statusboard-Zeilen */
+  .row {
+    display: flex; align-items: flex-start; gap: 9px;
+    padding: 8px 2px;
+    border-bottom: 1px solid #f0f0f3;
+  }
+  .row:last-child { border-bottom: 0; padding-bottom: 2px; }
+  .st { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex: none; }
+  .st.work { background: #34a853; box-shadow: 0 0 0 3px rgba(52,168,83,.15); }
+  .st.wait { background: #e0483e; box-shadow: 0 0 0 3px rgba(224,72,62,.15); }
+  .st.idle { background: #c7c7cc; }
+  .row .txt { min-width: 0; flex: 1; }
+  .row .name {
+    font-size: 12px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row .name span { color: #8e8e93; font-weight: 500; }
+  .row .info { font-size: 11.5px; color: #6e6e73; line-height: 1.4; margin-top: 1px; }
+  .row .since { font-size: 10px; color: #aeaeb4; flex: none; margin-top: 2px; }
+
+  /* Feed */
+  .feed-item { display: flex; gap: 9px; padding: 7px 2px; border-bottom: 1px solid #f0f0f3; }
+  .feed-item:last-child { border-bottom: 0; }
+  .feed-item .t { font-size: 10px; color: #aeaeb4; flex: none; width: 34px; margin-top: 2px; }
+  .feed-item .m { font-size: 12px; line-height: 1.45; }
+  .feed-item .m b { font-weight: 600; }
+  .feed-item .m .chip {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    background: #ececf0; color: #6e6e73;
+    border-radius: 5px; padding: 1px 6px; margin-right: 4px;
+    vertical-align: 1px;
+  }
+  .chip.ok { background: #e3f3e7; color: #1e7a3d; }
+  .chip.warn { background: #fdeee d; background: #fdeeed; color: #c0392b; }
+
+  /* Composer */
+  .composer {
+    padding: 10px 12px 12px;
+    background: #fff;
+    border-top: 1px solid #e4e4e8;
+  }
+  .composer .box {
+    display: flex; align-items: center; gap: 8px;
+    background: #f2f2f6;
+    border: 1px solid #e0e0e5;
+    border-radius: 10px;
+    padding: 8px 11px;
+    color: #9a9aa1;
+    font-size: 12.5px;
+  }
+  .composer .mic { margin-left: auto; color: #6e6e73; }
+  .composer .hint {
+    margin-top: 6px; font-size: 10px; color: #b4b4ba; text-align: center;
+  }
+
+  .legend {
+    width: 300px; font-size: 12px; color: #55555c; line-height: 1.55;
+  }
+  .legend h2 { font-size: 14px; margin-bottom: 8px; color: #1d1d1f; }
+  .legend p { margin-bottom: 10px; }
+  .legend code {
+    background: #ececf0; border-radius: 4px; padding: 1px 5px;
+    font-size: 11px; font-family: "SF Mono", Menlo, monospace;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="chat-ghost"></div>
+
+  <!-- ————————— JARVIS-PANEL ————————— -->
+  <div class="panel">
+
+    <div class="panel-head">
+      <div class="panel-title-row">
+        <div class="panel-title">Jarvis</div>
+        <div class="refresh">⟳</div>
+      </div>
+      <div class="panel-sub">Supervisor · 6 Chats überwacht · seit 14:32</div>
+      <div class="seg">
+        <button>Project context</button>
+        <button class="on">Jarvis</button>
+      </div>
+    </div>
+
+    <div class="panel-body">
+
+      <!-- Jarvis-Zustand -->
+      <div class="card">
+        <div class="jarvis-state">
+          <div class="orb"></div>
+          <div>
+            <b>Beobachtet 6 Chats — 3 arbeiten</b>
+            <small>Nächster Bericht bei Ergebnis, Blocker oder Frage</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1 · Braucht dich -->
+      <div class="card">
+        <h3><span class="ic">🔔</span> Braucht dich (2)</h3>
+
+        <div class="need">
+          <div class="who"><span class="dotp"></span> whisperm8 / GPT-Workflows</div>
+          <p>Statusline-Redesign ist fertig abgestimmt — <b>Gesamtentwurf bestätigen</b>, dann startet die Umsetzung.</p>
+          <div class="acts">
+            <button class="btn pri">Chat öffnen</button>
+            <button class="btn sec">Antwort diktieren</button>
+          </div>
+        </div>
+
+        <div class="need amber">
+          <div class="who"><span class="dotp"></span> akquise-ai / Kunden-Weg</div>
+          <p>Produktiver Umbau ist 8/8 E2E-grün, aber <b>noch uncommittet</b> — Commit-Aufteilung freigeben?</p>
+          <div class="acts">
+            <button class="btn pri">Freigeben</button>
+            <button class="btn sec">Details</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 · Statusboard -->
+      <div class="card">
+        <h3><span class="ic">📋</span> Statusboard</h3>
+
+        <div class="row">
+          <div class="st work"></div>
+          <div class="txt">
+            <div class="name">akquise-ai <span>/ Kunden-Weg</span></div>
+            <div class="info">Action-Items → Kapitel, Browser-QA läuft</div>
+          </div>
+          <div class="since">seit 12 min</div>
+        </div>
+
+        <div class="row">
+          <div class="st work"></div>
+          <div class="txt">
+            <div class="name">whisperm8 <span>/ Agent-Chats-Audit</span></div>
+            <div class="info">G6-Abnahme: noch 3 von 16 Test-Oracles offen</div>
+          </div>
+          <div class="since">seit 4 min</div>
+        </div>
+
+        <div class="row">
+          <div class="st wait"></div>
+          <div class="txt">
+            <div class="name">whisperm8 <span>/ GPT-Workflows</span></div>
+            <div class="info">Wartet auf deine Bestätigung (Statusline)</div>
+          </div>
+          <div class="since">seit 9 min</div>
+        </div>
+
+        <div class="row">
+          <div class="st idle"></div>
+          <div class="txt">
+            <div class="name">heartbeat-master <span>/ Slack-Tagesbericht</span></div>
+            <div class="info">Fertig & gepusht — PR auf Zuruf</div>
+          </div>
+          <div class="since">seit 26 min</div>
+        </div>
+
+        <div class="row">
+          <div class="st idle"></div>
+          <div class="txt">
+            <div class="name">ListM8 <span>/ Review-Queue</span></div>
+            <div class="info">Kampagne-28-Fix gepusht, nichts offen</div>
+          </div>
+          <div class="since">seit 51 min</div>
+        </div>
+
+        <div class="row">
+          <div class="st idle"></div>
+          <div class="txt">
+            <div class="name">whisperm8 <span>/ GPT-Fast-Modus</span></div>
+            <div class="info">Wartet auf make dev + Picker-QA</div>
+          </div>
+          <div class="since">seit 1 h</div>
+        </div>
+      </div>
+
+      <!-- 3 · Ereignis-Feed -->
+      <div class="card">
+        <h3><span class="ic">🕐</span> Was zuletzt passiert ist</h3>
+
+        <div class="feed-item">
+          <div class="t">19:00</div>
+          <div class="m"><span class="chip warn">Audit</span> G6-Abnahme fand 16 fehlende Test-Verträge — <b>13 bereits nachgezogen</b>, 3 offen. Gate bleibt korrekt rot.</div>
+        </div>
+        <div class="feed-item">
+          <div class="t">18:36</div>
+          <div class="m"><span class="chip ok">Heartbeat</span> Härtungsrunde <b>committet & gepusht</b> (<code>9ee43f5</code>) — 2 580 Tests grün.</div>
+        </div>
+        <div class="feed-item">
+          <div class="t">18:24</div>
+          <div class="m"><span class="chip ok">WhisperM8</span> Phase 0 fertig: 3 Security-/Deadlock-Fixes, 1 694 Tests, 3 Commits.</div>
+        </div>
+        <div class="feed-item">
+          <div class="t">18:11</div>
+          <div class="m"><span class="chip ok">ListM8</span> Unsichtbares Contact-Gate sichtbar gemacht, toter Filter raus (<code>8f5d464</code>).</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Composer -->
+    <div class="composer">
+      <div class="box">
+        <span>💬</span> Frag Jarvis … („was braucht mich?", „fass AKQ zusammen")
+        <span class="mic">🎙</span>
+      </div>
+      <div class="hint">Jarvis antwortet hier im Panel — Chats bleiben unberührt, Aktionen nur nach Freigabe</div>
+    </div>
+
+  </div>
+
+  <!-- Legende -->
+  <div class="legend">
+    <h2>Idee des Panels</h2>
+    <p><b>Rechte Seitenleiste</b> der Agent Chats bekommt neben „Project context" einen zweiten Tab: <b>Jarvis</b>.</p>
+    <p><b>Braucht dich</b> — nur echte Entscheidungen/Blocker, mit direkten Aktionen (Chat öffnen, Antwort diktieren, Freigeben).</p>
+    <p><b>Statusboard</b> — ersetzt die Markdown-Tabelle im Jarvis-Chat: eine Zeile pro betreutem Chat, Ampel + Ein-Zeilen-Stand + „seit".</p>
+    <p><b>Feed</b> — nur substanzielle Ereignisse (Ergebnis, Blocker, Entscheidung), kein Status-Rauschen.</p>
+    <p><b>Composer</b> — direkte Frage an Jarvis, per Text oder Diktat, ohne in den Jarvis-Chat wechseln zu müssen.</p>
+    <p>Datenfluss-Idee: Jarvis schreibt das Board per CLI (<code>whisperm8 chats board …</code>), die App rendert es nativ.</p>
+  </div>
+
+</div>
+</body>
+</html>
