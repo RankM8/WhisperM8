@@ -7,19 +7,30 @@
 #
 # Für jeden Skill wird ein Install-Stempel (.whisperm8-state.json) mit
 # SHA-256-Hashes geschrieben. Die App nutzt ihn für den Drei-Wege-Status
-# (Aktuell / Update verfügbar / Lokal geändert / Repo-Sync) in den Settings:
+# (Aktuell / Lokal geändert / Repo-Sync / Richtung unklar) in den Settings:
 # CLISkillExporter.installState().
 #
 # Die Skill-Tabelle unten muss CLISkillExporter.SkillDefinition.all spiegeln.
 
 set -euo pipefail
 
+force=0
+if [[ "${1:-}" == "--force" ]]; then
+  force=1
+  shift
+fi
+if [[ "$#" -ne 0 ]]; then
+  echo "Verwendung: $0 [--force]" >&2
+  exit 2
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RESOURCES="$REPO_ROOT/WhisperM8/Resources"
 SKILLS_HOME="${WHISPERM8_SKILLS_HOME:-$HOME/.claude/skills}"
 CLAUDE_HOME="${WHISPERM8_CLAUDE_HOME:-$HOME/.claude}"
-REPO_MIRROR="$REPO_ROOT/.claude/skills"
-APP_BUNDLE_RESOURCES="/Applications/WhisperM8.app/Contents/Resources/WhisperM8_WhisperM8.bundle"
+REPO_MIRROR="${WHISPERM8_REPO_MIRROR:-$REPO_ROOT/.claude/skills}"
+APP_BUNDLE_RESOURCES="${WHISPERM8_APP_BUNDLE_RESOURCES:-/Applications/WhisperM8.app/Contents/Resources/WhisperM8_WhisperM8.bundle}"
+CP_BIN="${WHISPERM8_CP_BIN:-cp}"
 STATUSLINE_SOURCE="$RESOURCES/whisperm8-statusline.sh"
 STATUSLINE_TARGET="$CLAUDE_HOME/statusline-command.sh"
 SUBAGENT_STATUSLINE_SOURCE="$RESOURCES/whisperm8-subagent-statusline.sh"
@@ -36,16 +47,80 @@ SKILLS=(
 
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
 
-# Kopiert nur bei Inhaltsunterschied; meldet "synced" oder "unchanged".
+# Liest einen Datei-Hash aus dem installed-Dictionary eines Stempels. plutil
+# ist Bestandteil von macOS; ungültige oder fremde Stempel gelten nicht als
+# Ownership-Nachweis.
+stamp_hash_for() {
+  local stamp="$1" key="$2" xml
+  [[ -f "$stamp" && ! -L "$stamp" ]] || return 1
+  xml="$(/usr/bin/plutil -extract installed xml1 -o - "$stamp" 2>/dev/null)" || return 1
+  printf '%s\n' "$xml" | awk -v key="$key" '
+    index($0, "<key>" key "</key>") {
+      if (getline <= 0) exit 1
+      sub(/^[[:space:]]*<string>/, "")
+      sub(/<\/string>[[:space:]]*$/, "")
+      print
+      found = 1
+      exit
+    }
+    END { if (!found) exit 1 }
+  '
+}
+
+# Abweichende Dateien dürfen nur überschrieben werden, wenn ihr aktueller Hash
+# dem zuletzt von WhisperM8 gestempelten installierten Hash entspricht. Symlinks
+# werden auch mit --force nie beschrieben.
+check_managed_target() {
+  local src="$1" dst="$2" stamp="$3" key="$4" expected current
+  if [[ -L "$dst" ]]; then
+    echo "WARNUNG: $dst ist ein Symlink und wird nicht überschrieben." >&2
+    return 3
+  fi
+  if [[ ! -e "$dst" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$dst" ]]; then
+    echo "WARNUNG: $dst ist keine reguläre Datei und wird nicht überschrieben." >&2
+    return 3
+  fi
+  if cmp -s "$src" "$dst" || [[ "$force" == 1 ]]; then
+    return 0
+  fi
+  expected="$(stamp_hash_for "$stamp" "$key")" || {
+    echo "WARNUNG: Fremder oder nicht gestempelter Skill bleibt unverändert: $dst" >&2
+    echo "          Nach manueller Prüfung kann mit --force ersetzt werden." >&2
+    return 3
+  }
+  current="$(sha256 "$dst")"
+  if [[ "$current" != "$expected" ]]; then
+    echo "WARNUNG: Lokal geänderter Skill bleibt unverändert: $dst" >&2
+    echo "          Nach manueller Prüfung kann mit --force ersetzt werden." >&2
+    return 3
+  fi
+}
+
+# Kopiert nur bei Inhaltsunterschied. COPY_RESULT vermeidet Command-Substitution,
+# damit Kopierfehler nicht durch Bash-errexit-Sonderregeln verschluckt werden.
+COPY_RESULT=unchanged
 copy_if_changed() {
   local src="$1" dst="$2"
-  if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
-    echo unchanged
-  else
-    mkdir -p "$(dirname "$dst")"
-    cp "$src" "$dst"
-    echo synced
+  COPY_RESULT=unchanged
+  if [[ -L "$dst" ]]; then
+    echo "FEHLER: Symlink-Ziel wird nicht überschrieben: $dst" >&2
+    return 3
   fi
+  if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
+    return 0
+  fi
+  if ! mkdir -p "$(dirname "$dst")"; then
+    echo "FEHLER: Zielordner konnte nicht erstellt werden: $(dirname "$dst")" >&2
+    return 1
+  fi
+  if ! "$CP_BIN" "$src" "$dst"; then
+    echo "FEHLER: Kopieren fehlgeschlagen: $src -> $dst" >&2
+    return 1
+  fi
+  COPY_RESULT=synced
 }
 
 overall_changed=0
@@ -59,18 +134,26 @@ for entry in "${SKILLS[@]}"; do
   fi
 
   target_dir="$SKILLS_HOME/$name"
+  stamp_url="$target_dir/.whisperm8-state.json"
   changed=0
 
-  [[ "$(copy_if_changed "$src_skill" "$target_dir/SKILL.md")" == synced ]] && changed=1
-
-  # Stempel-Hashes über den installierten Stand aufsammeln.
-  stamp_installed="\"SKILL.md\": \"$(sha256 "$target_dir/SKILL.md")\""
-  stamp_bundled=""
-  if [[ -f "$APP_BUNDLE_RESOURCES/$resource.md" ]]; then
-    stamp_bundled="\"SKILL.md\": \"$(sha256 "$APP_BUNDLE_RESOURCES/$resource.md")\""
+  if [[ -L "$target_dir" ]]; then
+    echo "WARNUNG: Skill-Ordner ist ein Symlink und wird nicht überschrieben: $target_dir" >&2
+    exit 3
+  fi
+  if [[ -L "$stamp_url" ]]; then
+    echo "WARNUNG: Install-Stempel ist ein Symlink und wird nicht überschrieben: $stamp_url" >&2
+    exit 3
   fi
 
+  check_managed_target "$src_skill" "$target_dir/SKILL.md" "$stamp_url" "SKILL.md" || exit $?
+
+  ref_entries=()
   if [[ -n "$refs" ]]; then
+    if [[ -L "$target_dir/references" ]]; then
+      echo "WARNUNG: references-Ordner ist ein Symlink und wird nicht überschrieben: $target_dir/references" >&2
+      exit 3
+    fi
     IFS=',' read -ra ref_entries <<<"$refs"
     for ref in "${ref_entries[@]}"; do
       ref_file="${ref%%=*}"
@@ -80,7 +163,29 @@ for entry in "${SKILLS[@]}"; do
         echo "FEHLER: Referenz-Ressource fehlt: $src_ref" >&2
         exit 1
       fi
-      [[ "$(copy_if_changed "$src_ref" "$target_dir/references/$ref_file")" == synced ]] && changed=1
+      check_managed_target \
+        "$src_ref" "$target_dir/references/$ref_file" "$stamp_url" \
+        "references/$ref_file" || exit $?
+    done
+  fi
+
+  copy_if_changed "$src_skill" "$target_dir/SKILL.md" || exit $?
+  [[ "$COPY_RESULT" == synced ]] && changed=1
+
+  # Stempel-Hashes über den installierten Stand aufsammeln.
+  stamp_installed="\"SKILL.md\": \"$(sha256 "$target_dir/SKILL.md")\""
+  stamp_bundled=""
+  if [[ -f "$APP_BUNDLE_RESOURCES/$resource.md" ]]; then
+    stamp_bundled="\"SKILL.md\": \"$(sha256 "$APP_BUNDLE_RESOURCES/$resource.md")\""
+  fi
+
+  if [[ -n "$refs" ]]; then
+    for ref in "${ref_entries[@]}"; do
+      ref_file="${ref%%=*}"
+      ref_resource="${ref#*=}"
+      src_ref="$RESOURCES/$ref_resource.md"
+      copy_if_changed "$src_ref" "$target_dir/references/$ref_file" || exit $?
+      [[ "$COPY_RESULT" == synced ]] && changed=1
       stamp_installed+=", \"references/$ref_file\": \"$(sha256 "$target_dir/references/$ref_file")\""
       if [[ -n "$stamp_bundled" && -f "$APP_BUNDLE_RESOURCES/$ref_resource.md" ]]; then
         stamp_bundled+=", \"references/$ref_file\": \"$(sha256 "$APP_BUNDLE_RESOURCES/$ref_resource.md")\""
@@ -96,17 +201,20 @@ for entry in "${SKILLS[@]}"; do
     echo "  \"installed\": { $stamp_installed }$( [[ -n "$stamp_bundled" ]] && echo ',' )"
     [[ -n "$stamp_bundled" ]] && echo "  \"bundled\": { $stamp_bundled }"
     echo '}'
-  } >"$target_dir/.whisperm8-state.json"
+  } >"$stamp_url"
 
   # Repo-Spiegel nur pflegen, wenn er bereits existiert.
   if [[ -d "$REPO_MIRROR/$name" ]]; then
-    [[ "$(copy_if_changed "$src_skill" "$REPO_MIRROR/$name/SKILL.md")" == synced ]] && changed=1
+    copy_if_changed "$src_skill" "$REPO_MIRROR/$name/SKILL.md" || exit $?
+    [[ "$COPY_RESULT" == synced ]] && changed=1
     if [[ -n "$refs" ]]; then
-      IFS=',' read -ra ref_entries <<<"$refs"
       for ref in "${ref_entries[@]}"; do
         ref_file="${ref%%=*}"
         ref_resource="${ref#*=}"
-        [[ "$(copy_if_changed "$RESOURCES/$ref_resource.md" "$REPO_MIRROR/$name/references/$ref_file")" == synced ]] && changed=1
+        copy_if_changed \
+          "$RESOURCES/$ref_resource.md" \
+          "$REPO_MIRROR/$name/references/$ref_file" || exit $?
+        [[ "$COPY_RESULT" == synced ]] && changed=1
       done
     fi
   fi
@@ -134,15 +242,20 @@ for index in 0 1; do
     exit 1
   fi
 
+  if [[ -L "$target_path" ]]; then
+    echo "WARNUNG: statusline — Symlink bleibt unverändert: $target_path" >&2
+    statusline_skipped=1
+    continue
+  fi
   if [[ -f "$target_path" ]] && ! grep -Fq "managed-by: whisperm8-statusline" "$target_path"; then
     echo "WARNUNG: statusline — fremdes Skript bleibt unverändert: $target_path" >&2
     statusline_skipped=1
     continue
   fi
 
-  result="$(copy_if_changed "$source_path" "$target_path")"
+  copy_if_changed "$source_path" "$target_path" || exit $?
   chmod 755 "$target_path"
-  [[ "$result" == synced ]] && statusline_changed=1
+  [[ "$COPY_RESULT" == synced ]] && statusline_changed=1
 done
 
 # Install-Stempel schreiben (Format: StatuslineInstaller.InstallStamp). Auch

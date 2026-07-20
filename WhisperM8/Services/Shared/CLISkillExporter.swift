@@ -89,11 +89,17 @@ struct CLISkillExporter {
 
     enum SkillError: LocalizedError {
         case resourceMissing(String)
+        case replacementRequiresConfirmation(String)
+        case symbolicLinkTarget(String)
 
         var errorDescription: String? {
             switch self {
             case .resourceMissing(let name):
                 return "Skill-Ressource fehlt im App-Bundle (\(name).md)."
+            case .replacementRequiresConfirmation(let path):
+                return "Der installierte Skill ist fremd oder lokal geändert und wird nicht ohne Bestätigung ersetzt (\(path))."
+            case .symbolicLinkTarget(let path):
+                return "Ein Skill-Symlink wird aus Sicherheitsgründen nicht überschrieben (\(path))."
             }
         }
     }
@@ -149,18 +155,15 @@ struct CLISkillExporter {
 
     // MARK: Drei-Wege-Status (Bundle vs. installiert vs. Install-Stempel)
 
-    /// Richtungssicherer Installationszustand. Ein reiner Inhaltsvergleich kann
-    /// „veraltet" nicht von „lokal editiert" unterscheiden; deshalb schreibt
-    /// jede verwaltete Installation (App-Button und `make skills`) einen
-    /// Stempel mit den Hashes des installierten und des damals gebündelten
-    /// Stands. Erst dieser Stempel macht die Richtung entscheidbar.
+    /// Installationszustand mit konservativer Konflikterkennung. Der Stempel
+    /// unterscheidet verwaltete von nachträglich lokal geänderten Dateien. Bei
+    /// einem seitdem abweichenden Bundle bleibt die Versionsrichtung unbekannt,
+    /// weil Hashes allein weder Upgrade noch Downgrade belegen.
     enum InstallState: Equatable {
         /// Kein SKILL.md am Zielpfad.
         case notInstalled
         /// Installiert == gebündelt.
         case current
-        /// Installiert entspricht dem Stempel, das Bundle ist weitergezogen.
-        case updateAvailable
         /// Installiert weicht vom Stempel ab — der User hat lokal editiert.
         case modifiedLocally
         /// Per `make skills` aus dem Repo synchronisiert; das App-Bundle ist
@@ -235,11 +238,13 @@ struct CLISkillExporter {
         if installed == bundled { return .current }
         guard let stamp = readInstallStamp() else { return .unknownDrift }
         guard stamp.installed == installed else { return .modifiedLocally }
-        if stamp.source == InstallStamp.sourceResources,
-           stamp.bundled == nil || stamp.bundled == bundled {
-            return .repoSynced
+        if stamp.source == InstallStamp.sourceResources {
+            if stamp.bundled == nil || stamp.bundled == bundled {
+                return .repoSynced
+            }
+            return .unknownDrift
         }
-        return .updateAvailable
+        return .unknownDrift
     }
 
     static func sha256(of content: String) -> String {
@@ -251,24 +256,46 @@ struct CLISkillExporter {
     /// Schreibt (bzw. aktualisiert) den Skill für Claude Code: SKILL.md plus
     /// alle verwalteten references/-Dateien. Idempotent. Fremde Dateien im
     /// references/-Ordner (z. B. lokale Ergänzungen des Users) bleiben
-    /// unangetastet.
+    /// unangetastet. Abweichende fremde oder lokal geänderte Dateien werden nur
+    /// nach expliziter Bestätigung ersetzt; Symlinks werden nie beschrieben.
     @discardableResult
-    func installForClaudeCode() throws -> URL {
+    func installForClaudeCode(force: Bool = false) throws -> URL {
         let content = try skillMarkdown()
         let destination = claudeCodeSkillURL
+        let referenceContents = try definition.references.map { reference in
+            (reference, try referenceMarkdown(reference))
+        }
+
+        try rejectSymbolicLink(at: destination.deletingLastPathComponent())
+        try rejectSymbolicLink(at: installStampURL)
+        if !referenceContents.isEmpty {
+            try rejectSymbolicLink(at: claudeCodeReferencesDirectory)
+        }
+        try validateReplacement(
+            content: content,
+            at: destination,
+            force: force
+        )
+        for (reference, referenceContent) in referenceContents {
+            try validateReplacement(
+                content: referenceContent,
+                at: claudeCodeReferenceURL(for: reference),
+                force: force
+            )
+        }
+
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         try content.write(to: destination, atomically: true, encoding: .utf8)
 
-        if !definition.references.isEmpty {
+        if !referenceContents.isEmpty {
             try FileManager.default.createDirectory(
                 at: claudeCodeReferencesDirectory,
                 withIntermediateDirectories: true
             )
-            for reference in definition.references {
-                let referenceContent = try referenceMarkdown(reference)
+            for (reference, referenceContent) in referenceContents {
                 try referenceContent.write(
                     to: claudeCodeReferenceURL(for: reference),
                     atomically: true,
@@ -286,6 +313,34 @@ struct CLISkillExporter {
         ))
         Logger.debug("[CLI] Skill installiert: \(destination.path)")
         return destination
+    }
+
+    private func validateReplacement(
+        content: String,
+        at destination: URL,
+        force: Bool
+    ) throws {
+        try rejectSymbolicLink(at: destination)
+        guard FileManager.default.fileExists(atPath: destination.path) else { return }
+        guard let installedContent = try? String(
+            contentsOf: destination,
+            encoding: .utf8
+        ) else {
+            throw SkillError.replacementRequiresConfirmation(destination.path)
+        }
+        guard installedContent != content else { return }
+        guard force else {
+            throw SkillError.replacementRequiresConfirmation(destination.path)
+        }
+    }
+
+    private func rejectSymbolicLink(at url: URL) throws {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let type = attributes[.type] as? FileAttributeType,
+              type == .typeSymbolicLink else {
+            return
+        }
+        throw SkillError.symbolicLinkTarget(url.path)
     }
 }
 

@@ -113,7 +113,7 @@ final class CLISkillExporterTests: XCTestCase {
         )
         XCTAssertFalse(exporter.installedSkillIsCurrent)
 
-        try exporter.installForClaudeCode()
+        try exporter.installForClaudeCode(force: true)
         XCTAssertTrue(exporter.installedSkillIsCurrent)
     }
 
@@ -156,17 +156,54 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertEqual(written, try exporter.skillMarkdown())
     }
 
-    func testInstallIsIdempotentAndUpdatesOutdatedSkill() throws {
+    func testInstallRequiresForceToReplaceModifiedSkill() throws {
         let exporter = makeExporter()
         let destination = try exporter.installForClaudeCode()
 
-        // Veraltete/abweichende Installation simulieren.
         try "old content".write(to: destination, atomically: true, encoding: .utf8)
         XCTAssertTrue(exporter.isInstalledForClaudeCode)
         XCTAssertFalse(exporter.installedSkillIsCurrent)
 
-        try exporter.installForClaudeCode()
+        XCTAssertThrowsError(try exporter.installForClaudeCode())
+        XCTAssertEqual(try String(contentsOf: destination, encoding: .utf8), "old content")
+
+        try exporter.installForClaudeCode(force: true)
         XCTAssertTrue(exporter.installedSkillIsCurrent)
+    }
+
+    func testInstallRejectsForeignSkillWithoutStamp() throws {
+        let exporter = makeExporter()
+        try FileManager.default.createDirectory(
+            at: exporter.claudeCodeSkillURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "fremder Skill".write(
+            to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try exporter.installForClaudeCode())
+        XCTAssertEqual(
+            try String(contentsOf: exporter.claudeCodeSkillURL, encoding: .utf8),
+            "fremder Skill"
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: exporter.installStampURL.path))
+    }
+
+    func testInstallNeverWritesThroughSkillSymlink() throws {
+        let exporter = makeExporter()
+        let external = tempHome.appendingPathComponent("external-skill.md")
+        try "extern gepflegt".write(to: external, atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(
+            at: exporter.claudeCodeSkillURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: exporter.claudeCodeSkillURL,
+            withDestinationURL: external
+        )
+
+        XCTAssertThrowsError(try exporter.installForClaudeCode(force: true))
+        XCTAssertEqual(try String(contentsOf: external, encoding: .utf8), "extern gepflegt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: exporter.installStampURL.path))
     }
 
     // MARK: Drei-Wege-Status
@@ -207,24 +244,30 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertEqual(exporter.installState(), .unknownDrift)
     }
 
-    func testInstallStateUpdateAvailableWhenBundleMovedOn() throws {
+    func testInstallStateUnknownDriftWhenStampedBundleDiffers() throws {
         let exporter = makeExporter()
         try exporter.installForClaudeCode()
 
-        // Simulierter alter Installationsstand: Der installierte Inhalt weicht
-        // vom Bundle ab, entspricht aber exakt dem Stempel; der Stempel trägt
-        // die Bundle-Hashes von damals.
-        try "installierter Altstand".write(
+        // Der installierte Inhalt entspricht dem Stempel. Der abweichende
+        // aktuelle Bundle-Hash beweist aber weder Upgrade noch Downgrade.
+        try "abweichender Installationsstand".write(
             to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
-        let oldHashes = try XCTUnwrap(exporter.installedHashes())
+        let stampedHashes = try XCTUnwrap(exporter.installedHashes())
         try exporter.writeInstallStamp(CLISkillExporter.InstallStamp(
             source: CLISkillExporter.InstallStamp.sourceBundle,
             updatedAt: "2026-07-01T00:00:00Z",
-            installed: oldHashes,
-            bundled: oldHashes
+            installed: stampedHashes,
+            bundled: stampedHashes
         ))
 
-        XCTAssertEqual(exporter.installState(), .updateAvailable)
+        XCTAssertEqual(exporter.installState(), .unknownDrift)
+        XCTAssertThrowsError(try exporter.installForClaudeCode())
+        XCTAssertEqual(
+            try String(contentsOf: exporter.claudeCodeSkillURL, encoding: .utf8),
+            "abweichender Installationsstand"
+        )
+        try exporter.installForClaudeCode(force: true)
+        XCTAssertEqual(exporter.installState(), .current)
     }
 
     func testInstallStateRepoSyncedWhenResourcesNewerThanBundle() throws {
@@ -263,23 +306,23 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertEqual(exporter.installState(), .repoSynced)
     }
 
-    func testInstallStateUpdateAvailableAfterRepoSyncWhenBundleAdvances() throws {
+    func testInstallStateUnknownDriftAfterRepoSyncWhenBundleDiffers() throws {
         let exporter = makeExporter()
         try exporter.installForClaudeCode()
 
-        // Repo-Sync von früher, aber das Bundle hat sich seither geändert
-        // (die Stempel-Bundle-Hashes passen nicht mehr) → Update ist sicher.
-        try "älterer Repo-Stand".write(
+        // Hashes belegen nur eine Abweichung, aber keine zeitliche Richtung:
+        // Der installierte Repo-Stand kann neuer oder älter als das Bundle sein.
+        try "abweichender Repo-Stand".write(
             to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
         let repoHashes = try XCTUnwrap(exporter.installedHashes())
         try exporter.writeInstallStamp(CLISkillExporter.InstallStamp(
             source: CLISkillExporter.InstallStamp.sourceResources,
             updatedAt: "2026-07-01T00:00:00Z",
             installed: repoHashes,
-            bundled: ["SKILL.md": "veralteter-bundle-hash"]
+            bundled: ["SKILL.md": "anderer-bundle-hash"]
         ))
 
-        XCTAssertEqual(exporter.installState(), .updateAvailable)
+        XCTAssertEqual(exporter.installState(), .unknownDrift)
     }
 
     func testInstallStampSurvivesScriptFormat() throws {
@@ -299,6 +342,100 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertEqual(stamp.source, "resources")
         XCTAssertEqual(stamp.installed["SKILL.md"], "abc")
         XCTAssertEqual(stamp.bundled?["SKILL.md"], "def")
+    }
+
+    // MARK: sync-skills.sh
+
+    func testSyncSkillsRejectsForeignSkillAndPreservesContent() throws {
+        let skillsHome = tempHome.appendingPathComponent("skills", isDirectory: true)
+        let target = skillsHome.appendingPathComponent("whisperm8-transcription/SKILL.md")
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "fremder Skill".write(to: target, atomically: true, encoding: .utf8)
+
+        let result = try runSyncSkills(skillsHome: skillsHome)
+
+        XCTAssertNotEqual(result.status, 0, result.output)
+        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "fremder Skill")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: target.deletingLastPathComponent()
+                .appendingPathComponent(".whisperm8-state.json").path
+        ))
+    }
+
+    func testSyncSkillsNeverWritesThroughSkillSymlink() throws {
+        let skillsHome = tempHome.appendingPathComponent("skills", isDirectory: true)
+        let target = skillsHome.appendingPathComponent("whisperm8-transcription/SKILL.md")
+        let external = tempHome.appendingPathComponent("external-skill.md")
+        try "extern gepflegt".write(to: external, atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: target, withDestinationURL: external)
+
+        let result = try runSyncSkills(skillsHome: skillsHome, arguments: ["--force"])
+
+        XCTAssertNotEqual(result.status, 0, result.output)
+        XCTAssertEqual(try String(contentsOf: external, encoding: .utf8), "extern gepflegt")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: target.deletingLastPathComponent()
+                .appendingPathComponent(".whisperm8-state.json").path
+        ))
+    }
+
+    func testSyncSkillsCopyFailureDoesNotWriteStamp() throws {
+        let skillsHome = tempHome.appendingPathComponent("skills", isDirectory: true)
+        let failingCopy = tempHome.appendingPathComponent("failing-cp.sh")
+        try "#!/bin/sh\nexit 42\n".write(
+            to: failingCopy, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: failingCopy.path)
+
+        let result = try runSyncSkills(
+            skillsHome: skillsHome,
+            extraEnvironment: ["WHISPERM8_CP_BIN": failingCopy.path]
+        )
+
+        XCTAssertNotEqual(result.status, 0, result.output)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: skillsHome
+                .appendingPathComponent("whisperm8-transcription/.whisperm8-state.json").path
+        ))
+        XCTAssertTrue(result.output.contains("FEHLER"), result.output)
+    }
+
+    private func runSyncSkills(
+        skillsHome: URL,
+        arguments: [String] = [],
+        extraEnvironment: [String: String] = [:]
+    ) throws -> (status: Int32, output: String) {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [
+            repositoryRoot.appendingPathComponent("scripts/sync-skills.sh").path,
+        ] + arguments
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["WHISPERM8_SKILLS_HOME"] = skillsHome.path
+        environment["WHISPERM8_CLAUDE_HOME"] = tempHome
+            .appendingPathComponent("claude-home", isDirectory: true).path
+        environment["WHISPERM8_REPO_MIRROR"] = tempHome
+            .appendingPathComponent("repo-mirror", isDirectory: true).path
+        for (key, value) in extraEnvironment {
+            environment[key] = value
+        }
+        process.environment = environment
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 
     // MARK: CLI-Symlink-Status

@@ -274,7 +274,7 @@ private struct CLISkillSettingsCard: View {
             "Replace installed skill?",
             isPresented: $isReplaceConfirmPresented
         ) {
-            Button("Replace Skill", role: .destructive) { install() }
+            Button("Replace Skill", role: .destructive) { install(force: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(replaceConfirmationMessage)
@@ -295,8 +295,6 @@ private struct CLISkillSettingsCard: View {
             return "Install"
         case .current:
             return "Installed"
-        case .updateAvailable:
-            return "Update Skill"
         case .modifiedLocally, .repoSynced, .unknownDrift:
             return "Replace…"
         }
@@ -308,7 +306,7 @@ private struct CLISkillSettingsCard: View {
         switch installState {
         case .modifiedLocally, .repoSynced, .unknownDrift:
             return true
-        case .notInstalled, .current, .updateAvailable:
+        case .notInstalled, .current:
             return false
         }
     }
@@ -317,8 +315,6 @@ private struct CLISkillSettingsCard: View {
         switch installState {
         case .notInstalled, .current:
             return nil
-        case .updateAvailable:
-            return "This app bundles a newer version than the installed one — updating is safe."
         case .modifiedLocally:
             return "The installed skill was modified locally since the last managed install. Replacing overwrites those changes."
         case .repoSynced:
@@ -346,9 +342,9 @@ private struct CLISkillSettingsCard: View {
         }
     }
 
-    private func install() {
+    private func install(force: Bool = false) {
         do {
-            try exporter.installForClaudeCode()
+            try exporter.installForClaudeCode(force: force)
             refresh()
             showFeedback("Installed")
         } catch {
