@@ -1,4 +1,5 @@
 import AVFoundation
+import Darwin
 import Foundation
 
 // MARK: - Fehler
@@ -179,11 +180,14 @@ enum CLIAudioExtractor {
 // MARK: - ffmpeg-Fallback
 
 enum FFmpegAudioExtractor {
+    struct ProcessResult {
+        var exitCode: Int32
+        var stderr: String
+    }
+
     static func extract(ffmpegPath: String, from sourceURL: URL, to destURL: URL) throws {
         try? FileManager.default.removeItem(at: destURL)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: ffmpegPath)
-        process.arguments = [
+        let arguments = [
             "-nostdin", "-hide_banner", "-loglevel", "error",
             "-i", sourceURL.path,
             "-vn",
@@ -193,23 +197,62 @@ enum FFmpegAudioExtractor {
             "-b:a", "32k",
             "-y", destURL.path
         ]
-        process.environment = LoginShellEnvironment.shared.processEnvironment()
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = Pipe()
 
+        let result: ProcessResult
         do {
-            try process.run()
+            result = try runProcess(
+                executableURL: URL(fileURLWithPath: ffmpegPath),
+                arguments: arguments,
+                environment: LoginShellEnvironment.shared.processEnvironment()
+            )
         } catch {
             throw CLIAudioError.extractionFailed("ffmpeg konnte nicht gestartet werden: \(error.localizedDescription)")
         }
-        process.waitUntilExit()
 
-        guard process.terminationStatus == 0 else {
-            let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let message = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw CLIAudioError.extractionFailed("ffmpeg-Fehler: \(message.isEmpty ? "Exit \(process.terminationStatus)" : message)")
+        guard result.exitCode == 0 else {
+            let message = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw CLIAudioError.extractionFailed("ffmpeg-Fehler: \(message.isEmpty ? "Exit \(result.exitCode)" : message)")
         }
+    }
+
+    static func runProcess(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String]? = nil,
+        timeout: TimeInterval = 600
+    ) throws -> ProcessResult {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.environment = environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+
+        try process.run()
+
+        let kill = DispatchWorkItem {
+            guard process.isRunning else { return }
+            process.terminate()
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                if process.isRunning {
+                    Darwin.kill(process.processIdentifier, SIGKILL)
+                }
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: kill)
+
+        // stderr wird für die Fehlermeldung gebraucht und deshalb vor dem
+        // Exit-Wait geleert; ungenutztes stdout geht direkt nach nullDevice.
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        kill.cancel()
+
+        return ProcessResult(
+            exitCode: process.terminationStatus,
+            stderr: String(data: errorData, encoding: .utf8) ?? ""
+        )
     }
 }
 
