@@ -70,7 +70,35 @@ extension AgentChatsView {
         openTab(session.id)
         selectedSessionID = session.id
 
-        // 2. Settings vorbereiten (Hook-Bridge + Context-Profil-Overlay) —
+        // 2. GPT-Router vor dem Spawn off-main absichern. Toggle und Ports
+        //    werden nach dem Readiness-Check erneut gelesen; kippt der Guard,
+        //    startet der Agent sichtbar geloggt im Claude-Direktbetrieb.
+        let routerEnvironment = await Task.detached(priority: .userInitiated) {
+            var ensureError: ClaudeCodeProxyError?
+            return BackgroundRouterLaunchGuard.resolveEnvironment(
+                isEnabled: { AppPreferences.shared.claudeGPTBackendEnabled },
+                port: { AppPreferences.shared.claudeGPTBackendPort },
+                ensureRunning: { port in
+                    switch ClaudeCodeProxyManager.shared.ensureRunning(port: port) {
+                    case .success:
+                        return true
+                    case .failure(let error):
+                        ensureError = error
+                        return false
+                    }
+                },
+                makeEnvironment: { _ in
+                    AgentCommandBuilder().gptRouterCoreEnvironment()
+                },
+                onUnavailable: {
+                    Logger.claudeGPTRouter.error(
+                        "background_launch_guard_unavailable error=\(ensureError?.localizedDescription ?? "unbekannt", privacy: .public)"
+                    )
+                }
+            )
+        }.value
+
+        // 3. Settings vorbereiten (Hook-Bridge + Context-Profil-Overlay) —
         //    die Background-Session erbt die Settings vom Supervisor, also
         //    muessen wir `--settings <path>` schon beim Spawn-Subprocess
         //    setzen, nicht erst beim spaeteren `claude attach`. Kein Pfad
@@ -78,13 +106,13 @@ extension AgentChatsView {
         //    der Agent laeuft trotzdem, nur ohne Live-Events/Overlay.
         let launchPreparation = AgentSessionStatusCoordinator.shared.prepareLaunchSettings(
             localSessionID: session.id,
-            contextProfile: contextProfile
+            contextProfile: contextProfile,
+            includeGPTModelCatalog: routerEnvironment != nil
         )
         let settingsPath = launchPreparation.settingsFilePath
 
-        // 3. Spawn via BackgroundAgentSpawner.
+        // 4. Spawn via BackgroundAgentSpawner.
         let extraArgs = AgentCommandBuilder.parseArguments(AppPreferences.shared.claudeExtraArguments)
-        let routerEnvironment = AgentCommandBuilder().gptRouterCoreEnvironment() ?? [:]
         do {
             let result = try await BackgroundAgentSpawner.spawn(
                 initialPrompt: request.prompt,
@@ -93,7 +121,7 @@ extension AgentChatsView {
                 subAgent: request.subAgent,
                 permissionMode: request.permissionMode,
                 extraArguments: extraArgs,
-                environmentOverrides: routerEnvironment
+                environmentOverrides: routerEnvironment ?? [:]
             )
             // 4. Short-ID persistieren + Hook-Tracking starten + Attach triggern.
             try store.setBackgroundShortID(localSessionID: session.id, shortID: result.shortID)
