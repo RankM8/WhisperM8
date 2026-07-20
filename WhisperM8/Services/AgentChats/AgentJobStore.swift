@@ -16,6 +16,8 @@ struct AgentJobStore {
     enum StoreError: LocalizedError, Equatable {
         case jobAlreadyExists(String)
         case jobNotFound(String)
+        case invalidJobID(String)
+        case jobPathOutsideRoot(String)
         case invalidTransition(from: AgentJobState.State, to: AgentJobState.State)
 
         var errorDescription: String? {
@@ -24,6 +26,10 @@ struct AgentJobStore {
                 return "Job \(id) existiert bereits."
             case .jobNotFound(let id):
                 return "Job \(id) nicht gefunden."
+            case .invalidJobID(let id):
+                return "Ungültige Job-ID: \(id)"
+            case .jobPathOutsideRoot(let id):
+                return "Job-Pfad für \(id) liegt außerhalb des Job-Verzeichnisses."
             case .invalidTransition(let from, let to):
                 return "Unerlaubter Zustandswechsel \(from.rawValue) → \(to.rawValue)."
             }
@@ -55,8 +61,26 @@ struct AgentJobStore {
 
     // MARK: - Pfade
 
-    func jobDirectory(for shortId: String) -> URL {
+    private func rawJobDirectory(for shortId: String) -> URL {
         rootDirectory.appendingPathComponent(shortId, isDirectory: true)
+    }
+
+    private func validatedJobDirectory(for shortId: String) throws -> URL {
+        guard AgentJobID.isValid(shortId) else {
+            throw StoreError.invalidJobID(shortId)
+        }
+        let resolvedRoot = rootDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        let resolvedJob = rawJobDirectory(for: shortId).standardizedFileURL.resolvingSymlinksInPath()
+        guard resolvedJob.deletingLastPathComponent() == resolvedRoot,
+              resolvedJob.lastPathComponent == shortId else {
+            throw StoreError.jobPathOutsideRoot(shortId)
+        }
+        return resolvedJob
+    }
+
+    func jobDirectory(for shortId: String) -> URL {
+        (try? validatedJobDirectory(for: shortId))
+            ?? URL(fileURLWithPath: "/dev/null")
     }
 
     func stateURL(for shortId: String) -> URL {
@@ -89,7 +113,7 @@ struct AgentJobStore {
     func generateShortID() -> String {
         for _ in 0..<32 {
             let candidate = String(format: "%08x", UInt32.random(in: UInt32.min...UInt32.max))
-            if !FileManager.default.fileExists(atPath: jobDirectory(for: candidate).path) {
+            if !FileManager.default.fileExists(atPath: rawJobDirectory(for: candidate).path) {
                 return candidate
             }
         }
@@ -100,7 +124,7 @@ struct AgentJobStore {
     // MARK: - Lifecycle
 
     func createJob(initial: AgentJobState) throws {
-        let directory = jobDirectory(for: initial.shortId)
+        let directory = try validatedJobDirectory(for: initial.shortId)
         guard !FileManager.default.fileExists(atPath: directory.path) else {
             throw StoreError.jobAlreadyExists(initial.shortId)
         }
@@ -109,7 +133,10 @@ struct AgentJobStore {
     }
 
     func readState(shortId: String) -> AgentJobState? {
-        guard let data = try? Data(contentsOf: stateURL(for: shortId)) else { return nil }
+        guard let directory = try? validatedJobDirectory(for: shortId),
+              let data = try? Data(contentsOf: directory.appendingPathComponent("state.json")) else {
+            return nil
+        }
         return Self.decode(data)
     }
 
@@ -120,8 +147,9 @@ struct AgentJobStore {
         updated.updatedAt = now()
         let data = try Self.encode(updated)
 
-        let destination = stateURL(for: state.shortId)
-        let temp = jobDirectory(for: state.shortId)
+        let directory = try validatedJobDirectory(for: state.shortId)
+        let destination = directory.appendingPathComponent("state.json")
+        let temp = directory
             .appendingPathComponent("state.json.tmp-\(UUID().uuidString)")
         try data.write(to: temp)
         guard rename(temp.path, destination.path) == 0 else {
@@ -166,7 +194,11 @@ struct AgentJobStore {
     /// Der Job muss existieren (das Verzeichnis ist der Anker). flock ist
     /// advisory — greift nur zwischen Aufrufern, die diesen Lock nehmen.
     func withExclusiveLock<T>(shortId: String, _ body: () throws -> T) throws -> T {
-        let lockURL = jobDirectory(for: shortId).appendingPathComponent(".claim.lock")
+        let directory = try validatedJobDirectory(for: shortId)
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            throw StoreError.jobNotFound(shortId)
+        }
+        let lockURL = directory.appendingPathComponent(".claim.lock")
         let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o644)
         guard fd >= 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
@@ -180,7 +212,7 @@ struct AgentJobStore {
     }
 
     func removeJob(shortId: String) throws {
-        let directory = jobDirectory(for: shortId)
+        let directory = try validatedJobDirectory(for: shortId)
         guard FileManager.default.fileExists(atPath: directory.path) else {
             throw StoreError.jobNotFound(shortId)
         }

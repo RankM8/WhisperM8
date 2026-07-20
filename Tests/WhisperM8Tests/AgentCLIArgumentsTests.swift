@@ -177,6 +177,16 @@ final class AgentCLIArgumentsTests: XCTestCase {
         }
     }
 
+    func testIDCommandRejectsPathTraversal() {
+        XCTAssertThrowsError(try AgentCLIParser.parseIDCommand(["../evil"]))
+    }
+
+    func testIDCommandAcceptsGeneratedShortIDFormat() throws {
+        let result = try AgentCLIParser.parseIDCommand(["a3f81c2e", "--json"])
+        XCTAssertEqual(result.shortId, "a3f81c2e")
+        XCTAssertTrue(result.json)
+    }
+
     // MARK: - parseLogs
 
     func testLogsTail() throws {

@@ -57,6 +57,7 @@ enum AgentCLIParser {
         case missingPrompt
         case multiplePrompts
         case missingShortID
+        case invalidShortID(String)
         case tooManyPositionals
 
         var errorDescription: String? {
@@ -73,6 +74,8 @@ enum AgentCLIParser {
                 return "Mehrere Prompt-Argumente — den Prompt bitte als EIN (gequotetes) Argument übergeben."
             case .missingShortID:
                 return "Keine Job-ID angegeben."
+            case .invalidShortID(let value):
+                return "Ungültige Job-ID '\(value)'. Erwartet werden acht kleingeschriebene Hex-Zeichen."
             case .tooManyPositionals:
                 return "Zu viele Argumente."
             }
@@ -187,6 +190,7 @@ enum AgentCLIParser {
         guard !positionals.isEmpty else { throw ParseError.missingShortID }
         guard positionals.count >= 2 else { throw ParseError.missingPrompt }
         guard positionals.count == 2 else { throw ParseError.multiplePrompts }
+        try validateShortID(positionals[0])
         options.shortId = positionals[0]
         options.prompt = positionals[1]
         return options
@@ -207,6 +211,7 @@ enum AgentCLIParser {
         guard positionals.count == 1 else {
             throw positionals.isEmpty ? ParseError.missingShortID : ParseError.tooManyPositionals
         }
+        try validateShortID(positionals[0])
         return (positionals[0], json)
     }
 
@@ -251,6 +256,13 @@ enum AgentCLIParser {
         guard positionals.count == 1 else {
             throw positionals.isEmpty ? ParseError.missingShortID : ParseError.tooManyPositionals
         }
+        try validateShortID(positionals[0])
         return (positionals[0], tail)
+    }
+
+    private static func validateShortID(_ value: String) throws {
+        guard AgentJobID.isValid(value) else {
+            throw ParseError.invalidShortID(value)
+        }
     }
 }

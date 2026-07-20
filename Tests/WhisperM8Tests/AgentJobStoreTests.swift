@@ -59,13 +59,13 @@ final class AgentJobStoreTests: XCTestCase {
 
     func testCorruptStateJSONIsSkippedInReadAll() throws {
         let store = makeStore()
-        try store.createJob(initial: makeJob("good0001"))
+        try store.createJob(initial: makeJob("600d0001"))
         let badDir = root.appendingPathComponent("bad00001", isDirectory: true)
         try FileManager.default.createDirectory(at: badDir, withIntermediateDirectories: true)
         try Data("{not json".utf8).write(to: badDir.appendingPathComponent("state.json"))
 
         let all = store.readAllCorrected()
-        XCTAssertEqual(all.map(\.shortId), ["good0001"])
+        XCTAssertEqual(all.map(\.shortId), ["600d0001"])
     }
 
     // MARK: - Transitions
@@ -88,9 +88,13 @@ final class AgentJobStoreTests: XCTestCase {
     func testReserveToSpawningFromRestingStatesSucceeds() throws {
         // send reserviert einen ruhenden Job auf spawning, bevor der Supervisor
         // startet — der Guard muss das aus done/failed/stopped erlauben.
-        for resting in [AgentJobState.State.done, .failed, .stopped] {
+        let restingStates: [(AgentJobState.State, String)] = [
+            (.done, "dead0001"),
+            (.failed, "dead0002"),
+            (.stopped, "dead0003"),
+        ]
+        for (resting, id) in restingStates {
             let store = makeStore()
-            let id = "rest\(resting.rawValue.prefix(4))"
             try store.createJob(initial: makeJob(id, state: .running))
             try store.transition(shortId: id, to: resting)
             try store.transition(shortId: id, to: .spawning)
@@ -203,5 +207,19 @@ final class AgentJobStoreTests: XCTestCase {
         try store.removeJob(shortId: "a3f81c2e")
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.jobDirectory(for: "a3f81c2e").path))
         XCTAssertThrowsError(try store.removeJob(shortId: "a3f81c2e"))
+    }
+
+    func testRemoveJobRejectsSymlinkOutsideRoot() throws {
+        let store = makeStore()
+        let outside = try makeTempProjectDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let marker = outside.appendingPathComponent("must-survive.txt")
+        try "safe".write(to: marker, atomically: true, encoding: .utf8)
+        let symlink = root.appendingPathComponent("a3f81c2e", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: outside)
+
+        XCTAssertThrowsError(try store.removeJob(shortId: "a3f81c2e"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: symlink.path))
     }
 }
