@@ -6,6 +6,7 @@ struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTBackendPort) private var port = 18_765
     @AppStorage(PreferenceKeys.claudeGPTBackendDefaultModel) private var defaultModel = ""
     @AppStorage(PreferenceKeys.claudeGPTFastModeEnabled) private var fastModeEnabled = true
+    @AppStorage(PreferenceKeys.claudeGPTPickerModel) private var pickerModel = ""
     @AppStorage(PreferenceKeys.claudeGPTSubagentModel) private var subagentModel = ""
     @AppStorage(PreferenceKeys.claudeGPTAutoCompactWindow) private var autoCompactWindow =
         AppPreferences.claudeGPTDefaultAutoCompactWindow
@@ -27,6 +28,11 @@ struct GPTBackendSettingsPage: View {
 
     private let proxyManager = ClaudeCodeProxyManager.shared
     private let modelSuggestions = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra"]
+    private let pickerModelSuggestions = [
+        "gpt-5.6-sol", "gpt-5.6-sol-fast",
+        "gpt-5.6-luna", "gpt-5.6-luna-fast",
+        "gpt-5.6-terra", "gpt-5.6-terra-fast",
+    ]
 
     var body: some View {
         SettingsPageContainer(
@@ -247,7 +253,7 @@ struct GPTBackendSettingsPage: View {
                 subtitle: "Leer = neue Chats starten wie gewohnt mit Claude; GPT nur, wenn hier ein Modell steht. Frei editierbar; die Liste enthält nur Vorschläge.",
                 placeholder: "Leer = Claude (Standard)",
                 text: $defaultModel,
-                offersSuggestions: true
+                suggestions: modelSuggestions
             )
 
             SettingsToggleRow(
@@ -257,11 +263,19 @@ struct GPTBackendSettingsPage: View {
             )
 
             editableModelRow(
+                title: "GPT-Modell im /model-Picker",
+                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer = automatisch (Standard-Modell bzw. gpt-5.6-sol, Fast-Modus wird angewendet). Alle anderen GPT-Modelle bleiben per getipptem /model <id> nutzbar.",
+                placeholder: "Leer = automatisch",
+                text: $pickerModel,
+                suggestions: pickerModelSuggestions
+            )
+
+            editableModelRow(
                 title: "Subagent-Modell (CLAUDE_CODE_SUBAGENT_MODEL)",
                 subtitle: "Zwangs-Override: erzwingt dieses Modell für ALLE nativen Subagents. Empfehlung: leer lassen — GPT-Subagents stehen ohnehin über den Agent-Typ »gpt« bereit, den Claude pro Aufgabe wählen kann.",
                 placeholder: "Leer = aus (empfohlen)",
                 text: $subagentModel,
-                offersSuggestions: true
+                suggestions: modelSuggestions
             )
 
             SettingsRow(
@@ -293,7 +307,7 @@ struct GPTBackendSettingsPage: View {
         subtitle: String,
         placeholder: String,
         text: Binding<String>,
-        offersSuggestions: Bool
+        suggestions: [String]
     ) -> some View {
         SettingsRow(title: title, subtitle: subtitle) {
             HStack(spacing: 6) {
@@ -302,9 +316,9 @@ struct GPTBackendSettingsPage: View {
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .frame(width: 260)
 
-                if offersSuggestions {
+                if !suggestions.isEmpty {
                     Menu {
-                        ForEach(modelSuggestions, id: \.self) { suggestion in
+                        ForEach(suggestions, id: \.self) { suggestion in
                             Button(suggestion) {
                                 text.wrappedValue = suggestion
                             }

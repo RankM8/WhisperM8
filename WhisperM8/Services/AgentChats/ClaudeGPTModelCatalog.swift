@@ -20,12 +20,16 @@ enum ClaudeGPTModelCatalog {
     /// Pendant; ein `[1m]`-Suffix bleibt bei beiden Varianten erhalten.
     static func availableModelsFragment(
         defaultModel: String,
-        subagentModel: String
+        pickerModel: String,
+        subagentModel: String,
+        sessionModel: String? = nil
     ) -> [String: Any] {
         let configuredModels = [
             AppPreferences.claudeGPTCanonicalModel,
             defaultModel,
+            pickerModel,
             subagentModel,
+            sessionModel ?? "",
             "gpt-5.6-luna",
             "gpt-5.6-terra",
         ]

@@ -58,6 +58,19 @@ final class PreferencesTests: XCTestCase {
         }
     }
 
+    func testClaudeGPTPickerModelDefaultsToEmptyAndPersists() {
+        withIsolatedPreferencesAndDefaults { preferences, defaults in
+            XCTAssertEqual(preferences.claudeGPTPickerModel, "")
+
+            preferences.claudeGPTPickerModel = "gpt-5.6-luna-fast"
+
+            XCTAssertEqual(
+                AppPreferences(defaults: defaults).claudeGPTPickerModel,
+                "gpt-5.6-luna-fast"
+            )
+        }
+    }
+
     func testClaudeGPTAutoCompactWindowClampsAndFallsBack() {
         withIsolatedPreferences { preferences in
             // Unset → getesteter Default (272k).
@@ -287,6 +300,7 @@ final class PreferencesTests: XCTestCase {
             ("claudeGPTBackendPort", PreferenceKeys.claudeGPTBackendPort),
             ("claudeGPTRouterPort", PreferenceKeys.claudeGPTRouterPort),
             ("claudeGPTBackendDefaultModel", PreferenceKeys.claudeGPTBackendDefaultModel),
+            ("claudeGPTPickerModel", PreferenceKeys.claudeGPTPickerModel),
             ("claudeGPTFastModeEnabled", PreferenceKeys.claudeGPTFastModeEnabled),
             ("claudeGPTSubagentModel", PreferenceKeys.claudeGPTSubagentModel),
             ("claudeGPTAutoCompactWindow", PreferenceKeys.claudeGPTAutoCompactWindow),
@@ -302,7 +316,7 @@ final class PreferencesTests: XCTestCase {
             ("updateCheckEnabled", PreferenceKeys.updateCheckEnabled)
         ]
 
-        XCTAssertEqual(keys.count, 51)
+        XCTAssertEqual(keys.count, 52)
         for (expected, actual) in keys {
             XCTAssertEqual(actual, expected)
         }
@@ -352,6 +366,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.isTerminalBellEnabled)
             XCTAssertEqual(preferences.codexExtraArguments, "")
             XCTAssertEqual(preferences.claudeExtraArguments, "")
+            XCTAssertEqual(preferences.claudeGPTPickerModel, "")
             XCTAssertTrue(preferences.claudeGPTFastModeEnabled)
             XCTAssertFalse(preferences.isAgentTerminalMetalRendererEnabled)
             XCTAssertTrue(preferences.isAgentEventDrivenWatchEnabled)
@@ -399,6 +414,7 @@ final class PreferencesTests: XCTestCase {
             preferences.isTerminalBellEnabled = false
             preferences.codexExtraArguments = "--ask-for-approval never"
             preferences.claudeExtraArguments = "--verbose"
+            preferences.claudeGPTPickerModel = "gpt-5.6-luna-fast"
             preferences.claudeGPTFastModeEnabled = false
             preferences.isAgentTerminalMetalRendererEnabled = true
             preferences.isAgentEventDrivenWatchEnabled = false
@@ -445,6 +461,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertFalse(loaded.isTerminalBellEnabled)
             XCTAssertEqual(loaded.codexExtraArguments, "--ask-for-approval never")
             XCTAssertEqual(loaded.claudeExtraArguments, "--verbose")
+            XCTAssertEqual(loaded.claudeGPTPickerModel, "gpt-5.6-luna-fast")
             XCTAssertFalse(loaded.claudeGPTFastModeEnabled)
             XCTAssertTrue(loaded.isAgentTerminalMetalRendererEnabled)
             XCTAssertFalse(loaded.isAgentEventDrivenWatchEnabled)

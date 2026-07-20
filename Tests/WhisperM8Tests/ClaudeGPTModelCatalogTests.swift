@@ -4,11 +4,13 @@ import XCTest
 final class ClaudeGPTModelCatalogTests: XCTestCase {
     private func models(
         defaultModel: String = "",
+        pickerModel: String = "",
         subagentModel: String = "",
         sessionModel: String = ""
     ) throws -> [String] {
         let fragment = ClaudeGPTModelCatalog.availableModelsFragment(
             defaultModel: defaultModel,
+            pickerModel: pickerModel,
             subagentModel: subagentModel,
             sessionModel: sessionModel
         )
@@ -51,6 +53,35 @@ final class ClaudeGPTModelCatalogTests: XCTestCase {
             XCTAssertTrue(catalog.contains(base), "Plain-Modell fehlt: \(base)")
             XCTAssertTrue(catalog.contains("\(base)-fast"), "Fast-Modell fehlt: \(base)")
         }
+    }
+
+    func testPickerModelAddsPlainAndFastPair() throws {
+        let catalog = Set(try models(pickerModel: "  gpt-5.6-orbit-fast  "))
+
+        XCTAssertTrue(catalog.contains("gpt-5.6-orbit"))
+        XCTAssertTrue(catalog.contains("gpt-5.6-orbit-fast"))
+        XCTAssertFalse(catalog.contains("gpt-5.6-orbit-fast-fast"))
+    }
+
+    func testPickerModelPairIsDeduplicatedAgainstOtherSources() throws {
+        let catalog = try models(
+            defaultModel: "gpt-5.6-orbit",
+            pickerModel: "gpt-5.6-orbit-fast",
+            subagentModel: "gpt-5.6-orbit"
+        )
+
+        XCTAssertEqual(catalog.filter { $0 == "gpt-5.6-orbit" }.count, 1)
+        XCTAssertEqual(catalog.filter { $0 == "gpt-5.6-orbit-fast" }.count, 1)
+    }
+
+    func testHistoricalSessionModelAddsPlainAndFastPair() throws {
+        let catalog = Set(try models(
+            defaultModel: "gpt-5.6-current",
+            sessionModel: "gpt-5.5-historical-fast"
+        ))
+
+        XCTAssertTrue(catalog.contains("gpt-5.5-historical"))
+        XCTAssertTrue(catalog.contains("gpt-5.5-historical-fast"))
     }
 
     func testCatalogDeduplicatesCanonicalAndIgnoresEmptyInputs() throws {

@@ -413,6 +413,7 @@ extension AgentCommandBuilderTests {
     func testGPTRouterCoreEnvironmentUsesCanonicalFastPickerModel() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptFastModeEnabledResolver = { true }
         builder.gptRouterPortResolver = { 19_002 }
         builder.gptDefaultModelResolver = { "" }
@@ -421,27 +422,69 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(builder.gptRouterCoreEnvironment(), [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
         ])
+    }
+
+    func testGPTRouterCoreEnvironmentFastifiesExplicitPlainPickerModel() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "  gpt-5.6-luna  " }
+        builder.gptDefaultModelResolver = { "gpt-5.6-terra" }
+
+        let environment = builder.gptRouterCoreEnvironment()
+
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-luna-fast")
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-luna-fast")
+        XCTAssertEqual(
+            environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
+            "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen"
+        )
+    }
+
+    func testGPTRouterCoreEnvironmentKeepsExplicitFastPickerModelWhenToggleIsOff() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { false }
+        builder.gptPickerModelResolver = { "gpt-5.6-terra-fast" }
+        builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
+
+        let environment = builder.gptRouterCoreEnvironment()
+
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-terra-fast")
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-terra-fast")
+        XCTAssertEqual(
+            environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
+            "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen"
+        )
     }
 
     func testGPTRouterCoreEnvironmentKeepsModelsPlainWhenFastModeIsDisabled() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptRouterPortResolver = { 19_003 }
         builder.gptDefaultModelResolver = { "gpt-5.6-terra" }
         builder.gptSubagentModelResolver = { "" }
 
+        let environment = builder.gptRouterCoreEnvironment()
+
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-terra")
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-terra")
         XCTAssertEqual(
-            builder.gptRouterCoreEnvironment()?["ANTHROPIC_CUSTOM_MODEL_OPTION"],
-            "gpt-5.6-terra"
+            environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
+            "Standard-Tier — andere GPT-Modelle per /model <id> tippen"
         )
     }
 
     func testGPTRouterCoreEnvironmentAddsFastSubagentModel() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptFastModeEnabledResolver = { true }
         builder.gptRouterPortResolver = { 19_004 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
@@ -464,6 +507,7 @@ extension AgentCommandBuilderTests {
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
         }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 19_002 }
         builder.gptSubagentModelResolver = { "" }
         builder.gptDefaultModelResolver = { "" }
@@ -487,6 +531,8 @@ extension AgentCommandBuilderTests {
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
         ])
     }
@@ -503,6 +549,7 @@ extension AgentCommandBuilderTests {
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
         }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 19_001 }
         builder.gptSubagentModelResolver = { "" }
         builder.gptDefaultModelResolver = { "" }
@@ -528,6 +575,8 @@ extension AgentCommandBuilderTests {
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen",
             "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
@@ -535,13 +584,14 @@ extension AgentCommandBuilderTests {
         ])
     }
 
-    func testClaudeGPTBackendResumeOmitsModelStampAndKeepsRouterTuning() throws {
+    func testClaudeGPTBackendResumeOmitsModelStampAndRouterTuning() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in ["--verbose"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
         builder.gptSubagentModelResolver = { "" }
@@ -561,13 +611,56 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.environmentOverrides, [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol",
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Standard-Tier — andere GPT-Modelle per /model <id> tippen",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
-            "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "260000",
         ])
         XCTAssertFalse(command.arguments.contains("--model"))
         XCTAssertNil(command.environmentOverrides["ANTHROPIC_AUTH_TOKEN"])
+    }
+
+    func testArgumentsContainResumeFlagRecognizesAllOfficialForms() {
+        let officialForms = [
+            ["-c"], ["--continue"], ["-r"], ["--resume"], ["--resume=session-1"],
+        ]
+        for arguments in officialForms {
+            XCTAssertTrue(
+                AgentCommandBuilder.argumentsContainResumeFlag(arguments),
+                "Resume-Form nicht erkannt: \(arguments)"
+            )
+        }
+    }
+
+    func testArgumentsContainResumeFlagRejectsPrefixLookalikes() {
+        XCTAssertFalse(AgentCommandBuilder.argumentsContainResumeFlag(["--resumeX", "-continue"]))
+        XCTAssertFalse(AgentCommandBuilder.argumentsContainResumeFlag(["--model", "gpt-5.6-sol"]))
+    }
+
+    func testClaudeGPTBackendResumeEqualsArgumentSuppressesStampAndTuning() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in ["--resume=restored-session"] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
+        builder.gptRouterPortResolver = { 18_766 }
+        builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
+        builder.gptSubagentModelResolver = { "" }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-terra"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--resume=restored-session"])
+        XCTAssertFalse(command.arguments.contains("--model"))
+        XCTAssertNil(command.environmentOverrides["ANTHROPIC_DEFAULT_HAIKU_MODEL"])
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"])
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_AUTO_COMPACT_WINDOW"])
+        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18766")
     }
 
     func testClaudeGPTBackendForkOmitsModelStamp() throws {
@@ -577,6 +670,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
         builder.gptSubagentModelResolver = { "" }
@@ -605,6 +699,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "" }
         let session = AgentChatSession(
@@ -629,6 +724,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in ["--model", "claude-opus-4-6"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "" }
         builder.gptAutoCompactWindowResolver = { 272_000 }
@@ -666,6 +762,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in ["--model", "gpt-5.6-sol"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "" }
         let session = AgentChatSession(
@@ -691,6 +788,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "gpt-5.6-luna" }
         let session = AgentChatSession(
@@ -716,6 +814,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
         builder.gptSubagentModelResolver = { "gpt-5.6-luna" }
@@ -746,6 +845,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "  \n " }
         let session = AgentChatSession(
@@ -814,6 +914,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "gpt-5.6-sol" }
         builder.gptDefaultModelResolver = { "gpt-5.6-terra" }
@@ -837,20 +938,18 @@ extension AgentCommandBuilderTests {
         let agentViewCommand = try builder.command(for: agentView, project: project)
         let backgroundCommand = try builder.command(for: backgroundChat, project: project)
 
+        let expectedRouterEnvironment = [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-terra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen",
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
+        ]
         XCTAssertEqual(agentViewCommand.arguments, ["agents"])
-        XCTAssertEqual(agentViewCommand.environmentOverrides, [
-            "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
-            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
-        ])
+        XCTAssertEqual(agentViewCommand.environmentOverrides, expectedRouterEnvironment)
         XCTAssertEqual(backgroundCommand.arguments, ["attach", "abcdef12"])
-        XCTAssertEqual(backgroundCommand.environmentOverrides, [
-            "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
-            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
-        ])
+        XCTAssertEqual(backgroundCommand.environmentOverrides, expectedRouterEnvironment)
     }
 }
 
@@ -1009,6 +1108,7 @@ extension AgentCommandBuilderTests {
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
         }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 19_003 }
         builder.gptSubagentModelResolver = { "" }
         builder.gptDefaultModelResolver = { "" }

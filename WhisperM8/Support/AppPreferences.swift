@@ -289,6 +289,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendDefaultModel) }
     }
 
+    /// Belegt den einen Custom-Eintrag im Claude-Code-`/model`-Picker.
+    /// Leer behaelt die automatische Ableitung aus Standard-/Canonical-Modell.
+    var claudeGPTPickerModel: String {
+        get { defaults.string(forKey: Keys.claudeGPTPickerModel) ?? "" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTPickerModel) }
+    }
+
     /// Aktiviert den Priority-Tier fuer GPT-Modelle ueber den `-fast`-Alias.
     /// Default bewusst an, auch fuer Bestandsnutzer ohne gespeicherten Wert.
     var claudeGPTFastModeEnabled: Bool {
@@ -480,6 +487,7 @@ enum PreferenceKeys {
     static let claudeGPTBackendPort = "claudeGPTBackendPort"
     static let claudeGPTRouterPort = "claudeGPTRouterPort"
     static let claudeGPTBackendDefaultModel = "claudeGPTBackendDefaultModel"
+    static let claudeGPTPickerModel = "claudeGPTPickerModel"
     static let claudeGPTFastModeEnabled = "claudeGPTFastModeEnabled"
     static let claudeGPTSubagentModel = "claudeGPTSubagentModel"
     static let claudeGPTAutoCompactWindow = "claudeGPTAutoCompactWindow"

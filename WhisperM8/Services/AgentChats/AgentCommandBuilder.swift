@@ -81,11 +81,16 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTSubagentModel
     }
 
-    /// Konfiguriertes GPT-Standardmodell (leer = keins). Speist die
-    /// /model-Picker-Option (`ANTHROPIC_CUSTOM_MODEL_OPTION`); Fallback ist
-    /// das kanonische Modell, damit GPT auch ohne Konfiguration waehlbar ist.
+    /// Konfiguriertes GPT-Standardmodell (leer = keins). Dient bei
+    /// automatischer Picker-Belegung als Fallback vor dem kanonischen Modell.
     var gptDefaultModelResolver: () -> String = {
         AppPreferences.shared.claudeGPTBackendDefaultModel
+    }
+
+    /// Explizites Modell fuer den einen Custom-Eintrag im `/model`-Picker.
+    /// Leer behaelt die automatische Ableitung aus Standard-/Canonical-Modell.
+    var gptPickerModelResolver: () -> String = {
+        AppPreferences.shared.claudeGPTPickerModel
     }
 
     /// Reales GPT-Kontextfenster fuer `CLAUDE_CODE_AUTO_COMPACT_WINDOW`.
@@ -174,6 +179,17 @@ struct AgentCommandBuilder {
         return result
     }
 
+    static func argumentsContainResumeFlag(_ arguments: [String]) -> Bool {
+        arguments.contains { argument in
+            switch argument {
+            case "-c", "--continue", "-r", "--resume":
+                return true
+            default:
+                return argument.hasPrefix("--resume=")
+            }
+        }
+    }
+
     /// Router-Kern-Env fuer jede Claude-Session bei aktivem GPT-Backend.
     /// Background-Spawns brauchen dieselben Werte bereits vor dem spaeteren
     /// Attach, deshalb ist der session-unabhaengige Teil separat abrufbar.
@@ -181,17 +197,28 @@ struct AgentCommandBuilder {
         guard gptBackendEnabledResolver() else { return nil }
 
         let fastModeEnabled = gptFastModeEnabledResolver()
-        let pickerModel = gptDefaultModelResolver()
+        let configuredPickerModel = gptPickerModelResolver()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedPickerModel = pickerModel.isEmpty
-            ? AppPreferences.claudeGPTCanonicalModel
-            : pickerModel
+        let defaultModel = gptDefaultModelResolver()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let pickerModel = configuredPickerModel.isEmpty
+            ? (defaultModel.isEmpty ? AppPreferences.claudeGPTCanonicalModel : defaultModel)
+            : configuredPickerModel
+        let effectivePickerModel = ClaudeGPTModelAlias.effectiveModel(
+            pickerModel,
+            fastEnabled: fastModeEnabled
+        )
+        let normalizedPickerModel = effectivePickerModel.lowercased()
+        let isFastPickerModel = normalizedPickerModel.hasSuffix("-fast")
+            || normalizedPickerModel.hasSuffix("-fast[1m]")
+        let pickerDescription = isFastPickerModel
+            ? "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen"
+            : "Standard-Tier — andere GPT-Modelle per /model <id> tippen"
         var environment = [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:\(gptRouterPortResolver())",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": ClaudeGPTModelAlias.effectiveModel(
-                resolvedPickerModel,
-                fastEnabled: fastModeEnabled
-            ),
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": effectivePickerModel,
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": effectivePickerModel,
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": pickerDescription,
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
         ]
         let subagentModel = gptSubagentModelResolver()
@@ -442,9 +469,10 @@ struct AgentCommandBuilder {
         // dem stillen Off-List-Fallthrough. User-Extras folgen weiterhin nach
         // dem Stempel und behalten damit das letzte Wort (last-flag-wins).
         let hasResumeArgument = resumeSessionID != nil
-            || arguments.contains("--resume")
-            || userArguments.contains("--resume")
-        if !hasResumeArgument, let gptBackendModel {
+            || Self.argumentsContainResumeFlag(arguments)
+            || Self.argumentsContainResumeFlag(userArguments)
+        let shouldApplyGPTModelStamp = !hasResumeArgument && gptBackendModel != nil
+        if shouldApplyGPTModelStamp, let gptBackendModel {
             arguments.append(contentsOf: ["--model", gptBackendModel])
         }
         // User-defined extras (z. B. --dangerously-skip-permissions) vor dem
@@ -491,7 +519,7 @@ struct AgentCommandBuilder {
 
         effectiveProfileEnvironment = applyRouterEnvironment(
             effectiveProfileEnvironment,
-            gptBackendModel != nil
+            shouldApplyGPTModelStamp
         )
 
         return AgentLaunchCommand(

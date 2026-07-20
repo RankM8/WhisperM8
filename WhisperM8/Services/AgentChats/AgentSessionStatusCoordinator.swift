@@ -60,12 +60,14 @@ final class AgentSessionStatusCoordinator {
     /// Session-weites Modellangebot für den `/model`-Picker. Als Closure
     /// injizierbar, damit Tests weder UserDefaults noch globale Preferences
     /// verändern müssen.
-    var gptModelsFragmentResolver: () -> [String: Any]? = {
+    var gptModelsFragmentResolver: (String?) -> [String: Any]? = { sessionModel in
         let preferences = AppPreferences.shared
         guard preferences.claudeGPTBackendEnabled else { return nil }
         return ClaudeGPTModelCatalog.availableModelsFragment(
             defaultModel: preferences.claudeGPTBackendDefaultModel,
-            subagentModel: preferences.claudeGPTSubagentModel
+            pickerModel: preferences.claudeGPTPickerModel,
+            subagentModel: preferences.claudeGPTSubagentModel,
+            sessionModel: sessionModel
         )
     }
 
@@ -131,15 +133,22 @@ final class AgentSessionStatusCoordinator {
     /// Existiert keines der drei Fragmente, wird keine Datei geschrieben.
     func prepareLaunchSettings(
         localSessionID: UUID,
-        contextProfile: ClaudeContextProfile?
+        contextProfile: ClaudeContextProfile?,
+        includeGPTModelCatalog: Bool = true
     ) -> LaunchSettingsPreparation {
         let hooksEnabled = loadPreferences().hooksEnabled
         let contextFragment = contextProfile.map {
             ClaudeContextSettingsBuilder.settingsFragment(for: $0)
         } ?? [:]
+        let sessionModel = store.loadWorkspace().sessions
+            .first(where: { $0.id == localSessionID })?
+            .claudeBackendModel
+        let gptModelsFragment = includeGPTModelCatalog
+            ? gptModelsFragmentResolver(sessionModel) ?? [:]
+            : [:]
         let fragment = ClaudeContextSettingsBuilder.merged([
             contextFragment,
-            gptModelsFragmentResolver() ?? [:],
+            gptModelsFragment,
         ])
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         let path = hookBridge.prepareSettingsFile(

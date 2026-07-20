@@ -51,7 +51,8 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             provider: .claude,
             projectPath: tempDir.path,
             title: "Statusmaschine-Chat",
-            initialPrompt: nil
+            initialPrompt: nil,
+            claudeBackendModel: "gpt-5.5-historical-fast"
         )
         let poster = NotificationPosterSpy()
         let sounds = SoundSpy()
@@ -65,7 +66,7 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             launchGraceSeconds: 999 // Grace-Timer soll in Tests nie feuern
         )
         coordinator.terminalExternalIDUpdater = { _, _ in }
-        coordinator.gptModelsFragmentResolver = { nil }
+        coordinator.gptModelsFragmentResolver = { _ in nil }
         return (coordinator, session.id, poster, sounds, preferences)
     }
 
@@ -262,8 +263,10 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             deniedMcpServers: ["claude.ai Gmail"]
         )
         let expectedModels = ["default", "gpt-test", "gpt-test-fast"]
-        coordinator.gptModelsFragmentResolver = {
-            ["availableModels": expectedModels]
+        var resolvedSessionModel: String?
+        coordinator.gptModelsFragmentResolver = { sessionModel in
+            resolvedSessionModel = sessionModel
+            return ["availableModels": expectedModels]
         }
 
         func settings(_ path: String?) throws -> [String: Any] {
@@ -278,6 +281,7 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             contextProfile: profile
         )
         XCTAssertTrue(allFragments.hooksActive)
+        XCTAssertEqual(resolvedSessionModel, "gpt-5.5-historical-fast")
         let allSettings = try settings(allFragments.settingsFilePath)
         XCTAssertEqual(Set(allSettings.keys), ["hooks", "deniedMcpServers", "availableModels"])
         XCTAssertEqual(allSettings["availableModels"] as? [String], expectedModels)
@@ -293,8 +297,15 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(Set(modelSettings.keys), ["availableModels"])
         XCTAssertEqual(modelSettings["availableModels"] as? [String], expectedModels)
 
+        let fallback = coordinator.prepareLaunchSettings(
+            localSessionID: sessionID,
+            contextProfile: nil,
+            includeGPTModelCatalog: false
+        )
+        XCTAssertNil(fallback.settingsFilePath)
+
         // Backend aus, Hooks aus, kein Profil: unverändert keine Settings-Datei.
-        coordinator.gptModelsFragmentResolver = { nil }
+        coordinator.gptModelsFragmentResolver = { _ in nil }
         let nothing = coordinator.prepareLaunchSettings(
             localSessionID: sessionID,
             contextProfile: nil
