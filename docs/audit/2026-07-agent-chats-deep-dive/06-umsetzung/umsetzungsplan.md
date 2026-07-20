@@ -64,18 +64,19 @@ Tab-Management verifiziert).
   Backup-vor-Migration-Mechanik; N05-Future-Schema bleibt offen (W1).
 - Die neuen Tests sind Fix-Verträge, **kein** Ersatz für die G4-Test-Spec.
 
-## Entscheidungsregister (offen — wird einzeln mit dem User besprochen)
+## Entscheidungsregister (entschieden am 2026-07-20)
 
-Ohne E1–E5 startet Phase 1 nicht. Formulierung bewusst untechnisch;
-keine gilt als getroffen.
+Alle fünf Festlegungen wurden einzeln mit dem User durchgegangen und
+entschieden (jeweils die Empfehlung). Sie sind damit verbindliche
+Vorgaben für die Gate-Arbeit in Phase 1.
 
-| # | Frage (Klartext) | Warum wichtig | Empfehlung | Status |
-|---|---|---|---|---|
-| E1 | Wer vergibt die Chat-ID: Claude selbst (heute) oder WhisperM8 vorab? | Wurzel der Chat-Verbindungs-Bugs (verlorene Chats, falsche Resumes). Vorab-Vergabe hat real „No conversation found" erzeugt. | Beim heutigen Weg bleiben und absichern; Vorab-Vergabe nur nach bestandener Live-Probe der installierten CLI. | offen |
-| E2 | Darf die App in Claudes eigene Daten (`~/.claude`) schreiben? | Reparatur-Ideen bräuchten das; Risiko: Claude-History beschädigen. | Nein — nur lesen; Reparaturen nur in WhisperM8-eigenen Daten vermerken. | offen |
-| E3 | Testnetz vor dem Kern-Umbau: vollständig oder abgespeckt? | Der Umbau betrifft den Kern (Chat-Bindung); Lücken = Regressionsrisiko. | Vollständig (fehlende Verträge B18–B22 + C07-Fallmatrix). | offen |
-| E4 | Terminal-Snapshots: Aufräumregel (Ablauf/Größenlimit) festschreiben? | Liegen unverschlüsselt und unbegrenzt auf der Platte, ggf. mit Secrets. | Ja, als verbindliches Soll-Gate (Umsetzung später, W2/T1). | offen |
-| E5 | Unklare Chat↔Verlauf-Zuordnung: weiter raten oder markieren? | Heute wird der zeitlich nächste Kandidat geraten — kann falsch verbinden. | Nicht raten: Chat als „prüfen" markieren und sichtbar machen. | offen |
+| # | Frage (Klartext) | Entscheidung | Status |
+|---|---|---|---|
+| E1 | Wer vergibt die Chat-ID: Claude selbst (heute) oder WhisperM8 vorab? | Beim heutigen Weg bleiben (Claude vergibt, App fängt streng geprüft ein = Weg B als Baseline); Vorab-Vergabe (Weg A) nur capability-gegatet nach bestandener Live-Probe der installierten CLI. | **entschieden** |
+| E2 | Darf die App in Claudes eigene Daten (`~/.claude`) schreiben? | Nein — nur lesen; Reparaturen nur in WhisperM8-eigenen Daten vermerken. Bestehende Schreib-Ausnahmen (Account-Umzug, Theme-Sync) werden in der Spec-Arbeit als eng gesicherte Ausnahmen festgeschrieben oder zurückgebaut. | **entschieden** |
+| E3 | Testnetz vor dem Kern-Umbau: vollständig oder abgespeckt? | Vollständig — fehlende Verträge B18–B22 plus C07-Fallmatrix werden ergänzt, keine Umbenennung in „Teilmenge". | **entschieden** |
+| E4 | Terminal-Snapshots: Aufräumregel (Ablauf/Größenlimit) festschreiben? | Ja — verbindliches Soll-Gate: Ablauf/Größenlimit, garantiertes Mitlöschen bei Session-Löschung, keine Eingabe-Aufzeichnung (Umsetzung später, W2/T1). | **entschieden** |
+| E5 | Unklare Chat↔Verlauf-Zuordnung: weiter raten oder markieren? | Nicht raten — unklare Fälle fail-closed als „prüfen" markieren und sichtbar machen; User wählt den richtigen Verlauf. | **entschieden** |
 
 ## Phasenplan
 
@@ -87,7 +88,7 @@ keine gilt als getroffen.
 | R4-AS-03 | `git status` im Worktree-Manager kann dauerhaft hängen (Pipe-Deadlock; Muster seit C13 vorhanden) | S–M |
 | R4-VC-03 | ffmpeg-Fallback der Transkriptions-CLI kann dauerhaft hängen (gleiches Muster) | S–M |
 
-### Phase 1 — Gate-Arbeit G0–G6 (reine Spec-/Doku-Arbeit; braucht E1–E5)
+### Phase 1 — Gate-Arbeit G0–G6 (reine Spec-/Doku-Arbeit; E1–E5 entschieden — startklar nach User-Go)
 
 Schaltet den gesperrten Kern-Umbau frei. Sechs delegierbare Pakete
 (inhaltliche Definition: [Abschlusskritik](../02-findings/runde4-abschlusskritik.md)):
