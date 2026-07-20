@@ -32,9 +32,10 @@ description: Die eine operative Datei zur Audit-Umsetzung — Handoff für neue 
    Feature-Regression; WhisperM8 bleibt CLI-Host (echte Claude-/Codex-CLI
    im PTY, kein SDK-/Eigen-UI-Ersatz).
 
-## Stand (2026-07-20, nach Commit `f8c8fad`)
+## Stand (2026-07-20)
 
-**Suite: 1648 Tests, 0 Failures** — alle untenstehenden Fixes an HEAD
+**Suite: 1648 Tests, 0 Failures** — gemessen auf `269f8bc` (letzter
+Code-Commit; alles danach ist reine Doku). Alle untenstehenden Fixes dort
 integrationsgeprüft (C14-Diff-Gate auch gegen das parallel gelandete
 Tab-Management verifiziert).
 
@@ -95,7 +96,7 @@ Schaltet den gesperrten Kern-Umbau frei. Sechs delegierbare Pakete
 |---|---|---|
 | A (G0–G2) | Einheitlicher Identitätsvertrag: ID-Vergabe, Launch-Korrelation/Claim-Regeln, Übergänge `/branch` `/rewind` `/clear` `/resume` `/compact` | E1, E2, E5 |
 | B (Live-Probe) | Fork-Verhalten der installierten Claude-CLI empirisch belegen — isoliert im Scratch-Config-Root, kein Junk in echten Daten | parallel möglich |
-| C (G3) | Feature-Inventar ehrlich machen: AC-41/AC-52/AC-30 in Ist/Lücke/Soll trennen; Snapshot-Privacy als offenes Gate | E4 |
+| C (G3) | Feature-Inventar ehrlich machen: AC-41/AC-52/AC-30 in Ist/Lücke/Soll trennen; R4-AS-11 als Persistenz-/Startup-Invariante aufnehmen (Codefix ersetzt das Oracle nicht); Snapshot-Privacy als offenes Gate | E4 |
 | D (G4) | Test-Spec vollständig auf W0/W1 (B18–B22, C07-Matrix, Runde-4-Oracles) | E3, nach A |
 | E (G5) | Runde-4-Findings dedupliziert in Matrix/Roadmap verankern (Konsolidierung, keine Neuanalyse) | teils parallel, Links nach D |
 | F (G6) | Referenzen nachziehen, formale Gate-Tabelle, unabhängiger Gegenleser | nach allem |
@@ -108,26 +109,40 @@ plus User-Abnahme. Kein Produktcode.
 1. **W0-Oracles** gemäß neuer Test-Spec.
 2. **Datenintegrität:** N06 (Keychain kann einzigen API-Key löschen),
    N03/N04 (Output-Modi: Crash bzw. Totalverlust), N05 + R4-SCHEMA-01
-   (Future-Schema-Downgrade), R4-SKILL-01 (Skill-Overwrite ohne Backup),
+   (Future-Schema-Downgrade), Skill-Ownership-Cluster
+   R4-SKILL-01/R3-DEF-G01 (Overwrite ohne Guard/Backup),
    Lost-Update-Cluster R4-INSTALL-01/R4-AS-01/R4-SHELL-02.
 3. **Recorder-Crashes:** C01/C02 (+N02-Quit-Schutz im gemeinsamen
    Termination-Contract mit Phase 3).
-4. **Environment-Fabrik P1.1:** ein Umbau, ~7 Findings (N09/N10-Secrets,
-   C06/R4-CP-05-Profile u. a.).
-5. **Chats-CLI-Härtung:** R4-AUTH-01/02, R4-IDEM-01, R4-CTRL-01/02,
-   R4-SEC-01.
-6. **GPT-Ship-Blocker** (solange GPT-Backend aktiv genutzt):
+4. **Codex-Supervisor R2.4 (W1!):** N07/N08/N14 — Ready-Handshake,
+   Stop-Latch, semantische Turn-Finalität.
+5. **Environment-Fabrik P1.1:** ein Umbau, ~7 Findings (N09/N10-Secrets,
+   C06/R4-CP-05-Profile u. a.); dazu Context-Profile fail-closed
+   R4-CP-02/03 und Prozessbaum-/PID-Härtung R4-HCLI-01/02 + R4-PLUG-02.
+6. **Chats-CLI-Härtung:** R4-AUTH-01/02, R4-IDEM-01, R4-CTRL-01/02,
+   R4-SEC-01; dazu die Wait-/Stempel-Verträge R4-WAIT-01/02 + R4-PROF-01
+   (W0-Oracle, Fix nach Paket A, da identitätsnah).
+7. **Weitere W1/W2-Hochbefunde:** R4-PLUG-01 (Plugin-Secrets in argv),
+   R4-SHELL-01 (`echo -e`-Zweitinterpretation), R4-STATUS-PROFILE-01
+   (Profil-Symlink-Reconciliation, W2).
+8. **GPT-Ship-Blocker** (solange GPT-Backend aktiv genutzt):
    Lifecycle-Automat (R3-PROXY-G01/02/04/05, R3-SEC-G04, R4-LIFE-01,
-   R4-GPTL-02), Client-Auth R3-SEC-G02, Health-Identität R3-SEC-G01,
-   Update-Vertrauenswurzel R4-GPTS-01, Contract-Fixtures R3-MIX-G07-Rest,
+   R4-GPTL-02), Background-Spawn-Guard R3-PROXY-G03, Client-Auth
+   R3-SEC-G02, Health-Identität R3-SEC-G01, Update-Vertrauenswurzel
+   R4-GPTS-01, Contract-Fixtures R3-MIX-G07-Rest + R3-MIX-G01/G03
+   (extern verifizierte Token-/History-Verträge, W0-Fixture zuerst),
    Usage-E2E R3-LIVE-G01-Rest.
+
+Vollständige ID-Abdeckung bleibt Aufgabe der Matrix + des
+Runde-4-Roadmap-Nachtrags (und wird in Paket E/G5 verankert) — dieser
+Plan priorisiert und ersetzt keine Traceability.
 
 ### Phase 3 — Welle 2: Kern-Korrektheit (erst nach G6-Abnahme)
 
 Identitäts-/Recovery-Umsetzung (P0.5/P0.6/P1.3/P1.4), gemeinsamer
-Termination-Contract (N02 + C10 + Snapshot-Prüfpunkte), Codex-Supervisor
-mit Ready-Handshake (N07/N08/N14), Auto-Paste-Intent (N11), Job-State-CAS
-(N12/N13), Recorder-Isolation (C03).
+Termination-Contract (N02 + C10 + Snapshot-Prüfpunkte), Auto-Paste-Intent
+(N11), Job-State-CAS (N12/N13), Background-Reconciliation (C08 · P1.2),
+Recorder-Isolation (C03).
 
 ### Phase 4 — Welle 3: Performance-Großbaustellen und Transcript-Vertrag
 
