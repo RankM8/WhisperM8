@@ -1,6 +1,6 @@
 ---
 status: abgeschlossen
-updated: 2026-07-18
+updated: 2026-07-20
 description: Vollständiges Referenzinventar der sichtbaren Funktionen und Erhaltungsinvarianten des Agent-Chats-Subsystems vor den geplanten Refactor-Wellen.
 ---
 
@@ -9,6 +9,8 @@ description: Vollständiges Referenzinventar der sichtbaren Funktionen und Erhal
 ## Zweck und Leseregel
 
 Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM8. Es ist kein Soll-Konzept und keine Qualitätsbewertung, sondern ein Regressions-Oracle: Eine Roadmap-Maßnahme darf die hier belegten Nutzerfunktionen und Invarianten nicht unbeabsichtigt verändern.
+
+> **G3-Revision:** AC-30/41/52 in Ist/Lücke/Soll getrennt; R4-AS-11 ergänzt.
 
 - **Einstiegspunkt** nennt den produktiven Einstieg als `Datei:Zeile`; ergänzende Belege folgen bei Bedarf.
 - **Sichtbares Verhalten** beschreibt, was ein Nutzer tatsächlich sieht oder auslösen kann.
@@ -33,6 +35,12 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Erhaltungsinvarianten:** Ein Store-Kern pro standardisiertem Produktionspfad; Domain-Mutationen sind lock-serialisiert und diff-gated; Produktionswrites sind debounced, atomar und spätestens nach zwei Sekunden Dirty-Zeit fällig; `willTerminate` drainiert Domainwrites und flusht den UI-Sidecar; Runtime-Status bleibt absichtlich ephemer (`WhisperM8/Services/AgentChats/AgentWorkspaceStore.swift:117`, `WhisperM8/Services/AgentChats/AgentWorkspaceStore.swift:207`, `WhisperM8/Models/AgentChat.swift:112`).
 - **Roadmap-Bezug:** `C11`, `C14`, `N05`; Welle 1 `R2.3` und `P1.7`, Welle 3 `P1.10`, Welle 4 `P2.3`. Future-Schema muss read-only bleiben; unbekannte Daten dürfen nicht still überschrieben werden.
 
+### R4-AS-11 · Doppelte lokale Session-IDs beim Load
+
+- **Ist-Verhalten:** `AgentSessionStore.migratedWorkspace` dedupliziert persistierte lokale Session-IDs vor nachgelagerten Konsumenten deterministisch; die erste Row gewinnt. `SummaryStartupPlanner` behandelt Duplikate zusätzlich trap-frei und plant eine ID höchstens einmal (`WhisperM8/Services/AgentChats/AgentSessionStore.swift:1180-1206`, `WhisperM8/Services/AgentChats/SummaryStartupPlanner.swift:16-23`).
+- **Oracle-Testanker (bestehend):** `AgentSessionStoreTests.testMigratedWorkspaceDeduplicatesDuplicateSessionIDs` sichert Load/Migration und „erste Row gewinnt“; `SummaryStartupPlannerTests.testDuplicateSessionIDsDoNotTrapAndPlanOnce` sichert den trap-freien Startup-Planer (`Tests/WhisperM8Tests/AgentSessionStoreTests.swift:256-277`, `Tests/WhisperM8Tests/AgentSessionSummarizerTests.swift:161`).
+- **Erhaltungsinvariante:** Kein persistiertes ID-Duplikat darf einen Konsumenten mit Eindeutigkeitsvorbedingung erreichen oder den App-Start abbrechen.
+
 ### AC-03 · Sidebar-Scope, Suche und Layout
 
 - **Funktion:** Zeigt den Chat-Bestand wahlweise als „Aktiv“, „Zuletzt“ (sieben Tage) oder „Alle“ und wahlweise projektgruppiert oder flach.
@@ -47,6 +55,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/AgentSidebarModelBuilder.swift:303`, `WhisperM8/Views/AgentChatsSidebarViews.swift:651`, `WhisperM8/Views/AgentChatChromeViews.swift:104`.
 - **Sichtbares Verhalten:** Gepinnte Chats stehen unabhängig vom Scope oben; Rows/Tabs zeigen `working`, `awaitingInput`, `idle`, Fehler und Subagent-Fortschritt, ohne dass jede fremde Statusänderung die ganze Shell neu rendert.
 - **Erhaltungsinvarianten:** Archivierte/unbekannte Pins fallen heraus; Pin-Reihenfolge bleibt stabil; per-Session-Publisher deduplizieren gleiche Werte; Mehrfachauswahl und aktive Auswahl bleiben visuell unterscheidbar.
+- **TODO-Inventarlücke (P1):** Sidebar-Usage als eigene Nutzerfunktion nachziehen: getrennte Claude- und ChatGPT/Codex-Popovers einschließlich primärer, sekundärer und scoped Limits (`WhisperM8/Views/AgentUsagePopovers.swift:3-49`, `WhisperM8/Views/AgentUsagePopovers.swift:129-255`).
 - **Roadmap-Bezug:** `C14`, `C15`; Welle 1 `P1.7`, Welle 3 `P1.5+P1.8`. Status- und Unread-Sichtbarkeit sind Regression-Gates, keine austauschbare Dekoration.
 
 ### AC-05 · Projekt hinzufügen, auswählen und als Startkontext verwenden
@@ -259,9 +268,10 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 
 - **Funktion:** Speichert den letzten normalen Terminalbuffer als Plaintext-Sidecar und zeigt ihn ohne JSONL-Parsing an.
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/TerminalSnapshotStore.swift:14`, `WhisperM8/Views/AgentTerminalView.swift:799`, `WhisperM8/Views/Transcript/TerminalSnapshotView.swift:8`.
-- **Sichtbares Verhalten:** Nach Stop, natürlichem Exit oder App-Quit bleibt der letzte Scrollback sichtbar; Anzeige rendert in 50-Zeilen-Chunks.
-- **Erhaltungsinvarianten:** Leere Ränder trimmen, höchstens jüngste 2.000 Zeilen, atomarer Sidecar-Write, Formatversion prüfen; Input wird nicht separat aufgezeichnet. Ein kaputter/neuer Sidecar darf langfristig nicht den JSONL-Fallback blockieren.
-- **Roadmap-Bezug:** `C10`; Welle 2 `P0.7+P1.12`, Welle 3 `T1` für output-only Recording. Letzte Exit-Bytes müssen genau einmal enthalten sein; stdin/Secrets dürfen nie in ein neues Recording gelangen.
+- **Ist-Verhalten:** Stop, natürlicher Exit und App-Quit erfassen den normalen Terminalbuffer; leere Ränder werden getrimmt, höchstens die jüngsten 2.000 Zeilen atomar gespeichert und in 50-Zeilen-Chunks angezeigt. `TerminalSnapshotStore.load` liefert bei kaputtem Header oder unbekannter Formatversion `nil`; der Displaypfad deferiert den JSONL-Load derzeit bereits bei bloßer Sidecar-Existenz (`WhisperM8/Views/AgentTerminalView.swift:775-836`, `WhisperM8/Views/AgentTerminalView.swift:969-979`, `WhisperM8/WhisperM8App.swift:343-351`, `WhisperM8/Services/AgentChats/TerminalSnapshotStore.swift:75-106`, `WhisperM8/Views/AgentSessionDetailView.swift:201-225`). Der normale Buffer kann vom TUI sichtbar gerenderte Eingaben, Prompts oder Secrets enthalten, obwohl kein separater Input-Stream aufgezeichnet wird (`WhisperM8/Views/AgentTerminalView.swift:808-819`).
+- **Heutige Lücke:** Nach einem asynchronen `nil` wird der Transcript-Load nicht erneut ausgelöst; ein kaputter oder neuer Sidecar kann den JSONL-Fallback deshalb dauerhaft blockieren. Privacy/Retention sind ebenfalls offen: Plaintext-Sidecars erhalten keine expliziten `0600`-Rechte, besitzen kein verbindliches Ablauf-/Gesamtgrößenlimit und keinen vollständigen Orphan-Cleanup; nur explizite Session-/Projekt-Deletes kennen sie derzeit. „Input wird nicht separat aufgezeichnet“ ist wegen gerenderter Bufferinhalte keine hinreichende Privacy-Garantie (`WhisperM8/Services/AgentChats/ClaudeHookBridge.swift:87-92`, `WhisperM8/Services/AgentChats/AgentSessionStore.swift:453-499`, `WhisperM8/Services/AgentChats/AgentSessionStore.swift:1103-1133`).
+- **Soll-Gate (offen; rot→grün, W2/T1):** Testanker 1 lädt bei kaputtem Header oder unbekannter Version garantiert das JSONL-Transcript. Testanker 2 erzwingt nach User-Entscheidung E4 einen verbindlichen Snapshot-Vertrag: Ablaufzeit und Größenbudget, garantiertes Mitlöschen auf jedem Session-Löschpfad, keine separate stdin-/Eingabe-Aufzeichnung, explizite Behandlung des Risikos gerenderter Eingaben/Secrets im Normalbuffer sowie private Dateirechte (`0600` oder strenger). Diese Punkte sind noch **keine** bestehende Invariante.
+- **Roadmap-Bezug:** `C10`; Welle 2 `P0.7+P1.12`, Welle 3 `T1`. Letzte Exit-Bytes müssen genau einmal enthalten sein; das offene Privacy-/Retention-Gate ist vor Freigabe rot→grün zu schließen.
 
 ## 5. Claude-Background-Agents und Codex-Subagent-Jobs
 
@@ -295,6 +305,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/AgentJobState.swift:13`, `WhisperM8/Services/AgentChats/AgentJobSupervisor.swift:59`, `WhisperM8/Services/AgentChats/CodexExecRunner.swift:180`.
 - **Sichtbares Verhalten:** Jobs durchlaufen `spawning`, `running`, `done|failed|stopped` oder terminal `takenOver`; Events, letzte Nachricht, Report und State bleiben unter `agent-jobs/<short-id>/` verfügbar.
 - **Erhaltungsinvarianten:** Jeder Supervisor bearbeitet genau einen Turn; State-Write ist atomar; erlaubte Übergänge sind zentral; erste Codex-Thread-ID wird früh persistiert; stdout/stderr werden bis EOF plus Prozessende gedraint; Idle-Watchdog begrenzt einen stillen Turn.
+- **TODO-Inventarlücke (P1):** Worktree-Jobs explizit inventarisieren: `run --worktree`, Branch/Pfad, Fortsetzung im Worktree, UI-Anzeige, Takeover-cwd und Dirty-Guard bei `agent rm` (`WhisperM8/CLI/AgentCLICommand.swift:119-133`, `WhisperM8/CLI/AgentCLICommand.swift:415-425`, `WhisperM8/Services/AgentChats/AgentWorktreeManager.swift:39-68`).
 - **Roadmap-Bezug:** `N07`, `N08`, `N12`, `N13`, `N14`; Welle 1 `R2.4`, Welle 2 `R2.7`. Supervisor/Turn-Vertrag und State-CAS sind P0-Regressionsflächen.
 
 ### AC-35 · `whisperm8 agent`-CLI
@@ -337,6 +348,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/ClaudeHookSettingsBuilder.swift:25`, `WhisperM8/Views/AgentSessionDetailView.swift:475`, `WhisperM8/Views/AgentChatsView+BackgroundAgents.swift:68`.
 - **Sichtbares Verhalten:** Status, Eingabebedarf und reale Claude-ID werden ohne Polling aus Claude-Lifecycle-Events aktualisiert.
 - **Erhaltungsinvarianten:** Registriert sind `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Stop`; `Notification` bleibt bewusst aus, damit `idle_prompt` nicht als Eingabebedarf erscheint. Agent View, Terminal und Background-Attach bekommen keine zweite Bridge.
+- **TODO-Inventarlücke (P1):** Sichtbare Agent-Chats-Settings einschließlich Defaults und Previews nachziehen: Fertig-/Awaiting-Benachrichtigungen, Completion-Sound, Terminal-Bell, Hook-Bridge/-Diagnose/-Preview sowie Claude-/Codex-Extra-Args (`WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:185-239`, `WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:397-435`, `WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:526-580`).
 - **Roadmap-Bezug:** `C07`, `C08`, `C09`; Welle 2 „Autoritative Session-Bindung“ und `P1.2` Hook-Matrix/Reconciliation.
 
 ### AC-40 · Event-Datei-Bridge mit initialem Drain
@@ -351,8 +363,9 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 
 - **Funktion:** Bindet Claudes `SessionStart.session_id` an die lokale UUID und aktualisiert Controller/Transcript-Watch.
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/AgentSessionStatusCoordinator.swift:345`, `WhisperM8/Services/AgentChats/AgentSessionStore.swift:598`.
-- **Sichtbares Verhalten:** Nach erstem Start kann derselbe lokale Chat später zuverlässig resumiert, geforkt, benannt und im Transcript gefunden werden.
-- **Erhaltungsinvarianten:** Binding wird sofort geflusht, bevor abhängige Watches umgehängt werden; bereits belegte externe IDs dürfen nicht parallel an zwei lokale Rows gebunden werden; mehrdeutige Reparatur startet nicht still eine fremde/fresh Session; `/cd`, Profilroot und ID-Rotation müssen berücksichtigt werden.
+- **Ist-Verhalten:** Der Binder vergleicht nur die bisherige und die neue externe ID derselben lokalen Row. Bei einer abweichenden nichtleeren Hook-ID schreibt und flusht er diese Row, bevor abhängige Watches umgehängt werden; eine Suche nach derselben externen ID in anderen Rows findet nicht statt (`WhisperM8/Services/AgentChats/AgentSessionStatusCoordinator.swift:345-363`).
+- **Heutige Lücke (`C07`):** Dieselbe externe ID kann parallel an mehrere lokale Rows gebunden werden. Damit sind eindeutiger Resume, Fork, Transcript-Lookup und Reparatur nicht garantiert; die frühere Eindeutigkeitsaussage war ein Soll-Fix, keine Erhaltungsinvariante.
+- **Soll-Gate (rot→grün; `C07`, Welle 2):** C07-Bugtest mit zwei lokalen Rows, von denen eine die eingehende externe ID bereits besitzt: `SessionStart` der zweiten Row darf keine zweite Bindung erzeugen und muss in einen deterministischen Konflikt-/Recovery-Pfad führen. Profilroot, cwd-/`/cd`-Wechsel und ID-Rotation gehören zur Golden-Matrix. Dieses Gate ist ausdrücklich noch **keine** bestehende Invariante.
 - **Roadmap-Bezug:** `C04`, `C07`, `C09`; Welle 2 `P0.5+P0.6+P1.3+P1.4`.
 
 ### AC-42 · Runtime-State-Machine und Hook-Primat
@@ -443,8 +456,9 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 
 - **Funktion:** Führt indexierte Sessions mit lokalen Projekten/Sessions zusammen und adoptiert zeitnah gestartete ungebundene Tabs.
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/AgentSessionStore.swift:736`, `WhisperM8/Services/AgentChats/AgentSessionStore.swift:786`.
-- **Sichtbares Verhalten:** Externe Session und lokal gestarteter Tab werden zu einer Row statt Duplikaten; Metadaten/letzte Aktivität aktualisieren sich.
-- **Erhaltungsinvarianten:** Dedupe-Key `provider|externalSessionID`; bei Claude passt Profilkandidat vor reiner Recency; Adoption nur im echten ±5-s-Fenster und bei eindeutiger Zuordnung; laufende Jobthreads bleiben aus normalem Import heraus.
+- **Ist-Verhalten:** Der Merge dedupliziert indexierte Sessions über `provider|externalSessionID`. Für Adoption filtert er ungebundene lokale Kandidaten im echten ±5-s-Fenster; liegen mehrere Kandidaten vor, wählt er per `min` den zeitlich nächsten, bei Claude unter Berücksichtigung des Profilkandidaten. Er verlangt heute keine eindeutige Zuordnung (`WhisperM8/Services/AgentChats/AgentSessionStore.swift:825-850`).
+- **Heutige Lücke (`C07`):** Bei mehreren plausiblen Kandidaten entscheidet Recency statt Eindeutigkeit. Scan-/Hook-Reihenfolge kann deshalb beeinflussen, welche Row adoptiert wird; dass beide Pfade in genau einer kanonischen Row enden, ist vor P0.4 nicht garantiert.
+- **Soll-Gate (rot→grün; `C07`, Welle 2/P0.4):** C07-Bugtest mit mindestens zwei plausiblen ungebundenen Kandidaten im ±5-s-Fenster: Der Merge darf keinen Kandidaten willkürlich adoptieren; erst autoritative Evidenz darf genau eine kanonische Row binden, und umgekehrte Hook-/Scan-Reihenfolge muss zum selben Ergebnis führen. Dieses Gate ist ausdrücklich noch **keine** bestehende Invariante.
 - **Roadmap-Bezug:** `C07`, `C12`; Welle 2 „Autoritative Session-Bindung“, Welle 3 `P1.5+P1.8`, Welle 4 `P2.3`.
 
 ### AC-53 · Transcript-Locator und providerübergreifender Tail-Cache
@@ -469,6 +483,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Einstiegspunkt:** `WhisperM8/Views/Transcript/AgentTranscriptContainerView.swift:28`, `WhisperM8/Views/Transcript/AgentTimelineView.swift:23`, `WhisperM8/Views/AgentChatTranscriptView.swift:22`, `WhisperM8/Views/Transcript/TerminalSnapshotView.swift:8`.
 - **Sichtbares Verhalten:** Timeline gruppiert Runden, Zwischentexte, Tools und finale Antworten; Rohansicht zeigt die Message-Reihenfolge; große Verläufe rendern harte Fenster (160 Runden/600 Messages), nicht die komplette Historie auf einmal.
 - **Erhaltungsinvarianten:** Timeline-Aufbau ist pure/off-main und verlustfrei bezüglich erzeugter Blocks; Antwort/Notiz bleiben getrennt; stabile IDs; ältere asynchrone Builds dürfen künftig keinen neueren View-State überschreiben. Terminal-Snapshot ist schneller Fallback, kein Ersatz des providerseitigen Transcripts.
+- **Heutige Lücke / Soll-Gate (offen; E4, W2/T1):** Die Snapshot-Ansicht erbt den in AC-30 beschriebenen offenen Privacy-/Retention-Vertrag; Ablauf-/Größenlimit, Mitlöschen, Eingabegrenze, Risiko gerenderter Secrets und private Dateirechte sind keine erhaltenen Eigenschaften, bis die dort markierten rot→grün-Testanker erfüllt sind.
 - **Roadmap-Bezug:** `N15`, `N16`; Welle 3 `P1.11` und `T1`.
 
 ### AC-56 · Tool-Korrelation in der Timeline
@@ -487,6 +502,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Einstiegspunkt:** `WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:4`, `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:302`, `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:326`.
 - **Sichtbares Verhalten:** Settings zeigen Binary-, Prozess- und Authstatus; Proxy kann gestartet/gestoppt werden; URL und Gerätecode werden angezeigt/kopiert; freie Modellstrings mit Vorschlägen sind editierbar.
 - **Erhaltungsinvarianten:** Deaktiviert bedeutet direkter Anthropic-Betrieb und GPT-Stempel ignorieren; „Proxy stoppen“ beendet nur von WhisperM8 selbst gestartete Instanz; Device-Login ersetzt einen alten laufenden Login und endet beim App-Quit; Default leer bedeutet Claude, nicht automatisch GPT.
+- **TODO-Inventarlücke (P2):** Das sichtbare, persistierte GPT-Kontextfenster (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`) mit Eingabevalidierung und Scope nur für GPT-gestempelte Hauptsessions als Nutzerfunktion in AC-57/60 nachziehen (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:195-208`, `WhisperM8/Support/AppPreferences.swift:298-309`, `WhisperM8/Services/AgentChats/AgentCommandBuilder.swift:299-307`).
 - **Roadmap-Bezug:** Noch kein C/N-Finding der Audit-Roadmap; als jüngst implementierter Produktpfad vollständiges Feature-Erhaltungs-Gate für alle Agent-Chats-Wellen.
 
 ### AC-58 · Proxy-Lifecycle und Health-Signatur
@@ -524,7 +540,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 ## 10. Querschnittsinvarianten und Abgrenzungen
 
 1. **WhisperM8 bleibt CLI-Host.** Claude Code, Codex und Shell laufen als echte Prozesse in PTYs beziehungsweise als echte CLI-Supervisoren. Eine Refactor-Welle darf sie nicht still durch eine Eigen-UI- oder SDK-Runtime ersetzen (`WhisperM8/Services/AgentChats/AgentCommandBuilder.swift:156`, `WhisperM8/Views/AgentTerminalView.swift:749`).
-2. **Externe Daten bleiben read-only.** Session-Indexer, Reader und Statuspfade lesen `~/.claude/`/`~/.codex/`. Expliziter Account-Umzug ist die einzige hier beschriebene Mutationsausnahme und braucht Copy+Verify vor Quellenlöschung.
+2. **Externe Daten bleiben grundsätzlich read-only.** Session-Indexer, Reader und Statuspfade lesen `~/.claude/`/`~/.codex/`. Expliziter Account-Umzug ist eine bestätigte Mutationsausnahme und braucht Copy+Verify vor Quellenlöschung. **TODO-Inventarlücke (P1, Entscheidung E2):** Claude-Theme-Sync ist eine bestehende Schreib-Ausnahme nach `~/.claude/settings.json`; sie wird mit Backup-/Parse-Fail-Guard gesichert oder zurückgebaut (`WhisperM8/Support/ThemeManager.swift:67-90`, `WhisperM8/Services/AgentChats/ClaudeThemeWriter.swift:83-158`).
 3. **Domain-Store-Mutationsclosures starten keine Subprozesse.** Sie laufen unter dem prozessweiten Lock; Git-, Config-, Index- und Dateiarbeit ist vorher/off-main zu erledigen (`WhisperM8/Services/AgentChats/AgentWorkspaceStore.swift:117`).
 4. **Hooks bleiben Claude-Status-SSoT.** Transcript ist Fallback und Turn-Ende-Oracle, nicht gleichrangiger Überschreiber eines lebendigen Hook-Zustands.
 5. **Session-, Tab-, Fenster- und Workspace-Identität sind verschieden.** Lokale Session-UUID, externe Provider-ID, Tab-Owner, Workspace-Membership und Prozess/PTY dürfen nicht vermischt werden.
