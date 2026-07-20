@@ -188,7 +188,7 @@ Die folgenden IDs sind normative Oracle-Platzhalter; jeder Test kontrolliert zus
 | `S-07` | `/compact` mit `source=compact` und gleichem Key bleibt `inPlaceCompact`, ohne Unread oder Auto-Rename. | Abweichende ID, Root oder konkurrierende Generation wird weder als Compact noch als Branchwechsel geraten. |
 | `S-08` | Reguläres Prozessende schließt ausschließlich die aktuelle Launchgeneration und erhält das letzte bestätigte Binding. | Spätes Event der geschlossenen Generation ist `staleGeneration`; Crash in `bindingPending` führt zu Recovery statt Fresh. |
 
-Diese Oracles werden in der G4-Revision der `test-specs-welle0-1.md` als B-Tests materialisiert; A02 wird dort durch capability-/claim-spezifische Oracles ersetzt.
+Diese Oracles sind in der G4-Revision der `test-specs-welle0-1.md` als `A02-S01` bis `A02-S08` materialisiert; die alte A02-Direktbindung ist dort durch capability-/claim-spezifische Oracles ersetzt.
 
 ## 2. Ursachen-Landkarte: heutige Verlust- und Fehlbindungswege
 
@@ -347,20 +347,9 @@ abweichenden Encoder
 
 ### 3.2 agent-deck (lokaler Klon)
 
-Der lokale Klon unter
-`/private/tmp/claude-501/-Users-giulianocosta-repos-whisperm8/8b93468c-4cf1-41c0-a5fc-b852563d2a8d/scratchpad/vergleich/agent-deck`
-definiert Disk-Scans
-als nicht autoritativ, erlaubt Bind/Rebind nur aus tmux-Environment, Hook-Payload
-oder Hook-Sidecar und bewahrt bei Ablehnung die bestehende ID
-(`/private/tmp/claude-501/-Users-giulianocosta-repos-whisperm8/8b93468c-4cf1-41c0-a5fc-b852563d2a8d/scratchpad/vergleich/agent-deck/docs/session-id-lifecycle.md:5-15`). Bei Restart
-bleibt die letzte persistierte ID bestehen; ein Disk-Scan darf sie nicht ersetzen
-(`/private/tmp/claude-501/-Users-giulianocosta-repos-whisperm8/8b93468c-4cf1-41c0-a5fc-b852563d2a8d/scratchpad/vergleich/agent-deck/docs/session-id-lifecycle.md:22-32`).
+Die repo-eigene Analyse des lokalen agent-deck-Klons beschreibt eine konservative Rebinding-Hierarchie: terminale Hook-Phasen binden nicht, Kandidaten ohne passende Konversationsdaten werden abgelehnt und der vorherige Zustand bleibt erhalten. Persistierte Instanzen und Provider-/Prozessidentität bleiben getrennt (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/code-analysen/agent-deck.md:49-61,148-194`).
 
-Für Start/Restart ist die persistierte Claude-ID die alleinige Quelle. Existiert
-ihre JSONL, verwendet agent-deck `--resume <id>`; fehlt sie, verwendet es
-`--session-id <dieselbe-id>` und mintet keine neue UUID
-(`/private/tmp/claude-501/-Users-giulianocosta-repos-whisperm8/8b93468c-4cf1-41c0-a5fc-b852563d2a8d/scratchpad/vergleich/agent-deck/docs/session-id-lifecycle.md:47-68`). Das ist
-genau der Schutz gegen „neueste Datei gewinnt“, den U3 heute verletzt.
+Für Start/Restart ist die persistierte Claude-ID der Anker. Existiert belastbare Konversationshistorie, verwendet agent-deck `--resume <id>`; andernfalls startet es dieselbe vorbereitete ID über `--session-id`, statt für den Restart eine neue UUID aus „neueste Datei“ abzuleiten (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/code-analysen/agent-deck.md:115-142`). Das ist genau der Schutz gegen „neueste Datei gewinnt“, den U3 heute verletzt.
 
 Für einen Projekt-Move besitzt der Klon eine explizite Migration von
 `~/.claude/projects/<oldSlug>` nach `<newSlug>`, verweigert vorhandene Ziele und
@@ -439,7 +428,7 @@ ProviderSessionKey + transcriptPath + currentCwd + source + lineage
 + recoveryState=healthy
 ```
 
-`collision`, `ambiguous` und `staleGeneration` verändern keine Row. Abgewiesene Kandidaten werden mit Grund append-only protokolliert; Kollision/Mehrdeutigkeit werden sichtbar als „prüfen“ markiert. Dieses Autoritätsmodell ist im agent-deck-Klon festgeschrieben (`/private/tmp/claude-501/-Users-giulianocosta-repos-whisperm8/8b93468c-4cf1-41c0-a5fc-b852563d2a8d/scratchpad/vergleich/agent-deck/docs/session-id-lifecycle.md:5-15,34-45`).
+`collision`, `ambiguous` und `staleGeneration` verändern keine Row. Abgewiesene Kandidaten werden mit Grund append-only protokolliert; Kollision/Mehrdeutigkeit werden sichtbar als „prüfen“ markiert. Dieses Autoritätsmodell folgt der konservativen Hook-/Rebinding-Hierarchie aus der agent-deck-Analyse (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/code-analysen/agent-deck.md:170-194`).
 
 **JSONL-Recovery:** Nur für alte CLI-Versionen oder wirklich stumme Hooks. Sie nutzt kanonischen Root, neue Dateiidentität, ein beidseitiges Fenster um `launchedAt`, cwd-Kompatibilität, gescopte Neuheit und globale Unbelegtheit. Sie bindet nur bei exakt einem Kandidaten und persistiert die schwächere Evidenzart; sie erfindet keine Parent-Lineage aus Nachrichtenrecords. Mehrere Kandidaten ergeben `ambiguous` und `recoveryRequired`, wie es der vorhandene Resolver bereits modelliert (`WhisperM8/Services/AgentChats/ClaudeActiveSessionTracker.swift:13-60`).
 
@@ -505,7 +494,7 @@ Nach P0.1 wird eine signaturbasierte, wiederholbare **App-Daten-Migration** spez
 
 #### Potenzielle Vorteile nur bei `hostAssignedVerified`
 
-- Falls die Live-Probe die Vorvergabe bestätigt, wäre die Claude-ID vor dem PTY-Spawn bekannt; Crash zwischen Spawn und Hook könnte dann keinen anonymen Chat mehr hinterlassen. agent-deck dient dafür nur als Vergleichsevidenz, nicht als Beleg für die installierte Claude-CLI (`/private/tmp/claude-501/-Users-giulianocosta-repos-whisperm8/8b93468c-4cf1-41c0-a5fc-b852563d2a8d/scratchpad/vergleich/agent-deck/docs/session-id-lifecycle.md:47-68`).
+- Falls die Live-Probe die Vorvergabe bestätigt, wäre die Claude-ID vor dem PTY-Spawn bekannt; Crash zwischen Spawn und Hook könnte dann keinen anonymen Chat mehr hinterlassen. agent-deck dient dafür nur als Vergleichsevidenz, nicht als Beleg für die installierte Claude-CLI (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/code-analysen/agent-deck.md:84-115,336-361`).
 - Zwei parallele Tabs könnten bei positiver Fresh-Probe verschiedene vorab reservierte UUIDs erhalten und bräuchten für frische Starts keinen „latest indexed session“-Fallback. Nimbalyst belegt lediglich einen Vergleichspfad (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/code-analysen/nimbalyst.md:105-110`).
 - Forks könnten bei positiver Fork-Probe vor dem Spawn eine Child-ID persistieren. Die bei agent-deck beobachtete Flagfolge `--session-id <child> --resume <parent> --fork-session` wird bis Paket B ausdrücklich nicht als gültiger Vertrag der installierten Claude-CLI vorausgesetzt (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/code-analysen/agent-deck.md:334-364`).
 - Das native TUI-Hosting bleibt unverändert: WhisperM8 setzt nur ein offizielles
@@ -521,8 +510,8 @@ Nach P0.1 wird eine signaturbasierte, wiederholbare **App-Daten-Migration** spez
 - Eine deterministisch vorgegebene ID löst weder falschen Config-Root noch verschobenes cwd: Claude-Resume bleibt an den vollständigen `ProviderSessionKey(provider, canonicalConfigRoot, externalSessionID)` und die lokale Pfadablage gebunden
   (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/workflow3-kandidaten.md:216-220`).
 - Existiert bereits eine JSONL, muss der Launcher `--resume`, nicht erneut
-  `--session-id`, verwenden; agent-deck trennt genau diese Fälle
-  (`/private/tmp/claude-501/-Users-giulianocosta-repos-whisperm8/8b93468c-4cf1-41c0-a5fc-b852563d2a8d/scratchpad/vergleich/agent-deck/docs/session-id-lifecycle.md:54-68`).
+  `--session-id`, verwenden; die agent-deck-Analyse trennt genau diese Fälle
+  (`docs/audit/2026-07-agent-chats-deep-dive/03-vergleich/code-analysen/agent-deck.md:115-142`).
 - Fork-Event-Semantik muss weiterhin verifiziert werden. Die
   Schluss-Verifikation empfiehlt bis dahin das zweiphasige agent-deck-Datenmodell
   mit der cmux-Mechanik ohne Vorvergabe

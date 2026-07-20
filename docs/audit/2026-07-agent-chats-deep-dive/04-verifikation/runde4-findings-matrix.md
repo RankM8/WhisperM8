@@ -1,7 +1,7 @@
 ---
-status: abgeschlossen
-updated: 2026-07-19
-description: Adversariale Runde-4-Verifikation der Findings-Matrix mit Fokus auf kritische und hohe Befunde.
+status: historischer-verdictstand
+updated: 2026-07-20
+description: Historische adversariale Runde-4-Verifikation; aktuelles Routing steht in 05-roadmap/findings-matrix.md, die Freigabe in 06-umsetzung/freigabe-gates-g0-g6.md.
 ---
 
 # Runde 4: Verifikation der Findings-Matrix

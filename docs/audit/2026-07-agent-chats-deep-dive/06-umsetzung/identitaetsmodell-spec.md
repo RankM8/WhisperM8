@@ -177,7 +177,7 @@ Die folgenden IDs sind normative Oracle-Platzhalter; jeder Test kontrolliert zus
 | `S-07` | `/compact` mit `source=compact` und gleichem Key bleibt `inPlaceCompact`, ohne Unread oder Auto-Rename. | Abweichende ID, Root oder konkurrierende Generation wird weder als Compact noch als Branchwechsel geraten. |
 | `S-08` | Reguläres Prozessende schließt ausschließlich die aktuelle Launchgeneration und erhält das letzte bestätigte Binding. | Spätes Event der geschlossenen Generation ist `staleGeneration`; Crash in `bindingPending` führt zu Recovery statt Fresh. |
 
-Diese Oracles werden in der G4-Revision der `test-specs-welle0-1.md` als B-Tests materialisiert; A02 wird dort durch capability-/claim-spezifische Oracles ersetzt.
+Diese Oracles sind in der G4-Revision der `test-specs-welle0-1.md` als `A02-S01` bis `A02-S08` materialisiert; die alte A02-Direktbindung ist dort durch capability-/claim-spezifische Oracles ersetzt.
 
 ### 2.4 Verbindlicher Resume-Übergang
 

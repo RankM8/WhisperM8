@@ -1,7 +1,7 @@
 ---
-status: abgeschlossen
-updated: 2026-07-18
-description: Adversarielle Schlussverifikation der Identitäts-, Verlust-, Feature- und Test-Spezifikationen gegen den produktiven WhisperM8-Code und die installierte Claude-Code-CLI.
+status: historischer-pruefstand
+updated: 2026-07-20
+description: Historische Schlussverifikation und Eingang der Gates G0–G4; aktueller P0-/Freigabestatus steht in freigabe-gates-g0-g6.md.
 ---
 
 # Schlussverifikation Workflow 3
@@ -196,7 +196,7 @@ Das Dokument beansprucht die „gesamte Diktat-Hälfte“, lässt aber bewusst g
 ### 6.1 Bestätigte Punkte
 
 1. **Die Hauptfläche ist breit erfasst.** Shell, Domain-/UI-Persistenz, Sidebar, Projekte, Archiv, Tabs, Multi-Select, Drag-and-drop, Multi-Window und Grid sind als getrennte Verträge beschrieben.
-2. **Der Native-PTY-Vertrag ist korrekt zentral.** Launch, Registry/Reparenting, Keyboardprofile und Link-Interceptor werden als echte CLI-/Terminalfunktionen bewahrt (`WhisperM8/Services/AgentChats/AgentCommandBuilder.swift:164-180`, `WhisperM8/Views/AgentTerminalView.swift:613-715`, `WhisperM8/Views/AgentTerminalLinkInterceptor.swift:20-78`).
+2. **Der Native-PTY-Vertrag ist korrekt zentral.** Launch, Registry/Reparenting, Keyboardprofile und Link-Interceptor werden als echte CLI-/Terminalfunktionen bewahrt (`WhisperM8/Services/AgentChats/AgentCommandBuilder.swift:164-180`, `WhisperM8/Views/AgentTerminalView.swift:613-715`, `WhisperM8/Views/AgentTerminalLinkInterceptor.swift:20-70`).
 3. **Background- und Codex-Subagent-Systeme sind getrennt inventarisiert.** Das entspricht dem realen Code: Claude wird per `--bg`/`attach` vom externen Supervisor gehostet, Codex-Jobs besitzen einen WhisperM8-Supervisor (`WhisperM8/Services/AgentChats/BackgroundAgentSpawner.swift:78-114`, `WhisperM8/Services/AgentChats/AgentJobSupervisor.swift:59-123`).
 4. **GPT-Backend ist inzwischen als eigener Bereich AC-57 bis AC-61 vorhanden.** Settings/Login, Proxy-Ownership, In-Process-Router, Launch-Environment/Fallback und verwalteter nativer `gpt`-Agent sind nicht mehr vollständig ausgelassen (`WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift:4-88`, `WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift:218-283`, `WhisperM8/Services/AgentChats/ClaudeGPTMixRouter.swift:268-307`, `WhisperM8/Services/AgentChats/ClaudeGPTAgentDefinition.swift:3-70`).
 5. **Terminal-Snapshots sind inzwischen als AC-30/AC-55 vorhanden.** Capture auf Stop, Selbst-Exit und App-Quit ist im Code real (`WhisperM8/Views/AgentTerminalView.swift:775-836`, `WhisperM8/Views/AgentTerminalView.swift:969-979`, `WhisperM8/WhisperM8App.swift:343-351`).
@@ -243,7 +243,7 @@ Die Sidebar besitzt getrennte Claude- und ChatGPT/Codex-Usage-Popovers. Claude l
 
 #### P1 — Agent-Chats-Settings sind nur indirekt inventarisiert
 
-Nutzer können Fertig-/Awaiting-Benachrichtigungen, Completion-Sound, Terminal-Bell, Hook-Bridge, externe Hook-Diagnose, Hook-Preview und Claude-/Codex-Extra-Args steuern (`WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:185-239`, `WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:397-435`, `WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:526-580`). AC-39/44 beschreiben Runtime-Verhalten, aber nicht vollständig die sichtbaren Einstellungen und ihre Defaults/Previews. Diese Settings sind bei Environment-, Hook- und Modulrefactors reale Regressionstore.
+Nutzer können Fertig-/Awaiting-Benachrichtigungen, Completion-Sound und Terminal-Bell (`WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:178-270`), Claude-/Codex-Extra-Args (`WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:390-435`) sowie Hook-Bridge, externe Hook-Diagnose und Hook-Preview (`WhisperM8/Views/Settings/Pages/ClaudeHooksSettingsPage.swift:5-105`) steuern. AC-39/44 beschreiben Runtime-Verhalten, aber nicht vollständig die sichtbaren Einstellungen und ihre Defaults/Previews. Diese Settings sind bei Environment-, Hook- und Modulrefactors reale Regressionstore.
 
 #### P1 — Claude-Theme-Sync fehlt und widerspricht der Read-only-Abgrenzung
 

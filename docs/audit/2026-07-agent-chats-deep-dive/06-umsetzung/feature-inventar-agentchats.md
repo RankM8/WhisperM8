@@ -305,7 +305,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/AgentJobState.swift:13`, `WhisperM8/Services/AgentChats/AgentJobSupervisor.swift:59`, `WhisperM8/Services/AgentChats/CodexExecRunner.swift:180`.
 - **Sichtbares Verhalten:** Jobs durchlaufen `spawning`, `running`, `done|failed|stopped` oder terminal `takenOver`; Events, letzte Nachricht, Report und State bleiben unter `agent-jobs/<short-id>/` verfügbar.
 - **Erhaltungsinvarianten:** Jeder Supervisor bearbeitet genau einen Turn; State-Write ist atomar; erlaubte Übergänge sind zentral; erste Codex-Thread-ID wird früh persistiert; stdout/stderr werden bis EOF plus Prozessende gedraint; Idle-Watchdog begrenzt einen stillen Turn.
-- **TODO-Inventarlücke (P1):** Worktree-Jobs explizit inventarisieren: `run --worktree`, Branch/Pfad, Fortsetzung im Worktree, UI-Anzeige, Takeover-cwd und Dirty-Guard bei `agent rm` (`WhisperM8/CLI/AgentCLICommand.swift:119-133`, `WhisperM8/CLI/AgentCLICommand.swift:415-425`, `WhisperM8/Services/AgentChats/AgentWorktreeManager.swift:39-68`).
+- **TODO-Inventarlücke (P1):** Worktree-Jobs explizit inventarisieren: `run --worktree`, Branch/Pfad, Fortsetzung im Worktree, UI-Anzeige, Takeover-cwd und Dirty-Guard bei `agent rm` (`WhisperM8/CLI/AgentCLICommand.swift:119-133`, `WhisperM8/CLI/AgentCLICommand.swift:415-425`, `WhisperM8/Services/AgentChats/AgentWorktreeManager.swift:40-70`).
 - **Roadmap-Bezug:** `N07`, `N08`, `N12`, `N13`, `N14`; Welle 1 `R2.4`, Welle 2 `R2.7`. Supervisor/Turn-Vertrag und State-CAS sind P0-Regressionsflächen.
 
 ### AC-35 · `whisperm8 agent`-CLI
@@ -348,7 +348,7 @@ Dieses Dokument beschreibt den Produktstand der Agent-Chats-Hälfte von WhisperM
 - **Einstiegspunkt:** `WhisperM8/Services/AgentChats/ClaudeHookSettingsBuilder.swift:25`, `WhisperM8/Views/AgentSessionDetailView.swift:475`, `WhisperM8/Views/AgentChatsView+BackgroundAgents.swift:68`.
 - **Sichtbares Verhalten:** Status, Eingabebedarf und reale Claude-ID werden ohne Polling aus Claude-Lifecycle-Events aktualisiert.
 - **Erhaltungsinvarianten:** Registriert sind `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Stop`; `Notification` bleibt bewusst aus, damit `idle_prompt` nicht als Eingabebedarf erscheint. Agent View, Terminal und Background-Attach bekommen keine zweite Bridge.
-- **TODO-Inventarlücke (P1):** Sichtbare Agent-Chats-Settings einschließlich Defaults und Previews nachziehen: Fertig-/Awaiting-Benachrichtigungen, Completion-Sound, Terminal-Bell, Hook-Bridge/-Diagnose/-Preview sowie Claude-/Codex-Extra-Args (`WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:185-239`, `WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:397-435`, `WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:526-580`).
+- **TODO-Inventarlücke (P1):** Sichtbare Agent-Chats-Settings einschließlich Defaults und Previews nachziehen: Fertig-/Awaiting-Benachrichtigungen, Completion-Sound und Terminal-Bell (`WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:178-270`), Claude-/Codex-Extra-Args (`WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift:390-435`) sowie Hook-Bridge/-Diagnose/-Preview (`WhisperM8/Views/Settings/Pages/ClaudeHooksSettingsPage.swift:5-105`).
 - **Roadmap-Bezug:** `C07`, `C08`, `C09`; Welle 2 „Autoritative Session-Bindung“ und `P1.2` Hook-Matrix/Reconciliation.
 
 ### AC-40 · Event-Datei-Bridge mit initialem Drain

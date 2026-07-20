@@ -1,7 +1,7 @@
 ---
-status: abgeschlossen
-updated: 2026-07-19
-description: Abschlusskritik der fünf P0-Blocker der Schlussverifikation nach Runde 4 und priorisierter Restweg zur Umsetzungsfreigabe von Welle 0/1.
+status: historischer-gate-eingang
+updated: 2026-07-20
+description: Historischer Prüfmaßstab der fünf P0-Blocker und Gates G0–G6; der aktuelle Abnahmestand steht in 06-umsetzung/freigabe-gates-g0-g6.md.
 ---
 
 # Runde 4: Abschlusskritik und Freigabeweg

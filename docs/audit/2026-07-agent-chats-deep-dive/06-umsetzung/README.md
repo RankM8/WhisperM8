@@ -1,29 +1,29 @@
 ---
 status: aktiv
-updated: 2026-07-19
-description: Autoritative Workflow-3-Synthese mit verifizierten Feldmustern, Runde-4-Abschlusskritik, gesperrtem Identitätsumbau und offenen Freigabemängeln.
+updated: 2026-07-20
+description: Workflow-3-Synthese nach technischer G0–G6-Abnahme; alle Dokumentations-P0s geschlossen, Produkt-Go und W0.1 warten auf die formale User-Freigabe.
 ---
 
 # Workflow 3 — Synthese und Umsetzungs-Gate
 
 ## Status
 
-**Workflow 3 ist dokumentiert, aber weiterhin nicht umsetzungsreif.** Die
-Runde-4-Abschlusskritik bewertet alle fünf P0-Blocker erneut: Keiner ist
-entschärft; P0 1 „Weg A gegen Weg B“ und P0 3 „Laufzeitwechsel durch
-`/branch`/`/rewind`“ sind unverändert, P0 2 „Launch-ID-Transport“, P0 4
-„Inventar als Oracle“ und P0 5 „Test-Spec für W0/W1 und C07“ sind verschärft
-([runde4-abschlusskritik.md:13-23](../02-findings/runde4-abschlusskritik.md)).
-Die verifizierte Matrix korrigiert außerdem den Altbestand: C04 ist als offener
-Hoch-Defekt widerlegt, N01 nicht bestätigt, C10/N07 nur teilbestätigt; die beiden
-Alt-Teilfixe sind ausdrücklich nicht geschlossen
-([runde4-findings-matrix.md:17-73](../04-verifikation/runde4-findings-matrix.md)).
-Damit gibt es weder ein Go für die Identitäts-/Recovery-Implementierung noch ein
-pauschales Go für Welle 0/1. Maßgeblich bleibt der Restweg G0–G6; kleine,
-nichtdestruktive Vorarbeiten sind weiterhin nur im bereits eng freigegebenen
-Umfang zulässig
-([runde4-abschlusskritik.md:25-78](../02-findings/runde4-abschlusskritik.md);
-[verifikation-schluss.md:348-360](verifikation-schluss.md)).
+**Workflow 3 ist dokumentarisch umsetzungsreif, aber noch nicht vom User freigegeben.**
+Die formale G6-Gegenprüfung bestätigt **G0–G6 technisch**:
+Identitätsstrategie, Launch-/Claim-Vertrag, Laufzeitmatrix, Inventar-Oracles,
+W0/W1-Testnetz und Runde-4-Traceability erfüllen ihre Kriterien.
+Alle fünf Dokumentations-/Spezifikations-P0s sind damit geschlossen.
+Das ist kein Produkt-Go: P0.3/P0.4 und W0.1 bleiben bis zur formalen
+User-Abnahme gesperrt. Nach diesem Go startet zuerst die W0.1-Oracle-Welle;
+daraus folgt keine pauschale W1- oder Kernumbau-Freigabe.
+Paket B hat die Vorab-ID-Vergabe nicht freigeschaltet: Der isolierte
+Auth-Mini-Lauf war blockiert, daher bleibt `hostAssignedUnsupported` fail-closed
+und Weg B die verbindliche Baseline.
+Offene rote Oracles und Produktdefekte bleiben im Umsetzungsplan unverändert
+offen; ihre Spezifikation ist kein Umsetzungsbeleg.
+Kleine, separat gegatete Phase-0-Fixes bleiben im dokumentierten Umfang zulässig
+([Gate-Tabelle G0–G6](freigabe-gates-g0-g6.md);
+[operativer Umsetzungsplan](umsetzungsplan.md)).
 
 ## 1. Kurzfazit Feldvergleich
 
@@ -127,7 +127,7 @@ bestätigte Usage-/Kompaktierungsdefekt, dessen ursprüngliche Ursachenbehauptun
 korrigiert wurde
 ([runde3-vollstaendigkeits-kritik.md:66-138](../02-findings/runde3-vollstaendigkeits-kritik.md)).
 Die eindeutigen IDs und Wellen stehen im
-[Roadmap-Nachtrag](../05-roadmap/refactor-roadmap.md#nachtrag-runde-3--workflow-3).
+[Roadmap-Nachtrag](../05-roadmap/refactor-roadmap.md#nachtrag-runde-3-workflow-3).
 
 Bestätigte Cluster:
 

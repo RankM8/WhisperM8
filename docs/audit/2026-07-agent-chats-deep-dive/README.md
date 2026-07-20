@@ -1,21 +1,20 @@
 ---
 status: aktiv
-updated: 2026-07-19
-description: Einstieg und Dokumentindex zum Agent-Chats-Deep-Dive mit vier Findings-Runden, verifizierter Findings-Matrix, Roadmap-Nachträgen und offenem Umsetzungs-Gate.
+updated: 2026-07-20
+description: Einstieg und Dokumentindex nach technischer G0–G6-Abnahme; alle Dokumentations-P0s geschlossen, Produkt-Go und W0.1 warten auf User-Freigabe.
 ---
 
 # Ultra Deep Dive: Agent Chats & Stabilität (2026-07)
 
-> **Status:** Die verifizierte Runde-4-Matrix korrigiert den Altbestand: C04 ist
-> als offener Hoch-Defekt widerlegt, N01 nicht bestätigt, C10/N07 nur
-> teilbestätigt und die beiden dokumentierten Alt-Teilfixe bleiben offen
-> ([runde4-findings-matrix.md:17-73](04-verifikation/runde4-findings-matrix.md)).
-> Runde 4 auditiert zusätzlich Chats-CLI, Context-Profile, Plugin-Manager,
-> Statusline/Skills und GPT-Setup. Das Gesamtaudit ist weiterhin **nicht
-> umsetzungsfreigegeben**: Keiner der fünf P0-Blocker ist entschärft; P0 1 und 3
-> sind unverändert, P0 2, 4 und 5 verschärft
-> ([runde4-abschlusskritik.md:13-23](02-findings/runde4-abschlusskritik.md)).
-> Aktuelle Synthese: [06-umsetzung/README.md](06-umsetzung/README.md); Planung:
+> **Status:** Die formale G6-Gegenprüfung bestätigt **G0–G6 technisch** und
+> schließt alle fünf Dokumentations-/Spezifikations-P0s. Das ist noch kein
+> Produkt-Go: P0.3/P0.4 und W0.1 bleiben bis zur formalen User-Abnahme gesperrt;
+> danach startet zuerst die Oracle-Welle, nicht pauschal W1 oder der Kernumbau.
+> Die blockierte Live-Probe lässt `hostAssignedVerified` deaktiviert und Weg B
+> fail-closed als Baseline
+> ([Gate-Tabelle G0–G6](06-umsetzung/freigabe-gates-g0-g6.md)).
+> Aktuelle operative Single Source:
+> [Umsetzungsplan](06-umsetzung/umsetzungsplan.md); Wellenzuordnung:
 > [Roadmap mit Runde-4-Nachtrag](05-roadmap/refactor-roadmap.md#nachtrag-runde-4).
 
 Multi-Agent-Audit des WhisperM8-Projekts (Fable-Finder, Codex-Refuter und
@@ -130,25 +129,23 @@ Security, Performance, Wartbarkeit und Technologieoptionen.
   `WhisperM8/Services/AgentChats/SummaryStartupPlanner.swift:9-20`;
   `WhisperM8/Services/AgentChats/AgentWorktreeManager.swift:73-87`;
   `WhisperM8/CLI/CLIAudioExtractor.swift:197-211`).
-- **Freigabefolge bleibt gesperrt:** Keiner der fünf P0-Blocker ist entschärft;
-  G0–G6 der Abschlusskritik und der Runde-4-Roadmap-Nachtrag bilden den
-  Restweg ([runde4-abschlusskritik.md:25-78](02-findings/runde4-abschlusskritik.md)).
+- **Freigabefolge technisch abgenommen:** G0–G6 und alle fünf Dokumentations-P0s
+  sind geschlossen. Produkt-Go und W0.1 warten weiterhin auf die formale
+  User-Abnahme; maßgeblich ist die
+  [formale Gate-Tabelle](06-umsetzung/freigabe-gates-g0-g6.md).
 
 ## Freigabeautorität
 
 Die aktuelle Reihenfolge der Autorität lautet:
 
-1. [runde4-abschlusskritik.md](02-findings/runde4-abschlusskritik.md) für
-   P0-Status und den aktuellen Freigabeweg;
-2. [runde4-findings-matrix.md](04-verifikation/runde4-findings-matrix.md) für
-   den verifizierten Status der bisherigen kritisch/hoch-Population;
-3. [verifikation-schluss.md](06-umsetzung/verifikation-schluss.md) für
-   Identitäts-/Recovery-Specs und Inventar-/Testfreigabe;
-4. [runde3-vollstaendigkeits-kritik.md](02-findings/runde3-vollstaendigkeits-kritik.md)
-   für die historische Gesamtvollständigkeit;
-5. [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) für Wellen und die
-   Runde-3-/Runde-4-Zuordnung;
-6. [06-umsetzung/README.md](06-umsetzung/README.md) als Synthese.
+1. [freigabe-gates-g0-g6.md](06-umsetzung/freigabe-gates-g0-g6.md) für
+   P0-/Gate-Status und die Freigabeentscheidung;
+2. [umsetzungsplan.md](06-umsetzung/umsetzungsplan.md) als operative Single Source;
+3. [findings-matrix.md](05-roadmap/findings-matrix.md) für kanonisches Routing,
+   Deduplizierung und Fixstände;
+4. [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) für Wellen und Maßnahmen;
+5. die Abschlusskritik, Runde-4-Verdictmatrix und Schlussverifikation als
+   historische Kriterien- und Evidenzquellen.
 
 `plan-review.md`, `verdicts-runde2.md` und frühere Statusformulierungen bleiben
 historische Eingaben; sie erteilen allein keine aktuelle Umsetzungsfreigabe.
@@ -267,12 +264,13 @@ historische Eingaben; sie erteilen allein keine aktuelle Umsetzungsfreigabe.
 | 04 Verifikation | [nachpruefung-fable.md](04-verifikation/nachpruefung-fable.md) | Nachprüfung früherer Verdicts |
 | 05 Roadmap | [plan-review.md](05-roadmap/plan-review.md) | Historischer Review von Prioritäten und Risiken |
 | 05 Roadmap | [konsistenz-check-fable.md](05-roadmap/konsistenz-check-fable.md) | C/N-Konsistenz und alte Restlücken |
-| 05 Roadmap | [findings-matrix.md](05-roadmap/findings-matrix.md) | Historische deduplizierte C/N-/Runde-3-Matrix; durch Runde-4-Verifikation korrigiert |
-| 05 Roadmap | [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) | Bestehende Wellen plus Runde-3-/Runde-4-Nachtrag; kein Produkt-Go |
+| 05 Roadmap | [findings-matrix.md](05-roadmap/findings-matrix.md) | Kanonische deduplizierte C/N-/Runde-3-/Runde-4-Matrix mit Routing und Fixständen |
+| 05 Roadmap | [refactor-roadmap.md](05-roadmap/refactor-roadmap.md) | Bestehende Wellen plus Runde-3-/Runde-4-Nachtrag; Produkt-Go wartet auf User-Abnahme |
 | 06 Umsetzung | [README.md](06-umsetzung/README.md) | Aktuelle Workflow-3-Synthese und Gate |
 | 06 Umsetzung neu | [umsetzungsplan.md](06-umsetzung/umsetzungsplan.md) | **Operative Single Source**: Handoff, erledigte Fixes mit Commits, Phasen 0–4, Entscheidungsregister E1–E5, QA-Sammelliste (ersetzt das frühere umsetzungslog.md) |
-| 06 Umsetzung | [identitaetsmodell-spec.md](06-umsetzung/identitaetsmodell-spec.md) | Entwurf; Revision erforderlich |
-| 06 Umsetzung | [verlorene-chats-spec.md](06-umsetzung/verlorene-chats-spec.md) | Recovery-Spec; Binding-Teile gesperrt |
+| 06 Umsetzung neu | [freigabe-gates-g0-g6.md](06-umsetzung/freigabe-gates-g0-g6.md) | Technische G0–G6-Abnahme bestanden; Produkt-Go und W0.1 warten auf formale User-Freigabe |
+| 06 Umsetzung | [identitaetsmodell-spec.md](06-umsetzung/identitaetsmodell-spec.md) | Revidierter G0–G2-Vertrag; Produktumsetzung gesperrt |
+| 06 Umsetzung | [verlorene-chats-spec.md](06-umsetzung/verlorene-chats-spec.md) | Revidierter Recovery-Vertrag; Produktumsetzung gesperrt |
 | 06 Umsetzung neu | [feature-inventar-agentchats.md](06-umsetzung/feature-inventar-agentchats.md) | Breit, aber als Oracle noch zu korrigieren |
 | 06 Umsetzung neu | [feature-inventar-diktat.md](06-umsetzung/feature-inventar-diktat.md) | Nahezu freigabefähig; Ergänzungen offen |
 | 06 Umsetzung neu | [test-specs-welle0-1.md](06-umsetzung/test-specs-welle0-1.md) | Neu zu schneiden und zu vervollständigen |
