@@ -1,4 +1,4 @@
-.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall _install_bundle
+.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall skills _install_bundle
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -14,6 +14,10 @@ help:
 	@echo "                            Preserves: TCC permissions (mic/accessibility/screen),"
 	@echo "                            UserDefaults, Keychain (API keys), Application Support."
 	@echo "  make dev-reinstall     - Alias for 'make dev' (kept for backwards compatibility)."
+	@echo ""
+	@echo "  make skills            - Sync agent skills from WhisperM8/Resources to"
+	@echo "                            ~/.claude/skills (+ repo mirrors) without building"
+	@echo "                            or restarting the app."
 	@echo ""
 	@echo "  make build             - Build release bundle in project directory only."
 	@echo "  make install           - Build and in-place sync to /Applications."
@@ -68,6 +72,10 @@ dev: install
 
 # Backwards-compatible alias.
 dev-reinstall: dev
+
+# Skills ohne Build/Neustart nachziehen (sicher aus einem Agent-Chat heraus).
+skills:
+	@bash scripts/sync-skills.sh
 
 # ------------------------------------------------------------------------------
 # Build / install (without launching)

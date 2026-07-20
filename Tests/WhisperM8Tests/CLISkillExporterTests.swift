@@ -169,6 +169,138 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertTrue(exporter.installedSkillIsCurrent)
     }
 
+    // MARK: Drei-Wege-Status
+
+    func testInstallStateNotInstalledWithoutSkillFile() {
+        XCTAssertEqual(makeExporter().installState(), .notInstalled)
+    }
+
+    func testInstallWritesStampAndReportsCurrent() throws {
+        let exporter = makeExporter()
+        try exporter.installForClaudeCode()
+
+        XCTAssertEqual(exporter.installState(), .current)
+        let stamp = try XCTUnwrap(exporter.readInstallStamp())
+        XCTAssertEqual(stamp.source, CLISkillExporter.InstallStamp.sourceBundle)
+        XCTAssertEqual(stamp.installed, try exporter.bundledHashes())
+        XCTAssertEqual(stamp.bundled, try exporter.bundledHashes())
+    }
+
+    func testInstallStateModifiedLocallyWhenInstalledDiffersFromStamp() throws {
+        let exporter = makeAgentExporter()
+        try exporter.installForClaudeCode()
+
+        try "lokal editiert".write(
+            to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(exporter.installState(), .modifiedLocally)
+    }
+
+    func testInstallStateUnknownDriftWithoutStamp() throws {
+        let exporter = makeExporter()
+        try exporter.installForClaudeCode()
+        try FileManager.default.removeItem(at: exporter.installStampURL)
+
+        try "alter Bestand".write(
+            to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(exporter.installState(), .unknownDrift)
+    }
+
+    func testInstallStateUpdateAvailableWhenBundleMovedOn() throws {
+        let exporter = makeExporter()
+        try exporter.installForClaudeCode()
+
+        // Simulierter alter Installationsstand: Der installierte Inhalt weicht
+        // vom Bundle ab, entspricht aber exakt dem Stempel; der Stempel trägt
+        // die Bundle-Hashes von damals.
+        try "installierter Altstand".write(
+            to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+        let oldHashes = try XCTUnwrap(exporter.installedHashes())
+        try exporter.writeInstallStamp(CLISkillExporter.InstallStamp(
+            source: CLISkillExporter.InstallStamp.sourceBundle,
+            updatedAt: "2026-07-01T00:00:00Z",
+            installed: oldHashes,
+            bundled: oldHashes
+        ))
+
+        XCTAssertEqual(exporter.installState(), .updateAvailable)
+    }
+
+    func testInstallStateRepoSyncedWhenResourcesNewerThanBundle() throws {
+        let exporter = makeExporter()
+        try exporter.installForClaudeCode()
+
+        // Simulierter `make skills`-Stand: installiert kommt aus dem Repo und
+        // ist neuer als das Bundle; die Bundle-Hashes im Stempel sind aktuell.
+        try "neuerer Repo-Stand".write(
+            to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+        let repoHashes = try XCTUnwrap(exporter.installedHashes())
+        try exporter.writeInstallStamp(CLISkillExporter.InstallStamp(
+            source: CLISkillExporter.InstallStamp.sourceResources,
+            updatedAt: "2026-07-20T00:00:00Z",
+            installed: repoHashes,
+            bundled: try exporter.bundledHashes()
+        ))
+
+        XCTAssertEqual(exporter.installState(), .repoSynced)
+    }
+
+    func testInstallStateRepoSyncedWithoutBundledHashes() throws {
+        let exporter = makeExporter()
+        try exporter.installForClaudeCode()
+
+        try "Repo-Stand ohne App".write(
+            to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+        let repoHashes = try XCTUnwrap(exporter.installedHashes())
+        try exporter.writeInstallStamp(CLISkillExporter.InstallStamp(
+            source: CLISkillExporter.InstallStamp.sourceResources,
+            updatedAt: "2026-07-20T00:00:00Z",
+            installed: repoHashes,
+            bundled: nil
+        ))
+
+        XCTAssertEqual(exporter.installState(), .repoSynced)
+    }
+
+    func testInstallStateUpdateAvailableAfterRepoSyncWhenBundleAdvances() throws {
+        let exporter = makeExporter()
+        try exporter.installForClaudeCode()
+
+        // Repo-Sync von früher, aber das Bundle hat sich seither geändert
+        // (die Stempel-Bundle-Hashes passen nicht mehr) → Update ist sicher.
+        try "älterer Repo-Stand".write(
+            to: exporter.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+        let repoHashes = try XCTUnwrap(exporter.installedHashes())
+        try exporter.writeInstallStamp(CLISkillExporter.InstallStamp(
+            source: CLISkillExporter.InstallStamp.sourceResources,
+            updatedAt: "2026-07-01T00:00:00Z",
+            installed: repoHashes,
+            bundled: ["SKILL.md": "veralteter-bundle-hash"]
+        ))
+
+        XCTAssertEqual(exporter.installState(), .updateAvailable)
+    }
+
+    func testInstallStampSurvivesScriptFormat() throws {
+        // Das Stempel-Format von scripts/sync-skills.sh muss dekodierbar sein.
+        let exporter = makeExporter()
+        try exporter.installForClaudeCode()
+        let json = """
+        {
+          "source": "resources",
+          "updatedAt": "2026-07-20T12:00:00Z",
+          "installed": { "SKILL.md": "abc" },
+          "bundled": { "SKILL.md": "def" }
+        }
+        """
+        try Data(json.utf8).write(to: exporter.installStampURL)
+        let stamp = try XCTUnwrap(exporter.readInstallStamp())
+        XCTAssertEqual(stamp.source, "resources")
+        XCTAssertEqual(stamp.installed["SKILL.md"], "abc")
+        XCTAssertEqual(stamp.bundled?["SKILL.md"], "def")
+    }
+
     // MARK: CLI-Symlink-Status
 
     func testInstallStatusMissingWithoutSymlink() {

@@ -20,6 +20,8 @@ make build        # Release build only (creates local .app)
 make clean-install # Full reset (removes all app data + reinstall) — use to test onboarding/migrations
 make kill         # Kill running instances
 make dmg          # Create distributable DMG
+make skills       # Sync agent skills (Resources → ~/.claude/skills + repo mirrors) without build/restart
+
 ```
 
 `make dev` uses `rsync` into the existing bundle on purpose: deleting and recopying the bundle would make macOS TCC revoke mic/accessibility/screen permissions. Run `scripts/setup-codesign-cert.sh` once for a persistent local signing identity (otherwise ad-hoc signing re-prompts TCC on every rebuild).

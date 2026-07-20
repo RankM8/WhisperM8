@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Stellt die gebündelten Agent-Skills fürs whisperm8-CLI bereit (Anthropic-
@@ -143,20 +144,108 @@ struct CLISkillExporter {
     /// (SKILL.md UND alle verwalteten references/-Dateien)? `false` auch,
     /// wenn (noch) gar keiner installiert ist.
     var installedSkillIsCurrent: Bool {
-        guard let bundled = try? skillMarkdown(),
-              let installed = try? String(contentsOf: claudeCodeSkillURL, encoding: .utf8),
-              installed == bundled else {
-            return false
-        }
+        installState() == .current
+    }
+
+    // MARK: Drei-Wege-Status (Bundle vs. installiert vs. Install-Stempel)
+
+    /// Richtungssicherer Installationszustand. Ein reiner Inhaltsvergleich kann
+    /// „veraltet" nicht von „lokal editiert" unterscheiden; deshalb schreibt
+    /// jede verwaltete Installation (App-Button und `make skills`) einen
+    /// Stempel mit den Hashes des installierten und des damals gebündelten
+    /// Stands. Erst dieser Stempel macht die Richtung entscheidbar.
+    enum InstallState: Equatable {
+        /// Kein SKILL.md am Zielpfad.
+        case notInstalled
+        /// Installiert == gebündelt.
+        case current
+        /// Installiert entspricht dem Stempel, das Bundle ist weitergezogen.
+        case updateAvailable
+        /// Installiert weicht vom Stempel ab — der User hat lokal editiert.
+        case modifiedLocally
+        /// Per `make skills` aus dem Repo synchronisiert; das App-Bundle ist
+        /// seither unverändert, der installierte Stand also mindestens so neu.
+        case repoSynced
+        /// Installiert != gebündelt, aber kein Stempel vorhanden — Richtung
+        /// unbekannt (Altbestand von vor der Stempel-Einführung).
+        case unknownDrift
+    }
+
+    /// Install-Stempel neben der SKILL.md. `bundled` darf fehlen, wenn der
+    /// Schreiber (z. B. `make skills` ohne installierte App) das Bundle nicht
+    /// lesen konnte.
+    struct InstallStamp: Codable, Equatable {
+        var source: String
+        var updatedAt: String
+        var installed: [String: String]
+        var bundled: [String: String]?
+
+        static let sourceBundle = "bundle"
+        static let sourceResources = "resources"
+    }
+
+    /// Pfad des Install-Stempels: `~/.claude/skills/<name>/.whisperm8-state.json`.
+    var installStampURL: URL {
+        claudeCodeSkillURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".whisperm8-state.json")
+    }
+
+    /// SHA-256-Hashes der gebündelten Dateien, gekeyt wie im Stempel
+    /// (`SKILL.md`, `references/<fileName>`).
+    func bundledHashes() throws -> [String: String] {
+        var hashes = ["SKILL.md": Self.sha256(of: try skillMarkdown())]
         for reference in definition.references {
-            guard let bundledReference = try? referenceMarkdown(reference),
-                  let installedReference = try? String(
-                    contentsOf: claudeCodeReferenceURL(for: reference), encoding: .utf8),
-                  installedReference == bundledReference else {
-                return false
+            hashes["references/\(reference.fileName)"] =
+                Self.sha256(of: try referenceMarkdown(reference))
+        }
+        return hashes
+    }
+
+    /// SHA-256-Hashes der installierten Dateien; fehlende Dateien fehlen im
+    /// Dictionary. `nil`, wenn gar kein SKILL.md installiert ist.
+    func installedHashes() -> [String: String]? {
+        guard let skill = try? String(contentsOf: claudeCodeSkillURL, encoding: .utf8) else {
+            return nil
+        }
+        var hashes = ["SKILL.md": Self.sha256(of: skill)]
+        for reference in definition.references {
+            if let content = try? String(
+                contentsOf: claudeCodeReferenceURL(for: reference), encoding: .utf8) {
+                hashes["references/\(reference.fileName)"] = Self.sha256(of: content)
             }
         }
-        return true
+        return hashes
+    }
+
+    func readInstallStamp() -> InstallStamp? {
+        guard let data = try? Data(contentsOf: installStampURL) else { return nil }
+        return try? JSONDecoder().decode(InstallStamp.self, from: data)
+    }
+
+    func writeInstallStamp(_ stamp: InstallStamp) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(stamp).write(to: installStampURL, options: .atomic)
+    }
+
+    func installState() -> InstallState {
+        guard let installed = installedHashes() else { return .notInstalled }
+        guard let bundled = try? bundledHashes() else { return .unknownDrift }
+        if installed == bundled { return .current }
+        guard let stamp = readInstallStamp() else { return .unknownDrift }
+        guard stamp.installed == installed else { return .modifiedLocally }
+        if stamp.source == InstallStamp.sourceResources,
+           stamp.bundled == nil || stamp.bundled == bundled {
+            return .repoSynced
+        }
+        return .updateAvailable
+    }
+
+    static func sha256(of content: String) -> String {
+        SHA256.hash(data: Data(content.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 
     /// Schreibt (bzw. aktualisiert) den Skill für Claude Code: SKILL.md plus
@@ -187,6 +276,14 @@ struct CLISkillExporter {
                 )
             }
         }
+        // Stempel für den Drei-Wege-Status: installierter Stand == Bundle-Stand.
+        let hashes = try bundledHashes()
+        try writeInstallStamp(InstallStamp(
+            source: InstallStamp.sourceBundle,
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            installed: hashes,
+            bundled: hashes
+        ))
         Logger.debug("[CLI] Skill installiert: \(destination.path)")
         return destination
     }

@@ -179,13 +179,13 @@ private struct CLISkillSettingsCard: View {
     let definition: CLISkillExporter.SkillDefinition
     let summary: String
 
-    @State private var installed = false
-    @State private var isCurrent = false
+    @State private var installState: CLISkillExporter.InstallState = .notInstalled
     @State private var markdown = ""
     @State private var feedback: SettingsFeedbackState
     @State private var feedbackMessage: String?
     @State private var errorMessage: String?
     @State private var isPreviewPresented = false
+    @State private var isReplaceConfirmPresented = false
 
     @MainActor
     init(title: String, definition: CLISkillExporter.SkillDefinition, summary: String) {
@@ -213,14 +213,22 @@ private struct CLISkillSettingsCard: View {
                 SettingsHelpText(summary)
 
                 SettingsHelpText("Claude Code reads from ~/.claude/skills; other tools need the file copied manually.")
+
+                if let stateDetail {
+                    SettingsHelpText(stateDetail)
+                }
             }
 
             HStack(spacing: 8) {
                 Button(installButtonTitle) {
-                    install()
+                    if requiresReplaceConfirmation {
+                        isReplaceConfirmPresented = true
+                    } else {
+                        install()
+                    }
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
-                .disabled(installed && isCurrent)
+                .disabled(installState == .current)
 
                 Button("Save…") {
                     saveToDisk()
@@ -262,6 +270,15 @@ private struct CLISkillSettingsCard: View {
                 markdown: markdown.isEmpty ? "Skill resource not found." : markdown
             )
         }
+        .confirmationDialog(
+            "Replace installed skill?",
+            isPresented: $isReplaceConfirmPresented
+        ) {
+            Button("Replace Skill", role: .destructive) { install() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(replaceConfirmationMessage)
+        }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -273,18 +290,57 @@ private struct CLISkillSettingsCard: View {
     }
 
     private var installButtonTitle: String {
-        if installed && isCurrent {
+        switch installState {
+        case .notInstalled:
+            return "Install"
+        case .current:
             return "Installed"
-        }
-        if installed {
+        case .updateAvailable:
             return "Update Skill"
+        case .modifiedLocally, .repoSynced, .unknownDrift:
+            return "Replace…"
         }
-        return "Install"
+    }
+
+    /// Zustände, in denen ein Install lokale Änderungen bzw. einen neueren
+    /// Repo-Stand überschreiben würde — nie ohne Rückfrage.
+    private var requiresReplaceConfirmation: Bool {
+        switch installState {
+        case .modifiedLocally, .repoSynced, .unknownDrift:
+            return true
+        case .notInstalled, .current, .updateAvailable:
+            return false
+        }
+    }
+
+    private var stateDetail: String? {
+        switch installState {
+        case .notInstalled, .current:
+            return nil
+        case .updateAvailable:
+            return "This app bundles a newer version than the installed one — updating is safe."
+        case .modifiedLocally:
+            return "The installed skill was modified locally since the last managed install. Replacing overwrites those changes."
+        case .repoSynced:
+            return "Synced from the repository via `make skills` — the installed version is at least as new as this app's bundled copy."
+        case .unknownDrift:
+            return "The installed skill differs from this app's version, and no install record exists — it may be locally modified. Replacing overwrites it."
+        }
+    }
+
+    private var replaceConfirmationMessage: String {
+        switch installState {
+        case .modifiedLocally:
+            return "The installed skill contains local changes that are not part of this app. Replacing overwrites them with the bundled version."
+        case .repoSynced:
+            return "The installed skill was synced from the repository and may be newer than this app's bundled version. Replace it anyway?"
+        default:
+            return "The installed skill differs from this app's version and the direction is unknown. Replacing overwrites it with the bundled version."
+        }
     }
 
     private func refresh() {
-        installed = exporter.isInstalledForClaudeCode
-        isCurrent = exporter.installedSkillIsCurrent
+        installState = exporter.installState()
         if markdown.isEmpty {
             markdown = (try? exporter.skillMarkdown()) ?? ""
         }
