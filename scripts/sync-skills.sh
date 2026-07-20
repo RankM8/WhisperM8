@@ -37,12 +37,13 @@ SUBAGENT_STATUSLINE_SOURCE="$RESOURCES/whisperm8-subagent-statusline.sh"
 SUBAGENT_STATUSLINE_TARGET="$CLAUDE_HOME/subagent-statusline.sh"
 STATUSLINE_STAMP="$CLAUDE_HOME/.whisperm8-statusline-state.json"
 
-# <skill-name>|<resource>|<ref-datei>=<ref-resource>,…
+# <skill-name>|<resource>|<ref-datei>=<ref-resource>,…|<asset-pfad>=<asset-ressource>,…
 SKILLS=(
-  "whisperm8-transcription|whisperm8-cli-skill|"
-  "codex-subagent|whisperm8-agent-skill|playwright-browser-qa.md=whisperm8-agent-skill-ref-playwright-browser-qa,1password-cli.md=whisperm8-agent-skill-ref-1password-cli,claude-workflows.md=whisperm8-agent-skill-ref-claude-workflows"
-  "whisperm8-chats|whisperm8-chats-skill|"
-  "gpt-coworker|whisperm8-gpt-coworker-skill|"
+  "whisperm8-transcription|whisperm8-cli-skill||"
+  "codex-subagent|whisperm8-agent-skill|playwright-browser-qa.md=whisperm8-agent-skill-ref-playwright-browser-qa,1password-cli.md=whisperm8-agent-skill-ref-1password-cli,claude-workflows.md=whisperm8-agent-skill-ref-claude-workflows|"
+  "whisperm8-chats|whisperm8-chats-skill||"
+  "gpt-coworker|whisperm8-gpt-coworker-skill||"
+  "gpt-workflow|whisperm8-gpt-workflow-skill||examples/wf-code-review.js=whisperm8-gpt-workflow-example-code-review.js,examples/wf-docs-review.js=whisperm8-gpt-workflow-example-docs-review.js"
 )
 
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
@@ -126,7 +127,7 @@ copy_if_changed() {
 overall_changed=0
 
 for entry in "${SKILLS[@]}"; do
-  IFS='|' read -r name resource refs <<<"$entry"
+  IFS='|' read -r name resource refs assets <<<"$entry"
   src_skill="$RESOURCES/$resource.md"
   if [[ ! -f "$src_skill" ]]; then
     echo "FEHLER: Ressource fehlt: $src_skill" >&2
@@ -169,6 +170,32 @@ for entry in "${SKILLS[@]}"; do
     done
   fi
 
+  asset_entries=()
+  if [[ -n "$assets" ]]; then
+    IFS=',' read -ra asset_entries <<<"$assets"
+    for asset in "${asset_entries[@]}"; do
+      asset_path="${asset%%=*}"
+      asset_resource="${asset#*=}"
+      if [[ -z "$asset_path" || "$asset_path" == /* || "$asset_path" == *".."* ]]; then
+        echo "FEHLER: Ungültiger relativer Asset-Pfad: $asset_path" >&2
+        exit 1
+      fi
+      src_asset="$RESOURCES/$asset_resource"
+      if [[ ! -f "$src_asset" ]]; then
+        echo "FEHLER: Asset-Ressource fehlt: $src_asset" >&2
+        exit 1
+      fi
+      asset_parent="$target_dir/$(dirname "$asset_path")"
+      if [[ -L "$asset_parent" ]]; then
+        echo "WARNUNG: Asset-Ordner ist ein Symlink und wird nicht überschrieben: $asset_parent" >&2
+        exit 3
+      fi
+      check_managed_target \
+        "$src_asset" "$target_dir/$asset_path" "$stamp_url" \
+        "$asset_path" || exit $?
+    done
+  fi
+
   copy_if_changed "$src_skill" "$target_dir/SKILL.md" || exit $?
   [[ "$COPY_RESULT" == synced ]] && changed=1
 
@@ -193,6 +220,19 @@ for entry in "${SKILLS[@]}"; do
     done
   fi
 
+  if [[ -n "$assets" ]]; then
+    for asset in "${asset_entries[@]}"; do
+      asset_path="${asset%%=*}"
+      asset_resource="${asset#*=}"
+      copy_if_changed "$RESOURCES/$asset_resource" "$target_dir/$asset_path" || exit $?
+      [[ "$COPY_RESULT" == synced ]] && changed=1
+      stamp_installed+=", \"$asset_path\": \"$(sha256 "$target_dir/$asset_path")\""
+      if [[ -n "$stamp_bundled" && -f "$APP_BUNDLE_RESOURCES/$asset_resource" ]]; then
+        stamp_bundled+=", \"$asset_path\": \"$(sha256 "$APP_BUNDLE_RESOURCES/$asset_resource")\""
+      fi
+    done
+  fi
+
   # Install-Stempel schreiben (Format: CLISkillExporter.InstallStamp).
   {
     echo '{'
@@ -203,9 +243,30 @@ for entry in "${SKILLS[@]}"; do
     echo '}'
   } >"$stamp_url"
 
-  # Repo-Spiegel nur pflegen, wenn er bereits existiert.
+  # Repo-Spiegel nur pflegen, wenn er bereits existiert. Symlinks werden auch
+  # hier nie verfolgt, damit ein Spiegel keine externen Dateien überschreibt.
   if [[ -d "$REPO_MIRROR/$name" ]]; then
-    copy_if_changed "$src_skill" "$REPO_MIRROR/$name/SKILL.md" || exit $?
+    mirror_dir="$REPO_MIRROR/$name"
+    if [[ -L "$mirror_dir" ]]; then
+      echo "WARNUNG: Repo-Spiegel ist ein Symlink und wird nicht überschrieben: $mirror_dir" >&2
+      exit 3
+    fi
+    if [[ -n "$refs" && -L "$mirror_dir/references" ]]; then
+      echo "WARNUNG: Referenz-Ordner im Repo-Spiegel ist ein Symlink: $mirror_dir/references" >&2
+      exit 3
+    fi
+    if [[ -n "$assets" ]]; then
+      for asset in "${asset_entries[@]}"; do
+        asset_path="${asset%%=*}"
+        mirror_parent="$mirror_dir/$(dirname "$asset_path")"
+        if [[ -L "$mirror_parent" ]]; then
+          echo "WARNUNG: Asset-Ordner im Repo-Spiegel ist ein Symlink: $mirror_parent" >&2
+          exit 3
+        fi
+      done
+    fi
+
+    copy_if_changed "$src_skill" "$mirror_dir/SKILL.md" || exit $?
     [[ "$COPY_RESULT" == synced ]] && changed=1
     if [[ -n "$refs" ]]; then
       for ref in "${ref_entries[@]}"; do
@@ -214,6 +275,16 @@ for entry in "${SKILLS[@]}"; do
         copy_if_changed \
           "$RESOURCES/$ref_resource.md" \
           "$REPO_MIRROR/$name/references/$ref_file" || exit $?
+        [[ "$COPY_RESULT" == synced ]] && changed=1
+      done
+    fi
+    if [[ -n "$assets" ]]; then
+      for asset in "${asset_entries[@]}"; do
+        asset_path="${asset%%=*}"
+        asset_resource="${asset#*=}"
+        copy_if_changed \
+          "$RESOURCES/$asset_resource" \
+          "$REPO_MIRROR/$name/$asset_path" || exit $?
         [[ "$COPY_RESULT" == synced ]] && changed=1
       done
     fi

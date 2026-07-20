@@ -123,6 +123,12 @@ struct CLISkillsSettingsPage: View {
                     definition: .gptCoworker,
                     summary: "Enables a session-wide delegation mode that proactively assigns well-defined implementation, planning, and review tasks to GPT subagents. Works together with the GPT & Codex Subagent Skill."
                 )
+
+                CLISkillSettingsCard(
+                    title: "GPT Workflow Skill",
+                    definition: .gptWorkflow,
+                    summary: "Orchestrates GPT-only multi-agent code and documentation reviews through native workflows. Includes reusable templates for finding, adversarial verification, and documentation updates."
+                )
             }
             .padding(.vertical, 10)
         }
@@ -199,6 +205,10 @@ private struct CLISkillSettingsCard: View {
         CLISkillExporter(definition: definition)
     }
 
+    private var hasAttachments: Bool {
+        !definition.references.isEmpty || !definition.assets.isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
@@ -212,7 +222,11 @@ private struct CLISkillSettingsCard: View {
 
                 SettingsHelpText(summary)
 
-                SettingsHelpText("Claude Code reads from ~/.claude/skills; other tools need the file copied manually.")
+                SettingsHelpText(
+                    hasAttachments
+                        ? "Claude Code reads from ~/.claude/skills; Save exports the complete skill folder including its supporting files."
+                        : "Claude Code reads from ~/.claude/skills; other tools need the file copied manually."
+                )
 
                 if let stateDetail {
                     SettingsHelpText(stateDetail)
@@ -239,7 +253,8 @@ private struct CLISkillSettingsCard: View {
                     copyToPasteboard()
                 }
                 .buttonStyle(SettingsButtonStyle.standard)
-                .disabled(markdown.isEmpty)
+                .disabled(markdown.isEmpty || hasAttachments)
+                .help(hasAttachments ? "Use Save to export the complete skill folder." : "Copy SKILL.md")
 
                 Button("View") {
                     isPreviewPresented = true
@@ -357,6 +372,11 @@ private struct CLISkillSettingsCard: View {
             errorMessage = CLISkillExporter.SkillError.resourceMissing(definition.resourceName).localizedDescription
             return
         }
+        if hasAttachments {
+            saveCompleteSkillFolder()
+            return
+        }
+
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "SKILL.md"
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
@@ -366,6 +386,26 @@ private struct CLISkillSettingsCard: View {
         do {
             try markdown.write(to: url, atomically: true, encoding: .utf8)
             showFeedback("Saved")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveCompleteSkillFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Export"
+        panel.title = "Choose Parent Folder"
+        guard panel.runModal() == .OK, let parent = panel.url else { return }
+
+        do {
+            try exporter.exportSkillDirectory(
+                to: parent.appendingPathComponent(definition.name, isDirectory: true)
+            )
+            showFeedback("Folder saved")
         } catch {
             errorMessage = error.localizedDescription
         }

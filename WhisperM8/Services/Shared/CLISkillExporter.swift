@@ -16,6 +16,17 @@ struct CLISkillExporter {
         let resourceName: String
     }
 
+    /// Eine zusätzliche Skill-Datei außerhalb von references/, etwa eine
+    /// ausführbare Workflow-Vorlage unter examples/.
+    struct SkillAsset: Equatable {
+        /// Relativer Zielpfad innerhalb des Skill-Ordners.
+        let relativePath: String
+        /// Bundle-Ressource ohne Dateiendung.
+        let resourceName: String
+        /// Dateiendung der Bundle-Ressource, z. B. `js`.
+        let resourceExtension: String
+    }
+
     /// Ein installierbarer Skill: `name` muss dem `name:`-Frontmatter der
     /// Ressource entsprechen — Claude Code erwartet Ordnername == Skill-Name.
     struct SkillDefinition: Equatable {
@@ -23,6 +34,8 @@ struct CLISkillExporter {
         let resourceName: String
         /// Vertiefende references/-Dateien (SKILL.md verweist auf sie).
         var references: [SkillReference] = []
+        /// Weitere Dateien mit frei wählbarem Unterordner und Dateityp.
+        var assets: [SkillAsset] = []
 
         /// Transkriptions-Skill (`whisperm8 transcribe …`).
         static let transcription = SkillDefinition(
@@ -61,11 +74,30 @@ struct CLISkillExporter {
             resourceName: "whisperm8-gpt-coworker-skill"
         )
 
+        /// GPT-only Multi-Agent-Reviews über das Workflow-Tool.
+        static let gptWorkflow = SkillDefinition(
+            name: "gpt-workflow",
+            resourceName: "whisperm8-gpt-workflow-skill",
+            assets: [
+                SkillAsset(
+                    relativePath: "examples/wf-code-review.js",
+                    resourceName: "whisperm8-gpt-workflow-example-code-review",
+                    resourceExtension: "js"
+                ),
+                SkillAsset(
+                    relativePath: "examples/wf-docs-review.js",
+                    resourceName: "whisperm8-gpt-workflow-example-docs-review",
+                    resourceExtension: "js"
+                ),
+            ]
+        )
+
         static let all: [SkillDefinition] = [
             .transcription,
             .codexAgent,
             .chats,
             .gptCoworker,
+            .gptWorkflow,
         ]
     }
 
@@ -80,7 +112,7 @@ struct CLISkillExporter {
     init(
         definition: SkillDefinition = .transcription,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        bundle: Bundle = .main
+        bundle: Bundle = .module
     ) {
         self.definition = definition
         self.homeDirectory = homeDirectory
@@ -91,34 +123,43 @@ struct CLISkillExporter {
         case resourceMissing(String)
         case replacementRequiresConfirmation(String)
         case symbolicLinkTarget(String)
+        case invalidAssetPath(String)
 
         var errorDescription: String? {
             switch self {
             case .resourceMissing(let name):
-                return "Skill-Ressource fehlt im App-Bundle (\(name).md)."
+                let fileName = name.contains(".") ? name : "\(name).md"
+                return "Skill-Ressource fehlt im App-Bundle (\(fileName))."
             case .replacementRequiresConfirmation(let path):
                 return "Der installierte Skill ist fremd oder lokal geändert und wird nicht ohne Bestätigung ersetzt (\(path))."
             case .symbolicLinkTarget(let path):
                 return "Ein Skill-Symlink wird aus Sicherheitsgründen nicht überschrieben (\(path))."
+            case .invalidAssetPath(let path):
+                return "Ungültiger relativer Pfad einer Skill-Ressource (\(path))."
             }
         }
     }
 
     /// Der vollständige Skill-Inhalt (Frontmatter + Markdown-Body).
     func skillMarkdown() throws -> String {
-        try resourceMarkdown(definition.resourceName)
+        try resourceText(definition.resourceName, extension: "md")
     }
 
     /// Inhalt einer Referenz-Datei aus dem Bundle.
     func referenceMarkdown(_ reference: SkillReference) throws -> String {
-        try resourceMarkdown(reference.resourceName)
+        try resourceText(reference.resourceName, extension: "md")
     }
 
-    private func resourceMarkdown(_ resourceName: String) throws -> String {
-        guard let url = bundle.url(forResource: resourceName, withExtension: "md"),
+    /// Inhalt einer zusätzlichen Skill-Datei aus dem Bundle.
+    func assetContent(_ asset: SkillAsset) throws -> String {
+        try resourceText(asset.resourceName, extension: asset.resourceExtension)
+    }
+
+    private func resourceText(_ resourceName: String, extension resourceExtension: String) throws -> String {
+        guard let url = bundle.url(forResource: resourceName, withExtension: resourceExtension),
               let content = try? String(contentsOf: url, encoding: .utf8),
               !content.isEmpty else {
-            throw SkillError.resourceMissing(resourceName)
+            throw SkillError.resourceMissing("\(resourceName).\(resourceExtension)")
         }
         return content
     }
@@ -140,6 +181,12 @@ struct CLISkillExporter {
 
     func claudeCodeReferenceURL(for reference: SkillReference) -> URL {
         claudeCodeReferencesDirectory.appendingPathComponent(reference.fileName)
+    }
+
+    func claudeCodeAssetURL(for asset: SkillAsset) -> URL {
+        claudeCodeSkillURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(asset.relativePath)
     }
 
     var isInstalledForClaudeCode: Bool {
@@ -202,6 +249,9 @@ struct CLISkillExporter {
             hashes["references/\(reference.fileName)"] =
                 Self.sha256(of: try referenceMarkdown(reference))
         }
+        for asset in definition.assets {
+            hashes[asset.relativePath] = Self.sha256(of: try assetContent(asset))
+        }
         return hashes
     }
 
@@ -216,6 +266,12 @@ struct CLISkillExporter {
             if let content = try? String(
                 contentsOf: claudeCodeReferenceURL(for: reference), encoding: .utf8) {
                 hashes["references/\(reference.fileName)"] = Self.sha256(of: content)
+            }
+        }
+        for asset in definition.assets {
+            if let content = try? String(
+                contentsOf: claudeCodeAssetURL(for: asset), encoding: .utf8) {
+                hashes[asset.relativePath] = Self.sha256(of: content)
             }
         }
         return hashes
@@ -265,11 +321,18 @@ struct CLISkillExporter {
         let referenceContents = try definition.references.map { reference in
             (reference, try referenceMarkdown(reference))
         }
+        let assetContents = try definition.assets.map { asset in
+            try validateAssetPath(asset.relativePath)
+            return (asset, try assetContent(asset))
+        }
 
         try rejectSymbolicLink(at: destination.deletingLastPathComponent())
         try rejectSymbolicLink(at: installStampURL)
         if !referenceContents.isEmpty {
             try rejectSymbolicLink(at: claudeCodeReferencesDirectory)
+        }
+        for (asset, _) in assetContents {
+            try rejectSymbolicLink(at: claudeCodeAssetURL(for: asset).deletingLastPathComponent())
         }
         try validateReplacement(
             content: content,
@@ -280,6 +343,13 @@ struct CLISkillExporter {
             try validateReplacement(
                 content: referenceContent,
                 at: claudeCodeReferenceURL(for: reference),
+                force: force
+            )
+        }
+        for (asset, assetContent) in assetContents {
+            try validateReplacement(
+                content: assetContent,
+                at: claudeCodeAssetURL(for: asset),
                 force: force
             )
         }
@@ -303,6 +373,14 @@ struct CLISkillExporter {
                 )
             }
         }
+        for (asset, assetContent) in assetContents {
+            let assetURL = claudeCodeAssetURL(for: asset)
+            try FileManager.default.createDirectory(
+                at: assetURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try assetContent.write(to: assetURL, atomically: true, encoding: .utf8)
+        }
         // Stempel für den Drei-Wege-Status: installierter Stand == Bundle-Stand.
         let hashes = try bundledHashes()
         try writeInstallStamp(InstallStamp(
@@ -313,6 +391,63 @@ struct CLISkillExporter {
         ))
         Logger.debug("[CLI] Skill installiert: \(destination.path)")
         return destination
+    }
+
+    /// Exportiert einen vollständigen Skill-Ordner für die manuelle Nutzung:
+    /// SKILL.md, references/ und zusätzliche Assets. Ein vorhandenes Ziel wird
+    /// nicht überschrieben; damit bleiben fremde oder lokale Dateien geschützt.
+    @discardableResult
+    func exportSkillDirectory(to directory: URL) throws -> URL {
+        try rejectSymbolicLink(at: directory)
+        guard !FileManager.default.fileExists(atPath: directory.path) else {
+            throw SkillError.replacementRequiresConfirmation(directory.path)
+        }
+
+        let references = try definition.references.map { reference in
+            (reference, try referenceMarkdown(reference))
+        }
+        let assets = try definition.assets.map { asset in
+            try validateAssetPath(asset.relativePath)
+            return (asset, try assetContent(asset))
+        }
+
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try skillMarkdown().write(
+            to: directory.appendingPathComponent("SKILL.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        for (reference, content) in references {
+            let destination = directory
+                .appendingPathComponent("references", isDirectory: true)
+                .appendingPathComponent(reference.fileName)
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try content.write(to: destination, atomically: true, encoding: .utf8)
+        }
+        for (asset, content) in assets {
+            let destination = directory.appendingPathComponent(asset.relativePath)
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try content.write(to: destination, atomically: true, encoding: .utf8)
+        }
+        return directory
+    }
+
+    private func validateAssetPath(_ relativePath: String) throws {
+        let components = NSString(string: relativePath).pathComponents
+        guard !relativePath.isEmpty,
+              !relativePath.hasPrefix("/"),
+              !components.contains("..") else {
+            throw SkillError.invalidAssetPath(relativePath)
+        }
     }
 
     private func validateReplacement(

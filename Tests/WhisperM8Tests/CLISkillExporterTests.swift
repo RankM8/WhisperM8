@@ -37,6 +37,10 @@ final class CLISkillExporterTests: XCTestCase {
         CLISkillExporter(definition: .codexAgent, homeDirectory: tempHome, bundle: .module)
     }
 
+    private func makeGPTWorkflowExporter() -> CLISkillExporter {
+        CLISkillExporter(definition: .gptWorkflow, homeDirectory: tempHome, bundle: .module)
+    }
+
     func testAgentSkillResourceLoadsAndMatchesDefinitionName() throws {
         let markdown = try makeAgentExporter().skillMarkdown()
         XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
@@ -56,6 +60,29 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
         XCTAssertTrue(markdown.contains("name: gpt-coworker"))
         XCTAssertEqual(exporter.definition.name, "gpt-coworker")
+    }
+
+    func testGPTWorkflowDefaultBundleLoadsProductionResources() throws {
+        let exporter = CLISkillExporter(
+            definition: .gptWorkflow,
+            homeDirectory: tempHome
+        )
+
+        XCTAssertTrue(try exporter.skillMarkdown().contains("name: gpt-workflow"))
+        for asset in exporter.definition.assets {
+            XCTAssertFalse(try exporter.assetContent(asset).isEmpty)
+        }
+    }
+
+    func testGPTWorkflowSkillLoadsWithExampleAssets() throws {
+        let exporter = makeGPTWorkflowExporter()
+        let markdown = try exporter.skillMarkdown()
+
+        XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
+        XCTAssertTrue(markdown.contains("name: gpt-workflow"))
+        XCTAssertTrue(markdown.contains("examples/wf-code-review.js"))
+        XCTAssertTrue(markdown.contains("examples/wf-docs-review.js"))
+        XCTAssertEqual(exporter.definition.assets.count, 2)
     }
 
     func testAgentSkillInstallsIntoOwnFolder() throws {
@@ -96,6 +123,53 @@ final class CLISkillExporterTests: XCTestCase {
                 "SKILL.md verweist nicht auf \(reference.fileName)"
             )
         }
+    }
+
+    func testGPTWorkflowSkillInstallsExampleAssets() throws {
+        let exporter = makeGPTWorkflowExporter()
+        try exporter.installForClaudeCode()
+
+        for asset in CLISkillExporter.SkillDefinition.gptWorkflow.assets {
+            let url = exporter.claudeCodeAssetURL(for: asset)
+            XCTAssertTrue(
+                url.path.contains("/gpt-workflow/examples/"),
+                "Workflow-Vorlage muss unter examples/ liegen: \(url.path)"
+            )
+            XCTAssertEqual(
+                try String(contentsOf: url, encoding: .utf8),
+                try exporter.assetContent(asset)
+            )
+        }
+        XCTAssertEqual(exporter.installState(), .current)
+    }
+
+    func testGPTWorkflowSkillExportsCompleteFolder() throws {
+        let exporter = makeGPTWorkflowExporter()
+        let destination = tempHome.appendingPathComponent("export/gpt-workflow")
+
+        try exporter.exportSkillDirectory(to: destination)
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: destination.appendingPathComponent("SKILL.md").path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: destination.appendingPathComponent("examples/wf-code-review.js").path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: destination.appendingPathComponent("examples/wf-docs-review.js").path))
+        XCTAssertThrowsError(try exporter.exportSkillDirectory(to: destination))
+    }
+
+    func testGPTWorkflowSkillNotCurrentWhenExampleIsModified() throws {
+        let exporter = makeGPTWorkflowExporter()
+        try exporter.installForClaudeCode()
+        let asset = try XCTUnwrap(exporter.definition.assets.first)
+        let assetURL = exporter.claudeCodeAssetURL(for: asset)
+
+        try "lokal geändert".write(to: assetURL, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(exporter.installState(), .modifiedLocally)
+        XCTAssertThrowsError(try exporter.installForClaudeCode())
+        try exporter.installForClaudeCode(force: true)
+        XCTAssertEqual(exporter.installState(), .current)
     }
 
     func testAgentSkillNotCurrentWhenReferenceOutdated() throws {
@@ -345,6 +419,52 @@ final class CLISkillExporterTests: XCTestCase {
     }
 
     // MARK: sync-skills.sh
+
+    func testSyncSkillsInstallsGPTWorkflowWithExamplesAndStamp() throws {
+        let skillsHome = tempHome.appendingPathComponent("skills", isDirectory: true)
+
+        let result = try runSyncSkills(skillsHome: skillsHome)
+
+        XCTAssertEqual(result.status, 0, result.output)
+        let workflowDirectory = skillsHome.appendingPathComponent("gpt-workflow")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: workflowDirectory.appendingPathComponent("SKILL.md").path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: workflowDirectory.appendingPathComponent("examples/wf-code-review.js").path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: workflowDirectory.appendingPathComponent("examples/wf-docs-review.js").path))
+
+        let stampData = try Data(contentsOf: workflowDirectory
+            .appendingPathComponent(".whisperm8-state.json"))
+        let stamp = try JSONDecoder().decode(
+            CLISkillExporter.InstallStamp.self,
+            from: stampData
+        )
+        XCTAssertNotNil(stamp.installed["examples/wf-code-review.js"])
+        XCTAssertNotNil(stamp.installed["examples/wf-docs-review.js"])
+    }
+
+    func testSyncSkillsRejectsSymlinkedAssetDirectoryInRepoMirror() throws {
+        let skillsHome = tempHome.appendingPathComponent("skills", isDirectory: true)
+        let mirror = tempHome.appendingPathComponent("repo-mirror/gpt-workflow", isDirectory: true)
+        let external = tempHome.appendingPathComponent("external-examples", isDirectory: true)
+        try FileManager.default.createDirectory(at: mirror, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        let externalFile = external.appendingPathComponent("wf-code-review.js")
+        try "extern gepflegt".write(to: externalFile, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(
+            at: mirror.appendingPathComponent("examples"),
+            withDestinationURL: external
+        )
+
+        let result = try runSyncSkills(skillsHome: skillsHome)
+
+        XCTAssertNotEqual(result.status, 0, result.output)
+        XCTAssertEqual(
+            try String(contentsOf: externalFile, encoding: .utf8),
+            "extern gepflegt"
+        )
+    }
 
     func testSyncSkillsRejectsForeignSkillAndPreservesContent() throws {
         let skillsHome = tempHome.appendingPathComponent("skills", isDirectory: true)
