@@ -4,8 +4,8 @@
 # WhisperM8-Statusline für Claude Code — installiert über die WhisperM8-App
 # (Einstellungen → CLI & Skills). Zeigt Repo/Branch, Kontext-Füllstand mit
 # exaktem Token-Wert (auch für GPT-Sessions über den WhisperM8-Mix-Router),
-# Modell, Effort-Level, Account-Usage-Limits, Kosten, aktive Subagents und
-# das aktive Account-Profil (CLAUDE_CONFIG_DIR-Switcher).
+# Modell und aktives Account-Profil (CLAUDE_CONFIG_DIR-Switcher), Effort-Level,
+# Account-Usage-Limits, Kosten sowie aktive Subagents und MCP-Server.
 # Benötigt: jq, git; Usage-Limits optional (curl + macOS-Keychain).
 input=$(cat)
 
@@ -18,14 +18,12 @@ fi
 
 # ── Profil-Kontext (Account-Switcher via CLAUDE_CONFIG_DIR) ──────────────
 # Läuft die Session mit CLAUDE_CONFIG_DIR (Zusatz-Account), zeigen alle
-# account-bezogenen Teile (Usage-Limits, Account-Name) DIESES Profil.
+# account-bezogenen Teile (Usage-Limits, Profilname) DIESES Profil.
 cfg_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 if [ -n "$CLAUDE_CONFIG_DIR" ]; then
     ccs_profile=$(basename "$CLAUDE_CONFIG_DIR")
-    claude_json="$cfg_dir/.claude.json"
 else
     ccs_profile="main"
-    claude_json="$HOME/.claude.json"   # main: liegt historisch in $HOME, nicht im Config-Dir
 fi
 
 # ── Tuning ────────────────────────────────────────────────────────────────
@@ -176,7 +174,7 @@ fi
 if [ -f "$usage_cache" ]; then
     usage_response=$(cat "$usage_cache")
 
-    # 5-Stunden Limit extrahieren
+    # 5-Stunden-Limit extrahieren
     five_hour_util=$(echo "$usage_response" | jq -r '.five_hour.utilization // empty')
     if [ -n "$five_hour_util" ]; then
         hourly_pct=$(LANG=C awk -v u="$five_hour_util" 'BEGIN {printf "%.0f", u}')
@@ -188,18 +186,18 @@ if [ -f "$usage_cache" ]; then
             hourly_color=""
         fi
         if [ -n "$hourly_color" ]; then
-            hourly_display="${hourly_color}${hourly_pct}%/5h\033[0m"
+            hourly_display="${hourly_color}${hourly_pct}%\033[0m/5h"
         else
             hourly_display="${hourly_pct}%/5h"
         fi
     fi
 
-    # 7-Tage Limit extrahieren
+    # 7-Tage-Limit extrahieren
     seven_day_util=$(echo "$usage_response" | jq -r '.seven_day.utilization // empty')
     if [ -n "$seven_day_util" ]; then
         weekly_pct=$(LANG=C awk -v u="$seven_day_util" 'BEGIN {printf "%.0f", u}')
 
-        # Reset-Zeitpunkt des Weekly-Limits (resets_at ist UTC -> lokale Zeit)
+        # Reset-Zeitpunkt des Weekly-Limits (resets_at ist UTC -> lokaler Wochentag)
         weekly_reset=""
         reset_raw=$(echo "$usage_response" | jq -r '.seven_day.resets_at // empty')
         if [ -n "$reset_raw" ]; then
@@ -208,7 +206,7 @@ if [ -f "$usage_cache" ]; then
             reset_epoch=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$reset_clean" "+%s" 2>/dev/null)
             if [ -n "$reset_epoch" ]; then
                 # In lokaler Zeit formatieren, Wochentag auf Deutsch
-                reset_fmt=$(date -r "$reset_epoch" "+%a %H:%M" 2>/dev/null | \
+                reset_fmt=$(date -r "$reset_epoch" "+%a" 2>/dev/null | \
                     sed 's/^Mon/Mo/; s/^Tue/Di/; s/^Wed/Mi/; s/^Thu/Do/; s/^Fri/Fr/; s/^Sat/Sa/; s/^Sun/So/')
                 [ -n "$reset_fmt" ] && weekly_reset=" ↻${reset_fmt}"
             fi
@@ -222,11 +220,21 @@ if [ -f "$usage_cache" ]; then
             weekly_color=""
         fi
         if [ -n "$weekly_color" ]; then
-            weekly_display="${weekly_color}${weekly_pct}%/week${weekly_reset}\033[0m"
+            weekly_display="${weekly_color}${weekly_pct}%\033[0m/w${weekly_reset}"
         else
-            weekly_display="${weekly_pct}%/week${weekly_reset}"
+            weekly_display="${weekly_pct}%/w${weekly_reset}"
         fi
     fi
+fi
+
+# Beide Usage-Limits bilden gemeinsam ein Segment.
+limits_display=""
+if [ -n "$hourly_display" ] && [ -n "$weekly_display" ]; then
+    limits_display="${hourly_display} \033[2m·\033[0m ${weekly_display}"
+elif [ -n "$hourly_display" ]; then
+    limits_display="$hourly_display"
+elif [ -n "$weekly_display" ]; then
+    limits_display="$weekly_display"
 fi
 
 # MCP Server Information
@@ -304,13 +312,7 @@ else
     color="\033[32m"  # Grün
 fi
 
-# Progress Bar (10 Blöcke): füllt sich mit Auslastung Richtung Compact
-filled=$((used_of_budget / 10))
-if [ $filled -gt 10 ]; then filled=10; fi
-empty=$((10 - filled))
-bar=""
-for ((i=0; i<filled; i++)); do bar="${bar}█"; done
-for ((i=0; i<empty; i++)); do bar="${bar}░"; done
+# Die Prozentzahl übernimmt die Warnfarbe des früheren Kontext-Balkens.
 
 # Subagent-Erkennung via Session-eigene Subagent-Transcripts
 # Das Statusline-JSON hat kein Subagent-Feld. Claude Code legt aber pro Session
@@ -366,21 +368,16 @@ if [ -n "$transcript_path" ] && [ -d "$subagent_dir" ]; then
     fi
 fi
 
-# Account-Anzeige: Profilname + E-Mail (aus der Profil-.claude.json) —
-# zeigt eindeutig, unter welchem Account/Profil die Session läuft
-account_email=$(jq -r '.oauthAccount.emailAddress // empty' "$claude_json" 2>/dev/null)
+# Account-Anzeige direkt hinter dem Modell: main dezent, Zusatzprofile auffällig.
 if [ "$ccs_profile" != "main" ]; then
     # Zusatz-Account: Profilname auffällig (gelb) — falscher Account ist der teuerste Bedienfehler
-    account_display="\033[1;33m⇄ ${ccs_profile}\033[0m"
-    [ -n "$account_email" ] && account_display="${account_display} \033[2m${account_email}\033[0m"
-elif [ -n "$account_email" ]; then
-    account_display="\033[2mmain ${account_email}\033[0m"  # Dim/grau, dezent am Zeilenende
+    account_display="\033[1;33m⇄${ccs_profile}\033[0m"
 else
-    account_display=""
+    account_display="\033[2m⇄main\033[0m"
 fi
 
 # Ausgabe zusammenbauen
-# Format: repo (branch) ✗ | [████░░░░] 42% 96k/272k | [Opus] | high | 11%/5h | 4%/week | $0.00 | ⚡2 sub (Fable, GPT)
+# Format: repo (branch) ✗ ↑3 | 30% 258k/1000k | [Fable 5] ⇄PowerUser | high | 32%/5h · 42%/w ↻Sa | $16.20 | ⚡2 sub (Fable, GPT) | MCP:1 server:4%
 output="${repo_display}"
 
 if [ -n "$branch_display" ]; then
@@ -391,23 +388,18 @@ if [ -n "$ab_display" ]; then
     output="${output} ${ab_display}"
 fi
 
-
 if [ -n "$ctx_exact" ]; then
-    output="${output} ${dim}|${reset} ${color}[${bar}] ${used_of_budget}% ${dim}${ctx_exact}${reset} ${dim}|${reset} [${model}]"
+    output="${output} ${dim}|${reset} ${color}${used_of_budget}%${reset} ${dim}${ctx_exact}${reset} ${dim}|${reset} [${model}] ${account_display}"
 else
-    output="${output} ${dim}|${reset} ${color}[${bar}] ${used_of_budget}%${reset} ${dim}|${reset} [${model}]"
+    output="${output} ${dim}|${reset} ${color}${used_of_budget}%${reset} ${dim}|${reset} [${model}] ${account_display}"
 fi
 
 if [ -n "$effort_display" ]; then
     output="${output} ${dim}|${reset} ${effort_display}"
 fi
 
-if [ -n "$hourly_display" ]; then
-    output="${output} ${dim}|${reset} ${hourly_display}"
-fi
-
-if [ -n "$weekly_display" ]; then
-    output="${output} ${dim}|${reset} ${weekly_display}"
+if [ -n "$limits_display" ]; then
+    output="${output} ${dim}|${reset} ${limits_display}"
 fi
 
 if [ -n "$cost_display" ]; then
@@ -420,10 +412,6 @@ fi
 
 if [ -n "$mcp_display" ]; then
     output="${output} ${dim}|${reset} ${mcp_display}"
-fi
-
-if [ -n "$account_display" ]; then
-    output="${output} ${dim}|${reset} ${account_display}"
 fi
 
 echo -e "${output}"

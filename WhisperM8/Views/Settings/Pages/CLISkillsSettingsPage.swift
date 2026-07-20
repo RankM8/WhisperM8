@@ -398,6 +398,7 @@ private struct StatuslineSettingsCard: View {
     @State private var errorMessage: String?
     @State private var isPreviewPresented = false
     @State private var isReplaceConfirmPresented = false
+    @State private var isManagedReplaceConfirmPresented = false
     @State private var isForeignSettingsConfirmPresented = false
 
     @MainActor
@@ -414,16 +415,18 @@ private struct StatuslineSettingsCard: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
-                Text("~/.claude/\(StatuslineInstaller.scriptFileName)")
+                Text("~/.claude/\(StatuslineInstaller.scriptFileName) · ~/.claude/\(StatuslineInstaller.subagentScriptFileName)")
                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(AppTheme.textSecondary)
 
-                SettingsHelpText("Claude Code status line: repo/branch, context usage with exact token count (incl. GPT sessions via the 272k window), model, effort, account usage limits, active subagents (Claude & GPT), and the active account profile.")
+                SettingsHelpText("Claude Code status line: repo/branch, context usage with exact token count (incl. GPT sessions via the 272k window), model, effort, account usage limits, active subagents (Claude & GPT), and the active account profile. Native subagent rows also show the model actually used for each task.")
 
                 SettingsHelpText(wiringSummary)
 
                 if status == .foreign {
-                    SettingsHelpText("A custom status line script exists at the target path. Installing replaces it — save a copy first if you want to keep it.")
+                    SettingsHelpText("A custom status line script exists at one of the two target paths. Installing replaces both managed scripts — save copies first if you want to keep them.")
+                } else if let stateDetail {
+                    SettingsHelpText(stateDetail)
                 }
             }
 
@@ -431,6 +434,8 @@ private struct StatuslineSettingsCard: View {
                 Button(installButtonTitle) {
                     if status == .foreign {
                         isReplaceConfirmPresented = true
+                    } else if status == .modifiedLocally || status == .repoSynced {
+                        isManagedReplaceConfirmPresented = true
                     } else if foreignSettings > 0, wiredCount < totalConfigs {
                         isForeignSettingsConfirmPresented = true
                     } else {
@@ -484,16 +489,25 @@ private struct StatuslineSettingsCard: View {
             Button("Replace Script", role: .destructive) { install(replaceScript: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The script at the target path was not installed by WhisperM8 and will be overwritten. Custom statusLine entries in settings.json are NOT touched by this.")
+            Text("One or both scripts at the two target paths were not installed by WhisperM8 and will be overwritten. Custom status line entries in settings.json are NOT touched by this.")
         }
         .confirmationDialog(
-            "Replace custom statusLine entries?",
+            "Replace managed status line script?",
+            isPresented: $isManagedReplaceConfirmPresented
+        ) {
+            Button("Replace Script", role: .destructive) { install() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(managedReplaceConfirmationMessage)
+        }
+        .confirmationDialog(
+            "Replace custom status line entries?",
             isPresented: $isForeignSettingsConfirmPresented
         ) {
             Button("Replace Entries", role: .destructive) { install(replaceSettings: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("\(foreignSettings) config(s) point to a different status line command. Replacing switches them to the WhisperM8 status line.")
+            Text("\(foreignSettings) config(s) contain a different status line command. Replacing switches both entries to the WhisperM8 status lines.")
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -512,6 +526,8 @@ private struct StatuslineSettingsCard: View {
             return foreignSettings > 0 ? "Repair Settings…" : "Repair Settings"
         case .outdated:
             return "Update"
+        case .modifiedLocally, .repoSynced:
+            return "Replace…"
         case .foreign:
             return "Replace…"
         case .missing:
@@ -519,9 +535,31 @@ private struct StatuslineSettingsCard: View {
         }
     }
 
+    private var stateDetail: String? {
+        switch status {
+        case .modifiedLocally:
+            return "The installed status line script was modified locally since the last managed install. Replacing overwrites those changes."
+        case .repoSynced:
+            return "Synced from the repository via `make skills` — the installed version is at least as new as this app's bundled copy."
+        case .missing, .current, .outdated, .foreign:
+            return nil
+        }
+    }
+
+    private var managedReplaceConfirmationMessage: String {
+        switch status {
+        case .modifiedLocally:
+            return "The installed status line script contains local changes. Replacing overwrites them with the bundled version."
+        case .repoSynced:
+            return "The installed status line script was synced from the repository and may be newer than this app's bundled version. Replace it anyway?"
+        default:
+            return "Replacing overwrites the installed status line script with the bundled version."
+        }
+    }
+
     private var wiringSummary: String {
         guard totalConfigs > 0 else { return "" }
-        var text = "statusLine entry active in \(wiredCount) of \(totalConfigs) Claude configs (main + account profiles; symlinked profiles follow main automatically)."
+        var text = "Status line entries active in \(wiredCount) of \(totalConfigs) Claude configs (main + account profiles; symlinked profiles follow main automatically)."
         if foreignSettings > 0 {
             text += " \(foreignSettings) config(s) use a different status line command."
         }

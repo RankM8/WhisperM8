@@ -43,6 +43,7 @@ let package = Package(
                 .copy("Resources/whisperm8-agent-skill-ref-1password-cli.md"),
                 .copy("Resources/whisperm8-agent-skill-ref-claude-workflows.md"),
                 .copy("Resources/whisperm8-statusline.sh"),
+                .copy("Resources/whisperm8-subagent-statusline.sh"),
                 .process("Resources/MenuBarIcon.png"),
                 .process("Resources/MenuBarIcon@2x.png"),
                 .process("Resources/AppLogo.png"),
