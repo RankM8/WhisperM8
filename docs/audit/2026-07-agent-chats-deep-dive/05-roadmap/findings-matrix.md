@@ -118,7 +118,7 @@ Die Roadmap bezeichnet diese fünf Finder-Einträge ausdrücklich als „noch ni
 
 ## Runde 4 — bestätigte kritische/hohe Findings
 
-Eine Zeile entspricht einer kanonischen Maßnahme. Quell-IDs, die dasselbe bestätigte Problem bezeichnen, stehen gemeinsam in der ID-Spalte und werden in der Zählung zusätzlich als Quell-IDs ausgewiesen. `G4-Spec: …` bezeichnet den Anschluss an die parallel revidierte Test-Spec; die endgültige Oracle-ID wird nach Paket D nachgezogen.
+Eine Zeile entspricht einer kanonischen Maßnahme. Quell-IDs, die dasselbe bestätigte Problem bezeichnen, stehen gemeinsam in der ID-Spalte und werden in der Zählung zusätzlich als Quell-IDs ausgewiesen. `G4-Spec: …` bezeichnet den gleichnamigen Test-/QA-Vertrag in `test-specs-welle0-1.md`; bewusst deduplizierte Maßnahmen teilen dort einen kombinierten Vertrag. Die formale G6-Prüfung bestätigt 28 eindeutige Quell-IDs in 27 kanonischen Zeilen mit jeweils genau einer Roadmap-Zuordnung und einem auflösbaren Test-/QA-Gate ([formale Gate-Abnahme](../06-umsetzung/freigabe-gates-g0-g6.md)).
 
 | ID | Kurztitel | Schweregrad | Verdict-Quelle (Datei:Zeile) | Roadmap-Welle/Maßnahme | Test-Gate | Aktueller Status |
 |---|---|---|---|---|---|---|

@@ -1,12 +1,14 @@
 ---
-status: spezifikation
+status: spezifikation-vollstaendig
 updated: 2026-07-20
-description: Vollständige Test-Spezifikationen für Welle 0/1 mit getrennt markierten W2/W3-Oracles, deterministischen Fakes, Claim-Matrix und Runde-4-Gates.
+description: Vollständige W0/W1-Test-Spezifikationen mit Identitäts-/C07-Vertrag, B18–B22 und eigenen Oracles beziehungsweise QA-Verifikation für alle gerouteten Runde-4-IDs.
 ---
 
 # Test-Spezifikationen Welle 0/1
 
-> **Identitäts-Gate für die G4-Revision:** Tests der Session-Bindung müssen gegen die Capability-Zustände `hostAssignedUnsupported`/`hostAssignedVerified` und die Claim-API aus [`identitaetsmodell-spec.md` §2.2](identitaetsmodell-spec.md) geschrieben werden. A02 ist in seiner heutigen Form überholt und wird in der G4-Revision durch capability-/claim-spezifische Oracles ersetzt.
+> **Identitäts-Gate:** Tests der Session-Bindung verwenden die Capability-Zustände `hostAssignedUnsupported`/`hostAssignedVerified` und die Claim-API aus [`identitaetsmodell-spec.md` §2.2](identitaetsmodell-spec.md). `A02` und `A02-S01` bis `A02-S08` materialisieren diesen Vertrag.
+>
+> **G4-Nachtrag vom 2026-07-20:** Alle in der Matrix gerouteten Runde-4-IDs besitzen jetzt eigene Oracles beziehungsweise dokumentierte QA-Verifikation. Maßgeblich bleibt die [Gate-Tabelle G0–G6](freigabe-gates-g0-g6.md).
 
 ## 0. Geltungsbereich und Ausführungsregel
 
@@ -293,8 +295,8 @@ Jede Zeile ist ein eigener Test; im Negativfall bleiben Binding, Lineage, Transc
 
 | Welle | Testverträge in diesem Dokument | Bedeutung |
 |---|---|---|
-| **W0** | A01–A06, A02-S01–S08, C07-1–C07-6, R4-AS-11 sowie die W0-Anteile R4-WAIT-01/02 | Charakterisierung, normative Oracles und Testnähte vor Produktänderungen. A02/C07 und offene Runde-4-Oracles sind bewusst zunächst rot. |
-| **W1** | B01–B05, B07, B08, B10, B11, B15, B18–B22, R4-AUTH-01/02, R4-IDEM-01, R4-WAIT-01/02, R4-PROF-01 sowie die erledigten Phase-0-Gates | Aktiven Schaden stoppen; jedes rote Oracle wird im eigenen Fix-Change grün. |
+| **W0** | A01–A06, A02-S01–S08, C07-1–C07-6, R4-AS-11, R4-SCHEMA-01 sowie die W0-Anteile R4-WAIT-01/02 | Charakterisierung, normative Oracles und Testnähte vor Produktänderungen. A02/C07 und offene Runde-4-Oracles sind bewusst zunächst rot. |
+| **W1** | B01–B05, B07, B08, B10, B11, B15, B18–B22; R4-AUTH-01/02, R4-IDEM-01, R4-WAIT-01/02, R4-PROF-01, R4-CP-02/03/05, R4-GPTS-01, R4-GPTL-02, R4-LIFE-01, R4-PLUG-01/02, R4-HCLI-02, R4-SHELL-01, R4-INSTALL-01, R4-AS-01, R4-SKILL-01, R4-CTRL-01/02, R4-SCHEMA-01 und R4-RESUME-01 sowie die erledigten Phase-0-Gates | Aktiven Schaden stoppen; jedes rote Oracle wird im eigenen Fix-Change grün. `R4-RESUME-01` ist als erledigter Fix mit manueller View-QA statt automatisiertem Oracle geführt. |
 | **W2 — separat, nicht Teil des W0/W1-Vollständigkeitsnachweises** | B06, B09, B12–B14 | Nachgelagerte Session-, Terminal- und UI-Korrektheit. |
 | **W3 — separat, nicht Teil des W0/W1-Vollständigkeitsnachweises** | B16, B17 | Transcript-Korrelation und sichtbare Schema-Drift. |
 
@@ -354,7 +356,7 @@ Gemeinsames Given aller sechs Fälle: H1/H2/H10a, `ManualClock`, zwei lokale Row
 
 ## 2.3 Fehlende W1-Gates B18–B22
 
-## B18 — P1.1: Child-Environment ist pro Prozessklasse minimal, profilbewusst und secret-frei `[W1, rot]`
+## B18 / R4-CP-05 — P1.1: Child-Environment ist pro Prozessklasse minimal, profilbewusst und secret-frei `[W1, rot]`
 
 - **Bug-/Maßnahmen-ID:** P1.1, N09/N10 sowie R4-CP-05.
 - **Given:** Tabellenmatrix für PTY, `--bg`, Attach, Logs/Stop/Respawn/Health, `agents --json`, Auto-Namer und Summarizer. Basis-Environment enthält benötigte PATH/TERM-Werte sowie Canary-Secrets `AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, fremdes `SSH_AUTH_SOCK`, `CCP_TRAFFIC_LOG` und unbekannte `CLAUDE_CODE_*`; Profil-Overlay setzt `CLAUDE_CONFIG_DIR` und versucht im Negativfall, eine gesperrte Variable erneut einzuführen.
@@ -455,6 +457,108 @@ Gemeinsames Given aller sechs Fälle: H1/H2/H10a, `ManualClock`, zwei lokale Row
 - **Negativfall/Persistenz:** Gelöschtes/uneindeutiges Accountprofil startet nicht still als Main; Fehler persistiert keine halbe Session. Projektdefault ist zulässiger Fallback nur dann, wenn kein expliziter Session-Override angefordert war.
 - **Minimale Naht:** gemeinsamer `SessionLaunchContextProvider` und eine `createSession`-Operation; keine View-Abhängigkeit.
 
+### R4-CP-02 — Angefordertes Restriktionsprofil startet nur mit gültiger Settings-Datei `[W1, rot]`
+
+- **Given:** Derselbe Launch wird einmal mit angefordertem Restriktionsprofil und erfolgreicher Settings-Erzeugung, einmal mit I/O-Fehler beziehungsweise unlesbarer Datei vorbereitet. H2/`ManualGate` hält den Launcher bis zum Ergebnis der Vorbereitung; ein Launcher-Spy protokolliert argv und Environment.
+- **When:** Coordinator beziehungsweise Detail-View den Start über dieselbe vorbereitende Operation auslöst.
+- **Then:** Nur der Erfolgsfall startet genau einmal und trägt den kanonischen `--settings`-Pfad. Jeder Fehler endet sichtbar fail-closed, bevor argv oder Child-Environment an einen Prozess gelangen.
+- **Negativfall/Persistenz:** Kein stiller Start ohne Settings-Argumente, kein Fallback auf ein weniger restriktives Profil und keine halbe Row-/UI-State-Mutation. Fehlgeschlagene temporäre Dateien werden entfernt; Workspace und Provider-Roots bleiben unverändert.
+- **Minimale Naht:** lokale `settingsFilePreparer`-Closure mit `Result<URL, Error>` plus vorhandene Launch-Closure; H1/H2, kein Bridge-/View-Harness.
+
+### R4-CP-03 — Background-Respawn besitzt eine explizite Context-Snapshot-Semantik `[W1, rot]`
+
+- **Given:** Background-Agent wurde mit Context-Generation G1 gestartet; vor dem Respawn ist G2 aktiv. Eine Tabellenmatrix deklariert je Prozessklasse `refreshCurrent` oder `reuseLaunchSnapshot` und hält den Respawn vor der Command-Erzeugung per `ManualGate`.
+- **When:** Respawn denselben Short-ID-Job neu startet.
+- **Then:** `refreshCurrent` erzeugt Overlay/Settings atomar aus G2; `reuseLaunchSnapshot` verwendet nachweislich den unveränderlichen G1-Snapshot. In beiden Fällen stimmen argv, cwd, Profilroot und Environment mit genau der deklarierten Generation überein.
+- **Negativfall/Persistenz:** Ein Short-ID-only-Respawn ohne Contextbezug, ein G1/G2-Mischzustand oder ein Main-Profil-Fallback startet nicht. Persistiert wird höchstens der gewählte Snapshotstempel, nie ein halbfertiges Overlay.
+- **Minimale Naht:** pure `RespawnContextPolicy` plus `contextSnapshotProvider`- und Launcher-Closures; H1/H2 und argv-/Environment-Capture.
+
+### R4-GPTS-01 — GPT-Update verlangt eine unabhängige Vertrauenswurzel `[W1, GPT-Ship-Blocker, rot]`
+
+- **Given:** Byte-Fixtures für Artefakt mit gültiger Signatur eines fest konfigurierten Publisher-Schlüssels, manipuliertes Artefakt mit passend manipuliertem Hash aus demselben Release, falschen Signaturschlüssel und nicht gepinntes `latest`. Download- und Install-Sinks sind lokal; kein Netzlauf.
+- **When:** Updateprüfung und Installation gegen jede Fixture laufen.
+- **Then:** Nur ein Artefakt, dessen Signatur oder gepinnter Digest gegen eine unabhängig konfigurierte Vertrauenswurzel verifiziert, erreicht den atomaren Installer. Payload und Hash aus derselben veränderbaren Release-Quelle genügen nie.
+- **Negativfall/Persistenz:** Bei fehlender, falscher oder widerrufener Vertrauensevidenz bleiben bestehendes Binary, Versionsmarker und Settings bytegleich; temporäre Downloads werden entfernt und kein Erfolg publiziert.
+- **Minimale Naht:** purer `UpdateArtifactVerifier` mit fixem Key-/Digest-Fixture sowie Download- und Atomic-Install-Closures; H1, keine generische Updateplattform.
+
+### R4-GPTL-02 / R4-LIFE-01 — GPT-Tasks sind generationen-, cancellation- und quit-gebunden `[W1, GPT-Ship-Blocker, rot]`
+
+- **Given:** Setup/Refresh G1 wird hinter `ManualGate` gehalten. Danach deaktiviert ein Preference-Wechsel G1 und erzeugt G2; zweite Tabelle startet während G1 den Quit-Drain. Task-Handles, Lifecycle-Sink und der gemeinsame Ensure-/Stop-Serializer werden aufgezeichnet.
+- **When:** Das ignorierte oder verspätete G1-Resultat nach Cancellation beziehungsweise Quit freigegeben wird.
+- **Then:** Nur die aktuell aktive Generation darf UI-/Manager-State publizieren oder ein Binary installieren. Deaktivieren und Quit canceln offene Arbeit; Stop läuft über dieselbe serialisierte Lifecycle-Barriere wie Ensure/Refresh, und Quit antwortet erst nach deren finalem Drain.
+- **Negativfall/Persistenz:** G1 darf nach G2 oder Quit weder Status zurückschreiben noch einen Proxy neu starten. Keine Installation, Preference-Mutation oder Erfolgsanzeige aus einer stale/cancelled Generation; temporäre Artefakte werden bereinigt.
+- **Minimale Naht:** lokale `setupTaskFactory`-/`refreshTaskFactory`-Closures mit cancelbarem Handle, Generation-Token, `lifecycleSink` und gemeinsamer serialisierter Ensure-/Stop-Closure; H2 statt globalem Task-Scheduler.
+
+### R4-PLUG-01 — Secret-verdächtige Plugin-Konfiguration erreicht argv nie `[W1, rot]`
+
+- **Given:** Tabellenfixture mit zulässigen Plugin-`key=value`-Zeilen und Canaries für `token`, `password`, `secret`, `api_key`, `authorization`, Cookie-/Credential-Pfade sowie gemischte Groß-/Kleinschreibung. H3a zeichnet executable und argv auf.
+- **When:** Settings-Parser und `ClaudePluginCLI` daraus eine Operation bauen.
+- **Then:** Zulässige Werte werden kanonisch serialisiert; jede secret-verdächtige Zeile wird vor argv-Bau mit feldbezogenem Fehler abgelehnt. Die Prüfung arbeitet auf dem geparsten Key, nicht auf einem nachträglichen Log-Redact.
+- **Negativfall/Persistenz:** Kein Canary erscheint in argv, Prozessliste, Fehlertext oder Diagnose; bei einem Treffer startet kein Prozess und Plugin-/Workspace-State bleibt unverändert.
+- **Minimale Naht:** pure `PluginConfigArgumentPolicy` vor dem vorhandenen Argument-Builder plus H3a-Argumentcapture; keine universelle Secret-Engine.
+
+### R4-HCLI-02 / R4-PLUG-02 — Prozessbaum und beide Streams sind vor Abschluss final `[W1, rot]`
+
+- **Given:** H3b simuliert ein Child, das einen Descendant mit offenen stdout/stderr-Handles erzeugt. Tabellenfälle: Parent beendet sich vor EOF, Timeout mit kooperativem TERM und Timeout mit TERM-resistentem Descendant. `ManualClock`/H2 steuern TERM→KILL-Frist und Stream-EOF; eine zweite Plugin-Operation wartet im Serializer.
+- **When:** Headless-Timeout beziehungsweise normaler Exit verarbeitet wird.
+- **Then:** Timeout signalisiert die gesamte Prozessgruppe, wartet bis zur manuellen Frist und eskaliert verbleibende Prozesse mit KILL. Abschluss und Serializer-Freigabe erfolgen erst nach Child-Exit **und** EOF beider Streams; erst danach darf Operation 2 starten.
+- **Negativfall/Persistenz:** Parent-Exit allein und `forceFinish` ohne EOF sind kein Abschluss. Partielle Ausgabe wird nicht als Erfolg persistiert, Operation 2 überlappt den lebenden Prozessbaum nicht und keine Plugin-State-Mutation erfolgt vor Finalität.
+- **Minimale Naht:** H3b (`ControllableChildProcess` plus Launcher-Closure) mit Prozessgruppen-Ziel, Exit- und getrennten EOF-Callbacks; H2, keine Shell-Abstraktion.
+
+### R4-SHELL-01 — Statusline interpretiert Nutzdaten nie als Shell-/Terminalsteuerung `[W1, rot]`
+
+- **Given:** Statusline-Fixtures enthalten Backslash-Sequenzen (`\\c`, `\\n`), ANSI/ESC, Tabs, Zeilenumbrüche und Shell-Metazeichen in Modell-, Repo-, MCP- und Profildaten. Fake-PATH und Environment machen den Skriptlauf deterministisch.
+- **When:** Das reale Statusline-Skript einmal über H3a ausgeführt wird.
+- **Then:** Nutzdaten werden nach definierter Steuerzeichenbereinigung ausschließlich als Daten per `printf '%s'` ausgegeben; nur template-eigene ANSI-Sequenzen dürfen Struktur/Farbe erzeugen. Erwartete stdout-Bytes sind als Goldenfixture exakt vergleichbar.
+- **Negativfall/Persistenz:** Canaries können Ausgabe weder abbrechen noch zusätzliche Zeilen/Farben/Befehle einschleusen; stderr enthält keine Secrets. Der Skriptlauf persistiert nichts und verändert keine Eingabedatei.
+- **Minimale Naht:** H1/H3a mit Fake-PATH und bytegenauer stdout-/stderr-Erfassung; keine Produktabstraktion um das Shellskript.
+
+### R4-INSTALL-01 / R4-AS-01 — Vollsnapshot-Schreiber verlieren keine externen Updates `[W1, rot]`
+
+- **Given:** Dieselbe Tabellenfixture läuft gegen Statusline-Settings und Theme-Settings. Writer A liest S0; `ManualGate` lässt externen Writer B danach einen disjunkten Schlüssel beziehungsweise denselben verwalteten Schlüssel ändern. Dritter Fall liefert syntaktisch ungültiges JSON.
+- **When:** A seine verwalteten Änderungen committen will.
+- **Then:** Lock/CAS erkennt die stale Revision; A liest neu und merged nur die eigenen verwalteten Pfade. Disjunkte B-Änderungen bleiben byte-/werttreu erhalten; Konflikte am selben verwalteten Pfad werden nach deklarierter Policy erneut gelesen oder sichtbar abgelehnt, nie blind überschrieben.
+- **Negativfall/Persistenz:** Kein atomarer Replace auf Basis von S0 nach B, kein Lost Update und kein Ersatz syntaktisch ungültiger Daten. Bei abgelehntem Konflikt bleibt Bs Datei bytegleich; temporäre Dateien werden bereinigt.
+- **Minimale Naht:** kleine `SettingsFileRepository`-Closure-Menge `readWithRevision`/`compareAndSwap` beziehungsweise Lock+Re-Read, H1/H2 und `ManualGate`; derselbe Contract-Harness für beide Writer.
+
+### R4-SKILL-01 — Skill-Update respektiert Ownership und ist wiederherstellbar `[W1, rot]`
+
+- **Given:** H1 enthält (a) fremde Datei unter einem verwalteten Skillnamen ohne Ownership-Marker, (b) eindeutig verwaltete Altversion mit Marker und (c) verwaltete Datei, deren Backup- oder Atomic-Replace-Schritt injiziert fehlschlägt.
+- **When:** Exporter beziehungsweise Settings-Seite einen Skill aktualisiert.
+- **Then:** Fremddatei wird mit sichtbarem Ownership-Konflikt abgelehnt. Nur markierte eigene Dateien werden nach erfolgreichem Backup atomar ersetzt; Marker und Backup referenzieren die ersetzte Version. Fehler nach Backup restauriert die alten Bytes.
+- **Negativfall/Persistenz:** Kein Byte einer Fremddatei wird überschrieben oder gelöscht; ohne erfolgreiches Backup kein Replace. Nach jedem Fehler existiert entweder die vollständige Altversion oder die vollständige neue Version, nie ein Teilstand.
+- **Minimale Naht:** H1 plus lokale `readOwnership`-, `backup`, `atomicReplace`-Closures mit Failure Injection; kein globaler Dateisystem-Wrapper.
+
+### R4-SCHEMA-01 — Future-Schema bleibt read-only; bekannte Migration erhält `contextProfileID` `[W0 Oracle/W1 Fix, rot]`
+
+- **Given:** Goldenfiles für aktuelle Version, bekannte Altversion und Future-Version enthalten jeweils `contextProfileID` sowie unbekannte Future-Felder. H1 zeichnet Eingangs- und Ausgangsbytes auf.
+- **When:** Workspace-Load, Normalisierung und anschließender Save-Impuls laufen.
+- **Then:** Bekannte Altversion migriert genau auf die aktuelle Version und bewahrt `contextProfileID`; aktuelle Daten bleiben semantisch stabil. Future-Version wird als unsupported/read-only gemeldet und nie auf Version 1 normalisiert.
+- **Negativfall/Persistenz:** Future-Bytes bleiben auch bei Load-Reconcile und späterem Flush exakt unverändert; unbekannte Felder werden nicht durch Decode/Encode vernichtet. Eine fehlgeschlagene bekannte Migration ersetzt die Quelldatei nicht.
+- **Minimale Naht:** H1, purer Decoder/Migrator mit explizitem `supportedSchemaVersion` und Repository-Save-Spy; kein kompletter App-Store.
+
+### R4-CTRL-01 — Prompt kann Bracketed Paste nicht vorzeitig schließen `[W1, rot]`
+
+- **Given:** Byte-Fixtures für normalen mehrzeiligen Prompt sowie Prompts mit ESC, unzulässigen C0/C1-Steuerbytes (ausgenommen die explizit erlaubten Tabs/Zeilenumbrüche) und eingebetteter Bracketed-Paste-Endsequenz. Ein Terminal-Sink zeichnet alle geschriebenen Bytes und Submit-Aufrufe auf.
+- **When:** `sendPrompt` den puren `BracketedPasteEncoder` vor dem ersten Terminalwrite aufruft.
+- **Then:** Normaler Text erzeugt genau einen balancierten Paste-Block und danach genau einen Submit. Jeder Prompt mit unzulässiger Terminalsteuerung oder Paste-Delimiter wird vor dem Write feldbezogen abgelehnt; sichtbare Nutzzeichen, Tabs und zulässige Zeilenumbrüche bleiben unverändert.
+- **Negativfall/Persistenz:** Abgelehnte Eingabe schreibt null Bytes, sendet keinen Return und kann keinen zweiten Befehl auslösen. Workspace, Terminal-ID und Audit-State bleiben unverändert; Diagnose enthält keine vollständige Promptkopie.
+- **Minimale Naht:** purer `BracketedPasteEncoder: String -> Result<Data, Error>` plus vorhandene Terminal-Byte-/Submit-Closures; kein SwiftTerm-Harness.
+
+### R4-CTRL-02 — Ziel-FIFO und bestätigtes Submit liegen vor `ack: delivered` `[W1, rot]`
+
+- **Given:** Zwei Sends A/B an dasselbe Terminal und C an ein anderes. `ManualGate` hält A nach dem Paste-Write vor dem bestätigten Submit; zweite Tabelle lässt Write oder Submit fehlschlagen. Ack- und Sink-Spies zeichnen Reihenfolge auf.
+- **When:** Requests parallel durch den Control-Handler laufen.
+- **Then:** Pro Terminalziel gilt FIFO: B erreicht den Sink erst nach As bestätigtem Submit. `delivered` wird erst nach vollständig erfolgreichem Paste **und** Submit emittiert; C darf unabhängig fortschreiten.
+- **Negativfall/Persistenz:** Ein zeitgesteuerter Return ohne Bestätigung, Write-/Submit-Fehler oder Connection-Cancel erzeugt kein `delivered`. B überholt A nie; Fehler mutieren weder Workspace noch Row und hinterlassen keinen falschen Idempotenz-Erfolg.
+- **Minimale Naht:** zielbezogener `SendSerializer` plus asynchrone `sendAndSubmit`- und Ack-Closures; H2/`ManualGate`, kein echter Socket oder Terminal.
+
+### R4-RESUME-01 — Fehlgeschlagener View-Resume verriegelt keinen zweiten Versuch `[W1, Fix erfüllt; manuelle QA offen]`
+
+- **Automatisierungsentscheid:** Kein automatisiertes Oracle: `focusLaunchInFlight` ist reiner SwiftUI-View-State ohne minimale verhaltensneutrale Testnaht. Der Fix `3db6d4d` setzt den Guard auf beiden Launch-Fehlerpfaden zurück; hierfür wird kein Produktionsharness nur zum Testen eingeführt.
+- **Erledigte manuelle QA-Verifikation:** `whisperm8 chats resume` auf eine Session mit gelöschtem Transcript auslösen; die Fehlermeldung abwarten und denselben Resume ein zweites Mal auslösen.
+- **Pass/Negativfall/Persistenz:** Der zweite Versuch feuert erneut und zeigt wieder den echten Launchfehler; kein dauerhaft gesperrter Tab, kein Geisterterminal und keine Row-/UI-Sidecar-Persistenz aus dem Fehlversuch. Dieser Punkt bleibt bis zur gebündelten `make dev`-QA offen, ist aber als Test-Spec bewusst abgeschlossen.
+
 ## 2.5 Erledigte Phase-0-Charakterisierungen
 
 Diese Gates sind bereits grün und bleiben als W1-Regressionsschutz verlinkt; sie werden nicht erneut als rote Arbeit ausgegeben.
@@ -470,11 +574,12 @@ Diese Gates sind bereits grün und bleiben als W1-Regressionsschutz verlinkt; si
 ## 3. Empfohlene Einführungsreihenfolge
 
 1. **Nähte verhaltensneutral:** H1/H2, H3a/H3b, H6a/H6b und H10a/H10b nur dort extrahieren, wo ein konkreter Test sie braucht. Kein God-Spy und keine Soll-Semantik im Seam-Change.
-2. **W0-Charakterisierung grün:** A01, A03–A06 und die bestehenden Coordinator-Statusfälle. A02/A02-S01–S08, C07-1–C07-6 sowie die beiden WAIT-Oracles zunächst rot materialisieren; keine Identitätsimplementierung vor beobachtetem Rot.
-3. **Bereits erfüllte Gates festhalten:** R4-AS-11, B19-Teilabdeckung, B21, B22-Teilabdeckung und Phase-0-Charakterisierungen bleiben grün.
+2. **W0-Charakterisierung und Oracles:** A01, A03–A06 und die bestehenden Coordinator-Statusfälle bleiben grün. A02/A02-S01–S08, C07-1–C07-6, R4-SCHEMA-01 sowie die beiden WAIT-Oracles zunächst rot materialisieren; keine Identitäts-/Schemaimplementierung vor beobachtetem Rot.
+3. **Bereits erfüllte Gates festhalten:** R4-AS-11, B19-Teilabdeckung, B21, B22-Teilabdeckung, R4-RESUME-01 mit dokumentierter View-QA und Phase-0-Charakterisierungen bleiben grün beziehungsweise explizit manuell gegatet.
 4. **W1 Crash/Datenverlust einzeln:** B01–B05, B07/B08, B10/B11 und B15. Kein Sammel-Fix ohne jeweils beobachtetes Rot→Grün.
-5. **W1 fehlende Pakete einzeln:** B18 Environment, B19 Rest-Oracles, B20 Stale-Apply und B22 Profilisolation in getrennten Changes; B21 benötigt keinen erneuten Produktfix.
-6. **Runde-4-Aktivschaden:** R4-AUTH-01 vor R4-AUTH-02, danach R4-IDEM-01, R4-WAIT-01/02 und R4-PROF-01. Jeder Fix bewahrt die vorherigen roten und grünen Oracles.
-7. **W2/W3 separat:** Erst nach dem W0/W1-Gate B06, B09, B12–B14 beziehungsweise B16/B17 umsetzen; sie zählen nicht zur Freigabe von W0/W1.
+5. **W1 Basis-Pakete einzeln:** B18/R4-CP-05 Environment, B19 Rest-Oracles, B20 Stale-Apply, B22 Profilisolation, R4-CP-02/03, R4-INSTALL-01/R4-AS-01, R4-SKILL-01 und R4-SCHEMA-01. B21 benötigt keinen erneuten Produktfix.
+6. **Runde-4-Control/Prozess/Shell:** R4-AUTH-01 vor R4-AUTH-02, danach R4-IDEM-01, R4-CTRL-01/02, R4-HCLI-02/R4-PLUG-02, R4-PLUG-01, R4-SHELL-01, R4-WAIT-01/02 und R4-PROF-01. Jeder Fix bewahrt die vorherigen roten und grünen Oracles.
+7. **GPT-Ship-Blocker:** R4-GPTS-01 vor R4-GPTL-02/R4-LIFE-01; Update-Vertrauen ist Voraussetzung, Generation/Cancellation/Quit bilden danach einen gemeinsamen Lifecycle-Contract.
+8. **W2/W3 separat:** Erst nach dem W0/W1-Gate B06, B09, B12–B14 beziehungsweise B16/B17 umsetzen; sie zählen nicht zur Freigabe von W0/W1.
 
 Die Reihenfolge priorisiert atomare Identität, Security/Datenhoheit und aktiven Datenverlust. Jeder zeitliche Vertrag läuft über ManualClock/Scheduler/Gate; jeder negative Claim-, Auth- oder Stale-Fall weist explizit nach, dass keine fachliche Row-Persistenzmutation erfolgt.
