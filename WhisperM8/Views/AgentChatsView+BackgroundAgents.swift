@@ -84,6 +84,7 @@ extension AgentChatsView {
 
         // 3. Spawn via BackgroundAgentSpawner.
         let extraArgs = AgentCommandBuilder.parseArguments(AppPreferences.shared.claudeExtraArguments)
+        let routerEnvironment = AgentCommandBuilder().gptRouterCoreEnvironment() ?? [:]
         do {
             let result = try await BackgroundAgentSpawner.spawn(
                 initialPrompt: request.prompt,
@@ -91,7 +92,8 @@ extension AgentChatsView {
                 settingsFilePath: settingsPath,
                 subAgent: request.subAgent,
                 permissionMode: request.permissionMode,
-                extraArguments: extraArgs
+                extraArguments: extraArgs,
+                environmentOverrides: routerEnvironment
             )
             // 4. Short-ID persistieren + Hook-Tracking starten + Attach triggern.
             try store.setBackgroundShortID(localSessionID: session.id, shortID: result.shortID)

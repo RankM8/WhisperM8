@@ -137,6 +137,7 @@ enum BackgroundAgentLifecycle {
                 executable: executable,
                 arguments: ["logs", trimmed],
                 workingDirectory: FileManager.default.currentDirectoryPath,
+                environmentOverrides: [:],
                 timeout: timeout
             )
             return classifyHealthCheck(exitCode: runResult.exitCode, stderr: runResult.stderr)
@@ -168,6 +169,7 @@ enum BackgroundAgentLifecycle {
                 executable: executable,
                 arguments: arguments,
                 workingDirectory: FileManager.default.currentDirectoryPath,
+                environmentOverrides: [:],
                 timeout: timeout
             )
         } catch let error as BackgroundAgentSpawner.SpawnError {

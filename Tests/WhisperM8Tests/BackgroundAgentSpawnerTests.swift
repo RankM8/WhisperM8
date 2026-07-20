@@ -119,6 +119,28 @@ final class BackgroundAgentSpawnerTests: XCTestCase {
         XCTAssertEqual(runner.recordedExecutable, "/usr/local/bin/claude")
     }
 
+    func testSpawnPassesEnvironmentOverridesToRunnerUnchanged() async throws {
+        let runner = MockProcessRunner(result: ProcessRunResult(
+            exitCode: 0,
+            stdout: "backgrounded · cafebabe\n",
+            stderr: ""
+        ))
+        let environmentOverrides = [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+        ]
+
+        _ = try await BackgroundAgentSpawner.spawn(
+            initialPrompt: "route this",
+            projectPath: FileManager.default.temporaryDirectory.path,
+            environmentOverrides: environmentOverrides,
+            commandResolver: { _ in "/usr/local/bin/claude" },
+            processRunner: runner
+        )
+
+        XCTAssertEqual(runner.recordedEnvironmentOverrides, environmentOverrides)
+    }
+
     func testSpawnPassesSubAgentAndPermissionMode() async throws {
         let runner = MockProcessRunner(result: ProcessRunResult(
             exitCode: 0,
@@ -226,6 +248,7 @@ private final class MockProcessRunner: ProcessRunner, @unchecked Sendable {
     private(set) var recordedExecutable: String = ""
     private(set) var recordedArguments: [String] = []
     private(set) var recordedWorkingDirectory: String = ""
+    private(set) var recordedEnvironmentOverrides: [String: String] = [:]
 
     init(result: ProcessRunResult) {
         self.result = result
@@ -235,11 +258,13 @@ private final class MockProcessRunner: ProcessRunner, @unchecked Sendable {
         executable: String,
         arguments: [String],
         workingDirectory: String,
+        environmentOverrides: [String: String],
         timeout: TimeInterval
     ) async throws -> ProcessRunResult {
         self.recordedExecutable = executable
         self.recordedArguments = arguments
         self.recordedWorkingDirectory = workingDirectory
+        self.recordedEnvironmentOverrides = environmentOverrides
         return result
     }
 }

@@ -174,6 +174,37 @@ struct AgentCommandBuilder {
         return result
     }
 
+    /// Router-Kern-Env fuer jede Claude-Session bei aktivem GPT-Backend.
+    /// Background-Spawns brauchen dieselben Werte bereits vor dem spaeteren
+    /// Attach, deshalb ist der session-unabhaengige Teil separat abrufbar.
+    func gptRouterCoreEnvironment() -> [String: String]? {
+        guard gptBackendEnabledResolver() else { return nil }
+
+        let fastModeEnabled = gptFastModeEnabledResolver()
+        let pickerModel = gptDefaultModelResolver()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedPickerModel = pickerModel.isEmpty
+            ? AppPreferences.claudeGPTCanonicalModel
+            : pickerModel
+        var environment = [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:\(gptRouterPortResolver())",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": ClaudeGPTModelAlias.effectiveModel(
+                resolvedPickerModel,
+                fastEnabled: fastModeEnabled
+            ),
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+        ]
+        let subagentModel = gptSubagentModelResolver()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !subagentModel.isEmpty {
+            environment["CLAUDE_CODE_SUBAGENT_MODEL"] = ClaudeGPTModelAlias.effectiveModel(
+                subagentModel,
+                fastEnabled: fastModeEnabled
+            )
+        }
+        return environment
+    }
+
     /// Zusaetzliche CLI-Argumente, die VOR den session-spezifischen Args
     /// eingefuegt werden — z. B. `--settings <path>` fuer die Hook-Bridge
     /// (Phase 5). `nil` wenn kein zusaetzlicher Inject gewuenscht ist.
@@ -312,32 +343,11 @@ struct AgentCommandBuilder {
         // konfigurierte GPT-Subagents verwenden.
         let applyRouterEnvironment: ([String: String], Bool) -> [String: String] = {
             baseEnvironment, includesGPTTuning in
-            guard routerEnabled else { return baseEnvironment }
-
-            var environment = baseEnvironment
-            environment["ANTHROPIC_BASE_URL"] = "http://127.0.0.1:\(gptRouterPortResolver())"
-            // GPT ist in JEDER Router-Session als /model-Picker-Option
-            // registriert — waehlbar, ohne Standard zu sein. Effort-Steuerung
-            // ist immer aktiv, damit GPT-Modelle mit High-Thinking laufen
-            // (das Level selbst kommt aus der Claude-Code-Einstellung).
-            let pickerModel = gptDefaultModelResolver()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedPickerModel = pickerModel.isEmpty
-                ? AppPreferences.claudeGPTCanonicalModel
-                : pickerModel
-            environment["ANTHROPIC_CUSTOM_MODEL_OPTION"] = ClaudeGPTModelAlias.effectiveModel(
-                resolvedPickerModel,
-                fastEnabled: fastModeEnabled
-            )
-            environment["CLAUDE_CODE_ALWAYS_ENABLE_EFFORT"] = "1"
-            let subagentModel = gptSubagentModelResolver()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !subagentModel.isEmpty {
-                environment["CLAUDE_CODE_SUBAGENT_MODEL"] = ClaudeGPTModelAlias.effectiveModel(
-                    subagentModel,
-                    fastEnabled: fastModeEnabled
-                )
+            guard let routerEnvironment = gptRouterCoreEnvironment() else {
+                return baseEnvironment
             }
+
+            var environment = baseEnvironment.merging(routerEnvironment) { _, router in router }
             if includesGPTTuning {
                 environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "gpt-5.4-mini"
                 environment["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"] = "3"

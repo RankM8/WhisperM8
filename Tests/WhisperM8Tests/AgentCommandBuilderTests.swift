@@ -399,6 +399,60 @@ final class AgentCommandBuilderTests: XCTestCase {
 // MARK: - Claude-GPT-Backend
 
 extension AgentCommandBuilderTests {
+    func testGPTRouterCoreEnvironmentReturnsNilWhenBackendIsDisabled() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { false }
+        builder.gptFastModeEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 19_001 }
+        builder.gptDefaultModelResolver = { "gpt-5.6-terra" }
+        builder.gptSubagentModelResolver = { "gpt-5.6-luna" }
+
+        XCTAssertNil(builder.gptRouterCoreEnvironment())
+    }
+
+    func testGPTRouterCoreEnvironmentUsesCanonicalFastPickerModel() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 19_002 }
+        builder.gptDefaultModelResolver = { "" }
+        builder.gptSubagentModelResolver = { "" }
+
+        XCTAssertEqual(builder.gptRouterCoreEnvironment(), [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+        ])
+    }
+
+    func testGPTRouterCoreEnvironmentKeepsModelsPlainWhenFastModeIsDisabled() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { false }
+        builder.gptRouterPortResolver = { 19_003 }
+        builder.gptDefaultModelResolver = { "gpt-5.6-terra" }
+        builder.gptSubagentModelResolver = { "" }
+
+        XCTAssertEqual(
+            builder.gptRouterCoreEnvironment()?["ANTHROPIC_CUSTOM_MODEL_OPTION"],
+            "gpt-5.6-terra"
+        )
+    }
+
+    func testGPTRouterCoreEnvironmentAddsFastSubagentModel() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 19_004 }
+        builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
+        builder.gptSubagentModelResolver = { "  gpt-5.6-luna  " }
+
+        XCTAssertEqual(
+            builder.gptRouterCoreEnvironment()?["CLAUDE_CODE_SUBAGENT_MODEL"],
+            "gpt-5.6-luna-fast"
+        )
+    }
+
     func testClaudeGPTRouterWithoutSessionStampKeepsArgumentsAndAddsRouterEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })

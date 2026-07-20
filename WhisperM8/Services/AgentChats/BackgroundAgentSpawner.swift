@@ -72,6 +72,7 @@ enum BackgroundAgentSpawner {
     ///   - subAgent: optionaler Sub-Agent-Name fuer `--agent <name>`
     ///   - permissionMode: optionaler `--permission-mode <mode>`
     ///   - extraArguments: weitere CLI-Argumente (z. B. aus User-Preferences)
+    ///   - environmentOverrides: zusaetzliche Env-Werte fuer den Spawn-Prozess
     ///   - timeout: Zeit-Limit fuer den Spawn (default 30 s)
     ///   - commandResolver: erlaubt Tests, einen Fake-Claude-Pfad zu liefern
     ///   - processRunner: erlaubt Tests, den Process-Lauf zu mocken
@@ -82,6 +83,7 @@ enum BackgroundAgentSpawner {
         subAgent: String? = nil,
         permissionMode: String? = nil,
         extraArguments: [String] = [],
+        environmentOverrides: [String: String] = [:],
         timeout: TimeInterval = defaultTimeout,
         commandResolver: (String) -> String? = { AgentCommandBuilder.commandPath($0) },
         processRunner: ProcessRunner = DefaultProcessRunner()
@@ -108,6 +110,7 @@ enum BackgroundAgentSpawner {
                 executable: executable,
                 arguments: arguments,
                 workingDirectory: projectPath,
+                environmentOverrides: environmentOverrides,
                 timeout: timeout
             )
         } catch let error as SpawnError {
@@ -225,6 +228,7 @@ protocol ProcessRunner {
         executable: String,
         arguments: [String],
         workingDirectory: String,
+        environmentOverrides: [String: String],
         timeout: TimeInterval
     ) async throws -> ProcessRunResult
 }
@@ -236,6 +240,7 @@ struct DefaultProcessRunner: ProcessRunner {
         executable: String,
         arguments: [String],
         workingDirectory: String,
+        environmentOverrides: [String: String],
         timeout: TimeInterval
     ) async throws -> ProcessRunResult {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ProcessRunResult, Error>) in
@@ -255,6 +260,11 @@ struct DefaultProcessRunner: ProcessRunner {
             var env = LoginShellEnvironment.shared.processEnvironment()
             env["NO_COLOR"] = "1"
             env["CLICOLOR"] = "0"
+            // Router-Env muss schon beim Spawn gesetzt sein: Der Supervisor-
+            // Daemon hostet die Session, und ein spaeteres Attach kann ihr Env
+            // nicht mehr aendern. Ein bereits laufender Daemon kann Claude-
+            // intern allerdings noch mit seinem alten Env weiterleben.
+            env.merge(environmentOverrides) { _, override in override }
             process.environment = env
 
             let stdoutPipe = Pipe()

@@ -255,6 +255,7 @@ private final class SpyProcessRunner: ProcessRunner, @unchecked Sendable {
         executable: String,
         arguments: [String],
         workingDirectory: String,
+        environmentOverrides: [String: String],
         timeout: TimeInterval
     ) async throws -> ProcessRunResult {
         callCount += 1
