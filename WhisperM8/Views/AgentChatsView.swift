@@ -2584,16 +2584,23 @@ struct AgentChatsView: View {
             let color = session.claudeProfileName == nil
                 ? AgentTheme.textTertiary
                 : AgentTheme.statusAwaiting
-            kindBadge(profileName, color: color)
+            kindBadge(profileName, color: color, maximumTextWidth: 88)
                 .help("Claude-Account-Profil dieser Session")
         }
     }
 
     @ViewBuilder
-    private func kindBadge(_ text: String, color: Color) -> some View {
+    private func kindBadge(
+        _ text: String,
+        color: Color,
+        maximumTextWidth: CGFloat? = nil
+    ) -> some View {
         Text(text)
             .font(.system(size: 8, weight: .bold))
             .tracking(0.04)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: maximumTextWidth)
             .foregroundStyle(color)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
@@ -2601,7 +2608,7 @@ struct AgentChatsView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.30), lineWidth: 0.5)
             )
-            .fixedSize()
+            .fixedSize(horizontal: maximumTextWidth == nil, vertical: true)
     }
 
     /// „＋ Claude" / „＋ Codex" — öffnet direkt einen neuen Tab mit diesem

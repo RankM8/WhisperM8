@@ -19,8 +19,17 @@ fi
 # Pro aufgelöstem Task genau eine JSONL-Zeile ausgeben. Die Beschreibung wird
 # gegen die nutzbare Zeilenbreite gekürzt; ANSI-Sequenzen zählen dabei nicht.
 printf '%s\n' "$input" | jq -c '
+    def sanitize_text:
+        tostring
+        | explode
+        | map(if . == 10 then 32
+              elif (. < 32 or (. >= 127 and . <= 159)) then empty
+              else .
+              end)
+        | implode;
     def nonempty($value):
-        ($value // "") as $text | if ($text | length) > 0 then $text else empty end;
+        (($value // "") | sanitize_text) as $text
+        | if ($text | length) > 0 then $text else empty end;
     def rounded_k($value): (($value / 1000) | round | tostring) + "k";
     def shorten($text; $available):
         if $available <= 0 then ""
@@ -37,9 +46,11 @@ printf '%s\n' "$input" | jq -c '
     | .tasks[]
     | select(has("model") and (.model | type == "string") and (.model | length) > 0)
     | . as $task
-    | (nonempty($task.name) // nonempty($task.label) // $task.id // "subagent") as $name
-    | ($task.model | sub("^claude-"; "")) as $short_model
-    | (if ($task.model | startswith("gpt-")) then "[36m" else "[35m" end) as $model_color
+    | (nonempty($task.name) // nonempty($task.label) // nonempty($task.id) // "subagent") as $name
+    | ($task.model | sanitize_text) as $safe_model
+    | select(($safe_model | length) > 0)
+    | ($safe_model | sub("^claude-"; "")) as $short_model
+    | (if ($safe_model | startswith("gpt-")) then "[36m" else "[35m" end) as $model_color
     | (if (($task.tokenCount | type) == "number" and ($task.contextWindowSize | type) == "number")
        then (rounded_k($task.tokenCount) + "/" + rounded_k($task.contextWindowSize))
        else ""
@@ -64,7 +75,7 @@ printf '%s\n' "$input" | jq -c '
        + $model_plain
        + (if $display_tokens == "" then "" else " " + $display_tokens end)) as $plain_fixed
     | (($columns - ($plain_fixed | length) - 1) | if . > 0 then . else 0 end) as $description_width
-    | shorten(($task.description // ""); $description_width) as $description
+    | shorten((($task.description // "") | sanitize_text); $description_width) as $description
     | ($display_name
        + (if $display_name == "" then "" else " " end)
        + (if $use_brackets then "[2m[[0m" else "" end)

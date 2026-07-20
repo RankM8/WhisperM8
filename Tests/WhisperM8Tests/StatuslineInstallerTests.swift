@@ -412,4 +412,151 @@ final class StatuslineInstallerTests: XCTestCase {
         )
         XCTAssertEqual(installer.wiredSettingsCount(), 1)
     }
+
+    // MARK: Terminal-Steuerzeichen
+
+    func testMainStatuslineSanitizesExternalTerminalSequences() throws {
+        let escape = String(UnicodeScalar(0x1B)!)
+        let bell = String(UnicodeScalar(0x07)!)
+        let payload = "SAFE\\n\(escape)]52;c;Y29waWVk\(bell)END\\cTAIL"
+        let input: [String: Any] = [
+            "model": ["display_name": payload],
+            "cost": ["total_cost_usd": 0],
+            "context_window": ["current_usage": NSNull()],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-statusline.sh",
+            input: input
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains(#"SAFE\n"#), text)
+        XCTAssertTrue(text.contains(#"END\cTAIL"#), text)
+        assertContainsOnlyFixedANSIControls(output, allowsTrailingLineFeed: true)
+    }
+
+    func testSubagentStatuslineSanitizesTaskTerminalSequences() throws {
+        let escape = String(UnicodeScalar(0x1B)!)
+        let bell = String(UnicodeScalar(0x07)!)
+        let payload = "SAFE\\n\(escape)]52;c;Y29waWVk\(bell)END\\cTAIL"
+        let input: [String: Any] = [
+            "columns": 200,
+            "tasks": [[
+                "id": "task-1",
+                "name": "worker",
+                "model": "claude-sonnet-5",
+                "description": payload,
+            ]],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledSubagentScript(),
+            named: "subagent-statusline.sh",
+            input: input
+        )
+        let line = try XCTUnwrap(String(data: output, encoding: .utf8)?.split(separator: "\n").first)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+        )
+        let content = try XCTUnwrap(object["content"] as? String)
+
+        XCTAssertTrue(content.contains(#"SAFE\n"#), content)
+        XCTAssertTrue(content.contains(#"END\cTAIL"#), content)
+        assertContainsOnlyFixedANSIControls(
+            Data(content.utf8),
+            allowsTrailingLineFeed: false
+        )
+    }
+
+    private func runStatuslineScript(
+        _ script: String,
+        named fileName: String,
+        input: [String: Any]
+    ) throws -> Data {
+        let scriptURL = tempHome.appendingPathComponent(fileName)
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: scriptURL.path
+        )
+
+        let temporaryDirectory = tempHome.appendingPathComponent("tmp", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [scriptURL.path]
+        process.currentDirectoryURL = tempHome
+        var environment = ProcessInfo.processInfo.environment
+        environment["HOME"] = tempHome.path
+        environment["TMPDIR"] = temporaryDirectory.path + "/"
+        environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
+        process.environment = environment
+
+        let standardInput = Pipe()
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        process.standardInput = standardInput
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        try process.run()
+        standardInput.fileHandleForWriting.write(try JSONSerialization.data(withJSONObject: input))
+        try standardInput.fileHandleForWriting.close()
+        process.waitUntilExit()
+
+        let output = standardOutput.fileHandleForReading.readDataToEndOfFile()
+        let error = standardError.fileHandleForReading.readDataToEndOfFile()
+        XCTAssertEqual(
+            process.terminationStatus,
+            0,
+            String(decoding: error, as: UTF8.self)
+        )
+        return output
+    }
+
+    private func assertContainsOnlyFixedANSIControls(
+        _ data: Data,
+        allowsTrailingLineFeed: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let bytes = Array(data)
+        var index = 0
+        while index < bytes.count {
+            let byte = bytes[index]
+            if byte == 0x1B {
+                var end = index + 2
+                guard index + 2 < bytes.count, bytes[index + 1] == 0x5B else {
+                    return XCTFail("Unerlaubte ESC-Sequenz bei Byte \(index)", file: file, line: line)
+                }
+                while end < bytes.count,
+                      (bytes[end] == 0x3B || (0x30...0x39).contains(bytes[end])) {
+                    end += 1
+                }
+                guard end < bytes.count, bytes[end] == 0x6D else {
+                    return XCTFail("Unerlaubte ANSI-Sequenz bei Byte \(index)", file: file, line: line)
+                }
+                index = end + 1
+                continue
+            }
+            if byte == 0x0A, allowsTrailingLineFeed, index == bytes.count - 1 {
+                index += 1
+                continue
+            }
+            if byte < 0x20 || byte == 0x7F {
+                return XCTFail("Unerlaubtes Steuerbyte 0x\(String(byte, radix: 16))", file: file, line: line)
+            }
+            if byte == 0xC2, index + 1 < bytes.count, (0x80...0x9F).contains(bytes[index + 1]) {
+                return XCTFail("Unerlaubtes C1-Steuerzeichen bei Byte \(index)", file: file, line: line)
+            }
+            index += 1
+        }
+    }
 }

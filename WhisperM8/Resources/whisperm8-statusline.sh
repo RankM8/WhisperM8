@@ -16,6 +16,20 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 0
 fi
 
+# Feste ANSI-Sequenzen werden getrennt von Nutzdaten aufgebaut. Externe Texte
+# verlieren C0-/C1-Steuerzeichen; Zeilenumbrüche werden zu Leerzeichen.
+ansi_escape=$'\033'
+sanitize_text() {
+    printf '%s' "${1-}" | jq -Rrs '
+        explode
+        | map(if . == 10 then 32
+              elif (. < 32 or (. >= 127 and . <= 159)) then empty
+              else .
+              end)
+        | implode
+    '
+}
+
 # ── Profil-Kontext (Account-Switcher via CLAUDE_CONFIG_DIR) ──────────────
 # Läuft die Session mit CLAUDE_CONFIG_DIR (Zusatz-Account), zeigen alle
 # account-bezogenen Teile (Usage-Limits, Profilname) DIESES Profil.
@@ -25,6 +39,7 @@ if [ -n "$CLAUDE_CONFIG_DIR" ]; then
 else
     ccs_profile="main"
 fi
+ccs_profile=$(sanitize_text "$ccs_profile")
 
 # ── Tuning ────────────────────────────────────────────────────────────────
 # Schwellenwert (% des vollen Fensters), ab dem Claude Code automatisch
@@ -33,7 +48,7 @@ COMPACT_AT=85
 # ──────────────────────────────────────────────────────────────────────────
 
 # Model Name
-model=$(echo "$input" | jq -r '.model.display_name // "Claude"')
+model=$(sanitize_text "$(printf '%s\n' "$input" | jq -r '.model.display_name // "Claude"')")
 
 # Projektname (Hauptrepo-Name, kein Pfad/Ordner)
 # --git-common-dir stellt sicher, dass auch Worktrees den echten Repo-Namen zeigen
@@ -52,17 +67,18 @@ if [ -n "$repo_root" ]; then
 else
     repo_name=$(basename "$(pwd)")
 fi
-repo_display="\033[1;35m${repo_name}\033[0m"  # Bold magenta
+repo_name=$(sanitize_text "$repo_name")
+repo_display="${ansi_escape}[1;35m${repo_name}${ansi_escape}[0m"  # Bold magenta
 
 # Git Branch — Format: (branch) statt git:(branch)
-branch=$(git --no-optional-locks branch --show-current 2>/dev/null || echo "")
+branch=$(sanitize_text "$(git --no-optional-locks branch --show-current 2>/dev/null || printf '')")
 if [ -n "$branch" ]; then
     if git --no-optional-locks diff --quiet 2>/dev/null && git --no-optional-locks diff --cached --quiet 2>/dev/null; then
         # Clean: (roter Branch)
-        branch_display="(\033[31m${branch}\033[0m)"
+        branch_display="(${ansi_escape}[31m${branch}${ansi_escape}[0m)"
     else
         # Dirty: (roter Branch) + gelbes ✗
-        branch_display="(\033[31m${branch}\033[0m) \033[33m✗\033[0m"
+        branch_display="(${ansi_escape}[31m${branch}${ansi_escape}[0m) ${ansi_escape}[33m✗${ansi_escape}[0m"
     fi
 else
     branch_display=""
@@ -79,14 +95,14 @@ if [ -n "$ahead_behind" ]; then
     fi
     if [ "$behind" -gt 0 ]; then
         # Orange wenn behind (sollte pullen)
-        ab_display="${ab_display}\033[33m↓${behind}\033[0m"
+        ab_display="${ab_display}${ansi_escape}[33m↓${behind}${ansi_escape}[0m"
     fi
 else
     ab_display=""
 fi
 
 # Kosten (LANG=C für korrektes Zahlenformat)
-cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
+cost=$(printf '%s\n' "$input" | jq -r '.cost.total_cost_usd // 0')
 cost_display=$(LANG=C awk -v c="$cost" 'BEGIN {printf "$%.2f", c}')
 
 # API Usage Limits - async Background-Fetch mit Cache
@@ -179,14 +195,14 @@ if [ -f "$usage_cache" ]; then
     if [ -n "$five_hour_util" ]; then
         hourly_pct=$(LANG=C awk -v u="$five_hour_util" 'BEGIN {printf "%.0f", u}')
         if [ "$hourly_pct" -ge 80 ]; then
-            hourly_color="\033[31m"  # Rot
+            hourly_color="${ansi_escape}[31m"  # Rot
         elif [ "$hourly_pct" -ge 50 ]; then
-            hourly_color="\033[33m"  # Orange
+            hourly_color="${ansi_escape}[33m"  # Orange
         else
             hourly_color=""
         fi
         if [ -n "$hourly_color" ]; then
-            hourly_display="${hourly_color}${hourly_pct}%\033[0m/5h"
+            hourly_display="${hourly_color}${hourly_pct}%${ansi_escape}[0m/5h"
         else
             hourly_display="${hourly_pct}%/5h"
         fi
@@ -213,14 +229,14 @@ if [ -f "$usage_cache" ]; then
         fi
 
         if [ "$weekly_pct" -ge 80 ]; then
-            weekly_color="\033[31m"  # Rot
+            weekly_color="${ansi_escape}[31m"  # Rot
         elif [ "$weekly_pct" -ge 50 ]; then
-            weekly_color="\033[33m"  # Orange
+            weekly_color="${ansi_escape}[33m"  # Orange
         else
             weekly_color=""
         fi
         if [ -n "$weekly_color" ]; then
-            weekly_display="${weekly_color}${weekly_pct}%\033[0m/w${weekly_reset}"
+            weekly_display="${weekly_color}${weekly_pct}%${ansi_escape}[0m/w${weekly_reset}"
         else
             weekly_display="${weekly_pct}%/w${weekly_reset}"
         fi
@@ -230,7 +246,7 @@ fi
 # Beide Usage-Limits bilden gemeinsam ein Segment.
 limits_display=""
 if [ -n "$hourly_display" ] && [ -n "$weekly_display" ]; then
-    limits_display="${hourly_display} \033[2m·\033[0m ${weekly_display}"
+    limits_display="${hourly_display} ${ansi_escape}[2m·${ansi_escape}[0m ${weekly_display}"
 elif [ -n "$hourly_display" ]; then
     limits_display="$hourly_display"
 elif [ -n "$weekly_display" ]; then
@@ -239,42 +255,42 @@ fi
 
 # MCP Server Information
 mcp_display=""
-mcp_servers=$(echo "$input" | jq -r '.mcp_servers // [] | length')
+mcp_servers=$(printf '%s\n' "$input" | jq -r '.mcp_servers // [] | length')
 if [ "$mcp_servers" -gt 0 ]; then
     # Build MCP display string with server names and context percentages
-    mcp_list=$(echo "$input" | jq -r '.mcp_servers // [] | map("\(.name):\(.context_percentage // 0)%") | join(" ")')
+    mcp_list=$(sanitize_text "$(printf '%s\n' "$input" | jq -r '.mcp_servers // [] | map("\(.name):\(.context_percentage // 0)%") | join(" ")')")
 
     # Calculate total MCP context usage
-    total_mcp_pct=$(echo "$input" | jq -r '[.mcp_servers // [] | .[].context_percentage // 0] | add // 0')
+    total_mcp_pct=$(printf '%s\n' "$input" | jq -r '[.mcp_servers // [] | .[].context_percentage // 0] | add // 0')
 
     # Color based on total usage
     if [ $(echo "$total_mcp_pct >= 50" | bc -l 2>/dev/null || echo 0) -eq 1 ]; then
-        mcp_color="\033[33m"  # Orange for high usage
+        mcp_color="${ansi_escape}[33m"  # Orange for high usage
     else
-        mcp_color="\033[36m"  # Cyan for normal
+        mcp_color="${ansi_escape}[36m"  # Cyan for normal
     fi
 
-    mcp_display="${mcp_color}MCP:${mcp_servers} ${mcp_list}\033[0m"
+    mcp_display="${mcp_color}MCP:${mcp_servers} ${mcp_list}${ansi_escape}[0m"
 fi
 
 # Effort Level
-effort_level=$(echo "$input" | jq -r '.effort.level // empty')
+effort_level=$(sanitize_text "$(printf '%s\n' "$input" | jq -r '.effort.level // empty')")
 if [ -n "$effort_level" ]; then
     case "$effort_level" in
         max|xhigh)
-            effort_color="\033[31m"  # Rot
+            effort_color="${ansi_escape}[31m"  # Rot
             ;;
         high)
-            effort_color="\033[33m"  # Orange
+            effort_color="${ansi_escape}[33m"  # Orange
             ;;
         medium)
-            effort_color="\033[32m"  # Grün
+            effort_color="${ansi_escape}[32m"  # Grün
             ;;
         *)
-            effort_color="\033[2m"   # Dim für low
+            effort_color="${ansi_escape}[2m"   # Dim für low
             ;;
     esac
-    effort_display="${effort_color}${effort_level}\033[0m"
+    effort_display="${effort_color}${effort_level}${ansi_escape}[0m"
 else
     effort_display=""
 fi
@@ -282,16 +298,16 @@ fi
 # Context: Rest bis Auto-Compact
 # Quelle: echte Token-Werte des Harness, gemessen gegen das Compact-Budget
 # (= COMPACT_AT % des vollen Fensters).
-reset="\033[0m"
-dim="\033[2m"
-usage=$(echo "$input" | jq '.context_window.current_usage')
+reset="${ansi_escape}[0m"
+dim="${ansi_escape}[2m"
+usage=$(printf '%s\n' "$input" | jq '.context_window.current_usage')
 if [ "$usage" = "null" ]; then
     remaining=100
     used_of_budget=0
     ctx_exact=""
 else
     current=$(echo "$usage" | jq '.input_tokens + .cache_creation_input_tokens + .cache_read_input_tokens')
-    size=$(echo "$input" | jq '.context_window.context_window_size')
+    size=$(printf '%s\n' "$input" | jq '.context_window.context_window_size')
     compact_budget=$((size * COMPACT_AT / 100))
     if [ "$compact_budget" -le 0 ]; then compact_budget=1; fi
     used_of_budget=$((current * 100 / compact_budget))
@@ -305,11 +321,11 @@ fi
 
 # Farbe basierend auf Verbrauch (viel verbraucht = Warnung)
 if [ $used_of_budget -ge 90 ]; then
-    color="\033[31m"  # Rot: Compact steht unmittelbar bevor
+    color="${ansi_escape}[31m"  # Rot: Compact steht unmittelbar bevor
 elif [ $used_of_budget -ge 75 ]; then
-    color="\033[33m"  # Orange: wird knapp
+    color="${ansi_escape}[33m"  # Orange: wird knapp
 else
-    color="\033[32m"  # Grün
+    color="${ansi_escape}[32m"  # Grün
 fi
 
 # Die Prozentzahl übernimmt die Warnfarbe des früheren Kontext-Balkens.
@@ -326,7 +342,7 @@ fi
 # können nicht mitgezählt werden.
 SUBAGENT_WINDOW=60
 subagent_display=""
-transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
+transcript_path=$(printf '%s\n' "$input" | jq -r '.transcript_path // empty')
 subagent_dir="${transcript_path%.jsonl}/subagents"
 if [ -n "$transcript_path" ] && [ -d "$subagent_dir" ]; then
     now_ts=$(date +%s)
@@ -361,9 +377,9 @@ if [ -n "$transcript_path" ] && [ -d "$subagent_dir" ]; then
 
     if [ "$subagent_count" -gt 0 ]; then
         if [ -n "$model_list" ]; then
-            subagent_display="\033[36m⚡${subagent_count} sub (${model_list})\033[0m"
+            subagent_display="${ansi_escape}[36m⚡${subagent_count} sub (${model_list})${ansi_escape}[0m"
         else
-            subagent_display="\033[36m⚡${subagent_count} sub\033[0m"
+            subagent_display="${ansi_escape}[36m⚡${subagent_count} sub${ansi_escape}[0m"
         fi
     fi
 fi
@@ -371,9 +387,9 @@ fi
 # Account-Anzeige direkt hinter dem Modell: main dezent, Zusatzprofile auffällig.
 if [ "$ccs_profile" != "main" ]; then
     # Zusatz-Account: Profilname auffällig (gelb) — falscher Account ist der teuerste Bedienfehler
-    account_display="\033[1;33m⇄${ccs_profile}\033[0m"
+    account_display="${ansi_escape}[1;33m⇄${ccs_profile}${ansi_escape}[0m"
 else
-    account_display="\033[2m⇄main\033[0m"
+    account_display="${ansi_escape}[2m⇄main${ansi_escape}[0m"
 fi
 
 # Ausgabe zusammenbauen
@@ -414,4 +430,4 @@ if [ -n "$mcp_display" ]; then
     output="${output} ${dim}|${reset} ${mcp_display}"
 fi
 
-echo -e "${output}"
+printf '%s\n' "$output"
