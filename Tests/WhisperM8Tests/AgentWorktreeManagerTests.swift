@@ -63,6 +63,28 @@ final class AgentWorktreeManagerTests: XCTestCase {
         return dir
     }
 
+    func testDefaultRunnerDrainsLargeStatusOutput() {
+        let result = AgentWorktreeManager.runProcess(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "yes x | head -c 200000"]
+        )
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(result.stdout.utf8.count, 200_000)
+    }
+
+    func testDefaultRunnerTerminatesAfterDeadline() {
+        let started = Date()
+        let result = AgentWorktreeManager.runProcess(
+            executableURL: URL(fileURLWithPath: "/bin/sleep"),
+            arguments: ["5"],
+            timeout: 0.05
+        )
+
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+    }
+
     func testCreateAndRemoveWorktreeEndToEnd() throws {
         let repo = try makeGitRepo()
         defer { try? FileManager.default.removeItem(at: repo) }

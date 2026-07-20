@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Legt Git-Worktrees für Subagent-Jobs an und räumt sie wieder ab.
@@ -71,23 +72,65 @@ struct AgentWorktreeManager {
     // MARK: - Default-Runner
 
     private static func runGit(_ arguments: [String]) -> GitResult {
+        runProcess(
+            executableURL: URL(fileURLWithPath: "/usr/bin/git"),
+            arguments: arguments
+        )
+    }
+
+    static func runProcess(
+        executableURL: URL,
+        arguments: [String],
+        timeout: TimeInterval = 10
+    ) -> GitResult {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.executableURL = executableURL
         process.arguments = arguments
+        process.standardInput = FileHandle.nullDevice
         let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+
+        let stderrURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisperm8-git-stderr-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: stderrURL.path, contents: nil)
+        guard let stderrHandle = try? FileHandle(forWritingTo: stderrURL) else {
+            return GitResult(exitCode: -1, stdout: "", stderr: "Temporäre Fehlerausgabe konnte nicht angelegt werden.")
+        }
+        process.standardError = stderrHandle
+        defer {
+            try? stderrHandle.close()
+            try? FileManager.default.removeItem(at: stderrURL)
+        }
+
         do {
             try process.run()
-            process.waitUntilExit()
-            return GitResult(
-                exitCode: process.terminationStatus,
-                stdout: String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
-                stderr: String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            )
         } catch {
             return GitResult(exitCode: -1, stdout: "", stderr: error.localizedDescription)
         }
+
+        let timeoutTask = DispatchWorkItem {
+            guard process.isRunning else { return }
+            process.terminate()
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                if process.isRunning {
+                    Darwin.kill(process.processIdentifier, SIGKILL)
+                }
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutTask)
+
+        // stdout vor dem Exit-Wait vollständig leeren; stderr liegt in einer
+        // Datei und kann den Kindprozess deshalb ebenfalls nie blockieren.
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        timeoutTask.cancel()
+        try? stderrHandle.synchronize()
+        let stderrData = (try? Data(contentsOf: stderrURL)) ?? Data()
+
+        return GitResult(
+            exitCode: process.terminationStatus,
+            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
+            stderr: String(data: stderrData, encoding: .utf8) ?? ""
+        )
     }
 }
