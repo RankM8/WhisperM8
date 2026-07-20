@@ -27,7 +27,9 @@ Skill-Argumente: `/codex-subagent <aufgabe>` → nativ. `/codex-subagent --cli
 ## Nativer Weg (Standard): Agent-Typ `gpt`
 
 Das WhisperM8-GPT-Backend verwaltet eine Agent-Definition
-(`<config-dir>/agents/gpt.md`, Frontmatter `model: gpt-5.6-sol`) für das
+(`<config-dir>/agents/gpt.md`, Frontmatter `model: gpt-5.6-sol` — bei
+aktivem Fast-Modus, dem Default, `model: gpt-5.6-sol-fast` = Priority-Tier,
+2,5× ChatGPT-Credits) für das
 Main-Profil UND jedes Account-Profil; alle Requests laufen über den lokalen
 Mix-Router. Nutzung: normales Agent-Tool mit `subagent_type: "gpt"` — ein
 Spawn pro Teilaufgabe, parallele Fan-outs ausdrücklich erwünscht. Effort ist

@@ -69,6 +69,10 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTBackendEnabled
     }
 
+    var gptFastModeEnabledResolver: () -> Bool = {
+        AppPreferences.shared.claudeGPTFastModeEnabled
+    }
+
     var gptRouterPortResolver: () -> Int = {
         AppPreferences.shared.claudeGPTRouterPort
     }
@@ -294,11 +298,13 @@ struct AgentCommandBuilder {
         let profileEnvironment = accountEnvironment(session.claudeProfileName)
 
         let routerEnabled = gptBackendEnabledResolver()
+        let fastModeEnabled = routerEnabled && gptFastModeEnabledResolver()
         let gptBackendModel: String? = {
             guard routerEnabled else { return nil }
             let model = session.claudeBackendModel?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return model.isEmpty ? nil : model
+            guard !model.isEmpty else { return nil }
+            return ClaudeGPTModelAlias.effectiveModel(model, fastEnabled: fastModeEnabled)
         }()
 
         // Der Router gilt bewusst fuer jede Claude-PTY-Session. So koennen
@@ -316,14 +322,21 @@ struct AgentCommandBuilder {
             // (das Level selbst kommt aus der Claude-Code-Einstellung).
             let pickerModel = gptDefaultModelResolver()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            environment["ANTHROPIC_CUSTOM_MODEL_OPTION"] = pickerModel.isEmpty
+            let resolvedPickerModel = pickerModel.isEmpty
                 ? AppPreferences.claudeGPTCanonicalModel
                 : pickerModel
+            environment["ANTHROPIC_CUSTOM_MODEL_OPTION"] = ClaudeGPTModelAlias.effectiveModel(
+                resolvedPickerModel,
+                fastEnabled: fastModeEnabled
+            )
             environment["CLAUDE_CODE_ALWAYS_ENABLE_EFFORT"] = "1"
             let subagentModel = gptSubagentModelResolver()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !subagentModel.isEmpty {
-                environment["CLAUDE_CODE_SUBAGENT_MODEL"] = subagentModel
+                environment["CLAUDE_CODE_SUBAGENT_MODEL"] = ClaudeGPTModelAlias.effectiveModel(
+                    subagentModel,
+                    fastEnabled: fastModeEnabled
+                )
             }
             if includesGPTTuning {
                 environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "gpt-5.4-mini"

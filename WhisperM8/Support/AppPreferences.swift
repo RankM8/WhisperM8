@@ -289,6 +289,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendDefaultModel) }
     }
 
+    /// Aktiviert den Priority-Tier fuer GPT-Modelle ueber den `-fast`-Alias.
+    /// Default bewusst an, auch fuer Bestandsnutzer ohne gespeicherten Wert.
+    var claudeGPTFastModeEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.claudeGPTFastModeEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTFastModeEnabled) }
+    }
+
     /// Leer bedeutet bewusst: kein Override fuer native Claude-Subagents.
     var claudeGPTSubagentModel: String {
         get { defaults.string(forKey: Keys.claudeGPTSubagentModel) ?? "" }
@@ -473,6 +480,7 @@ enum PreferenceKeys {
     static let claudeGPTBackendPort = "claudeGPTBackendPort"
     static let claudeGPTRouterPort = "claudeGPTRouterPort"
     static let claudeGPTBackendDefaultModel = "claudeGPTBackendDefaultModel"
+    static let claudeGPTFastModeEnabled = "claudeGPTFastModeEnabled"
     static let claudeGPTSubagentModel = "claudeGPTSubagentModel"
     static let claudeGPTAutoCompactWindow = "claudeGPTAutoCompactWindow"
     static let appearanceOverride = "appearanceOverride"

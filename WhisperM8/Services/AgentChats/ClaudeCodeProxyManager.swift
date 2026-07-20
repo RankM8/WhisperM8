@@ -235,6 +235,15 @@ final class ClaudeCodeProxyManager {
             let process: ClaudeCodeProxyProcessHandle
             do {
                 var environment = environmentResolver()
+                // Die Tier-Env des Proxy hat Vorrang vor jedem Modell-Alias
+                // und wuerde damit Toggle, plain /model sowie den guenstigen
+                // Haiku-Ersatz global ueberstimmen. Ein bewusster Override in
+                // der Proxy-Konfiguration oder einem externen Prozess bleibt.
+                if environment.removeValue(forKey: "CCP_CODEX_SERVICE_TIER") != nil {
+                    Logger.agentStore.warning(
+                        "claude_code_proxy_inherited_service_tier_removed key=CCP_CODEX_SERVICE_TIER"
+                    )
+                }
                 // Die echte Loopback-Garantie liefert das Binary selbst: der
                 // raine-Proxy bindet hart auf 127.0.0.1 (verifiziert per lsof;
                 // `serve` kennt keinen --host/--bind-Flag). CCP_BIND_ADDRESS

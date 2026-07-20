@@ -50,6 +50,14 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.maxScreenshotsPerRecording, 20)
     }
 
+    func testClaudeGPTFastModeDefaultsToEnabledAndPersistsDisabled() {
+        withIsolatedPreferences { preferences in
+            XCTAssertTrue(preferences.claudeGPTFastModeEnabled)
+            preferences.claudeGPTFastModeEnabled = false
+            XCTAssertFalse(preferences.claudeGPTFastModeEnabled)
+        }
+    }
+
     func testClaudeGPTAutoCompactWindowClampsAndFallsBack() {
         withIsolatedPreferences { preferences in
             // Unset → getesteter Default (272k).
@@ -279,6 +287,7 @@ final class PreferencesTests: XCTestCase {
             ("claudeGPTBackendPort", PreferenceKeys.claudeGPTBackendPort),
             ("claudeGPTRouterPort", PreferenceKeys.claudeGPTRouterPort),
             ("claudeGPTBackendDefaultModel", PreferenceKeys.claudeGPTBackendDefaultModel),
+            ("claudeGPTFastModeEnabled", PreferenceKeys.claudeGPTFastModeEnabled),
             ("claudeGPTSubagentModel", PreferenceKeys.claudeGPTSubagentModel),
             ("claudeGPTAutoCompactWindow", PreferenceKeys.claudeGPTAutoCompactWindow),
             ("appearanceOverride", PreferenceKeys.appearanceOverride),
@@ -293,7 +302,7 @@ final class PreferencesTests: XCTestCase {
             ("updateCheckEnabled", PreferenceKeys.updateCheckEnabled)
         ]
 
-        XCTAssertEqual(keys.count, 50)
+        XCTAssertEqual(keys.count, 51)
         for (expected, actual) in keys {
             XCTAssertEqual(actual, expected)
         }
@@ -343,6 +352,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertTrue(preferences.isTerminalBellEnabled)
             XCTAssertEqual(preferences.codexExtraArguments, "")
             XCTAssertEqual(preferences.claudeExtraArguments, "")
+            XCTAssertTrue(preferences.claudeGPTFastModeEnabled)
             XCTAssertFalse(preferences.isAgentTerminalMetalRendererEnabled)
             XCTAssertTrue(preferences.isAgentEventDrivenWatchEnabled)
             XCTAssertTrue(preferences.isAgentSidebarDragEnabled)
@@ -389,6 +399,7 @@ final class PreferencesTests: XCTestCase {
             preferences.isTerminalBellEnabled = false
             preferences.codexExtraArguments = "--ask-for-approval never"
             preferences.claudeExtraArguments = "--verbose"
+            preferences.claudeGPTFastModeEnabled = false
             preferences.isAgentTerminalMetalRendererEnabled = true
             preferences.isAgentEventDrivenWatchEnabled = false
             preferences.isAgentSidebarDragEnabled = false
@@ -434,6 +445,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertFalse(loaded.isTerminalBellEnabled)
             XCTAssertEqual(loaded.codexExtraArguments, "--ask-for-approval never")
             XCTAssertEqual(loaded.claudeExtraArguments, "--verbose")
+            XCTAssertFalse(loaded.claudeGPTFastModeEnabled)
             XCTAssertTrue(loaded.isAgentTerminalMetalRendererEnabled)
             XCTAssertFalse(loaded.isAgentEventDrivenWatchEnabled)
             XCTAssertFalse(loaded.isAgentSidebarDragEnabled)

@@ -60,7 +60,12 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
                 return Self.processHandle(terminate: { didTerminate = true })
             },
             routerStopper: { didStopRouter = true },
-            environment: { ["PATH": "/login-shell/bin"] },
+            environment: {
+                [
+                    "PATH": "/login-shell/bin",
+                    "CCP_CODEX_SERVICE_TIER": "priority",
+                ]
+            },
             retryAttempts: 2
         )
 

@@ -5,6 +5,7 @@ struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTBackendEnabled) private var backendEnabled = false
     @AppStorage(PreferenceKeys.claudeGPTBackendPort) private var port = 18_765
     @AppStorage(PreferenceKeys.claudeGPTBackendDefaultModel) private var defaultModel = ""
+    @AppStorage(PreferenceKeys.claudeGPTFastModeEnabled) private var fastModeEnabled = true
     @AppStorage(PreferenceKeys.claudeGPTSubagentModel) private var subagentModel = ""
     @AppStorage(PreferenceKeys.claudeGPTAutoCompactWindow) private var autoCompactWindow =
         AppPreferences.claudeGPTDefaultAutoCompactWindow
@@ -109,17 +110,13 @@ struct GPTBackendSettingsPage: View {
             }
             // Verwaltete `gpt`-Agent-Definition folgt dem Backend-Zustand:
             // aktiv → anlegen/aktualisieren, deaktiviert → entfernen.
-            ClaudeGPTAgentDefinitionInstaller().sync(
-                backendEnabled: backendEnabled,
-                model: defaultModel
-            )
+            syncAgentDefinition()
         }
-        .onChange(of: defaultModel) { _, newModel in
-            guard backendEnabled else { return }
-            ClaudeGPTAgentDefinitionInstaller().sync(
-                backendEnabled: true,
-                model: newModel
-            )
+        .onChange(of: defaultModel) { _, _ in
+            syncAgentDefinition()
+        }
+        .onChange(of: fastModeEnabled) { _, _ in
+            syncAgentDefinition()
         }
     }
 
@@ -253,6 +250,12 @@ struct GPTBackendSettingsPage: View {
                 offersSuggestions: true
             )
 
+            SettingsToggleRow(
+                title: "Fast-Modus (Priority-Tier)",
+                subtitle: "Rund 1,5× schneller, verbraucht bei GPT-5.6 aber 2,5× ChatGPT-Credits. Gilt für neu gestartete Chats samt Subagents — nicht für Background-Agents (claude --bg). Vorrang behalten: ein eigenes --model in den Claude-Extra-Argumenten, ein explizites ›-fast‹ im Modellnamen sowie eine globale Proxy-Konfiguration.",
+                isOn: $fastModeEnabled
+            )
+
             editableModelRow(
                 title: "Subagent-Modell (CLAUDE_CODE_SUBAGENT_MODEL)",
                 subtitle: "Zwangs-Override: erzwingt dieses Modell für ALLE nativen Subagents. Empfehlung: leer lassen — GPT-Subagents stehen ohnehin über den Agent-Typ »gpt« bereit, den Claude pro Aufgabe wählen kann.",
@@ -276,6 +279,13 @@ struct GPTBackendSettingsPage: View {
                 .frame(width: 100)
             }
         }
+    }
+
+    private func syncAgentDefinition() {
+        // Bewusst ueber die Preferences statt der @AppStorage-Snapshots:
+        // syncFromPreferences liest unter dem Sync-Lock den frischesten
+        // Stand und kann so keinen parallelen Start-Sync zurueckrollen.
+        ClaudeGPTAgentDefinitionInstaller().syncFromPreferences()
     }
 
     private func editableModelRow(

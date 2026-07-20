@@ -47,19 +47,44 @@ struct ClaudeGPTAgentDefinitionInstaller {
         """
     }
 
+    /// Serialisiert alle Sync-Laeufe prozessweit. Ohne Lock kann ein
+    /// detachter Start-Sync (ensureRunning) mit veraltetem Preference-
+    /// Snapshot NACH einem frischeren Settings-Sync schreiben und z. B.
+    /// einen gerade deaktivierten Fast-Toggle wieder zurueckrollen.
+    private static let syncLock = NSLock()
+
     /// Idempotenter Abgleich von Soll (Backend-Zustand + Modell) und Platte —
     /// fuer alle Config-Roots. Rueckgabe je Root, in fileURLs-Reihenfolge.
     @discardableResult
-    func sync(backendEnabled: Bool, model rawModel: String) -> [SyncOutcome] {
-        fileURLs.map { sync(backendEnabled: backendEnabled, model: rawModel, at: $0) }
+    func sync(backendEnabled: Bool, model rawModel: String, fastEnabled: Bool) -> [SyncOutcome] {
+        Self.syncLock.lock()
+        defer { Self.syncLock.unlock() }
+        return performSync(
+            backendEnabled: backendEnabled,
+            model: rawModel,
+            fastEnabled: fastEnabled
+        )
     }
 
-    /// Abgleich einer einzelnen Ziel-Datei. Leeres Modell faellt auf das
-    /// kanonische GPT-Modell zurueck, damit der Agent-Typ auch ohne
-    /// konfiguriertes Standard-Modell funktioniert.
-    private func sync(backendEnabled: Bool, model rawModel: String, at fileURL: URL) -> SyncOutcome {
+    @discardableResult
+    private func performSync(
+        backendEnabled: Bool,
+        model rawModel: String,
+        fastEnabled: Bool
+    ) -> [SyncOutcome] {
         let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        let model = trimmed.isEmpty ? AppPreferences.claudeGPTCanonicalModel : trimmed
+        let resolvedModel = trimmed.isEmpty ? AppPreferences.claudeGPTCanonicalModel : trimmed
+        let effectiveModel = ClaudeGPTModelAlias.effectiveModel(
+            resolvedModel,
+            fastEnabled: fastEnabled
+        )
+        return fileURLs.map {
+            sync(backendEnabled: backendEnabled, model: effectiveModel, at: $0)
+        }
+    }
+
+    /// Abgleich einer einzelnen Ziel-Datei.
+    private func sync(backendEnabled: Bool, model: String, at fileURL: URL) -> SyncOutcome {
         let fileManager = FileManager.default
         let existing = try? String(contentsOf: fileURL, encoding: .utf8)
 
@@ -94,11 +119,16 @@ struct ClaudeGPTAgentDefinitionInstaller {
         return existing == nil ? .installed : .updated
     }
 
-    /// Bequemer Abgleich aus den aktuellen Preferences.
+    /// Bequemer Abgleich aus den aktuellen Preferences. Liest die Werte
+    /// bewusst ERST unter dem Lock — der letzte Schreiber arbeitet damit
+    /// garantiert mit dem frischesten Stand statt einem Alt-Snapshot.
     func syncFromPreferences() {
-        sync(
+        Self.syncLock.lock()
+        defer { Self.syncLock.unlock() }
+        performSync(
             backendEnabled: AppPreferences.shared.claudeGPTBackendEnabled,
-            model: AppPreferences.shared.claudeGPTBackendDefaultModel
+            model: AppPreferences.shared.claudeGPTBackendDefaultModel,
+            fastEnabled: AppPreferences.shared.claudeGPTFastModeEnabled
         )
     }
 }

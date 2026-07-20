@@ -18,39 +18,116 @@ final class ClaudeGPTAgentDefinitionTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    /// Extrahiert den YAML-Frontmatter-Block (zwischen erstem und zweitem
+    /// `---`). Substring-Checks auf dem Gesamtinhalt wuerden auch eine
+    /// auskommentierte oder hinter den Delimiter gerutschte `model:`-Zeile
+    /// akzeptieren — gegen genau das sichern die Frontmatter-Assertions ab.
+    private func frontmatter(of content: String) throws -> String {
+        let parts = content.components(separatedBy: "---")
+        guard parts.count >= 3 else {
+            XCTFail("Kein Frontmatter-Block gefunden")
+            return ""
+        }
+        return parts[1]
+    }
+
+    private func assertFrontmatterModel(
+        _ expected: String,
+        in content: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let frontmatter = try frontmatter(of: content)
+        XCTAssertTrue(
+            frontmatter.contains("\nmodel: \(expected)\n"),
+            "Frontmatter enthaelt nicht die aktive Zeile 'model: \(expected)': \(frontmatter)",
+            file: file,
+            line: line
+        )
+    }
+
     func testInstallsDefinitionWithConfiguredModel() throws {
         XCTAssertEqual(
-            installer.sync(backendEnabled: true, model: "gpt-5.6-terra"),
+            installer.sync(backendEnabled: true, model: "gpt-5.6-terra", fastEnabled: false),
             [.installed]
         )
 
         let content = try String(contentsOf: mainFileURL, encoding: .utf8)
-        XCTAssertTrue(content.contains("model: gpt-5.6-terra"))
+        try assertFrontmatterModel("gpt-5.6-terra", in: content)
         XCTAssertTrue(content.contains("name: gpt"))
         XCTAssertTrue(content.contains(ClaudeGPTAgentDefinitionInstaller.managedMarker))
     }
 
     func testEmptyModelFallsBackToCanonicalModel() throws {
-        XCTAssertEqual(installer.sync(backendEnabled: true, model: "  \n"), [.installed])
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "  \n", fastEnabled: false),
+            [.installed]
+        )
 
         let content = try String(contentsOf: mainFileURL, encoding: .utf8)
-        XCTAssertTrue(content.contains("model: \(AppPreferences.claudeGPTCanonicalModel)"))
+        try assertFrontmatterModel(AppPreferences.claudeGPTCanonicalModel, in: content)
+    }
+
+    func testFastModeUsesEffectiveAliasThroughoutDefinition() throws {
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "gpt-5.6-terra", fastEnabled: true),
+            [.installed]
+        )
+
+        let content = try String(contentsOf: mainFileURL, encoding: .utf8)
+        try assertFrontmatterModel("gpt-5.6-terra-fast", in: content)
+        XCTAssertTrue(content.contains("(gpt-5.6-terra-fast, high thinking)"))
+        XCTAssertTrue(content.contains("GPT-Subagent (gpt-5.6-terra-fast)"))
+    }
+
+    func testFastModeAppliesAfterCanonicalFallback() throws {
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "", fastEnabled: true),
+            [.installed]
+        )
+
+        let content = try String(contentsOf: mainFileURL, encoding: .utf8)
+        try assertFrontmatterModel("\(AppPreferences.claudeGPTCanonicalModel)-fast", in: content)
+    }
+
+    func testFastModePreservesMemorySuffix() throws {
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "gpt-5.6-sol[1m]", fastEnabled: true),
+            [.installed]
+        )
+
+        let content = try String(contentsOf: mainFileURL, encoding: .utf8)
+        try assertFrontmatterModel("gpt-5.6-sol-fast[1m]", in: content)
+    }
+
+    func testToggleChangeUpdatesManagedDefinition() throws {
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false),
+            [.installed]
+        )
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: true),
+            [.updated]
+        )
+
+        let content = try String(contentsOf: mainFileURL, encoding: .utf8)
+        try assertFrontmatterModel("gpt-5.6-sol-fast", in: content)
     }
 
     func testSyncIsIdempotentAndUpdatesOnModelChange() throws {
-        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol"), [.installed])
-        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol"), [.upToDate])
-        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-luna"), [.updated])
+        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false), [.installed])
+        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false), [.upToDate])
+        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-luna", fastEnabled: false), [.updated])
 
         let content = try String(contentsOf: mainFileURL, encoding: .utf8)
-        XCTAssertTrue(content.contains("model: gpt-5.6-luna"))
+        try assertFrontmatterModel("gpt-5.6-luna", in: content)
     }
 
     func testDisabledBackendRemovesManagedDefinition() throws {
-        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol"), [.installed])
-        XCTAssertEqual(installer.sync(backendEnabled: false, model: "gpt-5.6-sol"), [.removed])
+        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false), [.installed])
+        XCTAssertEqual(installer.sync(backendEnabled: false, model: "gpt-5.6-sol", fastEnabled: false), [.removed])
         XCTAssertFalse(FileManager.default.fileExists(atPath: mainFileURL.path))
-        XCTAssertEqual(installer.sync(backendEnabled: false, model: "gpt-5.6-sol"), [.nothingToDo])
+        XCTAssertEqual(installer.sync(backendEnabled: false, model: "gpt-5.6-sol", fastEnabled: false), [.nothingToDo])
     }
 
     /// Claude Code liest User-Level-Agents aus dem CLAUDE_CONFIG_DIR der
@@ -61,14 +138,14 @@ final class ClaudeGPTAgentDefinitionTests: XCTestCase {
         installer = ClaudeGPTAgentDefinitionInstaller(fileURLs: [mainFileURL, profileFileURL])
 
         XCTAssertEqual(
-            installer.sync(backendEnabled: true, model: "gpt-5.6-sol"),
+            installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false),
             [.installed, .installed]
         )
         XCTAssertTrue(FileManager.default.fileExists(atPath: mainFileURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: profileFileURL.path))
 
         XCTAssertEqual(
-            installer.sync(backendEnabled: false, model: "gpt-5.6-sol"),
+            installer.sync(backendEnabled: false, model: "gpt-5.6-sol", fastEnabled: false),
             [.removed, .removed]
         )
         XCTAssertFalse(FileManager.default.fileExists(atPath: mainFileURL.path))
@@ -84,11 +161,11 @@ final class ClaudeGPTAgentDefinitionTests: XCTestCase {
         try foreign.write(to: mainFileURL, atomically: true, encoding: .utf8)
 
         XCTAssertEqual(
-            installer.sync(backendEnabled: true, model: "gpt-5.6-sol"),
+            installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false),
             [.leftForeignFileAlone]
         )
         XCTAssertEqual(
-            installer.sync(backendEnabled: false, model: "gpt-5.6-sol"),
+            installer.sync(backendEnabled: false, model: "gpt-5.6-sol", fastEnabled: false),
             [.leftForeignFileAlone],
             "Auch beim Deaktivieren darf eine fremde Datei nicht entfernt werden"
         )

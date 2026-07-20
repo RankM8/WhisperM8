@@ -6,6 +6,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderBuildsCodexNewAndResumeCommands() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.codexServiceTierResolver = { .fast }
         let newSession = AgentChatSession(
@@ -48,6 +49,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderBuildsClaudeCommands() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         let session = AgentChatSession(
             provider: .claude,
@@ -71,6 +73,7 @@ final class AgentCommandBuilderTests: XCTestCase {
         // gesetzte externalSessionID wird NICHT mehr erzwungen.
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         let session = AgentChatSession(
             provider: .claude,
@@ -90,6 +93,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderForksFromSourceWhenForkIDSetAndExternalIDUnbound() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         // Frischer Fork: eigene ID noch nicht gebunden, Quelle gesetzt.
         let session = AgentChatSession(
@@ -109,6 +113,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderResumesOwnIDAfterForkBoundAndDoesNotReFork() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         // Nach dem Launch hat der SessionStart-Hook die neue Fork-ID gebunden.
         let session = AgentChatSession(
@@ -129,6 +134,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderProducesAgentsSubcommandForAgentViewSession() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         let session = AgentChatSession(
             provider: .claude,
@@ -154,6 +160,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderProducesAttachCommandForBackgroundChat() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         let session = AgentChatSession(
             provider: .claude,
@@ -177,6 +184,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderRefusesAttachForBackgroundChatWithoutShortID() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         let session = AgentChatSession(
             provider: .claude,
@@ -278,6 +286,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderDoesNotSilentlyCreateNewSessionWhenResumeIDIsMissing() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         let launchedSession = AgentChatSession(
             provider: .codex,
@@ -313,6 +322,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderPrependsClaudeExtraArgumentsForResume() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { provider in
             provider == .claude ? ["--dangerously-skip-permissions"] : []
         }
@@ -333,6 +343,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderPrependsCodexExtraArgumentsForNewAndResume() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { provider in
             provider == .codex ? ["--ask-for-approval", "untrusted"] : []
         }
@@ -367,6 +378,7 @@ final class AgentCommandBuilderTests: XCTestCase {
     func testAgentCommandBuilderCanForceStandardCodexServiceTier() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.codexServiceTierResolver = { .standard }
         let session = AgentChatSession(
@@ -390,6 +402,7 @@ extension AgentCommandBuilderTests {
     func testClaudeGPTRouterWithoutSessionStampKeepsArgumentsAndAddsRouterEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { true }
         builder.extraArgumentsResolver = { provider in
             provider == .claude ? ["--dangerously-skip-permissions"] : []
         }
@@ -419,7 +432,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
         ])
     }
@@ -427,6 +440,7 @@ extension AgentCommandBuilderTests {
     func testClaudeGPTBackendAddsModelBeforeExtraArgumentsAndMergesEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { true }
         builder.extraLaunchArguments = ["--settings", "/tmp/hooks.json"]
         builder.extraArgumentsResolver = { provider in
             provider == .claude ? ["--dangerously-skip-permissions"] : []
@@ -452,14 +466,14 @@ extension AgentCommandBuilderTests {
 
         XCTAssertEqual(command.arguments, [
             "--settings", "/tmp/hooks.json",
-            "--model", "gpt-5.6-sol",
+            "--model", "gpt-5.6-sol-fast",
             "--dangerously-skip-permissions",
             "Los",
         ])
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
             "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
@@ -467,9 +481,10 @@ extension AgentCommandBuilderTests {
         ])
     }
 
-    func testClaudeGPTBackendCombinesModelAndResume() throws {
+    func testClaudeGPTBackendFastToggleOffKeepsPlainModelOnResume() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in ["--verbose"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
@@ -493,12 +508,34 @@ extension AgentCommandBuilderTests {
         XCTAssertNil(command.environmentOverrides["ANTHROPIC_AUTH_TOKEN"])
     }
 
+    func testClaudeGPTBackendKeepsExplicitFastModelWhenToggleIsOff() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 18_766 }
+        builder.gptSubagentModelResolver = { "" }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-sol-fast"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--model", "gpt-5.6-sol-fast"])
+    }
+
     func testClaudeGPTBackendOmitsCompactWindowWhenUserOverridesToClaudeModel() throws {
         // GPT-Stempel + explizites User-`--model claude-…` (last-flag-wins):
         // die Session laeuft effektiv auf Claude — das 272k-Fenster wuerde
         // die Kompaktierung dort ZU SPAET ausloesen und muss entfallen.
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in ["--model", "claude-opus-4-6"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
@@ -532,10 +569,11 @@ extension AgentCommandBuilderTests {
         )
     }
 
-    func testClaudeGPTBackendLetsUserModelFromExtraArgumentsWin() throws {
+    func testClaudeGPTBackendLeavesPlainUserExtraModelAsLastFlagWinsOptOut() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
-        builder.extraArgumentsResolver = { _ in ["--model", "claude-opus-4-6"] }
+        builder.gptFastModeEnabledResolver = { true }
+        builder.extraArgumentsResolver = { _ in ["--model", "gpt-5.6-sol"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
         builder.gptRouterPortResolver = { 18_766 }
@@ -544,21 +582,22 @@ extension AgentCommandBuilderTests {
             provider: .claude,
             projectID: project.id,
             title: "Claude",
-            claudeBackendModel: "gpt-5.6-sol"
+            claudeBackendModel: "gpt-5.6-terra"
         )
 
         let command = try builder.command(for: session, project: project)
 
-        // claude parst last-flag-wins: das explizite User-`--model` aus den
-        // Extra-Args muss NACH dem GPT-Stempel stehen und gewinnt damit.
+        // claude parst last-flag-wins: das explizite plain User-`--model`
+        // bleibt unveraendert NACH dem fastifizierten GPT-Stempel und gewinnt.
         XCTAssertEqual(command.arguments, [
-            "--model", "gpt-5.6-sol", "--model", "claude-opus-4-6",
+            "--model", "gpt-5.6-terra-fast", "--model", "gpt-5.6-sol",
         ])
     }
 
     func testClaudeGPTBackendAddsConfiguredSubagentModel() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { true }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
@@ -574,6 +613,38 @@ extension AgentCommandBuilderTests {
 
         XCTAssertEqual(
             command.environmentOverrides["CLAUDE_CODE_SUBAGENT_MODEL"],
+            "gpt-5.6-luna-fast"
+        )
+    }
+
+    func testClaudeGPTBackendFastToggleOffKeepsPickerAndSubagentPlain() throws {
+        // Fast-aus muss ALLE Emissionspunkte plain lassen — nicht nur das
+        // Haupt-`--model`, sondern auch Picker-Option und Subagent-Env.
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 18_766 }
+        builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
+        builder.gptSubagentModelResolver = { "gpt-5.6-luna" }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-terra"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--model", "gpt-5.6-terra"])
+        XCTAssertEqual(
+            command.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"],
+            "gpt-5.6-sol"
+        )
+        XCTAssertEqual(
+            command.environmentOverrides["CLAUDE_CODE_SUBAGENT_MODEL"],
             "gpt-5.6-luna"
         )
     }
@@ -581,6 +652,7 @@ extension AgentCommandBuilderTests {
     func testClaudeGPTBackendOmitsWhitespaceOnlySubagentModel() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
@@ -601,6 +673,7 @@ extension AgentCommandBuilderTests {
     func testClaudeDirectBackendOmitsConfiguredSubagentModel() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { false }
@@ -620,6 +693,7 @@ extension AgentCommandBuilderTests {
     func testClaudeGPTBackendKillSwitchIgnoresExistingSessionStamp() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
@@ -646,6 +720,7 @@ extension AgentCommandBuilderTests {
     func testClaudeGPTRouterAppliesToAgentViewAndBackgroundAttachWithoutChangingArguments() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { true }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
@@ -675,16 +750,16 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(agentViewCommand.arguments, ["agents"])
         XCTAssertEqual(agentViewCommand.environmentOverrides, [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol",
+            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
         ])
         XCTAssertEqual(backgroundCommand.arguments, ["attach", "abcdef12"])
         XCTAssertEqual(backgroundCommand.environmentOverrides, [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol",
+            "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
         ])
     }
 }
@@ -695,6 +770,7 @@ extension AgentCommandBuilderTests {
     func testClaudeCommandInjectsProfileEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { profileName in
             profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
@@ -725,6 +801,7 @@ extension AgentCommandBuilderTests {
     func testClaudeCommandWithoutProfileHasNoEnvironmentOverrides() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { profileName in
             profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
@@ -741,6 +818,7 @@ extension AgentCommandBuilderTests {
         // dem realen Ablageort folgen — sonst „No conversation found".
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { profileName in
             profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
@@ -784,6 +862,7 @@ extension AgentCommandBuilderTests {
         // bleibt maßgeblich, wie bisher.
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { profileName in
             profileName.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
@@ -805,6 +884,7 @@ extension AgentCommandBuilderTests {
     func testCodexCommandNeverGetsClaudeProfileEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.codexServiceTierResolver = { .standard }
         builder.claudeProfileEnvironmentResolver = { _ in
@@ -828,6 +908,7 @@ extension AgentCommandBuilderTests {
     func testContextProfileEnvironmentLosesAgainstAccountAndRouter() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.extraEnvironmentOverrides = [
             "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
@@ -859,6 +940,7 @@ extension AgentCommandBuilderTests {
     func testContextProfileEnvironmentPassesThroughWithoutConflicts() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.extraEnvironmentOverrides = ["ENABLE_TOOL_SEARCH": "auto"]
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
@@ -875,6 +957,7 @@ extension AgentCommandBuilderTests {
     func testContextProfileEnvironmentSurvivesResumeRepair() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         builder.extraEnvironmentOverrides = ["ENABLE_TOOL_SEARCH": "auto"]
         builder.claudeProfileEnvironmentResolver = { profileName in
