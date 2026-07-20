@@ -526,7 +526,11 @@ widerlegt oder als unimplementierbar bewertet:
    P1.3/P1.4 dürfen nicht auf dieser Formulierung implementiert werden. Vorher
    sind capability-gegatete Weg-A/Weg-B-Strategie, launchspezifischer
    Hook-Envelope, Generation-Guard, Config-Root-Ableitung, Claim-API,
-   Laufzeit-Branchwechsel und Recovery-Evidenz zu spezifizieren. Der Hook
+   Laufzeit-Branchwechsel und Recovery-Evidenz zu spezifizieren. Die capability-
+   gegatete Strategie ist jetzt normativ als `hostAssignedUnsupported`/
+   `hostAssignedVerified` in
+   [`identitaetsmodell-spec.md` §2.2](../06-umsetzung/identitaetsmodell-spec.md)
+   definiert. Der Hook
    transportiert heute keine WhisperM8-Launch-ID
    (`WhisperM8/Services/AgentChats/ClaudeHookEventStore.swift:36-46,121-136`;
    `WhisperM8/Services/AgentChats/ClaudeHookBridge.swift:27-41,218-229`).

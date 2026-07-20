@@ -6,6 +6,8 @@ description: Test-Spezifikationen für Absicherungs- und rot-nach-grün-Tests de
 
 # Test-Spezifikationen Welle 0/1
 
+> **Identitäts-Gate für die G4-Revision:** Tests der Session-Bindung müssen gegen die Capability-Zustände `hostAssignedUnsupported`/`hostAssignedVerified` und die Claim-API aus [`identitaetsmodell-spec.md` §2.2](identitaetsmodell-spec.md) geschrieben werden. A02 ist in seiner heutigen Form überholt und wird in der G4-Revision durch capability-/claim-spezifische Oracles ersetzt.
+
 ## 0. Geltungsbereich und Ausführungsregel
 
 Dieses Dokument spezifiziert ausschließlich Tests; es enthält keinen Test- oder Produktcode. Kategorie 1 friert korrektes Ist-Verhalten als Refactoring-Gate ein. Diese Tests müssen **vor** der jeweiligen Produktionsänderung grün sein. Wo der heutige Code harte Framework-Abhängigkeiten besitzt, ist zuerst nur eine verhaltensneutrale Naht zu extrahieren; erst wenn der Test gegen den unveränderten Altpfad grün ist, beginnt der Fix. Kategorie 2 beschreibt dagegen bewusst zunächst rote Bug-Soll-Tests, die im selben Change wie der jeweilige Fix grün werden.
