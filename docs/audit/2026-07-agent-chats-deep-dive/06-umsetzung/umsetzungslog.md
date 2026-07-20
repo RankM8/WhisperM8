@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-19
+updated: 2026-07-20
 description: Laufendes Umsetzungslog der freigegebenen Sofort-Fixes und Quick Wins mit Commits, Teststand und offener QA; das Freigabe-Gate für Identitäts-/Kernwellen bleibt unberührt.
 ---
 
@@ -19,7 +19,7 @@ Findings-Matrix ([runde4-findings-matrix.md](../04-verifikation/runde4-findings-
 wird erst durch einen erneuten Verifikationslauf (G5/G6) fortgeschrieben,
 nicht durch dieses Log.
 
-## Umgesetzte Maßnahmen (Stand 2026-07-19)
+## Umgesetzte Maßnahmen (Stand 2026-07-20)
 
 | Finding | Maßnahme | Commit | Tests |
 |---|---|---|---|
@@ -30,9 +30,26 @@ nicht durch dieses Log.
 | **R4-AS-11** (hoch) | `migratedWorkspace()` dedupliziert doppelte lokale Session-IDs beim Load/Normalize deterministisch (erste Row gewinnt — die per `first(where:)` ohnehin sichtbare; Log-Notice `agent_store_duplicate_session_ids`). Planer zusätzlich trap-frei (`uniquingKeysWith`) als zweite Verteidigungslinie. | `7953cf5` | 2 neue (Planer-Duplikat ohne Trap, Load-Dedup erste Row) |
 | **R4-RESUME-01** (hoch) | `focusLaunchInFlight` wird auf beiden Fehlerpfaden zurückgesetzt: Archiv-/Delete-Guard im Warmup-Task und `catch` in `prepareCommand` (Resume-Transcript fehlt, Builder-Fehler). | `3db6d4d` | — (SwiftUI-`@State`, siehe offene QA) |
 
-Teststand nach letztem Commit: **1626 Tests, 0 Failures** (`swift test`,
-vollständige Suite; enthält parallel laufende, hier nicht erfasste
-Arbeiten anderer Sessions).
+Teststand am aktuellen HEAD (`269f8bc`): **1648 Tests, 0 Failures**
+(`swift test`, vollständige Suite am 2026-07-20).
+
+## Parallel gelandete Fixes anderer Sessions
+
+Die folgenden Urteile sind ebenfalls **Selbstauskunft der Umsetzung gegen
+HEAD**; die verifizierte Matrix bleibt bis zum nächsten G5/G6-Lauf
+unverändert.
+
+| Finding | Umsetzungsurteil gegen HEAD | Commit | Tests |
+|---|---|---|---|
+| **R4-STATUS-01** (hoch) | **Geschlossen.** Der Produktionsdefault ist jetzt `Bundle.module`; `bundledScript()` löst die dort deklarierte SwiftPM-Ressource auf (`WhisperM8/Services/Shared/StatuslineInstaller.swift:25-30,77-82`; `Package.swift:37-45`). Der App-Bundle-Schritt kopiert die generierten `.bundle`-Verzeichnisse nach `Contents/Resources`, also genau die von `Bundle.module` adressierte Ressource (`Makefile:236-248`). Ein Root-Copy der Shell-Datei ist damit nicht mehr erforderlich. | `63c2adc` | 1 neuer Regressionstest ohne Bundle-Injektion (`Tests/WhisperM8Tests/StatuslineInstallerTests.swift:43-48`) |
+| **R4-UI-01** (niedrig) | **Geschlossen.** Die Default-Ziele werden über `standardizedFileURL.path` reihenfolgeerhaltend dedupliziert und mit dem injizierten Home aufgebaut (`WhisperM8/Services/Shared/StatuslineInstaller.swift:35-43`). Dieselbe deduplizierte Liste speist Anzeigezähler und Mutation (`WhisperM8/Services/Shared/StatuslineInstaller.swift:110-128,139-161`); `~/.claude` wird daher weder doppelt gezählt noch doppelt beschrieben. Der zusätzliche UI-Refresh im Fehlerpfad hält Zählung und Button nach Teilfehlern aktuell. | `9592d17` | 1 neuer Regressionstest für eindeutige Pfade und injiziertes Home (`Tests/WhisperM8Tests/StatuslineInstallerTests.swift:51-59`) |
+
+Außerdem landeten seit dem vorherigen Log-Stand die CLI-Erweiterungen
+`chats close` (`be7ac37`), Tab-/Workspace-Management (`8754a52`) und
+Archiv-Suche/Reaktivierung (`415987f`) sowie der ausgelieferte
+`gpt-coworker`-Skill (`269f8bc`). Diese vier Commits sind hier als
+HEAD-Abgleich erfasst, schließen aber kein Finding der verifizierten
+Runde-4-Matrix und verändern das geschlossene Freigabe-Gate nicht.
 
 ## Bewusste Abgrenzungen
 
@@ -71,7 +88,7 @@ Arbeiten anderer Sessions).
 
 ## Nächste freigegebene Kandidaten
 
-R4-STATUS-01 (Statusline-Bundle-Pfad), R4-VC-11 (Path-Traversal-Delete),
-R4-AS-03/R4-VC-03 (Pipe-Drain-Deadlocks; Muster liegt seit C13 vor) — alle
-klein, gate-unabhängig, mit rotem Oracle vor dem Fix. Parallel dazu der
-größte Hebel: die G0–G6-Spec-Nacharbeit der Abschlusskritik.
+R4-VC-11 (Path-Traversal-Delete), R4-AS-03/R4-VC-03
+(Pipe-Drain-Deadlocks; Muster liegt seit C13 vor) — alle klein,
+gate-unabhängig, mit rotem Oracle vor dem Fix. Parallel dazu der größte
+Hebel: die G0–G6-Spec-Nacharbeit der Abschlusskritik.
