@@ -411,19 +411,6 @@ struct AgentCommandBuilder {
             )
         }
 
-        var arguments: [String] = []
-        // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
-        // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.
-        arguments.append(contentsOf: extraLaunchArguments)
-        // GPT-Stempel VOR den User-Extras: ein explizites `--model` aus den
-        // claudeExtraArguments behaelt so das letzte Wort (last-flag-wins).
-        if let gptBackendModel {
-            arguments.append(contentsOf: ["--model", gptBackendModel])
-        }
-        // User-defined extras (z. B. --dangerously-skip-permissions) vor dem
-        // Resume-Block, damit sie auch beim Resume durchgehen.
-        arguments.append(contentsOf: extraArgumentsResolver(.claude))
-
         // Resume-Ziel bestimmen: Fork-Quelle vor gebundener eigener ID.
         var resumeSessionID: String?
         var isFork = false
@@ -442,6 +429,27 @@ struct AgentCommandBuilder {
             // Resume NUR mit einer real von Claude vergebenen, gebundenen ID.
             resumeSessionID = externalSessionID
         }
+
+        var arguments: [String] = []
+        // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
+        // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.
+        arguments.append(contentsOf: extraLaunchArguments)
+        let userArguments = extraArgumentsResolver(.claude)
+        // Nur Erststarts bekommen den GPT-Modellstempel. Bei Resume und Fork
+        // restauriert Claude die Transcript-Wahl; ein erneutes `--model` würde
+        // einen zwischenzeitlichen `/model`-Wechsel überschreiben. Die
+        // großzügige `availableModels`-Liste schützt restaurierte Modelle vor
+        // dem stillen Off-List-Fallthrough. User-Extras folgen weiterhin nach
+        // dem Stempel und behalten damit das letzte Wort (last-flag-wins).
+        let hasResumeArgument = resumeSessionID != nil
+            || arguments.contains("--resume")
+            || userArguments.contains("--resume")
+        if !hasResumeArgument, let gptBackendModel {
+            arguments.append(contentsOf: ["--model", gptBackendModel])
+        }
+        // User-defined extras (z. B. --dangerously-skip-permissions) vor dem
+        // Resume-Block, damit sie auch beim Resume durchgehen.
+        arguments.append(contentsOf: userArguments)
         // Sonst: frischer Start OHNE `--session-id`. Claude vergibt die Session-
         // ID selbst; SessionStart-Hook + Indexer-Merge binden die REALE, von
         // Claude geschriebene ID nach (Weg B / Superset-Prinzip). Ein erzwungenes

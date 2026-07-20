@@ -57,6 +57,18 @@ final class AgentSessionStatusCoordinator {
         AgentTerminalRegistry.shared.controller(for: sessionID)?.updateExternalSessionID(externalID)
     }
 
+    /// Session-weites Modellangebot für den `/model`-Picker. Als Closure
+    /// injizierbar, damit Tests weder UserDefaults noch globale Preferences
+    /// verändern müssen.
+    var gptModelsFragmentResolver: () -> [String: Any]? = {
+        let preferences = AppPreferences.shared
+        guard preferences.claudeGPTBackendEnabled else { return nil }
+        return ClaudeGPTModelCatalog.availableModelsFragment(
+            defaultModel: preferences.claudeGPTBackendDefaultModel,
+            subagentModel: preferences.claudeGPTSubagentModel
+        )
+    }
+
     private(set) var states: [UUID: AgentSessionLifecycleState] = [:]
     private var notificationThrottle = AgentNotificationThrottle()
     private var launchGraceTasks: [UUID: Task<Void, Never>] = [:]
@@ -112,17 +124,23 @@ final class AgentSessionStatusCoordinator {
     }
 
     /// Zentrale Settings-Vorbereitung für interaktive UND Background-Launches.
-    /// Matrix (Hooks-Preference × Context-Profil):
-    /// - Hooks an,  Profil da   → Datei mit hooks + Profil-Keys
-    /// - Hooks an,  kein Profil → Datei nur mit hooks (heutiges Verhalten)
-    /// - Hooks aus, Profil da   → Datei NUR mit Profil-Keys, kein Tracking
-    /// - Hooks aus, kein Profil → keine Datei
+    /// Hooks, Context-Profil und GPT-Modellkatalog werden unabhängig kombiniert:
+    /// - Hooks an                → Datei mit Hooks, Tracking aktiv
+    /// - Context-Profil vorhanden → dessen nicht-leere Profil-Keys in derselben Datei
+    /// - GPT-Backend an          → `availableModels` in derselben Datei
+    /// Existiert keines der drei Fragmente, wird keine Datei geschrieben.
     func prepareLaunchSettings(
         localSessionID: UUID,
         contextProfile: ClaudeContextProfile?
     ) -> LaunchSettingsPreparation {
         let hooksEnabled = loadPreferences().hooksEnabled
-        let fragment = contextProfile.map { ClaudeContextSettingsBuilder.settingsFragment(for: $0) } ?? [:]
+        let contextFragment = contextProfile.map {
+            ClaudeContextSettingsBuilder.settingsFragment(for: $0)
+        } ?? [:]
+        let fragment = ClaudeContextSettingsBuilder.merged([
+            contextFragment,
+            gptModelsFragmentResolver() ?? [:],
+        ])
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         let path = hookBridge.prepareSettingsFile(
             localSessionID: localSessionID,

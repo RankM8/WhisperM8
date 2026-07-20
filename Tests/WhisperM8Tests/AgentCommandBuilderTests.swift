@@ -535,7 +535,7 @@ extension AgentCommandBuilderTests {
         ])
     }
 
-    func testClaudeGPTBackendFastToggleOffKeepsPlainModelOnResume() throws {
+    func testClaudeGPTBackendResumeOmitsModelStampAndKeepsRouterTuning() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.gptFastModeEnabledResolver = { false }
@@ -543,7 +543,9 @@ extension AgentCommandBuilderTests {
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
         builder.gptRouterPortResolver = { 18_766 }
+        builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
         builder.gptSubagentModelResolver = { "" }
+        builder.gptAutoCompactWindowResolver = { 260_000 }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -555,11 +557,45 @@ extension AgentCommandBuilderTests {
 
         let command = try builder.command(for: session, project: project)
 
-        XCTAssertEqual(command.arguments, [
-            "--model", "gpt-5.6-terra", "--verbose", "--resume", "resume-1",
+        XCTAssertEqual(command.arguments, ["--verbose", "--resume", "resume-1"])
+        XCTAssertEqual(command.environmentOverrides, [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+            "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "260000",
         ])
-        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18766")
+        XCTAssertFalse(command.arguments.contains("--model"))
         XCTAssertNil(command.environmentOverrides["ANTHROPIC_AUTH_TOKEN"])
+    }
+
+    func testClaudeGPTBackendForkOmitsModelStamp() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { true }
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 18_766 }
+        builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
+        builder.gptSubagentModelResolver = { "" }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude-Fork",
+            forkSourceSessionID: "source-1",
+            claudeBackendModel: "gpt-5.6-terra"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--resume", "source-1", "--fork-session"])
+        XCTAssertFalse(command.arguments.contains("--model"))
+        XCTAssertEqual(
+            command.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"],
+            "gpt-5.6-sol-fast"
+        )
     }
 
     func testClaudeGPTBackendKeepsExplicitFastModelWhenToggleIsOff() throws {

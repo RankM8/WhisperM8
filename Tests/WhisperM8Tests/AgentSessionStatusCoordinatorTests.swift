@@ -65,6 +65,7 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             launchGraceSeconds: 999 // Grace-Timer soll in Tests nie feuern
         )
         coordinator.terminalExternalIDUpdater = { _, _ in }
+        coordinator.gptModelsFragmentResolver = { nil }
         return (coordinator, session.id, poster, sounds, preferences)
     }
 
@@ -252,6 +253,54 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             contextProfile: ClaudeContextProfile(name: "Leer")
         )
         XCTAssertNil(empty.settingsFilePath)
+    }
+
+    func testPrepareLaunchSettingsMergesInjectedGPTCatalogIndependently() throws {
+        let (coordinator, sessionID, _, _, preferences) = try makeCoordinator()
+        let profile = ClaudeContextProfile(
+            name: "Coding",
+            deniedMcpServers: ["claude.ai Gmail"]
+        )
+        let expectedModels = ["default", "gpt-test", "gpt-test-fast"]
+        coordinator.gptModelsFragmentResolver = {
+            ["availableModels": expectedModels]
+        }
+
+        func settings(_ path: String?) throws -> [String: Any] {
+            let path = try XCTUnwrap(path)
+            let data = try Data(contentsOf: URL(fileURLWithPath: path))
+            return try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        }
+
+        // Hooks + Profil + Backend-Fragment landen gemeinsam in einer Datei.
+        let allFragments = coordinator.prepareLaunchSettings(
+            localSessionID: sessionID,
+            contextProfile: profile
+        )
+        XCTAssertTrue(allFragments.hooksActive)
+        let allSettings = try settings(allFragments.settingsFilePath)
+        XCTAssertEqual(Set(allSettings.keys), ["hooks", "deniedMcpServers", "availableModels"])
+        XCTAssertEqual(allSettings["availableModels"] as? [String], expectedModels)
+
+        // Ohne Hooks und Profil reicht das Backend-Fragment allein für die Datei.
+        preferences.value.hooksEnabled = false
+        let modelsOnly = coordinator.prepareLaunchSettings(
+            localSessionID: sessionID,
+            contextProfile: nil
+        )
+        XCTAssertFalse(modelsOnly.hooksActive)
+        let modelSettings = try settings(modelsOnly.settingsFilePath)
+        XCTAssertEqual(Set(modelSettings.keys), ["availableModels"])
+        XCTAssertEqual(modelSettings["availableModels"] as? [String], expectedModels)
+
+        // Backend aus, Hooks aus, kein Profil: unverändert keine Settings-Datei.
+        coordinator.gptModelsFragmentResolver = { nil }
+        let nothing = coordinator.prepareLaunchSettings(
+            localSessionID: sessionID,
+            contextProfile: nil
+        )
+        XCTAssertEqual(nothing.settingsArguments, [])
+        XCTAssertFalse(nothing.hooksActive)
     }
 
     // MARK: Prozessende
