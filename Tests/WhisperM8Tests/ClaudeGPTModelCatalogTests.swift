@@ -4,18 +4,22 @@ import XCTest
 final class ClaudeGPTModelCatalogTests: XCTestCase {
     private func models(
         defaultModel: String = "",
-        subagentModel: String = ""
+        subagentModel: String = "",
+        sessionModel: String = ""
     ) throws -> [String] {
         let fragment = ClaudeGPTModelCatalog.availableModelsFragment(
             defaultModel: defaultModel,
-            subagentModel: subagentModel
+            subagentModel: subagentModel,
+            sessionModel: sessionModel
         )
         return try XCTUnwrap(fragment["availableModels"] as? [String])
     }
 
     func testClaudeAliasesAreCompleteAndFirstInDocumentedOrder() throws {
+        // fable[1m] statt fable: erzwingt den 1M-Refresh beim Picker-Wechsel
+        // (Claude Codes 200k-Annahme nach GPT-Zwischenwechsel, 2026-07-20).
         XCTAssertEqual(ClaudeGPTModelCatalog.claudeAliases, [
-            "default", "best", "fable", "opus", "sonnet", "haiku",
+            "default", "best", "fable[1m]", "opus", "sonnet", "haiku",
             "opus[1m]", "sonnet[1m]", "opusplan",
         ])
 

@@ -4,8 +4,13 @@ import Foundation
 enum ClaudeGPTModelCatalog {
     /// Vollständige Built-in-Aliasse (Doku `model-config`, 2.1.215) — jede
     /// Auslassung würde den Alias aus dem `/model`-Picker entfernen.
+    /// `fable[1m]` statt `fable`: Fable ist laut Doku immer 1M, aber ein
+    /// Picker-Wechsel über den suffixlosen Alias ließ nach einem
+    /// GPT-Zwischenwechsel Claude Codes 200k-Annahme stehen (2026-07-20).
+    /// Das explizite Suffix erzwingt den 1M-Refresh; das Matching strippt
+    /// `[1m]` beidseitig, suffixlose fable-Requests bleiben also erlaubt.
     static let claudeAliases = [
-        "default", "best", "fable", "opus", "sonnet", "haiku",
+        "default", "best", "fable[1m]", "opus", "sonnet", "haiku",
         "opus[1m]", "sonnet[1m]", "opusplan",
     ]
 
