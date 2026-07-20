@@ -1,6 +1,6 @@
 ---
 name: codex-subagent
-description: GPT-Subagents nutzen — standardmäßig NATIV über den Claude-Code-Agent-Typ `gpt` (WhisperM8 GPT-Backend), nur explizit als headless Codex-Job über das whisperm8-CLI. Nutze diese Skill bei "GPT-Subagent", "starte GPT-Agents", "lass GPT das machen/reviewen", "zweite Meinung", "frag Codex", "Codex-Subagent", "delegiere an Codex/GPT", bei Bild-Generierung via Codex, wenn Subagent-Jobs verwaltet werden sollen (Status, Logs, Nachsteuern, Stoppen, Aufräumen) oder wenn Codex-Jobs als Steps in Claude Dynamic Workflows orchestriert werden.
+description: Dieser Skill sollte verwendet werden, wenn Nutzer „GPT-Subagent“, „starte GPT-Agents“, „lass GPT reviewen“, „zweite Meinung“, „frag Codex“ oder „delegiere an GPT/Codex“ sagen. Standard ist der native Agent-Typ `gpt`. Der CLI-Spezialpfad gilt nur bei explizitem `--cli`/`whisperm8 agent` oder Codex-only-Anforderungen wie detachten, App-sichtbaren Jobs, Browser-QA mit Playwright-State, `image_gen`, Jobverwaltung oder ausdrücklich gewünschten CLI-Steps in Dynamic Workflows.
 ---
 
 # GPT-Subagents: nativ (Standard) oder Codex-CLI (explizit)
@@ -18,7 +18,7 @@ whisperm8-CLI ist die Spezial-Variante für alles, was nur Codex kann.
 | User sagt explizit "CLI", "whisperm8 agent", "Job" — oder `--cli` als Skill-Argument | **CLI** |
 | Detachte Langläufer: Sidebar-Sichtbarkeit in der App, überleben App-Neustart | **CLI** |
 | Browser-QA (Playwright-storageState), 1Password-Flows | **CLI** |
-| Steps in Claude Dynamic Workflows | **NATIV**: `agent(prompt, {agentType: "gpt", schema})` — inkl. Structured Output E2E-validiert (2026-07-18). CLI/codex-runner nur für Codex-Spezifisches (Bilder, detachte Jobs) |
+| Steps in Claude Dynamic Workflows | **NATIV**: `agent(prompt, {agentType: "gpt", schema})` — inkl. Structured Output E2E-validiert (2026-07-18). Der ausgelieferte Workflow `codex-verify` ist native-only und fällt nie auf CLI/`codex-runner` zurück. |
 
 Skill-Argumente: `/codex-subagent <aufgabe>` → nativ. `/codex-subagent --cli
 <aufgabe>` → CLI erzwingen. Bild-Aufträge gehen unabhängig vom Argument immer
@@ -27,7 +27,9 @@ Skill-Argumente: `/codex-subagent <aufgabe>` → nativ. `/codex-subagent --cli
 ## Nativer Weg (Standard): Agent-Typ `gpt`
 
 Das WhisperM8-GPT-Backend verwaltet eine Agent-Definition
-(`<config-dir>/agents/gpt.md`, Frontmatter `model: gpt-5.6-sol`) für das
+(`<config-dir>/agents/gpt.md`, Frontmatter `model: gpt-5.6-sol` — bei
+aktivem Fast-Modus, dem Default, `model: gpt-5.6-sol-fast` = Priority-Tier,
+2,5× ChatGPT-Credits) für das
 Main-Profil UND jedes Account-Profil; alle Requests laufen über den lokalen
 Mix-Router. Nutzung: normales Agent-Tool mit `subagent_type: "gpt"` — ein
 Spawn pro Teilaufgabe, parallele Fan-outs ausdrücklich erwünscht. Effort ist
@@ -37,11 +39,13 @@ Wenn der Spawn fehlschlägt („Agent type 'gpt' not found"):
 
 - Die Registry lädt beim **Session-Start** — Sessions, die älter sind als die
   Agent-Definition, kennen den Typ nicht (nur PROJEKT-Level-Definitionen unter
-  `.claude/agents/` laden mid-session nach). Abhilfe: neue Session, oder
-  CLI-Weg als Fallback + Hinweis an den User.
+  `.claude/agents/` laden mid-session nach). Abhilfe: neue Session starten und
+  den User informieren; nicht automatisch auf CLI wechseln.
 - GPT-Backend deaktiviert? `env | grep ANTHROPIC_BASE_URL` muss auf
   `http://127.0.0.1:<router-port>` zeigen; sonst Settings → „GPT-Backend"
-  prüfen und den CLI-Weg nehmen.
+  prüfen. Der native-only Workflow `codex-verify` bricht in diesem Fall klar
+  ab; nur ein ausdrücklich angeforderter CLI-Auftrag darf auf den CLI-Weg
+  wechseln.
 
 Gotchas (QA-verifiziert 2026-07-18):
 
@@ -304,27 +308,33 @@ Akzeptanzpunkt (Texte wörtlich zitieren), finale URL, Console-/Network-
 Auffälligkeiten und Artefaktpfade — VERDICT zusätzlich in die Abschlussnachricht.
 ```
 
-## Einsatz in Claude Dynamic Workflows (`/workflows`)
+## Explizite CLI-Spezialfälle in Claude Dynamic Workflows (`/workflows`)
 
-Codex-Jobs funktionieren als Steps in Dynamic Workflows — validiert 2026-07-08
-(Fan-out, Resume über Phasen, Exit-Code-Pfade, Parent-Zuordnung alle grün).
-Das Workflow-Skript kann nicht selbst shellen; jeder Codex-Aufruf läuft über
-einen billigen Claude-Wrapper-Subagenten (`model: 'sonnet'` oder `'haiku'`,
-`effort: 'low'` — nie das teure Hauptmodell) mit `run --wait --json`,
-`; echo "EXIT:$?"` und `{schema}`-Relay des stdout-JSON. Exit-Codes wertet das
-Skript aus, nicht der Wrapper. `status <id>` statt `list` (Kontext-Falle!),
-`shortId` durch die Stages reichen für `send`-Nachsteuerung, Playwright-Jobs
-auf 3–5 parallel batchen. Prompt-Vorlage, Schema, Muster (Cross-Model-
-Verifier-Panel, Fan-out-Implementierung) und bekannte Grenzen:
-**`references/claude-workflows.md`**.
+Der normale Workflow-Weg ist direkt und nativ:
+`agent(prompt, {agentType: "gpt", schema})`. Insbesondere
+`.claude/workflows/codex-verify.js` enthält ausschließlich diesen Weg. Der
+Workflow lädt diesen Skill nicht zur Laufzeit — das ist weder möglich noch
+nötig, weil Agent-Typ und Fehlerverhalten im Skript fest verdrahtet sind.
 
-## Workflows (Kopiervorlagen)
+Nur wenn ein Auftrag ausdrücklich Codex-CLI-Eigenschaften benötigt, etwa einen
+detachten Job, Browser-QA oder `image_gen`, darf ein eigener Workflow-Step die
+CLI verwenden. Das Workflow-Skript kann nicht selbst shellen; jeder solche
+Codex-Aufruf läuft über einen billigen Claude-Wrapper-Subagenten (`model:
+'sonnet'` oder `'haiku'`, `effort: 'low'` — nie das teure Hauptmodell) mit
+`run --wait --json`, `; echo "EXIT:$?"` und `{schema}`-Relay des stdout-JSON.
+Exit-Codes wertet das Skript aus, nicht der Wrapper. `status <id>` statt `list`
+(Kontext-Falle!), `shortId` durch die Stages reichen für `send`-Nachsteuerung,
+Playwright-Jobs auf 3–5 parallel batchen. Prompt-Vorlage, Schema,
+CLI-Spezialmuster wie detachte Nachsteuer-Ketten und Browser-QA-Fan-out sowie
+bekannte Grenzen: **`references/claude-workflows.md`**.
+
+## CLI-Spezialpfad: Kopiervorlagen
 
 ```bash
-# 1) Second-Opinion-Review, synchron
-whisperm8 agent run --wait --json --sandbox read-only \
+# 1) Detachter, in der App sichtbarer Langläufer
+whisperm8 agent run --json --sandbox read-only \
   --model gpt-5.6-sol --effort high \
-  "Reviewe den Diff von HEAD~3..HEAD auf Regressionen, Races und API-Brüche. Nur Analyse, keine Edits."
+  "Führe eine langlaufende Repository-Inventur durch. Nur Analyse, keine Edits. Fasse Risiken und offene Fragen im Abschluss-Report zusammen."
 
 # 2) Parallele Implementierung, isoliert (als Background-Task starten!)
 whisperm8 agent run --wait --json --worktree \
@@ -382,9 +392,8 @@ Vertiefendes Betriebswissen (bei Bedarf laden):
 - **`references/1password-cli.md`** — Auth-States via 1Password-CLI:
   `op run`-Muster ohne Secret-Sichtkontakt, capture-state.mjs, Item-Mapping,
   Setup, Betriebsregeln (Frische, gitignore, read-only für Subagents).
-- **`references/claude-workflows.md`** — Codex-Jobs als Steps in Claude
-  Dynamic Workflows: Wrapper-Kontrakt (Prompt-Vorlage + Schema),
-  Exit-Code-Mapping im Skript, Parallelitäts- und Budget-Regeln, bewährte
-  Muster (Cross-Model-Verifier-Panel, Fan-out, Nachsteuer-Kette), bekannte
-  Grenzen inkl. Commit-Blockade und verifiziertem Fix (Testprotokoll
-  2026-07-08).
+- **`references/claude-workflows.md`** — explizite Codex-CLI-Jobs als Steps in
+  Claude Dynamic Workflows: Wrapper-Kontrakt (Prompt-Vorlage + Schema),
+  Exit-Code-Mapping im Skript, Parallelitäts- und Budget-Regeln, Browser-QA-
+  Fan-out, App-sichtbare Langläufer und Nachsteuer-Ketten sowie bekannte
+  Grenzen inklusive des verifizierten Commit-Fixes.

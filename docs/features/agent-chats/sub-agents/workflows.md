@@ -1,105 +1,87 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-07-20
 ---
 
-# Sub-Agents in Claude Dynamic Workflows
+# GPT-Subagents in Claude Dynamic Workflows
 
-Claude Dynamic Workflows können Codex-Subagents benutzen. Das im Repo
-verwendete Muster berücksichtigt das am 2026-07-08 validierte
-Laufzeitverhalten, dass Workflow-Skripte selbst nicht direkt beliebige
-Shell-Befehle ausführen: Ein Claude-Subagent vom Typ `codex-runner` erhält
-genau einen fertigen `whisperm8 agent …`-Befehl, führt ihn per Bash aus,
-wartet auf das Ergebnis und relayed strukturierte Ergebnisfelder zurück an
-das Workflow-Skript.
+Claude Dynamic Workflows starten GPT-Subagents standardmäßig direkt über den
+nativen Agent-Typ `gpt` des WhisperM8-GPT-Backends:
 
-## Wrapper-Muster
+```js
+agent(prompt, {
+  agentType: 'gpt',
+  schema: RESULT,
+  effort: 'high',
+})
+```
 
-`.claude/agents/codex-runner.md` beschreibt einen mechanischen Agenten mit
-`tools: Bash`. Seine Aufgabe ist nicht Analyse, sondern Ausführung: Er nimmt
-einen einzigen `whisperm8 agent`-Befehl, hängt `; echo "EXIT:$?"` an, nutzt
-den als Laufzeitkonfiguration am 2026-07-08 validierten Bash-Timeout von
-600000 ms und füllt aus dem CLI-stdout-JSON die Felder des jeweils gesetzten
-Workflow-Schemas.
+Der Mix-Router leitet diese Requests an das konfigurierte GPT-Modell weiter.
+Das Workflow-Skript erhält das schema-validierte Ergebnis unmittelbar; ein
+Shell-Prozess, `whisperm8 agent`, `codex-runner` und ein JSON-Relay sind dafür
+nicht erforderlich.
 
-Welche Werte das Workflow-Skript sieht, hängt vom jeweiligen Schema ab.
-`codex-verify.js` relayed zum Beispiel für Finder `exitCode`, `state`,
-`reportStatus`, `findings` und `notes`, für Refuter `exitCode`, `state`,
-`refuted`, `reasoning` und `notes`; es verarbeitet nicht das rohe CLI-JSON.
-Andere Workflows können Felder wie `shortId`, `turns` oder Metriken in ihr
-Schema aufnehmen. Damit bleibt die Shell-Fähigkeit im Claude-Agent mit
-Bash-Tool, während die Workflow-Logik strukturierte Daten statt Terminaltext
-verarbeitet.
+## `codex-verify`
 
-`.claude/workflows/codex-verify.js` nutzt standardmäßig `agentType:
-"codex-runner"`. Der Inline-Fallback greift nur, wenn der Aufrufer explizit
-`agentType: null` übergibt; dann steht der Wrapper-Vertrag im Prompt und der
-Workflow startet einen Sonnet-Agenten mit Bash-Fähigkeit. Der eigentliche
-Codex-Job läuft trotzdem über `whisperm8 agent run --wait --json`.
+`.claude/workflows/codex-verify.js` ist der ausgelieferte native
+Review-Workflow. Er startet mehrere GPT-Finder parallel und prüft jedes Finding
+anschließend mit zwei adversarischen GPT-Refutern:
 
-## Exit-Code-Vertrag
+1. Finder untersuchen den Scope aus unterschiedlichen Perspektiven.
+2. Pro Finding prüfen die Linsen `reality` und `repro` Faktenlage und
+   Reproduzierbarkeit.
+3. Nur zwei bestätigende Refuter ergeben `confirmed`.
+4. Gemischte Urteile, `unverified` oder ausgefallene Refuter ergeben
+   `plausible`.
+5. Nur zwei erfolgreiche Widerlegungen ergeben `dropped`.
 
-| Code | Bedeutung im Workflow |
-|------|-----------------------|
-| `0` | Turn ist technisch abgeschlossen; der Report kann `success` oder `partial`, aber auch fehlend oder unparsebar sein. |
-| `1` | Usage-Fehler im erzeugten CLI-Aufruf; Workflow-Builder hat falsch parametrisiert. |
-| `2` | Job ist fehlgeschlagen oder der Report meldet `failure`; Workflow kann das als negatives Ergebnis behandeln. |
-| `3` | Zustandskonflikt; typischer Fall ist ein aktiver oder bereits übernommener Job. |
-| `4` | Umgebungsproblem; etwa fehlendes Codex-Binary, unbekannte Job-ID oder nicht entfernbarer Worktree. |
+Der Workflow akzeptiert optional `scope`, `effort`, `repo` und `dimensions`.
+Alte Parameter wie `runner` oder `agentType` werden ausdrücklich abgelehnt,
+damit kein stiller Wechsel auf einen anderen Ausführungsweg möglich ist.
 
-Der `codex-runner` interpretiert diese Codes nicht fachlich. Er meldet sie im
-Schema-Ergebnis zurück; die Workflow-Datei entscheidet, ob daraus ein Retry,
-ein Abbruch oder ein bewusstes negatives Urteil folgt.
+## Fehlerverhalten
 
-## `shortId` weiterreichen
+Ein fehlgeschlagener Agent darf nicht als fachliches Urteil interpretiert
+werden:
 
-Detached Jobs geben sofort eine `shortId` zurück. Synchrone Workflow-Schritte
-verwenden im Repo meist `--wait --json`, damit der Wrapper erst nach dem Turn
-zurückkehrt und das Workflow-Schema aus einem finalen Statusobjekt befüllt
-werden kann.
+- Schlagen alle Finder fehl, bricht der Workflow mit einem klaren Hinweis auf
+  GPT-Backend und Agent-Registry ab.
+- Teilweise Finder-Ausfälle setzen `complete` auf `false` und werden unter
+  `failedFinders` zurückgegeben.
+- Fehlende Refuter-Urteile widerlegen ein Finding nicht. Das Finding bleibt
+  `plausible`, der Lauf wird unvollständig und die Ausfälle erscheinen unter
+  `failedRefuters`.
+- „Keine überlebenden Findings“ wird nur bei einem technisch vollständigen Lauf
+  gemeldet.
 
-Die Short-ID bleibt trotzdem wichtig, wenn das jeweilige Workflow-Schema sie
-weiterreicht: Sie ist der stabile Handle für
-Nachsteuerung per `whisperm8 agent send <shortId> --wait --json "<prompt>"`,
-für `status`, `logs`, `stop` und für manuelles Debugging in der App. Ein
-Workflow, der einen Job später fortsetzen will, muss die `shortId` aus dem
-ersten Ergebnis explizit im eigenen Zwischenzustand weiterreichen.
+Eine ältere Chat-Session kann eine vor der GPT-Integration geladene
+Agent-Registry oder einen eingefrorenen Workflow-Snapshot besitzen. In diesem
+Fall einen neuen Chat und einen neuen Workflow-Lauf starten, keinen alten Lauf
+fortsetzen.
 
-`send` ist nur auf ruhenden Jobs erlaubt. Der CLI-Claim reserviert den Job
-unter `.claim.lock`; parallele Nachsteuerungen auf dieselbe Short-ID enden
-deshalb mit Exit `3` statt verschränkte Codex-Historien zu erzeugen.
+## Explizite Codex-CLI-Spezialfälle
 
-## Parallelität
+Das headless WhisperM8-/Codex-CLI bleibt für Eigenschaften vorgesehen, die der
+native Agent nicht bietet, beispielsweise detachte und in der App sichtbare
+Jobs, Browser-QA mit Playwright-Storage-State oder `image_gen`. Es ist kein
+Fallback von `codex-verify`.
 
-Parallelität entsteht auf Workflow-Ebene, nicht innerhalb eines Jobs. Ein Job
-führt immer genau einen Supervisor-Turn aus. Mehrere unabhängige Jobs können
-parallel per mehreren `agent(...)`-Aufrufen gestartet werden, solange sie nicht
-dieselbe Short-ID nachsteuern.
+Auswahlregeln, Befehle, Sicherheitsvorgaben und das Wrapper-Muster für solche
+Spezialfälle sind zentral im Skill `.claude/skills/codex-subagent/SKILL.md`
+dokumentiert. Aufruf:
 
-Für reine Analyse nutzt das Beispiel `--sandbox read-only`, damit parallele
-Finder und Refuter keine Dateien verändern. Schreibende Jobs im selben
-Working Tree bleiben ein bewusstes Konfliktrisiko; der CLI bietet dafür
-`--worktree`, das einen separaten Worktree im Job-Verzeichnis anlegt. Wenn ein
-Workflow mehrere schreibende Codex-Jobs parallel startet, muss er die
-Arbeitsbereiche trennen oder Konflikte fachlich einplanen.
+```text
+/codex-subagent --cli <Aufgabe>
+```
 
-## Reale Beispiele im Repo
+Die vertiefende Referenz
+`.claude/skills/codex-subagent/references/claude-workflows.md` beschreibt nur
+diesen expliziten CLI-Spezialpfad. Dadurch bleibt die native Review-Architektur
+frei von CLI-Boilerplate, während das Codex-spezifische Betriebswissen an einer
+Stelle gepflegt wird.
 
-- `.claude/agents/codex-runner.md` ist der registrierbare Claude-Subagent für das Bash-Relay eines einzelnen `whisperm8 agent`-Befehls; der Timeout-Wert ist Teil dieses Agent-Vertrags und wurde als Laufzeitkonfiguration am 2026-07-08 validiert.
-- `.claude/workflows/codex-verify.js` ist ein Dynamic Workflow, der mehrere Codex-Finder parallel startet und jedes Finding durch zwei adversarische Codex-Refuter prüfen lässt.
+## Modellnachweis
 
-`codex-verify.js` baut Befehle der Form
-`whisperm8 agent run --wait --json --sandbox read-only --effort <level> ...`.
-Die Finder schreiben Findings in ein vorgegebenes Report-Format. Für jedes
-Finding erzeugt der Workflow zwei weitere Wrapper-Jobs mit unterschiedlichen
-Prüflinsen. Am Ende gruppiert das Skript bestätigte, strittige und widerlegte
-Findings anhand der strukturierten Wrapper-Ergebnisse.
-
-## Grenzen
-
-Der Wrapper ist absichtlich mechanisch. Er startet keinen zweiten Befehl,
-führt keine Cleanup-Aktionen aus, stoppt keine hängenden Jobs und repariert
-keine Reports. Timeout, fehlendes JSON oder Exit `3` werden als Ergebnis an
-das Workflow-Skript gemeldet. Dadurch bleibt der Workflow deterministisch:
-Die Kontrolllogik liegt im Skript, die Shell-Ausführung im `codex-runner`, und
-der eigentliche Modelllauf im WhisperM8-Subagent-Job.
+Die Selbstauskunft eines Subagents beweist nicht, welches Modell tatsächlich
+gelaufen ist. Maßgeblich ist ausschließlich das `model`-Feld im betreffenden
+Session-JSONL unter `~/.claude*/projects/<cwd>/`.

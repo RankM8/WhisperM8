@@ -1,4 +1,11 @@
-# Codex-Subagents in Claude Dynamic Workflows (`/workflows`)
+# Explizite Codex-CLI-Subagents in Claude Dynamic Workflows (`/workflows`)
+
+> **Spezialpfad, nicht Standard:** Normale GPT-Schritte laufen nativ über
+> `agent(prompt, {agentType: "gpt", schema})`. Der ausgelieferte Workflow
+> `.claude/workflows/codex-verify.js` ist native-only und verwendet weder
+> `whisperm8 agent` noch `codex-runner`. Diese Referenz gilt ausschließlich für
+> Workflows, die ausdrücklich Codex-CLI-Eigenschaften wie detachte Jobs,
+> Browser-QA oder `image_gen` benötigen.
 
 Empirisch validiert am 2026-07-08: ein Test-Workflow mit 10 Agenten (8 Codex-Jobs:
 Smoke, 3er-Fan-out, Resume, 2 Schreib-Jobs, 2 Fehlerpfade) lief in 75 s fehlerfrei
@@ -35,8 +42,9 @@ agent(`Führe genau diesen Befehl aus:\n\n${cmd}\n\n${relayHinweis}`,
 ```
 
 Kein Boilerplate, kein `model`/`effort` setzen (kommt aus der Agent-Definition).
-Ein benannter Beispiel-Workflow liegt in `.claude/workflows/codex-verify.js`
-(Finder × adversarische Refuter). Ohne diese Datei gilt der Kontrakt unten.
+Dieses Muster gehört ausschließlich in explizite CLI-Spezialworkflows;
+`codex-verify.js` verwendet bewusst den nativen `gpt`-Agent-Typ und ist kein
+Beispiel für diesen Wrapper.
 
 ## Der Wrapper-Kontrakt (manuell)
 
@@ -122,39 +130,35 @@ User hat übernommen, Step überspringen), `4` = Umgebung (abbrechen, loggen).
    für die härtesten Verifikationen `--model gpt-5.6-sol --effort xhigh`
    aufwärts erwägen. Verfügbare Level pro Modell: `~/.codex/models_cache.json`.
 
-## Ausnahme: `codex exec` direkt (ohne whisperm8)
+## Bewährte CLI-Spezialmuster
 
-Für **kurze, read-only Einweg-Urteile** (< ~8 Min, kein Folge-Turn, keine
-Commits, App-Sichtbarkeit egal — z.B. ein schnelles Verifier-Panel in einem
-Repo ohne WhisperM8) darf der Wrapper auch direkt
-`codex exec --json --sandbox read-only "<prompt>"` aufrufen. Bewusst NUR
-dort: ein direkter Call verliert alles, was die Supervisor-Schicht leistet —
-Überleben des 10-Min-Bash-Timeouts (Totalverlust statt `agent wait`),
-`send`-Folge-Turns, Sichtbarkeit in der App, Report-Vertrag und den
-automatischen `.git`-writable_roots-Fix für Commits.
-
-## Bewährte Muster
-
-- **Cross-Model-Verifier-Panel** (stärkster Fit): Claude-Finder finden,
-  read-only-Codex-Jobs verifizieren/widerlegen — echte Modell-Diversität statt
-  N identischer Prüfer.
-- **Fan-out-Implementierung:** `pipeline()` über eine Task-Liste, pro Item ein
-  Codex-Job (workspace-write), Synthese-Step reviewt die Ergebnisse.
+- **Browser-QA-Fan-out:** Ein CLI-Preflight mit
+  `--playwright-storage-state` prüft Authentifizierung und Testumgebung; nur
+  bei PASS startet der Workflow 3–5 isolierte Browser-Jobs. Sicherheitsregeln
+  und Prompt-Vorlagen stehen in `playwright-browser-qa.md`.
+- **App-sichtbarer Langläufer:** Ein detachter Job übernimmt Arbeit, die einen
+  Workflow- oder App-Neustart überleben soll; spätere Phasen holen den Status
+  über die `shortId` ab.
 - **Nachsteuer-Kette:** Phase N wertet `openQuestions` aus, Phase N+1 schickt
-  gezielte `send`-Folge-Turns an dieselben Jobs.
+  gezielte `send`-Folge-Turns an denselben Job.
+- **Isolierte Implementierung:** Schreibende Codex-Jobs verwenden `--worktree`,
+  wenn App-Sichtbarkeit, persistente Folge-Turns oder andere CLI-Eigenschaften
+  ausdrücklich benötigt werden. Normale Workflow-Implementierungen bleiben
+  nativ.
 
-Minimalbeispiel (Verifier-Panel):
+Minimalbeispiel für einen expliziten Browser-QA-Preflight:
 
 ```js
-phase('Verify')
-const verdicts = await parallel(findings.map(f => () =>
-  agent(wrapperPrompt(
-    'whisperm8 agent run --wait --json --sandbox read-only --model gpt-5.6-sol --effort high --cd ' + REPO +
-    ' "Widerlege oder bestätige: ' + f.claim + '. Nur Analyse, Urteil ins summary."'),
-    { model: 'sonnet', effort: 'low', schema: RESULT, phase: 'Verify' })))
+phase('Preflight')
+const preflight = await agent(wrapperPrompt(
+  'whisperm8 agent run --wait --json --sandbox read-only --model gpt-5.6-sol --effort high ' +
+  '--playwright-storage-state ' + STATE + ' --cd ' + REPO +
+  ' "Prüfe ausschließlich, ob die geschützte Route authentifiziert erreichbar ist. ' +
+  'Bei Login-Redirect NICHT PRUEFBAR melden; nicht einloggen und keine Daten ändern."'),
+  { agentType: 'codex-runner', schema: RESULT, phase: 'Preflight' })
 ```
 
-## Bekannte Grenzen (Stand 2026-07-08, codex 0.142.5)
+## Bekannte Grenzen (fortgeschrieben bis 2026-07-20, Codex 0.144.0)
 
 - **Commits: behoben (Fix vom 2026-07-08).** Codex' Sandbox behandelt `.git`
   jeder writable root als read-only; das CLI ermittelt das gemeinsame
