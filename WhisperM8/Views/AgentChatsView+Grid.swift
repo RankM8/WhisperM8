@@ -746,6 +746,7 @@ extension AgentChatsView {
                 ProjectAvatar(project: project, size: 13)
                     .help(project.name)
             }
+            accountBadge(for: session)
             Spacer(minLength: 6)
             // Repo im Editor öffnen (PhpStorm etc.) — nutzt dasselbe
             // gemerkte Öffnen-Ziel wie der IDE-Opener im Chat-Header

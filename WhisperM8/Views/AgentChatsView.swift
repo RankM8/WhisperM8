@@ -2568,9 +2568,24 @@ struct AgentChatsView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(project.path)
+                if let selectedSession {
+                    accountBadge(for: selectedSession)
+                }
             }
         } else {
             Color.clear.frame(height: 12)
+        }
+    }
+
+    @ViewBuilder
+    func accountBadge(for session: AgentChatSession) -> some View {
+        if session.provider == .claude {
+            let profileName = session.claudeProfileName ?? "main"
+            let color = session.claudeProfileName == nil
+                ? AgentTheme.textTertiary
+                : AgentTheme.statusAwaiting
+            kindBadge(profileName, color: color)
+                .help("Claude-Account-Profil dieser Session")
         }
     }
 
