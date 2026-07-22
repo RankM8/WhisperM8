@@ -309,23 +309,26 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTSubagentModel) }
     }
 
-    /// Reales Kontextfenster der GPT-Modelle (ChatGPT-Limit fuer GPT-5.6:
-    /// 272k laut Codex-models_cache und Proxy-README). Wird GPT-gestempelten
-    /// Sessions als `CLAUDE_CODE_AUTO_COMPACT_WINDOW` mitgegeben, damit die
-    /// CLI nicht mit der 200k-Default-Annahme fuer unbekannte Modelle rechnet.
-    static let claudeGPTDefaultAutoCompactWindow = 272_000
+    /// Gemeinsame reale Modellkapazitaet der explizit freigegebenen GPT-
+    /// Modelle (GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4/Mini). Bei aktivem
+    /// MixRouter wird sie als `CLAUDE_CODE_MAX_CONTEXT_TOKENS` gesetzt und von
+    /// den modellselektiven Haupt-/Subagent-Statuslines angezeigt. Der
+    /// prozessweite Auto-Compact-Deckel ist davon getrennt und konstant 1M.
+    static let claudeGPTDefaultContextWindow = 272_000
 
-    /// Geclampte Grenzen: Ein Tippfehler wie 2 720 000 wuerde die
-    /// Kompaktierung faktisch abschalten (Session stirbt am 272k-Serverlimit),
-    /// ein Mini-Wert wuerde dauerkompaktieren. 500k laesst Luft fuer
-    /// kuenftige groessere GPT-Fenster.
-    static let claudeGPTAutoCompactWindowRange = 10_000...500_000
+    /// Geclampte Grenzen: Kleinere Werte begrenzen die freigegebenen Modelle
+    /// konservativ. Oberhalb 272k ist aktuell keine gemeinsam kompatible
+    /// Allowlist belegt; solche Alt-/Fehlwerte werden deshalb auf 272k gekappt.
+    /// Der persistierte Key behaelt aus Kompatibilitaetsgruenden seinen
+    /// historischen `claudeGPTAutoCompactWindow`-Namen.
+    static let claudeGPTContextWindowRange =
+        10_000...ClaudeGPTModelAlias.maximumKnownSharedContextWindow
 
-    var claudeGPTAutoCompactWindow: Int {
+    var claudeGPTContextWindow: Int {
         get {
             let value = defaults.integer(forKey: Keys.claudeGPTAutoCompactWindow)
-            guard value > 0 else { return Self.claudeGPTDefaultAutoCompactWindow }
-            let range = Self.claudeGPTAutoCompactWindowRange
+            guard value > 0 else { return Self.claudeGPTDefaultContextWindow }
+            let range = Self.claudeGPTContextWindowRange
             return min(max(value, range.lowerBound), range.upperBound)
         }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTAutoCompactWindow) }

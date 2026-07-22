@@ -72,7 +72,9 @@ extension AgentChatsView {
 
         // 2. GPT-Router vor dem Spawn off-main absichern. Toggle und Ports
         //    werden nach dem Readiness-Check erneut gelesen; kippt der Guard,
-        //    startet der Agent sichtbar geloggt im Claude-Direktbetrieb.
+        //    startet der Agent sichtbar geloggt im Claude-Direktbetrieb. Bei
+        //    Erfolg wird derselbe vollstaendige Snapshot an Dispatcher UND
+        //    session-scoped Worker-Settings weitergereicht.
         let routerEnvironment = await Task.detached(priority: .userInitiated) {
             var ensureError: ClaudeCodeProxyError?
             return BackgroundRouterLaunchGuard.resolveEnvironment(
@@ -87,8 +89,13 @@ extension AgentChatsView {
                         return false
                     }
                 },
-                makeEnvironment: { _ in
-                    AgentCommandBuilder().gptRouterCoreEnvironment()
+                makeEnvironment: { guardedPort in
+                    var builder = AgentCommandBuilder()
+                    // Der nach dem Guard fixierte Port gehoert zum Snapshot;
+                    // ein weiterer Preference-Read hier koennte sonst einen
+                    // noch nicht geprueften Port in die Worker-Datei schreiben.
+                    builder.gptRouterPortResolver = { guardedPort }
+                    return builder.gptRouterCoreEnvironment()
                 },
                 onUnavailable: {
                     Logger.claudeGPTRouter.error(
@@ -98,18 +105,33 @@ extension AgentChatsView {
             )
         }.value
 
-        // 3. Settings vorbereiten (Hook-Bridge + Context-Profil-Overlay) —
+        // 3. Settings vorbereiten (Hook-Bridge + Context-Profil + Worker-Env) —
         //    die Background-Session erbt die Settings vom Supervisor, also
         //    muessen wir `--settings <path>` schon beim Spawn-Subprocess
-        //    setzen, nicht erst beim spaeteren `claude attach`. Kein Pfad
-        //    (Hooks aus + kein Profil / IO-Fehler) → Spawn ohne Settings —
-        //    der Agent laeuft trotzdem, nur ohne Live-Events/Overlay.
+        //    setzen, nicht erst beim spaeteren `claude attach`. Ohne aktives
+        //    Routing bleibt ein IO-Fehler fail-open; mit Router-Snapshot ist die
+        //    Datei Pflicht, weil sonst der Worker andere Invarianten als der
+        //    Dispatcher erhielte.
         let launchPreparation = AgentSessionStatusCoordinator.shared.prepareLaunchSettings(
             localSessionID: session.id,
             contextProfile: contextProfile,
-            includeGPTModelCatalog: routerEnvironment != nil
+            includeGPTModelCatalog: routerEnvironment != nil,
+            workerEnvironment: routerEnvironment
         )
         let settingsPath = launchPreparation.settingsFilePath
+        if BackgroundRouterLaunchGuard.blocksSpawnAfterSettingsPreparation(
+            routerEnvironment: routerEnvironment,
+            settingsFilePath: settingsPath
+        ) {
+            spawningBackgroundSessions.remove(session.id)
+            try? store.deleteSession(id: session.id)
+            openTabIDs.removeAll { $0 == session.id }
+            if selectedSessionID == session.id {
+                selectedSessionID = openTabIDs.first
+            }
+            errorMessage = "Hintergrund-Agent konnte nicht gestartet werden: Worker-Settings mit GPT-Router-Environment konnten nicht geschrieben werden."
+            return
+        }
 
         // 4. Spawn via BackgroundAgentSpawner.
         let extraArgs = AgentCommandBuilder.parseArguments(AppPreferences.shared.claudeExtraArguments)

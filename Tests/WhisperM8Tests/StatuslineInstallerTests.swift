@@ -413,6 +413,267 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertEqual(installer.wiredSettingsCount(), 1)
     }
 
+    // MARK: GPT-Kontextmetadaten
+
+    func testMainStatuslineCorrectsGPTCustomModelFallbackTo272K() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "gpt-5.6-sol"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+                "context_window_size": 200_000,
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-gpt-context-statusline.sh",
+            input: input,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "272000"]
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("9k/272k"), text)
+    }
+
+    func testMainStatuslineWithoutExplicitGPTCapacityKeepsReported200K() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "gpt-5.6-sol"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+                "context_window_size": 200_000,
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-gpt-context-without-env-statusline.sh",
+            input: input
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("9k/200k"), text)
+        XCTAssertFalse(text.contains("9k/272k"), text)
+    }
+
+    func testMainStatuslineUsesConfiguredGPTModelCapacity() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "gpt-5.4-mini"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+                "context_window_size": 200_000,
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-custom-gpt-context-statusline.sh",
+            input: input,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "250000"]
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("9k/250k"), text)
+        XCTAssertFalse(text.contains("9k/1000k"), text)
+    }
+
+    func testMainStatuslineDoesNotRewriteSimilarGPTCustomID() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "gpt-5.6-solar"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+                "context_window_size": 200_000,
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-foreign-gpt-context-statusline.sh",
+            input: input
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("9k/200k"), text)
+        XCTAssertFalse(text.contains("9k/272k"), text)
+    }
+
+    func testMainStatuslineHandlesMissingContextWindowSize() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "gpt-5.6-terra"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-missing-context-statusline.sh",
+            input: input,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "272000"]
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("9k/272k"), text)
+    }
+
+    func testMainStatuslineDoesNotInventMissingClaudeWindow() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "claude-fable-5"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-missing-fable-context-statusline.sh",
+            input: input
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertFalse(text.contains("9k/200k"), text)
+        XCTAssertFalse(text.contains("9k/272k"), text)
+    }
+
+    func testSubagentStatuslineCorrectsOnlyGPT200KFallback() throws {
+        let input: [String: Any] = [
+            "columns": 200,
+            "tasks": [
+                [
+                    "id": "gpt-task",
+                    "name": "gpt-worker",
+                    "model": "gpt-5.6-sol-fast[1M]",
+                    "description": "Review",
+                    "tokenCount": 9_000,
+                    "contextWindowSize": 200_000,
+                ],
+                [
+                    "id": "supported-gpt-task",
+                    "name": "supported-gpt-worker",
+                    "model": "GPT-5.5-FAST[1M]",
+                    "description": "Review",
+                    "tokenCount": 9_000,
+                    "contextWindowSize": 200_000,
+                ],
+                [
+                    "id": "unsupported-mini-fast-task",
+                    "name": "unsupported-mini-fast-worker",
+                    "model": "gpt-5.4-mini-fast",
+                    "description": "Review",
+                    "tokenCount": 9_000,
+                    "contextWindowSize": 200_000,
+                ],
+                [
+                    "id": "legacy-gpt-task",
+                    "name": "legacy-gpt-worker",
+                    "model": "gpt-5.3-codex-spark",
+                    "description": "Review",
+                    "tokenCount": 9_000,
+                    "contextWindowSize": 200_000,
+                ],
+                [
+                    "id": "opus-task",
+                    "name": "opus-worker",
+                    "model": "claude-opus-4-8[1m]",
+                    "description": "Review",
+                    "tokenCount": 162_000,
+                    "contextWindowSize": 1_000_000,
+                ],
+            ],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledSubagentScript(),
+            named: "subagent-gpt-context-statusline.sh",
+            input: input,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "272000"]
+        )
+        let lines = try XCTUnwrap(String(data: output, encoding: .utf8))
+            .split(separator: "\n")
+        let objects = try lines.map { line in
+            try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+            )
+        }
+        let byID: [String: String] = Dictionary(
+            uniqueKeysWithValues: objects.compactMap { object -> (String, String)? in
+                guard let id = object["id"] as? String,
+                      let content = object["content"] as? String else { return nil }
+                return (id, content)
+            }
+        )
+
+        XCTAssertTrue(try XCTUnwrap(byID["gpt-task"]).contains("9k/272k"))
+        XCTAssertTrue(try XCTUnwrap(byID["supported-gpt-task"]).contains("9k/272k"))
+        XCTAssertTrue(try XCTUnwrap(byID["unsupported-mini-fast-task"]).contains("9k/200k"))
+        XCTAssertTrue(try XCTUnwrap(byID["legacy-gpt-task"]).contains("9k/200k"))
+        XCTAssertTrue(try XCTUnwrap(byID["opus-task"]).contains("162k/1000k"))
+    }
+
+    func testSubagentStatuslineWithoutExplicitGPTCapacityKeepsReported200K() throws {
+        let input: [String: Any] = [
+            "columns": 120,
+            "tasks": [[
+                "id": "gpt-task",
+                "name": "gpt-worker",
+                "model": "gpt-5.6-sol-fast",
+                "description": "Review",
+                "tokenCount": 9_000,
+                "contextWindowSize": 200_000,
+            ]],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledSubagentScript(),
+            named: "subagent-gpt-context-without-env-statusline.sh",
+            input: input
+        )
+        let line = try XCTUnwrap(String(data: output, encoding: .utf8))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+        )
+        let content = try XCTUnwrap(object["content"] as? String)
+
+        XCTAssertTrue(content.contains("9k/200k"), content)
+        XCTAssertFalse(content.contains("9k/272k"), content)
+    }
+
     // MARK: Terminal-Steuerzeichen
 
     func testMainStatuslineSanitizesExternalTerminalSequences() throws {
@@ -474,7 +735,8 @@ final class StatuslineInstallerTests: XCTestCase {
     private func runStatuslineScript(
         _ script: String,
         named fileName: String,
-        input: [String: Any]
+        input: [String: Any],
+        environmentOverrides: [String: String] = [:]
     ) throws -> Data {
         let scriptURL = tempHome.appendingPathComponent(fileName)
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
@@ -497,6 +759,8 @@ final class StatuslineInstallerTests: XCTestCase {
         environment["HOME"] = tempHome.path
         environment["TMPDIR"] = temporaryDirectory.path + "/"
         environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
+        environment.removeValue(forKey: "WHISPERM8_GPT56_CONTEXT_WINDOW")
+        environment.merge(environmentOverrides) { _, override in override }
         process.environment = environment
 
         let standardInput = Pipe()

@@ -187,13 +187,31 @@ final class ClaudeContextProfileTests: XCTestCase {
         XCTAssertTrue(ClaudeContextSettingsBuilder.processEnvironmentOverlay(for: nil).isEmpty)
     }
 
-    func testMergedIsFlatAndLastWins() {
+    func testMergedDeepMergesNestedEnvironmentAndLastLeafWins() {
         let merged = ClaudeContextSettingsBuilder.merged([
-            ["hooks": ["Stop": []], "a": 1],
-            ["deniedMcpServers": [["serverName": "x"]], "a": 2]
+            [
+                "hooks": ["Stop": []],
+                "env": ["PROFILE_ONLY": "yes", "COLLISION": "profile"],
+                "nested": ["left": ["a": 1]],
+                "a": 1,
+            ],
+            [
+                "deniedMcpServers": [["serverName": "x"]],
+                "env": ["WORKER_ONLY": "yes", "COLLISION": "internal"],
+                "nested": ["left": ["b": 2]],
+                "a": 2,
+            ],
         ])
-        XCTAssertEqual(Set(merged.keys), ["hooks", "deniedMcpServers", "a"])
+
+        XCTAssertEqual(Set(merged.keys), ["hooks", "deniedMcpServers", "env", "nested", "a"])
         XCTAssertEqual(merged["a"] as? Int, 2)
+        XCTAssertEqual(merged["env"] as? [String: String], [
+            "PROFILE_ONLY": "yes",
+            "WORKER_ONLY": "yes",
+            "COLLISION": "internal",
+        ])
+        let nested = merged["nested"] as? [String: Any]
+        XCTAssertEqual(nested?["left"] as? [String: Int], ["a": 1, "b": 2])
     }
 
     // MARK: Workspace-Modell: Decode-Abwaertskompatibilitaet

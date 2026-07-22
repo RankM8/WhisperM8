@@ -51,12 +51,20 @@ final class ClaudeGPTMixRouter {
         case lengthRequired
     }
 
+    struct UpstreamErrorDiagnostics: Equatable {
+        var errorType: String?
+        var errorCode: String?
+        var isContextLimit: Bool
+        var capturedBytes: Int
+    }
+
     private enum ListenerStartAction {
         case complete(Result<Void, Error>)
         case start(NWListener, generation: UInt64)
     }
 
     typealias UpstreamURLResolver = (Upstream) -> URL
+    typealias GPTContextWindowResolver = () -> Int
 
     private static let hopByHopHeaderNames: Set<String> = [
         "connection",
@@ -72,8 +80,10 @@ final class ClaudeGPTMixRouter {
     ]
     private static let maximumHeaderBytes = 64 * 1_024
     private static let maximumBodyBytes = 64 * 1_024 * 1_024
+    private static let maximumDiagnosticErrorBytes = 64 * 1_024
 
     private let upstreamURLResolver: UpstreamURLResolver
+    private let gptContextWindowResolver: GPTContextWindowResolver
     private let listenerQueue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.listener")
     private let lifecycleQueue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.lifecycle")
     private var listener: NWListener?
@@ -82,26 +92,39 @@ final class ClaudeGPTMixRouter {
     private var connections: [UUID: ClientConnection] = [:]
     private var generation: UInt64 = 0
 
-    init(upstreamURLResolver: @escaping UpstreamURLResolver = { upstream in
-        switch upstream {
-        case .codexProxy:
-            return URL(
-                string: "http://127.0.0.1:\(AppPreferences.shared.claudeGPTBackendPort)"
-            )!
-        case .anthropic:
-            return URL(string: "https://api.anthropic.com")!
+    init(
+        upstreamURLResolver: @escaping UpstreamURLResolver = { upstream in
+            switch upstream {
+            case .codexProxy:
+                return URL(
+                    string: "http://127.0.0.1:\(AppPreferences.shared.claudeGPTBackendPort)"
+                )!
+            case .anthropic:
+                return URL(string: "https://api.anthropic.com")!
+            }
+        },
+        gptContextWindowResolver: @escaping GPTContextWindowResolver = {
+            AppPreferences.shared.claudeGPTContextWindow
         }
-    }) {
+    ) {
         self.upstreamURLResolver = upstreamURLResolver
+        self.gptContextWindowResolver = gptContextWindowResolver
     }
 
-    convenience init(codexProxyURL: URL, anthropicURL: URL) {
-        self.init { upstream in
-            switch upstream {
-            case .codexProxy: return codexProxyURL
-            case .anthropic: return anthropicURL
-            }
-        }
+    convenience init(
+        codexProxyURL: URL,
+        anthropicURL: URL,
+        gptContextWindow: Int = AppPreferences.claudeGPTDefaultContextWindow
+    ) {
+        self.init(
+            upstreamURLResolver: { upstream in
+                switch upstream {
+                case .codexProxy: return codexProxyURL
+                case .anthropic: return anthropicURL
+                }
+            },
+            gptContextWindowResolver: { gptContextWindow }
+        )
     }
 
     var listeningPort: Int? {
@@ -277,10 +300,112 @@ final class ClaudeGPTMixRouter {
     }
 
     static func upstream(for body: Data) -> Upstream {
-        guard let model = model(in: body), model.hasPrefix("gpt-") else {
-            return .anthropic
+        guard let model = model(in: body) else { return .anthropic }
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasPrefix("gpt-") ? .codexProxy : .anthropic
+    }
+
+    static func hasUnsupportedContentEncoding(_ headers: [HTTPHeader]) -> Bool {
+        headers
+            .filter { $0.name.caseInsensitiveCompare("content-encoding") == .orderedSame }
+            .flatMap { $0.value.split(separator: ",") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .contains { !$0.isEmpty && $0 != "identity" }
+    }
+
+    static func isEventStreamContentType(_ rawValue: String?) -> Bool {
+        guard let rawValue else { return false }
+        let mediaType = rawValue
+            .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return mediaType == "text/event-stream"
+    }
+
+    /// Direkte `/model`-Eingaben muessen bereits der kanonischen, kapazitaets-
+    /// kompatiblen Allowlist entsprechen. Dadurch fallen Grossschreibung,
+    /// Whitespace, `[1m]`, alte 128k-Modelle und unbekannte GPT-IDs weder in den
+    /// Anthropic-Zweig noch unter ein zu grosses gemeinsames MAX_CONTEXT.
+    static func gptModelValidationErrorResponse(
+        for model: String?,
+        contextWindow: Int
+    ) -> Data? {
+        guard let model else { return nil }
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.lowercased().hasPrefix("gpt-") else { return nil }
+        guard let canonical = ClaudeGPTModelAlias.canonicalGPTModel(trimmed) else {
+            return anthropicInvalidRequestBody(message: "Invalid GPT model identifier.")
         }
-        return .codexProxy
+
+        if trimmed != canonical {
+            return anthropicInvalidRequestBody(
+                message: "Non-canonical GPT model identifier. Use \(canonical) and retry."
+            )
+        }
+        guard ClaudeGPTModelAlias.isSupportedCanonicalModel(
+            canonical,
+            contextWindow: contextWindow
+        ) else {
+            let message: String
+            if contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow {
+                message = "The configured GPT context window exceeds the largest verified shared capacity of \(ClaudeGPTModelAlias.maximumKnownSharedContextWindow) tokens. Reduce the setting and retry."
+            } else {
+                message = "Unsupported GPT model for the configured shared context window. Supported models: gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, and gpt-5.4-mini. All except gpt-5.4-mini optionally support -fast."
+            }
+            return anthropicInvalidRequestBody(message: message)
+        }
+        return nil
+    }
+
+    static func anthropicInvalidRequestBody(message: String) -> Data {
+        let payload: [String: Any] = [
+            "type": "error",
+            "error": [
+                "type": "invalid_request_error",
+                "message": message,
+            ],
+        ]
+        return (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+            ?? Data(#"{"type":"error","error":{"type":"invalid_request_error","message":"Invalid request."}}"#.utf8)
+    }
+
+    /// Extrahiert aus echten HTTP-4xx-Antworten nur datenschutzarme Metadaten.
+    /// Der freie Message-Text wird zur Klassifikation gelesen, aber nie geloggt.
+    /// Der beobachtete 200-SSE-Synthetic-Fehler wird separat nur in einem
+    /// begrenzten Prefix untersucht; normale Streams gehen ab dem ersten
+    /// semantischen Event unveraendert in den Pass-through.
+    static func upstreamErrorDiagnostics(from body: Data) -> UpstreamErrorDiagnostics {
+        let object = try? JSONSerialization.jsonObject(with: body)
+        let root = object as? [String: Any]
+        let error = root?["error"] as? [String: Any]
+        let errorType = safeErrorIdentifier(error?["type"])
+        let errorCode = safeErrorIdentifier(error?["code"])
+        let message = (error?["message"] as? String)?.lowercased() ?? ""
+        let classifier = [errorType, errorCode, message]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        let isContextLimit = classifier.contains("context_length")
+            || classifier.contains("context window")
+            || classifier.contains("maximum context")
+            || classifier.contains("prompt is too long")
+
+        return UpstreamErrorDiagnostics(
+            errorType: errorType,
+            errorCode: errorCode,
+            isContextLimit: isContextLimit,
+            capturedBytes: body.count
+        )
+    }
+
+    private static func safeErrorIdentifier(_ value: Any?) -> String? {
+        guard let raw = value as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 128 else { return nil }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+        guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
+        return trimmed
     }
 
     static func filteredHeaders(_ headers: [HTTPHeader]) -> [HTTPHeader] {
@@ -413,6 +538,7 @@ final class ClaudeGPTMixRouter {
             let client = ClientConnection(
                 connection: connection,
                 upstreamURLResolver: upstreamURLResolver,
+                gptContextWindowResolver: gptContextWindowResolver,
                 onFinish: { [weak self] in self?.removeConnection(id: id) }
             )
             connections[id] = client
@@ -434,6 +560,7 @@ private extension ClaudeGPTMixRouter {
     final class ClientConnection {
         private let connection: NWConnection
         private let upstreamURLResolver: UpstreamURLResolver
+        private let gptContextWindowResolver: GPTContextWindowResolver
         private let onFinish: () -> Void
         private let queue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.client")
         private var buffer = Data()
@@ -447,14 +574,23 @@ private extension ClaudeGPTMixRouter {
         private var didScheduleResponse = false
         private var requestModel: String?
         private var requestUpstream: Upstream?
+        private var upstreamStatusCode: Int?
+        private var upstreamErrorBuffer: Data?
+        private var upstreamErrorBytes = 0
+        private var overflowProbe: CodexSyntheticOverflowProbe?
+        private var deferredResponseHead: Data?
+        private var overflowProbeTimer: DispatchSourceTimer?
+        private var holdsOverflowProbeBudget = false
 
         init(
             connection: NWConnection,
             upstreamURLResolver: @escaping UpstreamURLResolver,
+            gptContextWindowResolver: @escaping GPTContextWindowResolver,
             onFinish: @escaping () -> Void
         ) {
             self.connection = connection
             self.upstreamURLResolver = upstreamURLResolver
+            self.gptContextWindowResolver = gptContextWindowResolver
             self.onFinish = onFinish
         }
 
@@ -532,8 +668,33 @@ private extension ClaudeGPTMixRouter {
         }
 
         private func forward(requestHead: HTTPRequestHead, body: Data) {
-            let upstream = ClaudeGPTMixRouter.upstream(for: body)
+            if ClaudeGPTMixRouter.hasUnsupportedContentEncoding(requestHead.headers) {
+                let errorBody = ClaudeGPTMixRouter.anthropicInvalidRequestBody(
+                    message: "Unsupported Content-Encoding. Send the request body with identity encoding."
+                )
+                Logger.claudeGPTRouter.warning("encoded_request_body_rejected status=415")
+                sendJSONResponse(
+                    status: 415,
+                    reason: "Unsupported Media Type",
+                    body: errorBody
+                )
+                return
+            }
+
             let model = ClaudeGPTMixRouter.model(in: body)
+            let upstream = ClaudeGPTMixRouter.upstream(for: body)
+            if let errorBody = ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: model,
+                contextWindow: gptContextWindowResolver()
+            ) {
+                requestModel = model
+                requestUpstream = upstream
+                Logger.claudeGPTRouter.warning(
+                    "gpt_model_rejected model=\(model ?? "nil", privacy: .public)"
+                )
+                sendJSONResponse(status: 400, reason: "Bad Request", body: errorBody)
+                return
+            }
             let baseURL = upstreamURLResolver(upstream)
             guard
                 let url = URL(string: requestHead.target, relativeTo: baseURL)?.absoluteURL,
@@ -576,8 +737,12 @@ private extension ClaudeGPTMixRouter {
         }
 
         private func receive(response: HTTPURLResponse) {
-            guard !didFinish, !didSendResponseHead else { return }
-            didSendResponseHead = true
+            guard !didFinish, !didSendResponseHead, deferredResponseHead == nil else { return }
+            upstreamStatusCode = response.statusCode
+            if (400...499).contains(response.statusCode) {
+                upstreamErrorBuffer = Data()
+                upstreamErrorBytes = 0
+            }
             let headers = response.allHeaderFields.compactMap { key, value -> HTTPHeader? in
                 guard let name = key as? String else { return nil }
                 return HTTPHeader(name: name, value: String(describing: value))
@@ -588,21 +753,137 @@ private extension ClaudeGPTMixRouter {
                 head += "\(header.name): \(header.value)\r\n"
             }
             head += "Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
-            send(Data(head.utf8))
+            let headData = Data(head.utf8)
+
+            let shouldProbe = requestUpstream == .codexProxy
+                && response.statusCode == 200
+                && ClaudeGPTMixRouter.isEventStreamContentType(
+                    response.value(forHTTPHeaderField: "Content-Type")
+                )
+                && SyntheticOverflowProbeBudget.acquire()
+            if shouldProbe {
+                holdsOverflowProbeBudget = true
+                overflowProbe = CodexSyntheticOverflowProbe()
+                deferredResponseHead = headData
+                scheduleOverflowProbeTimeout()
+            } else {
+                didSendResponseHead = true
+                send(headData)
+            }
             log(status: response.statusCode)
         }
 
         private func receive(upstreamData data: Data) {
-            guard !didFinish, didSendResponseHead, !data.isEmpty else { return }
+            guard !didFinish, !data.isEmpty else { return }
+            if var probe = overflowProbe {
+                let decision = probe.ingest(data)
+                let accepted = probe.lastAcceptedByteCount
+                overflowProbe = probe
+                switch decision {
+                case .pending:
+                    return
+                case .overflow:
+                    handleSyntheticOverflow()
+                    return
+                case .passThrough:
+                    let remainder = accepted < data.count ? Data(data.dropFirst(accepted)) : Data()
+                    flushOverflowProbeFailOpen(additionalData: remainder)
+                    return
+                }
+            }
+            guard didSendResponseHead else { return }
+            captureUpstreamErrorDiagnostics(data)
+            sendChunk(data)
+        }
+
+        private func captureUpstreamErrorDiagnostics(_ data: Data) {
+            if upstreamErrorBuffer != nil {
+                upstreamErrorBytes += data.count
+                let remainingCapacity = max(
+                    0,
+                    ClaudeGPTMixRouter.maximumDiagnosticErrorBytes
+                        - (upstreamErrorBuffer?.count ?? 0)
+                )
+                if remainingCapacity > 0 {
+                    upstreamErrorBuffer?.append(data.prefix(remainingCapacity))
+                }
+            }
+        }
+
+        private func sendChunk(_ data: Data) {
+            guard !data.isEmpty else { return }
             var chunk = Data("\(String(data.count, radix: 16))\r\n".utf8)
             chunk.append(data)
             chunk.append(Data("\r\n".utf8))
             send(chunk)
         }
 
+        private func scheduleOverflowProbeTimeout() {
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + CodexSyntheticOverflowProbe.deadlineSeconds)
+            timer.setEventHandler { [weak self] in
+                self?.flushOverflowProbeFailOpen(additionalData: Data())
+            }
+            overflowProbeTimer = timer
+            timer.resume()
+        }
+
+        private func flushOverflowProbeFailOpen(additionalData: Data) {
+            guard let probe = overflowProbe, let head = deferredResponseHead else { return }
+            let prefix = probe.bufferedData
+            clearOverflowProbe()
+            deferredResponseHead = nil
+            didSendResponseHead = true
+            send(head)
+            sendChunk(prefix)
+            sendChunk(additionalData)
+        }
+
+        private func handleSyntheticOverflow() {
+            guard overflowProbe != nil, !didSendResponseHead, !didScheduleResponse else { return }
+            clearOverflowProbe()
+            deferredResponseHead = nil
+            upstreamTask?.cancel()
+            let limit = min(
+                max(gptContextWindowResolver(), AppPreferences.claudeGPTContextWindowRange.lowerBound),
+                ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+            )
+            let body = ClaudeGPTMixRouter.anthropicInvalidRequestBody(
+                message: "prompt is too long: \(limit + 1) tokens > \(limit)"
+            )
+            sendJSONResponse(status: 400, reason: "Bad Request", body: body)
+        }
+
+        private func clearOverflowProbe() {
+            overflowProbeTimer?.cancel()
+            overflowProbeTimer = nil
+            overflowProbe = nil
+            if holdsOverflowProbeBudget {
+                holdsOverflowProbeBudget = false
+                SyntheticOverflowProbeBudget.release()
+            }
+        }
+
         private func completeUpstream(error: Error?) {
             upstreamTask = nil
-            guard !didFinish else { return }
+            guard !didFinish, !didScheduleResponse else { return }
+            if var probe = overflowProbe {
+                if error != nil {
+                    clearOverflowProbe()
+                    deferredResponseHead = nil
+                    log(status: 502)
+                    sendSimpleResponse(status: 502, reason: "Bad Gateway")
+                    return
+                }
+                let decision = probe.finish()
+                overflowProbe = probe
+                if decision == .overflow {
+                    handleSyntheticOverflow()
+                    return
+                }
+                flushOverflowProbeFailOpen(additionalData: Data())
+            }
+            logUpstreamErrorDiagnosticsIfNeeded()
             if !didSendResponseHead {
                 log(status: 502)
                 sendSimpleResponse(status: 502, reason: "Bad Gateway")
@@ -619,6 +900,17 @@ private extension ClaudeGPTMixRouter {
                 connection.cancel()
                 finish()
             }
+        }
+
+        private func sendJSONResponse(status: Int, reason: String, body: Data) {
+            guard !didFinish, !didSendResponseHead, !didScheduleResponse else { return }
+            didScheduleResponse = true
+            let head = Data(
+                "HTTP/1.1 \(status) \(reason)\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
+            )
+            var response = head
+            response.append(body)
+            send(response, closesConnection: true)
         }
 
         private func sendSimpleResponse(status: Int, reason: String) {
@@ -646,9 +938,21 @@ private extension ClaudeGPTMixRouter {
         private func finish() {
             guard !didFinish else { return }
             didFinish = true
+            clearOverflowProbe()
             upstreamTask?.cancel()
             upstreamTask = nil
             onFinish()
+        }
+
+        private func logUpstreamErrorDiagnosticsIfNeeded() {
+            guard let status = upstreamStatusCode,
+                  (400...499).contains(status),
+                  let body = upstreamErrorBuffer else { return }
+            let diagnostics = ClaudeGPTMixRouter.upstreamErrorDiagnostics(from: body)
+            Logger.claudeGPTRouter.warning(
+                "upstream_client_error model=\(self.requestModel ?? "nil", privacy: .public) upstream=\(self.requestUpstream?.rawValue ?? "unknown", privacy: .public) status=\(status) errorType=\(diagnostics.errorType ?? "nil", privacy: .public) errorCode=\(diagnostics.errorCode ?? "nil", privacy: .public) contextLimit=\(diagnostics.isContextLimit ? "true" : "false", privacy: .public) responseBytes=\(self.upstreamErrorBytes) capturedBytes=\(diagnostics.capturedBytes)"
+            )
+            upstreamErrorBuffer = nil
         }
 
         private func log(status: Int) {
@@ -677,6 +981,7 @@ private extension ClaudeGPTMixRouter {
             case 404: return "Not Found"
             case 408: return "Request Timeout"
             case 409: return "Conflict"
+            case 415: return "Unsupported Media Type"
             case 429: return "Too Many Requests"
             case 500: return "Internal Server Error"
             case 502: return "Bad Gateway"
@@ -763,5 +1068,31 @@ private extension ClaudeGPTMixRouter {
             session.finishTasksAndInvalidate()
             self.session = nil
         }
+    }
+}
+
+enum SyntheticOverflowProbeBudget {
+    private static let lock = NSLock()
+    private static var active = 0
+    static let maximumActive = 64
+
+    static func acquire() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard active < maximumActive else { return false }
+        active += 1
+        return true
+    }
+
+    static func release() {
+        lock.lock()
+        active = max(0, active - 1)
+        lock.unlock()
+    }
+
+    static func resetForTesting() {
+        lock.lock()
+        active = 0
+        lock.unlock()
     }
 }

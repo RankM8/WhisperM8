@@ -7,7 +7,7 @@ import XCTest
 final class ClaudeGPTMixRouterTests: XCTestCase {
     func testDispatchRoutesOnlyGPTPrefixToCodexProxy() {
         XCTAssertEqual(
-            ClaudeGPTMixRouter.upstream(for: Data(#"{"model":"gpt-5.6-sol"}"#.utf8)),
+            ClaudeGPTMixRouter.upstream(for: Data(#"{"model":"  GPT-5.6-SOL-FAST[1M]  "}"#.utf8)),
             .codexProxy
         )
         XCTAssertEqual(
@@ -20,6 +20,93 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         XCTAssertEqual(ClaudeGPTMixRouter.upstream(for: Data("kaputt".utf8)), .anthropic)
         XCTAssertEqual(ClaudeGPTMixRouter.upstream(for: Data()), .anthropic)
+    }
+
+    func testGPTModelGuardReturnsAnthropicInvalidRequestForNoncanonicalAndUnsupportedIDs() throws {
+        let noncanonicalBody = try XCTUnwrap(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: " GPT-5.6-SOL-FAST[1M] ",
+                contextWindow: 272_000
+            )
+        )
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: noncanonicalBody) as? [String: Any]
+        )
+        let error = try XCTUnwrap(object["error"] as? [String: Any])
+
+        XCTAssertEqual(object["type"] as? String, "error")
+        XCTAssertEqual(error["type"] as? String, "invalid_request_error")
+        XCTAssertTrue(
+            try XCTUnwrap(error["message"] as? String).contains("gpt-5.6-sol-fast")
+        )
+        XCTAssertNotNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.3-codex-spark",
+                contextWindow: 272_000
+            )
+        )
+        XCTAssertNotNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.6-orbit",
+                contextWindow: 272_000
+            )
+        )
+        XCTAssertNotNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.6-sol",
+                contextWindow: 300_000
+            )
+        )
+        XCTAssertNotNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.4-mini-fast",
+                contextWindow: 250_000
+            )
+        )
+        XCTAssertNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.4-mini",
+                contextWindow: 250_000
+            )
+        )
+        XCTAssertNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "claude-opus-4-8[1m]",
+                contextWindow: 272_000
+            )
+        )
+    }
+
+    func testContentEncodingGuardAllowsOnlyIdentity() {
+        XCTAssertFalse(ClaudeGPTMixRouter.hasUnsupportedContentEncoding([]))
+        XCTAssertFalse(ClaudeGPTMixRouter.hasUnsupportedContentEncoding([
+            .init(name: "Content-Encoding", value: "identity"),
+        ]))
+        XCTAssertTrue(ClaudeGPTMixRouter.hasUnsupportedContentEncoding([
+            .init(name: "content-encoding", value: "gzip"),
+        ]))
+    }
+
+    func testContentTypeProbeGateRequiresExactEventStreamMediaType() {
+        XCTAssertTrue(ClaudeGPTMixRouter.isEventStreamContentType("text/event-stream"))
+        XCTAssertTrue(ClaudeGPTMixRouter.isEventStreamContentType(" Text/Event-Stream ; charset=utf-8"))
+        XCTAssertFalse(ClaudeGPTMixRouter.isEventStreamContentType(nil))
+        XCTAssertFalse(ClaudeGPTMixRouter.isEventStreamContentType("application/json"))
+        XCTAssertFalse(ClaudeGPTMixRouter.isEventStreamContentType("application/x-text/event-streamish"))
+    }
+
+    func testUpstreamErrorDiagnosticsClassifiesContext4xxWithoutRetainingMessage() {
+        let body = Data(#"{"type":"error","error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Maximum context length exceeded for private prompt contents"}}"#.utf8)
+
+        XCTAssertEqual(
+            ClaudeGPTMixRouter.upstreamErrorDiagnostics(from: body),
+            .init(
+                errorType: "invalid_request_error",
+                errorCode: "context_length_exceeded",
+                isContextLimit: true,
+                capturedBytes: body.count
+            )
+        )
     }
 
     func testAnthropicHeadersKeepCredentialsAndReplaceHopByHopHeaders() {
@@ -275,6 +362,104 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
     }
 
+    func testRouterRejectsNoncanonicalGPTBeforeEitherUpstream() throws {
+        let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
+        defer { unusedUpstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(unusedUpstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let body = Data(#"{"model":" GPT-5.6-TERRA-FAST[1M] ","messages":[]}"#.utf8)
+        var request = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        request.append(body)
+        let response = try Self.exchange(
+            port: try XCTUnwrap(router.listeningPort),
+            request: request
+        )
+        let text = String(decoding: response, as: UTF8.self)
+
+        XCTAssertTrue(text.hasPrefix("HTTP/1.1 400 Bad Request"), text)
+        XCTAssertTrue(text.contains("invalid_request_error"), text)
+        XCTAssertTrue(text.contains("gpt-5.6-terra-fast"), text)
+        XCTAssertNil(unusedUpstream.lastRequest)
+
+        let oldBody = Data(#"{"model":"gpt-5.3-codex-spark","messages":[]}"#.utf8)
+        var oldRequest = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer must-not-reach-anthropic\r\nContent-Type: application/json\r\nContent-Length: \(oldBody.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        oldRequest.append(oldBody)
+        let oldResponse = try Self.exchange(
+            port: try XCTUnwrap(router.listeningPort),
+            request: oldRequest
+        )
+        let oldText = String(decoding: oldResponse, as: UTF8.self)
+        XCTAssertTrue(oldText.hasPrefix("HTTP/1.1 400 Bad Request"), oldText)
+        XCTAssertTrue(oldText.contains("Unsupported GPT model"), oldText)
+        XCTAssertNil(unusedUpstream.lastRequest)
+
+        let miniFastBody = Data(#"{"model":"gpt-5.4-mini-fast","messages":[]}"#.utf8)
+        var miniFastRequest = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: \(miniFastBody.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        miniFastRequest.append(miniFastBody)
+        let miniFastResponse = try Self.exchange(
+            port: try XCTUnwrap(router.listeningPort),
+            request: miniFastRequest
+        )
+        let miniFastText = String(decoding: miniFastResponse, as: UTF8.self)
+        XCTAssertTrue(miniFastText.hasPrefix("HTTP/1.1 400 Bad Request"), miniFastText)
+        XCTAssertTrue(miniFastText.contains("gpt-5.4-mini"), miniFastText)
+        XCTAssertNil(unusedUpstream.lastRequest)
+    }
+
+    func testRouterRejectsGzipRequestBodyBeforeModelParsingOrAuthRouting() throws {
+        let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
+        defer { unusedUpstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(unusedUpstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let compressedBody = try Self.gzipCompress(
+            Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8)
+        )
+        var request = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer must-not-fall-through\r\nContent-Type: application/json\r\nContent-Encoding: gzip\r\nContent-Length: \(compressedBody.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        request.append(compressedBody)
+        let response = try Self.exchange(
+            port: try XCTUnwrap(router.listeningPort),
+            request: request
+        )
+        let text = String(decoding: response, as: UTF8.self)
+
+        XCTAssertTrue(text.hasPrefix("HTTP/1.1 415 Unsupported Media Type"), text)
+        XCTAssertTrue(text.contains("invalid_request_error"), text)
+        XCTAssertNil(unusedUpstream.lastRequest)
+    }
+
+    func testRouterPassesThroughRealHTTP4xxWhileCollectingDiagnostics() throws {
+        let errorBody = Data(#"{"type":"error","error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Maximum context window exceeded"}}"#.utf8)
+        let upstream = try LocalHTTPMockServer(status: 400, responseChunks: [errorBody])
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: try XCTUnwrap(router.listeningPort),
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer ignored"
+        )
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 400"), response.head)
+        XCTAssertEqual(response.body, errorBody)
+    }
+
     func testRouterRejectsChunkedClientRequestWith411() throws {
         let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
         defer { unusedUpstream.stop() }
@@ -352,6 +537,310 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertEqual(response.body, plaintext, "Client muss dekodierten Klartext erhalten")
     }
 
+    func testRouterRewritesExactSyntheticOverflowOnceAndCancelsOriginalCompletion() throws {
+        let stream = Data((
+            "event: message_start\r\n"
+                + #"data: {"type":"message_start","message":{"role":"assistant","content":[],"stop_reason":null,"stop_sequence":null}}"#
+                + "\r\n\r\nevent: error\r\ndata: "
+                + #"{"type":"error","error":{"type":"api_error","message":"Prompt is too long"}}"#
+                + "\r\n\r\n"
+        ).utf8)
+        let chunks = [
+            Data(stream.prefix(7)),
+            Data(stream.dropFirst(7).prefix(19)),
+            Data(stream.dropFirst(26)),
+        ]
+        let upstream = try LocalHTTPMockServer(status: 200, responseChunks: chunks)
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: url,
+            anthropicURL: url,
+            gptContextWindow: 272_000
+        )
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let raw = try Self.exchangeMessage(
+            port: try XCTUnwrap(router.listeningPort),
+            model: "gpt-5.6-sol"
+        )
+        let response = try Self.splitResponse(raw)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+        )
+        let error = try XCTUnwrap(object["error"] as? [String: Any])
+        let text = String(decoding: raw, as: UTF8.self)
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 400 Bad Request"), response.head)
+        XCTAssertEqual(object["type"] as? String, "error")
+        XCTAssertEqual(error["type"] as? String, "invalid_request_error")
+        XCTAssertEqual(error["message"] as? String, "prompt is too long: 272001 tokens > 272000")
+        XCTAssertEqual(text.components(separatedBy: "HTTP/1.1 ").count - 1, 1)
+        XCTAssertFalse(text.contains("502 Bad Gateway"))
+        XCTAssertFalse(text.contains("Transfer-Encoding: chunked"))
+    }
+
+    func testRouterPassesSemanticTextThenSameErrorSentenceByteExactly() throws {
+        let stream = Data((
+            "event: message_start\n"
+                + #"data: {"type":"message_start","message":{"role":"assistant","content":[]}}"#
+                + "\n\nevent: content_block_start\n"
+                + #"data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#
+                + "\n\nevent: content_block_delta\n"
+                + #"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Prompt is too long"}}"#
+                + "\n\nevent: error\ndata: "
+                + #"{"type":"error","error":{"type":"api_error","message":"Prompt is too long"}}"#
+                + "\n\n"
+        ).utf8)
+        let upstream = try LocalHTTPMockServer(
+            status: 200,
+            responseChunks: [Data(stream.prefix(23)), Data(stream.dropFirst(23))]
+        )
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: try XCTUnwrap(router.listeningPort),
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer ignored"
+        )
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 200"), response.head)
+        XCTAssertEqual(response.body, stream)
+    }
+
+    func testProbeGateLeavesNonSSEAndAnthropicResponsesUnchanged() throws {
+        let exactError = Data((
+            "event: error\ndata: "
+                + #"{"type":"error","error":{"type":"api_error","message":"Prompt is too long"}}"#
+                + "\n\n"
+        ).utf8)
+
+        let nonSSE = try LocalHTTPMockServer(
+            status: 200,
+            responseChunks: [exactError],
+            contentType: "application/json"
+        )
+        defer { nonSSE.stop() }
+        let nonSSEURL = URL(string: "http://127.0.0.1:\(nonSSE.port)")!
+        let nonSSERouter = ClaudeGPTMixRouter(codexProxyURL: nonSSEURL, anthropicURL: nonSSEURL)
+        try nonSSERouter.start(port: 0).get()
+        let nonSSEResponse = try Self.sendRawRequest(
+            port: try XCTUnwrap(nonSSERouter.listeningPort),
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer ignored"
+        )
+        nonSSERouter.stop()
+        XCTAssertTrue(nonSSEResponse.head.hasPrefix("HTTP/1.1 200"))
+        XCTAssertEqual(nonSSEResponse.body, exactError)
+
+        let anthropic = try LocalHTTPMockServer(status: 200, responseChunks: [exactError])
+        defer { anthropic.stop() }
+        let anthropicURL = URL(string: "http://127.0.0.1:\(anthropic.port)")!
+        let anthropicRouter = ClaudeGPTMixRouter(
+            codexProxyURL: anthropicURL,
+            anthropicURL: anthropicURL
+        )
+        try anthropicRouter.start(port: 0).get()
+        defer { anthropicRouter.stop() }
+        let anthropicResponse = try Self.sendRawRequest(
+            port: try XCTUnwrap(anthropicRouter.listeningPort),
+            body: Data(#"{"model":"claude-fable-5","messages":[]}"#.utf8),
+            authorization: "Bearer oauth"
+        )
+        XCTAssertTrue(anthropicResponse.head.hasPrefix("HTTP/1.1 200"))
+        XCTAssertEqual(anthropicResponse.body, exactError)
+    }
+
+    func testProbeCleanEOFWithoutMatchFlushesOriginalPrefixAndTerminator() throws {
+        let prefix = Data((
+            "event: message_start\n"
+                + #"data: {"type":"message_start","message":{"role":"assistant","content":[]}}"#
+                + "\n\n"
+        ).utf8)
+        let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [prefix])
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: try XCTUnwrap(router.listeningPort),
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer ignored"
+        )
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 200"))
+        XCTAssertEqual(response.body, prefix)
+    }
+
+    func testTransportFailureDuringProbeReturnsSingle502() throws {
+        let prefix = Data((
+            "event: message_start\n"
+                + #"data: {"type":"message_start","message":{"role":"assistant","content":[]}}"#
+                + "\n\n"
+        ).utf8)
+        var truncated = Data(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: \(prefix.count + 100)\r\nConnection: close\r\n\r\n".utf8
+        )
+        truncated.append(prefix)
+        let upstream = try LocalHTTPMockServer(
+            status: 200,
+            responseChunks: [],
+            rawResponse: truncated
+        )
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let raw = try Self.exchangeMessage(
+            port: try XCTUnwrap(router.listeningPort),
+            model: "gpt-5.6-sol"
+        )
+        let text = String(decoding: raw, as: UTF8.self)
+
+        XCTAssertTrue(text.hasPrefix("HTTP/1.1 502 Bad Gateway"), text)
+        XCTAssertEqual(text.components(separatedBy: "HTTP/1.1 ").count - 1, 1)
+        XCTAssertFalse(text.contains("HTTP/1.1 200"))
+    }
+
+    func testTransportFailureAfterPassThroughAbortsOriginal200WithoutSecondResponse() throws {
+        let delta = Data((
+            "event: content_block_delta\n"
+                + #"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"visible"}}"#
+                + "\n\n"
+        ).utf8)
+        var malformedChunked = Data(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".utf8
+        )
+        malformedChunked.append(Data("\(String(delta.count, radix: 16))\r\n".utf8))
+        malformedChunked.append(delta)
+        malformedChunked.append(Data("\r\nnot-a-chunk-size\r\n".utf8))
+        let upstream = try LocalHTTPMockServer(
+            status: 200,
+            responseChunks: [],
+            rawResponse: malformedChunked
+        )
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let raw = try Self.exchangeMessage(
+            port: try XCTUnwrap(router.listeningPort),
+            model: "gpt-5.6-sol"
+        )
+        let text = String(decoding: raw, as: UTF8.self)
+
+        XCTAssertTrue(text.hasPrefix("HTTP/1.1 200"), text)
+        XCTAssertTrue(raw.range(of: delta) != nil)
+        XCTAssertEqual(text.components(separatedBy: "HTTP/1.1 ").count - 1, 1)
+        XCTAssertFalse(text.contains("502 Bad Gateway"))
+        XCTAssertFalse(raw.suffix(5) == Data("0\r\n\r\n".utf8))
+    }
+
+    func testProbeTimeoutFailsOpenAndFlushesDelayedErrorExactlyOnce() throws {
+        let exactError = Data((
+            "event: error\ndata: "
+                + #"{"type":"error","error":{"type":"api_error","message":"Prompt is too long"}}"#
+                + "\n\n"
+        ).utf8)
+        let ping = Data(": keepalive\n\n".utf8)
+        let upstream = try LocalHTTPMockServer(
+            status: 200,
+            responseChunks: [ping, exactError],
+            firstChunkDelay: 0.01,
+            chunkDelay: 1.2
+        )
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let raw = try Self.exchangeMessage(
+            port: try XCTUnwrap(router.listeningPort),
+            model: "gpt-5.6-sol"
+        )
+        let split = try Self.splitResponse(raw)
+        let decoded: Data
+        do {
+            decoded = try Self.decodeChunkedBody(split.body)
+        } catch {
+            XCTFail("ungueltiges Chunking nach Timeout: \(String(decoding: raw, as: UTF8.self))")
+            return
+        }
+
+        var expected = ping
+        expected.append(exactError)
+        XCTAssertTrue(split.head.hasPrefix("HTTP/1.1 200"))
+        XCTAssertEqual(decoded, expected)
+    }
+
+    func testProbeBudgetExhaustionFailsOpen() throws {
+        let exactError = Data((
+            "event: error\ndata: "
+                + #"{"type":"error","error":{"type":"api_error","message":"Prompt is too long"}}"#
+                + "\n\n"
+        ).utf8)
+        var acquired = 0
+        while SyntheticOverflowProbeBudget.acquire() { acquired += 1 }
+        defer {
+            for _ in 0..<acquired { SyntheticOverflowProbeBudget.release() }
+        }
+        XCTAssertEqual(acquired, SyntheticOverflowProbeBudget.maximumActive)
+
+        let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [exactError])
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: try XCTUnwrap(router.listeningPort),
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer ignored"
+        )
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 200"))
+        XCTAssertEqual(response.body, exactError)
+    }
+
+    func testProbePrefixCapFlushesEveryByteOnce() throws {
+        let largePrefix = Data(repeating: 0x78, count: CodexSyntheticOverflowProbe.maximumPrefixBytes + 31)
+        let exactError = Data((
+            "\n\nevent: error\ndata: "
+                + #"{"type":"error","error":{"type":"api_error","message":"Prompt is too long"}}"#
+                + "\n\n"
+        ).utf8)
+        var original = largePrefix
+        original.append(exactError)
+        let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [original])
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: try XCTUnwrap(router.listeningPort),
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer ignored"
+        )
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 200"))
+        XCTAssertEqual(response.body, original)
+    }
+
     private static func gzipCompress(_ data: Data) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
@@ -369,6 +858,25 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
             throw TestHTTPError.invalidResponse
         }
         return compressed
+    }
+
+    private static func exchangeMessage(port: Int, model: String) throws -> Data {
+        let body = Data(#"{"model":"\#(model)","messages":[]}"#.utf8)
+        var request = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        request.append(body)
+        return try exchange(port: port, request: request)
+    }
+
+    private static func splitResponse(_ response: Data) throws -> (head: String, body: Data) {
+        guard let delimiter = response.range(of: Data("\r\n\r\n".utf8)) else {
+            throw TestHTTPError.invalidResponse
+        }
+        return (
+            String(decoding: response[..<delimiter.lowerBound], as: UTF8.self),
+            Data(response[delimiter.upperBound...])
+        )
     }
 
     private static func sendRawRequest(
@@ -461,6 +969,11 @@ private enum TestHTTPError: Error {
 }
 
 private final class LocalHTTPMockServer {
+    enum Completion: Equatable {
+        case clean
+        case abort
+    }
+
     struct Request {
         var path: String
         var headers: [ClaudeGPTMixRouter.HTTPHeader]
@@ -478,6 +991,10 @@ private final class LocalHTTPMockServer {
     private let status: Int
     private let responseChunks: [Data]
     private let rawResponse: Data?
+    private let contentType: String
+    private let firstChunkDelay: TimeInterval
+    private let chunkDelay: TimeInterval
+    private let completion: Completion
     private let queue = DispatchQueue(label: "com.whisperm8.tests.http-mock")
     private let lock = NSLock()
     private var listener: NWListener?
@@ -491,10 +1008,22 @@ private final class LocalHTTPMockServer {
         return lastRequestStorage
     }
 
-    init(status: Int, responseChunks: [Data], rawResponse: Data? = nil) throws {
+    init(
+        status: Int,
+        responseChunks: [Data],
+        rawResponse: Data? = nil,
+        contentType: String = "text/event-stream",
+        firstChunkDelay: TimeInterval = 0.01,
+        chunkDelay: TimeInterval = 0.01,
+        completion: Completion = .clean
+    ) throws {
         self.status = status
         self.responseChunks = responseChunks
         self.rawResponse = rawResponse
+        self.contentType = contentType
+        self.firstChunkDelay = firstChunkDelay
+        self.chunkDelay = chunkDelay
+        self.completion = completion
 
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
@@ -582,11 +1111,16 @@ private final class LocalHTTPMockServer {
     }
 
     private func sendResponse(connection: NWConnection, chunkIndex: Int) {
+        if chunkIndex >= responseChunks.count, completion == .abort {
+            connection.cancel()
+            return
+        }
+
         let content: Data
         let nextIndex: Int
         if chunkIndex == -1 {
             content = Data(
-                "HTTP/1.1 \(status) Mock\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".utf8
+                "HTTP/1.1 \(status) Mock\r\nContent-Type: \(contentType)\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".utf8
             )
             nextIndex = 0
         } else if chunkIndex < responseChunks.count {
@@ -607,7 +1141,8 @@ private final class LocalHTTPMockServer {
                 connection.cancel()
                 return
             }
-            self.queue.asyncAfter(deadline: .now() + 0.01) {
+            let delay = nextIndex == 0 ? self.firstChunkDelay : self.chunkDelay
+            self.queue.asyncAfter(deadline: .now() + delay) {
                 self.sendResponse(connection: connection, chunkIndex: nextIndex)
             }
         })

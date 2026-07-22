@@ -71,27 +71,27 @@ final class PreferencesTests: XCTestCase {
         }
     }
 
-    func testClaudeGPTAutoCompactWindowClampsAndFallsBack() {
+    func testClaudeGPTContextWindowClampsAndFallsBackUsingLegacyKey() {
         withIsolatedPreferences { preferences in
             // Unset → getesteter Default (272k).
             XCTAssertEqual(
-                preferences.claudeGPTAutoCompactWindow,
-                AppPreferences.claudeGPTDefaultAutoCompactWindow
+                preferences.claudeGPTContextWindow,
+                AppPreferences.claudeGPTDefaultContextWindow
             )
-            // Tippfehler wie 2 720 000 wuerden die Kompaktierung faktisch
-            // abschalten → Clamp auf die Obergrenze.
-            preferences.claudeGPTAutoCompactWindow = 2_720_000
+            // Der historische UserDefaults-Key bleibt bestehen; nur seine
+            // fachliche Bedeutung ist jetzt ehrlich als Modellkapazitaet benannt.
+            preferences.claudeGPTContextWindow = 2_720_000
             XCTAssertEqual(
-                preferences.claudeGPTAutoCompactWindow,
-                AppPreferences.claudeGPTAutoCompactWindowRange.upperBound
+                preferences.claudeGPTContextWindow,
+                AppPreferences.claudeGPTContextWindowRange.upperBound
             )
-            preferences.claudeGPTAutoCompactWindow = 5
+            preferences.claudeGPTContextWindow = 5
             XCTAssertEqual(
-                preferences.claudeGPTAutoCompactWindow,
-                AppPreferences.claudeGPTAutoCompactWindowRange.lowerBound
+                preferences.claudeGPTContextWindow,
+                AppPreferences.claudeGPTContextWindowRange.lowerBound
             )
-            preferences.claudeGPTAutoCompactWindow = 300_000
-            XCTAssertEqual(preferences.claudeGPTAutoCompactWindow, 300_000)
+            preferences.claudeGPTContextWindow = 250_000
+            XCTAssertEqual(preferences.claudeGPTContextWindow, 250_000)
         }
     }
 

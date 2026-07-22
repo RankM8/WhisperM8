@@ -58,6 +58,32 @@ Gotchas (QA-verifiziert 2026-07-18):
 - Instruiere Subagents, ihr Ergebnis IMMER in der finalen Antwort zu melden —
   sonst enden sie teils mit bloßer Idle-Meldung ohne Inhalt.
 
+### Verbindliche Modell-Deklaration bei jedem Subagent
+
+Jeder Spawn muss das Modell **technisch und explizit** deklarieren, damit Claude
+Codes Agents-Ansicht den echten Modell-Chip (`[gpt-5.6-sol]`, die zugehörige
+`-fast`-Variante oder Terra) zeigt:
+
+- Standard-Aufruf: immer `subagent_type: "gpt"`; in Workflows ausnahmslos
+  `agentType: "gpt"`. Den Agent-Typ niemals weglassen und nie nur im Prompt
+  behaupten, dass GPT verwendet werde.
+- Ein spezialisierter Custom Agent darf seinen eigenen `subagent_type` bzw.
+  `agentType` behalten, **wenn** dessen Definition im Frontmatter explizit
+  `model: gpt-5.6-sol` oder `model: gpt-5.6-terra` setzt. Vor dem Spawn prüfen;
+  Custom-Prompt und Tool-Grenzen dürfen nicht durch `gpt` ersetzt werden.
+- Zulässige Subagent-Modelle sind ausschließlich **GPT-5.6 Sol** (Standard) oder
+  **GPT-5.6 Terra**. Niemals Haiku verwenden. Ist keine explizite Terra-
+  Definition verfügbar, auf den verwalteten `gpt`-Typ (Sol) zurückfallen —
+  nicht auf ein implizit geerbtes Modell.
+- Bei Custom-Agent-Definitionen muss `model:` im Frontmatter gesetzt sein; keine
+  Definition mit impliziter Vererbung starten. Name/Label beschreibt die
+  Aufgabe, nicht das Modell — den Modell-Chip rendert Claude Code aus der
+  tatsächlich aufgelösten Definition.
+- CLI-Jobs deklarieren das Modell weiterhin zwingend über `--model
+  gpt-5.6-sol` oder ein ausdrücklich gewünschtes `--model gpt-5.6-terra`.
+- Die sichtbare Deklaration ist ein Kontrollsignal, aber der verbindliche
+  Nachweis bleibt das `"model"`-Feld im Agent-Transcript.
+
 # CLI-Weg (explizit): Codex-Subagents via `whisperm8 agent`
 
 ## Was das System ist
@@ -172,7 +198,9 @@ whisperm8 agent help                             # Hilfetext
    Modell). NIEMALS `gpt-5.5` oder ein anderes älteres Modell wählen und
    die Flags NIE weglassen — ohne sie zieht die `~/.codex/config.toml`
    mit Effort `low`. Härteste Verifikationen/Adjudikationen: `--effort
-   xhigh` bis `ultra`. Abweichen nur, wenn der User es ausdrücklich sagt.
+   xhigh` bis `ultra`. Vom Sol-Default nur auf ausdrücklichen User-Wunsch zu
+   `gpt-5.6-terra` wechseln; andere Modellfamilien und ältere GPT-Generationen
+   bleiben ausgeschlossen.
 1. **Parent-Zuordnung ist automatisch:** Läufst du in einem
    WhisperM8-Chat, erkennt das CLI den spawnenden Chat über den
    Prozessbaum — kein `--parent` nötig. (`$CLAUDE_SESSION_ID` ist als
@@ -319,9 +347,11 @@ nötig, weil Agent-Typ und Fehlerverhalten im Skript fest verdrahtet sind.
 Nur wenn ein Auftrag ausdrücklich Codex-CLI-Eigenschaften benötigt, etwa einen
 detachten Job, Browser-QA oder `image_gen`, darf ein eigener Workflow-Step die
 CLI verwenden. Das Workflow-Skript kann nicht selbst shellen; jeder solche
-Codex-Aufruf läuft über einen billigen Claude-Wrapper-Subagenten (`model:
-'sonnet'` oder `'haiku'`, `effort: 'low'` — nie das teure Hauptmodell) mit
-`run --wait --json`, `; echo "EXIT:$?"` und `{schema}`-Relay des stdout-JSON.
+Codex-Aufruf läuft über den Custom-Agent `codex-runner`. Dessen Frontmatter
+setzt das Modell explizit auf `gpt-5.6-sol` und beschränkt die Tools auf Bash;
+Haiku, Sonnet oder ein implizit geerbtes Modell sind auch für mechanische
+Wrapper verboten. Der Runner nutzt `run --wait --json`, `; echo "EXIT:$?"` und
+reicht das stdout-JSON schemageprüft weiter.
 Exit-Codes wertet das Skript aus, nicht der Wrapper. `status <id>` statt `list`
 (Kontext-Falle!), `shortId` durch die Stages reichen für `send`-Nachsteuerung,
 Playwright-Jobs auf 3–5 parallel batchen. Prompt-Vorlage, Schema,

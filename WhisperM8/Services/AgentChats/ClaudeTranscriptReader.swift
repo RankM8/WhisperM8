@@ -114,6 +114,142 @@ enum ClaudeTranscriptReader {
         return readTail(fileURL: url, tailBytes: tailBytes)
     }
 
+    struct LastAssistantModelScanStatistics: Equatable {
+        var boundaryBytesRead = 0
+        var maximumLinePayloadBytesRead = 0
+        var longLinesInspected = 0
+        var fullLinesParsed = 0
+    }
+
+    /// Sucht rueckwaerts nach dem letzten im Assistant-Payload gespeicherten
+    /// Modellwert. Die Boundary-Suche liest jeden Datei-Block hoechstens einmal
+    /// und merkt sich nur Offsets. Pro Zeile wird maximal ein 64-KB-Praefix
+    /// materialisiert; eine irrelevante 50-MB-Toolzeile bleibt daher O(n) und
+    /// belegt keinen 50-MB-Zwischenpuffer.
+    static func lastAssistantModel(fileURL: URL) -> String? {
+        var statistics = LastAssistantModelScanStatistics()
+        return lastAssistantModel(fileURL: fileURL, statistics: &statistics)
+    }
+
+    static func lastAssistantModel(
+        fileURL: URL,
+        statistics: inout LastAssistantModelScanStatistics
+    ) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+
+        let boundaryChunkSize: UInt64 = 64 * 1_024
+        let linePrefixLimit: UInt64 = 64 * 1_024
+
+        func inspectLine(start: UInt64, end: UInt64) throws -> String? {
+            guard end > start else { return nil }
+            let lineLength = end - start
+            let payloadLength = min(lineLength, linePrefixLimit)
+            try handle.seek(toOffset: start)
+            let payload = handle.readData(ofLength: Int(payloadLength))
+            statistics.maximumLinePayloadBytesRead = max(
+                statistics.maximumLinePayloadBytesRead,
+                payload.count
+            )
+
+            if lineLength <= linePrefixLimit {
+                statistics.fullLinesParsed += 1
+                return strictAssistantModel(in: payload)
+            }
+
+            statistics.longLinesInspected += 1
+            return assistantModel(inLongLinePrefix: payload)
+        }
+
+        do {
+            let fileSize = try handle.seekToEnd()
+            var scanCursor = fileSize
+            var lineEnd = fileSize
+
+            while scanCursor > 0 {
+                let readSize = min(boundaryChunkSize, scanCursor)
+                let chunkStart = scanCursor - readSize
+                try handle.seek(toOffset: chunkStart)
+                let chunk = handle.readData(ofLength: Int(readSize))
+                statistics.boundaryBytesRead += chunk.count
+
+                var searchEnd = chunk.endIndex
+                while let newline = chunk[..<searchEnd].lastIndex(of: 0x0A) {
+                    let localOffset = chunk.distance(from: chunk.startIndex, to: newline)
+                    let newlineOffset = chunkStart + UInt64(localOffset)
+                    let lineStart = newlineOffset + 1
+                    if let model = try inspectLine(start: lineStart, end: lineEnd) {
+                        return model
+                    }
+                    lineEnd = newlineOffset
+                    searchEnd = newline
+                }
+
+                scanCursor = chunkStart
+            }
+
+            return try inspectLine(start: 0, end: lineEnd)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func strictAssistantModel(in line: Data) -> String? {
+        guard !line.isEmpty,
+              let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              object["type"] as? String == "assistant",
+              let message = object["message"] as? [String: Any],
+              let model = message["model"] as? String else {
+            return nil
+        }
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Lange Claude-JSONL-Zeilen werden nicht vollstaendig geparst. Der Parser
+    /// akzeptiert nur das enge Schema: erster `type`-String = assistant,
+    /// anschliessend ein `message`-Objekt und dessen einfacher Modell-Alias.
+    private static func assistantModel(inLongLinePrefix prefix: Data) -> String? {
+        let text = String(decoding: prefix, as: UTF8.self)
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let typeMatch = transcriptTypeRegex.firstMatch(
+            in: text,
+            range: fullRange
+        ), typeMatch.numberOfRanges == 2,
+           let typeRange = Range(typeMatch.range(at: 1), in: text),
+           text[typeRange] == "assistant",
+           let messageMatch = transcriptMessageRegex.firstMatch(
+               in: text,
+               range: NSRange(location: typeMatch.range.location, length: fullRange.length - typeMatch.range.location)
+           ) else {
+            return nil
+        }
+
+        let modelSearchStart = messageMatch.range.location + messageMatch.range.length
+        guard modelSearchStart < fullRange.length,
+              let modelMatch = transcriptModelRegex.firstMatch(
+                  in: text,
+                  range: NSRange(
+                      location: modelSearchStart,
+                      length: fullRange.length - modelSearchStart
+                  )
+              ), modelMatch.numberOfRanges == 2,
+              let modelRange = Range(modelMatch.range(at: 1), in: text) else {
+            return nil
+        }
+        return String(text[modelRange])
+    }
+
+    private static let transcriptTypeRegex = try! NSRegularExpression(
+        pattern: #""type"\s*:\s*"([A-Za-z-]+)""#
+    )
+    private static let transcriptMessageRegex = try! NSRegularExpression(
+        pattern: #""message"\s*:\s*\{"#
+    )
+    private static let transcriptModelRegex = try! NSRegularExpression(
+        pattern: #""model"\s*:\s*"([A-Za-z0-9.\-\[\]]+)""#
+    )
+
     static func readTail(fileURL: URL, tailBytes: Int = TranscriptTailReader.defaultTailBytes) -> AgentChatTranscript {
         var idGenerator = TranscriptStableIDGenerator()
         let (lines, truncatedHead) = TranscriptTailReader.tailLinesWithTruncation(fileURL: fileURL, tailBytes: tailBytes)

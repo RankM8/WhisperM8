@@ -90,14 +90,39 @@ final class ClaudeGPTAgentDefinitionTests: XCTestCase {
         try assertFrontmatterModel("\(AppPreferences.claudeGPTCanonicalModel)-fast", in: content)
     }
 
-    func testFastModePreservesMemorySuffix() throws {
+    func testFastModeStripsMemorySuffix() throws {
         XCTAssertEqual(
             installer.sync(backendEnabled: true, model: "gpt-5.6-sol[1m]", fastEnabled: true),
             [.installed]
         )
 
         let content = try String(contentsOf: mainFileURL, encoding: .utf8)
-        try assertFrontmatterModel("gpt-5.6-sol-fast[1m]", in: content)
+        try assertFrontmatterModel("gpt-5.6-sol-fast", in: content)
+        XCTAssertFalse(content.lowercased().contains("gpt-5.6-sol-fast[1m]"))
+    }
+
+    func testDisallowedSubagentModelsFallBackToCanonicalSol() throws {
+        XCTAssertEqual(
+            installer.sync(
+                backendEnabled: true,
+                model: "GPT-5.6-LUNA[1M]",
+                fastEnabled: true
+            ),
+            [.installed]
+        )
+        XCTAssertEqual(
+            installer.sync(
+                backendEnabled: true,
+                model: "gpt-5.5",
+                fastEnabled: true
+            ),
+            [.upToDate]
+        )
+
+        let content = try String(contentsOf: mainFileURL, encoding: .utf8)
+        try assertFrontmatterModel("gpt-5.6-sol-fast", in: content)
+        XCTAssertFalse(content.lowercased().contains("gpt-5.6-luna"))
+        XCTAssertFalse(content.lowercased().contains("gpt-5.5"))
     }
 
     func testToggleChangeUpdatesManagedDefinition() throws {
@@ -117,10 +142,10 @@ final class ClaudeGPTAgentDefinitionTests: XCTestCase {
     func testSyncIsIdempotentAndUpdatesOnModelChange() throws {
         XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false), [.installed])
         XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-sol", fastEnabled: false), [.upToDate])
-        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-luna", fastEnabled: false), [.updated])
+        XCTAssertEqual(installer.sync(backendEnabled: true, model: "gpt-5.6-terra", fastEnabled: false), [.updated])
 
         let content = try String(contentsOf: mainFileURL, encoding: .utf8)
-        try assertFrontmatterModel("gpt-5.6-luna", in: content)
+        try assertFrontmatterModel("gpt-5.6-terra", in: content)
     }
 
     func testDisabledBackendRemovesManagedDefinition() throws {

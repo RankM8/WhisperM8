@@ -797,6 +797,13 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             }
             environment.append(contentsOf: command.environmentOverrides.map { "\($0.key)=\($0.value)" })
         }
+        if !command.environmentRemovals.isEmpty {
+            environment.removeAll { entry in
+                command.environmentRemovals.contains(
+                    String(entry.prefix(while: { $0 != "=" }))
+                )
+            }
+        }
         // Identität für `whisperm8 chats`: die Session weiß, WER fragt, wenn
         // sie aus dem Chat heraus die CLI aufruft (Selbst-Send-Schutz,
         // „(du)"-Markierung, Audit). Das Token beweist dem Control-Server, dass

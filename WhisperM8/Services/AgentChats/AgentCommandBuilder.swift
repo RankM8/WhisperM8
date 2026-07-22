@@ -13,6 +13,9 @@ struct AgentLaunchCommand: Equatable {
     /// Zusaetzliche Env-Variablen fuer den Launch, gemerged ueber das
     /// LoginShellEnvironment (z. B. `CLAUDE_CONFIG_DIR` fuer Account-Profile).
     var environmentOverrides: [String: String] = [:]
+    /// Keys, die auch aus dem geerbten Login-/App-Environment entfernt werden
+    /// muessen. Attach nutzt dies, um keine fremden GPT-Kapazitaetswerte zu erben.
+    var environmentRemovals: Set<String> = []
 }
 
 enum AgentCommandError: LocalizedError, Equatable {
@@ -93,13 +96,21 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTPickerModel
     }
 
-    /// Reales GPT-Kontextfenster fuer `CLAUDE_CODE_AUTO_COMPACT_WINDOW`.
-    /// Nur GPT-gestempelte Sessions bekommen die Variable — sie wirkt
-    /// prozessweit, und in Misch-Sessions (Claude-Main) soll die
-    /// Claude-Default-Annahme unangetastet bleiben.
-    var gptAutoCompactWindowResolver: () -> Int = {
-        AppPreferences.shared.claudeGPTAutoCompactWindow
+    /// Reale Kapazitaet der explizit freigegebenen, kompatiblen GPT-Modelle.
+    /// Der Wert wird bei aktivem MixRouter als Modellfenster an Claude Code und
+    /// WhisperM8-Statuslines gegeben. Der prozessweite Auto-Compact-Deckel ist
+    /// davon getrennt und bleibt konstant bei 1M, damit native 1M-Modelle in
+    /// derselben Mischsession nicht auf das GPT-Fenster begrenzt werden.
+    var gptContextWindowResolver: () -> Int = {
+        AppPreferences.shared.claudeGPTContextWindow
     }
+
+    static let routerAutoCompactCeiling = 1_000_000
+    static let gptContextEnvironmentKeys = [
+        "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+        "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+        "WHISPERM8_GPT56_CONTEXT_WINDOW",
+    ]
 
     /// Lokalisiert das Claude-Transcript einer Session ueber ALLE Account-
     /// Roots (main + Profile) — (externalSessionID, cwd) → JSONL-URL.
@@ -117,20 +128,6 @@ struct AgentCommandBuilder {
             fromEnvironment: ProcessInfo.processInfo.environment["SHELL"],
             isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }
         )
-    }
-
-    /// Letzter `--model`-Wert einer Argumentliste (claude parst
-    /// last-flag-wins). `nil`, wenn kein Override vorhanden ist.
-    static func lastModelArgument(in arguments: [String]) -> String? {
-        var result: String?
-        var index = 0
-        while index < arguments.count - 1 {
-            if arguments[index] == "--model" {
-                result = arguments[index + 1]
-            }
-            index += 1
-        }
-        return result
     }
 
     /// Pure Auflösung der Login-Shell — separat, damit sie ohne echtes
@@ -190,9 +187,21 @@ struct AgentCommandBuilder {
         }
     }
 
-    /// Router-Kern-Env fuer jede Claude-Session bei aktivem GPT-Backend.
-    /// Background-Spawns brauchen dieselben Werte bereits vor dem spaeteren
-    /// Attach, deshalb ist der session-unabhaengige Teil separat abrufbar.
+    func normalizedGPTContextWindow() -> Int {
+        min(
+            max(
+                gptContextWindowResolver(),
+                AppPreferences.claudeGPTContextWindowRange.lowerBound
+            ),
+            ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+        )
+    }
+
+    /// Router-Kern-Env fuer jede direkt von WhisperM8 gestartete Claude-CLI bei
+    /// aktivem GPT-Backend. Background-Launches geben denselben Snapshot sowohl
+    /// an den `--bg`-Dispatcher als auch tief gemergt in die session-scoped
+    /// Settings-Datei fuer den Supervisor-Worker. Der Attach-Pfad entfernt die
+    /// drei Kontextwerte gezielt wieder, behaelt aber Router-/Profil-Env.
     func gptRouterCoreEnvironment() -> [String: String]? {
         guard gptBackendEnabledResolver() else { return nil }
 
@@ -204,30 +213,51 @@ struct AgentCommandBuilder {
         let pickerModel = configuredPickerModel.isEmpty
             ? (defaultModel.isEmpty ? AppPreferences.claudeGPTCanonicalModel : defaultModel)
             : configuredPickerModel
-        let effectivePickerModel = ClaudeGPTModelAlias.effectiveModel(
+        let contextWindow = normalizedGPTContextWindow()
+        let effectivePickerModel = ClaudeGPTModelAlias.supportedEffectiveModel(
             pickerModel,
-            fastEnabled: fastModeEnabled
-        )
-        let normalizedPickerModel = effectivePickerModel.lowercased()
-        let isFastPickerModel = normalizedPickerModel.hasSuffix("-fast")
-            || normalizedPickerModel.hasSuffix("-fast[1m]")
+            fastEnabled: fastModeEnabled,
+            contextWindow: contextWindow
+        ) ?? ClaudeGPTModelAlias.supportedEffectiveModel(
+            AppPreferences.claudeGPTCanonicalModel,
+            fastEnabled: fastModeEnabled,
+            contextWindow: contextWindow
+        )!
+        let isFastPickerModel = effectivePickerModel.hasSuffix("-fast")
+        let supportedDescription = "unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         let pickerDescription = isFastPickerModel
-            ? "Priority-Tier (1,5× Speed, 2,5× Credits) — andere GPT-Modelle per /model <id> tippen"
-            : "Standard-Tier — andere GPT-Modelle per /model <id> tippen"
+            ? "Priority-Tier (1,5× Speed, 2,5× Credits) — \(supportedDescription)"
+            : "Standard-Tier — \(supportedDescription)"
+        let gptContextWindow = String(contextWindow)
         var environment = [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:\(gptRouterPortResolver())",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": pickerDescription,
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+            // Drei gemeinsame Invarianten fuer jede direkt gestartete CLI.
+            // MAX_CONTEXT beschreibt die reale GPT-Kapazitaet, der 1M-Deckel
+            // laesst native Fable-/Opus-Modelle ungekappt, und die eigene
+            // Variable korrigiert ausschliesslich die freigegebene GPT-Anzeige.
+            // Background-Worker erhalten dasselbe Trio ueber ihr internes
+            // session-scoped Settings-`env`.
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": gptContextWindow,
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW": String(Self.routerAutoCompactCeiling),
+            "WHISPERM8_GPT56_CONTEXT_WINDOW": gptContextWindow,
         ]
         let subagentModel = gptSubagentModelResolver()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !subagentModel.isEmpty {
-            environment["CLAUDE_CODE_SUBAGENT_MODEL"] = ClaudeGPTModelAlias.effectiveModel(
+            let effectiveSubagentModel = ClaudeGPTModelAlias.supportedSubagentModel(
                 subagentModel,
-                fastEnabled: fastModeEnabled
-            )
+                fastEnabled: fastModeEnabled,
+                contextWindow: contextWindow
+            ) ?? ClaudeGPTModelAlias.supportedSubagentModel(
+                AppPreferences.claudeGPTCanonicalModel,
+                fastEnabled: fastModeEnabled,
+                contextWindow: contextWindow
+            )!
+            environment["CLAUDE_CODE_SUBAGENT_MODEL"] = effectiveSubagentModel
         }
         return environment
     }
@@ -362,7 +392,11 @@ struct AgentCommandBuilder {
             let model = session.claudeBackendModel?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !model.isEmpty else { return nil }
-            return ClaudeGPTModelAlias.effectiveModel(model, fastEnabled: fastModeEnabled)
+            return ClaudeGPTModelAlias.supportedEffectiveModel(
+                model,
+                fastEnabled: fastModeEnabled,
+                contextWindow: normalizedGPTContextWindow()
+            )
         }()
 
         // Der Router gilt bewusst fuer jede Claude-PTY-Session. So koennen
@@ -378,20 +412,6 @@ struct AgentCommandBuilder {
             if includesGPTTuning {
                 environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "gpt-5.4-mini"
                 environment["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"] = "3"
-                // Reale 272k statt 200k-Default-Annahme fuer unbekannte
-                // Modelle — Auto-Compact-Schwelle und /context rechnen
-                // sonst mit dem falschen Fenster (Proxy-README-Empfehlung).
-                // AUSNAHME: ueberschreibt der User das Modell per Extra-Args
-                // mit einem Nicht-GPT-Modell (last-flag-wins), laeuft die
-                // Session effektiv auf Claude — das GPT-Fenster wuerde die
-                // Kompaktierung dann ZU SPAET ausloesen (Review 2026-07-19).
-                let userModelOverride = Self.lastModelArgument(
-                    in: extraArgumentsResolver(.claude)
-                )
-                if userModelOverride?.hasPrefix("gpt-") != false {
-                    environment["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] =
-                        String(gptAutoCompactWindowResolver())
-                }
             }
             return environment
         }
@@ -427,14 +447,21 @@ struct AgentCommandBuilder {
             // User-defined extras zuerst, falls jemand z. B. `--verbose` will.
             arguments.append(contentsOf: extraArgumentsResolver(.claude))
             arguments.append(shortID)
+            var attachEnvironment = applyRouterEnvironment(profileEnvironment, false)
+            // Der Attach-Prozess kennt das reale Worker-Fenster nicht: Claude
+            // Code 2.1.216 persistiert die drei Kontextwerte nicht garantiert
+            // in den Supervisor-Worker. Ohne Metadaten zeigt die Statusline den
+            // vom Worker gemeldeten Wert statt faelschlich 272k zu erfinden.
+            for key in Self.gptContextEnvironmentKeys {
+                attachEnvironment.removeValue(forKey: key)
+            }
             return AgentLaunchCommand(
                 executablePath: executable,
                 arguments: arguments,
                 workingDirectory: project.path,
-                // Attach landet in einer normalen Claude-Chat-Session, also
-                // selbes Keyboard-Profil wie ein interaktiver `.chat`.
                 keyboardProfile: .claudeCodeChat,
-                environmentOverrides: applyRouterEnvironment(profileEnvironment, false)
+                environmentOverrides: attachEnvironment,
+                environmentRemovals: Set(Self.gptContextEnvironmentKeys)
             )
         }
 
@@ -457,23 +484,44 @@ struct AgentCommandBuilder {
             resumeSessionID = externalSessionID
         }
 
+        let resumeTranscriptURL = resumeSessionID.flatMap {
+            claudeTranscriptLocator($0, project.path)
+        }
+        let legacyResumeModel: String? = {
+            guard routerEnabled,
+                  let resumeTranscriptURL,
+                  let restoredModel = ClaudeTranscriptReader.lastAssistantModel(
+                      fileURL: resumeTranscriptURL
+                  ),
+                  ClaudeGPTModelAlias.hasMemorySuffix(restoredModel) else {
+                return nil
+            }
+            return ClaudeGPTModelAlias.supportedEffectiveModel(
+                restoredModel,
+                fastEnabled: false,
+                contextWindow: normalizedGPTContextWindow()
+            )
+        }()
+
         var arguments: [String] = []
         // Vom Caller injizierte Args (z. B. `--settings <hook-settings.json>`)
         // kommen ganz vorne, damit Claude sie sicher beim Parse sieht.
         arguments.append(contentsOf: extraLaunchArguments)
         let userArguments = extraArgumentsResolver(.claude)
-        // Nur Erststarts bekommen den GPT-Modellstempel. Bei Resume und Fork
-        // restauriert Claude die Transcript-Wahl; ein erneutes `--model` würde
-        // einen zwischenzeitlichen `/model`-Wechsel überschreiben. Die
-        // großzügige `availableModels`-Liste schützt restaurierte Modelle vor
-        // dem stillen Off-List-Fallthrough. User-Extras folgen weiterhin nach
-        // dem Stempel und behalten damit das letzte Wort (last-flag-wins).
+        // Nur Erststarts bekommen den normalen GPT-Modellstempel. Resume/Fork
+        // restaurieren grundsaetzlich die Transcript-Wahl. Einzige Ausnahme:
+        // alte GPT-Transcripts mit `[1m]` erhalten den suffixlosen, aus dem
+        // letzten Assistant-Payload gelesenen Modellwert, weil der Router den
+        // kapazitaetsverfaelschenden Suffix heute ablehnt. User-Extras folgen
+        // danach und behalten last-flag-wins.
         let hasResumeArgument = resumeSessionID != nil
             || Self.argumentsContainResumeFlag(arguments)
             || Self.argumentsContainResumeFlag(userArguments)
         let shouldApplyGPTModelStamp = !hasResumeArgument && gptBackendModel != nil
         if shouldApplyGPTModelStamp, let gptBackendModel {
             arguments.append(contentsOf: ["--model", gptBackendModel])
+        } else if hasResumeArgument, let legacyResumeModel {
+            arguments.append(contentsOf: ["--model", legacyResumeModel])
         }
         // User-defined extras (z. B. --dangerously-skip-permissions) vor dem
         // Resume-Block, damit sie auch beim Resume durchgehen.
@@ -494,7 +542,7 @@ struct AgentCommandBuilder {
         // nicht geschrieben) → Stempel wie bisher.
         var effectiveProfileEnvironment = profileEnvironment
         if let resumeSessionID,
-           let transcript = claudeTranscriptLocator(resumeSessionID, project.path) {
+           let transcript = resumeTranscriptURL {
             let actualProfile = ClaudeAccountProfiles.profileName(forTranscriptPath: transcript.path)
             if actualProfile != session.claudeProfileName {
                 Logger.agentStore.warning(
@@ -537,9 +585,11 @@ struct AgentCommandBuilder {
     /// auf stdout druckt und dann beendet. Wir bauen die Args trotzdem
     /// hier zentral, damit Spawn und Attach in derselben Code-Linie liegen.
     ///
-    /// Reihenfolge: `--settings` muss vor `--bg` stehen, damit Claude die
-    /// Hook-Konfiguration vor dem Session-Setup einliest. `--agent` und
-    /// `--permission-mode` sind optionale Flags vor dem Prompt.
+    /// Reihenfolge: Das interne `--settings` muss vor `--bg` stehen, damit
+    /// Claude die Hook-Konfiguration vor dem Session-Setup einliest. Wenn diese
+    /// interne Datei gesetzt ist, werden konkurrierende User-`--settings` aus
+    /// den Extras entfernt; ohne interne Datei bleiben die Extras unverändert.
+    /// `--agent` und `--permission-mode` sind optionale Flags vor dem Prompt.
     static func backgroundSpawnArguments(
         initialPrompt: String,
         settingsFilePath: String? = nil,
@@ -548,7 +598,27 @@ struct AgentCommandBuilder {
         extraArguments: [String] = []
     ) -> [String] {
         var args: [String] = []
+        var effectiveExtraArguments = extraArguments
         if let path = settingsFilePath?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+            var sanitizedArguments: [String] = []
+            var index = 0
+            while index < extraArguments.count {
+                let argument = extraArguments[index]
+                if argument == "--settings" {
+                    // Claude konsumiert nach der separaten Form immer genau das
+                    // naechste Token als Wert — auch wenn es wie ein Flag aussieht.
+                    index += 1
+                    if index < extraArguments.count {
+                        index += 1
+                    }
+                } else if argument.hasPrefix("--settings=") {
+                    index += 1
+                } else {
+                    sanitizedArguments.append(argument)
+                    index += 1
+                }
+            }
+            effectiveExtraArguments = sanitizedArguments
             args.append(contentsOf: ["--settings", path])
         }
         args.append("--bg")
@@ -558,7 +628,7 @@ struct AgentCommandBuilder {
         if let mode = permissionMode?.trimmingCharacters(in: .whitespacesAndNewlines), !mode.isEmpty {
             args.append(contentsOf: ["--permission-mode", mode])
         }
-        args.append(contentsOf: extraArguments)
+        args.append(contentsOf: effectiveExtraArguments)
         args.append(initialPrompt)
         return args
     }

@@ -80,6 +80,45 @@ final class AgentTranscriptReaderTests: XCTestCase {
         } else { XCTFail("Expected imagePlaceholder block") }
     }
 
+    func testLastAssistantModelReverseScanSkipsTwentyMegabyteTrailingLineWithoutMaterializingIt() throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-claude-reverse-model-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        try Data().write(to: tempURL)
+        let handle = try FileHandle(forWritingTo: tempURL)
+        try handle.write(contentsOf: Data(
+            (#"{"type":"assistant","message":{"model":"gpt-5.6-terra[1m]","content":[]}}"# + "\n").utf8
+        ))
+        try handle.write(contentsOf: Data(#"{"type":"user","message":{"content":""#.utf8))
+        let oneMegabyte = Data(repeating: Character("x").asciiValue!, count: 1_024 * 1_024)
+        for _ in 0..<20 {
+            try handle.write(contentsOf: oneMegabyte)
+        }
+        try handle.write(contentsOf: Data(#""}}"#.utf8))
+        try handle.close()
+
+        var statistics = ClaudeTranscriptReader.LastAssistantModelScanStatistics()
+        let model = ClaudeTranscriptReader.lastAssistantModel(
+            fileURL: tempURL,
+            statistics: &statistics
+        )
+        let fileSize = try XCTUnwrap(
+            (FileManager.default.attributesOfItem(atPath: tempURL.path)[.size] as? NSNumber)?.intValue
+        )
+
+        XCTAssertEqual(model, "gpt-5.6-terra[1m]")
+        XCTAssertEqual(
+            model.map { ClaudeGPTModelAlias.effectiveModel($0, fastEnabled: false) },
+            "gpt-5.6-terra"
+        )
+        XCTAssertGreaterThan(fileSize, 20 * 1_024 * 1_024)
+        XCTAssertGreaterThan(statistics.boundaryBytesRead, 16 * 1_024 * 1_024)
+        XCTAssertLessThanOrEqual(statistics.boundaryBytesRead, fileSize)
+        XCTAssertEqual(statistics.longLinesInspected, 1)
+        XCTAssertLessThanOrEqual(statistics.maximumLinePayloadBytesRead, 64 * 1_024)
+        XCTAssertGreaterThanOrEqual(statistics.fullLinesParsed, 1)
+    }
+
     func testCodexTranscriptReaderParsesUserAndAgentMessages() throws {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("test-codex-\(UUID().uuidString).jsonl")

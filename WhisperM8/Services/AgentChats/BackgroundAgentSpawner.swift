@@ -260,10 +260,9 @@ struct DefaultProcessRunner: ProcessRunner {
             var env = LoginShellEnvironment.shared.processEnvironment()
             env["NO_COLOR"] = "1"
             env["CLICOLOR"] = "0"
-            // Router-Env muss schon beim Spawn gesetzt sein: Der Supervisor-
-            // Daemon hostet die Session, und ein spaeteres Attach kann ihr Env
-            // nicht mehr aendern. Ein bereits laufender Daemon kann Claude-
-            // intern allerdings noch mit seinem alten Env weiterleben.
+            // Router-Env wird bewusst doppelt transportiert: hier direkt an den
+            // `claude --bg`-Dispatcher und zusaetzlich ueber die session-scoped
+            // `--settings`-Datei an den vom Supervisor gestarteten Worker.
             env.merge(environmentOverrides) { _, override in override }
             process.environment = env
 

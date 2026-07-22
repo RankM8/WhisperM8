@@ -4,7 +4,9 @@ import Foundation
 /// `~/.claude/agents/gpt.md`. Ueber sie kann das Hauptmodell einer Session
 /// nativ PRO AUFGABE einen GPT-Subagenten waehlen (Frontmatter `model:` hat
 /// in Claude Codes Aufloesungskette Vorrang vor dem Hauptmodell), ohne dass
-/// `CLAUDE_CODE_SUBAGENT_MODEL` saemtliche Subagents auf GPT zwingt.
+/// `CLAUDE_CODE_SUBAGENT_MODEL` saemtliche Subagents auf GPT zwingt. Die
+/// verbindliche Subagent-Policy erlaubt nur GPT-5.6 Sol oder Terra; jede andere
+/// nichtleere Konfiguration faellt sicher auf das kanonische Sol zurueck.
 ///
 /// Lifecycle folgt dem GPT-Backend: aktiv → Datei anlegen/aktualisieren,
 /// deaktiviert → entfernen (sonst scheitern `gpt`-Spawns ohne Router).
@@ -74,10 +76,13 @@ struct ClaudeGPTAgentDefinitionInstaller {
     ) -> [SyncOutcome] {
         let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedModel = trimmed.isEmpty ? AppPreferences.claudeGPTCanonicalModel : trimmed
-        let effectiveModel = ClaudeGPTModelAlias.effectiveModel(
+        let effectiveModel = ClaudeGPTModelAlias.supportedSubagentModel(
             resolvedModel,
             fastEnabled: fastEnabled
-        )
+        ) ?? ClaudeGPTModelAlias.supportedSubagentModel(
+            AppPreferences.claudeGPTCanonicalModel,
+            fastEnabled: fastEnabled
+        )!
         return fileURLs.map {
             sync(backendEnabled: backendEnabled, model: effectiveModel, at: $0)
         }

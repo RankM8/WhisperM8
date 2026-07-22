@@ -42,13 +42,37 @@ fi
 ccs_profile=$(sanitize_text "$ccs_profile")
 
 # ── Tuning ────────────────────────────────────────────────────────────────
-# Schwellenwert (% des vollen Fensters), ab dem Claude Code automatisch
-# komprimiert. Hier justieren, falls Compaction früher/später auslöst.
+# Reines Anzeige-Budget: Claude Code entscheidet die echte Auto-Kompaktierung
+# selbst. Die modellselektive GPT-Korrektur ist nur aktiv, wenn der gestartete
+# Prozess die Kapazitaet explizit als WhisperM8-Metadatum erhalten hat.
 COMPACT_AT=85
+GPT_CONTEXT_WINDOW="${WHISPERM8_GPT56_CONTEXT_WINDOW:-0}"
+case "$GPT_CONTEXT_WINDOW" in
+    ''|*[!0-9]*) GPT_CONTEXT_WINDOW=0 ;;
+esac
+if [ "$GPT_CONTEXT_WINDOW" -le 0 ]; then GPT_CONTEXT_WINDOW=0; fi
 # ──────────────────────────────────────────────────────────────────────────
 
 # Model Name
 model=$(sanitize_text "$(printf '%s\n' "$input" | jq -r '.model.display_name // "Claude"')")
+model_lower=$(printf '%s' "$model" | tr '[:upper:]' '[:lower:]')
+model_base=$model_lower
+case "$model_base" in
+    *'[1m]') model_base=${model_base%'[1m]'} ;;
+esac
+unsupported_mini_fast=0
+case "$model_base" in
+    gpt-5.4-mini-fast) unsupported_mini_fast=1 ;;
+esac
+case "$model_base" in
+    *-fast) model_base=${model_base%-fast} ;;
+esac
+is_supported_gpt=0
+case "$model_base" in
+    gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.5|gpt-5.4|gpt-5.4-mini)
+        if [ "$unsupported_mini_fast" -eq 0 ]; then is_supported_gpt=1; fi
+        ;;
+esac
 
 # Projektname (Hauptrepo-Name, kein Pfad/Ordner)
 # --git-common-dir stellt sicher, dass auch Worktrees den echten Repo-Namen zeigen
@@ -307,16 +331,35 @@ if [ "$usage" = "null" ]; then
     ctx_exact=""
 else
     current=$(echo "$usage" | jq '.input_tokens + .cache_creation_input_tokens + .cache_read_input_tokens')
-    size=$(printf '%s\n' "$input" | jq '.context_window.context_window_size')
-    compact_budget=$((size * COMPACT_AT / 100))
-    if [ "$compact_budget" -le 0 ]; then compact_budget=1; fi
-    used_of_budget=$((current * 100 / compact_budget))
-    if [ $used_of_budget -gt 100 ]; then used_of_budget=100; fi
-    remaining=$((100 - used_of_budget))
-    if [ $remaining -lt 0 ]; then remaining=0; fi
-    # Exakter Kontext-Wert: verbrauchte Token / volles Modellfenster.
-    # Wichtig für GPT-Sessions (272k-Fenster via CLAUDE_CODE_AUTO_COMPACT_WINDOW).
-    ctx_exact="$((current / 1000))k/$((size / 1000))k"
+    reported_size=$(printf '%s\n' "$input" | jq -r '.context_window.context_window_size // 0')
+    case "$reported_size" in
+        ''|*[!0-9]*) reported_size=0 ;;
+    esac
+    size=$reported_size
+    # Nur die explizit freigegebenen, gleich grossen GPT-Modelle erhalten die
+    # konfigurierte Kapazitaetskorrektur; unbekannte/alte IDs bleiben unberuehrt.
+    if [ "$is_supported_gpt" -eq 1 ] \
+        && [ "$GPT_CONTEXT_WINDOW" -gt 0 ] \
+        && { [ "$reported_size" -eq 0 ] || [ "$reported_size" -eq 200000 ]; }; then
+        size=$GPT_CONTEXT_WINDOW
+    fi
+    if [ "$size" -le 0 ]; then
+        # Ohne Modellmetadatum keine Kapazität erfinden: Tokenzahl und Modell
+        # bleiben sichtbar, Prozent-/Fensteranzeige wird für diesen Tick leer.
+        remaining=100
+        used_of_budget=0
+        ctx_exact=""
+    else
+        compact_budget=$((size * COMPACT_AT / 100))
+        if [ "$compact_budget" -le 0 ]; then compact_budget=1; fi
+        used_of_budget=$((current * 100 / compact_budget))
+        if [ $used_of_budget -gt 100 ]; then used_of_budget=100; fi
+        remaining=$((100 - used_of_budget))
+        if [ $remaining -lt 0 ]; then remaining=0; fi
+        # Exakter Kontext-Wert: verbrauchte Token / modellselektiv korrigiertes
+        # Modellfenster (freigegebene GPT-Custom-Modelle: konfigurierte Kapazitaet).
+        ctx_exact="$((current / 1000))k/$((size / 1000))k"
+    fi
 fi
 
 # Farbe basierend auf Verbrauch (viel verbraucht = Warnung)

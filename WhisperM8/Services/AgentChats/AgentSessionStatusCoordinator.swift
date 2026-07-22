@@ -67,7 +67,8 @@ final class AgentSessionStatusCoordinator {
             defaultModel: preferences.claudeGPTBackendDefaultModel,
             pickerModel: preferences.claudeGPTPickerModel,
             subagentModel: preferences.claudeGPTSubagentModel,
-            sessionModel: sessionModel
+            sessionModel: sessionModel,
+            contextWindow: preferences.claudeGPTContextWindow
         )
     }
 
@@ -126,7 +127,9 @@ final class AgentSessionStatusCoordinator {
     }
 
     /// Zentrale Settings-Vorbereitung für interaktive UND Background-Launches.
-    /// Hooks, Context-Profil und GPT-Modellkatalog werden unabhängig kombiniert:
+    /// Hooks, Context-Profil, GPT-Modellkatalog und internes Worker-Env werden
+    /// unabhängig kombiniert. Worker-Env wird nur intern erzeugt und gewinnt
+    /// im tief gemergten `env` bei Kollisionen gegen das Context-Profil.
     /// - Hooks an                → Datei mit Hooks, Tracking aktiv
     /// - Context-Profil vorhanden → dessen nicht-leere Profil-Keys in derselben Datei
     /// - GPT-Backend an          → `availableModels` in derselben Datei
@@ -134,7 +137,8 @@ final class AgentSessionStatusCoordinator {
     func prepareLaunchSettings(
         localSessionID: UUID,
         contextProfile: ClaudeContextProfile?,
-        includeGPTModelCatalog: Bool = true
+        includeGPTModelCatalog: Bool = true,
+        workerEnvironment: [String: String]? = nil
     ) -> LaunchSettingsPreparation {
         let hooksEnabled = loadPreferences().hooksEnabled
         let contextFragment = contextProfile.map {
@@ -146,9 +150,11 @@ final class AgentSessionStatusCoordinator {
         let gptModelsFragment = includeGPTModelCatalog
             ? gptModelsFragmentResolver(sessionModel) ?? [:]
             : [:]
+        let workerFragment: [String: Any] = workerEnvironment.map { ["env": $0] } ?? [:]
         let fragment = ClaudeContextSettingsBuilder.merged([
             contextFragment,
             gptModelsFragment,
+            workerFragment,
         ])
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         let path = hookBridge.prepareSettingsFile(

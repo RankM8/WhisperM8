@@ -8,8 +8,8 @@ struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTFastModeEnabled) private var fastModeEnabled = true
     @AppStorage(PreferenceKeys.claudeGPTPickerModel) private var pickerModel = ""
     @AppStorage(PreferenceKeys.claudeGPTSubagentModel) private var subagentModel = ""
-    @AppStorage(PreferenceKeys.claudeGPTAutoCompactWindow) private var autoCompactWindow =
-        AppPreferences.claudeGPTDefaultAutoCompactWindow
+    @AppStorage(PreferenceKeys.claudeGPTAutoCompactWindow) private var gptContextWindow =
+        AppPreferences.claudeGPTDefaultContextWindow
 
     @State private var binaryPath: String?
     @State private var proxyReachable: Bool?
@@ -27,10 +27,20 @@ struct GPTBackendSettingsPage: View {
     @State private var refreshQueued = false
 
     private let proxyManager = ClaudeCodeProxyManager.shared
-    private let modelSuggestions = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra"]
+    private let modelSuggestions = [
+        "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra",
+        "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
+    ]
     private let pickerModelSuggestions = [
         "gpt-5.6-sol", "gpt-5.6-sol-fast",
         "gpt-5.6-luna", "gpt-5.6-luna-fast",
+        "gpt-5.6-terra", "gpt-5.6-terra-fast",
+        "gpt-5.5", "gpt-5.5-fast",
+        "gpt-5.4", "gpt-5.4-fast",
+        "gpt-5.4-mini",
+    ]
+    private let subagentModelSuggestions = [
+        "gpt-5.6-sol", "gpt-5.6-sol-fast",
         "gpt-5.6-terra", "gpt-5.6-terra-fast",
     ]
 
@@ -250,7 +260,7 @@ struct GPTBackendSettingsPage: View {
 
             editableModelRow(
                 title: "Standard-Modell für neue Claude-Chats",
-                subtitle: "Leer = neue Chats starten wie gewohnt mit Claude; GPT nur, wenn hier ein Modell steht. Frei editierbar; die Liste enthält nur Vorschläge.",
+                subtitle: "Leer = neue Chats starten wie gewohnt mit Claude; GPT nur, wenn hier ein freigegebenes Modell steht. Unbekannte oder kapazitätsinkompatible GPT-IDs werden nicht gestempelt.",
                 placeholder: "Leer = Claude (Standard)",
                 text: $defaultModel,
                 suggestions: modelSuggestions
@@ -264,7 +274,7 @@ struct GPTBackendSettingsPage: View {
 
             editableModelRow(
                 title: "GPT-Modell im /model-Picker",
-                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer = automatisch (Standard-Modell bzw. gpt-5.6-sol, Fast-Modus wird angewendet). Alle anderen GPT-Modelle bleiben per getipptem /model <id> nutzbar.",
+                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer oder unbekannt = gpt-5.6-sol; Fast-Modus wird angewendet. Zulässig sind GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4 und GPT-5.4 Mini. Alle außer Mini unterstützen optional ›-fast‹; Mini bleibt immer suffixlos. Ältere und unbekannte GPT-IDs lehnt der Router klar ab.",
                 placeholder: "Leer = automatisch",
                 text: $pickerModel,
                 suggestions: pickerModelSuggestions
@@ -272,19 +282,19 @@ struct GPTBackendSettingsPage: View {
 
             editableModelRow(
                 title: "Subagent-Modell (CLAUDE_CODE_SUBAGENT_MODEL)",
-                subtitle: "Zwangs-Override: erzwingt dieses Modell für ALLE nativen Subagents. Empfehlung: leer lassen — GPT-Subagents stehen ohnehin über den Agent-Typ »gpt« bereit, den Claude pro Aufgabe wählen kann.",
+                subtitle: "Zwangs-Override für ALLE nativen Subagents. Zulässig sind ausschließlich GPT-5.6 Sol oder Terra, jeweils optional mit ›-fast‹; jede andere nichtleere Konfiguration fällt sicher auf Sol zurück. Empfehlung: leer lassen und GPT-Subagents über den Agent-Typ »gpt« wählen lassen.",
                 placeholder: "Leer = aus (empfohlen)",
                 text: $subagentModel,
-                suggestions: modelSuggestions
+                suggestions: subagentModelSuggestions
             )
 
             SettingsRow(
-                title: "Kontextfenster (CLAUDE_CODE_AUTO_COMPACT_WINDOW)",
-                subtitle: "Reales Token-Fenster der GPT-Modelle für GPT-Sessions; steuert Auto-Kompaktierung und Kontext-Anzeige. 272000 = ChatGPT-Limit für GPT-5.6 (serverseitig, nicht erhöhbar)."
+                title: "GPT-Modellkapazität (MAX_CONTEXT)",
+                subtitle: "Gemeinsames Token-Fenster der freigegebenen GPT-Modelle. Default und aktuell belegte Obergrenze: 272000; kleinere Werte begrenzen konservativ, größere Alt-/Fehlwerte werden auf 272000 gekappt. Direkt gestartete Chats, Forks, Resumes, Agents View und der --bg-Dispatcher erhalten MAX_CONTEXT plus den separaten 1M-Auto-Compact-Deckel. Claude Code 2.1.216 persistiert diese Werte nicht garantiert in den Background-Worker; Attach lässt das Trio deshalb weg und zeigt nur die vom Worker gemeldete Kapazität."
             ) {
                 TextField(
-                    String(AppPreferences.claudeGPTDefaultAutoCompactWindow),
-                    value: $autoCompactWindow,
+                    String(AppPreferences.claudeGPTDefaultContextWindow),
+                    value: $gptContextWindow,
                     format: .number.grouping(.never)
                 )
                 .textFieldStyle(.roundedBorder)

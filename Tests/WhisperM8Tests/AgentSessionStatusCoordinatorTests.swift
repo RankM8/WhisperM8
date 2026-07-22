@@ -314,6 +314,82 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertFalse(nothing.hooksActive)
     }
 
+    func testPrepareLaunchSettingsDeepMergesWorkerEnvironmentAndInternalValuesWin() throws {
+        let (coordinator, sessionID, _, _, preferences) = try makeCoordinator()
+        preferences.value.hooksEnabled = false
+        let profile = ClaudeContextProfile(
+            name: "Worker",
+            environment: [
+                "PROFILE_ONLY": "profile",
+                "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "profile-value",
+            ]
+        )
+        let workerEnvironment = [
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+        ]
+
+        let preparation = coordinator.prepareLaunchSettings(
+            localSessionID: sessionID,
+            contextProfile: profile,
+            includeGPTModelCatalog: false,
+            workerEnvironment: workerEnvironment
+        )
+        let path = try XCTUnwrap(preparation.settingsFilePath)
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        let settings = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        XCTAssertEqual(settings["env"] as? [String: String], [
+            "PROFILE_ONLY": "profile",
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
+        ])
+        XCTAssertFalse(preparation.hooksActive)
+    }
+
+    func testBackgroundSettingsWriteFailureBlocksOnlyActiveRouter() throws {
+        let blockedRoot = tempDir.appendingPathComponent("not-a-directory")
+        try Data("file".utf8).write(to: blockedRoot)
+        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("write-failure-workspace.json"))
+        let session = try store.createSession(
+            provider: .claude,
+            projectPath: tempDir.path,
+            title: "Write Failure",
+            initialPrompt: nil
+        )
+        let preferences = PreferencesBox()
+        preferences.value.hooksEnabled = false
+        let coordinator = AgentSessionStatusCoordinator(
+            store: store,
+            hookBridge: ClaudeHookBridge(paths: ClaudeHookPaths(rootDirectory: blockedRoot)),
+            notificationPoster: NotificationPosterSpy(),
+            playSound: { _ in },
+            loadPreferences: { preferences.value },
+            launchGraceSeconds: 999
+        )
+        coordinator.gptModelsFragmentResolver = { _ in nil }
+        let routerEnvironment = ["ANTHROPIC_BASE_URL": "http://127.0.0.1:19002"]
+
+        let failed = coordinator.prepareLaunchSettings(
+            localSessionID: session.id,
+            contextProfile: nil,
+            includeGPTModelCatalog: false,
+            workerEnvironment: routerEnvironment
+        )
+
+        XCTAssertNil(failed.settingsFilePath)
+        XCTAssertTrue(BackgroundRouterLaunchGuard.blocksSpawnAfterSettingsPreparation(
+            routerEnvironment: routerEnvironment,
+            settingsFilePath: failed.settingsFilePath
+        ))
+        XCTAssertFalse(BackgroundRouterLaunchGuard.blocksSpawnAfterSettingsPreparation(
+            routerEnvironment: nil,
+            settingsFilePath: failed.settingsFilePath
+        ))
+    }
+
     // MARK: Prozessende
 
     func testTerminationSetsFinalStatusAndIgnoresLateEvents() throws {

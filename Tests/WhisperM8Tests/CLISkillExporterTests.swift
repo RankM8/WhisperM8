@@ -46,8 +46,27 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
         XCTAssertTrue(markdown.contains("name: \(CLISkillExporter.SkillDefinition.codexAgent.name)"))
         XCTAssertTrue(markdown.contains("whisperm8 agent run"))
-        // Der Skill muss die verbindlichen Exit-Codes dokumentieren.
+        // Der Skill muss die verbindlichen Exit-Codes und die sichtbare,
+        // technische Modell-Deklaration für jeden Subagent dokumentieren.
         XCTAssertTrue(markdown.contains("Exit-Codes"))
+        XCTAssertTrue(markdown.contains("subagent_type: \"gpt\""))
+        XCTAssertTrue(markdown.contains("agentType: \"gpt\""))
+        XCTAssertTrue(markdown.contains("Niemals Haiku"))
+    }
+
+    func testCodexRunnerDeclaresGPT56SolModel() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let definition = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(".claude/agents/codex-runner.md"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(definition.contains("model: gpt-5.6-sol"))
+        XCTAssertFalse(definition.contains("model: sonnet"))
+        XCTAssertFalse(definition.contains("model: haiku"))
     }
 
     func testGPTCoworkerSkillResourceLoadsAndMatchesDefinitionName() throws {

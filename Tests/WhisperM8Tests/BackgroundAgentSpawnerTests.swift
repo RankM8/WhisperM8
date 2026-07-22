@@ -141,6 +141,27 @@ final class BackgroundAgentSpawnerTests: XCTestCase {
         XCTAssertEqual(runner.recordedEnvironmentOverrides, environmentOverrides)
     }
 
+    func testSpawnPassesSettingsBeforeBackgroundFlagToRunner() async throws {
+        let runner = MockProcessRunner(result: ProcessRunResult(
+            exitCode: 0,
+            stdout: "backgrounded · cafebabe\n",
+            stderr: ""
+        ))
+
+        _ = try await BackgroundAgentSpawner.spawn(
+            initialPrompt: "worker",
+            projectPath: FileManager.default.temporaryDirectory.path,
+            settingsFilePath: "/app-support/session-worker.json",
+            environmentOverrides: ["ANTHROPIC_BASE_URL": "http://127.0.0.1:19002"],
+            commandResolver: { _ in "/usr/local/bin/claude" },
+            processRunner: runner
+        )
+
+        XCTAssertEqual(runner.recordedArguments, [
+            "--settings", "/app-support/session-worker.json", "--bg", "worker",
+        ])
+    }
+
     func testSpawnPassesSubAgentAndPermissionMode() async throws {
         let runner = MockProcessRunner(result: ProcessRunResult(
             exitCode: 0,

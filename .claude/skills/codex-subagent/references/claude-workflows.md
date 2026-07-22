@@ -18,14 +18,15 @@ Commit-Blockade der Codex-Sandbox ist behoben (siehe „Bekannte Grenzen").
 Dynamic Workflows sind JavaScript-Skripte, die der Claude-Code-Harness **lokal**
 ausführt (nicht in Claude Code on the Web — dort existiert `whisperm8` nicht).
 Das Skript selbst hat KEINEN Filesystem-/Prozess-Zugriff — es kann `whisperm8`
-nicht direkt aufrufen. Der Weg führt immer über einen Claude-Subagenten als
-dünnen Wrapper:
+nicht direkt aufrufen. Der Weg führt immer über den explizit als GPT-5.6 Sol
+deklarierten Custom-Agent `codex-runner` als dünnen Wrapper:
 
 ```
 Workflow-Skript (JS)
-  └─ agent(wrapperPrompt, {model:'sonnet', effort:'low', schema:RESULT})
-       └─ Bash: whisperm8 agent run --wait --json … ; echo "EXIT:$?"
-            └─ codex exec (ein Turn)
+  └─ agent(wrapperPrompt, {agentType:'codex-runner', schema:RESULT})
+       └─ codex-runner [gpt-5.6-sol, nur Bash]
+            └─ Bash: whisperm8 agent run --wait --json … ; echo "EXIT:$?"
+                 └─ codex exec (ein Turn)
        ←─ stdout-JSON als validiertes StructuredOutput
   ←─ Report-Objekt im Skript verfügbar
 ```
@@ -33,8 +34,8 @@ Workflow-Skript (JS)
 ## Der bequeme Weg: `agentType: 'codex-runner'`
 
 Liegt im Projekt ein `.claude/agents/codex-runner.md` (in WhisperM8 selbst
-vorhanden), ist der Wrapper-Kontrakt dort fest verdrahtet — Sonnet, nur Bash,
-mechanisches Relay. Dann genügt im Workflow:
+vorhanden), ist der Wrapper-Kontrakt dort fest verdrahtet — explizit
+`model: gpt-5.6-sol`, nur Bash, mechanisches Relay. Dann genügt im Workflow:
 
 ```js
 agent(`Führe genau diesen Befehl aus:\n\n${cmd}\n\n${relayHinweis}`,
@@ -48,9 +49,9 @@ Beispiel für diesen Wrapper.
 
 ## Der Wrapper-Kontrakt (manuell)
 
-Wrapper sind mechanische Arbeit — **immer ein günstiges Modell**
-(`model: 'sonnet'` oder `'haiku'`, `effort: 'low'`), nie das teure
-Hauptmodell. Bewährte Prompt-Vorlage:
+Wrapper bleiben mechanische Arbeit, werden aber gemäß Modellrichtlinie ebenfalls
+explizit mit **GPT-5.6 Sol** ausgeführt. Haiku, Sonnet und implizite Vererbung
+sind verboten. Bewährte Prompt-Vorlage:
 
 ```text
 Du bist ein mechanischer CLI-Wrapper. Führe via Bash exakt diesen Befehl aus
@@ -115,8 +116,9 @@ User hat übernommen, Step überspringen), `4` = Umgebung (abbrechen, loggen).
    gleichzeitig (eine Chrome-Instanz pro Job) — im Skript batchen.
 6. **Browser-QA nur mit Preflight-Gate:** Phase 1 = ein Probe-Job, im Skript
    auf PASS prüfen (`if (!preflight.pass) return`), erst dann Fan-out.
-7. **Codex-Tokens zählen nicht ins Workflow-Budget** (`budget.spent()` sieht
-   nur Claude-Tokens). Kostensteuerung für Codex = Anzahl Jobs im Skript.
+7. **Codex-Tokens zählen nicht ins Workflow-Budget**, der native GPT-Wrapper
+   dagegen schon. Kostensteuerung = Anzahl CLI-Jobs plus Wrapper-Overhead im
+   Skript begrenzen.
 8. **Permission-Allowlist:** `Bash(whisperm8 agent *)` in die Projekt-Settings,
    sonst können Wrapper in restriktiven Sessions an Permission-Prompts hängen.
    In WhisperM8 stehen `run`/`send`/`list`/`status`/`logs` in `.claude/settings.json`
@@ -179,7 +181,6 @@ const preflight = await agent(wrapperPrompt(
   status` und ein Blick in die App klären es.
 - **`rg` fehlt im Codex-PATH** — Jobs weichen selbstständig auf grep/awk aus
   (nur Noise in openQuestions, kein Fehler).
-- **Wrapper-Overhead:** ~35 k Sonnet-Tokens pro Wrapper mit Inline-Kontrakt,
-  ~15 k mit `agentType: 'codex-runner'` (Kontrakt steckt im Agent, nicht im Prompt).
-  Bei großen Fan-outs einkalkulieren; der Wrapper belegt außerdem einen
-  Workflow-Concurrency-Slot für die gesamte Turn-Dauer.
+- **Wrapper-Overhead:** `codex-runner` läuft explizit auf GPT-5.6 Sol und
+  belegt für die gesamte Turn-Dauer einen Workflow-Concurrency-Slot. Bei großen
+  Fan-outs Agent-Zahl und GPT-Budget entsprechend begrenzen.

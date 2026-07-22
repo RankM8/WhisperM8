@@ -16,9 +16,17 @@ if ! printf '%s\n' "$input" | jq -e 'type == "object" and (.tasks | type == "arr
     exit 0
 fi
 
+# Ohne explizite Prozess-Metadaten keine GPT-Kapazitaet erfinden (wichtig fuer
+# Attach an Supervisor-Worker, die das Dispatcher-Env nicht geerbt haben).
+GPT_CONTEXT_WINDOW="${WHISPERM8_GPT56_CONTEXT_WINDOW:-0}"
+case "$GPT_CONTEXT_WINDOW" in
+    ''|*[!0-9]*) GPT_CONTEXT_WINDOW=0 ;;
+esac
+if [ "$GPT_CONTEXT_WINDOW" -le 0 ]; then GPT_CONTEXT_WINDOW=0; fi
+
 # Pro aufgelöstem Task genau eine JSONL-Zeile ausgeben. Die Beschreibung wird
 # gegen die nutzbare Zeilenbreite gekürzt; ANSI-Sequenzen zählen dabei nicht.
-printf '%s\n' "$input" | jq -c '
+printf '%s\n' "$input" | jq -c --argjson gpt_context_window "$GPT_CONTEXT_WINDOW" '
     def sanitize_text:
         tostring
         | explode
@@ -51,8 +59,17 @@ printf '%s\n' "$input" | jq -c '
     | select(($safe_model | length) > 0)
     | ($safe_model | sub("^claude-"; "")) as $short_model
     | (if ($safe_model | startswith("gpt-")) then "[36m" else "[35m" end) as $model_color
-    | (if (($task.tokenCount | type) == "number" and ($task.contextWindowSize | type) == "number")
-       then (rounded_k($task.tokenCount) + "/" + rounded_k($task.contextWindowSize))
+    # Claude Code meldet unbekannte Custom-Modelle teils als 200k. Nur die
+    # explizit freigegebenen, gleich grossen GPT-Modelle erhalten die
+    # konfigurierte Kapazitaet; alte/unknown GPT-IDs und echte native
+    # Modellmetadaten (z. B. Opus 1M) bleiben unveraendert.
+    | (($safe_model | ascii_downcase | test("^gpt-((5\\.6-(sol|terra|luna)|5\\.5|5\\.4)(-fast)?|5\\.4-mini)(\\[1m\\])?$"))) as $is_supported_gpt
+    | (if ($is_supported_gpt and $gpt_context_window > 0 and $task.contextWindowSize == 200000)
+       then $gpt_context_window
+       else $task.contextWindowSize
+       end) as $context_window_size
+    | (if (($task.tokenCount | type) == "number" and ($context_window_size | type) == "number")
+       then (rounded_k($task.tokenCount) + "/" + rounded_k($context_window_size))
        else ""
        end) as $tokens
     # Bei extrem schmalen Panels zuerst Tokens weglassen und danach Name sowie

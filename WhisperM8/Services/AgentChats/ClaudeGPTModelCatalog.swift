@@ -7,22 +7,20 @@ enum ClaudeGPTModelCatalog {
     /// `fable[1m]` statt `fable`: Fable ist laut Doku immer 1M, aber ein
     /// Picker-Wechsel über den suffixlosen Alias ließ nach einem
     /// GPT-Zwischenwechsel Claude Codes 200k-Annahme stehen (2026-07-20).
-    /// Das explizite Suffix erzwingt den 1M-Refresh; das Matching strippt
-    /// `[1m]` beidseitig, suffixlose fable-Requests bleiben also erlaubt.
     static let claudeAliases = [
         "default", "best", "fable[1m]", "opus", "sonnet", "haiku",
         "opus[1m]", "sonnet[1m]", "opusplan",
     ]
 
-    /// Die Liste ist bewusst großzügig: Ein beim Resume restauriertes
-    /// Off-List-Modell fällt sonst still auf die normale Modell-Präzedenz
-    /// zurück. Explizite `-fast`-Eingaben liefern deshalb auch ihr Plain-
-    /// Pendant; ein `[1m]`-Suffix bleibt bei beiden Varianten erhalten.
+    /// Nur GPT-Modelle mit bekannter, zum gemeinsamen MAX_CONTEXT kompatibler
+    /// Kapazitaet werden in den Picker aufgenommen. Unbekannte oder aeltere IDs
+    /// duerfen nicht still unter dem prozessweiten GPT-Fenster laufen.
     static func availableModelsFragment(
         defaultModel: String,
         pickerModel: String,
         subagentModel: String,
-        sessionModel: String? = nil
+        sessionModel: String? = nil,
+        contextWindow: Int = ClaudeGPTModelAlias.maximumKnownSharedContextWindow
     ) -> [String: Any] {
         let configuredModels = [
             AppPreferences.claudeGPTCanonicalModel,
@@ -32,30 +30,31 @@ enum ClaudeGPTModelCatalog {
             sessionModel ?? "",
             "gpt-5.6-luna",
             "gpt-5.6-terra",
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
         ]
 
         var gptModels = Set<String>()
         for configuredModel in configuredModels {
-            let trimmed = configuredModel.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-
-            let plainModel = plainModelAlias(trimmed)
+            guard var plainModel = ClaudeGPTModelAlias.canonicalGPTModel(configuredModel) else {
+                continue
+            }
+            if plainModel.hasSuffix("-fast") {
+                plainModel.removeLast("-fast".count)
+            }
+            guard ClaudeGPTModelAlias.isSupportedCanonicalModel(
+                plainModel,
+                contextWindow: contextWindow
+            ) else {
+                continue
+            }
             gptModels.insert(plainModel)
-            gptModels.insert(ClaudeGPTModelAlias.effectiveModel(plainModel, fastEnabled: true))
+            if ClaudeGPTModelAlias.supportsFast(plainModel) {
+                gptModels.insert("\(plainModel)-fast")
+            }
         }
 
-        let aliases = Set(claudeAliases)
-        let sortedGPTModels = gptModels.subtracting(aliases).sorted()
-        return ["availableModels": claudeAliases + sortedGPTModels]
-    }
-
-    private static func plainModelAlias(_ model: String) -> String {
-        let hasMemorySuffix = model.lowercased().hasSuffix("[1m]")
-        let memorySuffix = hasMemorySuffix ? String(model.suffix(4)) : ""
-        var baseModel = hasMemorySuffix ? String(model.dropLast(4)) : model
-        if baseModel.hasPrefix("gpt-"), baseModel.hasSuffix("-fast") {
-            baseModel.removeLast("-fast".count)
-        }
-        return baseModel + memorySuffix
+        return ["availableModels": claudeAliases + gptModels.sorted()]
     }
 }

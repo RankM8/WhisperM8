@@ -42,15 +42,27 @@ enum ClaudeContextSettingsBuilder {
         return fragment
     }
 
-    /// Flacher Merge mehrerer Settings-Fragmente. Die Fragmente sind
-    /// key-disjunkt ("hooks" vs. Profil-Keys); bei Kollision gewinnt das
-    /// spaetere Fragment (deterministisch, kein Deep-Merge noetig).
+    /// Tiefer Merge mehrerer Settings-Fragmente. Verschachtelte Dictionaries
+    /// (insbesondere `env`) werden rekursiv kombiniert; bei Blatt-Kollisionen
+    /// gewinnt das spaetere Fragment. So bleiben Profil-Env und interne Worker-
+    /// Werte gemeinsam erhalten, waehrend interne Werte deterministisch siegen.
     static func merged(_ fragments: [[String: Any]]) -> [String: Any] {
-        var result: [String: Any] = [:]
-        for fragment in fragments {
-            result.merge(fragment) { _, new in new }
+        fragments.reduce(into: [:]) { result, fragment in
+            result = deepMerged(result, fragment)
         }
-        return result
+    }
+
+    private static func deepMerged(
+        _ existing: [String: Any],
+        _ incoming: [String: Any]
+    ) -> [String: Any] {
+        existing.merging(incoming) { old, new in
+            if let oldDictionary = old as? [String: Any],
+               let newDictionary = new as? [String: Any] {
+                return deepMerged(oldDictionary, newDictionary)
+            }
+            return new
+        }
     }
 
     /// Gefiltertes Env-Overlay fuer den PTY-Prozess — gleiche Quelle und
