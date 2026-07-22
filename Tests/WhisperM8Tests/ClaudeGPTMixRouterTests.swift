@@ -717,16 +717,11 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
                 + #"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"visible"}}"#
                 + "\n\n"
         ).utf8)
-        var malformedChunked = Data(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".utf8
-        )
-        malformedChunked.append(Data("\(String(delta.count, radix: 16))\r\n".utf8))
-        malformedChunked.append(delta)
-        malformedChunked.append(Data("\r\nnot-a-chunk-size\r\n".utf8))
         let upstream = try LocalHTTPMockServer(
             status: 200,
-            responseChunks: [],
-            rawResponse: malformedChunked
+            responseChunks: [delta],
+            chunkDelay: 0.1,
+            completion: .malformedChunk
         )
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
@@ -972,6 +967,7 @@ private final class LocalHTTPMockServer {
     enum Completion: Equatable {
         case clean
         case abort
+        case malformedChunk
     }
 
     struct Request {
@@ -1111,9 +1107,20 @@ private final class LocalHTTPMockServer {
     }
 
     private func sendResponse(connection: NWConnection, chunkIndex: Int) {
-        if chunkIndex >= responseChunks.count, completion == .abort {
-            connection.cancel()
-            return
+        if chunkIndex >= responseChunks.count {
+            switch completion {
+            case .abort:
+                connection.cancel()
+                return
+            case .malformedChunk:
+                connection.send(
+                    content: Data("not-a-chunk-size\r\n".utf8),
+                    completion: .contentProcessed { _ in connection.cancel() }
+                )
+                return
+            case .clean:
+                break
+            }
         }
 
         let content: Data

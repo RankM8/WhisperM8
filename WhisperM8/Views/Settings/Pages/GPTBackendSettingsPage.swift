@@ -5,7 +5,7 @@ struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTBackendEnabled) private var backendEnabled = false
     @AppStorage(PreferenceKeys.claudeGPTBackendPort) private var port = 18_765
     @AppStorage(PreferenceKeys.claudeGPTBackendDefaultModel) private var defaultModel = ""
-    @AppStorage(PreferenceKeys.claudeGPTFastModeEnabled) private var fastModeEnabled = true
+    @AppStorage(PreferenceKeys.claudeGPTFastModeEnabled) private var fastModeEnabled = false
     @AppStorage(PreferenceKeys.claudeGPTPickerModel) private var pickerModel = ""
     @AppStorage(PreferenceKeys.claudeGPTSubagentModel) private var subagentModel = ""
     @AppStorage(PreferenceKeys.claudeGPTAutoCompactWindow) private var gptContextWindow =
@@ -274,7 +274,7 @@ struct GPTBackendSettingsPage: View {
 
             editableModelRow(
                 title: "GPT-Modell im /model-Picker",
-                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer oder unbekannt = gpt-5.6-sol; Fast-Modus wird angewendet. Zulässig sind GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4 und GPT-5.4 Mini. Alle außer Mini unterstützen optional ›-fast‹; Mini bleibt immer suffixlos. Ältere und unbekannte GPT-IDs lehnt der Router klar ab.",
+                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer oder unbekannt = gpt-5.6-sol; der Fast-Modus wird nur bei aktiviertem Schalter angewendet. Zulässig sind GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4 und GPT-5.4 Mini. Alle außer Mini unterstützen optional ›-fast‹; Mini bleibt immer suffixlos. Ältere und unbekannte GPT-IDs lehnt der Router klar ab.",
                 placeholder: "Leer = automatisch",
                 text: $pickerModel,
                 suggestions: pickerModelSuggestions

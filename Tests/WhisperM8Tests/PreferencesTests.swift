@@ -50,11 +50,11 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.maxScreenshotsPerRecording, 20)
     }
 
-    func testClaudeGPTFastModeDefaultsToEnabledAndPersistsDisabled() {
+    func testClaudeGPTFastModeDefaultsToDisabledAndPersistsEnabled() {
         withIsolatedPreferences { preferences in
-            XCTAssertTrue(preferences.claudeGPTFastModeEnabled)
-            preferences.claudeGPTFastModeEnabled = false
             XCTAssertFalse(preferences.claudeGPTFastModeEnabled)
+            preferences.claudeGPTFastModeEnabled = true
+            XCTAssertTrue(preferences.claudeGPTFastModeEnabled)
         }
     }
 
@@ -367,7 +367,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.codexExtraArguments, "")
             XCTAssertEqual(preferences.claudeExtraArguments, "")
             XCTAssertEqual(preferences.claudeGPTPickerModel, "")
-            XCTAssertTrue(preferences.claudeGPTFastModeEnabled)
+            XCTAssertFalse(preferences.claudeGPTFastModeEnabled)
             XCTAssertFalse(preferences.isAgentTerminalMetalRendererEnabled)
             XCTAssertTrue(preferences.isAgentEventDrivenWatchEnabled)
             XCTAssertTrue(preferences.isAgentSidebarDragEnabled)
@@ -415,7 +415,7 @@ final class PreferencesTests: XCTestCase {
             preferences.codexExtraArguments = "--ask-for-approval never"
             preferences.claudeExtraArguments = "--verbose"
             preferences.claudeGPTPickerModel = "gpt-5.6-luna-fast"
-            preferences.claudeGPTFastModeEnabled = false
+            preferences.claudeGPTFastModeEnabled = true
             preferences.isAgentTerminalMetalRendererEnabled = true
             preferences.isAgentEventDrivenWatchEnabled = false
             preferences.isAgentSidebarDragEnabled = false
@@ -462,7 +462,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(loaded.codexExtraArguments, "--ask-for-approval never")
             XCTAssertEqual(loaded.claudeExtraArguments, "--verbose")
             XCTAssertEqual(loaded.claudeGPTPickerModel, "gpt-5.6-luna-fast")
-            XCTAssertFalse(loaded.claudeGPTFastModeEnabled)
+            XCTAssertTrue(loaded.claudeGPTFastModeEnabled)
             XCTAssertTrue(loaded.isAgentTerminalMetalRendererEnabled)
             XCTAssertFalse(loaded.isAgentEventDrivenWatchEnabled)
             XCTAssertFalse(loaded.isAgentSidebarDragEnabled)

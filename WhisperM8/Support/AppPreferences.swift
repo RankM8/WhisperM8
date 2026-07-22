@@ -297,9 +297,9 @@ struct AppPreferences {
     }
 
     /// Aktiviert den Priority-Tier fuer GPT-Modelle ueber den `-fast`-Alias.
-    /// Default bewusst an, auch fuer Bestandsnutzer ohne gespeicherten Wert.
+    /// Default bewusst aus; Fast muss wegen der hoeheren Kosten explizit aktiviert werden.
     var claudeGPTFastModeEnabled: Bool {
-        get { boolWithDefault(true, forKey: Keys.claudeGPTFastModeEnabled) }
+        get { boolWithDefault(false, forKey: Keys.claudeGPTFastModeEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTFastModeEnabled) }
     }
 
