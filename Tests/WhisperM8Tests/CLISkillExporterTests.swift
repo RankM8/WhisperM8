@@ -99,9 +99,90 @@ final class CLISkillExporterTests: XCTestCase {
 
         XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
         XCTAssertTrue(markdown.contains("name: gpt-workflow"))
+        XCTAssertTrue(markdown.contains("version: 1.0.2"))
         XCTAssertTrue(markdown.contains("examples/wf-code-review.js"))
         XCTAssertTrue(markdown.contains("examples/wf-docs-review.js"))
         XCTAssertEqual(exporter.definition.assets.count, 2)
+    }
+
+    func testGPTWorkflowExamplesEnforceValidatedArgsAndGPTOnlyAgents() throws {
+        let exporter = makeGPTWorkflowExporter()
+        let assets = Dictionary(uniqueKeysWithValues: try exporter.definition.assets.map {
+            ($0.relativePath, try exporter.assetContent($0))
+        })
+        let codeReview = try XCTUnwrap(assets["examples/wf-code-review.js"])
+        let docsReview = try XCTUnwrap(assets["examples/wf-docs-review.js"])
+
+        for script in [codeReview, docsReview] {
+            XCTAssertTrue(script.contains("function parseWorkflowArgs(value)"))
+            XCTAssertTrue(script.contains("function validateRepoPath(value)"))
+            XCTAssertTrue(script.contains("function shellQuote(value)"))
+            XCTAssertTrue(script.contains("git --literal-pathspecs -C"))
+            XCTAssertFalse(script.contains("args?.repo"))
+            XCTAssertEqual(
+                occurrences(of: "agent(", in: script),
+                occurrences(of: "agentType: 'gpt'", in: script),
+                "Jeder Workflow-Agent muss explizit den GPT-Agent-Typ verwenden"
+            )
+            XCTAssertTrue(script.contains("Arbeite strikt read-only"))
+        }
+
+        XCTAssertTrue(codeReview.contains("function validateGitRange(value)"))
+        XCTAssertTrue(codeReview.contains("canonicalSummary(finding.summary)"))
+        XCTAssertTrue(codeReview.contains("JSON.stringify([finding.file, finding.line"))
+        XCTAssertTrue(codeReview.contains("failureScenarios"))
+        XCTAssertTrue(codeReview.contains("sources"))
+        XCTAssertTrue(codeReview.contains("invalidFindings"))
+
+        XCTAssertTrue(docsReview.contains("function validateDate(value)"))
+        XCTAssertTrue(docsReview.contains("function validatePacks(value)"))
+        XCTAssertTrue(docsReview.contains("Doku-Pakete müssen disjunkt sein"))
+        XCTAssertTrue(docsReview.contains("Du darfst ausschließlich die folgenden konkreten Markdown-Dateien ändern"))
+        XCTAssertTrue(docsReview.contains("const droppedPacks = results"))
+        XCTAssertTrue(docsReview.contains("scopeViolations"))
+        XCTAssertTrue(docsReview.contains("coverageGaps"))
+        XCTAssertFalse(docsReview.contains("glob:"))
+        XCTAssertFalse(docsReview.contains("filter:"))
+    }
+
+    func testAllBundledSkillsInstallCompletelyWithCurrentHashes() throws {
+        let definitions = CLISkillExporter.SkillDefinition.all
+        XCTAssertEqual(
+            definitions.map(\.name),
+            ["whisperm8-transcription", "codex-subagent", "whisperm8-chats", "gpt-coworker", "gpt-workflow"]
+        )
+
+        for definition in definitions {
+            let exporter = CLISkillExporter(
+                definition: definition,
+                homeDirectory: tempHome,
+                bundle: .module
+            )
+            let markdown = try exporter.skillMarkdown()
+            XCTAssertTrue(markdown.contains("name: \(definition.name)"), definition.name)
+
+            try exporter.installForClaudeCode()
+
+            XCTAssertEqual(exporter.installState(), .current, definition.name)
+            let stamp = try XCTUnwrap(exporter.readInstallStamp(), definition.name)
+            XCTAssertEqual(stamp.installed, try exporter.bundledHashes(), definition.name)
+            XCTAssertEqual(stamp.bundled, try exporter.bundledHashes(), definition.name)
+
+            for reference in definition.references {
+                XCTAssertEqual(
+                    try String(contentsOf: exporter.claudeCodeReferenceURL(for: reference), encoding: .utf8),
+                    try exporter.referenceMarkdown(reference),
+                    "\(definition.name): \(reference.fileName)"
+                )
+            }
+            for asset in definition.assets {
+                XCTAssertEqual(
+                    try String(contentsOf: exporter.claudeCodeAssetURL(for: asset), encoding: .utf8),
+                    try exporter.assetContent(asset),
+                    "\(definition.name): \(asset.relativePath)"
+                )
+            }
+        }
     }
 
     func testAgentSkillInstallsIntoOwnFolder() throws {
@@ -540,6 +621,11 @@ final class CLISkillExporterTests: XCTestCase {
                 .appendingPathComponent("whisperm8-transcription/.whisperm8-state.json").path
         ))
         XCTAssertTrue(result.output.contains("FEHLER"), result.output)
+    }
+
+    private func occurrences(of needle: String, in haystack: String) -> Int {
+        guard !needle.isEmpty else { return 0 }
+        return haystack.components(separatedBy: needle).count - 1
     }
 
     private func runSyncSkills(

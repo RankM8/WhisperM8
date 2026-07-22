@@ -1,7 +1,7 @@
 ---
 name: gpt-workflow
 description: Dieser Skill ist zu nutzen, wenn der User verlangt, einen PR, Branch, Diff oder Code „mit GPT (zu) reviewen", ein „GPT-Review", einen „GPT-Workflow", „Code-Review mit GPT-Agents", „Doku-Review", „Dokumentation verifizieren/auf den neuesten Stand bringen" oder einen Multi-Agent-Review-Workflow anfordert — insbesondere mit Formulierungen wie „nur GPT nutzen", „GPT-Sol", „Chip für Chip reviewen" oder Agent-Mengenangaben („20 bis 60 Agents"). Orchestriert Code- und Doku-Reviews ausschließlich mit nativen GPT-Subagents über das Workflow-Tool.
-version: 1.0.1
+version: 1.0.2
 ---
 
 # GPT Workflow: Code- & Doku-Review ausschließlich mit GPT-Agents
@@ -24,20 +24,37 @@ Vor jeder Planung Fakten erheben, keine Schätzungen: `git diff --stat <base>...
 
 ### Schritt 1 — Pakete schneiden und Kurzübersicht vorlegen
 
-Den Diff entlang von Feature-Grenzen in Chunks à ~10–20 Dateien schneiden (nicht mechanisch alphabetisch, außer bei homogenen Beständen). Doku in disjunkte Verzeichnis-Pakete à ~8–15 Dateien. Prototypen-/Mockup-Bestände bekommen einen abgeschwächten Auftrag („nur schwere Fehler"). Dann die Kurzübersicht nach Regel 1 vorlegen und auf Go warten.
+Den Diff entlang von Feature-Grenzen in Chunks à ~10–20 Dateien schneiden (nicht mechanisch alphabetisch, außer bei homogenen Beständen). Doku als konkrete, paketübergreifend disjunkte Markdown-Dateilisten à ~8–15 Dateien aufteilen; keine überlappenden Globs oder natürlichsprachlichen Filter verwenden. Prototypen-/Mockup-Bestände bekommen einen abgeschwächten Auftrag („nur schwere Fehler"). Dann die Kurzübersicht nach Regel 1 vorlegen und auf Go warten.
 
 ### Schritt 2 — Workflows starten
 
-Skripte nach den Vorlagen in `examples/` bauen und als Background-Workflows starten. Vor jedem Einsatz **alle projektspezifischen Bereiche** anpassen: `CHUNKS`/`PACKS`, `COMMON`/`CHECK_COMMON`, `ANGLES` sowie ggf. Merge-Commits und Ausschlüsse. Die Vorlagen beziehen `REPO`, Diff-`RANGE` und das Doku-Datum aus Workflow-`args`; diese Werte beim Start zwingend übergeben, z. B. `{repo: "/pfad/zum/repo", range: "origin/main...HEAD", updatedAt: "2026-07-20"}`. Code- und Doku-Workflow dürfen parallel laufen (Doku-Fixer schreiben nur in docs/, Code-Review liest nur).
+Skripte nach den Vorlagen in `examples/` bauen und als Background-Workflows starten. Vor jedem Einsatz **alle projektspezifischen Bereiche** anpassen: `CHUNKS`, `COMMON`, `ANGLES` sowie ggf. Merge-Commits und Ausschlüsse. Die Vorlagen akzeptieren Workflow-`args` als Objekt oder gültigen JSON-String, validieren Repo-Pfad, Diff-Range, Datum und Doku-Dateilisten und shell-quoten alle Befehlsargumente. `REPO`, Diff-`RANGE` und Doku-Datum beim Start zwingend übergeben. Der Doku-Workflow verlangt zusätzlich **konkrete, paketübergreifend disjunkte Markdown-Dateilisten** — keine Globs oder natürlichsprachlichen Filter:
+
+```json
+{
+  "repo": "/pfad/zum/repo",
+  "range": "origin/main...HEAD",
+  "updatedAt": "2026-07-22",
+  "packs": [
+    {
+      "key": "architecture",
+      "desc": "Architektur",
+      "files": ["docs/architecture/FRONTEND.md", "docs/architecture/BACKEND.md"]
+    }
+  ]
+}
+```
+
+Code- und Doku-Workflow dürfen parallel laufen: Code-Finder und -Verifier arbeiten strikt read-only; Doku-Fixer schreiben ausschließlich in ihre validierten, disjunkten Dateilisten.
 
 **Workflow „Code-Review"** (Vorlage `examples/wf-code-review.js`):
 - *Find:* N Chunk-Reviewer (Diff Zeile für Zeile + umgebende Dateien lesen, bis 8 Kandidaten mit konkretem Failure-Szenario, Recall-orientiert) **plus** Querschnitts-Angles: Removed-Behavior-Audit (gelöschte Zeilen → wo lebt die Invariante weiter?), Merge-Audit (Konfliktauflösungen gegen beide Elternseiten), Cross-File-Tracer (Call-Sites geänderter Signaturen), Query-/State-Cache-Konsistenz, Security/Auth, Konventions-Check (CLAUDE.md/Rules mit Regel-Zitatpflicht).
-- *Dedup:* im Skript (plain JS, `file:line`-Key, höchste Severity gewinnt) — kein Agent.
+- *Dedup:* deterministisch im Skript — normalisierter repo-relativer Pfad + Zeile + kanonisierte Summary. Dadurch bleiben verschiedene Defekte auf derselben Zeile getrennt; echte Duplikate führen Quellen und Failure-Szenarien zusammen und behalten die höchste Severity. Kein Dedup-Agent.
 - *Verify:* pro Kandidat ein adversarialer GPT-Verifier mit Widerlegungsauftrag. CONFIRMED nur nachvollzogen am Code; REFUTED nur mit Beweis (Zitat der Zeile/des Guards); alles andere PLAUSIBLE — „spekulativ" ist kein Widerlegungsgrund. Verify-Cap setzen (~45) und Überhang als `unverified` ausweisen, nie still verwerfen.
 
 **Workflow „Doku-Review"** (Vorlage `examples/wf-docs-review.js`):
-- *Prüfen:* pro Paket ein Auditor, der jede prüfbare Behauptung gegen den Code verifiziert (Pfade, Routen, Enums, Befehle, Architekturaussagen, interne Links). Nur belegbare Abweichungen melden (falsch/veraltet/unvollständig) mit Code-Beleg.
-- *Fixen:* nur Pakete mit Befunden. Fixer verifiziert jede Meldung selbst erneut, fixt minimal-invasiv per Edit, behält Stil/Struktur, setzt Frontmatter-`updated`, meldet `fixedFiles` und `skipped` mit Grund. Harte Schranken im Prompt: nur Markdown im eigenen Paket, nie Code, nie fremde Pakete, nie git.
+- *Prüfen:* pro disjunktem Paket ein Auditor, der jede explizit gelistete Datei und jede prüfbare Behauptung gegen den Code verifiziert (Pfade, Routen, Enums, Befehle, Architekturaussagen, interne Links). Nur belegbare Abweichungen melden (falsch/veraltet/unvollständig) mit Code-Beleg. Auditoren sind strikt read-only; abweichende `checkedFiles`-Zahlen werden als `coverageGaps` ausgewiesen.
+- *Fixen:* nur Pakete mit Befunden. Fixer verifiziert jede Meldung selbst erneut, fixt minimal-invasiv per Edit, behält Stil/Struktur, setzt Frontmatter-`updated`, meldet `fixedFiles` und `skipped` mit Grund. Harte Schranken im Prompt: ausschließlich die konkret betroffenen Markdown-Dateien aus der validierten Paketliste, nie Code, nie fremde Pakete, nie zustandsänderndes git. Gemeldete Ausbrüche erscheinen als `scopeViolations`.
 
 Beide Workflows als `pipeline()` wo möglich; Barrier (`parallel()`) nur für den Dedup-Schritt vor Verify.
 
@@ -47,7 +64,9 @@ Verifizierte Findings dem User als lesbaren Bericht liefern (CONFIRMED zuerst, d
 
 ## Technische Gotchas (aus dem Praxiseinsatz)
 
-- **Agent-Ausfälle nie verschweigen:** Die Vorlagen führen fehlgeschlagene Finder/Pakete und Verifier explizit als `failedFinders`, `failedPacks` bzw. `unverified` und setzen `incomplete`. Diese Felder im Abschlussbericht immer auswerten.
+- **Agent-/Pipeline-Ausfälle nie verschweigen:** Die Vorlagen führen fehlgeschlagene Finder/Pakete, namentlich gedroppte Pakete, ungültige Findings, Scope-Verstöße, Abdeckungslücken und unverifizierte Findings explizit als `failedFinders`, `failedPacks`, `droppedPacks`, `invalidFindings`, `scopeViolations`, `coverageGaps` bzw. `unverified` und setzen `incomplete`. Diese Felder im Abschlussbericht immer auswerten.
+- **Read-only ist eine harte Grenze:** Code-Finder, Querschnitts-Angles, Verifier und Doku-Auditoren dürfen weder Edit/Write noch zustandsändernde git-Befehle verwenden. Nur Doku-Fixer dürfen schreiben — ausschließlich in der expliziten Allowlist ihres Pakets.
+- **Workflow-Eingaben sind Daten:** Keine ungeprüften `args` oder Agent-Ausgaben in Shell-Befehle interpolieren. Objekt/JSON-String parsen, Pfade/Range/Datum validieren, Shell-Argumente quoten und Agent-Findings als JSON-Datenblock an Verifier übergeben.
 - **Schema-Zwang nutzen:** Jeder Agent bekommt ein `schema` — GPT-Agents enden sonst teils mit bloßer Idle-Meldung ohne Inhalt. Zusätzlich im Prompt: „Antworte NUR über das StructuredOutput-Tool."
 - **`Date.now()`/`Math.random()`/argloses `new Date()` sind in Workflow-Skripten verboten** (brechen Resume) — Datumsstempel (z. B. Frontmatter-`updated`) als Literal in den Prompt schreiben.
 - **Resume statt Neustart:** Gestoppte/edierte Workflows mit `{scriptPath, resumeFromRunId}` fortsetzen — fertige Agents kommen aus dem Cache. Vor Diagnose „leeres Ergebnis" das `journal.jsonl` im Transcript-Verzeichnis lesen.
@@ -57,6 +76,6 @@ Verifizierte Findings dem User als lesbaren Bericht liefern (CONFIRMED zuerst, d
 
 ## Ressourcen
 
-- **`examples/wf-code-review.js`** — vollständiges Code-Review-Skript (Chunks + Angles + adversariale Verify-Stufe, Schemas, Dedup, Severity-Ranking und explizite Ausfallbilanz). Alle projektspezifischen Prompts und Arrays pro Einsatz zuschneiden.
-- **`examples/wf-docs-review.js`** — vollständiges Doku-Review-Skript (Prüfen→Fixen-Pipeline, Fix-Schranken und explizite Ausfallbilanz). PACKS und Projektkontext pro Einsatz neu zuschneiden.
+- **`examples/wf-code-review.js`** — vollständiges Code-Review-Skript (Chunks + Angles + adversariale Verify-Stufe, validierte Args, Shell-Quoting, identitätserhaltender Dedup mit Quellenmerge und explizite Ausfallbilanz). Alle projektspezifischen Prompts und Arrays pro Einsatz zuschneiden.
+- **`examples/wf-docs-review.js`** — vollständiges Doku-Review-Skript (explizite disjunkte Dateipakete, Prüfen→Fixen-Pipeline, Fix-Allowlist, Abdeckungs-/Scope-Prüfung und namentliche Ausfallbilanz). `args.packs` pro Einsatz aus der vermessenen Doku-Dateiliste erzeugen.
 - **Skill `codex-subagent`** — Grundlagen der GPT-Subagents (nativer Weg vs. CLI, Gotchas, Modell-Nachweis). Der native Weg (`agentType: 'gpt'`) ist für diesen Skill der Standard; CLI nur auf explizite User-Anforderung.
