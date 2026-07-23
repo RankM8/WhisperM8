@@ -196,13 +196,22 @@ struct AgentChatsClaudeAccountsTab: View {
         }
     }
 
+    /// Login des Profils nicht mehr nutzbar (Token abgelaufen und Refresh
+    /// fehlgeschlagen, oder Keychain-Item weg) → „Log in…" wieder anbieten.
+    private func needsRelogin(_ profile: ClaudeAccountProfile) -> Bool {
+        switch usageByProfile[profile.name]?.liveFetchProblem {
+        case .loginExpired, .noCredentials: return true
+        default: return false
+        }
+    }
+
     /// ⋯-Menü: dauerhaft sichtbar (kein Hover-only), bündelt die seltenen
     /// Verwaltungs-Aktionen. Destruktives nur hier, nie als Flächen-Button.
     @ViewBuilder
     private func manageMenu(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
-        if !profile.isMain || !profile.isLoggedIn {
+        if !profile.isMain || !profile.isLoggedIn || needsRelogin(profile) {
             Menu {
-                if !profile.isLoggedIn {
+                if !profile.isLoggedIn || needsRelogin(profile) {
                     Button("Log in…") { openLoginTerminal(for: profile) }
                 }
                 if !profile.isMain {
@@ -234,19 +243,26 @@ struct AgentChatsClaudeAccountsTab: View {
     private func usageView(for profile: ClaudeAccountProfile) -> some View {
         if let usage = usageByProfile[profile.name] {
             VStack(alignment: .leading, spacing: 5) {
-                limitGauge(label: "5h", percent: usage.fiveHourPercent, resetsAt: usage.fiveHourResetsAt)
-                limitGauge(label: "wk", percent: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt)
-                if let modelPercent = usage.modelWeeklyPercent {
-                    limitGauge(
-                        label: usage.modelWeeklyLabel ?? "model",
-                        percent: modelPercent,
-                        resetsAt: usage.modelWeeklyResetsAt
-                    )
+                if usage.hasLimitData {
+                    limitGauge(label: "5h", percent: usage.fiveHourPercent, resetsAt: usage.fiveHourResetsAt)
+                    limitGauge(label: "wk", percent: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt)
+                    if let modelPercent = usage.modelWeeklyPercent {
+                        limitGauge(
+                            label: usage.modelWeeklyLabel ?? "model",
+                            percent: modelPercent,
+                            resetsAt: usage.modelWeeklyResetsAt
+                        )
+                    }
                 }
-                if !usage.isLive {
+                if !usage.isLive, usage.hasLimitData {
                     Text(cacheAgeText(usage.fetchedAt))
                         .font(.system(size: 9.5, weight: .regular))
                         .foregroundStyle(AppTheme.textTertiary)
+                }
+                if let problem = usage.liveFetchProblem {
+                    Text(Self.problemText(problem))
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(AppTheme.statusAwaiting)
                 }
             }
         } else if profile.isLoggedIn, isFetchingUsage {
@@ -308,6 +324,26 @@ struct AgentChatsClaudeAccountsTab: View {
     private func cacheAgeText(_ fetchedAt: Date) -> String {
         let minutes = Int(Date().timeIntervalSince(fetchedAt) / 60)
         return minutes < 1 ? "cache" : "cache · \(minutes) min alt"
+    }
+
+    /// Warum kein Live-Stand geholt werden konnte — sichtbar statt still auf
+    /// den Cache zurückzufallen (sonst wirkt „cache · 3320 min alt" wie ein
+    /// Anzeigefehler, obwohl der Login des Accounts abgelaufen ist).
+    static func problemText(_ problem: ClaudeUsageFetchProblem) -> String {
+        switch problem {
+        case .noCredentials:
+            return "no login token in Keychain — log in again (⋯ menu)"
+        case .loginExpired:
+            return "login expired — re-login via ⋯ → Log in…"
+        case .refreshBlockedBySession:
+            return "token expired — the running session refreshes it, retry shortly"
+        case .httpStatus(429):
+            return "rate-limited by Anthropic — try again in a few minutes"
+        case .httpStatus(let status):
+            return "live fetch failed (HTTP \(status))"
+        case .network:
+            return "offline — showing last known state"
+        }
     }
 
     // MARK: - Actions

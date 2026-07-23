@@ -23,15 +23,6 @@ struct ClaudeAccountProfile: Identifiable, Equatable {
     var isLoggedIn: Bool { emailAddress != nil }
 }
 
-/// Letzter bekannter Limit-Stand eines Accounts, gelesen aus dem Cache der
-/// Statusline (`/tmp/claude-usage-cache-<profil>.json`). Nur Anzeige-Daten —
-/// die App fragt selbst keine Anthropic-Endpoints ab.
-struct ClaudeAccountUsageSnapshot: Equatable {
-    var fiveHourUtilization: Double?
-    var sevenDayUtilization: Double?
-    var fetchedAt: Date
-}
-
 /// Verwaltung der Claude-Account-Profile (Discovery, aktives Profil,
 /// Env-Injektion). Dateibasiert und zustandslos — SSoT sind die Verzeichnisse
 /// und die `.active`-Datei, die auch das `ccs`-CLI liest/schreibt.
@@ -479,30 +470,5 @@ struct ClaudeAccountProfiles {
         }
         Logger.agentStore.notice("claude_transcript_moved session=\(externalSessionID, privacy: .public) target=\(target, privacy: .public)")
         return true
-    }
-
-    // MARK: - Usage-Snapshot (Anzeige)
-
-    /// Cache-Pfad identisch zur Statusline (`statusline-command.sh`) — bewusst
-    /// literal `/tmp`, nicht `NSTemporaryDirectory()` (App-Sandbox-Pfad).
-    func usageSnapshot(forProfile name: String) -> ClaudeAccountUsageSnapshot? {
-        let path = "/tmp/claude-usage-cache-\(name).json"
-        guard let data = fileManager.contents(atPath: path),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
-        }
-        let mtime = (try? fileManager.attributesOfItem(atPath: path)[.modificationDate] as? Date) ?? Date()
-        func utilization(_ key: String) -> Double? {
-            guard let window = obj[key] as? [String: Any] else { return nil }
-            return (window["utilization"] as? Double) ?? (window["used_percentage"] as? Double)
-        }
-        let fiveHour = utilization("five_hour")
-        let sevenDay = utilization("seven_day")
-        guard fiveHour != nil || sevenDay != nil else { return nil }
-        return ClaudeAccountUsageSnapshot(
-            fiveHourUtilization: fiveHour,
-            sevenDayUtilization: sevenDay,
-            fetchedAt: mtime
-        )
     }
 }

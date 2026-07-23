@@ -170,14 +170,26 @@ private struct ClaudeUsagePopoverView: View {
                     }
 
                     if let usage = usageByProfile[profile.name] {
-                        UsageGaugeLine(label: "5h", percent: usage.fiveHourPercent, resetsAt: usage.fiveHourResetsAt)
-                        UsageGaugeLine(label: "wk", percent: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt)
-                        if let model = usage.modelWeeklyPercent {
-                            UsageGaugeLine(
-                                label: usage.modelWeeklyLabel ?? "model",
-                                percent: model,
-                                resetsAt: usage.modelWeeklyResetsAt
-                            )
+                        if usage.hasLimitData {
+                            UsageGaugeLine(label: "5h", percent: usage.fiveHourPercent, resetsAt: usage.fiveHourResetsAt)
+                            UsageGaugeLine(label: "wk", percent: usage.sevenDayPercent, resetsAt: usage.sevenDayResetsAt)
+                            if let model = usage.modelWeeklyPercent {
+                                UsageGaugeLine(
+                                    label: usage.modelWeeklyLabel ?? "model",
+                                    percent: model,
+                                    resetsAt: usage.modelWeeklyResetsAt
+                                )
+                            }
+                        }
+                        if !usage.isLive, usage.hasLimitData {
+                            Text("Cache · \(Self.age(usage.fetchedAt))")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(AppTheme.textTertiary)
+                        }
+                        if let problem = usage.liveFetchProblem {
+                            Text(Self.problemText(problem))
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(AppTheme.statusAwaiting)
                         }
                     } else if !isLoading {
                         Text("keine Daten")
@@ -190,6 +202,29 @@ private struct ClaudeUsagePopoverView: View {
         .padding(14)
         .frame(width: 300, alignment: .leading)
         .onAppear(perform: load)
+    }
+
+    private static func age(_ date: Date) -> String {
+        let minutes = Int(Date().timeIntervalSince(date) / 60)
+        if minutes < 60 { return "\(minutes) min alt" }
+        return "\(minutes / 60) h alt"
+    }
+
+    private static func problemText(_ problem: ClaudeUsageFetchProblem) -> String {
+        switch problem {
+        case .noCredentials:
+            return "Kein Login-Token — in den Account-Settings neu einloggen"
+        case .loginExpired:
+            return "Login abgelaufen — in den Account-Settings neu einloggen"
+        case .refreshBlockedBySession:
+            return "Token abgelaufen — die laufende Session erneuert ihn gleich"
+        case .httpStatus(429):
+            return "Rate-Limit von Anthropic — gleich nochmal versuchen"
+        case .httpStatus(let status):
+            return "Live-Abruf fehlgeschlagen (HTTP \(status))"
+        case .network:
+            return "Offline — letzter bekannter Stand"
+        }
     }
 
     private func load() {
