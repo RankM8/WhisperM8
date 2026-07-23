@@ -511,6 +511,7 @@ enum PreferenceKeys {
     static let claudeGPTAutoCompactWindow = "claudeGPTAutoCompactWindow"
     static let appearanceOverride = "appearanceOverride"
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
+    static let agentTabGroupingEnabled = "agentTabGroupingEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
     static let agentStopSoundEnabled = "agentStopSoundEnabled"

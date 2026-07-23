@@ -101,10 +101,251 @@ struct SubagentChildSplit: Equatable {
     var terminalCount: Int { totalCount - workingCount }
 }
 
+struct SidebarScopeCounts: Equatable {
+    var active: Int
+    var recent: Int
+    var all: Int
+}
+
+struct AgentSidebarSnapshot {
+    var projectByID: [UUID: AgentProject]
+    var subagentChildrenByParent: [UUID: [AgentChatSession]]
+    var sessionsByProject: [UUID: [AgentChatSession]]
+    var visibleProjects: [AgentProject]
+    var visibleFlatSessions: [AgentChatSession]
+    var visibleFlatOrderIDs: [UUID]
+    var flatHiddenCount: Int
+    var visiblePinned: [AgentChatSession]
+    var pinnedOrderIDs: [UUID]
+    var scopeCounts: SidebarScopeCounts
+    var chatCount: Int
+    var chatListIsEmpty: Bool
+    var hasManualProjects: Bool
+
+    /// Fachlich sichtbare Root-Kandidaten. Das ist bewusst NICHT die Zahl der
+    /// aktuell materialisierten SwiftUI-Rows: Collapse-State und das lokale
+    /// 20er-Limit von `ProjectChatGroup` liegen erst in der View-Schicht.
+    var eligibleRootRowCount: Int {
+        visiblePinned.count + visibleFlatSessions.count
+            + visibleProjects.reduce(0) {
+                $0 + (sessionsByProject[$1.id]?.count ?? 0)
+            }
+    }
+}
+
 /// Pure Funktionen für das Sidebar-Modell (P4): Gruppierung + Suche in EINEM
 /// Durchlauf statt pro Projekt neu zu filtern/sortieren.
 /// Tests in AgentSidebarTests.swift.
 struct AgentSidebarModelBuilder {
+    static func snapshot(
+        workspace: AgentWorkspace,
+        pinnedSessionIDs: [UUID],
+        scope: SidebarScopeFilter,
+        layout: SidebarLayout,
+        query: String,
+        flatVisibleLimit: Int,
+        selectedSessionID: UUID?
+    ) -> AgentSidebarSnapshot {
+        let manualProjects: [AgentProject]
+        let hasManualProjects: Bool
+        switch layout {
+        case .grouped:
+            manualProjects = AgentSessionStore.sortedProjects(
+                workspace.projects.filter(\.isManuallyAdded)
+            )
+            hasManualProjects = !manualProjects.isEmpty
+        case .flat:
+            manualProjects = []
+            hasManualProjects = workspace.projects.contains(where: \.isManuallyAdded)
+        }
+        let projectByID = Dictionary(
+            workspace.projects.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let subagents = subagentChildren(workspaceSessions: workspace.sessions)
+        var subagentChildIDs: Set<UUID> = []
+        var parentIDByChildID: [UUID: UUID] = [:]
+        for (parentID, children) in subagents.byParentLocalID {
+            for child in children {
+                subagentChildIDs.insert(child.id)
+                parentIDByChildID[child.id] = parentID
+            }
+        }
+        var effectiveRunningSessionIDs = scope.runningSessionIDs
+        var effectiveOpenTabIDs = scope.openTabIDs
+        for childID in scope.runningSessionIDs {
+            if let parentID = parentIDByChildID[childID] {
+                effectiveRunningSessionIDs.insert(parentID)
+            }
+        }
+        for childID in scope.openTabIDs {
+            if let parentID = parentIDByChildID[childID] {
+                effectiveOpenTabIDs.insert(parentID)
+            }
+        }
+        if let selectedSessionID,
+           let parentID = parentIDByChildID[selectedSessionID] {
+            effectiveOpenTabIDs.insert(parentID)
+        }
+        let effectiveScope = SidebarScopeFilter(
+            scope: scope.scope,
+            runningSessionIDs: effectiveRunningSessionIDs,
+            openTabIDs: effectiveOpenTabIDs,
+            now: scope.now,
+            recentWindow: scope.recentWindow
+        )
+        let pinnedIDSet = Set(pinnedSessionIDs)
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let recentThreshold = effectiveScope.now.addingTimeInterval(-effectiveScope.recentWindow)
+
+        var activeCount = 0
+        var recentCount = 0
+        var allCount = 0
+        var grouped: [UUID: [AgentChatSession]] = [:]
+        var flat: [AgentChatSession] = []
+        var sessionByID: [UUID: AgentChatSession] = [:]
+        sessionByID.reserveCapacity(workspace.sessions.count)
+
+        for session in workspace.sessions {
+            if sessionByID[session.id] == nil {
+                sessionByID[session.id] = session
+            }
+            guard session.status != .archived,
+                  session.isManuallyCreated,
+                  !pinnedIDSet.contains(session.id),
+                  !subagentChildIDs.contains(session.id)
+            else { continue }
+
+            allCount += 1
+            let isActive = effectiveScope.runningSessionIDs.contains(session.id)
+                || effectiveScope.openTabIDs.contains(session.id)
+            if isActive {
+                activeCount += 1
+                recentCount += 1
+            } else if session.lastActivityAt >= recentThreshold {
+                recentCount += 1
+            }
+            guard effectiveScope.matches(session) else { continue }
+
+            switch layout {
+            case .grouped:
+                grouped[session.projectID, default: []].append(session)
+            case .flat:
+                guard matchesSearch(
+                    session: session,
+                    project: projectByID[session.projectID],
+                    query: trimmedQuery
+                ) else { continue }
+                flat.append(session)
+            }
+        }
+
+        let visiblePinned = pinnedSessionIDs
+            .compactMap { sessionByID[$0] }
+            .filter {
+                $0.status != .archived
+                    && (trimmedQuery.isEmpty
+                        || $0.title.localizedCaseInsensitiveContains(trimmedQuery))
+            }
+        let pinnedOrderIDs = visiblePinned.map(\.id)
+
+        var sessionsByProject: [UUID: [AgentChatSession]] = [:]
+        var visibleProjects: [AgentProject] = []
+        var visibleFlatSessions: [AgentChatSession] = []
+        var visibleFlatOrderIDs: [UUID] = []
+        var flatHiddenCount = 0
+        let chatCount: Int
+        let chatListIsEmpty: Bool
+
+        switch layout {
+        case .grouped:
+            sessionsByProject = grouped.mapValues { AgentSessionStore.sortedSessions($0) }
+            visibleProjects = Self.visibleProjects(
+                manualProjects: manualProjects,
+                sessionsByProject: sessionsByProject,
+                query: trimmedQuery
+            ).filter {
+                scope.scope == .all || !(sessionsByProject[$0.id] ?? []).isEmpty
+            }
+            chatCount = visibleProjects.reduce(0) {
+                $0 + (sessionsByProject[$1.id]?.count ?? 0)
+            }
+            chatListIsEmpty = visibleProjects.isEmpty
+        case .flat:
+            flat.sort { $0.lastActivityAt > $1.lastActivityAt }
+            var revealID = selectedSessionID
+            if let selectedSessionID,
+               !flat.contains(where: { $0.id == selectedSessionID }) {
+                revealID = parentIDByChildID[selectedSessionID]
+            }
+            let slice = visibleSlice(
+                of: flat,
+                limit: flatVisibleLimit,
+                mustIncludeID: revealID
+            )
+            visibleFlatSessions = slice.visible
+            visibleFlatOrderIDs = slice.visible.map(\.id)
+            flatHiddenCount = slice.hiddenCount
+            chatCount = flat.count
+            chatListIsEmpty = flat.isEmpty
+        }
+
+        return AgentSidebarSnapshot(
+            projectByID: projectByID,
+            subagentChildrenByParent: subagents.byParentLocalID,
+            sessionsByProject: sessionsByProject,
+            visibleProjects: visibleProjects,
+            visibleFlatSessions: visibleFlatSessions,
+            visibleFlatOrderIDs: visibleFlatOrderIDs,
+            flatHiddenCount: flatHiddenCount,
+            visiblePinned: visiblePinned,
+            pinnedOrderIDs: pinnedOrderIDs,
+            scopeCounts: SidebarScopeCounts(
+                active: activeCount,
+                recent: recentCount,
+                all: allCount
+            ),
+            chatCount: chatCount,
+            chatListIsEmpty: chatListIsEmpty,
+            hasManualProjects: hasManualProjects
+        )
+    }
+
+    private static func visibleSlice(
+        of sessions: [AgentChatSession],
+        limit: Int,
+        mustIncludeID: UUID?
+    ) -> (visible: [AgentChatSession], hiddenCount: Int) {
+        let cappedLimit = max(0, limit)
+        var visible = Array(sessions.prefix(cappedLimit))
+        if let mustIncludeID,
+           !visible.contains(where: { $0.id == mustIncludeID }),
+           let selected = sessions.first(where: { $0.id == mustIncludeID }) {
+            if visible.isEmpty {
+                visible.append(selected)
+            } else {
+                // Reveal ersetzt die letzte Prefix-Row, statt das harte Limit
+                // zu überschreiten. Beim nächsten +50-Schritt erscheinen so
+                // tatsächlich 50 neue eindeutige Rows.
+                visible[visible.count - 1] = selected
+            }
+        }
+        return (visible, sessions.count - visible.count)
+    }
+
+    private static func matchesSearch(
+        session: AgentChatSession,
+        project: AgentProject?,
+        query: String
+    ) -> Bool {
+        guard !query.isEmpty else { return true }
+        return project?.name.localizedCaseInsensitiveContains(query) == true
+            || project?.path.localizedCaseInsensitiveContains(query) == true
+            || session.title.localizedCaseInsensitiveContains(query)
+            || session.provider.displayName.localizedCaseInsensitiveContains(query)
+            || session.groupName?.localizedCaseInsensitiveContains(query) == true
+    }
+
     /// Sichtbarkeit (Redesign Juni 2026): die Sidebar ist die CHAT-LISTE —
     /// alle manuell erstellten, nicht-archivierten Sessions, unabhängig
     /// davon, ob gerade ein Tab dafür offen ist (Tabs sind die „aktive

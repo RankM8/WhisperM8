@@ -96,11 +96,68 @@ enum TitleBarZoom {
     }
 }
 
-/// Tab der globalen Tab-Bar. Trägt ein Repo-Badge (ProjectAvatar) zur
-/// Projektzuordnung — die Tabs sind projektübergreifend gemischt. Eine
-/// gesetzte Custom-Farbe tönt den GANZEN Tab dezent (inaktiv schwach,
-/// aktiv kräftiger ins Tab-Grau gemischt) statt nur einen Farbstreifen
-/// zu zeigen. Keine Border — der aktive Tab hebt sich über die Fläche ab.
+/// Kompaktes Chrome-artiges Gruppenlabel links vor den Mitglieds-Tabs.
+/// Die Gruppe selbst bekommt keine Außenkarte und kein Padding; Farbe dient
+/// nur als Herkunftsmarke, während aktive/inaktive Zustände über Fläche und
+/// Kontur lesbar bleiben.
+struct ChatTabGroupLabel: View {
+    let title: String
+    let count: Int
+    let colorHex: String
+    let isCollapsed: Bool
+    let isActive: Bool
+    let onToggle: () -> Void
+
+    @State private var isHovered = false
+
+    private var groupColor: Color { Color(hex: colorHex) }
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                Circle()
+                    .fill(groupColor)
+                    .frame(width: 6, height: 6)
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 110, alignment: .leading)
+                Text("\(count)")
+                    .font(.system(size: 9, weight: .medium).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .fixedSize()
+            }
+            .foregroundStyle(AgentTheme.textPrimary)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(
+                groupColor.opacity(isActive ? 0.18 : (isHovered ? 0.13 : 0.09)),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    groupColor.opacity(isActive ? 0.58 : 0.30),
+                    lineWidth: isActive ? 1.2 : 0.8
+                )
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.12), value: isCollapsed)
+        .help(isCollapsed ? "Tab-Gruppe aufklappen" : "Tab-Gruppe einklappen")
+    }
+}
+
+/// Tab der globalen Tab-Bar. Die aktive Fläche ist unten bewusst offen und
+/// geht ohne Zwischenraum in den Chat-Header über — wie ein aktiver Chrome-Tab.
+/// Gruppenfarbe und optionale Custom-Farbe erscheinen nur als feine Marker;
+/// die früher vollflächige Tönung entfällt zugunsten einer ruhigen Palette.
 struct ChatTabButton: View {
     let session: AgentChatSession
     /// Projekt der Session fürs Repo-Badge. `nil` (Workspace-Inkonsistenz)
@@ -108,13 +165,12 @@ struct ChatTabButton: View {
     let project: AgentProject?
     let isSelected: Bool
     /// Teil einer Mehrfach-Auswahl (Cmd/Shift-Klick) — Akzent-Ring zusätzlich
-    /// zum aktiven (`isSelected`) Tab. Bewusst ein Bool (nicht das Set) → die
-    /// `.equatable()`-Optimierung der Rows bleibt wirksam.
+    /// zum aktiven (`isSelected`) Tab.
     let isMultiSelected: Bool
-    /// Stabile Store-Referenz — Live-Status via Per-Item-Publisher,
-    /// gleiche Mechanik wie `SessionListButton`. Der Status (inkl.
-    /// awaitingInput) kommt vollständig aus dem Koordinator.
     let statusStore: AgentSessionRuntimeStatusStore
+    /// Herkunftsfarbe der sichtbaren Workspace-/Projektgruppe. `nil` bei
+    /// Einzel-Tabs oder deaktivierter Gruppierung.
+    var groupColor: Color? = nil
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -124,6 +180,10 @@ struct ChatTabButton: View {
     private var customColor: Color? {
         guard let hex = session.color, !hex.isEmpty else { return nil }
         return Color(hex: hex)
+    }
+
+    private var markerColor: Color {
+        groupColor ?? customColor ?? AgentTheme.accent
     }
 
     var body: some View {
@@ -146,26 +206,58 @@ struct ChatTabButton: View {
                     .frame(width: 18, alignment: .trailing)
             }
             .padding(.horizontal, 8)
-            .frame(minWidth: 100, maxWidth: 200, minHeight: 24, maxHeight: 24)
+            .frame(minWidth: 100, maxWidth: 190, minHeight: 28, maxHeight: 28)
             .background {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6).fill(tabBackground)
-                    if let customColor {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(customColor.opacity(tintOpacity))
+                    if isSelected {
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 7,
+                            bottomLeadingRadius: 0,
+                            bottomTrailingRadius: 0,
+                            topTrailingRadius: 7
+                        )
+                        .fill(AgentTheme.header)
+                    } else if isHovered {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(AgentTheme.surface.opacity(0.72))
                     }
+
                     if isMultiSelected {
-                        // Nicht-aktive Gruppen-Tabs dezent tönen …
-                        if !isSelected {
-                            RoundedRectangle(cornerRadius: 6).fill(AgentTheme.accentTint.opacity(0.5))
-                        }
-                        // … und alle Gruppen-Tabs mit Akzent-Ring umranden.
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(AgentTheme.accentTint.opacity(isSelected ? 0.20 : 0.42))
+                        RoundedRectangle(cornerRadius: 5)
+                            .strokeBorder(AgentTheme.accent.opacity(0.75), lineWidth: 1.4)
                     }
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(markerColor.opacity(isSelected ? 0.95 : 0.55))
+                    .frame(height: isSelected ? 2 : 1)
+            }
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Rectangle().fill(AgentTheme.borderStrong.opacity(0.65)).frame(width: 0.7)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if isSelected {
+                    Rectangle().fill(AgentTheme.borderStrong.opacity(0.65)).frame(width: 0.7)
+                } else {
+                    Rectangle().fill(AgentTheme.border.opacity(0.55)).frame(width: 0.6, height: 15)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if isSelected {
+                    // Überdeckt die Trennkante zum Header: der Tab öffnet sich
+                    // optisch nach unten statt als freistehende Pille zu enden.
+                    Rectangle()
+                        .fill(AgentTheme.header)
+                        .frame(height: 2)
+                        .offset(y: 1)
+                }
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -208,18 +300,6 @@ struct ChatTabButton: View {
 
     private var resolvedStatus: AgentSessionRuntimeStatus? {
         liveStatus
-    }
-
-    private var tabBackground: Color {
-        if isSelected { return AgentTheme.tabSelected }
-        if isHovered { return AgentTheme.surface }
-        return Color.clear
-    }
-
-    private var tintOpacity: Double {
-        if isSelected { return 0.24 }
-        if isHovered { return 0.17 }
-        return 0.11
     }
 }
 

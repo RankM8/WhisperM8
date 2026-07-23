@@ -102,10 +102,9 @@ struct AgentChatsView: View {
         nonmutating set { windowStore.setPinnedSessionIDs(newValue) }
     }
     @State private var searchText = ""
+    @State private var flatVisibleSessionLimit = 50
     @State var errorMessage: String?
     @State var isIndexingSessions = false
-    @State var indexRefreshTask: Task<Void, Never>?
-    @State var lastIndexStats: [AgentSessionIndexStats] = []
     @State var sessionActionRequest: AgentSessionActionRequest?
     @StateObject var terminalRegistry = AgentTerminalRegistry.shared
     /// Live-Status-Store für die Sidebar-Indikatoren — die app-weite Instanz
@@ -130,6 +129,12 @@ struct AgentChatsView: View {
     /// Etappe-0 Tab-Drag: gemessene Tab-Frames (Inhalts-Space) + aktueller
     /// Einfüge-Index während eines Drags (ephemer, nicht persistiert).
     @State private var tabFrames: [UUID: CGRect] = [:]
+    /// Chrome-artige Herkunftsgruppen im oberen Tab-Strip. Abschaltbar, damit
+    /// die exakte manuelle Reihenfolge jederzeit erreichbar bleibt.
+    @AppStorage("agentTabGroupingEnabled") private var tabGroupingEnabled = true
+    /// Eingeklappte Herkunftsgruppen sind bewusst ephemer: ein App-Neustart
+    /// beginnt mit vollständig sichtbaren Tabs, ohne versteckte Altzustände.
+    @State private var collapsedTabGroups: Set<AgentTabGroupingKey> = []
     /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
     /// dauerhaft oben Platz belegen.
     @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
@@ -182,6 +187,12 @@ struct AgentChatsView: View {
     // nur noch die v3→v4-Migration (AgentSessionStore.loadUIState).
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
+    /// Semantisches Drop-Ziel; bleibt auch stabil, wenn Collapse während des
+    /// Drags die sichtbare Tab-Reihenfolge erweitert.
+    @State var tabInsertionBeforeID: UUID?
+    /// Bereits dekodierter Drag-Payload, damit Einfügelinie und tatsächliches
+    /// gruppennormalisiertes Drop-Ziel dieselbe Position anzeigen.
+    @State var tabDropSession: DraggableSession?
 
     /// Multi-Select pro Fenster — Bridge in den AgentWindowStore (ephemer, nicht
     /// persistiert), damit ein Cross-Window-Drop die Quell-Auswahl live sieht und
@@ -381,6 +392,163 @@ struct AgentChatsView: View {
         return openTabIDs.compactMap { byID[$0] }.filter { $0.status != .archived }
     }
 
+    /// Erste Workspace-Zugehörigkeit in der persistierten Sidebar-Reihenfolge.
+    /// Ein Chat kann technisch in mehreren Workspaces liegen; für die visuelle
+    /// Tab-Herkunft gewinnt deterministisch der erste — und jeder Workspace
+    /// gewinnt vor der Projektzugehörigkeit.
+    private var tabWorkspaceBySession: [UUID: UUID] {
+        var result: [UUID: UUID] = [:]
+        for entity in windowStore.gridWorkspaces {
+            for sessionID in entity.occupiedSessionIDs where result[sessionID] == nil {
+                result[sessionID] = entity.id
+            }
+        }
+        return result
+    }
+
+    private var tabGroupingItems: [AgentTabGroupingItem] {
+        AgentTabGrouping.items(
+            entries: headerTabs.map {
+                AgentTabGroupingEntry(sessionID: $0.id, projectID: $0.projectID)
+            },
+            workspaceBySession: tabWorkspaceBySession,
+            enabled: tabGroupingEnabled
+        )
+    }
+
+    /// Kanonische Anzeige-Reihenfolge nach dem Zusammenziehen der Herkunfts-
+    /// gruppen. Alle Browser-Interaktionen (Shift, Wheel, Switcher, ⌘1–9)
+    /// müssen dieselbe Reihenfolge nutzen, sonst springt der Fokus entgegen der
+    /// sichtbaren Leiste.
+    var visualTabOrderIDs: [UUID] {
+        tabGroupingItems.flatMap { item in
+            switch item {
+            case .single(let id): [id]
+            case .group(_, let sessionIDs): sessionIDs
+            }
+        }
+    }
+
+    /// Berechnet dieselbe Anzeige-Reihenfolge für ein beliebiges Fenster.
+    /// Benötigt für Cross-Window-Drags, deren Quellfenster eine andere
+    /// persistierte Tab-Reihenfolge besitzt.
+    func visualTabOrderIDs(for orderedIDs: [UUID]) -> [UUID] {
+        let sessionsByID = Dictionary(
+            workspace.sessions.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let entries = orderedIDs.compactMap { id -> AgentTabGroupingEntry? in
+            guard let session = sessionsByID[id], session.status != .archived else {
+                return nil
+            }
+            return AgentTabGroupingEntry(
+                sessionID: session.id,
+                projectID: session.projectID
+            )
+        }
+        return AgentTabGrouping.items(
+            entries: entries,
+            workspaceBySession: tabWorkspaceBySession,
+            enabled: tabGroupingEnabled
+        ).flatMap { item in
+            switch item {
+            case .single(let id): [id]
+            case .group(_, let sessionIDs): sessionIDs
+            }
+        }
+    }
+
+    private func tabGroupingKey(for sessionID: UUID) -> AgentTabGroupingKey? {
+        guard let session = workspace.sessions.first(where: { $0.id == sessionID }) else {
+            return nil
+        }
+        return AgentTabGrouping.key(
+            for: AgentTabGroupingEntry(
+                sessionID: session.id,
+                projectID: session.projectID
+            ),
+            workspaceBySession: tabWorkspaceBySession
+        )
+    }
+
+    func draggedTabIDs(for dropped: DraggableSession) -> [UUID] {
+        let source = dropped.sourceWindowID ?? windowID
+        let sourceSelection = windowStore.multiSelection(in: source)
+        let sourceOrder = visualTabOrderIDs(
+            for: windowStore.openTabIDs(in: source)
+        )
+        guard sourceSelection.count > 1,
+              sourceSelection.contains(dropped.sessionID) else {
+            return [dropped.sessionID]
+        }
+
+        var selectedIDs = sourceOrder.filter(sourceSelection.contains)
+        // Eine Sidebar-Session kann ausgewählt, aber noch nicht als Tab offen
+        // sein und fehlt dann zwangsläufig in `sourceOrder`. Der tatsächlich
+        // gezogene Eintrag muss trotzdem Teil der Drag-Gruppe bleiben.
+        if !selectedIDs.contains(dropped.sessionID) {
+            selectedIDs.append(dropped.sessionID)
+        }
+        let selectedKeys = Set(selectedIDs.compactMap(tabGroupingKey(for:)))
+        // Automatische Herkunftsgruppen können einen gemischten Auswahlblock
+        // nicht zusammenhängend darstellen. In diesem Fall verhält sich der
+        // Drag bewusst wie ein Einzel-Drag statt ein irreführendes +N zu zeigen.
+        if tabGroupingEnabled, selectedKeys.count > 1 {
+            return [dropped.sessionID]
+        }
+        return selectedIDs
+    }
+
+    private func normalizedTabDropTarget(
+        for dropped: DraggableSession,
+        before requestedID: UUID?
+    ) -> UUID? {
+        let group = draggedTabIDs(for: dropped)
+        return AgentTabGrouping.adjustedDropTarget(
+            before: requestedID,
+            movingIDs: Set(group),
+            movingKeys: Set(group.compactMap(tabGroupingKey(for:))),
+            items: tabGroupingItems
+        )
+    }
+
+    var visibleTabOrderIDs: [UUID] {
+        tabGroupingItems.flatMap { item in
+            switch item {
+            case .single(let id):
+                [id]
+            case .group(let key, let sessionIDs):
+                visibleTabIDs(in: sessionIDs, collapsed: collapsedTabGroups.contains(key))
+            }
+        }
+    }
+
+    var visualHeaderTabs: [AgentChatSession] {
+        let byID = Dictionary(headerTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return visualTabOrderIDs.compactMap { byID[$0] }
+    }
+
+    var visibleHeaderTabs: [AgentChatSession] {
+        let byID = Dictionary(headerTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return visibleTabOrderIDs.compactMap { byID[$0] }
+    }
+
+    private func tabGroupMetadata(
+        for key: AgentTabGroupingKey
+    ) -> (title: String, colorHex: String) {
+        switch key {
+        case .workspace(let id):
+            if let entity = windowStore.gridWorkspace(id: id) {
+                return (entity.name, entity.colorHex)
+            }
+        case .project(let id):
+            if let project = workspace.projects.first(where: { $0.id == id }) {
+                return (project.name, project.color)
+            }
+        }
+        return ("Gruppe", AgentGridWorkspace.defaultColorHex)
+    }
+
     var selectedSession: AgentChatSession? {
         guard let selectedSessionID else { return headerTabs.first }
         return workspace.sessions.first { $0.id == selectedSessionID && $0.status != .archived }
@@ -412,14 +580,16 @@ struct AgentChatsView: View {
     // pure Funktion in `AgentSidebarModelBuilder` und wird in
     // `hashboardSidebar` einmal pro Body-Eval gebunden.
 
-    private var runningResourceDescriptors: [AgentResourceSessionDescriptor] {
+    private func runningResourceDescriptors(
+        projectByID: [UUID: AgentProject]
+    ) -> [AgentResourceSessionDescriptor] {
         // Quelle: `workspace.sessions` ist `@State` — Updates triggern Re-Render der View
-        // und damit Re-Berechnung dieser Property. `terminalRegistry.runningControllers`
+        // und damit Re-Berechnung dieser Funktion. `terminalRegistry.runningControllers`
         // hingegen tut das nicht zuverlässig, weil `controller.isRunning` ein innerer
         // ObservableObject-State ist und kein `@Published` auf der Registry selbst.
         workspace.sessions.compactMap { session in
             guard session.status == .running,
-                  let project = workspace.projects.first(where: { $0.id == session.projectID })
+                  let project = projectByID[session.projectID]
             else {
                 return nil
             }
@@ -679,7 +849,6 @@ struct AgentChatsView: View {
             attemptAutoDetectProjectIcons()
         }
         .onDisappear {
-            indexRefreshTask?.cancel()
             activeBackgroundTracker.stop()
             removeCloseTabShortcut()
             removeTitleBarZoomHandler()
@@ -737,6 +906,11 @@ struct AgentChatsView: View {
         }
         .onChange(of: openTabIDs) { _, _ in
             closeWindowIfEmptyAndSecondary()
+        }
+        .onChange(of: tabGroupingEnabled) { _, enabled in
+            // @AppStorage gilt für alle Fenster; der ephemere Collapse-State
+            // muss deshalb ebenfalls in jeder lebenden View zurückgesetzt werden.
+            if !enabled { collapsedTabGroups.removeAll() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
             // Fenster verliert den Key-Status mitten im Ctrl+Tab-Durchlauf
@@ -1014,13 +1188,62 @@ struct AgentChatsView: View {
     }
 
     private var hashboardSidebar: some View {
-        VStack(spacing: 0) {
+        let openTabIDSet = Set(openTabIDs)
+        let terminalActiveSessionIDs = terminalRegistry.activeSessionIDs
+        let workingSubagentIDs = jobRuntimeModel.activeSubagentSessionIDs
+            .union(jobRuntimeModel.snapshotsBySessionID
+                .filter {
+                    $0.value.state == .takenOver
+                        && terminalActiveSessionIDs.contains($0.key)
+                }
+                .keys)
+        let erroredSubagentIDs = Set(jobRuntimeModel.snapshotsBySessionID
+            .filter { $0.value.state == .failed }
+            .keys)
+        let runningSessionIDs = terminalActiveSessionIDs
+            .union(jobRuntimeModel.runningCountByParentSessionID.filter { $0.value > 0 }.keys)
+            .union(jobRuntimeModel.activeSubagentSessionIDs)
+        let snapshot: AgentSidebarSnapshot?
+        let projectByID: [UUID: AgentProject]
+        if archiveModeActive {
+            snapshot = nil
+            projectByID = Dictionary(
+                workspace.projects.map { ($0.id, $0) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        } else {
+            let scopeFilter = makeScopeFilter(
+                openTabIDs: openTabIDSet,
+                runningSessionIDs: runningSessionIDs
+            )
+            let builtSnapshot = PerfBudgets.sidebarModelBuild.withInterval {
+                AgentSidebarModelBuilder.snapshot(
+                    workspace: workspace,
+                    pinnedSessionIDs: pinnedSessionIDs,
+                    scope: scopeFilter,
+                    layout: sidebarLayout,
+                    query: searchText,
+                    flatVisibleLimit: flatVisibleSessionLimit,
+                    selectedSessionID: selectedSessionID
+                )
+            }
+            snapshot = builtSnapshot
+            projectByID = builtSnapshot.projectByID
+            PerfSignposts.sidebar.emitEvent(
+                "sidebar.eligibleRootRows",
+                "count=\(builtSnapshot.eligibleRootRowCount)"
+            )
+        }
+
+        return VStack(spacing: 0) {
             HStack(spacing: 6) {
                 // Reservierter Bereich für die macOS-Window-Controls (rot/gelb/grün
                 // floaten transparent über der Sidebar bei x ≈ 8–78).
                 Spacer().frame(width: 70)
                 Spacer(minLength: 4)
-                AgentResourceSummaryButton(descriptors: runningResourceDescriptors)
+                AgentResourceSummaryButton(
+                    descriptors: runningResourceDescriptors(projectByID: projectByID)
+                )
             }
             .padding(.trailing, 8)
             .frame(height: 28)
@@ -1038,7 +1261,7 @@ struct AgentChatsView: View {
                 // archivierte Chats mit „Wiederherstellen" — ersetzt Befehle,
                 // Scope-Bar und Chat-Liste; der Footer bleibt.
                 archiveSidebarContent
-            } else {
+            } else if let snapshot {
 
             // Fest verankert: Befehle (Neuer Chat / Aktualisieren / Projekt
             // hinzufügen) + Filter scrollen NICHT mit — nur die Chat-Liste
@@ -1047,86 +1270,24 @@ struct AgentChatsView: View {
                 .padding(.top, 2)
                 .padding(.bottom, 6)
 
-            sidebarScopeBar
+            sidebarScopeBar(counts: snapshot.scopeCounts)
 
             ScrollView {
-                // P4: Sidebar-Modell EINMAL pro Body-Eval bauen (Gruppierung +
-                // Suche in einem Durchlauf) statt pro Projekt neu zu filtern
-                // und zu sortieren.
-                let openTabIDSet = Set(openTabIDs)
-                // isRunning-Flips published die Registry nicht selbst; frisch
-                // wird das Set bei jedem Body-Eval (Registry-Inserts/Removes
-                // sind @Published und triggern den). Nur noch für den
-                // Scope-Filter („Aktiv") — der Row-Status kommt vollständig
-                // aus dem Status-Koordinator.
-                // Subagent-Kinder: unter Parent-Rows gruppiert; laufende Jobs
-                // halten ihre Parent-Row in jedem Scope sichtbar (sonst
-                // verschwände ein arbeitender Subagent im „Aktiv"-Filter).
-                let subagentChildren = AgentSidebarModelBuilder.subagentChildren(
-                    workspaceSessions: workspace.sessions
-                )
-                let subagentChildIDs = Set(
-                    subagentChildren.byParentLocalID.values.flatMap { $0 }.map(\.id)
-                )
-                // Variante-D-Mengen für den Kinder-Split: laufend = aktiv
-                // (spawning/running) ∪ übernommen mit lebender PTY; fehl-
-                // geschlagen = state == .failed.
-                let workingSubagentIDs = jobRuntimeModel.activeSubagentSessionIDs
-                    .union(jobRuntimeModel.snapshotsBySessionID
-                        .filter { $0.value.state == .takenOver && terminalRegistry.activeSessionIDs.contains($0.key) }
-                        .keys)
-                let erroredSubagentIDs = Set(jobRuntimeModel.snapshotsBySessionID
-                    .filter { $0.value.state == .failed }
-                    .keys)
-                let runningSessionIDs = terminalRegistry.activeSessionIDs
-                    .union(jobRuntimeModel.runningCountByParentSessionID.filter { $0.value > 0 }.keys)
-                    .union(jobRuntimeModel.activeSubagentSessionIDs)
-                let scopeFilter = makeScopeFilter(
-                    openTabIDs: openTabIDSet,
-                    runningSessionIDs: runningSessionIDs
-                )
-                let sessionsByProject = AgentSidebarModelBuilder.sessionsByProject(
-                    workspaceSessions: workspace.sessions,
-                    pinnedSessionIDs: Set(pinnedSessionIDs),
-                    scope: scopeFilter,
-                    subagentChildIDs: subagentChildIDs
-                )
-                // Im gefilterten Scope leere Projektgruppen ausblenden — sonst
-                // stünden in „Aktiv" lauter Projekte ohne Zeilen. In `.all` (und
-                // bei leerer Suche) bleiben alle Projekte sichtbar, damit man in
-                // ein leeres Projekt hinein einen Chat anlegen kann.
-                let visibleProjects = AgentSidebarModelBuilder.visibleProjects(
-                    manualProjects: manualProjects,
-                    sessionsByProject: sessionsByProject,
-                    query: searchText
-                ).filter { effectiveScope == .all || !(sessionsByProject[$0.id] ?? []).isEmpty }
-                let flatSessions = AgentSidebarModelBuilder.flatSessions(
-                    workspaceSessions: workspace.sessions,
-                    pinnedSessionIDs: Set(pinnedSessionIDs),
-                    scope: scopeFilter,
-                    subagentChildIDs: subagentChildIDs
-                )
-                let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                let visiblePinned = AgentSidebarModelBuilder.pinnedSessions(
-                    workspaceSessions: workspace.sessions,
-                    pinnedSessionIDs: pinnedSessionIDs
-                ).filter { trimmedQuery.isEmpty || $0.title.localizedCaseInsensitiveContains(trimmedQuery) }
-                let chatListIsEmpty = (sidebarLayout == .flat ? flatSessions.isEmpty : visibleProjects.isEmpty)
                 VStack(alignment: .leading, spacing: 2) {
-                    if manualProjects.isEmpty {
+                    if !snapshot.hasManualProjects {
                         sidebarEmptyState
-                    } else if chatListIsEmpty && visiblePinned.isEmpty {
+                    } else if snapshot.chatListIsEmpty && snapshot.visiblePinned.isEmpty {
                         scopeEmptyHint
                     }
 
-                    if !visiblePinned.isEmpty {
-                        pinnedSectionHeader(count: visiblePinned.count)
+                    if !snapshot.visiblePinned.isEmpty {
+                        pinnedSectionHeader(count: snapshot.visiblePinned.count)
                         if !pinnedSectionCollapsed {
-                            ForEach(visiblePinned) { session in
+                            ForEach(snapshot.visiblePinned) { session in
                                 // Subagent-Kinder wie in der Chat-Liste: Split
                                 // EINMAL pro Parent, Chip an der Row, Kinder
                                 // über die geteilte Komponente darunter.
-                                let children = subagentChildren.byParentLocalID[session.id] ?? []
+                                let children = snapshot.subagentChildrenByParent[session.id] ?? []
                                 let split = children.isEmpty ? nil : AgentSidebarModelBuilder.subagentChildSplit(
                                     children: children,
                                     erroredIDs: erroredSubagentIDs,
@@ -1134,7 +1295,12 @@ struct AgentChatsView: View {
                                     unreadIDs: windowStore.unreadSubagentSessionIDs,
                                     selectedID: selectedSessionID
                                 )
-                                pinnedRow(session, order: visiblePinned.map(\.id), split: split)
+                                pinnedRow(
+                                    session,
+                                    project: snapshot.projectByID[session.projectID],
+                                    order: snapshot.pinnedOrderIDs,
+                                    split: split
+                                )
                                 if let split {
                                     subagentChildrenRows(
                                         parent: session,
@@ -1153,7 +1319,7 @@ struct AgentChatsView: View {
                     // Bekommt dieselben Subagent-Mengen wie die Chat-Liste,
                     // damit Workspace-Rows Chip + Kind-Zeilen zeigen.
                     workspacesSidebarSection(
-                        subagentChildrenByParent: subagentChildren.byParentLocalID,
+                        subagentChildrenByParent: snapshot.subagentChildrenByParent,
                         workingSubagentIDs: workingSubagentIDs,
                         erroredSubagentIDs: erroredSubagentIDs
                     )
@@ -1161,21 +1327,17 @@ struct AgentChatsView: View {
                     // CHATS als klappbare Sektion (Muster GEPINNT). Eine
                     // aktive Suche überstimmt den Collapse — sonst wären
                     // Treffer unsichtbar.
-                    let chatCount = sidebarLayout == .flat
-                        ? flatSessions.count
-                        : visibleProjects.reduce(0) { $0 + (sessionsByProject[$1.id]?.count ?? 0) }
-                    let showChatList = !chatsSectionCollapsed || !trimmedQuery.isEmpty
-                    if !chatListIsEmpty {
-                        chatsSectionHeader(count: chatCount)
+                    let showChatList = !chatsSectionCollapsed
+                        || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    if !snapshot.chatListIsEmpty {
+                        chatsSectionHeader(count: snapshot.chatCount)
                     }
 
                     if showChatList, sidebarLayout == .flat {
-                        ForEach(flatSessions) { session in
+                        ForEach(snapshot.visibleFlatSessions) { session in
                             // Subagent-Kinder auch in der flachen Ansicht —
-                            // `flatSessions` filtert sie aus der Hauptliste,
-                            // gerendert werden sie unter ihrem Parent (sonst
-                            // wären sie hier komplett unsichtbar).
-                            let children = subagentChildren.byParentLocalID[session.id] ?? []
+                            // gerendert werden sie unter ihrem Parent.
+                            let children = snapshot.subagentChildrenByParent[session.id] ?? []
                             let split = children.isEmpty ? nil : AgentSidebarModelBuilder.subagentChildSplit(
                                 children: children,
                                 erroredIDs: erroredSubagentIDs,
@@ -1183,7 +1345,12 @@ struct AgentChatsView: View {
                                 unreadIDs: windowStore.unreadSubagentSessionIDs,
                                 selectedID: selectedSessionID
                             )
-                            flatRow(session, order: flatSessions.map(\.id), split: split)
+                            flatRow(
+                                session,
+                                project: snapshot.projectByID[session.projectID],
+                                order: snapshot.visibleFlatOrderIDs,
+                                split: split
+                            )
                             if let split {
                                 subagentChildrenRows(
                                     parent: session,
@@ -1194,11 +1361,35 @@ struct AgentChatsView: View {
                                 )
                             }
                         }
+
+                        if snapshot.flatHiddenCount > 0 {
+                            let nextCount = min(50, snapshot.flatHiddenCount)
+                            Button {
+                                flatVisibleSessionLimit += nextCount
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 9, weight: .semibold))
+                                    Text("Weitere \(nextCount) anzeigen")
+                                        .font(.system(size: 11, weight: .medium))
+                                    Spacer(minLength: 0)
+                                    Text("\(snapshot.flatHiddenCount) übrig")
+                                        .font(.system(size: 10).monospacedDigit())
+                                        .foregroundStyle(AgentTheme.textTertiary)
+                                }
+                                .foregroundStyle(AgentTheme.textSecondary)
+                                .padding(.horizontal, 14)
+                                .frame(height: 30)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     } else if showChatList {
-                    ForEach(visibleProjects) { project in
+                    ForEach(snapshot.visibleProjects) { project in
+                        let projectSessions = snapshot.sessionsByProject[project.id] ?? []
                         ProjectChatGroup(
                             project: project,
-                            sessions: sessionsByProject[project.id] ?? [],
+                            sessions: projectSessions,
                             isExpanded: expandedProjectIDs.contains(project.id) || !searchText.isEmpty,
                             selectedSessionID: selectedSessionID,
                             multiSelection: multiSelection,
@@ -1213,7 +1404,7 @@ struct AgentChatsView: View {
                                 handleSidebarSessionClick(
                                     sessionID,
                                     project: project,
-                                    orderedSessionIDs: (sessionsByProject[project.id] ?? []).map(\.id)
+                                    orderedSessionIDs: projectSessions.map(\.id)
                                 )
                             },
                             onNewChat: {
@@ -1228,7 +1419,7 @@ struct AgentChatsView: View {
                             statusStore: runtimeStatusStore,
                             autoRenamingSessionIDs: autoRenamingSessionIDs,
                             missingTranscriptSessionIDs: missingTranscriptIDs,
-                            subagentChildrenByParent: subagentChildren.byParentLocalID,
+                            subagentChildrenByParent: snapshot.subagentChildrenByParent,
                             workingSubagentSessionIDs: workingSubagentIDs,
                             erroredSubagentSessionIDs: erroredSubagentIDs,
                             unreadSubagentSessionIDs: windowStore.unreadSubagentSessionIDs,
@@ -1266,6 +1457,9 @@ struct AgentChatsView: View {
         .background(AgentTheme.sidebar)
         .onAppear { refreshMissingTranscripts() }
         .onChange(of: workspace.sessions.count) { _, _ in refreshMissingTranscripts() }
+        .onChange(of: sidebarScope) { _, _ in flatVisibleSessionLimit = 50 }
+        .onChange(of: sidebarLayout) { _, _ in flatVisibleSessionLimit = 50 }
+        .onChange(of: searchText) { _, _ in flatVisibleSessionLimit = 50 }
     }
 
     /// Kleines Uppercase-Label über einer Sidebar-Sektion („Gepinnt", „Chats").
@@ -1355,12 +1549,13 @@ struct AgentChatsView: View {
     @ViewBuilder
     private func pinnedRow(
         _ session: AgentChatSession,
+        project: AgentProject?,
         order: [UUID],
         split: SubagentChildSplit? = nil
     ) -> some View {
         PinnedSessionRow(
             session: session,
-            project: workspace.projects.first { $0.id == session.projectID },
+            project: project,
             isSelected: selectedSessionID == session.id,
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
@@ -1405,12 +1600,13 @@ struct AgentChatsView: View {
     @ViewBuilder
     private func flatRow(
         _ session: AgentChatSession,
+        project: AgentProject?,
         order: [UUID],
         split: SubagentChildSplit? = nil
     ) -> some View {
         PinnedSessionRow(
             session: session,
-            project: workspace.projects.first { $0.id == session.projectID },
+            project: project,
             isSelected: selectedSessionID == session.id,
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
@@ -1862,14 +2058,7 @@ struct AgentChatsView: View {
     /// Scope-Umschalter (Aktiv·Zuletzt·Alle) + Layout-Toggle (gruppiert·flach)
     /// + „N von M sichtbar"-Hinweis. Fest verankert über der Chat-Liste,
     /// scrollt also nicht mit.
-    private var sidebarScopeBar: some View {
-        let counts = AgentSidebarModelBuilder.scopeCounts(
-            workspaceSessions: workspace.sessions,
-            pinnedSessionIDs: Set(pinnedSessionIDs),
-            runningSessionIDs: terminalRegistry.activeSessionIDs,
-            openTabIDs: Set(openTabIDs),
-            now: Date()
-        )
+    private func sidebarScopeBar(counts: SidebarScopeCounts) -> some View {
         let visibleCount: Int = {
             switch sidebarScope {
             case .active: return counts.active
@@ -1983,9 +2172,9 @@ struct AgentChatsView: View {
                 // Grid-Panes — siehe sessionDetailContent in +Grid.
                 sessionDetailContent(for: selectedSession, project: project)
                 .id(selectedSession.id)
-                .padding(.top, 14)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 8)
+                .padding(.top, 4)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
                 .background(AgentTheme.background)
                 // Tear-off: Tab/Gruppe in den Content ziehen → neues Fenster.
                 // Eigene Drop-Zone (nur Content, NICHT der Strip → kein Konflikt
@@ -2020,7 +2209,7 @@ struct AgentChatsView: View {
     private var tabSwitcherOverlay: some View {
         if let tabSwitcher {
             AgentTabSwitcherOverlay(
-                sessions: headerTabs,
+                sessions: visualHeaderTabs,
                 highlightedID: tabSwitcher.highlightedID,
                 projectsByID: Dictionary(
                     workspace.projects.map { ($0.id, $0) },
@@ -2055,6 +2244,133 @@ struct AgentChatsView: View {
         .transition(.opacity)
     }
 
+    @ViewBuilder
+    private var tabStripItemsContent: some View {
+        ForEach(Array(tabGroupingItems.enumerated()), id: \.offset) { _, item in
+            switch item {
+            case .single(let sessionID):
+                if let session = headerTabs.first(where: { $0.id == sessionID }) {
+                    chromeTab(session, groupColor: nil)
+                }
+            case .group(let key, let sessionIDs):
+                chromeTabGroup(key: key, sessionIDs: sessionIDs)
+            }
+        }
+    }
+
+    private func visibleTabIDs(
+        in sessionIDs: [UUID],
+        collapsed: Bool
+    ) -> [UUID] {
+        guard collapsed else { return sessionIDs }
+        guard let selectedSessionID, sessionIDs.contains(selectedSessionID) else { return [] }
+        return [selectedSessionID]
+    }
+
+    private func chromeTabGroup(
+        key: AgentTabGroupingKey,
+        sessionIDs: [UUID]
+    ) -> some View {
+        let metadata = tabGroupMetadata(for: key)
+        let color = Color(hex: metadata.colorHex)
+        let isCollapsed = collapsedTabGroups.contains(key)
+        let isActive = selectedSessionID.map(sessionIDs.contains) ?? false
+        let visibleIDs = visibleTabIDs(in: sessionIDs, collapsed: isCollapsed)
+
+        return HStack(alignment: .bottom, spacing: 0) {
+            ChatTabGroupLabel(
+                title: metadata.title,
+                count: sessionIDs.count,
+                colorHex: metadata.colorHex,
+                isCollapsed: isCollapsed,
+                isActive: isActive,
+                onToggle: {
+                    if isCollapsed {
+                        collapsedTabGroups.remove(key)
+                    } else {
+                        collapsedTabGroups.insert(key)
+                    }
+                }
+            )
+            // Das Label gehört geometrisch zum ersten Tab. Der Preference-Key
+            // vereinigt beide Frames, sodass „vor erstem Gruppenmitglied" die
+            // Einfügelinie links VOR dem Label zeichnet.
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: TabFramePreferenceKey.self,
+                        value: (visibleIDs.first ?? sessionIDs.first).map {
+                            [$0: geo.frame(in: .named(Self.tabStripContentSpace))]
+                        } ?? [:]
+                    )
+                }
+            )
+
+            ForEach(visibleIDs, id: \.self) { sessionID in
+                if let session = headerTabs.first(where: { $0.id == sessionID }) {
+                    chromeTab(session, groupColor: color)
+                }
+            }
+        }
+        // Die Kontur sitzt direkt am Cluster — kein Außencontainer, kein
+        // Padding zwischen Label und Mitglieds-Tabs.
+        .background(alignment: .bottom) {
+            Rectangle()
+                .fill(color.opacity(isActive ? 0.88 : 0.42))
+                .frame(height: isActive ? 1.5 : 1)
+                .offset(y: 1)
+        }
+    }
+
+    /// Einzelner Tab inklusive aller bestehenden Browser-Interaktionen. Das
+    /// Rendering wird von `projectChatStrip` nur noch in Herkunfts-Cluster
+    /// einsortiert; Drag, Kontextmenü, Mittelklick und Frame-Messung bleiben
+    /// weiterhin pro Session-ID erhalten.
+    private func chromeTab(
+        _ session: AgentChatSession,
+        groupColor: Color?
+    ) -> some View {
+        ChatTabButton(
+            session: session,
+            project: workspace.projects.first { $0.id == session.projectID },
+            isSelected: session.id == selectedSession?.id,
+            isMultiSelected: multiSelection.contains(session.id),
+            statusStore: runtimeStatusStore,
+            groupColor: groupColor,
+            onSelect: {
+                handleTabClick(session.id)
+            },
+            onClose: {
+                closeTab(session)
+            }
+        )
+        // Mittelklick (Mausrad) schließt den Tab — wie im Browser.
+        .onMiddleClick { closeTab(session) }
+        .draggable(DraggableSession(
+            sessionID: session.id,
+            sourceProjectID: session.projectID,
+            sourceWindowID: windowID
+        )) {
+            TabDragPreview(
+                title: session.title,
+                extraCount: max(0, tabDragGroup(for: session).count - 1)
+            )
+        }
+        .contextMenu {
+            sessionContextMenu(session, context: .tab)
+        }
+        // Tab-Frame im Inhalts-Space messen → Einfüge-Linie.
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: TabFramePreferenceKey.self,
+                    value: [session.id: geo.frame(in: .named(Self.tabStripContentSpace))]
+                )
+            }
+        )
+        .id(session.id)
+    }
+
     private var projectChatStrip: some View {
         VStack(spacing: 0) {
             // Tabs sitzen in der Titelzone (oberste ~28px), browserähnlich neben
@@ -2063,7 +2379,7 @@ struct AgentChatsView: View {
             // `.onChange(of: isHoveringTabStrip)` am Body) — so zieht ein Klick/
             // Drag auf einem Tab nie das Fenster, während freie Flächen (links/
             // Lücken) das Fenster weiterhin verschieben.
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 if !isSidebarVisible {
                     // Platz für die Ampel-Buttons, wenn die Sidebar aus ist.
                     Spacer().frame(width: 70)
@@ -2076,46 +2392,8 @@ struct AgentChatsView: View {
                 if !headerTabs.isEmpty {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 4) {
-                                ForEach(headerTabs) { session in
-                                    ChatTabButton(
-                                        session: session,
-                                        project: workspace.projects.first { $0.id == session.projectID },
-                                        isSelected: session.id == selectedSession?.id,
-                                        isMultiSelected: multiSelection.contains(session.id),
-                                        statusStore: runtimeStatusStore,
-                                        onSelect: {
-                                            handleTabClick(session.id)
-                                        },
-                                        onClose: {
-                                            closeTab(session)
-                                        }
-                                    )
-                                    // Mittelklick (Mausrad) schließt den Tab — wie im Browser.
-                                    .onMiddleClick { closeTab(session) }
-                                    .draggable(DraggableSession(
-                                        sessionID: session.id,
-                                        sourceProjectID: session.projectID,
-                                        sourceWindowID: windowID
-                                    )) {
-                                        TabDragPreview(
-                                            title: session.title,
-                                            extraCount: max(0, tabDragGroup(for: session).count - 1)
-                                        )
-                                    }
-                                    .contextMenu {
-                                        sessionContextMenu(session, context: .tab)
-                                    }
-                                    // Tab-Frame im Inhalts-Space messen → Einfüge-Linie.
-                                    .background(
-                                        GeometryReader { geo in
-                                            Color.clear.preference(
-                                                key: TabFramePreferenceKey.self,
-                                                value: [session.id: geo.frame(in: .named(Self.tabStripContentSpace))]
-                                            )
-                                        }
-                                    )
-                                }
+                            HStack(alignment: .bottom, spacing: 0) {
+                                tabStripItemsContent
                             }
                             .coordinateSpace(.named(Self.tabStripContentSpace))
                             .onPreferenceChange(TabFramePreferenceKey.self) { tabFrames = $0 }
@@ -2127,52 +2405,88 @@ struct AgentChatsView: View {
                             }
                             // Einfüge-Linie an der Drop-Position (zwischen den Tabs).
                             .overlay(alignment: .leading) {
-                                if let index = tabInsertionIndex,
-                                   let x = TabReorderGeometry.insertionX(
-                                    forIndex: index,
-                                    orderedIDs: headerTabs.map(\.id),
-                                    frames: tabFrames,
-                                    spacing: 4
-                                   ) {
-                                    TabInsertionIndicator()
-                                        .offset(x: x - 1.25)
-                                        .allowsHitTesting(false)
+                                if tabInsertionIndex != nil {
+                                    let currentIndex = tabInsertionBeforeID.flatMap(
+                                        visibleTabOrderIDs.firstIndex(of:)
+                                    ) ?? visibleTabOrderIDs.count
+                                    if let x = TabReorderGeometry.insertionX(
+                                        forIndex: currentIndex,
+                                        orderedIDs: visibleTabOrderIDs,
+                                        frames: tabFrames,
+                                        spacing: 0
+                                    ) {
+                                        TabInsertionIndicator()
+                                            .offset(x: x - 1.25)
+                                            .allowsHitTesting(false)
+                                    }
                                 }
                             }
                             .animation(.easeOut(duration: 0.1), value: tabInsertionIndex)
+                            // Ein Drag braucht wieder alle Tab-Frames. Sobald der
+                            // Cursor den Strip betritt, öffnen wir eingeklappte
+                            // Herkunftsgruppen wie Chrome automatisch; dadurch
+                            // bleiben Reorder-Index und Einfüge-Linie vollständig.
+                            .onChange(of: tabInsertionIndex) { _, index in
+                                if index != nil, !collapsedTabGroups.isEmpty {
+                                    collapsedTabGroups.removeAll()
+                                }
+                            }
                             .background(WindowDragExclusionView())
                             // Reorder/Move + Cross-Window: EIN DropDelegate für die
                             // ganze Leiste → kontinuierliche Einfüge-Position (Linie)
                             // und Move-Semantik (kein Copy-„+"). Cross-Window/Sidebar-
                             // Open laufen weiter über windowStore.moveTab in dropTab.
                             .onDrop(of: [.agentChatSession], delegate: TabReorderDropDelegate(
-                                orderedIDs: headerTabs.map(\.id),
+                                orderedIDs: visibleTabOrderIDs,
                                 frames: tabFrames,
                                 insertionIndex: $tabInsertionIndex,
-                                onMove: { dropped, beforeID in
+                                insertionBeforeID: $tabInsertionBeforeID,
+                                droppedSession: $tabDropSession,
+                                normalizeBeforeID: { dropped, beforeID in
+                                    normalizedTabDropTarget(
+                                        for: dropped,
+                                        before: beforeID
+                                    )
+                                },
+                                onMove: { dropped, adjustedBeforeID in
                                     let source = dropped.sourceWindowID ?? windowID
-                                    // Gruppe aus der LIVE-Auswahl des QUELL-Fensters (robust, ohne
-                                    // Payload-Round-Trip) — fixt cross-window.
-                                    let sourceSel = windowStore.multiSelection(in: source)
-                                    let group = (sourceSel.count > 1 && sourceSel.contains(dropped.sessionID))
-                                        ? windowStore.openTabIDs(in: source).filter { sourceSel.contains($0) }
-                                        : [dropped.sessionID]
+                                    let group = draggedTabIDs(for: dropped)
+                                    let movingIDs = Set(group)
                                     if source == windowID {
-                                        // Same-window: Gruppe als Block reordern bzw. Einzel.
-                                        if group.count > 1 {
-                                            let newOrder = TabGroupReorder.newOrder(openTabIDs, moving: Set(group), before: beforeID)
+                                        // Die sichtbare Gruppen-Reihenfolge wird zur neuen
+                                        // manuellen Reihenfolge. Fremde Tabs schnappen an die
+                                        // Cluster-Grenze, statt eine Gruppe optisch zu teilen.
+                                        let currentVisualOrder = visualTabOrderIDs
+                                        let missingIDs = group.filter {
+                                            !currentVisualOrder.contains($0)
+                                        }
+                                        let reorderBase = currentVisualOrder + missingIDs
+                                        let newOrder = TabOrderReorder.newOrder(
+                                            reorderBase,
+                                            moving: movingIDs,
+                                            before: adjustedBeforeID
+                                        )
+                                        // Ein effektiver No-op darf die separat
+                                        // persistierte manuelle Reihenfolge nicht
+                                        // bloß auf die Gruppenansicht normalisieren.
+                                        if newOrder != currentVisualOrder {
                                             windowStore.setOpenTabIDs(newOrder, in: windowID)
-                                        } else if let beforeID {
-                                            dropTab(dropped, before: beforeID)
-                                        } else {
-                                            dropTabAtEnd(dropped)
+                                            if !missingIDs.isEmpty {
+                                                selectedSessionID = dropped.sessionID
+                                            }
                                         }
                                     } else {
-                                        // Cross-window: ganze Gruppe (Reihenfolge erhalten) hierher holen.
+                                        // Cross-window: ganze Gruppe in ihrer sichtbaren
+                                        // Reihenfolge hierher holen.
                                         for id in group {
-                                            windowStore.moveTab(id, from: source, to: windowID, before: beforeID)
+                                            windowStore.moveTab(
+                                                id,
+                                                from: source,
+                                                to: windowID,
+                                                before: adjustedBeforeID
+                                            )
                                         }
-                                        windowStore.setMultiSelection([], in: source)  // Quell-Auswahl aufräumen
+                                        windowStore.setMultiSelection([], in: source)
                                     }
                                     // Einzel-Drag (kein Gruppen-Tab) verwirft die Auswahl (Chrome/Finder).
                                     if group.count <= 1 { multiSelection = [] }
@@ -2188,7 +2502,7 @@ struct AgentChatsView: View {
                         .background {
                             // Unsichtbare Shortcut-Anker: ⌘1–⌘9 springen auf
                             // Tab 1–9 der globalen Tab-Bar.
-                            ForEach(Array(headerTabs.prefix(9).enumerated()), id: \.element.id) { index, session in
+                            ForEach(Array(visualHeaderTabs.prefix(9).enumerated()), id: \.element.id) { index, session in
                                 Button("") { selectedSessionID = session.id }
                                     .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                                     .frame(width: 0, height: 0)
@@ -2238,12 +2552,20 @@ struct AgentChatsView: View {
                     }
                 }
 
+                TitlebarIconButton(
+                    systemImage: "rectangle.stack",
+                    help: tabGroupingEnabled ? "Tab-Gruppen ausschalten" : "Tab-Gruppen einschalten",
+                    isActive: tabGroupingEnabled
+                ) {
+                    tabGroupingEnabled.toggle()
+                }
+
                 // Overflow-Menü: erscheint nur bei Tab-Überlauf (Fenstermodus).
                 // Listet ALLE offenen Tabs; Klick selektiert → bestehender
                 // onChange scrollt den Tab in Sicht. Im Fullscreen unsichtbar.
                 if hasTabOverflow {
                     Menu {
-                        ForEach(headerTabs) { session in
+                        ForEach(visualHeaderTabs) { session in
                             Button {
                                 selectedSessionID = session.id
                             } label: {
@@ -2307,8 +2629,9 @@ struct AgentChatsView: View {
                     isInspectorVisible.toggle()
                 }
             }
-            .padding(.horizontal, 8)
-            .frame(height: 28)
+            .padding(.leading, 8)
+            .padding(.trailing, 6)
+            .frame(height: 30, alignment: .bottom)
 
             // Im sichtbaren Grid ersetzt die Workspace-Zeile (Name + Belegung
             // + Kapazitäts-Picker) den Chat-Header — die Pane-Header tragen
@@ -2316,12 +2639,12 @@ struct AgentChatsView: View {
             // Pane mehr (vorher Overlay über der rechten oberen Pane).
             if isGridActive, let entity = activeGridWorkspaceEntity {
                 gridWorkspaceStatusRow(entity: entity)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
             } else {
                 activeChatStatusRow
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
             }
         }
         .background(AgentTheme.header)
@@ -2336,12 +2659,14 @@ struct AgentChatsView: View {
     /// - Runtime-Info (Provider · Modell · Status) ganz rechts
     @ViewBuilder
     private var activeChatStatusRow: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 8) {
             statusDot
 
-            VStack(alignment: .leading, spacing: 2) {
-                primaryTitleRow
-                secondaryProjectRow
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 8) {
+                    primaryTitleRow
+                    secondaryProjectRow
+                }
                 if selectedSession?.isAgentView == true {
                     tuiActiveSubSessionRow
                 }
@@ -2353,7 +2678,7 @@ struct AgentChatsView: View {
             // …-Menü) und der IDE-Opener. `fixedSize` hält die Controls auf
             // ihrer natürlichen Breite, sodass stattdessen der Projektpfad
             // links gekürzt wird.
-            HStack(spacing: 8) {
+            HStack(spacing: 5) {
                 newChatButton(provider: .claude)
                 newChatButton(provider: .codex)
                 if let selectedSession {
@@ -2506,7 +2831,7 @@ struct AgentChatsView: View {
         HStack(spacing: 6) {
             if let selectedSession {
                 Text(selectedSession.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -2617,17 +2942,17 @@ struct AgentChatsView: View {
         Button {
             createSession(provider: provider)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Image(systemName: "plus")
-                    .font(.system(size: 8, weight: .bold))
-                ProviderIcon(provider: provider, size: 11, tint: AgentTheme.textSecondary)
+                    .font(.system(size: 7, weight: .bold))
+                ProviderIcon(provider: provider, size: 10, tint: AgentTheme.textSecondary)
                 Text(provider.displayName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 10, weight: .medium))
             }
             .foregroundStyle(AgentTheme.textSecondary)
-            .padding(.horizontal, 9)
-            .frame(height: 24)
-            .background(AgentTheme.control.opacity(0.55), in: RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(AgentTheme.control.opacity(0.48), in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -2664,18 +2989,18 @@ struct AgentChatsView: View {
         let controller = terminalRegistry.controller(for: session.id)
         let isRunning = controller?.isRunning == true
 
-        return HStack(spacing: 6) {
-            HStack(spacing: 5) {
+        return HStack(spacing: 4) {
+            HStack(spacing: 4) {
                 Circle()
                     .fill(isRunning ? AgentTheme.textSecondary : AgentTheme.textTertiary)
                     .frame(width: 5, height: 5)
                 Text(session.runtimeDisplayText)
-                    .font(.system(size: 10, weight: .regular).monospacedDigit())
+                    .font(.system(size: 9, weight: .regular).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
 
             Button {
                 sessionActionRequest = AgentSessionActionRequest(
@@ -2683,16 +3008,16 @@ struct AgentChatsView: View {
                     kind: isRunning ? .restart : .start
                 )
             } label: {
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     Image(systemName: isRunning ? "arrow.clockwise" : "play.fill")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 8, weight: .medium))
                     Text(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start" : "Resume"))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 10, weight: .medium))
                 }
                 .foregroundStyle(AgentTheme.textPrimary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(AgentTheme.control.opacity(0.55), in: RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 7)
+                .frame(height: 22)
+                .background(AgentTheme.control.opacity(0.48), in: RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
 

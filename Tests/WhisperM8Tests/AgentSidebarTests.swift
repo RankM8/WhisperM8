@@ -274,6 +274,288 @@ final class AgentSidebarModelBuilderTests: XCTestCase {
     }
 }
 
+extension AgentSidebarModelBuilderTests {
+    private func snapshotFilter(
+        _ scope: SidebarScope = .all,
+        running: Set<UUID> = [],
+        openTabs: Set<UUID> = []
+    ) -> SidebarScopeFilter {
+        SidebarScopeFilter(
+            scope: scope,
+            runningSessionIDs: running,
+            openTabIDs: openTabs,
+            now: Date(timeIntervalSince1970: 1_000_000),
+            recentWindow: SidebarScopeFilter.defaultRecentWindow
+        )
+    }
+
+    func testGroupedSnapshotMatchesExistingBuildersAndSkipsFlatLayout() {
+        let project = AgentProject(
+            name: "Repo",
+            path: "/tmp/repo",
+            createdManually: true
+        )
+        let pinned = makeSidebarSession(projectID: project.id, title: "Pin")
+        let newer = makeSidebarSession(
+            projectID: project.id,
+            title: "Neu",
+            lastActivityAt: Date(timeIntervalSince1970: 900_000)
+        )
+        let older = makeSidebarSession(
+            projectID: project.id,
+            title: "Alt",
+            lastActivityAt: Date(timeIntervalSince1970: 100)
+        )
+        let workspace = AgentWorkspace(
+            projects: [project],
+            sessions: [older, pinned, newer]
+        )
+
+        let snapshot = AgentSidebarModelBuilder.snapshot(
+            workspace: workspace,
+            pinnedSessionIDs: [pinned.id],
+            scope: snapshotFilter(.all),
+            layout: .grouped,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: nil
+        )
+        let expected = AgentSidebarModelBuilder.sessionsByProject(
+            workspaceSessions: workspace.sessions,
+            pinnedSessionIDs: [pinned.id]
+        )
+
+        XCTAssertEqual(snapshot.sessionsByProject, expected)
+        XCTAssertEqual(snapshot.visibleProjects, [project])
+        XCTAssertEqual(snapshot.visiblePinned, [pinned])
+        XCTAssertEqual(snapshot.pinnedOrderIDs, [pinned.id])
+        XCTAssertTrue(snapshot.visibleFlatSessions.isEmpty)
+        XCTAssertTrue(snapshot.visibleFlatOrderIDs.isEmpty, "Das inaktive Flat-Layout darf nicht materialisiert werden")
+        XCTAssertEqual(snapshot.scopeCounts, SidebarScopeCounts(active: 0, recent: 1, all: 2))
+        XCTAssertEqual(snapshot.chatCount, 2)
+        XCTAssertFalse(snapshot.chatListIsEmpty)
+    }
+
+    func testFlatSnapshotSearchesBeforeLimitAndSkipsGroupedLayout() {
+        let matchingProject = AgentProject(
+            name: "RankM8",
+            path: "/tmp/rankm8",
+            createdManually: true
+        )
+        let otherProject = AgentProject(
+            name: "Andere",
+            path: "/tmp/andere",
+            createdManually: true
+        )
+        let projectMatch = makeSidebarSession(projectID: matchingProject.id, title: "Audit")
+        let titleMatch = makeSidebarSession(projectID: otherProject.id, title: "RankM8 Recherche")
+        let miss = makeSidebarSession(projectID: otherProject.id, title: "Ohne Treffer")
+
+        let snapshot = AgentSidebarModelBuilder.snapshot(
+            workspace: AgentWorkspace(
+                projects: [matchingProject, otherProject],
+                sessions: [projectMatch, titleMatch, miss]
+            ),
+            pinnedSessionIDs: [],
+            scope: snapshotFilter(.all),
+            layout: .flat,
+            query: "rankm8",
+            flatVisibleLimit: 1,
+            selectedSessionID: nil
+        )
+
+        XCTAssertEqual(snapshot.chatCount, 2, "Die Suche muss vor dem Flat-Limit greifen")
+        XCTAssertEqual(snapshot.visibleFlatSessions.count, 1)
+        XCTAssertEqual(snapshot.flatHiddenCount, 1)
+        XCTAssertEqual(snapshot.visibleFlatOrderIDs, snapshot.visibleFlatSessions.map(\.id))
+        XCTAssertTrue(Set(snapshot.visibleFlatOrderIDs).isSubset(of: [projectMatch.id, titleMatch.id]))
+        XCTAssertTrue(snapshot.sessionsByProject.isEmpty)
+        XCTAssertTrue(snapshot.visibleProjects.isEmpty, "Das inaktive Grouped-Layout darf nicht materialisiert werden")
+    }
+
+    func testFlatSnapshotCapsRowsAndRevealsSelectionWithoutFillingGap() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo", createdManually: true)
+        let sessions = (0..<120).map { index in
+            makeSidebarSession(
+                projectID: project.id,
+                title: "S\(index)",
+                lastActivityAt: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+        // In der Recency-Sortierung liegt S49 auf Index 70: außerhalb des
+        // ersten 50er-Prefix, aber innerhalb des nächsten 100er-Prefix.
+        let selected = sessions[49]
+
+        let snapshot = AgentSidebarModelBuilder.snapshot(
+            workspace: AgentWorkspace(projects: [project], sessions: sessions),
+            pinnedSessionIDs: [],
+            scope: snapshotFilter(.all),
+            layout: .flat,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: selected.id
+        )
+        let expanded = AgentSidebarModelBuilder.snapshot(
+            workspace: AgentWorkspace(projects: [project], sessions: sessions),
+            pinnedSessionIDs: [],
+            scope: snapshotFilter(.all),
+            layout: .flat,
+            query: "",
+            flatVisibleLimit: 100,
+            selectedSessionID: selected.id
+        )
+
+        XCTAssertEqual(snapshot.visibleFlatOrderIDs, snapshot.visibleFlatSessions.map(\.id))
+        XCTAssertEqual(snapshot.visibleFlatSessions.count, 50)
+        XCTAssertTrue(snapshot.visibleFlatSessions.contains { $0.id == selected.id })
+        XCTAssertEqual(snapshot.flatHiddenCount, 70)
+        XCTAssertEqual(
+            Set(expanded.visibleFlatOrderIDs).subtracting(snapshot.visibleFlatOrderIDs).count,
+            50,
+            "Der +50-Schritt muss trotz Reveal genau 50 neue sichtbare Rows liefern"
+        )
+    }
+
+    func testFlatSnapshotRevealsParentOfSelectedSubagentChild() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo", createdManually: true)
+        var parent = makeSidebarSession(
+            projectID: project.id,
+            title: "Parent",
+            lastActivityAt: Date(timeIntervalSince1970: 0)
+        )
+        parent.externalSessionID = "parent-external"
+        let child = AgentChatSession(
+            provider: .codex,
+            projectID: project.id,
+            title: "Child",
+            createdAt: Date(timeIntervalSince1970: 0),
+            lastActivityAt: Date(timeIntervalSince1970: 200),
+            createdManually: true,
+            kind: .subagentJob,
+            subagentParentSessionID: "parent-external"
+        )
+        let newerRoots = (1...60).map { index in
+            makeSidebarSession(
+                projectID: project.id,
+                title: "Root \(index)",
+                lastActivityAt: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+
+        let snapshot = AgentSidebarModelBuilder.snapshot(
+            workspace: AgentWorkspace(
+                projects: [project],
+                sessions: newerRoots + [parent, child]
+            ),
+            pinnedSessionIDs: [],
+            scope: snapshotFilter(.all),
+            layout: .flat,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: child.id
+        )
+
+        XCTAssertTrue(snapshot.visibleFlatSessions.contains { $0.id == parent.id })
+        XCTAssertFalse(snapshot.visibleFlatSessions.contains { $0.id == child.id })
+        XCTAssertEqual(snapshot.subagentChildrenByParent[parent.id], [child])
+    }
+
+    func testOpenSubagentMakesItsOldParentVisibleInActiveScope() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo", createdManually: true)
+        var parent = makeSidebarSession(
+            projectID: project.id,
+            title: "Alter Parent",
+            lastActivityAt: Date(timeIntervalSince1970: 0)
+        )
+        parent.externalSessionID = "active-parent"
+        let child = AgentChatSession(
+            provider: .codex,
+            projectID: project.id,
+            title: "Offenes Child",
+            createdAt: Date(timeIntervalSince1970: 0),
+            lastActivityAt: Date(timeIntervalSince1970: 0),
+            createdManually: true,
+            kind: .subagentJob,
+            subagentParentSessionID: "active-parent"
+        )
+        let workspace = AgentWorkspace(projects: [project], sessions: [parent, child])
+        let activeScope = snapshotFilter(.active, openTabs: [child.id])
+
+        let flat = AgentSidebarModelBuilder.snapshot(
+            workspace: workspace,
+            pinnedSessionIDs: [],
+            scope: activeScope,
+            layout: .flat,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: child.id
+        )
+        let grouped = AgentSidebarModelBuilder.snapshot(
+            workspace: workspace,
+            pinnedSessionIDs: [],
+            scope: activeScope,
+            layout: .grouped,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: child.id
+        )
+
+        XCTAssertEqual(flat.visibleFlatSessions.map(\.id), [parent.id])
+        XCTAssertEqual(flat.scopeCounts.active, 1)
+        XCTAssertEqual(grouped.visibleProjects, [project])
+        XCTAssertEqual(grouped.sessionsByProject[project.id]?.map(\.id), [parent.id])
+        XCTAssertEqual(grouped.scopeCounts.active, 1)
+    }
+
+    func testGroupedSnapshotKeepsEmptyManualProjectVisibleInAllScope() {
+        let project = AgentProject(name: "Leer", path: "/tmp/leer", createdManually: true)
+        let snapshot = AgentSidebarModelBuilder.snapshot(
+            workspace: AgentWorkspace(projects: [project], sessions: []),
+            pinnedSessionIDs: [],
+            scope: snapshotFilter(.all),
+            layout: .grouped,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: nil
+        )
+
+        XCTAssertEqual(snapshot.visibleProjects, [project])
+        XCTAssertEqual(snapshot.chatCount, 0)
+        XCTAssertFalse(snapshot.chatListIsEmpty)
+    }
+
+    func testFlatSnapshotClassifiesTenThousandSessionsWithoutMaterializingAllRows() {
+        let project = AgentProject(name: "Groß", path: "/tmp/gross", createdManually: true)
+        let sessions = (0..<10_000).map { index in
+            makeSidebarSession(
+                projectID: project.id,
+                title: "Session \(index)",
+                lastActivityAt: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+        let pinnedIDs = Array(sessions.prefix(100).map(\.id))
+
+        let snapshot = AgentSidebarModelBuilder.snapshot(
+            workspace: AgentWorkspace(projects: [project], sessions: sessions),
+            pinnedSessionIDs: pinnedIDs,
+            scope: snapshotFilter(.all),
+            layout: .flat,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: nil
+        )
+
+        XCTAssertEqual(snapshot.scopeCounts.all, 9_900)
+        XCTAssertEqual(snapshot.chatCount, 9_900)
+        XCTAssertEqual(snapshot.visibleFlatOrderIDs.count, 50)
+        XCTAssertEqual(snapshot.visibleFlatOrderIDs, snapshot.visibleFlatSessions.map(\.id))
+        XCTAssertEqual(snapshot.flatHiddenCount, 9_850)
+        XCTAssertEqual(snapshot.visiblePinned.count, 100)
+        XCTAssertEqual(snapshot.eligibleRootRowCount, 150)
+        XCTAssertTrue(snapshot.sessionsByProject.isEmpty)
+    }
+}
+
 // MARK: - Sichtbarkeits-Slice (P4 S5)
 
 final class SidebarVisibleSliceTests: XCTestCase {

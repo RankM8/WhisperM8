@@ -15,7 +15,7 @@ extension AgentChatsView {
         if mods.contains(.command) {
             outcome = TabSelectionResolver.commandClick(id, active: selectedSessionID, selection: multiSelection)
         } else if mods.contains(.shift) {
-            outcome = TabSelectionResolver.shiftClick(id, anchor: selectedSessionID, order: headerTabs.map(\.id))
+            outcome = TabSelectionResolver.shiftClick(id, anchor: selectedSessionID, order: visibleTabOrderIDs)
         } else {
             outcome = TabSelectionResolver.click(id)
         }
@@ -64,7 +64,13 @@ extension AgentChatsView {
     /// OFFENEN Tabs in Anzeige-Reihenfolge, falls `session` Teil der Auswahl ist;
     /// sonst leer (Einzel-Drag).
     func tabDragGroup(for session: AgentChatSession) -> [UUID] {
-        multiSelection.contains(session.id) ? openTabIDs.filter { multiSelection.contains($0) } : []
+        guard multiSelection.contains(session.id) else { return [] }
+        let ids = draggedTabIDs(for: DraggableSession(
+            sessionID: session.id,
+            sourceProjectID: session.projectID,
+            sourceWindowID: windowID
+        ))
+        return ids.count > 1 ? ids : []
     }
 
     /// Öffnet einen Tab in der globalen Bar (ans Ende), falls noch nicht
@@ -82,16 +88,23 @@ extension AgentChatsView {
     func closeTab(_ session: AgentChatSession) {
         // Geschlossener Tab darf nicht in der Mehrfach-Auswahl zurückbleiben.
         multiSelection.remove(session.id)
-        guard let index = openTabIDs.firstIndex(of: session.id) else {
-            if selectedSessionID == session.id { selectedSessionID = openTabIDs.first }
+        let visualOrder = visualTabOrderIDs
+        let visualIndex = visualOrder.firstIndex(of: session.id)
+        let wasSelected = selectedSessionID == session.id
+        guard let persistedIndex = openTabIDs.firstIndex(of: session.id) else {
+            if wasSelected { selectedSessionID = visualOrder.first }
             return
         }
-        openTabIDs.remove(at: index)
-        if selectedSessionID == session.id {
-            // Nachbar-Tab selektieren (gleiche Position, sonst letzter).
-            selectedSessionID = openTabIDs.indices.contains(index)
-                ? openTabIDs[index]
-                : openTabIDs.last
+        openTabIDs.remove(at: persistedIndex)
+        if wasSelected {
+            // Nachbar in der tatsächlich sichtbaren Gruppen-Reihenfolge, nicht
+            // in der eventuell auseinandergezogenen Persistenz-Reihenfolge.
+            let remaining = visualOrder.filter { $0 != session.id }
+            if let visualIndex, remaining.indices.contains(visualIndex) {
+                selectedSessionID = remaining[visualIndex]
+            } else {
+                selectedSessionID = remaining.last
+            }
         }
     }
 
@@ -202,7 +215,7 @@ extension AgentChatsView {
     /// hineinverschoben. PTYs bleiben (Registry ist sessionID-basiert).
     func moveSelectionToNewWindow(_ session: AgentChatSession) {
         let group = multiSelection.contains(session.id)
-            ? openTabIDs.filter { multiSelection.contains($0) }
+            ? visualTabOrderIDs.filter { multiSelection.contains($0) }
             : [session.id]
         guard let first = group.first, openTabIDs.contains(first) else { return }
         let newWindowID = windowStore.detachToNewWindow(first, from: windowID)
@@ -220,11 +233,8 @@ extension AgentChatsView {
     /// LIVE aus dem Quell-Fenster (robust, kein Payload-Round-Trip).
     func detachDroppedToNewWindow(_ dropped: DraggableSession) {
         let source = dropped.sourceWindowID ?? windowID
-        let sel = windowStore.multiSelection(in: source)
-        let group = (sel.count > 1 && sel.contains(dropped.sessionID))
-            ? windowStore.openTabIDs(in: source).filter { sel.contains($0) }
-            : [dropped.sessionID]
-        guard let first = group.first, windowStore.openTabIDs(in: source).contains(first) else { return }
+        let group = draggedTabIDs(for: dropped)
+        guard let first = group.first else { return }
         let newWindowID = windowStore.detachToNewWindow(first, from: source)
         for id in group.dropFirst() {
             windowStore.moveTab(id, from: source, to: newWindowID, before: nil)

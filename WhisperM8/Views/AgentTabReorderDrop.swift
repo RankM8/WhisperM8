@@ -40,22 +40,31 @@ enum TabReorderGeometry {
 
 // MARK: - Gruppen-Reorder (Multi-Tab-Drag)
 
+/// Reine, testbare Block-Reorder-Logik für einen oder mehrere Tabs. Die
+/// aktuelle Anzeige-Reihenfolge wird dabei zur neuen manuellen Reihenfolge.
+enum TabOrderReorder {
+    static func newOrder(_ order: [UUID], moving group: Set<UUID>, before beforeID: UUID?) -> [UUID] {
+        let moved = order.filter { group.contains($0) }
+        guard !moved.isEmpty else { return order }
+        if let beforeID, group.contains(beforeID) { return order }
+        let rest = order.filter { !group.contains($0) }
+        guard let beforeID, let index = rest.firstIndex(of: beforeID) else {
+            return rest + moved
+        }
+        var result = rest
+        result.insert(contentsOf: moved, at: index)
+        return result
+    }
+}
+
 /// Reine, testbare Reorder-Logik für einen Multi-Select-Drag: die `group`
 /// wird als zusammenhängender Block vor `beforeID` (nil = ans Ende) einsortiert
 /// und behält ihre aktuelle Relativ-Reihenfolge. Cross-Window-Gruppen sind
 /// bewusst NICHT hier (Caller fällt für die auf Einzel-`moveTab` zurück).
 enum TabGroupReorder {
     static func newOrder(_ order: [UUID], moving group: Set<UUID>, before beforeID: UUID?) -> [UUID] {
-        let moved = order.filter { group.contains($0) }
-        guard moved.count > 1 else { return order }                 // Einzel → Caller nutzt moveTab
-        if let beforeID, group.contains(beforeID) { return order }  // Drop auf eigenes Mitglied = No-op
-        let rest = order.filter { !group.contains($0) }
-        guard let beforeID, let idx = rest.firstIndex(of: beforeID) else {
-            return rest + moved
-        }
-        var result = rest
-        result.insert(contentsOf: moved, at: idx)
-        return result
+        guard order.filter({ group.contains($0) }).count > 1 else { return order }
+        return TabOrderReorder.newOrder(order, moving: group, before: beforeID)
     }
 }
 
@@ -65,7 +74,9 @@ enum TabGroupReorder {
 struct TabFramePreferenceKey: PreferenceKey {
     static let defaultValue: [UUID: CGRect] = [:]
     static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
-        value.merge(nextValue()) { _, new in new }
+        value.merge(nextValue()) { current, new in
+            current.union(new)
+        }
     }
 }
 
@@ -79,6 +90,12 @@ struct TabReorderDropDelegate: DropDelegate {
     let orderedIDs: [UUID]
     let frames: [UUID: CGRect]
     @Binding var insertionIndex: Int?
+    /// Semantisches Ziel unabhängig von einer während des Drags wechselnden
+    /// sichtbaren Reihenfolge (`nil` bedeutet bei aktivem Drag: ans Ende).
+    @Binding var insertionBeforeID: UUID?
+    @Binding var droppedSession: DraggableSession?
+    /// Passt ein geometrisches Ziel an strukturelle Gruppen-Grenzen an.
+    let normalizeBeforeID: (DraggableSession, UUID?) -> UUID?
     /// `beforeID == nil` → ans Ende. Wird auf dem Main-Thread aufgerufen.
     let onMove: (DraggableSession, UUID?) -> Void
 
@@ -87,32 +104,103 @@ struct TabReorderDropDelegate: DropDelegate {
     }
 
     func dropEntered(info: DropInfo) {
-        insertionIndex = TabReorderGeometry.insertionIndex(atX: info.location.x, orderedIDs: orderedIDs, frames: frames)
+        updateInsertion(atX: info.location.x)
+        guard droppedSession == nil,
+              let provider = info.itemProviders(for: [.agentChatSession]).first else {
+            return
+        }
+        _ = provider.loadDataRepresentation(
+            forTypeIdentifier: UTType.agentChatSession.identifier
+        ) { data, _ in
+            guard let data,
+                  let dropped = try? JSONDecoder().decode(
+                    DraggableSession.self,
+                    from: data
+                  ) else { return }
+            DispatchQueue.main.async {
+                // Ein später Callback nach dropExited/performDrop darf keinen
+                // bereits beendeten Drag wieder sichtbar machen.
+                guard insertionIndex != nil else { return }
+                let currentBeforeID = insertionBeforeID
+                droppedSession = dropped
+                setInsertion(
+                    before: normalizeBeforeID(dropped, currentBeforeID)
+                )
+            }
+        }
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        insertionIndex = TabReorderGeometry.insertionIndex(atX: info.location.x, orderedIDs: orderedIDs, frames: frames)
+        updateInsertion(atX: info.location.x)
         // .move → System zeigt kein grünes Copy-Plus mehr.
         return DropProposal(operation: .move)
     }
 
     func dropExited(info: DropInfo) {
         insertionIndex = nil
+        insertionBeforeID = nil
+        droppedSession = nil
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        let index = TabReorderGeometry.insertionIndex(atX: info.location.x, orderedIDs: orderedIDs, frames: frames)
+        let rawBeforeID = beforeID(atX: info.location.x)
         insertionIndex = nil
-        guard let provider = info.itemProviders(for: [.agentChatSession]).first else { return false }
-        let beforeID: UUID? = index < orderedIDs.count ? orderedIDs[index] : nil
+        insertionBeforeID = nil
+
+        if let droppedSession {
+            let beforeID = normalizeBeforeID(droppedSession, rawBeforeID)
+            self.droppedSession = nil
+            onMove(droppedSession, beforeID)
+            return true
+        }
+
+        guard let provider = info.itemProviders(for: [.agentChatSession]).first else {
+            return false
+        }
         let move = onMove
-        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.agentChatSession.identifier) { data, _ in
-            guard let data, let dropped = try? JSONDecoder().decode(DraggableSession.self, from: data) else { return }
+        let normalize = normalizeBeforeID
+        _ = provider.loadDataRepresentation(
+            forTypeIdentifier: UTType.agentChatSession.identifier
+        ) { data, _ in
+            guard let data,
+                  let dropped = try? JSONDecoder().decode(
+                    DraggableSession.self,
+                    from: data
+                  ) else { return }
             DispatchQueue.main.async {
-                move(dropped, beforeID)
+                move(dropped, normalize(dropped, rawBeforeID))
             }
         }
         return true
+    }
+
+    private func updateInsertion(atX x: CGFloat) {
+        let rawBeforeID = beforeID(atX: x)
+        if let droppedSession {
+            setInsertion(
+                before: normalizeBeforeID(droppedSession, rawBeforeID)
+            )
+        } else {
+            setInsertion(before: rawBeforeID)
+        }
+    }
+
+    private func setInsertion(before beforeID: UUID?) {
+        insertionBeforeID = beforeID
+        insertionIndex = index(before: beforeID)
+    }
+
+    private func beforeID(atX x: CGFloat) -> UUID? {
+        let rawIndex = TabReorderGeometry.insertionIndex(
+            atX: x,
+            orderedIDs: orderedIDs,
+            frames: frames
+        )
+        return rawIndex < orderedIDs.count ? orderedIDs[rawIndex] : nil
+    }
+
+    private func index(before beforeID: UUID?) -> Int {
+        beforeID.flatMap(orderedIDs.firstIndex(of:)) ?? orderedIDs.count
     }
 }
 

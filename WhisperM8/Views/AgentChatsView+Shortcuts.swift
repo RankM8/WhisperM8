@@ -12,7 +12,7 @@ extension AgentChatsView {
     /// konsistent mit den ⌘1–⌘9-Sprüngen. Das Setzen von `selectedSessionID`
     /// triggert die bestehende UIState-Persistenz via `onChange`.
     private func selectAdjacentTab(_ direction: Int) {
-        let order = headerTabs.map(\.id)
+        let order = visualTabOrderIDs
         if let next = adjacentTabID(in: order, current: selectedSessionID, direction: direction) {
             selectedSessionID = next
             multiSelection = []
@@ -152,7 +152,7 @@ extension AgentChatsView {
             // Event wird trotzdem konsumiert (No-op), damit kein Tab-Byte im
             // Terminal landet.
             tabSwitcher = TabSwitcherModel.begin(
-                order: headerTabs.map(\.id),
+                order: visualTabOrderIDs,
                 current: selectedSession?.id,
                 direction: direction
             )
@@ -160,20 +160,20 @@ extension AgentChatsView {
         }
 
         if let direction {
-            tabSwitcher?.advance(direction, order: headerTabs.map(\.id))
+            tabSwitcher?.advance(direction, order: visualTabOrderIDs)
             return nil
         }
         switch event.keyCode {
         case TerminalShortcut.KeyCode.leftArrow:
-            tabSwitcher?.advance(-1, order: headerTabs.map(\.id))
+            tabSwitcher?.advance(-1, order: visualTabOrderIDs)
         case TerminalShortcut.KeyCode.rightArrow:
-            tabSwitcher?.advance(+1, order: headerTabs.map(\.id))
+            tabSwitcher?.advance(+1, order: visualTabOrderIDs)
         case TabSwitcherShortcut.KeyCode.upArrow:
             // Eine Grid-Reihe hoch/runter: Schrittweite = Spaltenzahl des
             // Karten-Grids (vom Overlay gemeldet), Wrap-around inklusive.
-            tabSwitcher?.advance(-max(1, tabSwitcherColumns), order: headerTabs.map(\.id))
+            tabSwitcher?.advance(-max(1, tabSwitcherColumns), order: visualTabOrderIDs)
         case TabSwitcherShortcut.KeyCode.downArrow:
-            tabSwitcher?.advance(+max(1, tabSwitcherColumns), order: headerTabs.map(\.id))
+            tabSwitcher?.advance(+max(1, tabSwitcherColumns), order: visualTabOrderIDs)
         case TabSwitcherShortcut.KeyCode.escape:
             cancelTabSwitcher()
         case TerminalShortcut.KeyCode.returnKey:
@@ -217,7 +217,7 @@ extension AgentChatsView {
         // `onChange(of: selectedSessionID)`-Cancel (Klick in Sidebar/Strip
         // bricht den Switcher ab) darf den eigenen Commit nicht anfassen.
         tabSwitcher = nil
-        guard let target = switcher.commitTarget(order: headerTabs.map(\.id)) else { return }
+        guard let target = switcher.commitTarget(order: visualTabOrderIDs) else { return }
         selectedSessionID = target
         multiSelection = []
     }
@@ -375,7 +375,7 @@ extension AgentChatsView {
     /// `TerminalScrollGuard`) → ein Tab nach links, sonst nach rechts. Das
     /// System-„natürliches Scrollen" steckt bereits im Vorzeichen von `delta`.
     private func handleTabStripScroll(_ event: NSEvent) -> NSEvent? {
-        let tabs = headerTabs
+        let tabs = visibleHeaderTabs
         // Gating per Hover-Flag statt Koordinaten-Hit-Test: nur Events
         // konsumieren, während die Maus über dem Strip schwebt. Echtes Mausrad
         // (`hasPreciseScrollingDeltas == false`) übersetzen wir in Tab-Schritte;
@@ -416,6 +416,8 @@ extension AgentChatsView {
         guard tabDragEndMonitor == nil else { return }
         tabDragEndMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
             if tabInsertionIndex != nil { tabInsertionIndex = nil }
+            if tabInsertionBeforeID != nil { tabInsertionBeforeID = nil }
+            if tabDropSession != nil { tabDropSession = nil }
             return event
         }
     }

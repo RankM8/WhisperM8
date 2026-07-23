@@ -44,4 +44,18 @@ final class TabGroupReorderTests: XCTestCase {
             order
         )
     }
+
+    func testTabOrderReordersSingleAgainstVisualOrder() {
+        XCTAssertEqual(
+            TabOrderReorder.newOrder([a, c, b], moving: [b], before: a),
+            [b, a, c]
+        )
+    }
+
+    func testTabOrderReordersSelectionAsVisualBlock() {
+        XCTAssertEqual(
+            TabOrderReorder.newOrder([a, c, b, d], moving: [c, d], before: a),
+            [c, d, a, b]
+        )
+    }
 }
