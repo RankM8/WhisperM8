@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperM8 · Sidebar-Redesign — 4 Varianten</title>
+<style>
+/* ============================================================
+   TOKENS — an der echten App kalibriert (Light Mode), plus
+   redesign-eigene Akzente. Schrift bleibt bewusst SF Pro:
+   native macOS-App, Identität kommt aus Struktur, nicht Font.
+   ============================================================ */
+:root{
+  --font-ui:-apple-system,"SF Pro Text","Helvetica Neue",sans-serif;
+  --font-mono:"SF Mono",ui-monospace,Menlo,monospace;
+
+  --bg-toolbar:#f5f5f6;
+  --bg-sidebar:#f2f2f3;
+  --bg-header:#fbfbfc;
+  --bg-pane:#ffffff;
+  --bg-input:rgba(0,0,0,.05);
+  --border:#e4e4e7;
+
+  --tx-1:#1c1c1e;
+  --tx-2:#6e6e73;
+  --tx-3:#9b9ba1;
+
+  --ok:#34c759;
+  --busy:#ff9f0a;
+  --wait:#5e5ce6;
+  --idle:#c9c9ce;
+  --accent:#4f46e5;
+
+  --toolbar-h:38px;
+  --tab-h:28px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  font-family:var(--font-ui);font-size:13px;color:var(--tx-1);
+  background:#e9e9ec;display:flex;flex-direction:column;
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+
+/* ============================================================
+   META-LEISTE (nicht Teil der App): Variantenwahl + Konzepttext
+   ============================================================ */
+.meta{
+  flex:none;display:flex;align-items:center;gap:14px;
+  padding:10px 18px;background:#1c1c1e;color:#e5e5ea;
+}
+.meta .brand{font-size:12px;font-weight:700;letter-spacing:.05em;color:#9b9ba1;}
+.vtabs{display:flex;gap:4px;}
+.vtab{
+  padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;
+  color:#b9b9c0;cursor:pointer;user-select:none;border:1px solid transparent;
+}
+.vtab:hover{background:rgba(255,255,255,.07);}
+.vtab.on{background:#fff;color:#1c1c1e;}
+.meta .desc{font-size:12px;color:#9b9ba1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.meta .desc b{color:#e5e5ea;font-weight:600;}
+
+/* ============================================================
+   FENSTER-MOCKUP
+   ============================================================ */
+.window{flex:1;min-height:0;display:flex;flex-direction:column;background:#fff;}
+.toolbar{
+  height:var(--toolbar-h);flex:none;background:var(--bg-toolbar);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:6px;padding:0 10px;
+}
+.traffic{display:flex;gap:7px;flex:none;margin-right:4px;}
+.traffic i{width:12px;height:12px;border-radius:50%;}
+.traffic i:nth-child(1){background:#ff5f57;}
+.traffic i:nth-child(2){background:#febc2e;}
+.traffic i:nth-child(3){background:#28c840;}
+.sysstat{flex:none;font-size:11px;color:var(--tx-2);border:1px solid rgba(0,0,0,.12);
+  border-radius:6px;padding:2px 8px;background:rgba(255,255,255,.6);}
+.strip-sep{flex:none;}
+.sb-toggle{flex:none;color:var(--tx-2);font-size:13px;padding:2px 4px;}
+
+/* ---- Tab-Strip (geteilt; Gruppen-Grammatik aus Tab-Gruppen-Mockup) ---- */
+.tabs{flex:1;min-width:0;display:flex;align-items:center;gap:2px;overflow-x:auto;scrollbar-width:none;}
+.tabs::-webkit-scrollbar{height:0;}
+.tab{
+  height:var(--tab-h);display:flex;align-items:center;gap:6px;
+  padding:0 10px;border-radius:7px;color:var(--tx-2);
+  flex:0 1 auto;min-width:0;max-width:190px;cursor:default;position:relative;white-space:nowrap;
+}
+.tab:hover{background:rgba(0,0,0,.045);}
+.tab.active{background:#fff;color:var(--tx-1);
+  box-shadow:0 1px 2.5px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.05);}
+.tab .title{font-size:12px;overflow:hidden;text-overflow:ellipsis;}
+.tab .close{flex:none;color:var(--tx-3);font-size:11px;margin-left:2px;}
+.chip{flex:none;width:17px;height:17px;border-radius:5px;display:grid;place-items:center;
+  font-size:10px;font-weight:700;color:#fff;}
+.dot{flex:none;width:6px;height:6px;border-radius:50%;}
+.dot.ok{background:var(--ok);} .dot.busy{background:var(--busy);}
+.dot.idle{background:var(--idle);} .dot.wait{background:var(--wait);}
+.grp{display:flex;align-items:center;gap:2px;flex:none;padding:0 3px;border-radius:9px;}
+.grp-pill{flex:none;height:20px;display:flex;align-items:center;gap:5px;border-radius:10px;
+  padding:0 9px;font-size:10.5px;font-weight:600;color:#fff;background:var(--grp-color);
+  cursor:pointer;user-select:none;max-width:170px;}
+.grp-pill .cnt{opacity:.75;font-weight:500;}
+.grp .tab::after{content:"";position:absolute;left:5px;right:5px;bottom:-1px;height:2px;
+  border-radius:1px;background:var(--grp-color);opacity:.85;}
+.grp.collapsed .tab:not(.active){display:none;}
+.grp.collapsed{background:color-mix(in srgb,var(--grp-color) 8%,transparent);}
+.newtab{flex:none;color:var(--tx-2);font-size:15px;padding:0 7px;}
+.tool-ic{flex:none;color:var(--tx-2);font-size:13px;padding:2px 6px;}
+
+.wbody{flex:1;min-height:0;display:flex;}
+
+/* ---- Content-Platzhalter (abgedimmt — Fokus liegt links) ---- */
+.content{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg-pane);}
+.chat-h{flex:none;display:flex;align-items:center;gap:8px;padding:9px 16px;
+  background:var(--bg-header);border-bottom:1px solid var(--border);}
+.chat-h .name{font-size:14px;font-weight:700;}
+.chat-h .sub{font-size:11px;color:var(--tx-3);}
+.term{flex:1;padding:14px 24px;font-family:var(--font-mono);font-size:12px;line-height:1.6;
+  color:#8a8a90;white-space:pre-wrap;}
+
+/* ============================================================
+   SIDEBAR — GEMEINSAMER RAHMEN
+   ============================================================ */
+.sidebar{flex:none;background:var(--bg-sidebar);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;}
+.sb-scroll{flex:1;overflow-y:auto;padding:2px 8px 10px;}
+.sb-scroll::-webkit-scrollbar{width:0;}
+.sb-foot{flex:none;border-top:1px solid var(--border);display:flex;align-items:center;
+  gap:12px;padding:8px 14px;color:var(--tx-2);font-size:12px;}
+.sb-foot .icons{margin-left:auto;display:flex;gap:12px;color:var(--tx-3);}
+
+.sb-top{padding:10px 14px 6px;display:flex;flex-direction:column;gap:8px;flex:none;}
+.newchat{display:flex;align-items:center;gap:8px;background:#fff;
+  border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:6px 10px;font-weight:500;font-size:13px;}
+.newchat .chip{width:16px;height:16px;font-size:9px;background:#3b82f6;}
+.newchat .kbd{margin-left:auto;color:var(--tx-3);font-size:11px;font-weight:400;}
+.filter{background:var(--bg-input);border-radius:7px;padding:5px 9px;color:var(--tx-3);font-size:12px;}
+.seg{display:flex;align-items:center;background:var(--bg-input);border-radius:7px;padding:2px;}
+.seg span{flex:1;text-align:center;padding:3px 0;font-size:12px;color:var(--tx-2);border-radius:5px;}
+.seg span.on{background:#fff;color:var(--tx-1);box-shadow:0 1px 2px rgba(0,0,0,.1);}
+.sb-count{display:flex;justify-content:space-between;font-size:11px;color:var(--tx-3);padding:0 2px;}
+
+.avatar{flex:none;border-radius:5px;display:grid;place-items:center;font-weight:700;color:#fff;}
+.subchip{flex:none;font-size:10px;color:var(--tx-3);}
+.slot{flex:none;font-size:9.5px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;}
+.meta-t{flex:none;font-size:10.5px;color:var(--tx-3);font-variant-numeric:tabular-nums;}
+.branch{flex:none;font-size:10px;color:var(--tx-3);font-family:var(--font-mono);}
+.pulse{animation:pulse 1.6s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ============================================================
+   VARIANTE A — „ZONEN": verfeinerter Ist-Zustand.
+   Workspace-Spine (Farbleiste Header→Mitglieder), Sticky-Header,
+   ⊞-Querverweis statt Duplikat-Verwirrung in CHATS.
+   ============================================================ */
+.vA .sidebar{width:300px;}
+.vA .sect{position:sticky;top:0;z-index:2;background:var(--bg-sidebar);
+  display:flex;align-items:center;gap:5px;padding:12px 6px 4px;
+  font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tx-3);}
+.vA .sect .plus{margin-left:auto;font-weight:400;font-size:13px;cursor:pointer;}
+.vA .row{height:26px;display:flex;align-items:center;gap:7px;padding:0 6px;
+  border-radius:6px;min-width:0;position:relative;}
+.vA .row:hover{background:rgba(0,0,0,.04);}
+.vA .row.sel{background:#dcdce1;}
+.vA .row .title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;}
+.vA .row.head{height:29px;}
+.vA .row.head .title{font-weight:600;}
+.vA .wsblock{position:relative;margin-bottom:2px;}
+.vA .wsblock::before{content:"";position:absolute;left:1px;top:6px;bottom:4px;width:2.5px;
+  border-radius:2px;background:var(--ws-color);opacity:.75;}
+.vA .wsblock .row{padding-left:12px;}
+.vA .wsblock .row.head{padding-left:9px;}
+.vA .row .avatar{width:16px;height:16px;font-size:9px;}
+.vA .row.indent{padding-left:30px;}
+.vA .row.indent .avatar{width:14px;height:14px;font-size:8px;}
+.vA .xref{flex:none;font-size:8.5px;font-weight:700;color:var(--ws-color,#666);
+  border:1px solid color-mix(in srgb,var(--ws-color,#666) 45%,transparent);
+  border-radius:3px;padding:0 3px;letter-spacing:.02em;}
+.vA .row .dot{margin-left:auto;}
+.vA .row .dot.inrow{margin-left:0;}
+
+/* ============================================================
+   VARIANTE B — „STATUSBOARD": Aufmerksamkeit zuerst.
+   Sektionen nach Zustand (Wartet auf dich / Arbeitet / Ruht),
+   Herkunfts-Chip pro Zeile, Struktur bleibt als 2. Ansicht.
+   ============================================================ */
+.vB .sidebar{width:312px;}
+.vB .mode{display:flex;background:var(--bg-input);border-radius:7px;padding:2px;margin:0 0 2px;}
+.vB .mode span{flex:1;text-align:center;padding:3px 0;font-size:11.5px;color:var(--tx-2);border-radius:5px;cursor:pointer;}
+.vB .mode span.on{background:#fff;color:var(--tx-1);box-shadow:0 1px 2px rgba(0,0,0,.1);font-weight:600;}
+.vB .stat-h{display:flex;align-items:center;gap:7px;padding:14px 6px 5px;
+  font-size:10px;font-weight:700;letter-spacing:.07em;}
+.vB .stat-h .n{margin-left:auto;font-weight:600;color:var(--tx-3);font-variant-numeric:tabular-nums;}
+.vB .stat-h.wait{color:var(--wait);} .vB .stat-h.busy{color:#c77700;} .vB .stat-h.rest{color:var(--tx-3);}
+.vB .stat-h .led{width:7px;height:7px;border-radius:50%;}
+.vB .stat-h.wait .led{background:var(--wait);}
+.vB .stat-h.busy .led{background:var(--busy);}
+.vB .stat-h.rest .led{background:var(--idle);}
+.vB .row{min-height:30px;display:flex;align-items:center;gap:8px;padding:2px 7px;
+  border-radius:7px;min-width:0;border-left:2.5px solid transparent;}
+.vB .row:hover{background:rgba(0,0,0,.04);}
+.vB .row.sel{background:#dcdce1;}
+.vB .row.wait{border-left-color:var(--wait);background:color-mix(in srgb,var(--wait) 5%,transparent);margin-bottom:2px;}
+.vB .row.busy{border-left-color:var(--busy);}
+.vB .row .avatar{width:16px;height:16px;font-size:9px;}
+.vB .row .tcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.vB .row .title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;}
+.vB .row.wait .title{font-weight:600;}
+.vB .row .origin{font-size:10px;color:var(--tx-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vB .row .origin b{font-weight:600;color:var(--ws-color,var(--tx-2));}
+.vB .row .meta-t{align-self:center;}
+.vB .rest-list .row{min-height:26px;}
+.vB .rest-list .row .origin{display:none;}
+.vB .cta{font-size:10.5px;color:var(--tx-3);padding:2px 7px 0;}
+
+/* ============================================================
+   VARIANTE C — „RAIL": Kontext-Rail (Arc-artig).
+   Workspaces + Projekte als Rail-Icons, Panel zeigt NUR den
+   aktiven Kontext. Breite 44 + 248 statt 395.
+   ============================================================ */
+.vC .sidebar{width:292px;flex-direction:row;padding:0;}
+.vC .rail{width:44px;flex:none;background:#e9e9ec;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0;}
+.vC .rail .ric{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  font-size:12px;font-weight:700;color:#fff;cursor:pointer;position:relative;flex:none;}
+.vC .rail .ric.util{background:transparent;color:var(--tx-2);font-size:14px;font-weight:400;}
+.vC .rail .ric.util:hover{background:rgba(0,0,0,.06);}
+.vC .rail .ric .st{position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border-radius:50%;
+  border:2px solid #e9e9ec;}
+.vC .rail .ric.on::before{content:"";position:absolute;left:-7px;top:6px;bottom:6px;width:3px;
+  border-radius:2px;background:var(--tx-1);}
+.vC .rail .sep{width:22px;height:1px;background:rgba(0,0,0,.12);margin:2px 0;flex:none;}
+.vC .panel{flex:1;min-width:0;display:flex;flex-direction:column;}
+.vC .ctx-h{flex:none;padding:12px 12px 8px;display:flex;flex-direction:column;gap:2px;}
+.vC .ctx-h .l1{display:flex;align-items:center;gap:7px;}
+.vC .ctx-h .nm{font-size:13px;font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vC .ctx-h .grid{font-size:12px;color:var(--tx-2);cursor:pointer;}
+.vC .ctx-h .sub{font-size:11px;color:var(--tx-3);}
+.vC .panel .filter{margin:0 10px 6px;}
+.vC .row{height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;margin:0 6px;
+  border-radius:6px;min-width:0;}
+.vC .row:hover{background:rgba(0,0,0,.04);}
+.vC .row.sel{background:#dcdce1;}
+.vC .row .title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;}
+.vC .row .dot{margin-left:auto;}
+.vC .mini-sect{padding:12px 14px 4px;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tx-3);}
+
+/* ============================================================
+   VARIANTE D — „DENSE TREE": IDE-dicht, 22px-Zeilen,
+   Spalten-Layout (Status | Slot | Zeit rechtsbündig),
+   Guide-Lines, alles sichtbar, Tastatur-Hints.
+   ============================================================ */
+.vD .sidebar{width:322px;}
+.vD{--rowh:22px;}
+.vD .sb-top{padding:8px 12px 4px;gap:6px;}
+.vD .sect{display:flex;align-items:center;gap:5px;padding:10px 6px 3px;
+  font-size:9.5px;font-weight:700;letter-spacing:.07em;color:var(--tx-3);}
+.vD .sect .n{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums;}
+.vD .row{height:var(--rowh);display:flex;align-items:center;gap:6px;padding:0 6px;
+  border-radius:5px;min-width:0;position:relative;font-size:11.5px;}
+.vD .row:hover{background:rgba(0,0,0,.045);}
+.vD .row.sel{background:#d7d7dd;}
+.vD .row .title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vD .row.head .title{font-weight:600;font-size:11.5px;}
+.vD .row .avatar{width:14px;height:14px;font-size:8px;border-radius:4px;}
+.vD .tree{position:relative;}
+.vD .tree::before{content:"";position:absolute;left:12px;top:0;bottom:2px;width:1px;
+  background:rgba(0,0,0,.1);}
+.vD .tree .row{padding-left:24px;}
+.vD .cols{flex:none;display:flex;align-items:center;gap:6px;width:74px;justify-content:flex-end;}
+.vD .cols .meta-t{width:26px;text-align:right;font-size:10px;}
+.vD .cols .slot{width:16px;text-align:right;}
+.vD .cols .dot{width:5.5px;height:5.5px;}
+.vD .kbd-hint{margin-top:auto;padding:6px 12px;font-size:10px;color:var(--tx-3);
+  display:flex;gap:10px;border-top:1px dashed var(--border);}
+.vD .kbd-hint b{font-weight:600;color:var(--tx-2);font-family:var(--font-mono);font-size:9.5px;}
+
+/* ============================================================
+   Feature-Paritäts-Panel (Meta-UI, unten links)
+   ============================================================ */
+.parity{
+  position:fixed;left:16px;bottom:16px;z-index:50;max-width:420px;
+  background:rgba(28,28,30,.94);color:#d8d8dd;border-radius:12px;
+  padding:12px 14px;font-size:11.5px;line-height:1.5;box-shadow:0 6px 24px rgba(0,0,0,.35);
+}
+.parity .h{font-size:10px;font-weight:700;letter-spacing:.07em;color:#9b9ba1;margin-bottom:6px;}
+.parity .chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;}
+.parity .c{font-size:10px;padding:2px 7px;border-radius:9px;background:rgba(52,199,89,.16);
+  color:#7be09a;border:1px solid rgba(52,199,89,.25);}
+.parity .c.note{background:rgba(255,159,10,.14);color:#ffc46b;border-color:rgba(255,159,10,.3);}
+.parity p{color:#b9b9c0;}
+.parity p b{color:#fff;}
+.parity .toggle{position:absolute;top:8px;right:10px;cursor:pointer;color:#9b9ba1;font-size:11px;}
+.parity.min{padding:8px 12px;} .parity.min .body{display:none;}
+</style>
+</head>
+<body>
+
+<!-- ===================== Meta: Variantenwahl ===================== -->
+<div class="meta">
+  <span class="brand">SIDEBAR-REDESIGN</span>
+  <div class="vtabs" id="vtabs">
+    <span class="vtab on" data-v="A">A · Zonen</span>
+    <span class="vtab" data-v="B">B · Statusboard</span>
+    <span class="vtab" data-v="C">C · Rail</span>
+    <span class="vtab" data-v="D">D · Dense Tree</span>
+  </div>
+  <span class="desc" id="vdesc"></span>
+</div>
+
+<!-- ===================== Fenster ===================== -->
+<div class="window vA" id="win">
+  <div class="toolbar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="sysstat">⌸ 11 · 54.5% · 1.74 GB</div>
+    <div class="strip-sep" id="stripSep"></div>
+    <div class="sb-toggle">⊡</div>
+    <div class="tabs" id="tabs"></div>
+    <div class="tool-ic" style="margin-left:auto;">⊞</div>
+  </div>
+
+  <div class="wbody">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <div class="content">
+      <div class="chat-h">
+        <div>
+          <div class="name">Claude Chat</div>
+          <div class="sub">whisperm8 · ⑂ main · /Users/giulianocosta/repos/whisperm8</div>
+        </div>
+      </div>
+      <div class="term">● Content-Bereich abgedimmt — der Fokus dieser Mockups liegt auf
+  Tab-Leiste und Sidebar. Alle vier Varianten rendern aus DEMSELBEN
+  Datenmodell (Feature-Parität unten links pro Variante).</div>
+    </div>
+  </div>
+</div>
+
+<div class="parity" id="parity">
+  <span class="toggle" id="parityToggle">einklappen</span>
+  <div class="h" id="parityTitle"></div>
+  <div class="body" id="parityBody"></div>
+</div>
+
+<script>
+/* ============================================================
+   GEMEINSAMES DATENMODELL — aus den echten Screens abgenommen.
+   Jede Variante rendert NUR hieraus → nichts kann „verloren gehen".
+   ============================================================ */
+const WORKSPACES = [
+  { id:'ws-akq', name:'AKQ · ListM8 · Heartbeat', initial:'A', color:'#3f3f46', cap:4 },
+  { id:'ws-w8',  name:'WhisperM8 – GPT, Skills',  initial:'W', color:'#3b82f6', cap:4 },
+];
+const PROJECTS = {
+  akquise:   { name:'akquise-ai',       initial:'a', color:'#1d1d1f', branch:'feat/spri…2026-07' },
+  listm8:    { name:'ListM8',           initial:'L', color:'#0ea5e9', branch:'redesign' },
+  whisperm8: { name:'whisperm8',        initial:'W', color:'#3b82f6', branch:'main' },
+  heartbeat: { name:'heartbeat-master', initial:'H', color:'#e8590c', branch:'feat…lysis' },
+  copy:      { name:'Copy',             initial:'C', color:'#15aabf', branch:'main' },
+};
+/* status: ok=läuft/fertig-grün, busy=arbeitet, wait=wartet auf Input, idle */
+const SESSIONS = [
+  { id:'s1', title:'AKQ Kunden-Weg – Sprint-QA',        project:'akquise',   ws:'ws-akq', slot:1, sub:22, status:'idle', time:'16m' },
+  { id:'s2', title:'ListM8 Review-Queue',               project:'listm8',    ws:'ws-akq', slot:2, sub:12, status:'wait', time:'jetzt' },
+  { id:'s3', title:'Heartbeat Slack-Tagesbericht',      project:'heartbeat', ws:'ws-akq', slot:3, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s4', title:'Jarvis – Projektsteuerung A',       project:'whisperm8', ws:'ws-akq', slot:4, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s5', title:'WhisperM8 GPT-Fast-Modelle',        project:'whisperm8', ws:'ws-w8',  slot:1, sub:18, status:'idle', time:'30m' },
+  { id:'s6', title:'WhisperM8 Agent-Chats-Audit',       project:'whisperm8', ws:'ws-w8',  slot:2, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s7', title:'WhisperM8 GPT-Workflows',           project:'whisperm8', ws:'ws-w8',  slot:3, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s8', title:'Jarvis – Projektsteuerung W',       project:'whisperm8', ws:'ws-w8',  slot:4, sub:0,  status:'ok',   time:'jetzt' },
+  { id:'s9', title:'Podologie-Scraping DACH v2',        project:'listm8',    ws:null,     slot:0, sub:0,  status:'idle', time:'jetzt' },
+  { id:'s10',title:'Claude Chat',                       project:'whisperm8', ws:null,     slot:0, sub:0,  status:'ok',   time:'jetzt', sel:true },
+  { id:'s11',title:'MCP-Server konsolidieren',          project:'heartbeat', ws:null,     slot:0, sub:3,  status:'idle', time:'4h' },
+  { id:'s12',title:'Wolanin SEO-Nachholplan',           project:'copy',      ws:null,     slot:0, sub:39, status:'idle', time:'1d' },
+];
+const PINNED = [
+  { title:'Tägliche Reporting-Pipeline au…', proj:'heartbeat', time:'5h' },
+  { title:'Steuer 2024', proj:'listm8', time:'3w' },
+  { title:'Steuer 2025', proj:'listm8', time:'1w' },
+  { title:'Fitagon Meta-Ads Crea…', proj:'copy', sub:53, time:'1d' },
+];
+const OPEN_TABS = ['s5','s6','s7','s9','s10','s3','s8'];
+
+const S = { variant:'A', activeTab:'s10', collapsedGroups:new Set(), railCtx:'ws-w8', bMode:'status' };
+
+const ws = id => WORKSPACES.find(w => w.id === id);
+const pj = id => PROJECTS[id];
+const dotCls = s => ({ok:'ok',busy:'busy pulse',wait:'wait pulse',idle:'idle'})[s];
+
+/* ============================================================
+   TAB-STRIP (geteilt) — Gruppen: Workspace schlägt Projekt, ≥2.
+   ============================================================ */
+function renderTabs(){
+  const host = document.getElementById('tabs');
+  host.innerHTML = '';
+  const tabs = OPEN_TABS.map(id => SESSIONS.find(s => s.id === id));
+  const key = t => t.ws ? 'ws:'+t.ws : 'pj:'+t.project;
+  const counts = {};
+  tabs.forEach(t => counts[key(t)] = (counts[key(t)]||0)+1);
+  const emitted = new Set();
+
+  const mkTab = t => {
+    const p = pj(t.project);
+    const el = document.createElement('div');
+    el.className = 'tab' + (t.id === S.activeTab ? ' active' : '');
+    el.innerHTML = `<span class="chip" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+      <span class="title">${t.title}</span>` +
+      (t.id === S.activeTab ? `<span class="close">✕</span>` : `<span class="dot ${dotCls(t.status)}"></span>`);
+    el.onclick = () => { S.activeTab = t.id; render(); };
+    return el;
+  };
+
+  tabs.forEach(t => {
+    const k = key(t);
+    if (counts[k] < 2) { host.appendChild(mkTab(t)); return; }
+    if (emitted.has(k)) return;
+    emitted.add(k);
+    const members = tabs.filter(x => key(x) === k);
+    const meta = k.startsWith('ws:')
+      ? { icon:'⊞', name:ws(k.slice(3)).name, color:ws(k.slice(3)).color }
+      : { icon:'▤', name:pj(k.slice(3)).name, color:pj(k.slice(3)).color };
+    const g = document.createElement('div');
+    g.className = 'grp' + (S.collapsedGroups.has(k) ? ' collapsed' : '');
+    g.style.setProperty('--grp-color', meta.color);
+    const pill = document.createElement('div');
+    pill.className = 'grp-pill';
+    pill.innerHTML = `<span>${meta.icon}</span><span>${meta.name}</span><span class="cnt">${members.length}</span>`;
+    pill.onclick = e => { e.stopPropagation();
+      S.collapsedGroups.has(k) ? S.collapsedGroups.delete(k) : S.collapsedGroups.add(k); render(); };
+    g.appendChild(pill);
+    members.forEach(m => g.appendChild(mkTab(m)));
+    host.appendChild(g);
+  });
+  const plus = document.createElement('div');
+  plus.className = 'newtab'; plus.textContent = '+';
+  host.appendChild(plus);
+}
+
+/* ============================================================
+   BAUSTEINE
+   ============================================================ */
+const el = (cls, html) => { const d = document.createElement('div'); d.className = cls; if (html) d.innerHTML = html; return d; };
+function sbTop(host, compact){
+  const t = el('sb-top');
+  t.appendChild(el('newchat', `<span class="chip">W</span> Neuer Chat <span class="kbd">⌘N ⌄ ⟳</span>`));
+  t.appendChild(el('filter', '⌕ Filter…'));
+  if (!compact){
+    t.appendChild(el('seg', `<span class="on">Aktiv</span><span>Zuletzt</span><span>Alle</span><span style="flex:0 0 26px;">☰</span>`));
+    t.appendChild(el('sb-count', `<span>13 von 937 Chats</span><span>Alle zeigen</span>`));
+  }
+  host.appendChild(t);
+}
+function sbFoot(host){
+  host.appendChild(el('sb-foot', `⚙ Settings <span class="icons">▤ ✳ ◧ ⌗</span>`));
+}
+const subBadge = s => s.sub ? `<span class="subchip">› ${s.sub}</span>` : '';
+
+/* ============================================================
+   VARIANTE A — ZONEN
+   ============================================================ */
+function renderA(sb){
+  sbTop(sb);
+  const sc = el('sb-scroll');
+
+  sc.appendChild(el('sect','▾ ⌖ GEPINNT'));
+  PINNED.forEach(p => {
+    const pr = pj(p.proj);
+    sc.appendChild(el('row',
+      `<span class="avatar" style="width:16px;height:16px;font-size:9px;background:${pr.color}">${pr.initial.toUpperCase()}</span>
+       <span class="title">${p.title}</span>${p.sub?`<span class="subchip">› ${p.sub}</span>`:''}
+       <span class="meta-t">${p.time}</span>`));
+  });
+
+  sc.appendChild(el('sect','▾ ⊞ WORKSPACES <span class="plus">+</span>'));
+  WORKSPACES.forEach(w => {
+    const block = el('wsblock');
+    block.style.setProperty('--ws-color', w.color);
+    const members = SESSIONS.filter(s => s.ws === w.id);
+    block.appendChild(el('row head',
+      `<span class="avatar" style="width:16px;height:16px;font-size:9px;background:${w.color}">${w.initial}</span>
+       <span class="title">${w.name}</span><span class="meta-t">${members.length}/${w.cap} ⊞</span>`));
+    members.forEach(s => {
+      const p = pj(s.project);
+      block.appendChild(el('row indent' + (s.sel?' sel':''),
+        `<span class="avatar" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+         <span class="title">${s.title}</span>${subBadge(s)}
+         <span class="slot">S${s.slot}</span><span class="dot ${dotCls(s.status)}"></span>`));
+    });
+    sc.appendChild(block);
+  });
+
+  sc.appendChild(el('sect','▾ CHATS'));
+  Object.entries(PROJECTS).forEach(([pid, p]) => {
+    const all = SESSIONS.filter(s => s.project === pid);
+    if (!all.length) return;
+    sc.appendChild(el('row head',
+      `<span class="avatar" style="width:16px;height:16px;font-size:9px;background:${p.color}">${p.initial.toUpperCase()}</span>
+       <span class="title">${p.name}</span><span class="branch">⑂ ${p.branch}</span><span class="meta-t">${all.length}</span>`));
+    all.forEach(s => {
+      const w = s.ws ? ws(s.ws) : null;
+      const row = el('row indent' + (s.sel?' sel':''),
+        `<span class="dot inrow ${dotCls(s.status)}"></span>
+         <span class="title">${s.title}</span>${subBadge(s)}` +
+        (w ? `<span class="xref" style="--ws-color:${w.color}">⊞ S${s.slot}</span>`
+           : `<span class="meta-t">${s.time}</span>`));
+      sc.appendChild(row);
+    });
+  });
+  sb.appendChild(sc);
+  sbFoot(sb);
+}
+
+/* ============================================================
+   VARIANTE B — STATUSBOARD
+   ============================================================ */
+function originLine(s){
+  const p = pj(s.project);
+  if (s.ws){ const w = ws(s.ws);
+    return `<span class="origin" style="--ws-color:${w.color}"><b>⊞ ${w.name}</b> · S${s.slot}</span>`; }
+  return `<span class="origin">${p.name} · ⑂ ${p.branch}</span>`;
+}
+function renderB(sb){
+  sbTop(sb);
+  const sc = el('sb-scroll');
+  const mode = el('mode',
+    `<span class="${S.bMode==='status'?'on':''}" data-m="status">◉ Status</span>
+     <span class="${S.bMode==='struct'?'on':''}" data-m="struct">☰ Struktur</span>`);
+  mode.querySelectorAll('span').forEach(x => x.onclick = () => { S.bMode = x.dataset.m; render(); });
+  sc.appendChild(mode);
+
+  if (S.bMode === 'struct'){
+    sc.appendChild(el('cta','Struktur-Ansicht = Variante A (Zonen) — Umschalter bleibt oben.'));
+    sb.appendChild(sc); sbFoot(sb); return;
+  }
+
+  const waits = SESSIONS.filter(s => s.status==='wait');
+  const busy  = SESSIONS.filter(s => s.status==='busy');
+  const rest  = SESSIONS.filter(s => s.status!=='wait' && s.status!=='busy');
+
+  const rowB = (s, cls) => {
+    const p = pj(s.project);
+    return el('row '+cls+(s.sel?' sel':''),
+      `<span class="avatar" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+       <div class="tcol"><span class="title">${s.title}</span>${originLine(s)}</div>
+       ${subBadge(s)}<span class="meta-t">${s.time}</span>`);
+  };
+
+  sc.appendChild(el('stat-h wait', `<span class="led pulse"></span> WARTET AUF DICH <span class="n">${waits.length}</span>`));
+  waits.forEach(s => sc.appendChild(rowB(s,'wait')));
+
+  sc.appendChild(el('stat-h busy', `<span class="led pulse"></span> ARBEITET <span class="n">${busy.length}</span>`));
+  busy.forEach(s => sc.appendChild(rowB(s,'busy')));
+
+  sc.appendChild(el('stat-h rest', `<span class="led"></span> RUHT <span class="n">${rest.length + PINNED.length}</span>`));
+  const rl = el('rest-list');
+  rest.forEach(s => rl.appendChild(rowB(s,'')));
+  PINNED.forEach(p => {
+    const pr = pj(p.proj);
+    rl.appendChild(el('row',
+      `<span class="avatar" style="background:${pr.color}">${pr.initial.toUpperCase()}</span>
+       <div class="tcol"><span class="title">⌖ ${p.title}</span></div><span class="meta-t">${p.time}</span>`));
+  });
+  sc.appendChild(rl);
+  sb.appendChild(sc);
+  sbFoot(sb);
+}
+
+/* ============================================================
+   VARIANTE C — RAIL
+   ============================================================ */
+function ctxStatus(list){
+  if (list.some(s => s.status==='wait')) return 'wait';
+  if (list.some(s => s.status==='busy')) return 'busy';
+  return null;
+}
+function renderC(sb){
+  const rail = el('rail');
+  const mkIc = (id, color, initial, list, title) => {
+    const r = el('ric'+(S.railCtx===id?' on':''), initial);
+    r.style.background = color; r.title = title;
+    const st = ctxStatus(list);
+    if (st) r.innerHTML += `<span class="st dot ${dotCls(st)}" style="width:9px;height:9px;"></span>`;
+    r.onclick = () => { S.railCtx = id; render(); };
+    return r;
+  };
+  WORKSPACES.forEach(w => rail.appendChild(
+    mkIc(w.id, w.color, '⊞', SESSIONS.filter(s => s.ws===w.id), w.name)));
+  rail.appendChild(el('sep'));
+  Object.entries(PROJECTS).forEach(([pid,p]) => rail.appendChild(
+    mkIc('pj:'+pid, p.color, p.initial.toUpperCase(), SESSIONS.filter(s => s.project===pid && !s.ws), p.name)));
+  rail.appendChild(el('sep'));
+  const pin = el('ric util','⌖'); pin.title = 'Gepinnt'; pin.onclick = () => { S.railCtx='pinned'; render(); };
+  if (S.railCtx==='pinned') pin.classList.add('on');
+  rail.appendChild(pin);
+  const all = el('ric util','☰'); all.title = 'Alle Chats (937) — Filter & Archiv';
+  rail.appendChild(all);
+  sb.appendChild(rail);
+
+  const panel = el('panel');
+  let head, rows = [];
+  if (S.railCtx === 'pinned'){
+    head = { nm:'Gepinnt', sub:`${PINNED.length} projektübergreifend`, color:'#6e6e73', ic:'⌖' };
+    rows = PINNED.map(p => ({ title:p.title, proj:p.proj, time:p.time, sub:p.sub||0, status:'idle' }));
+  } else if (S.railCtx.startsWith('pj:')){
+    const pid = S.railCtx.slice(3), p = pj(pid);
+    const list = SESSIONS.filter(s => s.project===pid && !s.ws);
+    head = { nm:p.name, sub:`⑂ ${p.branch} · ${list.length} Chats`, color:p.color, ic:p.initial.toUpperCase() };
+    rows = list;
+  } else {
+    const w = ws(S.railCtx);
+    const list = SESSIONS.filter(s => s.ws===w.id);
+    head = { nm:w.name, sub:`${list.length}/${w.cap} Slots belegt`, color:w.color, ic:'⊞', grid:true };
+    rows = list;
+  }
+  const h = el('ctx-h');
+  h.appendChild(el('l1',
+    `<span class="avatar" style="width:18px;height:18px;font-size:10px;background:${head.color}">${head.ic}</span>
+     <span class="nm">${head.nm}</span>${head.grid?'<span class="grid">⊞ Grid</span>':''}<span class="grid">＋</span>`));
+  h.appendChild(el('sub', head.sub));
+  panel.appendChild(h);
+  panel.appendChild(el('filter','⌕ Filter…'));
+  rows.forEach(s => {
+    const p = pj(s.project || s.proj);
+    panel.appendChild(el('row'+(s.sel?' sel':''),
+      `<span class="avatar" style="width:15px;height:15px;font-size:8px;background:${p.color}">${p.initial.toUpperCase()}</span>
+       <span class="title">${s.title}</span>${subBadge(s)}
+       ${s.slot?`<span class="slot">S${s.slot}</span>`:''}
+       <span class="dot ${dotCls(s.status)}"></span>`));
+  });
+  panel.appendChild(el('mini-sect','ANDERE KONTEXTE → RAIL LINKS (Status-Punkte am Icon)'));
+  sb.appendChild(panel);
+}
+
+/* ============================================================
+   VARIANTE D — DENSE TREE
+   ============================================================ */
+function renderD(sb){
+  sbTop(sb, true);
+  const sc = el('sb-scroll');
+  const colsFor = s =>
+    `<div class="cols">${subBadge(s)}${s.slot?`<span class="slot">S${s.slot}</span>`:'<span class="slot"></span>'}
+     <span class="meta-t">${s.time}</span><span class="dot ${dotCls(s.status)}"></span></div>`;
+
+  sc.appendChild(el('sect','▾ GEPINNT <span class="n">4</span>'));
+  PINNED.forEach(p => {
+    const pr = pj(p.proj);
+    sc.appendChild(el('row',
+      `<span class="avatar" style="background:${pr.color}">${pr.initial.toUpperCase()}</span>
+       <span class="title">${p.title}</span>
+       <div class="cols">${p.sub?`<span class="subchip">› ${p.sub}</span>`:''}<span class="meta-t">${p.time}</span></div>`));
+  });
+
+  sc.appendChild(el('sect','▾ WORKSPACES <span class="n">2 · 8/8</span>'));
+  WORKSPACES.forEach(w => {
+    const members = SESSIONS.filter(s => s.ws===w.id);
+    sc.appendChild(el('row head',
+      `<span class="avatar" style="background:${w.color}">${w.initial}</span>
+       <span class="title">${w.name}</span><div class="cols"><span class="meta-t">${members.length}/${w.cap}</span><span class="slot">⊞</span></div>`));
+    const tree = el('tree');
+    members.forEach(s => tree.appendChild(el('row'+(s.sel?' sel':''),
+      `<span class="title">${s.title}</span>${colsFor(s)}`)));
+    sc.appendChild(tree);
+  });
+
+  sc.appendChild(el('sect','▾ CHATS <span class="n">12</span>'));
+  Object.entries(PROJECTS).forEach(([pid,p]) => {
+    const all = SESSIONS.filter(s => s.project===pid);
+    if (!all.length) return;
+    sc.appendChild(el('row head',
+      `<span class="avatar" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+       <span class="title">${p.name} <span class="branch">⑂ ${p.branch}</span></span>
+       <div class="cols"><span class="meta-t">${all.length}</span></div>`));
+    const tree = el('tree');
+    all.forEach(s => tree.appendChild(el('row'+(s.sel?' sel':''),
+      `<span class="title">${s.title}</span>${colsFor(s)}`)));
+    sc.appendChild(tree);
+  });
+
+  sb.appendChild(sc);
+  const kh = el('kbd-hint','<span><b>⌘1–9</b> Tab</span><span><b>⌘⇧A</b> Filter</span><span><b>⌥Klick</b> Multi</span><span><b>Space</b> Peek</span>');
+  sb.appendChild(kh);
+  sbFoot(sb);
+}
+
+/* ============================================================
+   PARITÄT + BESCHREIBUNGEN
+   ============================================================ */
+const DESCR = {
+  A: '<b>Zonen</b> — Ist-Struktur, verfeinert: Workspace-Farbleiste, Sticky-Header, ⊞S3-Querverweis statt Duplikat-Verwirrung.',
+  B: '<b>Statusboard</b> — Jarvis-Logik: „Wartet auf dich" zuerst, dann „Arbeitet", dann „Ruht". Struktur-Ansicht bleibt als 2. Modus.',
+  C: '<b>Rail</b> — Arc-artig: Kontexte (Workspaces/Projekte) als Icon-Rail, Panel zeigt nur den aktiven Kontext. ~100 pt schmaler.',
+  D: '<b>Dense Tree</b> — IDE-dicht: 22-px-Zeilen, rechtsbündige Spalten (Sub · Slot · Zeit · Status), Guide-Lines, Tastatur-Hints.',
+};
+const PARITY = {
+  A: { chips:['Gepinnt','Workspaces + Slots','Chats + Branch','Subagent-Counts','Status-Dots','Filter/Segmente','Footer','Tab-Gruppen'],
+       note:null,
+       text:'Kein Strukturwechsel — geringstes Regressionsrisiko. Der ⊞S3-Badge ersetzt nichts, er ergänzt: Workspace-Mitglieder bleiben in CHATS sichtbar, zeigen aber ihre Workspace-Heimat.' },
+  B: { chips:['Alle Chats erreichbar','Herkunft (Workspace/Projekt) pro Zeile','Subagent-Counts','Gepinnt (unter Ruht)','Struktur-Modus als Fallback'],
+       note:'Projekt-Gruppierung nur im Struktur-Modus',
+       text:'Sortierung nach Aufmerksamkeitsbedarf statt Struktur. Risiko: räumliches Gedächtnis („mein Chat war unten links") geht im Status-Modus verloren — darum der Modus-Umschalter.' },
+  C: { chips:['Workspaces + Slots','Projekte','Gepinnt (Rail-Icon)','Status am Rail-Icon','Filter pro Kontext','Grid-Öffnen'],
+       note:'Globale Liste nur über ☰ Alle',
+       text:'Stärkster Umbau, größter Platzgewinn. Risiko: kein Überblick über ALLE Chats gleichzeitig — Status-Punkte am Rail-Icon + Statusboard-Elemente müssten das auffangen.' },
+  D: { chips:['Alles aus A','+ ~40 % mehr Zeilen sichtbar','Spalten-Alignment','Tastatur-Hints'],
+       note:'Kleinere Klickflächen (22 px)',
+       text:'Für 937 Chats gedacht: maximale Dichte, tabellarische Ruhe durch rechtsbündige Spalten. Hover-Aktionen (✕, ＋) brauchen Präzision — eher Power-User-Modus als Default.' },
+};
+
+function renderParity(){
+  const p = PARITY[S.variant];
+  document.getElementById('parityTitle').textContent = 'FEATURE-PARITÄT — VARIANTE ' + S.variant;
+  document.getElementById('parityBody').innerHTML =
+    `<div class="chips">${p.chips.map(c=>`<span class="c">✓ ${c}</span>`).join('')}
+     ${p.note?`<span class="c note">⚠ ${p.note}</span>`:''}</div><p>${p.text}</p>`;
+  document.getElementById('vdesc').innerHTML = DESCR[S.variant];
+}
+
+/* ============================================================
+   RENDER-LOOP
+   ============================================================ */
+function render(){
+  const win = document.getElementById('win');
+  win.className = 'window v' + S.variant;
+  document.getElementById('stripSep').style.width =
+    ({A:'70px',B:'82px',C:'62px',D:'92px'})[S.variant];
+  renderTabs();
+  const sb = document.getElementById('sidebar');
+  sb.innerHTML = '';
+  ({A:renderA,B:renderB,C:renderC,D:renderD})[S.variant](sb);
+  renderParity();
+  document.querySelectorAll('.vtab').forEach(t =>
+    t.classList.toggle('on', t.dataset.v === S.variant));
+}
+document.querySelectorAll('.vtab').forEach(t =>
+  t.onclick = () => { S.variant = t.dataset.v; render(); });
+document.getElementById('parityToggle').onclick = () => {
+  const p = document.getElementById('parity');
+  p.classList.toggle('min');
+  document.getElementById('parityToggle').textContent =
+    p.classList.contains('min') ? 'aufklappen' : 'einklappen';
+};
+render();
+</script>
+</body>
+</html>

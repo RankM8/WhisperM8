@@ -1,0 +1,801 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperM8 — Chat-first Master Redesign</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #202126;
+    --muted: #72747d;
+    --faint: #9b9da5;
+    --line: #dedfe4;
+    --line-soft: #e9e9ed;
+    --canvas: #e8e8eb;
+    --sidebar: #f3f3f5;
+    --paper: #fbfbfc;
+    --white: #fefeff;
+    --indigo: #4f46e5;
+    --indigo-soft: #eeedff;
+    --green: #2da66d;
+    --orange: #d98324;
+    --violet: #8b5cf6;
+    --red: #d74d56;
+    --blue: #4b76d1;
+    --sidebar-width: 268px;
+    --radius: 9px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--canvas); color: var(--ink); }
+  body { min-height: 100vh; display: grid; place-items: center; padding: 20px; overflow: hidden; }
+  button, input { font: inherit; color: inherit; }
+  button { border: 0; }
+
+  .app-window {
+    width: min(1510px, calc(100vw - 40px));
+    height: min(944px, calc(100vh - 40px));
+    min-width: 900px;
+    min-height: 620px;
+    display: grid;
+    grid-template-rows: 36px minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid #c9cad0;
+    border-radius: 12px;
+    background: var(--paper);
+    box-shadow: 0 22px 65px rgb(37 38 44 / 15%), 0 2px 8px rgb(37 38 44 / 8%);
+  }
+
+  .titlebar {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    background: #ececef;
+    border-bottom: 1px solid #d5d6db;
+    user-select: none;
+  }
+
+  .window-zone { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-right: 1px solid var(--line); }
+  .traffic { display: flex; gap: 8px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #ff5f57; border: 1px solid #e14840; }
+  .traffic i:nth-child(2) { background: #febc2e; border: 1px solid #dea51e; }
+  .traffic i:nth-child(3) { background: #28c840; border: 1px solid #20aa35; }
+  .system-meter { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .system-meter .tiny-bars { letter-spacing: -1px; color: var(--green); }
+
+  .tabs-zone { display:flex; align-items:stretch; min-width:0; position:relative; background:#ececef; }
+  .tab-scroll { display:flex; align-items:stretch; gap:0; min-width:0; overflow:hidden; padding:0; flex:1; }
+  .tab-cluster { display:flex; align-items:stretch; gap:0; min-width:0; position:relative; }
+  .group-pill {
+    --group: var(--blue);
+    height:35px;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:0 7px;
+    border-radius:0;
+    border-right:1px solid rgb(85 87 96 / 12%);
+    background:transparent;
+    color:color-mix(in srgb, var(--group) 76%, #202126);
+    font-size:9px;
+    font-weight:650;
+    cursor:pointer;
+    white-space:nowrap;
+    position:relative;
+  }
+  .group-pill::before { content:""; position:absolute; left:0; right:0; top:0; height:2px; background:var(--group); opacity:.72; }
+  .group-pill:hover { background:color-mix(in srgb, var(--group) 9%, #ececef); }
+  .group-pill .count { opacity:.58; font-variant-numeric:tabular-nums; }
+  .group-pill .fold { font-size:7px; transition:transform 160ms cubic-bezier(.22,1,.36,1); }
+  .group-pill.closed .fold { transform:rotate(-90deg); }
+
+  .tab {
+    --group: transparent;
+    height:35px;
+    min-width:108px;
+    max-width:184px;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:0 8px;
+    border-radius:0;
+    border-right:1px solid rgb(85 87 96 / 9%);
+    border-bottom:2px solid color-mix(in srgb, var(--group) 74%, transparent);
+    background:transparent;
+    color:#5c5e67;
+    font-size:10px;
+    cursor:default;
+    position:relative;
+    white-space:nowrap;
+  }
+  .tab:hover { background:rgb(255 255 255 / 42%); color:var(--ink); }
+  .tab.active { color:var(--ink); z-index:2; }
+
+  /* Chrome: ruhige Flächen, Gruppenfarbe nur als feine Herkunftsmarke. */
+  .app-window[data-tab-style="chrome"] .group-pill { background:color-mix(in srgb, var(--group) 8%, #ececef); }
+  .app-window[data-tab-style="chrome"] .tab.active {
+    background:#f8f8fa;
+    box-shadow:inset 0 1px 0 rgb(255 255 255 / 82%), inset 1px 0 #d8d9de, inset -1px 0 #d8d9de;
+    border-bottom-color:var(--group);
+  }
+
+  /* Offen: der aktive Tab unterbricht die Titelleiste und geht direkt in Header/Content über. */
+  .app-window[data-tab-style="connected"] .group-pill { background:transparent; }
+  .app-window[data-tab-style="connected"] .group-pill::before { top:auto; bottom:0; height:2px; }
+  .app-window[data-tab-style="connected"] .tab { border-bottom-color:transparent; }
+  .app-window[data-tab-style="connected"] .tab.active {
+    background:#f9f9fa;
+    border-radius:5px 5px 0 0;
+    box-shadow:inset 0 1px #d7d8dd, inset 1px 0 #d7d8dd, inset -1px 0 #d7d8dd;
+  }
+  .app-window[data-tab-style="connected"] .tab.active::after {
+    content:"";
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:-2px;
+    height:3px;
+    background:#f9f9fa;
+  }
+
+  /* Linie: maximale Reduktion ohne Tab-Flächen; Typo und Unterkante tragen die Auswahl. */
+  .app-window[data-tab-style="line"] .group-pill { color:#5e6068; border-right-color:transparent; }
+  .app-window[data-tab-style="line"] .group-pill::before { top:auto; bottom:0; height:2px; opacity:.85; }
+  .app-window[data-tab-style="line"] .tab { border-right-color:transparent; border-bottom-color:transparent; }
+  .app-window[data-tab-style="line"] .tab.active { background:transparent; font-weight:650; border-bottom-color:var(--indigo); box-shadow:none; }
+
+  .tab .avatar, .row-avatar, .project-avatar, .pane-avatar {
+    display:grid; place-items:center; flex:none; color:white; font-weight:700; letter-spacing:-.02em;
+  }
+  .tab .avatar { width:16px; height:16px; border-radius:4px; font-size:8px; }
+  .tab .label { overflow:hidden; text-overflow:ellipsis; }
+  .tab .tail { margin-left:auto; display:grid; place-items:center; width:12px; height:12px; flex:none; }
+  .status-dot { width:6px; height:6px; border-radius:50%; background:#a7a8ae; display:inline-block; flex:none; }
+  .status-dot.working { background:var(--orange); animation:pulse 1.8s ease-in-out infinite; }
+  .status-dot.waiting { background:var(--violet); animation:pulse 1.8s ease-in-out infinite; }
+  .status-dot.idle { background:#a7a8ae; }
+  .status-dot.ready { background:var(--green); }
+  @keyframes pulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+
+  .tab-tools { display:flex; align-items:center; padding:0 5px 0 3px; gap:2px; border-left:1px solid var(--line); }
+  .tab-variant-picker { display:flex; align-items:center; height:23px; padding:2px; border-radius:5px; background:#e1e1e5; margin-right:3px; }
+  .tab-variant-picker button { height:19px; padding:0 6px; border-radius:3px; background:transparent; color:#74767e; font-size:8px; cursor:pointer; }
+  .tab-variant-picker button.on { background:#fafafc; color:#2e3036; box-shadow:0 1px 2px rgb(37 38 44 / 14%); font-weight:650; }
+  .icon-button {
+    width:25px; height:25px; border-radius:6px; display:grid; place-items:center;
+    background:transparent; color:#6e7079; cursor:pointer; font-size:13px;
+  }
+  .icon-button:hover, .icon-button.active { background:#dedee3; color:var(--ink); }
+  .icon-button.small { width:22px; height:22px; font-size:11px; }
+
+  .shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: 0; }
+  .sidebar { background: var(--sidebar); border-right: 1px solid var(--line); min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) 30px; position: relative; }
+  .sidebar.hidden { display: none; }
+  .app-window.sidebar-hidden .titlebar, .app-window.sidebar-hidden .shell { grid-template-columns: 0 minmax(0, 1fr); }
+  .app-window.sidebar-hidden .window-zone { visibility: hidden; padding: 0; border-right: 0; }
+  .sidebar-top { padding: 8px 9px 7px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 6px; }
+  .command-row { display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 5px; }
+  .new-chat {
+    height: 28px; border-radius: 7px; border: 1px solid #d7d8de; background: var(--white); display: flex; align-items: center;
+    padding: 0 8px; gap: 7px; font-size: 11px; font-weight: 600; box-shadow: 0 1px 1px rgb(28 29 34 / 4%); cursor: pointer;
+  }
+  .new-chat:hover { border-color: #c7c8cf; background: #fff; }
+  .new-chat .target { color: var(--muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .new-chat .shortcut { margin-left: auto; color: var(--faint); font-size: 9px; }
+  .search-wrap { position: relative; }
+  .search-wrap::before { content: "⌕"; position: absolute; left: 8px; top: 5px; color: var(--faint); font-size: 13px; }
+  .search {
+    width: 100%; height: 27px; border-radius: 6px; border: 1px solid transparent; background: #e9e9ed;
+    padding: 0 27px 0 25px; outline: none; font-size: 11px;
+  }
+  .search:focus { background: var(--white); border-color: color-mix(in srgb, var(--indigo) 45%, var(--line)); box-shadow: 0 0 0 2px rgb(79 70 229 / 9%); }
+  .clear-search { display:none; position:absolute; right:5px; top:4px; width:19px; height:19px; border-radius:5px; background:transparent; color:var(--faint); cursor:pointer; }
+  .clear-search.show { display:block; }
+
+  .control-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
+  .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 2px; border-radius: 6px; background: #e5e5e9; min-width: 0; }
+  .segmented button { height: 21px; border-radius: 4px; background: transparent; font-size: 9px; color: #73757e; cursor: pointer; padding: 0 7px; white-space: nowrap; }
+  .segmented button.on { background: var(--white); color: var(--ink); box-shadow: 0 1px 2px rgb(33 34 39 / 12%); font-weight: 600; }
+  .segmented.disabled { opacity: .45; pointer-events: none; }
+  .view-mode { min-width: 77px; }
+  .result-count { height: 14px; display:flex; align-items:center; justify-content:space-between; color:var(--faint); font-size:9px; padding:0 2px; }
+  .result-count button { color:var(--indigo); background:transparent; font-size:9px; cursor:pointer; }
+
+  .sidebar-scroll { overflow: auto; padding: 4px 0 12px; scrollbar-width: thin; scrollbar-color: #c7c8cd transparent; }
+  .section { margin-top: 2px; }
+  .section-head {
+    height: 25px; width: 100%; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px;
+    background: transparent; color: #7d7f88; font-size: 9px; font-weight: 700; letter-spacing: .075em; cursor: pointer;
+  }
+  .section-head:hover { color: #4f5159; }
+  .section-head .chev { font-size: 8px; width: 10px; transition: transform 160ms cubic-bezier(.22,1,.36,1); }
+  .section.collapsed .section-head .chev { transform: rotate(-90deg); }
+  .section.collapsed .section-body { display: none; }
+  .section-head .section-count { margin-left: auto; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .section-head .section-action { width:19px; height:19px; border-radius:5px; display:grid; place-items:center; background:transparent; color:var(--muted); cursor:pointer; margin-left:2px; }
+  .section-head .section-action:hover { background:#e3e3e7; color:var(--ink); }
+
+  .session-row, .project-head, .workspace-head, .sub-row {
+    width: calc(100% - 12px); margin: 0 6px; min-width: 0; position: relative; display:flex; align-items:center; cursor:default; border-radius:6px;
+  }
+  .session-row { height: 25px; gap: 7px; padding: 0 7px 0 9px; font-size: 11px; color:#50525a; }
+  .session-row:hover, .sub-row:hover { background:#e7e7eb; color:var(--ink); }
+  .session-row.open .row-avatar { opacity: 1; }
+  .session-row:not(.open) .row-avatar { opacity: .58; }
+  .session-row.selected { background: var(--indigo-soft); color:#242235; }
+  .session-row.selected::before { content:""; position:absolute; left:1px; width:2.5px; height:15px; border-radius:2px; background:var(--indigo); }
+  .session-row.multi { box-shadow: inset 0 0 0 1.5px rgb(79 70 229 / 48%); }
+  .row-avatar, .project-avatar { width:17px; height:17px; border-radius:4px; font-size:9px; }
+  .session-row .row-title, .sub-row .row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row-tail { margin-left:auto; display:flex; align-items:center; gap:6px; color:var(--faint); font-size:9px; font-variant-numeric: tabular-nums; flex:none; }
+  .kind { height:14px; min-width:19px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; font-size:7px; font-weight:750; letter-spacing:.04em; }
+  .kind.bg { color:#5148ba; background:#e7e5ff; }
+  .kind.sub { color:#167c78; background:#dff4f1; }
+  .kind.view { color:#9a5e13; background:#f8ead4; }
+  .kind.term { color:#4d666f; background:#e2eef1; }
+  .slot { color:var(--indigo); font-size:9px; font-weight:650; }
+
+  .project-head { height:27px; padding:0 7px 0 9px; gap:7px; font-size:11px; font-weight:600; }
+  .project-head:hover, .workspace-head:hover { background:#e9e9ed; }
+  .branch { color:var(--muted); font: 9px ui-monospace, "SFMono-Regular", Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .project-head .count { margin-left:auto; font-size:9px; font-weight:500; color:var(--faint); }
+  .project-children .session-row { padding-left:29px; }
+
+  .workspace { margin: 1px 0 3px; }
+  .workspace-head { height:28px; padding:0 7px 0 9px; gap:7px; font-size:11px; font-weight:600; }
+  .workspace-head .fold { width:10px; font-size:8px; color:var(--faint); cursor:pointer; }
+  .workspace-head .workspace-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .workspace-head .occupancy { margin-left:auto; color:var(--faint); font-size:9px; font-weight:500; }
+  .workspace-head .grid-open { width:19px; height:19px; display:grid; place-items:center; border-radius:5px; color:var(--muted); cursor:pointer; }
+  .workspace-head .grid-open:hover { color:var(--indigo); background:#e2e1fb; }
+  .workspace.closed .workspace-members { display:none; }
+  .workspace.closed .fold { transform:rotate(-90deg); }
+  .workspace-members { position:relative; }
+  .workspace-members::before { content:""; position:absolute; left:26px; top:1px; bottom:3px; width:1px; background:#dbdce1; }
+  .workspace-members .session-row { padding-left:33px; }
+  .slot-grid { display:none; grid-template-columns:repeat(4,5px); gap:2px; margin-left:3px; }
+  .workspace.closed .slot-grid { display:grid; }
+  .slot-grid i { width:5px; height:5px; border-radius:1px; background:#c7c8cd; }
+  .slot-grid i.working { background:var(--orange); }
+  .slot-grid i.waiting { background:var(--violet); }
+  .slot-grid i.ready { background:var(--green); }
+
+  .subagent-chip { display:inline-flex; align-items:center; gap:3px; height:15px; padding:0 4px; border-radius:4px; background:#e5e5e9; color:#6d6f78; cursor:pointer; }
+  .agent-road { display:flex; align-items:center; gap:1px; }
+  .agent-road i { width:3px; height:8px; border-radius:1px; background:#9a9ca4; }
+  .agent-road.running i { background:#d6974c; animation: road 1.2s linear infinite; }
+  .agent-road.running i:nth-child(2) { animation-delay:.15s; }
+  .agent-road.running i:nth-child(3) { animation-delay:.3s; }
+  @keyframes road { 0%,65%,100%{opacity:.3} 35%{opacity:1} }
+  .sub-row { height:23px; padding:0 7px 0 44px; gap:6px; font-size:10px; color:#62646c; }
+  .sub-row .branchline { position:absolute; left:27px; width:10px; height:12px; border-left:1px solid #d6d7dc; border-bottom:1px solid #d6d7dc; border-radius:0 0 0 5px; top:0; }
+  .finished-row { height:21px; margin-left:44px; display:flex; align-items:center; gap:5px; color:var(--faint); font-size:9px; cursor:pointer; }
+  .finished-row:hover { color:var(--ink); }
+
+  .status-group-head { height:24px; display:flex; align-items:center; gap:6px; padding:0 12px 0 18px; color:#7d7f88; font-size:9px; font-weight:700; letter-spacing:.06em; }
+  .status-group-head .status-count { margin-left:auto; font-weight:500; letter-spacing:0; }
+
+  .sidebar-footer { display:flex; align-items:center; gap:3px; padding:0 8px; border-top:1px solid var(--line-soft); color:var(--muted); }
+  .sidebar-footer .usage { margin-left:auto; font-size:9px; color:var(--faint); white-space:nowrap; }
+  .resize-handle { position:absolute; right:-3px; top:0; bottom:0; width:6px; cursor:col-resize; z-index:10; }
+
+  .content { min-width:0; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:var(--paper); position:relative; }
+  .chat-head, .workspace-toolbar {
+    min-width:0; display:flex; align-items:center; border-bottom:1px solid var(--line-soft); background:#f9f9fa;
+  }
+  .chat-head { height:29px; gap:6px; padding:0 7px 0 10px; }
+  .workspace-toolbar { height:31px; gap:8px; padding:0 9px 0 12px; }
+  .chat-head .head-title { max-width:min(24vw,280px); font-size:10px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .head-meta { min-width:0; flex:1; display:flex; align-items:center; gap:5px; color:var(--muted); font-size:8.5px; overflow:hidden; white-space:nowrap; }
+  .head-meta .path { overflow:hidden; text-overflow:ellipsis; font:8.5px ui-monospace,"SFMono-Regular",Menlo,monospace; }
+  .head-actions { margin-left:auto; display:flex; align-items:center; gap:2px; flex:none; }
+  .provider-action { height:21px; display:inline-flex; align-items:center; gap:3px; padding:0 6px; border-radius:5px; background:transparent; color:#555761; font-size:8.5px; cursor:pointer; }
+  .provider-action:hover { background:#e7e7eb; color:#25262b; }
+  .provider-action .provider-mark { color:var(--indigo); font-size:8px; }
+  .provider-action.codex .provider-mark { color:#69717b; }
+  .back-workspace { display:none; height:21px; padding:0 6px; border-radius:5px; color:var(--indigo); background:var(--indigo-soft); cursor:pointer; font-size:8.5px; }
+  .back-workspace.show { display:inline-flex; align-items:center; }
+
+  .terminal-shell { min-height:0; display:grid; grid-template-rows:minmax(0,1fr) auto auto; background:var(--white); }
+  .terminal { min-height:0; overflow:auto; padding:18px 22px 12px; font:11px/1.55 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; color:#3f4148; scrollbar-width:thin; scrollbar-color:#c9cad0 transparent; }
+  .term-block { max-width:1060px; margin-bottom:13px; }
+  .term-user { color:#26272c; font-weight:600; }
+  .term-muted { color:#8d8f97; }
+  .term-tool { color:#486aa8; }
+  .term-ok { color:#228057; }
+  .term-warn { color:#a96b21; }
+  .term-indent { padding-left:18px; border-left:1px solid #e4e5e9; margin-left:3px; }
+  .prompt-wrap { padding:0 12px 7px; background:var(--white); }
+  .prompt-box { min-height:40px; border:1px solid #d9dae0; border-radius:7px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:start; gap:7px; padding:8px 9px; font:11px/1.4 ui-monospace,"SFMono-Regular",Menlo,monospace; box-shadow:0 1px 2px rgb(33 34 39 / 4%); }
+  .prompt-box:focus-within { border-color:#bdb9f6; box-shadow:0 0 0 2px rgb(79 70 229 / 7%); }
+  .prompt-input { border:0; outline:0; resize:none; min-height:18px; background:transparent; padding:0; width:100%; font:inherit; }
+  .send-hint { color:var(--faint); font:9px -apple-system,BlinkMacSystemFont,sans-serif; padding-top:2px; }
+  .statusline { min-height:22px; display:flex; align-items:center; gap:8px; padding:0 10px; border-top:1px solid var(--line-soft); background:#f2f2f4; color:#6f7179; font:9px ui-monospace,"SFMono-Regular",Menlo,monospace; white-space:nowrap; overflow:hidden; }
+  .statusline .grow { flex:1; overflow:hidden; text-overflow:ellipsis; }
+  .meter { letter-spacing:-1px; color:#8179df; }
+
+  .workspace-toolbar .workspace-title { font-size:11px; font-weight:650; }
+  .workspace-toolbar .workspace-stats { color:var(--muted); font-size:9px; }
+  .layout-picker { margin-left:auto; }
+  .resize-notice { display:none; position:absolute; z-index:8; top:38px; left:50%; transform:translateX(-50%); align-items:center; gap:8px; padding:6px 8px; border:1px solid #dbdce2; border-radius:7px; background:#fafafc; box-shadow:0 7px 22px rgb(31 32 38 / 12%); font-size:9px; }
+  .resize-notice.show { display:flex; }
+  .resize-notice button { height:20px; padding:0 7px; border-radius:4px; background:#e6e6ea; font-size:9px; cursor:pointer; }
+  .resize-notice .danger { background:#f4e3e5; color:#a33d47; }
+
+  .grid-shell { min-height:0; padding:6px; background:#ececef; }
+  .workspace-grid { height:100%; display:grid; gap:1px; background:#d7d8dd; border:1px solid #d7d8dd; overflow:hidden; }
+  .workspace-grid.cap-2 { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:minmax(0,1fr); }
+  .workspace-grid.cap-3 { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); }
+  .workspace-grid.cap-3 .pane:nth-child(3) { grid-column:1/-1; }
+  .workspace-grid.cap-4 { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); }
+  .workspace-grid.cap-6 { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); }
+  .workspace-grid.cap-9 { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(3,minmax(0,1fr)); }
+  .pane { min-width:0; min-height:0; background:var(--white); display:grid; grid-template-rows:28px minmax(0,1fr) 18px; position:relative; outline:0 solid var(--indigo); outline-offset:-2px; }
+  .pane.focused { outline-width:2px; z-index:2; }
+  .pane-head { min-width:0; display:flex; align-items:center; gap:6px; padding:0 6px 0 8px; border-bottom:1px solid var(--line-soft); background:#f8f8fa; font-size:9px; cursor:pointer; }
+  .pane-avatar { width:15px; height:15px; border-radius:4px; font-size:8px; }
+  .pane-head .pane-title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pane-head .account { color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pane-actions { margin-left:auto; display:flex; align-items:center; }
+  .pane-terminal { min-height:0; overflow:hidden; padding:8px 10px; font:8px/1.48 ui-monospace,"SFMono-Regular",Menlo,monospace; color:#4b4d54; white-space:pre-wrap; }
+  .pane-status { display:flex; align-items:center; gap:5px; padding:0 7px; border-top:1px solid var(--line-soft); color:var(--faint); background:#f4f4f6; font:7.5px ui-monospace,"SFMono-Regular",Menlo,monospace; overflow:hidden; white-space:nowrap; }
+  .empty-pane { place-items:center; grid-template-rows:1fr; background:#f6f6f8; color:var(--faint); border:1px dashed #c9cad0; }
+  .empty-slot { text-align:center; font-size:10px; line-height:1.55; }
+  .empty-slot strong { display:block; color:#696b73; font-weight:600; }
+
+  .popover { position:absolute; z-index:30; min-width:210px; padding:5px; border:1px solid #d5d6dc; border-radius:8px; background:#fafafc; box-shadow:0 14px 35px rgb(31 32 38 / 18%); font-size:11px; display:none; }
+  .popover.show { display:block; }
+  .popover button { width:100%; height:27px; padding:0 8px; border-radius:5px; display:flex; align-items:center; gap:8px; background:transparent; cursor:pointer; text-align:left; }
+  .popover button:hover { background:#e8e8ec; }
+  .popover .shortcut { margin-left:auto; color:var(--faint); font-size:9px; }
+  .popover .divider { height:1px; background:var(--line-soft); margin:4px 3px; }
+  #newMenu { top:34px; right:7px; }
+  #moreMenu { top:29px; right:7px; min-width:245px; }
+  #helpMenu { bottom:34px; left:8px; width:350px; }
+
+  .switcher { position:absolute; z-index:40; inset:0; display:none; place-items:center; background:rgb(238 238 241 / 76%); backdrop-filter:blur(4px); }
+  .switcher.show { display:grid; }
+  .switcher-panel { width:min(720px,80%); padding:8px; border:1px solid #cecfd5; border-radius:10px; background:#f8f8fa; box-shadow:0 22px 60px rgb(31 32 38 / 22%); }
+  .switcher-title { padding:3px 5px 8px; color:var(--muted); font-size:10px; }
+  .switcher-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+  .switch-card { min-width:0; height:68px; border-radius:7px; padding:8px; display:grid; grid-template-columns:auto minmax(0,1fr); gap:7px; background:#eeeef1; cursor:pointer; }
+  .switch-card.active { background:var(--white); box-shadow:inset 0 0 0 1.5px var(--indigo); }
+  .switch-card .project-avatar { margin-top:1px; }
+  .switch-card strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+  .switch-card small { display:block; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; font-size:8px; line-height:1.35; }
+
+  .toast { position:absolute; z-index:50; left:50%; bottom:33px; transform:translate(-50%,8px); opacity:0; pointer-events:none; padding:6px 9px; border-radius:6px; color:#f7f7f8; background:#37383e; font-size:9px; transition:opacity 160ms ease, transform 160ms cubic-bezier(.22,1,.36,1); }
+  .toast.show { opacity:1; transform:translate(-50%,0); }
+
+  @media (max-width:1120px) {
+    :root { --sidebar-width:246px; }
+    .system-meter { display:none; }
+    .head-meta .path { display:none; }
+    .chat-head .head-title { max-width:170px; }
+    .provider-action { width:22px; justify-content:center; padding:0; }
+    .provider-action .action-label { display:none; }
+    .tab { min-width:92px; max-width:138px; }
+    .tab-variant-picker button { padding:0 4px; }
+  }
+  @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation-duration:.001ms!important; transition-duration:.001ms!important; } }
+</style>
+
+<div class="app-window" id="app">
+  <header class="titlebar">
+    <div class="window-zone">
+      <span class="traffic"><i></i><i></i><i></i></span>
+      <span class="system-meter" title="13 Prozesse · 50,9 % CPU · 2,01 GB RAM"><span class="tiny-bars">▂▅▇</span> 13 · 50,9% · 2,01 GB</span>
+    </div>
+    <div class="tabs-zone">
+      <div class="tab-scroll" id="tabStrip"></div>
+      <div class="tab-tools">
+        <div class="tab-variant-picker" id="tabVariantPicker" aria-label="Tab-Gruppen-Variante">
+          <button class="on" data-tab-style="chrome" title="Dezent und Chrome-artig">Chrome</button>
+          <button data-tab-style="connected" title="Aktiver Tab öffnet sich zum Content">Offen</button>
+          <button data-tab-style="line" title="Reduzierte Linienvariante">Linie</button>
+        </div>
+        <button class="icon-button small active" id="groupToggle" title="Tab-Gruppen an/aus">⌘</button>
+        <button class="icon-button small" id="overflowButton" title="Alle offenen Tabs">⌄</button>
+        <button class="icon-button small" id="sidebarToggle" title="Sidebar ein-/ausblenden">◧</button>
+        <button class="icon-button small" id="newTabButton" title="Neuer Chat oder Terminal">＋</button>
+      </div>
+      <div class="popover" id="newMenu">
+        <button data-toast="Neuer Claude-Chat"><span>◆</span> Neuer Claude-Chat <span class="shortcut">⌘N</span></button>
+        <button data-toast="Neuer Codex-Chat"><span>◇</span> Neuer Codex-Chat</button>
+        <button data-toast="Neues Terminal"><span>▣</span> Neues Terminal</button>
+        <div class="divider"></div>
+        <button data-toast="Hintergrund-Agent konfigurieren"><span>BG</span> Hintergrund-Agent…</button>
+        <button data-toast="Claude Agent View öffnen"><span>◫</span> Claude Agent View</button>
+        <button data-toast="Sub-Agent-Bibliothek öffnen"><span>⌘</span> Sub-Agent-Bibliothek…</button>
+      </div>
+      <div class="popover" id="overflowMenu"></div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="command-row">
+          <button class="new-chat" id="sidebarNew"><span>＋</span><span>Neuer Chat</span><span class="target">whisperm8</span><span class="shortcut">⌘N⌄</span></button>
+          <button class="icon-button" data-toast="Sessions neu eingelesen" title="Sessions neu einlesen · ⌘R">↻</button>
+        </div>
+        <div class="search-wrap">
+          <input class="search" id="filterInput" placeholder="Filter…" aria-label="Chats filtern">
+          <button class="clear-search" id="clearSearch">×</button>
+        </div>
+        <div class="control-row">
+          <div class="segmented" id="scopeControl">
+            <button class="on" data-scope="active">Aktiv</button><button data-scope="recent">Zuletzt</button><button data-scope="all">Alle</button>
+          </div>
+          <div class="segmented view-mode" id="sidebarMode">
+            <button class="on" data-mode="structure">Struktur</button><button data-mode="status">Status</button>
+          </div>
+        </div>
+        <div class="result-count"><span id="resultCount">13 von 937 Chats</span><button id="showAll">Alle zeigen</button></div>
+      </div>
+      <div class="sidebar-scroll" id="sidebarContent"></div>
+      <footer class="sidebar-footer">
+        <button class="icon-button small" id="helpButton" title="Funktionen und Kürzel">?</button>
+        <button class="icon-button small" data-toast="Archiv · 24 Chats" title="Archiv">▣</button>
+        <button class="icon-button small" data-toast="Einstellungen" title="Einstellungen">⚙</button>
+        <span class="usage">Claude 4% · GPT 21%</span>
+      </footer>
+      <div class="resize-handle" id="resizeHandle" title="Ziehen · ⌥-Doppelklick setzt zurück"></div>
+      <div class="popover" id="helpMenu">
+        <button><span>⌃⇥</span> Tab-Switcher <span class="shortcut">Ctrl+Tab</span></button>
+        <button><span>⌘1–9</span> Tab direkt wählen</button>
+        <button><span>⌘/⇧</span> Mehrfach-/Bereichsauswahl</button>
+        <button><span>↕</span> Tabs, Chats und Grid-Panes ziehen</button>
+        <div class="divider"></div>
+        <button><span>◫</span> Workspace-Grid · feste Slots 2/3/4/6/9</button>
+        <button><span>◧</span> Tab schließen lässt den Prozess weiterlaufen</button>
+      </div>
+    </aside>
+
+    <main class="content" id="content"></main>
+  </div>
+  <div class="switcher" id="switcher"><div class="switcher-panel"><div class="switcher-title">Offene Chats · Ctrl+Tab zum Wechseln · Esc zum Schließen</div><div class="switcher-grid" id="switcherGrid"></div></div></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  const projects = {
+    whisper: { name:'whisperm8', initial:'W', color:'#5576c7', branch:'feat/gpt-workflow-skill' },
+    list: { name:'ListM8', initial:'L', color:'#62a9c7', branch:'main' },
+    heart: { name:'heartbeat-master', initial:'H', color:'#ca7d45', branch:'feat/reporting' },
+    akq: { name:'akquiseai', initial:'A', color:'#35373d', branch:'main' }
+  };
+
+  const sessions = [
+    {id:'s1', title:'Tab-Gruppen und Sidebar', project:'whisper', workspace:'ws-whisper', status:'working', time:'jetzt', kind:'bg', sub:3, summary:'Chrome-artige Tab-Gruppen und Sidebar-Grammatik'},
+    {id:'s2', title:'GPT-Workflow Skill', project:'whisper', workspace:'ws-whisper', status:'waiting', time:'2m', kind:'sub', sub:2, summary:'Workflow-Skill und Backend-Einstellungen prüfen'},
+    {id:'s3', title:'Statusline & Metrics', project:'whisper', workspace:'ws-whisper', status:'ready', time:'11m', kind:'term', summary:'Sidebar-Performance und Statusline stabilisieren'},
+    {id:'s4', title:'Agent Chats Freeze', project:'whisper', workspace:'ws-whisper', status:'idle', time:'1h', summary:'Indexer- und Render-Pfade analysieren'},
+    {id:'s5', title:'Reporting-Pipeline', project:'heart', workspace:'ws-akq', status:'working', time:'jetzt', kind:'bg', sub:4, summary:'Reporting-Automation und Datenabgleich'},
+    {id:'s6', title:'Listen-Qualität', project:'list', workspace:'ws-akq', status:'ready', time:'8m', summary:'Leads bereinigen und Dubletten prüfen'},
+    {id:'s7', title:'Akquise-Dashboard', project:'akq', workspace:'ws-akq', status:'waiting', time:'19m', kind:'view', sub:1, summary:'Dashboard-Interaktionen und Status prüfen'},
+    {id:'s8', title:'Heartbeat QA', project:'heart', workspace:'ws-akq', status:'idle', time:'3h', summary:'Regressionen im Kampagnenlauf testen'},
+    {id:'s9', title:'Steuer 2025', project:'heart', status:'ready', time:'30m', summary:'Belege und Jahresabschluss vorbereiten'},
+    {id:'s10', title:'CLI Skills Export', project:'whisper', status:'idle', time:'45m', kind:'sub', sub:2, summary:'Skill-Sync und Exporter-Tests'},
+    {id:'s11', title:'Import-Validierung', project:'list', status:'idle', time:'2h', summary:'CSV-Import und Feldzuordnung'},
+    {id:'s12', title:'Steuer 2024', project:'heart', status:'idle', time:'1d', summary:'Archivierter Jahresabschluss'}
+  ];
+
+  const workspaces = [
+    {id:'ws-whisper', name:'WhisperM8 · GPT, Skills', color:'#5576c7', initial:'W', capacity:4, members:['s1','s2','s3','s4']},
+    {id:'ws-akq', name:'AKQ · ListM8 · Heartbeat', color:'#c77e45', initial:'A', capacity:4, members:['s5','s6','s7','s8']}
+  ];
+
+  const pinnedIDs = ['s12','s9','s5'];
+
+  const state = {
+    tabs:['s1','s5','s2','s9','s6','s3','s10','s7'], active:'s1', grouped:true, tabStyle:'chrome',
+    collapsedGroups:new Set(), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-akq']),
+    sidebarMode:'structure', scope:'active', filter:'', subOpen:new Set(['s1']), finishedOpen:new Set(),
+    multi:new Set(), lastSidebarIndex:null, view:'chat', gridWorkspace:'ws-whisper', gridCapacity:4, gridFocus:'s1', returnWorkspace:null,
+    switchIndex:0
+  };
+
+  const $ = s => document.querySelector(s);
+  const byId = id => sessions.find(s => s.id === id);
+  const project = id => projects[id];
+  const workspace = id => workspaces.find(w => w.id === id);
+  const statusLabel = s => ({working:'arbeitet',waiting:'wartet',ready:'bereit',idle:'ruht'})[s] || 'ruht';
+  const openSet = () => new Set(state.tabs);
+
+  function avatar(s, cls='row-avatar') {
+    const p=project(s.project); return `<span class="${cls}" style="background:${p.color}">${p.initial}</span>`;
+  }
+  function kindBadge(s) { return s.kind ? `<span class="kind ${s.kind}">${s.kind.toUpperCase()}</span>` : ''; }
+  function statusDot(s) { return `<i class="status-dot ${s.status}" title="${statusLabel(s.status)}"></i>`; }
+  function subChip(s) {
+    if(!s.sub) return '';
+    const running=s.status==='working';
+    return `<span class="subagent-chip" data-sub="${s.id}" title="${s.sub} Subagents"><span class="fold">⌄</span><span class="agent-road ${running?'running':''}">${Array.from({length:Math.min(s.sub,3)},()=>'<i></i>').join('')}</span><b>${s.sub}</b></span>`;
+  }
+
+  function bucket(s) { return s.workspace ? `ws:${s.workspace}` : `project:${s.project}`; }
+  function bucketMeta(key) {
+    const [type,id]=key.split(':');
+    if(type==='ws') { const w=workspace(id); return {label:w.name.split(' · ')[0],color:w.color,icon:'⊞'}; }
+    const p=project(id); return {label:p.name,color:p.color,icon:'▤'};
+  }
+
+  function buildTabItems() {
+    if(!state.grouped) return state.tabs.map(id=>({type:'tab',ids:[id]}));
+    const counts={}; state.tabs.forEach(id=>{ const k=bucket(byId(id)); counts[k]=(counts[k]||0)+1; });
+    const seen=new Set(), out=[];
+    state.tabs.forEach(id=>{
+      const k=bucket(byId(id));
+      if(counts[k]<2) out.push({type:'tab',ids:[id]});
+      else if(!seen.has(k)) { seen.add(k); out.push({type:'group',key:k,ids:state.tabs.filter(x=>bucket(byId(x))===k)}); }
+    });
+    return out;
+  }
+
+  function tabHtml(id, groupColor='transparent') {
+    const s=byId(id), p=project(s.project), active=id===state.active;
+    return `<button class="tab ${active?'active':''}" draggable="true" data-tab="${id}" style="--group:${groupColor}">
+      <span class="avatar" style="background:${p.color}">${p.initial}</span><span class="label">${s.title}</span>
+      <span class="tail">${active?'×':statusDot(s)}</span>
+    </button>`;
+  }
+
+  function renderTabs() {
+    const strip=$('#tabStrip');
+    $('#app').dataset.tabStyle=state.tabStyle;
+    document.querySelectorAll('#tabVariantPicker [data-tab-style]').forEach(button=>button.classList.toggle('on',button.dataset.tabStyle===state.tabStyle));
+    strip.innerHTML=buildTabItems().map(item=>{
+      if(item.type==='tab') return tabHtml(item.ids[0]);
+      const meta=bucketMeta(item.key), closed=state.collapsedGroups.has(item.key), contains=item.ids.includes(state.active);
+      const visible=closed ? (contains?[state.active]:[]) : item.ids;
+      return `<span class="tab-cluster"><button class="group-pill ${closed?'closed':''}" data-group="${item.key}" style="--group:${meta.color}"><span class="fold">⌄</span>${meta.icon} ${meta.label}<span class="count">${item.ids.length}</span></button>${visible.map(id=>tabHtml(id,meta.color)).join('')}</span>`;
+    }).join('');
+    $('#groupToggle').classList.toggle('active',state.grouped);
+    bindTabs(); renderOverflow(); renderSwitcher();
+  }
+
+  function bindTabs() {
+    document.querySelectorAll('[data-tab]').forEach(el=>{
+      el.onclick=e=>{
+        const id=el.dataset.tab;
+        if(e.target.closest('.tail') && id===state.active) { closeTab(id); return; }
+        selectWithModifiers(id,e,state.tabs); state.active=id; state.view='chat'; state.returnWorkspace=null; renderAll();
+      };
+      el.onauxclick=e=>{ if(e.button===1) closeTab(el.dataset.tab); };
+      el.ondragstart=e=>{ e.dataTransfer.setData('text/session-id',el.dataset.tab); e.dataTransfer.effectAllowed='move'; };
+      el.ondragover=e=>e.preventDefault();
+      el.ondrop=e=>{ e.preventDefault(); const dragged=e.dataTransfer.getData('text/session-id'); reorderTab(dragged,el.dataset.tab); };
+    });
+    document.querySelectorAll('[data-group]').forEach(el=>el.onclick=()=>{
+      const k=el.dataset.group; state.collapsedGroups.has(k)?state.collapsedGroups.delete(k):state.collapsedGroups.add(k); renderTabs();
+    });
+  }
+
+  function reorderTab(id,before) {
+    if(!id||id===before) return; state.tabs=state.tabs.filter(x=>x!==id); state.tabs.splice(state.tabs.indexOf(before),0,id); renderTabs(); toast('Tab-Reihenfolge aktualisiert');
+  }
+  function closeTab(id) {
+    const i=state.tabs.indexOf(id); state.tabs=state.tabs.filter(x=>x!==id); state.multi.delete(id);
+    if(state.active===id) state.active=state.tabs[Math.min(i,state.tabs.length-1)]||null;
+    renderAll(); toast('Tab geschlossen · Prozess läuft weiter');
+  }
+  function openTab(id) { if(!state.tabs.includes(id)) state.tabs.push(id); state.active=id; state.view='chat'; state.returnWorkspace=null; renderAll(); }
+
+  function selectWithModifiers(id,e,order) {
+    if(e.metaKey||e.ctrlKey) { state.multi.has(id)?state.multi.delete(id):state.multi.add(id); }
+    else if(e.shiftKey && state.lastSidebarIndex!==null) {
+      const a=Math.min(state.lastSidebarIndex,order.indexOf(id)), b=Math.max(state.lastSidebarIndex,order.indexOf(id)); state.multi=new Set(order.slice(a,b+1));
+    } else state.multi.clear();
+    state.lastSidebarIndex=order.indexOf(id);
+  }
+
+  function selectionZone(s) {
+    if(state.sidebarMode==='status') return 'status';
+    if(s.workspace) return 'workspace';
+    if(pinnedIDs.includes(s.id)) return 'pinned';
+    return 'project';
+  }
+
+  function sessionRow(s, opts={}) {
+    const opened=openSet().has(s.id), selected=s.id===state.active && (!opts.zone || opts.zone===selectionZone(s)), multi=state.multi.has(s.id);
+    return `<div class="session-row ${opened?'open':''} ${selected?'selected':''} ${multi?'multi':''}" draggable="true" data-session="${s.id}">
+      ${opts.slot?`<span class="slot">S${opts.slot}</span>`:avatar(s)}
+      <span class="row-title">${s.title}</span>${kindBadge(s)}${subChip(s)}
+      <span class="row-tail">${opts.slot&&!opts.hideAvatar?avatar(s):''}${statusDot(s)}<span>${s.time}</span></span>
+    </div>${subRows(s)}`;
+  }
+
+  function subRows(s) {
+    if(!s.sub || !state.subOpen.has(s.id)) return '';
+    const active=Math.max(1,Math.min(s.sub,2));
+    const rows=Array.from({length:active},(_,i)=>`<div class="sub-row"><i class="branchline"></i><span class="kind sub">SUB</span><span class="row-title">${i?'UI-Verifikation':'Code-Review'} ${i+1}</span><span class="row-tail">${i?'1m':'jetzt'} ${statusDot({status:i?'waiting':'working'})}</span></div>`).join('');
+    const finished=Math.max(0,s.sub-active);
+    return rows+(finished?`<div class="finished-row" data-finished="${s.id}">⌄ ${finished} fertig${state.finishedOpen.has(s.id)?' · QA bestanden':''}</div>`:'');
+  }
+
+  function section(id,label,body,count='',action='') {
+    const collapsed=state.collapsedSections.has(id);
+    return `<section class="section ${collapsed?'collapsed':''}" data-section="${id}"><button class="section-head"><span class="chev">⌄</span>${label}<span class="section-count">${count}</span>${action}</button><div class="section-body">${body}</div></section>`;
+  }
+
+  function renderStructure() {
+    const q=state.filter.toLowerCase();
+    const match=s=>!q || `${s.title} ${project(s.project).name}`.toLowerCase().includes(q);
+    const pinned=pinnedIDs.map(byId).filter(match);
+    const pinBody=pinned.map(s=>sessionRow(s,{zone:'pinned'})).join('')||emptyResult();
+    const wsBody=workspaces.map(w=>{
+      const members=w.members.map(byId).filter(match), closed=state.collapsedWorkspaces.has(w.id);
+      return `<div class="workspace ${closed?'closed':''}" data-workspace="${w.id}">
+        <div class="workspace-head"><button class="fold" data-wsfold="${w.id}">⌄</button><span class="project-avatar" style="background:${w.color}">${w.initial}</span><span class="workspace-name">${w.name}</span>
+          <span class="slot-grid">${w.members.map(id=>`<i class="${byId(id).status}"></i>`).join('')}</span><span class="occupancy">${w.members.length}/${w.capacity}</span><button class="grid-open" data-grid="${w.id}" title="Workspace-Grid öffnen">⊞</button></div>
+        <div class="workspace-members">${members.map((s,i)=>sessionRow(s,{slot:i+1,zone:'workspace'})).join('')||emptyResult()}</div></div>`;
+    }).join('');
+    const projectBodies=Object.entries(projects).map(([id,p])=>{
+      const list=sessions.filter(s=>s.project===id&&match(s)); if(!list.length) return '';
+      return `<div><div class="project-head"><span class="project-avatar" style="background:${p.color}">${p.initial}</span><span>${p.name}</span><span class="branch">⑂ ${p.branch}</span><span class="count">${list.length}</span></div><div class="project-children">${list.slice(0,4).map(s=>sessionRow(s,{zone:'project'})).join('')}${list.length>4?`<div class="finished-row">＋ ${list.length-4} weitere anzeigen</div>`:''}</div></div>`;
+    }).join('');
+    return section('pinned','GEPINNT',pinBody,pinned.length)+section('workspaces','WORKSPACES',wsBody,workspaces.length,'<button class="section-action" data-toast="Neuen Workspace anlegen">＋</button>')+section('chats','CHATS',projectBodies,sessions.filter(match).length);
+  }
+
+  function renderStatus() {
+    const q=state.filter.toLowerCase(), match=s=>!q||s.title.toLowerCase().includes(q);
+    const groups=[['waiting','WARTET AUF DICH'],['working','ARBEITET'],['idle','RUHT'],['ready','BEREIT']];
+    return groups.map(([status,label])=>{ const list=sessions.filter(s=>s.status===status&&match(s)); if(!list.length)return''; return `<div class="status-group"><div class="status-group-head">${statusDot({status})}${label}<span class="status-count">${list.length}</span></div>${list.map(s=>sessionRow(s,{zone:'status'})).join('')}</div>`; }).join('')||emptyResult();
+  }
+
+  function emptyResult() { return '<div class="finished-row">Keine passenden Chats</div>'; }
+  function renderSidebar() {
+    $('#sidebarContent').innerHTML=state.sidebarMode==='structure'?renderStructure():renderStatus();
+    $('#resultCount').textContent=state.filter?`${sessions.filter(s=>s.title.toLowerCase().includes(state.filter.toLowerCase())).length} Treffer`:(state.scope==='all'?'937 Chats':'13 von 937 Chats');
+    bindSidebar();
+  }
+
+  function bindSidebar() {
+    document.querySelectorAll('.section-head').forEach(h=>h.onclick=e=>{
+      if(e.target.closest('[data-toast]'))return; const id=h.closest('.section').dataset.section;
+      state.collapsedSections.has(id)?state.collapsedSections.delete(id):state.collapsedSections.add(id); renderSidebar();
+    });
+    document.querySelectorAll('[data-wsfold]').forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.dataset.wsfold;state.collapsedWorkspaces.has(id)?state.collapsedWorkspaces.delete(id):state.collapsedWorkspaces.add(id);renderSidebar();});
+    document.querySelectorAll('.workspace-head').forEach(h=>h.onclick=e=>{ if(e.target.closest('[data-wsfold]'))return; enterGrid(h.closest('.workspace').dataset.workspace); });
+    document.querySelectorAll('[data-grid]').forEach(b=>b.onclick=e=>{e.stopPropagation();enterGrid(b.dataset.grid);});
+    document.querySelectorAll('[data-session]').forEach(row=>{
+      row.onclick=e=>{
+        if(e.target.closest('[data-sub]')) { const id=e.target.closest('[data-sub]').dataset.sub; state.subOpen.has(id)?state.subOpen.delete(id):state.subOpen.add(id); renderSidebar(); return; }
+        const id=row.dataset.session; selectWithModifiers(id,e,sessions.map(s=>s.id));
+        if(!(e.metaKey||e.ctrlKey||e.shiftKey)) openTab(id); else renderSidebar();
+      };
+      row.ondragstart=e=>{e.dataTransfer.setData('text/session-id',row.dataset.session);e.dataTransfer.effectAllowed='move';};
+      row.oncontextmenu=e=>{e.preventDefault();showMoreMenu(e.clientX,e.clientY,row.dataset.session);};
+    });
+    document.querySelectorAll('[data-finished]').forEach(el=>el.onclick=()=>{const id=el.dataset.finished;state.finishedOpen.has(id)?state.finishedOpen.delete(id):state.finishedOpen.add(id);renderSidebar();});
+    bindToastButtons();
+  }
+
+  function terminalHtml(s) {
+    const p=project(s.project);
+    return `<div class="terminal-shell"><div class="terminal">
+      <div class="term-block term-user">❯ ${s.title}: Bitte prüfe den aktuellen Stand und setze die nächste sinnvolle Änderung vollständig um.</div>
+      <div class="term-block"><span class="term-ok">●</span> Ich prüfe zuerst die betroffenen Komponenten und die bestehenden Invarianten.</div>
+      <div class="term-block term-indent"><span class="term-tool">Read</span>(WhisperM8/Views/AgentChatsView.swift)<br><span class="term-tool">Read</span>(WhisperM8/Views/AgentChatsView+Tabs.swift)<br><span class="term-muted">⎿  Architektur und bestehende Drag-/Selection-Logik geladen</span></div>
+      <div class="term-block">Die aktive Session bleibt die einzige Fokusquelle. Tab schließen und Prozess beenden bleiben getrennte Aktionen. Workspace-Zugehörigkeit priorisiert weiterhin das Projekt.</div>
+      <div class="term-block term-indent"><span class="term-tool">Edit</span>(WhisperM8/Views/AgentChatsView.swift)<br><span class="term-ok">⎿  Kompakter Chat-Header und gruppierte Tab-Darstellung aktualisiert</span><br><span class="term-muted">… +38 Zeilen (ctrl+o zum Aufklappen)</span></div>
+      <div class="term-block"><span class="term-ok">●</span> Build und fokussierte Tests sind grün. Als Nächstes prüfe ich die Tastaturnavigation und den Grid-Rücksprung.</div>
+    </div>
+    <div class="prompt-wrap"><div class="prompt-box"><span>❯</span><textarea class="prompt-input" aria-label="Nachricht" placeholder="Nachricht an ${s.title}…"></textarea><span class="send-hint">⌘↵ senden</span></div></div>
+    <div class="statusline"><span>${p.name} (${p.branch})</span><span class="meter">████▂▁▁▁</span><span>18% · 182k/1000k</span><span>[GPT 5.6]</span><span>high</span><span class="grow">4%/5h · 21%/Woche · $4,45</span><span>⇄ PowerUser</span></div></div>`;
+  }
+
+  function renderChat() {
+    const s=byId(state.active)||sessions[0], p=project(s.project), w=s.workspace?workspace(s.workspace):null;
+    $('#content').innerHTML=`<header class="chat-head">${statusDot(s)}<span class="head-title">${s.title}</span>${kindBadge(s)}<span class="head-meta"><span>◆ ${p.name}</span><span class="branch">⑂ ${p.branch}</span><span class="path">~/repos/${p.name}</span></span>
+      <div class="head-actions"><button class="back-workspace ${state.returnWorkspace?'show':''}" id="backWorkspace">‹ ${state.returnWorkspace?'Workspace':''}</button><button class="provider-action claude" data-toast="Claude im Projekt öffnen" title="Neuen Claude-Chat im Projekt öffnen"><span class="provider-mark">◆</span><span class="action-label">Claude</span></button><button class="provider-action codex" data-toast="Codex im Projekt öffnen" title="Neuen Codex-Chat im Projekt öffnen"><span class="provider-mark">◇</span><span class="action-label">Codex</span></button><button class="icon-button small" data-toast="Session starten oder fortsetzen" title="Aktuelle Session starten / fortsetzen">▶</button><button class="icon-button small" data-toast="Projekt in PhpStorm öffnen" title="In IDE öffnen">↗</button><button class="icon-button small" id="moreButton" title="Weitere Aktionen">•••</button></div></header>${terminalHtml(s)}<div class="popover" id="moreMenu"></div>`;
+    $('#moreButton').onclick=e=>showMoreMenu(e.clientX,e.clientY,s.id);
+    if($('#backWorkspace')) $('#backWorkspace').onclick=()=>enterGrid(state.returnWorkspace);
+    bindToastButtons();
+  }
+
+  function enterGrid(id) {
+    const w=workspace(id); state.view='grid'; state.gridWorkspace=id; state.gridCapacity=w.capacity; state.gridFocus=w.members[0]; renderContent();
+  }
+  function maximizePane(id) { state.returnWorkspace=state.gridWorkspace; state.active=id; state.view='chat'; if(!state.tabs.includes(id))state.tabs.push(id); renderAll(); }
+
+  function renderGrid() {
+    const w=workspace(state.gridWorkspace), members=w.members.slice(0,state.gridCapacity);
+    const panes=Array.from({length:state.gridCapacity},(_,i)=>{
+      const s=byId(members[i]);
+      if(!s) return `<div class="pane empty-pane" data-slot="${i}"><div class="empty-slot"><strong>Slot ${i+1}</strong>Chat hier ablegen<br>oder aus der Sidebar ziehen</div></div>`;
+      const p=project(s.project);
+      return `<section class="pane ${s.id===state.gridFocus?'focused':''}" draggable="true" data-pane="${s.id}" data-slot="${i}"><header class="pane-head">${statusDot(s)}<span class="pane-avatar" style="background:${p.color}">${p.initial}</span><span class="pane-title">${s.title}</span><span class="account">${p.name}</span><span class="pane-actions"><button class="icon-button small" data-toast="Projekt öffnen">↗</button><button class="icon-button small" data-max="${s.id}" title="Maximieren">⤢</button><button class="icon-button small" data-remove="${s.id}" title="Aus Workspace entfernen">⊖</button></span></header><div class="pane-terminal"><span class="term-user">❯ ${s.summary}</span>\n\n<span class="term-ok">●</span> Session ${statusLabel(s.status)}\n<span class="term-tool">Read</span>(AgentChatsView.swift)\n<span class="term-muted">⎿ Kontext geladen</span>\n\nDie feste Slot-Position bleibt erhalten. Nur diese fokussierte Pane erhält direkten Keyboard-Input.</div><footer class="pane-status">${p.branch} · ${s.time} · ${statusLabel(s.status)}</footer></section>`;
+    }).join('');
+    $('#content').innerHTML=`<header class="workspace-toolbar"><span class="project-avatar" style="background:${w.color}">${w.initial}</span><span class="workspace-title">${w.name}</span><span class="workspace-stats">${w.members.length}/${state.gridCapacity} belegt · Fokus steuert den Prozess</span><div class="segmented layout-picker">${[2,3,4,6,9].map(n=>`<button class="${n===state.gridCapacity?'on':''}" data-cap="${n}">${n===2?'1×2':n===3?'2+1':n===4?'2×2':n===6?'3×2':'3×3'}</button>`).join('')}</div><button class="icon-button small" data-toast="Workspace-Aktionen">•••</button></header><div class="grid-shell"><div class="workspace-grid cap-${state.gridCapacity}">${panes}</div></div><div class="resize-notice" id="resizeNotice"><span id="resizeText"></span><button id="cancelResize">Abbrechen</button><button class="danger" id="confirmResize">Verkleinern</button></div>`;
+    document.querySelectorAll('[data-pane]').forEach(pane=>{
+      pane.onclick=e=>{ if(e.target.closest('button'))return;state.gridFocus=pane.dataset.pane;renderGrid(); };
+      pane.ondblclick=e=>{if(!e.target.closest('button'))maximizePane(pane.dataset.pane);};
+      pane.ondragstart=e=>e.dataTransfer.setData('text/session-id',pane.dataset.pane);
+      pane.ondragover=e=>e.preventDefault();
+      pane.ondrop=e=>{e.preventDefault();swapIntoSlot(e.dataTransfer.getData('text/session-id'),Number(pane.dataset.slot));};
+    });
+    document.querySelectorAll('.empty-pane').forEach(pane=>{pane.ondragover=e=>e.preventDefault();pane.ondrop=e=>{e.preventDefault();swapIntoSlot(e.dataTransfer.getData('text/session-id'),Number(pane.dataset.slot));};});
+    document.querySelectorAll('[data-max]').forEach(b=>b.onclick=e=>{e.stopPropagation();maximizePane(b.dataset.max);});
+    document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=e=>{e.stopPropagation(); const idx=w.members.indexOf(b.dataset.remove); if(idx>=0)w.members.splice(idx,1);renderGrid();renderSidebar();toast('Slot geleert · Tab bleibt geöffnet');});
+    document.querySelectorAll('[data-cap]').forEach(b=>b.onclick=()=>requestCapacity(Number(b.dataset.cap)));
+    bindToastButtons();
+  }
+
+  function swapIntoSlot(id,slot) {
+    if(!id)return; const w=workspace(state.gridWorkspace), from=w.members.indexOf(id), existing=w.members[slot];
+    if(from>=0) { w.members[from]=existing; w.members[slot]=id; if(!w.members[from])w.members.splice(from,1); }
+    else w.members.splice(slot,existing?1:0,id);
+    byId(id).workspace=w.id; state.gridFocus=id; renderAll(); toast(existing?'Grid-Slots getauscht':'Chat im freien Slot platziert');
+  }
+  function requestCapacity(n) {
+    const w=workspace(state.gridWorkspace);
+    if(n>=w.members.length) { state.gridCapacity=n; w.capacity=n; renderGrid();renderSidebar();return; }
+    const notice=$('#resizeNotice'); notice.classList.add('show'); $('#resizeText').textContent=`${w.members.length-n} Chats verlassen den Workspace.`;
+    $('#cancelResize').onclick=()=>notice.classList.remove('show'); $('#confirmResize').onclick=()=>{w.members.slice(n).forEach(id=>byId(id).workspace=null);w.members=w.members.slice(0,n);w.capacity=n;state.gridCapacity=n;renderAll();toast('Workspace verkleinert');};
+  }
+
+  function renderContent() { state.view==='grid'?renderGrid():renderChat(); }
+  function renderOverflow() {
+    const menu=$('#overflowMenu'); if(!menu)return;
+    menu.innerHTML=state.tabs.map((id,i)=>{const s=byId(id);return `<button data-overflow="${id}">${avatar(s,'project-avatar')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title}</span><span class="shortcut">⌘${i+1}</span></button>`;}).join('');
+    menu.style.right='34px';menu.style.top='34px';
+    menu.querySelectorAll('[data-overflow]').forEach(b=>b.onclick=()=>{openTab(b.dataset.overflow);menu.classList.remove('show');});
+  }
+  function renderSwitcher() {
+    $('#switcherGrid').innerHTML=state.tabs.map((id,i)=>{const s=byId(id),p=project(s.project);return `<div class="switch-card ${i===state.switchIndex?'active':''}" data-switch="${i}"><span class="project-avatar" style="background:${p.color}">${p.initial}</span><div><strong>${s.title}</strong><small>${p.name} · ${p.branch}<br>${s.summary}</small></div></div>`;}).join('');
+    document.querySelectorAll('[data-switch]').forEach(c=>c.onclick=()=>commitSwitcher(Number(c.dataset.switch)));
+  }
+  function showSwitcher(step=1) { state.switchIndex=(state.tabs.indexOf(state.active)+step+state.tabs.length)%state.tabs.length;renderSwitcher();$('#switcher').classList.add('show'); }
+  function commitSwitcher(i=state.switchIndex) { state.active=state.tabs[i];state.view='chat';state.returnWorkspace=null;$('#switcher').classList.remove('show');renderAll(); }
+
+  function showMoreMenu(x,y,id) {
+    let menu=$('#moreMenu'); if(!menu){renderChat();menu=$('#moreMenu');}
+    const count=state.multi.has(id)&&state.multi.size>1?state.multi.size:1;
+    menu.innerHTML=`<button data-toast="${count} ${count>1?'Tabs':'Tab'} geschlossen">× ${count>1?count+' Tabs':'Tab'} schließen</button><button data-toast="Umbenennen gestartet">✎ Umbenennen…</button><button data-toast="Titel wird automatisch generiert">✦ Titel automatisch generieren</button><button data-toast="Session wird fortgesetzt">▶ Starten / Fortsetzen / Neustarten</button><div class="divider"></div><button data-toast="In neues Fenster verschoben">◫ In neues Fenster verschieben</button><button data-toast="Workspace-Auswahl geöffnet">⊞ Zu Workspace hinzufügen…</button><button data-toast="Slot-Auswahl geöffnet">▦ Im Workspace platzieren…</button><button data-toast="Workspace aus ${count} Chats erstellt">＋ Neuer Workspace aus ${count} ${count===1?'Chat':'Chats'}</button><div class="divider"></div><button data-toast="Anheftung aktualisiert">⌖ Anpinnen / Loslösen</button><button data-toast="Tab-Farbe geändert">● Tab-Farbe</button><button data-toast="Logs geöffnet">≡ Agent-Logs / Stop / Respawn</button><button data-toast="Archivierung vorbereitet">▣ Archivieren…</button>`;
+    const appRect=$('#app').getBoundingClientRect(); menu.style.position='fixed';menu.style.left=`${Math.min(x,window.innerWidth-260)}px`;menu.style.top=`${Math.min(y,window.innerHeight-360)}px`;menu.style.right='auto';menu.classList.add('show');bindToastButtons();
+  }
+
+  let toastTimer;
+  function toast(text) { const el=$('#toast');el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1800); }
+  function bindToastButtons() { document.querySelectorAll('[data-toast]').forEach(b=>b.onclick=e=>{e.stopPropagation();toast(b.dataset.toast);document.querySelectorAll('.popover').forEach(p=>p.classList.remove('show'));}); }
+  function renderAll() { renderTabs();renderSidebar();renderContent();bindToastButtons(); }
+
+  document.querySelectorAll('#tabVariantPicker [data-tab-style]').forEach(button=>button.onclick=()=>{
+    state.tabStyle=button.dataset.tabStyle;
+    renderTabs();
+    toast({chrome:'Chrome-artige Tab-Gruppen',connected:'Aktiver Tab mit Content verbunden',line:'Reduzierte Linienvariante'}[state.tabStyle]);
+  });
+  $('#groupToggle').onclick=()=>{state.grouped=!state.grouped;state.collapsedGroups.clear();renderTabs();toast(state.grouped?'Tab-Gruppen aktiviert':'Manuelle Tab-Reihenfolge');};
+  $('#newTabButton').onclick=e=>{e.stopPropagation();$('#newMenu').classList.toggle('show');$('#overflowMenu').classList.remove('show');};
+  $('#overflowButton').onclick=e=>{e.stopPropagation();$('#overflowMenu').classList.toggle('show');$('#newMenu').classList.remove('show');};
+  $('#sidebarToggle').onclick=()=>$('#app').classList.toggle('sidebar-hidden');
+  $('#sidebarNew').onclick=()=>$('#newMenu').classList.add('show');
+  $('#helpButton').onclick=e=>{e.stopPropagation();$('#helpMenu').classList.toggle('show');};
+  $('#filterInput').oninput=e=>{state.filter=e.target.value;$('#clearSearch').classList.toggle('show',!!state.filter);$('#scopeControl').classList.toggle('disabled',!!state.filter);renderSidebar();};
+  $('#clearSearch').onclick=()=>{$('#filterInput').value='';state.filter='';$('#clearSearch').classList.remove('show');$('#scopeControl').classList.remove('disabled');renderSidebar();};
+  $('#showAll').onclick=()=>{state.scope='all';document.querySelectorAll('#scopeControl button').forEach(b=>b.classList.toggle('on',b.dataset.scope==='all'));renderSidebar();};
+  document.querySelectorAll('#scopeControl button').forEach(b=>b.onclick=()=>{state.scope=b.dataset.scope;document.querySelectorAll('#scopeControl button').forEach(x=>x.classList.toggle('on',x===b));renderSidebar();});
+  document.querySelectorAll('#sidebarMode button').forEach(b=>b.onclick=()=>{state.sidebarMode=b.dataset.mode;document.querySelectorAll('#sidebarMode button').forEach(x=>x.classList.toggle('on',x===b));renderSidebar();});
+
+  document.addEventListener('click',e=>{if(!e.target.closest('.popover')&&!e.target.closest('#newTabButton')&&!e.target.closest('#overflowButton')&&!e.target.closest('#helpButton'))document.querySelectorAll('.popover').forEach(p=>p.classList.remove('show'));});
+  document.addEventListener('keydown',e=>{
+    if(e.ctrlKey&&e.key==='Tab'){e.preventDefault();if($('#switcher').classList.contains('show'))state.switchIndex=(state.switchIndex+(e.shiftKey?-1:1)+state.tabs.length)%state.tabs.length;else showSwitcher(e.shiftKey?-1:1);renderSwitcher();}
+    if(e.key==='Escape'){document.querySelectorAll('.popover').forEach(p=>p.classList.remove('show'));$('#switcher').classList.remove('show');}
+    if(e.metaKey&&/^[1-9]$/.test(e.key)){const i=Number(e.key)-1;if(state.tabs[i])openTab(state.tabs[i]);}
+    if(e.metaKey&&e.key.toLowerCase()==='w'){e.preventDefault();closeTab(state.active);}
+    if(e.metaKey&&e.key.toLowerCase()==='k'){e.preventDefault();$('#filterInput').focus();}
+    if(state.view==='grid'&&e.ctrlKey&&e.metaKey&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
+      e.preventDefault();const w=workspace(state.gridWorkspace),i=w.members.indexOf(state.gridFocus),cols=state.gridCapacity<=4?2:3,delta=e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:e.key==='ArrowUp'?-cols:cols;const next=w.members[i+delta];if(next){state.gridFocus=next;renderGrid();}
+    }
+  });
+  document.addEventListener('keyup',e=>{if(e.key==='Control'&&$('#switcher').classList.contains('show'))commitSwitcher();});
+
+  let resizing=false;
+  $('#resizeHandle').onpointerdown=e=>{resizing=true;$('#resizeHandle').setPointerCapture(e.pointerId);};
+  $('#resizeHandle').onpointermove=e=>{if(!resizing)return;const left=$('#app').getBoundingClientRect().left;const width=Math.max(220,Math.min(360,e.clientX-left));document.documentElement.style.setProperty('--sidebar-width',`${width}px`);};
+  $('#resizeHandle').onpointerup=()=>resizing=false;
+  $('#resizeHandle').ondblclick=e=>{if(e.altKey)document.documentElement.style.setProperty('--sidebar-width','268px');};
+
+  renderAll();
+</script>

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperM8 · Zonen-Varianten (A1–A4) + Status-Modus</title>
+<style>
+/* ============================================================
+   TOKENS — an der echten App kalibriert (Light Mode).
+   Basis: Variante A („Zonen") aus sidebar-redesign-varianten.html,
+   hier in vier Untervarianten ausgearbeitet. Status-Modus (Ex-B)
+   ist in ALLEN Varianten als zweiter Ansichts-Modus integriert.
+   ============================================================ */
+:root{
+  --font-ui:-apple-system,"SF Pro Text","Helvetica Neue",sans-serif;
+  --font-mono:"SF Mono",ui-monospace,Menlo,monospace;
+
+  --bg-toolbar:#f5f5f6;
+  --bg-sidebar:#f2f2f3;
+  --bg-header:#fbfbfc;
+  --bg-pane:#ffffff;
+  --bg-input:rgba(0,0,0,.05);
+  --border:#e4e4e7;
+
+  --tx-1:#1c1c1e;
+  --tx-2:#6e6e73;
+  --tx-3:#9b9ba1;
+
+  --ok:#34c759;
+  --busy:#ff9f0a;
+  --wait:#5e5ce6;
+  --idle:#c9c9ce;
+  --accent:#4f46e5;
+
+  --toolbar-h:38px;
+  --tab-h:28px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  font-family:var(--font-ui);font-size:13px;color:var(--tx-1);
+  background:#e9e9ec;display:flex;flex-direction:column;
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+
+/* ============================================================
+   META-LEISTE (nicht Teil der App)
+   ============================================================ */
+.meta{flex:none;display:flex;align-items:center;gap:14px;
+  padding:10px 18px;background:#1c1c1e;color:#e5e5ea;}
+.meta .brand{font-size:12px;font-weight:700;letter-spacing:.05em;color:#9b9ba1;}
+.vtabs{display:flex;gap:4px;}
+.vtab{padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;
+  color:#b9b9c0;cursor:pointer;user-select:none;}
+.vtab:hover{background:rgba(255,255,255,.07);}
+.vtab.on{background:#fff;color:#1c1c1e;}
+.mod{display:flex;align-items:center;gap:6px;font-size:12px;color:#b9b9c0;
+  cursor:pointer;user-select:none;padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.14);}
+.mod .box{width:13px;height:13px;border-radius:3.5px;border:1.5px solid #9b9ba1;display:grid;place-items:center;font-size:9px;color:#1c1c1e;}
+.mod.on .box{background:var(--ok);border-color:var(--ok);}
+.mod.on .box::after{content:"✓";color:#fff;font-weight:700;}
+.meta .desc{font-size:12px;color:#9b9ba1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.meta .desc b{color:#e5e5ea;font-weight:600;}
+
+/* ============================================================
+   FENSTER + TAB-STRIP (geteilt, wie gehabt)
+   ============================================================ */
+.window{flex:1;min-height:0;display:flex;flex-direction:column;background:#fff;}
+.toolbar{height:var(--toolbar-h);flex:none;background:var(--bg-toolbar);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;padding:0 10px;}
+.traffic{display:flex;gap:7px;flex:none;margin-right:4px;}
+.traffic i{width:12px;height:12px;border-radius:50%;}
+.traffic i:nth-child(1){background:#ff5f57;}
+.traffic i:nth-child(2){background:#febc2e;}
+.traffic i:nth-child(3){background:#28c840;}
+.sysstat{flex:none;font-size:11px;color:var(--tx-2);border:1px solid rgba(0,0,0,.12);
+  border-radius:6px;padding:2px 8px;background:rgba(255,255,255,.6);}
+.strip-sep{flex:none;width:74px;}
+.sb-toggle{flex:none;color:var(--tx-2);font-size:13px;padding:2px 4px;}
+.tabs{flex:1;min-width:0;display:flex;align-items:center;gap:2px;overflow-x:auto;scrollbar-width:none;}
+.tabs::-webkit-scrollbar{height:0;}
+.tab{height:var(--tab-h);display:flex;align-items:center;gap:6px;padding:0 10px;border-radius:7px;
+  color:var(--tx-2);flex:0 1 auto;min-width:0;max-width:190px;cursor:default;position:relative;white-space:nowrap;}
+.tab:hover{background:rgba(0,0,0,.045);}
+.tab.active{background:#fff;color:var(--tx-1);box-shadow:0 1px 2.5px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.05);}
+.tab .title{font-size:12px;overflow:hidden;text-overflow:ellipsis;}
+.tab .close{flex:none;color:var(--tx-3);font-size:11px;margin-left:2px;}
+.chip{flex:none;width:17px;height:17px;border-radius:5px;display:grid;place-items:center;
+  font-size:10px;font-weight:700;color:#fff;}
+.dot{flex:none;width:6px;height:6px;border-radius:50%;}
+.dot.ok{background:var(--ok);} .dot.busy{background:var(--busy);}
+.dot.idle{background:var(--idle);} .dot.wait{background:var(--wait);}
+.grp{display:flex;align-items:center;gap:2px;flex:none;padding:0 3px;border-radius:9px;}
+.grp-pill{flex:none;height:20px;display:flex;align-items:center;gap:5px;border-radius:10px;
+  padding:0 9px;font-size:10.5px;font-weight:600;color:#fff;background:var(--grp-color);
+  cursor:pointer;user-select:none;max-width:170px;}
+.grp-pill .cnt{opacity:.75;font-weight:500;}
+.grp .tab::after{content:"";position:absolute;left:5px;right:5px;bottom:-1px;height:2px;
+  border-radius:1px;background:var(--grp-color);opacity:.85;}
+.grp.collapsed .tab:not(.active){display:none;}
+.grp.collapsed{background:color-mix(in srgb,var(--grp-color) 8%,transparent);}
+.newtab{flex:none;color:var(--tx-2);font-size:15px;padding:0 7px;}
+.tool-ic{flex:none;color:var(--tx-2);font-size:13px;padding:2px 6px;}
+.wbody{flex:1;min-height:0;display:flex;}
+.content{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg-pane);}
+.chat-h{flex:none;padding:9px 16px;background:var(--bg-header);border-bottom:1px solid var(--border);}
+.chat-h .name{font-size:14px;font-weight:700;}
+.chat-h .sub{font-size:11px;color:var(--tx-3);}
+.term{flex:1;padding:14px 24px;font-family:var(--font-mono);font-size:12px;line-height:1.6;
+  color:#8a8a90;white-space:pre-wrap;}
+
+/* ============================================================
+   SIDEBAR — GEMEINSAM
+   ============================================================ */
+.sidebar{width:306px;flex:none;background:var(--bg-sidebar);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;}
+.sb-top{padding:10px 14px 6px;display:flex;flex-direction:column;gap:8px;flex:none;}
+.newchat{display:flex;align-items:center;gap:8px;background:#fff;
+  border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:6px 10px;font-weight:500;font-size:13px;}
+.newchat .chip{width:16px;height:16px;font-size:9px;background:#3b82f6;}
+.newchat .kbd{margin-left:auto;color:var(--tx-3);font-size:11px;font-weight:400;}
+.filter{background:var(--bg-input);border-radius:7px;padding:5px 9px;color:var(--tx-3);font-size:12px;}
+/* Der A+B-Kern: Ansicht-Segment Struktur/Status ersetzt nichts,
+   es ERGÄNZT die bestehende Filterzeile. */
+.viewseg{display:flex;align-items:center;background:var(--bg-input);border-radius:7px;padding:2px;}
+.viewseg > span{flex:1;text-align:center;padding:3px 0;font-size:11.5px;color:var(--tx-2);
+  border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;}
+.viewseg > span.on{background:#fff;color:var(--tx-1);box-shadow:0 1px 2px rgba(0,0,0,.1);font-weight:600;}
+/* flex:none — sonst streckt die Segment-Regel den Punkt zum Balken */
+.viewseg .led{flex:none;width:6px;height:6px;border-radius:50%;background:var(--wait);}
+.seg{display:flex;align-items:center;background:var(--bg-input);border-radius:7px;padding:2px;}
+.seg span{flex:1;text-align:center;padding:3px 0;font-size:12px;color:var(--tx-2);border-radius:5px;}
+.seg span.on{background:#fff;color:var(--tx-1);box-shadow:0 1px 2px rgba(0,0,0,.1);}
+.sb-count{display:flex;justify-content:space-between;font-size:11px;color:var(--tx-3);padding:0 2px;}
+.sb-scroll{flex:1;overflow-y:auto;padding:2px 8px 10px;}
+.sb-scroll::-webkit-scrollbar{width:0;}
+.sb-foot{flex:none;border-top:1px solid var(--border);display:flex;align-items:center;
+  gap:12px;padding:8px 14px;color:var(--tx-2);font-size:12px;}
+.sb-foot .icons{margin-left:auto;display:flex;gap:12px;color:var(--tx-3);}
+
+.sect{position:sticky;top:0;z-index:2;background:var(--bg-sidebar);
+  display:flex;align-items:center;gap:5px;padding:12px 6px 4px;
+  font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tx-3);}
+.sect .plus{margin-left:auto;font-weight:400;font-size:13px;cursor:pointer;}
+.sect .n{font-weight:600;font-variant-numeric:tabular-nums;}
+
+.row{height:26px;display:flex;align-items:center;gap:7px;padding:0 6px;
+  border-radius:6px;min-width:0;position:relative;}
+.row:hover{background:rgba(0,0,0,.04);}
+.row.sel{background:#dcdce1;}
+.row .title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;}
+.row.head{height:29px;}
+.row.head .title{font-weight:600;}
+.avatar{flex:none;width:16px;height:16px;border-radius:5px;display:grid;place-items:center;
+  font-size:9px;font-weight:700;color:#fff;}
+.row .avatar.sm{width:14px;height:14px;font-size:8px;}
+.subchip{flex:none;font-size:10px;color:var(--tx-3);}
+.slot{flex:none;font-size:9.5px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;}
+.meta-t{flex:none;font-size:10.5px;color:var(--tx-3);font-variant-numeric:tabular-nums;}
+.branch{flex:none;font-size:10px;color:var(--tx-3);font-family:var(--font-mono);}
+.pulse{animation:pulse 1.6s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.xref{flex:none;font-size:8.5px;font-weight:700;color:var(--ws-color,#666);
+  border:1px solid color-mix(in srgb,var(--ws-color,#666) 45%,transparent);
+  border-radius:3px;padding:0 3px;}
+
+/* Workspace-Zuklappen (alle Varianten): Chevron wie in der echten App,
+   zugeklappt bleibt der Status als Mini-Raster im Header sichtbar. */
+.chev{flex:none;font-size:8px;color:var(--tx-3);width:10px;cursor:pointer;transition:transform .12s;}
+.wsblock.open .chev{transform:rotate(90deg);}
+.sgrid{flex:none;display:grid;grid-template-columns:repeat(4,11px);gap:2.5px;}
+.sgrid i{width:11px;height:11px;border-radius:3px;background:var(--idle);}
+.sgrid i.ok{background:var(--ok);} .sgrid i.busy{background:var(--busy);}
+.sgrid i.wait{background:var(--wait);}
+.sgrid i.empty{background:transparent;border:1px dashed rgba(0,0,0,.2);}
+
+/* Spalten-Modus (globaler Schalter): Zeit/Slot/Status rechtsbündig */
+.cols{flex:none;display:flex;align-items:center;gap:6px;width:84px;justify-content:flex-end;}
+.cols .meta-t{width:28px;text-align:right;font-size:10px;}
+.cols .slot{width:17px;text-align:right;}
+
+/* ---------- A1 · SPINE ---------- */
+.a1 .wsblock{position:relative;margin-bottom:2px;}
+.a1 .wsblock.open::before{content:"";position:absolute;left:1px;top:6px;bottom:4px;width:2.5px;
+  border-radius:2px;background:var(--ws-color);opacity:.75;}
+.a1 .wsblock .row{padding-left:12px;}
+.a1 .wsblock .row.head{padding-left:9px;}
+.a1 .row.indent{padding-left:30px;}
+
+/* ---------- A2 · TINT-BLOCK ---------- */
+.a2 .wsblock{border-radius:9px;margin:1px 0 5px;padding:2px 3px 3px;
+  background:color-mix(in srgb,var(--ws-color) 5%,transparent);
+  border:1px solid color-mix(in srgb,var(--ws-color) 12%,transparent);}
+.a2 .wsblock .row.head{height:27px;}
+.a2 .wsblock .row.head .title{color:color-mix(in srgb,var(--ws-color) 72%,var(--tx-1));}
+.a2 .wsblock .row:hover{background:color-mix(in srgb,var(--ws-color) 9%,transparent);}
+.a2 .wsblock .row.sel{background:color-mix(in srgb,var(--ws-color) 16%,transparent);}
+.a2 .row.indent{padding-left:26px;}
+
+/* ---------- A3 · DEDUP ---------- */
+.a3 .wsblock{position:relative;margin-bottom:2px;}
+.a3 .wsblock.open::before{content:"";position:absolute;left:1px;top:6px;bottom:4px;width:2.5px;
+  border-radius:2px;background:var(--ws-color);opacity:.75;}
+.a3 .wsblock .row{padding-left:12px;}
+.a3 .wsblock .row.head{padding-left:9px;}
+.a3 .row.indent{padding-left:30px;}
+.a3 .ghost{height:22px;display:flex;align-items:center;gap:6px;padding:0 6px 0 30px;
+  font-size:10.5px;color:var(--tx-3);cursor:pointer;border-radius:6px;}
+.a3 .ghost:hover{background:rgba(0,0,0,.04);color:var(--tx-2);}
+.a3 .ghost .gws{font-weight:700;font-size:8.5px;border-radius:3px;padding:0 3px;color:#fff;}
+
+/* ---------- A4 · SLOT-GRID ---------- */
+.a4 .wsblock{position:relative;margin-bottom:2px;}
+.a4 .wsblock .row.head{height:34px;cursor:pointer;}
+.a4 .row.indent{padding-left:30px;}
+.a4 .wsblock.open::before{content:"";position:absolute;left:1px;top:6px;bottom:4px;width:2.5px;
+  border-radius:2px;background:var(--ws-color);opacity:.75;}
+
+/* ---------- STATUS-MODUS (Ex-B, in allen Varianten identisch) ----------
+   Prinzip: die SEKTION trägt den Status (ein 6-px-Punkt als einziger
+   Farbakzent), die Zeile bleibt eine ganz normale Sidebar-Zeile —
+   keine Border-Streifen, keine Tint-Karten, keine Zweizeiler. */
+.stat-h{display:flex;align-items:center;gap:6px;padding:14px 6px 4px;
+  font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tx-3);}
+.stat-h .n{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums;}
+.stat-h .sdot{flex:none;width:6px;height:6px;border-radius:50%;}
+.stat-h .sdot.wait{background:var(--wait);}
+.stat-h .sdot.busy{background:var(--busy);}
+.stat-h .sdot.rest{background:var(--idle);}
+
+/* ============================================================
+   Notiz-Panel (Meta-UI)
+   ============================================================ */
+.parity{position:fixed;left:16px;bottom:16px;z-index:50;max-width:430px;
+  background:rgba(28,28,30,.94);color:#d8d8dd;border-radius:12px;
+  padding:12px 14px;font-size:11.5px;line-height:1.5;box-shadow:0 6px 24px rgba(0,0,0,.35);}
+.parity .h{font-size:10px;font-weight:700;letter-spacing:.07em;color:#9b9ba1;margin-bottom:6px;}
+.parity p{color:#b9b9c0;} .parity p b{color:#fff;}
+.parity .toggle{position:absolute;top:8px;right:10px;cursor:pointer;color:#9b9ba1;font-size:11px;}
+.parity.min{padding:8px 12px;} .parity.min .body{display:none;}
+</style>
+</head>
+<body>
+
+<div class="meta">
+  <span class="brand">ZONEN-VARIANTEN (A+B)</span>
+  <div class="vtabs" id="vtabs">
+    <span class="vtab on" data-v="a1">A1 · Spine</span>
+    <span class="vtab" data-v="a2">A2 · Tint-Block</span>
+    <span class="vtab" data-v="a3">A3 · Dedup</span>
+    <span class="vtab" data-v="a4">A4 · Slot-Grid</span>
+  </div>
+  <span class="mod" id="colsMod"><span class="box"></span> Spalten rechtsbündig</span>
+  <span class="desc" id="vdesc"></span>
+</div>
+
+<div class="window" id="win">
+  <div class="toolbar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="sysstat">⌸ 11 · 54.5% · 1.74 GB</div>
+    <div class="strip-sep"></div>
+    <div class="sb-toggle">⊡</div>
+    <div class="tabs" id="tabs"></div>
+    <div class="tool-ic" style="margin-left:auto;">⊞</div>
+  </div>
+  <div class="wbody">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="content">
+      <div class="chat-h">
+        <div class="name">Claude Chat</div>
+        <div class="sub">whisperm8 · ⑂ main · /Users/giulianocosta/repos/whisperm8</div>
+      </div>
+      <div class="term">● Vier Ausbaustufen desselben Zonen-Konzepts — alle mit dem
+  Struktur/Status-Segment (die A+B-Kombination) in der Sidebar oben.
+  Der Spalten-Schalter in der Meta-Leiste ist eine unabhängige Achse
+  und funktioniert in jeder Variante.</div>
+    </div>
+  </div>
+</div>
+
+<div class="parity" id="parity">
+  <span class="toggle" id="parityToggle">einklappen</span>
+  <div class="h" id="parityTitle"></div>
+  <div class="body"><p id="parityText"></p></div>
+</div>
+
+<script>
+/* ============================================================
+   DATENMODELL (identisch zu sidebar-redesign-varianten.html)
+   ============================================================ */
+const WORKSPACES = [
+  { id:'ws-akq', name:'AKQ · ListM8 · Heartbeat', initial:'A', color:'#3f3f46', cap:4 },
+  { id:'ws-w8',  name:'WhisperM8 – GPT, Skills',  initial:'W', color:'#3b82f6', cap:4 },
+];
+const PROJECTS = {
+  akquise:   { name:'akquise-ai',       initial:'a', color:'#1d1d1f', branch:'feat/spri…2026-07' },
+  listm8:    { name:'ListM8',           initial:'L', color:'#0ea5e9', branch:'redesign' },
+  whisperm8: { name:'whisperm8',        initial:'W', color:'#3b82f6', branch:'main' },
+  heartbeat: { name:'heartbeat-master', initial:'H', color:'#e8590c', branch:'feat…lysis' },
+  copy:      { name:'Copy',             initial:'C', color:'#15aabf', branch:'main' },
+};
+const SESSIONS = [
+  { id:'s1', title:'AKQ Kunden-Weg – Sprint-QA',   project:'akquise',   ws:'ws-akq', slot:1, sub:22, status:'idle', time:'16m' },
+  { id:'s2', title:'ListM8 Review-Queue',          project:'listm8',    ws:'ws-akq', slot:2, sub:12, status:'wait', time:'jetzt' },
+  { id:'s3', title:'Heartbeat Slack-Tagesbericht', project:'heartbeat', ws:'ws-akq', slot:3, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s4', title:'Jarvis – Projektsteuerung A',  project:'whisperm8', ws:'ws-akq', slot:4, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s5', title:'WhisperM8 GPT-Fast-Modelle',   project:'whisperm8', ws:'ws-w8',  slot:1, sub:18, status:'idle', time:'30m' },
+  { id:'s6', title:'WhisperM8 Agent-Chats-Audit',  project:'whisperm8', ws:'ws-w8',  slot:2, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s7', title:'WhisperM8 GPT-Workflows',      project:'whisperm8', ws:'ws-w8',  slot:3, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s8', title:'Jarvis – Projektsteuerung W',  project:'whisperm8', ws:'ws-w8',  slot:4, sub:0,  status:'ok',   time:'jetzt' },
+  { id:'s9', title:'Podologie-Scraping DACH v2',   project:'listm8',    ws:null,     slot:0, sub:0,  status:'idle', time:'jetzt' },
+  { id:'s10',title:'Claude Chat',                  project:'whisperm8', ws:null,     slot:0, sub:0,  status:'ok',   time:'jetzt', sel:true },
+  { id:'s11',title:'MCP-Server konsolidieren',     project:'heartbeat', ws:null,     slot:0, sub:3,  status:'idle', time:'4h' },
+  { id:'s12',title:'Wolanin SEO-Nachholplan',      project:'copy',      ws:null,     slot:0, sub:39, status:'idle', time:'1d' },
+];
+const PINNED = [
+  { title:'Tägliche Reporting-Pipeline au…', proj:'heartbeat', time:'5h' },
+  { title:'Steuer 2024', proj:'listm8', time:'3w' },
+  { title:'Steuer 2025', proj:'listm8', time:'1w' },
+  { title:'Fitagon Meta-Ads Crea…', proj:'copy', sub:53, time:'1d' },
+];
+const OPEN_TABS = ['s5','s6','s7','s9','s10','s3','s8'];
+
+const S = { variant:'a1', mode:'struct', cols:false, activeTab:'s10',
+            collapsedGroups:new Set(), a4open:new Set(['ws-akq']),
+            wsCollapsed:new Set() };
+
+const ws = id => WORKSPACES.find(w => w.id === id);
+const pj = id => PROJECTS[id];
+const dotCls = s => ({ok:'ok',busy:'busy pulse',wait:'wait pulse',idle:'idle'})[s];
+const el = (cls, html) => { const d = document.createElement('div'); d.className = cls; if (html) d.innerHTML = html; return d; };
+const subBadge = s => s.sub ? `<span class="subchip">› ${s.sub}</span>` : '';
+
+/* ---------- Tab-Strip (unverändert aus dem Tab-Gruppen-Vorschlag) ---------- */
+function renderTabs(){
+  const host = document.getElementById('tabs');
+  host.innerHTML = '';
+  const tabs = OPEN_TABS.map(id => SESSIONS.find(s => s.id === id));
+  const key = t => t.ws ? 'ws:'+t.ws : 'pj:'+t.project;
+  const counts = {};
+  tabs.forEach(t => counts[key(t)] = (counts[key(t)]||0)+1);
+  const emitted = new Set();
+  const mkTab = t => {
+    const p = pj(t.project);
+    const d = el('tab' + (t.id === S.activeTab ? ' active' : ''),
+      `<span class="chip" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+       <span class="title">${t.title}</span>` +
+      (t.id === S.activeTab ? `<span class="close">✕</span>` : `<span class="dot ${dotCls(t.status)}"></span>`));
+    d.onclick = () => { S.activeTab = t.id; render(); };
+    return d;
+  };
+  tabs.forEach(t => {
+    const k = key(t);
+    if (counts[k] < 2) { host.appendChild(mkTab(t)); return; }
+    if (emitted.has(k)) return;
+    emitted.add(k);
+    const members = tabs.filter(x => key(x) === k);
+    const meta = k.startsWith('ws:')
+      ? { icon:'⊞', name:ws(k.slice(3)).name, color:ws(k.slice(3)).color }
+      : { icon:'▤', name:pj(k.slice(3)).name, color:pj(k.slice(3)).color };
+    const g = el('grp' + (S.collapsedGroups.has(k) ? ' collapsed' : ''));
+    g.style.setProperty('--grp-color', meta.color);
+    const pill = el('grp-pill', `<span>${meta.icon}</span><span>${meta.name}</span><span class="cnt">${members.length}</span>`);
+    pill.onclick = e => { e.stopPropagation();
+      S.collapsedGroups.has(k) ? S.collapsedGroups.delete(k) : S.collapsedGroups.add(k); render(); };
+    g.appendChild(pill);
+    members.forEach(m => g.appendChild(mkTab(m)));
+    host.appendChild(g);
+  });
+  host.appendChild(el('newtab','+'));
+}
+
+/* ---------- Sidebar-Kopf: Filterzeile + A+B-Segment ---------- */
+function sbTop(host){
+  const waits = SESSIONS.filter(s => s.status==='wait').length;
+  const t = el('sb-top');
+  t.appendChild(el('newchat', `<span class="chip">W</span> Neuer Chat <span class="kbd">⌘N ⌄ ⟳</span>`));
+  t.appendChild(el('filter', '⌕ Filter…'));
+  const vs = el('viewseg',
+    `<span class="${S.mode==='struct'?'on':''}" data-m="struct">☰ Struktur</span>
+     <span class="${S.mode==='status'?'on':''}" data-m="status"><span class="led pulse"></span> Status${waits?' · '+waits:''}</span>`);
+  vs.querySelectorAll('[data-m]').forEach(x => x.onclick = () => { S.mode = x.dataset.m; render(); });
+  t.appendChild(vs);
+  t.appendChild(el('seg', `<span class="on">Aktiv</span><span>Zuletzt</span><span>Alle</span><span style="flex:0 0 26px;">☰</span>`));
+  t.appendChild(el('sb-count', `<span>13 von 937 Chats</span><span>Alle zeigen</span>`));
+  host.appendChild(t);
+}
+function sbFoot(host){
+  host.appendChild(el('sb-foot', `⚙ Settings <span class="icons">▤ ✳ ◧ ⌗</span>`));
+}
+
+/* ---------- Zeilen-Enden: inline vs. Spalten (globale Achse) ---------- */
+function rowTail(s, xrefHtml){
+  if (S.cols){
+    return `<div class="cols">${subBadge(s)}${s.slot?`<span class="slot">S${s.slot}</span>`:'<span class="slot"></span>'}
+            <span class="meta-t">${s.time}</span><span class="dot ${dotCls(s.status)}"></span></div>`;
+  }
+  return `${subBadge(s)}${xrefHtml ?? (s.slot?`<span class="slot">S${s.slot}</span>`:`<span class="meta-t">${s.time}</span>`)}
+          <span class="dot ${dotCls(s.status)}"></span>`;
+}
+
+/* ---------- Gemeinsame Sektionen ---------- */
+function pinnedSection(sc){
+  sc.appendChild(el('sect','▾ ⌖ GEPINNT'));
+  PINNED.forEach(p => {
+    const pr = pj(p.proj);
+    sc.appendChild(el('row',
+      `<span class="avatar" style="background:${pr.color}">${pr.initial.toUpperCase()}</span>
+       <span class="title">${p.title}</span>${p.sub?`<span class="subchip">› ${p.sub}</span>`:''}
+       <span class="meta-t">${p.time}</span>`));
+  });
+}
+function slotGridHtml(w, members){
+  const cells = Array.from({length:w.cap}, (_,i) => {
+    const m = members.find(s => s.slot === i+1);
+    return `<i class="${m ? dotCls(m.status).split(' ')[0] : 'empty'}" title="${m ? 'S'+(i+1)+' · '+m.title : 'S'+(i+1)+' frei'}"></i>`;
+  }).join('');
+  return `<span class="sgrid">${cells}</span>`;
+}
+/* Header mit Zuklapp-Chevron (wie echte App: Chevron klappt, Rest des
+   Headers öffnet das Grid). Zugeklappt wandert der Live-Status als
+   Mini-Raster in den Header — Status bleibt ohne Aufklappen sichtbar. */
+function wsHeader(w, members, collapsed){
+  const h = el('row head',
+    `<span class="chev">▶</span>
+     <span class="avatar" style="background:${w.color}">${w.initial}</span>
+     <span class="title">${w.name}</span>
+     ${collapsed ? slotGridHtml(w, members) : ''}
+     <span class="meta-t">${members.length}/${w.cap} ⊞</span>`);
+  h.querySelector('.chev').onclick = e => {
+    e.stopPropagation();
+    collapsed ? S.wsCollapsed.delete(w.id) : S.wsCollapsed.add(w.id);
+    render();
+  };
+  return h;
+}
+function wsMemberRow(s){
+  const p = pj(s.project);
+  return el('row indent' + (s.sel?' sel':''),
+    `<span class="avatar sm" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+     <span class="title">${s.title}</span>${rowTail(s)}`);
+}
+function chatsSection(sc, opts = {}){
+  sc.appendChild(el('sect','▾ CHATS'));
+  Object.entries(PROJECTS).forEach(([pid, p]) => {
+    const all = SESSIONS.filter(s => s.project === pid);
+    if (!all.length) return;
+    const shown = opts.dedup ? all.filter(s => !s.ws) : all;
+    const hidden = all.length - shown.length;
+    if (!shown.length && !hidden) return;
+    sc.appendChild(el('row head',
+      `<span class="avatar" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+       <span class="title">${p.name}</span><span class="branch">⑂ ${p.branch}</span>
+       <span class="meta-t">${shown.length}${hidden?` · ${hidden}⊞`:''}</span>`));
+    shown.forEach(s => {
+      const w = s.ws ? ws(s.ws) : null;
+      const xref = (!S.cols && w)
+        ? `<span class="xref" style="--ws-color:${w.color}">⊞ S${s.slot}</span>` : null;
+      sc.appendChild(el('row indent' + (s.sel?' sel':''),
+        `<span class="dot ${dotCls(s.status)}" style="margin-left:0"></span>
+         <span class="title">${s.title}</span>${rowTail(s, xref)}`));
+    });
+    if (opts.dedup && hidden){
+      const wsList = [...new Set(all.filter(s => s.ws).map(s => s.ws))];
+      const chips = wsList.map(id => `<span class="gws" style="background:${ws(id).color}">${ws(id).initial}</span>`).join('');
+      sc.appendChild(el('ghost', `↑ ${hidden} in Workspaces ${chips}`));
+    }
+  });
+}
+
+/* ---------- A1 · Spine / A2 · Tint-Block ---------- */
+function renderZonen(sb, cls){
+  sbTop(sb);
+  const sc = el('sb-scroll ' + cls);
+  pinnedSection(sc);
+  sc.appendChild(el('sect','▾ ⊞ WORKSPACES <span class="plus">+</span>'));
+  WORKSPACES.forEach(w => {
+    const members = SESSIONS.filter(s => s.ws === w.id);
+    const collapsed = S.wsCollapsed.has(w.id);
+    const block = el('wsblock' + (collapsed ? '' : ' open'));
+    block.style.setProperty('--ws-color', w.color);
+    block.appendChild(wsHeader(w, members, collapsed));
+    if (!collapsed) members.forEach(s => block.appendChild(wsMemberRow(s)));
+    sc.appendChild(block);
+  });
+  chatsSection(sc, { dedup:false });
+  sb.appendChild(sc);
+  sbFoot(sb);
+}
+
+/* ---------- A3 · Dedup ---------- */
+function renderA3(sb){
+  sbTop(sb);
+  const sc = el('sb-scroll a3');
+  pinnedSection(sc);
+  sc.appendChild(el('sect','▾ ⊞ WORKSPACES <span class="plus">+</span>'));
+  WORKSPACES.forEach(w => {
+    const members = SESSIONS.filter(s => s.ws === w.id);
+    const collapsed = S.wsCollapsed.has(w.id);
+    const block = el('wsblock' + (collapsed ? '' : ' open'));
+    block.style.setProperty('--ws-color', w.color);
+    block.appendChild(wsHeader(w, members, collapsed));
+    if (!collapsed) members.forEach(s => block.appendChild(wsMemberRow(s)));
+    sc.appendChild(block);
+  });
+  chatsSection(sc, { dedup:true });
+  sb.appendChild(sc);
+  sbFoot(sb);
+}
+
+/* ---------- A4 · Slot-Grid ---------- */
+function renderA4(sb){
+  sbTop(sb);
+  const sc = el('sb-scroll a4');
+  pinnedSection(sc);
+  sc.appendChild(el('sect','▾ ⊞ WORKSPACES <span class="plus">+</span>'));
+  WORKSPACES.forEach(w => {
+    const members = SESSIONS.filter(s => s.ws === w.id);
+    const open = S.a4open.has(w.id);
+    const block = el('wsblock' + (open ? ' open' : ''));
+    block.style.setProperty('--ws-color', w.color);
+    const cells = Array.from({length:w.cap}, (_,i) => {
+      const m = members.find(s => s.slot === i+1);
+      return `<i class="${m ? dotCls(m.status).split(' ')[0] : 'empty'}" title="${m ? 'S'+(i+1)+' · '+m.title : 'S'+(i+1)+' frei'}"></i>`;
+    }).join('');
+    const head = el('row head',
+      `<span class="chev">▶</span>
+       <span class="avatar" style="background:${w.color}">${w.initial}</span>
+       <span class="title">${w.name}</span>
+       <span class="sgrid">${cells}</span><span class="meta-t">⊞</span>`);
+    head.onclick = () => { open ? S.a4open.delete(w.id) : S.a4open.add(w.id); render(); };
+    block.appendChild(head);
+    if (open) members.forEach(s => block.appendChild(wsMemberRow(s)));
+    sc.appendChild(block);
+  });
+  chatsSection(sc, { dedup:false });
+  sb.appendChild(sc);
+  sbFoot(sb);
+}
+
+/* ---------- Status-Modus (Ex-B) — für alle Varianten identisch ----------
+   Zeilen-Grammatik = Struktur-Ansicht (Avatar · Titel · ›Sub · ⊞Sx · Zeit).
+   Einzige Hervorhebung: Titel der Wartet-Zeilen semibold. Kein Status-Dot
+   pro Zeile — den Status sagt schon die Sektion. */
+function renderStatus(sb){
+  sbTop(sb);
+  const sc = el('sb-scroll');
+  const rowS = (s, emph) => {
+    const p = pj(s.project);
+    const w = s.ws ? ws(s.ws) : null;
+    return el('row' + (s.sel?' sel':''),
+      `<span class="avatar sm" style="background:${p.color}">${p.initial.toUpperCase()}</span>
+       <span class="title"${emph?' style="font-weight:600"':''}>${s.title}</span>${subBadge(s)}
+       ${w?`<span class="xref" style="--ws-color:${w.color}">⊞ S${s.slot}</span>`:''}
+       <span class="meta-t">${s.time}</span>`);
+  };
+  const sect = (cls, label, count) =>
+    el('stat-h', `<span class="sdot ${cls}"></span> ${label} <span class="n">${count}</span>`);
+
+  const waits = SESSIONS.filter(s => s.status==='wait');
+  const busy  = SESSIONS.filter(s => s.status==='busy');
+  const rest  = SESSIONS.filter(s => s.status!=='wait' && s.status!=='busy');
+
+  sc.appendChild(sect('wait pulse', 'WARTET AUF DICH', waits.length));
+  waits.forEach(s => sc.appendChild(rowS(s, true)));
+  sc.appendChild(sect('busy', 'ARBEITET', busy.length));
+  busy.forEach(s => sc.appendChild(rowS(s, false)));
+  sc.appendChild(sect('rest', 'RUHT', rest.length + PINNED.length));
+  rest.forEach(s => sc.appendChild(rowS(s, false)));
+  PINNED.forEach(p => {
+    const pr = pj(p.proj);
+    sc.appendChild(el('row',
+      `<span class="avatar sm" style="background:${pr.color}">${pr.initial.toUpperCase()}</span>
+       <span class="title">⌖ ${p.title}</span>${p.sub?`<span class="subchip">› ${p.sub}</span>`:''}
+       <span class="meta-t">${p.time}</span>`));
+  });
+  sb.appendChild(sc);
+  sbFoot(sb);
+}
+
+/* ---------- Beschreibungen ---------- */
+const DESCR = {
+  a1: '<b>A1 · Spine</b> — Farbleiste verbindet Workspace-Header und Mitglieder; CHATS zeigt alles, Workspace-Chats mit ⊞Sx-Querverweis.',
+  a2: '<b>A2 · Tint-Block</b> — Workspace als leicht getönter Container in Workspace-Farbe; Hover/Selektion tinten mit. CHATS wie A1.',
+  a3: '<b>A3 · Dedup</b> — Workspace-Chats verschwinden aus CHATS; Projekt-Header zählt „2 · 4⊞", eine Ghost-Zeile führt zur Gruppe hoch.',
+  a4: '<b>A4 · Slot-Grid</b> — Workspace-Header trägt ein Mini-Raster (Slot-Belegung + Status auf einen Blick); Mitglieder klappen auf Klick.',
+};
+const NOTES = {
+  a1: '<b>Geringstes Risiko.</b> Reines Styling + ein Badge — keine Verhaltensänderung. Der Spine beantwortet „wo endet die Gruppe?", der ⊞S3-Badge „warum ist der Chat doppelt?".',
+  a2: 'Gleiche Semantik wie A1, aber <b>Containment statt Linie</b>: die Fläche macht Drag-Ziele („in den Workspace ziehen") körperlich. Risiko: 2 Workspaces übereinander = viel Farbe.',
+  a3: '<b>Aufgeräumteste Liste</b> — jeder Chat genau einmal. Risiko: Muskelgedächtnis („Jarvis war immer unter whisperm8") bricht; die Ghost-Zeile + Zähler müssen das auffangen. Als Toggle in Settings entschärfbar.',
+  a4: '<b>Dichteste Übersicht:</b> Workspaces default zu, Status trotzdem sichtbar (Raster = Statusboard im Kleinen). Passt gut zur A+B-Idee — das Raster ist quasi der Status-Modus en miniature.',
+};
+
+/* ---------- Render-Loop ---------- */
+function render(){
+  renderTabs();
+  const sb = document.getElementById('sidebar');
+  sb.innerHTML = '';
+  if (S.mode === 'status'){
+    renderStatus(sb);
+  } else {
+    ({a1:s=>renderZonen(s,'a1'), a2:s=>renderZonen(s,'a2'), a3:renderA3, a4:renderA4})[S.variant](sb);
+  }
+  document.getElementById('vdesc').innerHTML = DESCR[S.variant];
+  document.getElementById('parityTitle').textContent =
+    'NOTIZ — ' + S.variant.toUpperCase() + (S.mode==='status' ? ' (STATUS-MODUS AKTIV)' : '');
+  document.getElementById('parityText').innerHTML = S.mode==='status'
+    ? 'Status-Modus (in allen Varianten identisch): Sektionen „Wartet auf dich" → „Arbeitet" → „Ruht". <b>Die Sektion trägt den Status</b> — Zeilen bleiben normale Sidebar-Zeilen (Avatar · Titel · ⊞Sx · Zeit), Wartet-Titel semibold. Zurück über das Segment oben.'
+    : NOTES[S.variant];
+  document.querySelectorAll('.vtab').forEach(t =>
+    t.classList.toggle('on', t.dataset.v === S.variant));
+  document.getElementById('colsMod').classList.toggle('on', S.cols);
+}
+document.querySelectorAll('.vtab').forEach(t =>
+  t.onclick = () => { S.variant = t.dataset.v; S.mode = 'struct'; render(); });
+document.getElementById('colsMod').onclick = () => { S.cols = !S.cols; render(); };
+document.getElementById('parityToggle').onclick = () => {
+  const p = document.getElementById('parity');
+  p.classList.toggle('min');
+  document.getElementById('parityToggle').textContent =
+    p.classList.contains('min') ? 'aufklappen' : 'einklappen';
+};
+render();
+</script>
+</body>
+</html>
