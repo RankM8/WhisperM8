@@ -134,6 +134,9 @@ struct GPTBackendSettingsPage: View {
         .onChange(of: fastModeEnabled) { _, _ in
             syncAgentDefinition()
         }
+        .onChange(of: gptContextWindow) { _, _ in
+            syncAgentDefinition()
+        }
     }
 
     /// Setup unvollständig, sobald ein Baustein fehlt — erst dann zeigt die
@@ -289,20 +292,33 @@ struct GPTBackendSettingsPage: View {
             )
 
             SettingsRow(
-                title: "GPT-Modellkapazität (MAX_CONTEXT)",
-                subtitle: "Gemeinsames Token-Fenster der freigegebenen GPT-Modelle. Default und aktuell belegte Obergrenze: 272000; kleinere Werte begrenzen konservativ, größere Alt-/Fehlwerte werden auf 272000 gekappt. Direkt gestartete Chats, Forks, Resumes, Agents View und der --bg-Dispatcher erhalten MAX_CONTEXT plus den separaten 1M-Auto-Compact-Deckel. Claude Code 2.1.216 persistiert diese Werte nicht garantiert in den Background-Worker; Attach lässt das Trio deshalb weg und zeigt nur die vom Worker gemeldete Kapazität."
+                title: "GPT-Kontextprofil",
+                subtitle: gptContextProfileSubtitle
             ) {
-                TextField(
-                    String(AppPreferences.claudeGPTDefaultContextWindow),
-                    value: $gptContextWindow,
-                    format: .number.grouping(.never)
-                )
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                .multilineTextAlignment(.trailing)
-                .frame(width: 100)
+                Picker("GPT-Kontextprofil", selection: gptContextWindowSelection) {
+                    ForEach(ClaudeGPTContextProfile.allCases) { profile in
+                        Text(profile.title).tag(profile.rawValue)
+                    }
+                    if ClaudeGPTContextProfile.matching(contextWindow: effectiveGPTContextWindow) == nil {
+                        Text("Benutzerdefiniert — \(effectiveGPTContextWindow)")
+                            .tag(effectiveGPTContextWindow)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220)
             }
         }
+    }
+
+    private var effectiveGPTContextWindow: Int {
+        AppPreferences.normalizedClaudeGPTContextWindow(gptContextWindow)
+    }
+
+    private var gptContextWindowSelection: Binding<Int> {
+        Binding(
+            get: { effectiveGPTContextWindow },
+            set: { gptContextWindow = $0 }
+        )
     }
 
     private func syncAgentDefinition() {
@@ -340,6 +356,17 @@ struct GPTBackendSettingsPage: View {
                     .help("Modellvorschläge")
                 }
             }
+        }
+    }
+
+    private var gptContextProfileSubtitle: String {
+        switch ClaudeGPTContextProfile.matching(contextWindow: effectiveGPTContextWindow) {
+        case .some(.standard):
+            return "Sicherer Default für alle freigegebenen GPT-Modelle. Claude Code kompaktifiziert erfahrungsgemäß bei ungefähr \(ClaudeGPTContextProfile.standard.expectedAutoCompactTokens / 1_000)k; native 1M-Modelle bleiben unberührt."
+        case .some(.experimentalSol372K):
+            return "Opt-in für GPT-5.6 Sol über Codex-Subscription/OAuth: 372k Rohprofil, erwartetes Auto-Compact um \(ClaudeGPTContextProfile.experimentalSol372K.expectedAutoCompactTokens / 1_000)k. WhisperM8 lässt in diesem Profil ausschließlich Sol/Sol-Fast zu und fällt bei neuen abweichenden GPT-Konfigurationen auf Sol zurück; bestehende Nicht-Sol-Sessions benötigen wieder das Standardprofil. Die Freischaltung ist account-/rolloutabhängig und kann ChatGPT-Credits schneller verbrauchen — bei Upstream-Overflow auf Standard zurückstellen."
+        case .none:
+            return "Bestehender benutzerdefinierter Wert. Für eine klar getestete Konfiguration Standard 272k oder das experimentelle Sol-Profil 372k wählen."
         }
     }
 

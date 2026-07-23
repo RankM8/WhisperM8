@@ -51,10 +51,26 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
                 contextWindow: 272_000
             )
         )
+        XCTAssertNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.6-sol",
+                contextWindow: 372_000
+            )
+        )
+        let extendedTerraBody = try XCTUnwrap(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.6-terra",
+                contextWindow: 372_000
+            )
+        )
+        XCTAssertTrue(
+            String(decoding: extendedTerraBody, as: UTF8.self)
+                .contains("verified only for gpt-5.6-sol")
+        )
         XCTAssertNotNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: "gpt-5.6-sol",
-                contextWindow: 300_000
+                contextWindow: 372_001
             )
         )
         XCTAssertNotNil(

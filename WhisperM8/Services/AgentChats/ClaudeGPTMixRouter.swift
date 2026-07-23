@@ -348,10 +348,12 @@ final class ClaudeGPTMixRouter {
             contextWindow: contextWindow
         ) else {
             let message: String
-            if contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow {
-                message = "The configured GPT context window exceeds the largest verified shared capacity of \(ClaudeGPTModelAlias.maximumKnownSharedContextWindow) tokens. Reduce the setting and retry."
+            if contextWindow > ClaudeGPTModelAlias.maximumConfigurableContextWindow {
+                message = "The configured GPT context window exceeds the largest verified profile of \(ClaudeGPTModelAlias.maximumConfigurableContextWindow) tokens. Reduce the setting and retry."
+            } else if contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow {
+                message = "The experimental 372k context profile is verified only for gpt-5.6-sol. Switch to Sol or select the standard 272k profile and retry."
             } else {
-                message = "Unsupported GPT model for the configured shared context window. Supported models: gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, and gpt-5.4-mini. All except gpt-5.4-mini optionally support -fast."
+                message = "Unsupported GPT model for the configured context profile. Supported models: gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, and gpt-5.4-mini. All except gpt-5.4-mini optionally support -fast."
             }
             return anthropicInvalidRequestBody(message: message)
         }
@@ -846,7 +848,7 @@ private extension ClaudeGPTMixRouter {
             upstreamTask?.cancel()
             let limit = min(
                 max(gptContextWindowResolver(), AppPreferences.claudeGPTContextWindowRange.lowerBound),
-                ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+                ClaudeGPTModelAlias.maximumConfigurableContextWindow
             )
             let body = ClaudeGPTMixRouter.anthropicInvalidRequestBody(
                 message: "prompt is too long: \(limit + 1) tokens > \(limit)"

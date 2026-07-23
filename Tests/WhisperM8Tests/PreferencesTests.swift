@@ -71,20 +71,27 @@ final class PreferencesTests: XCTestCase {
         }
     }
 
-    func testClaudeGPTContextWindowClampsAndFallsBackUsingLegacyKey() {
-        withIsolatedPreferences { preferences in
-            // Unset → getesteter Default (272k).
+    func testClaudeGPTContextWindowNormalizesLegacyValuesAndKeepsExact372KOptIn() {
+        withIsolatedPreferencesAndDefaults { preferences, defaults in
+            XCTAssertEqual(AppPreferences.claudeGPTDefaultContextWindow, 272_000)
+            XCTAssertEqual(AppPreferences.claudeGPTContextWindowRange.upperBound, 372_000)
+            // Unset → sicherer gemeinsamer Default (272k).
             XCTAssertEqual(
                 preferences.claudeGPTContextWindow,
                 AppPreferences.claudeGPTDefaultContextWindow
             )
-            // Der historische UserDefaults-Key bleibt bestehen; nur seine
-            // fachliche Bedeutung ist jetzt ehrlich als Modellkapazitaet benannt.
-            preferences.claudeGPTContextWindow = 2_720_000
-            XCTAssertEqual(
-                preferences.claudeGPTContextWindow,
-                AppPreferences.claudeGPTContextWindowRange.upperBound
-            )
+            // Der historische UserDefaults-Key bleibt bestehen. Oberhalb des
+            // gemeinsamen 272k-Vertrags aktiviert ausschließlich der exakte
+            // Pickerwert 372k das Experiment; alte Zwischen-/Übergrößen fallen
+            // auf den sicheren Default zurück.
+            defaults.set(300_000, forKey: PreferenceKeys.claudeGPTAutoCompactWindow)
+            XCTAssertEqual(preferences.claudeGPTContextWindow, 272_000)
+            defaults.set(2_720_000, forKey: PreferenceKeys.claudeGPTAutoCompactWindow)
+            XCTAssertEqual(preferences.claudeGPTContextWindow, 272_000)
+            preferences.claudeGPTContextWindow = 372_000
+            XCTAssertEqual(preferences.claudeGPTContextWindow, 372_000)
+            preferences.claudeGPTContextWindow = 372_001
+            XCTAssertEqual(preferences.claudeGPTContextWindow, 272_000)
             preferences.claudeGPTContextWindow = 5
             XCTAssertEqual(
                 preferences.claudeGPTContextWindow,

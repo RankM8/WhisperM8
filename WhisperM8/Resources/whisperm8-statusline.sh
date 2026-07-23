@@ -43,9 +43,14 @@ ccs_profile=$(sanitize_text "$ccs_profile")
 
 # ── Tuning ────────────────────────────────────────────────────────────────
 # Reines Anzeige-Budget: Claude Code entscheidet die echte Auto-Kompaktierung
-# selbst. Die modellselektive GPT-Korrektur ist nur aktiv, wenn der gestartete
-# Prozess die Kapazitaet explizit als WhisperM8-Metadatum erhalten hat.
+# selbst. Für die beiden sichtbaren GPT-Profile spiegeln feste Budgets die
+# beobachtete/interne Reserve (272k → ~238k, 372k → ~339k). Native Modelle und
+# benutzerdefinierte Altwerte behalten die bisherige konservative 85-%-Anzeige.
 COMPACT_AT=85
+GPT_STANDARD_CONTEXT_WINDOW=272000
+GPT_STANDARD_COMPACT_BUDGET=238000
+GPT_SOL_EXTENDED_CONTEXT_WINDOW=372000
+GPT_SOL_EXTENDED_COMPACT_BUDGET=339000
 GPT_CONTEXT_WINDOW="${WHISPERM8_GPT56_CONTEXT_WINDOW:-0}"
 case "$GPT_CONTEXT_WINDOW" in
     ''|*[!0-9]*) GPT_CONTEXT_WINDOW=0 ;;
@@ -320,8 +325,8 @@ else
 fi
 
 # Context: Rest bis Auto-Compact
-# Quelle: echte Token-Werte des Harness, gemessen gegen das Compact-Budget
-# (= COMPACT_AT % des vollen Fensters).
+# Quelle: echte Token-Werte des Harness, gemessen gegen das profilspezifische
+# GPT-Budget beziehungsweise den konservativen Fallback für andere Modelle.
 reset="${ansi_escape}[0m"
 dim="${ansi_escape}[2m"
 usage=$(printf '%s\n' "$input" | jq '.context_window.current_usage')
@@ -336,10 +341,19 @@ else
         ''|*[!0-9]*) reported_size=0 ;;
     esac
     size=$reported_size
-    # Nur die explizit freigegebenen, gleich grossen GPT-Modelle erhalten die
-    # konfigurierte Kapazitaetskorrektur; unbekannte/alte IDs bleiben unberuehrt.
-    if [ "$is_supported_gpt" -eq 1 ] \
-        && [ "$GPT_CONTEXT_WINDOW" -gt 0 ] \
+    # Nur Modelle, für die das konfigurierte Profil freigegeben ist, erhalten
+    # die Kapazitätskorrektur: historische Custom-Werte bis 272k gelten für die
+    # gemeinsame Allowlist, das experimentelle 372k-Profil ausschließlich Sol.
+    context_profile_matches_model=0
+    if [ "$is_supported_gpt" -eq 1 ] && [ "$GPT_CONTEXT_WINDOW" -gt 0 ]; then
+        if [ "$GPT_CONTEXT_WINDOW" -le "$GPT_STANDARD_CONTEXT_WINDOW" ]; then
+            context_profile_matches_model=1
+        elif [ "$GPT_CONTEXT_WINDOW" -eq "$GPT_SOL_EXTENDED_CONTEXT_WINDOW" ] \
+            && [ "$model_base" = "gpt-5.6-sol" ]; then
+            context_profile_matches_model=1
+        fi
+    fi
+    if [ "$context_profile_matches_model" -eq 1 ] \
         && { [ "$reported_size" -eq 0 ] || [ "$reported_size" -eq 200000 ]; }; then
         size=$GPT_CONTEXT_WINDOW
     fi
@@ -351,6 +365,16 @@ else
         ctx_exact=""
     else
         compact_budget=$((size * COMPACT_AT / 100))
+        if [ "$is_supported_gpt" -eq 1 ]; then
+            case "${model_base}:${size}" in
+                "gpt-5.6-sol:${GPT_SOL_EXTENDED_CONTEXT_WINDOW}")
+                    compact_budget=$GPT_SOL_EXTENDED_COMPACT_BUDGET
+                    ;;
+                *":${GPT_STANDARD_CONTEXT_WINDOW}")
+                    compact_budget=$GPT_STANDARD_COMPACT_BUDGET
+                    ;;
+            esac
+        fi
         if [ "$compact_budget" -le 0 ]; then compact_budget=1; fi
         used_of_budget=$((current * 100 / compact_budget))
         if [ $used_of_budget -gt 100 ]; then used_of_budget=100; fi

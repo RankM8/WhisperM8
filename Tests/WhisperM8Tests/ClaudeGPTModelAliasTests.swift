@@ -83,7 +83,7 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         )
     }
 
-    func testSupportedCatalogRejectsOlderUnknownAndOversizedWindow() {
+    func testSupportedCatalogAppliesPerModelContextProfiles() {
         XCTAssertEqual(
             ClaudeGPTModelAlias.supportedEffectiveModel(
                 "GPT-5.5[1M]",
@@ -104,11 +104,26 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
                 fastEnabled: false
             )
         )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedEffectiveModel(
+                "gpt-5.6-sol",
+                fastEnabled: false,
+                contextWindow: 372_000
+            ),
+            "gpt-5.6-sol"
+        )
+        XCTAssertNil(
+            ClaudeGPTModelAlias.supportedEffectiveModel(
+                "gpt-5.6-terra",
+                fastEnabled: false,
+                contextWindow: 372_000
+            )
+        )
         XCTAssertNil(
             ClaudeGPTModelAlias.supportedEffectiveModel(
                 "gpt-5.6-sol",
                 fastEnabled: false,
-                contextWindow: 300_000
+                contextWindow: 372_001
             )
         )
     }
@@ -153,5 +168,20 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
                 fastEnabled: true
             )
         )
+    }
+
+    func testContextProfilesExposeExpectedCompactBudgets() {
+        XCTAssertEqual(ClaudeGPTContextProfile.standard.rawValue, 272_000)
+        XCTAssertEqual(ClaudeGPTContextProfile.standard.expectedAutoCompactTokens, 238_000)
+        XCTAssertEqual(ClaudeGPTContextProfile.experimentalSol372K.rawValue, 372_000)
+        XCTAssertEqual(
+            ClaudeGPTContextProfile.experimentalSol372K.expectedAutoCompactTokens,
+            339_000
+        )
+        XCTAssertEqual(
+            ClaudeGPTContextProfile.matching(contextWindow: 372_000),
+            .experimentalSol372K
+        )
+        XCTAssertNil(ClaudeGPTContextProfile.matching(contextWindow: 250_000))
     }
 }

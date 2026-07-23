@@ -82,10 +82,26 @@ final class ClaudeGPTModelCatalogTests: XCTestCase {
         XCTAssertFalse(catalog.contains("gpt-5.5-historical-fast"))
     }
 
-    func testCatalogConservativelyOmitsAllGPTWhenWindowExceedsVerifiedCapacity() throws {
-        let catalog = try models(contextWindow: 300_000)
+    func testCatalogOmitsAllGPTAboveLargestVerifiedProfile() throws {
+        let catalog = try models(contextWindow: 400_000)
 
         XCTAssertEqual(catalog, ClaudeGPTModelCatalog.claudeAliases)
+    }
+
+    func testExperimental372KCatalogContainsOnlySolVariants() throws {
+        let catalog = Set(try models(
+            defaultModel: "gpt-5.6-terra",
+            pickerModel: "gpt-5.6-luna-fast",
+            subagentModel: "gpt-5.6-terra-fast",
+            sessionModel: "gpt-5.5",
+            contextWindow: 372_000
+        ))
+
+        XCTAssertTrue(catalog.contains("gpt-5.6-sol"))
+        XCTAssertTrue(catalog.contains("gpt-5.6-sol-fast"))
+        XCTAssertFalse(catalog.contains("gpt-5.6-terra"))
+        XCTAssertFalse(catalog.contains("gpt-5.6-luna"))
+        XCTAssertFalse(catalog.contains("gpt-5.5"))
     }
 
     func testCatalogDeduplicatesConfiguredModels() throws {

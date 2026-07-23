@@ -503,7 +503,7 @@ extension AgentCommandBuilderTests {
         builder.gptFastModeEnabledResolver = { true }
         builder.gptPickerModelResolver = { "  GPT-5.4-MINI-FAST[1M]  " }
         builder.gptSubagentModelResolver = { "gpt-5.3-codex-spark" }
-        builder.gptContextWindowResolver = { 500_000 }
+        builder.gptContextWindowResolver = { 272_000 }
 
         let environment = builder.gptRouterCoreEnvironment()
 
@@ -516,6 +516,41 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol-fast")
         XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
+    }
+
+    func testExperimental372KProfileForcesSolAndKeepsNativeOneMillionCeiling() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { false }
+        builder.gptPickerModelResolver = { "gpt-5.6-terra" }
+        builder.gptDefaultModelResolver = { "gpt-5.6-luna" }
+        builder.gptSubagentModelResolver = { "gpt-5.6-terra-fast" }
+        builder.gptContextWindowResolver = { 372_000 }
+
+        let environment = builder.gptRouterCoreEnvironment()
+
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
+        XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol")
+        XCTAssertEqual(
+            environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
+            "Standard-Tier — experimentelles 372k-Profil: nur GPT-5.6 Sol"
+        )
+        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "372000")
+        XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
+        XCTAssertEqual(environment?["WHISPERM8_GPT56_CONTEXT_WINDOW"], "372000")
+    }
+
+    func testOversizedContextValueFallsBackToStandardProfile() {
+        var builder = AgentCommandBuilder()
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { false }
+        builder.gptPickerModelResolver = { "gpt-5.6-sol" }
+        builder.gptContextWindowResolver = { 500_000 }
+
+        let environment = builder.gptRouterCoreEnvironment()
+
+        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
     }
 
     func testRouterCoreFallsBackToCanonicalPickerForUnknownID() {
@@ -689,6 +724,30 @@ extension AgentCommandBuilderTests {
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "250000",
         ])
+    }
+
+    func testExperimental372KFreshTerraSessionFallsBackToSolStamp() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { false }
+        builder.gptPickerModelResolver = { "gpt-5.6-terra" }
+        builder.gptSubagentModelResolver = { "" }
+        builder.gptContextWindowResolver = { 372_000 }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.6-terra"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--model", "gpt-5.6-sol"])
+        XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "372000")
+        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
     }
 
     func testClaudeGPTBackendResumeOmitsModelStampAndRouterTuning() throws {

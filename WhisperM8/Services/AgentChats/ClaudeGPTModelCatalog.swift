@@ -12,9 +12,9 @@ enum ClaudeGPTModelCatalog {
         "opus[1m]", "sonnet[1m]", "opusplan",
     ]
 
-    /// Nur GPT-Modelle mit bekannter, zum gemeinsamen MAX_CONTEXT kompatibler
-    /// Kapazitaet werden in den Picker aufgenommen. Unbekannte oder aeltere IDs
-    /// duerfen nicht still unter dem prozessweiten GPT-Fenster laufen.
+    /// Nur GPT-Modelle mit bekannter, zum gewählten MAX_CONTEXT-Profil
+    /// kompatibler Kapazität werden in den Picker aufgenommen. Beim
+    /// experimentellen 372k-Profil bleibt dadurch ausschließlich Sol sichtbar.
     static func availableModelsFragment(
         defaultModel: String,
         pickerModel: String,

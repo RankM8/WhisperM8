@@ -1,12 +1,47 @@
 import Foundation
 
-/// Kanonisiert die von WhisperM8 erzeugten GPT-Modell-Aliasse und kapselt den
-/// bekannten gemeinsamen Kapazitaetsvertrag des MixRouters.
+/// Sichtbare Kontextprofile des GPT-Backends. Das persistierte Preference-Feld
+/// bleibt aus Kompatibilitätsgründen ein `Int`; dieser Typ definiert nur die
+/// bewusst angebotenen Presets und ihre erwartete Claude-Code-Compact-Grenze.
+enum ClaudeGPTContextProfile: Int, CaseIterable, Identifiable {
+    case standard = 272_000
+    case experimentalSol372K = 372_000
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .standard:
+            return "Standard — 272k"
+        case .experimentalSol372K:
+            return "Experimentell: Sol — 372k"
+        }
+    }
+
+    var expectedAutoCompactTokens: Int {
+        switch self {
+        case .standard:
+            return 238_000
+        case .experimentalSol372K:
+            return 339_000
+        }
+    }
+
+    static func matching(contextWindow: Int) -> Self? {
+        Self(rawValue: contextWindow)
+    }
+}
+
+/// Kanonisiert die von WhisperM8 erzeugten GPT-Modell-Aliasse und kapselt die
+/// pro Modell verifizierten Kapazitätsverträge des MixRouters.
 enum ClaudeGPTModelAlias {
-    /// Alle derzeit freigegebenen GPT-Aliasse besitzen mindestens dieses reale
-    /// Kontextfenster. Groessere konfigurierte Werte muessen bis zu einer
-    /// expliziten Katalog-Erweiterung konservativ abgelehnt werden.
-    static let maximumKnownSharedContextWindow = 272_000
+    /// Gemeinsame, konservative Kapazität aller freigegebenen GPT-Aliasse.
+    static let maximumKnownSharedContextWindow = ClaudeGPTContextProfile.standard.rawValue
+
+    /// Größtes auswählbares Profil. 372k ist experimentell und ausschließlich
+    /// für GPT-5.6 Sol über Codex-Subscription/OAuth verifiziert.
+    static let maximumConfigurableContextWindow =
+        ClaudeGPTContextProfile.experimentalSol372K.rawValue
 
     private static let mainModelBases: Set<String> = [
         "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
@@ -39,12 +74,28 @@ enum ClaudeGPTModelAlias {
             && canonicalBaseModel != "gpt-5.4-mini"
     }
 
+    /// Obergrenze des tatsächlich getesteten Profils pro kanonischem Modell.
+    /// Sol akzeptierte über denselben Subscription-/OAuth-Pfad 360k vollständig;
+    /// 372k/380k wurden vom Upstream abgewiesen. Claude Codes interne Reserve
+    /// kompaktifiziert beim 372k-Profil erwartbar um 339k und bleibt damit unter
+    /// der nachgewiesenen Annahmegrenze. Alle anderen Modelle bleiben bei 272k.
+    static func maximumContextWindow(for canonicalModel: String) -> Int? {
+        let base = canonicalModel.hasSuffix("-fast")
+            ? String(canonicalModel.dropLast("-fast".count))
+            : canonicalModel
+        guard mainModelBases.contains(base) else { return nil }
+        return base == "gpt-5.6-sol"
+            ? maximumConfigurableContextWindow
+            : maximumKnownSharedContextWindow
+    }
+
     static func isSupportedCanonicalModel(
         _ model: String,
         contextWindow: Int = maximumKnownSharedContextWindow
     ) -> Bool {
         guard contextWindow > 0,
-              contextWindow <= maximumKnownSharedContextWindow else {
+              let maximumContextWindow = maximumContextWindow(for: model),
+              contextWindow <= maximumContextWindow else {
             return false
         }
         let hasFast = model.hasSuffix("-fast")

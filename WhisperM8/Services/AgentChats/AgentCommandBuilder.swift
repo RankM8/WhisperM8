@@ -96,11 +96,11 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTPickerModel
     }
 
-    /// Reale Kapazitaet der explizit freigegebenen, kompatiblen GPT-Modelle.
-    /// Der Wert wird bei aktivem MixRouter als Modellfenster an Claude Code und
-    /// WhisperM8-Statuslines gegeben. Der prozessweite Auto-Compact-Deckel ist
-    /// davon getrennt und bleibt konstant bei 1M, damit native 1M-Modelle in
-    /// derselben Mischsession nicht auf das GPT-Fenster begrenzt werden.
+    /// Gewähltes GPT-Kontextprofil. Bis 272k gilt es für die gemeinsame
+    /// Allowlist; das experimentelle 372k-Profil lässt per Modellguard nur Sol
+    /// zu und kompaktifiziert durch Claude Codes interne Reserve um 339k.
+    /// Der prozessweite Auto-Compact-Deckel bleibt davon getrennt bei 1M, damit
+    /// native 1M-Modelle in derselben Mischsession nicht begrenzt werden.
     var gptContextWindowResolver: () -> Int = {
         AppPreferences.shared.claudeGPTContextWindow
     }
@@ -188,12 +188,8 @@ struct AgentCommandBuilder {
     }
 
     func normalizedGPTContextWindow() -> Int {
-        min(
-            max(
-                gptContextWindowResolver(),
-                AppPreferences.claudeGPTContextWindowRange.lowerBound
-            ),
-            ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+        AppPreferences.normalizedClaudeGPTContextWindow(
+            gptContextWindowResolver()
         )
     }
 
@@ -224,7 +220,9 @@ struct AgentCommandBuilder {
             contextWindow: contextWindow
         )!
         let isFastPickerModel = effectivePickerModel.hasSuffix("-fast")
-        let supportedDescription = "unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+        let supportedDescription = contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+            ? "experimentelles 372k-Profil: nur GPT-5.6 Sol"
+            : "unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         let pickerDescription = isFastPickerModel
             ? "Priority-Tier (1,5× Speed, 2,5× Credits) — \(supportedDescription)"
             : "Standard-Tier — \(supportedDescription)"
@@ -235,12 +233,12 @@ struct AgentCommandBuilder {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": pickerDescription,
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            // Drei gemeinsame Invarianten fuer jede direkt gestartete CLI.
-            // MAX_CONTEXT beschreibt die reale GPT-Kapazitaet, der 1M-Deckel
-            // laesst native Fable-/Opus-Modelle ungekappt, und die eigene
-            // Variable korrigiert ausschliesslich die freigegebene GPT-Anzeige.
-            // Background-Worker erhalten dasselbe Trio ueber ihr internes
-            // session-scoped Settings-`env`.
+            // Drei gemeinsame Invarianten für jede direkt gestartete CLI.
+            // MAX_CONTEXT beschreibt das gewählte GPT-Profil; bei 372k lässt
+            // der Modellguard ausschließlich Sol zu. Der 1M-Deckel lässt native
+            // Fable-/Opus-Modelle ungekappt, die eigene Variable korrigiert nur
+            // die GPT-Anzeige. Background-Worker erhalten dasselbe Trio über
+            // ihr internes session-scoped Settings-`env`.
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": gptContextWindow,
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": String(Self.routerAutoCompactCeiling),
             "WHISPERM8_GPT56_CONTEXT_WINDOW": gptContextWindow,
@@ -392,10 +390,30 @@ struct AgentCommandBuilder {
             let model = session.claudeBackendModel?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !model.isEmpty else { return nil }
-            return ClaudeGPTModelAlias.supportedEffectiveModel(
+            let contextWindow = normalizedGPTContextWindow()
+            if let supported = ClaudeGPTModelAlias.supportedEffectiveModel(
                 model,
                 fastEnabled: fastModeEnabled,
-                contextWindow: normalizedGPTContextWindow()
+                contextWindow: contextWindow
+            ) {
+                return supported
+            }
+
+            // Das 372k-Profil ist ein Sol-only-Opt-in. Ein für den normalen
+            // 272k-Vertrag bekanntes Modell fällt bei einem FRISCHEN Start auf
+            // Sol zurück, statt still ohne GPT-Stempel als Claude zu starten.
+            // Unbekannte GPT-IDs bleiben weiterhin abgelehnt; Resume/Fork folgt
+            // unverändert der Transcript-Wahl und benötigt für Nicht-Sol das
+            // Standardprofil.
+            guard contextWindow == ClaudeGPTContextProfile.experimentalSol372K.rawValue,
+                  let canonical = ClaudeGPTModelAlias.canonicalGPTModel(model),
+                  ClaudeGPTModelAlias.maximumContextWindow(for: canonical) != nil else {
+                return nil
+            }
+            return ClaudeGPTModelAlias.supportedEffectiveModel(
+                AppPreferences.claudeGPTCanonicalModel,
+                fastEnabled: fastModeEnabled,
+                contextWindow: contextWindow
             )
         }()
 

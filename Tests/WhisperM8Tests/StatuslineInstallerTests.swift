@@ -494,6 +494,71 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertFalse(text.contains("9k/1000k"), text)
     }
 
+    func testMainStatuslineUsesSol372KCompactBudgetAt339K() throws {
+        func input(currentTokens: Int) -> [String: Any] {
+            [
+                "model": ["display_name": "gpt-5.6-sol-fast"],
+                "cost": ["total_cost_usd": 0],
+                "context_window": [
+                    "current_usage": [
+                        "input_tokens": currentTokens,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    ],
+                    "context_window_size": 200_000,
+                ],
+                "mcp_servers": [],
+            ]
+        }
+
+        let beforeOutput = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-sol-372k-before-compact-statusline.sh",
+            input: input(currentTokens: 338_000),
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "372000"]
+        )
+        let beforeText = String(decoding: beforeOutput, as: UTF8.self)
+        XCTAssertTrue(beforeText.contains("99%"), beforeText)
+        XCTAssertTrue(beforeText.contains("338k/372k"), beforeText)
+
+        let atOutput = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-sol-372k-at-compact-statusline.sh",
+            input: input(currentTokens: 339_000),
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "372000"]
+        )
+        let atText = String(decoding: atOutput, as: UTF8.self)
+        XCTAssertTrue(atText.contains("100%"), atText)
+        XCTAssertTrue(atText.contains("339k/372k"), atText)
+    }
+
+    func testMainStatuslineDoesNotApplySol372KProfileToTerra() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "gpt-5.6-terra-fast"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+                "context_window_size": 200_000,
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-terra-rejects-sol-372k-statusline.sh",
+            input: input,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "372000"]
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("9k/200k"), text)
+        XCTAssertFalse(text.contains("9k/372k"), text)
+    }
+
     func testMainStatuslineDoesNotRewriteSimilarGPTCustomID() throws {
         let input: [String: Any] = [
             "model": ["display_name": "gpt-5.6-solar"],

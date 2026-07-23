@@ -309,29 +309,44 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTSubagentModel) }
     }
 
-    /// Gemeinsame reale Modellkapazitaet der explizit freigegebenen GPT-
-    /// Modelle (GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4/Mini). Bei aktivem
-    /// MixRouter wird sie als `CLAUDE_CODE_MAX_CONTEXT_TOKENS` gesetzt und von
-    /// den modellselektiven Haupt-/Subagent-Statuslines angezeigt. Der
-    /// prozessweite Auto-Compact-Deckel ist davon getrennt und konstant 1M.
-    static let claudeGPTDefaultContextWindow = 272_000
+    /// Konservatives Standardprofil aller freigegebenen GPT-Modelle. Ein
+    /// experimentelles 372k-Profil ist ausschließlich für GPT-5.6 Sol
+    /// verfügbar und bleibt Opt-in. Bei aktivem MixRouter wird der Wert als
+    /// `CLAUDE_CODE_MAX_CONTEXT_TOKENS` gesetzt; der prozessweite Auto-Compact-
+    /// Deckel bleibt getrennt bei 1M, damit native 1M-Modelle unberührt bleiben.
+    static let claudeGPTDefaultContextWindow =
+        ClaudeGPTContextProfile.standard.rawValue
 
-    /// Geclampte Grenzen: Kleinere Werte begrenzen die freigegebenen Modelle
-    /// konservativ. Oberhalb 272k ist aktuell keine gemeinsam kompatible
-    /// Allowlist belegt; solche Alt-/Fehlwerte werden deshalb auf 272k gekappt.
-    /// Der persistierte Key behaelt aus Kompatibilitaetsgruenden seinen
-    /// historischen `claudeGPTAutoCompactWindow`-Namen.
+    /// Persistierbare Grenzen. Werte bis 272k bleiben als historische Custom-
+    /// Profile gültig; oberhalb davon ist ausschließlich das exakte 372k-Profil
+    /// ein Opt-in. Der Key behält aus Kompatibilitätsgründen seinen historischen
+    /// `claudeGPTAutoCompactWindow`-Namen.
     static let claudeGPTContextWindowRange =
-        10_000...ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+        10_000...ClaudeGPTModelAlias.maximumConfigurableContextWindow
+
+    static func normalizedClaudeGPTContextWindow(_ value: Int) -> Int {
+        guard value > 0 else { return claudeGPTDefaultContextWindow }
+        if value == ClaudeGPTContextProfile.experimentalSol372K.rawValue {
+            return value
+        }
+        return min(
+            max(value, claudeGPTContextWindowRange.lowerBound),
+            ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+        )
+    }
 
     var claudeGPTContextWindow: Int {
         get {
-            let value = defaults.integer(forKey: Keys.claudeGPTAutoCompactWindow)
-            guard value > 0 else { return Self.claudeGPTDefaultContextWindow }
-            let range = Self.claudeGPTContextWindowRange
-            return min(max(value, range.lowerBound), range.upperBound)
+            Self.normalizedClaudeGPTContextWindow(
+                defaults.integer(forKey: Keys.claudeGPTAutoCompactWindow)
+            )
         }
-        nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTAutoCompactWindow) }
+        nonmutating set {
+            defaults.set(
+                Self.normalizedClaudeGPTContextWindow(newValue),
+                forKey: Keys.claudeGPTAutoCompactWindow
+            )
+        }
     }
 
     /// Opt-in für SwiftTerms Metal-GPU-Renderer (P6, Default: aus — erst
