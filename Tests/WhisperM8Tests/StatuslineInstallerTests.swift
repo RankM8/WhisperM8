@@ -71,8 +71,10 @@ final class StatuslineInstallerTests: XCTestCase {
         let subagentScript = try makeInstaller().bundledSubagentScript()
         XCTAssertTrue(subagentScript.hasPrefix("#!/bin/bash"))
         XCTAssertTrue(subagentScript.contains(StatuslineInstaller.managedMarker))
-        XCTAssertTrue(subagentScript.contains("tokenCount"))
-        XCTAssertTrue(subagentScript.contains("contextWindowSize"))
+        XCTAssertTrue(subagentScript.contains("startTime"))
+        XCTAssertTrue(subagentScript.contains("elapsed_label"))
+        XCTAssertFalse(subagentScript.contains("tokenCount"))
+        XCTAssertFalse(subagentScript.contains("contextWindowSize"))
     }
 
     // MARK: Installation
@@ -635,58 +637,52 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertFalse(text.contains("9k/272k"), text)
     }
 
-    func testSubagentStatuslineCorrectsOnlyGPT200KFallback() throws {
+    func testSubagentStatuslineShowsElapsedTimeInsteadOfTokens() throws {
+        let now = 1_700_000_712_000
         let input: [String: Any] = [
-            "columns": 200,
+            "columns": 120,
             "tasks": [
                 [
-                    "id": "gpt-task",
-                    "name": "gpt-worker",
-                    "model": "gpt-5.6-sol-fast[1M]",
-                    "description": "Review",
-                    "tokenCount": 9_000,
-                    "contextWindowSize": 200_000,
+                    "id": "running-task",
+                    "name": "ui-reviewer",
+                    "status": "running",
+                    "startTime": 1_700_000_000_000,
+                    "model": "gpt-5.6-sol",
+                    "description": "Review UI-Regeländerungen",
+                    // Claude Code liefert für GPT häufig dauerhaft nullartige
+                    // Fortschrittswerte. Sie dürfen nicht mehr sichtbar sein.
+                    "tokenCount": 0,
+                    "contextWindowSize": 272_000,
                 ],
                 [
-                    "id": "supported-gpt-task",
-                    "name": "supported-gpt-worker",
-                    "model": "GPT-5.5-FAST[1M]",
-                    "description": "Review",
+                    "id": "completed-task",
+                    "name": "done-reviewer",
+                    "status": "completed",
+                    "startTime": 1_700_000_000_000,
+                    "model": "gpt-5.6-terra",
+                    "description": "Review abgeschlossen",
                     "tokenCount": 9_000,
-                    "contextWindowSize": 200_000,
+                    "contextWindowSize": 272_000,
                 ],
                 [
-                    "id": "unsupported-mini-fast-task",
-                    "name": "unsupported-mini-fast-worker",
-                    "model": "gpt-5.4-mini-fast",
-                    "description": "Review",
+                    "id": "missing-start-task",
+                    "name": "new-reviewer",
+                    "status": "running",
+                    "model": "gpt-5.6-sol",
+                    "description": "Wartet auf Startmetadaten",
                     "tokenCount": 9_000,
-                    "contextWindowSize": 200_000,
-                ],
-                [
-                    "id": "legacy-gpt-task",
-                    "name": "legacy-gpt-worker",
-                    "model": "gpt-5.3-codex-spark",
-                    "description": "Review",
-                    "tokenCount": 9_000,
-                    "contextWindowSize": 200_000,
-                ],
-                [
-                    "id": "opus-task",
-                    "name": "opus-worker",
-                    "model": "claude-opus-4-8[1m]",
-                    "description": "Review",
-                    "tokenCount": 162_000,
-                    "contextWindowSize": 1_000_000,
+                    "contextWindowSize": 272_000,
                 ],
             ],
         ]
 
         let output = try runStatuslineScript(
             try makeInstaller().bundledSubagentScript(),
-            named: "subagent-gpt-context-statusline.sh",
+            named: "subagent-elapsed-statusline.sh",
             input: input,
-            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "272000"]
+            environmentOverrides: [
+                "WHISPERM8_SUBAGENT_STATUSLINE_NOW_MS": String(now),
+            ]
         )
         let lines = try XCTUnwrap(String(data: output, encoding: .utf8))
             .split(separator: "\n")
@@ -703,40 +699,88 @@ final class StatuslineInstallerTests: XCTestCase {
             }
         )
 
-        XCTAssertTrue(try XCTUnwrap(byID["gpt-task"]).contains("9k/272k"))
-        XCTAssertTrue(try XCTUnwrap(byID["supported-gpt-task"]).contains("9k/272k"))
-        XCTAssertTrue(try XCTUnwrap(byID["unsupported-mini-fast-task"]).contains("9k/200k"))
-        XCTAssertTrue(try XCTUnwrap(byID["legacy-gpt-task"]).contains("9k/200k"))
-        XCTAssertTrue(try XCTUnwrap(byID["opus-task"]).contains("162k/1000k"))
+        let running = try XCTUnwrap(byID["running-task"])
+        XCTAssertTrue(running.contains("gpt-5.6-sol"), running)
+        XCTAssertTrue(running.contains("Review UI-Regeländerungen"), running)
+        XCTAssertTrue(running.contains("11m 52s"), running)
+
+        let completed = try XCTUnwrap(byID["completed-task"])
+        XCTAssertTrue(completed.contains("gpt-5.6-terra"), completed)
+        XCTAssertFalse(completed.contains("11m 52s"), completed)
+
+        let missingStart = try XCTUnwrap(byID["missing-start-task"])
+        XCTAssertFalse(missingStart.contains("11m 52s"), missingStart)
+
+        let allContent = byID.values.joined(separator: "\n")
+        XCTAssertFalse(allContent.contains("0k/"), allContent)
+        XCTAssertFalse(allContent.contains("9k/"), allContent)
+        XCTAssertFalse(allContent.contains("272k"), allContent)
     }
 
-    func testSubagentStatuslineWithoutExplicitGPTCapacityKeepsReported200K() throws {
+    func testSubagentStatuslineFormatsElapsedTimeAcrossRanges() throws {
+        let now = 1_700_100_000_000
         let input: [String: Any] = [
-            "columns": 120,
-            "tasks": [[
-                "id": "gpt-task",
-                "name": "gpt-worker",
-                "model": "gpt-5.6-sol-fast",
-                "description": "Review",
-                "tokenCount": 9_000,
-                "contextWindowSize": 200_000,
-            ]],
+            "columns": 100,
+            "tasks": [
+                [
+                    "id": "seconds",
+                    "name": "seconds-worker",
+                    "status": "running",
+                    "startTime": now - 42_000,
+                    "model": "gpt-5.6-sol",
+                ],
+                [
+                    "id": "minutes",
+                    "name": "minutes-worker",
+                    "status": "running",
+                    "startTime": now - 662_000,
+                    "model": "gpt-5.6-sol",
+                ],
+                [
+                    "id": "hours",
+                    "name": "hours-worker",
+                    "status": "running",
+                    "startTime": now - 4_110_000,
+                    "model": "gpt-5.6-sol",
+                ],
+                [
+                    "id": "future",
+                    "name": "future-worker",
+                    "status": "running",
+                    "startTime": now + 1_000,
+                    "model": "gpt-5.6-sol",
+                ],
+            ],
         ]
 
         let output = try runStatuslineScript(
             try makeInstaller().bundledSubagentScript(),
-            named: "subagent-gpt-context-without-env-statusline.sh",
-            input: input
+            named: "subagent-elapsed-ranges-statusline.sh",
+            input: input,
+            environmentOverrides: [
+                "WHISPERM8_SUBAGENT_STATUSLINE_NOW_MS": String(now),
+            ]
         )
-        let line = try XCTUnwrap(String(data: output, encoding: .utf8))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let object = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+        let lines = try XCTUnwrap(String(data: output, encoding: .utf8))
+            .split(separator: "\n")
+        let byID: [String: String] = Dictionary(
+            uniqueKeysWithValues: try lines.map { line -> (String, String) in
+                let object = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+                )
+                return (
+                    try XCTUnwrap(object["id"] as? String),
+                    try XCTUnwrap(object["content"] as? String)
+                )
+            }
         )
-        let content = try XCTUnwrap(object["content"] as? String)
 
-        XCTAssertTrue(content.contains("9k/200k"), content)
-        XCTAssertFalse(content.contains("9k/272k"), content)
+        XCTAssertTrue(try XCTUnwrap(byID["seconds"]).contains("42s"))
+        XCTAssertTrue(try XCTUnwrap(byID["minutes"]).contains("11m 02s"))
+        XCTAssertTrue(try XCTUnwrap(byID["hours"]).contains("1h 08m"))
+        let future = try XCTUnwrap(byID["future"])
+        XCTAssertFalse(future.hasSuffix("s\u{001B}[0m"), future)
+        XCTAssertFalse(future.hasSuffix("m\u{001B}[0m"), future)
     }
 
     // MARK: Terminal-Steuerzeichen
@@ -825,6 +869,7 @@ final class StatuslineInstallerTests: XCTestCase {
         environment["TMPDIR"] = temporaryDirectory.path + "/"
         environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
         environment.removeValue(forKey: "WHISPERM8_GPT56_CONTEXT_WINDOW")
+        environment.removeValue(forKey: "WHISPERM8_SUBAGENT_STATUSLINE_NOW_MS")
         environment.merge(environmentOverrides) { _, override in override }
         process.environment = environment
 

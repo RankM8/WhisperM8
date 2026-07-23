@@ -16,17 +16,12 @@ if ! printf '%s\n' "$input" | jq -e 'type == "object" and (.tasks | type == "arr
     exit 0
 fi
 
-# Ohne explizite Prozess-Metadaten keine GPT-Kapazitaet erfinden (wichtig fuer
-# Attach an Supervisor-Worker, die das Dispatcher-Env nicht geerbt haben).
-GPT_CONTEXT_WINDOW="${WHISPERM8_GPT56_CONTEXT_WINDOW:-0}"
-case "$GPT_CONTEXT_WINDOW" in
-    ''|*[!0-9]*) GPT_CONTEXT_WINDOW=0 ;;
-esac
-if [ "$GPT_CONTEXT_WINDOW" -le 0 ]; then GPT_CONTEXT_WINDOW=0; fi
-
 # Pro aufgelöstem Task genau eine JSONL-Zeile ausgeben. Die Beschreibung wird
 # gegen die nutzbare Zeilenbreite gekürzt; ANSI-Sequenzen zählen dabei nicht.
-printf '%s\n' "$input" | jq -c --argjson gpt_context_window "$GPT_CONTEXT_WINDOW" '
+# Laufende Tasks zeigen statt der unzuverlässigen Token-Metadaten ihre seit dem
+# Start verstrichene Zeit. Claude Code ruft das Skript etwa alle fünf Sekunden auf.
+printf '%s\n' "$input" | jq -c \
+    --arg now_ms_override "${WHISPERM8_SUBAGENT_STATUSLINE_NOW_MS:-}" '
     def sanitize_text:
         tostring
         | explode
@@ -38,15 +33,37 @@ printf '%s\n' "$input" | jq -c --argjson gpt_context_window "$GPT_CONTEXT_WINDOW
     def nonempty($value):
         (($value // "") | sanitize_text) as $text
         | if ($text | length) > 0 then $text else empty end;
-    def rounded_k($value): (($value / 1000) | round | tostring) + "k";
     def shorten($text; $available):
         if $available <= 0 then ""
         elif ($text | length) <= $available then $text
         elif $available == 1 then "…"
         else $text[0:($available - 1)] + "…"
         end;
+    def two_digits($value):
+        ($value | floor | tostring) as $text
+        | if ($text | length) < 2 then "0" + $text else $text end;
+    def elapsed_label($task; $now_ms):
+        if (($task.status // "") == "running"
+            and ($task.startTime | type) == "number"
+            and $task.startTime > 0
+            and $now_ms >= $task.startTime)
+        then (($now_ms - $task.startTime) / 1000 | floor) as $seconds
+            | if $seconds < 60 then ($seconds | tostring) + "s"
+              elif $seconds < 3600
+              then (($seconds / 60 | floor | tostring)
+                    + "m " + two_digits($seconds % 60) + "s")
+              else (($seconds / 3600 | floor | tostring)
+                    + "h " + two_digits(($seconds % 3600) / 60) + "m")
+              end
+        else ""
+        end;
 
-    (.columns // 120) as $raw_columns
+    (try ($now_ms_override | tonumber) catch null) as $override_now_ms
+    | (if ($override_now_ms | type) == "number" and $override_now_ms >= 0
+       then ($override_now_ms | floor)
+       else (now * 1000 | floor)
+       end) as $now_ms
+    | (.columns // 120) as $raw_columns
     | (if ($raw_columns | type) == "number" and $raw_columns > 0
        then ($raw_columns | floor)
        else 120
@@ -59,47 +76,45 @@ printf '%s\n' "$input" | jq -c --argjson gpt_context_window "$GPT_CONTEXT_WINDOW
     | select(($safe_model | length) > 0)
     | ($safe_model | sub("^claude-"; "")) as $short_model
     | (if ($safe_model | startswith("gpt-")) then "[36m" else "[35m" end) as $model_color
-    # Claude Code meldet unbekannte Custom-Modelle teils als 200k. Nur die
-    # explizit freigegebenen, gleich grossen GPT-Modelle erhalten die
-    # konfigurierte Kapazitaet; alte/unknown GPT-IDs und echte native
-    # Modellmetadaten (z. B. Opus 1M) bleiben unveraendert.
-    | (($safe_model | ascii_downcase | test("^gpt-((5\\.6-(sol|terra|luna)|5\\.5|5\\.4)(-fast)?|5\\.4-mini)(\\[1m\\])?$"))) as $is_supported_gpt
-    | (if ($is_supported_gpt and $gpt_context_window > 0 and $task.contextWindowSize == 200000)
-       then $gpt_context_window
-       else $task.contextWindowSize
-       end) as $context_window_size
-    | (if (($task.tokenCount | type) == "number" and ($context_window_size | type) == "number")
-       then (rounded_k($task.tokenCount) + "/" + rounded_k($context_window_size))
-       else ""
-       end) as $tokens
-    # Bei extrem schmalen Panels zuerst Tokens weglassen und danach Name sowie
-    # Modell kürzen. So bleibt auch dann die gesamte sichtbare Zeile im Budget.
+    | elapsed_label($task; $now_ms) as $elapsed
+    # Bei extrem schmalen Panels zuerst die Laufzeit weglassen und danach Name
+    # sowie Modell kürzen. Das Modell bleibt gegenüber der Beschreibung priorisiert.
     | ($columns >= 3) as $use_brackets
     | shorten($short_model; ($columns - (if $use_brackets then 2 else 0 end))) as $display_model
     | ((if $use_brackets then "[" else "" end)
        + $display_model
        + (if $use_brackets then "]" else "" end)) as $model_plain
-    | (if $tokens != "" and ($model_plain | length) + ($tokens | length) + 3 <= $columns
-       then $tokens
+    | (if $elapsed != "" and ($model_plain | length) + ($elapsed | length) + 3 <= $columns
+       then $elapsed
        else ""
-       end) as $display_tokens
+       end) as $display_elapsed
     | (($columns - ($model_plain | length)
-        - (if $display_tokens == "" then 0 else ($display_tokens | length) + 1 end))
+        - (if $display_elapsed == "" then 0 else ($display_elapsed | length) + 1 end))
        | if . > 1 then . - 1 else 0 end) as $name_width
     | shorten($name; $name_width) as $display_name
     | ($display_name
        + (if $display_name == "" then "" else " " end)
-       + $model_plain
-       + (if $display_tokens == "" then "" else " " + $display_tokens end)) as $plain_fixed
-    | (($columns - ($plain_fixed | length) - 1) | if . > 0 then . else 0 end) as $description_width
+       + $model_plain) as $left_fixed_plain
+    | (($columns - ($left_fixed_plain | length)
+        - (if $display_elapsed == "" then 0 else ($display_elapsed | length) + 1 end)
+        - 1)
+       | if . > 0 then . else 0 end) as $description_width
     | shorten((($task.description // "") | sanitize_text); $description_width) as $description
+    | ($left_fixed_plain
+       + (if $description == "" then "" else " " + $description end)) as $left_plain
+    | (if $display_elapsed == "" then 0
+       else (($columns - ($left_plain | length) - ($display_elapsed | length))
+             | if . > 0 then . else 1 end)
+       end) as $elapsed_gap
     | ($display_name
        + (if $display_name == "" then "" else " " end)
        + (if $use_brackets then "[2m[[0m" else "" end)
        + $model_color + $display_model + "[0m"
        + (if $use_brackets then "[2m][0m" else "" end)
        + (if $description == "" then "" else " " + $description end)
-       + (if $display_tokens == "" then "" else " [2m" + $display_tokens + "[0m" end)) as $content
+       + (if $display_elapsed == "" then ""
+          else (" " * $elapsed_gap) + "[2m" + $display_elapsed + "[0m"
+          end)) as $content
     | {id: $task.id, content: $content}
 '
 
