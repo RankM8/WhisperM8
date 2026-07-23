@@ -26,7 +26,7 @@ struct ClaudeSessionIndexer {
         let startedAt = Date()
         let sessions = indexSessions(limit: limit, cache: &cache, stats: &stats)
         stats.duration = Date().timeIntervalSince(startedAt)
-        Logger.agentPerformance.info("agent_index provider=claude files=\(stats.scannedFiles) parsed=\(stats.parsedFiles) cacheHits=\(stats.cacheHits) cacheMisses=\(stats.cacheMisses) skipped=\(stats.skippedFiles) bytes=\(stats.bytesRead) durationMs=\(Int(stats.duration * 1000))")
+        Logger.agentPerformance.info("agent_index provider=claude files=\(stats.scannedFiles) parsed=\(stats.parsedFiles) cacheHits=\(stats.cacheHits) cacheMisses=\(stats.cacheMisses) skipped=\(stats.skippedFiles) pruned=\(stats.prunedCacheEntries) bytes=\(stats.bytesRead) durationMs=\(Int(stats.duration * 1000))")
         return AgentSessionIndexResult(sessions: sessions, stats: stats)
     }
 
@@ -56,19 +56,27 @@ struct ClaudeSessionIndexer {
         cache: inout AgentSessionIndexCache,
         stats: inout AgentSessionIndexStats
     ) {
+        var enumerationSucceeded = true
         guard let enumerator = FileManager.default.enumerator(
             at: projectsDirectory,
             includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey, .fileSizeKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: [.skipsHiddenFiles],
+            errorHandler: { url, error in
+                enumerationSucceeded = false
+                Logger.agentPerformance.warning("agent_index_enumeration_failed provider=claude root=\(url.path, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                return true
+            }
         ) else {
             return
         }
 
+        var seenKeys: Set<String> = []
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
             guard !fileURL.path.contains("/subagents/") else {
                 stats.skippedFiles += 1
                 continue
             }
+            seenKeys.insert(AgentSessionIndexCache.cacheKey(provider: .claude, fileURL: fileURL))
             stats.scannedFiles += 1
             guard let metadata = Self.metadata(for: fileURL) else {
                 stats.skippedFiles += 1
@@ -96,6 +104,14 @@ struct ClaudeSessionIndexer {
                 stats.skippedFiles += 1
                 cache[.claude, fileURL, metadata] = nil
             }
+        }
+
+        if enumerationSucceeded {
+            stats.prunedCacheEntries += cache.prune(
+                provider: .claude,
+                rootURL: projectsDirectory,
+                keeping: seenKeys
+            )
         }
     }
 

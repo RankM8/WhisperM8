@@ -124,23 +124,33 @@ final class AgentScanCoordinator {
         )
         let startedAt = Date()
 
-        // P1 S5: Der Detached-Block macht nur noch das reine Indexing
-        // (JSONL-Parsing off-main); der Merge läuft danach auf dem MainActor
-        // über die Facade — mit der ECHTEN Active-Menge statt einer leeren
-        // (vorher konnten live laufende Sessions auf .closed flippen).
+        // Indexing und Cache-I/O laufen auf Utility. Active-PTY-Snapshot und
+        // atomarer Store-Commit bleiben gemeinsam auf dem MainActor, damit
+        // kein dazwischen gestartetes PTY fälschlich auf `.closed` kippt.
+        // Der linearisierte Merge hält diesen Abschnitt kurz.
         Task.detached(priority: .utility) { [reason] in
+            let scanToken = PerfBudgets.indexScan.begin()
+            defer { PerfBudgets.indexScan.end(scanToken) }
             let cacheStore = AgentSessionIndexCacheStore()
             var cache = cacheStore.load()
             let codex = CodexSessionIndexer().indexedSessionResult(cache: &cache)
             let claude = ClaudeSessionIndexer().indexedSessionResult(cache: &cache)
-            cacheStore.save(cache)
+            cacheStore.save(&cache)
+            PerfBudgets.indexScan.end(scanToken)
 
             await MainActor.run {
                 let coordinator = AgentScanCoordinator.shared
                 let activeSessionIDs = coordinator.activeSessionIDsProvider()
-                let store = AgentSessionStore()
-                try? store.markStaleRunningSessionsClosed(excluding: activeSessionIDs)
-                try? store.mergeIndexedSessions(codex.sessions + claude.sessions)
+                do {
+                    let store = AgentSessionStore()
+                    try store.applyIndexedScan(
+                        codex.sessions + claude.sessions,
+                        activeSessionIDs: activeSessionIDs
+                    )
+                } catch {
+                    Logger.agentPerformance.error("agent_scan_merge_failed reason=\(reason.rawValue, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                }
+
                 let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
                 Logger.agentPerformance.info("agent_scan_completed reason=\(reason.rawValue, privacy: .public) durationMs=\(durationMs) codex=\(codex.stats.scannedFiles) claude=\(claude.stats.scannedFiles)")
                 coordinator.markScanCompleted()

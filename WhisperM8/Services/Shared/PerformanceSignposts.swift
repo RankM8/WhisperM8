@@ -8,6 +8,7 @@ import os
 enum PerfSignposts {
     private static let subsystem = "com.whisperm8.app"
     static let recording = OSSignposter(subsystem: subsystem, category: "perf.recording")
+    static let index = OSSignposter(subsystem: subsystem, category: "perf.index")
     static let store = OSSignposter(subsystem: subsystem, category: "perf.store")
     static let sidebar = OSSignposter(subsystem: subsystem, category: "perf.sidebar")
     static let grid = OSSignposter(subsystem: subsystem, category: "perf.grid")
@@ -103,8 +104,16 @@ enum PerfBudgets {
     static let chatTail = PerformanceBudget(name: "recording.chatTail", budget: 0.100, signposter: PerfSignposts.recording)
     static let engineStart = PerformanceBudget(name: "recording.engineStart", budget: 0.250, signposter: PerfSignposts.recording)
 
+    // Transcript-Index
+    static let indexCacheLoad = PerformanceBudget(name: "index.cacheLoad", budget: 0.250, signposter: PerfSignposts.index)
+    static let indexCacheSave = PerformanceBudget(name: "index.cacheSave", budget: 0.500, signposter: PerfSignposts.index)
+    static let indexScan = PerformanceBudget(name: "index.scan", budget: 2.000, signposter: PerfSignposts.index)
+    static let indexMerge = PerformanceBudget(name: "index.merge", budget: 0.030, signposter: PerfSignposts.index)
+
     // Workspace-Store
     static let storeMutate = PerformanceBudget(name: "store.mutate", budget: 0.030, signposter: PerfSignposts.store)
+    static let storeNormalize = PerformanceBudget(name: "store.normalize", budget: 0.015, signposter: PerfSignposts.store)
+    static let storeEquality = PerformanceBudget(name: "store.equality", budget: 0.010, signposter: PerfSignposts.store)
     static let storeLoad = PerformanceBudget(name: "store.load", budget: 0.015, signposter: PerfSignposts.store)
     static let storeSave = PerformanceBudget(name: "store.save", budget: 0.020, signposter: PerfSignposts.store)
     static let saveUIState = PerformanceBudget(name: "store.saveUIState", budget: 0.010, signposter: PerfSignposts.store)
@@ -113,6 +122,7 @@ enum PerfBudgets {
     static let sidebarWorkspaceLoad = PerformanceBudget(name: "sidebar.workspaceLoad", budget: 0.050, signposter: PerfSignposts.sidebar)
     static let sidebarBackgroundIndex = PerformanceBudget(name: "sidebar.backgroundIndex", budget: 2.000, signposter: PerfSignposts.sidebar)
     static let sidebarStatusPoll = PerformanceBudget(name: "sidebar.statusPoll", budget: 0.100, signposter: PerfSignposts.sidebar)
+    static let sidebarModelBuild = PerformanceBudget(name: "sidebar.modelBuild", budget: 0.0167, signposter: PerfSignposts.sidebar)
 
     // Grid-Workspace (Budgets aus docs/plans/grid-workspace-plan.html, Abschnitt 05;
     // Freigabe-Gates sind p95-Werte, Einzelverletzungen sind Hinweise, keine Fehler).

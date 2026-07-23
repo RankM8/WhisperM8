@@ -65,6 +65,135 @@ final class AgentWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(spy.saveCount, 1, "Unveränderter Workspace darf nicht erneut persistiert werden")
     }
 
+    func testMutateIfChangedSkipsNormalizePersistAndCallbackOnNoOp() throws {
+        let spy = PersistSpy()
+        var normalizeCount = 0
+        var callbackCount = 0
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { try spy.persist($0) },
+            normalize: { workspace in
+                normalizeCount += 1
+                return workspace
+            }
+        )
+        store.onWorkspaceChanged = { _ in callbackCount += 1 }
+
+        try store.mutateIfChanged { workspace in
+            // Selbst versehentliche lokale Änderungen werden bei `false`
+            // verworfen; der kanonische Workspace bleibt unangetastet.
+            workspace.sessions.append(self.makeSession())
+            return false
+        }
+
+        XCTAssertEqual(store.read { $0 }, .empty)
+        XCTAssertEqual(normalizeCount, 0)
+        XCTAssertEqual(spy.saveCount, 0)
+        XCTAssertEqual(callbackCount, 0)
+    }
+
+    func testMutateIfChangedNormalizesPersistsAndPublishesEffectiveChange() throws {
+        let spy = PersistSpy()
+        var normalizeCount = 0
+        var callbackCount = 0
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { try spy.persist($0) },
+            normalize: { workspace in
+                normalizeCount += 1
+                return workspace
+            }
+        )
+        store.onWorkspaceChanged = { _ in callbackCount += 1 }
+        let session = makeSession()
+
+        try store.mutateIfChanged { workspace in
+            workspace.sessions.append(session)
+            return true
+        }
+
+        XCTAssertEqual(store.read { $0.sessions }, [session])
+        XCTAssertEqual(normalizeCount, 1)
+        XCTAssertEqual(spy.saveCount, 1)
+        XCTAssertEqual(callbackCount, 1)
+    }
+
+    func testMutateIfChangedRollsBackThrowWithoutSideEffects() {
+        enum ExpectedError: Error { case stop }
+        let spy = PersistSpy()
+        var normalizeCount = 0
+        var callbackCount = 0
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { try spy.persist($0) },
+            normalize: { workspace in
+                normalizeCount += 1
+                return workspace
+            }
+        )
+        store.onWorkspaceChanged = { _ in callbackCount += 1 }
+
+        XCTAssertThrowsError(
+            try store.mutateIfChanged { workspace in
+                workspace.sessions.append(self.makeSession())
+                throw ExpectedError.stop
+            }
+        )
+
+        XCTAssertEqual(store.read { $0 }, .empty)
+        XCTAssertEqual(normalizeCount, 0)
+        XCTAssertEqual(spy.saveCount, 0)
+        XCTAssertEqual(callbackCount, 0)
+    }
+
+    func testMutateIfChangedRollsBackImmediatePersistFailure() throws {
+        let spy = PersistSpy()
+        var callbackCount = 0
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { try spy.persist($0) }
+        )
+        store.onWorkspaceChanged = { _ in callbackCount += 1 }
+        spy.failNext()
+
+        XCTAssertThrowsError(
+            try store.mutateIfChanged { workspace in
+                workspace.sessions.append(self.makeSession(title: "verworfen"))
+                return true
+            }
+        )
+
+        XCTAssertEqual(store.read { $0 }, .empty)
+        XCTAssertEqual(spy.saveCount, 0)
+        XCTAssertEqual(callbackCount, 0)
+
+        try store.mutateIfChanged { workspace in
+            workspace.sessions.append(self.makeSession(title: "gespeichert"))
+            return true
+        }
+        XCTAssertEqual(store.read { $0.sessions.map(\.title) }, ["gespeichert"])
+        XCTAssertEqual(spy.saveCount, 1)
+        XCTAssertEqual(callbackCount, 1)
+    }
+
+    @MainActor
+    func testUIModelReadsCanonicalStateWhenStaleCallbackArrives() throws {
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { _ in }
+        )
+        let model = AgentWorkspaceUIModel(store: store)
+        let session = makeSession(title: "Neu")
+        try store.mutate { $0.sessions.append(session) }
+        XCTAssertEqual(model.workspace.sessions, [session])
+
+        // Simuliert einen verspäteten Callback einer älteren parallelen
+        // Mutation. Der Payload darf den UI-Stand nicht zurücksetzen.
+        store.onWorkspaceChanged?(.empty)
+
+        XCTAssertEqual(model.workspace.sessions, [session])
+    }
+
     func testConcurrentMutationsLoseNoUpdates() throws {
         let store = AgentWorkspaceStore(
             loadInitial: { .empty },

@@ -509,12 +509,15 @@ struct AgentSessionStore {
     }
 
     func markStaleRunningSessionsClosed(excluding activeSessionIDs: Set<UUID> = []) throws {
-        try mutateWorkspace { workspace in
+        try mutateWorkspaceIfChanged { workspace in
+            var changed = false
             for index in workspace.sessions.indices where workspace.sessions[index].status == .running {
                 guard workspace.sessions[index].shouldLaunchOnOpen != true else { continue }
                 guard !activeSessionIDs.contains(workspace.sessions[index].id) else { continue }
                 workspace.sessions[index].status = .closed
+                changed = true
             }
+            return changed
         }
     }
 
@@ -725,7 +728,160 @@ struct AgentSessionStore {
         }
     }
 
+    private struct ExternalSessionKey: Hashable {
+        var provider: AgentProvider
+        var externalSessionID: String
+    }
+
+    private struct AdoptionKey: Hashable {
+        var provider: AgentProvider
+        var projectID: UUID
+    }
+
+    /// Pro Provider/Projekt sortierter Pool ungebundener Starts. Ein Fenwick-
+    /// Baum hält die noch verfügbaren Zeitstempel; Vorgänger/Nachfolger und
+    /// Verbrauch kosten damit O(log n), auch wenn viele parallele Starts im
+    /// selben Projekt liegen.
+    private final class AdoptionCandidatePool {
+        private let timestamps: [TimeInterval]
+        private let indicesByTimestamp: [[Int]]
+        private var consumedByTimestamp: [Int]
+        private var remainingTree: [Int]
+
+        init(candidates: [(index: Int, createdAt: Date)]) {
+            var grouped: [TimeInterval: [Int]] = [:]
+            for candidate in candidates {
+                grouped[candidate.createdAt.timeIntervalSinceReferenceDate, default: []]
+                    .append(candidate.index)
+            }
+            timestamps = grouped.keys.sorted()
+            indicesByTimestamp = timestamps.map { grouped[$0] ?? [] }
+            consumedByTimestamp = Array(repeating: 0, count: timestamps.count)
+            remainingTree = Array(repeating: 0, count: timestamps.count + 1)
+            for (position, indices) in indicesByTimestamp.enumerated() {
+                addRemaining(indices.count, at: position)
+            }
+        }
+
+        func takeNearest(to createdAt: Date) -> Int? {
+            guard !timestamps.isEmpty else { return nil }
+            let target = createdAt.timeIntervalSinceReferenceDate
+            let insertion = lowerBound(for: target)
+            let beforeCount = remainingCount(before: insertion)
+            let total = remainingCount(before: timestamps.count)
+            let previousPosition = beforeCount > 0
+                ? position(ofRemainingOrder: beforeCount)
+                : nil
+            let nextPosition = beforeCount < total
+                ? position(ofRemainingOrder: beforeCount + 1)
+                : nil
+
+            let validPositions = [previousPosition, nextPosition]
+                .compactMap { $0 }
+                .filter { abs(timestamps[$0] - target) <= 5 }
+            guard let selectedPosition = validPositions.min(by: { lhs, rhs in
+                let leftDistance = abs(timestamps[lhs] - target)
+                let rightDistance = abs(timestamps[rhs] - target)
+                if leftDistance != rightDistance {
+                    return leftDistance < rightDistance
+                }
+                return currentIndex(at: lhs) < currentIndex(at: rhs)
+            }) else {
+                return nil
+            }
+
+            let selectedIndex = currentIndex(at: selectedPosition)
+            consumedByTimestamp[selectedPosition] += 1
+            addRemaining(-1, at: selectedPosition)
+            return selectedIndex
+        }
+
+        private func currentIndex(at position: Int) -> Int {
+            indicesByTimestamp[position][consumedByTimestamp[position]]
+        }
+
+        private func lowerBound(for value: TimeInterval) -> Int {
+            var lower = 0
+            var upper = timestamps.count
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2
+                if timestamps[middle] < value {
+                    lower = middle + 1
+                } else {
+                    upper = middle
+                }
+            }
+            return lower
+        }
+
+        private func remainingCount(before end: Int) -> Int {
+            var index = end
+            var result = 0
+            while index > 0 {
+                result += remainingTree[index]
+                index -= index & -index
+            }
+            return result
+        }
+
+        private func position(ofRemainingOrder order: Int) -> Int {
+            var treeIndex = 0
+            var accumulated = 0
+            var step = 1
+            while step < remainingTree.count {
+                step <<= 1
+            }
+            while step > 0 {
+                let next = treeIndex + step
+                if next < remainingTree.count,
+                   accumulated + remainingTree[next] < order {
+                    treeIndex = next
+                    accumulated += remainingTree[next]
+                }
+                step >>= 1
+            }
+            return treeIndex
+        }
+
+        private func addRemaining(_ delta: Int, at position: Int) {
+            var index = position + 1
+            while index < remainingTree.count {
+                remainingTree[index] += delta
+                index += index & -index
+            }
+        }
+    }
+
+    private static func takeAdoptionCandidate(
+        for key: AdoptionKey,
+        createdAt: Date,
+        pools: [AdoptionKey: AdoptionCandidatePool]
+    ) -> Int? {
+        pools[key]?.takeNearest(to: createdAt)
+    }
+
     func mergeIndexedSessions(_ indexedSessions: [IndexedAgentSession]) throws {
+        _ = try mergeIndexedSessions(indexedSessions, closingStaleExcluding: nil)
+    }
+
+    /// Atomarer Scan-Commit: Statuskorrektur und Index-Merge teilen dieselbe
+    /// Store-Mutation. Dadurch entstehen höchstens eine Workspace-Publikation
+    /// und ein Persist-Debounce-Burst.
+    @discardableResult
+    func applyIndexedScan(
+        _ indexedSessions: [IndexedAgentSession],
+        activeSessionIDs: Set<UUID>
+    ) throws -> AgentSessionMergeStats {
+        try mergeIndexedSessions(
+            indexedSessions,
+            closingStaleExcluding: activeSessionIDs
+        )
+    }
+
+    private func mergeIndexedSessions(
+        _ indexedSessions: [IndexedAgentSession],
+        closingStaleExcluding activeSessionIDs: Set<UUID>?
+    ) throws -> AgentSessionMergeStats {
         // Git-Lookups VOR der Mutation (kein Subprozess unter dem Store-Lock):
         // Branches nur für Pfade berechnen, zu denen noch kein Projekt
         // existiert. TOCTOU ist harmlos — taucht das Projekt zwischenzeitlich
@@ -744,161 +900,229 @@ struct AgentSessionStore {
         // blockierendes I/O machen — gleiches Hoisting wie branchByPath oben.
         let fallbackModelRaw = AppPreferences.shared.resolvedCodexDefaultModelRaw()
         let fallbackEffortRaw = AppPreferences.shared.codexReasoningEffortRaw
+        var stats = AgentSessionMergeStats()
 
-        try mutateWorkspace { workspace in
-            Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
-            Self.removeUnresumableClaudeSessions(from: &workspace)
-            // Subagent-Jobs besitzen ihre Codex-Session exklusiv: der Scan
-            // findet deren Rollout-JSONL auch in ~/.codex/sessions und würde
-            // sie sonst duplizieren oder aufs Job-cwd-Projekt umhängen.
-            // Bewusst ALLE .subagentJob-Sessions (nicht nur aktive) — auch
-            // nach Übernahme/rm-Zwischenzuständen bleibt die Zuordnung.
-            let subagentThreadIDs = Set(
-                workspace.sessions
-                    .filter { $0.isSubagentJob }
-                    .compactMap(\.externalSessionID)
-            )
-            // Duplikat-Schutz (Review-Befund 2026-07-13): dieselbe
-            // externalSessionID kann in MEHREREN Roots liegen (extern
-            // kopierte Transcripts). Ohne Dedup ueberschriebe der Merge
-            // denselben Datensatz in Scan-Reihenfolge mehrfach — Stempel-
-            // Flip-Flop und Dauer-Persistenz. Bevorzugt wird der Kandidat,
-            // dessen Root zum vorhandenen Stempel passt (Stabilitaet),
-            // sonst die juengste Aktivitaet.
-            var chosenByKey: [String: IndexedAgentSession] = [:]
-            var duplicateKeys = Set<String>()
-            for indexed in indexedSessions {
-                let key = "\(indexed.provider.rawValue)|\(indexed.externalSessionID)"
-                guard let existing = chosenByKey[key] else {
-                    chosenByKey[key] = indexed
-                    continue
-                }
-                duplicateKeys.insert(key)
-                let stamp = workspace.sessions.first(where: {
-                    $0.provider == indexed.provider && $0.externalSessionID == indexed.externalSessionID
-                })?.claudeProfileName
-                if existing.claudeProfileName == stamp, indexed.claudeProfileName != stamp {
-                    // existing behalten
-                } else if indexed.claudeProfileName == stamp, existing.claudeProfileName != stamp {
-                    chosenByKey[key] = indexed
-                } else if indexed.lastActivityAt > existing.lastActivityAt {
-                    chosenByKey[key] = indexed
-                }
-            }
-            for key in duplicateKeys {
-                Logger.agentStore.warning("agent_index_duplicate_session key=\(key, privacy: .public) — Transcript liegt in mehreren Roots, Merge nutzt einen stabilen Kandidaten")
-            }
-            var emittedKeys = Set<String>()
-            let dedupedSessions = indexedSessions.compactMap { indexed -> IndexedAgentSession? in
-                let key = "\(indexed.provider.rawValue)|\(indexed.externalSessionID)"
-                guard chosenByKey[key] == indexed, !emittedKeys.contains(key) else { return nil }
-                emittedKeys.insert(key)
-                return indexed
-            }
-            for indexed in dedupedSessions {
-                guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
-                guard !subagentThreadIDs.contains(indexed.externalSessionID) else { continue }
-                let projectPath = Self.canonicalProjectPath(indexed.cwd)
-                let project: AgentProject
-                if let existingProject = workspace.projects.first(where: { $0.path == projectPath }) {
-                    project = existingProject
-                } else {
-                    project = AgentProject(
-                        name: URL(fileURLWithPath: projectPath).lastPathComponent,
-                        path: projectPath,
-                        color: AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
-                        lastBranch: branchByPath[projectPath] ?? nil
-                    )
-                    workspace.projects.append(project)
+        try PerfBudgets.indexMerge.withInterval {
+            try mutateWorkspaceIfChanged { workspace in
+                let projectCountBeforeMaintenance = workspace.projects.count
+                let sessionCountBeforeMaintenance = workspace.sessions.count
+                Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
+                Self.removeUnresumableClaudeSessions(from: &workspace)
+                var didChange = workspace.projects.count != projectCountBeforeMaintenance
+                    || workspace.sessions.count != sessionCountBeforeMaintenance
+                if let activeSessionIDs {
+                    for index in workspace.sessions.indices
+                    where workspace.sessions[index].status == .running {
+                        guard workspace.sessions[index].shouldLaunchOnOpen != true else { continue }
+                        guard !activeSessionIDs.contains(workspace.sessions[index].id) else { continue }
+                        workspace.sessions[index].status = .closed
+                        stats.closedStaleSessions += 1
+                        didChange = true
+                    }
                 }
 
-                if let index = workspace.sessions.firstIndex(where: { $0.provider == indexed.provider && $0.externalSessionID == indexed.externalSessionID }) {
-                    if workspace.sessions[index].projectID != project.id {
-                        workspace.sessions[index].projectID = project.id
+                // Alle globalen Lookups einmalig aufbauen. Bei beschädigten
+                // Duplikaten bleibt jeweils der erste Workspace-Eintrag maßgeblich
+                // — exakt wie zuvor bei `first(where:)`/`firstIndex(where:)`.
+                var projectIndexByPath: [String: Int] = [:]
+                for index in workspace.projects.indices {
+                    let path = workspace.projects[index].path
+                    if projectIndexByPath[path] == nil {
+                        projectIndexByPath[path] = index
                     }
-                    if workspace.sessions[index].lastActivityAt != indexed.lastActivityAt {
-                        workspace.sessions[index].lastActivityAt = indexed.lastActivityAt
-                    }
-                    if workspace.sessions[index].title.isEmpty,
-                       workspace.sessions[index].title != indexed.title {
-                        workspace.sessions[index].title = indexed.title
-                    }
-                    // Stempel-Selbstheilung: der Indexer kennt den REALEN
-                    // Ablageort des Transcripts (main- vs. Profil-Root).
-                    // Weicht der gespeicherte Account-Stempel davon ab, liefe
-                    // ein Resume unterm falschen CLAUDE_CONFIG_DIR („No
-                    // conversation found") — die Platte gewinnt.
-                    if indexed.provider == .claude,
-                       workspace.sessions[index].claudeProfileName != indexed.claudeProfileName {
-                        workspace.sessions[index].claudeProfileName = indexed.claudeProfileName
-                    }
-                } else if let index = workspace.sessions.indices
-                    .filter({ idx in
-                        let candidate = workspace.sessions[idx]
-                        return candidate.provider == indexed.provider
-                            // Terminals (Platzhalter-Provider, kein Transcript)
-                            // dürfen im ±5s-Fenster keine fremde JSONL kapern.
-                            // Bewusst NUR Terminals ausschließen — die übrigen
-                            // Kinds behalten ihr bisheriges Adoptionsverhalten.
-                            && candidate.effectiveKind != .terminal
-                            && candidate.externalSessionID == nil
-                            && candidate.projectID == project.id
-                            && candidate.hasLaunchedInitialPrompt
-                            // ECHTES ±5s-Fenster (Review-Befund 2026-07-13):
-                            // die frühere Formulierung hatte nur eine
-                            // Untergrenze — eine beliebig später gestartete
-                            // Session konnte einen alten ungebundenen Tab
-                            // kapern.
-                            && abs(indexed.createdAt.timeIntervalSince(candidate.createdAt)) <= 5
-                    })
-                    // Bei mehreren Kandidaten (parallele Starts) gewinnt der
-                    // zeitlich NÄCHSTE — nicht die Workspace-Reihenfolge.
-                    .min(by: { lhs, rhs in
-                        abs(indexed.createdAt.timeIntervalSince(workspace.sessions[lhs].createdAt))
-                            < abs(indexed.createdAt.timeIntervalSince(workspace.sessions[rhs].createdAt))
-                    }) {
-                    if workspace.sessions[index].externalSessionID != indexed.externalSessionID {
-                        workspace.sessions[index].externalSessionID = indexed.externalSessionID
-                    }
-                    let mergedLastActivityAt = max(
-                        indexed.lastActivityAt,
-                        workspace.sessions[index].lastActivityAt
-                    )
-                    if workspace.sessions[index].lastActivityAt != mergedLastActivityAt {
-                        workspace.sessions[index].lastActivityAt = mergedLastActivityAt
-                    }
-                    if (workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty),
-                       workspace.sessions[index].title != indexed.title {
-                        workspace.sessions[index].title = indexed.title
-                    }
-                    // Profil nachtragen, falls das Transcript unter einem
-                    // Profil-Root liegt und die Session noch keins traegt —
-                    // sonst wuerde ein Resume unterm falschen Config-Dir laufen.
-                    if workspace.sessions[index].claudeProfileName == nil,
-                       let profile = indexed.claudeProfileName {
-                        workspace.sessions[index].claudeProfileName = profile
-                    }
-                } else {
-                    workspace.sessions.append(
-                        AgentChatSession(
-                            provider: indexed.provider,
-                            projectID: project.id,
-                            externalSessionID: indexed.externalSessionID,
-                            title: indexed.title,
-                            model: indexed.model ?? fallbackModelRaw,
-                            reasoningEffort: indexed.reasoningEffort ?? fallbackEffortRaw,
-                            status: .closed,
-                            hasLaunchedInitialPrompt: true,
-                            createdAt: indexed.createdAt,
-                            lastActivityAt: indexed.lastActivityAt,
-                            claudeProfileName: indexed.claudeProfileName
+                }
+                var sessionIndexByExternalKey: [ExternalSessionKey: Int] = [:]
+                var adoptionCandidatesByKey: [AdoptionKey: [(index: Int, createdAt: Date)]] = [:]
+                for index in workspace.sessions.indices {
+                    let session = workspace.sessions[index]
+                    if let externalSessionID = session.externalSessionID {
+                        let key = ExternalSessionKey(
+                            provider: session.provider,
+                            externalSessionID: externalSessionID
                         )
-                    )
+                        if sessionIndexByExternalKey[key] == nil {
+                            sessionIndexByExternalKey[key] = index
+                        }
+                    } else if session.effectiveKind != .terminal,
+                              session.hasLaunchedInitialPrompt {
+                        let key = AdoptionKey(
+                            provider: session.provider,
+                            projectID: session.projectID
+                        )
+                        adoptionCandidatesByKey[key, default: []].append(
+                            (index: index, createdAt: session.createdAt)
+                        )
+                    }
                 }
+                let adoptionPoolsByKey = adoptionCandidatesByKey.mapValues {
+                    AdoptionCandidatePool(candidates: $0)
+                }
+
+                // Subagent-Jobs besitzen ihre Codex-Session exklusiv: der Scan
+                // findet deren Rollout-JSONL auch in ~/.codex/sessions und würde
+                // sie sonst duplizieren oder aufs Job-cwd-Projekt umhängen.
+                // Bewusst ALLE .subagentJob-Sessions (nicht nur aktive) — auch
+                // nach Übernahme/rm-Zwischenzuständen bleibt die Zuordnung.
+                let subagentThreadIDs = Set(
+                    workspace.sessions
+                        .filter { $0.isSubagentJob }
+                        .compactMap(\.externalSessionID)
+                )
+                // Duplikat-Schutz (Review-Befund 2026-07-13): dieselbe
+                // externalSessionID kann in MEHREREN Roots liegen (extern
+                // kopierte Transcripts). Ohne Dedup ueberschriebe der Merge
+                // denselben Datensatz in Scan-Reihenfolge mehrfach — Stempel-
+                // Flip-Flop und Dauer-Persistenz. Bevorzugt wird der Kandidat,
+                // dessen Root zum vorhandenen Stempel passt (Stabilitaet),
+                // sonst die juengste Aktivitaet.
+                var chosenByKey: [ExternalSessionKey: IndexedAgentSession] = [:]
+                var duplicateKeys = Set<ExternalSessionKey>()
+                for indexed in indexedSessions {
+                    let key = ExternalSessionKey(
+                        provider: indexed.provider,
+                        externalSessionID: indexed.externalSessionID
+                    )
+                    guard let existing = chosenByKey[key] else {
+                        chosenByKey[key] = indexed
+                        continue
+                    }
+                    duplicateKeys.insert(key)
+                    let stamp = sessionIndexByExternalKey[key].flatMap {
+                        workspace.sessions[$0].claudeProfileName
+                    }
+                    if existing.claudeProfileName == stamp, indexed.claudeProfileName != stamp {
+                        // existing behalten
+                    } else if indexed.claudeProfileName == stamp, existing.claudeProfileName != stamp {
+                        chosenByKey[key] = indexed
+                    } else if indexed.lastActivityAt > existing.lastActivityAt {
+                        chosenByKey[key] = indexed
+                    }
+                }
+                stats.duplicateKeys = duplicateKeys.count
+                for key in duplicateKeys {
+                    let description = "\(key.provider.rawValue)|\(key.externalSessionID)"
+                    Logger.agentStore.warning("agent_index_duplicate_session key=\(description, privacy: .public) — Transcript liegt in mehreren Roots, Merge nutzt einen stabilen Kandidaten")
+                }
+                var emittedKeys = Set<ExternalSessionKey>()
+                let dedupedSessions = indexedSessions.compactMap { indexed -> IndexedAgentSession? in
+                    let key = ExternalSessionKey(
+                        provider: indexed.provider,
+                        externalSessionID: indexed.externalSessionID
+                    )
+                    guard chosenByKey[key] == indexed, emittedKeys.insert(key).inserted else { return nil }
+                    return indexed
+                }
+                for indexed in dedupedSessions {
+                    guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
+                    guard !subagentThreadIDs.contains(indexed.externalSessionID) else { continue }
+                    let projectPath = Self.canonicalProjectPath(indexed.cwd)
+                    let project: AgentProject
+                    if let projectIndex = projectIndexByPath[projectPath] {
+                        project = workspace.projects[projectIndex]
+                    } else {
+                        project = AgentProject(
+                            name: URL(fileURLWithPath: projectPath).lastPathComponent,
+                            path: projectPath,
+                            color: AgentProjectColor.palette[workspace.projects.count % AgentProjectColor.palette.count],
+                            lastBranch: branchByPath[projectPath] ?? nil
+                        )
+                        workspace.projects.append(project)
+                        projectIndexByPath[projectPath] = workspace.projects.count - 1
+                        didChange = true
+                    }
+
+                    let externalKey = ExternalSessionKey(
+                        provider: indexed.provider,
+                        externalSessionID: indexed.externalSessionID
+                    )
+                    if let index = sessionIndexByExternalKey[externalKey] {
+                        stats.updates += 1
+                        if workspace.sessions[index].projectID != project.id {
+                            workspace.sessions[index].projectID = project.id
+                            didChange = true
+                        }
+                        if workspace.sessions[index].lastActivityAt != indexed.lastActivityAt {
+                            workspace.sessions[index].lastActivityAt = indexed.lastActivityAt
+                            didChange = true
+                        }
+                        if workspace.sessions[index].title.isEmpty,
+                           workspace.sessions[index].title != indexed.title {
+                            workspace.sessions[index].title = indexed.title
+                            didChange = true
+                        }
+                        // Stempel-Selbstheilung: der Indexer kennt den REALEN
+                        // Ablageort des Transcripts (main- vs. Profil-Root).
+                        // Weicht der gespeicherte Account-Stempel davon ab, liefe
+                        // ein Resume unterm falschen CLAUDE_CONFIG_DIR („No
+                        // conversation found") — die Platte gewinnt.
+                        if indexed.provider == .claude,
+                           workspace.sessions[index].claudeProfileName != indexed.claudeProfileName {
+                            workspace.sessions[index].claudeProfileName = indexed.claudeProfileName
+                            didChange = true
+                        }
+                    } else if let index = Self.takeAdoptionCandidate(
+                        for: AdoptionKey(
+                            provider: indexed.provider,
+                            projectID: project.id
+                        ),
+                        createdAt: indexed.createdAt,
+                        pools: adoptionPoolsByKey
+                    ) {
+                        stats.adoptions += 1
+                        didChange = true
+                        if workspace.sessions[index].externalSessionID != indexed.externalSessionID {
+                            workspace.sessions[index].externalSessionID = indexed.externalSessionID
+                        }
+                        sessionIndexByExternalKey[externalKey] = index
+                        let mergedLastActivityAt = max(
+                            indexed.lastActivityAt,
+                            workspace.sessions[index].lastActivityAt
+                        )
+                        if workspace.sessions[index].lastActivityAt != mergedLastActivityAt {
+                            workspace.sessions[index].lastActivityAt = mergedLastActivityAt
+                        }
+                        if (workspace.sessions[index].title.hasSuffix(" Chat") || workspace.sessions[index].title.isEmpty),
+                           workspace.sessions[index].title != indexed.title {
+                            workspace.sessions[index].title = indexed.title
+                        }
+                        // Profil nachtragen, falls das Transcript unter einem
+                        // Profil-Root liegt und die Session noch keins traegt —
+                        // sonst wuerde ein Resume unterm falschen Config-Dir laufen.
+                        if workspace.sessions[index].claudeProfileName == nil,
+                           let profile = indexed.claudeProfileName {
+                            workspace.sessions[index].claudeProfileName = profile
+                        }
+                    } else {
+                        stats.appends += 1
+                        didChange = true
+                        workspace.sessions.append(
+                            AgentChatSession(
+                                provider: indexed.provider,
+                                projectID: project.id,
+                                externalSessionID: indexed.externalSessionID,
+                                title: indexed.title,
+                                model: indexed.model ?? fallbackModelRaw,
+                                reasoningEffort: indexed.reasoningEffort ?? fallbackEffortRaw,
+                                status: .closed,
+                                hasLaunchedInitialPrompt: true,
+                                createdAt: indexed.createdAt,
+                                lastActivityAt: indexed.lastActivityAt,
+                                claudeProfileName: indexed.claudeProfileName
+                            )
+                        )
+                        sessionIndexByExternalKey[externalKey] = workspace.sessions.count - 1
+                    }
+                }
+                return didChange
             }
-            Self.removeClaudeWorktreeProjectsAndSessions(from: &workspace)
-            Self.removeUnresumableClaudeSessions(from: &workspace)
         }
+        let updates = stats.updates
+        let adoptions = stats.adoptions
+        let appends = stats.appends
+        let stale = stats.closedStaleSessions
+        let duplicates = stats.duplicateKeys
+        Logger.agentPerformance.info("agent_index_merge updates=\(updates) adoptions=\(adoptions) appends=\(appends) staleClosed=\(stale) duplicateKeys=\(duplicates)")
+        return stats
     }
 
     /// Spiegelt die Subagent-Jobs (state.json-Snapshots aus `agent-jobs/`) in
@@ -1257,9 +1481,11 @@ struct AgentSessionStore {
         }
     }
 
+    /// Boolescher Änderungsvertrag für fachlich präzise Mutatoren: `false`
+    /// beendet den Store-Pfad vor Vollnormalisierung und Deep-Equatable.
     private func mutateWorkspaceIfChanged(_ mutate: (inout AgentWorkspace) throws -> Bool) throws {
         try PerfBudgets.storeMutate.withInterval {
-            _ = try workspaceStore.mutate(mutate)
+            try workspaceStore.mutateIfChanged(mutate)
         }
     }
 }
@@ -1267,6 +1493,14 @@ struct AgentSessionStore {
 enum AgentSessionMoveDirection {
     case up
     case down
+}
+
+struct AgentSessionMergeStats: Equatable {
+    var updates = 0
+    var adoptions = 0
+    var appends = 0
+    var closedStaleSessions = 0
+    var duplicateKeys = 0
 }
 
 struct IndexedAgentSession: Codable, Equatable {

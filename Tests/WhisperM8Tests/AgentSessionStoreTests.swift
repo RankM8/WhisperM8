@@ -475,6 +475,126 @@ final class AgentSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.loadWorkspace().sessions.first?.status, .running)
     }
 
+    func testApplyIndexedScanClosesStaleAndMergesWithOnePublication() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let projectPath = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("repo", isDirectory: true)
+            .path
+        let project = AgentProject(name: "Repo", path: projectPath)
+        var stale = AgentChatSession(
+            provider: .codex,
+            projectID: project.id,
+            title: "Stale",
+            status: .running
+        )
+        stale.shouldLaunchOnOpen = false
+        var active = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Aktiv",
+            status: .running
+        )
+        active.shouldLaunchOnOpen = false
+        let store = AgentSessionStore(fileURL: fileURL)
+        try store.saveWorkspace(
+            AgentWorkspace(projects: [project], sessions: [stale, active])
+        )
+
+        let core = AgentWorkspaceStoreRegistry.store(for: fileURL)
+        var publications = 0
+        core.onWorkspaceChanged = { _ in publications += 1 }
+        let indexed = IndexedAgentSession(
+            provider: .codex,
+            externalSessionID: "atomic-scan",
+            cwd: projectPath,
+            title: "Importiert",
+            model: "gpt-5.5",
+            reasoningEffort: "medium",
+            createdAt: Date(timeIntervalSince1970: 100),
+            lastActivityAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let firstStats = try store.applyIndexedScan(
+            [indexed],
+            activeSessionIDs: [active.id]
+        )
+
+        let firstWorkspace = store.loadWorkspace()
+        XCTAssertEqual(firstStats.closedStaleSessions, 1)
+        XCTAssertEqual(firstStats.appends, 1)
+        XCTAssertEqual(publications, 1)
+        XCTAssertEqual(
+            firstWorkspace.sessions.first { $0.id == stale.id }?.status,
+            .closed
+        )
+        XCTAssertEqual(
+            firstWorkspace.sessions.first { $0.id == active.id }?.status,
+            .running
+        )
+        XCTAssertNotNil(
+            firstWorkspace.sessions.first { $0.externalSessionID == "atomic-scan" }
+        )
+
+        let secondStats = try store.applyIndexedScan(
+            [indexed],
+            activeSessionIDs: [active.id]
+        )
+        XCTAssertEqual(secondStats.updates, 1)
+        XCTAssertEqual(secondStats.closedStaleSessions, 0)
+        XCTAssertEqual(publications, 1, "Idempotenter Folge-Scan darf nicht erneut publizieren")
+    }
+
+    func testLargeIndexedScanUsesLookupMapsWithoutChangingCardinality() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let root = fileURL.deletingLastPathComponent()
+        let projects = (0..<28).map { index in
+            let path = AgentSessionStore.canonicalProjectPath(
+                root.appendingPathComponent("repo-\(index)", isDirectory: true).path
+            )
+            return AgentProject(name: "Repo \(index)", path: path)
+        }
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        let sessions = (0..<2_800).map { index in
+            let project = projects[0]
+            return AgentChatSession(
+                provider: .codex,
+                projectID: project.id,
+                externalSessionID: index < 1_000 ? "large-\(index)" : nil,
+                title: "Session \(index)",
+                status: .closed,
+                hasLaunchedInitialPrompt: true,
+                createdAt: base.addingTimeInterval(Double(index)),
+                lastActivityAt: base.addingTimeInterval(Double(index))
+            )
+        }
+        let indexed = (0..<2_000).map { index in
+            let project = projects[0]
+            return IndexedAgentSession(
+                provider: .codex,
+                externalSessionID: index < 1_000
+                    ? "large-\(index)"
+                    : "adopted-\(index)",
+                cwd: project.path,
+                title: "Session \(index)",
+                createdAt: base.addingTimeInterval(Double(index)),
+                lastActivityAt: base.addingTimeInterval(Double(index))
+            )
+        }
+        let store = AgentSessionStore(fileURL: fileURL)
+        try store.saveWorkspace(
+            AgentWorkspace(projects: projects, sessions: sessions)
+        )
+
+        let stats = try store.applyIndexedScan(indexed, activeSessionIDs: [])
+
+        XCTAssertEqual(stats.updates, 1_000)
+        XCTAssertEqual(stats.adoptions, 1_000)
+        XCTAssertEqual(stats.appends, 0)
+        XCTAssertEqual(store.loadWorkspace().sessions.count, 2_800)
+    }
+
     func testAgentSessionStoreBindsLaunchedSessionToIndexedSessionID() throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8AgentBind-\(UUID().uuidString)")
@@ -1093,6 +1213,224 @@ final class AgentSessionStoreTests: XCTestCase {
         ])
         let bound = store.loadWorkspace().sessions.first { $0.id == session.id }
         XCTAssertEqual(bound?.externalSessionID, "ext-zeitnah")
+    }
+
+    func testMergeAdoptsNearestAvailableCandidateWithinProjectGroup() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let projectPath = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("repo", isDirectory: true)
+            .path
+        let store = AgentSessionStore(fileURL: fileURL)
+        let base = Date()
+        var first = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Claude Chat"
+        )
+        first.createdAt = base
+        first.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(first)
+        var second = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Claude Chat"
+        )
+        second.createdAt = base.addingTimeInterval(4)
+        second.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(second)
+
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "nearest-second",
+                cwd: projectPath,
+                title: "Zweiter",
+                createdAt: base.addingTimeInterval(3),
+                lastActivityAt: base.addingTimeInterval(3)
+            ),
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "remaining-first",
+                cwd: projectPath,
+                title: "Erster",
+                createdAt: base.addingTimeInterval(1),
+                lastActivityAt: base.addingTimeInterval(1)
+            ),
+        ])
+
+        let sessions = store.loadWorkspace().sessions
+        XCTAssertEqual(
+            sessions.first { $0.id == second.id }?.externalSessionID,
+            "nearest-second"
+        )
+        XCTAssertEqual(
+            sessions.first { $0.id == first.id }?.externalSessionID,
+            "remaining-first"
+        )
+    }
+
+    func testMergeAdoptionIncludesBothBoundariesAndUsesWorkspaceTieBreak() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let projectPath = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("repo", isDirectory: true)
+            .path
+        let store = AgentSessionStore(fileURL: fileURL)
+        let base = Date()
+        var first = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Claude Chat"
+        )
+        first.createdAt = base
+        first.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(first)
+        var second = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Claude Chat"
+        )
+        second.createdAt = base.addingTimeInterval(10)
+        second.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(second)
+        var third = try store.createSession(
+            provider: .claude,
+            projectPath: projectPath,
+            title: "Claude Chat"
+        )
+        third.createdAt = base.addingTimeInterval(20)
+        third.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(third)
+
+        try store.mergeIndexedSessions([
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "tie-prefers-first",
+                cwd: projectPath,
+                title: "Tie",
+                createdAt: base.addingTimeInterval(5),
+                lastActivityAt: base.addingTimeInterval(5)
+            ),
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "negative-boundary",
+                cwd: projectPath,
+                title: "Minus fünf",
+                createdAt: base.addingTimeInterval(5),
+                lastActivityAt: base.addingTimeInterval(5)
+            ),
+            IndexedAgentSession(
+                provider: .claude,
+                externalSessionID: "positive-boundary",
+                cwd: projectPath,
+                title: "Plus fünf",
+                createdAt: base.addingTimeInterval(25),
+                lastActivityAt: base.addingTimeInterval(25)
+            ),
+        ])
+
+        let sessions = store.loadWorkspace().sessions
+        XCTAssertEqual(
+            sessions.first { $0.id == first.id }?.externalSessionID,
+            "tie-prefers-first"
+        )
+        XCTAssertEqual(
+            sessions.first { $0.id == second.id }?.externalSessionID,
+            "negative-boundary"
+        )
+        XCTAssertEqual(
+            sessions.first { $0.id == third.id }?.externalSessionID,
+            "positive-boundary"
+        )
+    }
+
+    func testMergeSkipsIndexedThreadOwnedBySubagentJob() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let projectPath = AgentSessionStore.canonicalProjectPath(
+            fileURL.deletingLastPathComponent()
+                .appendingPathComponent("repo", isDirectory: true)
+                .path
+        )
+        let project = AgentProject(name: "Repo", path: projectPath)
+        let subagent = AgentChatSession(
+            provider: .codex,
+            projectID: project.id,
+            externalSessionID: "owned-thread",
+            title: "Subagent",
+            hasLaunchedInitialPrompt: true,
+            kind: .subagentJob,
+            subagentJobShortID: "a1b2c3d4"
+        )
+        let store = AgentSessionStore(fileURL: fileURL)
+        try store.saveWorkspace(
+            AgentWorkspace(projects: [project], sessions: [subagent])
+        )
+
+        let stats = try store.applyIndexedScan(
+            [
+                IndexedAgentSession(
+                    provider: .codex,
+                    externalSessionID: "owned-thread",
+                    cwd: projectPath,
+                    title: "Indexer-Duplikat",
+                    createdAt: Date(),
+                    lastActivityAt: Date()
+                )
+            ],
+            activeSessionIDs: []
+        )
+
+        XCTAssertEqual(stats.updates, 0)
+        XCTAssertEqual(stats.appends, 0)
+        XCTAssertEqual(store.loadWorkspace().sessions, [subagent])
+    }
+
+    func testMergeDuplicateRootWithoutExistingSessionPrefersMainRootProject() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let root = fileURL.deletingLastPathComponent()
+        let olderPath = root.appendingPathComponent("older", isDirectory: true).path
+        let newerPath = root.appendingPathComponent("newer", isDirectory: true).path
+        let store = AgentSessionStore(fileURL: fileURL)
+        let base = Date()
+
+        let stats = try store.applyIndexedScan(
+            [
+                IndexedAgentSession(
+                    provider: .claude,
+                    externalSessionID: "duplicate-without-stamp",
+                    cwd: olderPath,
+                    title: "Alt",
+                    createdAt: base,
+                    lastActivityAt: base,
+                    claudeProfileName: nil
+                ),
+                IndexedAgentSession(
+                    provider: .claude,
+                    externalSessionID: "duplicate-without-stamp",
+                    cwd: newerPath,
+                    title: "Neu",
+                    createdAt: base,
+                    lastActivityAt: base.addingTimeInterval(60),
+                    claudeProfileName: "PowerUser"
+                ),
+            ],
+            activeSessionIDs: []
+        )
+
+        let workspace = store.loadWorkspace()
+        let session = try XCTUnwrap(
+            workspace.sessions.first { $0.externalSessionID == "duplicate-without-stamp" }
+        )
+        let project = try XCTUnwrap(
+            workspace.projects.first { $0.id == session.projectID }
+        )
+        XCTAssertEqual(stats.duplicateKeys, 1)
+        XCTAssertEqual(workspace.sessions.count, 1)
+        XCTAssertEqual(project.path, AgentSessionStore.canonicalProjectPath(olderPath))
+        XCTAssertNil(session.claudeProfileName)
     }
 
     func testMergeDeduplicatesSameExternalSessionIDAcrossRoots() throws {

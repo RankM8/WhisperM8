@@ -12,12 +12,21 @@ struct AgentSessionIndexStats: Equatable {
     var cacheHits = 0
     var cacheMisses = 0
     var skippedFiles = 0
+    var prunedCacheEntries = 0
     var bytesRead: Int64 = 0
     var duration: TimeInterval = 0
 }
 
 struct AgentSessionIndexCache {
+    static let currentSchemaVersion = 2
+
     private var entries: [String: Entry] = [:]
+    private(set) var isDirty = false
+    private(set) var invalidatedLegacyFormat = false
+
+    init(invalidateForRewrite: Bool = false) {
+        isDirty = invalidateForRewrite
+    }
 
     enum Lookup {
         case hit(IndexedAgentSession?)
@@ -33,11 +42,14 @@ struct AgentSessionIndexCache {
         }
         set {
             let cacheKey = Self.cacheKey(provider: provider, fileURL: fileURL)
-            entries[cacheKey] = Entry(
+            let entry = Entry(
                 fileSize: metadata.fileSize,
                 modifiedAt: metadata.modifiedAt,
                 session: newValue
             )
+            guard entries[cacheKey] != entry else { return }
+            entries[cacheKey] = entry
+            isDirty = true
         }
     }
 
@@ -51,7 +63,35 @@ struct AgentSessionIndexCache {
         return .hit(entry.session)
     }
 
-    private static func cacheKey(provider: AgentProvider, fileURL: URL) -> String {
+    /// Entfernt ausschließlich Cacheeinträge eines vollständig gelesenen Roots,
+    /// deren Datei in diesem Scan nicht mehr vorkam. Externe Transcripts bleiben
+    /// selbstverständlich unangetastet.
+    mutating func prune(
+        provider: AgentProvider,
+        rootURL: URL,
+        keeping seenKeys: Set<String>
+    ) -> Int {
+        let rootPath = rootURL.standardizedFileURL.path
+        let keyPrefix = "\(provider.rawValue):\(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")"
+        let staleKeys = entries.keys.filter { key in
+            key.hasPrefix(keyPrefix) && !seenKeys.contains(key)
+        }
+        guard !staleKeys.isEmpty else { return 0 }
+        for key in staleKeys {
+            entries.removeValue(forKey: key)
+        }
+        isDirty = true
+        return staleKeys.count
+    }
+
+    var entryCount: Int { entries.count }
+
+    mutating func markPersisted() {
+        isDirty = false
+        invalidatedLegacyFormat = false
+    }
+
+    static func cacheKey(provider: AgentProvider, fileURL: URL) -> String {
         "\(provider.rawValue):\(fileURL.standardizedFileURL.path)"
     }
 
@@ -61,10 +101,39 @@ struct AgentSessionIndexCache {
         var createdAt: Date?
     }
 
-    private struct Entry: Codable {
+    private struct Entry: Codable, Equatable {
         var fileSize: Int64
         var modifiedAt: Date?
         var session: IndexedAgentSession?
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case entries
+    }
+}
+
+extension AgentSessionIndexCache: Codable {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard try container.decodeIfPresent(Int.self, forKey: .schemaVersion) == Self.currentSchemaVersion else {
+            // Der Legacy-Cache besitzt keinen Versionsschlüssel und hat seine
+            // mtime-Subsekunden bereits verloren. Nicht scheinpräzise migrieren,
+            // sondern einmal kontrolliert neu aufbauen.
+            entries = [:]
+            isDirty = true
+            invalidatedLegacyFormat = true
+            return
+        }
+        entries = try container.decode([String: Entry].self, forKey: .entries)
+        isDirty = false
+        invalidatedLegacyFormat = false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Self.currentSchemaVersion, forKey: .schemaVersion)
+        try container.encode(entries, forKey: .entries)
     }
 }
 
@@ -72,33 +141,57 @@ struct AgentSessionIndexCacheStore {
     var fileURL: URL = Self.defaultFileURL()
 
     func load() -> AgentSessionIndexCache {
-        guard FileManager.default.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL) else {
-            return AgentSessionIndexCache()
-        }
+        PerfBudgets.indexCacheLoad.withInterval {
+            guard FileManager.default.fileExists(atPath: fileURL.path),
+                  let data = try? Data(contentsOf: fileURL) else {
+                return AgentSessionIndexCache()
+            }
 
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(AgentSessionIndexCache.self, from: data)
-        } catch {
-            Logger.agentPerformance.warning("agent_index_cache_load_failed error=\(error.localizedDescription, privacy: .public)")
-            return AgentSessionIndexCache()
+            do {
+                let decoder = JSONDecoder()
+                // Numerische Sekunden erhalten Date-Subsekunden im JSON-
+                // Roundtrip; ISO8601 hatte sie zuvor abgeschnitten.
+                decoder.dateDecodingStrategy = .secondsSince1970
+                let cache = try decoder.decode(AgentSessionIndexCache.self, from: data)
+                if cache.invalidatedLegacyFormat {
+                    Logger.agentPerformance.notice("agent_index_cache_invalidated reason=legacy-format")
+                }
+                Logger.agentPerformance.debug("agent_index_cache_loaded entries=\(cache.entryCount)")
+                return cache
+            } catch {
+                Logger.agentPerformance.warning("agent_index_cache_load_failed error=\(error.localizedDescription, privacy: .public)")
+                return AgentSessionIndexCache(invalidateForRewrite: true)
+            }
         }
     }
 
-    func save(_ cache: AgentSessionIndexCache) {
+    /// Schreibt nur einen tatsächlich veränderten Cache. Rückgabe `true`, wenn
+    /// neue Bytes atomar persistiert wurden.
+    @discardableResult
+    func save(_ cache: inout AgentSessionIndexCache) -> Bool {
+        guard cache.isDirty else {
+            let entryCount = cache.entryCount
+            Logger.agentPerformance.debug("agent_index_cache_save_skipped entries=\(entryCount)")
+            return false
+        }
         do {
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(cache)
-            try data.write(to: fileURL, options: .atomic)
+            try PerfBudgets.indexCacheSave.withInterval {
+                try FileManager.default.createDirectory(
+                    at: fileURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .secondsSince1970
+                let data = try encoder.encode(cache)
+                try data.write(to: fileURL, options: .atomic)
+            }
+            cache.markPersisted()
+            let entryCount = cache.entryCount
+            Logger.agentPerformance.debug("agent_index_cache_saved entries=\(entryCount)")
+            return true
         } catch {
             Logger.agentPerformance.warning("agent_index_cache_save_failed error=\(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 
@@ -108,5 +201,3 @@ struct AgentSessionIndexCacheStore {
             .appendingPathComponent("agent-session-index-cache.json")
     }
 }
-
-extension AgentSessionIndexCache: Codable {}

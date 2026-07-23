@@ -129,9 +129,14 @@ final class AgentWorkspaceStore: @unchecked Sendable {
             lock.unlock()
             throw error
         }
-        workspace = normalize(workspace)
+        workspace = PerfBudgets.storeNormalize.withInterval {
+            normalize(workspace)
+        }
 
-        guard workspace != before else {
+        let changed = PerfBudgets.storeEquality.withInterval {
+            workspace != before
+        }
+        guard changed else {
             lock.unlock()
             return result
         }
@@ -140,12 +145,51 @@ final class AgentWorkspaceStore: @unchecked Sendable {
         do {
             try persistLocked(workspace)
         } catch {
+            canonical = before
             lock.unlock()
             throw error
         }
         lock.unlock()
         onWorkspaceChanged?(workspace)
         return result
+    }
+
+    /// Variante mit fachlichem Änderungsvertrag. `false` verwirft den lokalen
+    /// CoW-Snapshot sofort: keine Normalisierung, kein Deep-Equatable, kein
+    /// Callback und kein Persist. Bei `true` garantiert der Aufrufer eine
+    /// effektive Änderung; die Normalisierung bleibt als Sicherheitsnetz.
+    func mutateIfChanged(
+        _ body: (inout AgentWorkspace) throws -> Bool
+    ) throws {
+        lock.lock()
+        var workspace = loadedLocked()
+        let before = workspace
+        let didChange: Bool
+        do {
+            didChange = try body(&workspace)
+        } catch {
+            lock.unlock()
+            throw error
+        }
+
+        guard didChange else {
+            lock.unlock()
+            return
+        }
+
+        workspace = PerfBudgets.storeNormalize.withInterval {
+            normalize(workspace)
+        }
+        canonical = workspace
+        do {
+            try persistLocked(workspace)
+        } catch {
+            canonical = before
+            lock.unlock()
+            throw error
+        }
+        lock.unlock()
+        onWorkspaceChanged?(workspace)
     }
 
     func replace(_ workspace: AgentWorkspace) throws {
@@ -289,20 +333,24 @@ final class AgentWorkspaceUIModel {
 
     init(store: AgentWorkspaceStore = AgentWorkspaceStoreRegistry.store(for: AgentWorkspaceRepository.defaultFileURL())) {
         self.workspace = store.read { $0 }
-        store.onWorkspaceChanged = { [weak self] newValue in
+        store.onWorkspaceChanged = { [weak self, weak store] _ in
+            guard let store else { return }
             if Thread.isMainThread {
-                // Mutationen vom MainActor (der Normalfall seit P1 S5)
-                // spiegeln sich SYNCHRON — die UI sieht ihre eigene Änderung
-                // sofort, ohne einen Runloop-Hop.
+                // Immer den jüngsten kanonischen Stand lesen: Callbacks
+                // paralleler Mutationen können nach dem Unlock überholen.
                 MainActor.assumeIsolated {
-                    self?.workspace = newValue
+                    self?.workspace = store.read { $0 }
                 }
             } else {
-                Task { @MainActor in
-                    self?.workspace = newValue
+                Task { @MainActor [weak self, weak store] in
+                    guard let store else { return }
+                    self?.workspace = store.read { $0 }
                 }
             }
         }
+        // Schließt das kleine Fenster zwischen Initial-Read und Callback-
+        // Installation: eine genau dort erfolgte Mutation wird so nachgezogen.
+        self.workspace = store.read { $0 }
     }
 }
 

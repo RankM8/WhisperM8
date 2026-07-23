@@ -17,7 +17,7 @@ struct CodexSessionIndexer {
         let startedAt = Date()
         let sessions = indexSessions(limit: limit, cache: &cache, stats: &stats)
         stats.duration = Date().timeIntervalSince(startedAt)
-        Logger.agentPerformance.info("agent_index provider=codex files=\(stats.scannedFiles) parsed=\(stats.parsedFiles) cacheHits=\(stats.cacheHits) cacheMisses=\(stats.cacheMisses) skipped=\(stats.skippedFiles) bytes=\(stats.bytesRead) durationMs=\(Int(stats.duration * 1000))")
+        Logger.agentPerformance.info("agent_index provider=codex files=\(stats.scannedFiles) parsed=\(stats.parsedFiles) cacheHits=\(stats.cacheHits) cacheMisses=\(stats.cacheMisses) skipped=\(stats.skippedFiles) pruned=\(stats.prunedCacheEntries) bytes=\(stats.bytesRead) durationMs=\(Int(stats.duration * 1000))")
         return AgentSessionIndexResult(sessions: sessions, stats: stats)
     }
 
@@ -32,16 +32,24 @@ struct CodexSessionIndexer {
         stats: inout AgentSessionIndexStats
     ) -> [IndexedAgentSession] {
         let fileManager = FileManager.default
+        var enumerationSucceeded = true
         guard let enumerator = fileManager.enumerator(
             at: sessionsDirectory,
             includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
+            options: [.skipsHiddenFiles],
+            errorHandler: { url, error in
+                enumerationSucceeded = false
+                Logger.agentPerformance.warning("agent_index_enumeration_failed provider=codex root=\(url.path, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                return true
+            }
         ) else {
             return []
         }
 
         var sessions: [IndexedAgentSession] = []
+        var seenKeys: Set<String> = []
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
+            seenKeys.insert(AgentSessionIndexCache.cacheKey(provider: .codex, fileURL: fileURL))
             stats.scannedFiles += 1
             guard let metadata = Self.metadata(for: fileURL) else {
                 stats.skippedFiles += 1
@@ -69,6 +77,14 @@ struct CodexSessionIndexer {
                 stats.skippedFiles += 1
                 cache[.codex, fileURL, metadata] = nil
             }
+        }
+
+        if enumerationSucceeded {
+            stats.prunedCacheEntries += cache.prune(
+                provider: .codex,
+                rootURL: sessionsDirectory,
+                keeping: seenKeys
+            )
         }
 
         return sessions
