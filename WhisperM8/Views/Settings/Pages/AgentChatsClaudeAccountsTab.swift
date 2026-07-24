@@ -57,14 +57,17 @@ struct AgentChatsClaudeAccountsTab: View {
                 SettingsHelpText(feedback, tone: feedbackTone)
             }
 
-            SettingsButtonRow(title: "Refresh", subtitle: "Reload profiles, login state, and usage data.") {
-                Button("Refresh") {
-                    reload()
+            SettingsButtonRow(
+                title: "Update usage",
+                subtitle: "Fetches live limits for all accounts and re-authenticates expired logins (one token refresh per account, rate-limit protected)."
+            ) {
+                Button("Update") {
+                    reload(allowTokenRefresh: true)
                 }
                 .buttonStyle(SettingsButtonStyle.standard)
             }
         }
-        .onAppear(perform: reload)
+        .onAppear { reload() }
     }
 
     // MARK: - Rows
@@ -337,6 +340,10 @@ struct AgentChatsClaudeAccountsTab: View {
             return "login expired — re-login via ⋯ → Log in…"
         case .refreshBlockedBySession:
             return "token expired — the running session refreshes it, retry shortly"
+        case .tokenExpired:
+            return "token expired — press “Update” below to fetch fresh limits"
+        case .refreshCoolingDown(let until):
+            return "rate-limited — next update possible at \(timeText(until))"
         case .httpStatus(429):
             return "rate-limited by Anthropic — try again in a few minutes"
         case .httpStatus(let status):
@@ -346,21 +353,30 @@ struct AgentChatsClaudeAccountsTab: View {
         }
     }
 
+    static func timeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
     // MARK: - Actions
 
-    private func reload() {
+    /// `allowTokenRefresh` nur beim manuellen Update-Button — automatische
+    /// Reloads (onAppear, nach Account-Aktionen) bleiben passiv und treffen
+    /// den streng gedrosselten OAuth-Token-Endpoint nie.
+    private func reload(allowTokenRefresh: Bool = false) {
         profiles = profileService.profiles()
         activeProfileName = profileService.activeProfileName()
         // Statusline-Marker nachziehen (heilt auch aeltere Profile ohne Datei)
         for profile in profiles where !profile.isMain {
             profileService.writeKeychainServiceMarker(forProfile: profile.name)
         }
-        fetchUsageForAllProfiles()
+        fetchUsageForAllProfiles(allowTokenRefresh: allowTokenRefresh)
     }
 
     /// Holt die Limits ALLER eingeloggten Accounts parallel — live vom
     /// oauth/usage-Endpoint, mit Statusline-Cache als Fallback.
-    private func fetchUsageForAllProfiles() {
+    private func fetchUsageForAllProfiles(allowTokenRefresh: Bool) {
         guard !isFetchingUsage else { return }
         isFetchingUsage = true
         let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
@@ -368,7 +384,9 @@ struct AgentChatsClaudeAccountsTab: View {
             var results: [String: ClaudeAccountUsage] = [:]
             await withTaskGroup(of: (String, ClaudeAccountUsage?).self) { group in
                 for name in loggedIn {
-                    group.addTask { (name, await usageFetcher.fetchUsage(forProfile: name)) }
+                    group.addTask {
+                        (name, await usageFetcher.fetchUsage(forProfile: name, allowTokenRefresh: allowTokenRefresh))
+                    }
                 }
                 for await (name, usage) in group {
                     if let usage { results[name] = usage }

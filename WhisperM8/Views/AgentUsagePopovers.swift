@@ -137,7 +137,24 @@ private struct ClaudeUsagePopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PopoverHeader(title: "Claude · Usage-Limits", subtitle: "Alle verbundenen Accounts")
+            HStack(alignment: .top, spacing: 8) {
+                PopoverHeader(title: "Claude · Usage-Limits", subtitle: "Alle verbundenen Accounts")
+                Spacer(minLength: 0)
+                // Manuelles Update: einziger Weg, abgelaufene Tokens zu
+                // refreshen — onAppear bleibt passiv (Rate-Limit-Schutz).
+                Button {
+                    load(allowTokenRefresh: true)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoading)
+                .help("Live aktualisieren — loggt abgelaufene Tokens neu ein")
+            }
 
             if isLoading, usageByProfile.isEmpty {
                 Text("lade Limits…")
@@ -201,7 +218,7 @@ private struct ClaudeUsagePopoverView: View {
         }
         .padding(14)
         .frame(width: 300, alignment: .leading)
-        .onAppear(perform: load)
+        .onAppear { load() }
     }
 
     private static func age(_ date: Date) -> String {
@@ -218,6 +235,10 @@ private struct ClaudeUsagePopoverView: View {
             return "Login abgelaufen — in den Account-Settings neu einloggen"
         case .refreshBlockedBySession:
             return "Token abgelaufen — die laufende Session erneuert ihn gleich"
+        case .tokenExpired:
+            return "Token abgelaufen — mit ↻ oben aktualisieren"
+        case .refreshCoolingDown(let until):
+            return "Rate-Limit — Update wieder möglich ab \(AgentChatsClaudeAccountsTab.timeText(until)) Uhr"
         case .httpStatus(429):
             return "Rate-Limit von Anthropic — gleich nochmal versuchen"
         case .httpStatus(let status):
@@ -227,7 +248,10 @@ private struct ClaudeUsagePopoverView: View {
         }
     }
 
-    private func load() {
+    /// Passiv per Default — nur der ↻-Button darf abgelaufene Tokens
+    /// refreshen (`allowTokenRefresh: true`), sonst Cache + Hinweis.
+    private func load(allowTokenRefresh: Bool = false) {
+        isLoading = true
         profiles = profileService.profiles()
         activeProfileName = profileService.activeProfileName()
         let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
@@ -235,7 +259,9 @@ private struct ClaudeUsagePopoverView: View {
             var results: [String: ClaudeAccountUsage] = [:]
             await withTaskGroup(of: (String, ClaudeAccountUsage?).self) { group in
                 for name in loggedIn {
-                    group.addTask { (name, await fetcher.fetchUsage(forProfile: name)) }
+                    group.addTask {
+                        (name, await fetcher.fetchUsage(forProfile: name, allowTokenRefresh: allowTokenRefresh))
+                    }
                 }
                 for await (name, usage) in group {
                     if let usage { results[name] = usage }

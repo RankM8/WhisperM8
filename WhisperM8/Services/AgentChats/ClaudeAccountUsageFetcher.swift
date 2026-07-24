@@ -39,10 +39,46 @@ enum ClaudeUsageFetchProblem: Equatable {
     /// deren Claude-Prozess erneuert den Token selbst, WhisperM8 rotiert
     /// dann bewusst nicht mit. Kein Handlungsbedarf, nur kurz warten.
     case refreshBlockedBySession
+    /// Access-Token abgelaufen, Refresh im passiven Modus bewusst
+    /// übersprungen — erst der manuelle Update-Button rotiert Tokens.
+    case tokenExpired
+    /// Refresh-Cooldown aktiv (z. B. nach einem 429 des Token-Endpoints) —
+    /// nächster Versuch frühestens ab `until`.
+    case refreshCoolingDown(until: Date)
     /// Endpoint erreichbar, aber Fehlerstatus (z. B. 429 Rate-Limit).
     case httpStatus(Int)
     /// Kein Response (offline, Timeout).
     case network
+}
+
+/// Prozessweiter Cooldown für Token-Refreshes, pro Profil. Der
+/// OAuth-Token-Endpoint ist streng pro IP gedrosselt (429-Sperren im
+/// Minuten- bis Stundenbereich, beobachtet 2026-07-23) — auch der manuelle
+/// Update-Button darf ihn deshalb nicht beliebig oft treffen.
+final class ClaudeTokenRefreshThrottle: @unchecked Sendable {
+    static let shared = ClaudeTokenRefreshThrottle()
+
+    struct Entry {
+        var nextAllowedAt: Date
+        /// Ergebnis des letzten Versuchs — wird während des Cooldowns weiter
+        /// ausgewiesen (z. B. „Login abgelaufen" statt generischem Warten).
+        var problem: ClaudeUsageFetchProblem?
+    }
+
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    /// Aktiver Cooldown-Eintrag, `nil` sobald `nextAllowedAt` erreicht ist.
+    func blockedEntry(forProfile name: String, now: Date) -> Entry? {
+        lock.lock(); defer { lock.unlock() }
+        guard let entry = entries[name], entry.nextAllowedAt > now else { return nil }
+        return entry
+    }
+
+    func record(profile: String, nextAllowedAt: Date, problem: ClaudeUsageFetchProblem?) {
+        lock.lock(); defer { lock.unlock() }
+        entries[profile] = Entry(nextAllowedAt: nextAllowedAt, problem: problem)
+    }
 }
 
 /// Fragt die 5h-/Wochen-Limits eines Account-Profils ab: OAuth-Token aus dem
@@ -51,11 +87,15 @@ enum ClaudeUsageFetchProblem: Equatable {
 /// den auch die Statusline und Community-Monitore nutzen.
 ///
 /// Abgelaufene Access-Tokens (inaktive Accounts, Claude Code refresht nur bei
-/// laufender Session) werden selbst erneuert: `refreshToken` gegen den
-/// OAuth-Token-Endpoint tauschen und das rotierte Secret feld-erhaltend in
-/// die Keychain zurückschreiben. Der Refresh unterbleibt, solange unter dem
-/// Profil eine Session läuft — deren Claude-Prozess rotiert selbst, eine
-/// parallele Rotation würde seinen Refresh-Token entwerten.
+/// laufender Session) werden NUR auf explizite Anforderung erneuert
+/// (`allowTokenRefresh: true`, der manuelle Update-Button): `refreshToken`
+/// gegen den OAuth-Token-Endpoint tauschen und das rotierte Secret
+/// feld-erhaltend in die Keychain zurückschreiben. Passive Abrufe (onAppear
+/// von Tab/Popover) treffen den Token-Endpoint nie — er ist streng pro IP
+/// gedrosselt. Zusätzlich Cooldown pro Profil (`ClaudeTokenRefreshThrottle`)
+/// und kein Refresh, solange unter dem Profil eine Session läuft — deren
+/// Claude-Prozess rotiert selbst, eine parallele Rotation würde seinen
+/// Refresh-Token entwerten.
 ///
 /// Antworten werden in den Statusline-Cache gespiegelt, Fallback-Kette bei
 /// Fehlern: Cache (mit `liveFetchProblem`) → leerer Fehler-Stand. Tokens
@@ -98,8 +138,16 @@ struct ClaudeAccountUsageFetcher {
 
     var now: () -> Date = Date.init
 
-    func fetchUsage(forProfile name: String) async -> ClaudeAccountUsage? {
-        switch await fetchLiveUsage(forProfile: name) {
+    /// Cooldown-Store — injizierbar, damit Tests nicht über das
+    /// prozessweite Singleton koppeln.
+    var refreshThrottle: ClaudeTokenRefreshThrottle = .shared
+
+    /// `allowTokenRefresh: false` (Default, alle automatischen Aufrufe) holt
+    /// Usage nur mit dem vorhandenen Access-Token; abgelaufen → Cache +
+    /// `.tokenExpired`, ohne den Token-Endpoint zu berühren. `true` gibt es
+    /// nur für den manuellen Update-Button.
+    func fetchUsage(forProfile name: String, allowTokenRefresh: Bool = false) async -> ClaudeAccountUsage? {
+        switch await fetchLiveUsage(forProfile: name, allowTokenRefresh: allowTokenRefresh) {
         case .usage(let usage):
             return usage
         case .problem(let problem):
@@ -121,7 +169,7 @@ struct ClaudeAccountUsageFetcher {
         case problem(ClaudeUsageFetchProblem)
     }
 
-    private func fetchLiveUsage(forProfile name: String) async -> LiveResult {
+    private func fetchLiveUsage(forProfile name: String, allowTokenRefresh: Bool) async -> LiveResult {
         guard var secret = readSecret(forProfile: name) else {
             return .problem(.noCredentials)
         }
@@ -130,6 +178,7 @@ struct ClaudeAccountUsageFetcher {
         var refreshAttempted = false
         var refreshFailure: RefreshFailure?
         if let expiresAt = secret.expiresAt, expiresAt.timeIntervalSince(now()) < 60 {
+            guard allowTokenRefresh else { return .problem(passiveProblem(forProfile: name)) }
             refreshAttempted = true
             switch await refreshSecret(secret, forProfile: name) {
             case .success(let refreshed): secret = refreshed
@@ -142,6 +191,7 @@ struct ClaudeAccountUsageFetcher {
         // Reaktiver Refresh: 401 trotz (scheinbar) gültigem Token → genau EIN
         // Refresh-Versuch pro Fetch, nie zwei Rotationen hintereinander.
         if status == 401, !refreshAttempted {
+            guard allowTokenRefresh else { return .problem(passiveProblem(forProfile: name)) }
             refreshAttempted = true
             switch await refreshSecret(secret, forProfile: name) {
             case .success(let refreshed):
@@ -160,6 +210,8 @@ struct ClaudeAccountUsageFetcher {
             switch refreshFailure {
             case nil, .rejected: return .problem(.loginExpired)
             case .blockedBySession: return .problem(.refreshBlockedBySession)
+            case .coolingDown(let until, let lastProblem):
+                return .problem(lastProblem ?? .refreshCoolingDown(until: until))
             case .http(let refreshStatus): return .problem(.httpStatus(refreshStatus))
             case .network: return .problem(.network)
             }
@@ -169,6 +221,14 @@ struct ClaudeAccountUsageFetcher {
         }
         writeCache(body, forProfile: name)
         return .usage(usage)
+    }
+
+    /// Problem-Zuordnung im passiven Modus (kein Refresh erlaubt): ein noch
+    /// laufender Cooldown aus einem früheren Update-Versuch ist die
+    /// präzisere Auskunft (z. B. „Login abgelaufen") als das generische
+    /// „Token abgelaufen — Update drücken".
+    private func passiveProblem(forProfile name: String) -> ClaudeUsageFetchProblem {
+        refreshThrottle.blockedEntry(forProfile: name, now: now())?.problem ?? .tokenExpired
     }
 
     private func usageRequest(token: String) -> URLRequest {
@@ -220,6 +280,9 @@ struct ClaudeAccountUsageFetcher {
         case rejected
         /// Session unter dem Profil aktiv → Rotation bewusst unterlassen.
         case blockedBySession
+        /// Cooldown aktiv — kein POST abgesetzt. Trägt den ggf. präziseren
+        /// Grund des letzten Versuchs.
+        case coolingDown(until: Date, lastProblem: ClaudeUsageFetchProblem?)
         /// Endpoint-Fehler (z. B. 429 Rate-Limit) — später erneut versuchen.
         case http(Int)
         case network
@@ -232,6 +295,10 @@ struct ClaudeAccountUsageFetcher {
         guard await !busyProfileNames().contains(name) else {
             Logger.agentStore.info("claude_token_refresh_skipped profile=\(name, privacy: .public) reason=session_running")
             return .failure(.blockedBySession)
+        }
+        if let entry = refreshThrottle.blockedEntry(forProfile: name, now: now()) {
+            Logger.agentStore.info("claude_token_refresh_skipped profile=\(name, privacy: .public) reason=cooldown")
+            return .failure(.coolingDown(until: entry.nextAllowedAt, lastProblem: entry.problem))
         }
 
         var request = URLRequest(url: URL(string: "https://console.anthropic.com/v1/oauth/token")!)
@@ -255,7 +322,32 @@ struct ClaudeAccountUsageFetcher {
               let accessToken = response["access_token"] as? String, !accessToken.isEmpty else {
             Logger.agentStore.warning("claude_token_refresh_failed profile=\(name, privacy: .public) status=\(status)")
             // 400/401 = Refresh-Token abgelehnt; alles andere ist vorübergehend.
-            return .failure(status == 400 || status == 401 ? .rejected : .http(status))
+            // Cooldown je nach Ausgang: ein 429 sperrt lange (beobachtete
+            // IP-Sperren >25 min), ein toter Login braucht ohnehin keinen
+            // zweiten POST — der Eintrag hält die präzise Auskunft fest.
+            switch status {
+            case 400, 401:
+                refreshThrottle.record(
+                    profile: name,
+                    nextAllowedAt: now().addingTimeInterval(15 * 60),
+                    problem: .loginExpired
+                )
+                return .failure(.rejected)
+            case 429:
+                refreshThrottle.record(
+                    profile: name,
+                    nextAllowedAt: now().addingTimeInterval(30 * 60),
+                    problem: nil
+                )
+                return .failure(.http(status))
+            default:
+                refreshThrottle.record(
+                    profile: name,
+                    nextAllowedAt: now().addingTimeInterval(5 * 60),
+                    problem: .httpStatus(status)
+                )
+                return .failure(.http(status))
+            }
         }
 
         var oauth = secret.oauth
@@ -285,6 +377,15 @@ struct ClaudeAccountUsageFetcher {
         } else {
             Logger.agentStore.error("claude_token_refresh_writeback_failed profile=\(name, privacy: .public) exit=serialization")
         }
+        // Auch nach Erfolg ein Cooldown: der frische Token hält Stunden, ein
+        // weiterer POST innerhalb von Minuten wäre nur ein Fehlerpfad
+        // (z. B. Write-back schlug fehl und der nächste Fetch liest wieder
+        // das alte Secret — die alte Rotation nochmal zu versuchen ist zwecklos).
+        refreshThrottle.record(
+            profile: name,
+            nextAllowedAt: now().addingTimeInterval(15 * 60),
+            problem: nil
+        )
         // Auch bei Write-back-Fehler mit dem frischen Token weiterarbeiten —
         // er ist der einzige, der jetzt noch gültig ist.
         return .success(KeychainSecret(raw: raw, oauth: oauth, accessToken: accessToken))
