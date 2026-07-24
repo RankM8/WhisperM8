@@ -20,6 +20,10 @@
     --violet: #8b5cf6;
     --red: #d74d56;
     --blue: #4b76d1;
+    --bar: #ececef;            /* Titelleiste + Tab-Zone */
+    --bar-line: #d5d6db;       /* Kante unter der Titelleiste */
+    --head: #f9f9fa;           /* Chat-Header = Fläche des aktiven Tabs */
+    --tab-edge: #d7d8dd;       /* Hairlines am aktiven Tab */
     --sidebar-width: 268px;
     --radius: 9px;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -27,13 +31,40 @@
 
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; background: var(--canvas); color: var(--ink); }
-  body { min-height: 100vh; display: grid; place-items: center; padding: 20px; overflow: hidden; }
+  body { min-height: 100vh; display: grid; justify-items: center; align-content: center; gap: 10px; padding: 14px 20px; overflow: hidden; }
+
+  /* Meta-Steuerung des Mockups — lebt bewusst AUSSERHALB des 1:1-Nachbaus
+     auf der Leinwand, damit die App-Titelleiste unverfälscht bleibt. */
+  .design-bar {
+    display:flex; align-items:center; gap:9px;
+    padding:4px 5px 4px 12px;
+    border:1px solid #d2d3d9;
+    border-radius:9px;
+    background:rgb(255 255 255 / 70%);
+    font-size:10px; color:var(--muted);
+    user-select:none;
+  }
+  .design-bar .bar-label { font-weight:650; color:#595b65; letter-spacing:.02em; }
+  .design-bar .bar-set { display:flex; padding:2px; gap:1px; border-radius:6px; background:#e2e2e7; }
+  .design-bar .bar-set button { height:20px; padding:0 9px; border-radius:4px; background:transparent; color:#72747e; font-size:10px; cursor:pointer; }
+  .design-bar .bar-set button.on { background:#fff; color:#2c2e35; font-weight:650; box-shadow:0 1px 2px rgb(37 38 44 / 12%); }
+  .design-bar .bar-toggle { height:24px; padding:0 10px; border-radius:6px; background:transparent; color:#72747e; font-size:10px; cursor:pointer; }
+  .design-bar .bar-toggle:hover { background:#e7e7eb; }
+  .design-bar .bar-toggle.active { background:#2b2c32; color:#e9e9ee; }
+  body.dark .design-bar { border-color:#33343b; background:rgb(30 31 36 / 82%); }
+  body.dark .design-bar .bar-label { color:#a3a5af; }
+  body.dark .design-bar .bar-set { background:#2a2b31; }
+  body.dark .design-bar .bar-set button { color:#8e909a; }
+  body.dark .design-bar .bar-set button.on { background:#3c3d46; color:#e8e8ec; box-shadow:none; }
+  body.dark .design-bar .bar-toggle { color:#8e909a; }
+  body.dark .design-bar .bar-toggle:hover { background:#2c2d34; }
+  body.dark .design-bar .bar-toggle.active { background:#e8e8ec; color:#1d1e23; }
   button, input { font: inherit; color: inherit; }
   button { border: 0; }
 
   .app-window {
     width: min(1510px, calc(100vw - 40px));
-    height: min(944px, calc(100vh - 40px));
+    height: min(944px, calc(100vh - 74px));
     min-width: 900px;
     min-height: 620px;
     display: grid;
@@ -45,15 +76,17 @@
     box-shadow: 0 22px 65px rgb(37 38 44 / 15%), 0 2px 8px rgb(37 38 44 / 8%);
   }
 
+  /* Wie in Chrome trennt KEINE Linie die Tab-Leiste vom Header — der
+     Farbwechsel und die Silhouette des aktiven Tabs übernehmen das. Nur
+     über der Sidebar bleibt eine dezente Kante. */
   .titlebar {
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-    background: #ececef;
-    border-bottom: 1px solid #d5d6db;
+    background: var(--bar);
     user-select: none;
   }
 
-  .window-zone { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-right: 1px solid var(--line); }
+  .window-zone { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--bar-line); }
   .traffic { display: flex; gap: 8px; }
   .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
   .traffic i:nth-child(1) { background: #ff5f57; border: 1px solid #e14840; }
@@ -62,44 +95,49 @@
   .system-meter { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; white-space: nowrap; }
   .system-meter .tiny-bars { letter-spacing: -1px; color: var(--green); }
 
-  .tabs-zone { display:flex; align-items:stretch; min-width:0; position:relative; background:#ececef; }
-  .tab-scroll { display:flex; align-items:stretch; gap:0; min-width:0; overflow:hidden; padding:0; flex:1; }
-  .tab-cluster { display:flex; align-items:stretch; gap:0; min-width:0; position:relative; }
-  .group-pill {
+  .tabs-zone { display:flex; align-items:stretch; min-width:0; position:relative; background:var(--bar); }
+  .tab-scroll { display:flex; align-items:flex-end; gap:6px; min-width:0; overflow:hidden; padding:0 6px; flex:1; }
+
+  /* EINE Formsprache: Gruppen-Label und Tabs teilen Höhe, oberen Radius und
+     Grundlinie. Zugehörigkeit entsteht durch Containment (getönte Platte)
+     plus Luft ZWISCHEN den Clustern (6px) bei 0px innerhalb — bewusst OHNE
+     durchgezogene Linie am Boden, damit sich der aktive Tab wie in Chrome
+     frei nach unten öffnen kann. */
+  .tab-cluster {
     --group: var(--blue);
-    height:35px;
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-    padding:0 7px;
-    border-radius:0;
-    border-right:1px solid rgb(85 87 96 / 12%);
-    background:transparent;
-    color:color-mix(in srgb, var(--group) 76%, #202126);
-    font-size:9px;
-    font-weight:650;
-    cursor:pointer;
-    white-space:nowrap;
+    display:flex; align-items:stretch; gap:0; min-width:0;
+    height:30px;
     position:relative;
+    border-radius:8px 8px 0 0;
+    background:color-mix(in srgb, var(--group) 9%, var(--bar));
   }
-  .group-pill::before { content:""; position:absolute; left:0; right:0; top:0; height:2px; background:var(--group); opacity:.72; }
-  .group-pill:hover { background:color-mix(in srgb, var(--group) 9%, #ececef); }
+  .tab-cluster > :first-child { border-top-left-radius:8px; }
+  .tab-cluster > :last-child { border-top-right-radius:8px; }
+
+  .group-pill {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:0 8px;
+    background:transparent;
+    color:color-mix(in srgb, var(--group) 72%, #202126);
+    font-size:9px; font-weight:650; cursor:pointer; white-space:nowrap;
+    box-shadow:inset -1px 0 color-mix(in srgb, var(--group) 22%, transparent);
+  }
+  .group-pill:hover { background:color-mix(in srgb, var(--group) 12%, transparent); }
   .group-pill .count { opacity:.58; font-variant-numeric:tabular-nums; }
   .group-pill .fold { font-size:7px; transition:transform 160ms cubic-bezier(.22,1,.36,1); }
+  .group-pill.closed { box-shadow:none; }
   .group-pill.closed .fold { transform:rotate(-90deg); }
 
   .tab {
     --group: transparent;
-    height:35px;
-    min-width:108px;
-    max-width:184px;
+    height:30px;
+    min-width:92px;
+    max-width:156px;
     display:inline-flex;
     align-items:center;
     gap:6px;
     padding:0 8px;
-    border-radius:0;
-    border-right:1px solid rgb(85 87 96 / 9%);
-    border-bottom:2px solid color-mix(in srgb, var(--group) 74%, transparent);
+    border-radius:7px 7px 0 0;
     background:transparent;
     color:#5c5e67;
     font-size:10px;
@@ -107,41 +145,84 @@
     position:relative;
     white-space:nowrap;
   }
-  .tab:hover { background:rgb(255 255 255 / 42%); color:var(--ink); }
-  .tab.active { color:var(--ink); z-index:2; }
+  .tab-cluster .tab { border-radius:0; }
+  .tab-cluster .tab + .tab { box-shadow:inset 1px 0 color-mix(in srgb, var(--group) 18%, transparent); }
+  .tab:hover { background:rgb(255 255 255 / 46%); color:var(--ink); }
 
-  /* Chrome: ruhige Flächen, Gruppenfarbe nur als feine Herkunftsmarke. */
-  .app-window[data-tab-style="chrome"] .group-pill { background:color-mix(in srgb, var(--group) 8%, #ececef); }
-  .app-window[data-tab-style="chrome"] .tab.active {
-    background:#f8f8fa;
-    box-shadow:inset 0 1px 0 rgb(255 255 255 / 82%), inset 1px 0 #d8d9de, inset -1px 0 #d8d9de;
-    border-bottom-color:var(--group);
+  /* Aktiv: exakt der Chrome-Effekt — headerfarbene Fläche, oben abgerundet,
+     unten VOLLSTÄNDIG offen. Die beiden Pseudos bilden den Chrome-Fuß:
+     konkav ausgestellte untere Ecken, mit denen der Tab auf dem Header
+     „steht". Keine Linie, keine Brücke — Tab und Header sind eine Fläche. */
+  .tab.active {
+    color:var(--ink); z-index:2;
+    border-radius:7px 7px 0 0 !important;
+    background:
+      linear-gradient(var(--group), var(--group)) top/100% 2px no-repeat,
+      var(--head);
   }
-
-  /* Offen: der aktive Tab unterbricht die Titelleiste und geht direkt in Header/Content über. */
-  .app-window[data-tab-style="connected"] .group-pill { background:transparent; }
-  .app-window[data-tab-style="connected"] .group-pill::before { top:auto; bottom:0; height:2px; }
-  .app-window[data-tab-style="connected"] .tab { border-bottom-color:transparent; }
-  .app-window[data-tab-style="connected"] .tab.active {
-    background:#f9f9fa;
-    border-radius:5px 5px 0 0;
-    box-shadow:inset 0 1px #d7d8dd, inset 1px 0 #d7d8dd, inset -1px 0 #d7d8dd;
-  }
-  .app-window[data-tab-style="connected"] .tab.active::after {
+  .tab.active::before,
+  .tab.active::after {
     content:"";
     position:absolute;
-    left:0;
-    right:0;
-    bottom:-2px;
-    height:3px;
-    background:#f9f9fa;
+    bottom:0;
+    width:7px;
+    height:7px;
+  }
+  .tab.active::before {
+    left:-7px;
+    background:radial-gradient(circle 7px at 0 0, transparent 6.4px, var(--head) 7px);
+  }
+  .tab.active::after {
+    right:-7px;
+    background:radial-gradient(circle 7px at 100% 0, transparent 6.4px, var(--head) 7px);
   }
 
-  /* Linie: maximale Reduktion ohne Tab-Flächen; Typo und Unterkante tragen die Auswahl. */
-  .app-window[data-tab-style="line"] .group-pill { color:#5e6068; border-right-color:transparent; }
-  .app-window[data-tab-style="line"] .group-pill::before { top:auto; bottom:0; height:2px; opacity:.85; }
-  .app-window[data-tab-style="line"] .tab { border-right-color:transparent; border-bottom-color:transparent; }
-  .app-window[data-tab-style="line"] .tab.active { background:transparent; font-weight:650; border-bottom-color:var(--indigo); box-shadow:none; }
+  /* Variante „Chrome": kein Platten-Tint — das gefüllte Farb-Label trägt die
+     Gruppe (wie echte Chrome-Tab-Gruppen); die 2px-Linie läuft nur unter den
+     INAKTIVEN Mitgliedern und wird vom Fuß des aktiven Tabs unterbrochen. */
+  #app[data-tab-style="chrome"] .tab-cluster { background:transparent; }
+  #app[data-tab-style="chrome"] .tab-cluster::before {
+    content:""; position:absolute; left:2px; right:0; bottom:0; height:2px;
+    background:var(--group); border-radius:2px 2px 0 0;
+  }
+  #app[data-tab-style="chrome"] .group-pill {
+    align-self:center;
+    height:19px;
+    margin:0 5px 0 2px;
+    padding:0 7px;
+    border-radius:5px;
+    background:var(--group);
+    color:#fdfdfe;
+    box-shadow:none;
+  }
+  #app[data-tab-style="chrome"] .group-pill:hover { background:color-mix(in srgb, var(--group) 86%, #16171b); }
+  #app[data-tab-style="chrome"] .group-pill .count { opacity:.78; }
+  #app[data-tab-style="chrome"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 rgb(120 122 132 / 16%); }
+
+  /* Variante „Kontur": 1px-Bügel in Gruppenfarbe über Label und Tabs —
+     oben und an den Seiten; die Unterkante bleibt komplett offen. */
+  #app[data-tab-style="outline"] .tab-cluster { background:transparent; }
+  #app[data-tab-style="outline"] .tab-cluster::before {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    border:1px solid color-mix(in srgb, var(--group) 46%, transparent);
+    border-bottom:0;
+    border-radius:8px 8px 0 0;
+  }
+  #app[data-tab-style="outline"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 color-mix(in srgb, var(--group) 14%, transparent); }
+
+  /* Variante „Label": maximale Ruhe — nur das getönte Label markiert die
+     Gruppe, Zugehörigkeit entsteht allein über Nähe und Luft. */
+  #app[data-tab-style="label"] .tab-cluster { background:transparent; }
+  #app[data-tab-style="label"] .group-pill {
+    align-self:center;
+    height:20px;
+    margin:0 4px 0 2px;
+    padding:0 8px;
+    border-radius:10px;
+    background:color-mix(in srgb, var(--group) 14%, transparent);
+    box-shadow:none;
+  }
+  #app[data-tab-style="label"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 rgb(120 122 132 / 14%); }
 
   .tab .avatar, .row-avatar, .project-avatar, .pane-avatar {
     display:grid; place-items:center; flex:none; color:white; font-weight:700; letter-spacing:-.02em;
@@ -157,9 +238,6 @@
   @keyframes pulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
 
   .tab-tools { display:flex; align-items:center; padding:0 5px 0 3px; gap:2px; border-left:1px solid var(--line); }
-  .tab-variant-picker { display:flex; align-items:center; height:23px; padding:2px; border-radius:5px; background:#e1e1e5; margin-right:3px; }
-  .tab-variant-picker button { height:19px; padding:0 6px; border-radius:3px; background:transparent; color:#74767e; font-size:8px; cursor:pointer; }
-  .tab-variant-picker button.on { background:#fafafc; color:#2e3036; box-shadow:0 1px 2px rgb(37 38 44 / 14%); font-weight:650; }
   .icon-button {
     width:25px; height:25px; border-radius:6px; display:grid; place-items:center;
     background:transparent; color:#6e7079; cursor:pointer; font-size:13px;
@@ -280,7 +358,7 @@
 
   .content { min-width:0; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:var(--paper); position:relative; }
   .chat-head, .workspace-toolbar {
-    min-width:0; display:flex; align-items:center; border-bottom:1px solid var(--line-soft); background:#f9f9fa;
+    min-width:0; display:flex; align-items:center; border-bottom:1px solid var(--line-soft); background:var(--head);
   }
   .chat-head { height:29px; gap:6px; padding:0 7px 0 10px; }
   .workspace-toolbar { height:31px; gap:8px; padding:0 9px 0 12px; }
@@ -366,6 +444,52 @@
   .toast { position:absolute; z-index:50; left:50%; bottom:33px; transform:translate(-50%,8px); opacity:0; pointer-events:none; padding:6px 9px; border-radius:6px; color:#f7f7f8; background:#37383e; font-size:9px; transition:opacity 160ms ease, transform 160ms cubic-bezier(.22,1,.36,1); }
   .toast.show { opacity:1; transform:translate(-50%,0); }
 
+  /* Dark Mode — die reale App läuft dunkel; getönte Slate-Neutrals statt
+     Schwarz, kein Glow. Die Tab-Geometrie bleibt identisch, nur die
+     Flächenwerte drehen sich: aktiver Tab + Header werden die HELLSTE
+     Fläche der Leiste (Licht fällt auf das Aktive). */
+  body.dark {
+    color-scheme:dark;
+    --ink:#e7e8ee; --muted:#9d9fa9; --faint:#686a75;
+    --line:#37383f; --line-soft:#2f3037;
+    --canvas:#131417; --sidebar:#1e1f24; --paper:#222327; --white:#28292f;
+    --indigo:#8781f0; --indigo-soft:#2e2d45;
+    --blue:#6b90e0;
+    --bar:#191a1e; --bar-line:#0d0e11;
+    --head:#26272d; --tab-edge:#41424b;
+  }
+  body.dark .app-window { border-color:#08090b; box-shadow:0 22px 65px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%); }
+  body.dark .tab { color:var(--muted); }
+  body.dark .tab:hover { background:rgb(255 255 255 / 6%); color:var(--ink); }
+  body.dark .group-pill:hover { background:rgb(255 255 255 / 7%); }
+  body.dark .icon-button { color:#8e909a; }
+  body.dark .icon-button:hover, body.dark .icon-button.active { background:#2c2d34; color:var(--ink); }
+  body.dark .search { background:#2a2b31; }
+  body.dark .segmented { background:#2a2b31; }
+  body.dark .segmented button { color:#8e909a; }
+  body.dark .segmented button.on { background:#3a3b44; color:var(--ink); box-shadow:none; }
+  body.dark .new-chat { border-color:#393a42; background:#2b2c32; box-shadow:none; }
+  body.dark .new-chat:hover { border-color:#45464f; background:#30313a; }
+  body.dark .session-row { color:#b4b6bf; }
+  body.dark .session-row:hover, body.dark .sub-row:hover { background:#2a2b32; }
+  body.dark .session-row.selected { color:#e3e2f5; }
+  body.dark .pane-head { background:#24252b; }
+  body.dark .terminal { color:#c3c5cd; scrollbar-color:#43444c transparent; }
+  body.dark .term-user { color:#e4e5eb; }
+  body.dark .term-muted { color:#787a84; }
+  body.dark .term-tool { color:#7d9dd8; }
+  body.dark .term-ok { color:#4cb586; }
+  body.dark .term-warn { color:#cf9349; }
+  body.dark .term-indent { border-left-color:#33343b; }
+  body.dark .statusline { background:#1d1e23; color:#8b8d97; }
+  body.dark .prompt-box { border-color:#3a3b44; box-shadow:none; }
+  body.dark .prompt-box:focus-within { border-color:#55519a; box-shadow:0 0 0 2px rgb(135 129 240 / 12%); }
+  body.dark .popover { border-color:#3a3b44; background:#25262c; box-shadow:0 14px 35px rgb(0 0 0 / 55%); }
+  body.dark .switcher { background:rgb(14 15 18 / 72%); }
+  body.dark .switcher-panel { border-color:#3a3b44; background:#222328; box-shadow:0 22px 60px rgb(0 0 0 / 55%); }
+  body.dark .provider-action { color:#a5a7b1; }
+  body.dark .provider-action:hover { background:#2c2d34; color:#e0e1e8; }
+
   @media (max-width:1120px) {
     :root { --sidebar-width:246px; }
     .system-meter { display:none; }
@@ -373,11 +497,21 @@
     .chat-head .head-title { max-width:170px; }
     .provider-action { width:22px; justify-content:center; padding:0; }
     .provider-action .action-label { display:none; }
-    .tab { min-width:92px; max-width:138px; }
-    .tab-variant-picker button { padding:0 4px; }
+    .tab { min-width:74px; max-width:120px; }
   }
   @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation-duration:.001ms!important; transition-duration:.001ms!important; } }
 </style>
+
+<div class="design-bar" aria-label="Mockup-Steuerung">
+  <span class="bar-label">Tab-Gruppen</span>
+  <div class="bar-set" id="tabVariantPicker">
+    <button class="on" data-tab-style="flat" title="Getönte Platte — Zugehörigkeit über Fläche">Fläche</button>
+    <button data-tab-style="chrome" title="Gefülltes Farb-Label + Linie unter inaktiven Tabs (wie Chrome)">Chrome</button>
+    <button data-tab-style="outline" title="1px-Bügel oben und seitlich, unten offen">Kontur</button>
+    <button data-tab-style="label" title="Nur getöntes Label, sonst pure Tabs">Label</button>
+  </div>
+  <button class="bar-toggle" id="themeToggle" title="Dark Mode — wie die echte App">◐ Dark</button>
+</div>
 
 <div class="app-window" id="app">
   <header class="titlebar">
@@ -388,11 +522,6 @@
     <div class="tabs-zone">
       <div class="tab-scroll" id="tabStrip"></div>
       <div class="tab-tools">
-        <div class="tab-variant-picker" id="tabVariantPicker" aria-label="Tab-Gruppen-Variante">
-          <button class="on" data-tab-style="chrome" title="Dezent und Chrome-artig">Chrome</button>
-          <button data-tab-style="connected" title="Aktiver Tab öffnet sich zum Content">Offen</button>
-          <button data-tab-style="line" title="Reduzierte Linienvariante">Linie</button>
-        </div>
         <button class="icon-button small active" id="groupToggle" title="Tab-Gruppen an/aus">⌘</button>
         <button class="icon-button small" id="overflowButton" title="Alle offenen Tabs">⌄</button>
         <button class="icon-button small" id="sidebarToggle" title="Sidebar ein-/ausblenden">◧</button>
@@ -488,7 +617,7 @@
   const pinnedIDs = ['s12','s9','s5'];
 
   const state = {
-    tabs:['s1','s5','s2','s9','s6','s3','s10','s7'], active:'s1', grouped:true, tabStyle:'chrome',
+    tabs:['s1','s5','s2','s9','s6','s3','s10','s7'], active:'s1', grouped:true, tabStyle:'flat', dark:false,
     collapsedGroups:new Set(), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-akq']),
     sidebarMode:'structure', scope:'active', filter:'', subOpen:new Set(['s1']), finishedOpen:new Set(),
     multi:new Set(), lastSidebarIndex:null, view:'chat', gridWorkspace:'ws-whisper', gridCapacity:4, gridFocus:'s1', returnWorkspace:null,
@@ -548,7 +677,7 @@
       if(item.type==='tab') return tabHtml(item.ids[0]);
       const meta=bucketMeta(item.key), closed=state.collapsedGroups.has(item.key), contains=item.ids.includes(state.active);
       const visible=closed ? (contains?[state.active]:[]) : item.ids;
-      return `<span class="tab-cluster"><button class="group-pill ${closed?'closed':''}" data-group="${item.key}" style="--group:${meta.color}"><span class="fold">⌄</span>${meta.icon} ${meta.label}<span class="count">${item.ids.length}</span></button>${visible.map(id=>tabHtml(id,meta.color)).join('')}</span>`;
+      return `<span class="tab-cluster" style="--group:${meta.color}"><button class="group-pill ${closed?'closed':''}" data-group="${item.key}"><span class="fold">⌄</span>${meta.icon} ${meta.label}<span class="count">${item.ids.length}</span></button>${visible.map(id=>tabHtml(id,meta.color)).join('')}</span>`;
     }).join('');
     $('#groupToggle').classList.toggle('active',state.grouped);
     bindTabs(); renderOverflow(); renderSwitcher();
@@ -764,8 +893,14 @@
   document.querySelectorAll('#tabVariantPicker [data-tab-style]').forEach(button=>button.onclick=()=>{
     state.tabStyle=button.dataset.tabStyle;
     renderTabs();
-    toast({chrome:'Chrome-artige Tab-Gruppen',connected:'Aktiver Tab mit Content verbunden',line:'Reduzierte Linienvariante'}[state.tabStyle]);
+    toast({flat:'Fläche — getönte Platte',chrome:'Chrome — Farb-Label + Linie unter inaktiven Tabs',outline:'Kontur — Bügel, unten offen',label:'Label — nur getöntes Gruppen-Label'}[state.tabStyle]);
   });
+  $('#themeToggle').onclick=()=>{
+    state.dark=!state.dark;
+    document.body.classList.toggle('dark',state.dark);
+    $('#themeToggle').classList.toggle('active',state.dark);
+    toast(state.dark?'Dark Mode — wie die echte App':'Light Mode');
+  };
   $('#groupToggle').onclick=()=>{state.grouped=!state.grouped;state.collapsedGroups.clear();renderTabs();toast(state.grouped?'Tab-Gruppen aktiviert':'Manuelle Tab-Reihenfolge');};
   $('#newTabButton').onclick=e=>{e.stopPropagation();$('#newMenu').classList.toggle('show');$('#overflowMenu').classList.remove('show');};
   $('#overflowButton').onclick=e=>{e.stopPropagation();$('#overflowMenu').classList.toggle('show');$('#newMenu').classList.remove('show');};
