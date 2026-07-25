@@ -192,12 +192,38 @@
     padding:0 7px;
     border-radius:5px;
     background:var(--group);
-    color:#fdfdfe;
+    /* Weiß ODER Schwarz — je nachdem, was auf der Gruppenfarbe den höheren
+       Kontrast hat (in JS über die WCAG-Relativluminanz bestimmt). Fest
+       weißer Text fällt auf kräftigen Mitteltönen wie Grün oder Orange auf
+       unter 2:1 zurück. */
+    color:var(--group-ink, #fdfdfe);
     box-shadow:none;
   }
   #app[data-tab-style="chrome"] .group-pill:hover { background:color-mix(in srgb, var(--group) 86%, #16171b); }
   #app[data-tab-style="chrome"] .group-pill .count { opacity:.78; }
   #app[data-tab-style="chrome"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 rgb(120 122 132 / 16%); }
+  /* Der aktive Gruppen-Tab wird wie in Chrome von der Gruppenlinie UMSCHLOSSEN:
+     die Bodenlinie klettert außen am Fuß hoch, läuft als 2px-Kontur über
+     Seiten und Oberkante und mündet auf der anderen Seite wieder in die
+     Linie — ein durchgehender Farbzug, unten bleibt der Tab offen. */
+  #app[data-tab-style="chrome"] .tab-cluster .tab.active {
+    border:2px solid var(--group);
+    border-bottom:0;
+    background:var(--head);
+  }
+  #app[data-tab-style="chrome"] .tab-cluster .tab.active::before {
+    background:radial-gradient(circle 7px at 0 0, transparent 4.6px, var(--group) 5px 6.9px, var(--head) 7px);
+  }
+  #app[data-tab-style="chrome"] .tab-cluster .tab.active::after {
+    background:radial-gradient(circle 7px at 100% 0, transparent 4.6px, var(--group) 5px 6.9px, var(--head) 7px);
+  }
+  /* Eingeklappte Gruppe: Chrome zeigt sie als umrandeten Chip. */
+  #app[data-tab-style="chrome"] .group-pill.closed {
+    background:transparent;
+    border:1.5px solid var(--group);
+    color:color-mix(in srgb, var(--group) 84%, var(--ink));
+  }
+  #app[data-tab-style="chrome"] .group-pill.closed:hover { background:color-mix(in srgb, var(--group) 12%, transparent); }
 
   /* Variante „Kontur": 1px-Bügel in Gruppenfarbe über Label und Tabs —
      oben und an den Seiten; die Unterkante bleibt komplett offen. */
@@ -236,6 +262,20 @@
   .status-dot.idle { background:#a7a8ae; }
   .status-dot.ready { background:var(--green); }
   @keyframes pulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+
+  /* Einfügelinie: zeigt ausschließlich ERLAUBTE Drop-Positionen (siehe
+     legalBoundaries) — sie schnappt an Cluster-Grenzen, statt eine Gruppe
+     optisch zu spalten und den Tab danach zurückspringen zu lassen. */
+  .drop-line {
+    position:absolute; top:5px; bottom:2px; width:2px; margin-left:-1px;
+    border-radius:1px; background:var(--indigo);
+    opacity:0; pointer-events:none; transition:left 90ms cubic-bezier(.22,1,.36,1), opacity 90ms ease;
+    z-index:5;
+  }
+  .drop-line.show { opacity:1; }
+  .group-pill { cursor:grab; }
+  .app-window.dragging-tabs .group-pill { cursor:grabbing; }
+  .app-window.dragging-tabs .tab { transition:opacity 120ms ease; }
 
   .tab-tools { display:flex; align-items:center; padding:0 5px 0 3px; gap:2px; border-left:1px solid var(--line); }
   .icon-button {
@@ -521,6 +561,7 @@
     </div>
     <div class="tabs-zone">
       <div class="tab-scroll" id="tabStrip"></div>
+      <i class="drop-line" id="dropLine"></i>
       <div class="tab-tools">
         <button class="icon-button small active" id="groupToggle" title="Tab-Gruppen an/aus">⌘</button>
         <button class="icon-button small" id="overflowButton" title="Alle offenen Tabs">⌄</button>
@@ -621,6 +662,7 @@
     collapsedGroups:new Set(), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-akq']),
     sidebarMode:'structure', scope:'active', filter:'', subOpen:new Set(['s1']), finishedOpen:new Set(),
     multi:new Set(), lastSidebarIndex:null, view:'chat', gridWorkspace:'ws-whisper', gridCapacity:4, gridFocus:'s1', returnWorkspace:null,
+    drag:null, dropTarget:null,
     switchIndex:0
   };
 
@@ -640,6 +682,14 @@
     if(!s.sub) return '';
     const running=s.status==='working';
     return `<span class="subagent-chip" data-sub="${s.id}" title="${s.sub} Subagents"><span class="fold">⌄</span><span class="agent-road ${running?'running':''}">${Array.from({length:Math.min(s.sub,3)},()=>'<i></i>').join('')}</span><b>${s.sub}</b></span>`;
+  }
+
+  // Lesbare Chip-Schrift: die Variante mit dem höheren WCAG-Kontrast gewinnt.
+  function chipInk(hex) {
+    const value = parseInt(hex.replace('#',''),16);
+    const linear = channel => { const c=channel/255; return c<=0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); };
+    const luminance = 0.2126*linear((value>>16)&255) + 0.7152*linear((value>>8)&255) + 0.0722*linear(value&255);
+    return (luminance+0.05)/0.05 >= 1.05/(luminance+0.05) ? 'rgba(0,0,0,.86)' : '#fdfdfe';
   }
 
   function bucket(s) { return s.workspace ? `ws:${s.workspace}` : `project:${s.project}`; }
@@ -677,7 +727,7 @@
       if(item.type==='tab') return tabHtml(item.ids[0]);
       const meta=bucketMeta(item.key), closed=state.collapsedGroups.has(item.key), contains=item.ids.includes(state.active);
       const visible=closed ? (contains?[state.active]:[]) : item.ids;
-      return `<span class="tab-cluster" style="--group:${meta.color}"><button class="group-pill ${closed?'closed':''}" data-group="${item.key}"><span class="fold">⌄</span>${meta.icon} ${meta.label}<span class="count">${item.ids.length}</span></button>${visible.map(id=>tabHtml(id,meta.color)).join('')}</span>`;
+      return `<span class="tab-cluster" style="--group:${meta.color};--group-ink:${chipInk(meta.color)}"><button class="group-pill ${closed?'closed':''}" draggable="true" data-group="${item.key}" title="Ziehen verschiebt die ganze Gruppe · Klick klappt sie ein"><span class="fold">⌄</span>${meta.icon} ${meta.label}<span class="count">${item.ids.length}</span></button>${visible.map(id=>tabHtml(id,meta.color)).join('')}</span>`;
     }).join('');
     $('#groupToggle').classList.toggle('active',state.grouped);
     bindTabs(); renderOverflow(); renderSwitcher();
@@ -691,17 +741,158 @@
         selectWithModifiers(id,e,state.tabs); state.active=id; state.view='chat'; state.returnWorkspace=null; renderAll();
       };
       el.onauxclick=e=>{ if(e.button===1) closeTab(el.dataset.tab); };
-      el.ondragstart=e=>{ e.dataTransfer.setData('text/session-id',el.dataset.tab); e.dataTransfer.effectAllowed='move'; };
-      el.ondragover=e=>e.preventDefault();
-      el.ondrop=e=>{ e.preventDefault(); const dragged=e.dataTransfer.getData('text/session-id'); reorderTab(dragged,el.dataset.tab); };
+      el.ondragstart=e=>beginTabDrag(e,el.dataset.tab);
+      el.ondragend=endDrag;
     });
-    document.querySelectorAll('[data-group]').forEach(el=>el.onclick=()=>{
-      const k=el.dataset.group; state.collapsedGroups.has(k)?state.collapsedGroups.delete(k):state.collapsedGroups.add(k); renderTabs();
+    document.querySelectorAll('[data-group]').forEach(el=>{
+      el.onclick=()=>{
+        const k=el.dataset.group; state.collapsedGroups.has(k)?state.collapsedGroups.delete(k):state.collapsedGroups.add(k); renderTabs();
+      };
+      // Der Chip ist der Griff der GANZEN Gruppe — auf- wie zugeklappt.
+      el.ondragstart=e=>beginGroupDrag(e,el.dataset.group);
+      el.ondragend=endDrag;
     });
   }
 
-  function reorderTab(id,before) {
-    if(!id||id===before) return; state.tabs=state.tabs.filter(x=>x!==id); state.tabs.splice(state.tabs.indexOf(before),0,id); renderTabs(); toast('Tab-Reihenfolge aktualisiert');
+  // ——— Drag & Drop: Slot-Modell ————————————————————————————————
+  // Die Leiste ist eine Folge von DROP-SLOTS, nicht von Tabs:
+  //   • Einzeltab                → 1 Slot
+  //   • aufgeklappte Gruppe      → jedes Mitglied ein Slot (Chip gehört zum ersten)
+  //   • eingeklappte Gruppe      → GENAU 1 Slot; man droppt davor/danach, nie hinein
+  // Zwischen den Slots liegen Einfüge-Grenzen. Jede Grenze kennt ihren
+  // Kontext: liegt sie INNERHALB eines Clusters, trägt sie dessen Bucket.
+  function stripSlots() {
+    const items=buildTabItems();
+    const byKey=Object.fromEntries(items.filter(i=>i.type==='group').map(i=>[i.key,i.ids]));
+    const slots=[];
+    [...$('#tabStrip').children].forEach(el=>{
+      if(el.classList.contains('tab')) {
+        const r=el.getBoundingClientRect();
+        slots.push({kind:'tab',ids:[el.dataset.tab],bucket:null,left:r.left,right:r.right});
+        return;
+      }
+      const key=el.querySelector('[data-group]')?.dataset.group;
+      if(!key) return;
+      const clusterRect=el.getBoundingClientRect();
+      if(state.collapsedGroups.has(key)) {
+        // Zugeklappt = unteilbarer Block.
+        slots.push({kind:'group',ids:byKey[key]||[],bucket:key,left:clusterRect.left,right:clusterRect.right});
+        return;
+      }
+      [...el.querySelectorAll('.tab')].forEach((tab,index)=>{
+        const r=tab.getBoundingClientRect();
+        slots.push({
+          kind:'tab',ids:[tab.dataset.tab],bucket:key,
+          // Der Chip zählt geometrisch zum ersten Mitglied.
+          left:index===0?clusterRect.left:r.left,
+          right:r.right
+        });
+      });
+    });
+    return slots;
+  }
+
+  // Grenzen 0…n mit Kontext; „insideBucket" ist gesetzt, wenn links UND
+  // rechts derselbe aufgeklappte Cluster liegt.
+  function dropBoundaries(slots) {
+    return Array.from({length:slots.length+1},(_,i)=>{
+      const before=slots[i-1], after=slots[i];
+      const x=!before ? after.left : !after ? before.right : (before.right+after.left)/2;
+      const inside=before && after && before.bucket && before.bucket===after.bucket
+        && before.kind==='tab' && after.kind==='tab' ? before.bucket : null;
+      return {index:i,x,insideBucket:inside,beforeID:after?after.ids[0]:null};
+    });
+  }
+
+  // Regeln — die Einfügelinie zeigt NUR erlaubte Positionen, damit kein Tab
+  // nach dem Loslassen unerwartet zurückspringt:
+  //   • Gruppenmitglied: nur innerhalb des EIGENEN Clusters (Zugehörigkeit
+  //     ergibt sich aus Workspace/Projekt, ein Herausziehen wäre folgenlos)
+  //   • Einzeltab / ganze Gruppe: nur an Cluster-Grenzen — Gruppen bleiben
+  //     immer zusammenhängend und werden nie gespalten
+  function legalBoundaries(boundaries,slots) {
+    const drag=state.drag;
+    if(!drag) return [];
+    if(!state.grouped) return boundaries;
+    if(drag.kind==='tab' && drag.bucket) {
+      const first=slots.findIndex(s=>s.bucket===drag.bucket);
+      const last=slots.map(s=>s.bucket).lastIndexOf(drag.bucket);
+      return boundaries.filter(b=>b.index>=first && b.index<=last+1);
+    }
+    return boundaries.filter(b=>b.insideBucket===null);
+  }
+
+  // Gilt für Tabs UND Sidebar-Zeilen: die Herkunft entscheidet, wo der Chat
+  // landen DARF — unabhängig davon, ob er schon offen ist.
+  function beginTabDrag(e,id) {
+    const s=byId(id);
+    const cluster=buildTabItems().find(i=>i.type==='group' && i.key===bucket(s));
+    const selection=state.multi.has(id)&&state.multi.size>1 ? visualTabOrder().filter(x=>state.multi.has(x)) : [id];
+    // Gemischte Mehrfachauswahl kann nicht zusammenhängend landen → Einzel-Drag.
+    const sameBucket=selection.every(x=>bucket(byId(x))===bucket(s));
+    state.drag={kind:'tab',ids:sameBucket&&selection.length?selection:[id],bucket:cluster?cluster.key:null};
+    e.dataTransfer.setData('text/session-id',id);
+    e.dataTransfer.effectAllowed='move';
+    $('#app').classList.add('dragging-tabs');
+  }
+
+  function beginGroupDrag(e,key) {
+    const item=buildTabItems().find(i=>i.type==='group'&&i.key===key);
+    if(!item) return;
+    state.drag={kind:'group',ids:item.ids,bucket:key};
+    e.dataTransfer.setData('text/session-id',item.ids[0]);
+    e.dataTransfer.effectAllowed='move';
+    $('#app').classList.add('dragging-tabs');
+  }
+
+  function endDrag() {
+    state.drag=null; state.dropTarget=null;
+    $('#app').classList.remove('dragging-tabs');
+    $('#dropLine').classList.remove('show');
+  }
+
+  function updateDropLine(clientX) {
+    if(!state.drag) return;
+    const slots=stripSlots();
+    const allowed=legalBoundaries(dropBoundaries(slots),slots);
+    if(!allowed.length) return;
+    const target=allowed.reduce((best,b)=>Math.abs(b.x-clientX)<Math.abs(best.x-clientX)?b:best);
+    state.dropTarget=target;
+    // Die Linie lebt in der Tabs-Zone (nicht im Scroller) — sie überlebt
+    // damit jedes Re-Render und braucht keine Scroll-Korrektur.
+    const zone=$('#dropLine').parentElement.getBoundingClientRect();
+    const line=$('#dropLine');
+    line.style.left=`${Math.round(target.x-zone.left)}px`;
+    line.classList.add('show');
+  }
+
+  function visualTabOrder() { return buildTabItems().flatMap(i=>i.ids); }
+
+  // Der Drop schreibt die SICHTBARE Reihenfolge als neue manuelle Reihenfolge
+  // zurück — sonst driften Anzeige und Persistenz auseinander.
+  function applyDrop() {
+    const drag=state.drag, target=state.dropTarget;
+    if(!drag||!target) return endDrag();
+    const moving=new Set(drag.ids);
+    const order=visualTabOrder();
+    // Noch nicht offene Chats (Sidebar-Drag) hängen wir an — sie werden an
+    // der Drop-Position eingefügt und aktiviert.
+    const opened=order.filter(x=>moving.has(x));
+    const fresh=drag.ids.filter(x=>!order.includes(x));
+    const moved=[...opened,...fresh];
+    const rest=order.filter(x=>!moving.has(x));
+    const at=target.beforeID&&!moving.has(target.beforeID) ? rest.indexOf(target.beforeID) : rest.length;
+    const next=[...rest.slice(0,at),...moved,...rest.slice(at)];
+    const changed=next.join()!==order.join();
+    state.tabs=next;
+    if(fresh.length) { state.active=fresh[0]; state.view='chat'; state.returnWorkspace=null; }
+    const label=drag.kind==='group'
+      ? `Gruppe „${bucketMeta(drag.bucket).label}" verschoben`
+      : fresh.length ? 'Chat geöffnet'
+      : moved.length>1 ? `${moved.length} Tabs verschoben` : 'Tab verschoben';
+    endDrag();
+    fresh.length ? renderAll() : renderTabs();
+    toast(changed?label:'Position unverändert');
   }
   function closeTab(id) {
     const i=state.tabs.indexOf(id); state.tabs=state.tabs.filter(x=>x!==id); state.multi.delete(id);
@@ -793,7 +984,10 @@
         const id=row.dataset.session; selectWithModifiers(id,e,sessions.map(s=>s.id));
         if(!(e.metaKey||e.ctrlKey||e.shiftKey)) openTab(id); else renderSidebar();
       };
-      row.ondragstart=e=>{e.dataTransfer.setData('text/session-id',row.dataset.session);e.dataTransfer.effectAllowed='move';};
+      // Sidebar → Leiste: derselbe Drag-Vertrag; ein noch nicht offener Chat
+      // wird an der Drop-Position geöffnet.
+      row.ondragstart=e=>beginTabDrag(e,row.dataset.session);
+      row.ondragend=endDrag;
       row.oncontextmenu=e=>{e.preventDefault();showMoreMenu(e.clientX,e.clientY,row.dataset.session);};
     });
     document.querySelectorAll('[data-finished]').forEach(el=>el.onclick=()=>{const id=el.dataset.finished;state.finishedOpen.has(id)?state.finishedOpen.delete(id):state.finishedOpen.add(id);renderSidebar();});
@@ -902,6 +1096,20 @@
     toast(state.dark?'Dark Mode — wie die echte App':'Light Mode');
   };
   $('#groupToggle').onclick=()=>{state.grouped=!state.grouped;state.collapsedGroups.clear();renderTabs();toast(state.grouped?'Tab-Gruppen aktiviert':'Manuelle Tab-Reihenfolge');};
+
+  // EIN Drop-Ziel für die ganze Leiste (nicht pro Tab): nur so ist die
+  // Einfügeposition kontinuierlich und kann an Cluster-Grenzen schnappen.
+  // Eingeklappte Gruppen bleiben dabei eingeklappt — sie sind ein Block.
+  const tabsZone=$('#tabStrip').parentElement;
+  tabsZone.addEventListener('dragover',e=>{
+    if(!state.drag) return;
+    e.preventDefault(); e.dataTransfer.dropEffect='move';
+    updateDropLine(e.clientX);
+  });
+  tabsZone.addEventListener('drop',e=>{ if(!state.drag) return; e.preventDefault(); applyDrop(); });
+  tabsZone.addEventListener('dragleave',e=>{
+    if(state.drag && !tabsZone.contains(e.relatedTarget)) $('#dropLine').classList.remove('show');
+  });
   $('#newTabButton').onclick=e=>{e.stopPropagation();$('#newMenu').classList.toggle('show');$('#overflowMenu').classList.remove('show');};
   $('#overflowButton').onclick=e=>{e.stopPropagation();$('#overflowMenu').classList.toggle('show');$('#newMenu').classList.remove('show');};
   $('#sidebarToggle').onclick=()=>$('#app').classList.toggle('sidebar-hidden');
