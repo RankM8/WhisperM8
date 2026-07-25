@@ -508,7 +508,14 @@
   .stack-tab.guest::after { content:"Vorschau"; margin-left:3px; padding:0 3px; border-radius:3px; background:color-mix(in srgb, var(--indigo) 16%, transparent); color:var(--indigo); font-size:6.5px; font-weight:700; letter-spacing:.03em; }
   .stack-count { margin-left:auto; flex:none; padding:0 4px; color:var(--faint); font-size:7.5px; align-self:center; }
 
-  .pane-head { min-width:0; display:flex; align-items:center; gap:6px; padding:0 6px 0 8px; border-bottom:1px solid var(--line-soft); background:#f8f8fa; font-size:9px; cursor:grab; }
+  .pane-head { min-width:0; display:flex; align-items:center; gap:6px; padding:0 6px 0 5px; border-bottom:1px solid var(--line-soft); background:#f8f8fa; font-size:9px; cursor:grab; transition:background 110ms ease; }
+  /* Der Kopf ist der Griff — das muss man sehen, bevor man es ausprobiert. */
+  .pane-head:hover { background:#eeeef2; }
+  .pane-grip { flex:none; color:#b6b8c0; font-size:10px; line-height:1; letter-spacing:-1px; cursor:grab; }
+  .pane-head:hover .pane-grip { color:#787a84; }
+  body.dark .pane-head:hover { background:#2b2c33; }
+  body.dark .pane-grip { color:#5b5d67; }
+  body.dark .pane-head:hover .pane-grip { color:#9a9ca6; }
   .pane.dragging .pane-head { cursor:grabbing; }
   .pane-avatar { width:15px; height:15px; border-radius:4px; font-size:8px; }
   .pane-head .pane-title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -539,12 +546,48 @@
   .stage.dropping .drop-overlay { display:block; }
   .drop-zone { position:absolute; border-radius:3px; background:transparent; pointer-events:auto; transition:background 110ms ease; }
   .drop-zone.hot { background:color-mix(in srgb, var(--indigo) 24%, transparent); box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--indigo) 72%, transparent); }
+  /* Ersetzen ist folgenreich (der bisherige Chat verlässt den Workspace) —
+     deshalb warnt die Zone farblich, statt wie ein normaler Drop zu wirken. */
+  .drop-zone.hot.replace { background:color-mix(in srgb, var(--red) 26%, transparent); box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--red) 76%, transparent); }
+  .drop-hint.replace { background:#8f3b43; }
   .drop-hint {
     position:absolute; z-index:9; pointer-events:none; padding:3px 7px; border-radius:5px;
     background:#37383e; color:#f7f7f8; font-size:8.5px; white-space:nowrap; opacity:0;
     transition:opacity 120ms ease;
   }
   .drop-hint.show { opacity:1; }
+
+  /* Die Mitte einer Pane trägt beim Ziehen ZWEI beschriftete Felder — die
+     Wahl zwischen Dazulegen und Ersetzen ist damit sichtbar und nicht nur
+     über eine Taste erreichbar. ⌥ bleibt der Schnellweg. */
+  .drop-zone.labelled { display:grid; place-items:center; border-radius:6px; }
+  .drop-zone.labelled::after {
+    content:attr(data-label);
+    padding:3px 8px; border-radius:5px;
+    background:rgb(255 255 255 / 82%); color:#4b4d54;
+    font:600 9px -apple-system,BlinkMacSystemFont,sans-serif; white-space:nowrap;
+    box-shadow:0 1px 4px rgb(31 32 38 / 14%); opacity:0;
+    transition:opacity 100ms ease;
+  }
+  /* Beschriftet wird nur die Pane unter dem Cursor — sonst flimmern in allen
+     Panes Etiketten über dem Terminaltext. */
+  .drop-zone.labelled.near::after { opacity:.8; }
+  .drop-zone.labelled.hot::after { background:var(--indigo); color:#fff; opacity:1; }
+  .drop-zone.labelled.hot.replace::after { background:var(--red); color:#fff; }
+  body.dark .drop-zone.labelled::after { background:rgb(40 41 47 / 88%); color:#c3c5cd; }
+
+  /* Pointer-Drag: der Ghost hängt am Cursor und benennt die Fracht. */
+  .drag-ghost {
+    position:fixed; z-index:60; pointer-events:none; transform:translate(-50%,-140%);
+    display:flex; align-items:center; gap:5px;
+    padding:4px 8px; border-radius:6px;
+    background:#fbfbfc; border:1px solid #cdced5; box-shadow:0 6px 18px rgb(31 32 38 / 22%);
+    font-size:9.5px; font-weight:600; color:#2b2c32; white-space:nowrap;
+  }
+  body.dark .drag-ghost { background:#2a2b31; border-color:#3d3e47; color:#e3e4ea; box-shadow:0 6px 18px rgb(0 0 0 / 45%); }
+  body.pointer-dragging { cursor:grabbing !important; }
+  body.pointer-dragging * { cursor:grabbing !important; user-select:none !important; }
+  .pane.source-dragging { opacity:.55; }
 
   /* Freie Fläche der Bühne bleibt ein Drop-Ziel: „einfach reinwerfen". */
   .stage-drop { position:absolute; inset:0; z-index:7; display:none; place-items:center; }
@@ -601,6 +644,9 @@
 
   .toast { position:absolute; z-index:50; left:50%; bottom:33px; transform:translate(-50%,8px); opacity:0; pointer-events:none; padding:6px 9px; border-radius:6px; color:#f7f7f8; background:#37383e; font-size:9px; transition:opacity 160ms ease, transform 160ms cubic-bezier(.22,1,.36,1); }
   .toast.show { opacity:1; transform:translate(-50%,0); }
+  .toast-undo { margin-left:8px; height:16px; padding:0 6px; border-radius:4px; background:rgb(255 255 255 / 16%); color:#f7f7f8; font-size:8.5px; font-weight:650; cursor:pointer; pointer-events:auto; }
+  .toast-undo:hover { background:rgb(255 255 255 / 28%); }
+  .toast:has(.toast-undo) { pointer-events:auto; }
 
   /* Dark Mode — die reale App läuft dunkel; getönte Slate-Neutrals statt
      Schwarz, kein Glow. Die Tab-Geometrie bleibt identisch, nur die
@@ -775,7 +821,12 @@
         <button><span>⌘⌥0</span> Manuelles Layout verwerfen → Automatik</button>
         <button><span>⌘⌥S</span> Fokus-Pane stapeln statt splitten</button>
         <div class="divider"></div>
-        <button><span>↕</span> Drop auf Pane-Mitte stapelt · auf die Kante splittet</button>
+        <button><span>⌘⌥⇧←/→</span> Fokus-Pane mit Nachbar tauschen</button>
+        <div class="divider"></div>
+        <button><span>↕</span> Pane-Kopf auf andere Pane = tauschen</button>
+        <button><span>↕</span> Sidebar/Tab auf Mitte = stapeln · Kante = einsortieren</button>
+        <button><span>⌥ + ↕</span> auf eine Pane = ersetzen <span class="shortcut">mit Rücknahme</span></button>
+        <button><span>↕</span> Stapel-Reiter ziehen verschiebt einzelne Chats</button>
         <button><span>◫</span> Kein Raster wählen, keine Kapazität, kein Verwerfen</button>
         <button><span>◧</span> Tab schließen lässt den Prozess weiterlaufen</button>
       </div>
@@ -1227,10 +1278,14 @@
         // führt ein einfacher Klick nicht heraus.
         if(state.view==='grid' && !e.altKey) openInFocusPane(id); else openTab(id);
       };
-      // Sidebar → Leiste: derselbe Drag-Vertrag; ein noch nicht offener Chat
-      // wird an der Drop-Position geöffnet.
-      row.ondragstart=e=>beginTabDrag(e,row.dataset.session);
-      row.ondragend=endDrag;
+      // Sidebar → Arbeitsfläche: Pointer-Drag (kein HTML5-DnD, siehe
+      // Begründung an der Drag-Engine). Der 4-px-Schwellwert lässt normale
+      // Klicks unberührt.
+      row.removeAttribute('draggable');
+      row.onpointerdown=e=>{
+        if(e.target.closest('[data-sub]')) return;
+        armDrag(e, {sid:row.dataset.session, origin:'external'});
+      };
       row.oncontextmenu=e=>{e.preventDefault();showMoreMenu(e.clientX,e.clientY,row.dataset.session);};
     });
     document.querySelectorAll('[data-finished]').forEach(el=>el.onclick=()=>{const id=el.dataset.finished;state.finishedOpen.has(id)?state.finishedOpen.delete(id):state.finishedOpen.add(id);renderSidebar();});
@@ -1457,28 +1512,29 @@
       if(e.target.closest('button')) return;
       toggleZoom(cell.cid);
     });
-    // Ziehen am Kopf verschiebt die Session (nicht die Pane) — Ziel
-    // entscheidet, ob gestapelt oder gesplittet wird.
+    // Ziehen am Kopf bewegt die Session (nicht die Pane) — das Ziel
+    // entscheidet über Tauschen, Dazulegen, Ersetzen oder Verschieben.
     const head = el.querySelector('.pane-head');
-    head.draggable = true;
-    head.addEventListener('dragstart', e=>{
+    head.addEventListener('pointerdown', e=>{
+      if(e.target.closest('button')) return;
       const c = cellByID(lay(state.gridWorkspace), cell.cid);
       if(!c) return;
-      state.drag = {kind:'pane', ids:[c.active], bucket:null, fromCID:c.cid};
-      e.dataTransfer.setData('text/session-id', c.active);
-      e.dataTransfer.effectAllowed='move';
-      el.classList.add('dragging');
-      $('#stage')?.classList.add('dropping');
+      armDrag(e, {sid:c.active, fromCID:c.cid, origin:'pane'});
     });
-    head.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); endPaneDrag(); });
     paneDOM[cell.cid]=el;
     return el;
   }
 
+  // Kopf und Stapel-Leiste werden NUR bei echter Änderung neu geschrieben.
+  // Grund ist nicht Performance, sondern Drag & Drop: ein `mousedown` löst
+  // einen Fokuswechsel aus, und würde dabei das innerHTML der Kopfzeile
+  // ersetzt, verschwindet der Knoten unter dem Cursor — Chrome bricht den
+  // gerade beginnenden Drag dann still ab (dragstart feuert, danach nichts).
   function paneChrome(cell, isFocus, isMaster) {
     const s = byId(cell.active), p = project(s.project);
     const l = lay(state.gridWorkspace);
-    const head = paneDOM[cell.cid].querySelector('.pane-head');
+    const paneEl = paneDOM[cell.cid];
+    const head = paneEl.querySelector('.pane-head');
     const memberOf = workspacesOf(cell.active);
     const primary = primaryOf(cell.active);
     const multiBadge = memberOf.length>1
@@ -1486,35 +1542,52 @@
         + memberOf.map(id=>workspace(id).name.split(' · ')[0] + (id===primary?' (Hauptgruppe)':'')).join(', ')
         + ` · Klick für Optionen">⊞${memberOf.length}</span>`
       : '';
-    head.innerHTML = `${statusDot(s)}<span class="pane-avatar" style="background:${p.color}">${p.initial}</span>`
-      + `<span class="pane-title">${s.title}</span><span class="account">${p.name}</span>`
-      + multiBadge
-      + (isMaster?'<span class="pane-badge master">MASTER</span>':'')
-      + `<span class="pane-actions">`
-      + `<button class="icon-button small" data-stack="${cell.cid}" title="${cell.sessions.length>1?'Stapel auflösen':'Nachbar-Chat hier stapeln'} · ⌘⌥S">⌷</button>`
-      + `<button class="icon-button small" data-zoom="${cell.cid}" title="Zoom an/aus · ⌘⇧↵">⤢</button>`
-      + `<button class="icon-button small" data-detach="${cell.cid}" title="Als Tab herauslösen">↗</button>`
-      + `<button class="icon-button small" data-drop-session="${cell.active}" title="Aus dem Workspace nehmen">⊖</button>`
-      + `</span>`;
+    const headSig = [cell.active, s.status, s.title, p.name, isMaster,
+                     cell.sessions.length, memberOf.length, primary].join('');
+    if(paneEl.dataset.headSig !== headSig) {
+      paneEl.dataset.headSig = headSig;
+      // Sichtbarer Griff: ohne ihn ist nicht erkennbar, dass die Kopfzeile
+      // der Anfasspunkt ist — die Terminalfläche ist bewusst NICHT ziehbar,
+      // sonst kollidiert das Ziehen mit Textauswahl und Eingabe.
+      head.innerHTML = `<span class="pane-grip" title="Ziehen: auf eine andere Pane = tauschen · auf eine Kante = verschieben · ⌥ = ersetzen">⠿</span>`
+        + `${statusDot(s)}<span class="pane-avatar" style="background:${p.color}">${p.initial}</span>`
+        + `<span class="pane-title">${s.title}</span><span class="account">${p.name}</span>`
+        + multiBadge
+        + (isMaster?'<span class="pane-badge master">MASTER</span>':'')
+        + `<span class="pane-actions">`
+        + `<button class="icon-button small" data-stack="${cell.cid}" title="${cell.sessions.length>1?'Stapel auflösen':'Nachbar-Chat hier stapeln'} · ⌘⌥S">⌷</button>`
+        + `<button class="icon-button small" data-zoom="${cell.cid}" title="Zoom an/aus · ⌘⇧↵">⤢</button>`
+        + `<button class="icon-button small" data-detach="${cell.cid}" title="Als Tab herauslösen">↗</button>`
+        + `<button class="icon-button small" data-drop-session="${cell.active}" title="Aus dem Workspace nehmen">⊖</button>`
+        + `</span>`;
+    }
 
-    const bar = paneDOM[cell.cid].querySelector('.stack-bar');
-    paneDOM[cell.cid].classList.toggle('stacked', cell.sessions.length>1);
-    bar.innerHTML = cell.sessions.length>1
-      ? cell.sessions.map(id=>{
-          const t=byId(id), guest=l.guest===id;
-          return `<button class="stack-tab ${id===cell.active?'on':''} ${guest?'guest':''}" data-stack-tab="${cell.cid}:${id}"`
-            + ` title="${guest?'Vorschau — der nächste Klick ersetzt sie · ⌥↵ behält sie':t.title}">`
-            + `${statusDot(t)}<span class="label">${t.title}</span></button>`;
-        }).join('') + `<span class="stack-count">${cell.sessions.length} im Stapel · ⌃⇥</span>`
-      : '';
+    const bar = paneEl.querySelector('.stack-bar');
+    paneEl.classList.toggle('stacked', cell.sessions.length>1);
+    const barSig = [cell.sessions.join(','), cell.active, l.guest].join('');
+    if(paneEl.dataset.barSig !== barSig) {
+      paneEl.dataset.barSig = barSig;
+      bar.innerHTML = cell.sessions.length>1
+        ? cell.sessions.map(id=>{
+            const t=byId(id), guest=l.guest===id;
+            return `<button class="stack-tab ${id===cell.active?'on':''} ${guest?'guest':''}" data-stack-tab="${cell.cid}:${id}" draggable="true"`
+              + ` title="${guest?'Vorschau — der nächste Klick ersetzt sie · ⌥↵ behält sie':t.title} · ziehen verschiebt ihn">`
+              + `${statusDot(t)}<span class="label">${t.title}</span></button>`;
+          }).join('') + `<span class="stack-count">${cell.sessions.length} im Stapel · ⌃⇥</span>`
+        : '';
+    }
 
-    const foot = paneDOM[cell.cid].querySelector('.pane-status');
+    const foot = paneEl.querySelector('.pane-status');
     const stackNote = cell.sessions.length>1 ? ` · Stapel ${cell.sessions.indexOf(cell.active)+1}/${cell.sessions.length}` : '';
-    foot.innerHTML = `<span>${p.branch}</span><span>${s.time}</span><span>${statusLabel(s.status)}${stackNote}</span>`
-      + (isFocus?'<span class="pane-badge">FOKUS · Tastatur</span>':'');
+    const footSig = [p.branch, s.time, s.status, stackNote, isFocus].join('');
+    if(paneEl.dataset.footSig !== footSig) {
+      paneEl.dataset.footSig = footSig;
+      foot.innerHTML = `<span>${p.branch}</span><span>${s.time}</span><span>${statusLabel(s.status)}${stackNote}</span>`
+        + (isFocus?'<span class="pane-badge">FOKUS · Tastatur</span>':'');
+    }
 
     // Terminal einhängen: der Knoten WANDERT, er wird nicht neu gebaut.
-    const host = paneDOM[cell.cid].querySelector('.pane-host');
+    const host = paneEl.querySelector('.pane-host');
     const term = terminalFor(cell.active);
     if(term.parentElement !== host) {
       const memo = scrollMemo[cell.active];
@@ -1646,18 +1719,24 @@
     l.cells.forEach(cell=>{
       const f = frames[cell.cid]; if(!f) return;
       const edge = Math.min(46, f.w*0.26), edgeY = Math.min(38, f.h*0.26);
+      const innerX = f.x+edge, innerW = f.w-2*edge;
+      const innerY = f.y+edgeY, innerH = f.h-2*edgeY;
+      // Die Mitte ist zweigeteilt: obere Hälfte legt dazu, untere ersetzt.
+      const half = innerH/2;
       const zones = [
-        {side:'left',   x:f.x,           y:f.y,             w:edge,        h:f.h},
-        {side:'right',  x:f.x+f.w-edge,  y:f.y,             w:edge,        h:f.h},
-        {side:'top',    x:f.x+edge,      y:f.y,             w:f.w-2*edge,  h:edgeY},
-        {side:'bottom', x:f.x+edge,      y:f.y+f.h-edgeY,   w:f.w-2*edge,  h:edgeY},
-        {side:'center', x:f.x+edge,      y:f.y+edgeY,       w:f.w-2*edge,  h:f.h-2*edgeY}
+        {side:'left',    x:f.x,           y:f.y,           w:edge,   h:f.h},
+        {side:'right',   x:f.x+f.w-edge,  y:f.y,           w:edge,   h:f.h},
+        {side:'top',     x:innerX,        y:f.y,           w:innerW, h:edgeY},
+        {side:'bottom',  x:innerX,        y:f.y+f.h-edgeY, w:innerW, h:edgeY},
+        {side:'center',  x:innerX,        y:innerY,        w:innerW, h:half,   labelled:true},
+        {side:'replace', x:innerX,        y:innerY+half,   w:innerW, h:half,   labelled:true}
       ];
       zones.forEach(z=>{
         if(z.w<=0||z.h<=0) return;
         const el=document.createElement('i');
-        el.className='drop-zone';
+        el.className='drop-zone' + (z.labelled?' labelled':'');
         el.dataset.cid=cell.cid; el.dataset.side=z.side;
+        if(z.labelled) el.dataset.label = z.side==='replace' ? '⇄ Ersetzen' : centerLabel(cell);
         el.style.left=`${z.x}px`; el.style.top=`${z.y}px`;
         el.style.width=`${z.w}px`; el.style.height=`${z.h}px`;
         host.appendChild(el);
@@ -1665,12 +1744,135 @@
     });
   }
 
-  function hintText(side, cell) {
+  // Beschriftung des oberen Mittelfelds: aus einer anderen Pane heißt es
+  // „Tauschen", von außen „Dazulegen".
+  function centerLabel(cell) {
+    const d = state.drag || pdrag;
+    return (d && d.origin==='pane' && d.fromCID && d.fromCID!==cell.cid)
+      ? '⇆ Tauschen' : '⌷ Dazulegen';
+  }
+
+  // Das Label sagt bei JEDEM Ziehen, was das Loslassen bewirkt — inklusive
+  // dem, was ⌥ daraus machen würde. So braucht die Modifier-Regel keine
+  // Erklärung außerhalb der Geste.
+  function hintText(side, cell, replace) {
     const l = lay(state.gridWorkspace);
-    if(side==='center') return `Stapeln in „${byId(cell.active).title}"`;
-    if(l.mode==='snapshot') return {left:'Links daneben teilen',right:'Rechts daneben teilen',top:'Oben abteilen',bottom:'Unten abteilen'}[side];
+    const drag = state.drag;
+    const fromPane = drag && (drag.origin==='pane' || drag.origin==='stackTab');
+    if(side==='center') {
+      if(replace) return `„${byId(cell.active).title}" ersetzen — verlässt den Workspace`;
+      if(drag?.origin==='pane' && drag.fromCID && drag.fromCID!==cell.cid)
+        return `Mit „${byId(cell.active).title}" tauschen · ⌥ ersetzen`;
+      return `Stapeln in „${byId(cell.active).title}" · ⌥ ersetzen`;
+    }
+    if(replace) return `„${byId(cell.active).title}" ersetzen — verlässt den Workspace`;
+    if(l.mode==='snapshot')
+      return ({left:'Links daneben teilen',right:'Rechts daneben teilen',top:'Oben abteilen',bottom:'Unten abteilen'}[side])
+        + (fromPane?' (herauslösen)':'');
     return {left:'Davor einsortieren',right:'Danach einsortieren',top:'Davor einsortieren',bottom:'Danach einsortieren'}[side];
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  POINTER-DRAG — bewusst KEIN HTML5-Drag-and-Drop.
+  //  Gründe: (1) HTML5-DnD lässt sich in dieser Umgebung nicht
+  //  automatisiert prüfen, (2) es bricht ab, sobald ein Handler beim
+  //  mousedown DOM ersetzt, und (3) SwiftUI kennt es gar nicht — die App
+  //  arbeitet ebenfalls mit Gesten. Ein Modell für alle Griffe.
+  // ═══════════════════════════════════════════════════════════════════
+  const pdrag = { armed:false, active:false, sid:null, fromCID:null, origin:null,
+                  startX:0, startY:0, ghost:null, target:null, replace:false };
+  const DRAG_THRESHOLD = 4;   // erst ab echter Bewegung ein Drag, sonst Klick
+
+  function armDrag(e, {sid, fromCID=null, origin='external'}) {
+    if(e.button!==0) return;
+    Object.assign(pdrag, {armed:true, active:false, sid, fromCID, origin,
+                          startX:e.clientX, startY:e.clientY, target:null, replace:false});
+  }
+
+  function activateDrag(e) {
+    pdrag.active = true;
+    state.drag = {kind:'pane', ids:[pdrag.sid], bucket:null, fromCID:pdrag.fromCID, origin:pdrag.origin};
+    document.body.classList.add('pointer-dragging');
+    const stage = $('#stage');
+    if(stage) { stage.classList.add('dropping'); layoutStage(false); }
+    if(pdrag.fromCID && paneDOM[pdrag.fromCID]) paneDOM[pdrag.fromCID].classList.add('source-dragging');
+    const s = byId(pdrag.sid), p = project(s.project);
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+    ghost.innerHTML = `<span class="pane-avatar" style="background:${p.color};width:13px;height:13px;border-radius:3px;font-size:7px">${p.initial}</span>${s.title}`;
+    document.body.appendChild(ghost);
+    pdrag.ghost = ghost;
+  }
+
+  function updateDrag(e) {
+    if(pdrag.ghost) { pdrag.ghost.style.left = `${e.clientX}px`; pdrag.ghost.style.top = `${e.clientY}px`; }
+    const stage = $('#stage'); if(!stage) return;
+    if(pdrag.ghost) pdrag.ghost.style.visibility = 'hidden';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if(pdrag.ghost) pdrag.ghost.style.visibility = '';
+    const zone = under?.closest('.drop-zone');
+    document.querySelectorAll('.drop-zone.hot').forEach(z=>z.classList.remove('hot','replace'));
+    document.querySelectorAll('.drop-zone.near').forEach(z=>z.classList.remove('near'));
+    if(zone) document.querySelectorAll(`.drop-zone.labelled[data-cid="${zone.dataset.cid}"]`)
+      .forEach(z=>z.classList.add('near'));
+    const hint = $('#dropHint');
+    const overStage = !!under?.closest('#stage');
+    if(!zone) {
+      pdrag.target = null; state.paneDrop = null;
+      hint.classList.toggle('replace', false);
+      hint.textContent = overStage ? 'Loslassen — die Engine ordnet selbst ein' : 'Außerhalb der Arbeitsfläche — Loslassen bricht ab';
+      hint.classList.toggle('show', overStage);
+    } else {
+      // ⌥ macht aus jedem Mittelfeld ein Ersetzen; die untere Hälfte ist der
+      // sichtbare Weg dorthin.
+      const replace = zone.dataset.side==='replace' || e.altKey;
+      const side = zone.dataset.side==='replace' ? 'center' : zone.dataset.side;
+      zone.classList.add('hot'); zone.classList.toggle('replace', replace);
+      const cell = cellByID(lay(state.gridWorkspace), zone.dataset.cid);
+      pdrag.target = {cid:zone.dataset.cid, side, replace};
+      state.paneDrop = pdrag.target;
+      hint.textContent = cell ? hintText(side, cell, replace) : '';
+      hint.classList.toggle('replace', replace);
+      hint.classList.add('show');
+    }
+    const box = stage.getBoundingClientRect();
+    hint.style.left = `${Math.min(Math.max(e.clientX-box.left+14, 6), Math.max(box.width-170, 6))}px`;
+    hint.style.top  = `${Math.max(e.clientY-box.top-26, 6)}px`;
+  }
+
+  function finishDrag(commit) {
+    const {sid, fromCID, origin, target} = pdrag;
+    if(pdrag.ghost) pdrag.ghost.remove();
+    if(fromCID && paneDOM[fromCID]) paneDOM[fromCID].classList.remove('source-dragging');
+    document.body.classList.remove('pointer-dragging');
+    Object.assign(pdrag, {armed:false, active:false, sid:null, fromCID:null, origin:null, ghost:null, target:null});
+    endPaneDrag(); endDrag();
+    if(commit && sid) dropSession(sid, target, fromCID, origin);
+    else if(!commit) toast('Abgebrochen');
+  }
+
+  window.addEventListener('pointermove', e=>{
+    if(!pdrag.armed) return;
+    if(!pdrag.active) {
+      if(Math.abs(e.clientX-pdrag.startX) < DRAG_THRESHOLD && Math.abs(e.clientY-pdrag.startY) < DRAG_THRESHOLD) return;
+      activateDrag(e);
+    }
+    e.preventDefault();
+    updateDrag(e);
+  });
+  window.addEventListener('pointerup', e=>{
+    if(!pdrag.armed) return;
+    if(!pdrag.active) { Object.assign(pdrag, {armed:false, sid:null, fromCID:null, origin:null}); return; }
+    updateDrag(e);
+    finishDrag(true);
+  });
+  // ⌥ während des Ziehens gedrückt/gelöst: Beschriftung sofort nachziehen.
+  ['keydown','keyup'].forEach(ev=>window.addEventListener(ev, e=>{
+    if(!pdrag.active) return;
+    if(e.key==='Escape') { finishDrag(false); return; }
+    if(e.key==='Alt' && pdrag.lastEvent) updateDrag({...pdrag.lastEvent, altKey:e.type==='keydown'});
+  }));
+  window.addEventListener('pointermove', e=>{ if(pdrag.active) pdrag.lastEvent={clientX:e.clientX, clientY:e.clientY, altKey:e.altKey}; });
 
   function endPaneDrag() {
     state.paneDrop=null;
@@ -1688,15 +1890,20 @@
       const zone = document.elementFromPoint(e.clientX, e.clientY)?.closest('.drop-zone');
       document.querySelectorAll('.drop-zone.hot').forEach(z=>z.classList.remove('hot'));
       const hint=$('#dropHint');
+      // ⌥ wird live ausgewertet: das Label ändert sich, während die Taste
+      // gedrückt wird — die Entscheidung ist bis zum Loslassen sichtbar.
+      const replace = e.altKey;
+      hint.classList.toggle('replace', replace);
       if(!zone) {
         state.paneDrop=null;
         hint.textContent='Loslassen — die Engine ordnet selbst ein';
         hint.classList.add('show');
       } else {
         zone.classList.add('hot');
+        zone.classList.toggle('replace', replace);
         const cell=cellByID(lay(state.gridWorkspace), zone.dataset.cid);
-        state.paneDrop={cid:zone.dataset.cid, side:zone.dataset.side};
-        hint.textContent=cell?hintText(zone.dataset.side, cell):'';
+        state.paneDrop={cid:zone.dataset.cid, side:zone.dataset.side, replace};
+        hint.textContent=cell?hintText(zone.dataset.side, cell, replace):'';
         hint.classList.add('show');
       }
       const box=stage.getBoundingClientRect();
@@ -1704,19 +1911,84 @@
       hint.style.top=`${Math.max(e.clientY-box.top-24, 6)}px`;
     });
     stage.addEventListener('dragleave', e=>{ if(!stage.contains(e.relatedTarget)) endPaneDrag(); });
+    // Stapel-Reiter sind vollwertige Griffe (Delegation, weil die Engine die
+    // Reiter beim Layout-Pass neu schreibt).
+    stage.addEventListener('pointerdown', e=>{
+      const tab=e.target.closest('[data-stack-tab]'); if(!tab) return;
+      const [cid,sid]=tab.dataset.stackTab.split(':');
+      armDrag(e, {sid, fromCID:cid, origin:'stackTab'});
+    });
     stage.addEventListener('drop', e=>{
       if(!state.drag) return;
       e.preventDefault(); e.stopPropagation();
       const sid = state.drag.ids[0] || e.dataTransfer.getData('text/session-id');
       const from = state.drag.fromCID || null;
-      const target = state.paneDrop;
+      const origin = state.drag.origin || 'external';
+      const target = state.paneDrop ? {...state.paneDrop, replace:e.altKey} : null;
       endPaneDrag(); endDrag();
       if(!sid) return;
-      dropSession(sid, target, from);
+      dropSession(sid, target, from, origin);
     });
   }
 
   // ——— 7) Operationen ————————————————————————————————————————————
+
+  // Undo für folgenreiche Drops (Ersetzen). Gesichert wird der ganze
+  // Layout-Zustand — Zell-IDs bleiben dabei erhalten, deshalb stellt ein
+  // Rücksprung dieselben Panes wieder her und mountet nichts neu.
+  function layoutSnapshot(l) {
+    return {
+      cells: l.cells.map(c=>({cid:c.cid, sessions:[...c.sessions], active:c.active})),
+      root: l.root ? structuredClone(l.root) : null,
+      mode: l.mode, bound: {...l.bound}, guest: l.guest,
+      focusCID: state.focusCID, zoomCID: state.zoomCID
+    };
+  }
+  function restoreLayout(l, snap) {
+    l.cells = snap.cells.map(c=>({cid:c.cid, sessions:[...c.sessions], active:c.active}));
+    l.root = snap.root ? structuredClone(snap.root) : null;
+    l.mode = snap.mode; l.bound = {...snap.bound}; l.guest = snap.guest;
+    state.focusCID = snap.focusCID; state.zoomCID = snap.zoomCID;
+    syncMembership(); layoutStage(); renderTabs(); renderSidebar();
+  }
+
+  // Umsortieren: die INHALTE zweier Panes wechseln die Plätze, die Geometrie
+  // bleibt. Genau das erwartet man beim Ziehen eines Pane-Kopfs auf eine
+  // andere Pane — kein Verdichten, kein Verlust, auch in angepassten Layouts.
+  function swapCells(cidA, cidB) {
+    const l = lay(state.gridWorkspace);
+    const a = cellByID(l, cidA), b = cellByID(l, cidB);
+    if(!a || !b || a===b) return false;
+    const carry = {sessions:a.sessions, active:a.active};
+    a.sessions = b.sessions; a.active = b.active;
+    b.sessions = carry.sessions; b.active = carry.active;
+    state.focusCID = cidB;   // der Fokus folgt dem gezogenen Chat
+    state.active = b.active;
+    layoutStage(); renderTabs(); renderSidebar();
+    toast(`„${byId(b.active).title}" und „${byId(a.active).title}" getauscht`);
+    return true;
+  }
+
+  // Ersetzen: der bisherige Inhalt der Pane verlässt den Workspace (Tab und
+  // Prozess laufen weiter). Folgenreich, deshalb mit Rücknahme.
+  function replaceInCell(cid, sid) {
+    const l = lay(state.gridWorkspace);
+    const before = layoutSnapshot(l);
+    const target = cellByID(l, cid); if(!target) return false;
+    const evicted = [...target.sessions];
+    if(cellOf(l, sid)) detachFromCells(l, sid);
+    const host = cellByID(l, cid); if(!host) { restoreLayout(l, before); return false; }
+    evicted.forEach(id=>{ delete l.bound[id]; });
+    host.sessions = [sid]; host.active = sid;
+    if(l.guest===sid) l.guest = null;
+    delete l.bound[sid];
+    syncMembership(); state.focusCID = cid; focusSession(sid);
+    const names = evicted.map(id=>`„${byId(id).title}"`).join(', ');
+    toast(`${names} ersetzt — ${evicted.length>1?'sie verlassen':'er verlässt'} den Workspace`,
+          ()=>restoreLayout(l, before));
+    return true;
+  }
+
   function detachFromCells(l, sid) {
     const cell = cellOf(l, sid); if(!cell) return null;
     cell.sessions = cell.sessions.filter(x=>x!==sid);
@@ -1781,12 +2053,27 @@
     toast(`„${byId(sid).title}" ist jetzt nur noch in diesem Workspace`);
   }
 
-  function dropSession(sid, target, fromCID) {
+  function dropSession(sid, target, fromCID, origin='external') {
     const l = lay(state.gridWorkspace);
     if(l.guest===sid) l.guest=null;          // gezielt platziert = Mitglied
     if(!target) { throwIn(sid); return; }
     const targetCell = cellByID(l, target.cid);
     if(!targetCell) { throwIn(sid); return; }
+
+    // ⌥ schlägt jede andere Bedeutung: die Ziel-Pane wird geleert, ihr
+    // bisheriger Inhalt verlässt den Workspace (mit Rücknahme im Toast).
+    if(target.replace) {
+      if(targetCell.sessions.length===1 && targetCell.active===sid) { focusSession(sid); return; }
+      replaceInCell(target.cid, sid);
+      return;
+    }
+    // Pane-Kopf auf eine andere Pane-Mitte = TAUSCHEN. Das ist das
+    // Umsortieren: Geometrie bleibt, Inhalte wechseln die Plätze. Ein
+    // einzelner Stapel-Reiter wird dagegen umgehängt (unten).
+    if(target.side==='center' && origin==='pane' && fromCID && fromCID!==target.cid) {
+      swapCells(fromCID, target.cid);
+      return;
+    }
     if(target.side==='center' && targetCell.sessions.includes(sid)) { focusSession(sid); return; }
 
     const wasIn = cellOf(l, sid);
@@ -1820,12 +2107,23 @@
     toast(l.mode==='snapshot' ? 'Pane geteilt' : 'Eingeordnet — Automatik hat neu gerechnet');
   }
 
+  // Fokuswechsel ist KEIN Layout-Ereignis: die Frames ändern sich nicht.
+  // Er fasst nur die zwei betroffenen Panes an — sonst würde ein Klick den
+  // gesamten Pane-Chrome neu schreiben und einen beginnenden Drag zerstören.
   function focusCell(cid) {
     if(state.focusCID===cid) return;
+    const l=lay(state.gridWorkspace);
+    const prev=state.focusCID;
     state.focusCID=cid;
-    const cell=cellByID(lay(state.gridWorkspace), cid);
+    const cell=cellByID(l, cid);
     if(cell) state.active=cell.active;
-    layoutStage(false);
+    [prev, cid].forEach(c=>{
+      const el=paneDOM[c]; if(!el) return;
+      el.classList.toggle('focused', c===cid);
+      const target=cellByID(l, c);
+      if(target) paneChrome(target, c===cid,
+        state.policy==='master' && l.cells[0]?.cid===c && !state.zoomCID);
+    });
     renderTabs(); renderSidebar();
   }
 
@@ -2288,7 +2586,22 @@
   }
 
   let toastTimer;
-  function toast(text) { const el=$('#toast');el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1800); }
+  // Zweiter Parameter macht den Toast handlungsfähig: folgenreiche Aktionen
+  // (Ersetzen) bieten die Rücknahme dort an, wo die Meldung erscheint.
+  function toast(text, undo) {
+    const el=$('#toast');
+    el.textContent=text;
+    if(undo) {
+      const button=document.createElement('button');
+      button.className='toast-undo';
+      button.textContent='Zurücknehmen';
+      button.onclick=()=>{ el.classList.remove('show'); undo(); };
+      el.appendChild(button);
+    }
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>el.classList.remove('show'), undo?6000:1800);
+  }
   function bindToastButtons() { document.querySelectorAll('[data-toast]').forEach(b=>b.onclick=e=>{e.stopPropagation();toast(b.dataset.toast);document.querySelectorAll('.popover').forEach(p=>p.classList.remove('show'));}); }
   function renderAll() { renderTabs();renderSidebar();renderContent();bindToastButtons(); }
 
@@ -2396,6 +2709,17 @@
     if(e.metaKey&&e.altKey&&e.key.toLowerCase()==='b'){ e.preventDefault(); balance(); return; }
     if(e.metaKey&&e.altKey&&e.key==='0'){ e.preventDefault(); resetAuto(); return; }
     if(e.metaKey&&e.altKey&&e.key.toLowerCase()==='s'){ e.preventDefault(); stackFocusedTarget(); return; }
+    // ⌘⌥⇧←/→ tauscht die Fokus-Pane mit ihrem Nachbarn (Umsortieren ohne
+    // Maus — bisher gab es dafür keinen Tastaturweg).
+    if(e.metaKey&&e.altKey&&e.shiftKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
+      e.preventDefault();
+      const l=lay(state.gridWorkspace);
+      const i=l.cells.findIndex(c=>c.cid===state.focusCID);
+      const j=i+(e.key==='ArrowRight'?1:-1);
+      if(i>=0 && j>=0 && j<l.cells.length) swapCells(l.cells[i].cid, l.cells[j].cid);
+      else toast('Kein Nachbar in dieser Richtung');
+      return;
+    }
     // ⌘⌥←/→ rotiert die Sessions durch die bestehende Geometrie
     if(e.metaKey&&e.altKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
       e.preventDefault(); rotate(e.key==='ArrowRight'?1:-1); return;
