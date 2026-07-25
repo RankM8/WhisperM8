@@ -134,27 +134,29 @@ private struct ClaudeUsagePopoverView: View {
     @State private var activeProfileName = ClaudeAccountProfiles.mainProfileName
     @State private var usageByProfile: [String: ClaudeAccountUsage] = [:]
     @State private var isLoading = true
+    /// Profile mit laufendem Einzel-Update. Anthropics Token-Endpoint ist so
+    /// streng gedrosselt (beobachtet: schon 6 Refreshes/Tag koennen 429
+    /// ausloesen), dass gezielt einzeln nachgeladen wird — einen
+    /// „alle aktualisieren"-Knopf gibt es bewusst nicht mehr.
+    @State private var refreshingProfiles: Set<String> = []
+    /// Tickt, damit die globale Sperre nach Ablauf von selbst wieder freigibt.
+    @State private var tick = Date()
+
+    /// Ende der prozessweiten Sperre nach dem letzten Token-Refresh.
+    private var cooldownEnd: Date? {
+        ClaudeTokenRefreshThrottle.shared.globalCooldownEnd(now: tick)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 8) {
-                PopoverHeader(title: "Claude · Usage-Limits", subtitle: "Alle verbundenen Accounts")
-                Spacer(minLength: 0)
-                // Manuelles Update: einziger Weg, abgelaufene Tokens zu
-                // refreshen — onAppear bleibt passiv (Rate-Limit-Schutz).
-                Button {
-                    load(allowTokenRefresh: true)
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isLoading)
-                .help("Live aktualisieren — loggt abgelaufene Tokens neu ein")
-            }
+            // Bewusst KEIN „alle aktualisieren": ein einziger Klick koennte
+            // saemtliche Accounts in die Anthropic-Sperre laufen lassen.
+            // Aktualisiert wird gezielt pro Zeile.
+            PopoverHeader(
+                title: "Claude · Usage-Limits",
+                subtitle: cooldownEnd.map { "Nächstes Update ab \(AgentChatsClaudeAccountsTab.timeText($0)) Uhr" }
+                    ?? "Alle verbundenen Accounts"
+            )
 
             if isLoading, usageByProfile.isEmpty {
                 Text("lade Limits…")
@@ -184,6 +186,30 @@ private struct ClaudeUsagePopoverView: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
+                        // Einzel-Update: verbraucht nur das Budget DIESES
+                        // Accounts. Der Sammel-Button oben ist der Sonderfall,
+                        // nicht der Normalweg.
+                        Button {
+                            refreshSingle(profile.name)
+                        } label: {
+                            Group {
+                                if refreshingProfiles.contains(profile.name) {
+                                    ProgressView().controlSize(.small).scaleEffect(0.55)
+                                } else {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(AppTheme.textTertiary)
+                                }
+                            }
+                            .frame(width: 16, height: 16)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isLoading || refreshingProfiles.contains(profile.name)
+                                  || cooldownEnd != nil)
+                        .help(cooldownEnd.map {
+                            "Gesperrt bis \(AgentChatsClaudeAccountsTab.timeText($0)) Uhr — Anthropic drosselt Token-Refreshes hart"
+                        } ?? "Nur diesen Account aktualisieren")
                     }
 
                     if let usage = usageByProfile[profile.name] {
@@ -219,6 +245,7 @@ private struct ClaudeUsagePopoverView: View {
         .padding(14)
         .frame(width: 300, alignment: .leading)
         .onAppear { load() }
+        .onReceive(Timer.publish(every: 20, on: .main, in: .common).autoconnect()) { tick = $0 }
     }
 
     private static func age(_ date: Date) -> String {
@@ -236,7 +263,7 @@ private struct ClaudeUsagePopoverView: View {
         case .refreshBlockedBySession:
             return "Token abgelaufen — die laufende Session erneuert ihn gleich"
         case .tokenExpired:
-            return "Token abgelaufen — mit ↻ oben aktualisieren"
+            return "Token abgelaufen — mit ↻ in dieser Zeile aktualisieren"
         case .refreshCoolingDown(let until):
             return "Rate-Limit — Update wieder möglich ab \(AgentChatsClaudeAccountsTab.timeText(until)) Uhr"
         case .httpStatus(429):
@@ -248,19 +275,21 @@ private struct ClaudeUsagePopoverView: View {
         }
     }
 
-    /// Passiv per Default — nur der ↻-Button darf abgelaufene Tokens
-    /// refreshen (`allowTokenRefresh: true`), sonst Cache + Hinweis.
-    private func load(allowTokenRefresh: Bool = false) {
+    /// Immer passiv: reiner Usage-Abruf mit dem vorhandenen Token, nie ein
+    /// Token-Refresh. Darf deshalb gefahrlos alle Accounts parallel laden —
+    /// gedrosselt ist der Token-Endpoint, nicht dieser Aufruf.
+    private func load() {
         isLoading = true
         profiles = profileService.profiles()
         activeProfileName = profileService.activeProfileName()
         let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
+
         Task {
             var results: [String: ClaudeAccountUsage] = [:]
             await withTaskGroup(of: (String, ClaudeAccountUsage?).self) { group in
                 for name in loggedIn {
                     group.addTask {
-                        (name, await fetcher.fetchUsage(forProfile: name, allowTokenRefresh: allowTokenRefresh))
+                        (name, await fetcher.fetchUsage(forProfile: name, allowTokenRefresh: false))
                     }
                 }
                 for await (name, usage) in group {
@@ -274,6 +303,20 @@ private struct ClaudeUsagePopoverView: View {
             }
         }
     }
+
+    /// Aktualisiert genau einen Account — der Normalweg bei diesen Limits.
+    private func refreshSingle(_ name: String) {
+        guard !refreshingProfiles.contains(name) else { return }
+        refreshingProfiles.insert(name)
+        Task {
+            let usage = await fetcher.fetchUsage(forProfile: name, allowTokenRefresh: true)
+            await MainActor.run {
+                if let usage { usageByProfile[name] = usage }
+                refreshingProfiles.remove(name)
+            }
+        }
+    }
+
 }
 
 // MARK: - ChatGPT / Codex

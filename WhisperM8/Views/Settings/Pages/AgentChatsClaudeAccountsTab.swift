@@ -15,6 +15,15 @@ struct AgentChatsClaudeAccountsTab: View {
     @State private var activeProfileName = ClaudeAccountProfiles.mainProfileName
     @State private var usageByProfile: [String: ClaudeAccountUsage] = [:]
     @State private var isFetchingUsage = false
+    /// Profile mit laufendem Einzel-Update (⋯-Menü → „Update usage").
+    @State private var refreshingProfiles: Set<String> = []
+    /// Tickt, damit die globale Sperre nach Ablauf von selbst wieder freigibt.
+    @State private var tick = Date()
+
+    /// Ende der prozessweiten Sperre nach dem letzten Token-Refresh.
+    private var cooldownEnd: Date? {
+        ClaudeTokenRefreshThrottle.shared.globalCooldownEnd(now: tick)
+    }
     @State private var newProfileName = ""
     @State private var feedback: String?
     @State private var feedbackTone: SettingsHelpText.Tone = .secondary
@@ -57,17 +66,19 @@ struct AgentChatsClaudeAccountsTab: View {
                 SettingsHelpText(feedback, tone: feedbackTone)
             }
 
-            SettingsButtonRow(
-                title: "Update usage",
-                subtitle: "Fetches live limits for all accounts and re-authenticates expired logins (one token refresh per account, rate-limit protected)."
-            ) {
-                Button("Update") {
-                    reload(allowTokenRefresh: true)
-                }
-                .buttonStyle(SettingsButtonStyle.standard)
-            }
+            // Bewusst kein „alle aktualisieren": Anthropic drosselt den
+            // OAuth-Token-Endpoint so hart, dass ein einziger Sammelklick
+            // sämtliche Accounts in die Sperre laufen lassen kann. Aktualisiert
+            // wird gezielt pro Account über das ⋯-Menü.
+            SettingsHelpText(
+                cooldownEnd.map {
+                    "Usage-Updates gesperrt bis \(Self.timeText($0)) Uhr — Anthropic drosselt Token-Refreshes hart. Danach über das ⋯-Menü einzeln aktualisieren."
+                } ?? "Limits werden beim Öffnen aus dem Cache geladen. Für einen Live-Stand einen einzelnen Account über sein ⋯-Menü aktualisieren — nie alle auf einmal.",
+                tone: cooldownEnd == nil ? .secondary : .warning
+            )
         }
         .onAppear { reload() }
+        .onReceive(Timer.publish(every: 20, on: .main, in: .common).autoconnect()) { tick = $0 }
     }
 
     // MARK: - Rows
@@ -210,31 +221,37 @@ struct AgentChatsClaudeAccountsTab: View {
 
     /// ⋯-Menü: dauerhaft sichtbar (kein Hover-only), bündelt die seltenen
     /// Verwaltungs-Aktionen. Destruktives nur hier, nie als Flächen-Button.
-    @ViewBuilder
     private func manageMenu(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
-        if !profile.isMain || !profile.isLoggedIn || needsRelogin(profile) {
-            Menu {
-                if !profile.isLoggedIn || needsRelogin(profile) {
-                    Button("Log in…") { openLoginTerminal(for: profile) }
+        Menu {
+            if profile.isLoggedIn {
+                // Einzel-Update statt „alle": Anthropics Token-Endpoint ist pro
+                // Account streng gedrosselt, ein Sammellauf verbrennt im
+                // Fehlerfall das Budget aller Accounts.
+                Button(cooldownEnd.map { "Update usage (ab \(Self.timeText($0)) Uhr)" } ?? "Update usage") {
+                    refreshSingle(profile.name)
                 }
-                if !profile.isMain {
-                    Button("Rename…") { renameProfile(profile) }
-                    Divider()
-                    Button("Remove…", role: .destructive) { removeProfile(profile) }
-                        .disabled(isActive)
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .frame(width: 26, height: 22)
-                    .contentShape(Rectangle())
+                .disabled(refreshingProfiles.contains(profile.name) || cooldownEnd != nil)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Rename, log in, remove")
+            if !profile.isLoggedIn || needsRelogin(profile) {
+                Button("Log in…") { openLoginTerminal(for: profile) }
+            }
+            if !profile.isMain {
+                Divider()
+                Button("Rename…") { renameProfile(profile) }
+                Button("Remove…", role: .destructive) { removeProfile(profile) }
+                    .disabled(isActive)
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+                .frame(width: 26, height: 22)
+                .contentShape(Rectangle())
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(profile.isMain ? "Update usage" : "Update usage, rename, log in, remove")
     }
 
     /// Limit-Anzeige pro Account: zwei ausgerichtete Gauge-Zeilen (5h-Fenster
@@ -361,22 +378,23 @@ struct AgentChatsClaudeAccountsTab: View {
 
     // MARK: - Actions
 
-    /// `allowTokenRefresh` nur beim manuellen Update-Button — automatische
-    /// Reloads (onAppear, nach Account-Aktionen) bleiben passiv und treffen
-    /// den streng gedrosselten OAuth-Token-Endpoint nie.
-    private func reload(allowTokenRefresh: Bool = false) {
+    /// Immer passiv — Reloads (onAppear, nach Account-Aktionen) treffen den
+    /// streng gedrosselten OAuth-Token-Endpoint nie. Tokens erneuert nur der
+    /// gezielte Einzel-Update im ⋯-Menü.
+    private func reload() {
         profiles = profileService.profiles()
         activeProfileName = profileService.activeProfileName()
         // Statusline-Marker nachziehen (heilt auch aeltere Profile ohne Datei)
         for profile in profiles where !profile.isMain {
             profileService.writeKeychainServiceMarker(forProfile: profile.name)
         }
-        fetchUsageForAllProfiles(allowTokenRefresh: allowTokenRefresh)
+        fetchUsageForAllProfiles()
     }
 
-    /// Holt die Limits ALLER eingeloggten Accounts parallel — live vom
-    /// oauth/usage-Endpoint, mit Statusline-Cache als Fallback.
-    private func fetchUsageForAllProfiles(allowTokenRefresh: Bool) {
+    /// Holt die Limits aller eingeloggten Accounts aus dem Cache bzw. live mit
+    /// dem vorhandenen Token. Darf parallel laufen: gedrosselt ist der
+    /// Token-Endpoint, nicht dieser Abruf.
+    private func fetchUsageForAllProfiles() {
         guard !isFetchingUsage else { return }
         isFetchingUsage = true
         let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
@@ -385,7 +403,7 @@ struct AgentChatsClaudeAccountsTab: View {
             await withTaskGroup(of: (String, ClaudeAccountUsage?).self) { group in
                 for name in loggedIn {
                     group.addTask {
-                        (name, await usageFetcher.fetchUsage(forProfile: name, allowTokenRefresh: allowTokenRefresh))
+                        (name, await usageFetcher.fetchUsage(forProfile: name, allowTokenRefresh: false))
                     }
                 }
                 for await (name, usage) in group {
@@ -396,6 +414,19 @@ struct AgentChatsClaudeAccountsTab: View {
             await MainActor.run {
                 usageByProfile = finalResults
                 isFetchingUsage = false
+            }
+        }
+    }
+
+    /// Aktualisiert genau einen Account.
+    private func refreshSingle(_ name: String) {
+        guard !refreshingProfiles.contains(name) else { return }
+        refreshingProfiles.insert(name)
+        Task {
+            let usage = await usageFetcher.fetchUsage(forProfile: name, allowTokenRefresh: true)
+            await MainActor.run {
+                if let usage { usageByProfile[name] = usage }
+                refreshingProfiles.remove(name)
             }
         }
     }

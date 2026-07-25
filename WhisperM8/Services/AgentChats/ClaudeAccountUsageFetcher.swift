@@ -49,6 +49,19 @@ enum ClaudeUsageFetchProblem: Equatable {
     case httpStatus(Int)
     /// Kein Response (offline, Timeout).
     case network
+
+    /// `true`, wenn weitere Versuche gerade schaden statt zu helfen: Jeder
+    /// zusaetzliche Refresh gegen eine aktive Sperre verlaengert sie, statt
+    /// sie abzuwarten. Ein Sammellauf bricht hier ab, damit ein Klick nicht
+    /// das Budget aller Accounts verbrennt.
+    var blocksFurtherAttempts: Bool {
+        switch self {
+        case .httpStatus(429), .refreshCoolingDown:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 /// Prozessweiter Cooldown für Token-Refreshes, pro Profil. Der
@@ -65,8 +78,16 @@ final class ClaudeTokenRefreshThrottle: @unchecked Sendable {
         var problem: ClaudeUsageFetchProblem?
     }
 
+    /// Sperrfrist fuer ALLE Accounts nach einem Token-Refresh. Ob Anthropic
+    /// pro Account oder pro IP drosselt, ist nicht dokumentiert und aus dem
+    /// beobachteten Verhalten nicht eindeutig — beim ersten Sammellauf gingen
+    /// alle fuenf Accounts gleichzeitig in 429. Solange das offen ist, wird
+    /// konservativ global gebremst: ein Refresh, dann Ruhe.
+    static let globalCooldown: TimeInterval = 10 * 60
+
     private let lock = NSLock()
     private var entries: [String: Entry] = [:]
+    private var globalNextAllowedAt: Date?
 
     /// Aktiver Cooldown-Eintrag, `nil` sobald `nextAllowedAt` erreicht ist.
     func blockedEntry(forProfile name: String, now: Date) -> Entry? {
@@ -78,6 +99,20 @@ final class ClaudeTokenRefreshThrottle: @unchecked Sendable {
     func record(profile: String, nextAllowedAt: Date, problem: ClaudeUsageFetchProblem?) {
         lock.lock(); defer { lock.unlock() }
         entries[profile] = Entry(nextAllowedAt: nextAllowedAt, problem: problem)
+    }
+
+    /// Nach jedem Token-Refresh-Versuch aufrufen — unabhaengig vom Ausgang.
+    /// Auch ein erfolgreicher Refresh zaehlt aufs Budget.
+    func recordGlobalAttempt(now: Date) {
+        lock.lock(); defer { lock.unlock() }
+        globalNextAllowedAt = now.addingTimeInterval(Self.globalCooldown)
+    }
+
+    /// Zeitpunkt, ab dem der naechste Refresh erlaubt ist — `nil`, wenn frei.
+    func globalCooldownEnd(now: Date) -> Date? {
+        lock.lock(); defer { lock.unlock() }
+        guard let until = globalNextAllowedAt, until > now else { return nil }
+        return until
     }
 }
 
@@ -300,6 +335,11 @@ struct ClaudeAccountUsageFetcher {
             Logger.agentStore.info("claude_token_refresh_skipped profile=\(name, privacy: .public) reason=cooldown")
             return .failure(.coolingDown(until: entry.nextAllowedAt, lastProblem: entry.problem))
         }
+
+        // Ab hier wird der gedrosselte Endpoint wirklich getroffen — global
+        // bremsen, unabhaengig vom Ausgang. Auch ein erfolgreicher Refresh
+        // zaehlt aufs Budget.
+        refreshThrottle.recordGlobalAttempt(now: now())
 
         var request = URLRequest(url: URL(string: "https://console.anthropic.com/v1/oauth/token")!)
         request.httpMethod = "POST"
