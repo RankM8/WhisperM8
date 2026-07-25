@@ -8,7 +8,9 @@ import Foundation
 ///
 /// Grundsätze (Plan-Abschnitt 03): stabile Positionen (nil statt
 /// Nachrücken), „ein Drop blockiert nie — bis 3×3", nie automatisches
-/// Schrumpfen.
+/// Schrumpfen. Einzige Ausnahme von der Positionsstabilität ist das
+/// ausdrücklich angeforderte Verkleinern (`planCapacityChange`): dort rücken
+/// die Belegten nach vorn, damit Löcher keine Chats kosten.
 enum WorkspaceSlotOps {
     enum AddResult: Equatable {
         /// In einen freien Slot gelegt; `grewTo` = neue Kapazität, falls
@@ -36,8 +38,18 @@ enum WorkspaceSlotOps {
         /// bestätigen. Verhindert, dass eine veraltete Bestätigung
         /// inzwischen neu platzierte Chats entfernt.
         case confirmationRequired([UUID])
-        /// Unzulässige Stufe.
+        /// Unzulässige Stufe oder ungültige Behalten-Liste.
         case rejected
+    }
+
+    /// Ergebnis der Slot-Planung für eine Ziel-Kapazität.
+    ///
+    /// `retained`/`evicted` stehen IMMER in der aktuellen Slot-Reihenfolge:
+    /// die Auswahl im Grid ist eine MENGE, die Reihenfolge kommt aus dem
+    /// Layout — nie aus der Klick-Reihenfolge des Users.
+    struct CapacityPlan: Equatable {
+        let retained: [UUID]
+        let evicted: [UUID]
     }
 
     // MARK: - Hinzufügen / Platzieren
@@ -151,25 +163,80 @@ enum WorkspaceSlotOps {
 
     // MARK: - Kapazität
 
-    /// Welche Sessions würde ein Wechsel auf `capacity` entfernen (geordnet,
-    /// nur Tail-Slots — Grow liefert immer `[]`).
+    /// Plant den Wechsel auf `capacity`: wer bleibt, wer verlässt den
+    /// Workspace.
+    ///
+    /// Verkleinern KOMPAKTIERT: die belegten Slots rücken unter Beibehaltung
+    /// ihrer relativen Reihenfolge nach vorn, erst danach wird gekappt.
+    /// Dadurch kostet ein Verkleinern nur noch dann Chats, wenn wirklich mehr
+    /// belegt sind als Slots übrig bleiben — Löcher aus vorherigem Entfernen
+    /// (`remove` setzt auf `nil`, ohne nachzurücken) evakuieren nichts mehr.
+    /// Das ist die einzige Stelle, die die Positionsstabilität aufgibt, und
+    /// zwar genau dann, wenn der User das Layout ohnehin absichtlich umbaut.
+    ///
+    /// `keeping == nil` = Auto-Politik (die vorderen `capacity` Belegten
+    /// bleiben). Mit expliziter Liste entscheidet der User im Grid, wer bleibt.
+    ///
+    /// `nil` = ungültige Eingabe: unerlaubte Stufe, oder eine Behalten-Liste
+    /// mit Duplikaten, Fremd-IDs bzw. mehr Einträgen als Slots.
+    static func planCapacityChange(
+        of workspace: AgentGridWorkspace,
+        to capacity: Int,
+        keeping retainedSessionIDs: [UUID]? = nil
+    ) -> CapacityPlan? {
+        guard AgentGridWorkspace.allowedCapacities.contains(capacity) else { return nil }
+        let occupied = workspace.occupiedSessionIDs
+
+        // Grow (und die Nulländerung) fasst Indizes NIE an — eine mitgegebene
+        // Behalten-Liste ist hier gegenstandslos, nicht ungültig.
+        guard capacity < workspace.capacity else {
+            return CapacityPlan(retained: occupied, evicted: [])
+        }
+
+        guard let retainedSessionIDs else {
+            return CapacityPlan(
+                retained: Array(occupied.prefix(capacity)),
+                evicted: Array(occupied.dropFirst(capacity))
+            )
+        }
+
+        let requested = Set(retainedSessionIDs)
+        guard requested.count == retainedSessionIDs.count,
+              retainedSessionIDs.count <= capacity,
+              requested.isSubset(of: Set(occupied)) else { return nil }
+        // In Slot-Reihenfolge materialisieren, nicht in der Reihenfolge des
+        // übergebenen Arrays — sonst springen die Panes beim Verkleinern.
+        return CapacityPlan(
+            retained: occupied.filter(requested.contains),
+            evicted: occupied.filter { !requested.contains($0) }
+        )
+    }
+
+    /// Welche Sessions würde ein Wechsel auf `capacity` entfernen (in
+    /// Slot-Reihenfolge)? Grow und ungültige Eingaben liefern `[]`.
     static func previewCapacityChange(
         of workspace: AgentGridWorkspace,
-        to capacity: Int
+        to capacity: Int,
+        keeping retainedSessionIDs: [UUID]? = nil
     ) -> [UUID] {
-        guard AgentGridWorkspace.allowedCapacities.contains(capacity),
-              capacity < workspace.capacity else { return [] }
-        return workspace.slots.suffix(from: capacity).compactMap { $0 }
+        planCapacityChange(
+            of: workspace, to: capacity, keeping: retainedSessionIDs
+        )?.evicted ?? []
     }
 
     /// Kapazität setzen. Grow polstert mit `nil` (bestehende Indizes bleiben
-    /// exakt); Shrink schneidet ausschließlich Tail-Slots ab und verlangt
-    /// die bestätigte Eviction-Liste. Eine Achse behält ihre Fractions,
-    /// wenn ihre Elementzahl gleich bleibt (`normalize`), sonst wird nur
-    /// diese Achse gleichverteilt.
+    /// exakt); Shrink kompaktiert die Belegung nach vorn (siehe
+    /// `planCapacityChange`) und verlangt die bestätigte Eviction-Liste.
+    /// Eine Achse behält ihre Fractions, wenn ihre Elementzahl gleich bleibt
+    /// (`normalize`), sonst wird nur diese Achse gleichverteilt.
+    ///
+    /// Passt die Belegung nach dem Kompaktieren in die Zielstufe, ist die
+    /// Eviction-Liste leer und deckt sich mit dem Default — der Wechsel geht
+    /// dann ohne jede Bestätigung durch.
     static func setCapacity(
         of workspace: AgentGridWorkspace,
         to capacity: Int,
+        keeping retainedSessionIDs: [UUID]? = nil,
         expectedEvictedSessionIDs: [UUID] = []
     ) -> (workspace: AgentGridWorkspace, result: CapacityResult) {
         guard AgentGridWorkspace.allowedCapacities.contains(capacity) else {
@@ -186,11 +253,19 @@ enum WorkspaceSlotOps {
             return (copy, .applied)
         }
 
-        let evicted = previewCapacityChange(of: workspace, to: capacity)
-        guard evicted == expectedEvictedSessionIDs else {
-            return (workspace, .confirmationRequired(evicted))
+        // Eine kaputte Behalten-Liste ist `.rejected`, NICHT
+        // `.confirmationRequired` — sonst liefe ein Eingabefehler in eine
+        // Bestätigungsschleife, die der User nie gewinnen kann.
+        guard let plan = planCapacityChange(
+            of: workspace, to: capacity, keeping: retainedSessionIDs
+        ) else {
+            return (workspace, .rejected)
         }
-        copy.slots.removeSubrange(capacity...)
+        guard plan.evicted == expectedEvictedSessionIDs else {
+            return (workspace, .confirmationRequired(plan.evicted))
+        }
+        copy.slots = plan.retained.map { Optional($0) }
+            + Array(repeating: nil, count: capacity - plan.retained.count)
         copy.capacity = capacity
         copy.normalize()
         return (copy, .applied)

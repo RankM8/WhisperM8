@@ -249,4 +249,178 @@ final class WorkspaceSlotOpsTests: XCTestCase {
         XCTAssertEqual(result, .rejected)
         XCTAssertEqual(updated, original)
     }
+
+    // MARK: - Kapazität: Kompaktieren beim Verkleinern
+
+    /// Der Alltagsfall: zwei Panes per ⊖ geschlossen (Löcher), zurück auf
+    /// 1×2 — das darf keinen Chat mehr kosten und keine Rückfrage auslösen.
+    func testShrinkWithHolesCompactsWithoutEviction() {
+        let a = UUID(); let b = UUID()
+        let original = workspace(slots: [a, nil, nil, b], capacity: 4)
+        XCTAssertEqual(WorkspaceSlotOps.previewCapacityChange(of: original, to: 2), [])
+        // Ohne expectedEvictedSessionIDs — der Default [] muss matchen.
+        let (updated, result) = WorkspaceSlotOps.setCapacity(of: original, to: 2)
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.slots, [a, b])
+        XCTAssertEqual(updated.capacity, 2)
+    }
+
+    func testShrinkPreservesRelativeOrderWhenCompacting() {
+        let a = UUID(); let b = UUID()
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: workspace(slots: [nil, b, nil, a], capacity: 4), to: 2
+        )
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.slots, [b, a], "Slot-Reihenfolge, nicht Erstellungsreihenfolge")
+    }
+
+    /// Überhang: nur die überzähligen Belegten verlassen den Workspace —
+    /// nicht pauschal, wer auf einem hohen Index sitzt.
+    func testShrinkEvictsOnlyOverflowInSlotOrder() {
+        let ids = (0 ..< 5).map { _ in UUID() }
+        let original = workspace(
+            slots: [ids[0], ids[1], nil, ids[2], ids[3], ids[4]], capacity: 6
+        )
+        let evicted = WorkspaceSlotOps.previewCapacityChange(of: original, to: 4)
+        XCTAssertEqual(evicted, [ids[4]], "nur der fünfte Belegte, nicht die Tail-Slots")
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: original, to: 4, expectedEvictedSessionIDs: evicted
+        )
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.slots, [ids[0], ids[1], ids[2], ids[3]])
+    }
+
+    func testShrinkToCapacityThatAlreadyFitsNeedsNoConfirmation() {
+        let a = UUID(); let b = UUID()
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: workspace(slots: [nil, nil, nil, nil, a, nil, nil, nil, b], capacity: 9),
+            to: 2
+        )
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.slots, [a, b])
+    }
+
+    // MARK: - Kapazität: gewählte Behalter
+
+    func testKeepListRetainsChosenSessionsInSlotOrder() {
+        let ids = (0 ..< 4).map { _ in UUID() }
+        let original = workspace(slots: ids.map { $0 }, capacity: 4)
+        // Bewusst unsortiert übergeben — die Slot-Reihenfolge gewinnt.
+        let keep = [ids[3], ids[0]]
+        let evicted = WorkspaceSlotOps.previewCapacityChange(
+            of: original, to: 2, keeping: keep
+        )
+        XCTAssertEqual(evicted, [ids[1], ids[2]])
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: original, to: 2, keeping: keep, expectedEvictedSessionIDs: evicted
+        )
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.slots, [ids[0], ids[3]], "in Slot-, nicht in Klick-Reihenfolge")
+    }
+
+    func testKeepListStaleConfirmationIsRejected() {
+        let ids = (0 ..< 4).map { _ in UUID() }
+        let original = workspace(slots: ids.map { $0 }, capacity: 4)
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: original, to: 2, keeping: [ids[0], ids[3]],
+            expectedEvictedSessionIDs: [ids[1]]
+        )
+        XCTAssertEqual(result, .confirmationRequired([ids[1], ids[2]]))
+        XCTAssertEqual(updated, original)
+    }
+
+    func testKeepListWithUnknownIDIsRejected() {
+        let ids = (0 ..< 4).map { _ in UUID() }
+        let original = workspace(slots: ids.map { $0 }, capacity: 4)
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: original, to: 2, keeping: [ids[0], UUID()]
+        )
+        XCTAssertEqual(result, .rejected, "Fremd-ID darf nie in einen Bestätigungs-Loop führen")
+        XCTAssertEqual(updated, original)
+        XCTAssertEqual(
+            WorkspaceSlotOps.previewCapacityChange(of: original, to: 2, keeping: [UUID()]), []
+        )
+    }
+
+    func testKeepListWithDuplicateIsRejected() {
+        let ids = (0 ..< 4).map { _ in UUID() }
+        let original = workspace(slots: ids.map { $0 }, capacity: 4)
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: original, to: 2, keeping: [ids[0], ids[0]]
+        )
+        XCTAssertEqual(result, .rejected)
+        XCTAssertEqual(updated, original)
+    }
+
+    func testKeepListLongerThanCapacityIsRejected() {
+        let ids = (0 ..< 4).map { _ in UUID() }
+        let original = workspace(slots: ids.map { $0 }, capacity: 4)
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: original, to: 2, keeping: [ids[0], ids[1], ids[2]]
+        )
+        XCTAssertEqual(result, .rejected)
+        XCTAssertEqual(updated, original)
+    }
+
+    /// Nichts behalten ist zulässig (der Workspace bleibt, nur leer) — die
+    /// Aktionsleiste lässt das bewusst zu.
+    func testEmptyKeepListEvictsAll() {
+        let ids = (0 ..< 4).map { $0 }.map { _ in UUID() }
+        let original = workspace(slots: ids.map { $0 }, capacity: 4)
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: original, to: 2, keeping: [], expectedEvictedSessionIDs: ids
+        )
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.slots, [nil, nil])
+        XCTAssertEqual(updated.capacity, 2)
+    }
+
+    func testGrowIgnoresKeepListAndKeepsExactIndices() {
+        let a = UUID(); let b = UUID()
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: workspace(slots: [a, nil, b], capacity: 3), to: 6, keeping: [a]
+        )
+        XCTAssertEqual(result, .applied, "Grow rührt Indizes nie an")
+        XCTAssertEqual(updated.slots, [a, nil, b, nil, nil, nil])
+    }
+
+    /// Das Kompaktieren darf die achsenweise Fraction-Regel nicht kippen
+    /// (Gegenstück zu testCapacityChangePreservesOrResetsFractionsPerAxis).
+    func testCompactingShrinkKeepsAxisFractionsThatDoNotChange() {
+        let a = UUID(); let b = UUID(); let c = UUID()
+        // 6 (3×2) → 4 (2×2): Spalten 3→2 (Reset), Zeilen 2→2 (erhalten).
+        var original = workspace(slots: [a, nil, b, nil, c, nil], capacity: 6)
+        original.columnFractions = [0.2, 0.3, 0.5]
+        original.rowFractions = [0.7, 0.3]
+        let (updated, result) = WorkspaceSlotOps.setCapacity(of: original, to: 4)
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(updated.slots, [a, b, c, nil])
+        XCTAssertEqual(updated.columnFractions.count, 2)
+        XCTAssertEqual(updated.rowFractions, [0.7, 0.3], "unveränderte Achse bleibt")
+    }
+
+    /// Invariante über beide Politiken: die Behalter stehen immer als
+    /// Teilfolge der ursprünglichen Belegung da.
+    func testAppliedShrinkKeepsOccupiedOrderAsSubsequence() {
+        let ids = (0 ..< 6).map { _ in UUID() }
+        let original = workspace(
+            slots: [ids[0], nil, ids[1], ids[2], nil, ids[3]], capacity: 6
+        )
+        let occupied = original.occupiedSessionIDs
+        for keep in [nil, [ids[3], ids[1]], [ids[0]]] as [[UUID]?] {
+            let evicted = WorkspaceSlotOps.previewCapacityChange(
+                of: original, to: 2, keeping: keep
+            )
+            let (updated, result) = WorkspaceSlotOps.setCapacity(
+                of: original, to: 2, keeping: keep, expectedEvictedSessionIDs: evicted
+            )
+            XCTAssertEqual(result, .applied)
+            let retained = updated.occupiedSessionIDs
+            XCTAssertEqual(
+                retained, occupied.filter(Set(retained).contains),
+                "Behalter bleiben Teilfolge der Slot-Reihenfolge"
+            )
+            XCTAssertTrue(Set(retained).isDisjoint(with: Set(evicted)))
+        }
+    }
 }

@@ -165,9 +165,10 @@ struct AgentChatsView: View {
     /// Aktuell gedrosselte Panes (F11) — Diff-Registry, damit entfernte/
     /// ersetzte Sessions und Workspace-Wechsel nie gedrosselt zurückbleiben.
     @State var throttledGridPaneIDs: Set<UUID> = []
-    /// Ausstehende Verkleinerung (Kapazitäts-Picker): erst die Vorschau
-    /// bestätigen, dann wird mit exakt dieser Eviction-Liste angewendet.
-    @State var gridShrinkRequest: GridShrinkRequest?
+    /// Laufende Verkleinerung mit echtem Überhang: der User markiert im Grid,
+    /// welche Chats bleiben. Passt die Belegung nach dem Kompaktieren ohnehin,
+    /// wird ohne Rückfrage angewendet und das hier bleibt `nil`.
+    @State var gridShrinkSelection: GridShrinkSelection?
     /// Gemessene Grid-Fläche — der Kapazitäts-Picker sitzt seit dem Umzug in
     /// die Header-Zeile außerhalb des Grids und braucht die Fläche weiterhin,
     /// um nicht passende Stufen auszublenden.
@@ -729,21 +730,9 @@ struct AgentChatsView: View {
         )) {
             renameWorkspaceSheet
         }
-        .confirmationDialog(
-            "Workspace verkleinern?",
-            isPresented: Binding(
-                get: { gridShrinkRequest != nil },
-                set: { if !$0 { gridShrinkRequest = nil } }
-            ),
-            presenting: gridShrinkRequest
-        ) { request in
-            Button("Verkleinern — \(request.evictedTitles.count) \(request.evictedTitles.count == 1 ? "Chat verlässt" : "Chats verlassen") den Workspace", role: .destructive) {
-                commitGridShrink(request)
-            }
-            Button("Abbrechen", role: .cancel) {}
-        } message: { request in
-            Text("Es verlassen: \(request.evictedTitles.joined(separator: ", ")). Tabs und Prozesse bleiben erhalten — nur die Slots werden entfernt.")
-        }
+        // Der frühere Dialog „Workspace verkleinern?" ist entfallen: er
+        // konnte nur eine Namensliste zeigen, ohne Einfluss darauf, WER geht.
+        // An seiner Stelle markiert der User direkt im Grid (GridShrinkSelection).
         // Benannte Ablehnungen (volles 3×3, blockierte Aktivierung,
         // PhpStorm-/Restore-Fehler) sichtbar machen — errorMessage hatte
         // zuvor keinen Leser (Review-Finding).

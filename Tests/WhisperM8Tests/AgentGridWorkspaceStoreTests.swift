@@ -447,6 +447,98 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedSession(in: w), ids[1], "Fokus repariert (next/prev)")
     }
 
+    /// Nach zwei ⊖ passt die Belegung in die kleinere Stufe — das darf
+    /// weder fragen noch Chats kosten, und die Tabs bleiben offen.
+    func testShrinkWithHolesAppliesWithoutConfirmation() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let ids = try seed(persistence, count: 4)
+        let id = store.createGridWorkspace(name: "G", slots: ids.map { $0 }, activateIn: w)
+        let tabsBefore = store.openTabIDs(in: w)
+
+        XCTAssertTrue(store.removeSession(ids[1], fromGridWorkspace: id))
+        XCTAssertTrue(store.removeSession(ids[2], fromGridWorkspace: id))
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [ids[0], nil, nil, ids[3]])
+
+        XCTAssertEqual(store.setCapacity(ofGridWorkspace: id, to: 2), .applied)
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [ids[0], ids[3]])
+        XCTAssertEqual(store.openTabIDs(in: w), tabsBefore, "Tabs bleiben unangetastet")
+    }
+
+    /// Der fokussierte Chat überlebt das Kompaktieren (nur der Index
+    /// verschiebt sich) — die Fokus-Reparatur darf hier NICHT greifen.
+    func testCompactingShrinkKeepsFocusWhenFocusedChatSurvives() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let ids = try seed(persistence, count: 2)
+        let id = store.createGridWorkspace(
+            name: "G", slots: [ids[0], nil, nil, ids[1]], activateIn: w
+        )
+        store.setGridFocusedSession(ids[1], in: w)
+
+        XCTAssertEqual(store.setCapacity(ofGridWorkspace: id, to: 2), .applied)
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [ids[0], ids[1]])
+        XCTAssertEqual(store.selectedSession(in: w), ids[1], "Fokus folgt dem Chat, nicht dem Index")
+    }
+
+    /// Der User wählt im Grid, wer bleibt — hier bewusst die HINTEREN zwei,
+    /// die das alte Tail-Abschneiden entfernt hätte.
+    func testShrinkWithKeepListEvictsUnmarkedAndRepairsFocus() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let ids = try seed(persistence, count: 4)
+        let id = store.createGridWorkspace(name: "G", slots: ids.map { $0 }, activateIn: w)
+        store.setGridFocusedSession(ids[0], in: w)
+
+        let keep = [ids[2], ids[3]]
+        let evicted = store.previewCapacityChange(of: id, to: 2, keeping: keep)
+        XCTAssertEqual(evicted, [ids[0], ids[1]])
+        XCTAssertEqual(
+            store.setCapacity(
+                ofGridWorkspace: id, to: 2, keeping: keep, expectedEvictedSessionIDs: evicted
+            ),
+            .applied
+        )
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, keep)
+        XCTAssertEqual(
+            store.selectedSession(in: w), ids[2],
+            "Fokus lag auf einem evakuierten Chat → deterministischer Fallback"
+        )
+        // Evakuierte bleiben Sessions und offene Tabs — nur die Slots gehen.
+        XCTAssertTrue(store.openTabIDs(in: w).contains(ids[0]))
+        XCTAssertNotNil(persistence.loadWorkspace().sessions.first { $0.id == ids[0] })
+    }
+
+    func testShrinkWithStaleKeepListMutatesNothing() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let ids = try seed(persistence, count: 4)
+        let id = store.createGridWorkspace(name: "G", slots: ids.map { $0 }, activateIn: w)
+
+        XCTAssertEqual(
+            store.setCapacity(
+                ofGridWorkspace: id, to: 2, keeping: [ids[1], ids[2]],
+                expectedEvictedSessionIDs: [ids[0]]
+            ),
+            .confirmationRequired([ids[0], ids[3]])
+        )
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, ids.map { $0 })
+        XCTAssertEqual(store.gridWorkspace(id: id)?.capacity, 4)
+    }
+
+    func testShrinkWithInvalidKeepListIsRejected() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let ids = try seed(persistence, count: 4)
+        let id = store.createGridWorkspace(name: "G", slots: ids.map { $0 }, activateIn: w)
+
+        XCTAssertEqual(
+            store.setCapacity(ofGridWorkspace: id, to: 2, keeping: [ids[0], UUID()]),
+            .rejected
+        )
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, ids.map { $0 })
+    }
+
     func testWorkspaceCollapseTogglesPersistsAndPrunes() throws {
         let wsURL = tempURL("ws"); let uiURL = tempURL("ui")
         let persistence = AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL)

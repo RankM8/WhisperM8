@@ -524,10 +524,18 @@ final class AgentWindowStore {
         mutateGridWorkspace(workspaceID) { $0.rowFractions = fractions }
     }
 
-    /// Welche Sessions würde ein Wechsel auf `capacity` entfernen (geordnet).
-    func previewCapacityChange(of workspaceID: UUID, to capacity: Int) -> [UUID] {
+    /// Welche Sessions würde ein Wechsel auf `capacity` entfernen (geordnet)?
+    /// `keeping` = die vom User im Grid gewählten Behalter; `nil` = die
+    /// Auto-Politik (vordere Belegte bleiben).
+    func previewCapacityChange(
+        of workspaceID: UUID,
+        to capacity: Int,
+        keeping retainedSessionIDs: [UUID]? = nil
+    ) -> [UUID] {
         guard let entity = gridWorkspace(id: workspaceID) else { return [] }
-        return WorkspaceSlotOps.previewCapacityChange(of: entity, to: capacity)
+        return WorkspaceSlotOps.previewCapacityChange(
+            of: entity, to: capacity, keeping: retainedSessionIDs
+        )
     }
 
     /// Kapazität setzen. Shrink verlangt die exakt bestätigte
@@ -537,11 +545,15 @@ final class AgentWindowStore {
     func setCapacity(
         ofGridWorkspace workspaceID: UUID,
         to capacity: Int,
+        keeping retainedSessionIDs: [UUID]? = nil,
         expectedEvictedSessionIDs: [UUID] = []
     ) -> WorkspaceSlotOps.CapacityResult {
         guard let entity = gridWorkspace(id: workspaceID) else { return .rejected }
         let (updated, result) = WorkspaceSlotOps.setCapacity(
-            of: entity, to: capacity, expectedEvictedSessionIDs: expectedEvictedSessionIDs
+            of: entity,
+            to: capacity,
+            keeping: retainedSessionIDs,
+            expectedEvictedSessionIDs: expectedEvictedSessionIDs
         )
         guard result == .applied else { return result }
         let isShrink = capacity < entity.capacity

@@ -274,7 +274,17 @@ extension AgentChatsView {
         .onChange(of: entity.slots) { _, _ in
             hoveredGridPaneID = nil
             applyGridOutputPriorities(entity: entity, focused: selectedSessionID)
+            // Belegung von außen geändert (anderes Fenster, Kontextmenü,
+            // Archivierung): laufende Auswahl angleichen statt auf einem
+            // veralteten Stand committen zu lassen.
+            reconcileGridShrinkSelection()
         }
+        .modifier(GridShrinkSelectionSync(
+            workspaceID: entity.id,
+            capacity: entity.capacity,
+            onCapacityChanged: { reconcileGridShrinkSelection() },
+            onWorkspaceChanged: { gridShrinkSelection = nil }
+        ))
         .onAppear {
             applyGridOutputPriorities(entity: entity, focused: selectedSessionID)
         }
@@ -282,6 +292,7 @@ extension AgentChatsView {
             hoveredGridPaneID = nil
             gridDropTargeted = false
             gridSlotDropTargetCount = 0
+            gridShrinkSelection = nil
             // Einzelansicht/Fenster zu: keine Pane darf gedrosselt
             // zurückbleiben (der Rückstand wird dabei geflusht).
             resetGridOutputPriorities()
@@ -298,6 +309,7 @@ extension AgentChatsView {
             // plötzlich die Growzone statt des gezielten Ersetzens
             // (Review-Finding).
             if gridDropTargeted,
+               gridShrinkSelection == nil,
                gridSlotDropTargetCount == 0,
                entity.firstFreeSlotIndex == nil,
                let next = AgentGridWorkspace.nextCapacity(after: entity.capacity) {
@@ -337,7 +349,18 @@ extension AgentChatsView {
 
             Spacer(minLength: 8)
 
-            gridCapacityPicker(entity: entity, available: gridAreaSize)
+            // Während der Auswahl übernimmt die Aktionsleiste den Platz des
+            // Pickers — eine weitere Stufe zu wählen wäre mitten in der
+            // Entscheidung nur verwirrend.
+            if let gridShrinkSelection, gridShrinkSelection.workspaceID == entity.id {
+                GridShrinkActionBar(
+                    selection: gridShrinkSelection,
+                    onCommit: { commitGridShrink(gridShrinkSelection) },
+                    onCancel: { self.gridShrinkSelection = nil }
+                )
+            } else {
+                gridCapacityPicker(entity: entity, available: gridAreaSize)
+            }
         }
         // Gleiche Mindesthöhe wie der zweizeilige Chat-Header — der Wechsel
         // Grid ↔ Einzelansicht soll das Layout darunter nicht springen lassen.
@@ -345,17 +368,6 @@ extension AgentChatsView {
     }
 
     // MARK: - Kapazitäts-Picker (F10)
-
-    /// Ausstehende Verkleinerung — trägt die BESTÄTIGTE Eviction-Liste
-    /// (`expectedEvictedSessionIDs`-Muster: eine veraltete Bestätigung kann
-    /// keine inzwischen neu platzierten Chats entfernen).
-    struct GridShrinkRequest: Identifiable {
-        let id = UUID()
-        let workspaceID: UUID
-        let capacity: Int
-        let evictedIDs: [UUID]
-        let evictedTitles: [String]
-    }
 
     /// Kompakter Stufen-Picker im Grid-Chrome (2 · 3 · 4 · 6 · 9). Stufen,
     /// die nicht in die übergebene GRID-Fläche passen (~240 pt je Spalte,
@@ -401,11 +413,13 @@ extension AgentChatsView {
             && rows * 200 + (rows - 1) <= size.height
     }
 
-    /// Stufe wählen: Wachsen wendet sofort an; Verkleinern zeigt die
-    /// Vorschau (welche Chats verlassen den Workspace) und verlangt die
-    /// Bestätigung.
+    /// Stufe wählen: Wachsen wendet sofort an. Verkleinern ebenfalls, solange
+    /// die Belegung nach dem Kompaktieren in die Zielstufe passt (Löcher aus
+    /// vorherigem ⊖ kosten keine Chats mehr). Nur bei echtem Überhang geht das
+    /// Grid in den Auswahlmodus, in dem der User markiert, wer bleibt.
     func requestCapacityChange(entity: AgentGridWorkspace, to stage: Int) {
         guard stage != entity.capacity else { return }
+        guard gridShrinkSelection == nil else { return }
         if stage > entity.capacity {
             _ = windowStore.setCapacity(ofGridWorkspace: entity.id, to: stage)
             return
@@ -415,36 +429,59 @@ extension AgentChatsView {
             _ = windowStore.setCapacity(ofGridWorkspace: entity.id, to: stage)
             return
         }
-        let titles = evicted.map { id in
-            workspace.sessions.first { $0.id == id }?.title ?? "Chat"
-        }
-        gridShrinkRequest = GridShrinkRequest(
+        gridShrinkSelection = GridShrinkSelection(
             workspaceID: entity.id,
-            capacity: stage,
-            evictedIDs: evicted,
-            evictedTitles: titles
+            targetCapacity: stage,
+            candidates: entity.occupiedSessionIDs
         )
     }
 
-    /// Bestätigte Verkleinerung anwenden — stimmt die Liste nicht mehr
-    /// (zwischenzeitlicher Drop), lehnt der Store ab und die neue Vorschau
-    /// erscheint.
-    func commitGridShrink(_ request: GridShrinkRequest) {
+    /// Auswahl anwenden. Hat sich die Belegung zwischenzeitlich geändert,
+    /// lehnt der Store mit der neuen Eviction-Liste ab — dann bleibt der Modus
+    /// offen und zeigt den frischen Stand, statt etwas Ungewolltes zu
+    /// entfernen.
+    func commitGridShrink(_ selection: GridShrinkSelection) {
         let result = windowStore.setCapacity(
-            ofGridWorkspace: request.workspaceID,
-            to: request.capacity,
-            expectedEvictedSessionIDs: request.evictedIDs
+            ofGridWorkspace: selection.workspaceID,
+            to: selection.targetCapacity,
+            keeping: selection.orderedRetained,
+            expectedEvictedSessionIDs: selection.orderedEvicted
         )
-        if case .confirmationRequired(let current) = result {
-            let titles = current.map { id in
-                workspace.sessions.first { $0.id == id }?.title ?? "Chat"
-            }
-            gridShrinkRequest = GridShrinkRequest(
-                workspaceID: request.workspaceID,
-                capacity: request.capacity,
-                evictedIDs: current,
-                evictedTitles: titles
+        switch result {
+        case .applied:
+            gridShrinkSelection = nil
+        case .confirmationRequired, .rejected:
+            // Beides heißt hier dasselbe: die Belegung hat sich unter der
+            // Auswahl verändert (`.rejected`, wenn ein markierter Chat den
+            // Workspace inzwischen verlassen hat — die einzige aus dieser UI
+            // erreichbare Ablehnung). Nichts wurde mutiert, also angleichen
+            // und im Modus bleiben statt den User mit einem Alert
+            // hinauszuwerfen; die Änderung ist an den Panes sichtbar.
+            reconcileGridShrinkSelection()
+        }
+    }
+
+    /// Gleicht eine laufende Auswahl an die aktuelle Belegung an (Slot-/
+    /// Kapazitätsänderung von außen, Archivierung, `prune`). Passt danach
+    /// alles in die Zielstufe, wird direkt angewendet — der
+    /// Kompaktierungspfad braucht keine Bestätigung.
+    func reconcileGridShrinkSelection() {
+        guard let selection = gridShrinkSelection else { return }
+        guard let entity = windowStore.gridWorkspace(id: selection.workspaceID),
+              entity.capacity > selection.targetCapacity else {
+            gridShrinkSelection = nil
+            return
+        }
+        switch selection.reconcile(withOccupied: entity.occupiedSessionIDs) {
+        case .continues:
+            break
+        case .noLongerNeeded:
+            gridShrinkSelection = nil
+            _ = windowStore.setCapacity(
+                ofGridWorkspace: selection.workspaceID, to: selection.targetCapacity
             )
+        case .obsolete:
+            gridShrinkSelection = nil
         }
     }
 
@@ -484,6 +521,9 @@ extension AgentChatsView {
     /// „+N"-Vorschau mehr, als der Drop einlöst.
     @discardableResult
     func handleGridGroupDrop(_ payload: DraggableSession, workspaceID: UUID) -> Bool {
+        // Während der Auswahl bleibt die Belegung eingefroren — ein Drop
+        // würde die gerade getroffene Entscheidung unter der Hand verschieben.
+        guard gridShrinkSelection == nil else { return false }
         guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
         let members = payload.groupMemberIDs.flatMap { $0.isEmpty ? nil : $0 }
         let candidates = (members ?? [payload.sessionID])
@@ -515,6 +555,7 @@ extension AgentChatsView {
     /// puren `GridDropZoneResolver`, ausgeführt als EINE Store-Mutation
     /// gegen den FRISCH gelesenen Workspace (nie den Body-Snapshot).
     func handleGridSlotDrop(_ payload: DraggableSession, targetSlot: Int, workspaceID: UUID) -> Bool {
+        guard gridShrinkSelection == nil else { return false }
         guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
         switch GridDropZoneResolver.action(
             sessionID: payload.sessionID,
@@ -619,6 +660,18 @@ extension AgentChatsView {
             } else {
                 gridEmptySlot(index)
             }
+        }
+        // UNBEDINGT anhängen (die Fallunterscheidung steckt im Overlay-Body):
+        // ein `if` an dieser Stelle änderte die View-Identität des Slots und
+        // remountete das Terminal.
+        .overlay {
+            GridSlotSelectionOverlay(
+                selection: gridShrinkSelection,
+                workspaceID: entity.id,
+                sessionID: occupied,
+                sessionTitle: occupied.flatMap { sessionsByID[$0]?.title },
+                onToggle: { if let occupied { gridShrinkSelection?.toggle(occupied) } }
+            )
         }
     }
 
@@ -873,6 +926,10 @@ extension AgentChatsView {
     /// nicht-fokussierte Pane verschiebt die Selektion dorthin. Beobachtend —
     /// das Event läuft unverändert weiter ans Terminal.
     func handleGridPaneMouseDown(_ event: NSEvent) {
+        // Im Auswahlmodus gehört der Klick der Markierung: der Monitor sieht
+        // Events VOR der View-Zustellung und würde sonst nebenbei den
+        // Pane-Fokus verschieben.
+        guard gridShrinkSelection == nil else { return }
         guard let hostWindow, event.window === hostWindow,
               isGridActive,
               let hovered = hoveredGridPaneID,
