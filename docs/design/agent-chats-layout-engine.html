@@ -1,0 +1,2423 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperM8 — Layout-Engine (Auto-Tiling + Snapshot)</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #202126;
+    --muted: #72747d;
+    --faint: #9b9da5;
+    --line: #dedfe4;
+    --line-soft: #e9e9ed;
+    --canvas: #e8e8eb;
+    --sidebar: #f3f3f5;
+    --paper: #fbfbfc;
+    --white: #fefeff;
+    --indigo: #4f46e5;
+    --indigo-soft: #eeedff;
+    --green: #2da66d;
+    --orange: #d98324;
+    --violet: #8b5cf6;
+    --red: #d74d56;
+    --blue: #4b76d1;
+    --bar: #ececef;            /* Titelleiste + Tab-Zone */
+    --bar-line: #d5d6db;       /* Kante unter der Titelleiste */
+    --head: #f9f9fa;           /* Chat-Header = Fläche des aktiven Tabs */
+    --tab-edge: #d7d8dd;       /* Hairlines am aktiven Tab */
+    --sidebar-width: 268px;
+    --radius: 9px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--canvas); color: var(--ink); }
+  body { min-height: 100vh; display: grid; justify-items: center; align-content: center; gap: 10px; padding: 14px 20px; overflow: hidden; }
+
+  /* Meta-Steuerung des Mockups — lebt bewusst AUSSERHALB des 1:1-Nachbaus
+     auf der Leinwand, damit die App-Titelleiste unverfälscht bleibt. */
+  .design-bar {
+    display:flex; align-items:center; gap:9px; flex-wrap:wrap; justify-content:center; max-width:calc(100vw - 40px);
+    padding:4px 5px 4px 12px;
+    border:1px solid #d2d3d9;
+    border-radius:9px;
+    background:rgb(255 255 255 / 70%);
+    font-size:10px; color:var(--muted);
+    user-select:none;
+  }
+  .design-bar .bar-label { font-weight:650; color:#595b65; letter-spacing:.02em; }
+  .design-bar .bar-set { display:flex; padding:2px; gap:1px; border-radius:6px; background:#e2e2e7; }
+  .design-bar .bar-set button { height:20px; padding:0 9px; border-radius:4px; background:transparent; color:#72747e; font-size:10px; cursor:pointer; }
+  .design-bar .bar-set button.on { background:#fff; color:#2c2e35; font-weight:650; box-shadow:0 1px 2px rgb(37 38 44 / 12%); }
+  .design-bar .bar-toggle { height:24px; padding:0 10px; border-radius:6px; background:transparent; color:#72747e; font-size:10px; cursor:pointer; }
+  .design-bar .bar-toggle:hover { background:#e7e7eb; }
+  .design-bar .bar-toggle.active { background:#2b2c32; color:#e9e9ee; }
+  .design-bar .bar-range { width:96px; accent-color:var(--indigo); }
+  .design-bar .bar-value { min-width:26px; font-variant-numeric:tabular-nums; color:#595b65; }
+  body.dark .design-bar .bar-value { color:#a3a5af; }
+  body.dark .design-bar { border-color:#33343b; background:rgb(30 31 36 / 82%); }
+  body.dark .design-bar .bar-label { color:#a3a5af; }
+  body.dark .design-bar .bar-set { background:#2a2b31; }
+  body.dark .design-bar .bar-set button { color:#8e909a; }
+  body.dark .design-bar .bar-set button.on { background:#3c3d46; color:#e8e8ec; box-shadow:none; }
+  body.dark .design-bar .bar-toggle { color:#8e909a; }
+  body.dark .design-bar .bar-toggle:hover { background:#2c2d34; }
+  body.dark .design-bar .bar-toggle.active { background:#e8e8ec; color:#1d1e23; }
+  button, input { font: inherit; color: inherit; }
+  button { border: 0; }
+
+  /* Fenstergrößen des Mockups. Der Kompakt-Fall ist bewusst schmaler als
+     jede sinnvolle Pane-Mindestbreite — genau dort muss die Engine stapeln
+     statt zu schrumpfen, und die Sidebar weicht. */
+  .app-window {
+    width: min(1510px, calc(100vw - 40px));
+    height: min(944px, calc(100vh - 74px));
+    min-width: 900px;
+    min-height: 620px;
+    display: grid;
+    grid-template-rows: 36px minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid #c9cad0;
+    border-radius: 12px;
+    background: var(--paper);
+    box-shadow: 0 22px 65px rgb(37 38 44 / 15%), 0 2px 8px rgb(37 38 44 / 8%);
+  }
+
+  /* Wie in Chrome trennt KEINE Linie die Tab-Leiste vom Header — der
+     Farbwechsel und die Silhouette des aktiven Tabs übernehmen das. Nur
+     über der Sidebar bleibt eine dezente Kante. */
+  .titlebar {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    background: var(--bar);
+    user-select: none;
+  }
+
+  .window-zone { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--bar-line); }
+  .traffic { display: flex; gap: 8px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #ff5f57; border: 1px solid #e14840; }
+  .traffic i:nth-child(2) { background: #febc2e; border: 1px solid #dea51e; }
+  .traffic i:nth-child(3) { background: #28c840; border: 1px solid #20aa35; }
+  .system-meter { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .system-meter .tiny-bars { letter-spacing: -1px; color: var(--green); }
+
+  .tabs-zone { display:flex; align-items:stretch; min-width:0; position:relative; background:var(--bar); }
+  .tab-scroll { display:flex; align-items:flex-end; gap:6px; min-width:0; overflow:hidden; padding:0 6px; flex:1; }
+
+  /* EINE Formsprache: Gruppen-Label und Tabs teilen Höhe, oberen Radius und
+     Grundlinie. Zugehörigkeit entsteht durch Containment (getönte Platte)
+     plus Luft ZWISCHEN den Clustern (6px) bei 0px innerhalb — bewusst OHNE
+     durchgezogene Linie am Boden, damit sich der aktive Tab wie in Chrome
+     frei nach unten öffnen kann. */
+  .tab-cluster {
+    --group: var(--blue);
+    display:flex; align-items:stretch; gap:0; min-width:0;
+    height:30px;
+    position:relative;
+    border-radius:8px 8px 0 0;
+    background:color-mix(in srgb, var(--group) 9%, var(--bar));
+  }
+  .tab-cluster > :first-child { border-top-left-radius:8px; }
+  .tab-cluster > :last-child { border-top-right-radius:8px; }
+
+  .group-pill {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:0 8px;
+    background:transparent;
+    color:color-mix(in srgb, var(--group) 72%, #202126);
+    font-size:9px; font-weight:650; cursor:pointer; white-space:nowrap;
+    box-shadow:inset -1px 0 color-mix(in srgb, var(--group) 22%, transparent);
+  }
+  .group-pill:hover { background:color-mix(in srgb, var(--group) 12%, transparent); }
+  .group-pill .count { opacity:.58; font-variant-numeric:tabular-nums; }
+  .group-pill .fold { font-size:7px; transition:transform 160ms cubic-bezier(.22,1,.36,1); }
+  .group-pill.closed { box-shadow:none; }
+  .group-pill.closed .fold { transform:rotate(-90deg); }
+
+  .tab {
+    --group: transparent;
+    height:30px;
+    min-width:92px;
+    max-width:156px;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:0 8px;
+    border-radius:7px 7px 0 0;
+    background:transparent;
+    color:#5c5e67;
+    font-size:10px;
+    cursor:default;
+    position:relative;
+    white-space:nowrap;
+  }
+  .tab-cluster .tab { border-radius:0; }
+  .tab-cluster .tab + .tab { box-shadow:inset 1px 0 color-mix(in srgb, var(--group) 18%, transparent); }
+  .tab:hover { background:rgb(255 255 255 / 46%); color:var(--ink); }
+
+  /* Aktiv: exakt der Chrome-Effekt — headerfarbene Fläche, oben abgerundet,
+     unten VOLLSTÄNDIG offen. Die beiden Pseudos bilden den Chrome-Fuß:
+     konkav ausgestellte untere Ecken, mit denen der Tab auf dem Header
+     „steht". Keine Linie, keine Brücke — Tab und Header sind eine Fläche. */
+  .tab.active {
+    color:var(--ink); z-index:2;
+    border-radius:7px 7px 0 0 !important;
+    background:
+      linear-gradient(var(--group), var(--group)) top/100% 2px no-repeat,
+      var(--head);
+  }
+  .tab.active::before,
+  .tab.active::after {
+    content:"";
+    position:absolute;
+    bottom:0;
+    width:7px;
+    height:7px;
+  }
+  .tab.active::before {
+    left:-7px;
+    background:radial-gradient(circle 7px at 0 0, transparent 6.4px, var(--head) 7px);
+  }
+  .tab.active::after {
+    right:-7px;
+    background:radial-gradient(circle 7px at 100% 0, transparent 6.4px, var(--head) 7px);
+  }
+
+  /* Variante „Chrome": kein Platten-Tint — das gefüllte Farb-Label trägt die
+     Gruppe (wie echte Chrome-Tab-Gruppen); die 2px-Linie läuft nur unter den
+     INAKTIVEN Mitgliedern und wird vom Fuß des aktiven Tabs unterbrochen. */
+  #app[data-tab-style="chrome"] .tab-cluster { background:transparent; }
+  #app[data-tab-style="chrome"] .tab-cluster::before {
+    content:""; position:absolute; left:2px; right:0; bottom:0; height:2px;
+    background:var(--group); border-radius:2px 2px 0 0;
+  }
+  #app[data-tab-style="chrome"] .group-pill {
+    align-self:center;
+    height:19px;
+    margin:0 5px 0 2px;
+    padding:0 7px;
+    border-radius:5px;
+    background:var(--group);
+    /* Weiß ODER Schwarz — je nachdem, was auf der Gruppenfarbe den höheren
+       Kontrast hat (in JS über die WCAG-Relativluminanz bestimmt). Fest
+       weißer Text fällt auf kräftigen Mitteltönen wie Grün oder Orange auf
+       unter 2:1 zurück. */
+    color:var(--group-ink, #fdfdfe);
+    box-shadow:none;
+  }
+  #app[data-tab-style="chrome"] .group-pill:hover { background:color-mix(in srgb, var(--group) 86%, #16171b); }
+  #app[data-tab-style="chrome"] .group-pill .count { opacity:.78; }
+  #app[data-tab-style="chrome"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 rgb(120 122 132 / 16%); }
+  /* Der aktive Gruppen-Tab wird wie in Chrome von der Gruppenlinie UMSCHLOSSEN:
+     die Bodenlinie klettert außen am Fuß hoch, läuft als 2px-Kontur über
+     Seiten und Oberkante und mündet auf der anderen Seite wieder in die
+     Linie — ein durchgehender Farbzug, unten bleibt der Tab offen. */
+  #app[data-tab-style="chrome"] .tab-cluster .tab.active {
+    border:2px solid var(--group);
+    border-bottom:0;
+    background:var(--head);
+  }
+  #app[data-tab-style="chrome"] .tab-cluster .tab.active::before {
+    background:radial-gradient(circle 7px at 0 0, transparent 4.6px, var(--group) 5px 6.9px, var(--head) 7px);
+  }
+  #app[data-tab-style="chrome"] .tab-cluster .tab.active::after {
+    background:radial-gradient(circle 7px at 100% 0, transparent 4.6px, var(--group) 5px 6.9px, var(--head) 7px);
+  }
+  /* Eingeklappte Gruppe: Chrome zeigt sie als umrandeten Chip. */
+  #app[data-tab-style="chrome"] .group-pill.closed {
+    background:transparent;
+    border:1.5px solid var(--group);
+    color:color-mix(in srgb, var(--group) 84%, var(--ink));
+  }
+  #app[data-tab-style="chrome"] .group-pill.closed:hover { background:color-mix(in srgb, var(--group) 12%, transparent); }
+
+  /* Variante „Kontur": 1px-Bügel in Gruppenfarbe über Label und Tabs —
+     oben und an den Seiten; die Unterkante bleibt komplett offen. */
+  #app[data-tab-style="outline"] .tab-cluster { background:transparent; }
+  #app[data-tab-style="outline"] .tab-cluster::before {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    border:1px solid color-mix(in srgb, var(--group) 46%, transparent);
+    border-bottom:0;
+    border-radius:8px 8px 0 0;
+  }
+  #app[data-tab-style="outline"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 color-mix(in srgb, var(--group) 14%, transparent); }
+
+  /* Variante „Label": maximale Ruhe — nur das getönte Label markiert die
+     Gruppe, Zugehörigkeit entsteht allein über Nähe und Luft. */
+  #app[data-tab-style="label"] .tab-cluster { background:transparent; }
+  #app[data-tab-style="label"] .group-pill {
+    align-self:center;
+    height:20px;
+    margin:0 4px 0 2px;
+    padding:0 8px;
+    border-radius:10px;
+    background:color-mix(in srgb, var(--group) 14%, transparent);
+    box-shadow:none;
+  }
+  #app[data-tab-style="label"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 rgb(120 122 132 / 14%); }
+
+  .tab .avatar, .row-avatar, .project-avatar, .pane-avatar {
+    display:grid; place-items:center; flex:none; color:white; font-weight:700; letter-spacing:-.02em;
+  }
+  .tab .avatar { width:16px; height:16px; border-radius:4px; font-size:8px; }
+  .tab .label { overflow:hidden; text-overflow:ellipsis; }
+  .tab .tail { margin-left:auto; display:grid; place-items:center; width:12px; height:12px; flex:none; }
+  .status-dot { width:6px; height:6px; border-radius:50%; background:#a7a8ae; display:inline-block; flex:none; }
+  .status-dot.working { background:var(--orange); animation:pulse 1.8s ease-in-out infinite; }
+  .status-dot.waiting { background:var(--violet); animation:pulse 1.8s ease-in-out infinite; }
+  .status-dot.idle { background:#a7a8ae; }
+  .status-dot.ready { background:var(--green); }
+  @keyframes pulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+
+  /* Einfügelinie: zeigt ausschließlich ERLAUBTE Drop-Positionen (siehe
+     legalBoundaries) — sie schnappt an Cluster-Grenzen, statt eine Gruppe
+     optisch zu spalten und den Tab danach zurückspringen zu lassen. */
+  .drop-line {
+    position:absolute; top:5px; bottom:2px; width:2px; margin-left:-1px;
+    border-radius:1px; background:var(--indigo);
+    opacity:0; pointer-events:none; transition:left 90ms cubic-bezier(.22,1,.36,1), opacity 90ms ease;
+    z-index:5;
+  }
+  .drop-line.show { opacity:1; }
+  .group-pill { cursor:grab; }
+  .app-window.dragging-tabs .group-pill { cursor:grabbing; }
+  .app-window.dragging-tabs .tab { transition:opacity 120ms ease; }
+
+  .tab-tools { display:flex; align-items:center; padding:0 5px 0 3px; gap:2px; border-left:1px solid var(--line); }
+  .icon-button {
+    width:25px; height:25px; border-radius:6px; display:grid; place-items:center;
+    background:transparent; color:#6e7079; cursor:pointer; font-size:13px;
+  }
+  .icon-button:hover, .icon-button.active { background:#dedee3; color:var(--ink); }
+  .icon-button.small { width:22px; height:22px; font-size:11px; }
+
+  /* `grid-template-rows` ist hier PFLICHT, nicht Kosmetik: ohne definiten
+     Zeilen-Track bemisst sich die implizite Zeile am Inhalt, und weil die
+     Engine die Pane-Höhen aus der Bühnenhöhe ableitet, schaukelt sich das
+     gegenseitig auf (Bühne 1031 px in einem 906 px hohen Fenster). */
+  .shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+  .sidebar { background: var(--sidebar); border-right: 1px solid var(--line); min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) 30px; position: relative; }
+  .sidebar.hidden { display: none; }
+  .app-window.sidebar-hidden .titlebar, .app-window.sidebar-hidden .shell { grid-template-columns: 0 minmax(0, 1fr); }
+  .app-window.sidebar-hidden .window-zone { visibility: hidden; padding: 0; border-right: 0; }
+  .sidebar-top { padding: 8px 9px 7px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 6px; }
+  .command-row { display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 5px; }
+  .new-chat {
+    height: 28px; border-radius: 7px; border: 1px solid #d7d8de; background: var(--white); display: flex; align-items: center;
+    padding: 0 8px; gap: 7px; font-size: 11px; font-weight: 600; box-shadow: 0 1px 1px rgb(28 29 34 / 4%); cursor: pointer;
+  }
+  .new-chat:hover { border-color: #c7c8cf; background: #fff; }
+  .new-chat .target { color: var(--muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .new-chat .shortcut { margin-left: auto; color: var(--faint); font-size: 9px; }
+  .search-wrap { position: relative; }
+  .search-wrap::before { content: "⌕"; position: absolute; left: 8px; top: 5px; color: var(--faint); font-size: 13px; }
+  .search {
+    width: 100%; height: 27px; border-radius: 6px; border: 1px solid transparent; background: #e9e9ed;
+    padding: 0 27px 0 25px; outline: none; font-size: 11px;
+  }
+  .search:focus { background: var(--white); border-color: color-mix(in srgb, var(--indigo) 45%, var(--line)); box-shadow: 0 0 0 2px rgb(79 70 229 / 9%); }
+  .clear-search { display:none; position:absolute; right:5px; top:4px; width:19px; height:19px; border-radius:5px; background:transparent; color:var(--faint); cursor:pointer; }
+  .clear-search.show { display:block; }
+
+  .control-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
+  .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 2px; border-radius: 6px; background: #e5e5e9; min-width: 0; }
+  .segmented button { height: 21px; border-radius: 4px; background: transparent; font-size: 9px; color: #73757e; cursor: pointer; padding: 0 7px; white-space: nowrap; }
+  .segmented button.on { background: var(--white); color: var(--ink); box-shadow: 0 1px 2px rgb(33 34 39 / 12%); font-weight: 600; }
+  .segmented.disabled { opacity: .45; pointer-events: none; }
+  .view-mode { min-width: 77px; }
+  .result-count { height: 14px; display:flex; align-items:center; justify-content:space-between; color:var(--faint); font-size:9px; padding:0 2px; }
+  .result-count button { color:var(--indigo); background:transparent; font-size:9px; cursor:pointer; }
+
+  .sidebar-scroll { overflow: auto; padding: 4px 0 12px; scrollbar-width: thin; scrollbar-color: #c7c8cd transparent; }
+  .section { margin-top: 2px; }
+  .section-head {
+    height: 25px; width: 100%; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px;
+    background: transparent; color: #7d7f88; font-size: 9px; font-weight: 700; letter-spacing: .075em; cursor: pointer;
+  }
+  .section-head:hover { color: #4f5159; }
+  .section-head .chev { font-size: 8px; width: 10px; transition: transform 160ms cubic-bezier(.22,1,.36,1); }
+  .section.collapsed .section-head .chev { transform: rotate(-90deg); }
+  .section.collapsed .section-body { display: none; }
+  .section-head .section-count { margin-left: auto; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .section-head .section-action { width:19px; height:19px; border-radius:5px; display:grid; place-items:center; background:transparent; color:var(--muted); cursor:pointer; margin-left:2px; }
+  .section-head .section-action:hover { background:#e3e3e7; color:var(--ink); }
+
+  .session-row, .project-head, .workspace-head, .sub-row {
+    width: calc(100% - 12px); margin: 0 6px; min-width: 0; position: relative; display:flex; align-items:center; cursor:default; border-radius:6px;
+  }
+  .session-row { height: 25px; gap: 7px; padding: 0 7px 0 9px; font-size: 11px; color:#50525a; }
+  .session-row:hover, .sub-row:hover { background:#e7e7eb; color:var(--ink); }
+  .session-row.open .row-avatar { opacity: 1; }
+  .session-row:not(.open) .row-avatar { opacity: .58; }
+  .session-row.selected { background: var(--indigo-soft); color:#242235; }
+  .session-row.selected::before { content:""; position:absolute; left:1px; width:2.5px; height:15px; border-radius:2px; background:var(--indigo); }
+  .session-row.multi { box-shadow: inset 0 0 0 1.5px rgb(79 70 229 / 48%); }
+  .row-avatar, .project-avatar { width:17px; height:17px; border-radius:4px; font-size:9px; }
+  .session-row .row-title, .sub-row .row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row-tail { margin-left:auto; display:flex; align-items:center; gap:6px; color:var(--faint); font-size:9px; font-variant-numeric: tabular-nums; flex:none; }
+  .kind { height:14px; min-width:19px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; font-size:7px; font-weight:750; letter-spacing:.04em; }
+  .kind.bg { color:#5148ba; background:#e7e5ff; }
+  .kind.sub { color:#167c78; background:#dff4f1; }
+  .kind.view { color:#9a5e13; background:#f8ead4; }
+  .kind.term { color:#4d666f; background:#e2eef1; }
+  .slot { color:var(--indigo); font-size:9px; font-weight:650; }
+
+  .project-head { height:27px; padding:0 7px 0 9px; gap:7px; font-size:11px; font-weight:600; }
+  .project-head:hover, .workspace-head:hover { background:#e9e9ed; }
+  .branch { color:var(--muted); font: 9px ui-monospace, "SFMono-Regular", Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .project-head .count { margin-left:auto; font-size:9px; font-weight:500; color:var(--faint); }
+  .project-children .session-row { padding-left:29px; }
+
+  .workspace { margin: 1px 0 3px; }
+  .workspace-head { height:28px; padding:0 7px 0 9px; gap:7px; font-size:11px; font-weight:600; }
+  .workspace-head .fold { width:10px; font-size:8px; color:var(--faint); cursor:pointer; }
+  .workspace-head .workspace-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .workspace-head .occupancy { margin-left:auto; color:var(--faint); font-size:9px; font-weight:500; }
+  .workspace-head .grid-open { width:19px; height:19px; display:grid; place-items:center; border-radius:5px; color:var(--muted); cursor:pointer; }
+  .workspace-head .grid-open:hover { color:var(--indigo); background:#e2e1fb; }
+  .workspace.closed .workspace-members { display:none; }
+  .workspace.closed .fold { transform:rotate(-90deg); }
+  .workspace-members { position:relative; }
+  .workspace-members::before { content:""; position:absolute; left:26px; top:1px; bottom:3px; width:1px; background:#dbdce1; }
+  .workspace-members .session-row { padding-left:33px; }
+  .slot-grid { display:none; grid-template-columns:repeat(4,5px); gap:2px; margin-left:3px; }
+  .workspace.closed .slot-grid { display:grid; }
+  .slot-grid i { width:5px; height:5px; border-radius:1px; background:#c7c8cd; }
+  .slot-grid i.working { background:var(--orange); }
+  .slot-grid i.waiting { background:var(--violet); }
+  .slot-grid i.ready { background:var(--green); }
+
+  .subagent-chip { display:inline-flex; align-items:center; gap:3px; height:15px; padding:0 4px; border-radius:4px; background:#e5e5e9; color:#6d6f78; cursor:pointer; }
+  .agent-road { display:flex; align-items:center; gap:1px; }
+  .agent-road i { width:3px; height:8px; border-radius:1px; background:#9a9ca4; }
+  .agent-road.running i { background:#d6974c; animation: road 1.2s linear infinite; }
+  .agent-road.running i:nth-child(2) { animation-delay:.15s; }
+  .agent-road.running i:nth-child(3) { animation-delay:.3s; }
+  @keyframes road { 0%,65%,100%{opacity:.3} 35%{opacity:1} }
+  .sub-row { height:23px; padding:0 7px 0 44px; gap:6px; font-size:10px; color:#62646c; }
+  .sub-row .branchline { position:absolute; left:27px; width:10px; height:12px; border-left:1px solid #d6d7dc; border-bottom:1px solid #d6d7dc; border-radius:0 0 0 5px; top:0; }
+  .finished-row { height:21px; margin-left:44px; display:flex; align-items:center; gap:5px; color:var(--faint); font-size:9px; cursor:pointer; }
+  .finished-row:hover { color:var(--ink); }
+
+  .status-group-head { height:24px; display:flex; align-items:center; gap:6px; padding:0 12px 0 18px; color:#7d7f88; font-size:9px; font-weight:700; letter-spacing:.06em; }
+  .status-group-head .status-count { margin-left:auto; font-weight:500; letter-spacing:0; }
+
+  .sidebar-footer { display:flex; align-items:center; gap:3px; padding:0 8px; border-top:1px solid var(--line-soft); color:var(--muted); }
+  .sidebar-footer .usage { margin-left:auto; font-size:9px; color:var(--faint); white-space:nowrap; }
+  .resize-handle { position:absolute; right:-3px; top:0; bottom:0; width:6px; cursor:col-resize; z-index:10; }
+
+  .content { min-width:0; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:var(--paper); position:relative; }
+  .chat-head, .workspace-toolbar {
+    min-width:0; display:flex; align-items:center; border-bottom:1px solid var(--line-soft); background:var(--head);
+  }
+  .chat-head { height:29px; gap:6px; padding:0 7px 0 10px; }
+  .workspace-toolbar { height:31px; gap:8px; padding:0 9px 0 12px; }
+  .chat-head .head-title { max-width:min(24vw,280px); font-size:10px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .head-meta { min-width:0; flex:1; display:flex; align-items:center; gap:5px; color:var(--muted); font-size:8.5px; overflow:hidden; white-space:nowrap; }
+  .head-meta .path { overflow:hidden; text-overflow:ellipsis; font:8.5px ui-monospace,"SFMono-Regular",Menlo,monospace; }
+  .head-actions { margin-left:auto; display:flex; align-items:center; gap:2px; flex:none; }
+  .provider-action { height:21px; display:inline-flex; align-items:center; gap:3px; padding:0 6px; border-radius:5px; background:transparent; color:#555761; font-size:8.5px; cursor:pointer; }
+  .provider-action:hover { background:#e7e7eb; color:#25262b; }
+  .provider-action .provider-mark { color:var(--indigo); font-size:8px; }
+  .provider-action.codex .provider-mark { color:#69717b; }
+  .back-workspace { display:none; height:21px; padding:0 6px; border-radius:5px; color:var(--indigo); background:var(--indigo-soft); cursor:pointer; font-size:8.5px; }
+  .back-workspace.show { display:inline-flex; align-items:center; }
+
+  .terminal-shell { min-height:0; display:grid; grid-template-rows:minmax(0,1fr) auto auto; background:var(--white); }
+  .terminal { min-height:0; overflow:auto; padding:18px 22px 12px; font:11px/1.55 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; color:#3f4148; scrollbar-width:thin; scrollbar-color:#c9cad0 transparent; }
+  .term-block { max-width:1060px; margin-bottom:13px; }
+  .term-user { color:#26272c; font-weight:600; }
+  .term-muted { color:#8d8f97; }
+  .term-tool { color:#486aa8; }
+  .term-ok { color:#228057; }
+  .term-warn { color:#a96b21; }
+  .term-indent { padding-left:18px; border-left:1px solid #e4e5e9; margin-left:3px; }
+  .prompt-wrap { padding:0 12px 7px; background:var(--white); }
+  .prompt-box { min-height:40px; border:1px solid #d9dae0; border-radius:7px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:start; gap:7px; padding:8px 9px; font:11px/1.4 ui-monospace,"SFMono-Regular",Menlo,monospace; box-shadow:0 1px 2px rgb(33 34 39 / 4%); }
+  .prompt-box:focus-within { border-color:#bdb9f6; box-shadow:0 0 0 2px rgb(79 70 229 / 7%); }
+  .prompt-input { border:0; outline:0; resize:none; min-height:18px; background:transparent; padding:0; width:100%; font:inherit; }
+  .send-hint { color:var(--faint); font:9px -apple-system,BlinkMacSystemFont,sans-serif; padding-top:2px; }
+  .statusline { min-height:22px; display:flex; align-items:center; gap:8px; padding:0 10px; border-top:1px solid var(--line-soft); background:#f2f2f4; color:#6f7179; font:9px ui-monospace,"SFMono-Regular",Menlo,monospace; white-space:nowrap; overflow:hidden; }
+  .statusline .grow { flex:1; overflow:hidden; text-overflow:ellipsis; }
+  .meter { letter-spacing:-1px; color:#8179df; }
+
+  .workspace-toolbar .workspace-title { font-size:11px; font-weight:650; }
+  .workspace-toolbar .workspace-stats { color:var(--muted); font-size:9px; }
+  .layout-picker { margin-left:auto; }
+  .resize-notice { display:none; position:absolute; z-index:8; top:38px; left:50%; transform:translateX(-50%); align-items:center; gap:8px; padding:6px 8px; border:1px solid #dbdce2; border-radius:7px; background:#fafafc; box-shadow:0 7px 22px rgb(31 32 38 / 12%); font-size:9px; }
+  .resize-notice.show { display:flex; }
+  .resize-notice button { height:20px; padding:0 7px; border-radius:4px; background:#e6e6ea; font-size:9px; cursor:pointer; }
+  .resize-notice .danger { background:#f4e3e5; color:#a33d47; }
+
+  /* ——— Layout-Engine ———————————————————————————————————————————————
+     Kernidee: die BÜHNE ist eine Positionierungs-Ebene, keine Grid-
+     Definition. Jede Pane ist ein absolut positionierter Knoten, dessen
+     Rechteck die Engine berechnet (Auto-Tiling oder Snapshot-Baum).
+     Panes werden EINMAL erzeugt und danach nur noch bewegt — genau wie in
+     SwiftUI die PTY-Terminals stabil per PaneID gekeyt bleiben müssen.
+     Beweis im Prototyp: die Scroll-Position und der Cursor in einer Pane
+     überleben jeden Layout-Wechsel. */
+  /* Die Bühne wird ABSOLUT aufgehängt: ihre Größe darf niemals von ihrem
+     Inhalt abhängen, sonst entsteht mit den berechneten Pane-Höhen eine
+     Rückkopplung (Panes machen die Bühne höher, die Bühne die Panes …). */
+  /* BÜNDIG wie in der App: kein Rahmen, kein Padding, keine Border um die
+     Bühne — die Panes reichen bis an Sidebar- und Fensterkante, getrennt
+     nur durch die 1-px-Fugen (Bühnenhintergrund = Fugenfarbe). */
+  .grid-shell { min-height:0; background:#d7d8dd; position:relative; overflow:hidden; }
+  .stage { position:absolute; inset:0; background:#d7d8dd; overflow:hidden; }
+  .pane {
+    position:absolute; min-width:0; min-height:0; overflow:hidden;
+    background:var(--white); display:grid; grid-template-rows:auto 22px minmax(0,1fr) 18px;
+    outline:0 solid var(--indigo); outline-offset:-2px;
+    transition:left var(--motion,220ms) var(--motion-ease,cubic-bezier(.22,1,.36,1)),
+               top var(--motion,220ms) var(--motion-ease,cubic-bezier(.22,1,.36,1)),
+               width var(--motion,220ms) var(--motion-ease,cubic-bezier(.22,1,.36,1)),
+               height var(--motion,220ms) var(--motion-ease,cubic-bezier(.22,1,.36,1)),
+               opacity 140ms ease;
+  }
+  body[data-motion="lively"] { --motion:140ms; --motion-ease:cubic-bezier(.34,1.24,.5,1); }
+  body[data-motion="off"] { --motion:1ms; }
+  body[data-motion="off"] .pane { animation:none; }
+  .pane.focused { outline-width:2px; z-index:3; }
+  .pane.zoomed { z-index:6; }
+  /* Einblenden per CSS-Animation statt Klassen-Toggle im nächsten Frame:
+     hängt an keinem JS-Timing und kann daher nicht „auf opacity 0 stehen
+     bleiben", wenn Frames gedrosselt werden. */
+  .pane { animation:paneIn 150ms ease both; }
+  @keyframes paneIn { from { opacity:0 } to { opacity:1 } }
+  .pane.dragging { opacity:.42; }
+  .stage.resizing .pane { transition:none; }
+
+  /* Stapel-Reiter IN der Pane — sichtbar nur, wenn mehr als eine Session
+     im Stapel liegt (sonst kostet die Zeile nur Höhe). */
+  /* Die Leiste bleibt IMMER ein Grid-Item (nur mit Höhe 0), denn
+     `display:none` würde sie aus dem Grid nehmen und alle folgenden
+     Pane-Zeilen um eine Spur nach oben schieben. */
+  .stack-bar { display:flex; align-items:stretch; gap:1px; height:0; padding:0; background:#f1f1f4; border-bottom:0 solid var(--line-soft); overflow:hidden; }
+  .pane.stacked .stack-bar { height:23px; padding:3px 4px 0; border-bottom-width:1px; }
+  .stack-tab {
+    min-width:0; max-width:112px; height:17px; display:inline-flex; align-items:center; gap:4px;
+    padding:0 6px; border-radius:4px 4px 0 0; background:transparent; color:#6b6d76;
+    font-size:8px; cursor:pointer; white-space:nowrap;
+  }
+  .stack-tab:hover { background:rgb(255 255 255 / 60%); color:var(--ink); }
+  .stack-tab.on { background:var(--white); color:var(--ink); font-weight:650; box-shadow:0 -1px 0 var(--indigo) inset; }
+  .stack-tab .label { overflow:hidden; text-overflow:ellipsis; }
+  /* Gast = Vorschau: erkennbar flüchtig, nicht wie ein Mitglied. */
+  .stack-tab.guest .label { font-style:italic; }
+  .stack-tab.guest::after { content:"Vorschau"; margin-left:3px; padding:0 3px; border-radius:3px; background:color-mix(in srgb, var(--indigo) 16%, transparent); color:var(--indigo); font-size:6.5px; font-weight:700; letter-spacing:.03em; }
+  .stack-count { margin-left:auto; flex:none; padding:0 4px; color:var(--faint); font-size:7.5px; align-self:center; }
+
+  .pane-head { min-width:0; display:flex; align-items:center; gap:6px; padding:0 6px 0 8px; border-bottom:1px solid var(--line-soft); background:#f8f8fa; font-size:9px; cursor:grab; }
+  .pane.dragging .pane-head { cursor:grabbing; }
+  .pane-avatar { width:15px; height:15px; border-radius:4px; font-size:8px; }
+  .pane-head .pane-title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pane-head .account { color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pane-actions { margin-left:auto; display:flex; align-items:center; flex:none; }
+  .pane-terminal { min-height:0; overflow:auto; padding:8px 10px; font:8px/1.48 ui-monospace,"SFMono-Regular",Menlo,monospace; color:#4b4d54; white-space:pre-wrap; scrollbar-width:thin; scrollbar-color:#c9cad0 transparent; }
+  .pane-status { display:flex; align-items:center; gap:5px; padding:0 7px; border-top:1px solid var(--line-soft); color:var(--faint); background:#f4f4f6; font:7.5px ui-monospace,"SFMono-Regular",Menlo,monospace; overflow:hidden; white-space:nowrap; }
+  .pane-badge { flex:none; height:12px; padding:0 4px; border-radius:3px; background:#e9e9ef; color:#71737c; font-size:7px; font-weight:700; letter-spacing:.04em; display:inline-flex; align-items:center; }
+  .pane-badge.master { background:#e7e5ff; color:#5148ba; }
+  .pane-badge.multi { background:#e2eef1; color:#3d6b78; cursor:pointer; }
+  .pane-badge.multi:hover { background:#d3e6ec; color:#26505c; }
+  body.dark .pane-badge.multi { background:#243740; color:#8fbecc; }
+
+  /* Divider: liegen ÜBER den Panes, exakt auf der Fugenmitte. Ziehen
+     erzeugt (bzw. verfeinert) den Snapshot dieses Workspace. */
+  .divider { position:absolute; z-index:5; background:transparent; pointer-events:auto; touch-action:none; }
+  .divider::after { content:""; position:absolute; inset:0; background:transparent; transition:background 120ms ease; }
+  .divider.v { cursor:col-resize; }
+  .divider.h { cursor:row-resize; }
+  .divider:hover::after, .divider.active::after { background:color-mix(in srgb, var(--indigo) 62%, transparent); }
+
+  /* Drop-Zonen: erscheinen nur während eines Drags. Mitte stapelt,
+     Kante splittet bzw. sortiert ein (im Auto-Modus = Reihenfolge). */
+  /* Die Overlay-Ebenen selbst dürfen keine Maus fangen — nur ihre Kinder
+     (Divider bzw. Drop-Zonen). Sonst läge eine unsichtbare Platte über
+     den Panes und Klicks/Fokus kämen nie an. */
+  .drop-overlay { position:absolute; inset:0; z-index:8; display:none; pointer-events:none; }
+  .stage.dropping .drop-overlay { display:block; }
+  .drop-zone { position:absolute; border-radius:3px; background:transparent; pointer-events:auto; transition:background 110ms ease; }
+  .drop-zone.hot { background:color-mix(in srgb, var(--indigo) 24%, transparent); box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--indigo) 72%, transparent); }
+  .drop-hint {
+    position:absolute; z-index:9; pointer-events:none; padding:3px 7px; border-radius:5px;
+    background:#37383e; color:#f7f7f8; font-size:8.5px; white-space:nowrap; opacity:0;
+    transition:opacity 120ms ease;
+  }
+  .drop-hint.show { opacity:1; }
+
+  /* Freie Fläche der Bühne bleibt ein Drop-Ziel: „einfach reinwerfen". */
+  .stage-drop { position:absolute; inset:0; z-index:7; display:none; place-items:center; }
+  .stage.empty .stage-drop { display:grid; }
+  .empty-stage { text-align:center; color:var(--faint); font-size:10px; line-height:1.6; }
+  .empty-stage strong { display:block; color:#696b73; font-weight:600; font-size:11px; margin-bottom:2px; }
+
+  /* Layout-Zustands-Chip in der Toolbar (Automatik vs. angepasst). */
+  .layout-state { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 7px; border-radius:6px; background:#e7e7ec; color:#65676f; font-size:8.5px; cursor:pointer; }
+  .layout-state:hover { background:#dedee4; color:var(--ink); }
+  .layout-state.snapshot { background:var(--indigo-soft); color:#4a43b8; }
+  .layout-state .dot { width:5px; height:5px; border-radius:50%; background:currentColor; opacity:.7; }
+  body.dark .stack-bar { background:#22232a; }
+  body.dark .stack-tab { color:#9799a3; }
+  body.dark .stack-tab:hover { background:rgb(255 255 255 / 7%); }
+  body.dark .stack-tab.on { background:var(--white); color:var(--ink); }
+  body.dark .pane-head { background:#24252b; }
+  body.dark .pane-status { background:#212228; }
+  /* Der Pane-Terminaltext braucht seinen eigenen Dark-Wert — der Light-Ton
+     #4b4d54 liegt auf #28292f unter jeder brauchbaren Kontrastschwelle. */
+  body.dark .pane-terminal { color:#b8bac3; scrollbar-color:#43444c transparent; }
+  body.dark .empty-stage strong { color:#b3b5be; }
+  body.dark .stack-count { color:#7c7e88; }
+  body.dark .grid-shell { background:#17181c; }
+  body.dark .stage { background:#0f1013; border-color:#0f1013; }
+  body.dark .pane-badge { background:#32333c; color:#9a9ca6; }
+  body.dark .pane-badge.master { background:#2f2d4d; color:#a5a0f5; }
+  body.dark .layout-state { background:#2a2b32; color:#9a9ca6; }
+  body.dark .layout-state.snapshot { background:#2e2d45; color:#a9a4f7; }
+
+  .popover { position:absolute; z-index:30; min-width:210px; padding:5px; border:1px solid #d5d6dc; border-radius:8px; background:#fafafc; box-shadow:0 14px 35px rgb(31 32 38 / 18%); font-size:11px; display:none; }
+  .popover.show { display:block; }
+  .popover button { width:100%; height:27px; padding:0 8px; border-radius:5px; display:flex; align-items:center; gap:8px; background:transparent; cursor:pointer; text-align:left; }
+  .popover button:hover { background:#e8e8ec; }
+  .popover .shortcut { margin-left:auto; color:var(--faint); font-size:9px; }
+  .popover .divider { height:1px; background:var(--line-soft); margin:4px 3px; }
+  .popover .menu-note { display:block; padding:2px 9px 5px; color:var(--faint); font-size:9px; }
+  .kind.ws { color:#3d6b78; background:#e2eef1; }
+  body.dark .kind.ws { color:#8fbecc; background:#243740; }
+  #newMenu { top:34px; right:7px; }
+  #moreMenu { top:29px; right:7px; min-width:245px; }
+  #helpMenu { bottom:34px; left:8px; width:350px; }
+
+  .switcher { position:absolute; z-index:40; inset:0; display:none; place-items:center; background:rgb(238 238 241 / 76%); backdrop-filter:blur(4px); }
+  .switcher.show { display:grid; }
+  .switcher-panel { width:min(720px,80%); padding:8px; border:1px solid #cecfd5; border-radius:10px; background:#f8f8fa; box-shadow:0 22px 60px rgb(31 32 38 / 22%); }
+  .switcher-title { padding:3px 5px 8px; color:var(--muted); font-size:10px; }
+  .switcher-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+  .switch-card { min-width:0; height:68px; border-radius:7px; padding:8px; display:grid; grid-template-columns:auto minmax(0,1fr); gap:7px; background:#eeeef1; cursor:pointer; }
+  .switch-card.active { background:var(--white); box-shadow:inset 0 0 0 1.5px var(--indigo); }
+  .switch-card .project-avatar { margin-top:1px; }
+  .switch-card strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+  .switch-card small { display:block; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; font-size:8px; line-height:1.35; }
+
+  .toast { position:absolute; z-index:50; left:50%; bottom:33px; transform:translate(-50%,8px); opacity:0; pointer-events:none; padding:6px 9px; border-radius:6px; color:#f7f7f8; background:#37383e; font-size:9px; transition:opacity 160ms ease, transform 160ms cubic-bezier(.22,1,.36,1); }
+  .toast.show { opacity:1; transform:translate(-50%,0); }
+
+  /* Dark Mode — die reale App läuft dunkel; getönte Slate-Neutrals statt
+     Schwarz, kein Glow. Die Tab-Geometrie bleibt identisch, nur die
+     Flächenwerte drehen sich: aktiver Tab + Header werden die HELLSTE
+     Fläche der Leiste (Licht fällt auf das Aktive). */
+  body.dark {
+    color-scheme:dark;
+    --ink:#e7e8ee; --muted:#9d9fa9; --faint:#686a75;
+    --line:#37383f; --line-soft:#2f3037;
+    --canvas:#131417; --sidebar:#1e1f24; --paper:#222327; --white:#28292f;
+    --indigo:#8781f0; --indigo-soft:#2e2d45;
+    --blue:#6b90e0;
+    --bar:#191a1e; --bar-line:#0d0e11;
+    --head:#26272d; --tab-edge:#41424b;
+  }
+  body.dark .app-window { border-color:#08090b; box-shadow:0 22px 65px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%); }
+  body.dark .tab { color:var(--muted); }
+  body.dark .tab:hover { background:rgb(255 255 255 / 6%); color:var(--ink); }
+  body.dark .group-pill:hover { background:rgb(255 255 255 / 7%); }
+  body.dark .icon-button { color:#8e909a; }
+  body.dark .icon-button:hover, body.dark .icon-button.active { background:#2c2d34; color:var(--ink); }
+  body.dark .search { background:#2a2b31; }
+  body.dark .segmented { background:#2a2b31; }
+  body.dark .segmented button { color:#8e909a; }
+  body.dark .segmented button.on { background:#3a3b44; color:var(--ink); box-shadow:none; }
+  body.dark .new-chat { border-color:#393a42; background:#2b2c32; box-shadow:none; }
+  body.dark .new-chat:hover { border-color:#45464f; background:#30313a; }
+  body.dark .session-row { color:#b4b6bf; }
+  body.dark .session-row:hover, body.dark .sub-row:hover { background:#2a2b32; }
+  body.dark .session-row.selected { color:#e3e2f5; }
+  body.dark .pane-head { background:#24252b; }
+  body.dark .terminal { color:#c3c5cd; scrollbar-color:#43444c transparent; }
+  body.dark .term-user { color:#e4e5eb; }
+  body.dark .term-muted { color:#787a84; }
+  body.dark .term-tool { color:#7d9dd8; }
+  body.dark .term-ok { color:#4cb586; }
+  body.dark .term-warn { color:#cf9349; }
+  body.dark .term-indent { border-left-color:#33343b; }
+  body.dark .statusline { background:#1d1e23; color:#8b8d97; }
+  body.dark .prompt-box { border-color:#3a3b44; box-shadow:none; }
+  body.dark .prompt-box:focus-within { border-color:#55519a; box-shadow:0 0 0 2px rgb(135 129 240 / 12%); }
+  body.dark .popover { border-color:#3a3b44; background:#25262c; box-shadow:0 14px 35px rgb(0 0 0 / 55%); }
+  body.dark .switcher { background:rgb(14 15 18 / 72%); }
+  body.dark .switcher-panel { border-color:#3a3b44; background:#222328; box-shadow:0 22px 60px rgb(0 0 0 / 55%); }
+  body.dark .provider-action { color:#a5a7b1; }
+  body.dark .provider-action:hover { background:#2c2d34; color:#e0e1e8; }
+
+  .app-window.size-medium { width:min(980px, calc(100vw - 40px)); height:min(700px, calc(100vh - 74px)); min-width:0; }
+  .app-window.size-compact {
+    width:420px; height:620px; min-width:0; min-height:0;
+    /* Im Kompakt-Fenster ist die Sidebar ausgeklappt sinnlos — sie weicht,
+       die Tab-Leiste trägt die Navigation. */
+    grid-template-rows:32px minmax(0,1fr);
+  }
+  .app-window.size-compact .titlebar, .app-window.size-compact .shell { grid-template-columns:0 minmax(0,1fr); }
+  .app-window.size-compact .window-zone { visibility:hidden; padding:0; border-right:0; }
+  /* NICHT display:none — das nähme die Sidebar aus dem Grid, und der Content
+     rutschte in die 0-px-Spalte (genau der Fehler, den die Stapel-Leiste
+     schon hatte). Sie bleibt ein Grid-Item in einer 0-px-Spur. */
+  .app-window.size-compact .sidebar { visibility:hidden; overflow:hidden; }
+  .app-window.size-compact .workspace-toolbar { height:28px; padding:0 6px 0 8px; gap:5px; }
+  .app-window.size-compact .workspace-title { font-size:10px; }
+  .app-window.size-compact .workspace-stats { display:none; }
+  .app-window.size-compact .provider-action .action-label { display:none; }
+  .app-window.size-compact .tab { min-width:60px; max-width:96px; }
+
+  @media (max-width:1120px) {
+    :root { --sidebar-width:246px; }
+    .system-meter { display:none; }
+    .head-meta .path { display:none; }
+    .chat-head .head-title { max-width:170px; }
+    .provider-action { width:22px; justify-content:center; padding:0; }
+    .provider-action .action-label { display:none; }
+    .tab { min-width:74px; max-width:120px; }
+  }
+  @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation-duration:.001ms!important; transition-duration:.001ms!important; } }
+</style>
+
+<div class="design-bar" aria-label="Mockup-Steuerung">
+  <span class="bar-label">Policy</span>
+  <div class="bar-set" id="policyPicker">
+    <button class="on" data-policy="balanced" title="Alle Panes gleich groß — Default">Gleich</button>
+    <button data-policy="master" title="Fokus-Pane groß, Rest als Stapel-Spalte">Master</button>
+    <button data-policy="columns" title="Nur Spalten, keine Zeilen">Spalten</button>
+  </div>
+  <span class="bar-label">Min-Breite</span>
+  <input class="bar-range" id="minWidthRange" type="range" min="240" max="760" step="20" value="330"
+         title="Mindestbreite pro Terminal — darunter stapelt die Engine statt zu verkleinern">
+  <span class="bar-value" id="minWidthValue">330</span>
+  <span class="bar-label">Fenster</span>
+  <div class="bar-set" id="sizePicker">
+    <button class="on" data-size="large" title="Großes Fenster — der Alltagsfall">Groß</button>
+    <button data-size="medium" title="Mittleres Fenster — halber Bildschirm">Mittel</button>
+    <button data-size="compact" title="Kompakt-Cockpit ~420×620 — hier wird Stapeln zum Normalfall">Kompakt</button>
+  </div>
+  <span class="bar-label">Motion</span>
+  <div class="bar-set" id="motionPicker">
+    <button class="on" data-motion="calm" title="220 ms, ruhige Kurve">Ruhig</button>
+    <button data-motion="lively" title="140 ms, knackiger">Lebhaft</button>
+    <button data-motion="off" title="Ohne Bewegung — Panes springen sofort">Aus</button>
+  </div>
+  <button class="bar-toggle" id="autoResetButton" title="Manuelles Layout verwerfen, zurück auf Automatik · ⌘⌥0">↺ Automatik</button>
+  <button class="bar-toggle" id="themeToggle" title="Dark Mode — wie die echte App">◐ Dark</button>
+</div>
+
+<div class="app-window" id="app">
+  <header class="titlebar">
+    <div class="window-zone">
+      <span class="traffic"><i></i><i></i><i></i></span>
+      <span class="system-meter" title="13 Prozesse · 50,9 % CPU · 2,01 GB RAM"><span class="tiny-bars">▂▅▇</span> 13 · 50,9% · 2,01 GB</span>
+    </div>
+    <div class="tabs-zone">
+      <div class="tab-scroll" id="tabStrip"></div>
+      <i class="drop-line" id="dropLine"></i>
+      <div class="tab-tools">
+        <button class="icon-button small active" id="groupToggle" title="Tab-Gruppen an/aus">⌘</button>
+        <button class="icon-button small" id="overflowButton" title="Alle offenen Tabs">⌄</button>
+        <button class="icon-button small" id="sidebarToggle" title="Sidebar ein-/ausblenden">◧</button>
+        <button class="icon-button small" id="newTabButton" title="Neuer Chat oder Terminal">＋</button>
+      </div>
+      <div class="popover" id="newMenu">
+        <button data-toast="Neuer Claude-Chat"><span>◆</span> Neuer Claude-Chat <span class="shortcut">⌘N</span></button>
+        <button data-toast="Neuer Codex-Chat"><span>◇</span> Neuer Codex-Chat</button>
+        <button data-toast="Neues Terminal"><span>▣</span> Neues Terminal</button>
+        <div class="divider"></div>
+        <button data-toast="Hintergrund-Agent konfigurieren"><span>BG</span> Hintergrund-Agent…</button>
+        <button data-toast="Claude Agent View öffnen"><span>◫</span> Claude Agent View</button>
+        <button data-toast="Sub-Agent-Bibliothek öffnen"><span>⌘</span> Sub-Agent-Bibliothek…</button>
+      </div>
+      <div class="popover" id="overflowMenu"></div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="command-row">
+          <button class="new-chat" id="sidebarNew"><span>＋</span><span>Neuer Chat</span><span class="target">whisperm8</span><span class="shortcut">⌘N⌄</span></button>
+          <button class="icon-button" data-toast="Sessions neu eingelesen" title="Sessions neu einlesen · ⌘R">↻</button>
+        </div>
+        <div class="search-wrap">
+          <input class="search" id="filterInput" placeholder="Filter…" aria-label="Chats filtern">
+          <button class="clear-search" id="clearSearch">×</button>
+        </div>
+        <div class="control-row">
+          <div class="segmented" id="scopeControl">
+            <button class="on" data-scope="active">Aktiv</button><button data-scope="recent">Zuletzt</button><button data-scope="all">Alle</button>
+          </div>
+          <div class="segmented view-mode" id="sidebarMode">
+            <button class="on" data-mode="structure">Struktur</button><button data-mode="status">Status</button>
+          </div>
+        </div>
+        <div class="result-count"><span id="resultCount">13 von 937 Chats</span><button id="showAll">Alle zeigen</button></div>
+      </div>
+      <div class="sidebar-scroll" id="sidebarContent"></div>
+      <footer class="sidebar-footer">
+        <button class="icon-button small" id="helpButton" title="Funktionen und Kürzel">?</button>
+        <button class="icon-button small" data-toast="Archiv · 24 Chats" title="Archiv">▣</button>
+        <button class="icon-button small" data-toast="Einstellungen" title="Einstellungen">⚙</button>
+        <span class="usage">Claude 4% · GPT 21%</span>
+      </footer>
+      <div class="resize-handle" id="resizeHandle" title="Ziehen · ⌥-Doppelklick setzt zurück"></div>
+      <div class="popover" id="helpMenu">
+        <button><span>⌥↵</span> Chat in den Workspace werfen <span class="shortcut">ohne Zielwahl</span></button>
+        <button><span>⌃⌘←↑↓→</span> Pane geometrisch fokussieren</button>
+        <button><span>⌘1–9</span> Pane direkt fokussieren <span class="shortcut">im Workspace</span></button>
+        <button><span>Klick</span> Tab/Chat landet in der Fokus-Pane <span class="shortcut">⌥ = einzeln</span></button>
+        <button><span>⌘⇧↵</span> Pane-Zoom an/aus</button>
+        <button><span>⌘⌥←/→</span> Sessions durch die Panes rotieren</button>
+        <button><span>⌃⇥</span> Im Stapel der Pane wechseln</button>
+        <button><span>⌘⌥B</span> Layout neu ausbalancieren</button>
+        <button><span>⌘⌥0</span> Manuelles Layout verwerfen → Automatik</button>
+        <button><span>⌘⌥S</span> Fokus-Pane stapeln statt splitten</button>
+        <div class="divider"></div>
+        <button><span>↕</span> Drop auf Pane-Mitte stapelt · auf die Kante splittet</button>
+        <button><span>◫</span> Kein Raster wählen, keine Kapazität, kein Verwerfen</button>
+        <button><span>◧</span> Tab schließen lässt den Prozess weiterlaufen</button>
+      </div>
+    </aside>
+
+    <main class="content" id="content"></main>
+  </div>
+  <div class="switcher" id="switcher"><div class="switcher-panel"><div class="switcher-title">Offene Chats · Ctrl+Tab zum Wechseln · Esc zum Schließen</div><div class="switcher-grid" id="switcherGrid"></div></div></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  const projects = {
+    whisper: { name:'whisperm8', initial:'W', color:'#5576c7', branch:'feat/gpt-workflow-skill' },
+    list: { name:'ListM8', initial:'L', color:'#62a9c7', branch:'main' },
+    heart: { name:'heartbeat-master', initial:'H', color:'#ca7d45', branch:'feat/reporting' },
+    akq: { name:'akquiseai', initial:'A', color:'#35373d', branch:'main' }
+  };
+
+  const sessions = [
+    {id:'s1', title:'Tab-Gruppen und Sidebar', project:'whisper', workspace:'ws-whisper', status:'working', time:'jetzt', kind:'bg', sub:3, summary:'Chrome-artige Tab-Gruppen und Sidebar-Grammatik'},
+    {id:'s2', title:'GPT-Workflow Skill', project:'whisper', workspace:'ws-whisper', status:'waiting', time:'2m', kind:'sub', sub:2, summary:'Workflow-Skill und Backend-Einstellungen prüfen'},
+    {id:'s3', title:'Statusline & Metrics', project:'whisper', workspace:'ws-whisper', status:'ready', time:'11m', kind:'term', summary:'Sidebar-Performance und Statusline stabilisieren'},
+    {id:'s4', title:'Agent Chats Freeze', project:'whisper', workspace:'ws-whisper', status:'idle', time:'1h', summary:'Indexer- und Render-Pfade analysieren'},
+    {id:'s5', title:'Reporting-Pipeline', project:'heart', workspace:'ws-akq', status:'working', time:'jetzt', kind:'bg', sub:4, summary:'Reporting-Automation und Datenabgleich'},
+    {id:'s6', title:'Listen-Qualität', project:'list', workspace:'ws-akq', status:'ready', time:'8m', summary:'Leads bereinigen und Dubletten prüfen'},
+    {id:'s7', title:'Akquise-Dashboard', project:'akq', workspace:'ws-akq', status:'waiting', time:'19m', kind:'view', sub:1, summary:'Dashboard-Interaktionen und Status prüfen'},
+    {id:'s8', title:'Heartbeat QA', project:'heart', workspace:'ws-akq', status:'idle', time:'3h', summary:'Regressionen im Kampagnenlauf testen'},
+    {id:'s9', title:'Steuer 2025', project:'heart', status:'ready', time:'30m', summary:'Belege und Jahresabschluss vorbereiten'},
+    {id:'s10', title:'CLI Skills Export', project:'whisper', status:'idle', time:'45m', kind:'sub', sub:2, summary:'Skill-Sync und Exporter-Tests'},
+    {id:'s11', title:'Import-Validierung', project:'list', status:'idle', time:'2h', summary:'CSV-Import und Feldzuordnung'},
+    {id:'s12', title:'Steuer 2024', project:'heart', status:'idle', time:'1d', summary:'Archivierter Jahresabschluss'}
+  ];
+
+  const workspaces = [
+    {id:'ws-whisper', name:'WhisperM8 · GPT, Skills', color:'#5576c7', initial:'W'},
+    {id:'ws-akq', name:'AKQ · ListM8 · Heartbeat', color:'#c77e45', initial:'A'}
+  ];
+
+  const pinnedIDs = ['s12','s9','s5'];
+
+  // ——— Layout-Modell ————————————————————————————————————————————————
+  // Ein Workspace hat KEINE Kapazität und KEINE Slots mehr. Er hat eine
+  // Menge von ZELLEN; jede Zelle hält einen Stapel von Sessions:
+  //
+  //   cells: [{ cid, sessions:[sessionID…], active:sessionID }]
+  //
+  // Die GEOMETRIE ist davon getrennt und kommt aus einem n-ären Baum:
+  //   node = {type:'split', axis:'col'|'row', ratios:[…], children:[node…]}
+  //        | {type:'leaf',  cid}
+  //
+  //   mode 'auto'     → der Baum wird bei JEDEM Layout-Pass aus Zellzahl,
+  //                     Fläche und Policy neu berechnet; Zellen dürfen
+  //                     zusammengelegt/aufgeteilt werden (Reflow).
+  //   mode 'snapshot' → Zellen und Baum sind fixiert; nur explizite
+  //                     Aktionen (Divider ziehen, Kanten-Drop) ändern sie.
+  //
+  // Beim ersten Divider-Zug friert die Engine das aktuelle Auto-Ergebnis
+  // als Snapshot ein — deshalb gibt es nie einen Sprung, und „↺ Automatik"
+  // ist jederzeit ein Weg zurück.
+  let cellSeq = 0;
+  const newCID = () => `c${++cellSeq}`;
+  const cellsFrom = ids => ids.map(id=>({cid:newCID(), sessions:[id], active:id}));
+
+  // `bound` hält die STAPEL-BINDUNGEN: sessionID → Anker-sessionID. Nur so
+  // übersteht ein bewusst gestapelter Chat den Auto-Reflow — sonst würde die
+  // Engine ihn beim nächsten Pass wieder in eine eigene Pane ziehen und die
+  // Nutzerentscheidung überschreiben.
+  const layouts = {
+    'ws-whisper': { mode:'auto', root:null, bound:{}, guest:null, cells:cellsFrom(['s1','s2','s3','s4','s10']) },
+    'ws-akq':     { mode:'auto', root:null, bound:{}, guest:null, cells:cellsFrom(['s5','s6','s7','s8']) }
+  };
+  // Mitgliedschaft ist die Summe der Zellen — eine zweite Wahrheit gibt es
+  // nicht. Ein Chat darf in MEHREREN Workspaces liegen (wie eine Playlist).
+  //
+  // Damit die Tab-Gruppierung dabei eindeutig bleibt, gibt es eine EXPLIZITE
+  // Hauptgruppe pro Chat (`primaryWS`) — heute entscheidet stattdessen „der
+  // erste Workspace in Sidebar-Reihenfolge", weshalb das Umsortieren von
+  // Workspaces die Tab-Gruppe eines Chats verändert. Die Hauptgruppe wird
+  // beim ersten Beitritt gesetzt und ändert sich nur auf Ansage.
+  const primaryWS = {};
+
+  const workspacesOf = sid =>
+    Object.entries(layouts).filter(([,l])=>l.cells.some(c=>c.sessions.includes(sid))).map(([id])=>id);
+
+  function primaryOf(sid) {
+    const all = workspacesOf(sid);
+    if(!all.length) return null;
+    if(primaryWS[sid] && all.includes(primaryWS[sid])) return primaryWS[sid];
+    primaryWS[sid] = all[0];
+    return all[0];
+  }
+
+  function setPrimary(sid, wsID) {
+    primaryWS[sid] = wsID;
+    syncMembership(); renderTabs(); renderSidebar();
+    if(state.view==='grid') layoutStage(false);
+    toast(`Hauptgruppe von „${byId(sid).title}" ist jetzt „${workspace(wsID).name.split(' · ')[0]}"`);
+  }
+
+  function syncMembership() {
+    sessions.forEach(s=>{ s.workspace = primaryOf(s.id); });
+    Object.keys(primaryWS).forEach(sid=>{ if(!workspacesOf(sid).length) delete primaryWS[sid]; });
+  }
+
+  const state = {
+    tabs:['s1','s5','s2','s9','s6','s3','s10','s7'], active:'s1', grouped:true, tabStyle:'flat', dark:false,
+    collapsedGroups:new Set(), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-akq']),
+    sidebarMode:'structure', scope:'active', filter:'', subOpen:new Set(['s1']), finishedOpen:new Set(),
+    multi:new Set(), lastSidebarIndex:null, view:'chat', gridWorkspace:'ws-whisper', returnWorkspace:null,
+    // Layout-Steuerung
+    policy:'balanced',   // balanced · master · columns
+    minPaneWidth:330,    // darunter stapelt die Engine statt zu verkleinern
+    minPaneHeight:190,   // ~20 Terminalzeilen — darunter ist eine Pane nutzlos
+    focusCID:null, zoomCID:null,
+    drag:null, dropTarget:null, paneDrop:null,
+    switchIndex:0
+  };
+
+  const $ = s => document.querySelector(s);
+  const byId = id => sessions.find(s => s.id === id);
+  const project = id => projects[id];
+  const workspace = id => workspaces.find(w => w.id === id);
+  const statusLabel = s => ({working:'arbeitet',waiting:'wartet',ready:'bereit',idle:'ruht'})[s] || 'ruht';
+  const openSet = () => new Set(state.tabs);
+
+  function avatar(s, cls='row-avatar') {
+    const p=project(s.project); return `<span class="${cls}" style="background:${p.color}">${p.initial}</span>`;
+  }
+  function kindBadge(s) { return s.kind ? `<span class="kind ${s.kind}">${s.kind.toUpperCase()}</span>` : ''; }
+  function statusDot(s) { return `<i class="status-dot ${s.status}" title="${statusLabel(s.status)}"></i>`; }
+  function subChip(s) {
+    if(!s.sub) return '';
+    const running=s.status==='working';
+    return `<span class="subagent-chip" data-sub="${s.id}" title="${s.sub} Subagents"><span class="fold">⌄</span><span class="agent-road ${running?'running':''}">${Array.from({length:Math.min(s.sub,3)},()=>'<i></i>').join('')}</span><b>${s.sub}</b></span>`;
+  }
+
+  // Lesbare Chip-Schrift: die Variante mit dem höheren WCAG-Kontrast gewinnt.
+  function chipInk(hex) {
+    const value = parseInt(hex.replace('#',''),16);
+    const linear = channel => { const c=channel/255; return c<=0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); };
+    const luminance = 0.2126*linear((value>>16)&255) + 0.7152*linear((value>>8)&255) + 0.0722*linear(value&255);
+    return (luminance+0.05)/0.05 >= 1.05/(luminance+0.05) ? 'rgba(0,0,0,.86)' : '#fdfdfe';
+  }
+
+  function bucket(s) { return s.workspace ? `ws:${s.workspace}` : `project:${s.project}`; }
+  function bucketMeta(key) {
+    const [type,id]=key.split(':');
+    if(type==='ws') { const w=workspace(id); return {label:w.name.split(' · ')[0],color:w.color,icon:'⊞'}; }
+    const p=project(id); return {label:p.name,color:p.color,icon:'▤'};
+  }
+
+  function buildTabItems() {
+    if(!state.grouped) return state.tabs.map(id=>({type:'tab',ids:[id]}));
+    const counts={}; state.tabs.forEach(id=>{ const k=bucket(byId(id)); counts[k]=(counts[k]||0)+1; });
+    const seen=new Set(), out=[];
+    state.tabs.forEach(id=>{
+      const k=bucket(byId(id));
+      if(counts[k]<2) out.push({type:'tab',ids:[id]});
+      else if(!seen.has(k)) { seen.add(k); out.push({type:'group',key:k,ids:state.tabs.filter(x=>bucket(byId(x))===k)}); }
+    });
+    return out;
+  }
+
+  function tabHtml(id, groupColor='transparent') {
+    const s=byId(id), p=project(s.project), active=id===state.active;
+    return `<button class="tab ${active?'active':''}" draggable="true" data-tab="${id}" style="--group:${groupColor}">
+      <span class="avatar" style="background:${p.color}">${p.initial}</span><span class="label">${s.title}</span>
+      <span class="tail">${active?'×':statusDot(s)}</span>
+    </button>`;
+  }
+
+  function renderTabs() {
+    const strip=$('#tabStrip');
+    $('#app').dataset.tabStyle=state.tabStyle;
+    document.querySelectorAll('#tabVariantPicker [data-tab-style]').forEach(button=>button.classList.toggle('on',button.dataset.tabStyle===state.tabStyle));
+    strip.innerHTML=buildTabItems().map(item=>{
+      if(item.type==='tab') return tabHtml(item.ids[0]);
+      const meta=bucketMeta(item.key), closed=state.collapsedGroups.has(item.key), contains=item.ids.includes(state.active);
+      const visible=closed ? (contains?[state.active]:[]) : item.ids;
+      return `<span class="tab-cluster" style="--group:${meta.color};--group-ink:${chipInk(meta.color)}"><button class="group-pill ${closed?'closed':''}" draggable="true" data-group="${item.key}" title="Ziehen verschiebt die ganze Gruppe · Klick klappt sie ein"><span class="fold">⌄</span>${meta.icon} ${meta.label}<span class="count">${item.ids.length}</span></button>${visible.map(id=>tabHtml(id,meta.color)).join('')}</span>`;
+    }).join('');
+    $('#groupToggle').classList.toggle('active',state.grouped);
+    bindTabs(); renderOverflow(); renderSwitcher();
+  }
+
+  function bindTabs() {
+    document.querySelectorAll('[data-tab]').forEach(el=>{
+      el.onclick=e=>{
+        const id=el.dataset.tab;
+        if(e.target.closest('.tail') && id===state.active) { closeTab(id); return; }
+        selectWithModifiers(id,e,state.tabs);
+        // Im Workspace bleibt der Workspace stehen — der Chat kommt in die
+        // Fokus-Pane. ⌥ erzwingt die Einzelansicht.
+        if(state.view==='grid' && !e.altKey && !e.metaKey && !e.shiftKey) { openInFocusPane(id); return; }
+        state.active=id; state.view='chat'; state.returnWorkspace=null; renderAll();
+      };
+      el.onauxclick=e=>{ if(e.button===1) closeTab(el.dataset.tab); };
+      el.ondragstart=e=>beginTabDrag(e,el.dataset.tab);
+      el.ondragend=endDrag;
+    });
+    document.querySelectorAll('[data-group]').forEach(el=>{
+      el.onclick=()=>{
+        const k=el.dataset.group; state.collapsedGroups.has(k)?state.collapsedGroups.delete(k):state.collapsedGroups.add(k); renderTabs();
+      };
+      // Der Chip ist der Griff der GANZEN Gruppe — auf- wie zugeklappt.
+      el.ondragstart=e=>beginGroupDrag(e,el.dataset.group);
+      el.ondragend=endDrag;
+    });
+  }
+
+  // ——— Drag & Drop: Slot-Modell ————————————————————————————————
+  // Die Leiste ist eine Folge von DROP-SLOTS, nicht von Tabs:
+  //   • Einzeltab                → 1 Slot
+  //   • aufgeklappte Gruppe      → jedes Mitglied ein Slot (Chip gehört zum ersten)
+  //   • eingeklappte Gruppe      → GENAU 1 Slot; man droppt davor/danach, nie hinein
+  // Zwischen den Slots liegen Einfüge-Grenzen. Jede Grenze kennt ihren
+  // Kontext: liegt sie INNERHALB eines Clusters, trägt sie dessen Bucket.
+  function stripSlots() {
+    const items=buildTabItems();
+    const byKey=Object.fromEntries(items.filter(i=>i.type==='group').map(i=>[i.key,i.ids]));
+    const slots=[];
+    [...$('#tabStrip').children].forEach(el=>{
+      if(el.classList.contains('tab')) {
+        const r=el.getBoundingClientRect();
+        slots.push({kind:'tab',ids:[el.dataset.tab],bucket:null,left:r.left,right:r.right});
+        return;
+      }
+      const key=el.querySelector('[data-group]')?.dataset.group;
+      if(!key) return;
+      const clusterRect=el.getBoundingClientRect();
+      if(state.collapsedGroups.has(key)) {
+        // Zugeklappt = unteilbarer Block.
+        slots.push({kind:'group',ids:byKey[key]||[],bucket:key,left:clusterRect.left,right:clusterRect.right});
+        return;
+      }
+      [...el.querySelectorAll('.tab')].forEach((tab,index)=>{
+        const r=tab.getBoundingClientRect();
+        slots.push({
+          kind:'tab',ids:[tab.dataset.tab],bucket:key,
+          // Der Chip zählt geometrisch zum ersten Mitglied.
+          left:index===0?clusterRect.left:r.left,
+          right:r.right
+        });
+      });
+    });
+    return slots;
+  }
+
+  // Grenzen 0…n mit Kontext; „insideBucket" ist gesetzt, wenn links UND
+  // rechts derselbe aufgeklappte Cluster liegt.
+  function dropBoundaries(slots) {
+    return Array.from({length:slots.length+1},(_,i)=>{
+      const before=slots[i-1], after=slots[i];
+      const x=!before ? after.left : !after ? before.right : (before.right+after.left)/2;
+      const inside=before && after && before.bucket && before.bucket===after.bucket
+        && before.kind==='tab' && after.kind==='tab' ? before.bucket : null;
+      return {index:i,x,insideBucket:inside,beforeID:after?after.ids[0]:null};
+    });
+  }
+
+  // Regeln — die Einfügelinie zeigt NUR erlaubte Positionen, damit kein Tab
+  // nach dem Loslassen unerwartet zurückspringt:
+  //   • Gruppenmitglied: nur innerhalb des EIGENEN Clusters (Zugehörigkeit
+  //     ergibt sich aus Workspace/Projekt, ein Herausziehen wäre folgenlos)
+  //   • Einzeltab / ganze Gruppe: nur an Cluster-Grenzen — Gruppen bleiben
+  //     immer zusammenhängend und werden nie gespalten
+  function legalBoundaries(boundaries,slots) {
+    const drag=state.drag;
+    if(!drag) return [];
+    if(!state.grouped) return boundaries;
+    if(drag.kind==='tab' && drag.bucket) {
+      const first=slots.findIndex(s=>s.bucket===drag.bucket);
+      const last=slots.map(s=>s.bucket).lastIndexOf(drag.bucket);
+      return boundaries.filter(b=>b.index>=first && b.index<=last+1);
+    }
+    return boundaries.filter(b=>b.insideBucket===null);
+  }
+
+  // Gilt für Tabs UND Sidebar-Zeilen: die Herkunft entscheidet, wo der Chat
+  // landen DARF — unabhängig davon, ob er schon offen ist.
+  function beginTabDrag(e,id) {
+    const s=byId(id);
+    const cluster=buildTabItems().find(i=>i.type==='group' && i.key===bucket(s));
+    const selection=state.multi.has(id)&&state.multi.size>1 ? visualTabOrder().filter(x=>state.multi.has(x)) : [id];
+    // Gemischte Mehrfachauswahl kann nicht zusammenhängend landen → Einzel-Drag.
+    const sameBucket=selection.every(x=>bucket(byId(x))===bucket(s));
+    state.drag={kind:'tab',ids:sameBucket&&selection.length?selection:[id],bucket:cluster?cluster.key:null};
+    e.dataTransfer.setData('text/session-id',id);
+    e.dataTransfer.effectAllowed='move';
+    $('#app').classList.add('dragging-tabs');
+  }
+
+  function beginGroupDrag(e,key) {
+    const item=buildTabItems().find(i=>i.type==='group'&&i.key===key);
+    if(!item) return;
+    state.drag={kind:'group',ids:item.ids,bucket:key};
+    e.dataTransfer.setData('text/session-id',item.ids[0]);
+    e.dataTransfer.effectAllowed='move';
+    $('#app').classList.add('dragging-tabs');
+  }
+
+  function endDrag() {
+    state.drag=null; state.dropTarget=null;
+    $('#app').classList.remove('dragging-tabs');
+    $('#dropLine').classList.remove('show');
+  }
+
+  function updateDropLine(clientX) {
+    if(!state.drag) return;
+    const slots=stripSlots();
+    const allowed=legalBoundaries(dropBoundaries(slots),slots);
+    if(!allowed.length) return;
+    const target=allowed.reduce((best,b)=>Math.abs(b.x-clientX)<Math.abs(best.x-clientX)?b:best);
+    state.dropTarget=target;
+    // Die Linie lebt in der Tabs-Zone (nicht im Scroller) — sie überlebt
+    // damit jedes Re-Render und braucht keine Scroll-Korrektur.
+    const zone=$('#dropLine').parentElement.getBoundingClientRect();
+    const line=$('#dropLine');
+    line.style.left=`${Math.round(target.x-zone.left)}px`;
+    line.classList.add('show');
+  }
+
+  function visualTabOrder() { return buildTabItems().flatMap(i=>i.ids); }
+
+  // Der Drop schreibt die SICHTBARE Reihenfolge als neue manuelle Reihenfolge
+  // zurück — sonst driften Anzeige und Persistenz auseinander.
+  function applyDrop() {
+    const drag=state.drag, target=state.dropTarget;
+    if(!drag||!target) return endDrag();
+    const moving=new Set(drag.ids);
+    const order=visualTabOrder();
+    // Noch nicht offene Chats (Sidebar-Drag) hängen wir an — sie werden an
+    // der Drop-Position eingefügt und aktiviert.
+    const opened=order.filter(x=>moving.has(x));
+    const fresh=drag.ids.filter(x=>!order.includes(x));
+    const moved=[...opened,...fresh];
+    const rest=order.filter(x=>!moving.has(x));
+    const at=target.beforeID&&!moving.has(target.beforeID) ? rest.indexOf(target.beforeID) : rest.length;
+    const next=[...rest.slice(0,at),...moved,...rest.slice(at)];
+    const changed=next.join()!==order.join();
+    state.tabs=next;
+    if(fresh.length) { state.active=fresh[0]; state.view='chat'; state.returnWorkspace=null; }
+    const label=drag.kind==='group'
+      ? `Gruppe „${bucketMeta(drag.bucket).label}" verschoben`
+      : fresh.length ? 'Chat geöffnet'
+      : moved.length>1 ? `${moved.length} Tabs verschoben` : 'Tab verschoben';
+    endDrag();
+    fresh.length ? renderAll() : renderTabs();
+    toast(changed?label:'Position unverändert');
+  }
+  function closeTab(id) {
+    const i=state.tabs.indexOf(id); state.tabs=state.tabs.filter(x=>x!==id); state.multi.delete(id);
+    if(state.active===id) state.active=state.tabs[Math.min(i,state.tabs.length-1)]||null;
+    renderAll(); toast('Tab geschlossen · Prozess läuft weiter');
+  }
+  function openTab(id) { if(!state.tabs.includes(id)) state.tabs.push(id); state.active=id; state.view='chat'; state.returnWorkspace=null; renderAll(); }
+
+  function selectWithModifiers(id,e,order) {
+    if(e.metaKey||e.ctrlKey) { state.multi.has(id)?state.multi.delete(id):state.multi.add(id); }
+    else if(e.shiftKey && state.lastSidebarIndex!==null) {
+      const a=Math.min(state.lastSidebarIndex,order.indexOf(id)), b=Math.max(state.lastSidebarIndex,order.indexOf(id)); state.multi=new Set(order.slice(a,b+1));
+    } else state.multi.clear();
+    state.lastSidebarIndex=order.indexOf(id);
+  }
+
+  function selectionZone(s) {
+    if(state.sidebarMode==='status') return 'status';
+    if(s.workspace) return 'workspace';
+    if(pinnedIDs.includes(s.id)) return 'pinned';
+    return 'project';
+  }
+
+  function sessionRow(s, opts={}) {
+    const opened=openSet().has(s.id), selected=s.id===state.active && (!opts.zone || opts.zone===selectionZone(s)), multi=state.multi.has(s.id);
+    return `<div class="session-row ${opened?'open':''} ${selected?'selected':''} ${multi?'multi':''}" draggable="true" data-session="${s.id}">
+      ${opts.cell?`<span class="slot" title="${opts.cellTitle||''}">${opts.cell}</span>`:avatar(s)}
+      <span class="row-title">${s.title}</span>${kindBadge(s)}${subChip(s)}
+      <span class="row-tail">${opts.cell?avatar(s):''}${statusDot(s)}<span>${s.time}</span></span>
+    </div>${subRows(s)}`;
+  }
+
+  function subRows(s) {
+    if(!s.sub || !state.subOpen.has(s.id)) return '';
+    const active=Math.max(1,Math.min(s.sub,2));
+    const rows=Array.from({length:active},(_,i)=>`<div class="sub-row"><i class="branchline"></i><span class="kind sub">SUB</span><span class="row-title">${i?'UI-Verifikation':'Code-Review'} ${i+1}</span><span class="row-tail">${i?'1m':'jetzt'} ${statusDot({status:i?'waiting':'working'})}</span></div>`).join('');
+    const finished=Math.max(0,s.sub-active);
+    return rows+(finished?`<div class="finished-row" data-finished="${s.id}">⌄ ${finished} fertig${state.finishedOpen.has(s.id)?' · QA bestanden':''}</div>`:'');
+  }
+
+  function section(id,label,body,count='',action='') {
+    const collapsed=state.collapsedSections.has(id);
+    return `<section class="section ${collapsed?'collapsed':''}" data-section="${id}"><button class="section-head"><span class="chev">⌄</span>${label}<span class="section-count">${count}</span>${action}</button><div class="section-body">${body}</div></section>`;
+  }
+
+  function renderStructure() {
+    const q=state.filter.toLowerCase();
+    const match=s=>!q || `${s.title} ${project(s.project).name}`.toLowerCase().includes(q);
+    const pinned=pinnedIDs.map(byId).filter(match);
+    const pinBody=pinned.map(s=>sessionRow(s,{zone:'pinned'})).join('')||emptyResult();
+    // Die Sidebar zeigt jetzt Pane-Zugehörigkeit statt Slot-Nummern:
+    // „P2" = zweite Pane, „⌷2" = im Stapel der zweiten Pane.
+    const wsBody=workspaces.map(w=>{
+      const l=lay(w.id), closed=state.collapsedWorkspaces.has(w.id);
+      const entries=l.cells.flatMap((c,ci)=>c.sessions.map((id,si)=>({
+        session:byId(id), cell:si===0?`P${ci+1}`:`⌷${ci+1}`,
+        cellTitle:si===0?`Pane ${ci+1}`:`Im Stapel von Pane ${ci+1}`
+      }))).filter(e=>e.session&&match(e.session));
+      const chats=l.cells.flatMap(c=>c.sessions).length, panes=l.cells.length;
+      return `<div class="workspace ${closed?'closed':''}" data-workspace="${w.id}">
+        <div class="workspace-head"><button class="fold" data-wsfold="${w.id}">⌄</button><span class="project-avatar" style="background:${w.color}">${w.initial}</span><span class="workspace-name">${w.name}</span>
+          <span class="slot-grid">${l.cells.map(c=>`<i class="${byId(c.active).status}"></i>`).join('')}</span><span class="occupancy" title="${chats} Chats in ${panes} Panes${l.mode==='snapshot'?' · angepasstes Layout':' · Automatik'}">${chats}·${panes}▣${l.mode==='snapshot'?'✎':''}</span><button class="grid-open" data-grid="${w.id}" title="Workspace öffnen">⊞</button></div>
+        <div class="workspace-members">${entries.map(e=>sessionRow(e.session,{cell:e.cell,cellTitle:e.cellTitle,zone:'workspace'})).join('')||emptyResult()}</div></div>`;
+    }).join('');
+    const projectBodies=Object.entries(projects).map(([id,p])=>{
+      const list=sessions.filter(s=>s.project===id&&match(s)); if(!list.length) return '';
+      return `<div><div class="project-head"><span class="project-avatar" style="background:${p.color}">${p.initial}</span><span>${p.name}</span><span class="branch">⑂ ${p.branch}</span><span class="count">${list.length}</span></div><div class="project-children">${list.slice(0,4).map(s=>sessionRow(s,{zone:'project'})).join('')}${list.length>4?`<div class="finished-row">＋ ${list.length-4} weitere anzeigen</div>`:''}</div></div>`;
+    }).join('');
+    return section('pinned','GEPINNT',pinBody,pinned.length)+section('workspaces','WORKSPACES',wsBody,workspaces.length,'<button class="section-action" data-toast="Neuen Workspace anlegen">＋</button>')+section('chats','CHATS',projectBodies,sessions.filter(match).length);
+  }
+
+  function renderStatus() {
+    const q=state.filter.toLowerCase(), match=s=>!q||s.title.toLowerCase().includes(q);
+    const groups=[['waiting','WARTET AUF DICH'],['working','ARBEITET'],['idle','RUHT'],['ready','BEREIT']];
+    return groups.map(([status,label])=>{ const list=sessions.filter(s=>s.status===status&&match(s)); if(!list.length)return''; return `<div class="status-group"><div class="status-group-head">${statusDot({status})}${label}<span class="status-count">${list.length}</span></div>${list.map(s=>sessionRow(s,{zone:'status'})).join('')}</div>`; }).join('')||emptyResult();
+  }
+
+  function emptyResult() { return '<div class="finished-row">Keine passenden Chats</div>'; }
+  function renderSidebar() {
+    $('#sidebarContent').innerHTML=state.sidebarMode==='structure'?renderStructure():renderStatus();
+    $('#resultCount').textContent=state.filter?`${sessions.filter(s=>s.title.toLowerCase().includes(state.filter.toLowerCase())).length} Treffer`:(state.scope==='all'?'937 Chats':'13 von 937 Chats');
+    bindSidebar();
+  }
+
+  function bindSidebar() {
+    document.querySelectorAll('.section-head').forEach(h=>h.onclick=e=>{
+      if(e.target.closest('[data-toast]'))return; const id=h.closest('.section').dataset.section;
+      state.collapsedSections.has(id)?state.collapsedSections.delete(id):state.collapsedSections.add(id); renderSidebar();
+    });
+    document.querySelectorAll('[data-wsfold]').forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.dataset.wsfold;state.collapsedWorkspaces.has(id)?state.collapsedWorkspaces.delete(id):state.collapsedWorkspaces.add(id);renderSidebar();});
+    document.querySelectorAll('.workspace-head').forEach(h=>h.onclick=e=>{ if(e.target.closest('[data-wsfold]'))return; enterGrid(h.closest('.workspace').dataset.workspace); });
+    document.querySelectorAll('[data-grid]').forEach(b=>b.onclick=e=>{e.stopPropagation();enterGrid(b.dataset.grid);});
+    document.querySelectorAll('[data-session]').forEach(row=>{
+      row.onclick=e=>{
+        if(e.target.closest('[data-sub]')) { const id=e.target.closest('[data-sub]').dataset.sub; state.subOpen.has(id)?state.subOpen.delete(id):state.subOpen.add(id); renderSidebar(); return; }
+        const id=row.dataset.session; selectWithModifiers(id,e,sessions.map(s=>s.id));
+        if(e.metaKey||e.ctrlKey||e.shiftKey) { renderSidebar(); return; }
+        // Gleiche Regel wie in der Tab-Leiste: aus einem offenen Workspace
+        // führt ein einfacher Klick nicht heraus.
+        if(state.view==='grid' && !e.altKey) openInFocusPane(id); else openTab(id);
+      };
+      // Sidebar → Leiste: derselbe Drag-Vertrag; ein noch nicht offener Chat
+      // wird an der Drop-Position geöffnet.
+      row.ondragstart=e=>beginTabDrag(e,row.dataset.session);
+      row.ondragend=endDrag;
+      row.oncontextmenu=e=>{e.preventDefault();showMoreMenu(e.clientX,e.clientY,row.dataset.session);};
+    });
+    document.querySelectorAll('[data-finished]').forEach(el=>el.onclick=()=>{const id=el.dataset.finished;state.finishedOpen.has(id)?state.finishedOpen.delete(id):state.finishedOpen.add(id);renderSidebar();});
+    bindToastButtons();
+  }
+
+  function terminalHtml(s) {
+    const p=project(s.project);
+    return `<div class="terminal-shell"><div class="terminal">
+      <div class="term-block term-user">❯ ${s.title}: Bitte prüfe den aktuellen Stand und setze die nächste sinnvolle Änderung vollständig um.</div>
+      <div class="term-block"><span class="term-ok">●</span> Ich prüfe zuerst die betroffenen Komponenten und die bestehenden Invarianten.</div>
+      <div class="term-block term-indent"><span class="term-tool">Read</span>(WhisperM8/Views/AgentChatsView.swift)<br><span class="term-tool">Read</span>(WhisperM8/Views/AgentChatsView+Tabs.swift)<br><span class="term-muted">⎿  Architektur und bestehende Drag-/Selection-Logik geladen</span></div>
+      <div class="term-block">Die aktive Session bleibt die einzige Fokusquelle. Tab schließen und Prozess beenden bleiben getrennte Aktionen. Workspace-Zugehörigkeit priorisiert weiterhin das Projekt.</div>
+      <div class="term-block term-indent"><span class="term-tool">Edit</span>(WhisperM8/Views/AgentChatsView.swift)<br><span class="term-ok">⎿  Kompakter Chat-Header und gruppierte Tab-Darstellung aktualisiert</span><br><span class="term-muted">… +38 Zeilen (ctrl+o zum Aufklappen)</span></div>
+      <div class="term-block"><span class="term-ok">●</span> Build und fokussierte Tests sind grün. Als Nächstes prüfe ich die Tastaturnavigation und den Grid-Rücksprung.</div>
+    </div>
+    <div class="prompt-wrap"><div class="prompt-box"><span>❯</span><textarea class="prompt-input" aria-label="Nachricht" placeholder="Nachricht an ${s.title}…"></textarea><span class="send-hint">⌘↵ senden</span></div></div>
+    <div class="statusline"><span>${p.name} (${p.branch})</span><span class="meter">████▂▁▁▁</span><span>18% · 182k/1000k</span><span>[GPT 5.6]</span><span>high</span><span class="grow">4%/5h · 21%/Woche · $4,45</span><span>⇄ PowerUser</span></div></div>`;
+  }
+
+  function renderChat() {
+    const s=byId(state.active)||sessions[0], p=project(s.project), w=s.workspace?workspace(s.workspace):null;
+    $('#content').innerHTML=`<header class="chat-head">${statusDot(s)}<span class="head-title">${s.title}</span>${kindBadge(s)}<span class="head-meta"><span>◆ ${p.name}</span><span class="branch">⑂ ${p.branch}</span><span class="path">~/repos/${p.name}</span></span>
+      <div class="head-actions"><button class="back-workspace ${state.returnWorkspace?'show':''}" id="backWorkspace">‹ ${state.returnWorkspace?'Workspace':''}</button><button class="provider-action claude" data-toast="Claude im Projekt öffnen" title="Neuen Claude-Chat im Projekt öffnen"><span class="provider-mark">◆</span><span class="action-label">Claude</span></button><button class="provider-action codex" data-toast="Codex im Projekt öffnen" title="Neuen Codex-Chat im Projekt öffnen"><span class="provider-mark">◇</span><span class="action-label">Codex</span></button><button class="icon-button small" data-toast="Session starten oder fortsetzen" title="Aktuelle Session starten / fortsetzen">▶</button><button class="icon-button small" data-toast="Projekt in PhpStorm öffnen" title="In IDE öffnen">↗</button><button class="icon-button small" id="moreButton" title="Weitere Aktionen">•••</button></div></header>${terminalHtml(s)}<div class="popover" id="moreMenu"></div>`;
+    $('#moreButton').onclick=e=>showMoreMenu(e.clientX,e.clientY,s.id);
+    if($('#backWorkspace')) $('#backWorkspace').onclick=()=>enterGrid(state.returnWorkspace);
+    bindToastButtons();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  LAYOUT-ENGINE
+  //  Die Engine berechnet ausschließlich RECHTECKE. Sie erzeugt keine
+  //  Views und zerstört keine. Panes und Terminals werden einmal
+  //  angelegt und danach nur bewegt — das ist die Bedingung dafür, dass
+  //  in der echten App die PTY-Terminals (LocalProcessTerminalView) beim
+  //  Umlayouten nicht neu gemountet werden.
+  // ═══════════════════════════════════════════════════════════════════
+
+  const lay = id => layouts[id];
+  const flatSessions = l => l.cells.flatMap(c=>c.sessions);
+  const cellOf = (l,sid) => l.cells.find(c=>c.sessions.includes(sid));
+  const cellByID = (l,cid) => l.cells.find(c=>c.cid===cid);
+  const equal = n => Array.from({length:n},()=>1/n);
+
+  // ——— 1) Reflow: wie viele Zellen trägt die Fläche? ———————————————
+  // Terminals sind unter ~80 Spalten unbrauchbar. Statt Panes beliebig
+  // klein zu rechnen (oder Chats aus dem Workspace zu werfen, wie das
+  // Slot-Modell), begrenzt die Engine die Zellzahl und STAPELT den Rest.
+  function capacityOf(rect) {
+    const cols = Math.max(1, Math.floor((rect.w+1)/(state.minPaneWidth+1)));
+    const rows = Math.max(1, Math.floor((rect.h+1)/(state.minPaneHeight+1)));
+    return cols*rows;
+  }
+
+  function distribute(list, buckets) {
+    const out=[], base=Math.floor(list.length/buckets), extra=list.length%buckets;
+    let i=0;
+    for(let k=0;k<buckets;k++){ const size=base+(k<extra?1:0); out.push(list.slice(i,i+size)); i+=size; }
+    return out;
+  }
+
+  // EINHEITEN statt Sessions: eine bewusst gestapelte Session hängt an ihrem
+  // Anker und wandert nur mit ihm. Der Reflow verteilt Einheiten, nie
+  // einzelne Sessions — deshalb bleibt ein gewollter Stapel ein Stapel.
+  function unitsOf(l) {
+    const units=[], slot={};
+    flatSessions(l).forEach(sid=>{
+      const anchor = l.bound[sid];
+      if(anchor!=null && slot[anchor]!=null) { units[slot[anchor]].push(sid); return; }
+      slot[sid]=units.length; units.push([sid]);
+    });
+    return units;
+  }
+
+  // Auto-Modus: Zellen werden aus den Einheiten neu aufgebaut. Zell-IDs
+  // bleiben positionsweise stabil, damit Panes nicht springen; aktive
+  // Stapel-Sessions bleiben aktiv, wo möglich.
+  function reflowAuto(l, rect) {
+    const units = unitsOf(l);
+    if(!units.length) { l.cells=[]; return; }
+    const wanted = Math.min(units.length, capacityOf(rect));
+    const actives = new Set(l.cells.map(c=>c.active));
+    const chunks = distribute(units, wanted).map(group=>group.flat());
+    l.cells = chunks.map((ids,i)=>{
+      const prev = l.cells[i];
+      const active = prev && ids.includes(prev.active) ? prev.active
+                   : (ids.find(id=>actives.has(id)) || ids[0]);
+      return { cid: prev ? prev.cid : newCID(), sessions:ids, active };
+    });
+  }
+
+  // ——— 2) Baum: Geometrie als n-ärer Split-Baum ————————————————————
+  const leaf = cid => ({type:'leaf', cid});
+  const split = (axis, children, ratios) => ({type:'split', axis, children, ratios: ratios||equal(children.length)});
+
+  // Spaltenzahl aus Fläche + Zellzahl: gesucht ist das Seitenverhältnis,
+  // das Terminals am besten liegt (~1,55 breit zu hoch), bei möglichst
+  // wenig „Löchern" in der letzten Zeile.
+  function bestColumns(count, rect) {
+    let best=1, bestScore=Infinity;
+    for(let cols=1; cols<=count; cols++) {
+      const rows = Math.ceil(count/cols);
+      const cw = rect.w/cols, ch = rect.h/rows;
+      if(cols>1 && cw < state.minPaneWidth) continue;
+      if(rows>1 && ch < state.minPaneHeight) continue;
+      const score = Math.abs((cw/ch) - 1.55) + (cols*rows - count)*0.14;
+      if(score < bestScore) { bestScore=score; best=cols; }
+    }
+    return best;
+  }
+
+  function buildAutoTree(cells, rect) {
+    if(!cells.length) return null;
+    if(cells.length===1) return leaf(cells[0].cid);
+    if(state.policy==='columns') return split('col', cells.map(c=>leaf(c.cid)));
+    if(state.policy==='master') {
+      const [first,...rest] = cells;
+      const side = rest.length===1 ? leaf(rest[0].cid) : split('row', rest.map(c=>leaf(c.cid)));
+      return split('col', [leaf(first.cid), side], [0.62,0.38]);
+    }
+    // balanced: Zeilen füllen sich auf; die letzte Zeile verteilt den Rest
+    // über die volle Breite — daraus entsteht „2 oben, 1 breit unten" von
+    // selbst, ohne dass es ein Preset dafür gäbe.
+    const cols = bestColumns(cells.length, rect);
+    const rows = Math.ceil(cells.length/cols);
+    const perRow = distribute(cells, rows);
+    if(rows===1) return split('col', perRow[0].map(c=>leaf(c.cid)));
+    return split('row', perRow.map(row =>
+      row.length===1 ? leaf(row[0].cid) : split('col', row.map(c=>leaf(c.cid)))
+    ));
+  }
+
+  const GAP = 1;
+  // Rekursive Frame-Berechnung. Nebenprodukt: die Divider-Rechtecke —
+  // jeder kennt seinen Knoten und Index, deshalb braucht Ziehen kein
+  // Hit-Testing über Frames.
+  function framesOf(node, rect, out) {
+    out = out || {frames:{}, dividers:[]};
+    if(!node) return out;
+    if(node.type==='leaf') { out.frames[node.cid]=rect; return out; }
+    const n = node.children.length;
+    const along = node.axis==='col' ? rect.w : rect.h;
+    const usable = along - GAP*(n-1);
+    let pos = node.axis==='col' ? rect.x : rect.y;
+    node.children.forEach((child,i)=>{
+      const size = usable * node.ratios[i];
+      framesOf(child, node.axis==='col'
+        ? {x:pos, y:rect.y, w:size, h:rect.h}
+        : {x:rect.x, y:pos, w:rect.w, h:size}, out);
+      pos += size + GAP;
+      if(i < n-1) out.dividers.push({
+        node, index:i, axis:node.axis, along:usable,
+        rect: node.axis==='col'
+          ? {x:pos-GAP-2.5, y:rect.y, w:GAP+5, h:rect.h}
+          : {x:rect.x, y:pos-GAP-2.5, w:rect.w, h:GAP+5}
+      });
+    });
+    return out;
+  }
+
+  // ——— 3) Baum-Operationen (nur im Snapshot-Modus nötig) ——————————
+  function freezeSnapshot(l) {
+    if(l.mode==='snapshot' && l.root) return;
+    l.root = l.tree;                 // exakt das, was gerade zu sehen ist
+    l.mode = 'snapshot';
+  }
+
+  function replaceLeaf(node, cid, replacement) {
+    if(!node) return null;
+    if(node.type==='leaf') return node.cid===cid ? replacement : node;
+    node.children = node.children.map(c=>replaceLeaf(c, cid, replacement));
+    return node;
+  }
+
+  function removeLeaf(node, cid) {
+    if(!node) return null;
+    if(node.type==='leaf') return node.cid===cid ? null : node;
+    const kept=[], ratios=[];
+    node.children.forEach((child,i)=>{
+      const next = removeLeaf(child, cid);
+      if(next) { kept.push(next); ratios.push(node.ratios[i]); }
+    });
+    if(!kept.length) return null;
+    if(kept.length===1) return kept[0];          // Knoten kollabiert
+    const sum = ratios.reduce((a,b)=>a+b,0);
+    node.children = kept; node.ratios = ratios.map(r=>r/sum);
+    return node;
+  }
+
+  // ——— 4) DOM: Panes und Terminals leben in Pools ————————————————
+  const paneDOM = {};       // cid → <section class="pane">
+  const terminalDOM = {};   // sessionID → <div class="pane-terminal">
+  const scrollMemo = {};
+
+  function terminalFor(sid) {
+    if(terminalDOM[sid]) return terminalDOM[sid];
+    const s = byId(sid), p = project(s.project);
+    const el = document.createElement('div');
+    el.className='pane-terminal';
+    el.innerHTML = `<span class="term-user">❯ ${s.summary}</span>\n\n`
+      + `<span class="term-ok">●</span> Session ${statusLabel(s.status)} · ${p.name}\n`
+      + `<span class="term-tool">Read</span>(WhisperM8/Views/AgentLayoutEngine.swift)\n`
+      + `<span class="term-muted">⎿ Frames berechnet, Views unverändert</span>\n\n`
+      + `Diese Pane wurde EINMAL erzeugt. Layout-Wechsel, Split, Zoom und\n`
+      + `Stapel-Wechsel verschieben nur ihr Rechteck — Scroll-Position und\n`
+      + `Eingabe bleiben stehen. Tippe hier und wirf einen Chat rein:\n\n`
+      + `<span class="term-user">❯ </span><span class="term-caret" contenteditable="true" spellcheck="false"></span>`;
+    terminalDOM[sid]=el;
+    return el;
+  }
+
+  function ensurePane(cell) {
+    if(paneDOM[cell.cid]) return paneDOM[cell.cid];
+    const el = document.createElement('section');
+    el.className='pane';
+    el.dataset.cid = cell.cid;
+    el.innerHTML = `<div class="stack-bar"></div><header class="pane-head"></header><div class="pane-host" style="min-height:0;overflow:hidden;display:grid"></div><footer class="pane-status"></footer>`;
+    el.draggable = false;
+    el.addEventListener('mousedown', e=>{
+      if(e.target.closest('button')) return;
+      focusCell(cell.cid);
+    });
+    el.querySelector('.pane-head').addEventListener('dblclick', e=>{
+      if(e.target.closest('button')) return;
+      toggleZoom(cell.cid);
+    });
+    // Ziehen am Kopf verschiebt die Session (nicht die Pane) — Ziel
+    // entscheidet, ob gestapelt oder gesplittet wird.
+    const head = el.querySelector('.pane-head');
+    head.draggable = true;
+    head.addEventListener('dragstart', e=>{
+      const c = cellByID(lay(state.gridWorkspace), cell.cid);
+      if(!c) return;
+      state.drag = {kind:'pane', ids:[c.active], bucket:null, fromCID:c.cid};
+      e.dataTransfer.setData('text/session-id', c.active);
+      e.dataTransfer.effectAllowed='move';
+      el.classList.add('dragging');
+      $('#stage')?.classList.add('dropping');
+    });
+    head.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); endPaneDrag(); });
+    paneDOM[cell.cid]=el;
+    return el;
+  }
+
+  function paneChrome(cell, isFocus, isMaster) {
+    const s = byId(cell.active), p = project(s.project);
+    const l = lay(state.gridWorkspace);
+    const head = paneDOM[cell.cid].querySelector('.pane-head');
+    const memberOf = workspacesOf(cell.active);
+    const primary = primaryOf(cell.active);
+    const multiBadge = memberOf.length>1
+      ? `<span class="pane-badge multi" data-ws-badge="${cell.active}" title="In ${memberOf.length} Workspaces: `
+        + memberOf.map(id=>workspace(id).name.split(' · ')[0] + (id===primary?' (Hauptgruppe)':'')).join(', ')
+        + ` · Klick für Optionen">⊞${memberOf.length}</span>`
+      : '';
+    head.innerHTML = `${statusDot(s)}<span class="pane-avatar" style="background:${p.color}">${p.initial}</span>`
+      + `<span class="pane-title">${s.title}</span><span class="account">${p.name}</span>`
+      + multiBadge
+      + (isMaster?'<span class="pane-badge master">MASTER</span>':'')
+      + `<span class="pane-actions">`
+      + `<button class="icon-button small" data-stack="${cell.cid}" title="${cell.sessions.length>1?'Stapel auflösen':'Nachbar-Chat hier stapeln'} · ⌘⌥S">⌷</button>`
+      + `<button class="icon-button small" data-zoom="${cell.cid}" title="Zoom an/aus · ⌘⇧↵">⤢</button>`
+      + `<button class="icon-button small" data-detach="${cell.cid}" title="Als Tab herauslösen">↗</button>`
+      + `<button class="icon-button small" data-drop-session="${cell.active}" title="Aus dem Workspace nehmen">⊖</button>`
+      + `</span>`;
+
+    const bar = paneDOM[cell.cid].querySelector('.stack-bar');
+    paneDOM[cell.cid].classList.toggle('stacked', cell.sessions.length>1);
+    bar.innerHTML = cell.sessions.length>1
+      ? cell.sessions.map(id=>{
+          const t=byId(id), guest=l.guest===id;
+          return `<button class="stack-tab ${id===cell.active?'on':''} ${guest?'guest':''}" data-stack-tab="${cell.cid}:${id}"`
+            + ` title="${guest?'Vorschau — der nächste Klick ersetzt sie · ⌥↵ behält sie':t.title}">`
+            + `${statusDot(t)}<span class="label">${t.title}</span></button>`;
+        }).join('') + `<span class="stack-count">${cell.sessions.length} im Stapel · ⌃⇥</span>`
+      : '';
+
+    const foot = paneDOM[cell.cid].querySelector('.pane-status');
+    const stackNote = cell.sessions.length>1 ? ` · Stapel ${cell.sessions.indexOf(cell.active)+1}/${cell.sessions.length}` : '';
+    foot.innerHTML = `<span>${p.branch}</span><span>${s.time}</span><span>${statusLabel(s.status)}${stackNote}</span>`
+      + (isFocus?'<span class="pane-badge">FOKUS · Tastatur</span>':'');
+
+    // Terminal einhängen: der Knoten WANDERT, er wird nicht neu gebaut.
+    const host = paneDOM[cell.cid].querySelector('.pane-host');
+    const term = terminalFor(cell.active);
+    if(term.parentElement !== host) {
+      const memo = scrollMemo[cell.active];
+      host.replaceChildren(term);
+      if(memo!=null) term.scrollTop = memo;
+    }
+    term.onscroll = ()=>{ scrollMemo[cell.active]=term.scrollTop; };
+  }
+
+  // ——— 5) Layout-Pass ————————————————————————————————————————————
+  function layoutStage(animate=true) {
+    const stage = $('#stage'); if(!stage) return;
+    const l = lay(state.gridWorkspace);
+    const box = stage.getBoundingClientRect();
+    const rect = {x:0, y:0, w:box.width, h:box.height};
+    // Der erste Pass kann VOR dem Layout des Browsers laufen — dann ist die
+    // Bühne noch 0×0. Nicht einfach aussteigen (sonst bleibt die Fläche
+    // dauerhaft leer), sondern im nächsten Frame erneut versuchen.
+    if(!rect.w || !rect.h) {
+      requestAnimationFrame(()=>layoutStage(false));
+      setTimeout(()=>layoutStage(false), 60);   // Fallback, wenn rAF gedrosselt ist
+      return;
+    }
+
+    if(l.mode==='auto') reflowAuto(l, rect);
+    stage.classList.toggle('empty', l.cells.length===0);
+    if(!animate) stage.classList.add('resizing');
+
+    // Baum + Frames
+    l.tree = l.mode==='snapshot' && l.root ? l.root : buildAutoTree(l.cells, rect);
+    if(l.mode==='snapshot' && !l.root) l.root = l.tree;
+    let {frames, dividers} = framesOf(l.tree, rect);
+
+    // Fokus/Zoom validieren
+    if(!cellByID(l, state.focusCID)) state.focusCID = l.cells[0]?.cid || null;
+    if(state.zoomCID && !cellByID(l, state.zoomCID)) state.zoomCID=null;
+    // Zoom legt EINE Pane vollflächig über die anderen — es entfernt sie
+    // nicht. In der echten App würde ein Aushängen den PTY beenden; hier
+    // behalten alle Panes ihren Frame und liegen nur darunter.
+    if(state.zoomCID) { frames = {...frames, [state.zoomCID]: rect}; dividers=[]; }
+    state.lastFrames = frames;   // Grundlage der geometrischen Fokusnavigation
+
+    // Panes einhängen/positionieren — nie neu erzeugen
+    const live = new Set(l.cells.map(c=>c.cid));
+    Object.keys(paneDOM).forEach(cid=>{
+      if(live.has(cid)) return;
+      if(paneDOM[cid].parentElement) paneDOM[cid].remove();
+      delete paneDOM[cid];
+    });
+    l.cells.forEach((cell,i)=>{
+      const f = frames[cell.cid]; if(!f) return;
+      const el = ensurePane(cell);
+      if(el.parentElement !== stage) stage.appendChild(el);
+      paneChrome(cell, cell.cid===state.focusCID, state.policy==='master' && i===0 && !state.zoomCID);
+      el.classList.toggle('focused', cell.cid===state.focusCID);
+      el.classList.toggle('zoomed', cell.cid===state.zoomCID);
+      // KANTEN runden, nicht Position und Größe getrennt: nur so bleiben
+      // Nachbarn exakt 1 px auseinander und die Außenkanten bündig
+      // (getrenntes Runden erzeugt sonst 1-px-Überstände und Subpixel-Fugen).
+      const x0=Math.round(f.x), y0=Math.round(f.y);
+      const x1=Math.round(f.x+f.w), y1=Math.round(f.y+f.h);
+      el.style.left=`${x0}px`; el.style.top=`${y0}px`;
+      el.style.width=`${x1-x0}px`; el.style.height=`${y1-y0}px`;
+    });
+
+    renderDividers(dividers);
+    renderDropZones(frames);
+    if(!animate) requestAnimationFrame(()=>stage.classList.remove('resizing'));
+    updateToolbar();
+  }
+
+  function renderDividers(dividers) {
+    const host = $('#dividers'); if(!host) return;
+    host.innerHTML='';
+    if(state.zoomCID) return;
+    dividers.forEach(d=>{
+      const el=document.createElement('i');
+      el.className=`divider ${d.axis==='col'?'v':'h'}`;
+      el.style.left=`${d.rect.x}px`; el.style.top=`${d.rect.y}px`;
+      el.style.width=`${d.rect.w}px`; el.style.height=`${d.rect.h}px`;
+      el.title='Ziehen passt das Layout an — der Workspace merkt sich die Anpassung';
+      el.onpointerdown=e=>beginDividerDrag(e, el, d);
+      host.appendChild(el);
+    });
+  }
+
+  // Divider ziehen = das Auto-Ergebnis einfrieren und verfeinern. Es gibt
+  // keinen Moduswechsel-Dialog: der erste Zug IST die Entscheidung.
+  function beginDividerDrag(e, el, d) {
+    e.preventDefault();
+    const l = lay(state.gridWorkspace);
+    freezeSnapshot(l);
+    el.classList.add('active');
+    const startPos = d.axis==='col' ? e.clientX : e.clientY;
+    const startRatios = [...d.node.ratios];
+    const minRatio = (d.axis==='col' ? state.minPaneWidth*0.55 : state.minPaneHeight*0.55) / d.along;
+    const stage = $('#stage');
+    stage.classList.add('resizing');
+    // Die Bewegung wird am FENSTER verfolgt, nicht am 5 px schmalen Divider:
+    // ein Pointer, der die Fuge verlässt, darf den Zug nicht abbrechen.
+    const onMove = move => {
+      const delta = (d.axis==='col' ? move.clientX : move.clientY) - startPos;
+      let shift = delta / d.along;
+      const a = startRatios[d.index], b = startRatios[d.index+1];
+      shift = Math.max(minRatio-a, Math.min(b-minRatio, shift));
+      d.node.ratios = [...startRatios];
+      d.node.ratios[d.index] = a + shift;
+      d.node.ratios[d.index+1] = b - shift;
+      layoutStage(false);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      el.classList.remove('active');
+      stage.classList.remove('resizing');
+      layoutStage(false);
+      renderSidebar();   // die Sidebar zeigt „angepasst" am Workspace mit an
+      toast('Layout angepasst · als Snapshot gespeichert · ⌘⌥0 zurück auf Automatik');
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
+  // ——— 6) Drop-Zonen: Mitte stapelt, Kante splittet ————————————————
+  function renderDropZones(frames) {
+    const host = $('#dropZones'); if(!host) return;
+    host.innerHTML='';
+    const l = lay(state.gridWorkspace);
+    l.cells.forEach(cell=>{
+      const f = frames[cell.cid]; if(!f) return;
+      const edge = Math.min(46, f.w*0.26), edgeY = Math.min(38, f.h*0.26);
+      const zones = [
+        {side:'left',   x:f.x,           y:f.y,             w:edge,        h:f.h},
+        {side:'right',  x:f.x+f.w-edge,  y:f.y,             w:edge,        h:f.h},
+        {side:'top',    x:f.x+edge,      y:f.y,             w:f.w-2*edge,  h:edgeY},
+        {side:'bottom', x:f.x+edge,      y:f.y+f.h-edgeY,   w:f.w-2*edge,  h:edgeY},
+        {side:'center', x:f.x+edge,      y:f.y+edgeY,       w:f.w-2*edge,  h:f.h-2*edgeY}
+      ];
+      zones.forEach(z=>{
+        if(z.w<=0||z.h<=0) return;
+        const el=document.createElement('i');
+        el.className='drop-zone';
+        el.dataset.cid=cell.cid; el.dataset.side=z.side;
+        el.style.left=`${z.x}px`; el.style.top=`${z.y}px`;
+        el.style.width=`${z.w}px`; el.style.height=`${z.h}px`;
+        host.appendChild(el);
+      });
+    });
+  }
+
+  function hintText(side, cell) {
+    const l = lay(state.gridWorkspace);
+    if(side==='center') return `Stapeln in „${byId(cell.active).title}"`;
+    if(l.mode==='snapshot') return {left:'Links daneben teilen',right:'Rechts daneben teilen',top:'Oben abteilen',bottom:'Unten abteilen'}[side];
+    return {left:'Davor einsortieren',right:'Danach einsortieren',top:'Davor einsortieren',bottom:'Danach einsortieren'}[side];
+  }
+
+  function endPaneDrag() {
+    state.paneDrop=null;
+    $('#stage')?.classList.remove('dropping');
+    document.querySelectorAll('.drop-zone.hot').forEach(z=>z.classList.remove('hot'));
+    $('#dropHint')?.classList.remove('show');
+  }
+
+  function bindStageDnD() {
+    const stage=$('#stage'); if(!stage) return;
+    stage.addEventListener('dragenter', e=>{ if(state.drag){ e.preventDefault(); stage.classList.add('dropping'); } });
+    stage.addEventListener('dragover', e=>{
+      if(!state.drag) return;
+      e.preventDefault(); e.dataTransfer.dropEffect='move';
+      const zone = document.elementFromPoint(e.clientX, e.clientY)?.closest('.drop-zone');
+      document.querySelectorAll('.drop-zone.hot').forEach(z=>z.classList.remove('hot'));
+      const hint=$('#dropHint');
+      if(!zone) {
+        state.paneDrop=null;
+        hint.textContent='Loslassen — die Engine ordnet selbst ein';
+        hint.classList.add('show');
+      } else {
+        zone.classList.add('hot');
+        const cell=cellByID(lay(state.gridWorkspace), zone.dataset.cid);
+        state.paneDrop={cid:zone.dataset.cid, side:zone.dataset.side};
+        hint.textContent=cell?hintText(zone.dataset.side, cell):'';
+        hint.classList.add('show');
+      }
+      const box=stage.getBoundingClientRect();
+      hint.style.left=`${Math.min(Math.max(e.clientX-box.left+12, 6), box.width-160)}px`;
+      hint.style.top=`${Math.max(e.clientY-box.top-24, 6)}px`;
+    });
+    stage.addEventListener('dragleave', e=>{ if(!stage.contains(e.relatedTarget)) endPaneDrag(); });
+    stage.addEventListener('drop', e=>{
+      if(!state.drag) return;
+      e.preventDefault(); e.stopPropagation();
+      const sid = state.drag.ids[0] || e.dataTransfer.getData('text/session-id');
+      const from = state.drag.fromCID || null;
+      const target = state.paneDrop;
+      endPaneDrag(); endDrag();
+      if(!sid) return;
+      dropSession(sid, target, from);
+    });
+  }
+
+  // ——— 7) Operationen ————————————————————————————————————————————
+  function detachFromCells(l, sid) {
+    const cell = cellOf(l, sid); if(!cell) return null;
+    cell.sessions = cell.sessions.filter(x=>x!==sid);
+    delete l.bound[sid];
+    // War die Session Anker eines Stapels, erbt die nächste verbleibende
+    // Session die Bindungen — sonst würde der Stapel still zerfallen.
+    const heirs = Object.keys(l.bound).filter(k=>l.bound[k]===sid);
+    if(heirs.length) {
+      const heir = cell.sessions[0];
+      heirs.forEach(k=>{ if(heir && k!==heir) l.bound[k]=heir; else delete l.bound[k]; });
+    }
+    if(cell.sessions.length) {
+      if(cell.active===sid) cell.active=cell.sessions[0];
+      return cell.cid;
+    }
+    l.cells = l.cells.filter(c=>c.cid!==cell.cid);
+    if(l.mode==='snapshot' && l.root) l.root = removeLeaf(l.root, cell.cid);
+    if(paneDOM[cell.cid]) { paneDOM[cell.cid].remove(); delete paneDOM[cell.cid]; }
+    return null;
+  }
+
+  // Einwerfen ohne Ziel: hinten anhängen. Im Auto-Modus rechnet die Engine
+  // sofort neu (und stapelt, wenn die Fläche voll ist) — im Snapshot-Modus
+  // landet der Chat im Stapel der kleinsten Pane, damit die Geometrie hält.
+  function throwIn(sid, silent=false) {
+    const l = lay(state.gridWorkspace);
+    if(l.guest===sid) l.guest=null;          // bewusst behalten = kein Gast mehr
+    if(cellOf(l, sid)) {
+      focusSession(sid);
+      if(!silent) toast(`„${byId(sid).title}" bleibt im Workspace`);
+      return;
+    }
+    // KEIN Entfernen aus anderen Workspaces: Mitgliedschaft ist mehrfach
+    // erlaubt (Playlist-Semantik). Die Hauptgruppe bleibt, wo sie war.
+    if(l.mode==='auto' || !l.cells.length) {
+      l.cells.push({cid:newCID(), sessions:[sid], active:sid});
+    } else {
+      const smallest = smallestCell(l);
+      smallest.sessions.push(sid); smallest.active=sid;
+    }
+    syncMembership();
+    focusSession(sid);
+    if(!silent) toast(`„${byId(sid).title}" eingeworfen — Layout neu berechnet`);
+  }
+
+  function smallestCell(l) {
+    const box=$('#stage').getBoundingClientRect();
+    const {frames}=framesOf(l.tree||buildAutoTree(l.cells,{x:0,y:0,w:box.width,h:box.height}), {x:0,y:0,w:box.width,h:box.height});
+    return l.cells.reduce((best,c)=>{
+      const a=frames[c.cid]?frames[c.cid].w*frames[c.cid].h:0;
+      const b=frames[best.cid]?frames[best.cid].w*frames[best.cid].h:0;
+      return a<b?c:best;
+    }, l.cells[0]);
+  }
+
+  // Nur für das AUSDRÜCKLICHE Verschieben („statt kopieren"): nimmt den Chat
+  // aus allen anderen Workspaces. Normale Drops kopieren die Mitgliedschaft.
+  function moveExclusivelyHere(sid) {
+    Object.entries(layouts).forEach(([id,other])=>{ if(id!==state.gridWorkspace) detachFromCells(other, sid); });
+    primaryWS[sid]=state.gridWorkspace;
+    syncMembership(); layoutStage(); renderTabs(); renderSidebar();
+    toast(`„${byId(sid).title}" ist jetzt nur noch in diesem Workspace`);
+  }
+
+  function dropSession(sid, target, fromCID) {
+    const l = lay(state.gridWorkspace);
+    if(l.guest===sid) l.guest=null;          // gezielt platziert = Mitglied
+    if(!target) { throwIn(sid); return; }
+    const targetCell = cellByID(l, target.cid);
+    if(!targetCell) { throwIn(sid); return; }
+    if(target.side==='center' && targetCell.sessions.includes(sid)) { focusSession(sid); return; }
+
+    const wasIn = cellOf(l, sid);
+    // Kanten-Drop auf die EIGENE Pane ist nur dann sinnlos, wenn die Session
+    // dort allein sitzt; aus einem Stapel heraus ist es das Herauslösen.
+    if(wasIn && wasIn.cid===target.cid && target.side!=='center' && wasIn.sessions.length===1) { focusSession(sid); return; }
+    if(wasIn) detachFromCells(l, sid);
+    const stillTarget = cellByID(l, target.cid);
+    if(!stillTarget) { throwIn(sid, true); return; }
+
+    if(target.side==='center') {
+      stillTarget.sessions.push(sid); stillTarget.active=sid;
+      l.bound[sid] = stillTarget.sessions[0];     // hält den Stapel über Reflows
+      syncMembership(); focusCell(stillTarget.cid); focusSession(sid);
+      toast(`Gestapelt in „${byId(stillTarget.sessions[0]).title}" · ⌃⇥ wechselt`);
+      return;
+    }
+
+    const cell = {cid:newCID(), sessions:[sid], active:sid};
+    const before = target.side==='left' || target.side==='top';
+    const index = l.cells.findIndex(c=>c.cid===target.cid);
+    l.cells.splice(before?index:index+1, 0, cell);
+
+    if(l.mode==='snapshot' && l.root) {
+      // Echter Split: das Zielblatt wird durch einen Zwei-Kind-Knoten ersetzt.
+      const axis = (target.side==='left'||target.side==='right') ? 'col' : 'row';
+      const pair = before ? [leaf(cell.cid), leaf(target.cid)] : [leaf(target.cid), leaf(cell.cid)];
+      l.root = replaceLeaf(l.root, target.cid, split(axis, pair));
+    }
+    syncMembership(); focusCell(cell.cid); focusSession(sid);
+    toast(l.mode==='snapshot' ? 'Pane geteilt' : 'Eingeordnet — Automatik hat neu gerechnet');
+  }
+
+  function focusCell(cid) {
+    if(state.focusCID===cid) return;
+    state.focusCID=cid;
+    const cell=cellByID(lay(state.gridWorkspace), cid);
+    if(cell) state.active=cell.active;
+    layoutStage(false);
+    renderTabs(); renderSidebar();
+  }
+
+  function focusSession(sid) {
+    const l=lay(state.gridWorkspace); const cell=cellOf(l,sid);
+    if(cell) { cell.active=sid; state.focusCID=cell.cid; }
+    state.active=sid;
+    layoutStage(); renderTabs(); renderSidebar();
+  }
+
+  function toggleZoom(cid) {
+    state.zoomCID = state.zoomCID===cid ? null : (cid||state.focusCID);
+    if(state.zoomCID) state.focusCID=state.zoomCID;
+    layoutStage();
+    toast(state.zoomCID?'Pane gezoomt · ⌘⇧↵ zurück':'Zoom aus — Layout unverändert');
+  }
+
+  function cycleStack(step=1) {
+    const l=lay(state.gridWorkspace), cell=cellByID(l, state.focusCID);
+    if(!cell || cell.sessions.length<2) return false;
+    const i=cell.sessions.indexOf(cell.active);
+    cell.active=cell.sessions[(i+step+cell.sessions.length)%cell.sessions.length];
+    state.active=cell.active;
+    layoutStage(false); renderTabs(); renderSidebar();
+    return true;
+  }
+
+  // Ring-Rotation: die INHALTE wandern durch die bestehende Geometrie, die
+  // Panes bleiben stehen. Rotiert werden ganze Zell-Inhalte, nicht einzelne
+  // Sessions — sonst zerfielen Stapel und die Bindungen würden inkonsistent.
+  function rotate(step=1) {
+    const l=lay(state.gridWorkspace);
+    if(l.cells.length<2) return;
+    const contents=l.cells.map(c=>({sessions:c.sessions, active:c.active}));
+    const n=contents.length;
+    l.cells.forEach((c,i)=>{
+      const src=contents[((i-step)%n+n)%n];
+      c.sessions=src.sessions; c.active=src.active;
+    });
+    if(state.focusCID) { const f=cellByID(l,state.focusCID); if(f) state.active=f.active; }
+    layoutStage(); renderTabs(); renderSidebar();
+    toast('Inhalte rotiert · Panes und Layout unverändert');
+  }
+
+  function balance() {
+    const l=lay(state.gridWorkspace);
+    l.mode='auto'; l.root=null; state.zoomCID=null;
+    layoutStage();
+    toast('Neu ausbalanciert nach Fläche und Mindestbreite');
+  }
+
+  // Zurück auf Automatik heißt: GEOMETRIE verwerfen. Die Zellen selbst
+  // werden nicht neu gebaut (das würde Panes neu mounten) — der Reflow
+  // verteilt die bestehenden Einheiten neu. Bewusste Stapel bleiben.
+  function resetAuto() {
+    const l=lay(state.gridWorkspace);
+    const had=l.mode==='snapshot';
+    l.mode='auto'; l.root=null; state.zoomCID=null;
+    layoutStage();
+    toast(had?'Manuelles Layout verworfen — zurück auf Automatik':'Läuft bereits auf Automatik');
+  }
+
+  // ⌷ ist ein Toggle: stapelt den Nachbarn herein bzw. löst einen
+  // bestehenden Stapel wieder auf.
+  function stackFocusedTarget() {
+    const l=lay(state.gridWorkspace), cell=cellByID(l, state.focusCID);
+    if(!cell) return;
+    if(cell.sessions.length>1) { unstackCell(cell.cid); return; }
+    const i=l.cells.findIndex(c=>c.cid===cell.cid);
+    const donor=l.cells[i+1]||l.cells[i-1];
+    if(!donor) { toast('Nur eine Pane — nichts zu stapeln'); return; }
+    const sid=donor.active, anchor=cell.sessions[0];
+    detachFromCells(l, sid);
+    const host=cellByID(l, cell.cid) || cell;
+    host.sessions.push(sid); host.active=sid;
+    l.bound[sid]=anchor;
+    syncMembership(); layoutStage(); renderTabs(); renderSidebar();
+    toast(`„${byId(sid).title}" in die Fokus-Pane gestapelt`);
+  }
+
+  function unstackCell(cid) {
+    const l=lay(state.gridWorkspace), cell=cellByID(l,cid);
+    if(!cell || cell.sessions.length<2) return;
+    const anchor=cell.sessions[0];
+    cell.sessions.slice(1).forEach(sid=>{ delete l.bound[sid]; });
+    if(l.mode==='snapshot') {
+      // Ohne Reflow muss der Stapel hier von Hand in Zellen zerlegt werden.
+      const extra=cell.sessions.slice(1);
+      cell.sessions=[anchor]; cell.active=anchor;
+      const index=l.cells.findIndex(c=>c.cid===cid);
+      extra.forEach((sid,k)=>{
+        const fresh={cid:newCID(), sessions:[sid], active:sid};
+        l.cells.splice(index+1+k, 0, fresh);
+        if(l.root) l.root = replaceLeaf(l.root, cid, split('col',[leaf(cid), leaf(fresh.cid)]));
+      });
+    }
+    layoutStage(); renderTabs(); renderSidebar();
+    toast('Stapel aufgelöst — jede Session bekommt eine eigene Pane');
+  }
+
+  function removeFromWorkspace(sid) {
+    const l=lay(state.gridWorkspace);
+    detachFromCells(l, sid);
+    syncMembership();
+    layoutStage(); renderTabs(); renderSidebar();
+    toast('Aus dem Workspace genommen · Tab und Prozess laufen weiter');
+  }
+
+  // ——— 7b) Layout-Vorlagen —————————————————————————————————————————
+  // Eine Vorlage speichert die STRUKTUR (Baum + Verhältnisse), nicht die
+  // Chats. Sie wird auf die aktuelle Zellenmenge angewendet: mehr Chats als
+  // Blätter → der Rest stapelt sich im letzten Blatt, weniger → überzählige
+  // Blätter fallen aus dem Baum. Deshalb passt jede Vorlage auf jeden
+  // Workspace, unabhängig von der Chat-Anzahl.
+  const templates = [];
+  let templateSeq = 0;
+
+  // Klonen mit Positions-Index statt Zell-ID (Vorlagen sind chat-unabhängig).
+  function templateFrom(node, counter={n:0}) {
+    if(!node) return null;
+    if(node.type==='leaf') return {type:'leaf', slot:counter.n++};
+    return {type:'split', axis:node.axis, ratios:[...node.ratios],
+            children:node.children.map(c=>templateFrom(c, counter))};
+  }
+  function countLeaves(node) {
+    if(!node) return 0;
+    return node.type==='leaf' ? 1 : node.children.reduce((a,c)=>a+countLeaves(c),0);
+  }
+  // Platzhalter-Slots auf echte Zellen abbilden; unbelegte Blätter entfernen.
+  function materialize(node, cells) {
+    if(!node) return null;
+    if(node.type==='leaf') return cells[node.slot] ? leaf(cells[node.slot].cid) : null;
+    const kept=[], ratios=[];
+    node.children.forEach((child,i)=>{
+      const next=materialize(child, cells);
+      if(next) { kept.push(next); ratios.push(node.ratios[i]); }
+    });
+    if(!kept.length) return null;
+    if(kept.length===1) return kept[0];
+    const sum=ratios.reduce((a,b)=>a+b,0);
+    return {type:'split', axis:node.axis, children:kept, ratios:ratios.map(r=>r/sum)};
+  }
+
+  function saveTemplate() {
+    const l=lay(state.gridWorkspace);
+    if(!l.tree) return;
+    const name = `Vorlage ${++templateSeq}`;
+    templates.push({id:`t${templateSeq}`, name, root:templateFrom(l.tree), leaves:countLeaves(l.tree)});
+    toast(`„${name}" gespeichert (${countLeaves(l.tree)} Panes) — auf jeden Workspace anwendbar`);
+    updateToolbar();
+  }
+
+  function applyTemplate(id) {
+    const t=templates.find(x=>x.id===id); if(!t) return;
+    const l=lay(state.gridWorkspace);
+    const units=unitsOf(l);
+    if(!units.length) { toast('Workspace ist leer — erst Chats einwerfen'); return; }
+    const target=Math.min(units.length, t.leaves);
+    const actives=new Set(l.cells.map(c=>c.active));
+    const chunks=distribute(units, target).map(g=>g.flat());
+    l.cells=chunks.map((ids,i)=>{
+      const prev=l.cells[i];
+      const active = prev && ids.includes(prev.active) ? prev.active : (ids.find(x=>actives.has(x))||ids[0]);
+      return {cid: prev?prev.cid:newCID(), sessions:ids, active};
+    });
+    l.root=materialize(t.root, l.cells);
+    l.mode='snapshot'; state.zoomCID=null;
+    layoutStage(); renderTabs(); renderSidebar();
+    toast(`„${t.name}" angewendet · ${l.cells.length} Panes`
+      + (units.length>t.leaves?` · ${units.length-t.leaves} gestapelt`:''));
+  }
+
+  // ——— 8) Rahmen: Toolbar + Bühne —————————————————————————————————
+  function enterGrid(id) {
+    state.view='grid'; state.gridWorkspace=id;
+    const l=lay(id);
+    state.focusCID=l.cells[0]?.cid||null; state.zoomCID=null;
+    state.active=l.cells[0]?.active||state.active;
+    renderContent();
+  }
+
+  function maximizePane(sid) {
+    state.returnWorkspace=state.gridWorkspace; state.active=sid; state.view='chat';
+    if(!state.tabs.includes(sid)) state.tabs.push(sid);
+    renderAll();
+  }
+
+  function layoutSummary() {
+    const l=lay(state.gridWorkspace);
+    const chats=flatSessions(l).length, panes=l.cells.length;
+    const stacked=chats-panes;
+    return `${chats} ${chats===1?'Chat':'Chats'} · ${panes} ${panes===1?'Pane':'Panes'}`
+      + (stacked>0?` · ${stacked} gestapelt`:'')
+      + (state.zoomCID?' · gezoomt':'');
+  }
+
+  function updateToolbar() {
+    const l=lay(state.gridWorkspace);
+    const stats=$('#wsStats'); if(stats) stats.textContent=layoutSummary();
+    const chip=$('#layoutState');
+    if(chip) {
+      const snap=l.mode==='snapshot';
+      chip.className=`layout-state ${snap?'snapshot':''}`;
+      chip.innerHTML=`<i class="dot"></i>${snap?'Angepasst':'Automatik'}`;
+      chip.title=snap?'Dieser Workspace hat ein gespeichertes Layout — Klick verwirft es (⌘⌥0)'
+                     :'Die Engine ordnet automatisch · ein Divider-Zug macht daraus ein gespeichertes Layout';
+    }
+  }
+
+  function renderGrid() {
+    const w=workspace(state.gridWorkspace);
+    $('#content').innerHTML=`<header class="workspace-toolbar">
+        <span class="project-avatar" style="background:${w.color}">${w.initial}</span>
+        <span class="workspace-title">${w.name}</span>
+        <span class="workspace-stats" id="wsStats"></span>
+        <button class="layout-state" id="layoutState"><i class="dot"></i>Automatik</button>
+        <div class="head-actions" style="margin-left:auto">
+          <button class="provider-action" id="balanceButton" title="Neu ausbalancieren · ⌘⌥B">⚖ Balance</button>
+          <button class="provider-action" id="rotateButton" title="Sessions rotieren · ⌘⌥←/→">↻ Rotieren</button>
+          <button class="icon-button small" id="zoomButton" title="Fokus-Pane zoomen · ⌘⇧↵">⤢</button>
+          <button class="icon-button small" id="wsMenuButton" title="Workspace- und Layout-Aktionen">•••</button>
+        </div>
+      </header>
+      <div class="grid-shell">
+        <div class="stage" id="stage">
+          <div class="stage-drop"><div class="empty-stage"><strong>Workspace ist leer</strong>Chat aus der Sidebar hierher ziehen<br>oder mit ⌥↵ einwerfen — die Engine ordnet selbst</div></div>
+          <div class="drop-overlay" id="dropZones"></div>
+          <i class="drop-hint" id="dropHint"></i>
+          <div class="drop-overlay" id="dividers" style="display:block"></div>
+        </div>
+      </div>
+      <div class="popover" id="paneMenu"></div>
+      <div class="popover" id="wsMenu"></div>`;
+    $('#balanceButton').onclick=balance;
+    $('#rotateButton').onclick=()=>rotate(1);
+    $('#zoomButton').onclick=()=>toggleZoom(state.focusCID);
+    $('#layoutState').onclick=resetAuto;
+    $('#wsMenuButton').onclick=e=>{ e.stopPropagation(); showWorkspaceMenu(); };
+    bindStageDnD();
+    bindToastButtons();
+    // SYNCHRON layouten, nicht per requestAnimationFrame: in einem inaktiven
+    // Tab (bzw. bei gedrosselter Fensteranimation) wird rAF eingefroren, und
+    // die Arbeitsfläche bliebe dauerhaft leer. Das Messen erzwingt ohnehin
+    // ein Reflow. Der rAF danach ist nur die Feinkorrektur.
+    bindPaneActions();
+    layoutStage(false);
+    requestAnimationFrame(()=>{ if(state.view==='grid') layoutStage(false); });
+  }
+
+  function showWorkspaceMenu() {
+    const menu=$('#wsMenu'); if(!menu) return;
+    const l=lay(state.gridWorkspace);
+    const rows=[
+      `<button data-wm="balance">⚖ Layout neu ausbalancieren<span class="shortcut">⌘⌥B</span></button>`,
+      `<button data-wm="auto">↺ Zurück auf Automatik<span class="shortcut">⌘⌥0</span></button>`,
+      '<div class="divider"></div>',
+      `<button data-wm="save">⌸ Aktuelles Layout als Vorlage speichern</button>`
+    ];
+    if(templates.length) {
+      rows.push('<span class="menu-note">Vorlage anwenden</span>');
+      templates.forEach(t=>rows.push(`<button data-tpl="${t.id}">▦ ${t.name}<span class="shortcut">${t.leaves} Panes</span></button>`));
+    } else {
+      rows.push('<span class="menu-note">Noch keine Vorlagen — Layout ziehen und speichern</span>');
+    }
+    rows.push('<div class="divider"></div>');
+    rows.push(`<button data-toast="Workspace umbenennen">✎ Workspace umbenennen…</button>`);
+    rows.push(`<button data-toast="Workspace-Farbe ändern">● Farbe</button>`);
+    rows.push(`<button data-toast="Workspace archiviert — Chats laufen weiter">▣ Workspace archivieren…</button>`);
+    menu.innerHTML=rows.join('');
+    const anchor=$('#wsMenuButton').getBoundingClientRect();
+    menu.style.position='fixed';
+    menu.style.left=`${Math.min(anchor.left-180, window.innerWidth-260)}px`;
+    menu.style.top=`${anchor.bottom+4}px`;
+    menu.classList.add('show');
+    menu.querySelectorAll('[data-wm]').forEach(b=>b.onclick=()=>{
+      menu.classList.remove('show');
+      ({balance, auto:resetAuto, save:saveTemplate})[b.dataset.wm]();
+    });
+    menu.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{
+      menu.classList.remove('show'); applyTemplate(b.dataset.tpl);
+    });
+    bindToastButtons();
+  }
+
+  // Pane-Kontextmenü — bündelt die Aktionen, die es bisher nur verstreut
+  // (Icon, Doppelklick, Sidebar-Menü) oder gar nicht gab.
+  function showPaneMenu(x, y, cid) {
+    const l = lay(state.gridWorkspace), cell = cellByID(l, cid);
+    if(!cell) return;
+    const menu = $('#paneMenu'); if(!menu) return;
+    const sid = cell.active, s = byId(sid);
+    const memberOf = workspacesOf(sid), primary = primaryOf(sid);
+    const isGuest = l.guest===sid;
+    const rows = [];
+    rows.push(`<button data-pm="zoom">⤢ ${state.zoomCID===cid?'Zoom beenden':'Diese Pane zoomen'}<span class="shortcut">⌘⇧↵</span></button>`);
+    rows.push(`<button data-pm="stack">⌷ ${cell.sessions.length>1?'Stapel auflösen':'Nachbar hier stapeln'}<span class="shortcut">⌘⌥S</span></button>`);
+    if(isGuest) rows.push(`<button data-pm="keep">⌖ Vorschau behalten<span class="shortcut">⌥↵</span></button>`);
+    rows.push(`<button data-pm="detach">↗ Als Einzelansicht herauslösen</button>`);
+    rows.push(`<button data-toast="In neues Fenster verschoben — Layout bleibt">◫ In neues Fenster</button>`);
+    rows.push('<div class="divider"></div>');
+    if(memberOf.length>1) {
+      if(primary!==state.gridWorkspace)
+        rows.push(`<button data-pm="primary">⊞ Hauptgruppe auf diesen Workspace</button>`);
+      rows.push(`<button data-pm="exclusive">→ Nur in diesen Workspace verschieben</button>`);
+      rows.push(`<span class="menu-note">Mitglied in ${memberOf.map(id=>workspace(id).name.split(' · ')[0]).join(', ')}</span>`);
+    } else {
+      rows.push(`<button data-toast="Workspace-Auswahl geöffnet">⊞ Zusätzlich zu Workspace hinzufügen…</button>`);
+    }
+    rows.push(`<button data-pm="remove">⊖ Aus diesem Workspace nehmen</button>`);
+    rows.push('<div class="divider"></div>');
+    rows.push(`<button data-pm="balance">⚖ Layout neu ausbalancieren<span class="shortcut">⌘⌥B</span></button>`);
+    rows.push(`<button data-pm="auto">↺ Zurück auf Automatik<span class="shortcut">⌘⌥0</span></button>`);
+    menu.innerHTML = rows.join('');
+    menu.style.position='fixed';
+    menu.style.left=`${Math.min(x, window.innerWidth-270)}px`;
+    menu.style.top=`${Math.min(y, window.innerHeight-330)}px`;
+    menu.classList.add('show');
+    menu.querySelectorAll('[data-pm]').forEach(b=>b.onclick=()=>{
+      menu.classList.remove('show');
+      switch(b.dataset.pm) {
+        case 'zoom': toggleZoom(cid); break;
+        case 'stack': focusCell(cid); stackFocusedTarget(); break;
+        case 'keep': throwIn(sid); break;
+        case 'detach': maximizePane(sid); break;
+        case 'primary': setPrimary(sid, state.gridWorkspace); break;
+        case 'exclusive': moveExclusivelyHere(sid); break;
+        case 'remove': removeFromWorkspace(sid); break;
+        case 'balance': balance(); break;
+        case 'auto': resetAuto(); break;
+      }
+    });
+    bindToastButtons();
+  }
+
+  // Pane-Buttons hängen an Elementen, die die Engine wiederverwendet —
+  // deshalb per Delegation auf der Bühne, einmal gebunden.
+  function bindPaneActions() {
+    const stage=$('#stage'); if(!stage || stage.dataset.bound) return;
+    stage.dataset.bound='1';
+    // Die Bühne beobachtet ihre eigene Größe: das deckt Fenster-Resize,
+    // Sidebar-Breite und Ein-/Ausblenden der Sidebar in einem Mechanismus ab.
+    new ResizeObserver(()=>{ if(state.view==='grid') layoutStage(false); }).observe(stage);
+    stage.addEventListener('click', e=>{
+      const zoom=e.target.closest('[data-zoom]');
+      if(zoom) { e.stopPropagation(); toggleZoom(zoom.dataset.zoom); return; }
+      const detach=e.target.closest('[data-detach]');
+      if(detach) { e.stopPropagation(); const c=cellByID(lay(state.gridWorkspace),detach.dataset.detach); if(c) maximizePane(c.active); return; }
+      const drop=e.target.closest('[data-drop-session]');
+      if(drop) { e.stopPropagation(); removeFromWorkspace(drop.dataset.dropSession); return; }
+      const stack=e.target.closest('[data-stack]');
+      if(stack) { e.stopPropagation(); focusCell(stack.dataset.stack); stackFocusedTarget(); return; }
+      const badge=e.target.closest('[data-ws-badge]');
+      if(badge) { e.stopPropagation(); const c=cellOf(lay(state.gridWorkspace), badge.dataset.wsBadge);
+        const r=badge.getBoundingClientRect(); if(c) showPaneMenu(r.left, r.bottom+4, c.cid); return; }
+      const tab=e.target.closest('[data-stack-tab]');
+      if(tab) {
+        e.stopPropagation();
+        const [cid,sid]=tab.dataset.stackTab.split(':');
+        const cell=cellByID(lay(state.gridWorkspace),cid);
+        if(cell) { cell.active=sid; state.focusCID=cid; state.active=sid; layoutStage(false); renderTabs(); renderSidebar(); }
+      }
+    });
+    stage.addEventListener('contextmenu', e=>{
+      const pane=e.target.closest('.pane'); if(!pane) return;
+      e.preventDefault();
+      focusCell(pane.dataset.cid);
+      showPaneMenu(e.clientX, e.clientY, pane.dataset.cid);
+    });
+  }
+
+  // Geometrische Fokusnavigation: rechts/links/oben/unten meint die
+  // gesehene Anordnung, nicht einen Array-Index — deshalb rechnet sie auf
+  // den Frames und funktioniert in Auto- wie Snapshot-Layouts gleich.
+  function moveFocus(dir) {
+    const l=lay(state.gridWorkspace), frames=state.lastFrames||{};
+    const cur=frames[state.focusCID]; if(!cur) return;
+    const cx=cur.x+cur.w/2, cy=cur.y+cur.h/2;
+    const reachable = l.cells
+      .filter(c=>c.cid!==state.focusCID)
+      .map(c=>({cell:c, f:frames[c.cid]}))
+      .filter(o=>o.f && (
+        dir==='left'  ? o.f.x+o.f.w <= cur.x+2 :
+        dir==='right' ? o.f.x >= cur.x+cur.w-2 :
+        dir==='up'    ? o.f.y+o.f.h <= cur.y+2 :
+                        o.f.y >= cur.y+cur.h-2))
+      .map(o=>{
+        const fx=o.f.x+o.f.w/2, fy=o.f.y+o.f.h/2;
+        const main = dir==='left'?cx-fx : dir==='right'?fx-cx : dir==='up'?cy-fy : fy-cy;
+        const cross = (dir==='left'||dir==='right') ? Math.abs(fy-cy) : Math.abs(fx-cx);
+        return {cid:o.cell.cid, score:main + cross*2};
+      })
+      .sort((a,b)=>a.score-b.score);
+    if(reachable.length) focusCell(reachable[0].cid);
+  }
+
+  // Ein Klick auf Tab oder Sidebar-Zeile darf den Workspace NICHT verlassen
+  // (heute reißt genau das aus dem Grid heraus und verlangt danach ein
+  // „Zurück"). Stattdessen erscheint der Chat in der Fokus-Pane; ⌥-Klick
+  // öffnet ihn weiterhin als Einzelansicht.
+  // Ein per Klick geöffneter Chat ist ein GAST: flüchtig, und der nächste
+  // Klick ersetzt ihn. Sonst würde die Fokus-Pane bei normalem Navigieren
+  // volllaufen. Dauerhaft wird er erst durch eine bewusste Platzierung
+  // (Drop, ⌥↵ oder ⌘⌥S) — dann verliert er den Gast-Status.
+  function openInFocusPane(sid) {
+    const l = lay(state.gridWorkspace);
+    if(!state.tabs.includes(sid)) state.tabs.push(sid);
+    if(cellOf(l, sid)) { focusSession(sid); return; }
+    const focusCID = (cellByID(l, state.focusCID) || l.cells[0])?.cid;
+    if(!focusCID) { throwIn(sid); return; }
+    if(l.guest && l.guest!==sid && cellOf(l, l.guest)) detachFromCells(l, l.guest);
+    const host = cellByID(l, focusCID) || l.cells[0];
+    if(!host) { throwIn(sid); return; }
+    host.sessions.push(sid); host.active = sid;
+    l.bound[sid] = host.sessions[0];
+    l.guest = sid;
+    syncMembership(); state.focusCID = host.cid; focusSession(sid);
+    toast(`„${byId(sid).title}" als Vorschau in der Fokus-Pane · ⌥↵ behält sie · ⌥-Klick öffnet einzeln`);
+  }
+
+  // „Einwerfen" ohne jede Zielwahl — der Kern des neuen Modells.
+  function throwSelectionIn() {
+    const ids = state.multi.size ? [...state.multi] : (state.active?[state.active]:[]);
+    if(!ids.length) return;
+    if(state.view!=='grid') enterGrid(state.gridWorkspace);
+    ids.forEach(id=>throwIn(id, true));
+    state.multi.clear();
+    layoutStage(); renderTabs(); renderSidebar();
+    toast(ids.length>1 ? `${ids.length} Chats eingeworfen — Layout neu berechnet`
+                       : `„${byId(ids[0]).title}" eingeworfen — Layout neu berechnet`);
+  }
+
+  // Fenster-Resize: Auto-Layouts fließen mit, Snapshots behalten ihre
+  // Verhältnisse (und stapeln, wenn eine Pane unter die Mindestbreite fällt).
+  let resizeRaf=null;
+  window.addEventListener('resize', ()=>{
+    if(state.view!=='grid') return;
+    if(resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf=requestAnimationFrame(()=>layoutStage(false));
+  });
+
+  function renderContent() { state.view==='grid'?renderGrid():renderChat(); }
+  function renderOverflow() {
+    const menu=$('#overflowMenu'); if(!menu)return;
+    menu.innerHTML=state.tabs.map((id,i)=>{const s=byId(id);return `<button data-overflow="${id}">${avatar(s,'project-avatar')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title}</span><span class="shortcut">⌘${i+1}</span></button>`;}).join('');
+    menu.style.right='34px';menu.style.top='34px';
+    menu.querySelectorAll('[data-overflow]').forEach(b=>b.onclick=()=>{openTab(b.dataset.overflow);menu.classList.remove('show');});
+  }
+  function renderSwitcher() {
+    $('#switcherGrid').innerHTML=state.tabs.map((id,i)=>{const s=byId(id),p=project(s.project);return `<div class="switch-card ${i===state.switchIndex?'active':''}" data-switch="${i}"><span class="project-avatar" style="background:${p.color}">${p.initial}</span><div><strong>${s.title}</strong><small>${p.name} · ${p.branch}<br>${s.summary}</small></div></div>`;}).join('');
+    document.querySelectorAll('[data-switch]').forEach(c=>c.onclick=()=>commitSwitcher(Number(c.dataset.switch)));
+  }
+  function showSwitcher(step=1) { state.switchIndex=(state.tabs.indexOf(state.active)+step+state.tabs.length)%state.tabs.length;renderSwitcher();$('#switcher').classList.add('show'); }
+  function commitSwitcher(i=state.switchIndex) { state.active=state.tabs[i];state.view='chat';state.returnWorkspace=null;$('#switcher').classList.remove('show');renderAll(); }
+
+  function showMoreMenu(x,y,id) {
+    let menu=$('#moreMenu'); if(!menu){renderChat();menu=$('#moreMenu');}
+    const count=state.multi.has(id)&&state.multi.size>1?state.multi.size:1;
+    menu.innerHTML=`<button data-toast="${count} ${count>1?'Tabs':'Tab'} geschlossen">× ${count>1?count+' Tabs':'Tab'} schließen</button><button data-toast="Umbenennen gestartet">✎ Umbenennen…</button><button data-toast="Titel wird automatisch generiert">✦ Titel automatisch generieren</button><button data-toast="Session wird fortgesetzt">▶ Starten / Fortsetzen / Neustarten</button><div class="divider"></div><button data-toast="In neues Fenster verschoben">◫ In neues Fenster verschieben</button><button data-toast="Workspace-Auswahl geöffnet">⊞ Zu Workspace hinzufügen…</button><button data-toast="Slot-Auswahl geöffnet">▦ Im Workspace platzieren…</button><button data-toast="Workspace aus ${count} Chats erstellt">＋ Neuer Workspace aus ${count} ${count===1?'Chat':'Chats'}</button><div class="divider"></div><button data-toast="Anheftung aktualisiert">⌖ Anpinnen / Loslösen</button><button data-toast="Tab-Farbe geändert">● Tab-Farbe</button><button data-toast="Logs geöffnet">≡ Agent-Logs / Stop / Respawn</button><button data-toast="Archivierung vorbereitet">▣ Archivieren…</button>`;
+    const appRect=$('#app').getBoundingClientRect(); menu.style.position='fixed';menu.style.left=`${Math.min(x,window.innerWidth-260)}px`;menu.style.top=`${Math.min(y,window.innerHeight-360)}px`;menu.style.right='auto';menu.classList.add('show');bindToastButtons();
+  }
+
+  let toastTimer;
+  function toast(text) { const el=$('#toast');el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1800); }
+  function bindToastButtons() { document.querySelectorAll('[data-toast]').forEach(b=>b.onclick=e=>{e.stopPropagation();toast(b.dataset.toast);document.querySelectorAll('.popover').forEach(p=>p.classList.remove('show'));}); }
+  function renderAll() { renderTabs();renderSidebar();renderContent();bindToastButtons(); }
+
+  // Policy wechseln = nur die Auto-Regel tauschen. Ein bestehender Snapshot
+  // hat Vorrang, deshalb wird er dabei bewusst verworfen (sonst passiert
+  // scheinbar nichts und der Regler wirkt kaputt).
+  document.querySelectorAll('#policyPicker [data-policy]').forEach(button=>button.onclick=()=>{
+    state.policy=button.dataset.policy;
+    document.querySelectorAll('#policyPicker [data-policy]').forEach(b=>b.classList.toggle('on',b===button));
+    const l=lay(state.gridWorkspace);
+    l.mode='auto'; l.root=null;
+    if(state.view==='grid') layoutStage();
+    toast({balanced:'Gleich groß — ausbalanciertes Tiling',master:'Master + Stapel — Fokus-Pane groß',columns:'Spalten — alles in einer Reihe'}[state.policy]);
+  });
+  $('#minWidthRange').oninput=e=>{
+    state.minPaneWidth=Number(e.target.value);
+    $('#minWidthValue').textContent=state.minPaneWidth;
+    if(state.view==='grid') layoutStage(false);
+  };
+  $('#minWidthRange').onchange=()=>{
+    const l=lay(state.gridWorkspace);
+    toast(l.mode==='auto'
+      ? `Mindestbreite ${state.minPaneWidth} px — darunter stapelt die Engine`
+      : `Mindestbreite ${state.minPaneWidth} px — wirkt erst wieder auf Automatik (⌘⌥0)`);
+  };
+  $('#autoResetButton').onclick=()=>{ if(state.view!=='grid') enterGrid(state.gridWorkspace); resetAuto(); };
+
+  // Fenstergröße: die Engine hört über den ResizeObserver von selbst mit —
+  // hier wird nur das Fenster verändert, kein Layout-Code angefasst.
+  document.querySelectorAll('#sizePicker [data-size]').forEach(button=>button.onclick=()=>{
+    document.querySelectorAll('#sizePicker [data-size]').forEach(b=>b.classList.toggle('on',b===button));
+    const app=$('#app');
+    app.classList.remove('size-medium','size-compact');
+    if(button.dataset.size!=='large') app.classList.add(`size-${button.dataset.size}`);
+    toast({large:'Großes Fenster',medium:'Mittleres Fenster — halber Bildschirm',
+      compact:'Kompakt-Cockpit — Sidebar weicht, die Engine stapelt'}[button.dataset.size]);
+  });
+
+  document.querySelectorAll('#motionPicker [data-motion]').forEach(button=>button.onclick=()=>{
+    document.querySelectorAll('#motionPicker [data-motion]').forEach(b=>b.classList.toggle('on',b===button));
+    document.body.dataset.motion=button.dataset.motion;
+    toast({calm:'Ruhig — 220 ms',lively:'Lebhaft — 140 ms mit Überschwung',off:'Ohne Bewegung'}[button.dataset.motion]);
+  });
+  $('#themeToggle').onclick=()=>{
+    state.dark=!state.dark;
+    document.body.classList.toggle('dark',state.dark);
+    $('#themeToggle').classList.toggle('active',state.dark);
+    toast(state.dark?'Dark Mode — wie die echte App':'Light Mode');
+  };
+  $('#groupToggle').onclick=()=>{state.grouped=!state.grouped;state.collapsedGroups.clear();renderTabs();toast(state.grouped?'Tab-Gruppen aktiviert':'Manuelle Tab-Reihenfolge');};
+
+  // EIN Drop-Ziel für die ganze Leiste (nicht pro Tab): nur so ist die
+  // Einfügeposition kontinuierlich und kann an Cluster-Grenzen schnappen.
+  // Eingeklappte Gruppen bleiben dabei eingeklappt — sie sind ein Block.
+  const tabsZone=$('#tabStrip').parentElement;
+  tabsZone.addEventListener('dragover',e=>{
+    if(!state.drag) return;
+    e.preventDefault(); e.dataTransfer.dropEffect='move';
+    updateDropLine(e.clientX);
+  });
+  tabsZone.addEventListener('drop',e=>{ if(!state.drag) return; e.preventDefault(); applyDrop(); });
+  tabsZone.addEventListener('dragleave',e=>{
+    if(state.drag && !tabsZone.contains(e.relatedTarget)) $('#dropLine').classList.remove('show');
+  });
+  $('#newTabButton').onclick=e=>{e.stopPropagation();$('#newMenu').classList.toggle('show');$('#overflowMenu').classList.remove('show');};
+  $('#overflowButton').onclick=e=>{e.stopPropagation();$('#overflowMenu').classList.toggle('show');$('#newMenu').classList.remove('show');};
+  $('#sidebarToggle').onclick=()=>$('#app').classList.toggle('sidebar-hidden');
+  $('#sidebarNew').onclick=()=>$('#newMenu').classList.add('show');
+  $('#helpButton').onclick=e=>{e.stopPropagation();$('#helpMenu').classList.toggle('show');};
+  $('#filterInput').oninput=e=>{state.filter=e.target.value;$('#clearSearch').classList.toggle('show',!!state.filter);$('#scopeControl').classList.toggle('disabled',!!state.filter);renderSidebar();};
+  $('#clearSearch').onclick=()=>{$('#filterInput').value='';state.filter='';$('#clearSearch').classList.remove('show');$('#scopeControl').classList.remove('disabled');renderSidebar();};
+  $('#showAll').onclick=()=>{state.scope='all';document.querySelectorAll('#scopeControl button').forEach(b=>b.classList.toggle('on',b.dataset.scope==='all'));renderSidebar();};
+  document.querySelectorAll('#scopeControl button').forEach(b=>b.onclick=()=>{state.scope=b.dataset.scope;document.querySelectorAll('#scopeControl button').forEach(x=>x.classList.toggle('on',x===b));renderSidebar();});
+  document.querySelectorAll('#sidebarMode button').forEach(b=>b.onclick=()=>{state.sidebarMode=b.dataset.mode;document.querySelectorAll('#sidebarMode button').forEach(x=>x.classList.toggle('on',x===b));renderSidebar();});
+
+  document.addEventListener('click',e=>{if(!e.target.closest('.popover')&&!e.target.closest('#newTabButton')&&!e.target.closest('#overflowButton')&&!e.target.closest('#helpButton'))document.querySelectorAll('.popover').forEach(p=>p.classList.remove('show'));});
+  document.addEventListener('keydown',e=>{
+    const grid = state.view==='grid';
+    // ⌃⇥ wechselt IM Stapel der Fokus-Pane, sonst durch die Tabs.
+    if(e.ctrlKey&&e.key==='Tab'){
+      if(grid && !e.shiftKey && cycleStack(1)) { e.preventDefault(); return; }
+      if(grid && e.shiftKey && cycleStack(-1)) { e.preventDefault(); return; }
+      e.preventDefault();
+      if($('#switcher').classList.contains('show'))state.switchIndex=(state.switchIndex+(e.shiftKey?-1:1)+state.tabs.length)%state.tabs.length;
+      else showSwitcher(e.shiftKey?-1:1);
+      renderSwitcher(); return;
+    }
+    if(e.key==='Escape'){document.querySelectorAll('.popover').forEach(p=>p.classList.remove('show'));$('#switcher').classList.remove('show');if(state.zoomCID){toggleZoom(state.zoomCID);}}
+    // ⌘1–9 heißt im Workspace „Pane N fokussieren" (bisher gab es keinen
+    // direkten Weg zu einer Zelle), außerhalb weiterhin „Tab N".
+    if(e.metaKey&&/^[1-9]$/.test(e.key)&&!e.altKey){
+      const i=Number(e.key)-1;
+      if(grid) { const c=lay(state.gridWorkspace).cells[i]; if(c) { e.preventDefault(); focusCell(c.cid); } }
+      else if(state.tabs[i]) openTab(state.tabs[i]);
+    }
+    if(e.metaKey&&e.key.toLowerCase()==='w'&&!e.altKey){e.preventDefault();closeTab(state.active);}
+    if(e.metaKey&&e.key.toLowerCase()==='k'){e.preventDefault();$('#filterInput').focus();}
+
+    // ⌥↵ — Chat einwerfen, ohne ein Ziel zu wählen.
+    if(e.altKey&&!e.metaKey&&e.key==='Enter'){ e.preventDefault(); throwSelectionIn(); return; }
+
+    if(!grid) return;
+    // ⌘⇧↵ Zoom · ⌘⌥B Balance · ⌘⌥0 Automatik · ⌘⌥S stapeln
+    if(e.metaKey&&e.shiftKey&&e.key==='Enter'){ e.preventDefault(); toggleZoom(state.focusCID); return; }
+    if(e.metaKey&&e.altKey&&e.key.toLowerCase()==='b'){ e.preventDefault(); balance(); return; }
+    if(e.metaKey&&e.altKey&&e.key==='0'){ e.preventDefault(); resetAuto(); return; }
+    if(e.metaKey&&e.altKey&&e.key.toLowerCase()==='s'){ e.preventDefault(); stackFocusedTarget(); return; }
+    // ⌘⌥←/→ rotiert die Sessions durch die bestehende Geometrie
+    if(e.metaKey&&e.altKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
+      e.preventDefault(); rotate(e.key==='ArrowRight'?1:-1); return;
+    }
+    // ⌃⌘-Pfeile: geometrischer Fokuswechsel
+    if(e.ctrlKey&&e.metaKey&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
+      e.preventDefault();
+      moveFocus({ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down'}[e.key]);
+    }
+  });
+  document.addEventListener('keyup',e=>{if(e.key==='Control'&&$('#switcher').classList.contains('show'))commitSwitcher();});
+
+  let resizing=false;
+  $('#resizeHandle').onpointerdown=e=>{resizing=true;$('#resizeHandle').setPointerCapture(e.pointerId);};
+  $('#resizeHandle').onpointermove=e=>{if(!resizing)return;const left=$('#app').getBoundingClientRect().left;const width=Math.max(220,Math.min(360,e.clientX-left));document.documentElement.style.setProperty('--sidebar-width',`${width}px`);};
+  $('#resizeHandle').onpointerup=()=>resizing=false;
+  $('#resizeHandle').ondblclick=e=>{if(e.altKey)document.documentElement.style.setProperty('--sidebar-width','268px');};
+
+  // Der Prototyp startet direkt im Workspace — die Layout-Engine IST das Thema.
+  syncMembership();
+  state.view='grid';
+  state.focusCID=layouts[state.gridWorkspace].cells[0].cid;
+  state.active=layouts[state.gridWorkspace].cells[0].active;
+  renderAll();
+</script>
