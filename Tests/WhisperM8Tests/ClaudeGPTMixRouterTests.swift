@@ -93,6 +93,71 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
     }
 
+    /// Trennt die zwei Ablehnungsgruende scharf: eine unbekannte Modellbasis ist
+    /// eine ungueltige Kennung (unabhaengig vom Profil), ein bekanntes Modell
+    /// jenseits seiner verifizierten Kapazitaet ist ein Profilproblem. Vorher
+    /// liefen beide in dieselbe Meldung, und beim Sol-372k-Profil wurde daraus
+    /// die falsche Handlungsempfehlung "wechsle zu Sol / nimm 272k".
+    func testGPTModelGuardSeparatesUnknownIdentifierFromContextProfileRejection() throws {
+        func message(for model: String, contextWindow: Int) throws -> String {
+            let body = try XCTUnwrap(
+                ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                    for: model,
+                    contextWindow: contextWindow
+                )
+            )
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: body) as? [String: Any]
+            )
+            let error = try XCTUnwrap(object["error"] as? [String: Any])
+            XCTAssertEqual(error["type"] as? String, "invalid_request_error")
+            return try XCTUnwrap(error["message"] as? String)
+        }
+
+        // Unbekannte Basis: gleiche Meldung im Standard- UND im Sol-Profil.
+        for window in [272_000, 372_000] {
+            for model in ["gpt-9.9-erfunden", "gpt-5.3-codex-spark", "gpt-5.6-orbit"] {
+                let text = try message(for: model, contextWindow: window)
+                XCTAssertEqual(
+                    text,
+                    "Invalid GPT model identifier.",
+                    "\(model) @ \(window)"
+                )
+            }
+        }
+
+        // Auch eine nicht-kanonische unbekannte Basis darf nicht zum Retry mit
+        // einer weiterhin ungueltigen ID raten.
+        XCTAssertEqual(
+            try message(for: " GPT-9.9-ERFUNDEN[1M] ", contextWindow: 372_000),
+            "Invalid GPT model identifier."
+        )
+
+        // Bekannt, aber jenseits der verifizierten Kapazitaet: Profilmeldung.
+        let terra = try message(for: "gpt-5.6-terra", contextWindow: 372_000)
+        XCTAssertTrue(terra.contains("verified only for gpt-5.6-sol"), terra)
+        XCTAssertFalse(terra.contains("Invalid GPT model identifier"), terra)
+
+        // Bekannte Basis mit unzulaessiger -fast-Variante bleibt ebenfalls ein
+        // Kapazitaets-/Variantenproblem, keine ungueltige Kennung.
+        let miniFast = try message(for: "gpt-5.4-mini-fast", contextWindow: 250_000)
+        XCTAssertTrue(miniFast.contains("Unsupported GPT model"), miniFast)
+        XCTAssertFalse(miniFast.contains("Invalid GPT model identifier"), miniFast)
+
+        // Kanonisierbare, bekannte Modelle bleiben unangetastet.
+        XCTAssertNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.6-sol",
+                contextWindow: 372_000
+            )
+        )
+        let noncanonicalKnown = try message(
+            for: " GPT-5.6-SOL-FAST[1M] ",
+            contextWindow: 272_000
+        )
+        XCTAssertTrue(noncanonicalKnown.contains("gpt-5.6-sol-fast"), noncanonicalKnown)
+    }
+
     func testContentEncodingGuardAllowsOnlyIdentity() {
         XCTAssertFalse(ClaudeGPTMixRouter.hasUnsupportedContentEncoding([]))
         XCTAssertFalse(ClaudeGPTMixRouter.hasUnsupportedContentEncoding([
@@ -413,7 +478,12 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         let oldText = String(decoding: oldResponse, as: UTF8.self)
         XCTAssertTrue(oldText.hasPrefix("HTTP/1.1 400 Bad Request"), oldText)
-        XCTAssertTrue(oldText.contains("Unsupported GPT model"), oldText)
+        // Unbekannte Basis = ungueltige Kennung, NICHT ein Kapazitaetsproblem.
+        // Frueher stand hier "Unsupported GPT model": das schrieb die
+        // irrefuehrende Diagnose fest, die beim Sol-372k-Profil zur
+        // Profilmeldung eskalierte.
+        XCTAssertTrue(oldText.contains("Invalid GPT model identifier"), oldText)
+        XCTAssertFalse(oldText.contains("context profile"), oldText)
         XCTAssertNil(unusedUpstream.lastRequest)
 
         let miniFastBody = Data(#"{"model":"gpt-5.4-mini-fast","messages":[]}"#.utf8)
@@ -595,6 +665,56 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertEqual(text.components(separatedBy: "HTTP/1.1 ").count - 1, 1)
         XCTAssertFalse(text.contains("502 Bad Gateway"))
         XCTAssertFalse(text.contains("Transfer-Encoding: chunked"))
+    }
+
+    /// Der Overflow-Fallback muss die TATSAECHLICH konfigurierte Kapazitaet
+    /// melden, nicht die gemeinsame 272k-Standardgrenze. Ohne diesen Test bliebe
+    /// eine Rueckklammerung auf `maximumKnownSharedContextWindow` unentdeckt:
+    /// der 272k-Test oben bliebe gruen, und genau das aktive Sol-372k-Profil
+    /// bekaeme eine zu kleine Grenze gemeldet.
+    func testRouterReportsConfiguredSolProfileLimitInSyntheticOverflow() throws {
+        let stream = Data((
+            "event: error\r\ndata: "
+                + #"{"type":"error","error":{"type":"api_error","message":"Prompt is too long"}}"#
+                + "\r\n\r\n"
+        ).utf8)
+        let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [stream])
+        defer { upstream.stop() }
+        let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: url,
+            anthropicURL: url,
+            gptContextWindow: ClaudeGPTModelAlias.maximumConfigurableContextWindow
+        )
+        try router.start(port: 0).get()
+        defer { router.stop() }
+
+        let raw = try Self.exchangeMessage(
+            port: try XCTUnwrap(router.listeningPort),
+            model: "gpt-5.6-sol"
+        )
+        let response = try Self.splitResponse(raw)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+        )
+        let error = try XCTUnwrap(object["error"] as? [String: Any])
+        let limit = ClaudeGPTModelAlias.maximumConfigurableContextWindow
+
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 400 Bad Request"), response.head)
+        XCTAssertEqual(error["type"] as? String, "invalid_request_error")
+        XCTAssertEqual(
+            error["message"] as? String,
+            "prompt is too long: \(limit + 1) tokens > \(limit)"
+        )
+        // Regressionsschutz: die 272k-Standardgrenze darf hier nicht auftauchen.
+        XCTAssertFalse(
+            try XCTUnwrap(error["message"] as? String)
+                .contains(String(ClaudeGPTModelAlias.maximumKnownSharedContextWindow)),
+            "Overflow meldete die Standardgrenze statt des konfigurierten Profils"
+        )
+        // Genau EINE Antwort, kein zusaetzliches 200/502 auf demselben Socket.
+        let text = String(decoding: raw, as: UTF8.self)
+        XCTAssertEqual(text.components(separatedBy: "HTTP/1.1 ").count - 1, 1)
     }
 
     func testRouterPassesSemanticTextThenSameErrorSentenceByteExactly() throws {

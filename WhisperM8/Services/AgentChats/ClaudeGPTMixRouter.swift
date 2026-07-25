@@ -334,7 +334,15 @@ final class ClaudeGPTMixRouter {
         guard let model else { return nil }
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.lowercased().hasPrefix("gpt-") else { return nil }
-        guard let canonical = ClaudeGPTModelAlias.canonicalGPTModel(trimmed) else {
+        // `canonicalGPTModel` normalisiert nur (Lowercase, `[1m]`) und prueft die
+        // Allowlist NICHT — fuer jedes `gpt-`-Praefix kommt ein Wert zurueck.
+        // Ohne den zweiten Guard fiel eine unbekannte Basis erst in die
+        // Kapazitaetspruefung und bekam beim Sol-372k-Profil die Profilmeldung:
+        // ein Tippfehler im Modellnamen las sich dann als Kontextfensterproblem.
+        // Die Basis-Pruefung laeuft absichtlich VOR der Kanonik-Meldung — sonst
+        // riete die Antwort zum Retry mit einer weiterhin ungueltigen ID.
+        guard let canonical = ClaudeGPTModelAlias.canonicalGPTModel(trimmed),
+              ClaudeGPTModelAlias.maximumContextWindow(for: canonical) != nil else {
             return anthropicInvalidRequestBody(message: "Invalid GPT model identifier.")
         }
 
