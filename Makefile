@@ -165,7 +165,10 @@ _install_bundle:
 #   Chats/Tab-State ihre Persistenz.
 # - Warten, bis der Prozess wirklich weg ist: der Single-Instance-Check der
 #   frisch gestarteten App und der rsync brauchen ein totes Bundle. SIGKILL
-#   nur als letzte Eskalation nach 5 s.
+#   nur als letzte Eskalation nach 5 s — und auch danach wird gewartet, sonst
+#   startet die neue Instanz, waehrend der Kernel die FDs des alten Prozesses
+#   (u. a. den `flock` des Control-Servers) noch nicht freigegeben hat.
+#   Zweite Verteidigungslinie dagegen ist der Lock-Retry im AgentControlServer.
 GUI_PIDS = ps -axww -o pid=,args= | awk '$$2 ~ /\/$(APP_NAME)$$/ && $$0 !~ /agent-supervise/ {print $$1}'
 
 kill:
@@ -181,6 +184,10 @@ kill:
 		if [ -n "$$leftover" ]; then \
 			echo "⚠️  $(APP_NAME) reagiert nicht auf SIGTERM — SIGKILL."; \
 			kill -9 $$leftover 2>/dev/null || true; \
+			i=0; \
+			while [ -n "$$($(GUI_PIDS))" ] && [ $$i -lt 30 ]; do \
+				sleep 0.1; i=$$((i+1)); \
+			done; \
 		fi; \
 	fi
 

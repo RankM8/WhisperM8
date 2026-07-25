@@ -450,3 +450,53 @@ final class AgentControlServerRoundtripTests: XCTestCase {
         XCTAssertEqual(boomResponse.error?.code, "conflict")
     }
 }
+
+// MARK: - Lock-Retry beim App-Neustart
+
+/// Vorfall 2026-07-24: Ein `make dev`-Neustart traf den `flock` des eben
+/// beendeten Vorgängers. Der Server gab beim ERSTEN Konflikt endgültig auf —
+/// die CLI-Steuerung blieb für die gesamte App-Laufzeit tot, ohne zweiten
+/// Versuch. Diese Tests pinnen die Retry-Politik und die Kernannahme dahinter.
+final class AgentControlServerLockRetryTests: XCTestCase {
+    func testRetryDelaysCoverATypicalRestartWindow() {
+        let delays = AgentControlServer.lockRetryDelays
+
+        XCTAssertFalse(delays.isEmpty, "ohne Retry wäre der Vorfall wieder möglich")
+        XCTAssertEqual(delays, delays.sorted(), "Backoff muss monoton wachsen")
+        XCTAssertTrue(delays.allSatisfy { $0 > 0 })
+        // Gesamtfenster großzügig über dem beobachteten Konflikt (< 1 s), aber
+        // endlich — ein echter Doppelstart muss weiterhin klar aufgeben.
+        XCTAssertGreaterThanOrEqual(delays.reduce(0, +), 5)
+        XCTAssertLessThanOrEqual(delays.reduce(0, +), 30)
+    }
+
+    /// Die Annahme des Fixes: Ein von einem anderen Deskriptor gehaltener
+    /// `flock` lässt `LOCK_EX | LOCK_NB` scheitern und gelingt, sobald der
+    /// Vorgänger losgelassen hat. Genau dieses Zeitfenster überbrückt der Retry.
+    func testNonBlockingFlockFailsWhileHeldAndSucceedsAfterRelease() throws {
+        let lockURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ctrl-lock-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: lockURL) }
+
+        let holderFD = open(lockURL.path, O_CREAT | O_RDWR, 0o600)
+        XCTAssertGreaterThanOrEqual(holderFD, 0)
+        XCTAssertEqual(flock(holderFD, LOCK_EX | LOCK_NB), 0)
+
+        let contenderFD = open(lockURL.path, O_CREAT | O_RDWR, 0o600)
+        XCTAssertGreaterThanOrEqual(contenderFD, 0)
+        defer { close(contenderFD) }
+        XCTAssertNotEqual(
+            flock(contenderFD, LOCK_EX | LOCK_NB), 0,
+            "solange der Vorgänger hält, muss der Start fail-closed bleiben"
+        )
+
+        // Vorgänger endgültig weg (entspricht dem abgeräumten alten Prozess).
+        close(holderFD)
+
+        XCTAssertEqual(
+            flock(contenderFD, LOCK_EX | LOCK_NB), 0,
+            "nach Freigabe muss ein späterer Versuch durchkommen"
+        )
+        flock(contenderFD, LOCK_UN)
+    }
+}

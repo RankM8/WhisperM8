@@ -39,6 +39,20 @@ final class AgentControlServer: @unchecked Sendable {
     private var boundStat: stat?
     private var started = false
 
+    /// Wartezeiten zwischen den `flock`-Versuchen. Hintergrund: Bei einem
+    /// App-Neustart (`make dev`) kann der eben beendete Vorgänger seinen Lock
+    /// noch Sekundenbruchteile halten — der Kernel gibt ihn erst frei, wenn der
+    /// Prozess wirklich abgeräumt ist. Ohne Retry blieb die CLI-Steuerung dann
+    /// für die GESAMTE Laufzeit tot (Vorfall 2026-07-24: ein einziger Konflikt
+    /// 2 s nach dem Start legte alle `chats`-Handeln-Befehle lahm). Fail-closed
+    /// bleibt erhalten: Ein fremder Lock wird nie übernommen, wir geben nur
+    /// nicht mehr beim ersten Versuch endgültig auf.
+    static let lockRetryDelays: [TimeInterval] = [0.25, 0.5, 1, 2, 4]
+    private var lockAttempt = 0
+    /// Verhindert, dass ein eingeplanter Retry nach einem `stop()` doch noch
+    /// einen Server hochzieht.
+    private var stopRequested = false
+
     /// Handler, der validierte Requests auf dem MainActor ausführt. Wird beim
     /// Start injiziert (der Handler kennt Registry, Store etc.).
     private var handler: AgentControlRequestHandling?
@@ -53,18 +67,21 @@ final class AgentControlServer: @unchecked Sendable {
             return
         }
         queue.async { [weak self] in
+            self?.stopRequested = false
+            self?.lockAttempt = 0
             self?.startLocked(handler: handler)
         }
     }
 
     func stop() {
         queue.async { [weak self] in
+            self?.stopRequested = true
             self?.stopLocked()
         }
     }
 
     private func startLocked(handler: AgentControlRequestHandling) {
-        guard !started else { return }
+        guard !started, !stopRequested else { return }
         self.handler = handler
 
         let directory = ChatsControlProtocol.controlDirectory()
@@ -91,10 +108,28 @@ final class AgentControlServer: @unchecked Sendable {
             return
         }
         guard flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
-            Logger.agentStore.notice("control_server_lock_held_by_other_instance")
             cleanupPartialStart()
+            let attempt = lockAttempt
+            guard attempt < Self.lockRetryDelays.count else {
+                // Erst hier ist es ein echter Doppelstart: Eine andere Instanz
+                // hält den Lock dauerhaft. Als `error`, damit der Ausfall im
+                // `log stream` sichtbar ist statt still zu bleiben.
+                Logger.agentStore.error(
+                    "control_server_lock_held_by_other_instance_giving_up attempts=\(attempt + 1)"
+                )
+                return
+            }
+            lockAttempt = attempt + 1
+            let delay = Self.lockRetryDelays[attempt]
+            Logger.agentStore.notice(
+                "control_server_lock_held_retrying attempt=\(attempt + 1) delaySeconds=\(delay)"
+            )
+            queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.startLocked(handler: handler)
+            }
             return
         }
+        lockAttempt = 0
 
         // Socket-Pfad wählen (sun_path-Limit).
         var chosen = ChatsControlProtocol.defaultSocketURL()
