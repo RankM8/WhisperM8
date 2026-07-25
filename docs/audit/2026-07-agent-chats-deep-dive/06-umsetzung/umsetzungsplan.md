@@ -196,14 +196,34 @@ besitzt, wird sie übernommen statt nachgebaut.
 |---|---|---|
 | E28 | Welchen Status bekommt das GPT-Backend? | Vollwertiges Kernfeature, vollständig härten: Lifecycle-Automat, nur nachweislich passender Router gilt als bereit, lokale Client-Authentifizierung, verifizierte Update-Quelle, Contract-Tests gegen Claude-Verhalten, kontrollierter Rückfall auf das native Backend. |
 | E29 | Verhalten bei Ausfall eines Pflicht-Agenten im Workflow? | Ergebnisse behalten, aber `incomplete: true` setzen und fehlgeschlagene Pflichtschritte namentlich führen. Synthese darf einen Zwischenstand liefern, **niemals** ein finales Ergebnis. Nachholen per Resume; erfolgreiche Schritte aus dem Cache. Optionale Ausfälle ebenfalls nennen. |
+| E30 | Dürfen Workflow-Agenten selbst Skills laden? | **Ja, unverändert.** Der Skill-Zugriff bleibt für GPT-Agenten erhalten — er ist der Grund, warum GPT überhaupt in Claude Code läuft. Kein Werkzeugentzug, keine Allowlist. Das Überlaufrisiko wird stattdessen über W1-TOOLCAP und die Ausfallbilanz aus E29 aufgefangen. |
+
+**Belegte Randbedingungen zu E30** (gemessen am 2026-07-25 an einem realen
+GPT-Subagenten, `agent-agpt-rules-probe2`):
+
+- GPT-Subagenten erhalten die Projekt- und Benutzerregeln vollständig — sowohl
+  `~/.claude-profiles/<Profil>/CLAUDE.md` als auch die Projekt-`CLAUDE.md`. Der
+  Agent konnte beide wörtlich zitieren. Eine frühere gegenteilige Vermutung war
+  ein Messfehler: Der System-Prompt steht nicht im Transcript-JSONL.
+- Jeder Subagent bekommt zusätzlich eine Aufstellung von rund **220 Skills**
+  samt Beschreibungen (~17 KB). Das ist die eigentliche Triggerfläche.
+- Eine Größenbegrenzung für Skill-Inhalte ist **nicht** umsetzbar: Das
+  Skill-Werkzeug gehört Claude Code; WhisperM8 hostet die CLI, greift aber nicht
+  in deren Werkzeugaufrufe ein.
+- Zwei der drei Fehlgriffe vom 2026-07-22 stammen aus eigenen Skills: `audit`
+  kollidiert namentlich mit jeder Aufgabe, die das Wort „Audit" enthält, und
+  zieht laut seiner Zeile 13 zusätzlich `frontend-design` nach. Das ist
+  reparierbar, weil es uns gehört — anders als der mitgelieferte `claude-api`
+  (840 KB), dessen Trigger bei jedem Vorkommen von „Sonnet" feuert und der bei
+  jedem CLI-Update neu ausgeliefert wird.
 
 ### Offen — noch nicht entschieden
 
 | # | Frage | Status |
 |---|---|---|
-| E30 | Dürfen Workflow-Agenten beliebige Skills laden, oder nur eine explizit deklarierte Liste? | **offen.** Auslöser: `verify:confluence` lud den irrelevanten Skill `claude-api` und injizierte ~813.000 Zeichen. Optionen: explizite Allowlist pro Agent, reines Größenlimit, oder unverändert. Vorher zu klären, weil eine reine Prompt-Anweisung sich als nicht ausreichend erwiesen hat. |
-| W1-TOOLCAP | Tool-/MCP-Ergebnisgrößen in Workflow-Agenten begrenzen | **neuer offener Punkt.** Ein einzelner Rückgabewert von 100k+ Tokens ist gegen jede Kompaktierungsstrategie immun, weil Auto-Compact zwischen Turns läuft. Kandidat für W1, siehe Stand 2026-07-25. |
-| E31 | Muss der reale Compact bei ~339k E2E belegt werden? | **offen.** Nicht billig erzwingbar; Workflow-Resume ist session-gebunden und der gestrige Lauf nicht wiederholbar. Der nächste reale lange Workflow gilt als natürlicher Nachweis. |
+| W1-TOOLCAP | Tool-/MCP-Ergebnisgrößen in Workflow-Agenten begrenzen | **offen.** Ein einzelner Rückgabewert von 100k+ Tokens ist gegen jede Kompaktierungsstrategie immun, weil Auto-Compact zwischen Turns läuft. Nach der E30-Entscheidung der verbleibende Haupthebel gegen Kontextüberläufe. Kandidat für W1. |
+| W1-SKILLTRIGGER | Trigger der eigenen Skills entschärfen | **offen.** `audit` umbenennen beziehungsweise Trigger schärfen, damit es nicht mehr bei jeder „Audit"-Aufgabe feuert und `frontend-design` nachzieht. Kleiner Aufwand, beseitigt zwei der drei bekannten Fehlgriffe dauerhaft. Gegen `claude-api` wirkungslos. |
+| E31 | Muss der reale Compact bei ~339k E2E belegt werden? | **offen.** Nicht billig erzwingbar; Workflow-Resume ist session-gebunden und der Lauf vom 2026-07-22 nicht wiederholbar. Der nächste reale lange Workflow gilt als natürlicher Nachweis. |
 
 ## Phasenplan
 
