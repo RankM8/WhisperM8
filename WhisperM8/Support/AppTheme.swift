@@ -49,6 +49,13 @@ enum AppTheme {
         light: Color(red: 0.928, green: 0.928, blue: 0.936),
         dark: Color(red: 0.080, green: 0.082, blue: 0.086)
     )
+    /// Fläche der Tab-Leiste (Titelzone). Bewusst dunkler als `header`:
+    /// wie in Chrome trennt der Flächenkontrast Leiste und Header — der
+    /// aktive Tab trägt `header` und geht dadurch nahtlos in ihn über.
+    static let tabBar = Color.dynamic(
+        light: Color(red: 0.916, green: 0.916, blue: 0.924),
+        dark: Color(red: 0.044, green: 0.046, blue: 0.050)
+    )
     static let tabSelected = Color.dynamic(
         light: Color(red: 1.0, green: 1.0, blue: 1.0),
         dark: Color(red: 0.115, green: 0.118, blue: 0.124)

@@ -326,7 +326,8 @@ extension AgentChatsView {
               event.window === window,
               let contentView = window.contentView else { return event }
 
-        let topZone: CGFloat = 28
+        // Muss zur Höhe der Tab-Zeile passen (34pt seit dem Chrome-Redesign).
+        let topZone: CGFloat = 34
         let trafficLightWidth: CGFloat = 80
         let location = event.locationInWindow
         let inTopBand = location.y >= contentView.bounds.height - topZone
@@ -416,7 +417,6 @@ extension AgentChatsView {
         guard tabDragEndMonitor == nil else { return }
         tabDragEndMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
             if tabInsertionIndex != nil { tabInsertionIndex = nil }
-            if tabInsertionBeforeID != nil { tabInsertionBeforeID = nil }
             if tabDropSession != nil { tabDropSession = nil }
             return event
         }

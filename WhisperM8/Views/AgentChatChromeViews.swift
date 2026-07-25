@@ -96,10 +96,90 @@ enum TitleBarZoom {
     }
 }
 
-/// Kompaktes Chrome-artiges Gruppenlabel links vor den Mitglieds-Tabs.
-/// Die Gruppe selbst bekommt keine Außenkarte und kein Padding; Farbe dient
-/// nur als Herkunftsmarke, während aktive/inaktive Zustände über Fläche und
-/// Kontur lesbar bleiben.
+/// Vollständige Chrome-Tab-Silhouette als EIN durchgehender Pfad: konkaver
+/// linker Fuß, linke Seite, abgerundete Oberkante, rechte Seite, konkaver
+/// rechter Fuß. Die Unterkante bleibt offen.
+///
+/// Bewusst ein einziger Pfad statt Tab + zwei separate Füße: als Stroke ist
+/// die Gruppenfarbe dadurch ein ununterbrochener Zug von der Bodenlinie um
+/// den aktiven Tab herum und zurück — getrennte Shapes hinterlassen an der
+/// Abzweigung einen sichtbaren Sporn.
+///
+/// Der `rect` umfasst Tab UND beide Füße; die Tab-Kanten liegen deshalb um
+/// `footRadius` eingerückt (Aufrufer: `.padding(.horizontal, -footRadius)`).
+/// Tangenten-Bögen statt Winkelangaben — die Anschlusspunkte ergeben sich
+/// so zwangsläufig und können nicht um Bruchteile auseinanderlaufen.
+struct ChromeTabShape: Shape {
+    var cornerRadius: CGFloat = 7
+    var footRadius: CGFloat = ChromeTabMetrics.footSize
+
+    func path(in rect: CGRect) -> Path {
+        let left = rect.minX + footRadius
+        let right = rect.maxX - footRadius
+        guard right > left else { return Path(rect) }
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addArc(
+            tangent1End: CGPoint(x: left, y: rect.maxY),
+            tangent2End: CGPoint(x: left, y: rect.maxY - footRadius),
+            radius: footRadius
+        )
+        path.addLine(to: CGPoint(x: left, y: rect.minY + cornerRadius))
+        path.addArc(
+            tangent1End: CGPoint(x: left, y: rect.minY),
+            tangent2End: CGPoint(x: left + cornerRadius, y: rect.minY),
+            radius: cornerRadius
+        )
+        path.addLine(to: CGPoint(x: right - cornerRadius, y: rect.minY))
+        path.addArc(
+            tangent1End: CGPoint(x: right, y: rect.minY),
+            tangent2End: CGPoint(x: right, y: rect.minY + cornerRadius),
+            radius: cornerRadius
+        )
+        path.addLine(to: CGPoint(x: right, y: rect.maxY - footRadius))
+        path.addArc(
+            tangent1End: CGPoint(x: right, y: rect.maxY),
+            tangent2End: CGPoint(x: rect.maxX, y: rect.maxY),
+            radius: footRadius
+        )
+        return path
+    }
+}
+
+enum ChromeTabMetrics {
+    /// Seitliche Ausstellung der Fußkurven über die Tab-Breite hinaus.
+    static let footSize: CGFloat = 7
+}
+
+/// Chip-Text: Weiß oder Schwarz — je nachdem, was auf der Gruppenfarbe
+/// tatsächlich den höheren Kontrast liefert. Bewusst über die WCAG-
+/// Relativluminanz (linearisiertes sRGB) statt über gamma-kodierte Luma:
+/// kräftige Mitteltöne wie Grün oder Orange bekämen sonst weißen Text mit
+/// unter 2:1 Kontrast.
+func chipTextColor(forHex hex: String) -> Color {
+    let scanner = Scanner(string: hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")))
+    var rgb: UInt64 = 0
+    scanner.scanHexInt64(&rgb)
+
+    func linear(_ channel: Double) -> Double {
+        channel <= 0.03928 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+    }
+    let red = linear(Double((rgb >> 16) & 0xFF) / 255.0)
+    let green = linear(Double((rgb >> 8) & 0xFF) / 255.0)
+    let blue = linear(Double(rgb & 0xFF) / 255.0)
+    let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+    let contrastOnWhite = 1.05 / (luminance + 0.05)
+    let contrastOnBlack = (luminance + 0.05) / 0.05
+    return contrastOnBlack >= contrastOnWhite
+        ? Color.black.opacity(0.86)
+        : Color.white.opacity(0.97)
+}
+
+/// Gruppen-Label im Chrome-Stil: aufgeklappt ein GEFÜLLTER Farbchip,
+/// eingeklappt ein umrandeter Chip (wie Chromes kollabierte Gruppen).
+/// Der Chip sitzt vertikal mittig vor den vollhohen Mitglieds-Tabs.
 struct ChatTabGroupLabel: View {
     let title: String
     let count: Int
@@ -114,50 +194,60 @@ struct ChatTabGroupLabel: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .bold))
                     .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                Circle()
-                    .fill(groupColor)
-                    .frame(width: 6, height: 6)
                 Text(title)
                     .font(.system(size: 10, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(maxWidth: 110, alignment: .leading)
+                    .frame(maxWidth: 110)
+                    .fixedSize(horizontal: true, vertical: false)
                 Text("\(count)")
                     .font(.system(size: 9, weight: .medium).monospacedDigit())
-                    .foregroundStyle(AgentTheme.textTertiary)
+                    .opacity(0.75)
                     .fixedSize()
             }
-            .foregroundStyle(AgentTheme.textPrimary)
-            .padding(.horizontal, 8)
-            .frame(height: 24)
-            .background(
-                groupColor.opacity(isActive ? 0.18 : (isHovered ? 0.13 : 0.09)),
-                in: Capsule()
+            .foregroundStyle(
+                isCollapsed
+                    ? groupColor
+                    : chipTextColor(forHex: colorHex).opacity(isHovered ? 1 : 0.94)
             )
-            .overlay(
-                Capsule().strokeBorder(
-                    groupColor.opacity(isActive ? 0.58 : 0.30),
-                    lineWidth: isActive ? 1.2 : 0.8
-                )
-            )
-            .contentShape(Capsule())
+            .padding(.horizontal, 7)
+            .frame(height: 19)
+            .background {
+                if isCollapsed {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(groupColor.opacity(isHovered ? 0.14 : 0))
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(groupColor, lineWidth: 1.5)
+                } else {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isHovered ? groupColor.opacity(0.86) : groupColor)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 5))
         }
         .buttonStyle(.plain)
+        .padding(.leading, 2)
+        .padding(.trailing, 5)
+        .padding(.bottom, 4.5)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .animation(.easeOut(duration: 0.12), value: isCollapsed)
-        .help(isCollapsed ? "Tab-Gruppe aufklappen" : "Tab-Gruppe einklappen")
+        .help(
+            isCollapsed
+                ? "Tab-Gruppe aufklappen · Ziehen verschiebt die ganze Gruppe"
+                : "Tab-Gruppe einklappen · Ziehen verschiebt die ganze Gruppe"
+        )
     }
 }
 
-/// Tab der globalen Tab-Bar. Die aktive Fläche ist unten bewusst offen und
-/// geht ohne Zwischenraum in den Chat-Header über — wie ein aktiver Chrome-Tab.
-/// Gruppenfarbe und optionale Custom-Farbe erscheinen nur als feine Marker;
-/// die früher vollflächige Tönung entfällt zugunsten einer ruhigen Palette.
+/// Tab der globalen Tab-Bar im Chrome-Stil: der aktive Tab trägt die
+/// Header-Fläche, ist unten komplett offen und „steht" mit konkaven
+/// Fußkurven auf dem Header. In einer Gruppe umschließt ihn die
+/// Gruppenfarbe als Kontur, die über die Füße in die Bodenlinie mündet.
 struct ChatTabButton: View {
     let session: AgentChatSession
     /// Projekt der Session fürs Repo-Badge. `nil` (Workspace-Inkonsistenz)
@@ -182,9 +272,11 @@ struct ChatTabButton: View {
         return Color(hex: hex)
     }
 
-    private var markerColor: Color {
-        groupColor ?? customColor ?? AgentTheme.accent
-    }
+    /// Silhouette des AKTIVEN Tabs samt Füßen. Wird über
+    /// `.padding(.horizontal, -footSize)` seitlich ausgestellt, ohne das
+    /// Layout zu verändern.
+    private var chromeShape: ChromeTabShape { ChromeTabShape() }
+    private var foot: CGFloat { ChromeTabMetrics.footSize }
 
     var body: some View {
         Button(action: onSelect) {
@@ -210,51 +302,59 @@ struct ChatTabButton: View {
             .background {
                 ZStack {
                     if isSelected {
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: 7,
-                            bottomLeadingRadius: 0,
-                            bottomTrailingRadius: 0,
-                            topTrailingRadius: 7
-                        )
-                        .fill(AgentTheme.header)
+                        // Fläche INKLUSIVE der beiden Fußkurven — der Tab
+                        // steht damit auf dem Header statt an ihm zu enden.
+                        chromeShape.fill(AgentTheme.header)
+                            .padding(.horizontal, -foot)
+                        if groupColor == nil, let customColor {
+                            // Custom-Farbe eines Einzel-Tabs: 2pt-Kappe oben.
+                            chromeShape.stroke(customColor, lineWidth: 2)
+                                .padding(.horizontal, -foot)
+                                .mask(Rectangle().padding(.bottom, 2))
+                        }
+                        if isMultiSelected {
+                            chromeShape.fill(AgentTheme.accentTint.opacity(0.20))
+                                .padding(.horizontal, -foot)
+                        }
                     } else if isHovered {
                         RoundedRectangle(cornerRadius: 5)
                             .fill(AgentTheme.surface.opacity(0.72))
                     }
 
-                    if isMultiSelected {
+                    if isMultiSelected, !isSelected {
                         RoundedRectangle(cornerRadius: 5)
-                            .fill(AgentTheme.accentTint.opacity(isSelected ? 0.20 : 0.42))
+                            .fill(AgentTheme.accentTint.opacity(0.42))
                         RoundedRectangle(cornerRadius: 5)
                             .strokeBorder(AgentTheme.accent.opacity(0.75), lineWidth: 1.4)
                     }
                 }
             }
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(markerColor.opacity(isSelected ? 0.95 : 0.55))
-                    .frame(height: isSelected ? 2 : 1)
-            }
-            .overlay(alignment: .leading) {
-                if isSelected {
-                    Rectangle().fill(AgentTheme.borderStrong.opacity(0.65)).frame(width: 0.7)
+            // Gruppen-Kontur: EIN Zug von der Bodenlinie um den Tab und
+            // zurück — Seiten, Oberkante und beide Fußbögen in einem Pfad.
+            .overlay {
+                if isSelected, let groupColor {
+                    chromeShape
+                        .stroke(groupColor, lineWidth: 2)
+                        .padding(.horizontal, -foot)
+                        .allowsHitTesting(false)
                 }
             }
+            // Mehrfach-Auswahl am aktiven Tab: derselbe offene Pfad statt
+            // eines geschlossenen Rings — ein Ring quer über die Unterkante
+            // würde die nahtlose Fläche zum Header zerschneiden.
+            .overlay {
+                if isSelected, isMultiSelected {
+                    chromeShape
+                        .stroke(AgentTheme.accent.opacity(0.75), lineWidth: 1.4)
+                        .padding(.horizontal, -foot)
+                        .padding(groupColor == nil ? 0 : 2)
+                        .allowsHitTesting(false)
+                }
+            }
+            // Hairline-Trenner nur zwischen INAKTIVEN Gruppen-Mitgliedern.
             .overlay(alignment: .trailing) {
-                if isSelected {
-                    Rectangle().fill(AgentTheme.borderStrong.opacity(0.65)).frame(width: 0.7)
-                } else {
+                if !isSelected, groupColor != nil {
                     Rectangle().fill(AgentTheme.border.opacity(0.55)).frame(width: 0.6, height: 15)
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if isSelected {
-                    // Überdeckt die Trennkante zum Header: der Tab öffnet sich
-                    // optisch nach unten statt als freistehende Pille zu enden.
-                    Rectangle()
-                        .fill(AgentTheme.header)
-                        .frame(height: 2)
-                        .offset(y: 1)
                 }
             }
             .contentShape(Rectangle())

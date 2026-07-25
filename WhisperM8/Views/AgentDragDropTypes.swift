@@ -26,19 +26,27 @@ struct DraggableSession: Codable, Transferable {
     /// bleiben decodierbar.
     let sourceWorkspaceID: UUID?
     let sourceSlotIndex: Int?
+    /// Gesetzt, wenn der GRIFF das Gruppen-Label war: dann zieht der Drag die
+    /// ganze Herkunftsgruppe als Block. `sessionID` bleibt das erste Mitglied,
+    /// damit jedes bestehende Drop-Ziel (Sidebar, Grid, Workspace, Tear-off)
+    /// den Payload unverändert versteht. Optional → ältere Payloads bleiben
+    /// decodierbar.
+    let groupMemberIDs: [UUID]?
 
     init(
         sessionID: UUID,
         sourceProjectID: UUID,
         sourceWindowID: UUID? = nil,
         sourceWorkspaceID: UUID? = nil,
-        sourceSlotIndex: Int? = nil
+        sourceSlotIndex: Int? = nil,
+        groupMemberIDs: [UUID]? = nil
     ) {
         self.sessionID = sessionID
         self.sourceProjectID = sourceProjectID
         self.sourceWindowID = sourceWindowID
         self.sourceWorkspaceID = sourceWorkspaceID
         self.sourceSlotIndex = sourceSlotIndex
+        self.groupMemberIDs = groupMemberIDs
     }
 
     static var transferRepresentation: some TransferRepresentation {

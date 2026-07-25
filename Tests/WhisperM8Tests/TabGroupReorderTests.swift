@@ -2,22 +2,24 @@ import Foundation
 import XCTest
 @testable import WhisperM8
 
-/// Multi-Tab-Drag: Gruppe als Block vor das Ziel sortieren, Relativ-Reihenfolge
-/// erhalten. Reine Logik.
+/// Block-Reorder der Tab-Leiste: die bewegten IDs landen zusammenhängend vor
+/// dem Ziel, die Relativ-Reihenfolge bleibt erhalten. Eingabe ist immer die
+/// SICHTBARE (gruppierte) Reihenfolge — deren Ergebnis wird zur neuen
+/// manuellen Reihenfolge. Reine Logik.
 final class TabGroupReorderTests: XCTestCase {
     private let a = UUID(), b = UUID(), c = UUID(), d = UUID(), e = UUID()
     private var order: [UUID] { [a, b, c, d, e] }
 
     func testMovesGroupBeforeTarget() {
         XCTAssertEqual(
-            TabGroupReorder.newOrder(order, moving: [b, d], before: c),
+            TabOrderReorder.newOrder(order, moving: [b, d], before: c),
             [a, b, d, c, e]
         )
     }
 
     func testMovesGroupToEndWhenBeforeNil() {
         XCTAssertEqual(
-            TabGroupReorder.newOrder(order, moving: [a, b], before: nil),
+            TabOrderReorder.newOrder(order, moving: [a, b], before: nil),
             [c, d, e, a, b]
         )
     }
@@ -25,34 +27,33 @@ final class TabGroupReorderTests: XCTestCase {
     func testPreservesGroupRelativeOrder() {
         // Set-Reihenfolge egal — Ergebnis folgt der Anzeige-Reihenfolge (b vor d).
         XCTAssertEqual(
-            TabGroupReorder.newOrder(order, moving: [d, b], before: e),
+            TabOrderReorder.newOrder(order, moving: [d, b], before: e),
             [a, c, b, d, e]
         )
     }
 
-    func testDropOnOwnGroupMemberIsNoOp() {
+    func testDropOnOwnMemberIsNoOp() {
         XCTAssertEqual(
-            TabGroupReorder.newOrder(order, moving: [b, c], before: b),
+            TabOrderReorder.newOrder(order, moving: [b, c], before: b),
             order
         )
     }
 
-    func testSingleElementGroupReturnsUnchanged() {
-        // Einzel-Auswahl: Caller nutzt moveTab, nicht diese Funktion.
+    func testUnknownMovingIDsLeaveOrderUntouched() {
         XCTAssertEqual(
-            TabGroupReorder.newOrder(order, moving: [c], before: a),
+            TabOrderReorder.newOrder(order, moving: [UUID()], before: a),
             order
         )
     }
 
-    func testTabOrderReordersSingleAgainstVisualOrder() {
+    func testReordersSingleAgainstVisualOrder() {
         XCTAssertEqual(
             TabOrderReorder.newOrder([a, c, b], moving: [b], before: a),
             [b, a, c]
         )
     }
 
-    func testTabOrderReordersSelectionAsVisualBlock() {
+    func testReordersSelectionAsVisualBlock() {
         XCTAssertEqual(
             TabOrderReorder.newOrder([a, c, b, d], moving: [c, d], before: a),
             [c, d, a, b]

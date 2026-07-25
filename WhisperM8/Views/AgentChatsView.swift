@@ -187,9 +187,9 @@ struct AgentChatsView: View {
     // nur noch die v3→v4-Migration (AgentSessionStore.loadUIState).
     /// internal, da der `leftMouseUp`-Monitor (in +Shortcuts) ihn zurücksetzt.
     @State var tabInsertionIndex: Int?
-    /// Semantisches Drop-Ziel; bleibt auch stabil, wenn Collapse während des
-    /// Drags die sichtbare Tab-Reihenfolge erweitert.
-    @State var tabInsertionBeforeID: UUID?
+    /// Zählt Strip-Eintritte — verwirft spät zurückkommende Payload-Decodes
+    /// abgebrochener Drags (sonst verschöbe der Drop den falschen Tab).
+    @State var tabDragGeneration = 0
     /// Bereits dekodierter Drag-Payload, damit Einfügelinie und tatsächliches
     /// gruppennormalisiertes Drop-Ziel dieselbe Position anzeigen.
     @State var tabDropSession: DraggableSession?
@@ -473,10 +473,17 @@ struct AgentChatsView: View {
 
     func draggedTabIDs(for dropped: DraggableSession) -> [UUID] {
         let source = dropped.sourceWindowID ?? windowID
-        let sourceSelection = windowStore.multiSelection(in: source)
         let sourceOrder = visualTabOrderIDs(
             for: windowStore.openTabIDs(in: source)
         )
+        // Gruppen-Drag (Griff war der Chip): die ganze Gruppe zieht mit, in
+        // ihrer sichtbaren Reihenfolge.
+        if let members = dropped.groupMemberIDs, !members.isEmpty {
+            let ordered = sourceOrder.filter(Set(members).contains)
+            return ordered.isEmpty ? members : ordered
+        }
+
+        let sourceSelection = windowStore.multiSelection(in: source)
         guard sourceSelection.count > 1,
               sourceSelection.contains(dropped.sessionID) else {
             return [dropped.sessionID]
@@ -499,16 +506,32 @@ struct AgentChatsView: View {
         return selectedIDs
     }
 
-    private func normalizedTabDropTarget(
+    /// Schnappt einen rohen geometrischen Index auf die nächste erlaubte
+    /// Slot-Grenze — die Einfügelinie zeigt danach exakt das, was der Drop
+    /// auch tut.
+    private func snappedTabDropIndex(
         for dropped: DraggableSession,
-        before requestedID: UUID?
-    ) -> UUID? {
-        let group = draggedTabIDs(for: dropped)
-        return AgentTabGrouping.adjustedDropTarget(
-            before: requestedID,
-            movingIDs: Set(group),
-            movingKeys: Set(group.compactMap(tabGroupingKey(for:))),
-            items: tabGroupingItems
+        rawIndex: Int
+    ) -> Int {
+        let moving = draggedTabIDs(for: dropped)
+        // Gemischte Herkunft (nur bei ausgeschalteter Gruppierung möglich)
+        // hat keinen Zielcluster — dann gilt allein die Grundregel.
+        let origins = Set(moving.compactMap(tabGroupingKey(for:)))
+        return AgentTabGrouping.snappedInsertionIndex(
+            requested: rawIndex,
+            slots: tabStripSlots,
+            movingIDs: Set(moving),
+            movingOrigin: origins.count == 1 ? origins.first : nil,
+            originOfSession: { tabGroupingKey(for: $0) },
+            groupingEnabled: tabGroupingEnabled
+        )
+    }
+
+    private func tabDropTargetID(atSlotIndex index: Int, moving: Set<UUID>) -> UUID? {
+        AgentTabGrouping.dropTargetID(
+            atSlotIndex: index,
+            in: tabStripSlots,
+            movingIDs: moving
         )
     }
 
@@ -522,6 +545,15 @@ struct AgentChatsView: View {
             }
         }
     }
+
+    /// Drop-Einheiten der Leiste. Eine eingeklappte Gruppe ist EIN Slot —
+    /// dadurch bleibt sie beim Ziehen ein gültiges Ziel, ohne aufzuklappen.
+    private var tabStripSlots: [AgentTabStripSlot] {
+        AgentTabGrouping.slots(items: tabGroupingItems, collapsedKeys: collapsedTabGroups)
+    }
+
+    /// Geometrie-Schlüssel der Slots (ein Eintrag je Drop-Einheit).
+    private var tabSlotOrderIDs: [UUID] { tabStripSlots.map(\.leadingID) }
 
     var visualHeaderTabs: [AgentChatSession] {
         let byID = Dictionary(headerTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -2246,14 +2278,19 @@ struct AgentChatsView: View {
 
     @ViewBuilder
     private var tabStripItemsContent: some View {
+        // zIndex hebt das Element mit dem aktiven Tab an, damit dessen
+        // Chrome-Füße (7pt über die eigene Breite hinaus) über den
+        // Nachbar-Tabs statt darunter gezeichnet werden.
         ForEach(Array(tabGroupingItems.enumerated()), id: \.offset) { _, item in
             switch item {
             case .single(let sessionID):
                 if let session = headerTabs.first(where: { $0.id == sessionID }) {
                     chromeTab(session, groupColor: nil)
+                        .zIndex(sessionID == selectedSession?.id ? 1 : 0)
                 }
             case .group(let key, let sessionIDs):
                 chromeTabGroup(key: key, sessionIDs: sessionIDs)
+                    .zIndex((selectedSessionID.map(sessionIDs.contains) ?? false) ? 1 : 0)
             }
         }
     }
@@ -2289,6 +2326,13 @@ struct AgentChatsView: View {
                         collapsedTabGroups.remove(key)
                     } else {
                         collapsedTabGroups.insert(key)
+                        // Eingeklappte Mitglieder verschwinden aus der Leiste.
+                        // Blieben sie ausgewählt, würden Bulk-Aktionen („N Tabs
+                        // schließen/archivieren") Chats treffen, die der User
+                        // nicht mehr sieht — bei Terminal-Sessions unwiderruflich.
+                        let hidden = Set(sessionIDs)
+                            .subtracting(visibleTabIDs(in: sessionIDs, collapsed: true))
+                        if !hidden.isEmpty { multiSelection.subtract(hidden) }
                     }
                 }
             )
@@ -2299,26 +2343,61 @@ struct AgentChatsView: View {
                 GeometryReader { geo in
                     Color.clear.preference(
                         key: TabFramePreferenceKey.self,
-                        value: (visibleIDs.first ?? sessionIDs.first).map {
+                        value: sessionIDs.first.map {
                             [$0: geo.frame(in: .named(Self.tabStripContentSpace))]
                         } ?? [:]
                     )
                 }
             )
+            // Der Chip ist der GRIFF der ganzen Gruppe — auf- wie zugeklappt.
+            .draggable(DraggableSession(
+                sessionID: sessionIDs.first ?? UUID(),
+                sourceProjectID: headerTabs.first { $0.id == sessionIDs.first }?.projectID ?? UUID(),
+                sourceWindowID: windowID,
+                groupMemberIDs: sessionIDs
+            )) {
+                TabDragPreview(
+                    title: metadata.title,
+                    extraCount: max(0, sessionIDs.count - 1)
+                )
+            }
 
             ForEach(visibleIDs, id: \.self) { sessionID in
                 if let session = headerTabs.first(where: { $0.id == sessionID }) {
                     chromeTab(session, groupColor: color)
+                        .zIndex(sessionID == selectedSessionID ? 1 : 0)
                 }
             }
         }
-        // Die Kontur sitzt direkt am Cluster — kein Außencontainer, kein
-        // Padding zwischen Label und Mitglieds-Tabs.
+        // Eingeklappt ist der Cluster EIN Drop-Slot — dafür muss sein
+        // gesamter Frame (Chip + ggf. sichtbarer aktiver Tab) unter der
+        // Leading-ID liegen, sonst endet die Einfügelinie am Chip.
+        .background {
+            if isCollapsed {
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: TabFramePreferenceKey.self,
+                        value: sessionIDs.first.map {
+                            [$0: geo.frame(in: .named(Self.tabStripContentSpace))]
+                        } ?? [:]
+                    )
+                }
+            }
+        }
+        // 2pt-Gruppenlinie am Boden des Clusters (Chip → letztes Mitglied).
+        // Sie liegt HINTER den Tabs: der aktive Tab deckt sie mit seiner
+        // Header-Fläche ab, und seine Fußbögen führen sie außen um ihn herum
+        // — ein durchgehender Farbzug wie bei Chromes Tab-Gruppen.
         .background(alignment: .bottom) {
-            Rectangle()
-                .fill(color.opacity(isActive ? 0.88 : 0.42))
-                .frame(height: isActive ? 1.5 : 1)
-                .offset(y: 1)
+            UnevenRoundedRectangle(
+                topLeadingRadius: 2,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 2
+            )
+            .fill(color)
+            .frame(height: 2)
+            .padding(.leading, 2)
         }
     }
 
@@ -2392,9 +2471,20 @@ struct AgentChatsView: View {
                 if !headerTabs.isEmpty {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .bottom, spacing: 0) {
+                            // 6pt Luft ZWISCHEN Gruppen/Einzeltabs (0pt innen)
+                            // trägt die Gruppierung räumlich; das horizontale
+                            // Padding gibt den Chrome-Füßen des aktiven Tabs
+                            // an den Strip-Rändern Platz (sonst clippt der
+                            // ScrollView die 7pt-Ausstellung).
+                            HStack(alignment: .bottom, spacing: 6) {
                                 tabStripItemsContent
                             }
+                            .padding(.horizontal, 8)
+                            // Volle Zeilenhöhe, unten verankert: die Tabs
+                            // MÜSSEN bündig auf der Zeilen-Unterkante stehen,
+                            // sonst bleibt ein 1pt-Leistenstreifen zwischen
+                            // aktivem Tab und Chat-Header sichtbar.
+                            .frame(height: 34, alignment: .bottom)
                             .coordinateSpace(.named(Self.tabStripContentSpace))
                             .onPreferenceChange(TabFramePreferenceKey.self) { tabFrames = $0 }
                             // Stale IDs aus der Multi-Auswahl entfernen, wenn sich die offenen Tabs ändern.
@@ -2403,55 +2493,46 @@ struct AgentChatsView: View {
                                 // Multi-Auswahl gilt auch für Sidebar-Sessions ohne offenen Tab.
                                 multiSelection.formIntersection(Set(workspace.sessions.map(\.id)))
                             }
-                            // Einfüge-Linie an der Drop-Position (zwischen den Tabs).
+                            // Einfüge-Linie — steht immer auf einer ERLAUBTEN
+                            // Slot-Grenze, weil der Delegate den rohen Index
+                            // vorher dorthin schnappt. Eingeklappte Gruppen
+                            // bleiben dabei eingeklappt: sie sind ein Slot.
                             .overlay(alignment: .leading) {
-                                if tabInsertionIndex != nil {
-                                    let currentIndex = tabInsertionBeforeID.flatMap(
-                                        visibleTabOrderIDs.firstIndex(of:)
-                                    ) ?? visibleTabOrderIDs.count
-                                    if let x = TabReorderGeometry.insertionX(
-                                        forIndex: currentIndex,
-                                        orderedIDs: visibleTabOrderIDs,
-                                        frames: tabFrames,
-                                        spacing: 0
-                                    ) {
-                                        TabInsertionIndicator()
-                                            .offset(x: x - 1.25)
-                                            .allowsHitTesting(false)
-                                    }
+                                if let index = tabInsertionIndex,
+                                   let x = TabReorderGeometry.insertionX(
+                                    forIndex: index,
+                                    orderedIDs: tabSlotOrderIDs,
+                                    frames: tabFrames,
+                                    spacing: 0
+                                   ) {
+                                    TabInsertionIndicator()
+                                        .offset(x: x - 1.25)
+                                        .allowsHitTesting(false)
                                 }
                             }
                             .animation(.easeOut(duration: 0.1), value: tabInsertionIndex)
-                            // Ein Drag braucht wieder alle Tab-Frames. Sobald der
-                            // Cursor den Strip betritt, öffnen wir eingeklappte
-                            // Herkunftsgruppen wie Chrome automatisch; dadurch
-                            // bleiben Reorder-Index und Einfüge-Linie vollständig.
-                            .onChange(of: tabInsertionIndex) { _, index in
-                                if index != nil, !collapsedTabGroups.isEmpty {
-                                    collapsedTabGroups.removeAll()
-                                }
-                            }
                             .background(WindowDragExclusionView())
                             // Reorder/Move + Cross-Window: EIN DropDelegate für die
                             // ganze Leiste → kontinuierliche Einfüge-Position (Linie)
                             // und Move-Semantik (kein Copy-„+"). Cross-Window/Sidebar-
                             // Open laufen weiter über windowStore.moveTab in dropTab.
                             .onDrop(of: [.agentChatSession], delegate: TabReorderDropDelegate(
-                                orderedIDs: visibleTabOrderIDs,
+                                orderedIDs: tabSlotOrderIDs,
                                 frames: tabFrames,
                                 insertionIndex: $tabInsertionIndex,
-                                insertionBeforeID: $tabInsertionBeforeID,
                                 droppedSession: $tabDropSession,
-                                normalizeBeforeID: { dropped, beforeID in
-                                    normalizedTabDropTarget(
-                                        for: dropped,
-                                        before: beforeID
-                                    )
+                                dragGeneration: $tabDragGeneration,
+                                snapIndex: { dropped, rawIndex in
+                                    snappedTabDropIndex(for: dropped, rawIndex: rawIndex)
                                 },
-                                onMove: { dropped, adjustedBeforeID in
+                                onMove: { dropped, slotIndex in
                                     let source = dropped.sourceWindowID ?? windowID
                                     let group = draggedTabIDs(for: dropped)
                                     let movingIDs = Set(group)
+                                    let adjustedBeforeID = tabDropTargetID(
+                                        atSlotIndex: slotIndex,
+                                        moving: movingIDs
+                                    )
                                     if source == windowID {
                                         // Die sichtbare Gruppen-Reihenfolge wird zur neuen
                                         // manuellen Reihenfolge. Fremde Tabs schnappen an die
@@ -2487,6 +2568,12 @@ struct AgentChatsView: View {
                                             )
                                         }
                                         windowStore.setMultiSelection([], in: source)
+                                        // Auch die ZIEL-Auswahl räumen: `moveTab`
+                                        // aktiviert den zuletzt geholten Tab, eine
+                                        // stehengebliebene Auswahl enthielte den
+                                        // aktiven Anker nicht mehr (Invariante aus
+                                        // TabSelectionResolver).
+                                        multiSelection = []
                                     }
                                     // Einzel-Drag (kein Gruppen-Tab) verwirft die Auswahl (Chrome/Finder).
                                     if group.count <= 1 { multiSelection = [] }
@@ -2631,7 +2718,15 @@ struct AgentChatsView: View {
             }
             .padding(.leading, 8)
             .padding(.trailing, 6)
-            .frame(height: 30, alignment: .bottom)
+            // 34pt statt 30pt: die Tabs (28pt) brauchen wie im Mockup (30 in
+            // 36) sichtbare Leisten-Luft ÜBER sich — sonst klebt der aktive
+            // Tab samt Gruppen-Kontur direkt an der Fensteroberkante und der
+            // „Tab hebt sich aus der Leiste"-Effekt geht verloren.
+            .frame(height: 34, alignment: .bottom)
+            // Chrome-Prinzip: die Leiste ist DUNKLER als der Header darunter;
+            // keine Trennlinie — der aktive Tab (headerfarben) geht dadurch
+            // nahtlos in den Chat-Header über.
+            .background(AgentTheme.tabBar)
 
             // Im sichtbaren Grid ersetzt die Workspace-Zeile (Name + Belegung
             // + Kapazitäts-Picker) den Chat-Header — die Pane-Header tragen

@@ -478,24 +478,37 @@ extension AgentChatsView {
     /// Quellfenster nicht wiederherstellen): ZUERST die Mitgliedschaft
     /// (lehnt sie ab, wurde nichts anderes mutiert), erst bei Erfolg die
     /// explizite Tab-Übernahme ins Besitzerfenster.
+    ///
+    /// Die Aufnahme ist eine LISTEN-Operation: ein Gruppen-Drag (Griff war das
+    /// Tab-Gruppen-Label) nimmt alle Mitglieder auf — sonst verspräche die
+    /// „+N"-Vorschau mehr, als der Drop einlöst.
     @discardableResult
     func handleGridGroupDrop(_ payload: DraggableSession, workspaceID: UUID) -> Bool {
         guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
-        if entity.slotIndex(of: payload.sessionID) != nil {
+        let members = payload.groupMemberIDs.flatMap { $0.isEmpty ? nil : $0 }
+        let candidates = (members ?? [payload.sessionID])
+            .filter { entity.slotIndex(of: $0) == nil }
+        guard !candidates.isEmpty else {
             return true // schon Mitglied — nichts zu tun, nichts zu übernehmen
         }
-        let result = windowStore.addSession(payload.sessionID, toGridWorkspace: workspaceID)
-        switch result {
-        case .added, .alreadyMember, .replaced, .swapped:
-            adoptTabAfterSuccessfulDrop(payload.sessionID, workspaceID: workspaceID)
-            return true
-        case .full:
-            errorMessage = "„\(entity.name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
-            return false
-        case .rejected:
-            errorMessage = "Der Chat kann nicht in „\(entity.name)“ aufgenommen werden (archiviert oder unbekannt)."
-            return false
+
+        var accepted = false
+        for sessionID in candidates {
+            switch windowStore.addSession(sessionID, toGridWorkspace: workspaceID) {
+            case .added, .alreadyMember, .replaced, .swapped:
+                adoptTabAfterSuccessfulDrop(sessionID, workspaceID: workspaceID)
+                accepted = true
+            case .full:
+                errorMessage = accepted
+                    ? "„\(entity.name)“ ist voll (3×3) — nicht alle Chats der Gruppe passen hinein."
+                    : "„\(entity.name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
+                return accepted
+            case .rejected:
+                errorMessage = "Der Chat kann nicht in „\(entity.name)“ aufgenommen werden (archiviert oder unbekannt)."
+                return accepted
+            }
         }
+        return accepted
     }
 
     /// Gezielter Slot-Drop (Pane oder leerer Slot) — Semantik über den

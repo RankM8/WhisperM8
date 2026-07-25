@@ -40,8 +40,10 @@ enum TabReorderGeometry {
 
 // MARK: - Gruppen-Reorder (Multi-Tab-Drag)
 
-/// Reine, testbare Block-Reorder-Logik für einen oder mehrere Tabs. Die
-/// aktuelle Anzeige-Reihenfolge wird dabei zur neuen manuellen Reihenfolge.
+/// Reine, testbare Block-Reorder-Logik für einen oder mehrere Tabs: die
+/// bewegten IDs werden als zusammenhängender Block vor `beforeID` einsortiert
+/// (nil = ans Ende) und behalten ihre Relativ-Reihenfolge. Eingabe ist die
+/// SICHTBARE Reihenfolge — sie wird dadurch zur neuen manuellen Reihenfolge.
 enum TabOrderReorder {
     static func newOrder(_ order: [UUID], moving group: Set<UUID>, before beforeID: UUID?) -> [UUID] {
         let moved = order.filter { group.contains($0) }
@@ -54,17 +56,6 @@ enum TabOrderReorder {
         var result = rest
         result.insert(contentsOf: moved, at: index)
         return result
-    }
-}
-
-/// Reine, testbare Reorder-Logik für einen Multi-Select-Drag: die `group`
-/// wird als zusammenhängender Block vor `beforeID` (nil = ans Ende) einsortiert
-/// und behält ihre aktuelle Relativ-Reihenfolge. Cross-Window-Gruppen sind
-/// bewusst NICHT hier (Caller fällt für die auf Einzel-`moveTab` zurück).
-enum TabGroupReorder {
-    static func newOrder(_ order: [UUID], moving group: Set<UUID>, before beforeID: UUID?) -> [UUID] {
-        guard order.filter({ group.contains($0) }).count > 1 else { return order }
-        return TabOrderReorder.newOrder(order, moving: group, before: beforeID)
     }
 }
 
@@ -86,24 +77,34 @@ struct TabFramePreferenceKey: PreferenceKey {
 /// die Einfüge-Position (→ Linie) und ein `DropProposal(.move)` (→ kein „+").
 /// Der eigentliche Move bleibt in der View (`onMove`) und nutzt weiterhin
 /// `windowStore.moveTab` inkl. Cross-Window + Sidebar-Open.
+/// `DropDelegate` der Tab-Leiste. Arbeitet auf SLOT-Indizes statt auf
+/// Tab-IDs: `orderedIDs` sind die Leading-IDs der Slots, eine eingeklappte
+/// Gruppe erscheint darin genau einmal. Dadurch hat sie eine eigene
+/// Einfügeposition, ohne aufgeklappt werden zu müssen.
 struct TabReorderDropDelegate: DropDelegate {
     let orderedIDs: [UUID]
     let frames: [UUID: CGRect]
     @Binding var insertionIndex: Int?
-    /// Semantisches Ziel unabhängig von einer während des Drags wechselnden
-    /// sichtbaren Reihenfolge (`nil` bedeutet bei aktivem Drag: ans Ende).
-    @Binding var insertionBeforeID: UUID?
     @Binding var droppedSession: DraggableSession?
-    /// Passt ein geometrisches Ziel an strukturelle Gruppen-Grenzen an.
-    let normalizeBeforeID: (DraggableSession, UUID?) -> UUID?
-    /// `beforeID == nil` → ans Ende. Wird auf dem Main-Thread aufgerufen.
-    let onMove: (DraggableSession, UUID?) -> Void
+    /// Zählt jeden Strip-Eintritt hoch. Das Dekodieren des Payloads ist
+    /// asynchron; ohne dieses Token könnte ein spät zurückkommender Callback
+    /// eines ABGEBROCHENEN Drags den Payload des aktuellen überschreiben —
+    /// der Drop verschöbe dann den falschen Tab.
+    @Binding var dragGeneration: Int
+    /// Verschiebt einen rohen geometrischen Index auf die nächste ERLAUBTE
+    /// Slot-Grenze (Gruppen bleiben unteilbar, Mitglieder in ihrem Cluster).
+    let snapIndex: (DraggableSession, Int) -> Int
+    /// Slot-Index, vor dem eingefügt wird (`slots.count` = ans Ende). Wird auf
+    /// dem Main-Thread aufgerufen.
+    let onMove: (DraggableSession, Int) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.agentChatSession])
     }
 
     func dropEntered(info: DropInfo) {
+        dragGeneration &+= 1
+        let generation = dragGeneration
         updateInsertion(atX: info.location.x)
         guard droppedSession == nil,
               let provider = info.itemProviders(for: [.agentChatSession]).first else {
@@ -118,14 +119,12 @@ struct TabReorderDropDelegate: DropDelegate {
                     from: data
                   ) else { return }
             DispatchQueue.main.async {
-                // Ein später Callback nach dropExited/performDrop darf keinen
-                // bereits beendeten Drag wieder sichtbar machen.
-                guard insertionIndex != nil else { return }
-                let currentBeforeID = insertionBeforeID
+                // Nur der Callback des LAUFENDEN Drags zählt: ein beendeter
+                // (dropExited/performDrop) oder überholter Drag darf den
+                // Payload nicht mehr setzen.
+                guard generation == dragGeneration, let current = insertionIndex else { return }
                 droppedSession = dropped
-                setInsertion(
-                    before: normalizeBeforeID(dropped, currentBeforeID)
-                )
+                insertionIndex = snapIndex(dropped, current)
             }
         }
     }
@@ -137,20 +136,21 @@ struct TabReorderDropDelegate: DropDelegate {
     }
 
     func dropExited(info: DropInfo) {
+        // Generation hochzählen: ein noch laufender Decode gehört ab jetzt zu
+        // einem beendeten Drag und wird verworfen.
+        dragGeneration &+= 1
         insertionIndex = nil
-        insertionBeforeID = nil
         droppedSession = nil
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        let rawBeforeID = beforeID(atX: info.location.x)
+        let rawIndex = rawInsertionIndex(atX: info.location.x)
+        dragGeneration &+= 1
         insertionIndex = nil
-        insertionBeforeID = nil
 
         if let droppedSession {
-            let beforeID = normalizeBeforeID(droppedSession, rawBeforeID)
             self.droppedSession = nil
-            onMove(droppedSession, beforeID)
+            onMove(droppedSession, snapIndex(droppedSession, rawIndex))
             return true
         }
 
@@ -158,7 +158,7 @@ struct TabReorderDropDelegate: DropDelegate {
             return false
         }
         let move = onMove
-        let normalize = normalizeBeforeID
+        let snap = snapIndex
         _ = provider.loadDataRepresentation(
             forTypeIdentifier: UTType.agentChatSession.identifier
         ) { data, _ in
@@ -168,39 +168,19 @@ struct TabReorderDropDelegate: DropDelegate {
                     from: data
                   ) else { return }
             DispatchQueue.main.async {
-                move(dropped, normalize(dropped, rawBeforeID))
+                move(dropped, snap(dropped, rawIndex))
             }
         }
         return true
     }
 
     private func updateInsertion(atX x: CGFloat) {
-        let rawBeforeID = beforeID(atX: x)
-        if let droppedSession {
-            setInsertion(
-                before: normalizeBeforeID(droppedSession, rawBeforeID)
-            )
-        } else {
-            setInsertion(before: rawBeforeID)
-        }
+        let raw = rawInsertionIndex(atX: x)
+        insertionIndex = droppedSession.map { snapIndex($0, raw) } ?? raw
     }
 
-    private func setInsertion(before beforeID: UUID?) {
-        insertionBeforeID = beforeID
-        insertionIndex = index(before: beforeID)
-    }
-
-    private func beforeID(atX x: CGFloat) -> UUID? {
-        let rawIndex = TabReorderGeometry.insertionIndex(
-            atX: x,
-            orderedIDs: orderedIDs,
-            frames: frames
-        )
-        return rawIndex < orderedIDs.count ? orderedIDs[rawIndex] : nil
-    }
-
-    private func index(before beforeID: UUID?) -> Int {
-        beforeID.flatMap(orderedIDs.firstIndex(of:)) ?? orderedIDs.count
+    private func rawInsertionIndex(atX x: CGFloat) -> Int {
+        TabReorderGeometry.insertionIndex(atX: x, orderedIDs: orderedIDs, frames: frames)
     }
 }
 
