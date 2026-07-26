@@ -48,6 +48,12 @@ enum AgentChatsCLICommand {
             return ChatsWaitCommand.run(rest)
         case "send":
             return ChatsSendCommand.run(rest)
+        case "snapshot":
+            return await ChatsSnapshotCommand.run(rest)
+        case "since":
+            return ChatsChangesCommand.since(rest)
+        case "watch":
+            return ChatsChangesCommand.watch(rest)
         case "enqueue":
             return ChatsQueueCommand.enqueue(rest)
         case "queue":
@@ -773,6 +779,18 @@ enum ChatsCLIHelp {
 
     HANDELN (App muss laufen — sonst Exit 5)
       whisperm8 chats send <ref> [--] "<prompt>" [--if-status S,S] [--no-submit] [--force] [--json]
+    FÜR AGENTEN (maschinenlesbarer Vertrag — Textausgabe ist nur Diagnose)
+      whisperm8 chats snapshot [--include idle] [--limit N] [--json]
+                               Kompaktes Lagebild über ALLE Sessions
+                               (wm8.overview/1). Zähler decken den vollen
+                               Bestand, die Liste nur das Handlungsrelevante;
+                               Kürzung wird in `coverage` ausgewiesen.
+      whisperm8 chats since --cursor <c> [--limit N] [--json]
+                               Änderungen seit Cursor (wm8.changes/1).
+                               `gap: true` = Cursor abgelaufen → snapshot ziehen.
+      whisperm8 chats watch [--cursor <c>] [--interval S] [--timeout S]
+                               NDJSON-Strom derselben Ereignisse; für Sidecars.
+
       whisperm8 chats enqueue <ref> -- "<prompt>" [--json]
                                Folgeauftrag vormerken. Anders als `send` kein
                                Status-Guard: ein ARBEITENDER Chat ist der

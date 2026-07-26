@@ -157,6 +157,17 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             guard let controller = registry.controller(for: targetID), controller.isRunning else {
                 return .failure(.noPty, "Keine laufende PTY — Tab mit `chats open` starten")
             }
+            // Start-Race: Ein frisch resumter Chat meldet `idle` (launching
+            // bildet bewusst darauf ab), ist aber noch nicht aufnahmebereit.
+            // `sendPrompt` schreibt blind — der Paste ginge verloren oder käme
+            // beim Retry doppelt an. Kein --force-Bypass: hier gibt es nichts
+            // zu erzwingen, nur einen sicheren Weg (`enqueue`).
+            let readiness = ChatsSendReadinessGuard.decide(
+                lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID))
+            if case .notReady = readiness {
+                return .failure(.notReady,
+                                ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
+            }
             // Status-Guard (--if-status). --force überstimmt ihn (nie den
             // Selbst-Send-Schutz).
             let force = request.params["force"]?.boolValue ?? false
