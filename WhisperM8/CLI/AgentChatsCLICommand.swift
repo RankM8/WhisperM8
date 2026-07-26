@@ -521,7 +521,8 @@ enum ChatsListCommand {
                 totalInScope: plan.totalInScope,
                 truncated: truncated,
                 countsCoverFullScope: plan.countsCoverFullScope,
-                queuedCounts: queuedCounts
+                queuedCounts: queuedCounts,
+                liveStatuses: live ?? [:]
             )
             CLIIO.out(ChatsOutput.encodeJSON(payload))
             if truncated {
@@ -575,6 +576,19 @@ enum ChatsShowCommand {
             for: entry.session.id,
             in: AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL()))
 
+        // Blockadeerklärung: warum fließt ein wartender Auftrag nicht ab?
+        let transcriptModifiedAt = runtime.transcriptPath.flatMap { path -> Date? in
+            (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        }
+        let blockReason = ChatsQueueBlockExplainer.reason(
+            openCount: queued.filter(\.isOpen).count,
+            runtimeStatus: runtime.status?.rawValue,
+            statusSince: runtime.since,
+            transcriptModifiedAt: transcriptModifiedAt,
+            hasProcess: live?[entry.session.id]?.isAttachedPTY ?? (runtime.status != .stopped),
+            now: context.now)
+        let history = ChatsStatusJournal.recent(sessionID: entry.session.id, limit: 6)
+
         if options.json {
             var payload = ChatsOutput.sessionJSON(
                 entry: entry, runtime: runtime,
@@ -586,7 +600,7 @@ enum ChatsShowCommand {
             payload["generatedAt"] = ChatsOutput.iso(context.now)
             payload["detail"] = ChatsOutput.detailJSON(entry: entry)
             let waiting = queued.filter(\.isOpen)
-            payload["queue"] = [
+            var queueDict: [String: Any] = [
                 "openCount": waiting.count,
                 "needsReviewCount": queued.filter(\.needsReview).count,
                 "prompts": queued.map { prompt in
@@ -595,6 +609,22 @@ enum ChatsShowCommand {
                         position: waiting.firstIndex { $0.id == prompt.id }.map { $0 + 1 })
                 },
             ]
+            if let code = ChatsQueueBlockExplainer.code(for: blockReason) {
+                queueDict["blockReason"] = code
+                queueDict["blockExplanation"] = ChatsQueueBlockExplainer.line(for: blockReason) ?? ""
+            }
+            payload["queue"] = queueDict
+            if !history.isEmpty {
+                payload["statusHistory"] = history.map { entry -> [String: Any] in
+                    [
+                        "at": ChatsOutput.iso(entry.at),
+                        "from": entry.from ?? NSNull(),
+                        "to": entry.to ?? NSNull(),
+                        "signal": entry.signal,
+                        "source": entry.source,
+                    ]
+                }
+            }
             CLIIO.out(ChatsOutput.encodeJSON(payload))
         } else {
             ChatsOutput.printShow(entry: entry, runtime: runtime,
@@ -610,6 +640,19 @@ enum ChatsShowCommand {
                         for: prompt,
                         position: waiting.firstIndex { $0.id == prompt.id }.map { $0 + 1 },
                         now: context.now))
+                }
+                if let explanation = ChatsQueueBlockExplainer.line(for: blockReason) {
+                    CLIIO.out(explanation)
+                }
+            }
+            if !history.isEmpty {
+                CLIIO.out("")
+                CLIIO.out("── STATUSVERLAUF " + String(repeating: "─", count: 36))
+                for entry in history {
+                    let from = entry.from ?? "–"
+                    let to = entry.to ?? "–"
+                    CLIIO.out("  \(ChatsOutput.relative(from: entry.at, to: context.now)) her  "
+                              + "\(from) → \(to)  (\(entry.signal), \(entry.source))")
                 }
             }
         }

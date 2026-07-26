@@ -325,8 +325,40 @@ final class AgentSessionStatusCoordinator {
             statusStore.clear(sessionID: sessionID)
         }
 
+        // Statuswechsel protokollieren. Der Laufzeitstatus lebt sonst nur im
+        // Speicher — bei der Nachanalyse eines Queue-Staus fehlte damit genau
+        // der Wert, der die Blockade erklärt hätte. `signal` und `source`
+        // machen den Übergang später erklärbar statt nur sichtbar.
+        ChatsStatusJournal.shared.append(
+            sessionID: sessionID,
+            from: oldState.runtimeStatus?.rawValue,
+            to: transition.state.runtimeStatus?.rawValue,
+            signal: Self.journalLabel(for: signal),
+            source: hookLiveSessions.contains(sessionID) ? "hook" : "transcript")
+
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
+        }
+    }
+
+    /// Kurzname des Signals fürs Journal — stabil und ohne assoziierte Werte,
+    /// damit Zeilen über Versionen hinweg vergleichbar bleiben. `nonisolated`,
+    /// weil pur: kein Zustand, keine Uhr, kein Actor nötig.
+    nonisolated static func journalLabel(for signal: AgentSessionSignal) -> String {
+        switch signal {
+        case .processLaunched: return "processLaunched"
+        case .launchGraceExpired: return "launchGraceExpired"
+        case .sessionStarted: return "sessionStarted"
+        case .userPromptSubmitted: return "userPromptSubmitted"
+        case .toolWillRun: return "toolWillRun"
+        case .toolDidRun: return "toolDidRun"
+        case .permissionRequested: return "permissionRequested"
+        case .turnStopped: return "turnStopped"
+        case .sessionEnded: return "sessionEnded"
+        case .transcriptActivity: return "transcriptActivity"
+        case .transcriptIdle: return "transcriptIdle"
+        case .turnAborted: return "turnAborted"
+        case .processTerminated: return "processTerminated"
         }
     }
 

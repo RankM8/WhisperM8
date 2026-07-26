@@ -33,7 +33,8 @@ enum ChatsOutput {
         totalInScope: Int? = nil,
         truncated: Bool = false,
         countsCoverFullScope: Bool = true,
-        queuedCounts: [UUID: Int] = [:]
+        queuedCounts: [UUID: Int] = [:],
+        liveStatuses: [UUID: ChatsLiveStatus] = [:]
     ) -> [String: Any] {
         var countsDict: [String: Any] = [:]
         for category in ChatsAttentionCategory.allCases {
@@ -54,7 +55,12 @@ enum ChatsOutput {
             // gefilterte Ansicht wie „nichts steht aus".
             "queuedTotal": queuedCounts.values.reduce(0, +),
             "sessions": items.map { item -> [String: Any] in
+                // Live-Status pro Session durchreichen: ohne ihn meldete jede
+                // Zeile `canSend: false` und `isAttachedPTY: null`, auch für
+                // laufende Sessions — ein Orchestrator hätte daraus nie eine
+                // Sendeentscheidung ableiten können.
                 var dict = sessionJSON(entry: item.entry, runtime: item.runtime, selfID: selfID, live: live, attention: item,
+                                       liveStatus: liveStatuses[item.entry.session.id],
                                        isOpen: openTabIDs.contains(item.entry.session.id),
                                        isPinned: pinnedIDs.contains(item.entry.session.id))
                 if let queued = queuedCounts[item.entry.session.id], queued > 0 {

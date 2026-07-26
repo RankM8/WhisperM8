@@ -206,9 +206,27 @@ enum ChatsQueueCommand {
             let name = entry.map { "\($0.projectName)/\($0.session.title)" } ?? ChatsOutput.shortID(sessionID)
             let open = AgentPromptQueueLogic.openPrompts(for: sessionID, in: prompts)
             CLIIO.out("── \(name)  (\(open.count) offen)")
-            for prompt in prompts.sorted(by: { $0.enqueuedAt < $1.enqueuedAt }) {
+            for prompt in prompts.sorted(by: AgentPromptQueueLogic.isOrderedBefore) {
                 let position = open.firstIndex { $0.id == prompt.id }.map { $0 + 1 }
                 CLIIO.out("   " + ChatsQueueSupport.line(for: prompt, position: position, now: context.now))
+            }
+            // Blockadeerklärung pro Session: „wartet seit X" allein sagt nicht,
+            // ob der Auftrag gleich rausgeht oder dauerhaft feststeckt.
+            if !open.isEmpty, let entry {
+                let runtime = ChatsStatusProbe.probe(entry: entry, now: context.now)
+                let modified = runtime.transcriptPath.flatMap { path -> Date? in
+                    (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+                }
+                let reason = ChatsQueueBlockExplainer.reason(
+                    openCount: open.count,
+                    runtimeStatus: runtime.status?.rawValue,
+                    statusSince: runtime.since,
+                    transcriptModifiedAt: modified,
+                    hasProcess: runtime.status != .stopped,
+                    now: context.now)
+                if let line = ChatsQueueBlockExplainer.line(for: reason) {
+                    CLIIO.out("   \(line)")
+                }
             }
         }
         return ChatsCLIExit.ok
