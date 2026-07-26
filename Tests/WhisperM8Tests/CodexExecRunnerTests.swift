@@ -351,7 +351,12 @@ final class CodexExecRunnerTests: XCTestCase {
         request.codexPath = fakeCodex.path
         request.cwd = dir.path
         request.outputLastMessagePath = dir.appendingPathComponent("last.txt").path
-        request.idleTimeout = 0.5
+        // 1,5 s statt 0,5 s: Der Test prüft, dass der Watchdog VOR dem
+        // 30-s-Sleep zuschlägt — dafür ist die exakte Schwelle unerheblich.
+        // Mit 0,5 s kippte er unter paralleler I/O-Last der Suite, weil der
+        // Watchdog feuerte, bevor der Subprozess seine erste Zeile (und damit
+        // die threadID) schreiben konnte.
+        request.idleTimeout = 1.5
 
         let runner = CodexExecRunner()
         let started = Date()

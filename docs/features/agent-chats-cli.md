@@ -78,9 +78,25 @@ bewusst schwache Schwester von `archive`. Contract:
   keine `--window`-Optionen). Session-Status, PTY-Prozess, Pin, Grid-Slot-
   Mitgliedschaft und Transcript bleiben unangetastet; erneutes Öffnen attached
   an denselben Terminal-Controller inkl. Scrollback.
-- **Kein Guard, kein `--force`:** auch working/awaitingInput-Ziele dürfen
+- **Ohne `--stop` kein Guard:** auch working/awaitingInput-Ziele dürfen
   geschlossen werden — es geht nur die Ansicht zu. Die Response meldet
   `ptyRunning`/`runtimeStatus`/`isPinned` zur Information.
+- **`--stop`: Tab zu + Agent beenden.** Die einzige Stufe zwischen „nur
+  Ansicht" und `archive`. Der Server terminiert das PTY über
+  `AgentTerminalRegistry.terminate` (graceful: 2× Ctrl+C → Snapshot → Kill,
+  damit der letzte JSONL-Flush und der `--resume`-Hinweis erhalten bleiben)
+  und stuft den Session-Status von `.running` auf `.closed` herunter. NICHT
+  archiviert, nichts gelöscht, Pin bleibt — `resume` fährt die Session wieder
+  hoch. Response: `stopped` pro Ziel plus `stoppedCount`. Ein Ziel ohne
+  offenen Tab meldet `alreadyClosed` und trotzdem `stopped: true`, wenn dort
+  ein Prozess lief.
+- **Schutz arbeitender Agenten (`--stop` ohne `--force`):** ist auch nur EIN
+  Ziel `working`, scheitert der GESAMTE Request mit `conflict`/Exit 4, bevor
+  ein Tab schließt oder ein Prozess stirbt — kein Teilzustand. Die Entscheidung
+  liegt im puren, unit-getesteten `ChatsCloseStopGuard`; die Meldung nennt die
+  blockierenden Ziele und die drei Auswege (warten, `interrupt`,
+  `--stop --force`). `--force` ohne `--stop` lehnt schon der Parser ab: ohne
+  Stop gibt es nichts zu erzwingen.
 - **Batch, alles-oder-nichts bei der Auflösung:** die CLI löst ALLE Refs vor
   dem Request auf (mehrdeutig/unbekannt → Exit 3, nichts wird geschlossen).
   Der Server verarbeitet alle Ziele in EINEM synchronen MainActor-Block

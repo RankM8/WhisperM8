@@ -340,6 +340,11 @@ final class AgentSessionStatusCoordinator {
             if preferences.stopNotificationEnabled {
                 postNotification(kind: .turnCompleted, sessionID: sessionID)
             }
+            // Turn-Ende ist der einzige sichere Zustellzeitpunkt für
+            // vorgemerkte Folgeaufträge. Bewusst NICHT bei `inputRequested`:
+            // dort wartet der Chat auf die Antwort zu einer konkreten Frage —
+            // ein Folgeauftrag würde als diese Antwort gelesen.
+            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         case .inputRequested(let reason):
             if preferences.awaitingNotificationEnabled {
                 postNotification(kind: .inputRequested(reason), sessionID: sessionID)

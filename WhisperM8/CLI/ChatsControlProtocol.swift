@@ -219,6 +219,13 @@ indirect enum ChatsControlJSON: Codable, Equatable {
         return nil
     }
 
+    /// Zahlen kommen als `Double` über den Draht; Zähler und Positionen liest
+    /// die CLI aber als `Int`.
+    var intValue: Int? {
+        if case .number(let value) = self { return Int(value) }
+        return nil
+    }
+
     subscript(key: String) -> ChatsControlJSON? {
         if case .object(let dict) = self { return dict[key] }
         return nil

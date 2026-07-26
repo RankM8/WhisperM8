@@ -15,6 +15,13 @@ enum ChatsOutput {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// - Parameter totalInScope: Sessions im Scope VOR dem Limit.
+    /// - Parameter truncated: `true`, wenn das Limit gegriffen hat — der
+    ///   Aufrufer darf `sessions` dann nicht als vollständige Menge lesen.
+    /// - Parameter countsCoverFullScope: `false`, wenn vor dem Proben limitiert
+    ///   wurde (Fast-Path). `counts` beschreibt dann nur die ausgegebenen
+    ///   Zeilen und ist kein Lagebild des ganzen Scopes — für das ist
+    ///   `overview` da.
     static func listJSON(
         items: [ChatsAttentionItem],
         counts: [ChatsAttentionCategory: Int],
@@ -22,7 +29,11 @@ enum ChatsOutput {
         generatedAt: Date,
         live: Bool = false,
         openTabIDs: Set<UUID> = [],
-        pinnedIDs: Set<UUID> = []
+        pinnedIDs: Set<UUID> = [],
+        totalInScope: Int? = nil,
+        truncated: Bool = false,
+        countsCoverFullScope: Bool = true,
+        queuedCounts: [UUID: Int] = [:]
     ) -> [String: Any] {
         var countsDict: [String: Any] = [:]
         for category in ChatsAttentionCategory.allCases {
@@ -34,9 +45,23 @@ enum ChatsOutput {
             "live": live,
             "self": selfID?.uuidString ?? NSNull(),
             "counts": countsDict,
-            "sessions": items.map { sessionJSON(entry: $0.entry, runtime: $0.runtime, selfID: selfID, live: live, attention: $0,
-                                                isOpen: openTabIDs.contains($0.entry.session.id),
-                                                isPinned: pinnedIDs.contains($0.entry.session.id)) },
+            "countsCoverFullScope": countsCoverFullScope,
+            "totalInScope": totalInScope ?? items.count,
+            "returned": items.count,
+            "truncated": truncated,
+            // Gesamtzahl vorgemerkter Folgeaufträge über ALLE Sessions — auch
+            // über die, die dieser Scope nicht zeigt. Sonst wirkte eine
+            // gefilterte Ansicht wie „nichts steht aus".
+            "queuedTotal": queuedCounts.values.reduce(0, +),
+            "sessions": items.map { item -> [String: Any] in
+                var dict = sessionJSON(entry: item.entry, runtime: item.runtime, selfID: selfID, live: live, attention: item,
+                                       isOpen: openTabIDs.contains(item.entry.session.id),
+                                       isPinned: pinnedIDs.contains(item.entry.session.id))
+                if let queued = queuedCounts[item.entry.session.id], queued > 0 {
+                    dict["queued"] = queued
+                }
+                return dict
+            },
         ]
     }
 
@@ -153,7 +178,8 @@ enum ChatsOutput {
         showAll: Bool,
         now: Date,
         openTabIDs: Set<UUID> = [],
-        pinnedIDs: Set<UUID> = []
+        pinnedIDs: Set<UUID> = [],
+        queuedCounts: [UUID: Int] = [:]
     ) {
         let grouped = Dictionary(grouping: items, by: \.category)
         var printedAny = false
@@ -173,6 +199,9 @@ enum ChatsOutput {
                 var marks = ""
                 if openTabIDs.contains(session.id) { marks += " ⊙" }
                 if pinnedIDs.contains(session.id) { marks += " 📌" }
+                // Vorgemerkte Folgeaufträge sichtbar machen: „arbeitet, und
+                // danach warten noch 2" ist eine andere Lage als „arbeitet".
+                if let queued = queuedCounts[session.id], queued > 0 { marks += " ⏳\(queued)" }
                 if session.id == selfID { marks += " (du)" }
                 let estimate = item.runtime.source == "transcriptEstimate" ? " · geschätzt" : ""
                 CLIIO.out("\(symbol) \(pad(name, 36))\(pad(status, 15))\(since)\(estimate)\(marks)")

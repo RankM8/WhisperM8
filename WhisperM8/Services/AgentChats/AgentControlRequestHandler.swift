@@ -63,6 +63,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await gridWorkspaceList(request)
         case "gridWorkspace.rename":
             return await gridWorkspaceRename(request)
+        case "gridWorkspace.open":
+            return await gridWorkspaceOpen(request)
+        case "queue.enqueue", "queue.cancel":
+            return await queueMutation(request)
         default:
             return .failure(requestID: request.requestID, code: .unsupported,
                             message: "Unbekannte Methode: \(request.method)")
@@ -272,12 +276,24 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
     // MARK: session.close
 
-    /// Schließt offene UI-Tabs — und NUR die. Bewusst kein Gegenstück zu
-    /// `workspace.archive`: die Session bleibt im Workspace, ein laufendes PTY
-    /// läuft weiter (Registry ist sessionID-basiert, erneutes Öffnen attached
-    /// an denselben Controller inkl. Scrollback), Pin und Grid-Mitgliedschaft
-    /// bleiben. Deshalb auch kein Status-Guard und kein `--force`: Schließen
-    /// ist nie destruktiv, egal ob das Ziel working oder awaitingInput ist.
+    /// Schließt offene UI-Tabs — und ohne `stop` NUR die. Bewusst kein
+    /// Gegenstück zu `workspace.archive`: die Session bleibt im Workspace, ein
+    /// laufendes PTY läuft weiter (Registry ist sessionID-basiert, erneutes
+    /// Öffnen attached an denselben Controller inkl. Scrollback), Pin und
+    /// Grid-Mitgliedschaft bleiben. Deshalb im Normalfall kein Status-Guard:
+    /// Schließen ist nie destruktiv, egal ob das Ziel working oder
+    /// awaitingInput ist.
+    ///
+    /// `stop == true` ist die einzige Ausnahme: dann wird zusätzlich der
+    /// laufende Agent beendet (graceful: 2× Ctrl+C, Terminal-Snapshot, dann
+    /// Kill) und der Session-Status von `.running` auf `.closed` gesetzt.
+    /// Nicht archiviert, nichts gelöscht, Pin bleibt — die Session ist danach
+    /// per `resume` wieder hochfahrbar.
+    ///
+    /// Schutz arbeitender Agenten: ist auch nur EIN Ziel gerade `working`,
+    /// scheitert der GESAMTE Request mit `conflict`, bevor irgendein Tab
+    /// schließt oder ein Prozess stirbt — kein Teilzustand, in dem die Hälfte
+    /// der Tabs weg ist. Nur `force` hebt das auf.
     ///
     /// Batch-fähig (`targetSessionIDs`): alle Ziele werden in EINEM synchronen
     /// MainActor-Block verarbeitet — ein konsistenter Snapshot, kein
@@ -296,6 +312,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return .failure(requestID: request.requestID, code: .invalid,
                             message: "mode muss explicit|others|right sein")
         }
+        let stop = request.params["stop"]?.boolValue ?? false
+        let force = request.params["force"]?.boolValue ?? false
         guard mode == "explicit" || parsedIDs.count == 1 else {
             return .failure(requestID: request.requestID, code: .invalid,
                             message: "mode \(mode) verlangt genau EINEN Anker-Tab")
@@ -338,23 +356,86 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 targetIDs = requestedIDs
             }
 
+            // Schutz arbeitender Agenten — VOR jeder Mutation und über ALLE
+            // Ziele. Ein Stop mitten im Turn verwirft die laufende Arbeit;
+            // das darf nie beiläufig aus einer Aufräum-Runde passieren.
+            if stop {
+                let blocking = ChatsCloseStopGuard.blockingTargets(
+                    targetIDs: targetIDs,
+                    force: force,
+                    isWorking: { id in
+                        // Archivierte/unbekannte Ziele blockieren nie — sie
+                        // landen ohnehin als `notFound` im Ergebnis.
+                        guard workspace.sessions.contains(where: { $0.id == id && $0.status != .archived })
+                        else { return false }
+                        return statusStore.status(for: id) == .working
+                    },
+                    label: { id in
+                        guard let session = workspace.sessions.first(where: { $0.id == id }) else { return nil }
+                        return [projectNames[session.projectID], session.title]
+                            .compactMap { $0 }.joined(separator: "/")
+                    }
+                )
+                if !blocking.isEmpty {
+                    return .failure(.conflict, ChatsCloseStopGuard.conflictMessage(blocking: blocking))
+                }
+            }
+
+            let sessionStore = stop ? AgentSessionStore() : nil
+
             return .items(targetIDs.map { id in
                 guard let session = workspace.sessions.first(where: { $0.id == id }),
                       session.status != .archived else {
                     return CloseOutcomeItem(id: id, outcome: "notFound")
                 }
+                let wasRunning = registry.controller(for: id)?.isRunning ?? false
                 let hostWindow = windowStore.closeTabInHostingWindow(id)
+
+                var didStop = false
+                if stop, wasRunning {
+                    // Graceful: 2× Ctrl+C, Terminal-Snapshot, dann Kill —
+                    // dieselbe Routine wie beim Archivieren, damit der letzte
+                    // JSONL-Flush und der `--resume`-Hinweis erhalten bleiben.
+                    registry.terminate(sessionID: id)
+                    didStop = true
+                }
+
+                // Hintergrund-Agenten leben im Claude-Supervisor-Daemon; das
+                // PTY ist nur ein `claude attach`. Es zu killen trennt die
+                // ANZEIGE, der Agent arbeitet weiter. Der echte Stop läuft
+                // über `claude stop <short-id>` — asynchron, also außerhalb
+                // dieses MainActor-Blocks.
+                let backgroundShortID: String? = {
+                    guard stop, session.effectiveKind == .backgroundChat,
+                          let shortID = session.backgroundShortID, !shortID.isEmpty else { return nil }
+                    return shortID
+                }()
+
+                if stop {
+                    // Status nur herunterstufen, nie archivieren. Idempotent —
+                    // der Terminierungs-Callback der UI setzt dasselbe.
+                    try? sessionStore?.updateSession(id: id) { updated in
+                        if updated.status == .running { updated.status = .closed }
+                    }
+                }
+
                 return CloseOutcomeItem(
                     id: id,
                     title: session.title,
                     project: projectNames[session.projectID],
                     outcome: hostWindow == nil ? "alreadyClosed" : "closed",
-                    ptyRunning: registry.controller(for: id)?.isRunning ?? false,
+                    // Nach einem Stop läuft nichts mehr — sonst würde die
+                    // Ausgabe „läuft weiter" behaupten, obwohl gerade beendet.
+                    ptyRunning: didStop ? false : wasRunning,
                     runtimeStatus: statusStore.status(for: id)?.rawValue,
-                    isPinned: windowStore.pinnedSessionIDs.contains(id))
+                    isPinned: windowStore.pinnedSessionIDs.contains(id),
+                    // Für Hintergrund-Agenten erst nach dem Daemon-Stop wahr —
+                    // sonst meldete die CLI „Agent gestoppt", während er läuft.
+                    stopped: backgroundShortID == nil ? didStop : false,
+                    backgroundShortID: backgroundShortID)
             })
         }
-        let items: [CloseOutcomeItem]
+        var items: [CloseOutcomeItem]
         switch computation {
         case .failure(let code, let message):
             await audit(request.actor, method: "close", target: nil, outcome: code.rawValue, prompt: nil)
@@ -363,22 +444,45 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             items = computed
         }
 
+        // Zweite Phase: Hintergrund-Agenten im Supervisor-Daemon beenden. Läuft
+        // bewusst NACH dem MainActor-Block — `claude stop` ist ein Subprozess
+        // und hätte den MainActor sonst über die gesamte Laufzeit blockiert.
+        for index in items.indices {
+            guard let shortID = items[index].backgroundShortID else { continue }
+            do {
+                _ = try await BackgroundAgentLifecycle.stop(shortID: shortID)
+                items[index].stopped = true
+            } catch {
+                // Tab ist bereits zu, der Daemon-Job läuft aber weiter — das
+                // muss sichtbar sein, sonst hält der Aufrufer ihn für beendet.
+                items[index].stopFailed = true
+                Logger.agentStore.warning(
+                    "close_stop_background_failed short=\(shortID, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            }
+        }
+
         // Audit pro tatsächlich geschlossenem Tab — genau die Mutationen sind
-        // nachvollziehbar, No-ops und notFound spammen das Log nicht.
-        for item in items where item.outcome == "closed" {
+        // nachvollziehbar, No-ops und notFound spammen das Log nicht. Ein Stop
+        // wird als eigene Methode geführt: er beendet einen Prozess und muss
+        // im Audit vom rein visuellen Schließen unterscheidbar sein.
+        for item in items where item.outcome == "closed" || item.stopped {
             let label = [item.project, item.title].compactMap { $0 }.joined(separator: "/")
-            await audit(request.actor, method: "close", target: label, outcome: "ok", prompt: nil)
+            let method = item.stopped ? (force ? "close --stop --force" : "close --stop") : "close"
+            await audit(request.actor, method: method, target: label, outcome: "ok", prompt: nil)
         }
 
         return .success(requestID: request.requestID, result: .object([
             "ok": true,
             "closedCount": items.filter { $0.outcome == "closed" }.count,
+            "stoppedCount": items.filter(\.stopped).count,
             "results": items.map { item -> [String: Any] in
                 var dict: [String: Any] = [
                     "id": item.id.uuidString,
                     "outcome": item.outcome,
                     "ptyRunning": item.ptyRunning,
                     "isPinned": item.isPinned,
+                    "stopped": item.stopped,
+                    "stopFailed": item.stopFailed,
                 ]
                 if let title = item.title { dict["title"] = title }
                 if let project = item.project { dict["project"] = project }
@@ -397,6 +501,13 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         var ptyRunning = false
         var runtimeStatus: String?
         var isPinned = false
+        /// `--stop` hat hier einen laufenden Agenten beendet.
+        var stopped = false
+        /// Gesetzt, solange der Supervisor-Job noch zu stoppen ist (zweite
+        /// Phase außerhalb des MainActor-Blocks).
+        var backgroundShortID: String?
+        /// Der Daemon-Stop schlug fehl — der Agent läuft trotz `--stop` weiter.
+        var stopFailed = false
     }
 
     // MARK: session.reopen
@@ -623,6 +734,189 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 "workspace": ["id": entity.id.uuidString, "name": entity.name],
                 "target": ["id": targetID.uuidString],
             ]))
+        }
+    }
+
+    // MARK: queue.enqueue / queue.cancel
+
+    /// Folgeaufträge vormerken und stornieren. Das LESEN der Warteschlange
+    /// läuft bewusst nicht über den Socket — die CLI liest die Queue-Datei
+    /// direkt, damit `chats queue` auch bei geschlossener App funktioniert.
+    private func queueMutation(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        guard let targetString = request.params["targetSessionID"]?.stringValue,
+              let targetID = UUID(uuidString: targetString) else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "targetSessionID fehlt/ungültig")
+        }
+        let store = AgentPromptQueueStore.shared
+        let actorLabel = await auditActorLabel(request.actor)
+
+        if request.method == "queue.cancel" {
+            let ids = request.params["ids"]?.arrayValue?.compactMap { $0.stringValue }
+                .compactMap(UUID.init(uuidString:))
+            let cancelled = store.cancel(sessionID: targetID, ids: ids.map(Set.init))
+            await audit(request.actor, method: "queue-cancel", target: await sessionLabel(targetID),
+                        outcome: "ok", prompt: nil)
+            return .success(requestID: request.requestID, result: .object([
+                "ok": true,
+                "cancelled": cancelled.count,
+                "remaining": store.openPrompts(for: targetID).count,
+            ]))
+        }
+
+        guard let prompt = request.params["prompt"]?.stringValue,
+              !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "prompt fehlt/leer")
+        }
+
+        // Dieselben Grundregeln wie `send`: kein Selbst-Auftrag, kein Ziel im
+        // Archiv. Der Status-Guard entfällt bewusst — ein Chat, der ARBEITET,
+        // ist genau der Grund, warum es diesen Befehl gibt.
+        let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
+        if let actorID, actorID == targetID {
+            return .failure(requestID: request.requestID, code: .selfSend,
+                            message: "An sich selbst kann kein Folgeauftrag vorgemerkt werden")
+        }
+        let valid: Bool = await MainActor.run {
+            AgentWorkspaceUIModel.shared.workspace.sessions
+                .contains { $0.id == targetID && $0.status != .archived }
+        }
+        guard valid else {
+            return .failure(requestID: request.requestID, code: .notFound,
+                            message: "Session nicht gefunden oder archiviert")
+        }
+
+        let entry = store.enqueue(sessionID: targetID, prompt: prompt, by: actorLabel)
+        let open = store.openPrompts(for: targetID)
+        let position = (open.firstIndex { $0.id == entry.id }).map { $0 + 1 } ?? open.count
+
+        // Wartet das Ziel gerade ohnehin, kann der Auftrag sofort laufen —
+        // sonst läge er bis zum nächsten Turn-Ende brach, das nie kommt.
+        let runtime = await MainActor.run {
+            AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
+        }
+        var deliveredNow = false
+        if runtime == .idle || runtime == nil {
+            await MainActor.run { AgentPromptQueueDelivery.shared.deliverNow(for: targetID) }
+            deliveredNow = store.all().first { $0.id == entry.id }?.state == .delivered
+        }
+
+        await audit(request.actor, method: "queue-enqueue", target: await sessionLabel(targetID),
+                    outcome: "ok", prompt: prompt)
+        return .success(requestID: request.requestID, result: .object([
+            "ok": true,
+            "id": entry.id.uuidString,
+            "position": position,
+            "queued": store.openPrompts(for: targetID).count,
+            "deliveredImmediately": deliveredNow,
+            "runtimeStatus": runtime?.rawValue ?? "unknown",
+            "target": ["id": targetID.uuidString],
+        ]))
+    }
+
+    // MARK: gridWorkspace.open
+
+    /// Holt einen Grid-Workspace in den Vordergrund: Grid sichtbar machen,
+    /// Slot-Tabs materialisieren, Fenster und App nach vorn. Optional wird ein
+    /// Slot fokussiert.
+    ///
+    /// Rein sichtbarkeitsbezogen — es werden KEINE Prozesse gestartet und
+    /// keine Slot-Mitgliedschaften geändert. Ein leerer Slot ist kein Fehler.
+    ///
+    /// Besitzt bereits ein ANDERES Fenster den Workspace, wird nichts mutiert;
+    /// stattdessen wird genau dieses Fenster fokussiert — das Ziel („zeig ihn
+    /// mir") ist damit erfüllt, ohne dem anderen Fenster seine Terminal-Views
+    /// zu stehlen.
+    private func gridWorkspaceOpen(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        guard let workspaceRef = request.params["workspaceRef"]?.stringValue, !workspaceRef.isEmpty else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "workspaceRef fehlt")
+        }
+        let slot = request.params["slot"].flatMap { json -> Int? in
+            if case .number(let value) = json { return Int(value) }
+            return nil
+        }
+
+        enum OpenOutcome {
+            case ok(name: String, workspaceID: UUID, windowID: UUID, outcome: String,
+                    focusedSessionID: UUID?, slotOccupied: Bool?)
+            case fail(ChatsControlErrorCode, String)
+        }
+
+        let result: OpenOutcome = await MainActor.run {
+            let store = AgentWindowStore.shared
+            let entity: AgentGridWorkspace
+            switch Self.resolveGridWorkspaceRef(workspaceRef, all: store.gridWorkspaces) {
+            case .success(let match): entity = match
+            case .failure(let message): return .fail(.notFound, message)
+            }
+
+            // Slot-Index VOR der Aktivierung prüfen — ein ungültiger Index soll
+            // nicht erst das Fenster umschalten und dann scheitern.
+            if let slot, slot < 0 || slot >= entity.capacity {
+                return .fail(.invalid,
+                             "Slot \(slot + 1) liegt außerhalb von „\(entity.name)\" (Kapazität \(entity.capacity))")
+            }
+
+            // Zielfenster: das besitzende, sonst das Hauptfenster.
+            let ownerWindowID = store.windowID(owningGridWorkspace: entity.id)
+            let targetWindowID = ownerWindowID ?? store.primaryWindowID
+
+            let outcome: String
+            switch store.activateGridWorkspace(entity.id, in: targetWindowID) {
+            case .activated:
+                outcome = "activated"
+            case .alreadyActiveHere:
+                outcome = "alreadyVisible"
+            case .alreadyActive:
+                // Anderes Fenster besitzt ihn — wir fokussieren nur.
+                outcome = "focusedOwnerWindow"
+            case .blockedByWindowOwnership(let map):
+                let count = map.count
+                return .fail(.conflict, "\(count) Slot-Chat(s) von „\(entity.name)\" sind Tabs anderer Fenster — "
+                    + "erst dort schließen oder per `chats move` übernehmen.")
+            case .rejected:
+                return .fail(.notFound, "Workspace oder Zielfenster nicht verfügbar")
+            }
+
+            // Slot-Fokus: nur setzen, wenn der Slot belegt ist. Ein leerer Slot
+            // ist eine gültige Ansicht, kein Fehler.
+            var focused: UUID?
+            var slotOccupied: Bool?
+            if let slot {
+                let current = store.gridWorkspace(id: entity.id) ?? entity
+                let sessionID = slot < current.slots.count ? current.slots[slot] : nil
+                slotOccupied = sessionID != nil
+                if let sessionID {
+                    store.setGridFocusedSession(sessionID, in: targetWindowID)
+                    focused = sessionID
+                }
+            }
+
+            WindowRequestCenter.shared.requestWindowFocus(windowID: targetWindowID)
+            NSApp.activate(ignoringOtherApps: true)
+
+            return .ok(name: entity.name, workspaceID: entity.id, windowID: targetWindowID,
+                       outcome: outcome, focusedSessionID: focused, slotOccupied: slotOccupied)
+        }
+
+        switch result {
+        case .fail(let code, let message):
+            await audit(request.actor, method: "workspace-open", target: workspaceRef,
+                        outcome: code.rawValue, prompt: nil)
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .ok(let name, let workspaceID, let windowID, let outcome, let focused, let slotOccupied):
+            await audit(request.actor, method: "workspace-open", target: name, outcome: "ok", prompt: nil)
+            var payload: [String: Any] = [
+                "ok": true,
+                "outcome": outcome,
+                "workspace": ["id": workspaceID.uuidString, "name": name],
+                "windowID": windowID.uuidString,
+            ]
+            if let slot { payload["slot"] = slot + 1 }
+            if let slotOccupied { payload["slotOccupied"] = slotOccupied }
+            if let focused {
+                payload["focused"] = ["id": focused.uuidString, "title": await sessionLabel(focused)]
+            }
+            return .success(requestID: request.requestID, result: .object(payload))
         }
     }
 

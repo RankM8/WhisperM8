@@ -288,6 +288,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // hoppt selbst auf den MainActor. Kill-Switch:
         // `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
         AgentControlServer.shared.start(handler: AgentControlRequestHandler())
+        // Folgeauftrags-Warteschlange: Was beim letzten Beenden mitten in der
+        // Zustellung stand, ist von unbekanntem Ausgang — als `unknown`
+        // markieren statt blind erneut zu senden (höchstens-einmal-Garantie).
+        // Zusätzlich alte abgeschlossene Einträge aufräumen.
+        AgentPromptQueueStore.shared.reconcileOnLaunch()
         // P2: FSEvents auf ~/.claude/projects + ~/.codex/sessions — extern
         // gestartete Sessions tauchen damit nach Sekunden auf statt erst beim
         // nächsten Foreground-Scan.
