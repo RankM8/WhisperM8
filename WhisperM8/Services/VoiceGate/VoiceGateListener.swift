@@ -5,11 +5,16 @@ import Speech
 // ==============================================================================
 // Der mithoerende Listener.
 //
-// Eigener AVAudioEngine-Tap, EXPLIZIT an ein Geraet gebunden — nie „System
-// Default". Das ist der Kern der Unabhaengigkeit: der Listener haengt am
-// Hardware-Mikrofon und bleibt hoerend, egal was Codex mit seinem eigenen
-// Eingang macht. Im Spike am 26.07.2026 nachgewiesen: zwei gleichzeitige
-// CoreAudio-Clients auf demselben AirPods-Mikro stoeren sich nicht.
+// Audio kommt aus einer austauschbaren `VoiceGateAudioSource` — diese Datei
+// kuemmert sich nur noch um Erkennung und Lebenszyklus. Die Engine-Details
+// (Geraetebindung, HFP-Wartezeit, Format-Retry, Konfigurations-Beobachter)
+// liegen dort, weil genau sie im Feld kaputtgingen und testbar sein muessen.
+//
+// GERAETEBINDUNG: Fuer Bluetooth liefert der `AudioDeviceManager` bewusst
+// `nil` — die HFP-Umschaltung gehoert macOS, und der Recorder faehrt seit
+// Langem genauso. Bei AirPods folgt die Quelle also dem System-Standard.
+// Frueher behauptete dieser Kopf das Gegenteil („nie System Default"); das
+// war fuer genau die haeufigste Hardware falsch.
 //
 // Erkennung strikt on-device (`requiresOnDeviceRecognition`). Faellt die
 // On-Device-Faehigkeit aus, startet der Listener GAR NICHT — ein stiller
@@ -50,42 +55,40 @@ final class VoiceGateListener {
     private let maxTaskDuration: TimeInterval = 50
 
     private let locale: Locale
-    private let deviceIDProvider: () -> AudioDeviceID?
+    private let audioSource: VoiceGateAudioSource
 
-    private var engine: AVAudioEngine?
     private var recognizer: SFSpeechRecognizer?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var taskStartedAt: Date?
-    private var configurationObserver: NSObjectProtocol?
-    /// Schuetzt `request`/`task` gegen den Audio-Thread, der parallel Puffer
-    /// anhaengt, waehrend die Erneuerung auf Main laeuft.
+
+    /// Schuetzt `request`/`task`/`taskStartedAt` und das Lebenszeichen gegen
+    /// den Audio-Thread, der parallel Puffer anhaengt.
     private let stateLock = NSLock()
     /// Verhindert den Erneuerungs-Sturm: „No speech detected" kommt bei Stille
     /// regulaer, und eine synchrone Erneuerung im Callback erzeugte daraus eine
     /// Endlosschleife (gemessen: 4796 Fehler in 90 s).
     private var pendingRenewal = false
+    private var health = VoiceGateListenerHealth()
 
     private(set) var isRunning = false
 
     /// Neue Hypothese. Kommt auf einer beliebigen Queue.
     var onHypothesis: ((VoiceGateHypothesis) -> Void)?
-    /// Laufzeitfehler nach erfolgreichem Start (Geraetewechsel, Task-Abbruch).
+    /// Laufzeitfehler nach erfolgreichem Start (Rebind gescheitert).
     var onRuntimeError: ((Error) -> Void)?
 
     init(
         locale: Locale = Locale(identifier: "de_DE"),
-        deviceIDProvider: @escaping () -> AudioDeviceID? = { AudioDeviceManager.shared.selectedDeviceID }
+        audioSource: VoiceGateAudioSource = AVAudioEngineVoiceGateAudioSource()
     ) {
         self.locale = locale
-        self.deviceIDProvider = deviceIDProvider
+        self.audioSource = audioSource
     }
 
     // MARK: - Locale-Auswahl
 
     /// Beste Regionalvariante, fuer die ein On-Device-Modell bereitliegt.
-    /// Bindeglied zwischen dem puren `VoiceGateLocaleResolver` und dem
-    /// Speech-Framework.
     static func resolveOnDeviceLocale(preferredLanguage: String) -> Locale? {
         VoiceGateLocaleResolver.resolve(preferredLanguage: preferredLanguage) { locale in
             SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition ?? false
@@ -100,6 +103,21 @@ final class VoiceGateListener {
                 continuation.resume(returning: status)
             }
         }
+    }
+
+    // MARK: - Lebenszeichen
+
+    /// Kommen noch Audio-Puffer an? Grundlage des Wachhunds im Coordinator.
+    func healthVerdict(now: Date = Date()) -> VoiceGateListenerHealth.Verdict {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return health.verdict(now: now)
+    }
+
+    func millisecondsSinceLastBuffer(now: Date = Date()) -> Int? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return health.millisecondsSinceLastBuffer(now: now)
     }
 
     // MARK: - Start / Stop
@@ -120,129 +138,108 @@ final class VoiceGateListener {
         }
         self.recognizer = recognizer
 
-        try startEngine()
-        startRecognitionTask()
-        observeConfigurationChanges()
+        audioSource.onBuffer = { [weak self] buffer in
+            self?.handle(buffer: buffer)
+        }
+        audioSource.onRebind = { [weak self] success in
+            self?.handleRebind(success: success)
+        }
 
+        try audioSource.start()
+
+        stateLock.lock()
+        health.markStarted(at: Date())
+        stateLock.unlock()
+
+        startRecognitionTask()
         isRunning = true
-        Logger.voiceGate.info("listener.started locale=\(self.locale.identifier, privacy: .public)")
+        Logger.voiceGate.info(
+            "listener.started locale=\(self.locale.identifier, privacy: .public) device=\(self.audioSource.deviceLabel, privacy: .public)"
+        )
     }
 
     func stop() {
-        guard isRunning else { return }
+        // Bewusst OHNE `guard isRunning`: nach einem gescheiterten Rebind steht
+        // das Flag auf false, die Quelle laeuft aber womoeglich noch. Frueher
+        // blieben hier Tap und Beobachter stehen.
         isRunning = false
 
-        if let configurationObserver {
-            NotificationCenter.default.removeObserver(configurationObserver)
-            self.configurationObserver = nil
-        }
+        audioSource.onBuffer = nil
+        audioSource.onRebind = nil
+        audioSource.stop()
 
         finishRecognitionTask()
-
-        if let engine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
-        engine = nil
         recognizer = nil
+
+        stateLock.lock()
+        health.markStopped()
+        pendingRenewal = false
+        stateLock.unlock()
 
         Logger.voiceGate.info("listener.stopped")
     }
 
     // MARK: - Audio
 
-    private func startEngine() throws {
-        let engine = AVAudioEngine()
-
-        // Geraet VOR dem ersten Zugriff auf das Format binden — derselbe
-        // Ablauf wie im AudioRecorder, sonst haengt der Tap am Default.
-        if let deviceID = deviceIDProvider(), let audioUnit = engine.inputNode.audioUnit {
-            var value = deviceID
-            let status = AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &value,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
-            if status != noErr {
-                Logger.voiceGate.warning("listener.device_bind_failed status=\(status)")
-            }
-        }
-
-        let inputNode = engine.inputNode
-        let format = inputNode.inputFormat(forBus: 0)
-
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw VoiceGateListenerError.audioEngineFailed("ungültiges Eingabeformat \(format)")
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
-            self?.handle(buffer: buffer)
-        }
-
-        engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            throw VoiceGateListenerError.audioEngineFailed(error.localizedDescription)
-        }
-
-        self.engine = engine
-    }
-
     private func handle(buffer: AVAudioPCMBuffer) {
         // Wichtig: JEDER Puffer geht durch, auch Stille. Wuerde hier bei
         // leisem Pegel ausgesetzt, verschwaende die Pause vor dem Codewort —
         // und genau an ihr erkennt der Matcher die Aeusserungsgrenze.
+        let now = Date()
+
         stateLock.lock()
         let currentRequest = request
         let startedAt = taskStartedAt
+        let hadBuffer = health.millisecondsSinceLastBuffer(now: now) != nil
+        health.recordBuffer(at: now)
         stateLock.unlock()
+
+        if !hadBuffer {
+            Logger.voiceGate.info("listener.first_buffer device=\(self.audioSource.deviceLabel, privacy: .public)")
+        }
 
         currentRequest?.append(buffer)
 
-        if let startedAt, Date().timeIntervalSince(startedAt) > maxTaskDuration {
+        if let startedAt, now.timeIntervalSince(startedAt) > maxTaskDuration {
             renewRecognitionTask()
         }
     }
 
-    private func observeConfigurationChanges() {
-        configurationObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self, self.isRunning else { return }
-            Logger.voiceGate.info("listener.configuration_changed — Engine wird neu gebunden")
-            self.restartAfterConfigurationChange()
-        }
-    }
+    /// Die Quelle hat nach einem Geraetewechsel neu gebunden.
+    private func handleRebind(success: Bool) {
+        guard isRunning else { return }
 
-    private func restartAfterConfigurationChange() {
-        finishRecognitionTask()
-        if let engine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
-        engine = nil
-
-        do {
-            try startEngine()
-            startRecognitionTask()
-        } catch {
+        guard success else {
             isRunning = false
-            Logger.voiceGate.error("listener.restart_failed \(error.localizedDescription, privacy: .public)")
+            let error = VoiceGateListenerError.audioEngineFailed("Rebind nach Gerätewechsel gescheitert")
+            Logger.voiceGate.error("listener.rebind_gave_up")
             onRuntimeError?(error)
+            return
         }
+
+        // Erkennung frisch aufsetzen: Die alte Task haengt an einem Stream, der
+        // nicht mehr gefuellt wird. `pendingRenewal` muss dabei zurueck, sonst
+        // startet 0,4 s spaeter eine ZWEITE Task und die beiden cancellen sich
+        // gegenseitig.
+        stateLock.lock()
+        pendingRenewal = false
+        health.markStarted(at: Date())
+        stateLock.unlock()
+
+        finishRecognitionTask()
+        startRecognitionTask()
+        Logger.voiceGate.info("listener.recognition_rebound device=\(self.audioSource.deviceLabel, privacy: .public)")
     }
 
     // MARK: - Erkennung
 
     private func startRecognitionTask() {
         guard let recognizer else { return }
+
+        // Nie ueber eine laufende Task druebersetzen — sonst bleibt sie als
+        // Waise zurueck, laeuft in ihren Fehler und cancelt aus dem Callback
+        // die lebende Task.
+        finishRecognitionTask()
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -294,13 +291,21 @@ final class VoiceGateListener {
     /// Neustart-Karussell mit ~15 ms Periode.
     private func renewRecognitionTask() {
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.isRunning, !self.pendingRenewal else { return }
-            self.pendingRenewal = true
+            guard let self, self.isRunning else { return }
+
+            self.stateLock.lock()
+            let alreadyPending = self.pendingRenewal
+            if !alreadyPending { self.pendingRenewal = true }
+            self.stateLock.unlock()
+            guard !alreadyPending else { return }
+
             self.finishRecognitionTask()
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                 guard let self else { return }
+                self.stateLock.lock()
                 self.pendingRenewal = false
+                self.stateLock.unlock()
                 guard self.isRunning else { return }
                 self.startRecognitionTask()
             }

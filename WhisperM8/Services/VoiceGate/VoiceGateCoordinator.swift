@@ -73,6 +73,11 @@ final class VoiceGateCoordinator {
     private var hasEverConfirmed = false
     private var lastVerboseLogAt: Date?
 
+    /// Erkennt einen tauben Listener und baut ihn neu — gedeckelt, damit daraus
+    /// keine Neustart-Schleife wird.
+    private var watchdog = VoiceGateWatchdogPolicy()
+    private var lastAliveLogAt: Date?
+
     private init(probe: CodexVoiceSessionProbe = CodexVoiceSessionProbe()) {
         self.probe = probe
     }
@@ -88,6 +93,10 @@ final class VoiceGateCoordinator {
         isEnabled = true
         startupError = nil
         startupFailedPermanently = false
+        // Manuelles Aus/An ist die Geste „probier es nochmal" — der Wachhund
+        // darf danach wieder von vorn zaehlen.
+        watchdog.reset()
+        lastAliveLogAt = nil
 
         Logger.voiceGate.info(
             "gate.start dryRun=\(AppPreferences.shared.isCodexVoiceGateDryRun, privacy: .public)"
@@ -155,7 +164,54 @@ final class VoiceGateCoordinator {
 
         if state == .armed {
             startListeningIfNeeded()
+            superviseListenerHealth()
         } else {
+            stopListening()
+        }
+    }
+
+    /// Wachhund gegen stilles Taubwerden.
+    ///
+    /// Der Gerätewechsel-Fehler vom 27.07.2026 war deshalb so zaeh, weil der
+    /// Listener nicht abstuerzte: Engine lief, `isRunning` blieb true, das Gate
+    /// meldete „scharf" — nur kamen keine Puffer mehr. Der Wachhund fragt
+    /// bewusst nicht nach der URSACHE, sondern nur danach, ob noch Audio
+    /// eintrifft; damit faengt er auch stille Tode, die wir nicht kennen.
+    private func superviseListenerHealth() {
+        guard let listener else { return }
+
+        let now = Date()
+        let verdict = listener.healthVerdict(now: now)
+
+        // Regelmaessiges Lebenszeichen auf `info` — eine gesunde und eine taube
+        // Sitzung sahen im Log bisher identisch aus, und Nutzer-Mitschriften
+        // haben `debug` nicht an.
+        if lastAliveLogAt == nil || now.timeIntervalSince(lastAliveLogAt!) >= 30 {
+            lastAliveLogAt = now
+            let since = listener.millisecondsSinceLastBuffer(now: now).map(String.init) ?? "—"
+            Logger.voiceGate.info(
+                "listener.alive verdict=\(String(describing: verdict), privacy: .public) sinceLastBufferMs=\(since, privacy: .public)"
+            )
+        }
+
+        switch watchdog.decide(armed: true, verdict: verdict, now: now) {
+        case .none:
+            break
+
+        case .restart:
+            if case .deaf(let gap) = verdict {
+                Logger.voiceGate.error(
+                    "listener.watchdog_restart gapMs=\(Int(gap * 1000), privacy: .public)"
+                )
+            }
+            note("Kein Audio mehr — Listener wird neu gebunden")
+            stopListening()
+            startListeningIfNeeded()
+
+        case .giveUp:
+            Logger.voiceGate.error("listener.watchdog_gave_up")
+            startupError = "Das Mikrofon liefert nichts mehr, und mehrere Neustarts haben nicht geholfen. Voice Gate aus- und wieder einschalten."
+            note("Wachhund hat aufgegeben")
             stopListening()
         }
     }

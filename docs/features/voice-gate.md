@@ -87,10 +87,56 @@ Daraus folgen die tragenden Entwurfsentscheidungen:
 
 - **Kein Mute auf Geräte- oder Systemebene.** Das würde den Listener mit-taub
   machen. Gemutet wird ausschließlich in Codex selbst.
-- **Der Listener bindet sein Eingabegerät explizit** (nie „System Default") und
-  ist damit unabhängig von allem, was Codex mit seinem Eingang tut.
+- **Der Listener ist ein eigener CoreAudio-Client** und damit unabhängig davon,
+  was Codex mit seinem Eingang tut. Bei kabelgebundenen Geräten bindet er
+  explizit; bei **Bluetooth folgt er bewusst dem System-Standard**, weil
+  `AudioDeviceManager` dort absichtlich `nil` liefert — die HFP-Umschaltung
+  gehört macOS, und der `AudioRecorder` fährt seit Langem genauso. (Bis
+  27.07.2026 behauptete dieser Abschnitt „nie System Default" — für AirPods,
+  also die häufigste Hardware, war das falsch.)
 - **Der Fokus-Roundtrip ist unvermeidbar**, weil `realtimeVoice.toggleMicrophoneMute`
   in Codex `shortcutScope: app` hat.
+
+## Gerätewechsel
+
+AirPods raus und wieder rein machte den Listener bis 27.07.2026 stumm — ohne
+Fehler, ohne Log, das Gate meldete weiter „scharf". Nur der Schalter aus/an
+half. Drei Ursachen, jede für sich harmlos:
+
+1. Der Konfigurations-Beobachter war mit `object: engine` an die Engine vom
+   Start gebunden und wurde nach dem Rebind **nie neu armiert**. Der erste
+   Wechsel (raus) wurde verarbeitet, der zweite (rein) kam nie an.
+2. Der Rebind hatte weder Wartezeit für die Bluetooth-HFP-Umschaltung noch
+   einen Format-Retry. Ein *gültiges, aber falsches* Format startete
+   erfolgreich und schwieg — nur der harte Fehlerfall heilte sich selbst.
+3. Es gab kein Lebenszeichen. Ein tauber Listener ist nicht `nil`, also baute
+   ihn niemand neu.
+
+**Behoben durch:**
+
+- `VoiceGateAudioSource` — eigene Abstraktion, die Engine, Tap und Beobachter
+  kapselt. Der Beobachter wird nach **jedem** Rebind neu armiert, mit 100 ms
+  Verzögerung gegen Sofort-Retrigger. Dieselbe Engine wird behalten, wie im
+  `AudioRecorder`.
+- 300 ms HFP-Wartezeit plus Format-Abfrage mit fünf Versuchen à 100 ms.
+- Nach dem Rebind wird die Erkennungs-Task sauber neu aufgesetzt und
+  `pendingRenewal` zurückgesetzt — sonst startete 0,4 s später eine zweite
+  Task, und die beiden brachen sich gegenseitig ab.
+- **Wachhund**: `VoiceGateListenerHealth` misst die Lücke seit dem letzten
+  Audio-Puffer, `VoiceGateWatchdogPolicy` entscheidet über einen Neustart.
+  Beide rein und unit-getestet. Angeschlossen an den bestehenden
+  10-Sekunden-Takt, gedeckelt auf einen Neustart pro 30 s; nach drei
+  erfolglosen wird aufgegeben und die Oberfläche sagt es, statt weiter
+  „scharf" zu behaupten.
+
+Der Wachhund fragt bewusst **nicht nach der Ursache**, sondern nur, ob noch
+Audio eintrifft — damit fängt er auch stille Tode, die wir nicht kennen. Das
+Primärsignal ist der Audio-Puffer, nicht die Erkennung: Der Tap feuert
+unabhängig davon, ob jemand spricht, während Stille legitim ist.
+
+Neue Log-Signale: `listener.observer_armed`, `listener.first_buffer`,
+`listener.restarted ok=`, `listener.alive verdict=… sinceLastBufferMs=` (alle
+30 s auf `info`), `listener.watchdog_restart gapMs=`, `listener.watchdog_gave_up`.
 
 ## Zustandslogik
 
@@ -288,9 +334,8 @@ Drei unabhängige Reviews haben übereinstimmend Blocker gefunden. Sie sind
    `isRunning` erst am Ende; ein Stop im falschen Moment verpufft, und das
    Mikrofon bleibt belegt — entgegen der Zusage im Einstellungs-Tab.
    `VoiceGateListener.swift:107/127/132`
-4. **Der Beobachter für Gerätewechsel überlebt nur einen.** Er filtert auf die
-   alte Engine, die beim Neubinden ersetzt wird. Ab dem zweiten Wechsel ist der
-   Listener stumm, ohne Fehler und ohne Log. `VoiceGateListener.swift:212-240`
+4. ~~**Der Beobachter für Gerätewechsel überlebt nur einen.**~~ **Behoben am
+   27.07.2026** — siehe „Gerätewechsel" weiter oben.
 5. **Der Nachfass-Druck kann einen erfolgreichen Druck aufheben** und meldet
    trotzdem Erfolg. Die Signatur ist nachweislich unzuverlässig; ihr Ausbleiben
    als Beweis zu werten widerspricht dem eigenen Vorsatz in
@@ -316,11 +361,15 @@ stoppt es nicht. Sofort wirkt allein der Schalter im Einstellungs-Tab
 - `WhisperM8/Services/VoiceGate/VoiceGateCommandMatcher.swift` — Phrasenerkennung (pur)
 - `WhisperM8/Services/VoiceGate/VoiceGateStateMachine.swift` — Zustandslogik (pur)
 - `WhisperM8/Services/VoiceGate/CodexVoiceSessionProbe.swift` — Gate
-- `WhisperM8/Services/VoiceGate/VoiceGateListener.swift` — Audio + On-Device-Erkennung
+- `WhisperM8/Services/VoiceGate/VoiceGateListener.swift` — On-Device-Erkennung
+- `WhisperM8/Services/VoiceGate/VoiceGateAudioSource.swift` — Engine, Tap, Gerätewechsel
+- `WhisperM8/Services/VoiceGate/VoiceGateListenerHealth.swift` — Lebenszeichen (pur)
+- `WhisperM8/Services/VoiceGate/VoiceGateWatchdogPolicy.swift` — Neustart-Entscheidung (pur)
 - `WhisperM8/Services/VoiceGate/VoiceGateCoordinator.swift` — Verdrahtung
 - `WhisperM8/Views/VoiceGateMenuSection.swift` — Menüleiste
 - `WhisperM8/Services/VoiceGate/CodexMuteToggler.swift` — Fokus-Roundtrip + CGEvent
 - `WhisperM8/Services/VoiceGate/CodexCommandExecutionProbe.swift` — Ausführungs-Bestätigung
 - `WhisperM8/Services/VoiceGate/VoiceGateLocaleResolver.swift` — Regionalvarianten
 - `WhisperM8/Views/Settings/Pages/AgentChatsVoiceAgentTab.swift` — Einstellungs-Tab
-- `Tests/WhisperM8Tests/CodexVoiceGateTests.swift` — 47 Tests der reinen Logik
+- `Tests/WhisperM8Tests/CodexVoiceGateTests.swift` — 50 Tests der reinen Logik
+- `Tests/WhisperM8Tests/VoiceGateDeviceSwitchTests.swift` — 15 Tests zum Gerätewechsel
