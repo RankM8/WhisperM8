@@ -10,7 +10,15 @@ import XCTest
 // ==============================================================================
 
 final class VoiceGateCommandMatcherTests: XCTestCase {
-    private let matcher = VoiceGateCommandMatcher()
+    /// Bewusst ein LANGES Traegerwort statt des Defaults: diese Tests pruefen
+    /// die allgemeinen Regeln inklusive Fuzzy-Toleranz, und die greift erst ab
+    /// `minCarrierLengthForFuzzyMatch`. Den Default deckt
+    /// `VoiceGateDefaultVocabularyTests` ab.
+    private let matcher: VoiceGateCommandMatcher = {
+        var vocabulary = VoiceGateVocabulary.default
+        vocabulary.carrier = "jarvis"
+        return VoiceGateCommandMatcher(vocabulary: vocabulary)
+    }()
 
     /// Segmente mit sauberer Aeusserungsgrenze davor.
     private func phrase(_ words: [String], leadingSilence: TimeInterval = 1.0, confidence: Float = 0.9) -> [VoiceGateSegment] {
@@ -498,6 +506,38 @@ final class VoiceGateGluedTokenTests: XCTestCase {
     func testGluedCarrierWithUnknownCommandDoesNotMatch() {
         if case .matched = matcher().match(segments: single("annagutenberg")) {
             XCTFail("annagutenberg darf nicht auslösen")
+        }
+    }
+}
+
+final class VoiceGateDefaultVocabularyTests: XCTestCase {
+    /// Das Standard-Traegerwort ist Teil des Nutzerversprechens — es steht in
+    /// der Doku, in den Platzhaltern der Oberflaeche und im Onboarding.
+    func testDefaultVocabulary() {
+        let vocabulary = VoiceGateVocabulary.default
+        XCTAssertEqual(vocabulary.carrier, "anna")
+        XCTAssertEqual(vocabulary.muteCommand, "pause")
+        XCTAssertEqual(vocabulary.unmuteCommand, "weiter")
+    }
+
+    /// „Anna" ist kurz und muss deshalb exakt sitzen — sonst waeren „Anne" und
+    /// „Hanna" Treffer. Diese Kopplung ist beabsichtigt und darf nicht
+    /// versehentlich gelockert werden.
+    func testDefaultCarrierRequiresExactRecognition() {
+        XCTAssertEqual(VoiceGateVocabulary.default.carrierDistanceAllowance(), 0)
+    }
+
+    func testDefaultPhrasesMatch() {
+        let matcher = VoiceGateCommandMatcher()
+        for (command, expected) in [("Pause", VoiceGateIntent.mute), ("weiter", .unmute)] {
+            let segments = [
+                VoiceGateSegment(text: "Anna", start: 1.0, duration: 0.3, confidence: 0.9),
+                VoiceGateSegment(text: command, start: 1.4, duration: 0.3, confidence: 0.9)
+            ]
+            guard case .matched(let intent, _, _) = matcher.match(segments: segments) else {
+                return XCTFail("Anna \(command) muss mit dem Default greifen")
+            }
+            XCTAssertEqual(intent, expected)
         }
     }
 }

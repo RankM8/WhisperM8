@@ -120,7 +120,7 @@ Key persisted paths: `~/Library/Application Support/WhisperM8/AgentSessions.json
 
 ### Voice Gate (`Services/VoiceGate/`)
 
-Ein gesprochenes Codewort („Jarvis Pause" / „Jarvis weiter", Trägerwort und beide
+Ein gesprochenes Codewort („Anna Pause" / „Anna weiter", Trägerwort und beide
 Kommandos frei konfigurierbar) schaltet das Mikrofon einer laufenden **Codex-Desktop**-
 Sprachsitzung stumm und wieder frei. WhisperM8 mutet **nicht selbst**: es aktiviert kurz
 Codex und sendet dessen eigenes Kürzel `Ctrl+Shift+U` — das der Nutzer in Codex' Einstellungen

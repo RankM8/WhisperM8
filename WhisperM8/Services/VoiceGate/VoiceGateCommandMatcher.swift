@@ -57,7 +57,16 @@ enum VoiceGateMatch: Equatable {
 /// Vokabular und Schwellen. Alles konfigurierbar, damit der Trockenlauf ohne
 /// Rebuild nachjustiert werden kann.
 struct VoiceGateVocabulary: Equatable {
-    var carrier: String = "jarvis"
+    /// Standard-Traegerwort. „Anna" statt des urspruenglichen „Jarvis", weil ein
+    /// gelaeufiger deutscher Name vom deutschen On-Device-Modell deutlich
+    /// zuverlaessiger getroffen wird — „Jarvis" ist ein englischer Eigenname und
+    /// wurde im Feldtest regelmaessig auf etwas Deutsches abgebildet
+    /// (`candidate.rejected reason=noCarrier`, 27.07.2026).
+    ///
+    /// Preis: Mit 4 Zeichen liegt es unter `minCarrierLengthForFuzzyMatch`, muss
+    /// also exakt erkannt werden. Das ist Absicht — bei Distanz 1 waeren „Anne",
+    /// „Hanna" und „Manna" Treffer.
+    var carrier: String = "anna"
     var muteCommand: String = "pause"
     var unmuteCommand: String = "weiter"
 

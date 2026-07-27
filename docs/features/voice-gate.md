@@ -9,8 +9,8 @@ feature: Voice Gate / Codex Voice Agent
 Ein kurzes Codewort schaltet das Mikrofon der laufenden **Codex-Desktop-Sprachsitzung**
 stumm und wieder frei, ohne dass jemand einen Shortcut drückt.
 
-- **„Jarvis Pause"** → stumm
-- **„Jarvis weiter"** → wieder frei
+- **„Anna Pause"** → stumm
+- **„Anna weiter"** → wieder frei
 
 WhisperM8 transkribiert dabei nichts für Codex und übernimmt keine parallele
 Aufnahme — es löst ausschließlich Codex' **eigenen** Mute-Umschalter aus.
@@ -98,7 +98,7 @@ Der Codex-Shortcut ist ein **blinder Toggle** — er schaltet um, verrät aber
 nicht wohin, und der wahre Zustand ist von außen nicht lesbar. Die
 Zustandsmaschine führt deshalb eine *Annahme* und macht sie dreifach robust:
 
-1. **Absicht statt Toggle** — „Jarvis Pause" mutet nur, wenn wir offen glauben.
+1. **Absicht statt Toggle** — „Anna Pause" mutet nur, wenn wir offen glauben.
 2. **Wiederholung überstimmt** — wurde ein Befehl als „schon im Zielzustand"
    **übersprungen** und kommt dieselbe Phrase binnen 4 s erneut, wird trotzdem
    gedrückt. Damit ist die Selbstkorrektur des Toggles zurück, ohne dessen
@@ -135,7 +135,8 @@ Gestaffelt, weil kein einzelnes Kriterium reicht:
 - Gate: nur bei laufendem Codex mit plausibel aktiver Sprachsitzung
 - pausiert, solange WhisperM8 selbst diktiert
 
-Das Trägerwort allein löst nie aus — „sei mein Jarvis" fällt im Alltag beiläufig.
+Das Trägerwort allein löst nie aus — ein Name fällt im Alltag beiläufig, gerade
+ein so gebräuchlicher.
 
 ### Verschmolzene Form
 
@@ -277,6 +278,12 @@ Drei unabhängige Reviews haben übereinstimmend Blocker gefunden. Sie sind
    `annepause`, `annapausen` und `annawetter`, also genau die Fälle, die für
    die getrennte Form per Test ausgeschlossen sind.
    `VoiceGateCommandMatcher.swift:162`
+
+   **Seit „Anna" der Standard ist, betrifft das die Auslieferung, nicht mehr
+   nur eine Nutzereinstellung.** Die Längenregel, die kurze Trägerwörter
+   schützen soll, greift auf diesem Pfad gar nicht — „Hanna, Pause!" schnell
+   gesprochen mutet. Reparatur ist einlagig: `carrierDistanceAllowance()`
+   statt der festen 1.
 3. **Verwaister Listener.** `start()` läuft nicht auf dem MainActor und setzt
    `isRunning` erst am Ende; ein Stop im falschen Moment verpufft, und das
    Mikrofon bleibt belegt — entgegen der Zusage im Einstellungs-Tab.
