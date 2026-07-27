@@ -11,12 +11,32 @@ final class GridPerformanceTrackerTests: XCTestCase {
         var count = 0
     }
 
+    /// - Parameter frozenClock: Friert die Budget-Uhr über den bereits
+    ///   vorhandenen `now`-Test-Hook ein, sodass jede Messung die Dauer 0
+    ///   bekommt.
+    ///
+    ///   Diese Tests prüfen die ZUSTANDSMASCHINE (Generation-Bindung, Abbruch
+    ///   statt Fake-Messung), nicht das Zeitbudget. Mit echter Wall-Clock
+    ///   maßen sie faktisch die Laufzeit ihrer eigenen `Task.sleep`-Aufrufe
+    ///   gegen das 50-ms-Budget von `grid.build` — bei nur 20 ms Puffer.
+    ///   Unter CI-Last reichte das nicht, und
+    ///   `testOverlappingBeginBuildCancelsPreviousWithoutViolation` schlug
+    ///   fehl, obwohl die Zustandsmaschine korrekt arbeitete.
+    ///
+    ///   Nur der Timeout-Test braucht die echte Uhr — er will eine
+    ///   Verletzung sehen und ist nach oben robust.
     private func makeTracker(
         violations: ViolationCounter,
-        timeout: Duration = .seconds(2)
+        timeout: Duration = .seconds(2),
+        frozenClock: Bool = true
     ) -> GridPerformanceTracker {
         let tracker = GridPerformanceTracker()
         tracker.timeout = timeout
+        if frozenClock {
+            let fixed = Date()
+            tracker.buildBudget.now = { fixed }
+            tracker.focusBudget.now = { fixed }
+        }
         tracker.buildBudget.onViolation = { _, _ in violations.count += 1 }
         tracker.focusBudget.onViolation = { _, _ in violations.count += 1 }
         return tracker
@@ -70,7 +90,10 @@ final class GridPerformanceTrackerTests: XCTestCase {
 
     func testBuildTimeoutEndsLeakedMeasurementAsViolation() async throws {
         let violations = ViolationCounter()
-        let tracker = makeTracker(violations: violations, timeout: .milliseconds(80))
+        // Echte Uhr: Dieser Test WILL die Budget-Verletzung sehen. Er ist nach
+        // oben robust — je langsamer die Maschine, desto sicherer greift er.
+        let tracker = makeTracker(violations: violations, timeout: .milliseconds(80),
+                                  frozenClock: false)
         tracker.beginBuild(expectedPaneIDs: [UUID()]) // attached nie
 
         try await Task.sleep(for: .milliseconds(200))
