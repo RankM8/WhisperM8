@@ -138,6 +138,30 @@ Neue Log-Signale: `listener.observer_armed`, `listener.first_buffer`,
 `listener.restarted ok=`, `listener.alive verdict=… sinceLastBufferMs=` (alle
 30 s auf `info`), `listener.watchdog_restart gapMs=`, `listener.watchdog_gave_up`.
 
+### Feldtest 27.07.2026 — bestätigt
+
+AirPods raus und wieder rein, mit funktionierenden Codewörtern davor und danach:
+
+| Zeit | Ereignis | Gebundenes Format |
+|---|---|---|
+| 17:41:39.206 | raus → `configuration_changed` | |
+| 17:41:39.562 | neu gebunden | 96000 Hz (internes Mikro) |
+| 17:41:39.664 | `observer_armed` + `restarted ok=true` | |
+| 17:41:39.763 | `first_buffer` | |
+| 17:41:45.603 | rein → `configuration_changed` | |
+| 17:41:45.981 | neu gebunden | 24000 Hz (AirPods, HFP) |
+| 17:41:46.088 | `observer_armed` + `restarted ok=true` | |
+| 17:41:46.180 | `first_buffer` | |
+
+Der **zweite** Wechsel ist der entscheidende: Vorher kam dort gar kein
+`configuration_changed` mehr an. Vom Ereignis bis zum wieder fließenden Audio
+vergehen 577 ms. Kein `watchdog_restart` — der Fix trug, das Netz musste nicht
+greifen.
+
+Nebenbei belegt der Formatverlauf 48000 → 96000 → 24000 Hz, warum der
+Format-Retry nötig ist: Jeder Wechsel liefert eine andere Abtastrate, und die
+AirPods kommen im HFP-Modus mit 24 kHz zurück.
+
 ## Zustandslogik
 
 Der Codex-Shortcut ist ein **blinder Toggle** — er schaltet um, verrät aber
@@ -334,8 +358,8 @@ Drei unabhängige Reviews haben übereinstimmend Blocker gefunden. Sie sind
    `isRunning` erst am Ende; ein Stop im falschen Moment verpufft, und das
    Mikrofon bleibt belegt — entgegen der Zusage im Einstellungs-Tab.
    `VoiceGateListener.swift:107/127/132`
-4. ~~**Der Beobachter für Gerätewechsel überlebt nur einen.**~~ **Behoben am
-   27.07.2026** — siehe „Gerätewechsel" weiter oben.
+4. ~~**Der Beobachter für Gerätewechsel überlebt nur einen.**~~ **Behoben und im
+   Feld bestätigt am 27.07.2026** — siehe „Gerätewechsel" weiter oben.
 5. **Der Nachfass-Druck kann einen erfolgreichen Druck aufheben** und meldet
    trotzdem Erfolg. Die Signatur ist nachweislich unzuverlässig; ihr Ausbleiben
    als Beweis zu werten widerspricht dem eigenen Vorsatz in
