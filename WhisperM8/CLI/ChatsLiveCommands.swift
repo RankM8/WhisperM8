@@ -255,6 +255,13 @@ struct ChatsCloseResultItem: Equatable {
     var ptyRunning: Bool
     var runtimeStatus: String?
     var isPinned: Bool
+    /// `true`, wenn `--stop` einen laufenden Agenten tatsächlich beendet hat.
+    /// Unabhängig vom Tab-`outcome`: eine Session ohne offenen Tab meldet
+    /// `alreadyClosed` und trotzdem `stopped: true`.
+    var stopped = false
+    /// Der Stop schlug fehl (Supervisor-Job eines Hintergrund-Agenten) — der
+    /// Tab ist zu, der Agent läuft weiter.
+    var stopFailed = false
 }
 
 enum ChatsCloseSupport {
@@ -268,7 +275,9 @@ enum ChatsCloseSupport {
                 outcome: entry["outcome"]?.stringValue ?? "notFound",
                 ptyRunning: entry["ptyRunning"]?.boolValue ?? false,
                 runtimeStatus: entry["runtimeStatus"]?.stringValue,
-                isPinned: entry["isPinned"]?.boolValue ?? false)
+                isPinned: entry["isPinned"]?.boolValue ?? false,
+                stopped: entry["stopped"]?.boolValue ?? false,
+                stopFailed: entry["stopFailed"]?.boolValue ?? false)
         }
     }
 
@@ -283,14 +292,26 @@ enum ChatsCloseSupport {
     static func humanLine(for item: ChatsCloseResultItem, fallbackLabel: String?) -> String {
         let label = [item.project, item.title].compactMap { $0 }.joined(separator: "/")
         let name = label.isEmpty ? (fallbackLabel ?? item.id) : label
+        let pin = item.isPinned ? " · 📌 Pin bleibt" : ""
+        // Fehlgeschlagener Stop zuerst: der Tab ist zu, der Agent läuft aber
+        // weiter — das darf keine Erfolgsmeldung überdecken.
+        if item.stopFailed {
+            return "⚠︎ Tab geschlossen, Agent läuft WEITER: \(name) "
+                + "(Supervisor-Job nicht gestoppt — `claude stop <short-id>` prüfen)"
+        }
         switch item.outcome {
+        case "closed" where item.stopped:
+            return "✓ Tab geschlossen · Agent gestoppt: \(name) (Verlauf bleibt, resume möglich\(pin))"
         case "closed":
             var suffix = "Session bleibt erhalten"
             if item.ptyRunning {
                 suffix = "läuft weiter" + (item.runtimeStatus.map { ", \($0)" } ?? "")
             }
-            let pin = item.isPinned ? " · 📌 Pin bleibt" : ""
             return "✓ Tab geschlossen: \(name) (\(suffix)\(pin))"
+        case "alreadyClosed" where item.stopped:
+            // Kein Tab offen, aber ein Prozess lief im Hintergrund weiter —
+            // genau der Fall, für den `--stop` gedacht ist.
+            return "✓ Agent gestoppt: \(name) (kein offener Tab, Verlauf bleibt\(pin))"
         case "alreadyClosed":
             return "– kein offener Tab: \(name)"
         default:
@@ -306,7 +327,7 @@ enum ChatsCloseCommand {
             options = try ChatsCLIParser.parseClose(arguments)
         } catch {
             CLIIO.err(error.localizedDescription)
-            CLIIO.err("Usage: whisperm8 chats close <ref> [<ref>…] [--json]")
+            CLIIO.err("Usage: whisperm8 chats close <ref> [<ref>…] [--stop [--force]] [--json]")
             return ChatsCLIExit.usage
         }
 
@@ -328,6 +349,8 @@ enum ChatsCloseCommand {
         let params: [String: Any] = [
             "targetSessionIDs": targetIDs.map(\.uuidString),
             "mode": options.mode,
+            "stop": options.stop,
+            "force": options.force,
         ]
         switch ChatsLiveSupport.perform(method: "session.close", params: params) {
         case .failed(let code):
@@ -682,16 +705,53 @@ enum ChatsMutationCommand {
 
 // MARK: - workspace (Grid-Workspaces)
 
+/// Pure Ausgabelogik von `workspace open` — die Fallunterscheidung
+/// (aktiviert / war schon sichtbar / anderes Fenster) ist die eigentliche
+/// Aussage des Befehls und bleibt ohne laufende App testbar.
+enum ChatsWorkspaceOpenSupport {
+    static func humanLine(
+        name: String,
+        outcome: String?,
+        slot: Int?,
+        slotOccupied: Bool?,
+        focusedTitle: String?
+    ) -> String {
+        let head: String
+        switch outcome {
+        case "activated":
+            head = "✓ Workspace „\(name)\" geöffnet"
+        case "alreadyVisible":
+            head = "– Workspace „\(name)\" war schon sichtbar"
+        case "focusedOwnerWindow":
+            // Wichtig zu benennen: ein anderes Fenster besitzt ihn, wir haben
+            // nur fokussiert — es wurde nichts umgehängt.
+            head = "✓ Workspace „\(name)\" im besitzenden Fenster nach vorn geholt"
+        default:
+            head = "✓ Workspace „\(name)\""
+        }
+        guard let slot else { return head }
+        if slotOccupied == false {
+            return head + " · Slot \(slot) ist leer"
+        }
+        if let focusedTitle, !focusedTitle.isEmpty {
+            return head + " · Slot \(slot) fokussiert: \(focusedTitle)"
+        }
+        return head + " · Slot \(slot) fokussiert"
+    }
+}
+
 enum ChatsWorkspaceCommand {
     static func run(_ arguments: [String]) -> Int32 {
         guard let sub = arguments.first else {
-            CLIIO.err("Usage: whisperm8 chats workspace list | rename <name|id> \"<neu>\" | add <name|id> <ref> [--slot N] | remove <name|id> <ref>")
+            CLIIO.err("Usage: whisperm8 chats workspace list | open <name|id> [--slot N] | rename <name|id> \"<neu>\" | add <name|id> <ref> [--slot N] | remove <name|id> <ref>")
             return ChatsCLIExit.usage
         }
         let rest = Array(arguments.dropFirst())
         switch sub {
         case "list":
             return list(rest)
+        case "open":
+            return open(rest)
         case "rename":
             return rename(rest)
         case "add":
@@ -699,8 +759,59 @@ enum ChatsWorkspaceCommand {
         case "remove":
             return membership(rest, add: false)
         default:
-            CLIIO.err("Unbekannter workspace-Befehl: \(sub) (list | rename | add | remove)")
+            CLIIO.err("Unbekannter workspace-Befehl: \(sub) (list | open | rename | add | remove)")
             return ChatsCLIExit.usage
+        }
+    }
+
+    /// `workspace open <ws> [--slot N]` — Workspace sichtbar machen und Fenster
+    /// nach vorn holen. Rein visuell: startet keine Prozesse und ändert keine
+    /// Slot-Mitgliedschaften.
+    private static func open(_ arguments: [String]) -> Int32 {
+        var positionals: [String] = []
+        var slot: Int?
+        var json = false
+        var index = 0
+        while index < arguments.count {
+            let arg = arguments[index]
+            switch arg {
+            case "--slot":
+                index += 1
+                guard index < arguments.count, let value = Int(arguments[index]), value >= 1 else {
+                    CLIIO.err("--slot erwartet eine Slot-Nummer >= 1.")
+                    return ChatsCLIExit.usage
+                }
+                slot = value - 1    // menschlich 1-basiert → Slot-Index
+            case "--json": json = true
+            default:
+                if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
+                positionals.append(arg)
+            }
+            index += 1
+        }
+        guard positionals.count == 1 else {
+            CLIIO.err("Usage: whisperm8 chats workspace open <name|id> [--slot N] [--json]")
+            return ChatsCLIExit.usage
+        }
+        var params: [String: Any] = ["workspaceRef": positionals[0]]
+        if let slot { params["slot"] = slot }
+
+        switch ChatsLiveSupport.perform(method: "gridWorkspace.open", params: params) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            ChatsLiveSupport.printResult(response, json: json) { result in
+                ChatsWorkspaceOpenSupport.humanLine(
+                    name: result["workspace"]?["name"]?.stringValue ?? positionals[0],
+                    outcome: result["outcome"]?.stringValue,
+                    slot: result["slot"].flatMap { json -> Int? in
+                        if case .number(let value) = json { return Int(value) }
+                        return nil
+                    },
+                    slotOccupied: result["slotOccupied"]?.boolValue,
+                    focusedTitle: result["focused"]?["title"]?.stringValue)
+            }
+            return ChatsCLIExit.ok
         }
     }
 

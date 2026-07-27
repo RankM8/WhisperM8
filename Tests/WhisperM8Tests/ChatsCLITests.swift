@@ -488,6 +488,116 @@ final class ChatsArchivedParserTests: XCTestCase {
     }
 }
 
+// MARK: - List-Planner (Probe-vor-Limit)
+
+final class ChatsListPlannerTests: XCTestCase {
+    private func entries(_ count: Int, now: Date = Date()) -> [ChatsSessionEntry] {
+        // Absteigende Aktivität in AUFSTEIGENDER Array-Reihenfolge, damit ein
+        // fehlendes Vorsortieren im Fast-Path sofort auffällt.
+        (0..<count).map { index in
+            makeEntry(title: "s\(index)", lastActivityAt: now.addingTimeInterval(-Double(index) * 60))
+        }
+    }
+
+    func testFastPathSortsByActivityAndCutsBeforeProbing() {
+        let now = Date()
+        var options = ChatsListOptions()
+        options.limit = 3
+        let shuffled = entries(10, now: now).shuffled()
+
+        let plan = ChatsListPlanner.plan(entries: shuffled, options: options)
+
+        XCTAssertFalse(plan.limitAfterProbe, "ohne Status-Abhängigkeit wird vor der Probe gekürzt")
+        XCTAssertEqual(plan.candidates.count, 3, "nur die auszugebenden Sessions werden geprobt")
+        XCTAssertEqual(plan.candidates.map(\.session.title), ["s0", "s1", "s2"], "jüngste zuerst")
+        XCTAssertEqual(plan.totalInScope, 10)
+        XCTAssertTrue(plan.truncated)
+        XCTAssertFalse(plan.countsCoverFullScope, "vorab gekürzte Zähler sind kein Lagebild")
+    }
+
+    func testStatusFilterAttentionSortAndBoardForceFullProbe() {
+        let all = entries(10)
+
+        var statusFilter = ChatsListOptions()
+        statusFilter.limit = 3
+        statusFilter.status = "working"
+
+        var attentionOnly = ChatsListOptions()
+        attentionOnly.limit = 3
+        attentionOnly.attentionOnly = true
+
+        var attentionSort = ChatsListOptions()
+        attentionSort.limit = 3
+        attentionSort.sort = "attention"
+
+        var board = ChatsListOptions()
+        board.limit = 3
+        board.format = "board"
+
+        for options in [statusFilter, attentionOnly, attentionSort, board] {
+            let plan = ChatsListPlanner.plan(entries: all, options: options)
+            XCTAssertTrue(ChatsListPlanner.requiresFullProbe(options: options))
+            XCTAssertTrue(plan.limitAfterProbe, "Runtime bestimmt das Ergebnis-Set mit")
+            XCTAssertEqual(plan.candidates.count, 10, "es muss vollständig geprobt werden")
+            XCTAssertFalse(plan.truncated, "das Limit greift erst nach der Probe")
+            XCTAssertTrue(plan.countsCoverFullScope)
+        }
+    }
+
+    func testUnlimitedAndUndersizedScopesAreNotTruncated() {
+        var unlimited = ChatsListOptions()
+        unlimited.limit = 0
+        let unlimitedPlan = ChatsListPlanner.plan(entries: entries(7), options: unlimited)
+        XCTAssertEqual(unlimitedPlan.candidates.count, 7, "--limit 0 = alles")
+        XCTAssertFalse(unlimitedPlan.truncated)
+        XCTAssertTrue(unlimitedPlan.countsCoverFullScope)
+
+        var roomy = ChatsListOptions()
+        roomy.limit = 50
+        let roomyPlan = ChatsListPlanner.plan(entries: entries(7), options: roomy)
+        XCTAssertEqual(roomyPlan.candidates.count, 7)
+        XCTAssertFalse(roomyPlan.truncated, "Limit größer als der Scope kürzt nichts")
+        XCTAssertTrue(roomyPlan.countsCoverFullScope)
+    }
+
+    func testEmptyScopeStaysEmpty() {
+        let plan = ChatsListPlanner.plan(entries: [], options: ChatsListOptions())
+        XCTAssertTrue(plan.candidates.isEmpty)
+        XCTAssertEqual(plan.totalInScope, 0)
+        XCTAssertFalse(plan.truncated)
+    }
+}
+
+final class ChatsListJSONTests: XCTestCase {
+    func testListJSONReportsTruncationAndCoverage() {
+        let item = ChatsAttentionItem(
+            entry: makeEntry(title: "eins"),
+            runtime: ChatsRuntimeInfo(
+                status: .idle, source: "transcriptEstimate", since: nil, revision: nil,
+                transcriptPath: nil, transcriptSizeBytes: nil, availability: .unsupported),
+            category: .idle,
+            rank: 5
+        )
+        let payload = ChatsOutput.listJSON(
+            items: [item], counts: [.idle: 1], selfID: nil, generatedAt: Date(),
+            totalInScope: 2_700, truncated: true, countsCoverFullScope: false
+        )
+        XCTAssertEqual(payload["totalInScope"] as? Int, 2_700)
+        XCTAssertEqual(payload["returned"] as? Int, 1)
+        XCTAssertEqual(payload["truncated"] as? Bool, true)
+        XCTAssertEqual(payload["countsCoverFullScope"] as? Bool, false)
+    }
+
+    func testListJSONDefaultsToCompleteUntruncatedScope() {
+        let payload = ChatsOutput.listJSON(
+            items: [], counts: [:], selfID: nil, generatedAt: Date()
+        )
+        XCTAssertEqual(payload["truncated"] as? Bool, false)
+        XCTAssertEqual(payload["countsCoverFullScope"] as? Bool, true)
+        XCTAssertEqual(payload["totalInScope"] as? Int, 0)
+    }
+}
+
 // MARK: - Parser + Workspace-Reader
 
 final class ChatsCLIParserTests: XCTestCase {
@@ -525,7 +635,33 @@ final class ChatsCLIParserTests: XCTestCase {
         XCTAssertThrowsError(try ChatsCLIParser.parseClose(["ref", "--all"]),
                              "kein pauschaler --all-Pfad — Kandidaten waehlt der Aufrufer explizit")
         XCTAssertThrowsError(try ChatsCLIParser.parseClose(["ref", "--force"]),
-                             "close kennt kein --force: es gibt nichts zu erzwingen")
+                             "ohne --stop gibt es nichts zu erzwingen")
+    }
+
+    func testParseCloseStopDefaultsOffAndAcceptsForceOnlyWithStop() throws {
+        XCTAssertFalse(try ChatsCLIParser.parseClose(["ref"]).stop,
+                       "close bleibt ohne Flag rein visuell")
+        XCTAssertFalse(try ChatsCLIParser.parseClose(["ref"]).force)
+
+        let stopped = try ChatsCLIParser.parseClose(["whisperm8/audit", "--stop"])
+        XCTAssertTrue(stopped.stop)
+        XCTAssertFalse(stopped.force, "der Schutz arbeitender Agenten gilt per Default")
+
+        let forced = try ChatsCLIParser.parseClose(["ref", "--stop", "--force"])
+        XCTAssertTrue(forced.stop && forced.force)
+
+        // Reihenfolge der Flags darf keine Rolle spielen.
+        XCTAssertTrue(try ChatsCLIParser.parseClose(["--force", "--stop", "ref"]).force)
+    }
+
+    func testParseCloseStopCombinesWithBatchModesAndJSON() throws {
+        let batch = try ChatsCLIParser.parseClose(["a", "b", "--stop", "--json"])
+        XCTAssertEqual(batch.refs, ["a", "b"])
+        XCTAssertTrue(batch.stop && batch.json)
+
+        let others = try ChatsCLIParser.parseClose(["--others", "anker", "--stop"])
+        XCTAssertEqual(others.mode, "others")
+        XCTAssertTrue(others.stop)
     }
 
     func testParseCloseModesRequireExactlyOneAnchor() throws {

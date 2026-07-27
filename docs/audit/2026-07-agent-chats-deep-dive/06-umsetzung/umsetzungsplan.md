@@ -1,7 +1,7 @@
 ---
 status: aktiv
-updated: 2026-07-20
-description: Operative Single Source der Audit-Umsetzung mit Phase-0-Commits, Gate-Paketstatus, formaler G6-Abnahme, Entscheidungsregister und QA-Sammelliste.
+updated: 2026-07-25
+description: Operative Single Source der Audit-Umsetzung mit Phase-0-Commits, Gate-Paketstatus, formaler G6-Abnahme, zwei Entscheidungsregistern und QA-Sammelliste.
 ---
 
 # Umsetzungsplan Audit 2026-07 (Single Source für die Umsetzung)
@@ -32,6 +32,44 @@ description: Operative Single Source der Audit-Umsetzung mit Phase-0-Commits, Ga
    [Diktat](feature-inventar-diktat.md)) sind die Referenz — keine
    Feature-Regression; WhisperM8 bleibt CLI-Host (echte Claude-/Codex-CLI
    im PTY, kein SDK-/Eigen-UI-Ersatz).
+
+## Stand (2026-07-25)
+
+**Releases 2.14.0, 2.15.0 und 2.16.0 sind gepusht.** Die Audit-Arbeit selbst
+(vier Runden), Phase 0 und Phase 1 (Gates G0–G6 technisch abgenommen) sind
+abgeschlossen; die formale User-Abnahme der Gate-Tabelle steht weiter aus und
+sperrt P0.3/P0.4 sowie W0.1.
+
+**Vollständige Suite auf `b2cbfe4`: 1856 Tests, 0 Failures** (gemessen mit
+echtem Exit-Code; Vorsicht bei `swift test | tail` — der Exit-Code kommt dann
+von `tail`, nicht vom Testlauf).
+
+**Am laufenden 2.16.0-Build verifiziert:**
+
+| Prüfung | Ergebnis |
+|---|---|
+| Control-Server nach `make dev` | Socket neu gebunden, `live:true`, Handeln-Befehle Exit 0 |
+| Router-Modellgating (5 Fälle live gegen Port 18766) | fail-closed korrekt, unbekannte Basis vs. Kapazitätsproblem getrennt |
+| Statusline-Kontext | 372k nur für Sol; Opus/Luna korrekt unangetastet |
+| GPT-Subagent-Usage über 12 Turns | monoton 16.532 → 119.602 Tokens, Modell `gpt-5.6-sol` belegt |
+| App-Log seit Neustart | keine Fehler, keine Budget-Überschreitungen, keine Recovery-Konflikte |
+
+**Korrektur einer früheren Annahme (wichtig):** Die im Audit dokumentierte
+`usage: 0/0`-Blindheit erklärt die drei Workflow-Ausfälle vom 2026-07-22
+(`audit:jira`, `verify:confluence`, `verify:governance`) **nicht**. Bei zwei
+der drei war Usage sichtbar gemeldet (11 bzw. 40 Zeilen mit Werten), und sie
+starben bei 195.101 bzw. 245.298 Tokens — weit unter dem 372k-Fenster. Ein
+Compact-Schwellwert bei ~339k hätte sie nicht gerettet. Die
+Workflow-Transcripts sind inzwischen von der Platte verschwunden, eine
+Nachmessung ist nicht mehr möglich.
+
+Naheliegende Ursache als **Hypothese**: Ein einzelner großer Tool-Rückgabewert
+hebt den Kontext in EINEM Sprung über die reale Obergrenze; Auto-Compact läuft
+zwischen Turns, nicht mitten im Request. `audit:jira` hatte ~731.000 Zeichen
+Tool-Ergebnisse, `verify:governance` ~718.000. `verify:confluence` ist ein
+eigener Fall: Der Agent lud den irrelevanten Skill `claude-api` und injizierte
+damit ~813.000 Zeichen. Daraus folgen die neuen offenen Punkte W1-TOOLCAP und
+W1-SKILLGATE (siehe Entscheidungsregister II, E29/E30).
 
 ## Stand (2026-07-20)
 
@@ -68,6 +106,7 @@ erneute vollständige Suite wurde in Paket F nicht ausgeführt.
 | **R4-AS-03** (hoch) | Worktree-Git-Runner drainiert deadlock-frei und besitzt eine Deadline mit Termination/Eskalation | `d375855` | 2 neue |
 | **R4-VC-03** (hoch) | ffmpeg-Fallback drainiert deadlock-frei und besitzt Deadline/Termination | `3086b9e` | 3 neue |
 | R3-MIX-G07 / R3-LIVE-G01 | Alt-Teilfixe (Managed Installer-Pin; 272k-Fenster) — Restverträge offen | `0bdff8f`+ / `17f76dc` | — |
+| **Router-Modellkennung** (niedrig, Diagnose) | Unbekannte GPT-Basis wird als ungültige Kennung abgewiesen statt als Kontextprofil-Problem; der Integrationstest, der die falsche Diagnose festschrieb, ist umgestellt. Zusätzlich Overflow-Test, der die konfigurierte Sol-372k-Grenze pinnt | `b2cbfe4` | 2 neue, rot-grün geprüft |
 
 ### Bewusste Abgrenzungen
 
@@ -93,6 +132,98 @@ Vorgaben für die Gate-Arbeit in Phase 1.
 | E3 | Testnetz vor dem Kern-Umbau: vollständig oder abgespeckt? | Vollständig — fehlende Verträge B18–B22 plus C07-Fallmatrix werden ergänzt, keine Umbenennung in „Teilmenge". | **entschieden** |
 | E4 | Terminal-Snapshots: Aufräumregel (Ablauf/Größenlimit) festschreiben? | Ja — verbindliches Soll-Gate: Ablauf/Größenlimit, garantiertes Mitlöschen bei Session-Löschung, keine Eingabe-Aufzeichnung (Umsetzung später, W2/T1). | **entschieden** |
 | E5 | Unklare Chat↔Verlauf-Zuordnung: weiter raten oder markieren? | Nicht raten — unklare Fälle fail-closed als „prüfen" markieren und sichtbar machen; User wählt den richtigen Verlauf. | **entschieden** |
+
+## Entscheidungsregister II (entschieden am 2026-07-22 bis 2026-07-25)
+
+Alle Punkte wurden einzeln im Grilling mit dem User durchgegangen und
+entschieden. Sie sind verbindliche Vorgaben und **präzisieren beziehungsweise
+erweitern** E1–E5; bei Widerspruch gilt das jeweils spätere Register.
+
+**Leitprinzip, das der User ausdrücklich festgelegt hat:** WhisperM8 passt sich
+der echten Claude-Code-CLI an, nicht umgekehrt. Wo die CLI eine Semantik
+besitzt, wird sie übernommen statt nachgebaut.
+
+### Reihenfolge und Testnetz
+
+| # | Frage (Klartext) | Entscheidung |
+|---|---|---|
+| E6 | Was ist das Hauptziel der nächsten Phase? | Zuverlässigkeit zuerst: Tests, Session-Zuordnung, Wiederherstellung. Performance und Komfort danach. |
+| E7 | Wie umfassend das Testnetz vor dem Kernumbau? | Vollständig — alle spezifizierten kritischen Fälle zuerst als reproduzierbare Tests. Bestätigt E3. |
+| E8 | Erst appweite Crash-/Datenverlustfehler oder direkt der Umbau? | Kritische Fehler zuerst (Keychain-Einzelkey, Output-Modi, Recorder-Crashes, Quit-Flush), dann der Identitätsumbau. |
+| E9 | Wie weiter nach dem parallelen Performance-WIP? | Erst messen (p50/p95 für Index, Merge, Store, Sidebar), dann die Rest-Roadmap neu schneiden. Keine Optimierung von inzwischen ersetztem Code. |
+
+### Identität, Zuordnung und Wiederherstellung
+
+| # | Frage (Klartext) | Entscheidung |
+|---|---|---|
+| E10 | Wer vergibt die Session-ID? | Claude Code vergibt sie; WhisperM8 bindet beweissicher nach. Bestätigt E1 und das Leitprinzip. |
+| E11 | Verhalten bei nicht eindeutig beweisbarer Zuordnung? | Stoppen und klären: nichts überschreiben, sichtbar markieren, Steuerbefehle sperren, manuelle Auswahl anbieten. Bestätigt E5. |
+| E12 | Wie weit Mehr-Account-Trennung? | Vollständig: Identität = Anbieter + kanonischer Config-Root + externe Session-ID. `~/.claude`/`~/.codex` bleiben read-only (E2). |
+| E13 | Wie automatisch die Wiederherstellung verlorener Chats? | Sicher automatisch: genau ein eindeutiger, unbelegter Kandidat wird automatisch verbunden; alles andere bleibt dauerhaft „prüfen". |
+| E14 | Verhalten bei nicht sicher ladbarem Claude-/Codex-Profil? | Start blockieren, Profilproblem benennen. Kein automatischer Fallback auf das Standardprofil; Wechsel nur nach ausdrücklicher Bestätigung. Gilt für Claude, Codex, GPT-Router und Hintergrundjobs. |
+
+### Tabs und Laufzeitübergänge
+
+| # | Frage (Klartext) | Entscheidung |
+|---|---|---|
+| E15 | Was passiert bei `/resume` im laufenden Terminal? | Derselbe Tab folgt der gewählten Unterhaltung. Der vorige Chat bleibt gespeichert und später öffnbar. |
+| E16 | Was passiert bei `/branch` und `/rewind`? | Ebenfalls derselbe Tab. Nur eine ausdrücklich parallele Aktion („Fork in neuem Tab") erzeugt einen zweiten Tab. |
+| E17 | Wie werden beendete Chats dargestellt? | Als saubere gerenderte Provider-Unterhaltung mit „Fortsetzen", progressiv nachladend. Der rohe Terminal-Snapshot wird als Hauptansicht abgebaut (ersetzt die Ausbaurichtung aus E4; die Aufräumregeln aus E4 gelten für den Restbestand weiter). |
+
+### Agenten- und Background-Modell
+
+| # | Frage (Klartext) | Entscheidung |
+|---|---|---|
+| E18 | Ist ein Claude-Background-Agent ein eigener Chat-Typ? | Nein. Ein gemeinsames Modell: derselbe Chat in einem anderen Laufzeitzustand (`←`/`/bg` → Supervisor → `attach` → zurück). Gleiche lokale Row, gleiche Session-ID, gleicher Titel/Pin/Transcript, zusätzlich Supervisor-Kurz-ID und Laufzeitstatus. Claude bleibt Wahrheit über Running/Waiting/Stopped/Finished. |
+| E19 | Bleibt „Background-Agent separat starten"? | Nein, entfällt. Alle Claude-Chats starten gleich und wechseln nativ. Entfernt Spawn-, Timeout- und ID-Parsing-Fehlerquellen. |
+| E20 | Wie werden native Task-Subagents dargestellt? | Read-only spiegeln in der **vorhandenen** WhisperM8-Subagent-UI (gleiche Parent/Child-Optik). Kein eigener Lifecycle, kein Attach/Stop/Resume von außen, keine künstlichen Tabs — Claude besitzt diese Handles nicht. Fehlen Daten oder ändert sich das Format, verschwindet nur die Zusatzanzeige. |
+| E21 | Wie wird das gemeinsame Modell eingeführt? | Dreistufig und rückrollbar: (1) Beobachtungsmodus mit Diagnose ohne Persistenz, (2) gemeinsames Modell hinter Schalter mit konservativer Zuordnung, (3) Altpfad erst nach Tests entfernen. Keine Row und keine Supervisor-ID wird ungeprüft gelöscht. |
+| E22 | Wie mit außerhalb von WhisperM8 gestarteten Agents umgehen? | Ignorieren. WhisperM8 verwaltet nur Sessions seines eigenen Workspace; ein bekannter Chat bleibt auch nach externem Backgrounding verwaltet. Fremde Sessions werden höchstens zur Kollisionsprüfung gelesen, nie übernommen. |
+| E23 | Bleibt der eigenständige Codex-Supervisor (`whisperm8 agent`)? | Ja, behalten und vollständig härten (Ready-Handshake, endgültiger Stop-Latch, semantische Turn-Finalität, getrennte Crash-/Timeout-/Abbruchzustände, Reconciliation nach App-Neustart). Begründung ist nicht mehr „GPT verfügbar machen", sondern unabhängige persistierte Jobs mit Sidebar, Worktrees, Browser-QA, Folge-Prompts und Übernahme. |
+
+### Lebenszyklus und Aufräumen
+
+| # | Frage (Klartext) | Entscheidung |
+|---|---|---|
+| E24 | Was beim Beenden der App mit laufenden Chats? | Vorher auswählen: laufende Chats auflisten, pro Chat bestätigtes Backgrounding, kontrollierter Stop oder Abbruch des Quits. App beendet sich erst nach bestätigter Übernahme. Nie automatisch für alle. |
+| E25 | Interaktive Codex-Chats beim Quit in Jobs umwandeln? | Nein. Kontrolliert beenden, Session bleibt über die Codex-Thread-ID resumebar. Nur bereits als `whisperm8 agent` gestartete Jobs laufen weiter — keine erfundene Übergabesemantik. |
+| E26 | Was tut Archivieren bei einem laufenden Agenten? | Nicht direkt archivieren. Nur die ausdrückliche Kombination „Stoppen und archivieren"; Tab-Schließen lässt die Arbeit unberührt. Löschen bleibt separat und löscht nie Provider-Transcripts. |
+| E27 | Wie mit den ~495 technischen Alt-Hilfs-Sessions? | Vorschau und Bestätigung: nur eindeutig maschinell erzeugte WhisperM8-Hilfsläufe, reversibel aus den Listen ausblenden, Originaldateien bleiben. Bei jeder Unsicherheit unangetastet. **Echte Nutzer-Chats sind ausdrücklich nicht betroffen.** Präzisiert P0.4b. |
+
+### GPT-Backend und Workflows
+
+| # | Frage (Klartext) | Entscheidung |
+|---|---|---|
+| E28 | Welchen Status bekommt das GPT-Backend? | Vollwertiges Kernfeature, vollständig härten: Lifecycle-Automat, nur nachweislich passender Router gilt als bereit, lokale Client-Authentifizierung, verifizierte Update-Quelle, Contract-Tests gegen Claude-Verhalten, kontrollierter Rückfall auf das native Backend. |
+| E29 | Verhalten bei Ausfall eines Pflicht-Agenten im Workflow? | Ergebnisse behalten, aber `incomplete: true` setzen und fehlgeschlagene Pflichtschritte namentlich führen. Synthese darf einen Zwischenstand liefern, **niemals** ein finales Ergebnis. Nachholen per Resume; erfolgreiche Schritte aus dem Cache. Optionale Ausfälle ebenfalls nennen. |
+| E30 | Dürfen Workflow-Agenten selbst Skills laden? | **Ja, unverändert.** Der Skill-Zugriff bleibt für GPT-Agenten erhalten — er ist der Grund, warum GPT überhaupt in Claude Code läuft. Kein Werkzeugentzug, keine Allowlist. Das Überlaufrisiko wird stattdessen über W1-TOOLCAP und die Ausfallbilanz aus E29 aufgefangen. |
+
+**Belegte Randbedingungen zu E30** (gemessen am 2026-07-25 an einem realen
+GPT-Subagenten, `agent-agpt-rules-probe2`):
+
+- GPT-Subagenten erhalten die Projekt- und Benutzerregeln vollständig — sowohl
+  `~/.claude-profiles/<Profil>/CLAUDE.md` als auch die Projekt-`CLAUDE.md`. Der
+  Agent konnte beide wörtlich zitieren. Eine frühere gegenteilige Vermutung war
+  ein Messfehler: Der System-Prompt steht nicht im Transcript-JSONL.
+- Jeder Subagent bekommt zusätzlich eine Aufstellung von rund **220 Skills**
+  samt Beschreibungen (~17 KB). Das ist die eigentliche Triggerfläche.
+- Eine Größenbegrenzung für Skill-Inhalte ist **nicht** umsetzbar: Das
+  Skill-Werkzeug gehört Claude Code; WhisperM8 hostet die CLI, greift aber nicht
+  in deren Werkzeugaufrufe ein.
+- Zwei der drei Fehlgriffe vom 2026-07-22 stammen aus eigenen Skills: `audit`
+  kollidiert namentlich mit jeder Aufgabe, die das Wort „Audit" enthält, und
+  zieht laut seiner Zeile 13 zusätzlich `frontend-design` nach. Das ist
+  reparierbar, weil es uns gehört — anders als der mitgelieferte `claude-api`
+  (840 KB), dessen Trigger bei jedem Vorkommen von „Sonnet" feuert und der bei
+  jedem CLI-Update neu ausgeliefert wird.
+
+### Offen — noch nicht entschieden
+
+| # | Frage | Status |
+|---|---|---|
+| W1-TOOLCAP | Tool-/MCP-Ergebnisgrößen in Workflow-Agenten begrenzen | **offen.** Ein einzelner Rückgabewert von 100k+ Tokens ist gegen jede Kompaktierungsstrategie immun, weil Auto-Compact zwischen Turns läuft. Nach der E30-Entscheidung der verbleibende Haupthebel gegen Kontextüberläufe. Kandidat für W1. |
+| W1-SKILLTRIGGER | Trigger der eigenen Skills entschärfen | **offen.** `audit` umbenennen beziehungsweise Trigger schärfen, damit es nicht mehr bei jeder „Audit"-Aufgabe feuert und `frontend-design` nachzieht. Kleiner Aufwand, beseitigt zwei der drei bekannten Fehlgriffe dauerhaft. Gegen `claude-api` wirkungslos. |
+| E31 | Muss der reale Compact bei ~339k E2E belegt werden? | **offen.** Nicht billig erzwingbar; Workflow-Resume ist session-gebunden und der Lauf vom 2026-07-22 nicht wiederholbar. Der nächste reale lange Workflow gilt als natürlicher Nachweis. |
 
 ## Phasenplan
 
@@ -185,3 +316,33 @@ Danach W4 (Modulgrenzen) nach Bedarf.
    `perf.store` für die C14/C12-Pfade.
 6. **Parallel-Features** (andere Sessions): Tab-Management/`chats close`/
    Archiv-CLI und Statusline-Installation einmal durchklicken.
+
+### Am 2026-07-25 gegen den laufenden 2.16.0-Build erledigt
+
+Diese Punkte brauchen keine manuelle QA mehr — sie sind gegen die laufende
+App gemessen, nicht nur unit-getestet:
+
+- **Control-Server nach Neustart:** Socket neu gebunden, `live:true`,
+  Handeln-Befehle Exit 0. Der Lock-Retry (`AgentControlServerLockRetryTests`)
+  ist eingebaut, war bei diesem Neustart aber nicht nötig — die Retry-Kette
+  selbst ist damit unit-, nicht feldgeprüft.
+- **Router-Modellgating:** fünf Fälle live gegen den echten Router; unbekannte
+  Basis, nicht-kanonische Kennung und Kapazitätsproblem sind getrennt.
+- **Statusline-Kontext:** 372k greift nur bei Sol; Opus und Luna behalten ihr
+  gemeldetes Fenster.
+- **GPT-Subagent-Usage:** über 12 Turns monoton 16.532 → 119.602 Tokens,
+  Modell `gpt-5.6-sol` im Transcript belegt.
+
+### Neu offen aus der Testrunde
+
+- **E30 / W1-SKILLGATE:** Skill-Zugriff in Workflow-Agenten — Entscheidung
+  ausstehend.
+- **W1-TOOLCAP:** Tool-/MCP-Ergebnisgrößen begrenzen (siehe Stand 2026-07-25).
+- **E31:** Realer Compact bei ~339k unbelegt; nächster langer Workflow gilt als
+  natürlicher Nachweis.
+- **Externe Abhängigkeit:** Die korrekte GPT-Usage kommt aus Proxy und
+  Claude-CLI, nicht aus WhisperM8 (kein `usage`-/`message_start`-Rewrite im
+  Code, belegt in `ClaudeGPTMixRouter.swift:778-799` und
+  `CodexSyntheticOverflowProbe.swift:166-177`). Der Proxy ist weiterhin
+  `0.1.21`. Ein CLI-Update kann das brechen, ohne dass die Suite es bemerkt —
+  Kandidat für einen Contract-/Fixture-Test unter E28.

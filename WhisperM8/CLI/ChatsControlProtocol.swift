@@ -99,6 +99,10 @@ enum ChatsControlErrorCode: String, Codable {
     case conflict          // → Exit 4 (working-Ziel, Drift, Status-Guard)
     case selfSend          // → Exit 4 (Endlosschleife verhindert)
     case noPty             // → Exit 4 (keine laufende PTY)
+    /// → Exit 4: PTY läuft, die TUI ist aber noch nicht aufnahmebereit
+    /// (Start-Race nach `resume`). Eigener Code statt `conflict`, weil der
+    /// Ausweg ein anderer ist: warten oder `enqueue`, nicht `--force`.
+    case notReady
     case invalid           // → Exit 1 (kaputte Parameter)
     case unsupported       // → Exit 1
     case internalError     // → Exit 4
@@ -106,8 +110,26 @@ enum ChatsControlErrorCode: String, Codable {
     var exitCode: Int32 {
         switch self {
         case .notFound: return ChatsCLIExit.notFound
-        case .conflict, .selfSend, .noPty, .internalError: return ChatsCLIExit.conflict
+        case .conflict, .selfSend, .noPty, .notReady, .internalError: return ChatsCLIExit.conflict
         case .invalid, .unsupported: return ChatsCLIExit.usage
+        }
+    }
+
+    /// `true`, wenn derselbe Aufruf später Erfolg haben kann — für Agenten die
+    /// Entscheidung zwischen „erneut versuchen" und „anders lösen".
+    var isRetryable: Bool {
+        switch self {
+        case .notReady, .conflict: return true
+        case .notFound, .selfSend, .noPty, .invalid, .unsupported, .internalError: return false
+        }
+    }
+
+    /// Sicherer Alternativweg, falls es einen gibt.
+    var alternative: String? {
+        switch self {
+        case .notReady, .conflict: return "enqueue"
+        case .noPty: return "resume"
+        default: return nil
         }
     }
 }
@@ -216,6 +238,13 @@ indirect enum ChatsControlJSON: Codable, Equatable {
 
     var arrayValue: [ChatsControlJSON]? {
         if case .array(let value) = self { return value }
+        return nil
+    }
+
+    /// Zahlen kommen als `Double` über den Draht; Zähler und Positionen liest
+    /// die CLI aber als `Int`.
+    var intValue: Int? {
+        if case .number(let value) = self { return Int(value) }
         return nil
     }
 

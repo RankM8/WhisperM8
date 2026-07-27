@@ -48,6 +48,18 @@ enum AgentChatsCLICommand {
             return ChatsWaitCommand.run(rest)
         case "send":
             return ChatsSendCommand.run(rest)
+        case "snapshot":
+            return await ChatsSnapshotCommand.run(rest)
+        case "since":
+            return ChatsChangesCommand.since(rest)
+        case "watch":
+            return ChatsChangesCommand.watch(rest)
+        case "enqueue":
+            return ChatsQueueCommand.enqueue(rest)
+        case "queue":
+            return ChatsQueueCommand.list(rest)
+        case "dequeue":
+            return ChatsQueueCommand.cancel(rest)
         case "interrupt":
             return ChatsInterruptCommand.run(rest)
         case "open":
@@ -119,6 +131,14 @@ struct ChatsCloseOptions: Equatable {
     var refs: [String] = []
     var json = false
     var mode = "explicit"          // explicit | others | right
+    /// `--stop`: zusätzlich den laufenden Agenten beenden. Ohne dieses Flag
+    /// bleibt `close` rein visuell (Tab zu, Prozess läuft weiter).
+    /// Archiviert NICHT und löscht keinen Verlauf — die Session bleibt in der
+    /// Sidebar und ist per `resume` wieder hochfahrbar.
+    var stop = false
+    /// Nur zusammen mit `--stop` erlaubt: hebt den Schutz arbeitender Agenten
+    /// auf. Ein laufender Turn wird dadurch mitten in der Arbeit abgebrochen.
+    var force = false
 }
 
 /// Refs + `--json` — gemeinsame Form der Batch-Befehle ohne Extra-Flags
@@ -207,6 +227,8 @@ enum ChatsCLIParser {
         for arg in arguments {
             switch arg {
             case "--json": options.json = true
+            case "--stop": options.stop = true
+            case "--force": options.force = true
             case "--others", "--right":
                 let mode = String(arg.dropFirst(2))
                 guard options.mode == "explicit" || options.mode == mode else {
@@ -222,6 +244,14 @@ enum ChatsCLIParser {
         guard !options.refs.isEmpty else { throw ParseError.missingShortID }
         if options.mode != "explicit", options.refs.count != 1 {
             throw ParseError.tooManyPositionals
+        }
+        // Ohne --stop gibt es nichts zu erzwingen: das reine Schließen eines
+        // Tabs ist nie destruktiv. `--force` allein wäre also entweder ein
+        // Tippfehler oder eine Fehlannahme über die Wirkung — beides soll
+        // laut, nicht still danebengehen.
+        guard !options.force || options.stop else {
+            throw ParseError.invalidValue(flag: "--force", value: "ohne --stop",
+                                          allowed: "--force nur zusammen mit --stop")
         }
         return options
     }
@@ -445,8 +475,13 @@ enum ChatsListCommand {
             entries = entries.filter { matchingProjects.contains($0.session.projectID) }
         }
 
-        let runtimeByID = await ChatsStatusProbe.probeAll(entries: entries, now: context.now)
-        var items: [(entry: ChatsSessionEntry, runtime: ChatsRuntimeInfo)] = entries.map {
+        // Erst planen, dann proben: bestimmt der Runtime-Status das Ergebnis
+        // nicht (kein --status/--attention/--sort attention/Board), steht die
+        // Auswahl schon über `lastActivityAt` fest — dann werden nur die
+        // tatsächlich ausgegebenen Sessions geprobt statt aller ~2.700.
+        let plan = ChatsListPlanner.plan(entries: entries, options: options)
+        let runtimeByID = await ChatsStatusProbe.probeAll(entries: plan.candidates, now: context.now)
+        var items: [(entry: ChatsSessionEntry, runtime: ChatsRuntimeInfo)] = plan.candidates.map {
             let estimate = runtimeByID[$0.session.id] ?? ChatsRuntimeInfo(
                 status: nil, source: "transcriptEstimate", since: nil, revision: nil,
                 transcriptPath: nil, transcriptSizeBytes: nil, availability: .unsupported)
@@ -466,6 +501,20 @@ enum ChatsListCommand {
             boardItems.sort { $0.entry.session.lastActivityAt > $1.entry.session.lastActivityAt }
         }
 
+        // Limit greift für JSON und Tabelle gleichermaßen. Im Fast-Path hat der
+        // Planner schon gekürzt; hier fällt nur noch der Rest an, wenn der
+        // Runtime-Status das Ergebnis-Set mitbestimmt hat. Board bleibt
+        // ungekürzt — es kollabiert idle ohnehin und ist das Lagebild.
+        var truncated = plan.truncated
+        if plan.limitAfterProbe, options.format != "board",
+           options.limit > 0, boardItems.count > options.limit {
+            boardItems = Array(boardItems.prefix(options.limit))
+            truncated = true
+        }
+
+        let queuedCounts = AgentPromptQueueLogic.openCounts(
+            in: AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL()))
+
         if options.json {
             let payload = ChatsOutput.listJSON(
                 items: boardItems,
@@ -474,20 +523,27 @@ enum ChatsListCommand {
                 generatedAt: context.now,
                 live: live != nil,
                 openTabIDs: context.view.openTabIDs,
-                pinnedIDs: context.view.pinnedSessionIDs
+                pinnedIDs: context.view.pinnedSessionIDs,
+                totalInScope: plan.totalInScope,
+                truncated: truncated,
+                countsCoverFullScope: plan.countsCoverFullScope,
+                queuedCounts: queuedCounts,
+                liveStatuses: live ?? [:]
             )
             CLIIO.out(ChatsOutput.encodeJSON(payload))
+            if truncated {
+                CLIIO.err("Zeige \(boardItems.count) von \(plan.totalInScope) Sessions — mehr mit --limit N (0 = alle).")
+            }
         } else if options.format == "board" {
             ChatsOutput.printBoard(items: boardItems, counts: boardModel.counts,
                                    selfID: context.caller.sessionID, showAll: options.all, now: context.now,
-                                   openTabIDs: context.view.openTabIDs, pinnedIDs: context.view.pinnedSessionIDs)
+                                   openTabIDs: context.view.openTabIDs, pinnedIDs: context.view.pinnedSessionIDs,
+                                   queuedCounts: queuedCounts)
         } else {
-            var tableItems = boardItems
-            if options.limit > 0, tableItems.count > options.limit {
-                tableItems = Array(tableItems.prefix(options.limit))
-                CLIIO.err("Zeige \(options.limit) von \(boardItems.count) Sessions — mehr mit --limit N (0 = alle).")
+            if truncated {
+                CLIIO.err("Zeige \(boardItems.count) von \(plan.totalInScope) Sessions — mehr mit --limit N (0 = alle).")
             }
-            ChatsOutput.printTable(items: tableItems, selfID: context.caller.sessionID, now: context.now,
+            ChatsOutput.printTable(items: boardItems, selfID: context.caller.sessionID, now: context.now,
                                    openTabIDs: context.view.openTabIDs, pinnedIDs: context.view.pinnedSessionIDs)
         }
         return ChatsCLIExit.ok
@@ -520,6 +576,25 @@ enum ChatsShowCommand {
 
         let isOpen = context.isOpen(entry.session.id)
         let isPinned = context.isPinned(entry.session.id)
+        // Vorgemerkte Folgeaufträge direkt von Disk — auch bei geschlossener
+        // App muss sichtbar sein, was noch aussteht.
+        let queued = AgentPromptQueueLogic.visiblePrompts(
+            for: entry.session.id,
+            in: AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL()))
+
+        // Blockadeerklärung: warum fließt ein wartender Auftrag nicht ab?
+        let transcriptModifiedAt = runtime.transcriptPath.flatMap { path -> Date? in
+            (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        }
+        let blockReason = ChatsQueueBlockExplainer.reason(
+            openCount: queued.filter(\.isOpen).count,
+            runtimeStatus: runtime.status?.rawValue,
+            statusSince: runtime.since,
+            transcriptModifiedAt: transcriptModifiedAt,
+            hasProcess: live?[entry.session.id]?.isAttachedPTY ?? (runtime.status != .stopped),
+            now: context.now)
+        let history = ChatsStatusJournal.recent(sessionID: entry.session.id, limit: 6)
+
         if options.json {
             var payload = ChatsOutput.sessionJSON(
                 entry: entry, runtime: runtime,
@@ -530,11 +605,62 @@ enum ChatsShowCommand {
             payload["schemaVersion"] = 1
             payload["generatedAt"] = ChatsOutput.iso(context.now)
             payload["detail"] = ChatsOutput.detailJSON(entry: entry)
+            let waiting = queued.filter(\.isOpen)
+            var queueDict: [String: Any] = [
+                "openCount": waiting.count,
+                "needsReviewCount": queued.filter(\.needsReview).count,
+                "prompts": queued.map { prompt in
+                    ChatsQueueSupport.json(
+                        for: prompt,
+                        position: waiting.firstIndex { $0.id == prompt.id }.map { $0 + 1 })
+                },
+            ]
+            if let code = ChatsQueueBlockExplainer.code(for: blockReason) {
+                queueDict["blockReason"] = code
+                queueDict["blockExplanation"] = ChatsQueueBlockExplainer.line(for: blockReason) ?? ""
+            }
+            payload["queue"] = queueDict
+            if !history.isEmpty {
+                payload["statusHistory"] = history.map { entry -> [String: Any] in
+                    [
+                        "at": ChatsOutput.iso(entry.at),
+                        "from": entry.from ?? NSNull(),
+                        "to": entry.to ?? NSNull(),
+                        "signal": entry.signal,
+                        "source": entry.source,
+                    ]
+                }
+            }
             CLIIO.out(ChatsOutput.encodeJSON(payload))
         } else {
             ChatsOutput.printShow(entry: entry, runtime: runtime,
                                   selfID: context.caller.sessionID, now: context.now,
                                   isOpen: isOpen, isPinned: isPinned)
+            if let summary = ChatsQueueSupport.summary(open: queued) {
+                CLIIO.out("")
+                CLIIO.out("── WARTESCHLANGE " + String(repeating: "─", count: 36))
+                CLIIO.out(summary)
+                let waiting = queued.filter(\.isOpen)
+                for prompt in queued {
+                    CLIIO.out("  " + ChatsQueueSupport.line(
+                        for: prompt,
+                        position: waiting.firstIndex { $0.id == prompt.id }.map { $0 + 1 },
+                        now: context.now))
+                }
+                if let explanation = ChatsQueueBlockExplainer.line(for: blockReason) {
+                    CLIIO.out(explanation)
+                }
+            }
+            if !history.isEmpty {
+                CLIIO.out("")
+                CLIIO.out("── STATUSVERLAUF " + String(repeating: "─", count: 36))
+                for entry in history {
+                    let from = entry.from ?? "–"
+                    let to = entry.to ?? "–"
+                    CLIIO.out("  \(ChatsOutput.relative(from: entry.at, to: context.now)) her  "
+                              + "\(from) → \(to)  (\(entry.signal), \(entry.source))")
+                }
+            }
         }
         return ChatsCLIExit.ok
     }
@@ -653,10 +779,36 @@ enum ChatsCLIHelp {
 
     HANDELN (App muss laufen — sonst Exit 5)
       whisperm8 chats send <ref> [--] "<prompt>" [--if-status S,S] [--no-submit] [--force] [--json]
+    FÜR AGENTEN (maschinenlesbarer Vertrag — Textausgabe ist nur Diagnose)
+      whisperm8 chats snapshot [--include idle] [--limit N] [--json]
+                               Kompaktes Lagebild über ALLE Sessions
+                               (wm8.overview/1). Zähler decken den vollen
+                               Bestand, die Liste nur das Handlungsrelevante;
+                               Kürzung wird in `coverage` ausgewiesen.
+      whisperm8 chats since --cursor <c> [--limit N] [--json]
+                               Änderungen seit Cursor (wm8.changes/1).
+                               `gap: true` = Cursor abgelaufen → snapshot ziehen.
+      whisperm8 chats watch [--cursor <c>] [--interval S] [--timeout S]
+                               NDJSON-Strom derselben Ereignisse; für Sidecars.
+
+      whisperm8 chats enqueue <ref> -- "<prompt>" [--json]
+                               Folgeauftrag vormerken. Anders als `send` kein
+                               Status-Guard: ein ARBEITENDER Chat ist der
+                               Normalfall. Zustellung beim nächsten Turn-Ende,
+                               höchstens einmal, in Einstell-Reihenfolge. Ist
+                               der Chat frei, geht es sofort raus.
+      whisperm8 chats queue [<ref>] [--json]             Was wartet? (auch bei geschlossener App)
+      whisperm8 chats dequeue <ref> --all | --id <UUID>  offene Aufträge stornieren
       whisperm8 chats interrupt <ref> [--force] [--json]   ESC an working-Session
       whisperm8 chats open <ref> [--json]
       whisperm8 chats close <ref> [<ref>…] [--json]      NUR den UI-Tab schließen — Session,
                                                          PTY, Pin und Transcript bleiben
+      whisperm8 chats close <ref> --stop [--force]       Tab schließen UND den laufenden Agenten
+                                                         beenden. Archiviert nicht, löscht keinen
+                                                         Verlauf — resume bleibt möglich.
+                                                         Arbeitende Agenten sind geschützt: der
+                                                         ganze Aufruf scheitert mit Exit 4, bis
+                                                         --force es ausdrücklich erzwingt.
       whisperm8 chats close --others|--right <ref>       alle anderen / rechts vom Anker (dessen Fenster)
       whisperm8 chats reopen [--json]                    zuletzt geschlossenen Tab wiederherstellen
       whisperm8 chats pin <ref> [<ref>…] [--json]        Sidebar-Pin setzen (unpin: entfernen)
@@ -671,6 +823,12 @@ enum ChatsCLIHelp {
                                nur Archiv-Markierung entfernen; Start/Fokus NUR
                                über die expliziten Flags (Compound)
       whisperm8 chats workspace list [--json]            Grid-Workspaces (Sidebar-Sektion)
+      whisperm8 chats workspace open <name|id> [--slot N] [--json]
+                               Workspace sichtbar machen + Fenster nach vorn.
+                               Rein visuell: startet keine Prozesse, ändert keine
+                               Slots. --slot N fokussiert die Kachel (1-basiert);
+                               leerer Slot ist kein Fehler. Gehört der Workspace
+                               einem anderen Fenster, wird dieses fokussiert.
       whisperm8 chats workspace rename <name|id> "<neu>" [--json]
       whisperm8 chats workspace add <name|id> <ref> [--slot N] [--json]
       whisperm8 chats workspace remove <name|id> <ref> [--json]   nur Slot — Tab/Prozess bleiben

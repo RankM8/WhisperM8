@@ -78,9 +78,25 @@ bewusst schwache Schwester von `archive`. Contract:
   keine `--window`-Optionen). Session-Status, PTY-Prozess, Pin, Grid-Slot-
   Mitgliedschaft und Transcript bleiben unangetastet; erneutes Öffnen attached
   an denselben Terminal-Controller inkl. Scrollback.
-- **Kein Guard, kein `--force`:** auch working/awaitingInput-Ziele dürfen
+- **Ohne `--stop` kein Guard:** auch working/awaitingInput-Ziele dürfen
   geschlossen werden — es geht nur die Ansicht zu. Die Response meldet
   `ptyRunning`/`runtimeStatus`/`isPinned` zur Information.
+- **`--stop`: Tab zu + Agent beenden.** Die einzige Stufe zwischen „nur
+  Ansicht" und `archive`. Der Server terminiert das PTY über
+  `AgentTerminalRegistry.terminate` (graceful: 2× Ctrl+C → Snapshot → Kill,
+  damit der letzte JSONL-Flush und der `--resume`-Hinweis erhalten bleiben)
+  und stuft den Session-Status von `.running` auf `.closed` herunter. NICHT
+  archiviert, nichts gelöscht, Pin bleibt — `resume` fährt die Session wieder
+  hoch. Response: `stopped` pro Ziel plus `stoppedCount`. Ein Ziel ohne
+  offenen Tab meldet `alreadyClosed` und trotzdem `stopped: true`, wenn dort
+  ein Prozess lief.
+- **Schutz arbeitender Agenten (`--stop` ohne `--force`):** ist auch nur EIN
+  Ziel `working`, scheitert der GESAMTE Request mit `conflict`/Exit 4, bevor
+  ein Tab schließt oder ein Prozess stirbt — kein Teilzustand. Die Entscheidung
+  liegt im puren, unit-getesteten `ChatsCloseStopGuard`; die Meldung nennt die
+  blockierenden Ziele und die drei Auswege (warten, `interrupt`,
+  `--stop --force`). `--force` ohne `--stop` lehnt schon der Parser ab: ohne
+  Stop gibt es nichts zu erzwingen.
 - **Batch, alles-oder-nichts bei der Auflösung:** die CLI löst ALLE Refs vor
   dem Request auf (mehrdeutig/unbekannt → Exit 3, nichts wird geschlossen).
   Der Server verarbeitet alle Ziele in EINEM synchronen MainActor-Block
@@ -169,6 +185,75 @@ Runde 2 (gleicher Tag) hat die Prioritäten 1–4 umgesetzt: `pin`/`unpin`,
 | CLI-detach in ein NEUES Fenster | offen — braucht einen Scene-Open-Request (`openWindow` gehört SwiftUI); Workaround: in der App per Drag |
 | Dry-Run/`--plan` für Batch-Aktionen | nicht nötig — `list --open --json` IST der Plan-Schritt |
 | Pauschales `close --all` | bewusst nie (gefährlicher Pfad; Kandidaten immer explizit) |
+
+## Agentenvertrag (`snapshot` / `since` / `watch`)
+
+Die CLI ist primär für Agenten. `--json` ist der Vertrag; die Textausgabe der
+Agentenbefehle ist ausdrücklich nur Diagnosehilfe **ohne** Stabilitätszusage
+und darf nicht geparst werden. Kein Terminal-Dashboard.
+
+**Warum ein eigener Befehl statt einer Option an `overview`:** `overview` und
+`list` haben einen etablierten Vertrag, auf den Skill und Skripte bauen.
+`snapshot` erlaubt das saubere Schema `wm8.overview/1`, ohne bestehende
+Aufrufer zu brechen.
+
+- **`chats snapshot`** (`wm8.overview/1`) — kompaktes Lagebild über ALLE
+  Sessions. Gemessener Anlass: `overview --json` lieferte 868.379 Zeichen für
+  920 Sessions, von denen fünf relevant waren; `snapshot` liefert dieselbe
+  Lage in ~2.200 Zeichen. `counts` deckt **immer** den vollen Bestand ab, auch
+  wenn `sessions` gekürzt ist (`coverage.countsComplete`). Gekürzt wird in
+  dieser Reihenfolge: erst Auszüge bei nicht handlungsbedürftigen Zeilen, dann
+  Sessions vom Ende — und jede Auslassung erscheint in `coverage.omitted`.
+  Idle-Sessions nur mit `--include idle`.
+- **`chats since --cursor <c>`** (`wm8.changes/1`) — Änderungen seit einem
+  Cursor. Kosten proportional zur Änderung statt zum Bestand. **`gap: true`**
+  heißt: Der Cursor stammt aus einer älteren Journal-Generation, es fehlen
+  Ereignisse — der Aufrufer MUSS einen frischen `snapshot` ziehen. Ein stilles
+  Fortfahren „ab jetzt" wäre der gefährlichste Fehler, weil eine Lücke sonst
+  wie „nichts passiert" aussieht.
+- **`chats watch`** — NDJSON-Strom derselben Ereignisse, eine Zeile pro
+  Ereignis mit Cursor. Für Sidecars und Skripte; ein LLM nutzt besser `since`.
+  Ausdrücklich **kein zweiter Ereignisweg**: Bricht der Strom ab, holt der
+  Cursor die Ereignisse nach.
+
+### Zustandsachsen
+
+Vier unabhängige Achsen statt eines gemischten Status (`ChatsSessionAxes`):
+
+| Achse | Werte | Bedeutung |
+|---|---|---|
+| `catalog` | `active \| inactive \| archived` | Aufbewahrung, **keine** Prozessaussage |
+| `execution.worker` | `alive \| exited \| missing \| unknown` | der echte Agent |
+| `execution.attachment` | `attached \| detached \| none` | nur die Anzeige |
+| `conversation.state` | `launching \| ready \| working \| needsInput \| turnDone \| stopped \| errored` | |
+| `conversation.reason` | `permission \| question \| planApproval` | nur bei `needsInput` |
+| `evidence.quality` | `observed \| inferred` | Hook/App belegt vs. Transcript geschätzt |
+
+`launching` ist ein **eigener** Wert und wird nicht auf `idle` abgebildet — das
+war die Wurzel des Start-Race. Bei Hintergrund-Agenten ist `attachment` kein
+Beleg für `worker`: Das PTY ist dort nur ein `claude attach`.
+
+### Sichere Send-Semantik
+
+`send` an eine Session in `launching` scheitert mit `notReady` (Exit 4) statt
+still Erfolg zu melden. Belegt am 2026-07-26: `resume` + sofortiges `send`
+meldete „delivered", während die Transcript-Revision 30 Sekunden unverändert
+blieb — der Paste landete in einer noch nicht bereiten TUI und ging je nach
+Timing verloren oder kam beim Retry doppelt an. `sendPrompt` schreibt blind in
+die PTY; ein Erfolg belegt nur den Schreibvorgang, nicht die Verarbeitung.
+Wer Zustellung braucht, nutzt `enqueue` (höchstens einmal, bei bestätigtem
+Turn-Ende). `snapshot` bietet in `launching` konsequent kein `send` als Aktion an.
+
+### Anomalien und Kompatibilität
+
+Anomalien (`wm8.anomaly/1`) werden **nie** in einen Gesamtstatus eingerechnet;
+sie stehen mit `severity`, `evidence` und `recommendedAction` daneben. Ein
+Hintergrund-Agent ohne Tab und ohne PTY ist ausdrücklich **keine** Anomalie —
+das ist der Normalfall von `claude --bg`.
+
+Kompatibilität: Additive Felder ändern das Schema nicht; Agenten MÜSSEN
+unbekannte Felder ignorieren. Entfernen, Umbenennen oder Umdeuten eines Feldes
+erzwingt `/2`. Cursor sind opak und nur innerhalb derselben Generation gültig.
 
 ## wait
 

@@ -40,9 +40,14 @@ whisperm8 chats archived [query] [--project P] [--group G] [--provider claude|co
 Handeln (App muss laufen — sonst Exit 5). **Vor jeder dieser Aktionen: Regeln unten beachten.**
 ```bash
 whisperm8 chats send <ref> -- "<prompt>"  [--if-status S,S] [--no-submit] [--force]
+whisperm8 chats enqueue <ref> -- "<prompt>"          # Folgeauftrag vormerken (auch bei working)
+whisperm8 chats queue [<ref>]                        # was wartet? (auch bei geschlossener App)
+whisperm8 chats dequeue <ref> --all | --id <UUID>    # offene Aufträge stornieren
 whisperm8 chats interrupt <ref> [--force]            # ein ESC an eine working-Session
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
 whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
+whisperm8 chats close <ref> --stop [--force]         # Tab zu + Agent beenden (kein Archiv, Verlauf bleibt);
+                                                     # working ist geschützt → Exit 4 ohne --force
 whisperm8 chats close --others|--right <ref>         # alle anderen / rechts vom Anker (dessen Fenster)
 whisperm8 chats reopen                               # zuletzt geschlossenen Tab wiederherstellen
 whisperm8 chats pin <ref> [<ref>…] | unpin …         # Sidebar-Pin setzen/entfernen (idempotent)
@@ -88,13 +93,23 @@ wieder hochfahren macht `resume` (setzt Auto-Launch + Fokus → App startet mit
 
 - `close` schließt AUSSCHLIESSLICH den UI-Tab. Die Session bleibt in der
   Sidebar, ein laufendes PTY läuft weiter (erneutes Öffnen zeigt denselben
-  Terminal-Zustand), Pin und Transcript bleiben. Deshalb gibt es kein
-  `--force`: auch working/awaitingInput-Sessions dürfen geschlossen werden —
+  Terminal-Zustand), Pin und Transcript bleiben. Deshalb ohne Flag kein
+  Guard: auch working/awaitingInput-Sessions dürfen geschlossen werden —
   es geht nur die Ansicht zu, nie die Arbeit. Mehrere Refs = ein Batch;
   bereits geschlossene Tabs sind kein Fehler (idempotent).
+- `close <ref> --stop` ist die Zwischenstufe: Tab zu UND der laufende Agent
+  wird beendet (graceful, mit letztem Transcript-Flush). Es wird NICHT
+  archiviert und NICHTS gelöscht — die Session bleibt in der Sidebar, Pin und
+  Verlauf bleiben, `resume` fährt sie wieder hoch. Für „stopp den Agenten",
+  „beende den Prozess, aber behalte den Chat", „der dreht sich im Kreis".
+  Arbeitende Ziele sind geschützt: ist auch nur EINES `working`, scheitert der
+  ganze Aufruf mit Exit 4 und NICHTS wird geschlossen. Dann Optionen zeigen
+  (warten / `interrupt` / `--stop --force`) statt selbst zu erzwingen —
+  `--force` nur auf ausdrückliche Ansage des Users (Regel 3).
 - `archive` ist die stärkere Aktion: Session verschwindet aus Sidebar + Tabs,
   ein laufendes Terminal wird TERMINIERT. Bei „schließ/räum die Tabs auf" →
-  `close`; nur bei „archivier X"/„weg damit" → `archive` (mit Bestätigung).
+  `close`; bei „stopp den Agenten" → `close --stop`; nur bei „archivier X"/
+  „weg damit" → `archive` (mit Bestätigung).
 - `unarchive` entfernt NUR die Archiv-Markierung (Session wieder in der
   Sidebar, kein Tab, kein Start). `resume` startet nie eine archivierte
   Session (Exit 4) — der einzige, explizite Compound ist
@@ -161,6 +176,16 @@ unterbrochen.
 8. **Fehler sauber erklären:** Exit 4 → Konflikt benennen (z. B. „arbeitet
    gerade") + Optionen; Exit 5 → „WhisperM8-App starten", Lese-Befehle gehen
    weiter.
+9. **Stau erkennen statt erzwingen.** Nach einem `resume` und immer, wenn eine
+   Queue nicht abfließt, zuerst `show <ref>` und `tail <ref> --turns 1` prüfen.
+   Zeigt der Chat `working`, obwohl kein neuer Turn begonnen hat und das
+   Transcript nicht wächst (`show` → Größe/Revision bleibt gleich), ist der
+   Status unglaubwürdig: Ein vorgemerkter Auftrag wird dann nicht zugestellt,
+   weil die Zustellung am Turn-Ende hängt. Melde diesen Stau klar („Chat X
+   meldet seit N min working, Transcript unverändert, 2 Aufträge warten") und
+   nenne dem User die Optionen. **Niemals** eigenmächtig `interrupt`,
+   `--force` oder `close --stop` einsetzen, um den Stau aufzulösen — das
+   bricht möglicherweise echte Arbeit ab. Die Entscheidung trifft der User.
 
 ## Supervisor-Modus („sei mein Jarvis")
 

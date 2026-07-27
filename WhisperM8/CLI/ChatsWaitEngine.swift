@@ -93,7 +93,8 @@ final class ChatsWaitEngine {
             armWatch(path: path, entry: entry, semaphore: semaphore) { result = $0 }
             watchedPaths[entry.session.id] = path
             if watchers.count >= 64 {
-                CLIIO.err("Hinweis: nur die ersten 64 Sessions werden beobachtet.")
+                CLIIO.err("Hinweis: \(entries.count) Sessions im Scope — die ersten 64 werden "
+                          + "event-getrieben beobachtet, der Rest über den 10-s-Poll (höhere Latenz).")
                 break
             }
         }
@@ -113,6 +114,11 @@ final class ChatsWaitEngine {
         pollTimer.setEventHandler { [weak self] in
             guard let self else { return }
             self.rearmRotatedWatches(semaphore: semaphore) { result = $0 }
+            // Vollständige Re-Evaluierung, nicht nur Re-Armierung: Über der
+            // 64-Watch-Grenze wurden Sessions bisher NUR beim Start geprüft
+            // und danach nie wieder — ihre Ereignisse gingen still verloren.
+            // Der Poll deckt sie jetzt ab (10 s Latenz statt Event-Takt).
+            self.reevaluateAll(semaphore: semaphore) { result = $0 }
             self.reevaluateAll(semaphore: semaphore) { result = $0 }
         }
         pollTimer.resume()

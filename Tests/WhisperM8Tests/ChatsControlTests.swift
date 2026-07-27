@@ -242,6 +242,15 @@ final class ChatsCloseSupportTests: XCTestCase {
             ptyRunning: true, runtimeStatus: "working", isPinned: true))
         XCTAssertEqual(items[1].outcome, "notFound")
         XCTAssertNil(items[1].title)
+        XCTAssertFalse(items[0].stopped, "ohne stop-Feld gilt: nichts wurde beendet")
+    }
+
+    func testItemsParseStoppedFlag() {
+        let result = ChatsControlJSON.object([
+            "ok": true, "closedCount": 1, "stoppedCount": 1,
+            "results": [["id": "A1", "outcome": "closed", "stopped": true, "ptyRunning": false]],
+        ])
+        XCTAssertTrue(ChatsCloseSupport.items(from: result)[0].stopped)
     }
 
     func testExitCodeIsOkUnlessAnyNotFound() {
@@ -267,6 +276,134 @@ final class ChatsCloseSupportTests: XCTestCase {
                                       ptyRunning: false, runtimeStatus: nil, isPinned: false),
             fallbackLabel: "whisperm8/alt")
         XCTAssertTrue(missing.contains("whisperm8/alt"), "notFound nutzt das CLI-Label")
+    }
+
+    func testStoppedLineSaysAgentEndedAndHistorySurvives() {
+        var stopped = item("closed", pinned: true)
+        stopped.stopped = true
+        let line = ChatsCloseSupport.humanLine(for: stopped, fallbackLabel: nil)
+        XCTAssertTrue(line.contains("Agent gestoppt"))
+        XCTAssertTrue(line.contains("Verlauf bleibt"), "Stop ist kein Archivieren und kein Löschen")
+        XCTAssertTrue(line.contains("resume möglich"))
+        XCTAssertTrue(line.contains("Pin bleibt"))
+        XCTAssertFalse(line.contains("läuft weiter"), "nach dem Stop läuft nichts mehr")
+    }
+
+    func testFailedBackgroundStopIsReportedAsWarningNotSuccess() {
+        // Hintergrund-Agenten leben im Supervisor-Daemon: das PTY zu killen
+        // trennt nur die Anzeige. Schlägt `claude stop` fehl, läuft der Agent
+        // weiter — eine Erfolgsmeldung wäre hier eine Falschaussage.
+        var failed = item("closed")
+        failed.stopFailed = true
+        let line = ChatsCloseSupport.humanLine(for: failed, fallbackLabel: nil)
+        XCTAssertTrue(line.contains("läuft WEITER"))
+        XCTAssertFalse(line.contains("Agent gestoppt"))
+        XCTAssertTrue(line.hasPrefix("⚠︎"))
+    }
+
+    func testStoppedWithoutOpenTabIsReportedAsStopNotAsNoop() {
+        // Randfall: kein Tab offen, aber der Prozess lief im Hintergrund —
+        // ohne diese Zeile meldete die CLI „kein offener Tab" und verschwiege
+        // die eigentliche Wirkung.
+        var stopped = item("alreadyClosed")
+        stopped.stopped = true
+        let line = ChatsCloseSupport.humanLine(for: stopped, fallbackLabel: nil)
+        XCTAssertTrue(line.contains("Agent gestoppt"))
+        XCTAssertTrue(line.contains("kein offener Tab"))
+    }
+}
+
+final class ChatsWorkspaceOpenSupportTests: XCTestCase {
+    private func line(_ outcome: String, slot: Int? = nil, occupied: Bool? = nil,
+                      title: String? = nil) -> String {
+        ChatsWorkspaceOpenSupport.humanLine(
+            name: "Recherche", outcome: outcome, slot: slot,
+            slotOccupied: occupied, focusedTitle: title)
+    }
+
+    func testActivatedAndAlreadyVisibleAreDistinguishable() {
+        XCTAssertTrue(line("activated").contains("geöffnet"))
+        XCTAssertTrue(line("alreadyVisible").contains("war schon sichtbar"))
+    }
+
+    func testForeignWindowSaysItOnlyFocused() {
+        // Kritisch fürs Vertrauen: hier wurde NICHTS umgehängt — die Ausgabe
+        // darf nicht wie eine Aktivierung im eigenen Fenster klingen.
+        let text = line("focusedOwnerWindow")
+        XCTAssertTrue(text.contains("besitzenden Fenster"))
+        XCTAssertTrue(text.contains("nach vorn"))
+    }
+
+    func testEmptySlotIsReportedButNotAsFailure() {
+        let text = line("activated", slot: 3, occupied: false)
+        XCTAssertTrue(text.contains("Slot 3 ist leer"))
+        XCTAssertTrue(text.hasPrefix("✓"), "leerer Slot bleibt ein Erfolg")
+    }
+
+    func testOccupiedSlotNamesTheFocusedChat() {
+        let text = line("activated", slot: 2, occupied: true, title: "whisperm8/CLI")
+        XCTAssertTrue(text.contains("Slot 2 fokussiert: whisperm8/CLI"))
+    }
+
+    func testOccupiedSlotWithoutTitleStillReportsFocus() {
+        XCTAssertTrue(line("activated", slot: 1, occupied: true).contains("Slot 1 fokussiert"))
+    }
+
+    func testWithoutSlotNoSlotSuffix() {
+        XCTAssertFalse(line("activated").contains("Slot"))
+    }
+}
+
+final class ChatsCloseStopGuardTests: XCTestCase {
+    private let idle = UUID()
+    private let working = UUID()
+    private let alsoWorking = UUID()
+
+    private func blocking(_ targets: [UUID], force: Bool = false) -> [String] {
+        ChatsCloseStopGuard.blockingTargets(
+            targetIDs: targets,
+            force: force,
+            isWorking: { $0 == working || $0 == alsoWorking },
+            label: { id in
+                if id == working { return "whisperm8/Plan" }
+                if id == alsoWorking { return "akquise/Mails" }
+                return "whisperm8/Idle"
+            })
+    }
+
+    func testIdleTargetsAreNeverBlocked() {
+        XCTAssertTrue(blocking([idle]).isEmpty)
+        XCTAssertTrue(blocking([]).isEmpty)
+    }
+
+    func testSingleWorkingTargetBlocksTheWholeBatch() {
+        // Alles-oder-nichts: sonst wären die idle-Tabs schon zu, wenn der
+        // Aufrufer den Konflikt sieht.
+        XCTAssertEqual(blocking([idle, working]), ["whisperm8/Plan"])
+    }
+
+    func testAllWorkingTargetsAreNamed() {
+        XCTAssertEqual(blocking([working, idle, alsoWorking]),
+                       ["whisperm8/Plan", "akquise/Mails"])
+    }
+
+    func testForceLiftsTheGuard() {
+        XCTAssertTrue(blocking([working, alsoWorking], force: true).isEmpty)
+    }
+
+    func testUnlabeledTargetFallsBackToItsID() {
+        let unknown = UUID()
+        let names = ChatsCloseStopGuard.blockingTargets(
+            targetIDs: [unknown], force: false, isWorking: { _ in true }, label: { _ in nil })
+        XCTAssertEqual(names, [unknown.uuidString])
+    }
+
+    func testConflictMessageNamesTargetsAndAllThreeWaysOut() {
+        let message = ChatsCloseStopGuard.conflictMessage(blocking: ["whisperm8/Plan"])
+        XCTAssertTrue(message.contains("whisperm8/Plan"))
+        XCTAssertTrue(message.contains("kein Tab wurde geschlossen"))
+        XCTAssertTrue(message.contains("interrupt"))
+        XCTAssertTrue(message.contains("--stop --force"))
     }
 }
 
