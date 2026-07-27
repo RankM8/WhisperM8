@@ -213,7 +213,17 @@ clean-apps: kill
 	@echo ""
 	@echo "Then run 'make dev' to reinstall."
 
-dmg: kill
+# ------------------------------------------------------------------------------
+# DMG bauen — OHNE die laufende App zu beenden (Nutzerwunsch 2026-07-27).
+#
+# Das `kill` war hier defensiv, nicht notwendig: build-dmg.sh ruft `make build`
+# und arbeitet ausschliesslich auf dem LOKALEN ./WhisperM8.app im Repo. Die
+# Installation unter /Applications wird nie angefasst — anders als bei `dev`,
+# wo der rsync in ein laufendes Bundle tatsaechlich scheitern kann.
+#
+# Praktische Folge: Ein Release laesst laufende Agent-Chats in Ruhe.
+# ------------------------------------------------------------------------------
+dmg:
 	@./scripts/build-dmg.sh
 
 # ------------------------------------------------------------------------------
