@@ -63,12 +63,14 @@ Anpassungen `PerfBudgets` ändern.
 
 ### Code organization
 
-`Services/` is split into three subfolders (Phase-1 refactor, 2026-06-27):
+`Services/` is split into four subfolders (Phase-1 refactor, 2026-06-27;
+`VoiceGate/` added 2026-07-27):
 `Services/Dictation/` (audio, transcription, post-processing, recording, visual context),
 `Services/AgentChats/` (session store/indexer, runtime watcher, background agents, hooks,
-transcript readers, `AgentProjectPath`), and `Services/Shared/` (Logger,
+transcript readers, `AgentProjectPath`), `Services/Shared/` (Logger,
 LoginShellEnvironment, PerformanceSignposts, PermissionService, KeychainManager,
-FileEventSource, WindowRequestCenter, CLISymlinkInstaller). SwiftPM discovers sources
+FileEventSource, WindowRequestCenter, CLISymlinkInstaller), and `Services/VoiceGate/`
+(Codewort-Steuerung der Codex-Sprachsitzung — siehe unten). SwiftPM discovers sources
 recursively, so moving files between these folders is build-neutral. The same pass split
 several god-files into per-type files (SettingsView → `Views/Settings/`, PostProcessingService,
 TranscriptionService, AgentSessionIndexer) and pulled AgentChatsView's NSEvent monitors into
@@ -115,6 +117,26 @@ The other half of the codebase. Flow: **discovery → persistence → runtime tr
 - **Agent-Chats-CLI (`whisperm8 chats`, „Jarvis")**: Jeder Chat kann alle Sessions sehen/verwalten. Lese-Befehle (`list`/`overview`/`show`/`tail`/`wait`/`audit`) laufen app-unabhängig direkt von Disk (`ChatsWorkspaceReader` + `ChatsStatusProbe` mit denselben puren Bausteinen wie der Runtime-Watcher). Handeln-Befehle (`send`/`interrupt`/`open`/`new`/`rename`/`group`/`archive`) gehen über einen BSD-Unix-Domain-Socket (`AgentControlServer`, Start in `applicationDidFinishLaunching`) an die laufende App — Workspace-Single-Writer bleibt die App. Identität via `WHISPERM8_SESSION_ID`+Token (beim PTY-Spawn injiziert). `send` ist TOCTOU-frei (Guards + Bracketed Paste in einem MainActor-Block). Skill `whisperm8-chats` steuert das Verhalten (Send-Gate, Ein-Hop-Regel). Doku: `docs/features/agent-chats-cli.md`, Plan: `docs/plans/whisperm8-chats-cli/`. Kill-Switch: `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
 
 Key persisted paths: `~/Library/Application Support/WhisperM8/AgentSessions.json` (workspace), `agent-ui-state.json`, `agent-index-cache.json`. Everything under `~/.claude/` and `~/.codex/` is external and read-only (except hook settings files WhisperM8 generates).
+
+### Voice Gate (`Services/VoiceGate/`)
+
+Ein gesprochenes Codewort („Jarvis Pause" / „Jarvis weiter", Trägerwort und beide
+Kommandos frei konfigurierbar) schaltet das Mikrofon einer laufenden **Codex-Desktop**-
+Sprachsitzung stumm und wieder frei. WhisperM8 mutet **nicht selbst**: es aktiviert kurz
+Codex und sendet dessen eigenes Kürzel `Ctrl+Shift+U` — das der Nutzer in Codex' Einstellungen
+einmalig auf `realtimeVoice.toggleMicrophoneMute` legen muss, sonst tut das Feature nichts.
+Der Fokus-Roundtrip ist unvermeidbar (`shortcutScope: app`); ein Tastendruck ohne Aktivierung
+bleibt nachweislich wirkungslos.
+
+Erkennung strikt on-device (`SFSpeechRecognizer`, `requiresOnDeviceRecognition`) über einen
+eigenen `AVAudioEngine`-Tap, der **explizit ans Gerät** gebunden wird (nie „System Default").
+Fehlt das Sprachmodell, startet die Funktion gar nicht statt still auf Apples Server
+auszuweichen; `VoiceGateLocaleResolver` weicht vorher auf verfügbare Regionalvarianten aus
+(`de_DE` → `de_CH` → `de_AT`). Reine, unit-getestete Logik in `VoiceGateCommandMatcher`
+(Phrasenerkennung inkl. verschmolzener Form „annapause") und `VoiceGateStateMachine`
+(Annahme gegen Codex' blinden Toggle). Opt-in, Default aus, eigener Einstellungs-Tab
+„Codex Voice Agent"; Kill-Switch: `defaults write com.whisperm8.app codexVoiceGateEnabled -bool NO`.
+Details, Messwerte und Fallstricke: `docs/features/voice-gate.md`.
 
 ### Subprocess environment (important gotcha)
 

@@ -22,8 +22,13 @@ defaults write com.whisperm8.app codexVoiceGateDryRun -bool YES   # nur Ton
 
 Im Trockenlauf (Default) endet der Pfad bei Log, Zähler und einem kurzen Ton.
 Scharf folgt der Fokus-Roundtrip: Vordergrund-App merken → Codex aktivieren →
-`Ctrl+Shift+U` als `CGEvent` → zurück zur vorherigen App. Gemessene Dauer steht
-als `durationMs` im Log.
+**0,35 s Nachlauf** → `Ctrl+Shift+U` als `CGEvent` → zurück zur vorherigen App.
+Gemessene Dauer steht als `durationMs` im Log (rund 480 ms).
+
+Der Nachlauf ist nicht willkürlich: Chromium meldet die App als frontmost,
+**bevor** das Key-Window steht. Mit 0,08 s ging am 27.07.2026 ein Druck durch
+und der nächste unter identischen Bedingungen verpuffte; ein Handtest mit 0,8 s
+war zuverlässig.
 
 ### Bestätigung und Fehlerfälle
 
@@ -32,11 +37,20 @@ Nach dem Druck sucht der `CodexCommandExecutionProbe` bis zu 1,5 s nach der
 undokumentierte Interna und darf nichts blockieren:
 
 - **Signatur da** → `confirmed=true`, Annahme übernommen.
-- **Signatur fehlt** → nur eine Notiz. Der Druck gilt trotzdem als erfolgt,
-  weil ein wegfallendes Log-Detail die Funktion nicht lahmlegen darf.
+- **Signatur fehlt, aber sie hat in dieser Sitzung schon einmal getragen** →
+  genau **ein** Nachfass-Druck (`press.retry`), dann erneute Prüfung. Bleibt
+  auch der unbestätigt, geht der Zustand auf `unknown` — keine Schleife.
+- **Signatur fehlt und hat noch nie getragen** → nur eine Notiz, kein
+  Nachfassen. Fällt die Signatur mit einem Codex-Update weg, bleibt das
+  Verhalten dadurch unverändert, statt blind doppelt zu drücken.
 - **Mechanisches Scheitern** (Codex kam nicht in den Vordergrund, kein
   `CGEvent`) → echter Beleg, Zustand auf `unknown`, der nächste Befehl drückt
   in jedem Fall.
+
+In der Praxis ist die Signatur **unzuverlässig**: Im Feldtest am 27.07.2026
+standen mehrere nachweislich erfolgreiche Umschaltungen mit `confirmed=false`
+im Log. Sie taugt deshalb als Zusatzsicherung, nicht als Wahrheit — genau
+darum die Bedingung „hat schon einmal getragen".
 
 ## Warum es so gebaut ist (Messungen vom 26.07.2026)
 
@@ -49,6 +63,20 @@ Ein Live-Spike gegen eine laufende Codex-Sitzung hat vier Dinge belegt:
 | Hört ein paralleler Listener weiter? | **Ja** — Aufnahme am selben AirPods-Mikro, transkribierbar |
 | Reicht ein Tastendruck ohne Fokus? | **Nein** — `CGEventPostToPid` blieb wirkungslos |
 
+### Sitzungserkennung und ihre Grenze
+
+Das Codex-Log schreibt `realtime_session_started`, aber **weder einen
+Ende-Marker noch ein Lebenszeichen** während der Sitzung — zwischen Start
+(06:17) und laufendem Gespräch (06:55) stand am 27.07.2026 nichts
+Realtime-Bezogenes darin. Ein Sitzungsende ist damit nicht erkennbar.
+
+Folge: `CodexVoiceSessionProbe.maxSessionAge` steht auf **8 Stunden**. Eine
+kürzere Frist ließ die Schärfe mitten im Gespräch verfallen (mit 30 Minuten
+passiert). Der Preis ist, dass das Gate scharf bleibt, solange Codex läuft und
+heute eine Sprachsitzung begonnen hat — auch nach deren Ende. Verlässlich
+geschlossen wird es durch: Codex beenden, oder den Schalter in den
+Einstellungen. **Der Schalter ist die eigentliche Kontrolle.**
+
 Daraus folgen die tragenden Entwurfsentscheidungen:
 
 - **Kein Mute auf Geräte- oder Systemebene.** Das würde den Listener mit-taub
@@ -56,7 +84,7 @@ Daraus folgen die tragenden Entwurfsentscheidungen:
 - **Der Listener bindet sein Eingabegerät explizit** (nie „System Default") und
   ist damit unabhängig von allem, was Codex mit seinem Eingang tut.
 - **Der Fokus-Roundtrip ist unvermeidbar**, weil `realtimeVoice.toggleMicrophoneMute`
-  in Codex `shortcutScope: app` hat. Ab Phase 2 relevant.
+  in Codex `shortcutScope: app` hat.
 
 ## Zustandslogik
 
@@ -65,12 +93,26 @@ nicht wohin, und der wahre Zustand ist von außen nicht lesbar. Die
 Zustandsmaschine führt deshalb eine *Annahme* und macht sie dreifach robust:
 
 1. **Absicht statt Toggle** — „Jarvis Pause" mutet nur, wenn wir offen glauben.
-2. **Wiederholung überstimmt** — dieselbe Phrase binnen 4 s heißt „deine
-   Annahme war falsch" und drückt trotzdem. Damit ist die Selbstkorrektur des
-   Toggles zurück, ohne dessen Richtungs-Blindheit.
-3. **Passiver Abgleich** — empfängt Codex nachweislich Sprache, ist die Annahme
-   „stumm" widerlegt. Bewusst asymmetrisch: *ausbleibender* Empfang beweist
-   nichts, der Mensch könnte einfach schweigen.
+2. **Wiederholung überstimmt** — wurde ein Befehl als „schon im Zielzustand"
+   **übersprungen** und kommt dieselbe Phrase binnen 4 s erneut, wird trotzdem
+   gedrückt. Damit ist die Selbstkorrektur des Toggles zurück, ohne dessen
+   Richtungs-Blindheit.
+
+   Entscheidend ist die Einschränkung auf *übersprungene* Befehle. Zuvor griff
+   die Übersteuerung nach jeder Erkennung — dadurch wurde eine Doppelerkennung
+   derselben Äußerung 3 s nach einem erfolgreichen Druck als Widerspruch
+   gewertet und hob ihn wieder auf (gemessen 27.07.2026, 09:18). Die Annahme
+   lief danach dauerhaft gegen die Realität. Drei Regressionstests halten das
+   fest.
+3. **Manuelle Korrektur** — läuft die Annahme dennoch auseinander, etwa weil im
+   Codex-Overlay von Hand geklickt wurde, wird sie im Einstellungs-Tab oder im
+   Menüleisten-Menü richtiggestellt.
+
+Ein *passiver* Abgleich über Codex' Thread-Transkript ist in
+`VoiceGateStateMachine.observeCodexReceivedAudio()` vorbereitet und getestet,
+aber **bewusst noch nicht verdrahtet**: Die Zustellung der `user_message`-
+Einträge ist an Turn-Grenzen gebunden und damit bis zu eine Minute verzögert —
+zu träge, um eine Sekundenentscheidung zu tragen.
 
 ## Fehlalarm-Schutz
 
@@ -80,12 +122,26 @@ Gestaffelt, weil kein einzelnes Kriterium reicht:
 - mindestens 0,3 s Stille vor dem Trägerwort (kein Treffer mitten im Satz)
 - Kommandowörter **exakt** — schon Editierdistanz 1 macht „Wetter" zu „weiter"
   und „Hause" zu „Pause" (von einem Unit-Test gefunden)
-- Trägerwort mit Distanz 1, weil Erkenner den Eigennamen verbiegen
-- Cooldown 2,5 s nach jeder Auslösung
+- Trägerwort **längenabhängig**: ab 6 Zeichen wird ein verhörter Buchstabe
+  verziehen, darunter muss es exakt sitzen. Bei „anna" (4 Zeichen) lägen sonst
+  „Anne", „Hanna", „Manna" und „wanna" alle in Distanz 1
+- Entprellung 2,0 s je Absicht, Cooldown 2,5 s nach jeder Auslösung
 - Gate: nur bei laufendem Codex mit plausibel aktiver Sprachsitzung
 - pausiert, solange WhisperM8 selbst diktiert
 
 Das Trägerwort allein löst nie aus — „sei mein Jarvis" fällt im Alltag beiläufig.
+
+### Verschmolzene Form
+
+Der On-Device-Erkenner klebt benachbarte Wörter unregelmäßig zusammen: „anna
+pause" kam im Feldtest mal als zwei Segmente und mal als ein Token `annapause`
+an (im selben Log auch „aufjeden fall ein traum auto"). Der Matcher prüft
+deshalb **beide** Formen — zuerst die verschmolzene, dann die getrennte, beide
+mit derselben Äußerungsgrenze davor.
+
+Ohne diesen Pfad wirkt das Feature zufällig: Es greift oder greift nicht, je
+nachdem wie der Erkenner gerade segmentiert — nicht abhängig von der
+Aussprache. Genau so ist es am 27.07.2026 aufgefallen.
 
 ## Eigene Codewörter
 
@@ -146,9 +202,28 @@ defaults write com.whisperm8.app codexVoiceGateEnabled -bool YES   # Default: au
 log stream --predicate 'subsystem == "com.whisperm8.app" && category == "voice.gate"' --level debug
 ```
 
-Ereignisse: `gate.arm_state`, `candidate.rejected reason=…`, `candidate.partial`,
-`would_press intent=… reason=… confidence=…`. Die **Beinahe-Treffer** sind der
+Ereignisse: `gate.arm_state`, `gate.locale`, `listener.started`,
+`candidate.match intent=… final=…`, `candidate.rejected reason=…`,
+`would_press …` (Trockenlauf) bzw. `pressed … durationMs=… confirmed=…`,
+`press.retry` und `press.retry_result`. Die **Beinahe-Treffer** sind der
 eigentliche Ertrag — sie zeigen datenbasiert, ob die Schwellen sitzen.
+
+### Wenn ein Codewort nicht greift
+
+Der Schalter **„Log recognized words"** (Diagnostics-Abschnitt, Default aus,
+Schlüssel `codexVoiceGateVerboseLogging`) schreibt zusätzlich, **was** der
+Erkenner verstanden hat:
+
+```
+heard="anna pause" final=false vocabulary="anna/pause/weiter"
+```
+
+Damit ist in einer Zeile unterscheidbar, ob das Modell etwas anderes verstanden
+hat oder ob eine Regel gegriffen hat. Ausgewertet werden auch Teilergebnisse
+(gedrosselt auf eine Zeile alle 2 s) — nur auf finale zu warten war nutzlos,
+weil die Phrase dort praktisch nie steht.
+
+Der Schalter protokolliert Gesprochenes. Nach der Fehlersuche wieder ausschalten.
 
 Sichtbar außerdem im Menüleisten-Menü: Schärfe, angenommener Mikrofon-Zustand,
 Zähler, letztes Ereignis und eine manuelle Zustandskorrektur. Bei jedem
