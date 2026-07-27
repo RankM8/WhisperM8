@@ -675,13 +675,23 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             let ids = [store.primaryWindowID] + store.secondaryWindowIDs
             return ids.map { id in
                 let tabs = store.openTabIDs(in: id)
-                return [
+                var dict: [String: Any] = [
                     "id": id.uuidString,
                     "isPrimary": id == store.primaryWindowID,
                     "tabCount": tabs.count,
                     "tabTitles": tabs.map { titles[$0] ?? "?" },
                     "selectedTitle": store.selectedSession(in: id).flatMap { titles[$0] } ?? "",
+                    // Grid oder Einzelansicht? Ohne dieses Feld ist ein
+                    // gesetzter `activeWorkspaceID` nicht interpretierbar —
+                    // er bleibt auch in der Einzelansicht stehen.
+                    "showsGrid": store.showsGrid(in: id),
                 ]
+                let active = store.activeGridWorkspace(in: id)
+                dict["activeWorkspaceID"] = active?.id.uuidString ?? NSNull()
+                // Name mitliefern, damit ein Agent für die Aussage nicht
+                // zusätzlich `workspace list` aufrufen muss.
+                dict["activeWorkspaceName"] = active?.name ?? NSNull()
+                return dict
             }
         }
         return .success(requestID: request.requestID, result: .object(["windows": windows]))
@@ -1217,10 +1227,70 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// Grid-Workspaces (die „WORKSPACES"-Sektion der Sidebar). Read-über-Socket,
     /// weil die Namen im UI-State liegen (nicht in AgentSessions.json) und die
     /// App der Single Writer dafür ist.
+    /// Grid-Workspaces mit Sichtbarkeits- und Slot-Geometrie.
+    ///
+    /// Bewusst KEIN Feld `isVisible`: `activeWorkspaceID` ist doppelt belegt —
+    /// es bezeichnet das aktive Grid ODER nur das Rücksprungziel der
+    /// Einzelansicht (`showSingleSession` lässt die Referenz stehen und setzt
+    /// nur `showsGrid = false`). Ein einzelnes Sichtbarkeits-Flag würde diesen
+    /// Zwischenzustand platt machen. Stattdessen `hostWindowID` und
+    /// `gridVisible` getrennt — erst beides zusammen ergibt „logisch sichtbar".
+    ///
+    /// „Logisch" ist hier wörtlich zu nehmen: Der Store ist UI-Zustand, kein
+    /// Fenster-Inventar. Ein geschlossenes Primärfenster bleibt im State
+    /// (`removeWindow` weigert sich dort), meldet also weiter `gridVisible`,
+    /// obwohl nichts auf dem Bildschirm steht. Minimiert, verdeckt oder auf
+    /// einem anderen Space ist überhaupt nicht abbildbar.
     private func gridWorkspaceList(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         let workspaces = await MainActor.run { () -> [[String: Any]] in
-            AgentWindowStore.shared.gridWorkspaces.map { ws in
-                ["id": ws.id.uuidString, "name": ws.name, "capacity": ws.capacity]
+            let store = AgentWindowStore.shared
+            let sessions = AgentWorkspaceUIModel.shared.workspace.sessions
+            let titles = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.title) })
+            let projects = Dictionary(
+                uniqueKeysWithValues: AgentWorkspaceUIModel.shared.workspace.projects.map { ($0.id, $0.name) })
+            let projectBySession = Dictionary(
+                uniqueKeysWithValues: sessions.map { ($0.id, projects[$0.projectID] ?? "?") })
+
+            return store.gridWorkspaces.map { ws in
+                let hostWindowID = store.windowID(owningGridWorkspace: ws.id)
+                let gridVisible = hostWindowID.map { store.showsGrid(in: $0) } ?? false
+
+                // Slots in SLOT-Reihenfolge, nicht kompaktiert: Der Index ist
+                // eine Modell-Invariante (`workspace add --slot N` adressiert
+                // ihn), und ein Loch darf nicht wegrutschen.
+                var slots: [[String: Any]] = []
+                for index in 0..<ws.capacity {
+                    let sessionID = index < ws.slots.count ? ws.slots[index] : nil
+                    // 1-basiert wie in der CLI.
+                    var slot: [String: Any] = ["index": index + 1]
+                    // Eine Slot-UUID ohne lebende Session gilt NICHT als
+                    // belegt: `prune` räumt erst bei Load/flush auf, ein Read
+                    // kann also kurz eine verwaiste ID sehen.
+                    guard let sessionID, let title = titles[sessionID] else {
+                        slots.append(slot)
+                        continue
+                    }
+                    let slotHost = store.windowID(containingTab: sessionID)
+                    slot["sessionID"] = sessionID.uuidString
+                    slot["ref"] = ChatsOutput.shortID(sessionID)
+                    slot["title"] = "\(projectBySession[sessionID] ?? "?")/\(title)"
+                    if let slotHost { slot["hostWindowID"] = slotHost.uuidString }
+                    // `rendered == false`: Der Chat ist Mitglied, sein Tab
+                    // gehört aber einem anderen Fenster — das Grid zeigt dort
+                    // den Übernahme-Platzhalter statt eines Terminals.
+                    slot["rendered"] = slotHost != nil && slotHost == hostWindowID
+                    slots.append(slot)
+                }
+
+                var dict: [String: Any] = [
+                    "id": ws.id.uuidString,
+                    "name": ws.name,
+                    "capacity": ws.capacity,
+                    "gridVisible": gridVisible,
+                    "slots": slots,
+                ]
+                dict["hostWindowID"] = hostWindowID?.uuidString ?? NSNull()
+                return dict
             }
         }
         return .success(requestID: request.requestID, result: .object(["workspaces": workspaces]))

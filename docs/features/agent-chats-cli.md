@@ -255,6 +255,54 @@ Kompatibilität: Additive Felder ändern das Schema nicht; Agenten MÜSSEN
 unbekannte Felder ignorieren. Entfernen, Umbenennen oder Umdeuten eines Feldes
 erzwingt `/2`. Cursor sind opak und nur innerhalb derselben Generation gültig.
 
+## Sichtbarkeit von Workspaces und Grid (nur lesend)
+
+`workspace list --json` und `window list --json` liefern zusätzlich, was ein
+Agent braucht, um vor einer Aussage zu **prüfen** statt zu **vermuten**:
+
+```jsonc
+// workspace list
+{"id":"…","name":"Recherche","capacity":4,          // unverändert
+ "hostWindowID":"3D41A097-…",   // null = keinem Fenster zugeordnet
+ "gridVisible":true,            // zeigt das Host-Fenster gerade das Grid?
+ "slots":[{"index":1,"sessionID":"…","ref":"c595df2e",
+           "title":"whisperm8/CLI","hostWindowID":"…","rendered":true},
+          {"index":2}]}         // leerer Slot: nur der Index
+
+// window list
+{"id":"…","isPrimary":true,"tabCount":11,"tabTitles":[…],  // unverändert
+ "selectedTitle":"…",
+ "showsGrid":false,             // Grid oder Einzelansicht
+ "activeWorkspaceID":"…","activeWorkspaceName":"Recherche"}
+```
+
+**Bewusst kein Feld `isVisible`.** `activeWorkspaceID` ist doppelt belegt: Es
+bezeichnet das aktive Grid **oder** nur das Rücksprungziel der Einzelansicht —
+`showSingleSession` lässt die Referenz stehen und setzt lediglich
+`showsGrid = false`. Ein einzelnes Sichtbarkeits-Flag würde diesen Zustand
+platt machen. „Logisch sichtbar" ist die UND-Verknüpfung
+`hostWindowID != nil && gridVisible`.
+
+**`rendered` ist nicht dasselbe wie „belegt".** Gehört der Slot-Chat als Tab
+einem anderen Fenster, wird er nicht materialisiert; das Grid zeigt dort den
+Übernahme-Platzhalter. Ohne dieses Feld behauptet ein Agent „A und B liegen
+nebeneinander", während der Nutzer „Läuft als Tab in einem anderen Fenster"
+sieht.
+
+**Grenzen, die kein Feld abbildet.** Der Store ist UI-Zustand, kein
+Fenster-Inventar:
+
+- Ein geschlossenes **Primärfenster** bleibt im Zustand erhalten (`removeWindow`
+  verweigert es dort) — `gridVisible` kann `true` melden, obwohl nichts auf dem
+  Bildschirm steht.
+- **Minimiert, verdeckt oder auf einem anderen Space** ist gar nicht abbildbar.
+- **Vordergrund/Fokus** wäre AppKit-Ebene; `keyAgentChatWindowID` wird bereits
+  beim App-Wechsel `nil` und taugt nicht als Beleg. Deshalb kein solches Feld.
+- Slot-Einträge werden erst bei Load/`flush` bereinigt; eine Slot-UUID ohne
+  lebende Session gilt daher **nicht** als belegt.
+
+Formulierungsregel für Agenten: „im Grid angeordnet", niemals „du siehst".
+
 ## wait
 
 `ChatsWaitEngine`: pro Transcript ein `DispatchSourceFileSystemObject`

@@ -52,14 +52,14 @@ whisperm8 chats close --others|--right <ref>         # alle anderen / rechts vom
 whisperm8 chats reopen                               # zuletzt geschlossenen Tab wiederherstellen
 whisperm8 chats pin <ref> [<ref>…] | unpin …         # Sidebar-Pin setzen/entfernen (idempotent)
 whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehendes Fenster (window list zeigt IDs)
-whisperm8 chats window list                          # Fenster-Inventar
+whisperm8 chats window list                          # Fenster-Inventar (+ showsGrid, activeWorkspace)
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
 whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"]
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
 whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
 whisperm8 chats unarchive <ref> [--resume|--open]    # NUR Markierung weg; Start nur via Flag
-whisperm8 chats workspace list                       # Grid-Workspaces (Sidebar-Sektion WORKSPACES)
+whisperm8 chats workspace list                       # Grid-Workspaces + Slots, hostWindowID, gridVisible
 whisperm8 chats workspace rename <name|id> "<neu>"   # Grid-Workspace umbenennen
 whisperm8 chats workspace add <name|id> <ref> [--slot N]    # Session in Grid-Slot aufnehmen
 whisperm8 chats workspace remove <name|id> <ref>     # nur Slot leeren — Tab/Prozess bleiben
@@ -176,7 +176,18 @@ unterbrochen.
 8. **Fehler sauber erklären:** Exit 4 → Konflikt benennen (z. B. „arbeitet
    gerade") + Optionen; Exit 5 → „WhisperM8-App starten", Lese-Befehle gehen
    weiter.
-9. **Stau erkennen statt erzwingen.** Nach einem `resume` und immer, wenn eine
+9. **Nie Sichtbarkeit behaupten.** Was der User auf dem Bildschirm sieht,
+   weiß die CLI NICHT. `workspace list --json` sagt nur, welchem Fenster ein
+   Workspace zugeordnet ist (`hostWindowID`) und ob dieses Fenster das Grid
+   zeigt (`gridVisible`) — beides zusammen heißt „logisch angeordnet", nicht
+   „sichtbar". Ein geschlossenes Hauptfenster meldet weiter `gridVisible`;
+   minimiert oder verdeckt ist gar nicht erkennbar. Ebenso: Ein belegter Slot
+   mit `rendered: false` zeigt im Grid nur einen Platzhalter, weil der Chat
+   als Tab in einem anderen Fenster lebt. Formuliere deshalb „X ist im Grid
+   angeordnet" oder „ich habe X nach vorn geholt" — **nie** „du siehst X".
+   Vor jeder Aussage über Ansichten: `workspace list --json` bzw.
+   `window list --json` lesen, nicht aus Tabs oder Status ableiten.
+10. **Stau erkennen statt erzwingen.** Nach einem `resume` und immer, wenn eine
    Queue nicht abfließt, zuerst `show <ref>` und `tail <ref> --turns 1` prüfen.
    Zeigt der Chat `working`, obwohl kein neuer Turn begonnen hat und das
    Transcript nicht wächst (`show` → Größe/Revision bleibt gleich), ist der

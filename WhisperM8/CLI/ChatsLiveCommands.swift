@@ -536,7 +536,8 @@ enum ChatsWindowCommand {
                     let titles = window["tabTitles"]?.arrayValue?.compactMap(\.stringValue) ?? []
                     let preview = titles.prefix(4).joined(separator: " · ")
                         + (titles.count > 4 ? " · …" : "")
-                    CLIIO.out("\(short)\(primary)  \(titles.count) Tabs  \(preview)")
+                    CLIIO.out("\(short)\(primary)  \(titles.count) Tabs  \(preview)"
+                              + ChatsWorkspaceViewSupport.windowSuffix(for: window))
                 }
             }
             return ChatsCLIExit.ok
@@ -886,7 +887,7 @@ enum ChatsWorkspaceCommand {
                     let name = ws["name"]?.stringValue ?? "?"
                     let id = ws["id"]?.stringValue ?? ""
                     let short = String(id.replacingOccurrences(of: "-", with: "").lowercased().prefix(8))
-                    CLIIO.out("\(short)  \(name)")
+                    CLIIO.out("\(short)  \(name)\(ChatsWorkspaceViewSupport.suffix(for: ws))")
                 }
             }
             return ChatsCLIExit.ok
