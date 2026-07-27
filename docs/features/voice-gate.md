@@ -1,3 +1,9 @@
+---
+status: in Review — offene Blocker, siehe „Bekannte Probleme"
+stand: 2026-07-27
+feature: Voice Gate / Codex Voice Agent
+---
+
 # Voice Gate — Codewort-Steuerung der Codex-Sprachsitzung
 
 Ein kurzes Codewort schaltet das Mikrofon der laufenden **Codex-Desktop-Sprachsitzung**
@@ -166,6 +172,22 @@ fehlendes Modell wäre dagegen ein harter Stopp.
 Die gewählte Locale steht beim Start im Log: `gate.locale=de_CH`. Fehlt jede
 Variante, meldet die Menüleiste, welche geprüft wurden.
 
+## Berechtigungen
+
+Drei Stück, und zwei davon fehlen einer frischen Installation:
+
+| Berechtigung | Wofür | Wann |
+|---|---|---|
+| Mikrofon | Listener-Tap | immer |
+| **Spracherkennung** | `SFSpeechRecognizer` | beim ersten Scharfschalten |
+| **Bedienungshilfen** | `CGEvent` an Codex senden | nur im scharfen Modus |
+
+Ohne Bedienungshilfen scheitert **jeder** Tastendruck (`CodexMuteToggler` wirft
+`accessibilityPermissionMissing`) — im Trockenlauf fällt das nicht auf, weil dort
+nie gedrückt wird.
+
+Dazu die lokalen Diktat-Sprachdaten: ohne sie startet der Listener nicht.
+
 ## Datenschutz
 
 Erkennung strikt **on-device** (`requiresOnDeviceRecognition`). Fehlen die
@@ -239,11 +261,48 @@ dass es ausgelöst hätte.
 Die zwei Blöcke werden getrennt gefahren; dadurch ist jede Auslösung im Soak
 per Definition ein Fehlalarm und braucht keine Interpretation.
 
+## Bekannte Probleme (Stand 2026-07-27, vor Freigabe zu klären)
+
+Drei unabhängige Reviews haben übereinstimmend Blocker gefunden. Sie sind
+**noch nicht behoben** — wer das Feature scharf schaltet, sollte sie kennen.
+
+1. **Eine einzige Äußerung hebt ihren eigenen Mute auf.** Teilergebnisse
+   wiederholen die Phrase, bis die Erkennungs-Task erneuert wird. Der zweite
+   Treffer wird übersprungen, der dritte gilt als Widerspruch und drückt erneut
+   — nach ~6 s ist das Mikrofon wieder offen, die Anzeige sagt „stumm".
+   Entprellt wird auf Wanduhrzeit statt auf der äußerungsrelativen Position,
+   die `VoiceGateMatch.at` bereits liefert. `VoiceGateCoordinator.swift:232`
+2. **Der verschmolzene Erkennungspfad umgeht beide Toleranzregeln.** Feste
+   `maxDistance: 1` über das Gesamttoken — damit greifen `hannapause`,
+   `annepause`, `annapausen` und `annawetter`, also genau die Fälle, die für
+   die getrennte Form per Test ausgeschlossen sind.
+   `VoiceGateCommandMatcher.swift:162`
+3. **Verwaister Listener.** `start()` läuft nicht auf dem MainActor und setzt
+   `isRunning` erst am Ende; ein Stop im falschen Moment verpufft, und das
+   Mikrofon bleibt belegt — entgegen der Zusage im Einstellungs-Tab.
+   `VoiceGateListener.swift:107/127/132`
+4. **Der Beobachter für Gerätewechsel überlebt nur einen.** Er filtert auf die
+   alte Engine, die beim Neubinden ersetzt wird. Ab dem zweiten Wechsel ist der
+   Listener stumm, ohne Fehler und ohne Log. `VoiceGateListener.swift:212-240`
+5. **Der Nachfass-Druck kann einen erfolgreichen Druck aufheben** und meldet
+   trotzdem Erfolg. Die Signatur ist nachweislich unzuverlässig; ihr Ausbleiben
+   als Beweis zu werten widerspricht dem eigenen Vorsatz in
+   `CodexCommandExecutionProbe.swift:14-16`.
+
+Kleinere, ebenfalls offen: Datenrennen auf `engine`/`recognizer`/`isRunning`
+(die Sperre deckt nur `request`/`task`), Mitternachtswechsel im Log-Ordner,
+`readTail` verwirft bei zerschnittenem UTF-8 den ganzen Puffer, Diktat-Pause
+hängt am 10-s-Poll.
+
 ## Kill-Switch
 
 ```bash
 defaults write com.whisperm8.app codexVoiceGateEnabled -bool NO
 ```
+
+**Achtung:** Das Flag wird nur beim App-Start gelesen — eine *laufende* Instanz
+stoppt es nicht. Sofort wirkt allein der Schalter im Einstellungs-Tab
+(`VoiceGateCoordinator.setEnabled`).
 
 ## Dateien
 
@@ -253,4 +312,8 @@ defaults write com.whisperm8.app codexVoiceGateEnabled -bool NO
 - `WhisperM8/Services/VoiceGate/VoiceGateListener.swift` — Audio + On-Device-Erkennung
 - `WhisperM8/Services/VoiceGate/VoiceGateCoordinator.swift` — Verdrahtung
 - `WhisperM8/Views/VoiceGateMenuSection.swift` — Menüleiste
-- `Tests/WhisperM8Tests/CodexVoiceGateTests.swift` — 27 Tests der reinen Logik
+- `WhisperM8/Services/VoiceGate/CodexMuteToggler.swift` — Fokus-Roundtrip + CGEvent
+- `WhisperM8/Services/VoiceGate/CodexCommandExecutionProbe.swift` — Ausführungs-Bestätigung
+- `WhisperM8/Services/VoiceGate/VoiceGateLocaleResolver.swift` — Regionalvarianten
+- `WhisperM8/Views/Settings/Pages/AgentChatsVoiceAgentTab.swift` — Einstellungs-Tab
+- `Tests/WhisperM8Tests/CodexVoiceGateTests.swift` — 47 Tests der reinen Logik

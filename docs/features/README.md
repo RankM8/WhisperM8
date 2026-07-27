@@ -17,6 +17,15 @@ Die Doku ist in **fünf Bereiche** organisiert — die vier Produkt-Säulen der 
 | [`settings/`](settings/) | Einstellungen: 10-Seiten-Struktur, Settings-Kit, Routing | — |
 | [`app-shell/`](app-shell/) | App-Hülle: Profile (Dock/MenuBar), Onboarding, Menüleiste, Updates, Fenster-Routing | — |
 
+## Einzeldokumente
+
+Features, die quer zu den Säulen liegen und (noch) keinen eigenen Unterordner haben:
+
+| Dokument | Inhalt |
+|---|---|
+| [`agent-chats-cli.md`](agent-chats-cli.md) | `whisperm8 chats` — Agent-Sessions aus einem Chat heraus sehen und steuern |
+| [`voice-gate.md`](voice-gate.md) | Codewort-Steuerung der Codex-Sprachsitzung („Codex Voice Agent") |
+
 ## Konventionen
 
 - **Fachlich vor codezeilengetrieben:** Schlüsseldateien werden als *Pfad + Rolle* genannt, ohne Zeilennummern.
