@@ -7,6 +7,9 @@ struct MenuBarView: View {
     /// Geteilte Registry der laufenden Vordergrund-PTYs — liefert die Anzahl
     /// für den "Stop all"-Eintrag und triggert dessen Sichtbarkeit.
     @ObservedObject private var terminalRegistry = AgentTerminalRegistry.shared
+    /// Voice Gate (Codewort-Steuerung der Codex-Sprachsitzung). Der Abschnitt
+    /// erscheint nur, wenn das Feature eingeschaltet ist.
+    @State private var voiceGate = VoiceGateCoordinator.shared
 
     var body: some View {
         Group {
@@ -83,6 +86,11 @@ struct MenuBarView: View {
         }
         .onAppear {
             deviceManager.refreshDevices()
+        }
+
+        if voiceGate.isEnabled {
+            Divider()
+            VoiceGateMenuSection(gate: voiceGate)
         }
 
         Divider()

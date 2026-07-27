@@ -19,6 +19,11 @@ enum Logger {
     static let claudeBinding = os.Logger(subsystem: subsystem, category: "claude.binding")
     static let claudeRecovery = os.Logger(subsystem: subsystem, category: "claude.recovery")
     static let claudeGPTRouter = os.Logger(subsystem: subsystem, category: "claude.gpt-router")
+    /// Codewort-Steuerung der Codex-Sprachsitzung („Jarvis Pause"/„Jarvis weiter").
+    /// Im Trockenlauf die Beobachtungsquelle — Filter im `log stream` mit
+    /// `category == "voice.gate"`. Enthaelt bewusst KEINE Transkripte, nur
+    /// Klassifikation, Konfidenz und Entscheidung.
+    static let voiceGate = os.Logger(subsystem: subsystem, category: "voice.gate")
 
     // MARK: - Optional File Logging
 

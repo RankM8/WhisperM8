@@ -366,6 +366,65 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentEventDrivenWatchEnabled) }
     }
 
+    // MARK: - Voice Gate (Codewort-Steuerung der Codex-Sprachsitzung)
+
+    /// Opt-in, Default AUS. Schaltet den mithoerenden On-Device-Listener frei:
+    /// `defaults write com.whisperm8.app codexVoiceGateEnabled -bool YES`
+    var isCodexVoiceGateEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.codexVoiceGateEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateEnabled) }
+    }
+
+    /// Trockenlauf, Default AN. In Phase 1 existiert ohnehin kein Code, der
+    /// eine Taste drueckt — das Flag ist die Absicherung fuer Phase 2:
+    /// `defaults write com.whisperm8.app codexVoiceGateDryRun -bool NO`
+    var isCodexVoiceGateDryRun: Bool {
+        get { boolWithDefault(true, forKey: Keys.codexVoiceGateDryRun) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateDryRun) }
+    }
+
+    /// Kurzer Ton, wenn das Codewort greift. Im Trockenlauf wichtig: nur so
+    /// faellt im Moment des Geschehens auf, dass es ausgeloest haette.
+    var isCodexVoiceGateSoundEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.codexVoiceGateSoundEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateSoundEnabled) }
+    }
+
+    var codexVoiceGateSoundName: String {
+        get { defaults.string(forKey: Keys.codexVoiceGateSoundName) ?? "Tink" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateSoundName) }
+    }
+
+    /// Traegerwort. Leer oder nur Leerzeichen faellt auf den Default zurueck —
+    /// ein leeres Vokabular wuerde entweder nie oder staendig ausloesen.
+    var codexVoiceGateCarrier: String {
+        get { nonEmpty(Keys.codexVoiceGateCarrier, default: VoiceGateVocabulary.default.carrier) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateCarrier) }
+    }
+
+    var codexVoiceGateMuteWord: String {
+        get { nonEmpty(Keys.codexVoiceGateMuteWord, default: VoiceGateVocabulary.default.muteCommand) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateMuteWord) }
+    }
+
+    var codexVoiceGateUnmuteWord: String {
+        get { nonEmpty(Keys.codexVoiceGateUnmuteWord, default: VoiceGateVocabulary.default.unmuteCommand) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateUnmuteWord) }
+    }
+
+    /// Schreibt die ERKANNTEN WÖRTER ins Log — nur zur Fehlersuche, Default aus.
+    /// Ohne das ist bei „mein Codewort greift nicht" nicht unterscheidbar, ob
+    /// der Erkenner etwas anderes verstanden hat oder die Regel zuschlug.
+    var isCodexVoiceGateVerboseLoggingEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.codexVoiceGateVerboseLogging) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexVoiceGateVerboseLogging) }
+    }
+
+    private func nonEmpty(_ key: String, default fallback: String) -> String {
+        let raw = (defaults.string(forKey: key) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? fallback : raw
+    }
+
     /// Escape-Hatch für Drag & Drop in der Agent-Chats-Sidebar. Der Mai-2026
     /// Scroll-Haenger (`.draggable` + `LazyVStack`, gefixt in 60ca683) ist
     /// durch den nicht-lazy `VStack` behoben — falls er in anderer Form
@@ -520,6 +579,14 @@ enum PreferenceKeys {
     static let agentStopNotificationEnabled = "agentStopNotificationEnabled"
     static let agentAwaitingNotificationEnabled = "agentAwaitingNotificationEnabled"
     static let updateCheckEnabled = "updateCheckEnabled"
+    static let codexVoiceGateEnabled = "codexVoiceGateEnabled"
+    static let codexVoiceGateDryRun = "codexVoiceGateDryRun"
+    static let codexVoiceGateSoundEnabled = "codexVoiceGateSoundEnabled"
+    static let codexVoiceGateSoundName = "codexVoiceGateSoundName"
+    static let codexVoiceGateCarrier = "codexVoiceGateCarrier"
+    static let codexVoiceGateMuteWord = "codexVoiceGateMuteWord"
+    static let codexVoiceGateUnmuteWord = "codexVoiceGateUnmuteWord"
+    static let codexVoiceGateVerboseLogging = "codexVoiceGateVerboseLogging"
 }
 
 private typealias Keys = PreferenceKeys

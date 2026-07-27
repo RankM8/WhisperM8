@@ -8,6 +8,7 @@ import UserNotifications
 enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
     case workspace
     case notifications
+    case voiceAgent
     case advanced
 
     var title: String {
@@ -16,6 +17,8 @@ enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
             return "Workspace"
         case .notifications:
             return "Notifications"
+        case .voiceAgent:
+            return "Codex Voice Agent"
         case .advanced:
             return "Advanced"
         }
@@ -52,6 +55,8 @@ struct AgentChatsSettingsPage: View {
             AgentChatsWorkspaceSettingsTab()
         case .notifications:
             AgentChatsNotificationsSettingsTab()
+        case .voiceAgent:
+            AgentChatsVoiceAgentTab()
         case .advanced:
             AgentChatsAdvancedSettingsTab()
         }

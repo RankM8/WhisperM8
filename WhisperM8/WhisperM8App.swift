@@ -296,6 +296,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // + Launch/Foreground-Sync — spiegelt Jobs als .subagentJob-Sessions
         // in den Workspace und pflegt Status/Zähler/Unread.
         AgentJobWorkspaceSync.shared.start()
+        // Voice Gate (Phase 1, Trockenlauf): On-Device-Codewort-Erkennung für
+        // die Codex-Sprachsitzung. Opt-in, Default aus; startet den Listener
+        // nur, solange eine Codex-Voice-Session plausibel läuft. Kill-Switch:
+        // `defaults write com.whisperm8.app codexVoiceGateEnabled -bool NO`.
+        VoiceGateCoordinator.shared.start()
         // T4: Summary-Abgleich für die beim letzten Lauf offenen Tabs
         // (gedeckelt + seriell; Digest-Guard überspringt Unverändertes).
         AgentSessionSummarizer.shared.runStartupReconciliation(
