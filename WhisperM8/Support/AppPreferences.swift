@@ -349,13 +349,53 @@ struct AppPreferences {
         }
     }
 
-    /// Opt-in für SwiftTerms Metal-GPU-Renderer (P6, Default: aus — erst
-    /// benchmarken, die CPU-Parser-Gewinne aus SwiftTerm 1.9–1.11 sind
-    /// bereits ohne Metal enthalten). Einschalten:
+    /// SwiftTerms Metal-GPU-Renderer — **Opt-in, Default aus**.
+    ///
+    /// Die Sicherheitsgründe von früher sind mit SwiftTerm 1.15 weg: der
+    /// Renderer brach in einer gepackten .app beim Laden der Shader den ganzen
+    /// Prozess ab (#593) und sein Buffer-Pool wuchs bei stetig wechselndem
+    /// Inhalt unbegrenzt (#598). Beides behoben, der Rückfall auf die
+    /// CPU-Darstellung ist ein sauberer `throw`.
+    ///
+    /// Trotzdem aus, aus einem anderen Grund: **das Schriftbild leidet
+    /// sichtbar** (Feldtest 01.08.2026 — „low resolution"). Nicht die
+    /// Auflösung, die stimmt (`scaledFontFor(font:scale:)` rastert in
+    /// Retina-Größe), sondern vermutlich das auf transparentem Grund
+    /// rasternde Font-Smoothing (`_fontSmoothing = true`) und die
+    /// Pixel-Rundung der Glyph-Positionen (`alignToPixel`). Der Gewinn ist
+    /// dagegen unbelegt — es gibt bis heute keine A/B-Messung.
+    ///
+    /// Etwas Sichtbares gegen etwas Unbelegtes zu tauschen ist ein schlechter
+    /// Handel; Metal kommt zurück, wenn das Messgerüst (Paket A4) einen
+    /// Gewinn zeigt UND die Darstellung stimmt. Einschalten zum Vergleichen:
     /// `defaults write com.whisperm8.app agentTerminalMetalEnabled -bool YES`
+    /// (wirkt nach App-Neustart, der Wert wird einmal pro Prozess gelesen).
     var isAgentTerminalMetalRendererEnabled: Bool {
         get { boolWithDefault(false, forKey: Keys.agentTerminalMetalEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.agentTerminalMetalEnabled) }
+    }
+
+    /// Detail-Messung für Performance-Untersuchungen — **Opt-in, Default aus**.
+    ///
+    /// Aus heißt nicht „keine Messung": die Stufe-1-Messpunkte
+    /// (`PerfBudgets`, Tier `.always`) laufen immer mit. Sie sitzen
+    /// ausschließlich an seltenen Ereignissen — Klick, Fensterwechsel,
+    /// Speichervorgang, gebündelter Terminal-Flush — und kosten damit unter
+    /// 0,01 % CPU. Genau sie liefern im Alltag die
+    /// `perf_budget_exceeded`-Warnungen.
+    ///
+    /// Diese Preference schaltet Stufe 2 dazu: dichtere Messpunkte und die
+    /// periodische Zähler-Ausgabe für eine Baseline-Aufnahme. Gemessen
+    /// (01.08.2026, M-Serie) kostet **ein** os_signpost-Intervall ~686 ns —
+    /// auch ohne laufendes Instruments, denn `OSSignposter.isEnabled` ist auf
+    /// macOS immer `true`. Bei ein paar hundert Ereignissen pro Sekunde ist
+    /// das nichts, bei zehntausenden wären es Prozente. Deshalb die Trennung.
+    ///
+    /// `defaults write com.whisperm8.app agentPerfDetailEnabled -bool YES`
+    /// (wirkt nach App-Neustart, wird einmal pro Prozess gelesen).
+    var isAgentPerfDetailEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.agentPerfDetailEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentPerfDetailEnabled) }
     }
 
     /// Kill-Switch für das event-getriebene Transcript-Watching (P2). Bei
@@ -605,6 +645,7 @@ enum PreferenceKeys {
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
+    static let agentPerfDetailEnabled = "agentPerfDetailEnabled"
     static let agentStopSoundEnabled = "agentStopSoundEnabled"
     static let agentStopSoundName = "agentStopSoundName"
     static let claudeHooksEnabled = "claudeHooksEnabled"

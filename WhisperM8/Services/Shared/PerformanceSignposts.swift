@@ -14,6 +14,38 @@ enum PerfSignposts {
     static let grid = OSSignposter(subsystem: subsystem, category: "perf.grid")
 }
 
+/// Wie dicht ein Messpunkt sitzt — und damit, ob er im Normalbetrieb mitläuft.
+///
+/// **Warum es diese Unterscheidung gibt (gemessen 01.08.2026, M-Serie):** Ein
+/// os_signpost-Intervall (`begin` + `end`) kostet **~686 ns**, und zwar immer.
+/// `OSSignposter.isEnabled` ist auf macOS dauerhaft `true` — die Daten laufen
+/// in den Ringpuffer des Systems, auch ohne laufendes Instruments. Ein
+/// `guard isEnabled` bringt exakt nichts (683 vs. 686 ns). Die Zeitmessung via
+/// `Date()` ist mit 61 ns dagegen der billige Teil; sie zu optimieren wäre
+/// Beschäftigungstherapie.
+///
+/// Die Kosten skalieren also allein mit der **Dichte**:
+/// 100 Messpunkte/s ≈ 0,007 %, 10.000/s ≈ 0,7 %, 100.000/s ≈ 7 % CPU.
+///
+/// **Harte Regel: niemals pro Byte, pro Zeichen oder pro Zeile messen.** Dort
+/// gehören Zähler hin (`PerfCounters`, ~1 ns pro Ereignis), die einmal pro
+/// Sekunde aggregiert ausgegeben werden — aus 10.000 Messpunkten wird einer.
+enum PerfTier {
+    /// Sitzt an einem von Natur aus seltenen Ereignis (Klick, Fensterwechsel,
+    /// Speichervorgang, gebündelter Flush). Läuft immer mit.
+    case always
+    /// Dichter oder nur für Untersuchungen interessant. Läuft nur bei
+    /// `defaults write com.whisperm8.app agentPerfDetailEnabled -bool YES`.
+    case detail
+}
+
+/// Prozessweites Gate für die Detail-Stufe. Einmal gelesen — Umschalten
+/// erfordert einen App-Neustart, genau wie beim Metal-Schalter.
+enum PerfDetailGate {
+    /// Überschreibbar für Tests; im Produktivbetrieb aus den Preferences.
+    nonisolated(unsafe) static var isEnabled: Bool = AppPreferences.shared.isAgentPerfDetailEnabled
+}
+
 /// Budget-Überwachung um ein os_signpost-Intervall: misst die Dauer, emittiert
 /// Begin/End für Instruments und loggt eine Warnung, wenn das Budget gerissen
 /// wird.
@@ -30,27 +62,45 @@ enum PerfSignposts {
 struct PerformanceBudget {
     /// Token einer laufenden Messung. Referenztyp, damit `end` die Messung
     /// idempotent abschließen kann.
+    ///
+    /// `state == nil` heißt: abgeschalteter Detail-Messpunkt. Dann entfällt
+    /// auch die Zeitmessung, der Token ist eine leere Hülle und `end` kehrt
+    /// sofort zurück.
     final class Token {
-        fileprivate let state: OSSignpostIntervalState
-        fileprivate let startedAt: Date
+        fileprivate let state: OSSignpostIntervalState?
+        fileprivate let startedAt: Date?
         fileprivate var ended = false
 
-        fileprivate init(state: OSSignpostIntervalState, startedAt: Date) {
+        fileprivate init(state: OSSignpostIntervalState?, startedAt: Date?) {
             self.state = state
             self.startedAt = startedAt
         }
+
+        /// Token eines abgeschalteten Detail-Messpunkts.
+        fileprivate static var inactive: Token { Token(state: nil, startedAt: nil) }
     }
 
     let name: StaticString
     /// Budget in Sekunden. Startwerte — nach Realdaten-Abgleich nachziehen.
     let budget: TimeInterval
     let signposter: OSSignposter
+    /// Messdichte-Stufe. Default `.always`, damit bestehende Messpunkte sich
+    /// nicht ändern; neue dichte Messpunkte müssen `.detail` explizit setzen.
+    var tier: PerfTier = .always
     /// Test-Hook: deterministische Uhr.
     var now: () -> Date = Date.init
     /// Test-Hook: ersetzt das Default-Logging. Parameter: Name, gemessene Dauer.
     var onViolation: ((String, TimeInterval) -> Void)?
 
+    /// `false`, wenn dieser Messpunkt zur Detail-Stufe gehört und die
+    /// abgeschaltet ist. Öffentlich, damit Aufrufer teure Vorbereitung
+    /// (Zählen, Zusammenstellen von Werten) davon abhängig machen können.
+    var isActive: Bool {
+        tier == .always || PerfDetailGate.isEnabled
+    }
+
     func begin() -> Token {
+        guard isActive else { return .inactive }
         let state = signposter.beginInterval(name, id: signposter.makeSignpostID())
         return Token(state: state, startedAt: now())
     }
@@ -58,9 +108,10 @@ struct PerformanceBudget {
     func end(_ token: Token) {
         guard !token.ended else { return }
         token.ended = true
-        signposter.endInterval(name, token.state)
+        guard let state = token.state, let startedAt = token.startedAt else { return }
+        signposter.endInterval(name, state)
 
-        let duration = now().timeIntervalSince(token.startedAt)
+        let duration = now().timeIntervalSince(startedAt)
         guard duration > budget else { return }
         if let onViolation {
             onViolation("\(name)", duration)
@@ -78,7 +129,8 @@ struct PerformanceBudget {
     func cancel(_ token: Token) {
         guard !token.ended else { return }
         token.ended = true
-        signposter.endInterval(name, token.state)
+        guard let state = token.state else { return }
+        signposter.endInterval(name, state)
     }
 
     func withInterval<T>(_ body: () throws -> T) rethrows -> T {

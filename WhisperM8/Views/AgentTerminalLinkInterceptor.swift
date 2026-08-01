@@ -1,22 +1,32 @@
 import AppKit
 import SwiftTerm
 
-/// Fängt SwiftTerms Link-Klicks ab, ohne den Rest des Terminals zu stören.
+/// Fängt SwiftTerms Link-Klicks ab, ohne den Rest des Terminals zu stören —
+/// und verweigert TUIs das LESEN der Zwischenablage.
 ///
 /// **Warum nötig:** `LocalProcessTerminalView` macht sich in `setup()` selbst
 /// zum `terminalDelegate` und reicht nur Prozess-relevante Callbacks
 /// (`sizeChanged`/`setTerminalTitle`/`hostCurrentDirectoryUpdate`/
 /// `processTerminated`) an den `processDelegate` weiter — **`requestOpenLink`
-/// gehört nicht dazu** und ist auch nicht als `open`-Klassenmethode
-/// überschreibbar (nur Protocol-Extension-Default, der `URL(string:) +
-/// NSWorkspace.open` macht und bei schemelosen Dateipfaden mit `-50` scheitert).
-/// Ein Override auf dem `processDelegate` wird deshalb nie aufgerufen.
+/// gehört nicht dazu**. Ein Override auf dem `processDelegate` wird deshalb nie
+/// aufgerufen, und der Protocol-Extension-Default macht `URL(string:) +
+/// NSWorkspace.open`, was bei schemelosen Dateipfaden mit `-50` scheitert.
 ///
 /// **Lösung (von SwiftTerm dokumentiert):** den `terminalDelegate` ersetzen und
 /// „proxy the values" — alles unverändert an die Basis weiterreichen, nur
 /// `requestOpenLink` selbst behandeln. Die Basis-Methoden werden per dynamischer
 /// Dispatch aufgerufen, sodass die Overrides der `QuietableTerminalView`
 /// (z. B. der Scroll-Lock in `scrolled(source:position:)`) erhalten bleiben.
+///
+/// **Warum der Proxy trotz SwiftTerm 1.15 bleibt:** Upstream-PR #599 hat
+/// `requestOpenLink` inzwischen als `open` auf `LocalProcessTerminalView`
+/// nachgereicht — der ursprüngliche Grund ist damit weg, ein Override in
+/// `QuietableTerminalView` täte es. Der zweite Grund bleibt und wiegt schwerer:
+/// `clipboardRead` (`MacLocalTerminalView.swift`) gibt jeder TUI den Klartext
+/// der Zwischenablage und ist `public`, nicht `open` — per Subclass also NICHT
+/// überschreibbar. Nur als eigenständiger Delegate lässt sich der Zugriff
+/// abweisen. Wer den Proxy „vereinfacht", öffnet damit still das Auslesen von
+/// Passwörtern aus der Zwischenablage.
 @MainActor
 final class AgentTerminalLinkInterceptor: @preconcurrency TerminalViewDelegate {
     private weak var base: LocalProcessTerminalView?

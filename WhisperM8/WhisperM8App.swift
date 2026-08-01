@@ -245,6 +245,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             AppUpdateChecker.shared.scheduleAutomaticChecks()
         }
 
+        // Metals Shader-Cache vorwärmen, damit der erste Chat nicht die
+        // einmalige Shader-Übersetzung auf dem Main Thread bezahlt (Messung und
+        // Begründung in `TerminalMetalWarmup`). Läuft nur bei aktivem Metal —
+        // das ist Opt-in, siehe AppPreferences.
+        TerminalMetalWarmup.warmUpIfNeeded()
+
+        // Stillstands-Wächter: meldet, wenn der Main Thread nicht mehr
+        // reagiert — unabhängig davon, wer ihn blockiert. Kostet zehn
+        // Timer-Ticks pro Sekunde und läuft deshalb immer mit.
+        MainThreadStallMonitor.shared.start()
+        // Ereignis-Zähler für die dichten Pfade — no-op, solange
+        // `agentPerfDetailEnabled` aus ist (Default).
+        PerformanceCounters.shared.startIfEnabled()
+
         // Claude-Code-Theme einmalig synchron mit unserem aufgelösten
         // Color-Scheme — falls der User WhisperM8 nach einem manuellen
         // `/theme dark` in Claude öffnet, ziehen wir das passend nach.

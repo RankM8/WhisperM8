@@ -1,0 +1,299 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workspace-Layout — Performance-Plan</title>
+<style>
+  :root{
+    --papier:#faf8f4; --papier-tief:#f3efe7;
+    --tinte:#211f1c; --tinte-weich:#4a453e; --tinte-matt:#7d766b;
+    --linie:#e0d9cc; --linie-stark:#c9c0ae;
+    --akzent:#c2410c; --moos:#3f6212; --ozean:#0e5c6b; --bernstein:#a16207; --rot:#9f1239;
+    --serif:"Iowan Old Style","Palatino",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--papier);color:var(--tinte);font:15px/1.65 var(--sans);}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px;}
+
+  nav.top{position:sticky;top:0;z-index:10;background:rgb(250 248 244/94%);
+    border-bottom:1px solid var(--linie);backdrop-filter:blur(8px);}
+  nav.top .wrap{display:flex;align-items:center;gap:22px;height:52px;}
+  nav.top .marke{font:600 14px var(--sans);letter-spacing:-.01em;}
+  nav.top a{color:var(--tinte-matt);text-decoration:none;font-size:12.5px;}
+  nav.top a:hover,nav.top a.an{color:var(--akzent);}
+  nav.top .stempel{margin-left:auto;font:11px var(--mono);color:var(--tinte-matt);}
+
+  header.hero{padding:56px 0 40px;border-bottom:1px solid var(--linie);}
+  h1{font:400 44px/1.1 var(--serif);letter-spacing:-.02em;margin-bottom:14px;}
+  h1 em{font-style:italic;color:var(--akzent);}
+  .lede{font:18px/1.6 var(--serif);color:var(--tinte-weich);max-width:660px;}
+  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--linie);
+    border:1px solid var(--linie);margin-top:34px;}
+  .meta div{background:var(--papier);padding:14px 16px;}
+  .meta .l{font:600 10px var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--tinte-matt);}
+  .meta .v{font:15px var(--sans);margin-top:5px;}
+
+  section{padding:46px 0;border-bottom:1px solid var(--linie);}
+  h2{font:400 30px/1.15 var(--serif);margin-bottom:8px;}
+  h2 em{font-style:italic;color:var(--akzent);}
+  h3{font:600 15px var(--sans);margin:26px 0 8px;}
+  .sub{color:var(--tinte-matt);font-size:13.5px;margin-bottom:24px;}
+  p{margin-bottom:13px;color:var(--tinte-weich);}
+  p strong,li strong{color:var(--tinte);font-weight:600;}
+  code{font:12.5px var(--mono);background:var(--papier-tief);padding:1px 5px;border-radius:3px;color:var(--akzent);}
+
+  .budget{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px;}
+  .budget th{text-align:left;font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;
+    color:var(--tinte-matt);border-bottom:1.5px solid var(--linie-stark);padding:8px 10px;}
+  .budget td{border-bottom:1px solid var(--linie);padding:9px 10px;vertical-align:top;color:var(--tinte-weich);}
+  .budget td:first-child{font:12.5px var(--mono);color:var(--tinte);white-space:nowrap;}
+  .budget td.zahl{font:600 13px var(--mono);color:var(--moos);white-space:nowrap;}
+  .budget td.zahl.hart{color:var(--rot);}
+
+  .karten{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px;}
+  .karte{border:1px solid var(--linie);background:#fff;padding:20px;text-decoration:none;color:inherit;
+    display:block;transition:border-color 140ms ease,transform 140ms ease;}
+  .karte:hover{border-color:var(--akzent);transform:translateY(-2px);}
+  .karte .nr{font:italic 300 26px var(--serif);color:var(--linie-stark);float:right;}
+  .karte h3{margin:0 0 6px;font-size:17px;font-family:var(--serif);font-weight:400;}
+  .karte h3 em{font-style:italic;color:var(--akzent);}
+  .karte p{font-size:13px;margin-bottom:12px;}
+  .karte ul{list-style:none;border-top:1px dashed var(--linie);padding-top:10px;}
+  .karte li{font:12px var(--mono);color:var(--tinte-matt);padding:2.5px 0;}
+  .karte li::before{content:"› ";color:var(--akzent);}
+  .karte .pfeil{margin-top:12px;font-size:13px;color:var(--akzent);}
+
+  .risiko{display:grid;grid-template-columns:auto 1fr auto;gap:0;border:1px solid var(--linie);margin-top:8px;}
+  .risiko > div{padding:11px 13px;border-bottom:1px solid var(--linie);font-size:13.5px;}
+  .risiko > div:nth-child(3n+1){font:600 12px var(--mono);color:var(--tinte-matt);background:var(--papier-tief);white-space:nowrap;}
+  .risiko > div:nth-child(3n+3){font:600 11px var(--sans);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;}
+  .hoch{color:var(--rot);} .mittel{color:var(--bernstein);} .klein{color:var(--moos);}
+
+  .warn{border-left:3px solid var(--akzent);background:#fff;padding:16px 18px;margin:22px 0;}
+  .warn .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--akzent);margin-bottom:6px;}
+  .zitat{font:italic 15px/1.6 var(--serif);color:var(--tinte-weich);border-left:2px solid var(--linie-stark);
+    padding-left:16px;margin:14px 0;}
+
+  .phasen{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--linie);
+    border:1px solid var(--linie);margin-top:20px;}
+  .phase{background:#fff;padding:16px;}
+  .phase .n{font:600 10px var(--sans);letter-spacing:.08em;color:var(--akzent);}
+  .phase h4{font:600 14px var(--sans);margin:5px 0 7px;}
+  .phase p{font-size:12.5px;margin:0;}
+  .phase .dauer{font:11px var(--mono);color:var(--tinte-matt);margin-top:9px;display:block;}
+
+  footer{padding:34px 0 60px;color:var(--tinte-matt);font-size:12.5px;}
+  @media (max-width:820px){.karten,.meta,.phasen{grid-template-columns:1fr;}}
+</style>
+
+<nav class="top"><div class="wrap">
+  <span class="marke">Workspace-Layout · Performance</span>
+  <a href="#warum">Warum</a><a href="#neu">Erkenntnisse</a><a href="#budgets">Budgets</a>
+  <a href="#pakete">Pakete</a><a href="#risiken">Risiken</a><a href="#fahrplan">Fahrplan</a>
+  <span class="stempel">Stand 01.08.2026 · Paket 04: A2 umgesetzt, A1 zurückgenommen, Rest Plan</span>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Neun Terminals, ein Raster, <em>kein Ruckeln</em></h1>
+  <p class="lede">Die neue Layout-Engine soll Panes frei anordnen, stapeln, tauschen und zoomen — während
+  darunter bis zu neun echte PTY-Prozesse Text ausspucken. Dieser Plan beantwortet die einzige Frage,
+  die dabei zählt: Wo geht die Zeit hin, und welche Grenze darf sie nicht überschreiten?</p>
+  <div class="meta">
+    <div><span class="l">Grundlage</span><span class="v">HTML-Zwilling + Code-Analyse</span></div>
+    <div><span class="l">Leitbudget</span><span class="v">16,7 ms pro Frame</span></div>
+    <div><span class="l">Status</span><span class="v">Planung — nichts implementiert</span></div>
+  </div>
+</div></header>
+
+<section id="warum"><div class="wrap">
+  <h2>Warum die Sorge <em>berechtigt</em> ist</h2>
+  <p class="sub">Drei Code-Analysen, jede mit Belegstellen im Repo.</p>
+
+  <p>Das ist keine theoretische Befürchtung. Im eigenen Audit steht bereits dokumentiert, was beim
+  letzten Mal passiert ist — Render-Sturm mit Vollpässen, und bis zu <strong>neun Hit-Tests pro
+  Scroll-Event</strong>, weil jeder PTY seinen eigenen globalen Event-Monitor hatte.</p>
+
+  <p>Die aktuelle Analyse findet vier Stellen, an denen der geplante Umbau genau dort wieder
+  hineinlaufen würde:</p>
+
+  <h3>1 — Die Invalidierungsdomäne ist zu groß</h3>
+  <p><code>AgentChatsView</code> liest den gesamten Workspace aus <em>einer</em> beobachteten Property,
+  den gesamten Fensterzustand aus einer weiteren. Jede relevante Mutation kann den großen Root-Body
+  invalidieren. Ein Diff-Gate im WindowStore existiert inzwischen, die grobe Beobachtungs-Granularität
+  bleibt.</p>
+
+  <h3>2 — Pro Body wird O(n)-Arbeit wiederholt</h3>
+  <p>Jeder Grid-Body baut ein Dictionary über <em>alle</em> Sessions; jede Pane sucht ihr Projekt linear
+  und ermittelt den Fokus über eine Suche, die erneut alle Sessions scannt. Bei neun Panes ist das
+  neunfach vergebliche Arbeit.</p>
+
+  <h3>3 — Identität hängt am Strukturpfad</h3>
+  <p>Das heutige Grid ist verschachteltes <code>VStack/HStack/ForEach</code> mit Index-IDs plus einem
+  Sonderast für „2+1". Ein Layoutwechsel oder ein Session-Tausch ändert den Elternpfad — und damit
+  droht genau das, was nie passieren darf: <strong>ein Re-Mount des PTY-Hosts</strong>. Der
+  AppKit-Container heilt das heute nachträglich, verhindert den SwiftUI-Re-Mount aber nicht.</p>
+
+  <h3>4 — Der Terminal-Feed skaliert nicht linear</h3>
+  <p>Heute läuft die Fokus-Pane <strong>ungepuffert</strong> direkt in den Emulator, alle anderen
+  gebatcht. Nominell 80 ms — real 80 bis 144 ms, weil jeder neu geplante Timer eine Phase addiert.
+  Bei neun Panes konkurrieren acht gedrosselte Ströme und ein ungedrosselter um denselben Main Thread,
+  und es gibt nur fünf Phasenlagen: <strong>Kollisionen sind bei acht Panes sicher</strong>.</p>
+
+  <div class="warn">
+    <div class="t">Befund mit direkter Folge fürs Stapel-Konzept</div>
+    <p style="margin:0">Verlässt eine Session heute das sichtbare Grid, wird sie <strong>explizit
+    entdrosselt</strong>. Ein gestapelter, unsichtbarer Chat wäre damit ausgerechnet der teuerste:
+    voller Main-Thread-Feed für etwas, das niemand sieht. Das Stapeln aus dem Prototyp braucht also
+    zwingend eine eigene Priorität, sonst wird das Feature zum Performance-Loch.</p>
+  </div>
+</div></section>
+
+<section id="neu"><div class="wrap">
+  <h2>Was die Recherche <em>ergänzt</em> hat</h2>
+  <p class="sub">Vier Befunde vom 01.08.2026 — sie verändern die Bewertung gegenüber der ersten Fassung.</p>
+
+  <h3>Ghostty ist den Weg schon gegangen</h3>
+  <p>Ghostty war ursprünglich „all-in auf SwiftUI" gebaut und hat die Split-Logik später bewusst nach
+  AppKit verlagert (<a href="https://github.com/ghostty-org/ghostty/pull/7523">PR #7523</a>) — SwiftUI
+  arrangiert weiter, AppKit hält Daten und Logik. Das Datenmodell dort ist ein immutabler Split-Baum
+  mit Copy-on-Write, also genau das, was hier geplant ist. <strong>SwiftUI ist damit nicht
+  disqualifiziert</strong> — SwiftUI als Besitzer der Terminal-Lebensdauer wäre es.</p>
+
+  <h3>Der Flaschenhals heißt SwiftTerm, nicht SwiftUI</h3>
+  <p>Der Maintainer führt ein offenes Issue
+  (<a href="https://github.com/migueldeicaza/SwiftTerm/issues/137">#137</a>): Parsing und Rendering sind
+  gekoppelt; bei zu viel Daten in <code>parse</code> bleibt das Display-Update aus. Das ist die Ursache
+  von „viel Output → alles klebt" — ein Upstream-Thema, kein Fehler im eigenen Code.</p>
+
+  <h3>Der GPU-Schalter liegt ungenutzt da</h3>
+  <p>SwiftTerms Metal-Renderer ist bereits verdrahtet, aber als Opt-in mit Default <strong>aus</strong>
+  (<span style="font-family:var(--mono);font-size:11.5px">AgentTerminalView.swift:27-41</span>).
+  Ghostty, iTerm2, Warp und WezTerm rendern alle auf der GPU. Dazu: die jüngsten SwiftTerm-Releases
+  melden <strong>+69 % Parser-Durchsatz</strong>.</p>
+
+  <div class="warn">
+    <div class="t">Der Präzedenzfall steht im eigenen Code</div>
+    <p style="margin:0"><em>„Bewusst KEINE Drag/Drop-Modifier an dieser Row. Der Container bleibt
+    nicht-lazy (LazyVStack + .draggable = Mai-2026-Freeze, Fix 60ca683)."</em> — SwiftUI-Drag hat diese
+    App bereits einmal vollständig eingefroren. Deshalb gehört Drag &amp; Drop über einen zentralen
+    Dragging-Destination gedacht, nicht über SwiftUI-Modifier über den Terminals.</p>
+  </div>
+</div></section>
+
+<section id="budgets"><div class="wrap">
+  <h2>Der <em>Messvertrag</em></h2>
+  <p class="sub">„Snappy" ist keine Meinung. Diese Zahlen entscheiden, ob das Feature fertig ist.</p>
+
+  <table class="budget">
+    <tr><th>Signpost</th><th>Budget p95</th><th>Was er beweist</th></tr>
+    <tr><td>grid.layout.solve</td><td class="zahl">≤ 1 ms</td><td>Frames aus Zellen + Fläche berechnen — reine Rechnung, kein View-Aufbau</td></tr>
+    <tr><td>grid.layout.diffApply</td><td class="zahl">≤ 2 ms</td><td>Frames auf die Panes anwenden</td></tr>
+    <tr><td>Layout-Tick gesamt</td><td class="zahl hart">≤ 8 ms · nie > 16,7</td><td>Der ganze Main-Thread-Anteil eines Layout-Durchgangs</td></tr>
+    <tr><td>grid.drag.resolveTarget</td><td class="zahl">≤ 0,5 ms</td><td>Zone unter dem Cursor bestimmen</td></tr>
+    <tr><td>Eingabe → Frame sichtbar</td><td class="zahl hart">≤ 16,7 ms</td><td>Ziehen fühlt sich direkt an</td></tr>
+    <tr><td>grid.layout.switch</td><td class="zahl">≤ 16,7 ms</td><td>Policy-/Snapshot-Wechsel in einem Frame</td></tr>
+    <tr><td>pane.mount bei gleicher Sessionmenge</td><td class="zahl hart">exakt 0</td><td><strong>Die härteste Regel:</strong> Umlayouten darf keinen PTY neu aufbauen</td></tr>
+    <tr><td>Fokuswechsel</td><td class="zahl">≤ 16,7 ms</td><td>heute 33 ms — halbiert</td></tr>
+    <tr><td>Feed-Latenz Fokus</td><td class="zahl">≤ 16 ms</td><td>Tippen erscheint sofort</td></tr>
+    <tr><td>Feed-Latenz sichtbarer Hintergrund</td><td class="zahl">≤ 120 ms</td><td>mitlaufende Panes bleiben lebendig</td></tr>
+    <tr><td>Feed-Latenz gestapelt</td><td class="zahl">≤ 350 ms</td><td>unsichtbar darf träge sein — aber nichts verlieren</td></tr>
+    <tr><td>Byte-Prüfsumme je Session</td><td class="zahl hart">exakt gleich</td><td>Drosselung darf <strong>nie</strong> ein Byte verlieren</td></tr>
+  </table>
+
+  <p style="margin-top:18px">Die heutigen Messungen enden am nächsten Main-Queue-Turn, nicht bei
+  tatsächlich präsentierter Geometrie — und die GPU-Zeit sieht der bestehende Signpost ausdrücklich
+  nicht. Beides muss ergänzt werden, sonst misst man das Falsche.</p>
+</div></section>
+
+<section id="pakete"><div class="wrap">
+  <h2>Drei <em>Pakete</em></h2>
+  <p class="sub">Jedes für sich umsetzbar und messbar. Reihenfolge ist bewusst gewählt.</p>
+  <div class="karten">
+    <a class="karte" href="01-rendering/01-renderer-architektur.html">
+      <span class="nr">01</span>
+      <h3>Renderer — <em>eine Ebene, feste Identität</em></h3>
+      <p>Wie das Grid gebaut sein muss, damit ein Layoutwechsel Rechtecke verschiebt statt Views neu zu bauen.</p>
+      <ul><li>Custom-Layout statt VStack-Verschachtelung</li><li>Terminal-Ebene nach SessionID</li>
+      <li>Drag-Runtime außerhalb der Observation</li><li>Zoom = Frame, nicht Struktur</li></ul>
+      <div class="pfeil">Paket öffnen →</div>
+    </a>
+    <a class="karte" href="02-terminals/01-pty-durchsatz.html">
+      <span class="nr">02</span>
+      <h3>Terminals — <em>drei Geschwindigkeiten</em></h3>
+      <p>Wie neun Textströme gleichzeitig laufen, ohne den Main Thread zu blockieren — und was mit gestapelten Sessions passiert.</p>
+      <ul><li>Fokus 8 ms · sichtbar 80 ms · gestapelt 250 ms</li><li>Ein Scheduler statt N Timer</li>
+      <li>Visuell detachen statt Reader pausieren</li><li>4 ms Terminalbudget pro Frame</li></ul>
+      <div class="pfeil">Paket öffnen →</div>
+    </a>
+    <a class="karte" href="03-state/01-store-persistenz.html">
+      <span class="nr">03</span>
+      <h3>State — <em>Geometrie ist flüchtig</em></h3>
+      <p>Warum ein Divider-Zug nicht die Platte anfassen darf, und wie die Schema-Migration ohne Datenverlust läuft.</p>
+      <ul><li>Trennung flüchtig ↔ dauerhaft</li><li>Coalescing statt Schreiben pro Pixel</li>
+      <li>Schema v4 → v5</li><li>Zugriffsmuster bei 200+ Sessions</li></ul>
+      <div class="pfeil">Paket öffnen →</div>
+    </a>
+    <a class="karte" href="04-sofort/01-sofortmassnahmen.html">
+      <span class="nr">04</span>
+      <h3>Sofort — <em>vier Schritte vorab</em></h3>
+      <p>Zwei Schalter, eine Entkopplung, eine Baseline. Unabhängig vom Workspace-Umbau. <strong>A2 umgesetzt, A1 nach dem Feldtest zurückgenommen</strong> — mit vier Befunden, die der Plan nicht vorhergesehen hatte.</p>
+      <ul><li>Metal: eingeschaltet, Schriftbild litt, wieder aus</li><li>✓ SwiftTerm auf v1.15.0</li>
+      <li>Persistenz vom Main Thread</li><li>✓ Messgerüst, Lastgenerator, erste Baseline</li></ul>
+      <div class="pfeil">Paket öffnen →</div>
+    </a>
+    <a class="karte" href="05-entscheidungen/01-scope.html">
+      <span class="nr">05</span>
+      <h3>Entscheidungen — <em>Scope und Alternativen</em></h3>
+      <p>Was gebaut wird, was bewusst draußen bleibt, und unter welcher Bedingung sich das ändert.</p>
+      <ul><li>SwiftUI · Hybrid · libghostty · eigenes Framework</li><li>Kipppunkte für den AppKit-Container</li>
+      <li>Scope-Liste mit Bedingungen</li><li>Vier offene Produktfragen</li></ul>
+      <div class="pfeil">Paket öffnen →</div>
+    </a>
+    <a class="karte" href="../../design/agent-chats-layout-engine.html">
+      <span class="nr">↗</span>
+      <h3>Der <em>Zwilling</em></h3>
+      <p>Die lebende HTML-Referenz: Auto-Tiling, Stapel, Drag &amp; Drop, Projekt-Workspaces — alles klickbar.</p>
+      <ul><li>Verhalten ist dort entschieden</li><li>Dieser Plan sagt, wie es schnell wird</li></ul>
+      <div class="pfeil">Zwilling öffnen →</div>
+    </a>
+  </div>
+</div></section>
+
+<section id="risiken"><div class="wrap">
+  <h2>Risiken, nach <em>Schadenshöhe</em></h2>
+  <p class="sub">Nicht alles ist gleich gefährlich. Diese Reihenfolge bestimmt, was zuerst abgesichert wird.</p>
+  <div class="risiko">
+    <div>R1</div><div><strong>PTY-Re-Mount durch Struktur- oder ID-Wechsel.</strong> Ein neu gemounteter Terminal-Host verliert Scrollback und Prozessbindung — der sichtbarste denkbare Fehler.</div><div class="hoch">kritisch</div>
+    <div>R2</div><div><strong>Gestapelte Sessions werden entdrosselt.</strong> Heute verlässt eine Session das Grid und läuft danach ungebremst. Unsichtbar und teuer zugleich.</div><div class="hoch">kritisch</div>
+    <div>R3</div><div><strong>Observation-Blast-Radius.</strong> Pane- und Drag-Zustand im Root-View lässt jede Mausbewegung den ganzen Baum invalidieren.</div><div class="hoch">hoch</div>
+    <div>R4</div><div><strong>Timer-Kollisionen beim Feed.</strong> Fünf Phasenlagen für acht Ströme plus High-Water-Flushes, die die Staffelung umgehen.</div><div class="mittel">mittel</div>
+    <div>R5</div><div><strong>Schreiblast durch Geometrie.</strong> Divider-Ziehen erzeugt viele kleine Änderungen; landen sie in der Persistenz, schreibt die App im Sekundentakt.</div><div class="mittel">mittel</div>
+    <div>R6</div><div><strong>Neun GPU-Redraws.</strong> Beherrschbar, aber erst nach Messung anzugehen — der Metal-Renderer ist eine Option, kein Automatismus.</div><div class="klein">beobachten</div>
+  </div>
+</div></section>
+
+<section id="fahrplan"><div class="wrap">
+  <h2>Fahrplan — <em>messen, bevor gebaut wird</em></h2>
+  <p class="sub">Jede Phase endet mit einer Zahl, nicht mit einem Gefühl.</p>
+  <div class="phasen">
+    <div class="phase"><span class="n">A — ZUERST</span><h4>Schalter &amp; Baseline</h4>
+      <p>Metal an, SwiftTerm aktualisieren, Persistenz vom Main Thread, Messgerüst. Unabhängig vom Feature — und danach ist die Diskussion faktenbasiert.</p>
+      <span class="dauer">~1,5 Tage · Paket 04</span></div>
+    <div class="phase"><span class="n">B — DANN</span><h4>Engine pur</h4>
+      <p>Frame-Berechnung als reine, unit-testbare Funktion. Kein View, kein Store — nur Zellen, Fläche, Policy → Rechtecke.</p>
+      <span class="dauer">vollständig testbar</span></div>
+    <div class="phase"><span class="n">C — KERN</span><h4>Renderer + Feature</h4>
+      <p>Flache Ebenen, stabile Session-IDs, Drag-Runtime außerhalb der Observation. Hier entscheidet die Messung über SwiftUI oder AppKit-Container.</p>
+      <span class="dauer">riskantester Schritt</span></div>
+    <div class="phase"><span class="n">D — PARALLEL</span><h4>Feeds &amp; Persistenz</h4>
+      <p>Drei Geschwindigkeiten, ein Scheduler, Geometrie flüchtig halten. Gate: Prüfsummen und Latenzen.</p>
+      <span class="dauer">unabhängig planbar</span></div>
+  </div>
+  </div>
+  <p style="margin-top:22px">Die Reihenfolge ist bewusst so gewählt: Was <strong>im</strong> Umbau steckt (pure Engine, stabile IDs, Drag-Runtime) lässt sich nicht vorziehen — falsch gebaut heißt zweimal gebaut. Was <strong>außerhalb</strong> liegt (Paket 04), verbessert die App unabhängig davon und macht jede spätere Entscheidung billiger.</p>
+</div></section>
+
+<footer><div class="wrap">
+  Planungsdokument · basiert auf drei Code-Analysen im Repo und dem HTML-Zwilling ·
+  keine Zeile Produktivcode geändert.
+</div></footer>

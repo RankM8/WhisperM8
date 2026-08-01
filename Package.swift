@@ -13,15 +13,22 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "1.16.1"),
         .package(url: "https://github.com/sindresorhus/Defaults", from: "8.0.0"),
         .package(url: "https://github.com/sindresorhus/LaunchAtLogin-Modern", from: "1.0.0"),
-        // Fork von SwiftTerm v1.14.0 (Branch whisperm8-v1.14-patches, Basis-Tag
-        // 849e8a4): v1.14.0 bringt Resize-Fix #573, PTY-Backpressure #574,
-        // Metal-Reparenting #548, Shift-Selection #536 und Scroll-Lock #587
-        // upstream mit — von unseren frueheren 4 Patches bleiben nur die 2
-        // Selection-Patches (Selektion ueberlebt Streaming: feedPrepare +
-        // linefeed, feuert pro '\n'). Upstream-PR-faehig — bei Merge zurueck
-        // auf migueldeicaza/SwiftTerm + Version-Bump. Pin auf Commit fuer
-        // reproduzierbare Builds.
-        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "27f06d7e506511e2826d08175665a13e76ccf5f2"),
+        // Fork von SwiftTerm v1.15.0 (Branch whisperm8-v1.15-patches, Basis-Tag
+        // dd2fb8a): unveraendert unsere 2 Selection-Patches (Selektion
+        // ueberlebt Streaming: feedPrepare + linefeed, feuert pro '\n'),
+        // konfliktfrei von v1.14.0 rebased.
+        //
+        // v1.15.0 bringt drei Metal-Fixes mit, die Voraussetzung dafuer sind,
+        // den GPU-Renderer ueberhaupt einzuschalten: #593 behebt einen Crash in
+        // signierten .app-Bundles (Bundle.module-fatalError beim Laden der
+        // Shader), #598 unbegrenztes BufferPool-Wachstum bei staendig
+        // wechselndem Inhalt, dazu gehaerteter Glyph-Atlas-Overflow. Ausserdem
+        // #599 (offizielle Subclass-Hooks fuer Link-/Key-Handling) und #600
+        // (zeilengenaues Wheel-Scrolling).
+        //
+        // Upstream-PR-faehig — bei Merge zurueck auf migueldeicaza/SwiftTerm +
+        // Version-Bump. Pin auf Commit fuer reproduzierbare Builds.
+        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "2671405c3157ed259ee1051fb372ec5d9b44682d"),
     ],
     targets: [
         .executableTarget(

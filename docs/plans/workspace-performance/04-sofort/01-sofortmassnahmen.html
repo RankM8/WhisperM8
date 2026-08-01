@@ -1,0 +1,353 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 04 — Sofortmaßnahmen</title>
+<style>
+  :root{
+    --papier:#faf8f4; --papier-tief:#f3efe7; --tinte:#211f1c; --tinte-weich:#4a453e; --tinte-matt:#7d766b;
+    --linie:#e0d9cc; --linie-stark:#c9c0ae; --akzent:#c2410c; --moos:#3f6212; --rot:#9f1239; --bernstein:#a16207;
+    --serif:"Iowan Old Style","Palatino",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--papier);color:var(--tinte);font:15px/1.65 var(--sans);}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px;}
+  nav.top{position:sticky;top:0;z-index:10;background:rgb(250 248 244/94%);border-bottom:1px solid var(--linie);backdrop-filter:blur(8px);}
+  nav.top .wrap{display:flex;align-items:center;gap:20px;height:52px;}
+  nav.top a{color:var(--tinte-matt);text-decoration:none;font-size:12.5px;}
+  nav.top a:hover{color:var(--akzent);}
+  nav.top .marke{font:600 14px var(--sans);color:var(--tinte);}
+  nav.top .krume{font:11px var(--mono);color:var(--tinte-matt);}
+  nav.top .stempel{margin-left:auto;font:11px var(--mono);color:var(--tinte-matt);}
+  header.hero{padding:52px 0 36px;border-bottom:1px solid var(--linie);}
+  h1{font:400 38px/1.12 var(--serif);letter-spacing:-.02em;margin-bottom:12px;}
+  h1 em{font-style:italic;color:var(--akzent);}
+  .lede{font:17px/1.6 var(--serif);color:var(--tinte-weich);max-width:660px;}
+  section{padding:42px 0;border-bottom:1px solid var(--linie);}
+  h2{font:400 27px/1.15 var(--serif);margin-bottom:6px;}
+  h2 em{font-style:italic;color:var(--akzent);}
+  h3{font:600 15px var(--sans);margin:22px 0 8px;}
+  .sub{color:var(--tinte-matt);font-size:13.5px;margin-bottom:22px;}
+  p{margin-bottom:13px;color:var(--tinte-weich);}
+  p strong,li strong,td strong{color:var(--tinte);font-weight:600;}
+  ul{margin:0 0 14px 18px;color:var(--tinte-weich);} li{margin-bottom:6px;}
+  code{font:12.5px var(--mono);background:var(--papier-tief);padding:1px 5px;border-radius:3px;color:var(--akzent);}
+  .quelle{font:11.5px var(--mono);color:var(--tinte-matt);}
+  a{color:var(--akzent);}
+  .massnahme{border:1px solid var(--linie);background:#fff;margin:18px 0;}
+  .massnahme .kopf{display:flex;align-items:baseline;gap:12px;padding:14px 18px;border-bottom:1px solid var(--linie);background:var(--papier-tief);}
+  .massnahme .nr{font:600 11px var(--mono);color:var(--akzent);}
+  .massnahme .titel{font:600 16px var(--sans);}
+  .massnahme .aufwand{margin-left:auto;font:11px var(--mono);color:var(--tinte-matt);}
+  .massnahme .rumpf{padding:16px 18px;}
+  .zeile{display:grid;grid-template-columns:118px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--linie);font-size:13.5px;}
+  .zeile:last-child{border-bottom:0;}
+  .zeile .k{font:600 10px var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--tinte-matt);padding-top:2px;}
+  .zeile .v{color:var(--tinte-weich);}
+  .warn{border-left:3px solid var(--akzent);background:#fff;padding:15px 17px;margin:20px 0;}
+  .warn .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--akzent);margin-bottom:5px;}
+  .gut{border-left:3px solid var(--moos);background:#fff;padding:15px 17px;margin:20px 0;}
+  .gut .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--moos);margin-bottom:5px;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px;}
+  th{text-align:left;font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--tinte-matt);
+    border-bottom:1.5px solid var(--linie-stark);padding:8px 10px;}
+  td{border-bottom:1px solid var(--linie);padding:9px 10px;vertical-align:top;color:var(--tinte-weich);}
+  td.mono{font:12.5px var(--mono);color:var(--tinte);}
+  .weiter{display:block;background:#1c1a17;color:#e4dfd6;padding:24px 26px;margin:40px 0 0;text-decoration:none;}
+  .weiter .l{font:600 10px var(--sans);letter-spacing:.09em;text-transform:uppercase;color:#a89f92;}
+  .weiter h3{color:#fff;font:400 22px var(--serif);margin:6px 0;}
+  .weiter p{color:#bdb5a8;margin:0;font-size:13.5px;}
+  footer{padding:30px 0 60px;color:var(--tinte-matt);font-size:12.5px;}
+</style>
+
+<nav class="top"><div class="wrap">
+  <a class="marke" href="../index.html">← Performance-Plan</a>
+  <span class="krume">04 · Sofort</span>
+  <a href="#warum">Warum zuerst</a><a href="#a1">Metal</a><a href="#a2">SwiftTerm</a><a href="#umsetzung">Umsetzung</a>
+  <a href="#a3">Persistenz</a><a href="#a4">Messgerüst</a>
+  <span class="stempel">vor dem Umbau · ~1,5 Tage</span>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Vier Schritte, die <em>vor</em> dem Umbau kommen</h1>
+  <p class="lede">Sie haben mit Workspaces nichts zu tun, kosten zusammen etwa anderthalb Tage — und
+  machen jede spätere Entscheidung billiger. Zwei davon sind Schalter, kein Umbau.</p>
+</div></header>
+
+<section id="warum"><div class="wrap">
+  <h2>Warum diese Reihenfolge <em>nicht verhandelbar</em> ist</h2>
+  <p>Ohne Baseline lässt sich nach dem Workspace-Umbau nicht sagen, ob die App schneller oder langsamer
+  geworden ist — jede Trägheit wäre dann dem neuen Feature zuzuschreiben, auch wenn sie vorher schon
+  da war. Und zwei der vier Punkte könnten das Terminal-Thema komplett erledigen, bevor überhaupt
+  jemand eine Zeile Layout-Code anfasst.</p>
+  <div class="gut">
+    <div class="t">Der eigentliche Hebel dieser Reihenfolge</div>
+    <p style="margin:0">A1 und A2 sind Konfiguration und Abhängigkeits-Update. Wenn sie das
+    Terminal-Verhalten spürbar verbessern, schrumpft Paket 02 von „Architekturarbeit" auf „Feinschliff".
+    Wenn nicht, weiß man es nach zwei Stunden — statt nach zwei Wochen.</p>
+  </div>
+</div></section>
+
+<section id="a1"><div class="wrap">
+  <div class="massnahme">
+    <div class="kopf"><span class="nr">A1</span><span class="titel">Metal-Renderer einschalten und messen</span>
+      <span class="aufwand">~2 Stunden</span></div>
+    <div class="rumpf">
+      <div class="zeile"><div class="k">Befund</div><div class="v">SwiftTerms GPU-Renderer ist bereits eingebaut — als Opt-in, Default <strong>aus</strong>. Aktivierung erfolgt in <code>viewDidMoveToWindow</code> über <code>setUseMetal(true)</code>, gesteuert von <code>AppPreferences.isAgentTerminalMetalRendererEnabled</code>. <span class="quelle">AgentTerminalView.swift:27-41</span></div></div>
+      <div class="zeile"><div class="k">Warum</div><div class="v">Ghostty, iTerm2, Warp und WezTerm rendern <strong>alle</strong> auf der GPU. Bei neun gleichzeitig scrollenden Panes ist CPU-Textrendering der wahrscheinlichste versteckte Kostenpunkt.</div></div>
+      <div class="zeile"><div class="k">Vorgehen</div><div class="v">Schalter an, App neu starten (der Wert wird einmal pro Prozess gelesen), dann A/B messen: 9 Panes mit Firehose-Output, einmal mit und einmal ohne. Vergleichswerte: Frame-Zeit, CPU-Last, Core-Animation-Hitches.</div></div>
+      <div class="zeile"><div class="k">Risiko</div><div class="v">Gering — Kill-Switch existiert bereits. Zu prüfen: Textdarstellung, Ligaturen, Selektion, Transparenz. Der Opt-in-Status legt nahe, dass es beim Einbau Gründe zur Vorsicht gab; die gehören verifiziert, nicht angenommen.</div></div>
+      <div class="zeile"><div class="k">Erfolg</div><div class="v">Messbar niedrigere Frame-Zeit bei gleicher Darstellungsqualität → Default umstellen.</div></div>
+      <div class="zeile"><div class="k">Stand</div><div class="v"><strong>Umgesetzt und wieder zurückgenommen, 01.08.2026.</strong> Default steht wieder auf <em>aus</em> — nicht aus Sicherheitsgründen, sondern weil das Schriftbild sichtbar litt. Der Befund steht unten unter <a href="#metal-zurueck">Warum Metal wieder aus ist</a>; er ist das stärkste Argument für A4.</div></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="a2"><div class="wrap">
+  <div class="massnahme">
+    <div class="kopf"><span class="nr">A2</span><span class="titel">SwiftTerm aktualisieren</span>
+      <span class="aufwand">~2 Stunden</span></div>
+    <div class="rumpf">
+      <div class="zeile"><div class="k">Befund</div><div class="v">Die jüngsten SwiftTerm-Releases melden Parser-Optimierungen mit <strong>+69 % Durchsatz</strong> in internen Benchmarks, bis zu <strong>+58 % auf VteBench</strong> und +20 % beim reinen Feeding. Dazu Thread-Safety-Arbeit (Zeichensatzdaten pro Terminal statt global).</div></div>
+      <div class="zeile"><div class="k">Warum</div><div class="v">Fremde Arbeit, die gratis mitgenommen werden kann. Version 1.14.0 erschien am 10.07.2026 mit ~40 PRs.</div></div>
+      <div class="zeile"><div class="k">Vorgehen</div><div class="v">Version in <code>Package.swift</code> prüfen, aktualisieren, volle Testsuite, danach manuelle QA der eigenen Erweiterungen: Link-Interceptor, Scroll-Lock, Selektion, Keyboard-Profile.</div></div>
+      <div class="zeile"><div class="k">Risiko</div><div class="v">Mittel — die App hat mehrere Stellen, die SwiftTerm-Interna umgehen (<code>terminalDelegate</code>-Ersatz für Link-Klicks). Ein Minor-Update kann dort brechen. Deshalb eigener Commit, getrennt von allem anderen.</div></div>
+      <div class="zeile"><div class="k">Erfolg</div><div class="v">Tests grün, Erweiterungen funktionsfähig, gemessener Durchsatz höher als vorher.</div></div>
+      <div class="zeile"><div class="k">Stand</div><div class="v"><strong>Umgesetzt am 01.08.2026.</strong> Fork auf <strong>v1.15.0</strong> rebased (Branch <code>whisperm8-v1.15-patches</code>, Pin <code>2671405</code>), beide Selection-Patches konfliktfrei übernommen, 2154 Tests grün. Der alte Branch bleibt als Rückweg stehen.</div></div>
+    </div>
+  </div>
+  <div class="warn">
+    <div class="t">Was A1 und A2 NICHT lösen</div>
+    <p style="margin:0">Beide ändern nichts daran, dass SwiftTerm <strong>Parsing und Rendering
+    koppelt</strong>. Der Maintainer führt dazu ein offenes Issue
+    (<a href="https://github.com/migueldeicaza/SwiftTerm/issues/137">#137 „Multi-threading Terminal"</a>):
+    Bei zu viel Daten in <code>parse</code> bleibt das Display-Update aus. Genau das ist das Symptom
+    „viel Output → alles klebt". Die Drosselung aus Paket 02 bleibt also nötig, egal wie A1 und A2
+    ausgehen.</p>
+  </div>
+</div></section>
+
+<section id="umsetzung"><div class="wrap">
+  <h2>Was tatsächlich passiert ist <em>(01.08.2026)</em></h2>
+  <p>A1 und A2 sind umgesetzt. Drei Dinge kamen anders als der Plan sie beschrieben hat, und alle drei
+  sind es wert, festgehalten zu werden.</p>
+
+  <div class="warn">
+    <div class="t">1. Die Reihenfolge war umgekehrt — und das war kein Stilfrage</div>
+    <p style="margin:0 0 10px">Der Plan sah A1 vor A2. Tatsächlich musste A2 zuerst kommen: SwiftTerm
+    v1.15.0 enthält
+    <a href="https://github.com/migueldeicaza/SwiftTerm/pull/593">#593 „Fix Metal renderer crash in
+    packaged apps"</a>. Der Renderer suchte seine Shader über <code>Bundle.module</code> — und SwiftPMs
+    generierter Zugriff dafür ruft <code>fatalError</code>, wenn er das Bundle nicht findet. Er sucht es
+    nur in der <em>Wurzel</em> der .app und unter dem absoluten Build-Pfad der Maschine, die kompiliert
+    hat. In einer signierten .app liegen SwiftPM-Bundles aber in <code>Contents/Resources</code>.</p>
+    <p style="margin:0">Praktische Folge: Metal auf v1.14 einzuschalten hätte die App auf <em>jedem</em>
+    fremden Mac beim ersten Terminal sofort abgeschossen — kein Fehler, kein Fallback, Prozessabbruch.
+    Auf dem Build-Rechner wäre es durch den einkompilierten Pfad zufällig gutgegangen und damit
+    unentdeckt geblieben, bis das DMG bei jemand anderem landet. Dazu kommt
+    <a href="https://github.com/migueldeicaza/SwiftTerm/pull/598">#598</a>: unbegrenztes Wachstum des
+    Metal-Buffer-Pools bei ständig wechselndem Inhalt — also genau bei neun streamenden Agenten.</p>
+  </div>
+
+  <div class="warn">
+    <div class="t">2. Der Link-Interceptor bleibt — trotz passendem Upstream-Fix</div>
+    <p style="margin:0 0 10px">v1.15.0 enthält
+    <a href="https://github.com/migueldeicaza/SwiftTerm/pull/599">#599</a>, das
+    <code>requestOpenLink</code> als <code>open</code> nachreicht und in seiner Beschreibung wörtlich
+    unseren Workaround beschreibt („embedders have to swap the delegate out"). Der ursprüngliche Grund
+    für <code>AgentTerminalLinkInterceptor</code> ist damit weg.</p>
+    <p style="margin:0">Der Proxy bleibt trotzdem, weil er inzwischen eine zweite Aufgabe trägt: er
+    verweigert <code>clipboardRead</code>. SwiftTerms Implementierung gibt jeder TUI per OSC 52 den
+    Klartext der Zwischenablage — Passwörter eingeschlossen. Diese Methode ist <code>public</code>, nicht
+    <code>open</code>, also per Unterklasse nicht überschreibbar; nur ein eigenständiger Delegate kann
+    den Zugriff abweisen. Die Begründung steht jetzt im Code, damit niemand später „vereinfacht" und die
+    Lücke still wieder aufreißt.</p>
+  </div>
+
+  <div class="gut">
+    <div class="t">3. Ein gemessener 262-ms-Hänger, den niemand geplant hatte</div>
+    <p style="margin:0 0 10px">SwiftTerm liefert seine Shader als Quelltext aus, nicht als
+    vorkompilierte <code>.metallib</code>. Der Renderer übersetzt sie deshalb beim ersten Aufbau selbst —
+    <strong>synchron auf dem Main Thread</strong>, weil er im <code>viewDidMoveToWindow</code> der
+    Terminal-View entsteht.</p>
+    <table style="margin:10px 0">
+      <tr><th>Messung (M-Serie)</th><th>Dauer</th></tr>
+      <tr><td>Erste Übersetzung, kalter Cache</td><td><strong>261,7 ms</strong></td></tr>
+      <tr><td>Jede weitere im selben Prozess</td><td>0,1 ms</td></tr>
+      <tr><td>Erste im <em>nächsten</em> Prozess (Cache auf Platte)</td><td>0,6 ms</td></tr>
+    </table>
+    <p style="margin:0 0 10px">Der Metal-Compiler-Cache überlebt App-Neustarts, der Treffer fällt also
+    nur einmal an: nach der Installation, nach einem SwiftTerm-Update, nach einem geleerten Cache. Genau
+    dann trifft er aber das Öffnen des <em>ersten</em> Chats — eine Viertelsekunde Standbild im
+    schlechtestmöglichen Moment.</p>
+    <p style="margin:0">Die naheliegende Lösung — Shader beim Build vorkompilieren — scheidet aus: der
+    <code>metal</code>-Compiler ist seit Xcode 26 eine separat zu ladende Komponente
+    (<code>xcodebuild -downloadComponent MetalToolchain</code>) und würde jeden Build-Rechner und die CI
+    daran binden. Stattdessen wärmt <code>TerminalMetalWarmup</code> beim App-Start dieselbe Quelle
+    einmal im Hintergrund vor und wirft das Ergebnis weg. Der Cache ist warm, bevor das erste Terminal
+    ihn braucht; schlägt es fehl, passiert nichts — der Renderer übersetzt dann wie bisher selbst.</p>
+  </div>
+
+  <h3>Wo A1/A2 im Code stehen</h3>
+  <table>
+    <tr><th>Datei</th><th>Änderung</th></tr>
+    <tr><td><code>Package.swift</code></td><td>Pin auf <code>2671405</code> (v1.15.0 + 2 Selection-Patches), Kommentar mit Begründung</td></tr>
+    <tr><td><code>AppPreferences.swift</code></td><td><code>isAgentTerminalMetalRendererEnabled</code> Default <code>false</code> → <code>true</code>, Kill-Switch dokumentiert</td></tr>
+    <tr><td><code>TerminalMetalWarmup.swift</code></td><td>neu — Vorwärmen des Shader-Caches beim Start, mit Messwerten in der Begründung</td></tr>
+    <tr><td><code>WhisperM8App.swift</code></td><td>Aufruf in <code>applicationDidFinishLaunching</code></td></tr>
+    <tr><td><code>AgentTerminalLinkInterceptor.swift</code></td><td>Begründung aktualisiert: warum der Proxy trotz #599 bleibt</td></tr>
+    <tr><td><code>PreferencesTests.swift</code></td><td>Default-Erwartung gedreht; Roundtrip testet jetzt wieder eine Abweichung vom Default</td></tr>
+  </table>
+
+  <h3 id="metal-zurueck">Warum Metal wieder aus ist</h3>
+  <div class="warn">
+    <div class="t">Der Feldtest hat A1 rückgängig gemacht — und das ist die wichtigste Erkenntnis des Tages</div>
+    <p style="margin:0 0 10px">Nach dem ersten Neustart mit aktivem Metal war die Rückmeldung eindeutig:
+    das Terminal wirkt <em>„low resolution"</em> und verhält sich schlechter als vorher. Zwei Hypothesen
+    wurden geprüft:</p>
+    <table style="margin:0 0 10px">
+      <tr><th>Hypothese</th><th>Befund</th></tr>
+      <tr><td>Metal zeichnet in 1× statt Retina</td><td><strong>Widerlegt.</strong> <code>scaledFontFor(font:scale:)</code> rastert in Retina-Größe, <code>drawableSize</code> wird pro Bild auf die Backing-Scale gesetzt.</td></tr>
+      <tr><td>Font-Smoothing auf transparentem Grund</td><td><strong>Offen, wahrscheinlich.</strong> <code>_fontSmoothing = true</code>; der Glyph-Vorrat wird in einen durchsichtigen <code>CGContext</code> gerastert, wo <code>setShouldSmoothFonts(true)</code> matschige Ränder erzeugt. Apple hat das Verfahren auf Retina längst abgeschaltet.</td></tr>
+      <tr><td>Pixel-Rundung der Glyph-Positionen</td><td><strong>Offen, plausibel.</strong> <code>alignToPixel</code> rundet Positionen auf ganze Pixel; der CPU-Pfad setzt Glyphen zwischen Pixeln.</td></tr>
+    </table>
+    <p style="margin:0">Beide offenen Punkte lägen in SwiftTerms Metal-Renderer, also in unserem Fork —
+    Arbeit an fremdem, jungem Code (drei Metal-Nachbesserungen allein in v1.15) mit offenem Ausgang.</p>
+  </div>
+  <div class="gut">
+    <div class="t">Die eigentliche Lehre</div>
+    <p style="margin:0 0 10px">Metal wurde eingeschaltet, weil es <em>theoretisch</em> schneller ist.
+    Gemessen wurde das nie — das ist ja gerade A4. Jetzt ist der Preis bekannt (sichtbar schlechteres
+    Schriftbild) und der Gewinn immer noch nicht. <strong>Etwas Sichtbares gegen etwas Unbelegtes zu
+    tauschen ist ein schlechter Handel</strong>, also steht der Default wieder auf aus.</p>
+    <p style="margin:0">Genau dieser Ablauf ist das Argument für A4: Ohne Messgerüst lässt sich nicht
+    einmal die Frage beantworten, ob es sich lohnt, den Darstellungsfehler überhaupt zu jagen. Metal
+    kommt zurück, wenn die Baseline einen Gewinn zeigt <em>und</em> die Darstellung stimmt — beides,
+    nicht eines von beiden. Was bleibt: SwiftTerm 1.15 samt seiner Fixes, das Shader-Vorwärmen und ein
+    Schalter, der nachweislich in beide Richtungen funktioniert.</p>
+  </div>
+
+  <div class="warn">
+    <div class="t">Was noch offen ist</div>
+    <p style="margin:0">Die A/B-Messung aus der A1-Karte steht weiterhin aus — sie gehört zu A4. Belegt
+    ist bisher nur, <em>dass</em> Metal gefahrlos laufen kann, nicht <em>wieviel</em> es bringt. Dazu
+    kommen jetzt die beiden offenen Darstellungs-Hypothesen oben: sie zu prüfen heißt, den Fork
+    anzufassen, und lohnt erst nach einer belegten Beschleunigung.</p>
+  </div>
+</div></section>
+
+<section id="a3"><div class="wrap">
+  <div class="massnahme">
+    <div class="kopf"><span class="nr">A3</span><span class="titel">Persistenz vom Main Thread lösen</span>
+      <span class="aufwand">~1 Tag</span></div>
+    <div class="rumpf">
+      <div class="zeile"><div class="k">Befund</div><div class="v">Nach dem 400-ms-Debounce wird synchron auf dem Main Thread encodiert und geschrieben — immer die <strong>ganze</strong> Datei, pretty-printed mit sortierten Keys. Gemessen: Sidecar 99.677 Bytes, Domain-Datei 7.771.874 Bytes. <span class="quelle">AgentWindowStore.swift:1019-1040 · AgentSessionStore.swift:115-125</span></div></div>
+      <div class="zeile"><div class="k">Warum zuerst</div><div class="v">Das ist der größte Einzelhebel für „die App fühlt sich träge an" — und er berührt das Grid <strong>überhaupt nicht</strong>. Er lässt sich unabhängig und parallel umsetzen.</div></div>
+      <div class="zeile"><div class="k">Vorgehen</div><div class="v">Serieller Writer auf einer Utility-Queue, der <code>(Revision, unveränderlicher Snapshot)</code> entgegennimmt und nur die neueste Revision schreibt. <code>willTerminate</code> drainiert synchron. Details in Paket 03.</div></div>
+      <div class="zeile"><div class="k">Risiko</div><div class="v">Mittel — Datenverlust bei falscher Reihenfolge. Absicherung: Revisionsnummern, Drain beim Beenden, und die in Paket 03 beschriebenen Last-known-good-Generationen.</div></div>
+      <div class="zeile"><div class="k">Erfolg</div><div class="v">Kein synchroner Dateizugriff mehr auf dem Main Thread, nachweisbar über Signposts.</div></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="a4"><div class="wrap">
+  <div class="massnahme">
+    <div class="kopf"><span class="nr">A4</span><span class="titel">Messgerüst und Baseline</span>
+      <span class="aufwand">~1 Tag</span></div>
+    <div class="rumpf">
+      <div class="zeile"><div class="k">Befund</div><div class="v">Die heutigen Messungen enden am nächsten Main-Queue-Turn, nicht bei präsentierter Geometrie; <code>grid.streamingFrame</code> sieht ausdrücklich keine GPU-Zeit, und die ungepufferten Fokus-Feeds fehlen ganz. <span class="quelle">AgentTerminalView.swift:99-109 · PerformanceSignposts.swift:121-137</span></div></div>
+      <div class="zeile"><div class="k">Was ergänzt wird</div><div class="v">Layout-Solve und -Apply, Drag-Auflösung, Eingabe-bis-Frame, Mount-/Dismantle-Zähler, Feed-Stufe mit Bytes und Pending-Höchststand, Core-Animation-Hitches separat.</div></div>
+      <div class="zeile"><div class="k">Testszenario</div><div class="v">Je 60 s mit 1, 3, 6 und 9 Panes à 64 KiB/s, danach simultaner 1-MiB-Burst je Pane, 20 % ANSI-/TUI-Sequenzen, Fokuswechsel alle 2 s, Stapelwechsel alle 5 s.</div></div>
+      <div class="zeile"><div class="k">Ergebnis</div><div class="v">Eine Baseline-Tabelle des <strong>heutigen</strong> Zustands. Sie ist die Vergleichsgröße für alles Weitere — und sie entscheidet die Architekturfrage aus Paket 05.</div></div>
+      <div class="zeile"><div class="k">Stand</div><div class="v"><strong>Umgesetzt am 01.08.2026.</strong> Gerüst, Messpunkte, Lastgenerator und Auswerter stehen; 11 neue Tests. Die erste Auswertung hängt unten. <a href="#a4-umsetzung">Details</a></div></div>
+    </div>
+  </div>
+
+  <h3>Was die Baseline beantworten muss</h3>
+  <table>
+    <tr><th>Frage</th><th>Konsequenz bei „ja"</th></tr>
+    <tr><td>Taucht SwiftTerms Parsing in den Top 3 der Main-Thread-Zeit auf?</td><td>libghostty wird eine ernsthafte Option (Paket 05)</td></tr>
+    <tr><td>Bringt Metal messbar etwas?</td><td>Default umstellen, Paket 02 schrumpft</td></tr>
+    <tr><td>Kostet die Persistenz spürbar Main-Thread-Zeit?</td><td>A3 wird vorgezogen und höher priorisiert</td></tr>
+    <tr><td>Gibt es heute schon unerwartete Pane-Remounts?</td><td>Der Renderer-Umbau wird dringlicher als gedacht</td></tr>
+  </table>
+
+  <h3 id="a4-umsetzung">Wie das Messgerüst gebaut ist</h3>
+  <div class="gut">
+    <div class="t">Zwei Stufen — und der Grund dafür ist eine Messung</div>
+    <p style="margin:0 0 10px">Die naheliegende Sorge lautet: Messen kostet Leistung, also verliert man
+    genau das, was man gewinnen will. Deshalb wurden erst die Kosten gemessen (M-Serie, 01.08.2026):</p>
+    <table style="margin:0 0 10px">
+      <tr><th>Vorgang</th><th>Kosten</th></tr>
+      <tr><td>Zeit ablesen (<code>Date()</code>, zweimal)</td><td>61 ns</td></tr>
+      <tr><td><strong>os_signpost-Intervall (begin+end)</strong></td><td><strong>686 ns</strong></td></tr>
+      <tr><td>Zähler-Inkrement</td><td>~1 ns</td></tr>
+    </table>
+    <p style="margin:0 0 10px">Überraschend: der Signpost ist der teure Teil, nicht die Uhr — und er
+    kostet <em>immer</em>. <code>OSSignposter.isEnabled</code> ist auf macOS dauerhaft <code>true</code>,
+    ein <code>guard</code> darauf bringt nichts (683 vs. 686 ns). Die Kosten hängen damit allein an der
+    <strong>Dichte</strong>: 100 Messpunkte/s ≈ 0,007 %, 10.000/s ≈ 0,7 %, 100.000/s ≈ 7 % CPU.</p>
+    <table style="margin:0">
+      <tr><th>Stufe</th><th>Wann</th><th>Was</th></tr>
+      <tr><td><code>.always</code></td><td>immer</td><td>Messpunkte an seltenen Ereignissen — Klick, Fensterwechsel, Speichern, gebündelter Flush. Liefert im Alltag die Budget-Warnungen, ohne dass jemand etwas einschaltet.</td></tr>
+      <tr><td><code>.detail</code></td><td><code>agentPerfDetailEnabled</code></td><td>Dichtere Messpunkte und die Zähler-Ausgabe für eine Baseline-Aufnahme. Default aus.</td></tr>
+    </table>
+  </div>
+  <div class="warn">
+    <div class="t">Die Regel, die im Code steht</div>
+    <p style="margin:0"><strong>Niemals pro Byte, pro Zeichen oder pro Zeile messen.</strong> In
+    <code>dataReceived</code> — dem heißesten Pfad der App — steht deshalb ausschließlich ein Zähler,
+    kein Signpost. Die Zähler werden einmal pro Sekunde gesammelt ausgegeben: aus 10.000 Ereignissen
+    wird ein Log-Eintrag. Wer das umdreht, misst am Ende die Messung.</p>
+  </div>
+
+  <h3>Der wichtigste neue Messpunkt: Stillstand</h3>
+  <p>Alle Budgets beantworten „war <em>diese</em> Operation langsam?" — sie finden also nur, was jemand
+  vorher instrumentiert hat. Was ein Nutzer spürt, ist etwas anderes: der Main Thread war beschäftigt
+  und hat nicht gezeichnet. <code>MainThreadStallMonitor</code> misst genau das mit einem Timer, der
+  alle 100 ms feuern soll; seine <strong>Verspätung ist die Blockadedauer</strong>. Zehn Ticks pro
+  Sekunde kosten nichts, also läuft er immer mit. Bleibt ein langer Stillstand ohne begleitende
+  Budget-Warnung, ist das der Fingerzeig auf eine Stelle, die noch niemand gemessen hat.</p>
+
+  <h3>Werkzeuge</h3>
+  <table>
+    <tr><th>Datei</th><th>Zweck</th></tr>
+    <tr><td><code>Services/Shared/PerformanceSignposts.swift</code></td><td><code>PerfTier</code>, <code>PerfDetailGate</code>, Tier-Prüfung in <code>PerformanceBudget</code></td></tr>
+    <tr><td><code>Services/Shared/PerformanceCounters.swift</code></td><td>Zähler für heiße Pfade, Ausgabe im Sekundentakt</td></tr>
+    <tr><td><code>Services/Shared/MainThreadStallMonitor.swift</code></td><td>Stillstands-Wächter</td></tr>
+    <tr><td><code>scripts/perf-load.sh</code></td><td>Lastgenerator mit definierter Rate und ANSI-Anteil; weist die <em>erreichte</em> Rate aus, nicht die angepeilte</td></tr>
+    <tr><td><code>scripts/perf-report.sh</code></td><td>Macht aus dem Log eine Tabelle: Stillstände, gerissene Budgets, Zähler, Renderer-Zustand</td></tr>
+  </table>
+
+  <h3>Erste Auswertung — 40 Minuten normale Nutzung</h3>
+  <p class="sub">Ohne künstliche Last, ohne Detail-Stufe. Genau das, was Stufe 1 im Alltag hergibt.</p>
+  <table>
+    <tr><th>Budget</th><th>Verletzungen</th><th>Schlechtester Wert</th><th>Budget</th></tr>
+    <tr><td><code>sidebar.statusPoll</code></td><td>27 ×</td><td><strong>659 ms</strong></td><td>100 ms</td></tr>
+    <tr><td><code>store.save</code></td><td>12 ×</td><td><strong>122 ms</strong></td><td>20 ms</td></tr>
+    <tr><td><code>grid.focusSwitch</code></td><td>4 ×</td><td>171 ms</td><td>33 ms</td></tr>
+    <tr><td><code>grid.build</code></td><td>2 ×</td><td>301 ms</td><td>50 ms</td></tr>
+    <tr><td><code>index.scan</code></td><td>3 ×</td><td>2373 ms</td><td>2000 ms</td></tr>
+    <tr><td><code>store.mutate</code></td><td>3 ×</td><td>69 ms</td><td>30 ms</td></tr>
+  </table>
+  <div class="warn">
+    <div class="t">Was diese Tabelle bereits umsortiert</div>
+    <p style="margin:0 0 10px"><strong>Der Statuspoll der Seitenleiste ist der größte Einzelposten</strong>
+    — bis zu 659 ms, mehr als das Sechsfache seines Budgets, und mit Abstand am häufigsten. In keinem
+    Paket stand er als Kandidat. A3 (Persistenz) ist mit 122 ms real und bestätigt, aber es ist nicht
+    der Spitzenreiter.</p>
+    <p style="margin:0"><code>grid.focusSwitch</code> mit 171 ms und <code>grid.build</code> mit 301 ms
+    sind die Zahlen hinter „der Chatwechsel fühlt sich nicht flüssig an" — jetzt sind sie beziffert
+    statt gefühlt. <strong>Sichtbar ist bislang nur, was sein Budget reißt</strong>: was 90 ms bei
+    100 ms Budget braucht, taucht nie auf. Für das vollständige Bild braucht es die Detail-Stufe und
+    einen Lauf unter definierter Last.</p>
+  </div>
+</div></section>
+
+<a class="weiter" href="../05-entscheidungen/01-scope.html">
+  <span class="l">Paket 05</span>
+  <h3>Entscheidungen — Scope und Architektur</h3>
+  <p>Was drin ist, was draußen bleibt, und unter welcher Bedingung sich das ändert. →</p>
+</a>
+
+<footer><div class="wrap">Paket 04 · <a href="../index.html">zurück zum Hub</a></div></footer>

@@ -1,0 +1,224 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 03 — State, Store und Persistenz</title>
+<style>
+  :root{
+    --papier:#faf8f4; --papier-tief:#f3efe7; --tinte:#211f1c; --tinte-weich:#4a453e; --tinte-matt:#7d766b;
+    --linie:#e0d9cc; --linie-stark:#c9c0ae; --akzent:#c2410c; --moos:#3f6212; --rot:#9f1239; --bernstein:#a16207;
+    --serif:"Iowan Old Style","Palatino",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--papier);color:var(--tinte);font:15px/1.65 var(--sans);}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px;}
+  nav.top{position:sticky;top:0;z-index:10;background:rgb(250 248 244/94%);border-bottom:1px solid var(--linie);backdrop-filter:blur(8px);}
+  nav.top .wrap{display:flex;align-items:center;gap:20px;height:52px;}
+  nav.top a{color:var(--tinte-matt);text-decoration:none;font-size:12.5px;}
+  nav.top a:hover{color:var(--akzent);}
+  nav.top .marke{font:600 14px var(--sans);color:var(--tinte);}
+  nav.top .krume{font:11px var(--mono);color:var(--tinte-matt);}
+  nav.top .stempel{margin-left:auto;font:11px var(--mono);color:var(--tinte-matt);}
+  header.hero{padding:52px 0 36px;border-bottom:1px solid var(--linie);}
+  h1{font:400 38px/1.12 var(--serif);letter-spacing:-.02em;margin-bottom:12px;}
+  h1 em{font-style:italic;color:var(--akzent);}
+  .lede{font:17px/1.6 var(--serif);color:var(--tinte-weich);max-width:640px;}
+  section{padding:42px 0;border-bottom:1px solid var(--linie);}
+  h2{font:400 27px/1.15 var(--serif);margin-bottom:6px;}
+  h2 em{font-style:italic;color:var(--akzent);}
+  h3{font:600 15px var(--sans);margin:24px 0 8px;}
+  .sub{color:var(--tinte-matt);font-size:13.5px;margin-bottom:22px;}
+  p{margin-bottom:13px;color:var(--tinte-weich);}
+  p strong,li strong,td strong{color:var(--tinte);font-weight:600;}
+  ul{margin:0 0 14px 18px;color:var(--tinte-weich);} li{margin-bottom:6px;}
+  code{font:12.5px var(--mono);background:var(--papier-tief);padding:1px 5px;border-radius:3px;color:var(--akzent);}
+  .quelle{font:11.5px var(--mono);color:var(--tinte-matt);}
+  .zahlen{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--linie);border:1px solid var(--linie);margin:20px 0;}
+  .zahl{background:#fff;padding:16px;}
+  .zahl .w{font:600 22px var(--mono);color:var(--tinte);}
+  .zahl .l{font:11px var(--sans);color:var(--tinte-matt);margin-top:4px;}
+  .warn{border-left:3px solid var(--akzent);background:#fff;padding:15px 17px;margin:20px 0;}
+  .warn .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--akzent);margin-bottom:5px;}
+  .gut{border-left:3px solid var(--moos);background:#fff;padding:15px 17px;margin:20px 0;}
+  .gut .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--moos);margin-bottom:5px;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px;}
+  th{text-align:left;font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--tinte-matt);
+    border-bottom:1.5px solid var(--linie-stark);padding:8px 10px;}
+  td{border-bottom:1px solid var(--linie);padding:9px 10px;vertical-align:top;color:var(--tinte-weich);}
+  td.mono{font:12.5px var(--mono);color:var(--tinte);}
+  .teilung{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--linie);border:1px solid var(--linie);margin:18px 0;}
+  .teilung > div{background:#fff;padding:18px;}
+  .teilung .k{font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;margin-bottom:9px;}
+  .teilung .dauer{color:var(--moos);} .teilung .fluecht{color:var(--akzent);}
+  .teilung ul{margin:0 0 0 16px;font-size:13px;}
+  .weiter{display:block;background:#1c1a17;color:#e4dfd6;padding:24px 26px;margin:40px 0 0;text-decoration:none;}
+  .weiter .l{font:600 10px var(--sans);letter-spacing:.09em;text-transform:uppercase;color:#a89f92;}
+  .weiter h3{color:#fff;font:400 22px var(--serif);margin:6px 0;}
+  .weiter p{color:#bdb5a8;margin:0;font-size:13.5px;}
+  footer{padding:30px 0 60px;color:var(--tinte-matt);font-size:12.5px;}
+  footer a{color:var(--akzent);}
+  @media(max-width:820px){.zahlen,.teilung{grid-template-columns:1fr;}}
+</style>
+
+<nav class="top"><div class="wrap">
+  <a class="marke" href="../index.html">← Performance-Plan</a>
+  <span class="krume">03 · State</span>
+  <a href="#pfad">Pfad</a><a href="#teilung">Teilung</a><a href="#writer">Writer</a>
+  <a href="#skalierung">Skalierung</a><a href="#migration">Migration</a>
+  <span class="stempel">Analyse mit Messwerten</span>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Ein Divider-Zug darf die <em>Platte nicht anfassen</em></h1>
+  <p class="lede">Jede Mutation schreibt heute die komplette Sidecar-Datei neu — synchron, auf dem Main
+  Thread. Solange das selten passiert, ist es unauffällig. Ein Layout, das sich beim Ziehen ständig
+  ändert, macht daraus ein Dauerfeuer. Dieses Paket trennt, was bleiben muss, von dem, was flüchtig ist.</p>
+</div></header>
+
+<section id="pfad"><div class="wrap">
+  <h2>Vom Klick bis zur <em>Platte</em></h2>
+  <p class="sub">Der heutige Weg einer Grid-Mutation, Schritt für Schritt.</p>
+
+  <p>Ein Drop ruft <code>addSessionToWorkspace</code>. Der Store validiert die Session per
+  <code>loadWorkspace()</code> und linearem Lookup, <strong>kopiert den gesamten UI-State</strong>,
+  mutiert ihn, macht ein vollständiges Equatable-Diff und ersetzt die eine beobachtete Property.
+  Jede echte Änderung rearmiert 400 ms; danach wird synchron auf dem Main Thread encodiert und atomar
+  geschrieben.</p>
+  <p class="quelle">AgentChatsView+Grid.swift:31-45 · AgentWindowStore.swift:423-465, 996-1007, 1019-1040</p>
+
+  <div class="zahlen">
+    <div class="zahl"><div class="w">99.677 B</div><div class="l">Sidecar <code>agent-ui-state.json</code> — gemessen 30.07.2026</div></div>
+    <div class="zahl"><div class="w">7.771.874 B</div><div class="l">Domain-Datei <code>AgentSessions.json</code></div></div>
+    <div class="zahl"><div class="w">400 ms</div><div class="l">Debounce, danach Vollwrite</div></div>
+  </div>
+
+  <p>Für den UI-Sidecar gibt es <em>kein</em> Lock — die Serialisierung übernimmt der MainActor;
+  <code>NSLock</code> nutzt nur der Domain-Store. Die Hauptkosten auf dem Main Thread sind damit:
+  State-Kopie und Deep-Compare, Normalisierung mit linearen Suchen, Observation-Invalidierung sowie
+  JSON-Encoding plus atomarer Dateiersatz.</p>
+
+  <div class="gut">
+    <div class="t">Was bereits richtig gebaut ist</div>
+    <p style="margin:0">Der Divider ist schon sauber entkoppelt: Mauswerte leben in einem
+    <strong>nicht beobachteten</strong> Drag-State, werden alle 33 ms nur lokal angewandt und
+    <strong>genau einmal beim Loslassen</strong> committet
+    <span class="quelle">(AgentGridSplitContainer.swift:3-11, 213-267)</span>. Dieses Muster ist die
+    Vorlage für alles Weitere — es muss beim Umbau erhalten bleiben, nicht neu erfunden werden.</p>
+  </div>
+
+  <h3>Schreibgranularität</h3>
+  <p>Geschrieben wird <strong>immer die ganze Datei</strong>, pretty-printed und mit sortierten Keys,
+  anschließend atomar ersetzt. Teilwrites gibt es nicht. Würde jeder Divider-Tick in den Store gehen,
+  wären das bis zu 30 State-Publikationen pro Sekunde und am Ende ein Vollwrite — der aktuelle Code
+  verhindert genau das. Viele kurze, getrennte Gesten erzeugen dennoch je einen Vollwrite.</p>
+  <p class="quelle">AgentSessionStore.swift:115-125</p>
+</div></section>
+
+<section id="teilung"><div class="wrap">
+  <h2>Die <em>Teilung</em></h2>
+  <p class="sub">Nicht alles, was das Layout beschreibt, muss die Sitzung überleben.</p>
+  <div class="teilung">
+    <div><div class="k dauer">Dauerhaft — gehört in v5</div>
+      <ul><li>Zell-ID, Reihenfolge, Session-Referenz</li><li>Split-Topologie</li>
+      <li><em>committete</em> Ratio je innerem Knoten</li><li>Fenster- und Fokusreferenzen</li>
+      <li>explizit benannte Snapshots</li></ul></div>
+    <div><div class="k fluecht">Flüchtig — nie persistieren</div>
+      <ul><li>Live-Ratios während des Ziehens</li><li>Hover- und Drop-Vorschau</li>
+      <li>gemessene Frames</li><li>Animationszustand</li><li>Undo-Ring</li></ul></div>
+  </div>
+
+  <p>Live-Geometrie wird ausschließlich in einem workspace-lokalen View-Modell gesampelt (16–33 ms),
+  ohne jeden Schreibzugriff auf den UI-State. Beim Loslassen gibt es <strong>genau einen</strong>
+  Commit. Ratios werden dabei auf <code>1e-4</code> quantisiert, und Deltas unter <code>0,001</code>
+  gelten als No-op — das verhindert Schreibvorgänge, die niemand sehen kann.</p>
+</div></section>
+
+<section id="writer"><div class="wrap">
+  <h2>Ein <em>serieller Writer</em></h2>
+  <p class="sub">Nicht schneller schreiben — seltener und woanders.</p>
+
+  <p>Vorgeschlagen ist ein serieller Writer auf einer Utility-Queue, der <code>(revision, unveränderlicher
+  Snapshot)</code> entgegennimmt und immer nur die <strong>neueste</strong> Revision schreibt:</p>
+
+  <table>
+    <tr><th>Änderungsart</th><th>Verzögerung</th><th>Begründung</th></tr>
+    <tr><td>Layout-Commit (Ratio, Frames)</td><td class="mono">750 ms trailing, hart max. 2 s</td><td>viele kleine Gesten hintereinander werden zu einem Write</td></tr>
+    <tr><td>semantische Änderung (Mitglied, Name)</td><td class="mono">400 ms</td><td>wie heute</td></tr>
+    <tr><td>Löschen, benannter Snapshot</td><td class="mono">sofort eingereiht</td><td>Datenverlust wäre teurer als I/O</td></tr>
+    <tr><td>Beenden der App</td><td class="mono">synchron drainieren</td><td>nichts darf offen bleiben</td></tr>
+  </table>
+
+  <p>Damit ist selbst ein 100-KB-Sidecar unproblematisch. Erst ab etwa <strong>1 MB</strong> lohnt sich
+  ein separates, eigenständig atomares Layout-Payload — vorher erhöht die Trennung nur die Komplexität.</p>
+
+  <div class="warn">
+    <div class="t">Eine Lücke, die schon heute besteht</div>
+    <p style="margin:0">Ein Decode-Fehler führt derzeit zum <strong>Totalfallback</strong> — der gesamte
+    UI-State ist dann weg <span class="quelle">(AgentSessionStore.swift:52-60, 94-107)</span>. Für v5
+    sollten <strong>1–3 Last-known-good-Generationen</strong> mitgeführt werden; sonst kostet ein
+    einzelner Schreibfehler die komplette Fenster- und Layout-Einrichtung.</p>
+  </div>
+</div></section>
+
+<section id="skalierung"><div class="wrap">
+  <h2>Wo es bei <em>200 Sessions</em> klemmt</h2>
+  <p class="sub">Lineare Suchen, die heute nicht auffallen, weil die Zahlen klein sind.</p>
+  <table>
+    <tr><th>Stelle</th><th>Kosten</th></tr>
+    <tr><td class="mono">gridWorkspace(id:) · Besitzer- und Tabsuche</td><td>linear <span class="quelle">(AgentWindowStore.swift:279-296, 101-110)</span></td></tr>
+    <tr><td class="mono">mutateGridWorkspace</td><td>sucht erneut linear <span class="quelle">(:737-744)</span></td></tr>
+    <tr><td class="mono">activateGridWorkspace</td><td><strong>O(C·F·T)</strong> — pro Zelle Fenstersuche, dann <code>contains</code> auf Tab-Array <span class="quelle">(:599-623, 751-759)</span></td></tr>
+    <tr><td class="mono">normalizedWindows · prune</td><td>Fenster × Workspace-Suchen <span class="quelle">(AgentUIState.swift:727-789, 475-519)</span></td></tr>
+    <tr><td class="mono">initialMigration</td><td><strong>O(P·S log S)</strong> — filtert und sortiert alle Sessions pro Projekt <span class="quelle">(:586-608)</span></td></tr>
+  </table>
+
+  <h3>Gegenmittel</h3>
+  <p>Pro Revision einmalig aufgebaute Indizes: <code>workspaceByID</code>, <code>sessionByID</code>,
+  <code>windowByTabID</code>, <code>ownerByWorkspaceID</code>, je Baum <code>nodeByID</code> und
+  <code>parentByNodeID</code> sowie eine einmalige DFS-Blattreihenfolge. Nie rekursiv vom Root pro Pane,
+  nie <code>contains</code> auf Arrays in Schleifen. Und: Publikation pro betroffenem Workspace-Slice
+  statt globaler Invalidierung — sonst rendert jede Änderung alle Fenster neu.</p>
+</div></section>
+
+<section id="migration"><div class="wrap">
+  <h2>v4 → v5 <em>ohne Verlust</em></h2>
+  <p class="sub">Die empfindlichste Stelle des ganzen Umbaus.</p>
+
+  <p>Vor jeder Normalisierung wird ein <strong>roher v4-Snapshot</strong> gesichert — das verlustfreie
+  Muster existiert bereits im Code <span class="quelle">(AgentUIState.swift:323-343)</span>. Die
+  manuellen <code>decodeIfPresent</code>-Defaults bleiben erhalten; sie sind der Grund, warum ein
+  fehlender Key heute nicht den ganzen Sidecar kostet.</p>
+
+  <h3>Zu erhalten sind</h3>
+  <ul>
+    <li>Workspace-ID, Name, Farbe, Sidebar-Reihenfolge</li>
+    <li>Slot-Reihenfolge <strong>inklusive der <code>nil</code>-Lücken</strong></li>
+    <li>jede gültige Session-Referenz</li>
+    <li>Capacity sowie visuell äquivalente Spalten- und Zeilen-Fractions</li>
+    <li>Fenster-IDs, Primärfenster, Tab-Reihenfolge, Selektionen, <code>showsGrid</code>, Workspace-Besitzer, Fokus</li>
+    <li>Pins, Auf-/Zugeklappt-Zustände, Ungelesen-Marken</li>
+  </ul>
+
+  <h3>Ablauf</h3>
+  <p>Deterministische Zell- und Knoten-IDs erzeugen, den Baum validieren, und <strong>erst danach</strong>
+  die Version auf v5 setzen. Die Migration ist idempotent und sichert sofort atomar. Schlägt die
+  Validierung fehl, wird die v4-Datei <strong>in Quarantäne verschoben statt überschrieben</strong>.</p>
+
+  <h3>Invarianten, die vor jedem Publish gelten müssen</h3>
+  <table>
+    <tr><td class="mono">azyklisch</td><td>der Baum enthält keinen Zyklus</td></tr>
+    <tr><td class="mono">genau eine Wurzel</td><td>kein zweiter Root</td></tr>
+    <tr><td class="mono">jeder Knoten einmal erreichbar</td><td>keine Doppelreferenz</td></tr>
+    <tr><td class="mono">jede Zelle genau ein Blatt</td><td>keine Zelle ohne Platz, kein Platz ohne Zelle</td></tr>
+    <tr><td class="mono">keine Session doppelt</td><td>pro Workspace eindeutig</td></tr>
+    <tr><td class="mono">Ratios endlich, positiv, normalisiert</td><td>Summe 1</td></tr>
+  </table>
+</div></section>
+
+<a class="weiter" href="../04-sofort/01-sofortmassnahmen.html">
+  <span class="l">Paket 04</span>
+  <h3>Sofortmaßnahmen — vier Schritte vor dem Umbau</h3>
+  <p>Zwei Schalter, eine Entkopplung, eine Baseline. Zusammen etwa anderthalb Tage. →</p>
+</a>
+
+<footer><div class="wrap">Paket 03 · <a href="../index.html">zurück zum Hub</a></div></footer>

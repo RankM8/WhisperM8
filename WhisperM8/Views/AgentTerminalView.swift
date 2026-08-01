@@ -24,9 +24,11 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     /// window-drag behavior.
     override var mouseDownCanMoveWindow: Bool { false }
 
-    /// P6 S5: SwiftTerms Metal-GPU-Renderer als Opt-in (Default: aus).
-    /// Einmal pro Prozess gelesen — Umschalten erfordert App-Neustart.
-    private static let metalRendererOptIn = AppPreferences.shared.isAgentTerminalMetalRendererEnabled
+    /// SwiftTerms Metal-GPU-Renderer — Opt-in, Default aus (Begründung in
+    /// `AppPreferences.isAgentTerminalMetalRendererEnabled`: das Schriftbild
+    /// leidet, der Gewinn ist unbelegt). Einmal pro Prozess gelesen —
+    /// Umschalten erfordert App-Neustart.
+    static let metalRendererOptIn = AppPreferences.shared.isAgentTerminalMetalRendererEnabled
 
     /// Aktivierung erst, wenn die View im Window hängt — in makeNSView ist
     /// der Container noch fensterlos und die MTKView hätte keine Surface.
@@ -97,6 +99,7 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     )
 
     private func feedDirect(_ bytes: ArraySlice<UInt8>, batched: Bool) {
+        PerformanceCounters.shared.count(.terminalFeedFlush, bytes: bytes.count)
         if batched {
             // Misst Parser + Render-Scheduling eines gebündelten Flushes
             // (grid.streamingFrame, Budget 16,7 ms) — keine GPU-Zeit.
@@ -113,7 +116,13 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     /// direkt durch (kein Verhaltensunterschied zu vorher).
     override func dataReceived(slice: ArraySlice<UInt8>) {
         assert(Thread.isMainThread)
+        // Der heißeste Pfad der App: bei Firehose-Output tausende Aufrufe pro
+        // Sekunde. Deshalb hier ausschließlich Zähler (~1 ns) und niemals ein
+        // os_signpost (~686 ns) — siehe `PerfTier`. Das Verhältnis
+        // Chunks-zu-Flushes zeigt, wie stark die Bündelung tatsächlich greift.
+        PerformanceCounters.shared.count(.terminalFeedChunk, bytes: slice.count)
         feedBatcher.receive(slice)
+        PerformanceCounters.shared.reportPending(bytes: feedBatcher.pendingByteCount)
     }
 
     /// Fokuswechsel im Grid: Hintergrund-Panes drosseln, die Fokus-Pane
@@ -701,10 +710,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         super.init()
         terminal.processDelegate = self
 
-        // SwiftTerm reicht `requestOpenLink` NICHT an den processDelegate weiter
-        // (und es ist nicht überschreibbar). Daher den terminalDelegate durch
-        // einen Proxy ersetzen, der nur Link-Klicks abfängt und sonst alles an
-        // die Basis weiterreicht.
+        // SwiftTerm reicht `requestOpenLink` NICHT an den processDelegate
+        // weiter. Der Proxy fängt es ab — und blockt zusätzlich das Lesen der
+        // Zwischenablage per OSC 52. Beide Gründe stehen in
+        // `AgentTerminalLinkInterceptor`; der zweite ist der bleibende.
         let interceptor = AgentTerminalLinkInterceptor(base: terminal) { [weak self] link, params in
             self?.handleOpenLink(link: link, params: params)
         }
@@ -1037,6 +1046,11 @@ struct AgentTerminalView: NSViewRepresentable {
     @ObservedObject var controller: AgentTerminalController
 
     func makeNSView(context: Context) -> NSView {
+        // Zählt Pane-Aufbauten. Ein Wiederaufbau bei bloßem Umsortieren wäre
+        // ein Fehler (der Scrollback ginge sichtbar verloren) — die Zahl hier
+        // deckt genau das auf. Erwartung: eine Zählung pro tatsächlich neu
+        // geöffneter Pane, nicht pro Layout-Änderung.
+        PerformanceCounters.shared.count(.paneMounted)
         let container = AgentTerminalContainerView(frame: .zero)
         container.configure(terminal: controller.terminal, sessionID: controller.sessionID)
         return container
@@ -1048,6 +1062,7 @@ struct AgentTerminalView: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
+        PerformanceCounters.shared.count(.paneDismantled)
         // Gepufferte Bytes einer gedrosselten Pane vor dem Abbau verarbeiten
         // (der Controller lebt in der Registry weiter — der Scrollback muss
         // vollständig sein).

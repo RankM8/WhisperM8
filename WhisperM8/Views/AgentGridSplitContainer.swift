@@ -237,6 +237,9 @@ struct AgentGridSplitContainer<Pane: View>: View {
         guard columnsChanged || rowsChanged else { return }
 
         PerfSignposts.grid.emitEvent("grid.divider.layoutTick")
+        // Zählt angewandte Layout-Durchläufe. Verhältnis zu den Panes zeigt,
+        // ob ein Zug am Trenner das Layout öfter neu rechnet als nötig.
+        PerformanceCounters.shared.count(.layoutSolved)
         let token = PerfBudgets.gridDividerTick.begin()
         if columnsChanged, let nextColumns { appliedColumnFractions = nextColumns }
         if rowsChanged, let nextRows { appliedRowFractions = nextRows }

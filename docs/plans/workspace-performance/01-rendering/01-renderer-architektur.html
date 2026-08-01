@@ -1,0 +1,261 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 01 — Renderer-Architektur</title>
+<style>
+  :root{
+    --papier:#faf8f4; --papier-tief:#f3efe7; --tinte:#211f1c; --tinte-weich:#4a453e; --tinte-matt:#7d766b;
+    --linie:#e0d9cc; --linie-stark:#c9c0ae; --akzent:#c2410c; --moos:#3f6212; --rot:#9f1239; --bernstein:#a16207;
+    --serif:"Iowan Old Style","Palatino",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--papier);color:var(--tinte);font:15px/1.65 var(--sans);}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px;}
+  nav.top{position:sticky;top:0;z-index:10;background:rgb(250 248 244/94%);border-bottom:1px solid var(--linie);backdrop-filter:blur(8px);}
+  nav.top .wrap{display:flex;align-items:center;gap:20px;height:52px;}
+  nav.top a{color:var(--tinte-matt);text-decoration:none;font-size:12.5px;}
+  nav.top a:hover{color:var(--akzent);}
+  nav.top .marke{font:600 14px var(--sans);color:var(--tinte);}
+  nav.top .krume{font:11px var(--mono);color:var(--tinte-matt);}
+  nav.top .stempel{margin-left:auto;font:11px var(--mono);color:var(--tinte-matt);}
+  header.hero{padding:52px 0 36px;border-bottom:1px solid var(--linie);}
+  h1{font:400 38px/1.12 var(--serif);letter-spacing:-.02em;margin-bottom:12px;}
+  h1 em{font-style:italic;color:var(--akzent);}
+  .lede{font:17px/1.6 var(--serif);color:var(--tinte-weich);max-width:640px;}
+  section{padding:42px 0;border-bottom:1px solid var(--linie);}
+  h2{font:400 27px/1.15 var(--serif);margin-bottom:6px;}
+  h2 em{font-style:italic;color:var(--akzent);}
+  h3{font:600 15px var(--sans);margin:24px 0 8px;}
+  .sub{color:var(--tinte-matt);font-size:13.5px;margin-bottom:22px;}
+  p{margin-bottom:13px;color:var(--tinte-weich);}
+  p strong,li strong{color:var(--tinte);font-weight:600;}
+  ul{margin:0 0 14px 18px;color:var(--tinte-weich);}
+  li{margin-bottom:6px;}
+  code{font:12.5px var(--mono);background:var(--papier-tief);padding:1px 5px;border-radius:3px;color:var(--akzent);}
+  .quelle{font:11.5px var(--mono);color:var(--tinte-matt);}
+  .code{background:#1c1a17;color:#e4dfd6;border-radius:6px;padding:16px 18px;font:12.5px/1.65 var(--mono);
+    overflow-x:auto;margin:14px 0;}
+  .code .k{color:#e6a15f;} .code .t{color:#8fbf7f;} .code .c{color:#8b8378;font-style:italic;}
+  .warn{border-left:3px solid var(--akzent);background:#fff;padding:15px 17px;margin:20px 0;}
+  .warn .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--akzent);margin-bottom:5px;}
+  .gut{border-left:3px solid var(--moos);background:#fff;padding:15px 17px;margin:20px 0;}
+  .gut .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--moos);margin-bottom:5px;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px;}
+  th{text-align:left;font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--tinte-matt);
+    border-bottom:1.5px solid var(--linie-stark);padding:8px 10px;}
+  td{border-bottom:1px solid var(--linie);padding:9px 10px;vertical-align:top;color:var(--tinte-weich);}
+  td.mono{font:12.5px var(--mono);color:var(--tinte);}
+  .weiter{display:block;background:#1c1a17;color:#e4dfd6;padding:24px 26px;margin:40px 0 0;text-decoration:none;}
+  .weiter .l{font:600 10px var(--sans);letter-spacing:.09em;text-transform:uppercase;color:#a89f92;}
+  .weiter h3{color:#fff;font:400 22px var(--serif);margin:6px 0;}
+  .weiter p{color:#bdb5a8;margin:0;font-size:13.5px;}
+  footer{padding:30px 0 60px;color:var(--tinte-matt);font-size:12.5px;}
+  footer a{color:var(--akzent);}
+</style>
+
+<nav class="top"><div class="wrap">
+  <a class="marke" href="../index.html">← Performance-Plan</a>
+  <span class="krume">01 · Renderer</span>
+  <a href="#befund">Befund</a><a href="#ebenen">Ebenen</a><a href="#layout">Layout</a>
+  <a href="#drag">Drag</a><a href="#hybrid">Hybrid</a><a href="#gates">Gates</a>
+  <span class="stempel">Analyse mit Code-Belegen</span>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Rechtecke verschieben, <em>keine Views bauen</em></h1>
+  <p class="lede">Ein Layoutwechsel darf im neuen Grid nur eines tun: den Panes neue Frames geben.
+  Alles andere — Struktur, Identität, PTY-Hosts — bleibt stehen. Dieses Paket beschreibt, wie das in
+  SwiftUI geht und woran es heute scheitern würde.</p>
+</div></header>
+
+<section id="befund"><div class="wrap">
+  <h2>Was heute im Weg <em>steht</em></h2>
+  <p class="sub">Vier Befunde aus dem bestehenden Grid-Pfad, jeder mit Fundstelle.</p>
+
+  <h3>Die Invalidierungsdomäne umfasst alles</h3>
+  <p><code>AgentChatsView</code> bezieht den kompletten Workspace aus einer beobachteten Property, den
+  kompletten Fensterzustand aus einer zweiten. Damit kann praktisch jede Mutation den großen Root-Body
+  invalidieren. Ein Diff-Gate im WindowStore mildert das, ändert aber nichts an der Granularität.</p>
+  <p class="quelle">AgentChatsView.swift:45-50 · AgentWorkspaceStore.swift:327-353 · AgentWindowStore.swift:36-43, 996-1006</p>
+
+  <h3>Jeder Body wiederholt O(n)-Arbeit</h3>
+  <p>Pro Grid-Body entsteht ein Dictionary über <em>alle</em> Sessions; jede Pane sucht ihr Projekt
+  linear, und die Fokusermittlung scannt erneut. Bei neun Panes multipliziert sich das.</p>
+  <p class="quelle">AgentChatsView+Grid.swift:211-217, 740-743 · AgentChatsView.swift:589-593, 395-398</p>
+
+  <h3>Drei GeometryReader übereinander, mit Rückkopplung</h3>
+  <p>Root-Reader, Split-Reader und die Flächenmessung des Grids liegen gestapelt — und die Messung
+  schreibt Größenänderungen zurück in Root-State. Auch Hover und Drop schreiben dorthin. Damit
+  invalidiert eine Mausbewegung deutlich mehr als das Overlay, das sie eigentlich betrifft.</p>
+  <p class="quelle">AgentChatsView.swift:646-695, 154-175 · AgentGridSplitContainer.swift:57-60 · AgentChatsView+Grid.swift:245-250, 642-647</p>
+
+  <div class="warn">
+    <div class="t">Der gefährlichste Befund</div>
+    <p style="margin:0"><strong>Die View-Identität hängt am Strukturpfad.</strong> Das Grid ist
+    verschachteltes <code>VStack/HStack/ForEach</code> mit Index-IDs plus einem Sonderast für „2+1".
+    Ein Layoutwechsel oder ein Session-Tausch zwischen Slots ändert den Elternpfad — und damit kann
+    SwiftUI den Terminal-Host neu mounten. Der AppKit-Container fängt das heute nachträglich ab
+    (<span class="quelle">AgentTerminalView.swift:1089-1137</span>), aber er verhindert den Re-Mount
+    nicht, er repariert ihn.</p>
+  </div>
+
+  <h3>Der Divider läuft mit 30 fps, nicht 60</h3>
+  <p>Rohwerte sind bereits sauber entkoppelt und die Persistenz erfolgt einmalig — angewendet wird
+  aber nur alle 33 ms. Das ist die Hälfte dessen, was sich flüssig anfühlt.</p>
+  <p class="quelle">AgentGridSplitContainer.swift:213-245</p>
+</div></section>
+
+<section id="ebenen"><div class="wrap">
+  <h2>Zwei flache <em>Ebenen</em></h2>
+  <p class="sub">Die Struktur ändert sich nie — nur die Rechtecke darin.</p>
+
+  <p>Der Kern des Vorschlags: ein einziger Stage-View, dessen Aufbau über die gesamte Lebensdauer
+  konstant bleibt, mit zwei Ebenen darin.</p>
+
+  <div class="code">
+<span class="c">// Ebene 1 — Pane-Chrome: Kopfzeilen, Stapel-Reiter, Fokusrahmen</span>
+<span class="k">ForEach</span>(panes, id: \.<span class="t">paneID</span>) { pane <span class="k">in</span> PaneChrome(pane) }
+
+<span class="c">// Ebene 2 — Terminals: gekeyt nach SESSION, nicht nach Position</span>
+<span class="k">ForEach</span>(liveSessions, id: \.<span class="t">sessionID</span>) { session <span class="k">in</span>
+    TerminalHost(session)          <span class="c">// bleibt derselbe Knoten, immer</span>
+        .layoutValue(key: <span class="t">PaneRect</span>.self, value: frames[session.paneID])
+}</div>
+
+  <p>Weil die Terminal-Ebene nach <strong>SessionID</strong> gekeyt ist und nicht nach Slot oder
+  Position, bleibt der PTY-Host derselbe SwiftUI- und AppKit-Knoten — beim Tauschen, beim Stapeln,
+  beim Zoomen. Die Zuordnung Session→Pane ändert nur noch das Rechteck und die Ebene im Stapel.</p>
+
+  <div class="gut">
+    <div class="t">Regel für gestapelte Terminals</div>
+    <p style="margin:0">Inaktive Stapel-Terminals bleiben <strong>montiert</strong>, unsichtbar und ohne
+    Hit-Testing — aber sie dürfen <strong>nicht auf 0×0 verkleinert</strong> werden. SwiftTerm reflowt
+    sonst seinen Puffer, und beim Aufdecken steht der Text falsch umbrochen da.</p>
+  </div>
+</div></section>
+
+<section id="layout"><div class="wrap">
+  <h2>Warum ein Custom-<em>Layout</em></h2>
+  <p class="sub">Und nicht ZStack mit Offsets, nicht Canvas, nicht AnyLayout.</p>
+
+  <table>
+    <tr><th>Variante</th><th>Bewertung</th></tr>
+    <tr><td class="mono">Custom Layout-Protokoll</td><td><strong>Empfohlen.</strong> Platziert Subviews anhand vorberechneter <code>CGRect</code>s über einen <code>LayoutValueKey</code>. Exakte Proposals, saubere Hit-Tests, wenig Modifier-Geometrie. Derselbe konkrete Layout-Typ trägt Auto, Snapshot <em>und</em> Zoom.</td></tr>
+    <tr><td class="mono">ZStack + frame + position</td><td>Funktioniert, erzeugt aber Modifier-Geometrie pro Pane und unschärfere Hit-Tests.</td></tr>
+    <tr><td class="mono">AnyLayout-Umschalten</td><td><strong>Verboten.</strong> Ein Wechsel des Layout-Typs ist ein Strukturwechsel — genau der Auslöser für Re-Mounts.</td></tr>
+    <tr><td class="mono">Canvas</td><td>Scheidet aus: kann keine interaktiven <code>NSViewRepresentable</code>-PTYs hosten.</td></tr>
+    <tr><td class="mono">Eigener NSView-Container</td><td>Fallback, falls Instruments beim Custom Layout doch <code>updateNSView</code>-Stürme zeigt. Maximale Kontrolle, aber deutlich aufwendiger für Drag&nbsp;&amp;&nbsp;Drop, Accessibility und Pane-Chrome.</td></tr>
+  </table>
+
+  <h3>Zoom ist ein Frame, kein Sonderfall</h3>
+  <p>Kein konditionelles Entfernen der anderen Panes. Die gezoomte Pane bekommt das volle Rechteck und
+  einen höheren zIndex; alle anderen behalten ihre Frames und liegen darunter. Damit ist Zoom
+  ein reiner Zahlenwechsel — und das Zurückschalten kann nichts kaputt machen.</p>
+
+  <h3>Frames einmal pro Revision lösen</h3>
+  <p>Die Berechnung läuft genau einmal je <code>(layoutRevision, stageSize)</code>, nicht pro Body.
+  Session- und Projekt-Indizes werden vorberechnet eingespeist statt in jeder Pane neu gesucht.
+  Pane-Chrome wird eine kleine <code>Equatable</code>-View mit expliziten Eingaben — keine Closure,
+  die den gesamten <code>AgentChatsView</code> einfängt.</p>
+</div></section>
+
+<section id="drag"><div class="wrap">
+  <h2>Ziehen bei <em>60 fps</em></h2>
+  <p class="sub">Die Regel lautet: Rohdaten fließen nicht durch den State.</p>
+
+  <p>Zeigerposition und Translation leben ausschließlich in einer renderer-lokalen, <strong>nicht
+  beobachteten</strong> Struktur. Per Display-Link wird höchstens einmal je 16,7 ms ein kleiner
+  Snapshot angewendet.</p>
+
+  <table>
+    <tr><th>Darf während des Ziehens in den State</th><th>Darf es nicht</th></tr>
+    <tr><td>Ziel-Pane und Zone <em>(nur beim Wechsel)</em><br>Ghost-Frame<br>aktuelle Split-Vorschau</td>
+        <td>Workspace- oder WindowStore-Mutationen<br>Persistenz<br>Session-Map neu bauen<br>Split-Baum neu konstruieren</td></tr>
+  </table>
+
+  <p>Die Drop-Zonen und der Ghost leben in einer separaten Overlay-Ebene. Die echten PTY-Frames ändern
+  sich <strong>erst beim Loslassen</strong>. Beim Divider ist Live-Reflow gewünscht — dort wird auf
+  VSync gesampelt, nur die betroffene Baumkante neu gelöst und einmal bei <code>mouseUp</code>
+  committet. PTY-Resize wird nie animiert; animiert werden nur Ghost und Hervorhebung.</p>
+</div></section>
+
+<section id="hybrid"><div class="wrap">
+  <h2>Die zweite Variante: <em>AppKit-Terminalcontainer</em></h2>
+  <p class="sub">Ergänzt nach der Recherche vom 01.08.2026 — gleichwertige Option, nicht Notnagel.</p>
+
+  <p>Statt die Terminals von SwiftUI platzieren zu lassen, hält <strong>ein einziger AppKit-Container</strong>
+  alle Terminal-Views und setzt ihre Frames selbst. SwiftUI rendert dann nur noch Kopfzeilen,
+  Drop-Zonen und Overlays — über schmale <code>NSHostingView</code>s, nicht als Fläche über den
+  Terminals.</p>
+
+  <p><strong>Das ist kein exotischer Weg.</strong> Ghostty ist ursprünglich „all-in auf SwiftUI"
+  gebaut worden und hat die Split-Logik später bewusst nach AppKit verlagert
+  (<a href="https://github.com/ghostty-org/ghostty/pull/7523">PR #7523</a>): SwiftUI arrangiert weiter,
+  AppKit hält Daten und Logik, die Views enthalten fast nichts mehr.</p>
+
+  <table>
+    <tr><th>Gewinn</th><th>Verlust</th></tr>
+    <tr><td>stabile NSView-Identität ohne Umweg<br>atomare Frame- und Z-Order-Wechsel<br>verlässlicher First Responder<br>Divider bei 60/120 Hz ohne SwiftUI-Diffing</td>
+        <td>automatische SwiftUI-Transitions<br>bequemes <code>.dropDestination</code><br>einfache Accessibility-Komposition</td></tr>
+  </table>
+
+  <h3>Wie Drag &amp; Drop dann funktioniert</h3>
+  <p>Ein zentraler <code>NSDraggingDestination</code> am Container: Er konvertiert den Mauspunkt, fragt
+  den Split-Baum nach Pane und Drop-Kante und aktualisiert ein SwiftUI-Overlay-Modell. Die
+  transparenten Overlay-Flächen müssen im <code>hitTest</code> tatsächlich <code>nil</code> liefern —
+  <strong>kein vollflächiges HostingView über SwiftTerm</strong>.</p>
+
+  <div class="warn">
+    <div class="t">Warum dieser Punkt keine Theorie ist</div>
+    <p style="margin:0">Im eigenen Code steht bereits: <em>„Bewusst KEINE Drag/Drop-Modifier an dieser
+    Row. Der Container bleibt nicht-lazy (LazyVStack + .draggable = Mai-2026-Freeze, Fix 60ca683)."</em>
+    <span class="quelle">AgentChatsSidebarViews.swift:199</span> — SwiftUI-Drag hat diese App schon
+    einmal vollständig eingefroren.</p>
+  </div>
+
+  <h3>Kipppunkte: ab wann diese Variante verbindlich wird</h3>
+  <p>Jeder einzelne Punkt genügt, gemessen am Prototyp der SwiftUI-Variante:</p>
+  <ul>
+    <li>p95 der Divider-Ticks über <strong>16,7 ms</strong></li>
+    <li>Fokuswechsel über <strong>33 ms</strong>, Aufbau über <strong>50 ms</strong></li>
+    <li><code>makeNSView</code>/<code>dismantleNSView</code> während reiner <strong>Geometrieoperationen</strong></li>
+    <li>Verlust des First Responders oder sichtbare Leerframes</li>
+  </ul>
+
+  <div class="gut">
+    <div class="t">Der Grund, warum die Entscheidung warten kann</div>
+    <p style="margin:0">Beide Varianten nutzen <strong>denselben Split-Baum und dieselbe pure Engine</strong>.
+    Solange keine Logik in den Views liegt, bleibt der Wechsel billig — deshalb wird zuerst gemessen und
+    dann entschieden, nicht umgekehrt. Was der AppKit-Container allerdings <em>nicht</em> löst, ist
+    SwiftTerms Main-Thread-Parsing; die Drosselung aus Paket 02 bleibt in jedem Fall nötig.</p>
+  </div>
+</div></section>
+
+<section id="gates"><div class="wrap">
+  <h2>Abnahme-<em>Gates</em></h2>
+  <p class="sub">Ohne diese Zahlen gilt das Paket als nicht fertig.</p>
+  <table>
+    <tr><th>Messpunkt</th><th>Grenze p95</th><th>Anmerkung</th></tr>
+    <tr><td class="mono">grid.layout.solve</td><td class="mono">≤ 1 ms</td><td>reine Rechnung</td></tr>
+    <tr><td class="mono">grid.layout.diffApply</td><td class="mono">≤ 2 ms</td><td>Anwenden der Frames</td></tr>
+    <tr><td class="mono">Layout-Tick gesamt</td><td class="mono">≤ 8 ms, nie > 16,7</td><td>Main-Thread-Anteil</td></tr>
+    <tr><td class="mono">grid.drag.resolveTarget</td><td class="mono">≤ 0,5 ms</td><td>Zone bestimmen</td></tr>
+    <tr><td class="mono">Eingabe → Frame</td><td class="mono">≤ 16,7 ms</td><td>gefühlte Direktheit</td></tr>
+    <tr><td class="mono">grid.layout.switch</td><td class="mono">≤ 16,7 ms</td><td>Policy/Snapshot-Wechsel</td></tr>
+    <tr><td class="mono">pane.mount / dismantle</td><td class="mono">exakt 0</td><td><strong>bei unveränderter Sessionmenge</strong></td></tr>
+    <tr><td class="mono">grid.terminal.resize</td><td class="mono">≤ 8 ms aggregiert</td><td>alle Panes zusammen</td></tr>
+    <tr><td class="mono">verpasste Frames im 5-s-Drag</td><td class="mono">&lt; 1 %</td><td></td></tr>
+  </table>
+  <p style="margin-top:16px">Zusätzlich mitzählen: Body-Auswertungen sowie
+  <code>make/update/dismantleNSView</code> pro Interaktion. Diese Zähler sind der eigentliche Beweis,
+  dass die Identität hält — Zeitmessungen allein würden einen Re-Mount übersehen, solange er schnell ist.</p>
+</div></section>
+
+<a class="weiter" href="../02-terminals/01-pty-durchsatz.html">
+  <span class="l">Paket 02</span>
+  <h3>Terminals — drei Geschwindigkeiten</h3>
+  <p>Neun Textströme, ein Main Thread. Warum ein gestapelter Chat heute der teuerste wäre. →</p>
+</a>
+
+<footer><div class="wrap">Paket 01 · <a href="../index.html">zurück zum Hub</a></div></footer>

@@ -1,0 +1,248 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 05 — Entscheidungen, Scope und Alternativen</title>
+<style>
+  :root{
+    --papier:#faf8f4; --papier-tief:#f3efe7; --tinte:#211f1c; --tinte-weich:#4a453e; --tinte-matt:#7d766b;
+    --linie:#e0d9cc; --linie-stark:#c9c0ae; --akzent:#c2410c; --moos:#3f6212; --rot:#9f1239; --bernstein:#a16207;
+    --serif:"Iowan Old Style","Palatino",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--papier);color:var(--tinte);font:15px/1.65 var(--sans);}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px;}
+  nav.top{position:sticky;top:0;z-index:10;background:rgb(250 248 244/94%);border-bottom:1px solid var(--linie);backdrop-filter:blur(8px);}
+  nav.top .wrap{display:flex;align-items:center;gap:20px;height:52px;}
+  nav.top a{color:var(--tinte-matt);text-decoration:none;font-size:12.5px;}
+  nav.top a:hover{color:var(--akzent);}
+  nav.top .marke{font:600 14px var(--sans);color:var(--tinte);}
+  nav.top .krume{font:11px var(--mono);color:var(--tinte-matt);}
+  nav.top .stempel{margin-left:auto;font:11px var(--mono);color:var(--tinte-matt);}
+  header.hero{padding:52px 0 36px;border-bottom:1px solid var(--linie);}
+  h1{font:400 38px/1.12 var(--serif);letter-spacing:-.02em;margin-bottom:12px;}
+  h1 em{font-style:italic;color:var(--akzent);}
+  .lede{font:17px/1.6 var(--serif);color:var(--tinte-weich);max-width:660px;}
+  section{padding:42px 0;border-bottom:1px solid var(--linie);}
+  h2{font:400 27px/1.15 var(--serif);margin-bottom:6px;}
+  h2 em{font-style:italic;color:var(--akzent);}
+  h3{font:600 15px var(--sans);margin:22px 0 8px;}
+  .sub{color:var(--tinte-matt);font-size:13.5px;margin-bottom:22px;}
+  p{margin-bottom:13px;color:var(--tinte-weich);}
+  p strong,li strong,td strong{color:var(--tinte);font-weight:600;}
+  ul{margin:0 0 14px 18px;color:var(--tinte-weich);} li{margin-bottom:6px;}
+  code{font:12.5px var(--mono);background:var(--papier-tief);padding:1px 5px;border-radius:3px;color:var(--akzent);}
+  .quelle{font:11.5px var(--mono);color:var(--tinte-matt);}
+  a{color:var(--akzent);}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px;}
+  th{text-align:left;font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--tinte-matt);
+    border-bottom:1.5px solid var(--linie-stark);padding:8px 10px;}
+  td{border-bottom:1px solid var(--linie);padding:9px 10px;vertical-align:top;color:var(--tinte-weich);}
+  td.mono{font:12.5px var(--mono);color:var(--tinte);}
+  .opt{border:1px solid var(--linie);background:#fff;margin:16px 0;}
+  .opt .kopf{display:flex;align-items:baseline;gap:12px;padding:13px 18px;border-bottom:1px solid var(--linie);background:var(--papier-tief);}
+  .opt .buchstabe{font:600 13px var(--mono);color:var(--akzent);}
+  .opt .titel{font:600 16px var(--sans);}
+  .opt .verdikt{margin-left:auto;font:600 10px var(--sans);letter-spacing:.06em;text-transform:uppercase;}
+  .ja{color:var(--moos);} .spaeter{color:var(--bernstein);} .nein{color:var(--rot);}
+  .opt .rumpf{padding:15px 18px;}
+  .scope{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--linie);border:1px solid var(--linie);margin:18px 0;}
+  .scope > div{background:#fff;padding:18px;}
+  .scope .k{font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;}
+  .scope .drin{color:var(--moos);} .scope .raus{color:var(--rot);}
+  .scope ul{margin:0 0 0 16px;font-size:13px;}
+  .frage{border-left:3px solid var(--bernstein);background:#fff;padding:15px 17px;margin:16px 0;}
+  .frage .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--bernstein);margin-bottom:5px;}
+  .frage .empf{margin-top:9px;padding-top:9px;border-top:1px dashed var(--linie);font-size:13px;}
+  .frage .empf b{color:var(--tinte);}
+  .weiter{display:block;background:#1c1a17;color:#e4dfd6;padding:24px 26px;margin:40px 0 0;text-decoration:none;}
+  .weiter .l{font:600 10px var(--sans);letter-spacing:.09em;text-transform:uppercase;color:#a89f92;}
+  .weiter h3{color:#fff;font:400 22px var(--serif);margin:6px 0;}
+  .weiter p{color:#bdb5a8;margin:0;font-size:13.5px;}
+  footer{padding:30px 0 60px;color:var(--tinte-matt);font-size:12.5px;}
+  @media(max-width:820px){.scope{grid-template-columns:1fr;}}
+</style>
+
+<nav class="top"><div class="wrap">
+  <a class="marke" href="../index.html">← Performance-Plan</a>
+  <span class="krume">05 · Entscheidungen</span>
+  <a href="#recherche">Recherche</a><a href="#optionen">Optionen</a><a href="#scope">Scope</a>
+  <a href="#offen">Offene Fragen</a>
+  <span class="stempel">Stand 01.08.2026</span>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Was wir bauen — und was <em>bewusst nicht</em></h1>
+  <p class="lede">Die Architekturfrage lautet nicht „SwiftUI oder AppKit". Sie lautet: Wie weit muss die
+  Terminal-Ebene vom deklarativen Chrome entkoppelt werden — und wo hört der Nutzen auf, den man
+  tatsächlich spürt?</p>
+</div></header>
+
+<section id="recherche"><div class="wrap">
+  <h2>Was die Recherche <em>ergeben</em> hat</h2>
+  <p class="sub">Vier Befunde, die die Bewertung gegenüber der ersten Planfassung verändern.</p>
+
+  <h3>1 — Ghostty hat genau diese Reise hinter sich</h3>
+  <p>Ghostty war ursprünglich „all-in auf SwiftUI" gebaut. Mit
+  <a href="https://github.com/ghostty-org/ghostty/pull/7523">PR #7523</a> wurde die Split-Logik bewusst
+  nach AppKit verlagert — SwiftUI arrangiert weiterhin den Split-Baum, aber die Daten und die Logik
+  liegen in AppKit, und die Views enthalten fast nichts mehr. Das Datenmodell dort ist ein
+  <strong>immutabler Split-Baum mit Copy-on-Write</strong>, also genau das, was in Paket 01 geplant ist.</p>
+  <p class="quelle">Belege: deepwiki.com/ghostty-org/ghostty/6.2.3-split-management-system</p>
+
+  <h3>2 — Der Flaschenhals ist SwiftTerm, nicht SwiftUI</h3>
+  <p>Der SwiftTerm-Maintainer führt ein offenes Issue
+  (<a href="https://github.com/migueldeicaza/SwiftTerm/issues/137">#137</a>): Views sollten asynchron
+  zur Engine laufen; bei zu viel Daten in <code>parse</code> bleibt das Display-Update aus. Das ist die
+  technische Ursache des Symptoms „viel Output → alles klebt" — ein bekanntes Upstream-Thema, kein
+  Fehler im eigenen Code.</p>
+
+  <h3>3 — Der GPU-Schalter liegt seit jeher ungenutzt da</h3>
+  <p>SwiftTerms Metal-Renderer ist in <code>QuietableTerminalView</code> bereits verdrahtet, aber als
+  Opt-in mit Default <strong>aus</strong>. Alle Vergleichsprodukte (Ghostty, iTerm2, Warp, WezTerm)
+  rendern auf der GPU. <span class="quelle">AgentTerminalView.swift:27-41</span></p>
+
+  <h3>4 — Der Präzedenzfall für SwiftUI-Drag steht im eigenen Code</h3>
+  <p>In <code>AgentChatsSidebarViews.swift:199</code> steht wörtlich: <em>„Bewusst KEINE
+  Drag/Drop-Modifier an dieser Row. Der Container bleibt nicht-lazy (LazyVStack + .draggable =
+  Mai-2026-Freeze, Fix 60ca683)."</em> SwiftUI-Drag hat diese App bereits einmal vollständig
+  eingefroren.</p>
+</div></section>
+
+<section id="optionen"><div class="wrap">
+  <h2>Vier <em>Wege</em>, ehrlich bewertet</h2>
+
+  <div class="opt">
+    <div class="kopf"><span class="buchstabe">A</span><span class="titel">Bleiben und optimieren</span><span class="verdikt ja">in Scope</span></div>
+    <div class="rumpf">
+      <p style="margin:0">Metal an, SwiftTerm aktualisieren, Drosselung in drei Stufen, Persistenz vom
+      Main Thread. <strong>Aufwand: Tage.</strong> Risiko gering, Gewinn wahrscheinlich groß, weil es
+      genau die Stellen trifft, an denen die dokumentierten Freezes entstanden.</p>
+    </div>
+  </div>
+
+  <div class="opt">
+    <div class="kopf"><span class="buchstabe">B</span><span class="titel">Hybrid: AppKit-Terminalcontainer</span><span class="verdikt spaeter">entscheidet die Messung</span></div>
+    <div class="rumpf">
+      <p>Ein einziger AppKit-Container hält alle Terminal-Views und setzt ihre Frames selbst; SwiftUI
+      rendert nur Kopfzeilen, Drop-Zonen und Overlays.</p>
+      <table>
+        <tr><th>Gewinn</th><th>Verlust</th></tr>
+        <tr><td>stabile NSView-Identität · atomare Frame- und Z-Order-Wechsel · verlässlicher First Responder · Divider bei 60/120 Hz ohne SwiftUI-Diffing</td>
+            <td>automatische SwiftUI-Transitions · bequemes <code>.dropDestination</code> · einfache Accessibility-Komposition</td></tr>
+      </table>
+      <p style="margin-top:12px"><strong>Kipppunkte, ab denen B verbindlich wird</strong> — jeder einzelne genügt:</p>
+      <ul>
+        <li>p95 der Divider-Ticks über <strong>16,7 ms</strong></li>
+        <li>Fokuswechsel über <strong>33 ms</strong>, Aufbau über <strong>50 ms</strong></li>
+        <li><code>makeNSView</code>/<code>dismantleNSView</code> während reiner <strong>Geometrieoperationen</strong></li>
+        <li>Verlust des First Responders oder sichtbare Leerframes</li>
+      </ul>
+      <p style="margin:0"><strong>Wichtig:</strong> B behebt <em>nicht</em> SwiftTerms
+      Main-Thread-Parsing. Wer B für die Lösung des Durchsatzproblems hält, verlagert es nur.</p>
+    </div>
+  </div>
+
+  <div class="opt">
+    <div class="kopf"><span class="buchstabe">C</span><span class="titel">Terminal-Kern austauschen: libghostty</span><span class="verdikt spaeter">beobachten, nicht bauen</span></div>
+    <div class="rumpf">
+      <p>Die einzige Option, die das Problem an der Wurzel löst: SIMD-Parser, GPU-Rendering, eigene
+      Threads pro Terminal. Stand heute veröffentlicht Ghostty ein <code>ghostty-vt.xcframework</code>
+      auf Tip-Builds; Community-Pakete (libghostty-spm, Termini) existieren; Hashimotos
+      <a href="https://mitchellh.com/writing/libghostty-is-coming">offizieller Swift-Metal-Renderer</a>
+      ist angekündigt, aber <strong>noch nicht veröffentlicht</strong>.</p>
+      <p><strong>Der wahre Aufwand liegt nicht in der Engine</strong>, sondern im Wiederaufbau dessen,
+      was rundherum schon existiert: Link-Interceptor, Scroll-Lock, Selektion, Feed-Batcher,
+      Keyboard-Profile pro TUI-Typ. Realistisch <strong>zwei bis vier Monate</strong>.</p>
+      <p style="margin:0"><strong>Bedingung für eine Neubewertung:</strong> Die Baseline aus A4 zeigt
+      SwiftTerms Parsing in den Top 3 der Main-Thread-Zeit — <em>und</em> das offizielle Swift-Paket ist
+      erschienen. Dann als eigenes Projekt, nicht nebenbei.</p>
+    </div>
+  </div>
+
+  <div class="opt">
+    <div class="kopf"><span class="buchstabe">D</span><span class="titel">Eigenes UI-Framework, Rust/Zig</span><span class="verdikt nein">außer Scope</span></div>
+    <div class="rumpf">
+      <p style="margin:0">Der Weg von <a href="https://www.warp.dev/blog/how-warp-works">Warp</a> und
+      WezTerm. Für ein Feature in einer bestehenden Swift-App: Jahre statt Monate, ohne erkennbaren
+      Gegenwert bei dieser Last.</p>
+    </div>
+  </div>
+</div></section>
+
+<section id="scope"><div class="wrap">
+  <h2>Scope — <em>Stand jetzt</em></h2>
+  <p class="sub">Was draußen ist, ist nicht für immer draußen. Jede Ausschlussentscheidung hat eine Bedingung.</p>
+  <div class="scope">
+    <div><div class="k drin">Drin</div>
+      <ul>
+        <li>Metal-Schalter prüfen und messen (A1)</li>
+        <li>SwiftTerm aktualisieren (A2)</li>
+        <li>Persistenz vom Main Thread (A3)</li>
+        <li>Messgerüst und Baseline (A4)</li>
+        <li>Layout-Engine als pure, testbare Funktion</li>
+        <li>Flacher Renderer mit stabilen Session-IDs, Null-Mount-Gate</li>
+        <li>Drag-Runtime außerhalb der Observation</li>
+        <li>Drei Feed-Stufen inklusive <code>hiddenStack</code></li>
+        <li>Schema v4 → v5 mit Rohsnapshot und Quarantäne</li>
+      </ul></div>
+    <div><div class="k raus">Draußen — mit Bedingung</div>
+      <ul>
+        <li><strong>libghostty</strong> — bis Baseline und offizielles Paket es rechtfertigen</li>
+        <li><strong>Eigener Metal-Renderer</strong> — SwiftTerms Renderer zuerst messen</li>
+        <li><strong>Observation-Generalsanierung</strong> (per-Slice statt global) — eigenes Projekt, nicht Teil des Layout-Umbaus</li>
+        <li><strong>Separates Layout-Payload</strong> — erst ab ~1 MB Sidecar (heute 100 KB)</li>
+        <li><strong>Index-Generalsanierung</strong> — nur die Stellen, die der Umbau ohnehin anfasst</li>
+        <li><strong>Eigenes UI-Framework</strong> — nicht</li>
+      </ul></div>
+  </div>
+</section></div>
+
+<section id="offen"><div class="wrap">
+  <h2>Offene <em>Produktentscheidungen</em></h2>
+  <p class="sub">Keine davon ist stillschweigend festgelegt — jede braucht eine Antwort, bevor gebaut wird.</p>
+
+  <div class="frage">
+    <div class="t">Frage 1 — Was heißt „snappy" konkret?</div>
+    <p style="margin:0">Zwei Bedeutungen mit sehr unterschiedlichem Preis: <strong>(a)</strong> keine
+    Hänger beim Tippen, sofortiges Umschalten, flüssiges Ziehen bei neun Agenten — erreichbar mit dem
+    heutigen Stack. <strong>(b)</strong> Verhalten wie Ghostty oder Alacritty bei voller Last — führt
+    zwingend zu Option C.</p>
+    <div class="empf"><b>Empfehlung:</b> (a) festlegen und über die Baseline belegen. (b) bleibt als
+    Fernziel formuliert, nicht als Anforderung.</div>
+  </div>
+
+  <div class="frage">
+    <div class="t">Frage 2 — Reihenfolge: Sofortmaßnahmen oder Workspace-Feature?</div>
+    <p style="margin:0">Die Performance-Arbeit zerfällt in zwei Sorten: Was <em>im</em> Umbau steckt
+    (pure Engine, stabile IDs, Drag-Runtime) lässt sich nicht vorziehen — falsch gebaut heißt zweimal
+    gebaut. Was <em>außerhalb</em> liegt (A1–A4), verbessert die App unabhängig davon.</p>
+    <div class="empf"><b>Empfehlung:</b> A1–A4 zuerst (~1,5 Tage), dann das Feature mit den
+    Architekturregeln von Beginn an. A3 kann parallel laufen.</div>
+  </div>
+
+  <div class="frage">
+    <div class="t">Frage 3 — Wer entscheidet über SwiftUI gegen AppKit-Container?</div>
+    <p style="margin:0">Beide Varianten nutzen denselben Split-Baum und dieselbe pure Engine. Der
+    Wechsel bleibt billig, solange keine Logik in den Views liegt.</p>
+    <div class="empf"><b>Empfehlung:</b> Nicht vorab entscheiden. Die Kipppunkte aus Option B sind das
+    Kriterium; gemessen wird nach A4 und nach dem ersten Renderer-Prototyp.</div>
+  </div>
+
+  <div class="frage">
+    <div class="t">Frage 4 — Wie viel Risiko darf das SwiftTerm-Update tragen?</div>
+    <p style="margin:0">Die App umgeht an mehreren Stellen SwiftTerm-Interna (Delegate-Ersatz für
+    Link-Klicks, Scroll-Lock). Ein Minor-Update kann dort brechen — der Gewinn (+69 % Durchsatz) ist
+    aber erheblich.</p>
+    <div class="empf"><b>Empfehlung:</b> Eigener Commit, getrennt von allem anderen, mit manueller QA
+    der Erweiterungen. Bei Bruch: zurückrollen und die Frage neu stellen, nicht reparieren.</div>
+  </div>
+</div></section>
+
+<a class="weiter" href="../index.html">
+  <span class="l">Zurück</span>
+  <h3>Zum Hub — Budgets, Risiken, Fahrplan</h3>
+  <p>Alle fünf Pakete im Überblick, mit der Reihenfolge für die Umsetzung. →</p>
+</a>
+
+<footer><div class="wrap">Paket 05 · <a href="../index.html">zurück zum Hub</a></div></footer>

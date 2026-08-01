@@ -1,0 +1,211 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paket 02 — Terminal-Durchsatz</title>
+<style>
+  :root{
+    --papier:#faf8f4; --papier-tief:#f3efe7; --tinte:#211f1c; --tinte-weich:#4a453e; --tinte-matt:#7d766b;
+    --linie:#e0d9cc; --linie-stark:#c9c0ae; --akzent:#c2410c; --moos:#3f6212; --rot:#9f1239; --bernstein:#a16207;
+    --serif:"Iowan Old Style","Palatino",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--papier);color:var(--tinte);font:15px/1.65 var(--sans);}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px;}
+  nav.top{position:sticky;top:0;z-index:10;background:rgb(250 248 244/94%);border-bottom:1px solid var(--linie);backdrop-filter:blur(8px);}
+  nav.top .wrap{display:flex;align-items:center;gap:20px;height:52px;}
+  nav.top a{color:var(--tinte-matt);text-decoration:none;font-size:12.5px;}
+  nav.top a:hover{color:var(--akzent);}
+  nav.top .marke{font:600 14px var(--sans);color:var(--tinte);}
+  nav.top .krume{font:11px var(--mono);color:var(--tinte-matt);}
+  nav.top .stempel{margin-left:auto;font:11px var(--mono);color:var(--tinte-matt);}
+  header.hero{padding:52px 0 36px;border-bottom:1px solid var(--linie);}
+  h1{font:400 38px/1.12 var(--serif);letter-spacing:-.02em;margin-bottom:12px;}
+  h1 em{font-style:italic;color:var(--akzent);}
+  .lede{font:17px/1.6 var(--serif);color:var(--tinte-weich);max-width:640px;}
+  section{padding:42px 0;border-bottom:1px solid var(--linie);}
+  h2{font:400 27px/1.15 var(--serif);margin-bottom:6px;}
+  h2 em{font-style:italic;color:var(--akzent);}
+  h3{font:600 15px var(--sans);margin:24px 0 8px;}
+  .sub{color:var(--tinte-matt);font-size:13.5px;margin-bottom:22px;}
+  p{margin-bottom:13px;color:var(--tinte-weich);}
+  p strong,li strong,td strong{color:var(--tinte);font-weight:600;}
+  ul{margin:0 0 14px 18px;color:var(--tinte-weich);} li{margin-bottom:6px;}
+  code{font:12.5px var(--mono);background:var(--papier-tief);padding:1px 5px;border-radius:3px;color:var(--akzent);}
+  .quelle{font:11.5px var(--mono);color:var(--tinte-matt);}
+  .warn{border-left:3px solid var(--akzent);background:#fff;padding:15px 17px;margin:20px 0;}
+  .warn .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--akzent);margin-bottom:5px;}
+  .gut{border-left:3px solid var(--moos);background:#fff;padding:15px 17px;margin:20px 0;}
+  .gut .t{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--moos);margin-bottom:5px;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px;}
+  th{text-align:left;font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--tinte-matt);
+    border-bottom:1.5px solid var(--linie-stark);padding:8px 10px;}
+  td{border-bottom:1px solid var(--linie);padding:9px 10px;vertical-align:top;color:var(--tinte-weich);}
+  td.mono{font:12.5px var(--mono);color:var(--tinte);white-space:nowrap;}
+  .stufen{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--linie);border:1px solid var(--linie);margin:18px 0;}
+  .stufe{background:#fff;padding:18px;}
+  .stufe .n{font:600 10px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--akzent);}
+  .stufe .w{font:600 24px var(--mono);margin:8px 0 4px;color:var(--tinte);}
+  .stufe p{font-size:12.5px;margin:0;}
+  .weiter{display:block;background:#1c1a17;color:#e4dfd6;padding:24px 26px;margin:40px 0 0;text-decoration:none;}
+  .weiter .l{font:600 10px var(--sans);letter-spacing:.09em;text-transform:uppercase;color:#a89f92;}
+  .weiter h3{color:#fff;font:400 22px var(--serif);margin:6px 0;}
+  .weiter p{color:#bdb5a8;margin:0;font-size:13.5px;}
+  footer{padding:30px 0 60px;color:var(--tinte-matt);font-size:12.5px;}
+  footer a{color:var(--akzent);}
+  @media(max-width:820px){.stufen{grid-template-columns:1fr;}}
+</style>
+
+<nav class="top"><div class="wrap">
+  <a class="marke" href="../index.html">← Performance-Plan</a>
+  <span class="krume">02 · Terminals</span>
+  <a href="#heute">Heute</a><a href="#stapel">Stapel</a><a href="#stufen">Stufen</a>
+  <a href="#messen">Messen</a><a href="#risiken">Risiken</a>
+  <span class="stempel">Analyse mit Code-Belegen</span>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Neun Ströme, <em>ein Main Thread</em></h1>
+  <p class="lede">Jedes Byte aus jedem PTY läuft heute über denselben Thread, der auch das Layout
+  zeichnet. Solange eine Pane sichtbar ist, geht das gut. Bei neun — und mit gestapelten Sessions
+  dahinter — entscheidet die Drosselung darüber, ob sich die App flüssig anfühlt oder klebt.</p>
+</div></header>
+
+<section id="heute"><div class="wrap">
+  <h2>Wie der Feed <em>heute</em> läuft</h2>
+  <p class="sub">Der Mechanismus ist gut gebaut — er wurde nur nicht für neun Panes entworfen.</p>
+
+  <p>Jedes PTY-Paket trifft auf dem Main Thread ein und geht in den pane-eigenen Batcher. Die
+  <strong>Fokus-Pane läuft ohne Bündelung</strong> direkt in den Emulator; jede andere sichtbare Pane
+  puffert. Pro Pane gibt es höchstens einen Timer und ein Pending-Limit von 256 KiB. Wird es
+  überschritten, fließt der alte Teil sofort ab; ein einzelner Riesen-Chunk läuft direkt durch.
+  Verloren geht dabei nie etwas — es ist FIFO ohne Drop.</p>
+  <p class="quelle">AgentTerminalView.swift:71-127 · TerminalFeedBatcher.swift:19-26, 49-72 · AgentChatsView+Grid.swift:600-617</p>
+
+  <div class="warn">
+    <div class="t">Der Takt ist nicht der, der im Code steht</div>
+    <p style="margin:0">Nominal sind es 80 ms. Tatsächlich addiert jeder neu geplante Timer eine feste
+    Phase von 0/16/32/48/64 ms — dauerstreamende Panes laufen dadurch mit <strong>80 bis 144 ms</strong>,
+    je nach Hash. Und es gibt nur <strong>fünf</strong> Phasenlagen. Bei acht gedrosselten Panes sind
+    Kollisionen damit nicht unwahrscheinlich, sondern sicher.</p>
+  </div>
+
+  <p>Im Vollausbau bedeutet das: acht unabhängig gedrosselte Ströme plus ein ungedrosselter Fokus-Stream,
+  alle Flushes seriell auf dem Main Thread. Im schlechtesten Fall stehen 8 × 256 KiB Pending an, und die
+  High-Water-Flushes umgehen die zeitliche Staffelung gerade dann, wenn am meisten los ist.</p>
+</div></section>
+
+<section id="stapel"><div class="wrap">
+  <h2>Der Befund, der das <em>Stapeln</em> betrifft</h2>
+  <p class="sub">Das neue Feature trifft eine Stelle, die genau falsch herum eingestellt ist.</p>
+
+  <div class="warn">
+    <div class="t">Unsichtbar ist heute am teuersten</div>
+    <p style="margin:0">Verlässt eine Session das sichtbare Grid, wird sie <strong>explizit
+    entdrosselt</strong> <span class="quelle">(AgentChatsView+Grid.swift:604-626)</span>. Ein gestapelter
+    Chat aus dem neuen Konzept liefe damit ungebremst in den Main Thread — für etwas, das niemand sieht.</p>
+  </div>
+
+  <p>Der Prozess und die Terminal-Instanz gehören einem Controller, der unabhängig vom SwiftUI-Host lebt.
+  Beim Abbau wird nur geflusht und die NSView entfernt; der Controller bleibt, PTY-Empfang und Parsing
+  laufen weiter.</p>
+  <p class="quelle">AgentTerminalView.swift:613-623, 1036-1058</p>
+
+  <h3>Vier Wege, drei davon falsch</h3>
+  <table>
+    <tr><th>Ansatz</th><th>Folge</th></tr>
+    <tr><td class="mono">Reader pausieren</td><td>Der PTY-Kernelpuffer füllt sich und <strong>blockiert am Ende den Agenten selbst</strong>. Der Chat bliebe stehen, obwohl er arbeiten soll.</td></tr>
+    <tr><td class="mono">Bytes puffern, nicht parsen</td><td>Entweder unbeschränkt wachsend — oder mit Drop, und dann fehlen Daten. Beim Aufdecken gibt es zusätzlich einen Catch-up-Ruckler.</td></tr>
+    <tr><td class="mono">Terminal wirklich abhängen</td><td>Verliert den exakten Zustand: Alternate Screen, Escape-Sequenzen, Scrollback. Eine TUI käme kaputt zurück.</td></tr>
+    <tr><td class="mono"><strong>Nur die NSView abhängen</strong></td><td><strong>Empfohlen.</strong> Dieselbe Terminal-Instanz samt PTY-Reader und Emulator lebt weiter, nur grob gebatcht. Bytes und Scrollback bleiben vollständig; es kostet weiterhin Parser und Puffer-RAM.</td></tr>
+  </table>
+
+  <div class="gut">
+    <div class="t">Vorhandene Grundlage</div>
+    <p style="margin:0">Der Mechanismus dafür existiert bereits: Die Adoption verschiebt dieselbe NSView
+    schon heute zwischen Hosts <span class="quelle">(AgentTerminalView.swift:1089-1137)</span>. Beim
+    Wiederanhängen muss dieselbe Instanz verwendet werden, und der Weg muss Resize plus TUI-Repaint
+    vertragen.</p>
+  </div>
+</div></section>
+
+<section id="stufen"><div class="wrap">
+  <h2>Drei <em>Geschwindigkeiten</em></h2>
+  <p class="sub">Was der Nutzer ansieht, ist schnell. Was mitläuft, ist sparsam. Was verborgen ist, ist träge.</p>
+
+  <div class="stufen">
+    <div class="stufe"><span class="n">Fokus</span><div class="w">8 ms / 32 KiB</div>
+      <p>Mikro-Batch statt ungepuffert. Bleibt unter einem 60-Hz-Frame und fängt Chunk-Stürme ab, statt sie einzeln durchzureichen.</p></div>
+    <div class="stufe"><span class="n">Sichtbar im Hintergrund</span><div class="w">80 ms / 128 KiB</div>
+      <p>Phase nur <em>einmal beim Eintritt</em> verteilen, danach echtes 80-ms-Intervall — das beseitigt die 80–144-ms-Streuung.</p></div>
+    <div class="stufe"><span class="n">Gestapelt, unsichtbar</span><div class="w">250 ms / 256 KiB</div>
+      <p>NSView abgehängt, nie gedroppt. Beim Aufdecken zuerst FIFO leeren, dann erst den Fokus bedienen.</p></div>
+  </div>
+
+  <h3>Ein Scheduler statt N Timer</h3>
+  <p>Statt vieler unabhängiger <code>asyncAfter</code>-Ketten ein zentraler Scheduler mit einem harten
+  Deckel: höchstens etwa <strong>4 ms Terminalarbeit pro 16,7-ms-Frame</strong>, der Rest wird in FIFO-
+  Reihenfolge fortgesetzt. Das High-Water-Limit bleibt als Sicherheitsventil bestehen.</p>
+
+  <p>Ab wann lohnt das? Ab <strong>drei gleichzeitig schreibenden Panes</strong> — dann konkurrieren
+  bereits drei Parser- und Invalidierungsströme um ein Framebudget. Bei sechs bis neun ist es Pflicht.
+  Diese Schwelle ist aus der Architektur abgeleitet, <em>nicht</em> gemessen; sie gehört per Testlauf
+  kalibriert.</p>
+</div></section>
+
+<section id="messen"><div class="wrap">
+  <h2>Messen — und zwar das <em>Richtige</em></h2>
+  <p class="sub">Der heutige Signpost sieht zwei entscheidende Dinge nicht.</p>
+
+  <p>Aktuell misst <code>grid.streamingFrame</code> nur Parser plus Render-Scheduling gebündelter
+  Flushes — <strong>ausdrücklich ohne GPU-Zeit</strong> — und die Fokus-Feeds fehlen ganz, weil sie
+  ungepuffert laufen. Wer damit misst, sieht ausgerechnet den Strom nicht, den der Nutzer spürt.</p>
+  <p class="quelle">AgentTerminalView.swift:99-109 · PerformanceSignposts.swift:121-137</p>
+
+  <h3>Zu ergänzen</h3>
+  <ul>
+    <li>pro Feed und Flush: <strong>Stufe</strong>, Eingangs-Bytes, Chunk-Anzahl, Flush-Bytes</li>
+    <li><strong>Pending-Höchststand</strong> und <strong>Alter des ältesten Bytes</strong> — verrät Hunger und Stau</li>
+    <li>Scheduler-Drift und CPU-Dauer je Flush</li>
+    <li>Durchsatz in B/s mit p50/p95/p99</li>
+    <li>Core-Animation-Hitches und GPU-Zeit <strong>separat</strong>, weil der bestehende Signpost sie nicht sieht</li>
+  </ul>
+
+  <h3>Testszenarien</h3>
+  <p>Je 60 Sekunden mit 1, 3, 6 und 9 Panes à 64 KiB/s (bis 576 KiB/s gesamt), danach ein simultaner
+  1-MiB-Burst je Pane. 20 % des Datenstroms als ANSI-/TUI-Sequenzen. Fokuswechsel alle 2 Sekunden,
+  Stapel-Wechsel alle 5 Sekunden.</p>
+
+  <h3>Gates</h3>
+  <table>
+    <tr><th>Kriterium</th><th>Grenze</th></tr>
+    <tr><td><strong>Byte-Prüfsumme je Session</strong></td><td class="mono">exakt gleich</td></tr>
+    <tr><td>Feed-Latenz p95 — Fokus</td><td class="mono">&lt; 16 ms</td></tr>
+    <tr><td>Feed-Latenz p95 — sichtbar</td><td class="mono">&lt; 120 ms</td></tr>
+    <tr><td>Feed-Latenz p95 — gestapelt</td><td class="mono">&lt; 350 ms</td></tr>
+    <tr><td>Flush-CPU p95</td><td class="mono">&lt; 8 ms</td></tr>
+    <tr><td>einzelner Flush</td><td class="mono">nie &gt; 16,7 ms</td></tr>
+    <tr><td>Hitches</td><td class="mono">keiner &gt; 50 ms</td></tr>
+    <tr><td>Pending je Stufe</td><td class="mono">nie über Limit</td></tr>
+  </table>
+</div></section>
+
+<section id="risiken"><div class="wrap">
+  <h2>Fünf <em>Risiken</em></h2>
+  <table>
+    <tr><th>Risiko</th><th>Gegenmaßnahme</th></tr>
+    <tr><td><strong>Parser läuft pro Chunk auf Main</strong></td><td>Mikro- und Stufen-Batching, globales Framebudget</td></tr>
+    <tr><td><strong>Timer- und High-Water-Bursts</strong></td><td>zentrale faire Queue; Phase nicht in jedes Intervall addieren; sichtbares Limit auf 128 KiB senken</td></tr>
+    <tr><td><strong>Parsen und Rendern im Verborgenen</strong></td><td>visuell abhängen, Stufe <code>hiddenStack</code>; niemals Reader pausieren oder Bytes droppen</td></tr>
+    <tr><td><strong>Neun GPU-/Text-Redraws</strong></td><td>Metal-Renderer erst <em>nach</em> Messung erwägen; Draw-Hitches separat messen; nur angehängte Panes invalidieren</td></tr>
+    <tr><td><strong>Zusätzliche Transcript-I/O</strong></td><td>stat-first beibehalten; Event-Polls staffeln; Statusänderungen weiter deduplizieren</td></tr>
+  </table>
+</div></section>
+
+<a class="weiter" href="../03-state/01-store-persistenz.html">
+  <span class="l">Paket 03</span>
+  <h3>State — Geometrie ist flüchtig</h3>
+  <p>Warum ein Divider-Zug die Platte nicht anfassen darf, und wie v4 → v5 ohne Datenverlust läuft. →</p>
+</a>
+
+<footer><div class="wrap">Paket 02 · <a href="../index.html">zurück zum Hub</a></div></footer>
