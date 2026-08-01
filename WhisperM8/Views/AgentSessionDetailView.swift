@@ -64,11 +64,9 @@ struct AgentSessionDetailView: View {
     @State private var focusLaunchInFlight = false
     /// Persistierter Terminal-Stand der beendeten Session (Stufe 1) — zeigt
     /// den echten CLI-Exit inkl. Resume-Hinweis, ohne JSONL zu laden.
-    @State private var terminalSnapshot: TerminalSnapshot?
     /// Gleicher globaler Modus wie im Container — steuert hier, ob der
     /// Transcript-Load aufgeschoben werden darf (Terminal-Modus braucht
     /// kein JSONL) und wird beim Umschalten nachgeholt.
-    @AppStorage("agentTranscriptViewMode") private var transcriptViewMode = "terminal"
 
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
@@ -122,8 +120,7 @@ struct AgentSessionDetailView: View {
                         ? { loadEarlierHistory() } : nil,
                     history: historyState,
                     loadHint: tailWindowHint,
-                    showsSummaryCard: !session.isSubagentJob,
-                    terminalSnapshot: terminalSnapshot
+                    showsSummaryCard: !session.isSubagentJob
                 )
             }
         }
@@ -138,7 +135,6 @@ struct AgentSessionDetailView: View {
                 // das View jetzt erst mountet.
                 controller?.focusTerminal()
             }
-            loadTerminalSnapshotIfNeeded()
             loadTranscriptIfNeeded()
         }
         .onChange(of: session.id) { _, _ in
@@ -148,7 +144,6 @@ struct AgentSessionDetailView: View {
             transcriptTailBytes = Self.initialTailBytes
             historyState = .idle
             countBeforeEarlierLoad = nil
-            terminalSnapshot = nil
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
                     launchAfterCacheWarmup()
@@ -156,7 +151,6 @@ struct AgentSessionDetailView: View {
                 // Wechsel zwischen offenen Chats: dem neuen Terminal Fokus geben.
                 controller?.focusTerminal()
             }
-            loadTerminalSnapshotIfNeeded()
             loadTranscriptIfNeeded()
         }
         .onChange(of: actionRequest) { _, request in
@@ -175,11 +169,6 @@ struct AgentSessionDetailView: View {
                   !focusLaunchInFlight else { return }
             focusLaunchInFlight = true
             launchAfterCacheWarmup()
-        }
-        // Umschalten Terminal → Chat/Roh holt den aufgeschobenen
-        // Transcript-Load nach (im Terminal-Modus wird kein JSONL gelesen).
-        .onChange(of: transcriptViewMode) { _, _ in
-            loadTranscriptIfNeeded()
         }
         // Grid-Fokusmodell (Plan F9): Wird eine bisher unterdrückte Pane zur
         // Fokus-Pane (suppressesAutoActivation false), holt sie Launch +
@@ -207,37 +196,9 @@ struct AgentSessionDetailView: View {
                 // Prozess gerade beendet: der Terminate-Pfad hat den Snapshot
                 // synchron persistiert — jetzt laden, damit der beendete Chat
                 // direkt als eingefrorenes Terminal erscheint.
-                loadTerminalSnapshotIfNeeded()
-                loadTranscriptIfNeeded()
+                    loadTranscriptIfNeeded()
             }
         }
-    }
-
-    /// Lädt den persistierten Terminal-Stand (falls vorhanden) off-main.
-    /// Nur für Sessions ohne Live-Controller relevant — die Existenzprüfung
-    /// selbst ist 1 stat() und läuft synchron für die Lade-Weiche.
-    private func loadTerminalSnapshotIfNeeded() {
-        guard controller == nil, !session.isAgentView, !session.isSubagentJob else {
-            terminalSnapshot = nil
-            return
-        }
-        let sessionID = session.id
-        Task.detached(priority: .userInitiated) {
-            let snapshot = TerminalSnapshotStore.shared.load(sessionID: sessionID)
-            await MainActor.run {
-                guard sessionID == session.id else { return }
-                terminalSnapshot = snapshot
-            }
-        }
-    }
-
-    /// `true`, wenn der Transcript-Load aufgeschoben werden darf: Es gibt
-    /// einen Terminal-Snapshot und der User ist im Terminal-Modus — für die
-    /// reine Anzeige wird dann kein JSONL gelesen (Performance-Ziel der
-    /// Snapshot-Architektur). Beim Umschalten auf Chat/Roh wird nachgeladen.
-    private var transcriptLoadIsDeferred: Bool {
-        transcriptViewMode == AgentTranscriptContainerView.TranscriptViewMode.terminal.rawValue
-            && TerminalSnapshotStore.shared.hasSnapshot(sessionID: session.id)
     }
 
     /// Laedt das Transcript fuer die aktuelle Session aus der JSONL-Datei
@@ -264,13 +225,6 @@ struct AgentSessionDetailView: View {
         // (per Indexer-Lookup via cwd + lastActivityAt). Bis dahin: skip.
         guard !session.isBackgroundChat else {
             cachedTranscript = nil
-            isLoadingTranscript = false
-            return
-        }
-        // Terminal-Modus mit Snapshot: JSONL-Load aufschieben — die Anzeige
-        // braucht ihn nicht. Bereits geladene Transcripts bleiben gecacht
-        // (kein Wegwerfen beim Zurückschalten).
-        guard !transcriptLoadIsDeferred || cachedTranscript != nil else {
             isLoadingTranscript = false
             return
         }

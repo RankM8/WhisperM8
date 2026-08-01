@@ -1,15 +1,27 @@
+import AppKit
 import SwiftUI
 
-/// Hülle um die Transcript-Anzeige: schmale Kopf-Leiste (Meta + Chat|Roh-
-/// Umschalter) über der Timeline (Variante E, primäre UX) bzw. der
-/// bestehenden Roh-Ansicht (`AgentChatTranscriptView`, verlustfreier
-/// Fallback). Leere/fehlende Transcripts delegieren komplett an die
-/// Roh-View — deren Empty-States (Resume-Hinweis, Orphan-BG-Chat) bleiben
-/// die eine Wahrheit.
+/// Die Verlaufsansicht einer Session: schmale Meta-Leiste, optional die
+/// Summary-Karte, darunter der Verlauf als CLI-formatierter Text.
+///
+/// **Eine Ansicht statt drei.** Bis 01.08.2026 gab es hier einen Umschalter
+/// Terminal | Chat | Roh. Alle drei bauten pro Nachricht eine SwiftUI-
+/// Hierarchie, alle drei brauchten deshalb harte Deckel gegen das Layout
+/// (2000 Zeichen pro Block, 160 Runden, 2000 Snapshot-Zeilen) — und alle
+/// drei hingen an `.defaultScrollAnchor(.bottom)`, das SwiftUI zwingt, jede
+/// Item-Höhe vorauszuberechnen. Mit sechs Grid-Panes hat das die App
+/// dauerhaft eingefroren: Main Thread endlos in `StackLayout.prioritize`,
+/// 100 % CPU, kein Fortschritt.
+///
+/// Jetzt rendert `TranscriptTextRenderer` einen flachen Zeilenstrom, den
+/// `TranscriptTextView` als EIN `NSTextView` (TextKit 2) darstellt. Gelayoutet
+/// wird nur der sichtbare Ausschnitt — die Kosten hängen an der Fensterhöhe
+/// statt an der Länge des Verlaufs. Textauswahl über alles, ⌘F und Kopieren
+/// gibt es dadurch nativ.
 struct AgentTranscriptContainerView: View {
     let transcript: AgentChatTranscript?
     let session: AgentChatSession
-    /// Läuft gerade ein Turn (Subagent working)? → Live-Indikator unten.
+    /// Läuft gerade ein Turn? → Live-Indikator unten.
     var isWorking: Bool = false
     /// Nachlade-Hook des Owners (vergrößert dessen Tail-Lesefenster) — nur
     /// relevant wenn `transcript.hasTruncatedHead`.
@@ -17,102 +29,62 @@ struct AgentTranscriptContainerView: View {
     /// Lade-Feedback + Fenster-Hinweis des Owners (vier Zustände).
     var history: TranscriptHistoryState = .idle
     var loadHint: String?
-    /// Summary-Karte über der Timeline (Chat-Sessions; Subagents haben die
+    /// Summary-Karte über dem Verlauf (Chat-Sessions; Subagents haben die
     /// Ergebnis-Karte in ihrer eigenen Detail-View).
     var showsSummaryCard: Bool = false
-    /// Persistierter Terminal-Stand der beendeten Session (Stufe 1,
-    /// Plaintext) — schaltet den „Terminal"-Modus frei. `nil` = kein
-    /// Snapshot vorhanden (Legacy-Sessions), Modi Chat|Roh wie bisher.
-    var terminalSnapshot: TerminalSnapshot? = nil
 
-    /// Global gemerkter Modus — wer Roh bevorzugt, bekommt Roh überall.
-    /// Default „terminal": beendete Chats sehen wie beendete Terminals aus;
-    /// ohne Snapshot löst der Modus auf Chat auf (`mode`-Getter).
-    @AppStorage("agentTranscriptViewMode") private var storedMode = TranscriptViewMode.terminal.rawValue
-    /// Runden-Projektion, off-main gebaut (volle Transcripts können groß sein).
-    @State private var timeline: TranscriptTimeline = .empty
-
-    enum TranscriptViewMode: String, CaseIterable {
-        case terminal
-        case chat
-        case raw
-
-        var label: String {
-            switch self {
-            case .terminal: return "Terminal"
-            case .chat: return "Chat"
-            case .raw: return "Roh"
-            }
-        }
-    }
-
-    private var mode: TranscriptViewMode {
-        let resolved = TranscriptViewMode(rawValue: storedMode) ?? .chat
-        // Terminal-Modus nur mit vorhandenem Snapshot — sonst Chat.
-        if resolved == .terminal, terminalSnapshot == nil { return .chat }
-        return resolved
-    }
-
-    /// Modi im Umschalter: „Terminal" erscheint nur, wenn ein Snapshot da ist.
-    private var availableModes: [TranscriptViewMode] {
-        terminalSnapshot == nil ? [.chat, .raw] : TranscriptViewMode.allCases
-    }
+    /// Fertig gebauter Verlaufstext. Wird off-main erzeugt (siehe `rebuild`)
+    /// und hier nur gehalten — das Setzen im NSTextView ist billig.
+    @State private var document = NSAttributedString()
+    /// Zählt hoch, sobald ein neuer Stand steht; die View vergleicht nur
+    /// dieses Token statt des gesamten Textes.
+    @State private var revision = 0
+    @State private var lineCount = 0
 
     private var isEmpty: Bool {
         transcript?.messages.isEmpty ?? true
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if !isEmpty || terminalSnapshot != nil {
-                headerStrip
-            }
-            if showsSummaryCard, !isEmpty, mode != .terminal {
-                SessionSummaryCard(session: session)
-                    .background(AgentTheme.background)
-            }
-            if mode == .terminal, let terminalSnapshot {
-                TerminalSnapshotView(snapshot: terminalSnapshot)
-            } else if isEmpty || mode == .raw {
-                AgentChatTranscriptView(
-                    transcript: transcript,
-                    session: session,
-                    history: history,
-                    loadHint: loadHint,
-                    onLoadEarlierHistory: onLoadEarlierHistory
-                )
-            } else if timeline.isEmpty {
-                // Die Runden-Projektion baut noch (off-main). Die ScrollView
-                // darf sich NICHT an leerem Inhalt verankern — sonst bleibt
-                // der Viewport nach dem Befüllen leer stehen, bis der User
-                // scrollt (defaultScrollAnchor(.bottom)-Race).
-                VStack(spacing: 8) {
-                    Spacer()
-                    ProgressView().controlSize(.small)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(AgentTheme.background)
+        Group {
+            if isEmpty {
+                TranscriptEmptyStateView(transcript: transcript, session: session)
             } else {
-                AgentTimelineView(
-                    timeline: timeline,
-                    isWorking: isWorking,
-                    hasTruncatedHead: transcript?.hasTruncatedHead ?? false,
-                    history: history,
-                    loadHint: loadHint,
-                    onLoadEarlierHistory: onLoadEarlierHistory
-                )
+                VStack(spacing: 0) {
+                    metaStrip
+                    if showsSummaryCard {
+                        SessionSummaryCard(session: session)
+                            .background(AgentTheme.background)
+                    }
+                    historyStrip
+                    if revision == 0 {
+                        // Der Text baut noch (off-main).
+                        VStack {
+                            Spacer()
+                            ProgressView().controlSize(.small)
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        TranscriptTextView(document: document, revision: revision)
+                    }
+                    if isWorking {
+                        liveStrip
+                    }
+                }
                 .background(AgentTheme.background)
             }
         }
         .task(id: rebuildTaskID) {
-            await rebuildTimeline()
+            await rebuild()
         }
     }
 
-    /// Inhaltsbasierte Rebuild-ID: Zahl allein reicht nicht — beim Wechsel
-    /// zwischen zwei Chats mit gleicher Nachrichtenzahl bliebe sonst die
-    /// alte Timeline stehen.
+    // MARK: - Aufbau
+
+    /// Inhaltsbasierte Rebuild-ID: Die Zahl allein reicht nicht — beim
+    /// Wechsel zwischen zwei Chats mit gleicher Nachrichtenzahl bliebe sonst
+    /// der alte Text stehen.
     private var rebuildTaskID: String {
         guard let transcript, let first = transcript.messages.first, let last = transcript.messages.last else {
             return "leer"
@@ -120,38 +92,41 @@ struct AgentTranscriptContainerView: View {
         return "\(transcript.messages.count)-\(first.id.uuidString)-\(last.id.uuidString)"
     }
 
-    /// Off-main, weil volle Claude-Transcripts tausende Messages haben können
-    /// und der Builder pro Tool-Step Input-JSON parst.
-    private func rebuildTimeline() async {
+    /// Rendern und Attributieren laufen komplett off-main und sind
+    /// abbrechbar: Ein Sessionwechsel verwirft den laufenden Aufbau, statt
+    /// ihn zu Ende zu rechnen (`Task.isCancelled`-Prüfung nach dem Bau).
+    private func rebuild() async {
         guard let transcript, !transcript.messages.isEmpty else {
-            timeline = .empty
+            document = NSAttributedString()
+            revision = 0
+            lineCount = 0
             return
         }
-        let built = await Task.detached(priority: .userInitiated) {
-            TranscriptTimelineBuilder.build(from: transcript)
+        let built = await Task.detached(priority: .userInitiated) { () -> (NSAttributedString, Int) in
+            let lines = TranscriptTextRenderer.render(transcript)
+            return (TranscriptTextDocument.make(lines: lines), lines.count)
         }.value
-        timeline = built
+        guard !Task.isCancelled else { return }
+        document = built.0
+        lineCount = built.1
+        revision &+= 1
     }
 
-    @ViewBuilder
-    private var headerStrip: some View {
+    // MARK: - Chrome
+
+    /// Ersetzt den früheren Modus-Umschalter: keine Auswahl mehr, sondern
+    /// die Herkunft des Verlaufs und sein Umfang.
+    private var metaStrip: some View {
         HStack(spacing: 8) {
             Text(metaLabel)
                 .font(.system(size: 10.5).monospacedDigit())
                 .foregroundStyle(AgentTheme.textTertiary)
             Spacer()
-            Picker("", selection: Binding(
-                get: { mode },
-                set: { storedMode = $0.rawValue }
-            )) {
-                ForEach(availableModes, id: \.self) { candidate in
-                    Text(candidate.label).tag(candidate)
-                }
+            if let loadHint, transcript?.hasTruncatedHead == true {
+                Text(loadHint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(AgentTheme.textTertiary)
             }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .labelsHidden()
-            .fixedSize()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -165,16 +140,75 @@ struct AgentTranscriptContainerView: View {
     }
 
     private var metaLabel: String {
-        // Terminal-Modus mit (noch) ungeladenem Transcript: kein irreführendes
-        // „0 Nachrichten" — der Load ist bewusst deferred (Performance).
-        if mode == .terminal, transcript == nil {
-            return "Terminal-Stand"
-        }
         let messages = transcript?.messages.count ?? 0
         var parts = ["\(messages) Nachrichten"]
-        if mode == .chat, !timeline.isEmpty {
-            parts.append(timeline.rounds.count == 1 ? "1 Runde" : "\(timeline.rounds.count) Runden")
+        if lineCount > 0 {
+            parts.append("\(lineCount) Zeilen")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Vier Zustände wie bisher: Button → Spinner → „✓ N geladen" → „Anfang
+    /// der Konversation". Der Unterschied zu früher: Das Lesefenster begrenzt
+    /// nur noch, wie viel GELADEN ist — dargestellt wird davon alles, ohne
+    /// Kürzung mitten im Text.
+    @ViewBuilder
+    private var historyStrip: some View {
+        if showsHistorySection {
+            VStack(spacing: 7) {
+                if history.isLoading {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Verlauf wird geladen …")
+                            .font(.system(size: 11))
+                            .foregroundStyle(AgentTheme.textTertiary)
+                    }
+                } else {
+                    if let delta = history.lastLoadedDelta {
+                        Text(delta > 0 ? "✓ \(delta) ältere Nachrichten geladen" : "✓ Verlauf aktualisiert")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(AgentTheme.statusWorking)
+                    }
+                    if canLoadFromDisk {
+                        TranscriptHistoryPill(title: "Früheren Verlauf laden", detail: loadHint) {
+                            onLoadEarlierHistory?()
+                        }
+                    } else if history.reachedStart {
+                        TranscriptHistoryStartMarker()
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(AgentTheme.background)
+        }
+    }
+
+    private var canLoadFromDisk: Bool {
+        (transcript?.hasTruncatedHead ?? false) && onLoadEarlierHistory != nil
+    }
+
+    private var showsHistorySection: Bool {
+        history.isLoading || history.lastLoadedDelta != nil || canLoadFromDisk || history.reachedStart
+    }
+
+    /// Pulsierender „arbeitet"-Hinweis unter dem Verlauf.
+    private var liveStrip: some View {
+        HStack(spacing: 7) {
+            TimelinePulsingDot(color: AgentTheme.statusWorking)
+            Text("arbeitet …")
+                .font(.system(size: 11.5))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(AgentTheme.surface)
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundStyle(AgentTheme.border),
+            alignment: .top
+        )
     }
 }
