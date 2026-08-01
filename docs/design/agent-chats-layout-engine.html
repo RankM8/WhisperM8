@@ -2,28 +2,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WhisperM8 — Layout-Engine (Auto-Tiling + Snapshot)</title>
 <style>
+  /* ——— Farbsystem = AgentTheme der App ————————————————————————————
+     Alle Werte stammen 1:1 aus WhisperM8/Support/AppTheme.swift, damit der
+     Zwilling nicht „ähnlich", sondern farbgleich ist. Namen hier ↔ dort:
+     --canvas=tabBar · --sidebar=sidebar · --paper=header · --white=surface
+     --panel=panel · --control=control · --tab-selected=tabSelected
+     --indigo=accent · --green/orange/red=statusWorking/Awaiting/Error. */
   :root {
     color-scheme: light;
-    --ink: #202126;
-    --muted: #72747d;
-    --faint: #9b9da5;
-    --line: #dedfe4;
-    --line-soft: #e9e9ed;
-    --canvas: #e8e8eb;
-    --sidebar: #f3f3f5;
-    --paper: #fbfbfc;
-    --white: #fefeff;
-    --indigo: #4f46e5;
-    --indigo-soft: #eeedff;
-    --green: #2da66d;
-    --orange: #d98324;
+    --ink: rgb(0 0 0 / 90%);        /* textPrimary   */
+    --muted: rgb(0 0 0 / 58%);      /* textSecondary */
+    --faint: rgb(0 0 0 / 42%);      /* textTertiary  */
+    --line: rgb(0 0 0 / 8%);        /* border        */
+    --line-soft: rgb(0 0 0 / 6%);
+    --line-strong: rgb(0 0 0 / 13%);/* borderStrong  */
+    --hover: rgb(0 0 0 / 4.5%);
+    --selection: rgb(0 0 0 / 7.5%);
+    --canvas: #EAEAEC;
+    --sidebar: #EEEEF0;
+    --paper: #F2F2F4;
+    --white: #FFFFFF;
+    --panel: #FFFFFF;
+    --control: #EBEBED;
+    --tab-selected: #FFFFFF;
+    --status-pill: #FBFBFC;
+    --indigo: #5E6AD2;
+    --indigo-strong: #4B56C0;
+    --indigo-soft: color-mix(in srgb, #5E6AD2 12%, transparent);
+    --green: #3FA873;
+    --orange: #C9962A;
+    --red: #D6473D;
     --violet: #8b5cf6;
-    --red: #d74d56;
     --blue: #4b76d1;
-    --bar: #ececef;            /* Titelleiste + Tab-Zone */
-    --bar-line: #d5d6db;       /* Kante unter der Titelleiste */
-    --head: #f9f9fa;           /* Chat-Header = Fläche des aktiven Tabs */
-    --tab-edge: #d7d8dd;       /* Hairlines am aktiven Tab */
+    --bar: var(--canvas);
+    --bar-line: rgb(0 0 0 / 10%);
+    --head: var(--paper);
+    --tab-edge: rgb(0 0 0 / 10%);
     --sidebar-width: 268px;
     --radius: 9px;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -102,6 +116,7 @@
   .system-meter .tiny-bars { letter-spacing: -1px; color: var(--green); }
 
   .tabs-zone { display:flex; align-items:stretch; min-width:0; position:relative; background:var(--bar); }
+  .tab-lead { display:flex; align-items:center; padding:0 2px 0 6px; }
   .tab-scroll { display:flex; align-items:flex-end; gap:6px; min-width:0; overflow:hidden; padding:0 6px; flex:1; }
 
   /* EINE Formsprache: Gruppen-Label und Tabs teilen Höhe, oberen Radius und
@@ -109,10 +124,13 @@
      plus Luft ZWISCHEN den Clustern (6px) bei 0px innerhalb — bewusst OHNE
      durchgezogene Linie am Boden, damit sich der aktive Tab wie in Chrome
      frei nach unten öffnen kann. */
+  /* Maße 1:1 aus AgentChatChromeViews.swift (ChatTabButton/GroupPill):
+     Tab 28 hoch, 100–190 breit, Titel 11pt, Avatar 13, Tail-Spalte 18,
+     Zungen-Radius 7 und Fußbreite 7 (ChromeTabMetrics.footSize). */
   .tab-cluster {
     --group: var(--blue);
     display:flex; align-items:stretch; gap:0; min-width:0;
-    height:30px;
+    height:28px;
     position:relative;
     border-radius:8px 8px 0 0;
     background:color-mix(in srgb, var(--group) 9%, var(--bar));
@@ -136,35 +154,35 @@
 
   .tab {
     --group: transparent;
-    height:30px;
-    min-width:92px;
-    max-width:156px;
+    height:28px;
+    min-width:100px;
+    max-width:190px;
     display:inline-flex;
     align-items:center;
     gap:6px;
     padding:0 8px;
     border-radius:7px 7px 0 0;
     background:transparent;
-    color:#5c5e67;
-    font-size:10px;
+    color:var(--muted);
+    font-size:11px;
     cursor:default;
     position:relative;
     white-space:nowrap;
   }
   .tab-cluster .tab { border-radius:0; }
   .tab-cluster .tab + .tab { box-shadow:inset 1px 0 color-mix(in srgb, var(--group) 18%, transparent); }
-  .tab:hover { background:rgb(255 255 255 / 46%); color:var(--ink); }
+  .tab:not(.active):hover { background:color-mix(in srgb, var(--white) 72%, transparent); border-radius:5px; color:var(--ink); }
 
   /* Aktiv: exakt der Chrome-Effekt — headerfarbene Fläche, oben abgerundet,
      unten VOLLSTÄNDIG offen. Die beiden Pseudos bilden den Chrome-Fuß:
      konkav ausgestellte untere Ecken, mit denen der Tab auf dem Header
      „steht". Keine Linie, keine Brücke — Tab und Header sind eine Fläche. */
   .tab.active {
-    color:var(--ink); z-index:2;
+    color:var(--ink); font-weight:600; z-index:2;
     border-radius:7px 7px 0 0 !important;
     background:
       linear-gradient(var(--group), var(--group)) top/100% 2px no-repeat,
-      var(--head);
+      var(--tab-selected);
   }
   .tab.active::before,
   .tab.active::after {
@@ -176,11 +194,11 @@
   }
   .tab.active::before {
     left:-7px;
-    background:radial-gradient(circle 7px at 0 0, transparent 6.4px, var(--head) 7px);
+    background:radial-gradient(circle 7px at 0 0, transparent 6.4px, var(--tab-selected) 7px);
   }
   .tab.active::after {
     right:-7px;
-    background:radial-gradient(circle 7px at 100% 0, transparent 6.4px, var(--head) 7px);
+    background:radial-gradient(circle 7px at 100% 0, transparent 6.4px, var(--tab-selected) 7px);
   }
 
   /* Variante „Chrome": kein Platten-Tint — das gefüllte Farb-Label trägt die
@@ -194,9 +212,10 @@
   #app[data-tab-style="chrome"] .group-pill {
     align-self:center;
     height:19px;
-    margin:0 5px 0 2px;
+    margin:0 5px 4.5px 2px;
     padding:0 7px;
     border-radius:5px;
+    font-size:10px; font-weight:600; gap:4px;
     background:var(--group);
     /* Weiß ODER Schwarz — je nachdem, was auf der Gruppenfarbe den höheren
        Kontrast hat (in JS über die WCAG-Relativluminanz bestimmt). Fest
@@ -206,8 +225,13 @@
     box-shadow:none;
   }
   #app[data-tab-style="chrome"] .group-pill:hover { background:color-mix(in srgb, var(--group) 86%, #16171b); }
-  #app[data-tab-style="chrome"] .group-pill .count { opacity:.78; }
-  #app[data-tab-style="chrome"] .tab-cluster .tab + .tab { box-shadow:inset 1px 0 rgb(120 122 132 / 16%); }
+  #app[data-tab-style="chrome"] .group-pill .count { opacity:.75; font-size:9px; font-weight:500; }
+  #app[data-tab-style="chrome"] .group-pill .fold { font-size:7px; font-weight:700; }
+  #app[data-tab-style="chrome"] .tab-cluster .tab:not(.active) + .tab:not(.active) { box-shadow:none; }
+  #app[data-tab-style="chrome"] .tab-cluster .tab:not(.active) + .tab:not(.active)::before {
+    content:""; position:absolute; left:0; top:50%; transform:translateY(-50%);
+    width:0.6px; height:15px; background:var(--line-strong);
+  }
   /* Der aktive Gruppen-Tab wird wie in Chrome von der Gruppenlinie UMSCHLOSSEN:
      die Bodenlinie klettert außen am Fuß hoch, läuft als 2px-Kontur über
      Seiten und Oberkante und mündet auf der anderen Seite wieder in die
@@ -215,7 +239,7 @@
   #app[data-tab-style="chrome"] .tab-cluster .tab.active {
     border:2px solid var(--group);
     border-bottom:0;
-    background:var(--head);
+    background:var(--tab-selected);
   }
   #app[data-tab-style="chrome"] .tab-cluster .tab.active::before {
     background:radial-gradient(circle 7px at 0 0, transparent 4.6px, var(--group) 5px 6.9px, var(--head) 7px);
@@ -224,9 +248,13 @@
     background:radial-gradient(circle 7px at 100% 0, transparent 4.6px, var(--group) 5px 6.9px, var(--head) 7px);
   }
   /* Eingeklappte Gruppe: Chrome zeigt sie als umrandeten Chip. */
+  /* Kontur als INSET-Schatten, nicht als border: SwiftUI zeichnet sie mit
+     `strokeBorder` innerhalb der Form (die Pille bleibt exakt 19 hoch), und
+     Chrome rundet `border-width: 1.5px` auf 1 px ab — der Schatten nicht. */
   #app[data-tab-style="chrome"] .group-pill.closed {
     background:transparent;
-    border:1.5px solid var(--group);
+    border:0;
+    box-shadow:inset 0 0 0 1.5px var(--group);
     color:color-mix(in srgb, var(--group) 84%, var(--ink));
   }
   #app[data-tab-style="chrome"] .group-pill.closed:hover { background:color-mix(in srgb, var(--group) 12%, transparent); }
@@ -236,7 +264,7 @@
   #app[data-tab-style="outline"] .tab-cluster { background:transparent; }
   #app[data-tab-style="outline"] .tab-cluster::before {
     content:""; position:absolute; inset:0; pointer-events:none;
-    border:1px solid color-mix(in srgb, var(--group) 46%, transparent);
+    border:1.5px solid color-mix(in srgb, var(--group) 78%, transparent);
     border-bottom:0;
     border-radius:8px 8px 0 0;
   }
@@ -259,9 +287,9 @@
   .tab .avatar, .row-avatar, .project-avatar, .pane-avatar {
     display:grid; place-items:center; flex:none; color:white; font-weight:700; letter-spacing:-.02em;
   }
-  .tab .avatar { width:16px; height:16px; border-radius:4px; font-size:8px; }
+  .tab .avatar { width:13px; height:13px; border-radius:4px; font-size:7px; }
   .tab .label { overflow:hidden; text-overflow:ellipsis; }
-  .tab .tail { margin-left:auto; display:grid; place-items:center; width:12px; height:12px; flex:none; }
+  .tab .tail { margin-left:auto; display:flex; align-items:center; justify-content:flex-end; width:18px; flex:none; }
   .status-dot { width:6px; height:6px; border-radius:50%; background:#a7a8ae; display:inline-block; flex:none; }
   .status-dot.working { background:var(--orange); animation:pulse 1.8s ease-in-out infinite; }
   .status-dot.waiting { background:var(--violet); animation:pulse 1.8s ease-in-out infinite; }
@@ -331,7 +359,7 @@
   .sidebar-scroll { overflow: auto; padding: 4px 0 12px; scrollbar-width: thin; scrollbar-color: #c7c8cd transparent; }
   .section { margin-top: 2px; }
   .section-head {
-    height: 25px; width: 100%; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px;
+    height: 25px; width: 100%; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 14px;
     background: transparent; color: #7d7f88; font-size: 9px; font-weight: 700; letter-spacing: .075em; cursor: pointer;
   }
   .section-head:hover { color: #4f5159; }
@@ -342,10 +370,13 @@
   .section-head .section-action { width:19px; height:19px; border-radius:5px; display:grid; place-items:center; background:transparent; color:var(--muted); cursor:pointer; margin-left:2px; }
   .section-head .section-action:hover { background:#e3e3e7; color:var(--ink); }
 
+  /* Einzugs-Grammatik 1:1 aus SidebarMetrics.swift:
+     rowOuterInset 8 · sectionLabel 14 · Gruppen-Avatar 37 ab Kante
+     (8+8+12+9) · Ebene 1 = 8+28 · Ebene 2 = 8+44 · „N fertig" = 8+52. */
   .session-row, .project-head, .workspace-head, .sub-row {
-    width: calc(100% - 12px); margin: 0 6px; min-width: 0; position: relative; display:flex; align-items:center; cursor:default; border-radius:6px;
+    width: calc(100% - 16px); margin: 0 8px; min-width: 0; position: relative; display:flex; align-items:center; cursor:default; border-radius:6px;
   }
-  .session-row { height: 25px; gap: 7px; padding: 0 7px 0 9px; font-size: 11px; color:#50525a; }
+  .session-row { height: 26px; gap: 7px; padding: 0 7px 0 10px; font-size: 12px; color:var(--muted); }
   .session-row:hover, .sub-row:hover { background:#e7e7eb; color:var(--ink); }
   .session-row.open .row-avatar { opacity: 1; }
   .session-row:not(.open) .row-avatar { opacity: .58; }
@@ -354,23 +385,32 @@
   .session-row.multi { box-shadow: inset 0 0 0 1.5px rgb(79 70 229 / 48%); }
   .row-avatar, .project-avatar { width:17px; height:17px; border-radius:4px; font-size:9px; }
   .session-row .row-title, .sub-row .row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .row-tail { margin-left:auto; display:flex; align-items:center; gap:6px; color:var(--faint); font-size:9px; font-variant-numeric: tabular-nums; flex:none; }
-  .kind { height:14px; min-width:19px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; font-size:7px; font-weight:750; letter-spacing:.04em; }
+  .row-tail { margin-left:auto; display:flex; align-items:center; gap:6px; color:var(--faint); font-size:10px; font-variant-numeric: tabular-nums; flex:none; }
+  .kind { height:14px; min-width:19px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; font-size:6.5px; font-weight:700; letter-spacing:.04em; }
   .kind.bg { color:#5148ba; background:#e7e5ff; }
   .kind.sub { color:#167c78; background:#dff4f1; }
   .kind.view { color:#9a5e13; background:#f8ead4; }
   .kind.term { color:#4d666f; background:#e2eef1; }
   .slot { color:var(--indigo); font-size:9px; font-weight:650; }
 
-  .project-head { height:27px; padding:0 7px 0 9px; gap:7px; font-size:11px; font-weight:600; }
+  .project-head { height:28px; padding:0 7px 0 8px; gap:9px; font-size:12px; font-weight:600; }
   .project-head:hover, .workspace-head:hover { background:#e9e9ed; }
-  .branch { color:var(--muted); font: 9px ui-monospace, "SFMono-Regular", Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .branch { color:var(--muted); font: 9.5px ui-monospace, "SFMono-Regular", Menlo, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .project-head .count { margin-left:auto; font-size:9px; font-weight:500; color:var(--faint); }
-  .project-children .session-row { padding-left:29px; }
+  /* Projekt-Einstieg: erscheint beim Überfahren, bleibt sichtbar wenn offen. */
+  .project-head .grid-open { width:19px; height:19px; display:grid; place-items:center; border-radius:5px;
+    color:var(--muted); cursor:pointer; opacity:0; transition:opacity 110ms ease; flex:none; }
+  .project-head:hover .grid-open { opacity:1; }
+  .project-head .grid-open:hover { color:var(--indigo); background:var(--indigo-soft); }
+  .project-head.im-grid { background:var(--indigo-soft); color:var(--ink); position:relative; }
+  .project-head.im-grid::before { content:""; position:absolute; left:1px; width:2.5px; height:15px;
+    border-radius:2px; background:var(--indigo); }
+  .project-head.im-grid .grid-open { opacity:1; color:var(--indigo); }
+  .project-children .session-row { padding-left:28px; }
 
   .workspace { margin: 1px 0 3px; }
-  .workspace-head { height:28px; padding:0 7px 0 9px; gap:7px; font-size:11px; font-weight:600; }
-  .workspace-head .fold { width:10px; font-size:8px; color:var(--faint); cursor:pointer; }
+  .workspace-head { height:28px; padding:0 7px 0 8px; gap:9px; font-size:12px; font-weight:600; }
+  .workspace-head .fold { width:12px; font-size:8px; color:var(--faint); cursor:pointer; }
   .workspace-head .workspace-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .workspace-head .occupancy { margin-left:auto; color:var(--faint); font-size:9px; font-weight:500; }
   .workspace-head .grid-open { width:19px; height:19px; display:grid; place-items:center; border-radius:5px; color:var(--muted); cursor:pointer; }
@@ -378,8 +418,8 @@
   .workspace.closed .workspace-members { display:none; }
   .workspace.closed .fold { transform:rotate(-90deg); }
   .workspace-members { position:relative; }
-  .workspace-members::before { content:""; position:absolute; left:26px; top:1px; bottom:3px; width:1px; background:#dbdce1; }
-  .workspace-members .session-row { padding-left:33px; }
+  .workspace-members::before { content:""; position:absolute; left:28px; top:1px; bottom:3px; width:1px; background:#dbdce1; }
+  .workspace-members .session-row { padding-left:28px; }
   .slot-grid { display:none; grid-template-columns:repeat(4,5px); gap:2px; margin-left:3px; }
   .workspace.closed .slot-grid { display:grid; }
   .slot-grid i { width:5px; height:5px; border-radius:1px; background:#c7c8cd; }
@@ -394,9 +434,9 @@
   .agent-road.running i:nth-child(2) { animation-delay:.15s; }
   .agent-road.running i:nth-child(3) { animation-delay:.3s; }
   @keyframes road { 0%,65%,100%{opacity:.3} 35%{opacity:1} }
-  .sub-row { height:23px; padding:0 7px 0 44px; gap:6px; font-size:10px; color:#62646c; }
+  .sub-row { height:23px; padding:0 7px 0 44px; gap:7px; font-size:9.5px; color:var(--muted); }
   .sub-row .branchline { position:absolute; left:27px; width:10px; height:12px; border-left:1px solid #d6d7dc; border-bottom:1px solid #d6d7dc; border-radius:0 0 0 5px; top:0; }
-  .finished-row { height:21px; margin-left:44px; display:flex; align-items:center; gap:5px; color:var(--faint); font-size:9px; cursor:pointer; }
+  .finished-row { height:21px; margin-left:52px; display:flex; align-items:center; gap:5px; color:var(--faint); font-size:9px; cursor:pointer; }
   .finished-row:hover { color:var(--ink); }
 
   .status-group-head { height:24px; display:flex; align-items:center; gap:6px; padding:0 12px 0 18px; color:#7d7f88; font-size:9px; font-weight:700; letter-spacing:.06em; }
@@ -442,6 +482,26 @@
   .meter { letter-spacing:-1px; color:#8179df; }
 
   .workspace-toolbar .workspace-title { font-size:11px; font-weight:650; }
+  /* — Projekt-Ansicht: Kopfzeile — */
+  .workspace-toolbar.projekt { gap:7px; }
+  .btn-zurueck { width:20px; height:20px; display:grid; place-items:center; border-radius:5px;
+    background:var(--control); color:var(--muted); font-size:12px; cursor:pointer; flex:none; }
+  .btn-zurueck:hover { color:var(--ink); background:var(--selection); }
+  .kopf-herkunft { flex:none; height:16px; padding:0 6px; border-radius:4px; display:inline-flex; align-items:center;
+    background:var(--indigo-soft); color:var(--indigo); font-size:8px; font-weight:700; letter-spacing:.04em; }
+  .kopf-pfad { color:var(--faint); font:9px ui-monospace,Menlo,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .kopf-zaehler { flex:none; display:flex; align-items:center; gap:7px; color:var(--muted); font-size:9px;
+    font-variant-numeric:tabular-nums; }
+  .kopf-zaehler span { display:inline-flex; align-items:center; gap:3px; }
+  .chip-filter { flex:none; height:20px; padding:0 7px; border-radius:6px; background:var(--control);
+    color:var(--muted); font-size:8.5px; cursor:pointer; }
+  .chip-filter:hover { color:var(--ink); }
+  .chip-filter.weit { background:var(--indigo-soft); color:var(--indigo); }
+  .leer-aktionen { margin-top:10px; display:flex; gap:6px; justify-content:center; }
+  .leer-aktionen .provider-action { background:var(--control); color:var(--ink); height:22px; }
+  @media (max-width:1120px) {
+    .workspace-toolbar.projekt .kopf-pfad { display:none; }
+  }
   .workspace-toolbar .workspace-stats { color:var(--muted); font-size:9px; }
   .layout-picker { margin-left:auto; }
   .resize-notice { display:none; position:absolute; z-index:8; top:38px; left:50%; transform:translateX(-50%); align-items:center; gap:8px; padding:6px 8px; border:1px solid #dbdce2; border-radius:7px; background:#fafafc; box-shadow:0 7px 22px rgb(31 32 38 / 12%); font-size:9px; }
@@ -463,11 +523,11 @@
   /* BÜNDIG wie in der App: kein Rahmen, kein Padding, keine Border um die
      Bühne — die Panes reichen bis an Sidebar- und Fensterkante, getrennt
      nur durch die 1-px-Fugen (Bühnenhintergrund = Fugenfarbe). */
-  .grid-shell { min-height:0; background:#d7d8dd; position:relative; overflow:hidden; }
-  .stage { position:absolute; inset:0; background:#d7d8dd; overflow:hidden; }
+  .grid-shell { min-height:0; background:var(--bar); position:relative; overflow:hidden; }
+  .stage { position:absolute; inset:0; background:var(--bar); overflow:hidden; }
   .pane {
     position:absolute; min-width:0; min-height:0; overflow:hidden;
-    background:var(--white); display:grid; grid-template-rows:auto 22px minmax(0,1fr) 18px;
+    background:var(--white); display:grid; grid-template-rows:auto 22px minmax(0,1fr);
     outline:0 solid var(--indigo); outline-offset:-2px;
     transition:left var(--motion,220ms) var(--motion-ease,cubic-bezier(.22,1,.36,1)),
                top var(--motion,220ms) var(--motion-ease,cubic-bezier(.22,1,.36,1)),
@@ -493,7 +553,7 @@
   /* Die Leiste bleibt IMMER ein Grid-Item (nur mit Höhe 0), denn
      `display:none` würde sie aus dem Grid nehmen und alle folgenden
      Pane-Zeilen um eine Spur nach oben schieben. */
-  .stack-bar { display:flex; align-items:stretch; gap:1px; height:0; padding:0; background:#f1f1f4; border-bottom:0 solid var(--line-soft); overflow:hidden; }
+  .stack-bar { display:flex; align-items:stretch; gap:1px; height:0; padding:0; background:var(--panel); border-bottom:0 solid var(--line-soft); overflow:hidden; }
   .pane.stacked .stack-bar { height:23px; padding:3px 4px 0; border-bottom-width:1px; }
   .stack-tab {
     min-width:0; max-width:112px; height:17px; display:inline-flex; align-items:center; gap:4px;
@@ -508,23 +568,47 @@
   .stack-tab.guest::after { content:"Vorschau"; margin-left:3px; padding:0 3px; border-radius:3px; background:color-mix(in srgb, var(--indigo) 16%, transparent); color:var(--indigo); font-size:6.5px; font-weight:700; letter-spacing:.03em; }
   .stack-count { margin-left:auto; flex:none; padding:0 4px; color:var(--faint); font-size:7.5px; align-self:center; }
 
-  .pane-head { min-width:0; display:flex; align-items:center; gap:6px; padding:0 6px 0 5px; border-bottom:1px solid var(--line-soft); background:#f8f8fa; font-size:9px; cursor:grab; transition:background 110ms ease; }
+  .pane-head { min-width:0; display:flex; align-items:center; gap:6px; padding:0 6px 0 5px; border-bottom:1px solid var(--line); background:var(--paper); font-size:9px; cursor:grab; transition:background 110ms ease; }
   /* Der Kopf ist der Griff — das muss man sehen, bevor man es ausprobiert. */
-  .pane-head:hover { background:#eeeef2; }
-  .pane-grip { flex:none; color:#b6b8c0; font-size:10px; line-height:1; letter-spacing:-1px; cursor:grab; }
-  .pane-head:hover .pane-grip { color:#787a84; }
-  body.dark .pane-head:hover { background:#2b2c33; }
-  body.dark .pane-grip { color:#5b5d67; }
-  body.dark .pane-head:hover .pane-grip { color:#9a9ca6; }
+  .pane-head:hover { background:var(--control); }
+  .pane-grip { flex:none; color:var(--faint); font-size:10px; line-height:1; letter-spacing:-1px; cursor:grab; }
+  .pane-head:hover .pane-grip { color:var(--muted); }
   .pane.dragging .pane-head { cursor:grabbing; }
   .pane-avatar { width:15px; height:15px; border-radius:4px; font-size:8px; }
   .pane-head .pane-title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pane-head .account { color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pane-actions { margin-left:auto; display:flex; align-items:center; flex:none; }
-  .pane-terminal { min-height:0; overflow:auto; padding:8px 10px; font:8px/1.48 ui-monospace,"SFMono-Regular",Menlo,monospace; color:#4b4d54; white-space:pre-wrap; scrollbar-width:thin; scrollbar-color:#c9cad0 transparent; }
-  .pane-status { display:flex; align-items:center; gap:5px; padding:0 7px; border-top:1px solid var(--line-soft); color:var(--faint); background:#f4f4f6; font:7.5px ui-monospace,"SFMono-Regular",Menlo,monospace; overflow:hidden; white-space:nowrap; }
-  .pane-badge { flex:none; height:12px; padding:0 4px; border-radius:3px; background:#e9e9ef; color:#71737c; font-size:7px; font-weight:700; letter-spacing:.04em; display:inline-flex; align-items:center; }
+  .pane-terminal {
+    min-height:0; overflow:auto; padding:8px 10px 0;
+    font:8px/1.5 ui-monospace,"SFMono-Regular",Menlo,monospace; color:var(--muted);
+    white-space:pre-wrap; scrollbar-width:thin; scrollbar-color:var(--line-strong) transparent;
+    /* Terminals wachsen von unten — Inhalt und Statusline kleben am Fuß. */
+    display:flex; flex-direction:column; justify-content:flex-end;
+  }
+  .term-body { flex:0 0 auto; white-space:normal; }
+  .term-body p { margin:0 0 9px; white-space:pre-wrap; }
+  .term-body b { color:var(--ink); font-weight:700; }
+  .term-link { color:var(--blue); }
+  .term-think, .term-recap { color:var(--faint); margin:0 0 9px; }
+  .term-recap { font-style:italic; }
+  .term-teammate { margin:0 0 9px; color:var(--muted); }
+  .term-prompt { margin-top:2px; }
+  /* Statusline: gehört zum Terminal (WhisperM8 liefert Zeile 1, Claude Code
+     die Hinweiszeilen), deshalb monospace und mitscrollend. */
+  .term-statusline { flex:0 0 auto; margin-top:6px; padding:4px 0 6px; border-top:1px solid var(--line-soft); line-height:1.55; }
+  .sl-repo { color:var(--ink); font-weight:600; }
+  .sl-account { color:var(--orange); }
+  .term-err { color:var(--red); }
+  .pane-status { display:flex; align-items:center; gap:5px; padding:0 7px; border-top:1px solid var(--line); color:var(--faint); background:var(--status-pill); font:7.5px ui-monospace,"SFMono-Regular",Menlo,monospace; overflow:hidden; white-space:nowrap; }
+  .pane-badge { flex:none; height:12px; padding:0 4px; border-radius:3px; background:var(--control); color:var(--muted); font-size:7px; font-weight:700; letter-spacing:.04em; display:inline-flex; align-items:center; }
   .pane-badge.master { background:#e7e5ff; color:#5148ba; }
+  .account-chip {
+    flex:none; height:13px; padding:0 5px; border-radius:3px;
+    border:1px solid color-mix(in srgb, var(--orange) 55%, transparent);
+    color:var(--orange); background:color-mix(in srgb, var(--orange) 12%, transparent);
+    font-size:7.5px; font-weight:700; letter-spacing:.02em;
+    display:inline-flex; align-items:center;
+  }
   .pane-badge.multi { background:#e2eef1; color:#3d6b78; cursor:pointer; }
   .pane-badge.multi:hover { background:#d3e6ec; color:#26505c; }
   body.dark .pane-badge.multi { background:#243740; color:#8fbecc; }
@@ -596,26 +680,19 @@
   .empty-stage strong { display:block; color:#696b73; font-weight:600; font-size:11px; margin-bottom:2px; }
 
   /* Layout-Zustands-Chip in der Toolbar (Automatik vs. angepasst). */
-  .layout-state { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 7px; border-radius:6px; background:#e7e7ec; color:#65676f; font-size:8.5px; cursor:pointer; }
-  .layout-state:hover { background:#dedee4; color:var(--ink); }
+  .layout-state { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 7px; border-radius:6px; background:var(--control); color:var(--muted); font-size:8.5px; cursor:pointer; }
+  .layout-state:hover { background:var(--selection); color:var(--ink); }
   .layout-state.snapshot { background:var(--indigo-soft); color:#4a43b8; }
   .layout-state .dot { width:5px; height:5px; border-radius:50%; background:currentColor; opacity:.7; }
-  body.dark .stack-bar { background:#22232a; }
   body.dark .stack-tab { color:#9799a3; }
   body.dark .stack-tab:hover { background:rgb(255 255 255 / 7%); }
   body.dark .stack-tab.on { background:var(--white); color:var(--ink); }
-  body.dark .pane-head { background:#24252b; }
-  body.dark .pane-status { background:#212228; }
   /* Der Pane-Terminaltext braucht seinen eigenen Dark-Wert — der Light-Ton
      #4b4d54 liegt auf #28292f unter jeder brauchbaren Kontrastschwelle. */
   body.dark .pane-terminal { color:#b8bac3; scrollbar-color:#43444c transparent; }
   body.dark .empty-stage strong { color:#b3b5be; }
   body.dark .stack-count { color:#7c7e88; }
-  body.dark .grid-shell { background:#17181c; }
-  body.dark .stage { background:#0f1013; border-color:#0f1013; }
-  body.dark .pane-badge { background:#32333c; color:#9a9ca6; }
   body.dark .pane-badge.master { background:#2f2d4d; color:#a5a0f5; }
-  body.dark .layout-state { background:#2a2b32; color:#9a9ca6; }
   body.dark .layout-state.snapshot { background:#2e2d45; color:#a9a4f7; }
 
   .popover { position:absolute; z-index:30; min-width:210px; padding:5px; border:1px solid #d5d6dc; border-radius:8px; background:#fafafc; box-shadow:0 14px 35px rgb(31 32 38 / 18%); font-size:11px; display:none; }
@@ -652,15 +729,40 @@
      Schwarz, kein Glow. Die Tab-Geometrie bleibt identisch, nur die
      Flächenwerte drehen sich: aktiver Tab + Header werden die HELLSTE
      Fläche der Leiste (Licht fällt auf das Aktive). */
+  /* Der Dark-Modus IST der Normalfall der App — deshalb startet der
+     Zwilling darin. Werte wieder 1:1 aus AgentTheme. */
   body.dark {
     color-scheme:dark;
-    --ink:#e7e8ee; --muted:#9d9fa9; --faint:#686a75;
-    --line:#37383f; --line-soft:#2f3037;
-    --canvas:#131417; --sidebar:#1e1f24; --paper:#222327; --white:#28292f;
-    --indigo:#8781f0; --indigo-soft:#2e2d45;
-    --blue:#6b90e0;
-    --bar:#191a1e; --bar-line:#0d0e11;
-    --head:#26272d; --tab-edge:#41424b;
+    --ink: rgb(255 255 255 / 92%);
+    --muted: rgb(255 255 255 / 55%);
+    --faint: rgb(255 255 255 / 38%);
+    --line: rgb(255 255 255 / 6%);
+    --line-soft: rgb(255 255 255 / 4.5%);
+    --line-strong: rgb(255 255 255 / 10%);
+    --hover: rgb(255 255 255 / 4%);
+    --selection: rgb(255 255 255 / 7%);
+    --canvas: #0B0C0D;
+    --sidebar: #131415;
+    --paper: #121213;
+    --white: #171719;
+    --panel: #1B1C1D;
+    --control: #242426;
+    --tab-selected: #1D1E20;
+    --status-pill: #0D0D0E;
+    --indigo: #7C84E8;
+    --indigo-strong: #5E6AD2;
+    --indigo-soft: color-mix(in srgb, #7C84E8 18%, transparent);
+    --green: #4CC38A;
+    --orange: #E9B949;
+    --red: #E5594F;
+    --blue: #6b90e0;
+    --bar-line: #000;
+    --tab-edge: rgb(255 255 255 / 10%);
+    /* PFLICHT: --bar/--head verweisen in :root per var() auf --canvas/--paper
+       und sind dort bereits ersetzt — ohne eigene Dark-Werte bliebe die
+       Titelleiste hell. */
+    --bar: #0B0C0D;
+    --head: #121213;
   }
   body.dark .app-window { border-color:#08090b; box-shadow:0 22px 65px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%); }
   body.dark .tab { color:var(--muted); }
@@ -677,7 +779,6 @@
   body.dark .session-row { color:#b4b6bf; }
   body.dark .session-row:hover, body.dark .sub-row:hover { background:#2a2b32; }
   body.dark .session-row.selected { color:#e3e2f5; }
-  body.dark .pane-head { background:#24252b; }
   body.dark .terminal { color:#c3c5cd; scrollbar-color:#43444c transparent; }
   body.dark .term-user { color:#e4e5eb; }
   body.dark .term-muted { color:#787a84; }
@@ -722,6 +823,47 @@
     .provider-action .action-label { display:none; }
     .tab { min-width:74px; max-width:120px; }
   }
+  /* ═══ VERLAUFSANSICHT ═══════════════════════════════════════════════
+     Ersetzt Terminal/Chat/Roh durch EINE Ansicht. In der App ist der
+     Textkörper ein einziges NSTextView (TextKit 2), kein View-Baum pro
+     Nachricht: gelayoutet wird nur der sichtbare Ausschnitt, egal wie
+     lang das Transcript ist. Hier im Zwilling steht dafür ein
+     scrollender Textblock — die Optik ist maßstabsgetreu. */
+  /* Ein Verlauf wächst von OBEN (man liest ihn von vorne), anders als das
+     Live-Terminal, dessen Inhalt am Fuß klebt. Mit justify-content:flex-end
+     ragt langer Inhalt nach oben aus dem Container und ist nicht scrollbar. */
+  .pane-terminal.tx-scroll { justify-content:flex-start; }
+  .tx-meta { flex:none; display:flex; align-items:center; gap:8px; padding:4px 11px; border-bottom:1px solid var(--line);
+             background:var(--paper); font-size:9.5px; color:var(--faint); }
+  .tx-meta .tx-src { font-family:ui-monospace,"SFMono-Regular",Menlo,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tx-meta .tx-grow { margin-left:auto; flex:none; }
+  .tx-engine { flex:none; padding:1px 5px; border:1px solid var(--line-strong); border-radius:4px; letter-spacing:.02em; }
+  .tx-pill { display:inline-flex; align-items:center; gap:6px; margin:0 auto 12px; padding:3px 11px; border:1px solid var(--line-strong);
+             border-radius:999px; background:var(--white); color:var(--muted); font-size:10px; cursor:pointer; }
+  .tx-pill:hover { background:var(--hover); color:var(--ink); }
+  .tx-pill .tx-hint { color:var(--faint); }
+  .tx-center { display:flex; justify-content:center; }
+  .tx-start { margin:0 auto 13px; padding:2px 9px; color:var(--faint); font-size:9.5px; letter-spacing:.04em; text-transform:uppercase; }
+  .tx-loading { display:inline-flex; align-items:center; gap:7px; margin:0 auto 12px; color:var(--faint); font-size:10px; }
+  .tx-spin { width:9px; height:9px; border:1.5px solid var(--line-strong); border-top-color:var(--muted); border-radius:50%;
+             animation:txspin 700ms linear infinite; }
+  @keyframes txspin { to { transform:rotate(360deg); } }
+  .tx-foot { flex:none; display:flex; align-items:center; gap:8px; padding:6px 12px; border-top:1px solid var(--line);
+             background:var(--paper); font-size:10.5px; color:var(--muted); }
+  .tx-foot .tx-resume { padding:2px 9px; border:1px solid var(--line-strong); border-radius:6px; background:var(--white);
+                        color:var(--ink); font-size:10px; cursor:pointer; }
+  .tx-foot .tx-resume:hover { background:var(--hover); }
+  .tx-live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:txpulse 1.1s ease-in-out infinite; }
+  @keyframes txpulse { 50% { opacity:.3; } }
+  .term-err { color:#b1443a; }
+  .tx-more { color:#9a9ca4; }
+  .tx-think { color:#8d8f97; font-style:italic; }
+  body.dark .tx-meta, body.dark .tx-foot { background:#121213; color:#7c7e87; border-color:rgb(255 255 255 / 9%); }
+  body.dark .tx-pill, body.dark .tx-foot .tx-resume { background:#17181a; border-color:rgb(255 255 255 / 13%); color:#b8bac3; }
+  body.dark .tx-pill:hover, body.dark .tx-foot .tx-resume:hover { background:#1e1f22; }
+  body.dark .term-err { color:#e0655a; }
+  body.dark .tx-more, body.dark .tx-think { color:#6f717a; }
+
   @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation-duration:.001ms!important; transition-duration:.001ms!important; } }
 </style>
 
@@ -748,6 +890,11 @@
     <button data-motion="lively" title="140 ms, knackiger">Lebhaft</button>
     <button data-motion="off" title="Ohne Bewegung — Panes springen sofort">Aus</button>
   </div>
+  <span class="bar-label">Inhalt</span>
+  <div class="bar-set" id="paneViewPicker">
+    <button class="on" data-paneview="live" title="Laufende Session: das PTY-Terminal, wie bisher">Live</button>
+    <button data-paneview="transcript" title="Verlaufsansicht — EIN NSTextView, CLI-formatiert aus dem Transcript. Ersetzt Terminal/Chat/Roh.">Verlauf</button>
+  </div>
   <button class="bar-toggle" id="autoResetButton" title="Manuelles Layout verwerfen, zurück auf Automatik · ⌘⌥0">↺ Automatik</button>
   <button class="bar-toggle" id="themeToggle" title="Dark Mode — wie die echte App">◐ Dark</button>
 </div>
@@ -761,6 +908,7 @@
     <div class="tabs-zone">
       <div class="tab-scroll" id="tabStrip"></div>
       <i class="drop-line" id="dropLine"></i>
+      <div class="tab-lead"><button class="icon-button small" id="sidebarToggleLeft" title="Sidebar ein-/ausblenden">◧</button></div>
       <div class="tab-tools">
         <button class="icon-button small active" id="groupToggle" title="Tab-Gruppen an/aus">⌘</button>
         <button class="icon-button small" id="overflowButton" title="Alle offenen Tabs">⌄</button>
@@ -847,18 +995,21 @@
   };
 
   const sessions = [
-    {id:'s1', title:'Tab-Gruppen und Sidebar', project:'whisper', workspace:'ws-whisper', status:'working', time:'jetzt', kind:'bg', sub:3, summary:'Chrome-artige Tab-Gruppen und Sidebar-Grammatik'},
-    {id:'s2', title:'GPT-Workflow Skill', project:'whisper', workspace:'ws-whisper', status:'waiting', time:'2m', kind:'sub', sub:2, summary:'Workflow-Skill und Backend-Einstellungen prüfen'},
-    {id:'s3', title:'Statusline & Metrics', project:'whisper', workspace:'ws-whisper', status:'ready', time:'11m', kind:'term', summary:'Sidebar-Performance und Statusline stabilisieren'},
-    {id:'s4', title:'Agent Chats Freeze', project:'whisper', workspace:'ws-whisper', status:'idle', time:'1h', summary:'Indexer- und Render-Pfade analysieren'},
-    {id:'s5', title:'Reporting-Pipeline', project:'heart', workspace:'ws-akq', status:'working', time:'jetzt', kind:'bg', sub:4, summary:'Reporting-Automation und Datenabgleich'},
-    {id:'s6', title:'Listen-Qualität', project:'list', workspace:'ws-akq', status:'ready', time:'8m', summary:'Leads bereinigen und Dubletten prüfen'},
-    {id:'s7', title:'Akquise-Dashboard', project:'akq', workspace:'ws-akq', status:'waiting', time:'19m', kind:'view', sub:1, summary:'Dashboard-Interaktionen und Status prüfen'},
-    {id:'s8', title:'Heartbeat QA', project:'heart', workspace:'ws-akq', status:'idle', time:'3h', summary:'Regressionen im Kampagnenlauf testen'},
-    {id:'s9', title:'Steuer 2025', project:'heart', status:'ready', time:'30m', summary:'Belege und Jahresabschluss vorbereiten'},
-    {id:'s10', title:'CLI Skills Export', project:'whisper', status:'idle', time:'45m', kind:'sub', sub:2, summary:'Skill-Sync und Exporter-Tests'},
-    {id:'s11', title:'Import-Validierung', project:'list', status:'idle', time:'2h', summary:'CSV-Import und Feldzuordnung'},
-    {id:'s12', title:'Steuer 2024', project:'heart', status:'idle', time:'1d', summary:'Archivierter Jahresabschluss'}
+    {id:'s1', title:'Tab-Gruppen und Sidebar', project:'whisper', workspace:'ws-whisper', status:'working', time:'jetzt', kind:'bg', sub:3, summary:'Chrome-artige Tab-Gruppen und Sidebar-Grammatik',
+     account:'ai2', pct:87, used:'741k', model:'Opus 5 (1M context)', effort:'high', agents:2, stale:true},
+    {id:'s2', title:'GPT-Workflow Skill', project:'whisper', workspace:'ws-whisper', status:'waiting', time:'2m', kind:'sub', sub:2, summary:'Workflow-Skill und Backend-Einstellungen prüfen', account:'Claude2', pct:60, used:'513k', model:'Opus 5 (1M context)', effort:'high', agents:2, stale:true},
+    {id:'s3', title:'Statusline & Metrics', project:'whisper', workspace:'ws-whisper', status:'ready', time:'11m', kind:'term', summary:'Sidebar-Performance und Statusline stabilisieren', account:'PowerUser', pct:46, used:'145k', model:'gpt-5.6-sol', effort:'high', agents:1, stale:false},
+    {id:'s4', title:'Agent Chats Freeze', project:'whisper', workspace:'ws-whisper', status:'idle', time:'1h', summary:'Indexer- und Render-Pfade analysieren', account:'Claude2', pct:18, used:'182k', model:'Opus 5 (1M context)', effort:'high', agents:0, stale:false},
+    {id:'s5', title:'Reporting-Pipeline', project:'heart', workspace:'ws-akq', status:'working', time:'jetzt', kind:'bg', sub:4, summary:'Reporting-Automation und Datenabgleich', account:'ai2', pct:71, used:'612k', model:'Opus 5 (1M context)', effort:'high', agents:3, stale:true},
+    {id:'s6', title:'Listen-Qualität', project:'list', workspace:'ws-akq', status:'ready', time:'8m', summary:'Leads bereinigen und Dubletten prüfen', account:'Claude2', pct:34, used:'291k', model:'Opus 5 (1M context)', effort:'medium', agents:0, stale:false},
+    {id:'s7', title:'Akquise-Dashboard', project:'akq', workspace:'ws-akq', status:'waiting', time:'19m', kind:'view', sub:1, summary:'Dashboard-Interaktionen und Status prüfen', account:'PowerUser', pct:52, used:'450k', model:'gpt-5.6-sol', effort:'high', agents:1, stale:false},
+    {id:'s8', title:'Heartbeat QA', project:'heart', workspace:'ws-akq', status:'idle', time:'3h', summary:'Regressionen im Kampagnenlauf testen', account:'ai2', pct:12, used:'104k', model:'Opus 5 (1M context)', effort:'high', agents:0, stale:false},
+    {id:'s9', title:'Steuer 2025', project:'heart', status:'ready', time:'30m', summary:'Belege und Jahresabschluss vorbereiten', account:'Claude2', pct:29, used:'246k', model:'Opus 5 (1M context)', effort:'high', agents:0, stale:false},
+    {id:'s10', title:'CLI Skills Export', project:'whisper', status:'idle', time:'45m', kind:'sub', sub:2, summary:'Skill-Sync und Exporter-Tests', account:'ai2', pct:66, used:'563k', model:'Opus 5 (1M context)', effort:'high', agents:1, stale:true},
+    {id:'s11', title:'Import-Validierung', project:'list', status:'idle', time:'2h', summary:'CSV-Import und Feldzuordnung', account:'PowerUser', pct:8, used:'71k', model:'gpt-5.6-sol', effort:'medium', agents:0, stale:false,
+     ended:true, rounds:41, bytes:'2,7 MB'},
+    {id:'s12', title:'Steuer 2024', project:'heart', status:'idle', time:'1d', summary:'Archivierter Jahresabschluss', account:'Claude2', pct:5, used:'44k', model:'Opus 5 (1M context)', effort:'low', agents:0, stale:false,
+     ended:true, rounds:133, bytes:'18,2 MB'}
   ];
 
   const workspaces = [
@@ -899,6 +1050,55 @@
     'ws-whisper': { mode:'auto', root:null, bound:{}, guest:null, cells:cellsFrom(['s1','s2','s3','s4','s10']) },
     'ws-akq':     { mode:'auto', root:null, bound:{}, guest:null, cells:cellsFrom(['s5','s6','s7','s8']) }
   };
+  // ——— PROJEKT-WORKSPACES ——————————————————————————————————————————
+  // Ein Projekt kann als eigener Workspace betrachtet werden. Technisch ist
+  // das KEIN zweiter Mechanismus, sondern ein weiterer Eintrag in `layouts`
+  // mit dem Schlüssel `project:<id>` — dieselbe Engine, dasselbe Ziehen,
+  // dieselben Snapshots. Der einzige Unterschied ist die Herkunft der
+  // Zellen: kuratierte Workspaces BESITZEN ihre Mitglieder, Projekt-
+  // Workspaces LEITEN sie aus dem Projekt ab.
+  const projectKey = pid => `project:${pid}`;
+  const isProjectLayout = l => l?.source === 'project';
+
+  // VORLÄUFIG (siehe Entscheidungsbereich, Frage 1): Standardfilter zeigt
+  // nur Chats, die gerade etwas tun oder auf den Nutzer warten.
+  const AKTIVE_STATUS = ['working','waiting','ready'];
+
+  function ensureProjectLayout(pid) {
+    const key = projectKey(pid);
+    if(!layouts[key]) {
+      layouts[key] = { source:'project', projectID:pid, mode:'auto', root:null,
+                       bound:{}, guest:null, hidden:[], filter:'aktiv', cells:[] };
+    }
+    syncProjectCells(layouts[key]);
+    return key;
+  }
+
+  /// Chats, die laut Filter und Ausblendungen in die Ansicht gehören.
+  function projectSessions(l) {
+    return sessions.filter(s =>
+      s.project === l.projectID &&
+      !l.hidden.includes(s.id) &&
+      (l.filter === 'alle' || AKTIVE_STATUS.includes(s.status))
+    );
+  }
+
+  /// Zellen an die Soll-Menge angleichen: Verschwundenes raus, Neues ans
+  /// Ende. Bestehende Zellen behalten ihre `cid` — deshalb bleiben Panes
+  /// und Terminals beim Nachführen stehen.
+  function syncProjectCells(l) {
+    const soll = new Set(projectSessions(l).map(s => s.id));
+    l.cells.forEach(c => {
+      c.sessions = c.sessions.filter(id => soll.has(id));
+      if(!c.sessions.includes(c.active)) c.active = c.sessions[0];
+    });
+    l.cells = l.cells.filter(c => c.sessions.length);
+    const vorhanden = new Set(l.cells.flatMap(c => c.sessions));
+    [...soll].filter(id => !vorhanden.has(id))
+             .forEach(id => l.cells.push({cid:newCID(), sessions:[id], active:id}));
+    if(l.mode === 'snapshot' && l.root) l.root = null;   // Struktur änderte sich
+  }
+
   // Mitgliedschaft ist die Summe der Zellen — eine zweite Wahrheit gibt es
   // nicht. Ein Chat darf in MEHREREN Workspaces liegen (wie eine Playlist).
   //
@@ -910,7 +1110,9 @@
   const primaryWS = {};
 
   const workspacesOf = sid =>
-    Object.entries(layouts).filter(([,l])=>l.cells.some(c=>c.sessions.includes(sid))).map(([id])=>id);
+    Object.entries(layouts)
+      .filter(([,l])=>!isProjectLayout(l) && l.cells.some(c=>c.sessions.includes(sid)))
+      .map(([id])=>id);
 
   function primaryOf(sid) {
     const all = workspacesOf(sid);
@@ -928,13 +1130,15 @@
   }
 
   function syncMembership() {
+    // Projekt-Layouts bleiben außen vor: ihre Zellen sind abgeleitet, keine
+    // Mitgliedschaft — sonst wäre jeder Chat automatisch „in einem Workspace".
     sessions.forEach(s=>{ s.workspace = primaryOf(s.id); });
     Object.keys(primaryWS).forEach(sid=>{ if(!workspacesOf(sid).length) delete primaryWS[sid]; });
   }
 
   const state = {
-    tabs:['s1','s5','s2','s9','s6','s3','s10','s7'], active:'s1', grouped:true, tabStyle:'flat', dark:false,
-    collapsedGroups:new Set(), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-akq']),
+    tabs:['s1','s5','s2','s9','s6','s3','s10','s7'], active:'s1', grouped:true, tabStyle:'chrome', dark:true,
+    collapsedGroups:new Set(['ws:ws-whisper','ws:ws-akq','project:whisper','project:heart','project:list','project:akq']), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-akq']),
     sidebarMode:'structure', scope:'active', filter:'', subOpen:new Set(['s1']), finishedOpen:new Set(),
     multi:new Set(), lastSidebarIndex:null, view:'chat', gridWorkspace:'ws-whisper', returnWorkspace:null,
     // Layout-Steuerung
@@ -943,8 +1147,16 @@
     minPaneHeight:190,   // ~20 Terminalzeilen — darunter ist eine Pane nutzlos
     focusCID:null, zoomCID:null,
     drag:null, dropTarget:null, paneDrop:null,
-    switchIndex:0
+    switchIndex:0,
+    // Inhalt einer Pane: 'live' = laufendes PTY-Terminal (wie bisher),
+    // 'transcript' = Verlaufsansicht. Beendete Sessions zeigen IMMER den
+    // Verlauf — es gibt kein Terminal mehr, an das man andocken könnte.
+    paneView:'live'
   };
+
+  // Verlaufsansicht gilt für diese Pane? Beendete Sessions kennen nichts
+  // anderes; laufende folgen dem Umschalter in der Mockup-Leiste.
+  const showsTranscript = s => !!s.ended || state.paneView==='transcript';
 
   const $ = s => document.querySelector(s);
   const byId = id => sessions.find(s => s.id === id);
@@ -975,7 +1187,7 @@
   function bucket(s) { return s.workspace ? `ws:${s.workspace}` : `project:${s.project}`; }
   function bucketMeta(key) {
     const [type,id]=key.split(':');
-    if(type==='ws') { const w=workspace(id); return {label:w.name.split(' · ')[0],color:w.color,icon:'⊞'}; }
+    if(type==='ws') { const w=workspace(id); return {label:w.name,color:w.color,icon:'⊞'}; }
     const p=project(id); return {label:p.name,color:p.color,icon:'▤'};
   }
 
@@ -1243,7 +1455,10 @@
     }).join('');
     const projectBodies=Object.entries(projects).map(([id,p])=>{
       const list=sessions.filter(s=>s.project===id&&match(s)); if(!list.length) return '';
-      return `<div><div class="project-head"><span class="project-avatar" style="background:${p.color}">${p.initial}</span><span>${p.name}</span><span class="branch">⑂ ${p.branch}</span><span class="count">${list.length}</span></div><div class="project-children">${list.slice(0,4).map(s=>sessionRow(s,{zone:'project'})).join('')}${list.length>4?`<div class="finished-row">＋ ${list.length-4} weitere anzeigen</div>`:''}</div></div>`;
+      const pKey=projectKey(id);
+      const offen=state.view==='grid' && state.gridWorkspace===pKey;
+      const aktiveChats=list.filter(x=>AKTIVE_STATUS.includes(x.status)).length;
+      return `<div><div class="project-head ${offen?'im-grid':''}" data-project="${id}"><span class="project-avatar" style="background:${p.color}">${p.initial}</span><span>${p.name}</span><span class="branch">⑂ ${p.branch}</span><span class="count">${list.length}</span><button class="grid-open" data-project-grid="${id}" title="Projekt-Ansicht öffnen — startet und beendet nichts (${aktiveChats} aktiv von ${list.length})">⊞</button></div><div class="project-children">${list.slice(0,4).map(s=>sessionRow(s,{zone:'project'})).join('')}${list.length>4?`<div class="finished-row">＋ ${list.length-4} weitere anzeigen</div>`:''}</div></div>`;
     }).join('');
     return section('pinned','GEPINNT',pinBody,pinned.length)+section('workspaces','WORKSPACES',wsBody,workspaces.length,'<button class="section-action" data-toast="Neuen Workspace anlegen">＋</button>')+section('chats','CHATS',projectBodies,sessions.filter(match).length);
   }
@@ -1269,6 +1484,10 @@
     document.querySelectorAll('[data-wsfold]').forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.dataset.wsfold;state.collapsedWorkspaces.has(id)?state.collapsedWorkspaces.delete(id):state.collapsedWorkspaces.add(id);renderSidebar();});
     document.querySelectorAll('.workspace-head').forEach(h=>h.onclick=e=>{ if(e.target.closest('[data-wsfold]'))return; enterGrid(h.closest('.workspace').dataset.workspace); });
     document.querySelectorAll('[data-grid]').forEach(b=>b.onclick=e=>{e.stopPropagation();enterGrid(b.dataset.grid);});
+    // Projekt-Einstieg: öffnet NUR die Ansicht — kein Start, kein Schließen.
+    document.querySelectorAll('[data-project-grid]').forEach(b=>b.onclick=e=>{
+      e.stopPropagation(); enterProject(b.dataset.projectGrid);
+    });
     document.querySelectorAll('[data-session]').forEach(row=>{
       row.onclick=e=>{
         if(e.target.closest('[data-sub]')) { const id=e.target.closest('[data-sub]').dataset.sub; state.subOpen.has(id)?state.subOpen.delete(id):state.subOpen.add(id); renderSidebar(); return; }
@@ -1294,6 +1513,17 @@
 
   function terminalHtml(s) {
     const p=project(s.project);
+    // Verlaufsansicht: KEIN Modus-Umschalter mehr (Terminal|Chat|Roh sind
+    // ersatzlos weg), keine Prompt-Box bei beendeten Sessions — stattdessen
+    // Herkunft oben und Fortsetzen unten.
+    if(showsTranscript(s)) {
+      const index = sessions.findIndex(x=>x.id===s.id);
+      return `<div class="terminal-shell" style="grid-template-rows:auto minmax(0,1fr) auto;">`
+        + transcriptMeta(s)
+        + `<div class="terminal">${transcriptBody(s, index)}</div>`
+        + transcriptFoot(s)
+        + `</div>`;
+    }
     return `<div class="terminal-shell"><div class="terminal">
       <div class="term-block term-user">❯ ${s.title}: Bitte prüfe den aktuellen Stand und setze die nächste sinnvolle Änderung vollständig um.</div>
       <div class="term-block"><span class="term-ok">●</span> Ich prüfe zuerst die betroffenen Komponenten und die bestehenden Invarianten.</div>
@@ -1480,19 +1710,220 @@
   const terminalDOM = {};   // sessionID → <div class="pane-terminal">
   const scrollMemo = {};
 
+  // Die Statusline ist Teil des Terminals, nicht ein Balken der App — genau
+  // wie in echt: WhisperM8 liefert Zeile 1, Claude Code die Hinweiszeilen
+  // darunter. Deshalb steht sie IM Terminal und scrollt mit.
+  function statuslineFor(s) {
+    const p = project(s.project);
+    const gpt = s.model.startsWith('gpt');
+    const pctColor = s.pct >= 85 ? 'term-err' : s.pct >= 70 ? 'term-warn' : 'term-ok';
+    const limit = gpt ? '372k' : '1000k';
+    const rows = [
+      `<span class="sl-repo">${p.name}</span> <span class="term-ok">(${p.branch.split('/').pop()})</span>`
+        + ` <span class="term-err">✗</span> <span class="term-muted">|</span>`
+        + ` <span class="${pctColor}">${s.pct}%</span> <span class="term-muted">${s.used}/${limit}</span>`
+        + ` <span class="term-muted">|</span> [${s.model}] <span class="sl-account">⇄${s.account}</span>`
+        + ` <span class="term-muted">|</span> ${s.effort} <span class="term-muted">|</span> <span class="term-muted">${13 + (s.pct % 7)}…</span>`,
+      `<span class="term-warn">▸▸</span> <span class="term-warn">bypass permissions on</span> <span class="term-muted">(shift+tab to cycle)</span>`
+        + (s.agents ? ` <span class="term-muted">·</span> <span class="term-muted">← ${s.agents} agent${s.agents>1?'s':''}</span>` : '')
+    ];
+    if(s.stale) rows.push(`<span class="term-err">✗ Auto-update failed · Run claude doctor</span>`);
+    rows.push(`<span class="term-muted">new task? </span><span class="term-err">/clear</span><span class="term-muted"> to save ${s.used} tokens</span>`);
+    return `<div class="term-statusline">${rows.join('\n')}</div>`;
+  }
+
+  // Gesprächsverläufe im Stil der echten Sessions: Fließtext mit Auszeichnung,
+  // farbige Pfade, Denk- und Recap-Zeilen, laufende Teammates. Der Zwilling
+  // soll sich lesen wie die App, nicht wie ein Platzhalter.
+  const VERLAEUFE = [
+    s => `<p>Der parallele Strang hat <b>während meines Commits selbst committet</b> — <span class="term-link">b2cbfe4</span> (die
+GPT-Modellvalidierung) stammt nicht von mir. Mein Commit dafür lief deshalb
+ins Leere und wurde übersprungen. Ergebnis geprüft: Jede Änderung ist genau
+einmal drin, nichts doppelt, nichts verloren.</p>
+<p>Und: Diese Session arbeitet <b>weiter</b>. Seit meinem Commit ist
+<span class="term-link">docs/audit/2026-07-agent-chats-deep-dive/06-umsetzung/umsetzungsplan.md</span> neu
+geändert. Die Datei habe ich bewusst <b>nicht</b> mitgenommen — sie wird gerade
+bearbeitet, und ein Commit mitten in fremder Arbeit hätte einen unfertigen
+Zwischenstand festgeschrieben.</p>
+<p>Vor dem Push habe ich den Gesamtstand gebaut und getestet: <b>1856 Tests, 0
+Fehler.</b></p>
+<div class="term-think">✱ Cogitated for 3m 50s</div>
+<div class="term-recap">✱ recap: Ziel war das Chrome-artige Tab-Gruppen-Design für Agent Chats: Mockup,
+SwiftUI-Umsetzung und Slot-basiertes Drag &amp; Drop sind fertig, alles ist auf
+main gepusht. (disable recaps in /config)</div>`,
+    s => `<p>Ich würde gern zuerst klären, ob deine Regeln überhaupt bei GPT-Subagenten
+ankommen. Wenn nein, ist das der wichtigere Hebel für genau das Ziel, das du
+beschreibst — dass GPT dein Setup nutzt.</p>
+<p>Soll ich das zuerst prüfen, oder willst du <b>E30</b> jetzt entscheiden?</p>
+<div class="term-teammate"><span class="term-err">●</span> Teammate <span class="term-link">@gpt-rules-probe</span> failed: API Error: Server is temporarily limiting
+requests (not your usage limit) · rate limit reached</div>
+<p><span class="term-ok">●</span> Der Probeagent ist an einem serverseitigen Rate-Limit gescheitert, nicht an
+deinem Kontingent — die Regel-Frage bleibt vorerst unbeantwortet.</p>
+<p>Ob <span class="term-link">CLAUDE.md</span> in einen Subagenten geladen wird, entscheidet die
+Claude-Code-Umgebung, nicht das Modell dahinter.</p>`,
+    s => `<p>verändert — deine Swift-Änderungen und die erste Fassung des Prototyps sind
+inzwischen selbst committet (<span class="term-link">620bd30 docs(design): Mockup für
+Auto-Tiling-Layout-Engine und Snapshots</span>). Mein Commit enthält deshalb nur, was
+seither dazukam: Pointer-Drag, Tauschen, Ersetzen mit Rücknahme, die zwei
+beschrifteten Mittelfelder, den Griff und das änderungsgesteuerte Pane-Chrome.</p>
+<p><b>Nicht angefasst:</b> <span class="term-link">docs/plans/claude-in-chrome-shared.md</span> liegt unversioniert
+daneben — die Datei stammt aus der Chrome-Umstellung.</p>
+<div class="term-think">✱ Baked for 1m 46s</div>
+<div class="term-recap">✱ recap: Wir bauen die neue Layout-Engine für Agent Chats als HTML-Prototyp; das
+Drag-and-Drop mit Tauschen, Dazulegen und Ersetzen läuft jetzt und ist
+committet. (disable recaps in /config)</div>`,
+    s => `<p><span class="term-link">92e2dec</span> docs(design): Umsortieren, Ersetzen und Pointer-Drag im Layout-Mockup
+<span class="term-link">4a519b1</span> docs(audit): Grilling-Entscheidungen E6–E31 im Umsetzungsplan verankern</p>
+<p>Zwischenzeitlich war ein paralleler Strang schneller: <span class="term-link">1107894 feat(grid-workspace):
+Verkleinern kompaktiert + Auswahl direkt im Grid</span> — 919 Zeilen in neun Swift-Dateien.
+Weil meine beiden Commits nur Doku und Mockup anfassen, gab es keine
+Überschneidung; ich habe sie darauf rebased und dann gepusht.</p>
+<div class="term-think">✱ Sautéed for 50s</div>`,
+    s => `<p><span class="term-ok">●</span> Session ${'${statusLabel(s.status)}'} · ${'${project(s.project).name}'}</p>
+<p><span class="term-tool">Read</span>(WhisperM8/Views/AgentLayoutEngine.swift)
+<span class="term-muted">⎿ Frames berechnet, Views unverändert</span></p>
+<p>Diese Pane wurde EINMAL erzeugt. Layout-Wechsel, Split, Zoom und
+Stapel-Wechsel verschieben nur ihr Rechteck — Scroll-Position und Eingabe
+bleiben stehen.</p>`
+  ];
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  VERLAUFSANSICHT — eine Ansicht statt Terminal/Chat/Roh
+  //
+  //  Quelle ist IMMER das Transcript (JSONL), formatiert wie die
+  //  Claude-Code-CLI im Terminal: Prompt mit ❯, Antwort mit ⏺,
+  //  Tool-Aufrufe eingerückt, Ergebnisse mit ⎿ und gedimmt.
+  //
+  //  In der App ist der Textkörper EIN NSTextView (TextKit 2). Das ist
+  //  der ganze Punkt: TextKit layoutet nur den sichtbaren Ausschnitt,
+  //  während der heutige SwiftUI-Baum (eine View-Hierarchie pro
+  //  Nachricht) alle Höhen vorausberechnen muss und dabei die App
+  //  aufhängt. Textauswahl über den gesamten Verlauf, ⌘F und Kopieren
+  //  kommen dadurch nativ — heute kostet jedes .textSelection(.enabled)
+  //  eine eigene NSView im Layout-Pfad.
+  // ═══════════════════════════════════════════════════════════════════
+
+  const elementFromHTML = html => {
+    const t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  };
+
+  // Runde: Nutzer-Prompt, Antworttext, Tool-Aufrufe mit Ergebnis.
+  const txRound = (prompt, blocks) =>
+    `<p class="term-user">❯ ${prompt}</p>` + blocks.join('');
+  const txSay  = t => `<p class="term-block"><span class="term-ok">⏺</span> ${t}</p>`;
+  const txTool = (name, arg, out, cls='term-muted', more='') =>
+    `<p class="term-block term-indent"><span class="term-tool">${name}</span>(${arg})<br>`
+    + `<span class="${cls}">⎿  ${out}</span>`
+    + (more?`<br><span class="tx-more">… ${more}</span>`:'') + `</p>`;
+  const txThink = t => `<p class="term-block tx-think">✻ ${t}</p>`;
+
+  // Drei Verlaufs-Varianten, damit nebeneinanderliegende Panes nicht
+  // identisch aussehen — inhaltlich an der jeweiligen Session orientiert.
+  const TX_VARIANTEN = [
+    s => txRound(s.summary, [
+      txThink('prüft die betroffenen Dateien und die bestehenden Invarianten'),
+      txSay('Ich sehe mir zuerst an, wie der Zustand heute geschrieben wird.'),
+      txTool('Read', 'WhisperM8/Views/AgentChatsView.swift', '2426 Zeilen'),
+      txTool('Grep', '"defaultScrollAnchor" in Views/', '3 Treffer in 3 Dateien'),
+      txSay('Alle drei Ansichten hängen am selben Muster. Ich ziehe den Anker heraus und ersetze ihn durch ein Scrollen nach dem Erscheinen.'),
+      txTool('Edit', 'WhisperM8/Views/Transcript/AgentTimelineView.swift', '1 Änderung übernommen', 'term-ok', '+12 −4 Zeilen (ctrl+o zum Aufklappen)'),
+      txTool('Bash', 'swift build 2>&1 | tail -3', 'Build complete! (14.8s)', 'term-ok'),
+      txSay('Build ist grün. Ich lasse noch die fokussierten Tests laufen.'),
+      txTool('Bash', 'swift test --filter Transcript', '18 Tests, 0 Fehler', 'term-ok')
+    ]),
+    s => txRound(s.summary, [
+      txSay('Ich fasse den Stand zusammen und arbeite die offenen Punkte der Reihe nach ab.'),
+      txTool('Read', 'docs/plans/workspace-performance/README.md', '214 Zeilen'),
+      txTool('Bash', 'git log --oneline -8', '8 Commits seit gestern', 'term-muted'),
+      txThink('wägt ab, ob der Umbau vor oder nach der Messung sinnvoll ist'),
+      txSay('Zwei der vier Befunde waren Messfehler — die verbleibenden betreffen genau den Code, den der Umbau ohnehin ersetzt.'),
+      txTool('Bash', 'scripts/perf-report.sh 30m', 'kein Budget-Verstoß in 30 min', 'term-ok'),
+      txTool('Write', 'docs/plans/workspace-performance/05-entscheidungen/…', 'Datei angelegt', 'term-ok', '+64 Zeilen'),
+      txSay('Ergebnis steht in den Entscheidungen. Der Umbau kann direkt beginnen.')
+    ]),
+    s => txRound(s.summary, [
+      txSay('Ich prüfe zuerst, ob der Fehler reproduzierbar ist.'),
+      txTool('Bash', 'swift test --filter Import 2>&1 | tail', '1 Test fehlgeschlagen', 'term-err'),
+      txTool('Read', 'Tests/WhisperM8Tests/ImportTests.swift', '188 Zeilen'),
+      txSay('Der Test erwartet eine Spaltenreihenfolge, die der Importer nicht garantiert. Ich mache die Zuordnung namensbasiert.'),
+      txTool('Edit', 'WhisperM8/Services/Import/ColumnMapper.swift', '2 Änderungen übernommen', 'term-ok', '+27 −9 Zeilen'),
+      txTool('Bash', 'swift test --filter Import', '12 Tests, 0 Fehler', 'term-ok'),
+      txSay('Behoben. Die Zuordnung hängt jetzt an den Kopfzeilen-Namen statt an der Position.')
+    ])
+  ];
+
+  // Kopfzeile: ersetzt den Modus-Umschalter (Terminal|Chat|Roh). Statt
+  // einer Auswahl steht dort, WORAUS gelesen wird und wie viel offen ist.
+  function transcriptMeta(s) {
+    const p = project(s.project);
+    const provider = s.model && s.model.startsWith('gpt') ? '.codex/sessions' : '.claude/projects';
+    return `<div class="tx-meta">`
+      + `<span>${s.rounds||64} Runden</span>`
+      + `<span class="tx-src" title="Quelle des Verlaufs">~/${provider}/${p.name}…/${s.id}.jsonl · ${s.bytes||'1,4 MB'}</span>`
+      + `<span class="tx-grow tx-engine" title="Ein NSTextView (TextKit 2): gelayoutet wird nur der sichtbare Ausschnitt — unabhängig von der Länge des Verlaufs.">TextKit 2</span>`
+      + `</div>`;
+  }
+
+  // Fußzeile: beendete Session → Fortsetzen. Laufende → Live-Hinweis.
+  function transcriptFoot(s) {
+    if(s.ended) {
+      return `<div class="tx-foot"><span>Session beendet — der Verlauf bleibt lesbar.</span>`
+        + `<button class="tx-resume" data-toast="claude --resume startet die Session erneut">▶ Fortsetzen</button></div>`;
+    }
+    return `<div class="tx-foot"><span class="tx-live-dot"></span>`
+      + `<span>arbeitet … zuletzt: Bash(swift test --filter Transcript)</span></div>`;
+  }
+
+  function transcriptBody(s, index) {
+    const variante = TX_VARIANTEN[index % TX_VARIANTEN.length](s);
+    // Kopf des Fensters: entweder gibt es früheren Verlauf zum Nachladen,
+    // oder der Anfang ist erreicht. Beides ersetzt die heutigen harten
+    // Deckel („… 2000 Zeichen abgeschnitten"), die Inhalt verschluckt haben.
+    const kopf = (s.rounds||64) > 60
+      ? `<div class="tx-center"><button class="tx-pill" data-toast="Lesefenster vergrößern — der Rest des Verlaufs wird nachgeladen">⟲ Früheren Verlauf laden<span class="tx-hint">Fenster 2 MB → 8 MB</span></button></div>`
+      : `<div class="tx-center"><span class="tx-start">Anfang der Konversation</span></div>`;
+    // Vier aufeinanderfolgende Runden — genug Inhalt, um Scrollen, Dichte
+    // und Lesbarkeit realistisch zu beurteilen.
+    const folge = ['❯ Übernimm das bitte und lass die Tests laufen.',
+                   '❯ Sieht gut aus. Bau noch den Fall mit leerem Verlauf ein.',
+                   '❯ Commit das und fass zusammen, was offen bleibt.']
+      .map((frage,k)=> TX_VARIANTEN[(index+k+1) % TX_VARIANTEN.length](s).replace(/❯ [^<]*/, frage))
+      .join('');
+    return `<div class="term-body">` + kopf + variante + folge + `</div>`;
+  }
+
   function terminalFor(sid) {
     if(terminalDOM[sid]) return terminalDOM[sid];
-    const s = byId(sid), p = project(s.project);
+    const s = byId(sid);
+    const index = sessions.findIndex(x=>x.id===sid);
+    if(showsTranscript(s)) {
+      const el = document.createElement('div');
+      el.className='pane-terminal tx-scroll';
+      el.innerHTML = transcriptBody(s, index);
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;';
+      wrap.appendChild(elementFromHTML(transcriptMeta(s)));
+      wrap.appendChild(el);
+      wrap.appendChild(elementFromHTML(transcriptFoot(s)));
+      // Wie die App: der Verlauf öffnet am ENDE, bei der neuesten Runde.
+      // Hochscrollen führt zur Lade-Pille am Anfang des Lesefensters.
+      setTimeout(()=>{ el.scrollTop = el.scrollHeight; }, 0);
+      terminalDOM[sid]=wrap;
+      return wrap;
+    }
     const el = document.createElement('div');
     el.className='pane-terminal';
-    el.innerHTML = `<span class="term-user">❯ ${s.summary}</span>\n\n`
-      + `<span class="term-ok">●</span> Session ${statusLabel(s.status)} · ${p.name}\n`
-      + `<span class="term-tool">Read</span>(WhisperM8/Views/AgentLayoutEngine.swift)\n`
-      + `<span class="term-muted">⎿ Frames berechnet, Views unverändert</span>\n\n`
-      + `Diese Pane wurde EINMAL erzeugt. Layout-Wechsel, Split, Zoom und\n`
-      + `Stapel-Wechsel verschieben nur ihr Rechteck — Scroll-Position und\n`
-      + `Eingabe bleiben stehen. Tippe hier und wirf einen Chat rein:\n\n`
-      + `<span class="term-user">❯ </span><span class="term-caret" contenteditable="true" spellcheck="false"></span>`;
+    const verlauf = VERLAEUFE[index % VERLAEUFE.length](s)
+      .replace('${statusLabel(s.status)}', statusLabel(s.status))
+      .replace('${project(s.project).name}', project(s.project).name);
+    el.innerHTML = `<div class="term-body">`
+      + `<p class="term-user">❯ ${s.summary}</p>`
+      + verlauf
+      + `<p class="term-prompt"><span class="term-user">❯ </span><span class="term-caret" contenteditable="true" spellcheck="false"></span></p>`
+      + `</div>`
+      + statuslineFor(s);
     terminalDOM[sid]=el;
     return el;
   }
@@ -1502,7 +1933,7 @@
     const el = document.createElement('section');
     el.className='pane';
     el.dataset.cid = cell.cid;
-    el.innerHTML = `<div class="stack-bar"></div><header class="pane-head"></header><div class="pane-host" style="min-height:0;overflow:hidden;display:grid"></div><footer class="pane-status"></footer>`;
+    el.innerHTML = `<div class="stack-bar"></div><header class="pane-head"></header><div class="pane-host" style="min-height:0;overflow:hidden;display:grid"></div>`;
     el.draggable = false;
     el.addEventListener('mousedown', e=>{
       if(e.target.closest('button')) return;
@@ -1542,22 +1973,28 @@
         + memberOf.map(id=>workspace(id).name.split(' · ')[0] + (id===primary?' (Hauptgruppe)':'')).join(', ')
         + ` · Klick für Optionen">⊞${memberOf.length}</span>`
       : '';
-    const headSig = [cell.active, s.status, s.title, p.name, isMaster,
+    const headSig = [cell.active, s.status, s.title, p.name, s.account, isMaster,
                      cell.sessions.length, memberOf.length, primary].join('');
     if(paneEl.dataset.headSig !== headSig) {
       paneEl.dataset.headSig = headSig;
       // Sichtbarer Griff: ohne ihn ist nicht erkennbar, dass die Kopfzeile
       // der Anfasspunkt ist — die Terminalfläche ist bewusst NICHT ziehbar,
       // sonst kollidiert das Ziehen mit Textauswahl und Eingabe.
+      // Reihenfolge wie in der App: Status · Projekt-Avatar · Titel ·
+      // Account-Chip · Aktionen. Neu davor nur der Griff, neu bei den
+      // Aktionen nur ⌷ (Stapeln) — der Rest ist der Bestand: Transcript,
+      // Neustart, Maximieren, Aus dem Workspace nehmen.
       head.innerHTML = `<span class="pane-grip" title="Ziehen: auf eine andere Pane = tauschen · auf eine Kante = verschieben · ⌥ = ersetzen">⠿</span>`
         + `${statusDot(s)}<span class="pane-avatar" style="background:${p.color}">${p.initial}</span>`
         + `<span class="pane-title">${s.title}</span><span class="account">${p.name}</span>`
         + multiBadge
         + (isMaster?'<span class="pane-badge master">MASTER</span>':'')
+        + `<span class="account-chip" title="Account-Profil ${s.account}">${s.account}</span>`
         + `<span class="pane-actions">`
         + `<button class="icon-button small" data-stack="${cell.cid}" title="${cell.sessions.length>1?'Stapel auflösen':'Nachbar-Chat hier stapeln'} · ⌘⌥S">⌷</button>`
-        + `<button class="icon-button small" data-zoom="${cell.cid}" title="Zoom an/aus · ⌘⇧↵">⤢</button>`
-        + `<button class="icon-button small" data-detach="${cell.cid}" title="Als Tab herauslösen">↗</button>`
+        + `<button class="icon-button small" data-toast="Transkript dieser Session öffnen" title="Transkript">&lt;/&gt;</button>`
+        + `<button class="icon-button small" data-toast="Session neu starten" title="Neu starten">↻</button>`
+        + `<button class="icon-button small" data-zoom="${cell.cid}" title="Maximieren · ⌘⇧↵">⤢</button>`
         + `<button class="icon-button small" data-drop-session="${cell.active}" title="Aus dem Workspace nehmen">⊖</button>`
         + `</span>`;
     }
@@ -1575,15 +2012,6 @@
               + `${statusDot(t)}<span class="label">${t.title}</span></button>`;
           }).join('') + `<span class="stack-count">${cell.sessions.length} im Stapel · ⌃⇥</span>`
         : '';
-    }
-
-    const foot = paneEl.querySelector('.pane-status');
-    const stackNote = cell.sessions.length>1 ? ` · Stapel ${cell.sessions.indexOf(cell.active)+1}/${cell.sessions.length}` : '';
-    const footSig = [p.branch, s.time, s.status, stackNote, isFocus].join('');
-    if(paneEl.dataset.footSig !== footSig) {
-      paneEl.dataset.footSig = footSig;
-      foot.innerHTML = `<span>${p.branch}</span><span>${s.time}</span><span>${statusLabel(s.status)}${stackNote}</span>`
-        + (isFocus?'<span class="pane-badge">FOKUS · Tastatur</span>':'');
     }
 
     // Terminal einhängen: der Knoten WANDERT, er wird nicht neu gebaut.
@@ -1612,6 +2040,7 @@
       return;
     }
 
+    if(isProjectLayout(l)) syncProjectCells(l);   // Herkunft = Projekt
     if(l.mode==='auto') reflowAuto(l, rect);
     stage.classList.toggle('empty', l.cells.length===0);
     if(!animate) stage.classList.add('resizing');
@@ -2013,8 +2442,18 @@
   // Einwerfen ohne Ziel: hinten anhängen. Im Auto-Modus rechnet die Engine
   // sofort neu (und stapelt, wenn die Fläche voll ist) — im Snapshot-Modus
   // landet der Chat im Stapel der kleinsten Pane, damit die Geometrie hält.
+  /// VORLÄUFIG (Frage 3 im Entscheidungsbereich): Eine Projekt-Ansicht nimmt
+  /// keine fremden Chats auf — sonst wäre sie keine Projekt-Ansicht mehr.
+  function fremdImProjekt(l, sid) {
+    if(!isProjectLayout(l)) return false;
+    if(byId(sid)?.project === l.projectID) return false;
+    toast(`„${byId(sid).title}" gehört zu einem anderen Projekt — die Projekt-Ansicht zeigt nur „${project(l.projectID).name}"`);
+    return true;
+  }
+
   function throwIn(sid, silent=false) {
     const l = lay(state.gridWorkspace);
+    if(fremdImProjekt(l, sid)) return;
     if(l.guest===sid) l.guest=null;          // bewusst behalten = kein Gast mehr
     if(cellOf(l, sid)) {
       focusSession(sid);
@@ -2055,6 +2494,7 @@
 
   function dropSession(sid, target, fromCID, origin='external') {
     const l = lay(state.gridWorkspace);
+    if(fremdImProjekt(l, sid)) return;
     if(l.guest===sid) l.guest=null;          // gezielt platziert = Mitglied
     if(!target) { throwIn(sid); return; }
     const targetCell = cellByID(l, target.cid);
@@ -2226,6 +2666,18 @@
 
   function removeFromWorkspace(sid) {
     const l=lay(state.gridWorkspace);
+    // Ein Projektchat kann sein Projekt nicht verlassen — er wird nur in
+    // DIESER Ansicht ausgeblendet und ist über den Kopf zurückholbar.
+    if(isProjectLayout(l)) {
+      if(!l.hidden.includes(sid)) l.hidden.push(sid);
+      syncProjectCells(l); syncMembership();
+      layoutStage(); renderTabs(); renderSidebar(); renderContent();
+      toast(`„${byId(sid).title}" ausgeblendet · bleibt im Projekt`, ()=>{
+        l.hidden = l.hidden.filter(x=>x!==sid);
+        renderContent(); toast('Wieder eingeblendet');
+      });
+      return;
+    }
     detachFromCells(l, sid);
     syncMembership();
     layoutStage(); renderTabs(); renderSidebar();
@@ -2297,6 +2749,27 @@
   }
 
   // ——— 8) Rahmen: Toolbar + Bühne —————————————————————————————————
+  /// Projekt-Ansicht öffnen. Bewusst OHNE Lifecycle: kein Start, kein Stop,
+  /// kein Tab wird geschlossen — es ist eine Ansicht auf Vorhandenes.
+  function enterProject(pid) {
+    const key = ensureProjectLayout(pid);
+    state.returnView = state.view;
+    enterGrid(key);
+    const anzahl = lay(key).cells.length;
+    toast(anzahl
+      ? `Projekt-Ansicht „${project(pid).name}" · ${anzahl} ${anzahl===1?'Chat':'Chats'} — nichts gestartet`
+      : `Projekt-Ansicht „${project(pid).name}" — noch keine sichtbaren Chats`);
+  }
+
+  /// Zurück aus der Projekt-Ansicht: führt zur vorherigen Ansicht, beendet nie
+  /// einen Chat.
+  function leaveProject() {
+    state.view = state.returnView === 'grid' ? 'chat' : (state.returnView || 'chat');
+    state.returnView = null;
+    renderAll();
+    toast('Projekt-Ansicht verlassen · alle Chats laufen weiter');
+  }
+
   function enterGrid(id) {
     state.view='grid'; state.gridWorkspace=id;
     const l=lay(id);
@@ -2333,7 +2806,47 @@
     }
   }
 
+  /// Kopfzeile der Projekt-Ansicht. Layout-Chip, Balance und ••• sind
+  /// bewusst identisch zur Workspace-Leiste — beide Arten werden gleich
+  /// bedient; unterschiedlich sind nur Herkunftsangaben und „Chat hier".
+  function projektKopf(l) {
+    const p = project(l.projectID);
+    const alle = sessions.filter(s => s.project === l.projectID);
+    const zaehl = st => alle.filter(s => s.status === st).length;
+    const sichtbar = projectSessions(l).length;
+    const versteckt = l.hidden.length;
+    return `<header class="workspace-toolbar projekt">
+        <button class="btn-zurueck" id="leaveProject" title="Zurück — beendet nichts">‹</button>
+        <span class="project-avatar" style="background:${p.color}">${p.initial}</span>
+        <span class="workspace-title">${p.name}</span>
+        <span class="kopf-herkunft">Projekt-Ansicht</span>
+        <span class="branch">⑂ ${p.branch}</span>
+        <span class="kopf-pfad">~/repos/${p.name}</span>
+        <span class="kopf-zaehler">
+          <span title="arbeiten"><i class="status-dot working"></i>${zaehl('working')}</span>
+          <span title="warten auf dich"><i class="status-dot waiting"></i>${zaehl('waiting')}</span>
+          <span title="bereit"><i class="status-dot ready"></i>${zaehl('ready')}</span>
+          <span title="ruhen"><i class="status-dot idle"></i>${zaehl('idle')}</span>
+        </span>
+        <button class="chip-filter ${l.filter==='alle'?'weit':''}" id="projektFilter"
+          title="Welche Chats die Ansicht zeigt — Frage 1 im Entscheidungsbereich">
+          ${l.filter==='alle'?'Alle':'Aktive'} · ${sichtbar} von ${alle.length}</button>
+        ${versteckt?`<button class="chip-filter" id="projektEinblenden" title="Wieder einblenden">⊘ ${versteckt} ausgeblendet</button>`:''}
+        <button class="layout-state" id="layoutState"><i class="dot"></i>Automatik</button>
+        <div class="head-actions" style="margin-left:auto">
+          <button class="provider-action" data-toast="Neuer Chat in diesem Projekt — im Prototyp nicht ausgeführt">＋ Chat hier</button>
+          <button class="provider-action" data-toast="Projekt in PhpStorm öffnen">↗ IDE</button>
+          <button class="provider-action" id="balanceButton" title="Neu ausbalancieren · ⌘⌥B">⚖ Balance</button>
+          <button class="icon-button small" id="rotateButton" title="Inhalte rotieren · ⌘⌥←/→">↻</button>
+          <button class="icon-button small" id="zoomButton" title="Fokus-Pane zoomen · ⌘⇧↵">⤢</button>
+          <button class="icon-button small" id="wsMenuButton" title="Aktionen">•••</button>
+        </div>
+      </header>`;
+  }
+
   function renderGrid() {
+    const l0 = lay(state.gridWorkspace);
+    if(isProjectLayout(l0)) return renderProjektGrid(l0);
     const w=workspace(state.gridWorkspace);
     $('#content').innerHTML=`<header class="workspace-toolbar">
         <span class="project-avatar" style="background:${w.color}">${w.initial}</span>
@@ -2371,6 +2884,60 @@
     bindPaneActions();
     layoutStage(false);
     requestAnimationFrame(()=>{ if(state.view==='grid') layoutStage(false); });
+  }
+
+  /// Projekt-Ansicht rendern: gleiche Bühne, anderer Kopf, eigene leere
+  /// Zustände. Die Engine darunter ist unverändert.
+  function renderProjektGrid(l) {
+    const p = project(l.projectID);
+    const alle = sessions.filter(x => x.project === l.projectID);
+    const leerGrund = alle.length === 0 ? 'ohneChats'
+                    : projectSessions(l).length === 0 ? (l.hidden.length ? 'allesAusgeblendet' : 'allesGefiltert')
+                    : null;
+    const leerBlock = {
+      ohneChats: `<strong>Noch kein Chat in „${p.name}"</strong>Starte den ersten — er erscheint sofort hier.
+        <div class="leer-aktionen"><button class="provider-action" data-toast="Neuer Claude-Chat (Prototyp)">＋ Claude</button>
+        <button class="provider-action" data-toast="Neuer Codex-Chat (Prototyp)">＋ Codex</button>
+        <button class="provider-action" data-toast="Neues Terminal (Prototyp)">▣ Terminal</button></div>`,
+      allesGefiltert: `<strong>${alle.length} Chats, keiner aktiv</strong>Der Filter zeigt gerade nur laufende Sitzungen.
+        <div class="leer-aktionen"><button class="provider-action" id="leerAlleZeigen">Alle ${alle.length} zeigen</button></div>`,
+      allesAusgeblendet: `<strong>Alles ausgeblendet</strong>${l.hidden.length} Chats sind in dieser Ansicht verborgen.
+        <div class="leer-aktionen"><button class="provider-action" id="leerEinblenden">Wieder einblenden</button></div>`
+    }[leerGrund] || '';
+
+    $('#content').innerHTML = projektKopf(l)
+      + `<div class="grid-shell">
+        <div class="stage" id="stage">
+          <div class="stage-drop"><div class="empty-stage">${leerBlock ||
+            `<strong>Keine sichtbaren Chats</strong>Ändere den Filter oder starte einen Chat.`}</div></div>
+          <div class="drop-overlay" id="dropZones"></div>
+          <i class="drop-hint" id="dropHint"></i>
+          <div class="drop-overlay" id="dividers" style="display:block"></div>
+        </div>
+      </div>
+      <div class="popover" id="paneMenu"></div>
+      <div class="popover" id="wsMenu"></div>`;
+
+    $('#leaveProject').onclick = leaveProject;
+    $('#balanceButton').onclick = balance;
+    $('#rotateButton').onclick = () => rotate(1);
+    $('#zoomButton').onclick = () => toggleZoom(state.focusCID);
+    $('#layoutState').onclick = resetAuto;
+    $('#wsMenuButton').onclick = e => { e.stopPropagation(); showWorkspaceMenu(); };
+    $('#projektFilter').onclick = () => {
+      l.filter = l.filter === 'alle' ? 'aktiv' : 'alle';
+      renderContent(); renderSidebar();
+      toast(l.filter === 'alle' ? 'Zeigt alle Chats des Projekts' : 'Zeigt nur aktive Chats');
+    };
+    const einblenden = () => { l.hidden = []; renderContent(); toast('Alle Chats wieder eingeblendet'); };
+    if($('#projektEinblenden')) $('#projektEinblenden').onclick = einblenden;
+    if($('#leerEinblenden')) $('#leerEinblenden').onclick = einblenden;
+    if($('#leerAlleZeigen')) $('#leerAlleZeigen').onclick = () => {
+      l.filter = 'alle'; renderContent(); renderSidebar();
+    };
+    bindStageDnD(); bindToastButtons(); bindPaneActions();
+    layoutStage(false);
+    requestAnimationFrame(() => { if(state.view === 'grid') layoutStage(false); });
   }
 
   function showWorkspaceMenu() {
@@ -2616,6 +3183,20 @@
     if(state.view==='grid') layoutStage();
     toast({balanced:'Gleich groß — ausbalanciertes Tiling',master:'Master + Stapel — Fokus-Pane groß',columns:'Spalten — alles in einer Reihe'}[state.policy]);
   });
+  // Inhalt der Panes umschalten. Die Terminal-Knoten werden dabei bewusst
+  // verworfen und neu gebaut — im Mockup ist das der einzige Weg, beide
+  // Darstellungen zu zeigen; in der App wechselt der Inhalt einer Session
+  // nicht, sie hat entweder ein laufendes Terminal oder einen Verlauf.
+  document.querySelectorAll('#paneViewPicker [data-paneview]').forEach(button=>button.onclick=()=>{
+    state.paneView=button.dataset.paneview;
+    document.querySelectorAll('#paneViewPicker [data-paneview]').forEach(b=>b.classList.toggle('on',b===button));
+    Object.keys(terminalDOM).forEach(k=>delete terminalDOM[k]);
+    renderAll();
+    if(state.view==='grid') layoutStage(false);
+    toast(state.paneView==='transcript'
+      ? 'Verlauf — ein NSTextView pro Pane, CLI-formatiert aus dem Transcript'
+      : 'Live — laufendes PTY-Terminal wie bisher');
+  });
   $('#minWidthRange').oninput=e=>{
     state.minPaneWidth=Number(e.target.value);
     $('#minWidthValue').textContent=state.minPaneWidth;
@@ -2669,6 +3250,7 @@
   $('#newTabButton').onclick=e=>{e.stopPropagation();$('#newMenu').classList.toggle('show');$('#overflowMenu').classList.remove('show');};
   $('#overflowButton').onclick=e=>{e.stopPropagation();$('#overflowMenu').classList.toggle('show');$('#newMenu').classList.remove('show');};
   $('#sidebarToggle').onclick=()=>$('#app').classList.toggle('sidebar-hidden');
+  $('#sidebarToggleLeft').onclick=()=>$('#app').classList.toggle('sidebar-hidden');
   $('#sidebarNew').onclick=()=>$('#newMenu').classList.add('show');
   $('#helpButton').onclick=e=>{e.stopPropagation();$('#helpMenu').classList.toggle('show');};
   $('#filterInput').oninput=e=>{state.filter=e.target.value;$('#clearSearch').classList.toggle('show',!!state.filter);$('#scopeControl').classList.toggle('disabled',!!state.filter);renderSidebar();};
@@ -2739,6 +3321,10 @@
   $('#resizeHandle').ondblclick=e=>{if(e.altKey)document.documentElement.style.setProperty('--sidebar-width','268px');};
 
   // Der Prototyp startet direkt im Workspace — die Layout-Engine IST das Thema.
+  // Und er startet DUNKEL, weil die App so läuft; der Regler in der
+  // Design-Bar schaltet für Vergleiche auf Hell.
+  document.body.classList.add('dark');
+  $('#themeToggle').classList.add('active');
   syncMembership();
   state.view='grid';
   state.focusCID=layouts[state.gridWorkspace].cells[0].cid;
