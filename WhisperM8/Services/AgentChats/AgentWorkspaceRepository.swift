@@ -127,7 +127,12 @@ struct AgentWorkspaceRepository {
             let finishedAt = clock()
 
             let ms: (TimeInterval) -> Int = { Int($0 * 1000) }
-            Logger.agentPerformance.debug(
+            // `.info`, nicht `.debug`: Debug-Meldungen behaelt macOS nur im
+            // Ringpuffer, `log show` sieht sie nie und `log config` braucht
+            // root. Eine Phasenmessung, die man hinterher nicht auslesen kann,
+            // ist nutzlos. Saves sind selten genug (Groessenordnung 1/Minute),
+            // dass eine Zeile pro Save das Log nicht flutet.
+            Logger.agentPerformance.info(
                 """
                 agent_store_save durationMs=\(ms(finishedAt - startedAt)) \
                 encodeMs=\(ms(encodedAt - startedAt)) \
