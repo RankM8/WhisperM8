@@ -76,8 +76,16 @@ struct PerformanceBudget {
             self.startedAt = startedAt
         }
 
-        /// Token eines abgeschalteten Detail-Messpunkts.
-        fileprivate static var inactive: Token { Token(state: nil, startedAt: nil) }
+        /// EIN geteiltes Token für alle abgeschalteten Detail-Messpunkte.
+        ///
+        /// Bewusst `static let`, nicht berechnet: sonst allokierte jeder
+        /// abgeschaltete `begin()` ein neues Objekt samt ARC-Verkehr — bei
+        /// einem `.detail`-Messpunkt in einem dichten Pfad also zehntausende
+        /// Allokationen pro Sekunde für Messungen, die gar nicht stattfinden.
+        /// Das Teilen ist nur zulässig, weil `end`/`cancel` bei fehlendem
+        /// `state` zurückkehren, BEVOR sie `ended` schreiben — dieses Token
+        /// wird also nie verändert und ist damit über Threads hinweg sicher.
+        fileprivate static let inactive = Token(state: nil, startedAt: nil)
     }
 
     let name: StaticString
@@ -95,6 +103,15 @@ struct PerformanceBudget {
     /// `false`, wenn dieser Messpunkt zur Detail-Stufe gehört und die
     /// abgeschaltet ist. Öffentlich, damit Aufrufer teure Vorbereitung
     /// (Zählen, Zusammenstellen von Werten) davon abhängig machen können.
+    ///
+    /// **Pflicht für Aufrufer, die um `begin`/`end` herum eigene Verwaltung
+    /// betreiben** — `GridPerformanceTracker` etwa hält Tokens, startet
+    /// Timeout-Tasks und zählt Generationen. Ein inaktives Token ist nicht
+    /// `nil`; solcher Code liefe also weiter, als gäbe es eine Messung, und
+    /// verursachte genau die Kosten, die die Detail-Stufe vermeiden soll.
+    /// Wer ein Budget auf `.detail` umstellt, muss die umgebende Verwaltung
+    /// deshalb hiermit absichern. Solange alle produktiven Budgets `.always`
+    /// sind, ist das ein Zukunfts-, kein Ist-Problem.
     var isActive: Bool {
         tier == .always || PerfDetailGate.isEnabled
     }
@@ -106,9 +123,13 @@ struct PerformanceBudget {
     }
 
     func end(_ token: Token) {
+        // Reihenfolge ist wichtig: erst auf „inaktiv" prüfen, DANN `ended`
+        // schreiben. Sonst würde das geteilte `Token.inactive` beschrieben —
+        // aus mehreren Threads und mit der Folge, dass es nach dem ersten
+        // Gebrauch global als beendet gälte.
+        guard let state = token.state, let startedAt = token.startedAt else { return }
         guard !token.ended else { return }
         token.ended = true
-        guard let state = token.state, let startedAt = token.startedAt else { return }
         signposter.endInterval(name, state)
 
         let duration = now().timeIntervalSince(startedAt)
@@ -127,9 +148,10 @@ struct PerformanceBudget {
     /// Messungen (z. B. ein Fokusziel, das nie anwendbar wurde). Idempotent
     /// wie `end`.
     func cancel(_ token: Token) {
+        // Gleiche Reihenfolge wie in `end` — siehe Begründung dort.
+        guard let state = token.state else { return }
         guard !token.ended else { return }
         token.ended = true
-        guard let state = token.state else { return }
         signposter.endInterval(name, state)
     }
 
@@ -173,7 +195,31 @@ enum PerfBudgets {
     // Sidebar / Status-Pipeline
     static let sidebarWorkspaceLoad = PerformanceBudget(name: "sidebar.workspaceLoad", budget: 0.050, signposter: PerfSignposts.sidebar)
     static let sidebarBackgroundIndex = PerformanceBudget(name: "sidebar.backgroundIndex", budget: 2.000, signposter: PerfSignposts.sidebar)
-    static let sidebarStatusPoll = PerformanceBudget(name: "sidebar.statusPoll", budget: 0.100, signposter: PerfSignposts.sidebar)
+    /// Die tatsächliche Arbeit eines Status-Polls: `stat` und, falls nötig,
+    /// das Lesen des Transcript-Endes. Läuft im Hintergrund-Task, misst also
+    /// reine Rechen- und I/O-Zeit.
+    ///
+    /// **Korrigiert am 01.08.2026** — vorher lief die Messung von `begin()` auf
+    /// dem MainActor bis `end()` nach der Rückkehr aus dem Hintergrund-Task und
+    /// enthielt damit Einplanungs- und MainActor-Wartezeit. Belegt durch die
+    /// Logs: Am 01.08. um 16:38:08 endeten **zehn** Polls mit exakt 150 ms, um
+    /// 16:37:35 acht mit 173 ms. Unabhängige Dateizugriffe enden nicht
+    /// millisekundengleich — gemessen wurde eine gemeinsame Blockade, nicht die
+    /// Arbeit. Der Messpunkt schlug damit auf einen fremden Verursacher an und
+    /// stand fälschlich als größter Ausreißer der App da.
+    ///
+    /// Budget ist ein Startwert und gehört gegen Realdaten nachgezogen.
+    static let sidebarStatusPoll = PerformanceBudget(name: "sidebar.statusPoll", budget: 0.050, signposter: PerfSignposts.sidebar)
+
+    /// Die Gesamtstrecke eines Polls inklusive Einplanung des Hintergrund-Tasks
+    /// und Rückkehr auf den MainActor. Das ist eine **Latenz**, keine
+    /// Main-Thread-Kosten: ein hoher Wert heißt „das Ergebnis kam spät", nicht
+    /// „die App stand". Genau deshalb Detail-Stufe — im Alltag sagt die Zahl
+    /// wenig, bei einer Untersuchung zeigt sie zusammen mit
+    /// `MainThreadStallMonitor`, ob der MainActor der Engpass war.
+    static let sidebarStatusPollLatency = PerformanceBudget(
+        name: "sidebar.statusPollLatency", budget: 0.250, signposter: PerfSignposts.sidebar, tier: .detail
+    )
     static let sidebarModelBuild = PerformanceBudget(name: "sidebar.modelBuild", budget: 0.0167, signposter: PerfSignposts.sidebar)
 
     // Grid-Workspace (Budgets aus docs/plans/grid-workspace-plan.html, Abschnitt 05;

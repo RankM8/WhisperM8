@@ -301,7 +301,11 @@ final class AgentSessionRuntimeWatcher {
         // Manuelles Token statt withInterval: Begin und End laufen über die
         // Task-Grenze. Das End steht VOR dem `guard let self` — das Intervall
         // muss auch dann schließen, wenn der Watcher inzwischen weg ist.
-        let pollToken = PerfBudgets.sidebarStatusPoll.begin()
+        //
+        // Dies misst die LATENZ (inkl. Einplanung und Rückkehr auf den
+        // MainActor), nicht die Arbeit. Die Arbeit misst `sidebarStatusPoll`
+        // unten im Hintergrund-Task — Begründung an beiden Budgets.
+        let latencyToken = PerfBudgets.sidebarStatusPollLatency.begin()
         let snapshotEntry = entry
         let snapshotGeneration = entry.generation
         let statProvider = self.statProvider
@@ -310,16 +314,20 @@ final class AgentSessionRuntimeWatcher {
 
         Task { @MainActor [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
-                Self.pollSnapshot(
-                    for: snapshotEntry,
-                    now: Date(),
-                    statProvider: statProvider,
-                    tailProvider: tailProvider,
-                    urlResolver: urlResolver
-                )
+                // Hier — und nur hier — steckt die eigentliche Arbeit: stat
+                // und gegebenenfalls das Lesen des Transcript-Endes.
+                PerfBudgets.sidebarStatusPoll.withInterval {
+                    Self.pollSnapshot(
+                        for: snapshotEntry,
+                        now: Date(),
+                        statProvider: statProvider,
+                        tailProvider: tailProvider,
+                        urlResolver: urlResolver
+                    )
+                }
             }.value
 
-            PerfBudgets.sidebarStatusPoll.end(pollToken)
+            PerfBudgets.sidebarStatusPollLatency.end(latencyToken)
             guard let self else { return }
             self.pollingSessionIDs.remove(sessionID)
             defer {

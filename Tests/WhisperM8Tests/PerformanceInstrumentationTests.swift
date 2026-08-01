@@ -123,6 +123,38 @@ final class PerformanceInstrumentationTests: XCTestCase {
         XCTAssertEqual(violations, 0)
     }
 
+    /// Das inaktive Token ist EIN geteiltes Objekt (spart Allokationen in
+    /// dichten Pfaden). Deshalb darf es nie beschrieben werden — sonst gaelte
+    /// es nach dem ersten `end` global als beendet, und ein spaeter
+    /// eingeschalteter Messpunkt bekaeme ein „verbrauchtes" Token.
+    func testInactiveTokenIsSharedAndNeverConsumed() {
+        PerfDetailGate.isEnabled = false
+        var budget = PerformanceBudget(name: "test.detail", budget: 0.001, signposter: PerfSignposts.store)
+        budget.tier = .detail
+
+        let first = budget.begin()
+        budget.end(first)          // wuerde `ended` setzen, wenn die Reihenfolge kippt
+        budget.cancel(first)
+
+        let second = budget.begin()
+        XCTAssertTrue(first === second, "Inaktive Tokens sollen dasselbe Objekt sein")
+
+        // Der entscheidende Punkt: nach beliebig vielen end/cancel muss ein
+        // frisch aktivierter Messpunkt weiterhin sauber messen koennen.
+        PerfDetailGate.isEnabled = true
+        var violations = 0
+        var clock = Date(timeIntervalSince1970: 0)
+        var active = PerformanceBudget(name: "test.detail", budget: 0.001, signposter: PerfSignposts.store)
+        active.tier = .detail
+        active.now = { clock }
+        active.onViolation = { _, _ in violations += 1 }
+
+        let token = active.begin()
+        clock = clock.addingTimeInterval(0.5)
+        active.end(token)
+        XCTAssertEqual(violations, 1, "Nach Aktivierung muss wieder regulaer gemessen werden")
+    }
+
     // MARK: - Zaehler
 
     /// Zaehlen bei abgeschalteter Detail-Stufe darf nicht abstuerzen und
