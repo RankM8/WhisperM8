@@ -31,6 +31,18 @@ let package = Package(
         .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "2671405c3157ed259ee1051fb372ec5d9b44682d"),
     ],
     targets: [
+        // Winziges Objective-C-Target, nur damit Swift eine NSException
+        // ueberleben kann. AVFoundation meldet manche Fehler nicht per
+        // NSError, sondern per Exception (`installTapOnBus` bei
+        // Format-Mismatch) — Swift kann die nicht fangen, jede solche
+        // Exception beendet den Prozess. Ohne dieses Target laesst sich der
+        // Absturz vom 01.08.2026 nicht strukturell ausschliessen, nur
+        // unwahrscheinlicher machen.
+        .target(
+            name: "ObjCExceptionBridge",
+            path: "Sources/ObjCExceptionBridge",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "WhisperM8",
             dependencies: [
@@ -38,6 +50,7 @@ let package = Package(
                 "Defaults",
                 .product(name: "LaunchAtLogin", package: "LaunchAtLogin-Modern"),
                 "SwiftTerm",
+                "ObjCExceptionBridge",
             ],
             path: "WhisperM8",
             exclude: ["Info.plist", "WhisperM8.entitlements", "Resources/AppIcon.icns"],

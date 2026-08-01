@@ -38,6 +38,23 @@ enum Logger {
         AppPreferences.shared.isDebugFileLoggingEnabled
     }
 
+    /// Wie `debug`, aber auf `.info` — und damit im persistenten Log-Store,
+    /// nicht nur im laufenden `log stream`.
+    ///
+    /// Der Unterschied ist im Ernstfall entscheidend: Nach dem Absturz vom
+    /// 01.08.2026 (`installTapOnBus`, Format-Mismatch) liess sich nicht
+    /// nachvollziehen, welches Format der Recorder geprueft hatte — die
+    /// gesamte Spur lag auf `.debug` und war nach dem Absturz nicht mehr
+    /// abrufbar. Fuer die wenigen Ereignisse, die einen Absturz erklaeren
+    /// koennen, gehoert deshalb `info` genommen.
+    static func info(_ message: String) {
+        debugLog.info("\(message, privacy: .public)")
+
+        #if DEBUG
+        print("[WhisperM8] \(message)")
+        #endif
+    }
+
     static func debug(_ message: String) {
         debugLog.debug("\(message, privacy: .public)")
 

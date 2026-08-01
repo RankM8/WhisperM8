@@ -108,12 +108,26 @@ final class AVAudioEngineVoiceGateAudioSource: VoiceGateAudioSource {
         }
 
         let inputNode = engine.inputNode
-        guard let format = resolveInputFormat(of: inputNode) else {
+        guard let resolved = resolveInputFormat(of: inputNode) else {
             throw VoiceGateListenerError.audioEngineFailed("kein gültiges Eingabeformat nach \(formatRetries) Versuchen")
         }
 
-        inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
-            self?.onBuffer?(buffer)
+        // Dieselbe Absicherung wie im Diktat-Recorder: Zwischen dem Auflösen
+        // des Formats und dem Tap kann das Gerät wechseln (HFP-Umschaltung),
+        // und `installTap` quittiert einen Mismatch mit einer NSException,
+        // die Swift nicht fangen kann — das hat am 01.08.2026 den Prozess
+        // gekillt. Format direkt davor noch einmal lesen, den Rest fängt der
+        // ObjC-Shim ab.
+        let live = inputNode.inputFormat(forBus: 0)
+        let format = (live.sampleRate > 0 && live.channelCount > 0) ? live : resolved
+        do {
+            try ObjCException.catching {
+                inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
+                    self?.onBuffer?(buffer)
+                }
+            }
+        } catch {
+            throw VoiceGateListenerError.audioEngineFailed("Tap abgelehnt: \(error.localizedDescription)")
         }
 
         engine.prepare()

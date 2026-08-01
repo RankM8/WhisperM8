@@ -152,7 +152,20 @@ class AudioRecorder {
         // Install tap for recording + level metering
         // Use larger buffer size (4096) for better Bluetooth compatibility
         Logger.debug("[AudioRecorder] Installing tap on inputNode...")
-        installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "TAP", logHundredthCallback: true)
+        do {
+            try installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "TAP", logHundredthCallback: true)
+        } catch {
+            // Statt Prozess-Abort: sauber abbrechen. Der Nutzer bekommt die
+            // normale Fehlermeldung und kann es erneut versuchen — beim
+            // zweiten Anlauf steht das Gerät meist stabil.
+            Logger.info("[AudioRecorder] ERROR: Tap konnte nicht installiert werden — \(error.localizedDescription)")
+            resourceLock.withLock {
+                audioFile = nil
+                converter = nil
+            }
+            recordingURL = nil
+            throw RecordingError.invalidFormat
+        }
 
         Logger.debug("[AudioRecorder] Starting engine...")
         do {
@@ -326,7 +339,16 @@ class AudioRecorder {
         let hasAudioFile = resourceLock.withLock { self.audioFile != nil }
         Logger.debug("[AudioRecorder] audioFile is \(hasAudioFile ? "valid" : "NIL")")
 
-        installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "NEW TAP", logHundredthCallback: false)
+        do {
+            try installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "NEW TAP", logHundredthCallback: false)
+        } catch {
+            // Reconnect nach Gerätewechsel: Schlägt der Tap fehl, ist die
+            // Aufnahme verloren — aber die App bleibt am Leben. Ohne Tap
+            // weiterzulaufen wäre schlimmer als ein sauberer Stopp.
+            Logger.info("[AudioRecorder] ERROR: Tap-Reinstall fehlgeschlagen — \(error.localizedDescription)")
+            isRestarting = false
+            return
+        }
 
         // 6. Restart the engine
         Logger.debug("[AudioRecorder] Restarting engine...")
@@ -358,35 +380,67 @@ class AudioRecorder {
     /// loggt zusaetzlich den 100. Callback.
     private func installRecordingTap(
         on inputNode: AVAudioInputNode,
-        inputFormat: AVAudioFormat,
+        inputFormat requestedFormat: AVAudioFormat,
         label: String,
         logHundredthCallback: Bool
-    ) {
+    ) throws {
         // Defensiv: ein evtl. vorhandener Tap würde installTap ebenfalls mit
         // einer unfangbaren NSException quittieren; removeTap ohne Tap ist
         // ein No-op.
         inputNode.removeTap(onBus: 0)
 
+        // Das Format DIREKT VOR dem Tap noch einmal lesen. Zwischen der
+        // Prüfung in `startRecording()` und diesem Punkt liegen
+        // Converter-Aufbau und das Anlegen der AAC-Datei — am 01.08.2026
+        // waren das 1,6 Sekunden, in denen das Gerät von 48 kHz auf 24 kHz
+        // wechselte (Bluetooth-Profilwechsel). `installTap` verlangt exakte
+        // Übereinstimmung mit dem AKTUELLEN Hardware-Format und wirft sonst.
+        let liveFormat = inputNode.inputFormat(forBus: 0)
+        var inputFormat = requestedFormat
+        if AudioFormatDecision.isRecordable(liveFormat),
+           liveFormat.sampleRate != requestedFormat.sampleRate
+            || liveFormat.channelCount != requestedFormat.channelCount {
+            Logger.info(
+                "[AudioRecorder] \(label): Format hat sich seit der Prüfung geändert "
+                + "(\(requestedFormat.sampleRate)Hz/\(requestedFormat.channelCount)ch → "
+                + "\(liveFormat.sampleRate)Hz/\(liveFormat.channelCount)ch) — übernehme das aktuelle"
+            )
+            inputFormat = liveFormat
+            // Der Converter hing am alten Format und würde falsch resampeln.
+            let target = self.targetFormat
+            resourceLock.withLock {
+                converter = AudioFormatDecision.needsConversion(from: liveFormat, to: target)
+                    ? AVAudioConverter(from: liveFormat, to: target)
+                    : nil
+            }
+        }
+
         var tapCallCount = 0
         let capturedTargetFormat = self.targetFormat
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
+        let capturedFormat = inputFormat
+        // Der einzige vollständige Schutz: Auch nach dem Neulesen bleibt ein
+        // Zeitfenster, in dem das Gerät wechseln kann. Ohne @try/@catch
+        // beendet die NSException aus AVFAudio den Prozess.
+        try ObjCException.catching {
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: capturedFormat) { [weak self] buffer, _ in
+                guard let self else { return }
 
-            tapCallCount += 1
-            if tapCallCount == 1 {
-                Logger.debug("[AudioRecorder] \(label): First callback received! frameLength=\(buffer.frameLength)")
-            } else if tapCallCount == 10 {
-                Logger.debug("[AudioRecorder] \(label): 10 callbacks received")
-            } else if logHundredthCallback, tapCallCount == 100 {
-                Logger.debug("[AudioRecorder] \(label): 100 callbacks received")
+                tapCallCount += 1
+                if tapCallCount == 1 {
+                    Logger.debug("[AudioRecorder] \(label): First callback received! frameLength=\(buffer.frameLength)")
+                } else if tapCallCount == 10 {
+                    Logger.debug("[AudioRecorder] \(label): 10 callbacks received")
+                } else if logHundredthCallback, tapCallCount == 100 {
+                    Logger.debug("[AudioRecorder] \(label): 100 callbacks received")
+                }
+
+                let level = self.calculateLevel(buffer: buffer)
+                Task { @MainActor in
+                    self.audioLevel = level
+                }
+
+                self.writeBuffer(buffer, inputFormat: capturedFormat, targetFormat: capturedTargetFormat)
             }
-
-            let level = self.calculateLevel(buffer: buffer)
-            Task { @MainActor in
-                self.audioLevel = level
-            }
-
-            self.writeBuffer(buffer, inputFormat: inputFormat, targetFormat: capturedTargetFormat)
         }
     }
 
