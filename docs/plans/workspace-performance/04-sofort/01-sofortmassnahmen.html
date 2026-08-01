@@ -319,28 +319,56 @@
     <tr><td><code>scripts/perf-report.sh</code></td><td>Macht aus dem Log eine Tabelle: Stillstände, gerissene Budgets, Zähler, Renderer-Zustand</td></tr>
   </table>
 
-  <h3>Erste Auswertung — 40 Minuten normale Nutzung</h3>
-  <p class="sub">Ohne künstliche Last, ohne Detail-Stufe. Genau das, was Stufe 1 im Alltag hergibt.</p>
-  <table>
-    <tr><th>Budget</th><th>Verletzungen</th><th>Schlechtester Wert</th><th>Budget</th></tr>
-    <tr><td><code>sidebar.statusPoll</code></td><td>27 ×</td><td><strong>659 ms</strong></td><td>100 ms</td></tr>
-    <tr><td><code>store.save</code></td><td>12 ×</td><td><strong>122 ms</strong></td><td>20 ms</td></tr>
-    <tr><td><code>grid.focusSwitch</code></td><td>4 ×</td><td>171 ms</td><td>33 ms</td></tr>
-    <tr><td><code>grid.build</code></td><td>2 ×</td><td>301 ms</td><td>50 ms</td></tr>
-    <tr><td><code>index.scan</code></td><td>3 ×</td><td>2373 ms</td><td>2000 ms</td></tr>
-    <tr><td><code>store.mutate</code></td><td>3 ×</td><td>69 ms</td><td>30 ms</td></tr>
-  </table>
+  <h3>Erste Auswertung — und warum sie zunächst falsch war</h3>
   <div class="warn">
-    <div class="t">Was diese Tabelle bereits umsortiert</div>
-    <p style="margin:0 0 10px"><strong>Der Statuspoll der Seitenleiste ist der größte Einzelposten</strong>
-    — bis zu 659 ms, mehr als das Sechsfache seines Budgets, und mit Abstand am häufigsten. In keinem
-    Paket stand er als Kandidat. A3 (Persistenz) ist mit 122 ms real und bestätigt, aber es ist nicht
-    der Spitzenreiter.</p>
-    <p style="margin:0"><code>grid.focusSwitch</code> mit 171 ms und <code>grid.build</code> mit 301 ms
-    sind die Zahlen hinter „der Chatwechsel fühlt sich nicht flüssig an" — jetzt sind sie beziffert
-    statt gefühlt. <strong>Sichtbar ist bislang nur, was sein Budget reißt</strong>: was 90 ms bei
-    100 ms Budget braucht, taucht nie auf. Für das vollständige Bild braucht es die Detail-Stufe und
-    einen Lauf unter definierter Last.</p>
+    <div class="t">Drei Fehler im Messwerkzeug, gefunden durch parallele Reviews</div>
+    <p style="margin:0 0 10px">Die erste Auswertung wurde als Tabelle präsentiert und war in
+    wesentlichen Teilen unbrauchbar. Das ist es wert, festgehalten zu werden — die Fehler sind
+    typisch für selbstgebaute Messwerkzeuge:</p>
+    <table style="margin:0 0 10px">
+      <tr><th>Fehler</th><th>Wirkung</th></tr>
+      <tr><td>Der Auswerter filterte nur nach Subsystem, nicht nach Prozess</td><td><strong>Unit-Test-Läufe flossen in die App-Baseline.</strong> <code>swift test</code> nutzt denselben Logger; die gemeldeten <code>store.mutate</code>- und <code>store.load</code>-Spitzen stammten vollständig aus <code>xctest</code>, wo Test-URLs bewusst synchron speichern.</td></tr>
+      <tr><td>Die Prüfung auf „keine Daten" griff nie</td><td><code>log show</code> gibt immer eine Kopfzeile aus. Ohne Messdaten meldete das Werkzeug „keine Verletzungen, Metal aus" — das sah aus wie ein sauberes Ergebnis.</td></tr>
+      <tr><td>Der Lastgenerator verbrauchte selbst CPU</td><td>Rund 120 Prozessstarts pro Sekunde für Zeitmessung und Schlaf. Ein Lastgenerator, der mit dem Gemessenen konkurriert, verfälscht es. Jetzt ein einziger Prozess mit monotoner Uhr: 62,7 von 64 KiB/s erreicht statt etwa 65 %.</td></tr>
+      <tr><td>Die Uhr war eine Wanduhr</td><td>Systemschlaf erschien als Einfrieren, Zeitsprünge als erfundene Verletzungen. Die ersten gemeldeten Einfrierungen (3133/2471/1118 ms) sind damit <strong>nicht belastbar</strong>. Umgestellt auf <code>DispatchTime</code>.</td></tr>
+    </table>
+    <p style="margin:0">Lehre: Ein Messwerkzeug gehört genauso geprüft wie der Code, den es misst —
+    sonst optimiert man gegen seine eigenen Fehler.</p>
+  </div>
+
+  <h3>Der teuerste Fehlalarm: <code>sidebar.statusPoll</code></h3>
+  <p>Der Messpunkt stand als größter Ausreißer der App da — 27 Verletzungen, Spitze 659 ms. Er maß
+  jedoch von <code>begin()</code> auf dem MainActor bis <code>end()</code> nach der Rückkehr aus dem
+  Hintergrund-Task und enthielt damit Einplanungs- und MainActor-Wartezeit statt Arbeit.</p>
+  <div class="gut">
+    <div class="t">Der Beweis steckte in den Zeitstempeln</div>
+    <p style="margin:0 0 10px">Am 01.08. um <strong>16:38:08 endeten zehn Polls mit exakt 150 ms</strong>,
+    um 16:37:35 acht mit 173 ms. Unabhängige Dateizugriffe enden nicht millisekundengleich — gemessen
+    wurde eine gemeinsame Blockade. Die Gegenmessung bestätigt es: ein <code>stat</code> kostet
+    <strong>1,3 µs</strong>, ein 64-KiB-Tail-Read <strong>18,3 µs</strong>. Größenordnungen unter den
+    gemeldeten Hunderten Millisekunden.</p>
+    <p style="margin:0">Der Poll skaliert außerdem nur mit den <em>live gewachten</em> Sessions, nicht
+    mit den 240 Chats im Workspace — pro Session und Takt genau ein <code>stat</code>, ein Tail-Read
+    nur bei geänderter Datei. Er ist billig. Was er anzeigte, war ein fremder Verursacher.</p>
+  </div>
+  <p>Seither misst <code>sidebar.statusPoll</code> nur die Arbeit im Hintergrund-Task; die Gesamtstrecke
+  wandert in den Detail-Messpunkt <code>sidebar.statusPollLatency</code>. Ein hoher Latenzwert heißt
+  „das Ergebnis kam spät", nicht „die App stand" — zusammen mit dem Stillstands-Wächter wird daraus
+  eine verwertbare Aussage.</p>
+
+  <div class="warn">
+    <div class="t">A3 ist weitgehend gegenstandslos</div>
+    <p style="margin:0 0 10px">Die Analyse hinter A3 („Persistenz synchron auf dem Main Thread") trifft
+    den heutigen Code nicht mehr: <code>AgentSessions.json</code> wird bereits off-main auf einer
+    seriellen Utility-Queue geschrieben, mit <code>persistLock</code> gegen überholende Writes,
+    begrenzter Dirty-Latenz und synchronem Drain beim Beenden. Belegt über die Thread-IDs im Log.</p>
+    <p style="margin:0">Auf dem Main Thread liegt nur noch der UI-Sidecar — und der ist
+    <strong>3.497 Bytes</strong>, nicht die im Plan genannten 99.677. Auch die Domain-Datei ist nach der
+    Subagent-Retention auf <strong>1,45 MB</strong> geschrumpft statt 7,77 MB. Der Umbau lohnt in dieser
+    Form nicht mehr; offen bleibt die Frage, warum einzelne Saves 122 ms brauchen, wo vergleichbare
+    21–29 ms schaffen. Dafür misst <code>save</code> seit dem 01.08. seine Phasen einzeln
+    (Encodieren, Schreiben, Backup-Rotation) — die Rotation schreibt die Daten ein zweites Mal und ist
+    der erste Verdächtige.</p>
   </div>
 </div></section>
 

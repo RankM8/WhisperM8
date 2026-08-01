@@ -98,10 +98,14 @@ struct AgentWorkspaceRepository {
 
     func save(_ workspace: AgentWorkspace) throws {
         try PerfBudgets.storeSave.withInterval {
-            let startedAt = Date()
-            defer {
-                Logger.agentPerformance.debug("agent_store_save durationMs=\(Int(Date().timeIntervalSince(startedAt) * 1000)) projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)")
-            }
+            // Phasen einzeln messen. Grund: `store.save` umfasst Encodieren,
+            // Schreiben UND die gelegentliche Backup-Rotation — eine
+            // Ausreisser-Spitze (gemessen 122 ms, wo vergleichbare Saves
+            // 21–29 ms brauchten) liess sich daraus nicht erklaeren. Die
+            // Zeiten kosten je einen Uhrenzugriff (~21 ns) und stehen nur im
+            // Debug-Log, laufen also nicht im normalen Log-Rauschen mit.
+            let clock = { TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 }
+            let startedAt = clock()
 
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),
@@ -111,11 +115,28 @@ struct AgentWorkspaceRepository {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(workspace)
+            let encodedAt = clock()
+
             try data.write(to: fileURL, options: .atomic)
+            let writtenAt = clock()
+
             // NACH dem erfolgreichen Write rotieren und die soeben encodierten
             // (garantiert dekodierbaren) Bytes als Generation sichern — so
             // landet nie eine korrupte Datei in den Backups.
-            rotateGenerationBackupsIfDue(with: data)
+            let rotated = rotateGenerationBackupsIfDue(with: data)
+            let finishedAt = clock()
+
+            let ms: (TimeInterval) -> Int = { Int($0 * 1000) }
+            Logger.agentPerformance.debug(
+                """
+                agent_store_save durationMs=\(ms(finishedAt - startedAt)) \
+                encodeMs=\(ms(encodedAt - startedAt)) \
+                writeMs=\(ms(writtenAt - encodedAt)) \
+                backupMs=\(ms(finishedAt - writtenAt)) backupDue=\(rotated) \
+                bytes=\(data.count) \
+                projects=\(workspace.projects.count) sessions=\(workspace.sessions.count)
+                """
+            )
         }
     }
 
@@ -123,12 +144,17 @@ struct AgentWorkspaceRepository {
     /// `.bak.1`→`.bak.2`, frische Daten → `.bak.1`. Gedrosselt ueber
     /// `generationBackupMinInterval` (mtime von `.bak.1`). Best-effort —
     /// ein Backup-Fehler darf den eigentlichen Save nie scheitern lassen.
-    private func rotateGenerationBackupsIfDue(with data: Data) {
+    ///
+    /// Liefert `true`, wenn tatsaechlich rotiert wurde. War das der Fall,
+    /// schrieb dieser Save die Daten ZWEIMAL — ein plausibler Kandidat fuer
+    /// Save-Ausreisser, den die Phasenmessung in `save` sichtbar macht.
+    @discardableResult
+    private func rotateGenerationBackupsIfDue(with data: Data) -> Bool {
         let fm = FileManager.default
         let newest = generationBackupURL(1)
         if let mtime = (try? fm.attributesOfItem(atPath: newest.path))?[.modificationDate] as? Date,
            Date().timeIntervalSince(mtime) < generationBackupMinInterval {
-            return
+            return false
         }
         for generation in stride(from: Self.generationBackupCount - 1, through: 1, by: -1) {
             let source = generationBackupURL(generation)
@@ -138,6 +164,7 @@ struct AgentWorkspaceRepository {
             try? fm.moveItem(at: source, to: target)
         }
         try? data.write(to: newest, options: .atomic)
+        return true
     }
 
     func generationBackupURL(_ generation: Int) -> URL {

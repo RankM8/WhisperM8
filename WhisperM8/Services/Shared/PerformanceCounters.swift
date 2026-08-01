@@ -7,7 +7,13 @@ import os
 /// 01.08.2026, M-Serie) — unabhaengig davon, ob Instruments laeuft. An einem
 /// Pfad, der zehntausendmal pro Sekunde durchlaufen wird, waeren das Prozente
 /// an CPU-Last, und die Messung verfaelschte genau das, was sie messen soll.
-/// Ein Zaehler-Inkrement kostet dagegen ~1 ns.
+///
+/// Ein Zaehler-Aufruf kostet dagegen **~3,9 ns bei abgeschalteter und ~5,1 ns
+/// bei eingeschalteter Detail-Stufe** (nachgemessen). Das ist mehr als der
+/// blosse Bool-Vergleich, den man erwartet: Ein veraenderliches globales
+/// `static var` traegt in Swift pro Zugriff eine Lazy-Init-Pruefung und einen
+/// Zugriffsschutz, dazu kommt der Singleton-Accessor. Gegenueber 686 ns bleibt
+/// es zwei Groessenordnungen billiger — genau darum geht es.
 ///
 /// Die Zaehler werden **einmal pro Sekunde** gesammelt ausgegeben. Aus 10.000
 /// Ereignissen wird so ein einziger Log-Eintrag.

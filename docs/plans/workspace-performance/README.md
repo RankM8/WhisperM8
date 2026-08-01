@@ -86,10 +86,22 @@ in heißen Pfaden, ein Stillstands-Wächter für den Main Thread, dazu
 `scripts/perf-load.sh` (Lastgenerator) und `scripts/perf-report.sh`
 (Auswertung). 11 neue Tests.
 
-Erste Auswertung über 40 Minuten normale Nutzung — sie sortiert die Prioritäten
-um: `sidebar.statusPoll` reißt sein 100-ms-Budget 27-mal, Spitze **659 ms**;
-`store.save` 12-mal, Spitze 122 ms; `grid.focusSwitch` bis 171 ms;
-`grid.build` bis 301 ms. Der Statuspoll stand in keinem Paket als Kandidat.
+Die erste Auswertung war in wesentlichen Teilen **falsch** — parallele Reviews
+(GPT und Opus) fanden vier Fehler im Messwerkzeug selbst: Unit-Test-Läufe
+flossen in die App-Baseline, „keine Daten" wurde nie erkannt, der Lastgenerator
+verbrauchte selbst CPU, und die Uhr war eine Wanduhr (Systemschlaf erschien als
+Einfrieren). Alles behoben; Details im Paket 04.
 
-**A3 (Persistenz vom Main Thread) ist noch offen** — durch die Messung
-bestätigt, aber nicht mehr der Spitzenreiter.
+**Zwei Befunde haben die Prioritäten umgeworfen:**
+
+- `sidebar.statusPoll` war ein **Fehlalarm**. Der Messpunkt umfasste
+  Einplanungs- und MainActor-Wartezeit statt Arbeit — belegt durch zehn Polls,
+  die millisekundengleich endeten. Ein `stat` kostet 1,3 µs, ein Tail-Read
+  18,3 µs. Korrigiert.
+- **A3 ist weitgehend gegenstandslos.** Die Domain-Datei wird längst off-main
+  geschrieben; auf dem Main Thread liegt nur der UI-Sidecar mit 3.497 Bytes
+  (nicht 99.677). Die Domain-Datei misst nach der Retention 1,45 MB statt
+  7,77 MB.
+
+Offen bleibt: Warum brauchen einzelne Saves 122 ms, wo vergleichbare 21–29 ms
+schaffen? Dafür misst `save` jetzt seine Phasen einzeln.
