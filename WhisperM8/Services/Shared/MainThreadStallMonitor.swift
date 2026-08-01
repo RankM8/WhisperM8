@@ -33,6 +33,15 @@ import os
 /// obwohl die App nichts blockiert hat. `DispatchTime` steht waehrend des
 /// Schlafs still und misst genau das, was uns interessiert.
 ///
+/// **Laufende Blockaden meldet ein zweiter Beobachter.** Der Timer oben kann
+/// eine Blockade erst melden, wenn sie vorbei ist — er laeuft ja selbst auf dem
+/// blockierten Thread. Bei einer Blockade, die NIE endet, schweigt er deshalb
+/// vollstaendig. Genau das ist am 01.08.2026 passiert: Die App stand endlos im
+/// SwiftUI-Layout, brannte 100 % CPU, und im Log fand sich zur Ursache keine
+/// einzige Zeile. Deshalb setzt der Main-Timer zusaetzlich einen Herzschlag,
+/// den ein `StallWatchdog` auf einer eigenen Queue beobachtet — der meldet,
+/// WAEHREND die App steht, und eskaliert bei Verdopplung der Dauer.
+///
 /// **Was er nicht kann:** Er sagt nicht, WOMIT der Main Thread beschaeftigt
 /// war. Dafuer sind die Signposts der einzelnen Budgets da — faellt beides in
 /// dieselbe Zeitspanne, hat man Ursache und Wirkung beisammen. Bleibt ein
@@ -53,6 +62,8 @@ final class MainThreadStallMonitor {
 
     private var timer: Timer?
     private var lastTick: TimeInterval?
+    /// Beobachtet den Herzschlag von aussen — meldet WAEHREND einer Blockade.
+    private let watchdog = StallWatchdog()
     /// Laengster Stillstand und deren Anzahl seit der letzten Zusammenfassung.
     private var worstStall: TimeInterval = 0
     private var stallCount = 0
@@ -64,6 +75,11 @@ final class MainThreadStallMonitor {
     }
     /// Test-Hook: ersetzt das Logging. Parameter: Dauer in Sekunden.
     var onStall: ((TimeInterval) -> Void)?
+    /// Test-Hook: Meldung einer noch LAUFENDEN Blockade (vom Watchdog).
+    var onOngoingBlock: ((TimeInterval) -> Void)? {
+        get { watchdog.onBlock }
+        set { watchdog.onBlock = newValue }
+    }
 
     private init() {}
 
@@ -79,6 +95,7 @@ final class MainThreadStallMonitor {
         // Stillstand am ehesten auffaellt.
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+        watchdog.start()
         Logger.agentPerformance.info("main_thread_stall_monitor_started intervalMs=100 thresholdMs=100")
     }
 
@@ -86,11 +103,16 @@ final class MainThreadStallMonitor {
         timer?.invalidate()
         timer = nil
         lastTick = nil
+        watchdog.stop()
     }
 
     /// Sichtbar fuer Tests — im Betrieb ruft nur der Timer.
     func tick() {
         let current = now()
+        // Herzschlag fuer den Watchdog: Solange dieser Wert frisch bleibt,
+        // reagiert der Main Thread. Bleibt er stehen, steht die App — und
+        // zwar SICHTBAR, waehrend es passiert.
+        watchdog.beat()
         defer { lastTick = current }
         guard let previous = lastTick else { return }
 
