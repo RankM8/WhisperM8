@@ -24,6 +24,14 @@ final class AgentJobWorkspaceSync {
     private var pendingSync = false
     /// Letzte bekannte Phase pro Short-ID — Basis des Übergangs-Diffs.
     private var lastPhaseByShortId: [String: AgentJobState.State] = [:]
+    /// Letzter Retention-Lauf. Der erste Sync nach App-Start räumt, danach
+    /// höchstens alle 6 h — die Aufräumkandidaten sind tagealt, das rechtfertigt
+    /// keinen Verzeichnis-Walk bei jedem FSEvent.
+    private var lastRetentionRun: Date?
+    private static let retentionInterval: TimeInterval = 6 * 60 * 60
+    /// Ab dieser Menge wird vor dem Löschen eine Kopie des Workspace
+    /// weggeschrieben — Sicherheitsnetz für den einmaligen Altlasten-Lauf.
+    private static let retentionBackupThreshold = 100
 
     init(
         monitor: AgentJobDirectoryMonitor? = nil,
@@ -209,6 +217,97 @@ final class AgentJobWorkspaceSync {
 
         let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
         Logger.agentPerformance.debug("subagent_sync reason=\(reason, privacy: .public) jobs=\(jobs.count) durationMs=\(durationMs)")
+
+        // 5. Retention NACH dem Merge: erst spiegeln, dann abräumen — sonst
+        //    würde ein gerade wieder aufgetauchter Job in derselben Runde
+        //    gelöscht und neu angelegt.
+        await runRetentionIfDue(liveJobShortIds: Set(jobs.map(\.shortId)))
+    }
+
+    // MARK: - Retention
+
+    /// Räumt die verwaisten Spiegel abgeschlossener CLI-Subagent-Jobs weg
+    /// (Policy: `SubagentJobRetentionPolicy`).
+    ///
+    /// Reihenfolge ist wichtig: erst das Rollout-Transcript aus dem Scan-Root
+    /// schieben, DANN die Session löschen. Andersherum könnte ein Scan im
+    /// Zeitfenster dazwischen das Transcript als neuen, normalen Codex-Chat
+    /// adoptieren — das Aufräumen würde sich selbst rückgängig machen.
+    private func runRetentionIfDue(liveJobShortIds: Set<String>) async {
+        guard AppPreferences.shared.isSubagentJobRetentionEnabled else { return }
+        let now = Date()
+        if let last = lastRetentionRun, now.timeIntervalSince(last) < Self.retentionInterval {
+            return
+        }
+        lastRetentionRun = now
+
+        // Einmalige Altlasten-Bereinigung beim ersten Lauf nach dem Update:
+        // die Frist ausgesetzt, alle Schutzregeln (laufende Jobs, lebende
+        // Verzeichnisse, sichtbare Sessions) bleiben in Kraft.
+        let isInitialPurge = !AppPreferences.shared.hasCompletedSubagentRetentionInitialPurge
+        let policy = SubagentJobRetentionPolicy(
+            maxAge: isInitialPurge ? 0 : AppPreferences.shared.subagentJobRetentionMaxAge
+        )
+        let candidates = policy.expiredSessions(
+            in: store.loadWorkspace().sessions,
+            liveJobShortIDs: liveJobShortIds,
+            protectedSessionIDs: Self.protectedSessionIDs(),
+            requiresClearedShortID: isInitialPurge,
+            now: now
+        )
+        AppPreferences.shared.hasCompletedSubagentRetentionInitialPurge = true
+        guard !candidates.isEmpty else { return }
+
+        let needsBackup = candidates.count >= Self.retentionBackupThreshold
+        let archiveResult = await Task.detached(priority: .utility) {
+            if needsBackup { Self.backupWorkspaceFile() }
+            return SubagentJobTranscriptArchiver().archive(candidates)
+        }.value
+
+        let removed = (try? store.deleteSessions(ids: Set(candidates.map(\.sessionID)))) ?? 0
+        let movedMB = Double(archiveResult.movedBytes) / 1_048_576
+        Logger.agentStore.info(
+            """
+            subagent_retention_run initialPurge=\(isInitialPurge) removed=\(removed) \
+            transcriptsArchived=\(archiveResult.movedCount) \
+            transcriptsMissing=\(archiveResult.missingCount) \
+            transcriptsFailed=\(archiveResult.failedCount) \
+            archivedMB=\(String(format: "%.1f", movedMB), privacy: .public)
+            """
+        )
+    }
+
+    /// Sessions, die der Nutzer gerade sieht — offene Tabs (alle Fenster),
+    /// Pins und belegte Grid-Slots. Die bleiben stehen, auch wenn sie formal
+    /// fällig wären: einen sichtbaren Tab unter den Händen wegzuräumen wäre
+    /// aus Nutzersicht ein Datenverlust.
+    private static func protectedSessionIDs() -> Set<UUID> {
+        let state = AgentWindowStore.shared.state
+        var ids = Set(state.windows.flatMap(\.openTabIDs))
+        ids.formUnion(state.pinnedSessionIDs)
+        ids.formUnion(state.gridWorkspaces.flatMap(\.slots).compactMap { $0 })
+        return ids
+    }
+
+    /// Best-effort-Kopie der Workspace-Datei vor einem großen Aufräumlauf.
+    /// Gleiches Namensmuster wie die Migrations-Backups des Repositories.
+    nonisolated private static func backupWorkspaceFile() {
+        let source = AgentWorkspaceRepository.defaultFileURL()
+        guard FileManager.default.fileExists(atPath: source.path) else { return }
+        let stamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let destination = source.deletingLastPathComponent()
+            .appendingPathComponent("\(source.lastPathComponent).pre-retention.\(stamp).bak")
+        do {
+            try FileManager.default.copyItem(at: source, to: destination)
+            Logger.agentStore.info(
+                "subagent_retention_backup file=\(destination.lastPathComponent, privacy: .public)"
+            )
+        } catch {
+            Logger.agentStore.warning(
+                "subagent_retention_backup_failed error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     /// Pure + testbar: erster PID-Kandidat des Jobs (benannter Best-Guess

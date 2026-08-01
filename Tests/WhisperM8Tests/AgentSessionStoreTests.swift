@@ -1480,4 +1480,45 @@ final class AgentSessionStoreTests: XCTestCase {
             "Bei Duplikaten über Roots hinweg muss der stempel-konforme Kandidat gewinnen (kein Flip-Flop)"
         )
     }
+
+    // MARK: - Batch-Löschung (Subagent-Retention)
+
+    /// Massenaufräumen entfernt genau die genannten Sessions und lässt den
+    /// Rest unangetastet.
+    func testDeleteSessionsRemovesOnlyRequestedSessions() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let projectPath = FileManager.default.temporaryDirectory.path
+        let doomed = try (0..<3).map { index in
+            try store.createSession(provider: .codex, projectPath: projectPath, title: "Weg \(index)")
+        }
+        let keeper = try store.createSession(
+            provider: .codex, projectPath: projectPath, title: "Bleibt"
+        )
+
+        let removed = try store.deleteSessions(ids: Set(doomed.map(\.id)))
+
+        XCTAssertEqual(removed, 3)
+        XCTAssertEqual(store.loadWorkspace().sessions.map(\.id), [keeper.id])
+    }
+
+    /// Idempotenz: unbekannte IDs und ein leeres Set sind kein Fehler und
+    /// lösen keine Mutation aus.
+    func testDeleteSessionsIgnoresUnknownAndEmptyIDs() throws {
+        let fileURL = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        let store = AgentSessionStore(fileURL: fileURL)
+        let session = try store.createSession(
+            provider: .codex,
+            projectPath: FileManager.default.temporaryDirectory.path,
+            title: "Bleibt"
+        )
+
+        XCTAssertEqual(try store.deleteSessions(ids: []), 0)
+        XCTAssertEqual(try store.deleteSessions(ids: [UUID(), UUID()]), 0)
+        XCTAssertEqual(store.loadWorkspace().sessions.map(\.id), [session.id])
+    }
 }

@@ -481,6 +481,31 @@ struct AgentSessionStore {
         }
     }
 
+    /// Loescht mehrere Sessions in EINER Mutation. Fuer Massenaufraeumen
+    /// (Subagent-Retention): 2599 Einzelaufrufe waeren 2599 Mutationen,
+    /// Equatable-Diffs ueber den vollen Workspace und Persist-Bursts — hier
+    /// ist es ein Diff und ein Flush. Idempotent; unbekannte IDs werden
+    /// ignoriert. Liefert die Anzahl tatsaechlich entfernter Sessions.
+    @discardableResult
+    func deleteSessions(ids: Set<UUID>) throws -> Int {
+        guard !ids.isEmpty else { return 0 }
+        var removed = 0
+        try mutateWorkspaceIfChanged { workspace in
+            let before = workspace.sessions.count
+            workspace.sessions.removeAll { ids.contains($0.id) }
+            removed = before - workspace.sessions.count
+            return removed > 0
+        }
+        guard removed > 0 else { return 0 }
+        workspaceStore.flush(reason: "delete-sessions")
+        DispatchQueue.global(qos: .utility).async {
+            for id in ids {
+                TerminalSnapshotStore.shared.delete(sessionID: id)
+            }
+        }
+        return removed
+    }
+
     /// Entfernt ein Projekt samt all seiner Sessions aus dem Workspace.
     /// Bewusst NUR der WhisperM8-Workspace-Eintrag — das Repo auf der
     /// Festplatte und die externen Claude/Codex-Transcripts (`~/.claude`,

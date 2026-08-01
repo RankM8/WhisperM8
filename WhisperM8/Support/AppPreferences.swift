@@ -366,6 +366,35 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentEventDrivenWatchEnabled) }
     }
 
+    /// Kill-Switch für die Retention der CLI-Subagent-Spiegel. Aus heißt: die
+    /// verwaisten Einträge bleiben für immer in der Sidebar stehen (der
+    /// Zustand vor 2026-08-01):
+    /// `defaults write com.whisperm8.app subagentJobRetentionEnabled -bool NO`
+    var isSubagentJobRetentionEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.subagentJobRetentionEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.subagentJobRetentionEnabled) }
+    }
+
+    /// Aufbewahrungsdauer abgeschlossener Subagent-Jobs in Tagen. 0 oder
+    /// negativ = Default (7). Anpassbar ohne Rebuild:
+    /// `defaults write com.whisperm8.app subagentJobRetentionDays -int 30`
+    var subagentJobRetentionMaxAge: TimeInterval {
+        let days = defaults.integer(forKey: Keys.subagentJobRetentionDays)
+        guard days > 0 else { return SubagentJobRetentionPolicy.defaultMaxAge }
+        return TimeInterval(days) * 24 * 60 * 60
+    }
+
+    /// Einmalige Altlasten-Bereinigung: Vor Einführung der Retention
+    /// (2026-08-01) sammelten sich Jahrgänge verwaister Subagent-Spiegel an,
+    /// die auch die Frist nicht mehr rechtfertigt — der erste Lauf räumt
+    /// deshalb ALLE verwaisten Einträge ab, unabhängig vom Alter. Danach
+    /// gilt die normale Frist. Erneut auslösen:
+    /// `defaults delete com.whisperm8.app subagentJobRetentionInitialPurgeDone`
+    var hasCompletedSubagentRetentionInitialPurge: Bool {
+        get { defaults.bool(forKey: Keys.subagentJobRetentionInitialPurgeDone) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.subagentJobRetentionInitialPurgeDone) }
+    }
+
     // MARK: - Voice Gate (Codewort-Steuerung der Codex-Sprachsitzung)
 
     /// Opt-in, Default AUS. Schaltet den mithoerenden On-Device-Listener frei:
@@ -572,6 +601,9 @@ enum PreferenceKeys {
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
     static let agentTabGroupingEnabled = "agentTabGroupingEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
+    static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
+    static let subagentJobRetentionDays = "subagentJobRetentionDays"
+    static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
     static let agentStopSoundEnabled = "agentStopSoundEnabled"
     static let agentStopSoundName = "agentStopSoundName"

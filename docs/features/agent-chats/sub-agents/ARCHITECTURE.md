@@ -106,6 +106,55 @@ werden als `AgentChatSession(provider: .codex, kind: .subagentJob)` angelegt.
 Wenn ein Parent existiert, übernimmt der Job dessen Projekt; sonst nutzt der
 Merge das Job-CWD als Projekt-Fallback.
 
+## Retention: verwaiste Spiegel abräumen
+
+`mergeSubagentJobs` ist additiv. Verschwindet ein Job-Verzeichnis, wird nur
+`subagentJobShortID` genilt und die Session bleibt stehen, damit der Indexer
+die Codex-Session adoptieren kann. Bis 2026-08-01 fehlte die Gegenbewegung:
+die Einträge verschwanden nie wieder. Bei intensiver CLI-Nutzung sammelten
+sich so 2599 Karteileichen an — 83 Prozent der Workspace-Datei.
+
+`SubagentJobRetentionPolicy` (rein, `expiredSessions`) entscheidet, was fällig
+ist: `.subagentJob`, weder `running` noch `pending`, kein lebendes
+Job-Verzeichnis mehr, letzte Aktivität älter als die Aufbewahrungsfrist
+(Default 7 Tage) und nicht sichtbar (offener Tab, Pin oder belegter
+Grid-Slot). Solange das Job-Verzeichnis existiert, bleibt der Eintrag: ein
+Löschen würde der nächste Merge sofort rückgängig machen. Job-Verzeichnisse
+selbst räumt weiterhin ausschließlich `agent rm`, weil sie git-Worktrees
+enthalten können, deren Entfernung über `git worktree remove` laufen muss.
+
+`SubagentJobTranscriptArchiver` verschiebt vorher das Rollout-Transcript aus
+`~/.codex/sessions` nach `Application Support/WhisperM8/agent-jobs-archive/`.
+Das ist der Kern der Sache: Der Indexer erkennt Subagent-Threads nur an den
+`subagentThreadIDs` der vorhandenen Job-Sessions (siehe
+`mergeIndexedSessions`). Wäre der Workspace-Eintrag weg und das Transcript
+noch im Scan-Root, legte der nächste Scan es als ganz normalen Codex-Chat neu
+an — das Aufräumen machte sich selbst rückgängig. Deshalb gilt die
+Reihenfolge: erst verschieben, dann löschen. Verschoben statt gelöscht wird,
+weil `~/.codex` im Projekt als extern gilt; der Archiv-Ordner darf jederzeit
+per Hand geleert werden.
+
+Der erste Lauf nach dem Update ist eine einmalige Altlasten-Bereinigung: die
+Frist ist ausgesetzt, alle verwaisten Spiegel fliegen unabhängig vom Alter
+raus (Stand 2026-08-01: 2599 Einträge, davon 1443 mit Transcript = 12,5 GB
+Archiv, 1156 leere Hüllen). Für diesen fristlosen Lauf gilt eine zusätzliche
+Bedingung — `requiresClearedShortID`: nur Sessions, deren Short-ID der Merge
+schon genilt hat. Wäre `agent-jobs/` in dem Moment nicht lesbar, käme eine
+leere Live-Menge herein und alle lebenden Jobs sähen verwaist aus; im
+Normalbetrieb übernimmt die Frist diesen Schutz. Gesteuert über
+`subagentJobRetentionInitialPurgeDone`; `defaults delete` löst ihn erneut aus.
+
+`AgentJobWorkspaceSync` ruft die Retention nach dem Merge, beim ersten Sync
+nach App-Start und danach höchstens alle sechs Stunden. Ab 100 Kandidaten
+legt sie vorher eine `AgentSessions.json.pre-retention.<stamp>.bak` an. Die
+Unread-Marker der entfernten Sessions räumt `AgentUIState` beim Normalisieren
+selbst weg (Filter gegen `liveSessionIDs`). Kill-Switch und Frist:
+
+```bash
+defaults write com.whisperm8.app subagentJobRetentionEnabled -bool NO
+defaults write com.whisperm8.app subagentJobRetentionDays -int 30
+```
+
 ## Effektive Codex-Defaults
 
 Jobs ohne explizites `--model` beziehungsweise `--effort` werden im
@@ -169,7 +218,9 @@ Codex-PTY-Pfad.
 - Generische `--config key=value`-Overrides werden nach den eingebauten Codex-Configs angehängt und können deshalb auch die eingebauten Werte übersteuern.
 - In `AgentWorkspaceStore`-Mutationen laufen keine Subprozesse; Git-Branch-Lookups für neue Fallback-Projekte werden vor der Mutation berechnet.
 - `events.jsonl` wird nicht für Workspace-Syncs beobachtet, weil laufende Turns viele Append-Events erzeugen.
-- `agent rm` löscht das Job-Verzeichnis, lässt die Codex-Session unter `~/.codex/sessions/` aber bestehen.
+- `agent rm` löscht das Job-Verzeichnis, lässt die Codex-Session unter `~/.codex/sessions/` aber bestehen. Deren Workspace-Spiegel räumt später die Retention ab und verschiebt das Transcript ins Archiv.
+- Die Retention löscht nie Sessions mit lebendem Job-Verzeichnis: der nächste Merge legte sie sofort neu an (Flip-Flop).
+- Transcript-Verschieben und Session-Löschen sind eine Einheit in dieser Reihenfolge. Umgekehrt könnte ein Scan im Zeitfenster dazwischen das Transcript als neuen Codex-Chat adoptieren.
 
 ## Test-Cluster
 
@@ -177,6 +228,7 @@ Codex-PTY-Pfad.
 - `Tests/WhisperM8Tests/AgentJobStateTests.swift`, `AgentJobStoreTests.swift` und `AgentJobSupervisorTests.swift` decken State-Übergänge, Persistenz, Liveness und Supervisor-Finalisierung ab.
 - `Tests/WhisperM8Tests/AgentJobDirectoryMonitorTests.swift` und `AgentJobWorkspaceSyncTests.swift` decken FSEvents-Filter, Sync-Merge und Parent-Auflösung ab.
 - `Tests/WhisperM8Tests/ProcessAncestryTests.swift` deckt PID-Ketten und Parent-Matching ab.
+- `Tests/WhisperM8Tests/SubagentJobRetentionTests.swift` deckt Fälligkeitsregel und Transcript-Archivierung ab; die Batch-Löschung liegt in `AgentSessionStoreTests.swift`.
 - `Tests/WhisperM8Tests/SubAgentDiscoveryTests.swift` deckt Frontmatter-Discovery für Claude-Subagent-Definitionen ab.
 - `Tests/WhisperM8Tests/AgentSidebarTests.swift` deckt Subagent-Kindgruppierung, sichtbare Kinder, Footer und Statusmengen ab.
 
