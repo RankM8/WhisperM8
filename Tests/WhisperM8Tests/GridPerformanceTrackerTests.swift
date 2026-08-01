@@ -33,7 +33,7 @@ final class GridPerformanceTrackerTests: XCTestCase {
         let tracker = GridPerformanceTracker()
         tracker.timeout = timeout
         if frozenClock {
-            let fixed = Date()
+            let fixed = TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
             tracker.buildBudget.now = { fixed }
             tracker.focusBudget.now = { fixed }
         }

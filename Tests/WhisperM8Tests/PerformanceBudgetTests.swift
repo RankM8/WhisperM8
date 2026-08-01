@@ -4,10 +4,13 @@ import XCTest
 
 final class PerformanceBudgetTests: XCTestCase {
     /// Deterministische Uhr nach Repo-Konvention (Closure-DI).
+    /// Sekunden seit Systemstart, nicht Wanduhrzeit — `PerformanceBudget` misst
+    /// seit 01.08.2026 mit `DispatchTime`, damit Zeitumstellungen und
+    /// Systemschlaf keine erfundenen Verletzungen erzeugen.
     private final class Clock {
-        var current = Date(timeIntervalSince1970: 1_000)
+        var current: TimeInterval = 1_000
         func advance(by interval: TimeInterval) {
-            current = current.addingTimeInterval(interval)
+            current += interval
         }
     }
 

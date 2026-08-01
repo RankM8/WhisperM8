@@ -68,10 +68,10 @@ struct PerformanceBudget {
     /// sofort zurück.
     final class Token {
         fileprivate let state: OSSignpostIntervalState?
-        fileprivate let startedAt: Date?
+        fileprivate let startedAt: TimeInterval?
         fileprivate var ended = false
 
-        fileprivate init(state: OSSignpostIntervalState?, startedAt: Date?) {
+        fileprivate init(state: OSSignpostIntervalState?, startedAt: TimeInterval?) {
             self.state = state
             self.startedAt = startedAt
         }
@@ -95,8 +95,19 @@ struct PerformanceBudget {
     /// Messdichte-Stufe. Default `.always`, damit bestehende Messpunkte sich
     /// nicht ändern; neue dichte Messpunkte müssen `.detail` explizit setzen.
     var tier: PerfTier = .always
-    /// Test-Hook: deterministische Uhr.
-    var now: () -> Date = Date.init
+    /// Test-Hook: deterministische Uhr. Liefert Sekunden seit Systemstart.
+    ///
+    /// Bewusst `DispatchTime` und nicht `Date`: Eine Wanduhr springt bei
+    /// Zeitumstellung und NTP-Korrektur — vorwaerts ergaebe das erfundene
+    /// Budget-Verletzungen, rueckwaerts negative Dauern, die jede echte
+    /// Verletzung verschlucken. Sie laeuft ausserdem waehrend des Systemschlafs
+    /// weiter, sodass eine Messung ueber einen Schlaf hinweg Stunden meldete.
+    /// Nebeneffekt: `DispatchTime` ist mit ~21 ns auch dreimal billiger als
+    /// `Date` (~61 ns) — beides verschwindet allerdings neben den ~686 ns des
+    /// Signposts.
+    var now: () -> TimeInterval = {
+        TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+    }
     /// Test-Hook: ersetzt das Default-Logging. Parameter: Name, gemessene Dauer.
     var onViolation: ((String, TimeInterval) -> Void)?
 
@@ -132,7 +143,7 @@ struct PerformanceBudget {
         token.ended = true
         signposter.endInterval(name, state)
 
-        let duration = now().timeIntervalSince(startedAt)
+        let duration = now() - startedAt
         guard duration > budget else { return }
         if let onViolation {
             onViolation("\(name)", duration)

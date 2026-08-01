@@ -12,9 +12,26 @@ import os
 /// findet also auch Verursacher, an die niemand gedacht hat.
 ///
 /// **Verfahren:** Ein Timer, der alle 100 ms auf dem Main Thread feuern soll.
-/// Feuert er spaeter, war der Main Thread in der Zwischenzeit blockiert; die
-/// Verspaetung IST die Blockadedauer. Kostet zehn Timer-Ticks pro Sekunde —
-/// nichts. Deshalb laeuft er in Stufe 1, also immer.
+/// Feuert er spaeter, war der Main Thread in der Zwischenzeit blockiert. Kostet
+/// zehn Timer-Ticks pro Sekunde — nichts. Deshalb laeuft er in Stufe 1, also
+/// immer.
+///
+/// **Die gemessene Zahl ist eine Untergrenze, keine exakte Dauer.** Gemessen
+/// wird die Verspaetung ab dem Solltermin des Ticks, nicht die Blockade selbst.
+/// Beginnt eine Blockade kurz NACH einem Tick, faellt ein Teil von ihr in das
+/// regulaere Intervall und wird nicht mitgezaehlt: eine 150-ms-Blockade, die
+/// 1 ms nach einem Tick beginnt, erscheint als 51 ms. Der Monitor erfasst
+/// deshalb je nach Phasenlage zuverlaessig erst Blockaden ab etwa 200 ms und
+/// nennt sie um bis zu 100 ms zu kurz. Fuer den Zweck — „stand die App, und wie
+/// schlimm" — reicht das; wer exakte Dauern braucht, misst mit Instruments.
+///
+/// **Uhr:** `DispatchTime` (mach_absolute_time), NICHT `Date`. Zwei Gruende:
+/// Eine Wanduhr springt bei Zeitumstellung und NTP-Korrektur — vorwaerts ergaebe
+/// das einen erfundenen Freeze, rueckwaerts eine negative Dauer, die jede
+/// Meldung unterdrueckt. Und sie laeuft waehrend des Systemschlafs weiter: nach
+/// 30 Minuten Deckel-zu meldete der Monitor brav ein „1.800.000 ms Einfrieren",
+/// obwohl die App nichts blockiert hat. `DispatchTime` steht waehrend des
+/// Schlafs still und misst genau das, was uns interessiert.
 ///
 /// **Was er nicht kann:** Er sagt nicht, WOMIT der Main Thread beschaeftigt
 /// war. Dafuer sind die Signposts der einzelnen Budgets da — faellt beides in
@@ -35,13 +52,16 @@ final class MainThreadStallMonitor {
     private static let freezeThreshold: TimeInterval = 1.0
 
     private var timer: Timer?
-    private var lastTick: Date?
+    private var lastTick: TimeInterval?
     /// Laengster Stillstand und deren Anzahl seit der letzten Zusammenfassung.
     private var worstStall: TimeInterval = 0
     private var stallCount = 0
-    private var lastSummary = Date()
-    /// Test-Hook: deterministische Uhr.
-    var now: () -> Date = Date.init
+    private var lastSummary: TimeInterval = 0
+    /// Test-Hook: deterministische Uhr. Liefert Sekunden seit Systemstart
+    /// (monoton, steht waehrend des Schlafs still) — nicht Wanduhrzeit.
+    var now: () -> TimeInterval = {
+        TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+    }
     /// Test-Hook: ersetzt das Logging. Parameter: Dauer in Sekunden.
     var onStall: ((TimeInterval) -> Void)?
 
@@ -74,8 +94,9 @@ final class MainThreadStallMonitor {
         defer { lastTick = current }
         guard let previous = lastTick else { return }
 
-        // Verspaetung = tatsaechlicher Abstand minus Soll-Abstand.
-        let delay = current.timeIntervalSince(previous) - Self.interval
+        // Verspaetung = tatsaechlicher Abstand minus Soll-Abstand. Untergrenze
+        // der echten Blockade — Begruendung im Typ-Kommentar.
+        let delay = (current - previous) - Self.interval
         if delay >= Self.stallThreshold {
             stallCount += 1
             worstStall = max(worstStall, delay)
@@ -97,7 +118,7 @@ final class MainThreadStallMonitor {
         }
 
         // Einmal pro Minute zusammenfassen — nur wenn es etwas zu sagen gibt.
-        guard current.timeIntervalSince(lastSummary) >= 60 else { return }
+        guard current - lastSummary >= 60 else { return }
         lastSummary = current
         guard stallCount > 0 else { return }
         Logger.agentPerformance.info(

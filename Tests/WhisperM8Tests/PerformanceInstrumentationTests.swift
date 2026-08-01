@@ -27,7 +27,7 @@ final class PerformanceInstrumentationTests: XCTestCase {
     func testAlwaysTierMeasuresEvenWhenDetailDisabled() {
         PerfDetailGate.isEnabled = false
         var violations: [(String, TimeInterval)] = []
-        var clock = Date(timeIntervalSince1970: 0)
+        var clock: TimeInterval = 0
 
         var budget = PerformanceBudget(name: "test.always", budget: 0.010, signposter: PerfSignposts.store)
         budget.tier = .always
@@ -36,7 +36,7 @@ final class PerformanceInstrumentationTests: XCTestCase {
 
         XCTAssertTrue(budget.isActive)
         let token = budget.begin()
-        clock = clock.addingTimeInterval(0.050)
+        clock += 0.050
         budget.end(token)
 
         XCTAssertEqual(violations.count, 1)
@@ -48,7 +48,7 @@ final class PerformanceInstrumentationTests: XCTestCase {
     func testDetailTierIsSilentWhenDisabled() {
         PerfDetailGate.isEnabled = false
         var violations: [(String, TimeInterval)] = []
-        var clock = Date(timeIntervalSince1970: 0)
+        var clock: TimeInterval = 0
 
         var budget = PerformanceBudget(name: "test.detail", budget: 0.010, signposter: PerfSignposts.store)
         budget.tier = .detail
@@ -57,7 +57,7 @@ final class PerformanceInstrumentationTests: XCTestCase {
 
         XCTAssertFalse(budget.isActive)
         let token = budget.begin()
-        clock = clock.addingTimeInterval(5.0)   // weit ueber Budget
+        clock += 5.0   // weit ueber Budget
         budget.end(token)
 
         XCTAssertTrue(violations.isEmpty, "Ein abgeschalteter Detail-Messpunkt darf nichts melden")
@@ -67,7 +67,7 @@ final class PerformanceInstrumentationTests: XCTestCase {
     func testDetailTierMeasuresWhenEnabled() {
         PerfDetailGate.isEnabled = true
         var violations: [(String, TimeInterval)] = []
-        var clock = Date(timeIntervalSince1970: 0)
+        var clock: TimeInterval = 0
 
         var budget = PerformanceBudget(name: "test.detail", budget: 0.010, signposter: PerfSignposts.store)
         budget.tier = .detail
@@ -76,7 +76,7 @@ final class PerformanceInstrumentationTests: XCTestCase {
 
         XCTAssertTrue(budget.isActive)
         let token = budget.begin()
-        clock = clock.addingTimeInterval(0.020)
+        clock += 0.020
         budget.end(token)
 
         XCTAssertEqual(violations.count, 1)
@@ -112,13 +112,13 @@ final class PerformanceInstrumentationTests: XCTestCase {
     func testCancelSkipsBudgetEvaluation() {
         PerfDetailGate.isEnabled = false
         var violations = 0
-        var clock = Date(timeIntervalSince1970: 0)
+        var clock: TimeInterval = 0
         var budget = PerformanceBudget(name: "test.always", budget: 0.001, signposter: PerfSignposts.store)
         budget.now = { clock }
         budget.onViolation = { _, _ in violations += 1 }
 
         let token = budget.begin()
-        clock = clock.addingTimeInterval(5.0)
+        clock += 5.0
         budget.cancel(token)
         XCTAssertEqual(violations, 0)
     }
@@ -143,14 +143,14 @@ final class PerformanceInstrumentationTests: XCTestCase {
         // frisch aktivierter Messpunkt weiterhin sauber messen koennen.
         PerfDetailGate.isEnabled = true
         var violations = 0
-        var clock = Date(timeIntervalSince1970: 0)
+        var clock: TimeInterval = 0
         var active = PerformanceBudget(name: "test.detail", budget: 0.001, signposter: PerfSignposts.store)
         active.tier = .detail
         active.now = { clock }
         active.onViolation = { _, _ in violations += 1 }
 
         let token = active.begin()
-        clock = clock.addingTimeInterval(0.5)
+        clock += 0.5
         active.end(token)
         XCTAssertEqual(violations, 1, "Nach Aktivierung muss wieder regulaer gemessen werden")
     }
@@ -195,16 +195,16 @@ final class PerformanceInstrumentationTests: XCTestCase {
         // Singleton: den Stand aus einem vorherigen Test verwerfen, sonst
         // waere der erste Tick hier schon eine Messung gegen dessen Uhr.
         monitor.stop()
-        var clock = Date(timeIntervalSince1970: 1000)
+        var clock: TimeInterval = 1000
         var stalls: [TimeInterval] = []
         monitor.now = { clock }
         monitor.onStall = { stalls.append($0) }
-        defer { monitor.now = Date.init; monitor.onStall = nil }
+        defer { monitor.now = { TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 }; monitor.onStall = nil }
 
         monitor.tick()                                  // setzt den Startpunkt
-        clock = clock.addingTimeInterval(0.1)           // exakt im Soll
+        clock += 0.1           // exakt im Soll
         monitor.tick()
-        clock = clock.addingTimeInterval(0.13)          // 30 ms Verzug, unter Schwelle
+        clock += 0.13          // 30 ms Verzug, unter Schwelle
         monitor.tick()
 
         XCTAssertTrue(stalls.isEmpty)
@@ -218,14 +218,14 @@ final class PerformanceInstrumentationTests: XCTestCase {
         // Singleton: den Stand aus einem vorherigen Test verwerfen, sonst
         // waere der erste Tick hier schon eine Messung gegen dessen Uhr.
         monitor.stop()
-        var clock = Date(timeIntervalSince1970: 2000)
+        var clock: TimeInterval = 2000
         var stalls: [TimeInterval] = []
         monitor.now = { clock }
         monitor.onStall = { stalls.append($0) }
-        defer { monitor.now = Date.init; monitor.onStall = nil }
+        defer { monitor.now = { TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 }; monitor.onStall = nil }
 
         monitor.tick()
-        clock = clock.addingTimeInterval(0.85)          // Soll 0,1 → 0,75 s Blockade
+        clock += 0.85          // Soll 0,1 → 0,75 s Blockade
         monitor.tick()
 
         XCTAssertEqual(stalls.count, 1)
@@ -240,14 +240,14 @@ final class PerformanceInstrumentationTests: XCTestCase {
         // Singleton: den Stand aus einem vorherigen Test verwerfen, sonst
         // waere der erste Tick hier schon eine Messung gegen dessen Uhr.
         monitor.stop()
-        var clock = Date(timeIntervalSince1970: 3000)
+        var clock: TimeInterval = 3000
         var stalls: [TimeInterval] = []
         monitor.now = { clock }
         monitor.onStall = { stalls.append($0) }
-        defer { monitor.now = Date.init; monitor.onStall = nil }
+        defer { monitor.now = { TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 }; monitor.onStall = nil }
 
         monitor.tick()
-        clock = clock.addingTimeInterval(2.6)           // 2,5 s eingefroren
+        clock += 2.6           // 2,5 s eingefroren
         monitor.tick()
 
         XCTAssertEqual(stalls.count, 1)
