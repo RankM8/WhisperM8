@@ -28,6 +28,20 @@ enum TerminalMetalWarmup {
 
     /// Startet das Vorwaermen, sofern der Metal-Renderer ueberhaupt aktiv ist.
     /// Kehrt sofort zurueck; die Arbeit laeuft auf einer Hintergrund-Queue.
+    ///
+    /// **Bekannte Luecke (Review 01.08.2026):** Das Vorwaermen ist
+    /// fire-and-forget und gewinnt kein Rennen. Die App oeffnet ihr
+    /// Agent-Chats-Fenster beim Start automatisch; wird dabei ein Chat
+    /// wiederhergestellt, kann `QuietableTerminalView.viewDidMoveToWindow`
+    /// die Shader-Uebersetzung anstossen, bevor das Vorwaermen fertig ist —
+    /// dann wartet der Main Thread doch. Beide Uebersetzungen sind
+    /// unschaedlich (Metal darf off-main), nur der Zweck verfehlt.
+    ///
+    /// Bewusst nicht abgesichert: Warten hiesse den Start blockieren, also
+    /// genau das eintauschen, was vermieden werden soll. Der Fall trifft
+    /// ausserdem nur den allerersten Start nach Installation oder
+    /// Cache-Loeschung, und nur bei eingeschaltetem Metal — das ist Opt-in
+    /// und derzeit aus. Sollte Metal je Default werden, gehoert das gemessen.
     static func warmUpIfNeeded() {
         guard QuietableTerminalView.metalRendererOptIn else { return }
         DispatchQueue.global(qos: .utility).async { warmUp() }
