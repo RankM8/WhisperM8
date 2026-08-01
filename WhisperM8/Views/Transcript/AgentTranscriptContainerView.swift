@@ -102,34 +102,52 @@ struct AgentTranscriptContainerView: View {
             lineCount = 0
             return
         }
-        let built = await Task.detached(priority: .userInitiated) { () -> (NSAttributedString, Int) in
+        let built = await Task.detached(priority: .userInitiated) { () -> BuiltDocument in
             let lines = TranscriptTextRenderer.render(transcript)
-            return (TranscriptTextDocument.make(lines: lines), lines.count)
+            return BuiltDocument(text: TranscriptTextDocument.make(lines: lines), lineCount: lines.count)
         }.value
         guard !Task.isCancelled else { return }
-        document = built.0
-        lineCount = built.1
+        document = built.text
+        lineCount = built.lineCount
         revision &+= 1
+    }
+
+    /// `NSAttributedString` ist unveränderlich und damit gefahrlos über
+    /// Aktorgrenzen zu reichen — AppKit erklärt es nur nicht als `Sendable`.
+    /// Ohne diese Box wäre der Aufbau in Swift 6 ein Fehler.
+    private struct BuiltDocument: @unchecked Sendable {
+        let text: NSAttributedString
+        let lineCount: Int
     }
 
     // MARK: - Chrome
 
     /// Ersetzt den früheren Modus-Umschalter: keine Auswahl mehr, sondern
     /// die Herkunft des Verlaufs und sein Umfang.
+    /// Die WERTE tragen, die Einheiten treten zurück. Vorher stand dort
+    /// „143 Nachrichten · 697 Zeilen" in einer Farbe und Größe — alles gleich
+    /// laut, nichts auf einen Blick lesbar.
     private var metaStrip: some View {
-        HStack(spacing: 8) {
-            Text(metaLabel)
-                .font(.system(size: 10.5).monospacedDigit())
-                .foregroundStyle(AgentTheme.textTertiary)
-            Spacer()
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            stat(value: "\(transcript?.messages.count ?? 0)", unit: "Nachrichten")
+            if lineCount > 0 {
+                stat(value: "\(lineCount)", unit: "Zeilen")
+            }
+            Spacer(minLength: 8)
             if let loadHint, transcript?.hasTruncatedHead == true {
                 Text(loadHint)
-                    .font(.system(size: 10))
+                    .font(.system(size: 9.5).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 999)
+                            .stroke(AgentTheme.border, lineWidth: 1)
+                    )
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
         .background(AgentTheme.surface)
         .overlay(
             Rectangle()
@@ -139,13 +157,15 @@ struct AgentTranscriptContainerView: View {
         )
     }
 
-    private var metaLabel: String {
-        let messages = transcript?.messages.count ?? 0
-        var parts = ["\(messages) Nachrichten"]
-        if lineCount > 0 {
-            parts.append("\(lineCount) Zeilen")
+    private func stat(value: String, unit: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value)
+                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Text(unit)
+                .font(.system(size: 9.5))
+                .foregroundStyle(AgentTheme.textTertiary)
         }
-        return parts.joined(separator: " · ")
     }
 
     /// Vier Zustände wie bisher: Button → Spinner → „✓ N geladen" → „Anfang

@@ -5,11 +5,11 @@ import Foundation
 /// bleibt AppKit-frei und damit rein unit-testbar.
 struct TranscriptTextLine: Equatable {
     enum Style: Equatable {
-        /// Nutzer-Prompt (`❯ …`).
+        /// Nutzer-Nachricht — ohne Marker, dafür hinterlegt.
         case prompt
-        /// Antworttext des Agenten (`⏺ …`).
+        /// Antworttext des Agenten (`● …`).
         case answer
-        /// Tool-Aufruf (`⏺ Read(datei.swift)`).
+        /// Tool-Aufruf (`● Read(datei.swift)`).
         case tool
         /// Ergebnis eines Tool-Aufrufs (`⎿ …`), eingerückt und gedimmt.
         case toolOutput
@@ -34,8 +34,9 @@ struct TranscriptTextLine: Equatable {
 }
 
 /// Rendert ein `AgentChatTranscript` als zeilenweisen Text im Stil der
-/// Claude-Code-CLI: Prompt mit `❯`, Antwort mit `⏺`, Tool-Aufrufe mit dem
-/// klassifizierten Kurz-Subject, Ergebnisse eingerückt mit `⎿`.
+/// Claude-Code-CLI: Antwort und Tool-Aufruf mit `●`, Ergebnisse eingerückt
+/// mit `⎿`, Thinking mit `✻`. Nutzer-Nachrichten tragen keinen Marker — sie
+/// heben sich über einen Hintergrund ab (siehe `TranscriptTextDocument`).
 ///
 /// **Warum zeilenweise und nicht als View-Baum:** Die frühere Chat-Ansicht
 /// baute pro Nachricht eine SwiftUI-Hierarchie. Deren Layout-Kosten wachsen
@@ -57,7 +58,10 @@ enum TranscriptTextRenderer {
         var toolOutputLines: Int
         var toolOutputChars: Int
 
-        static let `default` = Limits(toolOutputLines: 12, toolOutputChars: 4000)
+        /// Vier Zeilen — dasselbe Maß, das die Claude-Code-CLI im Terminal
+        /// zeigt. Ein `git log` oder eine Sitemap-Prüfung frisst sonst 15
+        /// Zeilen und begräbt das, was zählt: Prompts und Antworten.
+        static let `default` = Limits(toolOutputLines: 4, toolOutputChars: 4000)
     }
 
     static func render(_ transcript: AgentChatTranscript, limits: Limits = .default) -> [TranscriptTextLine] {
@@ -96,9 +100,12 @@ enum TranscriptTextRenderer {
             guard !trimmed.isEmpty else { return }
             switch role {
             case .user:
-                appendWrapped(trimmed, marker: "❯ ", style: .prompt, to: &lines)
+                // Kein Marker: Die Prompt-Zeilen bekommen einen
+                // Hintergrund (siehe TranscriptTextDocument) und heben sich
+                // dadurch ab — so steht die Nachricht auch im Terminal.
+                appendWrapped(trimmed, marker: "", style: .prompt, to: &lines)
             case .assistant:
-                appendWrapped(trimmed, marker: "⏺ ", style: .answer, to: &lines)
+                appendWrapped(trimmed, marker: "● ", style: .answer, to: &lines)
             case .system:
                 appendWrapped(trimmed, marker: "· ", style: .meta, to: &lines)
             }
@@ -112,7 +119,7 @@ enum TranscriptTextRenderer {
             let classified = ToolCallClassifier.classify(name: name, input: input)
             let subject = singleLine(classified.subject)
             let detail = classified.detail.map { " · " + singleLine($0) } ?? ""
-            lines.append(TranscriptTextLine(.tool, "⏺ \(name)(\(subject))\(detail)"))
+            lines.append(TranscriptTextLine(.tool, "● \(name)(\(subject))\(detail)"))
 
         case .toolResult(let content, let isError):
             appendToolOutput(content, isError: isError, to: &lines, limits: limits)

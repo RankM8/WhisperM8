@@ -33,14 +33,115 @@ enum TranscriptTextDocument {
 
         let result = NSMutableAttributedString()
         for line in lines {
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: line.style == .prompt ? boldFont : font,
+            var attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
                 .foregroundColor: color(for: line.style),
                 .paragraphStyle: paragraph
             ]
-            result.append(NSAttributedString(string: line.text + "\n", attributes: attributes))
+            // Nutzer-Nachrichten hinterlegen statt mit einem Marker zu
+            // versehen — im Terminal sind sie das auffälligste Element.
+            // Bewusst als Attribut und NICHT als eigener Layout-Fragment-
+            // Renderer: Das Attribut zeichnet TextKit beim Text ohnehin mit
+            // und kostet nichts, ein eigener Renderer haenge sich in genau
+            // den Layout-Pfad ein, der die App vorher eingefroren hat.
+            if line.style == .prompt {
+                attributes[.backgroundColor] = promptBackground
+            }
+
+            // Inline-Auszeichnung nur dort, wo Markdown ueberhaupt vorkommt:
+            // in Fliesstext. Tool-Ausgaben sind Rohtext — sie zu scannen
+            // waere verschwendete Arbeit auf dem mengenabhaengigen Pfad.
+            //
+            // Die Vorpruefung laeuft ueber UTF-8-Bytes, nicht ueber
+            // `String.contains`: Letzteres ist Unicode-korrekt und damit
+            // teuer — im Haertetest (10 MB) kostete es allein 0,7 s, obwohl
+            // die Texte gar kein Markdown enthielten.
+            if (line.style == .answer || line.style == .prompt), mayContainMarkup(line.text) {
+                appendInline(line.text, base: attributes, boldFont: boldFont, into: result)
+                result.append(NSAttributedString(string: "\n", attributes: attributes))
+            } else {
+                result.append(NSAttributedString(string: line.text + "\n", attributes: attributes))
+            }
         }
         return result
+    }
+
+    /// Ein einziger Byte-Durchlauf: Enthaelt die Zeile ein `*` (Fettschrift)
+    /// oder die Folge `://` (Link)? Nur dann lohnt der teurere String-Pfad.
+    ///
+    /// Auf `:` allein zu pruefen reicht NICHT — Doppelpunkte stehen in fast
+    /// jedem Satz, und der Haertetest sprang dadurch von 0,53 s auf 0,90 s.
+    /// Mit dem Zwei-Byte-Muster greift der Schnellpfad wieder.
+    private nonisolated static func mayContainMarkup(_ text: String) -> Bool {
+        var vorherDoppelpunkt = false
+        for byte in text.utf8 {
+            if byte == UInt8(ascii: "*") { return true }
+            if vorherDoppelpunkt, byte == UInt8(ascii: "/") { return true }
+            vorherDoppelpunkt = byte == UInt8(ascii: ":")
+        }
+        return false
+    }
+
+    /// Loest `**fett**` und nackte `http(s)`-Links auf — ohne regulaere
+    /// Ausdruecke, damit der Aufbau linear bleibt.
+    private nonisolated static func appendInline(
+        _ text: String,
+        base: [NSAttributedString.Key: Any],
+        boldFont: NSFont,
+        into result: NSMutableAttributedString
+    ) {
+        var bold = base
+        bold[.font] = boldFont
+
+        var rest = Substring(text)
+        while let marker = rest.range(of: "**") {
+            let vorher = rest[rest.startIndex..<marker.lowerBound]
+            appendLinked(String(vorher), attributes: base, into: result)
+            let nach = rest[marker.upperBound...]
+            guard let ende = nach.range(of: "**") else {
+                // Unpaariges ** — als normalen Text ausgeben, nichts verschlucken.
+                result.append(NSAttributedString(string: "**" + String(nach), attributes: base))
+                return
+            }
+            result.append(NSAttributedString(string: String(nach[nach.startIndex..<ende.lowerBound]), attributes: bold))
+            rest = nach[ende.upperBound...]
+        }
+        appendLinked(String(rest), attributes: base, into: result)
+    }
+
+    /// Haengt Text an und macht darin enthaltene `http(s)`-Adressen
+    /// anklickbar. NSTextView oeffnet `.link`-Attribute selbst — kein
+    /// eigener Klick-Handler noetig.
+    private nonisolated static func appendLinked(
+        _ text: String,
+        attributes: [NSAttributedString.Key: Any],
+        into result: NSMutableAttributedString
+    ) {
+        guard let start = text.range(of: "http://") ?? text.range(of: "https://") else {
+            result.append(NSAttributedString(string: text, attributes: attributes))
+            return
+        }
+        result.append(NSAttributedString(string: String(text[text.startIndex..<start.lowerBound]), attributes: attributes))
+        let rest = text[start.lowerBound...]
+        // Die URL endet am ersten Leerzeichen; typische Satzzeichen am Ende
+        // gehoeren nicht mehr dazu.
+        let urlText = rest.prefix { !$0.isWhitespace }
+        let trimmed = urlText.drop(while: { _ in false })
+            .reversed().drop(while: { ",.;:)]".contains($0) }).reversed()
+        let urlString = String(trimmed)
+
+        var linkAttributes = attributes
+        if let url = URL(string: urlString) {
+            linkAttributes[.link] = url
+            linkAttributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        }
+        result.append(NSAttributedString(string: urlString, attributes: linkAttributes))
+        appendLinked(String(rest.dropFirst(urlString.count)), attributes: attributes, into: result)
+    }
+
+    private nonisolated static var promptBackground: NSColor {
+        dynamic(light: NSColor.black.withAlphaComponent(0.055),
+                dark: NSColor.white.withAlphaComponent(0.075))
     }
 
     /// Dynamische Farben (wie `AppTheme.dynamic`): der Text passt sich beim

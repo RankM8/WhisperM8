@@ -1,14 +1,18 @@
 import SwiftUI
 
 /// Zusammenfassungs-Karte über der Timeline (Prototyp chat-summary-ui.html):
-/// Headline + Freshness-Chip + Evidenz-Zeilen + Deep-Dive + Aktualisieren.
+/// Headline + Freshness-Chip + Aktualisieren — mehr nicht.
+///
+/// Belegzeilen (Commits, Testbefehle, Dateilisten) und der aufklappbare
+/// Deep-Dive sind am 01.08.2026 ersatzlos entfallen: Die Testbefehle
+/// standen sechsmal fast identisch untereinander, und der Deep-Dive wurde
+/// nie geöffnet. Was zählt, ist der eine Absatz.
 /// Gepinnt unter der Meta-Leiste — beim Öffnen sofort sichtbar, ohne Scrollen.
 struct SessionSummaryCard: View {
     let session: AgentChatSession
 
     @State private var isGenerating = false
     @State private var isStale = false
-    @State private var isDeepDiveExpanded = false
 
     private var summary: AgentSessionSummary? { session.summary }
 
@@ -28,36 +32,6 @@ struct SessionSummaryCard: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let evidence = summary.evidence, !evidence.isEmpty {
-                    evidenceRows(evidence)
-                }
-
-                if !summary.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button {
-                        withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)) {
-                            isDeepDiveExpanded.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 8, weight: .semibold))
-                                .rotationEffect(.degrees(isDeepDiveExpanded ? 90 : 0))
-                            Text("Deep-Dive")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundStyle(AgentTheme.textTertiary)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 2)
-
-                    if isDeepDiveExpanded {
-                        TranscriptMarkdownView(text: summary.details)
-                            .padding(.top, 6)
-                            .overlay(Rectangle().frame(height: 1).foregroundStyle(AgentTheme.border), alignment: .top)
-                            .transition(.opacity)
-                    }
-                }
             } else {
                 Text("Für diesen Chat gibt es noch keine Zusammenfassung.")
                     .font(.system(size: 11.5))
@@ -144,46 +118,6 @@ struct SessionSummaryCard: View {
         .background(background, in: Capsule())
         .overlay(Capsule().stroke(border, lineWidth: 1))
     }
-
-    // MARK: - Evidenz
-
-    @ViewBuilder
-    private func evidenceRows(_ evidence: AgentSessionSummary.Evidence) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            ForEach(Array(evidence.commits.enumerated()), id: \.offset) { _, commit in
-                evidenceRow(glyph: "⌥", color: AgentTheme.accentDiffPos, text: "\(commit.sha.prefix(7)) \(commit.message)")
-            }
-            ForEach(Array(evidence.tests.enumerated()), id: \.offset) { _, test in
-                evidenceRow(glyph: test.passed ? "✓" : "✗",
-                            color: test.passed ? AgentTheme.statusWorking : AgentTheme.statusError,
-                            text: test.command)
-            }
-            ForEach(Array(evidence.filesChanged.prefix(4).enumerated()), id: \.offset) { _, file in
-                evidenceRow(glyph: "±", color: AgentTheme.accent, text: file)
-            }
-            if evidence.filesChanged.count > 4 {
-                evidenceRow(glyph: "·", color: AgentTheme.textTertiary, text: "+ \(evidence.filesChanged.count - 4) weitere Dateien")
-            }
-        }
-        .padding(.leading, 2)
-    }
-
-    private func evidenceRow(glyph: String, color: Color, text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
-            Text(glyph)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(color)
-                .frame(width: 11, alignment: .center)
-            Text(text)
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-        }
-    }
-
-    // MARK: - Zustand
 
     private var relativeAge: String {
         guard let generatedAt = summary?.generatedAt else { return "" }

@@ -833,11 +833,50 @@
      Live-Terminal, dessen Inhalt am Fuß klebt. Mit justify-content:flex-end
      ragt langer Inhalt nach oben aus dem Container und ist nicht scrollbar. */
   .pane-terminal.tx-scroll { justify-content:flex-start; }
-  .tx-meta { flex:none; display:flex; align-items:center; gap:8px; padding:4px 11px; border-bottom:1px solid var(--line);
-             background:var(--paper); font-size:9.5px; color:var(--faint); }
-  .tx-meta .tx-src { font-family:ui-monospace,"SFMono-Regular",Menlo,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .tx-meta .tx-grow { margin-left:auto; flex:none; }
-  .tx-engine { flex:none; padding:1px 5px; border:1px solid var(--line-strong); border-radius:4px; letter-spacing:.02em; }
+  /* Zahlenzeile: die WERTE tragen, die Einheiten treten zurück. Vorher stand
+     dort „143 Nachrichten · 697 Zeilen" in einer Farbe und Größe — alles
+     gleich laut, nichts lesbar auf einen Blick. */
+  .tx-meta { flex:none; display:flex; align-items:baseline; gap:14px; padding:5px 12px;
+             border-bottom:1px solid var(--line); background:var(--paper); }
+  .tx-stat { display:inline-flex; align-items:baseline; gap:4px; }
+  .tx-stat b { font:600 11.5px/1 ui-monospace,"SFMono-Regular",Menlo,monospace; color:var(--muted);
+               font-variant-numeric:tabular-nums; }
+  .tx-stat span { font-size:9.5px; color:var(--faint); }
+  .tx-window { margin-left:auto; flex:none; display:inline-flex; align-items:center; gap:5px;
+               padding:2px 8px; border:1px solid var(--line); border-radius:999px;
+               font-size:9.5px; color:var(--faint); background:var(--white); }
+  .tx-window b { font:600 9.5px/1 ui-monospace,Menlo,monospace; color:var(--muted); font-variant-numeric:tabular-nums; }
+  body.dark .tx-window { background:#17181a; border-color:rgb(255 255 255 / 9%); }
+
+  /* Zusammenfassung — nur noch Text. Belegzeilen (Testbefehle, Dateilisten)
+     und der Deep-Dive sind ersatzlos entfallen: sechs Mal derselbe
+     export-Befehl war Rauschen, der Deep-Dive wurde nie geöffnet. */
+  .tx-card { flex:none; padding:11px 14px 13px; border-bottom:1px solid var(--line); background:var(--white); }
+  .tx-card-head { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .tx-card-label { font-size:8.5px; font-weight:700; letter-spacing:.09em; color:var(--faint); }
+  .tx-fresh { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:999px;
+              font-size:9px; background:color-mix(in srgb, var(--green) 13%, transparent); color:var(--green); }
+  .tx-fresh i { width:4px; height:4px; border-radius:50%; background:currentColor; }
+  .tx-refresh { margin-left:auto; font-size:9.5px; color:var(--faint); cursor:pointer; }
+  .tx-refresh:hover { color:var(--ink); }
+  .tx-card p { margin:0; font-size:12px; line-height:1.55; color:var(--ink); font-weight:500; }
+  body.dark .tx-card { background:#121213; }
+
+  /* Deine Nachrichten: geschlossener Block über die volle Breite — im
+     Terminal das auffälligste Element, deshalb hier ebenso. In der App
+     braucht das einen eigenen TextKit-Fragment-Renderer; ein reines
+     Hintergrund-Attribut faerbte nur hinter den Buchstaben. */
+  .tx-said { margin:2px 0 11px; white-space:pre-wrap; }
+  .tx-said span { background:rgb(0 0 0 / 5.5%); color:#26272c; padding:1px 3px; border-radius:2px;
+                  -webkit-box-decoration-break:clone; box-decoration-break:clone; }
+  body.dark .tx-said span { background:rgb(255 255 255 / 7.5%); color:#d6d7dd; }
+  .tx-strong { font-weight:700; color:var(--ink); }
+  body.dark .tx-strong { color:#e6e7ec; }
+  .tx-link { color:#4b76d1; text-decoration:none; border-bottom:1px solid currentColor; }
+  body.dark .tx-link { color:#7fa2e8; }
+  .tx-table { margin:2px 0 11px; color:#5a5c64; }
+  body.dark .tx-table { color:#9a9ca6; }
+  .tx-churn { color:#8d8f97; }
   .tx-pill { display:inline-flex; align-items:center; gap:6px; margin:0 auto 12px; padding:3px 11px; border:1px solid var(--line-strong);
              border-radius:999px; background:var(--white); color:var(--muted); font-size:10px; cursor:pointer; }
   .tx-pill:hover { background:var(--hover); color:var(--ink); }
@@ -1007,9 +1046,11 @@
     {id:'s9', title:'Steuer 2025', project:'heart', status:'ready', time:'30m', summary:'Belege und Jahresabschluss vorbereiten', account:'Claude2', pct:29, used:'246k', model:'Opus 5 (1M context)', effort:'high', agents:0, stale:false},
     {id:'s10', title:'CLI Skills Export', project:'whisper', status:'idle', time:'45m', kind:'sub', sub:2, summary:'Skill-Sync und Exporter-Tests', account:'ai2', pct:66, used:'563k', model:'Opus 5 (1M context)', effort:'high', agents:1, stale:true},
     {id:'s11', title:'Import-Validierung', project:'list', status:'idle', time:'2h', summary:'CSV-Import und Feldzuordnung', account:'PowerUser', pct:8, used:'71k', model:'gpt-5.6-sol', effort:'medium', agents:0, stale:false,
-     ended:true, rounds:41, bytes:'2,7 MB'},
+     ended:true, rounds:41, bytes:'2,7 MB', messages:64, lines:298, loaded:'2,7 MB',
+     headline:'Der CSV-Import ordnete Spalten nach Position statt nach Kopfzeilen-Namen — bei vertauschten Spalten landeten E-Mails im Namensfeld. Die Zuordnung ist jetzt namensbasiert, 12 Tests grün.'},
     {id:'s12', title:'Steuer 2024', project:'heart', status:'idle', time:'1d', summary:'Archivierter Jahresabschluss', account:'Claude2', pct:5, used:'44k', model:'Opus 5 (1M context)', effort:'low', agents:0, stale:false,
-     ended:true, rounds:133, bytes:'18,2 MB'}
+     ended:true, rounds:133, bytes:'18,2 MB', messages:143, lines:697, loaded:'512 KB',
+     headline:'Belege und Jahresabschluss 2024 sind vollständig aufbereitet: 341 Positionen zugeordnet, vier offene Rechnungen geklärt und der Abschluss an die Steuerkanzlei übergeben.'}
   ];
 
   const workspaces = [
@@ -1518,8 +1559,9 @@
     // Herkunft oben und Fortsetzen unten.
     if(showsTranscript(s)) {
       const index = sessions.findIndex(x=>x.id===s.id);
-      return `<div class="terminal-shell" style="grid-template-rows:auto minmax(0,1fr) auto;">`
+      return `<div class="terminal-shell" style="grid-template-rows:auto auto minmax(0,1fr) auto;">`
         + transcriptMeta(s)
+        + transcriptCard(s)
         + `<div class="terminal">${transcriptBody(s, index)}</div>`
         + transcriptFoot(s)
         + `</div>`;
@@ -1809,61 +1851,108 @@ bleiben stehen.</p>`
     return t.content.firstElementChild;
   };
 
-  // Runde: Nutzer-Prompt, Antworttext, Tool-Aufrufe mit Ergebnis.
-  const txRound = (prompt, blocks) =>
-    `<p class="term-user">❯ ${prompt}</p>` + blocks.join('');
-  const txSay  = t => `<p class="term-block"><span class="term-ok">⏺</span> ${t}</p>`;
-  const txTool = (name, arg, out, cls='term-muted', more='') =>
-    `<p class="term-block term-indent"><span class="term-tool">${name}</span>(${arg})<br>`
-    + `<span class="${cls}">⎿  ${out}</span>`
-    + (more?`<br><span class="tx-more">… ${more}</span>`:'') + `</p>`;
-  const txThink = t => `<p class="term-block tx-think">✻ ${t}</p>`;
+  // ——— Bausteine im Format der Claude-Code-CLI ————————————————————
+  // Deine Nachricht: geschlossener grauer Block, kein Marker — so steht sie
+  // auch im Terminal.
+  const txSaid = t => `<div class="tx-said"><span>${t}</span></div>`;
+  // Antwort des Agenten. Inline-Markdown (**fett**, [text](url)) wird
+  // aufgeloest — im Terminal ist das ebenfalls formatiert, nicht roh.
+  const txSay  = t => `<p class="term-block"><span class="term-ok">●</span> ${inline(t)}</p>`;
+  // Tool-Aufruf plus Ergebnis. HARTE GRENZE: vier Zeilen, danach nur noch
+  // die Zaehlung — genau wie die CLI. Der Verlauf soll das Geschriebene
+  // zeigen, nicht das Terminal-Protokoll nachdrucken.
+  const TX_OUTPUT_LINES = 4;
+  const txTool = (name, arg, out, cls='term-muted') => {
+    const lines = out.split('\n');
+    const shown = lines.slice(0, TX_OUTPUT_LINES);
+    const hidden = lines.length - shown.length;
+    return `<p class="term-block term-indent"><span class="term-tool">${name}</span>(${arg})<br>`
+      + shown.map((l,i)=>`<span class="${cls}">${i===0?'⎿  ':'   '}${l}</span>`).join('<br>')
+      + (hidden>0?`<br><span class="tx-more">   … +${hidden} ${hidden===1?'Zeile':'Zeilen'}</span>`:'')
+      + `</p>`;
+  };
+  const txThink = t => `<p class="term-block tx-churn">✻ ${t}</p>`;
+  // Tabellen als Box-Zeichen: im Monospace-Fluss die ehrlichste Form, und
+  // exakt das Bild aus dem Terminal.
+  const txTable = rows => `<p class="term-block tx-table">${rows.join('<br>')}</p>`;
+
+  // Minimales Inline-Markdown: **fett** und [text](url).
+  function inline(text) {
+    return text
+      .replace(/(https?:\/\/[^\s]+)/g, '<a class="tx-link" href="#" onclick="return false">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<span class="tx-strong">$1</span>');
+  }
 
   // Drei Verlaufs-Varianten, damit nebeneinanderliegende Panes nicht
-  // identisch aussehen — inhaltlich an der jeweiligen Session orientiert.
+  // identisch aussehen. Die Tool-Ausgaben sind bewusst LAENGER als vier
+  // Zeilen — nur so ist im Mockup sichtbar, wie stark gekuerzt wird.
   const TX_VARIANTEN = [
-    s => txRound(s.summary, [
+    s => [
+      txSaid('Prüf bitte, warum die App beim Öffnen mehrerer Chats einfriert.'),
       txThink('prüft die betroffenen Dateien und die bestehenden Invarianten'),
-      txSay('Ich sehe mir zuerst an, wie der Zustand heute geschrieben wird.'),
+      txSay('Ich sehe mir zuerst an, wie der Verlauf heute gerendert wird.'),
       txTool('Read', 'WhisperM8/Views/AgentChatsView.swift', '2426 Zeilen'),
-      txTool('Grep', '"defaultScrollAnchor" in Views/', '3 Treffer in 3 Dateien'),
-      txSay('Alle drei Ansichten hängen am selben Muster. Ich ziehe den Anker heraus und ersetze ihn durch ein Scrollen nach dem Erscheinen.'),
-      txTool('Edit', 'WhisperM8/Views/Transcript/AgentTimelineView.swift', '1 Änderung übernommen', 'term-ok', '+12 −4 Zeilen (ctrl+o zum Aufklappen)'),
-      txTool('Bash', 'swift build 2>&1 | tail -3', 'Build complete! (14.8s)', 'term-ok'),
-      txSay('Build ist grün. Ich lasse noch die fokussierten Tests laufen.'),
-      txTool('Bash', 'swift test --filter Transcript', '18 Tests, 0 Fehler', 'term-ok')
-    ]),
-    s => txRound(s.summary, [
-      txSay('Ich fasse den Stand zusammen und arbeite die offenen Punkte der Reihe nach ab.'),
-      txTool('Read', 'docs/plans/workspace-performance/README.md', '214 Zeilen'),
-      txTool('Bash', 'git log --oneline -8', '8 Commits seit gestern', 'term-muted'),
-      txThink('wägt ab, ob der Umbau vor oder nach der Messung sinnvoll ist'),
-      txSay('Zwei der vier Befunde waren Messfehler — die verbleibenden betreffen genau den Code, den der Umbau ohnehin ersetzt.'),
-      txTool('Bash', 'scripts/perf-report.sh 30m', 'kein Budget-Verstoß in 30 min', 'term-ok'),
-      txTool('Write', 'docs/plans/workspace-performance/05-entscheidungen/…', 'Datei angelegt', 'term-ok', '+64 Zeilen'),
-      txSay('Ergebnis steht in den Entscheidungen. Der Umbau kann direkt beginnen.')
-    ]),
-    s => txRound(s.summary, [
+      txTool('Grep', '"defaultScrollAnchor" in Views/',
+        'AgentTimelineView.swift:79\nAgentChatTranscriptView.swift:118\nTerminalSnapshotView.swift:42\n3 Treffer in 3 Dateien\n(Suche über 214 Dateien, 0,4 s)'),
+      txSay('Alle drei Ansichten hängen am **selben Muster**. Ich ziehe den Anker heraus und scrolle stattdessen nach dem Erscheinen ans Ende.'),
+      txTool('Edit', 'WhisperM8/Views/Transcript/AgentTimelineView.swift', '1 Änderung übernommen\n+12 −4 Zeilen', 'term-ok'),
+      txTool('Bash', 'swift build 2>&1 | tail -3',
+        'Compiling WhisperM8 (214 sources)\nLinking WhisperM8\nBuild complete! (14.8s)', 'term-ok'),
+      txSay('Build ist grün. Jetzt die fokussierten Tests.'),
+      txTool('Bash', 'swift test --filter Transcript',
+        'Test Suite Transcript startet\n18 Tests, 0 Fehler\nDauer: 2,1 s', 'term-ok'),
+      txSay('**18 Tests grün.** Das Einfrieren ist weg — die Layout-Kosten hängen jetzt an der sichtbaren Fläche, nicht an der Länge des Verlaufs.')
+    ].join(''),
+    s => [
+      txSaid('Was ist der Stand? Und läuft auf der alten Seite eigentlich Tracking?'),
+      txSay('Gut, dass du fragst — das ist zeitkritisch. Ich sehe sofort nach.'),
+      txTool('Bash', 'curl -sS -L --max-time 60 https://tisto.net/ -o tn.html && python3 -c "…"',
+        'Google Tag Manager (GTM-)   [\'GTM-P4HMQD2\']\nMeta Pixel (noscript)       [\'615906596963540\']\nSite Kit (GA4)             aktiv\nPixelYourSite              aktiv\nGTM Server-Side            aktiv\nCookie-Banner              Cookiebot'),
+      txSay('Gefunden — und die Nachricht ist besser als befürchtet. Auf https://tisto.net läuft:'),
+      txTable([
+        '| Dienst              | Kennung                    |',
+        '|---------------------|----------------------------|',
+        '| Google Tag Manager  | GTM-P4HMQD2                |',
+        '| Meta Pixel          | 615906596963540            |'
+      ]),
+      txSay('Im neuen Shop ist **kein Tracking** eingebaut. Wenn am Launch-Tag Kampagnen laufen, brechen alle Messungen ab — das muss vor dem Umzug geklärt sein, nicht danach.')
+    ].join(''),
+    s => [
+      txSaid('Der Import-Test ist rot. Schau dir das an und mach es fertig.'),
       txSay('Ich prüfe zuerst, ob der Fehler reproduzierbar ist.'),
-      txTool('Bash', 'swift test --filter Import 2>&1 | tail', '1 Test fehlgeschlagen', 'term-err'),
+      txTool('Bash', 'swift test --filter Import 2>&1 | tail',
+        'ImportTests.testSpaltenZuordnung FEHLGESCHLAGEN\n  erwartet: ["name","email","firma"]\n  war:      ["email","name","firma"]\n1 Test fehlgeschlagen, 11 bestanden\nDauer: 3,4 s', 'term-err'),
       txTool('Read', 'Tests/WhisperM8Tests/ImportTests.swift', '188 Zeilen'),
-      txSay('Der Test erwartet eine Spaltenreihenfolge, die der Importer nicht garantiert. Ich mache die Zuordnung namensbasiert.'),
-      txTool('Edit', 'WhisperM8/Services/Import/ColumnMapper.swift', '2 Änderungen übernommen', 'term-ok', '+27 −9 Zeilen'),
-      txTool('Bash', 'swift test --filter Import', '12 Tests, 0 Fehler', 'term-ok'),
+      txSay('Der Test erwartet eine Spaltenreihenfolge, die der Importer nicht garantiert. Ich mache die Zuordnung **namensbasiert** statt positionsbasiert.'),
+      txTool('Edit', 'WhisperM8/Services/Import/ColumnMapper.swift', '2 Änderungen übernommen\n+27 −9 Zeilen', 'term-ok'),
+      txTool('Bash', 'swift test --filter Import', '12 Tests, 0 Fehler\nDauer: 3,1 s', 'term-ok'),
       txSay('Behoben. Die Zuordnung hängt jetzt an den Kopfzeilen-Namen statt an der Position.')
-    ])
+    ].join('')
   ];
 
-  // Kopfzeile: ersetzt den Modus-Umschalter (Terminal|Chat|Roh). Statt
-  // einer Auswahl steht dort, WORAUS gelesen wird und wie viel offen ist.
+  // Kopfzeile: ersetzt den Modus-Umschalter (Terminal|Chat|Roh). Die WERTE
+  // tragen, die Einheiten treten zurueck — vorher stand dort alles in einer
+  // Groesse und Farbe.
   function transcriptMeta(s) {
-    const p = project(s.project);
-    const provider = s.model && s.model.startsWith('gpt') ? '.codex/sessions' : '.claude/projects';
+    const nachrichten = s.messages || 143;
+    const zeilen = s.lines || 697;
     return `<div class="tx-meta">`
-      + `<span>${s.rounds||64} Runden</span>`
-      + `<span class="tx-src" title="Quelle des Verlaufs">~/${provider}/${p.name}…/${s.id}.jsonl · ${s.bytes||'1,4 MB'}</span>`
-      + `<span class="tx-grow tx-engine" title="Ein NSTextView (TextKit 2): gelayoutet wird nur der sichtbare Ausschnitt — unabhängig von der Länge des Verlaufs.">TextKit 2</span>`
+      + `<span class="tx-stat"><b>${nachrichten}</b><span>Nachrichten</span></span>`
+      + `<span class="tx-stat"><b>${zeilen}</b><span>Zeilen</span></span>`
+      + `<span class="tx-window" title="Geladenes Lesefenster — der Rest wird auf Anforderung nachgeladen">`
+      + `<b>${s.loaded||'512 KB'}</b><span>von</span><b>${s.bytes||'2 MB'}</b><span>geladen</span></span>`
       + `</div>`;
+  }
+
+  // Zusammenfassung — NUR noch der Text. Belegzeilen (sechs Mal derselbe
+  // Testbefehl, Dateilisten) und der Deep-Dive sind ersatzlos entfallen.
+  function transcriptCard(s) {
+    return `<div class="tx-card">`
+      + `<div class="tx-card-head">`
+      + `<span class="tx-card-label">ZUSAMMENFASSUNG</span>`
+      + `<span class="tx-fresh"><i></i>Aktuell · vor 12 Min.</span>`
+      + `<span class="tx-refresh" data-toast="Zusammenfassung neu erzeugen">↻ Aktualisieren</span>`
+      + `</div><p>${s.headline || s.summary}</p></div>`;
   }
 
   // Fußzeile: beendete Session → Fortsetzen. Laufende → Live-Hinweis.
@@ -1877,21 +1966,16 @@ bleiben stehen.</p>`
   }
 
   function transcriptBody(s, index) {
-    const variante = TX_VARIANTEN[index % TX_VARIANTEN.length](s);
     // Kopf des Fensters: entweder gibt es früheren Verlauf zum Nachladen,
-    // oder der Anfang ist erreicht. Beides ersetzt die heutigen harten
-    // Deckel („… 2000 Zeichen abgeschnitten"), die Inhalt verschluckt haben.
+    // oder der Anfang ist erreicht. Das Fenster begrenzt nur noch, wie viel
+    // GELADEN ist — dargestellt wird davon alles.
     const kopf = (s.rounds||64) > 60
-      ? `<div class="tx-center"><button class="tx-pill" data-toast="Lesefenster vergrößern — der Rest des Verlaufs wird nachgeladen">⟲ Früheren Verlauf laden<span class="tx-hint">Fenster 2 MB → 8 MB</span></button></div>`
+      ? `<div class="tx-center"><button class="tx-pill" data-toast="Lesefenster vergrößern — der Rest des Verlaufs wird nachgeladen">⟲ Früheren Verlauf laden<span class="tx-hint">512 KB → 2 MB</span></button></div>`
       : `<div class="tx-center"><span class="tx-start">Anfang der Konversation</span></div>`;
-    // Vier aufeinanderfolgende Runden — genug Inhalt, um Scrollen, Dichte
+    // Drei aufeinanderfolgende Runden — genug Inhalt, um Scrollen, Dichte
     // und Lesbarkeit realistisch zu beurteilen.
-    const folge = ['❯ Übernimm das bitte und lass die Tests laufen.',
-                   '❯ Sieht gut aus. Bau noch den Fall mit leerem Verlauf ein.',
-                   '❯ Commit das und fass zusammen, was offen bleibt.']
-      .map((frage,k)=> TX_VARIANTEN[(index+k+1) % TX_VARIANTEN.length](s).replace(/❯ [^<]*/, frage))
-      .join('');
-    return `<div class="term-body">` + kopf + variante + folge + `</div>`;
+    const runden = [0,1,2].map(k=> TX_VARIANTEN[(index+k) % TX_VARIANTEN.length](s)).join('');
+    return `<div class="term-body">` + kopf + runden + `</div>`;
   }
 
   function terminalFor(sid) {
@@ -1903,8 +1987,9 @@ bleiben stehen.</p>`
       el.className='pane-terminal tx-scroll';
       el.innerHTML = transcriptBody(s, index);
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;';
+      wrap.style.cssText = 'min-height:0;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;';
       wrap.appendChild(elementFromHTML(transcriptMeta(s)));
+      wrap.appendChild(elementFromHTML(transcriptCard(s)));
       wrap.appendChild(el);
       wrap.appendChild(elementFromHTML(transcriptFoot(s)));
       // Wie die App: der Verlauf öffnet am ENDE, bei der neuesten Runde.

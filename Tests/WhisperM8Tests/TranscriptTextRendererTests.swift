@@ -26,16 +26,18 @@ final class TranscriptTextRendererTests: XCTestCase {
 
     // MARK: - Rollen und Marker
 
-    func testUserPromptBekommtPromptMarker() {
+    /// Nutzer-Nachrichten tragen KEINEN Marker — sie heben sich über den
+    /// Hintergrund ab, genau wie im Terminal.
+    func testUserNachrichtOhneMarker() {
         let lines = render([message(.user, [.text("Bitte prüfe den Stand.")])])
         XCTAssertEqual(lines.first?.style, .prompt)
-        XCTAssertEqual(lines.first?.text, "❯ Bitte prüfe den Stand.")
+        XCTAssertEqual(lines.first?.text, "Bitte prüfe den Stand.")
     }
 
     func testAssistantAntwortBekommtAntwortMarker() {
         let lines = render([message(.assistant, [.text("Erledigt.")])])
         XCTAssertEqual(lines.first?.style, .answer)
-        XCTAssertEqual(lines.first?.text, "⏺ Erledigt.")
+        XCTAssertEqual(lines.first?.text, "● Erledigt.")
     }
 
     func testSystemNachrichtWirdAlsMetaGerendert() {
@@ -48,7 +50,7 @@ final class TranscriptTextRendererTests: XCTestCase {
     /// zusammenbleibt — sonst zerfällt ein mehrzeiliger Absatz.
     func testMehrzeiligerTextWirdEingerueckt() {
         let lines = render([message(.assistant, [.text("Zeile eins\nZeile zwei")])])
-        XCTAssertEqual(lines.map(\.text), ["⏺ Zeile eins", "  Zeile zwei"])
+        XCTAssertEqual(lines.map(\.text), ["● Zeile eins", "  Zeile zwei"])
         XCTAssertTrue(lines.allSatisfy { $0.style == .answer })
     }
 
@@ -64,7 +66,7 @@ final class TranscriptTextRendererTests: XCTestCase {
         let input = #"{"file_path":"/repo/WhisperM8/Views/AgentChatsView.swift"}"#
         let lines = render([message(.assistant, [.toolUse(name: "Read", input: input)])])
         XCTAssertEqual(lines.first?.style, .tool)
-        XCTAssertTrue(lines.first?.text.hasPrefix("⏺ Read(") == true, "war: \(lines.first?.text ?? "-")")
+        XCTAssertTrue(lines.first?.text.hasPrefix("● Read(") == true, "war: \(lines.first?.text ?? "-")")
         XCTAssertTrue(lines.first?.text.contains("AgentChatsView.swift") == true)
     }
 
@@ -128,7 +130,7 @@ final class TranscriptTextRendererTests: XCTestCase {
             message(.assistant, [.text("   \n  ")]),
             message(.assistant, [.text("Da.")])
         ])
-        XCTAssertEqual(lines.map(\.text), ["⏺ Da."])
+        XCTAssertEqual(lines.map(\.text), ["● Da."])
     }
 
     func testNachrichtenWerdenDurchLeerzeileGetrennt() {
