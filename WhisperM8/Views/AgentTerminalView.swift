@@ -24,6 +24,17 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     /// window-drag behavior.
     override var mouseDownCanMoveWindow: Bool { false }
 
+    /// SwiftTerm legt den Scroller auf `.overlay` — und Overlay-Scroller
+    /// blenden ihren Knob aus, sobald man kurz nicht scrollt. Übrig blieb die
+    /// Rinne ohne Positionsanzeige. `.legacy` hält den Knob dauerhaft
+    /// sichtbar, so wie es der User vom Terminal erwartet.
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if scrollerStyle != .legacy {
+            scrollerStyle = .legacy
+        }
+    }
+
     /// SwiftTerms Metal-GPU-Renderer — Opt-in, Default aus (Begründung in
     /// `AppPreferences.isAgentTerminalMetalRendererEnabled`: das Schriftbild
     /// leidet, der Gewinn ist unbelegt). Einmal pro Prozess gelesen —
