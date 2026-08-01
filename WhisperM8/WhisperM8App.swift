@@ -255,6 +255,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // reagiert — unabhängig davon, wer ihn blockiert. Kostet zehn
         // Timer-Ticks pro Sekunde und läuft deshalb immer mit.
         MainThreadStallMonitor.shared.start()
+        // Einmalig: Terminal-Snapshots wegräumen — seit der Verlaufsansicht
+        // liest sie niemand mehr, geschrieben werden sie auch nicht mehr.
+        LegacyDataCleanup.removeObsoleteTerminalSnapshots()
         // Ereignis-Zähler für die dichten Pfade — no-op, solange
         // `agentPerfDetailEnabled` aus ist (Default).
         PerformanceCounters.shared.startIfEnabled()

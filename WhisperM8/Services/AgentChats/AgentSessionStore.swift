@@ -474,11 +474,6 @@ struct AgentSessionStore {
         // Crash-safe: strukturelle Loeschung sofort persistieren (Review-
         // Befund 2026-07-13: Doku versprach das, der Code tat es nicht).
         workspaceStore.flush(reason: "delete-session")
-        // Terminal-Snapshot-Sidecar mit entsorgen (I/O bewusst NACH der
-        // Mutation, nie in der Closure).
-        DispatchQueue.global(qos: .utility).async {
-            TerminalSnapshotStore.shared.delete(sessionID: id)
-        }
     }
 
     /// Loescht mehrere Sessions in EINER Mutation. Fuer Massenaufraeumen
@@ -498,11 +493,6 @@ struct AgentSessionStore {
         }
         guard removed > 0 else { return 0 }
         workspaceStore.flush(reason: "delete-sessions")
-        DispatchQueue.global(qos: .utility).async {
-            for id in ids {
-                TerminalSnapshotStore.shared.delete(sessionID: id)
-            }
-        }
         return removed
     }
 
@@ -525,12 +515,6 @@ struct AgentSessionStore {
             return true
         }
         workspaceStore.flush(reason: "delete-project")
-        if !removedSessionIDs.isEmpty {
-            let ids = removedSessionIDs
-            DispatchQueue.global(qos: .utility).async {
-                TerminalSnapshotStore.shared.delete(sessionIDs: ids)
-            }
-        }
     }
 
     func markStaleRunningSessionsClosed(excluding activeSessionIDs: Set<UUID> = []) throws {
