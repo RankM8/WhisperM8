@@ -103,6 +103,7 @@ build:
 	@scripts/patch-resource-accessors.sh release; status=$$?; \
 	if [ $$status -eq 3 ]; then \
 		echo "♻️  Resource-Accessors frisch gepatcht — Rebuild..."; \
+		find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
 		swift build -c release --disable-sandbox; \
 	elif [ $$status -ne 0 ]; then \
 		exit $$status; \
