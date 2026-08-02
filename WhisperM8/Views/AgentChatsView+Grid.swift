@@ -907,7 +907,9 @@ extension AgentChatsView {
             sourceWindowID: windowID,
             sourceWorkspaceID: workspaceID,
             sourceSlotIndex: slotIndex
-        ))
+        )) {
+            SessionDragPreview(title: session.title)
+        }
         // Vereinheitlichtes Session-Kontextmenü — bewusst am HEADER, nicht
         // am Terminal-Inhalt (dort gehört der Rechtsklick dem PTY). Die
         // Header-Buttons bleiben als Schnellzugriff unverändert.

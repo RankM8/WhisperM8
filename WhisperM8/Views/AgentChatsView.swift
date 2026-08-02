@@ -1642,7 +1642,9 @@ struct AgentChatsView: View {
             sessionID: session.id,
             sourceProjectID: session.projectID,
             sourceWindowID: windowID
-        ))
+        )) {
+            SessionDragPreview(title: session.title)
+        }
         .contextMenu {
             sessionContextMenu(session, context: .sidebarRow)
         }
@@ -1697,7 +1699,9 @@ struct AgentChatsView: View {
             sessionID: session.id,
             sourceProjectID: session.projectID,
             sourceWindowID: windowID
-        ))
+        )) {
+            SessionDragPreview(title: session.title)
+        }
         .contextMenu {
             sessionContextMenu(session, context: .sidebarRow)
         }

@@ -247,7 +247,9 @@ extension AgentChatsView {
             sessionID: session.id,
             sourceProjectID: session.projectID,
             sourceWindowID: windowID
-        ))
+        )) {
+            SessionDragPreview(title: session.title)
+        }
     }
 
     // MARK: - Subagent-Kinder (geteilt — siehe +SubagentChildren)
