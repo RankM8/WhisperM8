@@ -233,6 +233,20 @@ enum PerfBudgets {
     )
     static let sidebarModelBuild = PerformanceBudget(name: "sidebar.modelBuild", budget: 0.0167, signposter: PerfSignposts.sidebar)
 
+    /// Die Arbeit, die JEDER abgeschlossene Scan auf dem Main Thread nach sich
+    /// zieht: Workspace neu laden, Projekt-Icons erkennen, Auto-Benennung
+    /// anstossen — pro offenem Fenster.
+    ///
+    /// **Warum eigens gemessen (02.08.2026):** Der Main Thread stand mehrfach
+    /// pro Minute ueber eine Sekunde, ohne dass ein einziger Messpunkt es
+    /// zeigte. Genau dafuer ist der `MainThreadStallMonitor` da — und diese
+    /// Kette ist der konkreteste Verdaechtige, den die Analyse uebrig liess:
+    /// sie haengt an `scanDidCompleteNotification`, laeuft also auch nach
+    /// Scans, die nichts geaendert haben, und iteriert dabei ueber den
+    /// gesamten Workspace. Ob sie die Sekunden erklaert, ist damit ab dem
+    /// naechsten Lauf keine Vermutung mehr.
+    static let sidebarScanFollowUp = PerformanceBudget(name: "sidebar.scanFollowUp", budget: 0.050, signposter: PerfSignposts.sidebar)
+
     // Grid-Workspace (Budgets aus docs/plans/grid-workspace-plan.html, Abschnitt 05;
     // Freigabe-Gates sind p95-Werte, Einzelverletzungen sind Hinweise, keine Fehler).
     /// Grid-Aufbau: showsGrid → alle erwarteten Terminal-Panes attached.

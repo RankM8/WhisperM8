@@ -313,6 +313,10 @@ struct AgentChatsView: View {
     /// Sessions, für die gerade der Archivieren-Bestätigungsdialog offen ist
     /// (nur gesetzt, wenn mindestens ein Terminal der Gruppe läuft).
     @State var sessionsPendingArchive: [AgentChatSession]?
+    /// Sessions, für die gerade der Beenden-Bestätigungsdialog offen ist
+    /// (Hover-Aktion im Scope „Aktiv"; nur gesetzt, wenn mindestens ein
+    /// Terminal der Gruppe läuft — nichts Laufendes stirbt unbestätigt).
+    @State var sessionsPendingEnd: [AgentChatSession]?
     /// `true` solange die Sidebar den Archiv-Modus zeigt (Footer-Button) —
     /// gleiche Listen-UI, aber archivierte Chats mit „Wiederherstellen".
     @State var archiveModeActive = false
@@ -800,6 +804,27 @@ struct AgentChatsView: View {
                 ? "Der Chat läuft noch — beim Archivieren wird das Terminal beendet. Der Chat bleibt im Archiv erhalten und lässt sich wiederherstellen."
                 : "\(running) von \(sessions.count) Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen.")
         }
+        .confirmationDialog(
+            "Chat beenden?",
+            isPresented: Binding(
+                get: { sessionsPendingEnd != nil },
+                set: { if !$0 { sessionsPendingEnd = nil } }
+            ),
+            presenting: sessionsPendingEnd
+        ) { sessions in
+            Button(sessions.count == 1 ? "Beenden" : "\(sessions.count) Chats beenden") {
+                commitEndSession(sessions)
+                sessionsPendingEnd = nil
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { sessions in
+            let running = sessions.filter {
+                terminalRegistry.controller(for: $0.id)?.isRunning == true
+            }.count
+            Text(sessions.count == 1
+                ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen. Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
+                : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.")
+        }
         .sheet(item: $pendingBackgroundDispatch) { pending in
             BackgroundDispatchModal(
                 project: pending.project,
@@ -972,12 +997,18 @@ struct AgentChatsView: View {
             autoRenamingSessionIDs = autoNamer?.inFlight ?? []
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanDidCompleteNotification)) { _ in
-            // Workspace neu laden — der Coordinator hat moeglicherweise neue
-            // Sessions importiert oder Stale-Running-States gefixt.
-            loadWorkspaceFast()
-            attemptAutoDetectProjectIcons()
-            // Auto-Rename fuer alle generisch-benannten Sessions anstossen.
-            forceAutoNameUntitledSessions()
+            // Diese drei Schritte laufen nach JEDEM Scan auf dem Main Thread —
+            // auch nach Scans, die nichts geaendert haben — und jeder von
+            // ihnen geht ueber den gesamten Workspace. Deshalb gemessen:
+            // siehe `PerfBudgets.sidebarScanFollowUp`.
+            PerfBudgets.sidebarScanFollowUp.withInterval {
+                // Workspace neu laden — der Coordinator hat moeglicherweise neue
+                // Sessions importiert oder Stale-Running-States gefixt.
+                loadWorkspaceFast()
+                attemptAutoDetectProjectIcons()
+                // Auto-Rename fuer alle generisch-benannten Sessions anstossen.
+                forceAutoNameUntitledSessions()
+            }
         }
     }
 
@@ -1433,7 +1464,8 @@ struct AgentChatsView: View {
                                 expandedProjectIDs.insert(project.id)
                                 createDefaultSession()
                             },
-                            onCloseSession: { archiveSelection(forID: $0.id) },
+                            onCloseSession: { closeSelectionFromSidebar(forID: $0.id) },
+                            sidebarScope: effectiveScope,
                             onRename: renameSession,
                             sessionMenu: { AnyView(sessionContextMenu($0, context: .sidebarRow)) },
                             subagentChildMenu: { AnyView(sessionContextMenu($0, context: .subagentChild)) },
@@ -1574,6 +1606,7 @@ struct AgentChatsView: View {
         order: [UUID],
         split: SubagentChildSplit? = nil
     ) -> some View {
+        let closeAction = sidebarCloseAction(for: session)
         PinnedSessionRow(
             session: session,
             project: project,
@@ -1581,6 +1614,8 @@ struct AgentChatsView: View {
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
+            closeIcon: closeAction.icon,
+            closeHelp: closeAction.help,
             runningChildCount: split?.workingCount ?? 0,
             erroredChildCount: split?.erroredCount ?? 0,
             unreadChildCount: split?.hiddenUnreadCount ?? 0,
@@ -1592,7 +1627,7 @@ struct AgentChatsView: View {
                     selectedSessionID = session.id
                 }
             },
-            onClose: { requestArchive([session]) }
+            onClose: { performSidebarCloseAction([session]) }
         )
         // Sidebar-Quelle für Grid-/Workspace-Drops (Add/Place-Semantik).
         .draggable(DraggableSession(
@@ -1625,6 +1660,7 @@ struct AgentChatsView: View {
         order: [UUID],
         split: SubagentChildSplit? = nil
     ) -> some View {
+        let closeAction = sidebarCloseAction(for: session)
         PinnedSessionRow(
             session: session,
             project: project,
@@ -1632,6 +1668,8 @@ struct AgentChatsView: View {
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
+            closeIcon: closeAction.icon,
+            closeHelp: closeAction.help,
             runningChildCount: split?.workingCount ?? 0,
             erroredChildCount: split?.erroredCount ?? 0,
             unreadChildCount: split?.hiddenUnreadCount ?? 0,
@@ -1644,7 +1682,7 @@ struct AgentChatsView: View {
                     selectedSessionID = session.id
                 }
             },
-            onClose: { requestArchive([session]) }
+            onClose: { performSidebarCloseAction([session]) }
         )
         // Sidebar-Quelle für Grid-/Workspace-Drops (Add/Place-Semantik).
         .draggable(DraggableSession(
@@ -2036,8 +2074,17 @@ struct AgentChatsView: View {
     /// Effektiver Scope: die Suche überstimmt den Scope-Filter — tippt der
     /// User etwas, wird IMMER über alle Chats gesucht, egal welcher Filter
     /// gewählt ist (sonst „warum finde ich meinen Chat nicht").
-    private var effectiveScope: SidebarScope {
+    /// `internal`, weil die Sidebar-Hover-Aktion (+Tabs) daran hängt: gezeigt
+    /// wird immer die Aktion zum SICHTBAREN Inhalt, nicht zum gespeicherten
+    /// Filter.
+    var effectiveScope: SidebarScope {
         searchText.trimmingCharacters(in: .whitespaces).isEmpty ? sidebarScope : .all
+    }
+
+    /// Icon + Tooltip der Hover-Aktion einer Sidebar-Chat-Zeile, aufgelöst am
+    /// effektiven Scope — `performSidebarCloseAction` führt genau das aus.
+    func sidebarCloseAction(for session: AgentChatSession) -> SidebarCloseAction {
+        SidebarCloseAction.resolve(scope: effectiveScope, session: session)
     }
 
     /// Baut den auswertbaren Filter aus dem effektiven Scope + Live-Inputs.
@@ -3146,11 +3193,19 @@ struct AgentChatsView: View {
     func forceAutoNameUntitledSessions() {
         guard let autoNamer else { return }
 
+        // Projekte einmal indizieren statt pro Session linear zu suchen: Bei
+        // 1971 Sessions und 79 Projekten waren das rund 155.000 Vergleiche —
+        // nach JEDEM abgeschlossenen Scan und pro offenem Fenster. Das
+        // Dictionary kostet einen Durchlauf und macht daraus 1971 Zugriffe.
+        let projectsByID = Dictionary(
+            workspace.projects.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let candidates: [(session: AgentChatSession, project: AgentProject)] = workspace.sessions.compactMap { session in
             guard session.status != .archived else { return nil }
             guard session.externalSessionID != nil else { return nil }
             guard isDefaultUntitled(session) else { return nil }
-            guard let project = workspace.projects.first(where: { $0.id == session.projectID }) else { return nil }
+            guard let project = projectsByID[session.projectID] else { return nil }
             return (session, project)
         }
 
