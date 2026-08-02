@@ -401,6 +401,16 @@ struct AppPreferences {
     /// Kill-Switch für das event-getriebene Transcript-Watching (P2). Bei
     /// Problemen ohne Rebuild zurück zum reinen 1,5-s-Polling:
     /// `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`
+    /// Verdichtet das Grid beim Entfernen eines Chats: die uebrigen ruecken
+    /// nach, die Stufe faellt auf die kleinste passende. Aus heisst: das Loch
+    /// bleibt stehen und die Stufe auch — die feste Position ueberlebt dann
+    /// jedes Entfernen.
+    /// `defaults write com.whisperm8.app gridAutoCompactEnabled -bool NO`
+    var isGridAutoCompactEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.gridAutoCompactEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.gridAutoCompactEnabled) }
+    }
+
     var isAgentEventDrivenWatchEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.agentEventDrivenWatchEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.agentEventDrivenWatchEnabled) }
@@ -641,6 +651,7 @@ enum PreferenceKeys {
     static let agentSidebarDragEnabled = "agentSidebarDragEnabled"
     static let agentTabGroupingEnabled = "agentTabGroupingEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
+    static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"

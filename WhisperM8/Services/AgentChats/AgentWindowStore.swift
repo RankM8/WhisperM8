@@ -472,7 +472,10 @@ final class AgentWindowStore {
     func removeSession(_ sessionID: UUID, fromGridWorkspace workspaceID: UUID) -> Bool {
         guard let entity = gridWorkspace(id: workspaceID),
               let removedIndex = entity.slotIndex(of: sessionID) else { return false }
-        let (updated, removed) = WorkspaceSlotOps.remove(sessionID, from: entity)
+        let (updated, removed) = WorkspaceSlotOps.remove(
+            sessionID, from: entity,
+            compacting: AppPreferences.shared.isGridAutoCompactEnabled
+        )
         guard removed else { return false }
         mutate { state in
             guard let index = state.gridWorkspaces.firstIndex(where: { $0.id == workspaceID })

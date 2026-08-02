@@ -403,7 +403,8 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         store.setGridFocusedSession(s[1], in: w)
 
         XCTAssertTrue(store.removeSession(s[1], fromGridWorkspace: id))
-        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], nil, s[2]])
+        // Verdichtet: Das Loch schliesst sich, die Stufe faellt von 3 auf 2.
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], s[2]])
         XCTAssertEqual(store.selectedSession(in: w), s[2], "nächster belegter Slot")
         XCTAssertTrue(store.openTabIDs(in: w).contains(s[1]), "Tab bleibt offen")
     }
@@ -458,7 +459,10 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
 
         XCTAssertTrue(store.removeSession(ids[1], fromGridWorkspace: id))
         XCTAssertTrue(store.removeSession(ids[2], fromGridWorkspace: id))
-        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [ids[0], nil, nil, ids[3]])
+        // Verdichtet: Zwei Entfernungen lassen keine Loecher zurueck, die
+        // Stufe ist bereits auf 2 gefallen — ein Shrink findet nichts mehr
+        // zu tun.
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [ids[0], ids[3]])
 
         XCTAssertEqual(store.setCapacity(ofGridWorkspace: id, to: 2), .applied)
         XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [ids[0], ids[3]])

@@ -101,24 +101,36 @@ final class WorkspaceSlotOpsTests: XCTestCase {
 
     // MARK: - Entfernen / Verschieben / Tauschen
 
-    func testRemoveLeavesNilAtOriginalIndex() {
+    /// Mit abgeschaltetem Verdichten gilt die alte Zusage weiter: Die
+    /// Position ist fest, das Loch bleibt stehen.
+    func testRemoveWithoutCompactingLeavesNilAtOriginalIndex() {
         let a = UUID(); let b = UUID(); let c = UUID()
         let (updated, removed) = WorkspaceSlotOps.remove(
-            b, from: workspace(slots: [a, b, c], capacity: 3)
+            b, from: workspace(slots: [a, b, c], capacity: 3), compacting: false
         )
         XCTAssertTrue(removed)
         XCTAssertEqual(updated.slots, [a, nil, c], "Nachbarn unverändert, nichts rückt nach")
     }
 
-    func testRemoveDoesNotAutoShrink() {
+    func testRemoveWithoutCompactingDoesNotShrink() {
         let a = UUID()
         var slots: [UUID?] = Array(repeating: nil, count: 9)
         slots[3] = a
         let (updated, removed) = WorkspaceSlotOps.remove(
-            a, from: workspace(slots: slots, capacity: 9)
+            a, from: workspace(slots: slots, capacity: 9), compacting: false
         )
         XCTAssertTrue(removed)
-        XCTAssertEqual(updated.capacity, 9, "nie automatisch schrumpfen")
+        XCTAssertEqual(updated.capacity, 9, "ohne Verdichten nie automatisch schrumpfen")
+    }
+
+    /// Der Normalfall seit dem Smart-Grid: Loch schliessen, Stufe senken.
+    func testRemoveCompactsByDefault() {
+        let a = UUID(); let b = UUID(); let c = UUID()
+        let (updated, _) = WorkspaceSlotOps.remove(
+            b, from: workspace(slots: [a, b, c], capacity: 3)
+        )
+        XCTAssertEqual(updated.slots.compactMap { $0 }, [a, c])
+        XCTAssertEqual(updated.capacity, 2, "drei Plaetze braucht es fuer zwei Chats nicht mehr")
     }
 
     func testRemoveUnknownSessionIsNoOp() {

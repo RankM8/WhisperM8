@@ -110,18 +110,52 @@ enum WorkspaceSlotOps {
 
     // MARK: - Entfernen / Verschieben / Tauschen
 
-    /// Setzt den Slot der Session auf `nil` — ohne zu kompaktieren oder zu
-    /// schrumpfen. `false`, wenn die Session kein Mitglied ist.
+    /// Setzt den Slot der Session auf `nil`. Mit `compacting` ruecken die
+    /// uebrigen Chats nach und die Stufe faellt auf die kleinste passende.
+    ///
+    /// **Warum Verdichten der Normalfall ist:** Ohne das bleibt genau da ein
+    /// Loch, wo eben noch ein Chat war, und die Flaeche behaelt eine Stufe,
+    /// die sie nicht mehr braucht — aufraeumen muss dann der Nutzer von Hand.
+    /// Das war der haeufigste Aerger am Grid. Wer die feste Position doch
+    /// will, schaltet es ab:
+    /// `defaults write com.whisperm8.app gridAutoCompactEnabled -bool NO`.
     static func remove(
         _ sessionID: UUID,
-        from workspace: AgentGridWorkspace
+        from workspace: AgentGridWorkspace,
+        compacting: Bool = true
     ) -> (workspace: AgentGridWorkspace, removed: Bool) {
         guard let index = workspace.slotIndex(of: sessionID) else {
             return (workspace, false)
         }
         var copy = workspace
         copy.slots[index] = nil
-        return (copy, true)
+        return (compacting ? compacted(copy) : copy, true)
+    }
+
+    /// Schiebt alle belegten Slots nach vorn und senkt die Stufe auf die
+    /// kleinste, die sie fasst.
+    ///
+    /// Die REIHENFOLGE bleibt erhalten — es wird nur zusammengeschoben, nie
+    /// umsortiert. Sonst waere jedes Entfernen eine Ueberraschung: Der Blick
+    /// sucht die Chats dort, wo sie vorher relativ zueinander standen.
+    ///
+    /// Ein leerer Workspace behaelt die kleinste Stufe, statt auf null zu
+    /// fallen — sonst gaebe es keine Drop-Ziele mehr, um ihn wieder zu
+    /// fuellen.
+    static func compacted(_ workspace: AgentGridWorkspace) -> AgentGridWorkspace {
+        let belegt = workspace.slots.compactMap { $0 }
+        let stufe = AgentGridWorkspace.smallestCapacity(fitting: max(belegt.count, 1))
+        guard stufe != workspace.capacity || belegt.count != workspace.slots.count else {
+            // Nichts zu tun: volle Flaeche in passender Stufe.
+            return workspace
+        }
+        var copy = workspace
+        copy.capacity = stufe
+        copy.slots = belegt + Array(repeating: nil, count: max(stufe - belegt.count, 0))
+        // Die Gewichte passen nach einem Stufenwechsel nicht mehr zur
+        // Spalten-/Zeilenzahl; die Entity repariert das achsenweise.
+        copy.normalize()
+        return copy
     }
 
     /// Verschieben: nur belegte Quelle in LEERES Ziel (Quelle wird nil).
