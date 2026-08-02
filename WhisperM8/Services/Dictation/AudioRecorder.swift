@@ -202,11 +202,15 @@ class AudioRecorder {
         // Remove configuration observer
         removeConfigurationObserver()
 
-        // Remove tap first
+        // Remove tap first. Beides ist synchron und kann auf die CoreAudio-HAL
+        // warten — siehe `PerfBudgets.engineStop`: der laengste gemessene
+        // Main-Thread-Stillstand stand unmittelbar hinter genau diesem Abbau.
         if let engine = engine {
             Logger.debug("[AudioRecorder] Removing tap and stopping engine")
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
+            PerfBudgets.engineStop.withInterval {
+                engine.inputNode.removeTap(onBus: 0)
+                engine.stop()
+            }
         }
         engine = nil
         resourceLock.withLock {

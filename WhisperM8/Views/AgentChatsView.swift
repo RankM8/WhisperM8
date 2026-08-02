@@ -940,15 +940,23 @@ struct AgentChatsView: View {
             syncActiveAgentChat()
         }
         .onChange(of: workspace) { _, _ in
-            syncActiveAgentChat()
-            // Globale GC gegen den frischen Workspace: tote Session-IDs auch
-            // aus Fenstern raeumen, die gerade NICHT gerendert sind (per X
-            // geschlossene Fenster haben keinen reconcileSelection-Lauf mehr).
-            // Diff-gated — ohne effektive Aenderung kein Save/Re-Render.
-            windowStore.prune(workspace: workspace)
-            // P1 S6: Selektion darf nach Mutationen (z. B. deleteSession aus
-            // dem Spawn-Fehlerpfad) nie auf Gelöschtes zeigen.
-            reconcileSelection()
+            // Laeuft bei JEDER Workspace-Aenderung, pro offenem Fenster, und
+            // jeder der drei Schritte geht ueber alle Sessions. Die Analyse
+            // hat den Merge selbst als Sekundenverursacher ausgeschlossen —
+            // die Blockade liegt in der Reaktionsphase danach, und das hier
+            // ist ihr uninstrumentierter Teil. Siehe
+            // `PerfBudgets.workspaceChangeFollowUp`.
+            PerfBudgets.workspaceChangeFollowUp.withInterval {
+                syncActiveAgentChat()
+                // Globale GC gegen den frischen Workspace: tote Session-IDs auch
+                // aus Fenstern raeumen, die gerade NICHT gerendert sind (per X
+                // geschlossene Fenster haben keinen reconcileSelection-Lauf mehr).
+                // Diff-gated — ohne effektive Aenderung kein Save/Re-Render.
+                windowStore.prune(workspace: workspace)
+                // P1 S6: Selektion darf nach Mutationen (z. B. deleteSession aus
+                // dem Spawn-Fehlerpfad) nie auf Gelöschtes zeigen.
+                reconcileSelection()
+            }
         }
         .onChange(of: openTabIDs) { _, _ in
             closeWindowIfEmptyAndSecondary()

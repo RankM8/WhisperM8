@@ -189,6 +189,17 @@ enum PerfBudgets {
     static let chatTail = PerformanceBudget(name: "recording.chatTail", budget: 0.100, signposter: PerfSignposts.recording)
     static let engineStart = PerformanceBudget(name: "recording.engineStart", budget: 0.250, signposter: PerfSignposts.recording)
 
+    /// Abbau der Audio-Engine: `removeTap` + `stop`.
+    ///
+    /// **Warum eigens gemessen (02.08.2026):** Der laengste beobachtete
+    /// Main-Thread-Stillstand — 3034 ms — hatte im Log unmittelbar davor
+    /// CoreAudio-/AVAudioEngine-Teardown stehen und keinerlei Scan-, Merge-
+    /// oder Store-Ereignis. Das ist ein ZWEITER, vom Indexer unabhaengiger
+    /// Blockadetyp: `AVAudioEngine.stop()` und `removeTap` sind synchron und
+    /// koennen auf die CoreAudio-HAL warten, etwa wenn ein Geraet gerade
+    /// wechselt. Ohne eigenen Messpunkt bleibt das Ratearbeit.
+    static let engineStop = PerformanceBudget(name: "recording.engineStop", budget: 0.100, signposter: PerfSignposts.recording)
+
     // Transcript-Index
     static let indexCacheLoad = PerformanceBudget(name: "index.cacheLoad", budget: 0.250, signposter: PerfSignposts.index)
     static let indexCacheSave = PerformanceBudget(name: "index.cacheSave", budget: 0.500, signposter: PerfSignposts.index)
@@ -246,6 +257,20 @@ enum PerfBudgets {
     /// gesamten Workspace. Ob sie die Sekunden erklaert, ist damit ab dem
     /// naechsten Lauf keine Vermutung mehr.
     static let sidebarScanFollowUp = PerformanceBudget(name: "sidebar.scanFollowUp", budget: 0.050, signposter: PerfSignposts.sidebar)
+
+    /// Die Folgearbeit bei jeder Workspace-Aenderung: aktiven Chat abgleichen,
+    /// tote IDs aus allen Fenstern raeumen, Selektion pruefen — pro offenem
+    /// Fenster und jeweils ueber alle Sessions.
+    ///
+    /// **Warum eigens gemessen (02.08.2026):** Die Log-Korrelation eines
+    /// 1241-ms-Stillstands zeigt, dass der Main Thread erst NACH der
+    /// Workspace-Publikation blockiert — der Merge selbst ist als Ursache
+    /// widerlegt (keine Verletzung von `index.merge`, `store.mutate`,
+    /// `store.normalize`). Die Zeit steckt in der Reaktionsphase, und dies ist
+    /// deren einziger uninstrumentierter Teil neben SwiftUIs eigenem Diff.
+    /// Reisst dieses Budget, haben wir den Verursacher; reisst es nicht,
+    /// bleibt SwiftUIs View-Auswertung uebrig und braucht Instruments.
+    static let workspaceChangeFollowUp = PerformanceBudget(name: "sidebar.workspaceChangeFollowUp", budget: 0.050, signposter: PerfSignposts.sidebar)
 
     // Grid-Workspace (Budgets aus docs/plans/grid-workspace-plan.html, Abschnitt 05;
     // Freigabe-Gates sind p95-Werte, Einzelverletzungen sind Hinweise, keine Fehler).
