@@ -1,0 +1,202 @@
+<meta charset="utf-8">
+<title>Workspace-Umbau — Plan</title>
+<style>
+  :root {
+    --bg: #0f1014; --panel: #16181f; --panel2: #1c1f28; --line: #272b36;
+    --text: #e6e8ee; --dim: #9aa1b0; --accent: #6E6ADE; --gut: #4ea86b;
+    --warn: #d99a3f; --bad: #d16a6a; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f7f8fa; --panel:#fff; --panel2:#f0f2f6; --line:#dfe3ea;
+            --text:#1a1d24; --dim:#5d6472; }
+  }
+  :root[data-theme="dark"] { --bg:#0f1014; --panel:#16181f; --panel2:#1c1f28;
+    --line:#272b36; --text:#e6e8ee; --dim:#9aa1b0; }
+  :root[data-theme="light"] { --bg:#f7f8fa; --panel:#fff; --panel2:#f0f2f6;
+    --line:#dfe3ea; --text:#1a1d24; --dim:#5d6472; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width:940px; margin:0 auto; padding:0 28px; }
+  header { border-bottom:1px solid var(--line); padding:54px 0 30px; }
+  h1 { font-size:32px; margin:0 0 10px; letter-spacing:-.02em; }
+  h1 em { font-style:normal; color:var(--accent); }
+  .lead { color:var(--dim); font-size:17px; max-width:70ch; margin:0; }
+  nav { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line);
+    padding:11px 0; z-index:9; font-size:13px; }
+  nav .wrap { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  nav a { color:var(--dim); text-decoration:none; }
+  nav a:hover { color:var(--text); }
+  .stempel { margin-left:auto; color:var(--dim); font-size:12px; }
+  section { padding:38px 0; border-bottom:1px solid var(--line); }
+  h2 { font-size:23px; margin:0 0 6px; letter-spacing:-.01em; }
+  h2 em { font-style:normal; color:var(--dim); font-weight:400; }
+  h3 { font-size:16px; margin:26px 0 8px; }
+  .sub { color:var(--dim); margin:0 0 18px; }
+  p { max-width:74ch; }
+  code { font-family:var(--mono); font-size:.88em; background:var(--panel2);
+    padding:1px 5px; border-radius:4px; }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }
+  th, td { text-align:left; padding:8px 11px; border-bottom:1px solid var(--line);
+    vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12.5px;
+    text-transform:uppercase; letter-spacing:.04em; }
+  .karten { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); }
+  .karte { display:block; background:var(--panel); border:1px solid var(--line);
+    border-radius:11px; padding:20px; text-decoration:none; color:inherit;
+    transition:border-color .15s, transform .15s; }
+  .karte:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .karte .nr { font-family:var(--mono); font-size:12px; color:var(--accent); }
+  .karte h3 { margin:6px 0 8px; font-size:17px; }
+  .karte h3 em { font-style:normal; color:var(--dim); font-weight:400; }
+  .karte p { font-size:14px; color:var(--dim); margin:0 0 10px; }
+  .karte ul { margin:0; padding-left:17px; font-size:13.5px; color:var(--dim); }
+  .karte .pfeil { margin-top:12px; font-size:13px; color:var(--accent); }
+  .box { border-radius:9px; padding:16px 18px; margin:18px 0; border:1px solid var(--line);
+    background:var(--panel); }
+  .box .t { font-weight:600; margin-bottom:7px; }
+  .gut { border-left:3px solid var(--gut); }
+  .warn { border-left:3px solid var(--warn); }
+  .bad { border-left:3px solid var(--bad); }
+  .phase { display:flex; gap:14px; align-items:baseline; padding:13px 0;
+    border-bottom:1px solid var(--line); }
+  .phase:last-child { border-bottom:0; }
+  .phase .n { font-family:var(--mono); color:var(--accent); font-size:13px;
+    min-width:26px; }
+  .phase .txt { flex:1; }
+  .phase .txt b { display:block; margin-bottom:3px; }
+  .phase .txt span { color:var(--dim); font-size:14px; }
+  footer { padding:36px 0 60px; color:var(--dim); font-size:13px; }
+</style>
+
+<header><div class="wrap">
+  <h1>Workspace-Umbau — <em>Layout, das sich selbst anordnet</em></h1>
+  <p class="lead">Heute muss der Nutzer sein Raster selbst anlegen, verkleinern und umsortieren —
+  und Chats von außen hineinzubekommen ist umständlich. Dieser Plan ersetzt das feste
+  Positionsraster durch eine Anordnung, die sich aus den enthaltenen Chats ergibt.</p>
+</div></header>
+
+<nav><div class="wrap">
+  <a href="#warum">Warum</a><a href="#kern">Kernidee</a><a href="#pakete">Pakete</a>
+  <a href="#risiken">Risiken</a><a href="#fahrplan">Fahrplan</a>
+  <span class="stempel">Stand 02.08.2026 · Planung</span>
+</div></nav>
+
+<section id="warum"><div class="wrap">
+  <h2>Warum überhaupt umbauen</h2>
+  <p class="sub">Die Bedienprobleme sind keine Oberflächenfrage — sie stehen im Datenmodell.</p>
+
+  <p>Ein Workspace ist heute eine Liste fester Plätze:</p>
+  <table>
+    <tr><th>Feld</th><th>Bedeutung</th><th>Folge für die Bedienung</th></tr>
+    <tr><td><code>slots: [UUID?]</code></td><td>Feste Positionen, <code>nil</code> = sichtbar leer</td><td>Ein geschlossener Chat hinterlässt ein Loch. Niemand räumt es weg.</td></tr>
+    <tr><td><code>capacity: Int</code></td><td>Sichtbare Plätze, Stufen 2·3·4·6·9</td><td>Wächst automatisch, schrumpft nie von selbst — man muss von Hand zurückstellen.</td></tr>
+    <tr><td><code>columnFractions</code><br><code>rowFractions</code></td><td>Spalten- und Zeilengewichte</td><td>Hängen an der Stufe; jede Kapazitätsänderung wirft die eigene Aufteilung durcheinander.</td></tr>
+  </table>
+
+  <div class="box bad">
+    <div class="t">Der eigentliche Konstruktionsfehler</div>
+    <p style="margin:0">Positionsstabilität und automatische Anordnung schließen sich in diesem
+    Modell aus. Weil jeder Chat an einem <em>Index</em> klebt, kann das Layout nicht auf Änderungen
+    reagieren, ohne die Anordnung des Nutzers zu zerstören — und weil es nicht reagieren darf,
+    muss der Nutzer alles von Hand machen. Jede Verbesserung an der Oberfläche stößt an diese Wand.</p>
+  </div>
+
+  <h3>Was der Nutzer konkret vermisst</h3>
+  <table>
+    <tr><th>Beobachtung</th><th>Ursache im Modell</th></tr>
+    <tr><td>„Ohne einen Grid, den ich selber anlegen muss und auch klein machen muss"</td><td><code>capacity</code> ist eine Nutzereingabe statt eine Folge des Inhalts</td></tr>
+    <tr><td>„Rearrangen muss"</td><td>Positionen sind fest; es gibt kein Verdichten</td></tr>
+    <tr><td>„Nicht genug Möglichkeit, Chats von außen einfach schnell reinzuhauen"</td><td>Ein Chat braucht einen freien Index — ist keiner da, passiert nichts Sinnvolles</td></tr>
+  </table>
+</div></section>
+
+<section id="kern"><div class="wrap">
+  <h2>Die Kernidee <em>— Anordnung ist ein Ergebnis, keine Eingabe</em></h2>
+  <p class="sub">Erprobt im HTML-Zwilling <code>docs/design/agent-chats-layout-engine.html</code>,
+  inklusive echter Maus-Interaktion.</p>
+
+  <p>Statt einer Platzliste hält ein Workspace eine <strong>Menge von Zellen</strong>, und jede Zelle
+  einen <strong>Stapel</strong> von Chats. Die geometrische Anordnung wird bei jeder Änderung neu
+  berechnet — es sei denn, der Nutzer hat sie ausdrücklich festgelegt.</p>
+
+  <table>
+    <tr><th>Begriff</th><th>Was er trägt</th></tr>
+    <tr><td><code>mode: auto</code></td><td>Die Anordnung ergibt sich aus der Anzahl der Zellen. Kein Loch, keine Stufe, keine Handarbeit.</td></tr>
+    <tr><td><code>mode: snapshot</code></td><td>Der Nutzer hat geteilt oder gezogen — ab dann gilt sein Baum, bis er ihn löst.</td></tr>
+    <tr><td>Zelle mit Stapel</td><td>Mehrere Chats teilen sich eine Fläche, einer ist sichtbar. Das ist die Antwort auf „als Tab hinzufügen".</td></tr>
+    <tr><td><code>bound</code></td><td>Merkt sich, dass ein Chat bewusst zu einem anderen gestapelt wurde — damit die Neuanordnung diese Absicht nicht zerreißt.</td></tr>
+    <tr><td><code>guest</code></td><td>Ein angeklickter Chat erscheint sofort, ohne Mitglied zu werden. Erst <code>⌥↵</code> oder ein Zug macht ihn dauerhaft.</td></tr>
+  </table>
+
+  <div class="box gut">
+    <div class="t">Was das für die drei Beschwerden bedeutet</div>
+    <p style="margin:0">Kein Raster mehr anlegen: Die Anordnung folgt der Anzahl. Kein Verkleinern:
+    Wer einen Chat schließt, verdichtet die Fläche automatisch. Kein Umsortieren: Ziehen tauscht
+    Zellen, statt Indizes zu verschieben. Und „schnell reinhauen" ist ein Klick — der Gast erscheint,
+    ohne dass man vorher Platz schaffen muss.</p>
+  </div>
+</div></section>
+
+<section id="pakete"><div class="wrap">
+  <h2>Pakete</h2>
+  <p class="sub">In dieser Reihenfolge zu lesen. Das Datenmodell trägt alles Weitere.</p>
+  <div class="karten">
+    <a class="karte" href="01-datenmodell/01-modell-und-migration.html">
+      <span class="nr">01</span>
+      <h3>Datenmodell — <em>und der Weg dorthin</em></h3>
+      <p>Die Swift-Entsprechung der Engine, ihre Invarianten und wie der Bestand ohne Verlust hinüberkommt.</p>
+      <ul><li>Zellen, Stapel, Baum</li><li>Invarianten und was sie verhindern</li>
+      <li>Migration v4 → v5 mit Rückweg</li><li>75 Aufrufstellen von <code>slots</code></li></ul>
+      <div class="pfeil">Paket öffnen →</div>
+    </a>
+    <a class="karte" href="02-entscheidungen/01-offene-fragen.html">
+      <span class="nr">02</span>
+      <h3>Entscheidungen — <em>bevor gebaut wird</em></h3>
+      <p>Alle Produkt- und UX-Fragen, die offen sind, mit Empfehlung und Auswirkung. Keine stillschweigenden Festlegungen.</p>
+      <ul><li>Gast oder Mitglied beim Klick</li><li>Ziehen auf die Mitte</li>
+      <li>Projekt-Workspaces</li><li>Was beim Schließen passiert</li></ul>
+      <div class="pfeil">Paket öffnen →</div>
+    </a>
+  </div>
+</div></section>
+
+<section id="risiken"><div class="wrap">
+  <h2>Risiken <em>— nach Schadenshöhe</em></h2>
+  <table>
+    <tr><th>Risiko</th><th>Warum es real ist</th><th>Absicherung</th></tr>
+    <tr><td><strong>Terminal wird beim Umsortieren neu aufgebaut</strong></td>
+        <td>Ein PTY neu zu starten heißt: Scrollback weg, laufender Befehl weg. Das wäre schlimmer als jedes Layoutproblem.</td>
+        <td>Der Zähler <code>pane.mounted</code> aus dem Messgerüst deckt jeden ungewollten Wiederaufbau auf. Er gehört in die Abnahme jedes Schritts.</td></tr>
+    <tr><td><strong>Verlorene Anordnung nach dem Update</strong></td>
+        <td>Wer sich sein Raster mühsam gebaut hat, verliert Vertrauen, wenn es beim Update verschwindet.</td>
+        <td>Migration übernimmt die bestehende Anordnung als <code>snapshot</code> — sie bleibt exakt erhalten, bis der Nutzer selbst auf <code>auto</code> löst.</td></tr>
+    <tr><td><strong>Drag friert die App ein</strong></td>
+        <td>Genau das ist im Mai 2026 schon passiert (<code>LazyVStack</code> + <code>.draggable</code>, Fix 60ca683). Der Präzedenzfall steht im eigenen Code.</td>
+        <td>Zeigegerät-Ereignisse statt SwiftUIs Drag-API, wie im Zwilling erprobt. Die Auswahl- und Einfüge-Logik bleibt pur und testbar.</td></tr>
+    <tr><td>Zwei Layout-Modelle nebeneinander</td>
+        <td>Solange beide existieren, verdoppelt sich jede Änderung und Fehler verstecken sich im Übergang.</td>
+        <td>Schnitte so legen, dass das alte Modell in <em>einem</em> Schritt verschwindet, nicht schrittweise.</td></tr>
+  </table>
+</div></section>
+
+<section id="fahrplan"><div class="wrap">
+  <h2>Fahrplan</h2>
+  <p class="sub">Jeder Schritt lässt die App benutzbar und ist einzeln messbar.</p>
+  <div class="phase"><span class="n">W1</span><div class="txt">
+    <b>Entscheiden</b><span>Die offenen Produktfragen beantworten. Ohne sie baut man Vermutungen in Code.</span></div></div>
+  <div class="phase"><span class="n">W2</span><div class="txt">
+    <b>Engine als pure Logik</b><span>Zellen, Stapel, Baum, Verdichten, Tauschen, Einfügen — ohne SwiftUI, vollständig unter Tests. Der Zwilling liefert die Vorlage samt erprobtem Verhalten.</span></div></div>
+  <div class="phase"><span class="n">W3</span><div class="txt">
+    <b>Modell und Migration</b><span>Schema v5, Übernahme des Bestands als <code>snapshot</code>, Rohsnapshot für den Rückweg.</span></div></div>
+  <div class="phase"><span class="n">W4</span><div class="txt">
+    <b>Darstellung</b><span>Die Anordnung zeichnen, ohne Terminals anzufassen. Abnahmekriterium: <code>pane.mounted</code> zählt nur bei wirklich neuen Chats.</span></div></div>
+  <div class="phase"><span class="n">W5</span><div class="txt">
+    <b>Interaktion</b><span>Ziehen, Tauschen, Stapeln, Gast-Vorschau. Der riskanteste Teil — deshalb zuletzt, auf gesichertem Fundament.</span></div></div>
+</div></section>
+
+<footer><div class="wrap">
+  Reine Planung. Kein Produktivcode geändert.<br>
+  Verhaltensfragen werden im HTML-Zwilling entschieden: <code>docs/design/agent-chats-layout-engine.html</code>.<br>
+  Messgerüst und Performance-Befunde: <code>docs/plans/workspace-performance/</code>.
+</div></footer>

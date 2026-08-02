@@ -1,0 +1,169 @@
+<meta charset="utf-8">
+<title>Offene Entscheidungen — Workspace-Umbau</title>
+<style>
+  :root { --bg:#0f1014; --panel:#16181f; --panel2:#1c1f28; --line:#272b36;
+    --text:#e6e8ee; --dim:#9aa1b0; --accent:#6E6ADE; --gut:#4ea86b; --warn:#d99a3f;
+    --bad:#d16a6a; --mono:ui-monospace,"SF Mono",Menlo,monospace; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f7f8fa; --panel:#fff;
+    --panel2:#f0f2f6; --line:#dfe3ea; --text:#1a1d24; --dim:#5d6472; } }
+  :root[data-theme="dark"] { --bg:#0f1014; --panel:#16181f; --panel2:#1c1f28;
+    --line:#272b36; --text:#e6e8ee; --dim:#9aa1b0; }
+  :root[data-theme="light"] { --bg:#f7f8fa; --panel:#fff; --panel2:#f0f2f6;
+    --line:#dfe3ea; --text:#1a1d24; --dim:#5d6472; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .wrap { max-width:940px; margin:0 auto; padding:0 28px; }
+  header { border-bottom:1px solid var(--line); padding:48px 0 28px; }
+  .zurueck { color:var(--dim); text-decoration:none; font-size:13px; }
+  .zurueck:hover { color:var(--text); }
+  h1 { font-size:29px; margin:10px 0 10px; letter-spacing:-.02em; }
+  h1 em { font-style:normal; color:var(--accent); }
+  .lead { color:var(--dim); font-size:16.5px; max-width:70ch; margin:0; }
+  section { padding:32px 0; border-bottom:1px solid var(--line); }
+  h2 { font-size:22px; margin:0 0 6px; letter-spacing:-.01em; }
+  p { max-width:74ch; }
+  code { font-family:var(--mono); font-size:.88em; background:var(--panel2);
+    padding:1px 5px; border-radius:4px; }
+  .frage { background:var(--panel); border:1px solid var(--line); border-radius:11px;
+    padding:22px 24px; margin:20px 0; }
+  .frage .nr { font-family:var(--mono); font-size:12px; color:var(--accent); }
+  .frage h3 { margin:6px 0 12px; font-size:18.5px; }
+  .zeile { display:grid; grid-template-columns:118px 1fr; gap:14px; padding:9px 0;
+    border-top:1px solid var(--line); font-size:14.5px; }
+  .zeile:first-of-type { border-top:0; }
+  .zeile .k { color:var(--dim); font-size:12.5px; text-transform:uppercase;
+    letter-spacing:.04em; padding-top:2px; }
+  .empf { border-left:3px solid var(--gut); padding-left:13px; margin:14px 0 0; }
+  .empf .t { font-weight:600; color:var(--gut); font-size:13px;
+    text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+  .box { border-radius:9px; padding:16px 18px; margin:18px 0;
+    border:1px solid var(--line); background:var(--panel); }
+  .box .t { font-weight:600; margin-bottom:7px; }
+  .warn { border-left:3px solid var(--warn); }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 11px; border-bottom:1px solid var(--line);
+    vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12.5px; text-transform:uppercase;
+    letter-spacing:.04em; }
+  footer { padding:30px 0 60px; color:var(--dim); font-size:13.5px; }
+</style>
+
+<header><div class="wrap">
+  <a class="zurueck" href="../index.html">← Übersicht</a>
+  <h1>Entscheidungen — <em>bevor gebaut wird</em></h1>
+  <p class="lead">Sieben Fragen, die das Verhalten bestimmen. Jede mit dem Zusammenhang, einer
+  Empfehlung samt Begründung und der Angabe, was die Entscheidung nach sich zieht. Nichts davon
+  wird stillschweigend festgelegt.</p>
+</div></header>
+
+<section><div class="wrap">
+  <div class="frage">
+    <span class="nr">F1</span>
+    <h3>Was passiert beim Klick auf einen Chat in der Seitenleiste?</h3>
+    <div class="zeile"><div class="k">Zusammenhang</div><div>Heute braucht ein Chat einen freien Platz, sonst passiert nichts Brauchbares. Genau daher kommt „nicht genug Möglichkeit, Chats von außen schnell reinzuhauen".</div></div>
+    <div class="zeile"><div class="k">Möglichkeiten</div><div><strong>a)</strong> Der Chat wird sofort dauerhaftes Mitglied.<br><strong>b)</strong> Er erscheint als flüchtiger Gast; <code>⌥↵</code> oder ein Zug macht ihn dauerhaft.<br><strong>c)</strong> Er ersetzt den fokussierten Chat.</div></div>
+    <div class="zeile"><div class="k">Auswirkung</div><div>Bei (a) wächst der Workspace bei jedem neugierigen Klick — nach einer Woche steht dort alles Mögliche. Bei (b) braucht es einen sichtbaren Hinweis, sonst ist unklar, warum ein Chat wieder verschwindet.</div></div>
+    <div class="empf"><div class="t">Empfehlung: (b)</div>
+      Ein Klick ist meist „mal schauen", kein „dauerhaft dazunehmen". Der Gast liefert genau das
+      und hält den Workspace sauber, ohne eine Entscheidung zu erzwingen. Im Zwilling erprobt;
+      der Gastzustand ist am Rahmen erkennbar.</div>
+  </div>
+
+  <div class="frage">
+    <span class="nr">F2</span>
+    <h3>Was passiert, wenn ein Chat auf die Mitte einer Fläche gezogen wird?</h3>
+    <div class="zeile"><div class="k">Zusammenhang</div><div>Ausdrücklich gewünscht: „ob ich den jetzt umtauschen will oder als Tab hinzufügen will". Beides ist sinnvoll — die Frage ist, wie unterschieden wird.</div></div>
+    <div class="zeile"><div class="k">Möglichkeiten</div><div><strong>a)</strong> Zwei Zonen: äußerer Ring ersetzt, innerer Kern stapelt.<br><strong>b)</strong> Immer stapeln, Ersetzen nur über das Kontextmenü.<br><strong>c)</strong> Modifiertaste entscheidet (<code>⌥</code> = ersetzen).</div></div>
+    <div class="zeile"><div class="k">Auswirkung</div><div>(a) ist ohne Erklärung verständlich, verlangt aber eine deutliche Vorschau — sonst rät man. (c) ist unsichtbar für alle, die es nicht wissen.</div></div>
+    <div class="empf"><div class="t">Empfehlung: (a), mit deutlicher Vorschau</div>
+      Die Zone muss beim Ziehen sichtbar sein, nicht erst beim Loslassen wirken. Der Zwilling
+      zeigt die Aufteilung; ohne diese Rückmeldung wird aus einer guten Idee ein Ratespiel.</div>
+  </div>
+
+  <div class="frage">
+    <span class="nr">F3</span>
+    <h3>Bleibt eine bewusste Stapelung bei der Neuanordnung erhalten?</h3>
+    <div class="zeile"><div class="k">Zusammenhang</div><div>Zwei Chats werden absichtlich übereinandergelegt. Dann wird ein dritter geschlossen und die Fläche neu aufgeteilt.</div></div>
+    <div class="zeile"><div class="k">Möglichkeiten</div><div><strong>a)</strong> Die Stapelung bleibt (<code>bindings</code>).<br><strong>b)</strong> Beim Verdichten wird alles gleichrangig verteilt.</div></div>
+    <div class="zeile"><div class="k">Auswirkung</div><div>(b) ist einfacher zu bauen, zerstört aber wiederholt eine ausdrückliche Entscheidung des Nutzers. Das ist der Punkt, an dem „hilfreich" in „bevormundend" kippt.</div></div>
+    <div class="empf"><div class="t">Empfehlung: (a)</div>
+      Automatik darf Unentschiedenes ordnen, aber niemals Entschiedenes überschreiben. Das ist die
+      Regel, die den ganzen Umbau erträglich macht — ohne sie wäre die automatische Anordnung ein
+      Rückschritt.</div>
+  </div>
+
+  <div class="frage">
+    <span class="nr">F4</span>
+    <h3>Was passiert, wenn der letzte Chat einer Zelle geschlossen wird?</h3>
+    <div class="zeile"><div class="k">Zusammenhang</div><div>Heute bleibt ein sichtbares Loch. Das ist die Beschwerde „muss ich klein machen".</div></div>
+    <div class="zeile"><div class="k">Möglichkeiten</div><div><strong>a)</strong> Die Zelle verschwindet, die Fläche verdichtet sich sofort.<br><strong>b)</strong> Die Zelle bleibt leer, bis der Nutzer aufräumt.<br><strong>c)</strong> Sie verschwindet, aber mit kurzer Rückgängig-Möglichkeit.</div></div>
+    <div class="zeile"><div class="k">Auswirkung</div><div>(a) ist das Ziel des Umbaus. Der Einwand: Bei <code>manual</code>-Anordnung springt die Aufteilung, was überraschen kann.</div></div>
+    <div class="empf"><div class="t">Empfehlung: (a) bei automatischer, Fläche aufteilen bei manueller Anordnung</div>
+      Wer selbst geteilt hat, erwartet Stabilität — dort wird die frei gewordene Fläche unter den
+      Nachbarn aufgeteilt, statt alles neu zu ordnen. Wer die Automatik nutzt, will genau das
+      Verdichten.</div>
+  </div>
+
+  <div class="frage">
+    <span class="nr">F5</span>
+    <h3>Wie funktionieren Projekt-Workspaces?</h3>
+    <div class="zeile"><div class="k">Zusammenhang</div><div>Im Zwilling angelegt: Ein Workspace, dessen Mitglieder sich aus einem Projekt ergeben statt einzeln gepflegt zu werden.</div></div>
+    <div class="zeile"><div class="k">Offene Punkte</div><div><strong>·</strong> Welche Chats gehören dazu — alle, oder nur aktive?<br><strong>·</strong> Was passiert beim Entfernen? Löschen geht nicht, die Mitgliedschaft folgt ja dem Projekt.<br><strong>·</strong> Was, wenn ein projektfremder Chat hineingezogen wird?</div></div>
+    <div class="zeile"><div class="k">Auswirkung</div><div>Das ist die einzige Frage, die ein zweites Mitgliedschaftsmodell einführt. Sie macht das Datenmodell dauerhaft komplizierter.</div></div>
+    <div class="empf"><div class="t">Empfehlung: aktive Chats, Entfernen blendet aus, fremde Chats abweisen</div>
+      Ausblenden statt Entfernen (<code>hidden</code>) ist ehrlicher als ein Löschen, das der
+      nächste Abgleich rückgängig macht. <strong>Zu erwägen:</strong> Diese Frage lässt sich
+      vertagen, ohne den Rest zu blockieren — dann bleibt das Modell zunächst einfacher.</div>
+  </div>
+
+  <div class="frage">
+    <span class="nr">F6</span>
+    <h3>Wie kommt man von der manuellen Anordnung zurück zur automatischen?</h3>
+    <div class="zeile"><div class="k">Zusammenhang</div><div>Wer einmal geteilt hat, ist in <code>manual</code>. Der bestehende Workspace landet durch die Migration ebenfalls dort.</div></div>
+    <div class="zeile"><div class="k">Möglichkeiten</div><div><strong>a)</strong> Sichtbarer Schalter „automatisch anordnen".<br><strong>b)</strong> Automatisch, sobald sich die Zellenzahl ändert.<br><strong>c)</strong> Gar nicht — einmal manuell, immer manuell.</div></div>
+    <div class="zeile"><div class="k">Auswirkung</div><div>(b) würde die eigene Aufteilung unangekündigt verwerfen — dieselbe Falle wie heute. (c) macht den Umbau für Bestandsnutzer wertlos, weil sie nach der Migration nie in den neuen Modus kämen.</div></div>
+    <div class="empf"><div class="t">Empfehlung: (a)</div>
+      Ein sichtbarer, umkehrbarer Schalter. Die Migration setzt alle Bestandsnutzer auf
+      <code>manual</code>; dieser Schalter ist ihre einzige Tür zur neuen Bedienung — er darf nicht
+      versteckt sein.</div>
+  </div>
+
+  <div class="frage">
+    <span class="nr">F7</span>
+    <h3>Wie viele Chats dürfen gleichzeitig sichtbar sein?</h3>
+    <div class="zeile"><div class="k">Zusammenhang</div><div>Heute begrenzt <code>capacity</code> auf 9. Ohne Stufen fällt diese Grenze weg — jeder sichtbare Chat ist aber ein laufendes Terminal.</div></div>
+    <div class="zeile"><div class="k">Möglichkeiten</div><div><strong>a)</strong> Harte Obergrenze (etwa 9).<br><strong>b)</strong> Weiche Grenze: darüber hinaus wird gestapelt statt geteilt.<br><strong>c)</strong> Keine Grenze.</div></div>
+    <div class="zeile"><div class="k">Auswirkung</div><div>(c) erlaubt Flächen, die zu klein zum Lesen sind, bei voller Terminal-Last. (a) bringt die Stufen-Bevormundung zurück, die wir gerade abschaffen.</div></div>
+    <div class="empf"><div class="t">Empfehlung: (b)</div>
+      Kein Ablehnen, kein Unlesbar-Werden: Ab einer Mindestgröße pro Fläche wandern weitere Chats
+      in Stapel. Der Nutzer wird nie blockiert, das Bild bleibt brauchbar. Die Mindestgröße ist zu
+      bestimmen — Vorschlag: nicht kleiner als 80×24 Zeichen.</div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Zusammengefasst</h2>
+  <table>
+    <tr><th>Frage</th><th>Empfehlung</th><th>Vertagbar?</th></tr>
+    <tr><td>F1 Klickverhalten</td><td>Gast, dauerhaft per <code>⌥↵</code> oder Zug</td><td>nein — bestimmt das Modell</td></tr>
+    <tr><td>F2 Ziehen auf die Mitte</td><td>Zwei Zonen mit deutlicher Vorschau</td><td>nein — Kernfunktion</td></tr>
+    <tr><td>F3 Stapel überlebt Neuanordnung</td><td>ja, über <code>bindings</code></td><td>nein — sonst ist die Automatik ein Rückschritt</td></tr>
+    <tr><td>F4 Letzter Chat geschlossen</td><td>verdichten, bei manueller Anordnung Fläche aufteilen</td><td>nein — der Kern der Beschwerde</td></tr>
+    <tr><td>F5 Projekt-Workspaces</td><td>abgeleitet, ausblenden, fremde abweisen</td><td><strong>ja</strong> — eigenes Paket</td></tr>
+    <tr><td>F6 Rückweg zur Automatik</td><td>sichtbarer Schalter</td><td>nein — Bestandsnutzer kämen sonst nie an</td></tr>
+    <tr><td>F7 Obergrenze</td><td>weiche Grenze, dann stapeln</td><td>teilweise — Grenze später kalibrierbar</td></tr>
+  </table>
+
+  <div class="box warn">
+    <div class="t">Was ohne diese Antworten passiert</div>
+    <p style="margin:0">Sie landen trotzdem im Code — nur als stillschweigende Annahme desjenigen,
+    der ihn schreibt. Später sind sie teurer zu ändern, weil dann Verhalten daran hängt, das
+    niemand bewusst entschieden hat.</p>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  Verhalten wird im HTML-Zwilling erprobt, bevor es in Swift entsteht:
+  <code>docs/design/agent-chats-layout-engine.html</code>.
+</div></footer>

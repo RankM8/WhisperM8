@@ -1,0 +1,270 @@
+<meta charset="utf-8">
+<title>Datenmodell und Migration — Workspace-Umbau</title>
+<style>
+  :root { --bg:#0f1014; --panel:#16181f; --panel2:#1c1f28; --line:#272b36;
+    --text:#e6e8ee; --dim:#9aa1b0; --accent:#6E6ADE; --gut:#4ea86b; --warn:#d99a3f;
+    --bad:#d16a6a; --mono:ui-monospace,"SF Mono",Menlo,monospace; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f7f8fa; --panel:#fff;
+    --panel2:#f0f2f6; --line:#dfe3ea; --text:#1a1d24; --dim:#5d6472; } }
+  :root[data-theme="dark"] { --bg:#0f1014; --panel:#16181f; --panel2:#1c1f28;
+    --line:#272b36; --text:#e6e8ee; --dim:#9aa1b0; }
+  :root[data-theme="light"] { --bg:#f7f8fa; --panel:#fff; --panel2:#f0f2f6;
+    --line:#dfe3ea; --text:#1a1d24; --dim:#5d6472; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .wrap { max-width:940px; margin:0 auto; padding:0 28px; }
+  header { border-bottom:1px solid var(--line); padding:48px 0 28px; }
+  .zurueck { color:var(--dim); text-decoration:none; font-size:13px; }
+  .zurueck:hover { color:var(--text); }
+  h1 { font-size:29px; margin:10px 0 10px; letter-spacing:-.02em; }
+  h1 em { font-style:normal; color:var(--accent); }
+  .lead { color:var(--dim); font-size:16.5px; max-width:70ch; margin:0; }
+  nav { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line);
+    padding:11px 0; z-index:9; font-size:13px; }
+  nav .wrap { display:flex; gap:18px; flex-wrap:wrap; }
+  nav a { color:var(--dim); text-decoration:none; }
+  nav a:hover { color:var(--text); }
+  section { padding:36px 0; border-bottom:1px solid var(--line); }
+  h2 { font-size:22px; margin:0 0 6px; letter-spacing:-.01em; }
+  h2 em { font-style:normal; color:var(--dim); font-weight:400; }
+  h3 { font-size:16px; margin:26px 0 8px; }
+  .sub { color:var(--dim); margin:0 0 18px; }
+  p { max-width:74ch; }
+  code { font-family:var(--mono); font-size:.88em; background:var(--panel2);
+    padding:1px 5px; border-radius:4px; }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:9px;
+    padding:15px 17px; overflow-x:auto; font-family:var(--mono); font-size:13px;
+    line-height:1.6; }
+  pre .k { color:#c678dd; } pre .t { color:#61afef; } pre .c { color:var(--dim); }
+  pre .s { color:#98c379; }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 11px; border-bottom:1px solid var(--line);
+    vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12.5px; text-transform:uppercase;
+    letter-spacing:.04em; }
+  .box { border-radius:9px; padding:16px 18px; margin:18px 0;
+    border:1px solid var(--line); background:var(--panel); }
+  .box .t { font-weight:600; margin-bottom:7px; }
+  .gut { border-left:3px solid var(--gut); }
+  .warn { border-left:3px solid var(--warn); }
+  .bad { border-left:3px solid var(--bad); }
+  .weiter { display:flex; justify-content:space-between; align-items:center;
+    padding:22px; margin:34px 0 60px; background:var(--panel);
+    border:1px solid var(--line); border-radius:11px; text-decoration:none; color:inherit; }
+  .weiter:hover { border-color:var(--accent); }
+  .weiter .l { color:var(--dim); font-size:13px; }
+  .weiter .r { color:var(--accent); }
+</style>
+
+<header><div class="wrap">
+  <a class="zurueck" href="../index.html">← Übersicht</a>
+  <h1>Datenmodell — <em>und der Weg dorthin</em></h1>
+  <p class="lead">Das heutige Modell macht die gewünschte Bedienung unmöglich. Hier steht, was an
+  seine Stelle tritt, welche Regeln es dauerhaft einhalten muss und wie der Bestand ohne Verlust
+  hinüberkommt.</p>
+</div></header>
+
+<nav><div class="wrap">
+  <a href="#heute">Heute</a><a href="#neu">Neu</a><a href="#invarianten">Invarianten</a>
+  <a href="#migration">Migration</a><a href="#flaeche">Aufrufstellen</a>
+</div></nav>
+
+<section id="heute"><div class="wrap">
+  <h2>Was heute dasteht</h2>
+  <p class="sub"><code>WhisperM8/Models/AgentGridWorkspace.swift:15-40</code></p>
+<pre><span class="k">struct</span> <span class="t">AgentGridWorkspace</span>: Identifiable, Codable, Equatable, Hashable {
+    <span class="k">var</span> id: UUID
+    <span class="k">var</span> name: String
+    <span class="k">var</span> colorHex: String
+    <span class="c">/// Feste Slot-Positionen; `nil` = sichtbar leerer Slot.</span>
+    <span class="k">var</span> slots: [UUID?]
+    <span class="c">/// Sichtbare Slot-Anzahl, immer eine erlaubte Stufe.</span>
+    <span class="k">var</span> capacity: Int
+    <span class="k">var</span> columnFractions: [Double]
+    <span class="k">var</span> rowFractions: [Double]
+
+    <span class="k">static let</span> allowedCapacities = [<span class="s">2, 3, 4, 6, 9</span>]
+}</pre>
+
+  <div class="box bad">
+    <div class="t">Warum daran nichts zu retten ist</div>
+    <p style="margin:0 0 9px">Die Position <em>ist</em> die Identität. Ein Chat liegt auf Index 3,
+    und das ist alles, was das Modell über seine Anordnung weiß. Daraus folgt zwingend:</p>
+    <p style="margin:0"><strong>Verdichten würde Positionen ändern</strong> — also darf es nicht
+    automatisch passieren. <strong>Automatisch anordnen würde Positionen ändern</strong> — also
+    darf es das auch nicht. Übrig bleibt Handarbeit. Die Bedienprobleme sind keine fehlenden
+    Funktionen, sie sind die logische Folge dieser einen Entscheidung.</p>
+  </div>
+
+  <p>Dazu kommt eine zweite Kopplung: <code>columnFractions</code> und <code>rowFractions</code>
+  hängen an der Stufe. Ändert sich <code>capacity</code>, passt die selbst eingestellte Aufteilung
+  nicht mehr und wird repariert — die Anpassung des Nutzers ist weg.</p>
+</div></section>
+
+<section id="neu"><div class="wrap">
+  <h2>Was an seine Stelle tritt</h2>
+  <p class="sub">Swift-Entsprechung der Engine aus dem HTML-Zwilling, dort mit echter
+  Maus-Interaktion erprobt.</p>
+
+<pre><span class="k">struct</span> <span class="t">AgentWorkspaceLayout</span>: Identifiable, Codable, Equatable {
+    <span class="k">var</span> id: UUID
+    <span class="k">var</span> name: String
+    <span class="k">var</span> colorHex: String
+
+    <span class="c">/// Die Chats, gruppiert in Zellen. Reihenfolge = Lesereihenfolge,</span>
+    <span class="c">/// NICHT Bildschirmposition — die berechnet die Engine.</span>
+    <span class="k">var</span> cells: [Cell]
+
+    <span class="c">/// Wie die Fläche aufgeteilt wird.</span>
+    <span class="k">var</span> arrangement: Arrangement
+
+    <span class="c">/// Absichtlich gestapelt: Chat → Anker-Chat. Überlebt jede</span>
+    <span class="c">/// Neuanordnung; ohne das würde Verdichten Stapel zerreißen.</span>
+    <span class="k">var</span> bindings: [UUID: UUID]
+
+    <span class="c">/// Kurzzeitiger Gast — sichtbar, aber kein Mitglied.</span>
+    <span class="k">var</span> guest: UUID?
+
+    <span class="c">/// Nur bei abgeleiteten Layouts (Projekt-Workspaces): Chats,</span>
+    <span class="c">/// die der Nutzer ausgeblendet hat. Löschen geht dort nicht,</span>
+    <span class="c">/// weil die Mitgliedschaft aus dem Projekt folgt.</span>
+    <span class="k">var</span> hidden: [UUID]
+
+    <span class="c">/// Woher die Mitgliedschaft kommt.</span>
+    <span class="k">var</span> source: Source
+}
+
+<span class="k">struct</span> <span class="t">Cell</span>: Identifiable, Codable, Equatable {
+    <span class="k">var</span> id: UUID
+    <span class="c">/// Mindestens ein Eintrag. Leere Zellen existieren nicht —</span>
+    <span class="c">/// das ist der Unterschied zu `slots: [UUID?]`.</span>
+    <span class="k">var</span> sessions: [UUID]
+    <span class="c">/// Welcher davon sichtbar ist. Muss in `sessions` enthalten sein.</span>
+    <span class="k">var</span> active: UUID
+}
+
+<span class="k">enum</span> <span class="t">Arrangement</span>: Codable, Equatable {
+    <span class="c">/// Ergibt sich aus der Zellenzahl. Der Normalfall.</span>
+    <span class="k">case</span> automatic
+    <span class="c">/// Der Nutzer hat geteilt oder gezogen — sein Baum gilt.</span>
+    <span class="k">case</span> manual(SplitNode)
+}
+
+<span class="k">indirect enum</span> <span class="t">SplitNode</span>: Codable, Equatable {
+    <span class="k">case</span> leaf(cellID: UUID)
+    <span class="k">case</span> split(axis: Axis, children: [SplitNode], fractions: [Double])
+}
+
+<span class="k">enum</span> <span class="t">Source</span>: Codable, Equatable {
+    <span class="c">/// Der Nutzer bestimmt die Mitglieder.</span>
+    <span class="k">case</span> manual
+    <span class="c">/// Mitglieder folgen aus dem Projekt; `hidden` blendet aus.</span>
+    <span class="k">case</span> project(UUID)
+}</pre>
+
+  <h3>Die vier Unterschiede, auf die es ankommt</h3>
+  <table>
+    <tr><th>Heute</th><th>Neu</th><th>Was dadurch möglich wird</th></tr>
+    <tr><td><code>slots: [UUID?]</code> mit Löchern</td><td><code>cells: [Cell]</code>, nie leer</td>
+        <td>Schließen verdichtet automatisch. Es gibt kein Loch, das jemand wegräumen müsste.</td></tr>
+    <tr><td><code>capacity</code> als Eingabe</td><td>Zellenzahl als Tatsache</td>
+        <td>Kein Raster anlegen, kein Verkleinern. Die Anordnung folgt dem Inhalt.</td></tr>
+    <tr><td>Ein Chat pro Platz</td><td>Stapel pro Zelle</td>
+        <td>„Als Tab hinzufügen" beim Hineinziehen — mehrere Chats teilen sich eine Fläche.</td></tr>
+    <tr><td>Feste Gewichte je Stufe</td><td><code>manual(SplitNode)</code> nur wenn gewollt</td>
+        <td>Die eigene Aufteilung überlebt, weil sie nicht an einer Stufe hängt.</td></tr>
+  </table>
+
+  <div class="box gut">
+    <div class="t">Warum <code>bindings</code> kein Beiwerk ist</div>
+    <p style="margin:0">Ohne diese Zuordnung wäre die automatische Anordnung schädlich: Wer zwei
+    Chats bewusst übereinandergelegt hat, verlöre diese Gruppierung beim nächsten Verdichten.
+    <code>bindings</code> hält fest, dass die Stapelung <em>gewollt</em> war — die Engine ordnet
+    frei an, respektiert dabei aber jede ausdrückliche Entscheidung. Das ist der Unterschied
+    zwischen „hilfreich" und „bevormundend".</p>
+  </div>
+</div></section>
+
+<section id="invarianten"><div class="wrap">
+  <h2>Invarianten <em>— was nie passieren darf</em></h2>
+  <p class="sub">Jede davon gehört als Test abgesichert, nicht als Kommentar.</p>
+  <table>
+    <tr><th>Regel</th><th>Was sie verhindert</th></tr>
+    <tr><td>Jede Zelle hat mindestens einen Chat</td><td>Genau das Loch, das im alten Modell entstand. Wird der letzte entfernt, verschwindet die Zelle.</td></tr>
+    <tr><td><code>active</code> ist in <code>sessions</code> enthalten</td><td>Eine Zelle, die auf einen Chat zeigt, den sie nicht hat — dargestellt als leere Fläche ohne Erklärung.</td></tr>
+    <tr><td>Ein Chat liegt in höchstens einer Zelle</td><td>Zwei Ansichten desselben PTY. Technisch möglich, für den Nutzer verwirrend, und die Fokus-Verwaltung würde mehrdeutig.</td></tr>
+    <tr><td>Bei <code>manual</code>: jedes Blatt zeigt auf eine existierende Zelle, jede Zelle kommt genau einmal vor</td><td>Chats, die niemand sieht, obwohl sie Mitglied sind — oder doppelt gezeichnete Flächen.</td></tr>
+    <tr><td><code>fractions</code>: positiv, endlich, Summe 1, so viele wie Kinder</td><td>Flächen mit Breite 0 oder <code>NaN</code>. Beim heutigen Modell schon einmal aufgetreten.</td></tr>
+    <tr><td><code>guest</code> ist kein Mitglied</td><td>Dass eine flüchtige Vorschau versehentlich dauerhaft wird — der Nutzer würde seinen Workspace langsam zumüllen, ohne es zu merken.</td></tr>
+    <tr><td>Bei <code>source: .project</code>: <code>cells</code> wird abgeleitet, nie direkt gesetzt</td><td>Dass die Ableitung und der gespeicherte Stand auseinanderlaufen und niemand weiß, welcher gilt.</td></tr>
+  </table>
+
+  <div class="box warn">
+    <div class="t">Wo die Invarianten durchgesetzt werden</div>
+    <p style="margin:0">Nicht im Setter und nicht in der Ansicht, sondern in <strong>einer</strong>
+    Normalisierungsfunktion, durch die jede Änderung läuft — nach demselben Muster wie
+    <code>migratedWorkspace</code> heute. Sie ist pur, damit sie vollständig testbar bleibt: Ein
+    kaputter Zustand hinein, ein gültiger heraus, und der Test beschreibt genau, was „gültig"
+    heißt.</p>
+  </div>
+</div></section>
+
+<section id="migration"><div class="wrap">
+  <h2>Migration <em>— v4 nach v5</em></h2>
+  <p class="sub">Der Bestand darf nicht verlorengehen, und ein Rückweg muss existieren.</p>
+
+  <h3>Die Übersetzung</h3>
+  <table>
+    <tr><th>Alt</th><th>Neu</th><th>Begründung</th></tr>
+    <tr><td>Jeder belegte <code>slot</code></td><td>Eine Zelle mit einem Chat</td><td>Der einfachste treue Fall.</td></tr>
+    <tr><td><code>nil</code>-Slots</td><td>Entfallen</td><td>Sie waren nie Inhalt, nur Lücke. Sie zu übernehmen hieße, den Fehler mitzunehmen.</td></tr>
+    <tr><td><code>capacity</code> + <code>fractions</code></td><td><code>manual(SplitNode)</code></td><td><strong>Wichtig:</strong> Die bestehende Anordnung bleibt exakt erhalten. Wer sich sein Raster gebaut hat, findet es unverändert vor.</td></tr>
+    <tr><td>—</td><td><code>bindings: [:]</code>, <code>guest: nil</code>, <code>hidden: []</code></td><td>Neue Möglichkeiten, keine Altlasten.</td></tr>
+  </table>
+
+  <div class="box gut">
+    <div class="t">Warum <code>manual</code> und nicht <code>automatic</code></div>
+    <p style="margin:0">Die automatische Anordnung ist besser — aber sie ungefragt über eine
+    gewachsene Einrichtung zu legen, fühlt sich wie Datenverlust an, auch wenn keiner vorliegt.
+    Deshalb: Bestand bleibt wie er ist, und ein sichtbarer Schalter („automatisch anordnen") löst
+    ihn auf Wunsch. <strong>Neue</strong> Workspaces starten dagegen auf <code>automatic</code> —
+    dort gibt es nichts zu bewahren.</p>
+  </div>
+
+  <h3>Absicherung</h3>
+  <table>
+    <tr><th>Maßnahme</th><th>Zweck</th></tr>
+    <tr><td>Rohsnapshot der v4-Datei vor der Migration</td><td>Ein Rückweg, der nicht von der Korrektheit der Migration abhängt. Nach dem Muster der Generationen-Backups im Workspace-Repository.</td></tr>
+    <tr><td>Migration ist eine pure Funktion</td><td>Testbar mit echten v4-Daten aus dem Feld, nicht nur mit konstruierten.</td></tr>
+    <tr><td>Unlesbare Layouts werden abgelegt, nicht verworfen</td><td>Ein einzelnes kaputtes Layout darf nicht den ganzen Sidecar unbrauchbar machen.</td></tr>
+    <tr><td>Migration läuft genau einmal, erkennbar an <code>schemaVersion</code></td><td>Verhindert, dass ein Fehlschlag bei jedem Start erneut versucht wird und dabei jedes Mal denselben Schaden anrichtet.</td></tr>
+  </table>
+
+  <p><code>AgentUIState</code> trägt bereits eine <code>schemaVersion</code> mit Migrationspfad
+  (<code>AgentUIState.swift:113-271</code>) — der Mechanismus ist vorhanden und erprobt, es kommt
+  ein Schritt hinzu.</p>
+</div></section>
+
+<section id="flaeche"><div class="wrap">
+  <h2>Wie groß der Eingriff ist</h2>
+  <p><code>slots</code> und <code>capacity</code> werden an <strong>75 Stellen</strong> im Code
+  benutzt. Das ist die eigentliche Arbeit — nicht der Entwurf des Modells, sondern der Umbau
+  aller Stellen, die vom alten ausgehen.</p>
+
+  <div class="box warn">
+    <div class="t">Daraus folgt die Reihenfolge</div>
+    <p style="margin:0 0 9px">Zwei Modelle nebeneinander zu betreiben wäre der teuerste Weg: jede
+    Änderung doppelt, und Fehler verstecken sich im Übergang. Besser ist ein Schnitt, bei dem das
+    alte Modell in <em>einem</em> Schritt verschwindet.</p>
+    <p style="margin:0">Möglich wird das, wenn die Engine vorher als pure, vollständig getestete
+    Logik steht. Dann ist der Umbau der 75 Stellen mechanisch — und jeder Fehler zeigt sich sofort
+    als fehlgeschlagener Test, nicht erst im Betrieb.</p>
+  </div>
+</div></section>
+
+<a class="weiter" href="../02-entscheidungen/01-offene-fragen.html">
+  <span class="l">Paket 02</span>
+  <span>Entscheidungen — was vor dem Bauen zu beantworten ist</span>
+  <span class="r">→</span>
+</a>
