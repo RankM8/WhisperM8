@@ -196,7 +196,10 @@
     <tr><th>Regel</th><th>Was sie verhindert</th></tr>
     <tr><td>Jede Zelle hat mindestens einen Chat</td><td>Genau das Loch, das im alten Modell entstand. Wird der letzte entfernt, verschwindet die Zelle.</td></tr>
     <tr><td><code>active</code> ist in <code>sessions</code> enthalten</td><td>Eine Zelle, die auf einen Chat zeigt, den sie nicht hat — dargestellt als leere Fläche ohne Erklärung.</td></tr>
-    <tr><td>Ein Chat liegt in höchstens einer Zelle</td><td>Zwei Ansichten desselben PTY. Technisch möglich, für den Nutzer verwirrend, und die Fokus-Verwaltung würde mehrdeutig.</td></tr>
+    <tr><td>Ein Chat liegt in höchstens einer Zelle <strong>desselben Layouts</strong></td>
+        <td>Zwei Ansichten desselben Terminals nebeneinander im gleichen Bild — die Fokus-Verwaltung würde mehrdeutig. <strong>Über Layouts hinweg ist Mehrfach-Mitgliedschaft ausdrücklich erlaubt</strong> (Entscheidung E8): derselbe Chat darf in beliebig vielen Workspaces liegen, weil immer nur einer davon sichtbar ist.</td></tr>
+    <tr><td>Ein beendeter Chat verschwindet aus <em>allen</em> Layouts</td>
+        <td>Layouts, die auf ein totes Terminal zeigen. Folgt zwingend aus E8: Solange ein Chat in mehreren Workspaces liegen darf, muss sein Ende überall ankommen — sonst bleibt eine Leiche in einem Workspace zurück, den man gerade nicht ansieht.</td></tr>
     <tr><td>Bei <code>manual</code>: jedes Blatt zeigt auf eine existierende Zelle, jede Zelle kommt genau einmal vor</td><td>Chats, die niemand sieht, obwohl sie Mitglied sind — oder doppelt gezeichnete Flächen.</td></tr>
     <tr><td><code>fractions</code>: positiv, endlich, Summe 1, so viele wie Kinder</td><td>Flächen mit Breite 0 oder <code>NaN</code>. Beim heutigen Modell schon einmal aufgetreten.</td></tr>
     <tr><td>Bei <code>source: .project</code>: <code>cells</code> wird abgeleitet, nie direkt gesetzt</td><td>Dass die Ableitung und der gespeicherte Stand auseinanderlaufen und niemand weiß, welcher gilt.</td></tr>

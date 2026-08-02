@@ -76,7 +76,36 @@
         <td>Zeigt die <strong>Chats des Workspace</strong>. Tab anklicken = fokussieren.</td></tr>
     <tr><td>E6</td><td>Was die Rückkehr überlebt</td>
         <td><strong>Nur die Anordnung.</strong> Nicht der Zoom, nicht der Fokus.</td></tr>
+    <tr><td>E7</td><td>Ziehen auf eine Trennlinie</td>
+        <td><strong>Dort entsteht eine neue Fläche.</strong> Die Anordnung wird dadurch manuell — der Nutzer hat sie ja gerade bestimmt.</td></tr>
+    <tr><td>E8</td><td>Derselbe Chat in mehreren Workspaces</td>
+        <td><strong>Erlaubt, in beliebig vielen.</strong> Es bleibt ein einziges Terminal.</td></tr>
+    <tr><td>E9</td><td>Derselbe Workspace in zwei Fenstern</td>
+        <td><strong>Nein.</strong> Ein Workspace wird höchstens in einem Fenster gezeigt.</td></tr>
+    <tr><td>E10</td><td>× am Tab im Workspace</td>
+        <td><strong>Nimmt den Chat nur aus dem Workspace.</strong> Er läuft weiter und bleibt in der Seitenleiste.</td></tr>
   </table>
+
+  <div class="box gut">
+    <div class="t">E8 und E10 greifen sauber ineinander</div>
+    <p style="margin:0 0 9px">Die offene Frage bei E8 war: Ein Chat liegt in zwei Workspaces —
+    was passiert beim Schließen im einen? <strong>E10 beantwortet sie:</strong> Das × nimmt ihn
+    nur aus <em>diesem</em> Workspace. Im anderen bleibt er, das Terminal läuft ununterbrochen
+    weiter. Kein Sonderfall nötig.</p>
+    <p style="margin:0">Der gefährliche Fall bleibt und braucht eine Regel: Wird ein Chat
+    <em>wirklich</em> beendet — aus der Seitenleiste, oder weil der Prozess endet —, muss er aus
+    <strong>allen</strong> Workspaces verschwinden. Sonst zeigen Layouts auf einen Chat, den es
+    nicht mehr gibt. Das ist eine Invariante, kein Detail.</p>
+  </div>
+
+  <div class="box warn">
+    <div class="t">Was E9 fürs Modell bedeutet</div>
+    <p style="margin:0">Ein Workspace gehört nicht zu einem Fenster, aber er darf nur in einem
+    <em>gezeigt</em> werden. Das heißt: Die Anordnung liegt beim Workspace (geteilt), die Zuordnung
+    „Fenster X zeigt Workspace Y" liegt beim Fenster. Wird derselbe Workspace in einem zweiten
+    Fenster geöffnet, ist zu entscheiden, ob er dorthin wandert oder das zweite Fenster ihn
+    ablehnt. <strong>Noch offen</strong> — aber erst beim Bauen relevant.</p>
+  </div>
 
   <div class="box gut">
     <div class="t">Was E1 und E3 zusammen bewirken</div>
@@ -198,7 +227,7 @@
   <table>
     <tr><th>Frage</th><th>Empfehlung</th><th>Vertagbar?</th></tr>
     <tr><td>F1 Klickverhalten</td><td style="color:var(--bad)">verworfen → <strong>E1:</strong> Workspace verlassen</td><td>entschieden</td></tr>
-    <tr><td>F2 Ziehen auf die Mitte</td><td>Zwei Zonen mit deutlicher Vorschau</td><td>nein — Kernfunktion</td></tr>
+    <tr><td>F2 Ziehen auf die Mitte</td><td>Zwei Zonen mit deutlicher Vorschau · ergänzt um <strong>E7:</strong> Kante = neue Fläche</td><td>entschieden</td></tr>
     <tr><td>F3 Stapel überlebt Neuanordnung</td><td>ja, über <code>bindings</code></td><td>nein — sonst ist die Automatik ein Rückschritt</td></tr>
     <tr><td>F4 Letzter Chat geschlossen</td><td>verdichten, bei manueller Anordnung Fläche aufteilen</td><td>nein — der Kern der Beschwerde</td></tr>
     <tr><td>F5 Projekt-Workspaces</td><td>abgeleitet, ausblenden, fremde abweisen</td><td><strong>ja</strong> — eigenes Paket</td></tr>
