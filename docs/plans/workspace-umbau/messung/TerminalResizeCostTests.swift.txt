@@ -1,0 +1,109 @@
+import XCTest
+import SwiftTerm
+@testable import WhisperM8
+
+/// Was kostet eine Groessenaenderung — und wie skaliert das mit der Zahl der
+/// gleichzeitig sichtbaren Terminals?
+///
+/// **Warum diese Messung vor dem Umbau kommt:** Beim Ziehen eines Trenners
+/// aendert sich die Groesse ALLER sichtbaren Panes, und zwar mehrmals pro
+/// Sekunde. Ob das Layout dabei fluessig bleibt, entscheidet sich nicht an
+/// SwiftUI, sondern hier. Liegt eine Aenderung bei allen Panes unter ~5 ms,
+/// kann sie waehrend des Ziehens durchgereicht werden. Liegt sie darueber,
+/// muss das Bild waehrend des Ziehens nur gedehnt und die echte Aenderung ans
+/// Ende verschoben werden — eine Architekturentscheidung, die man nicht
+/// nachruestet.
+///
+/// Gemessen wird die SwiftTerm-Seite: Puffer umstellen, Zeilen umbrechen,
+/// Neuzeichnung anstossen. NICHT gemessen ist, was ein laufendes Programm
+/// (Claude Code) nach dem SIGWINCH an neuem Bild schickt — das kommt als
+/// zusaetzliche Last obendrauf und ist der Grund, warum diese Zahl eine
+/// Untergrenze ist.
+final class TerminalResizeCostTests: XCTestCase {
+    /// Realistische Fuellung: ein Bildschirm voll Text mit Sequenzen, wie eine
+    /// TUI ihn erzeugt.
+    private func fill(_ view: TerminalView, lines: Int) {
+        var payload = ""
+        for i in 0..<lines {
+            if i % 5 == 0 {
+                payload += "\u{1b}[1;3\(i % 8)m[\(String(format: "%05d", i))]\u{1b}[0m "
+                payload += "Zeile mit Sequenzen — Fuellung bis auf Zeilenlaenge xxxxxxxxxxxx\r\n"
+            } else {
+                payload += "[\(String(format: "%05d", i))] Reiner Text — Fuellung bis Zeilenlaenge xxxx\r\n"
+            }
+        }
+        view.feed(text: payload)
+    }
+
+    private func makeTerminals(count: Int) -> [TerminalView] {
+        (0..<count).map { _ in
+            let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 800, height: 500))
+            fill(view, lines: 400)   // Scrollback plus sichtbarer Inhalt
+            return view
+        }
+    }
+
+    /// Misst die schnellste von mehreren Runden — der Median waere durch
+    /// Hintergrundlast der Testmaschine verzerrt, das Minimum ist die
+    /// belastbare Untergrenze.
+    private func measureResize(views: [TerminalView], rounds: Int = 8) -> Double {
+        var best = Double.infinity
+        for round in 0..<rounds {
+            // Zwischen zwei Groessen wechseln, damit nie ein No-op gemessen wird.
+            let width: CGFloat = round.isMultiple(of: 2) ? 640 : 900
+            let started = DispatchTime.now().uptimeNanoseconds
+            for view in views {
+                view.frame = CGRect(x: 0, y: 0, width: width, height: 500)
+                view.layoutSubtreeIfNeeded()
+            }
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+            best = min(best, ms)
+        }
+        return best
+    }
+
+    @MainActor
+    func testResizeCostScalesWithPaneCount() throws {
+        var zeilen: [String] = []
+        for count in [1, 3, 6, 9] {
+            let views = makeTerminals(count: count)
+            let ms = measureResize(views: views)
+            let proPane = ms / Double(count)
+            zeilen.append(String(
+                format: "MESSUNG  %d Pane(s): %6.2f ms gesamt · %5.2f ms je Pane · %@",
+                count, ms, proPane,
+                ms <= 5 ? "durchreichen moeglich" : (ms <= 16 ? "grenzwertig" : "Dehnen noetig")
+            ))
+        }
+        zeilen.forEach { print($0) }
+
+        // Kein hartes Budget — das ist eine Erhebung, keine Regression. Der
+        // Test faellt nur, wenn die Messung selbst nicht funktioniert hat.
+        XCTAssertEqual(zeilen.count, 4)
+    }
+
+    /// Gegenprobe: Wie teuer ist die Groessenaenderung im Verhaeltnis zum
+    /// Befuellen? Wenn Resize deutlich billiger ist als das Verarbeiten von
+    /// Output, liegt der Engpass beim Ziehen nicht im Layout, sondern in dem,
+    /// was die Programme danach schicken.
+    @MainActor
+    func testResizeComparedToFeeding() throws {
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 800, height: 500))
+        fill(view, lines: 400)
+
+        let resizeMs = measureResize(views: [view])
+
+        var feedBest = Double.infinity
+        for _ in 0..<5 {
+            let payloadStart = DispatchTime.now().uptimeNanoseconds
+            fill(view, lines: 50)          // ~ein Bildschirm neuer Inhalt
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - payloadStart) / 1_000_000
+            feedBest = min(feedBest, ms)
+        }
+
+        print(String(format: "MESSUNG  Resize einer Pane:        %6.2f ms", resizeMs))
+        print(String(format: "MESSUNG  Ein Bildschirm Output:    %6.2f ms", feedBest))
+        print(String(format: "MESSUNG  Verhaeltnis Output/Resize: %5.1fx", feedBest / max(resizeMs, 0.001)))
+        XCTAssertGreaterThan(resizeMs, 0)
+    }
+}

@@ -1013,3 +1013,73 @@ final class AgentSidebarSubagentSplitTests: XCTestCase {
         XCTAssertEqual(split.visible.map(\.title), ["low", "high"])
     }
 }
+
+// MARK: - Hover-Aktion der Sidebar-Zeile (Scope-abhängig)
+
+final class SidebarCloseActionTests: XCTestCase {
+    private func chat(kind: AgentSessionKind? = nil) -> AgentChatSession {
+        var session = makeSidebarSession(projectID: UUID())
+        session.kind = kind
+        return session
+    }
+
+    func testActiveScopeEndsChatInsteadOfArchiving() {
+        let action = SidebarCloseAction.resolve(scope: .active, session: chat())
+        XCTAssertEqual(action, .endSession)
+        XCTAssertEqual(action.icon, "minus")
+        XCTAssertEqual(action.help, "Tab schließen und Chat beenden")
+    }
+
+    func testOtherScopesKeepArchiving() {
+        for scope in [SidebarScope.recent, .all] {
+            let action = SidebarCloseAction.resolve(scope: scope, session: chat())
+            XCTAssertEqual(action, .archive, "Scope \(scope.rawValue) darf weiter archivieren")
+            XCTAssertEqual(action.icon, "xmark")
+            XCTAssertEqual(action.help, "Archivieren")
+        }
+    }
+
+    func testTerminalsCloseInEveryScope() {
+        for scope in SidebarScope.allCases {
+            let action = SidebarCloseAction.resolve(scope: scope, session: chat(kind: .terminal))
+            XCTAssertEqual(action, .closeTerminal, "Terminal in Scope \(scope.rawValue)")
+            XCTAssertEqual(action.icon, "xmark")
+            XCTAssertEqual(action.help, "Terminal schließen")
+        }
+    }
+
+    func testSubagentChildFollowsScopeLikeAnyChat() {
+        XCTAssertEqual(SidebarCloseAction.resolve(scope: .active, session: chat(kind: .subagentJob)), .endSession)
+        XCTAssertEqual(SidebarCloseAction.resolve(scope: .all, session: chat(kind: .subagentJob)), .archive)
+    }
+}
+
+/// Belegt die Wirkung des Beendens auf die Sichtbarkeit: ohne laufendes PTY
+/// und ohne offenen Tab fällt der Chat aus „Aktiv" heraus, bleibt aber (weil
+/// nicht archiviert) über „Zuletzt"/„Alle" erreichbar.
+final class EndedSessionVisibilityTests: XCTestCase {
+    func testEndedSessionLeavesActiveButStaysInRecent() {
+        let now = Date(timeIntervalSince1970: 100_000)
+        var session = makeSidebarSession(projectID: UUID(), lastActivityAt: now.addingTimeInterval(-60))
+        session.status = .closed
+
+        let active = SidebarScopeFilter(
+            scope: .active,
+            runningSessionIDs: [],
+            openTabIDs: [],
+            now: now,
+            recentWindow: SidebarScopeFilter.defaultRecentWindow
+        )
+        let recent = SidebarScopeFilter(
+            scope: .recent,
+            runningSessionIDs: [],
+            openTabIDs: [],
+            now: now,
+            recentWindow: SidebarScopeFilter.defaultRecentWindow
+        )
+
+        XCTAssertFalse(active.matches(session))
+        XCTAssertTrue(recent.matches(session))
+        XCTAssertNotEqual(session.status, .archived)
+    }
+}

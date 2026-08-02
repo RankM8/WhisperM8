@@ -255,6 +255,43 @@ final class CodexVoiceSessionGateTests: XCTestCase {
         let tail = "2026-07-26T16:30:48.611Z error [electron-message-handler] ResizeObserver loop completed"
         XCTAssertNil(CodexVoiceSessionProbe.lastSessionStartTimestamp(inLogTail: tail))
     }
+
+    /// Regression vom 28.07.2026: Codex schreibt Tagesordner nach UTC. Kurz
+    /// nach lokaler Mitternacht liegt die aktive Sitzung deshalb noch im
+    /// Ordner des lokalen Vortags. Zudem darf normaler Log-Traffic den Marker
+    /// nicht bereits nach 64 KiB aus dem Lesefenster schieben.
+    func testProbeFindsLongRunningSessionAcrossLocalMidnight() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 3 * 60 * 60)!
+        let now = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 28,
+            hour: 0,
+            minute: 15
+        ))!
+        let previousDay = root.appendingPathComponent("2026/07/27", isDirectory: true)
+        try FileManager.default.createDirectory(at: previousDay, withIntermediateDirectories: true)
+
+        let marker = "2026-07-27T20:23:51.404Z info [AppServerConnection] realtime_session_started hostId=local\n"
+        let noise = String(repeating: "2026-07-27T21:00:00.000Z info normal application event\n", count: 3_000)
+        try (marker + noise).write(
+            to: previousDay.appendingPathComponent("codex-desktop-test.log"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let probe = CodexVoiceSessionProbe(
+            logRoot: root,
+            now: { now },
+            codexRunningProvider: { true }
+        )
+        XCTAssertEqual(probe.currentArmState(), .armed)
+    }
 }
 
 final class VoiceGateLocaleResolverTests: XCTestCase {
@@ -529,7 +566,14 @@ final class VoiceGateDefaultVocabularyTests: XCTestCase {
 
     func testDefaultPhrasesMatch() {
         let matcher = VoiceGateCommandMatcher()
-        for (command, expected) in [("Pause", VoiceGateIntent.mute), ("weiter", .unmute)] {
+        for (command, expected) in [
+            ("Pause", VoiceGateIntent.mute),
+            ("Stopp", .mute),
+            ("Stop", .mute),
+            ("weiter", .unmute),
+            ("Resume", .unmute),
+            ("Resümee", .unmute)
+        ] {
             let segments = [
                 VoiceGateSegment(text: "Anna", start: 1.0, duration: 0.3, confidence: 0.9),
                 VoiceGateSegment(text: command, start: 1.4, duration: 0.3, confidence: 0.9)
@@ -539,5 +583,34 @@ final class VoiceGateDefaultVocabularyTests: XCTestCase {
             }
             XCTAssertEqual(intent, expected)
         }
+    }
+
+    func testAliasesStillRequireExactCarrierAndUtteranceBoundary() {
+        let matcher = VoiceGateCommandMatcher()
+        let noCarrier = [
+            VoiceGateSegment(text: "Resume", start: 1.0, duration: 0.3, confidence: 0.9)
+        ]
+        XCTAssertEqual(matcher.match(segments: noCarrier), .rejected(.noCarrier))
+
+        let runningSentence = [
+            VoiceGateSegment(text: "sag", start: 1.0, duration: 0.3, confidence: 0.9),
+            VoiceGateSegment(text: "Anna", start: 1.31, duration: 0.3, confidence: 0.9),
+            VoiceGateSegment(text: "Stopp", start: 1.65, duration: 0.3, confidence: 0.9)
+        ]
+        XCTAssertEqual(matcher.match(segments: runningSentence), .rejected(.noUtteranceBoundary))
+    }
+
+    /// Ein Trockenlauf darf die Live-Annahme nicht so verändern, als sei die
+    /// Taste wirklich gedrückt worden. Der Coordinator ruft in diesem Modus
+    /// bewusst kein `confirmPress` auf.
+    func testUnconfirmedDryRunDecisionLeavesAssumedStateUntouched() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var machine = VoiceGateStateMachine(assumed: .open)
+        XCTAssertEqual(machine.handle(.mute, now: now), .press(intent: .mute, reason: .stateMismatch))
+        XCTAssertEqual(machine.assumed, .open)
+        XCTAssertEqual(
+            machine.handle(.mute, now: now.addingTimeInterval(3)),
+            .press(intent: .mute, reason: .stateMismatch)
+        )
     }
 }

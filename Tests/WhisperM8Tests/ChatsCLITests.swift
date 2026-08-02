@@ -146,6 +146,26 @@ final class SessionRefResolverTests: XCTestCase {
 // MARK: - ChatsStatusProbe (derive-Kern mit Temp-Transcripts)
 
 final class ChatsStatusProbeTests: XCTestCase {
+    func testCodexIndexWalksNestedJSONLFilesWithoutFollowingSymlinks() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-index-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let nested = root.appendingPathComponent("2026/07/27", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+
+        let id = UUID()
+        let transcript = nested.appendingPathComponent("rollout-test-\(id.uuidString.lowercased()).jsonl")
+        try Data().write(to: transcript)
+        try Data().write(to: nested.appendingPathComponent("not-a-session.jsonl"))
+
+        let loop = nested.appendingPathComponent("loop")
+        try FileManager.default.createSymbolicLink(at: loop, withDestinationURL: root)
+
+        let index = ChatsStatusProbe.buildCodexTranscriptIndex(rootPath: root.path)
+        XCTAssertEqual(index[id.uuidString.lowercased()]?.path, transcript.path)
+        XCTAssertEqual(index.count, 1)
+    }
+
     private var tempDir: URL!
 
     override func setUpWithError() throws {

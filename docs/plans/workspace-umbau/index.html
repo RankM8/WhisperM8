@@ -77,7 +77,7 @@
 </div></header>
 
 <nav><div class="wrap">
-  <a href="#warum">Warum</a><a href="#kern">Kernidee</a><a href="#pakete">Pakete</a>
+  <a href="#warum">Warum</a><a href="#kern">Kernidee</a><a href="#messung">Messung</a><a href="#pakete">Pakete</a>
   <a href="#risiken">Risiken</a><a href="#fahrplan">Fahrplan</a>
   <span class="stempel">Stand 02.08.2026 · Planung</span>
 </div></nav>
@@ -178,6 +178,64 @@
         <td>Solange beide existieren, verdoppelt sich jede Änderung und Fehler verstecken sich im Übergang.</td>
         <td>Schnitte so legen, dass das alte Modell in <em>einem</em> Schritt verschwindet, nicht schrittweise.</td></tr>
   </table>
+</div></section>
+
+<section id="messung"><div class="wrap">
+  <h2>Die Messung, die die Architektur entscheidet <em>— 02.08.2026</em></h2>
+  <p class="sub">Vor dem Bauen erhoben, nicht danach. Der Messcode liegt als
+  <code>messung/TerminalResizeCostTests.swift.txt</code> daneben — zum Wiederholen nach
+  <code>Tests/WhisperM8Tests/</code> kopieren. <strong>Bewusst nicht in der Testsuite:</strong> Er
+  erzeugt 19 Terminal-Ansichten mit je 400 Zeilen und brachte dabei einen anderen Test zum
+  Wackeln. Eine einmalige Erhebung gehört nicht dauerhaft in eine Suite, die verlässlich sein
+  muss.</p>
+
+  <p>Beim Ziehen eines Trenners ändert sich die Größe <em>aller</em> sichtbaren Flächen, mehrmals
+  pro Sekunde. Ob das flüssig bleibt, entscheidet sich nicht an SwiftUI, sondern daran, was eine
+  Größenänderung im Terminal kostet.</p>
+
+  <table>
+    <tr><th>Flächen</th><th>Gesamt</th><th>Je Fläche</th><th>Anteil an einem 60-Hz-Bild (16,7 ms)</th></tr>
+    <tr><td>1</td><td>1,31 ms</td><td>1,31 ms</td><td>8 %</td></tr>
+    <tr><td>3</td><td>3,93 ms</td><td>1,31 ms</td><td>24 %</td></tr>
+    <tr><td>6</td><td>7,47 ms</td><td>1,25 ms</td><td>45 %</td></tr>
+    <tr><td><strong>9</strong></td><td><strong>11,24 ms</strong></td><td>1,25 ms</td><td><strong>67 %</strong></td></tr>
+  </table>
+
+  <p>Die Kosten sind <strong>exakt linear</strong> — rund 1,3 ms je Fläche, unabhängig davon, wie
+  viele es sind. Kein verstecktes quadratisches Verhalten, das erst bei neun zuschlägt. Das ist die
+  gute Nachricht.</p>
+
+  <div class="box warn">
+    <div class="t">Die Zahl ist eine Untergrenze — und die Gegenprobe zeigt warum</div>
+    <p style="margin:0 0 9px">Gemessen ist nur die Terminal-Seite: Puffer umstellen, Zeilen
+    umbrechen, Neuzeichnung anstoßen. <strong>Nicht gemessen ist, was das laufende Programm danach
+    schickt.</strong> Claude Code erfährt die neue Zeichenzahl per SIGWINCH und baut sein Bild
+    komplett neu auf.</p>
+    <p style="margin:0">Wie teuer das ist, sagt die Gegenprobe: <strong>Ein Bildschirm neuer
+    Ausgabe kostet 1,40 ms</strong> — praktisch dasselbe wie eine Größenänderung. Die Neuzeichnung
+    verdoppelt die Rechnung also ungefähr. Realistisch für neun Flächen:
+    <strong>rund 24 ms</strong> statt 11 — und damit über dem 60-Hz-Budget.</p>
+  </div>
+
+  <div class="box gut">
+    <div class="t">Was daraus folgt</div>
+    <table style="margin:0">
+      <tr><th>Fall</th><th>Bewertung</th></tr>
+      <tr><td>Bis 6 Flächen, 60 Bilder/s durchreichen</td><td><strong>Geht.</strong> 7,5 ms plus Neuzeichnung bleibt im Rahmen.</td></tr>
+      <tr><td>9 Flächen, 60 Bilder/s durchreichen</td><td><strong>Geht nicht.</strong> Rund 24 ms — sichtbares Ruckeln.</td></tr>
+      <tr><td>9 Flächen, 30 Bilder/s (heutiges Verhalten)</td><td><strong>Geht.</strong> 24 ms von 33 ms. Genau deshalb steht die Drosselung heute bei 33 ms — der Wert war offenbar gut gewählt.</td></tr>
+      <tr><td>Während des Ziehens nur dehnen, echte Änderung am Ende</td><td><strong>Der beste Weg.</strong> Ziehen läuft mit 60 Bildern, die Neuzeichnung fällt einmal an statt dreißigmal pro Sekunde.</td></tr>
+    </table>
+  </div>
+
+  <p><strong>Entscheidung für den Umbau:</strong> Die Dehn-Technik von Anfang an einplanen, nicht
+  nachrüsten. Sie ist der Unterschied zwischen „läuft" und „läuft flüssig" — und sie lässt sich
+  später kaum nachträglich einziehen, weil die gesamte Geometrie-Kette davon abhängt, ob eine
+  Größe „vorläufig" oder „endgültig" ist.</p>
+
+  <p>Für das Vergrößern eines Chats (Zoom) folgt dasselbe: Es sollte eine reine
+  Sichtbarkeitsänderung sein. Die verdeckten Terminals behalten ihre Größe, es wird nichts neu
+  gezeichnet — sonst kostet jedes Ein- und Auszoomen zweimal die volle Neuzeichnung aller Flächen.</p>
 </div></section>
 
 <section id="fahrplan"><div class="wrap">

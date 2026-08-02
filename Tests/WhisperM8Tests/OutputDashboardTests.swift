@@ -12,6 +12,7 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(modes.map(\.id), [
             OutputMode.rawID,
             OutputMode.cleanID,
+            OutputMode.promptFastID,
             OutputMode.promptID,
             OutputMode.promptPlusID,
             OutputMode.taskID,
@@ -23,6 +24,7 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(modesByID[OutputMode.emailID]?.shortLabel, "Mail")
         XCTAssertEqual(modesByID[OutputMode.whatsappID]?.shortLabel, "WA")
         XCTAssertEqual(modesByID[OutputMode.slackID]?.contextPolicy, .auto)
+        XCTAssertEqual(modesByID[OutputMode.promptFastID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.promptID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.promptPlusID]?.contextPolicy, .auto)
         XCTAssertEqual(modesByID[OutputMode.taskID]?.contextPolicy, .auto)
@@ -31,11 +33,18 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(modesByID[OutputMode.promptPlusID]?.projectAccess, .readOnly)
         XCTAssertEqual(modesByID[OutputMode.taskID]?.projectAccess, .readOnly)
         XCTAssertEqual(modesByID[OutputMode.promptID]?.projectAccess, .off)
+        XCTAssertEqual(modesByID[OutputMode.promptFastID]?.projectAccess, .off)
+        // Fast Prompt räumt nur auf — deshalb Low statt des globalen Reasoning-Defaults.
+        XCTAssertEqual(
+            modesByID[OutputMode.promptFastID]?.codexReasoningEffortRawOverride,
+            CodexReasoningEffort.low.rawValue
+        )
         XCTAssertEqual(modesByID[OutputMode.rawID]?.projectAccess, .off)
         XCTAssertFalse(modesByID[OutputMode.rawID]?.usesPostProcessing ?? true)
         XCTAssertTrue(modesByID[OutputMode.cleanID]?.usesPostProcessing ?? false)
         XCTAssertFalse(modesByID[OutputMode.rawID]?.pasteVisualAttachments ?? true)
         XCTAssertFalse(modesByID[OutputMode.cleanID]?.pasteVisualAttachments ?? true)
+        XCTAssertTrue(modesByID[OutputMode.promptFastID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.promptID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.promptPlusID]?.pasteVisualAttachments ?? false)
         XCTAssertTrue(modesByID[OutputMode.taskID]?.pasteVisualAttachments ?? false)
@@ -118,10 +127,14 @@ final class OutputDashboardTests: XCTestCase {
         let store = OutputModeStore(fileURL: fileURL)
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
+        // Über IDs statt Indizes adressiert — die Built-in-Reihenfolge ändert
+        // sich mit jedem neuen Modus (zuletzt Fast Prompt).
         var modes = OutputMode.builtInModes
-        modes[0].isEnabled = false
-        modes[2].shortLabel = "Ask"
-        modes[2].isEnabled = false
+        let rawIndex = try XCTUnwrap(modes.firstIndex { $0.id == OutputMode.rawID })
+        let promptIndex = try XCTUnwrap(modes.firstIndex { $0.id == OutputMode.promptID })
+        modes[rawIndex].isEnabled = false
+        modes[promptIndex].shortLabel = "Ask"
+        modes[promptIndex].isEnabled = false
 
         try store.saveModes(modes)
 
@@ -226,6 +239,27 @@ final class OutputDashboardTests: XCTestCase {
         XCTAssertEqual(taskTemplate?.name, "Agent task")
         XCTAssertTrue(taskTemplate?.instruction.contains("Execute this task") == true)
         XCTAssertTrue(taskTemplate?.instruction.contains("Do not output a prompt") == true)
+    }
+
+    func testFastPromptTemplateCleansUpInsteadOfEngineering() {
+        let fastTemplate = PostProcessingTemplate.builtInTemplates.first { $0.id == PostProcessingTemplate.promptFastID }
+
+        XCTAssertEqual(fastTemplate?.name, "Fast prompt")
+        // Kernvertrag: nur aufräumen, nichts ergänzen, nichts recherchieren.
+        XCTAssertTrue(fastTemplate?.instruction.contains("Reproduce it one to one") == true)
+        XCTAssertTrue(fastTemplate?.instruction.contains("Do not research") == true)
+        XCTAssertTrue(fastTemplate?.instruction.contains("Do not summarize, shorten, expand, or elaborate") == true)
+        // Der Playbook-Kern der Prompt-Modi darf hier gerade NICHT auftauchen.
+        XCTAssertFalse(fastTemplate?.instruction.contains("Classify the intent") == true)
+        XCTAssertFalse(fastTemplate?.instruction.contains("Acceptance Criteria:") == true)
+        XCTAssertFalse(fastTemplate?.instruction.contains("Project exploration") == true)
+        // Bilder werden mit kurzer Beschreibung eingepflegt.
+        XCTAssertTrue(fastTemplate?.instruction.contains("\"Screenshots\"") == true)
+        XCTAssertTrue(fastTemplate?.instruction.contains("visual manifest") == true)
+        // Kontext-Footer wie bei den anderen Prompt-Modi.
+        XCTAssertTrue(fastTemplate?.instruction.contains("{rawTranscript}") == true)
+        XCTAssertTrue(fastTemplate?.instruction.contains("{visualContextSummary}") == true)
+        XCTAssertTrue(fastTemplate?.instruction.contains("{activeApp}") == true)
     }
 
     func testTemplateStoreLoadsBuiltInsAndSavesCustomTemplates() throws {
@@ -450,6 +484,10 @@ final class OutputDashboardTests: XCTestCase {
         )
         XCTAssertEqual(
             router.route(rawText: "mach daraus einen prompt", mode: OutputMode.mode(for: OutputMode.promptID), contextBundle: context),
+            .promptPackage
+        )
+        XCTAssertEqual(
+            router.route(rawText: "räum das nur auf", mode: OutputMode.mode(for: OutputMode.promptFastID), contextBundle: context),
             .promptPackage
         )
         XCTAssertEqual(
