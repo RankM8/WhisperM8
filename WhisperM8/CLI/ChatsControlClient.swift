@@ -84,6 +84,18 @@ enum ChatsControlClient {
         // Read-Timeout setzen.
         var tv = timeval(tv_sec: readTimeoutSeconds, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+
+        // Ein blockierendes AF_UNIX-connect besitzt auf Darwin keinen eigenen
+        // Timeout. Bei einem stale Socket oder voller Listen-Queue konnte die
+        // CLI deshalb trotz `connectTimeoutSeconds` unbegrenzt hängen. Kurz
+        // non-blocking verbinden, per poll begrenzen und anschließend den
+        // ursprünglichen Modus wiederherstellen.
+        let originalFlags = fcntl(fd, F_GETFL, 0)
+        guard originalFlags >= 0, fcntl(fd, F_SETFL, originalFlags | O_NONBLOCK) == 0 else {
+            close(fd)
+            throw ClientError.appUnreachable("Socket konnte nicht auf Timeout-Modus gesetzt werden.")
+        }
 
         let len = socklen_t(MemoryLayout<sockaddr_un>.size)
         let result = withUnsafePointer(to: &addr) { ptr in
@@ -91,9 +103,31 @@ enum ChatsControlClient {
                 Darwin.connect(fd, $0, len)
             }
         }
-        guard result == 0 else {
+        if result != 0, errno != EINPROGRESS {
             close(fd)
             throw ClientError.appUnreachable("WhisperM8-App nicht erreichbar (Socket antwortet nicht). Läuft die App?")
+        }
+
+        if result != 0 {
+            var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            let pollResult = poll(&descriptor, 1, Int32(connectTimeoutSeconds * 1_000))
+            guard pollResult > 0 else {
+                close(fd)
+                throw ClientError.appUnreachable("WhisperM8-App nicht erreichbar (Connect-Timeout). Läuft die App?")
+            }
+
+            var socketError: Int32 = 0
+            var socketErrorLength = socklen_t(MemoryLayout<Int32>.size)
+            guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &socketErrorLength) == 0,
+                  socketError == 0 else {
+                close(fd)
+                throw ClientError.appUnreachable("WhisperM8-App nicht erreichbar (Socket antwortet nicht). Läuft die App?")
+            }
+        }
+
+        guard fcntl(fd, F_SETFL, originalFlags) == 0 else {
+            close(fd)
+            throw ClientError.appUnreachable("Socket konnte nicht in den normalen Modus zurückgesetzt werden.")
         }
         return fd
     }

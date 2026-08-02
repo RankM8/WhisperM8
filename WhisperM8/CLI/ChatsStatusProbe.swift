@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // MARK: - One-Shot-Runtime-Status für den CLI-Prozess
 
@@ -221,22 +222,48 @@ enum ChatsStatusProbe {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex")
             .appendingPathComponent("sessions")
-        guard let enumerator = FileManager.default.enumerator(
-            at: dir,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else { return [:] }
+        return buildCodexTranscriptIndex(rootPath: dir.path)
+    }()
+
+    /// Baut den Codex-Index ausschließlich über POSIX-Pfade auf.
+    ///
+    /// `FileManager.enumerator(at:includingPropertiesForKeys:)` wirkt zwar wie
+    /// ein reiner Dateisystem-Walk, fragt auf macOS aber URL-Ressourcenwerte
+    /// über LaunchServices/XPC ab. Wenn dieser Dienst hängt, blockiert der
+    /// gesamte CLI-Prozess synchron — genau das wurde bei `chats overview`
+    /// beobachtet. `contentsOfDirectory(atPath:)` plus `lstat` bleibt dagegen
+    /// auf dem lokalen Dateisystem und folgt außerdem keinen Symlinks.
+    static func buildCodexTranscriptIndex(rootPath: String) -> [String: URL] {
+        let fileManager = FileManager.default
+        var directories = [rootPath]
         var index: [String: URL] = [:]
-        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
-            let stem = url.deletingPathExtension().lastPathComponent
-            guard stem.count >= 36 else { continue }
-            let candidate = String(stem.suffix(36)).lowercased()
-            if UUID(uuidString: candidate) != nil {
-                index[candidate] = url
+
+        while let directory = directories.popLast() {
+            guard let names = try? fileManager.contentsOfDirectory(atPath: directory) else {
+                continue
+            }
+            for name in names where !name.hasPrefix(".") {
+                let path = (directory as NSString).appendingPathComponent(name)
+                var metadata = stat()
+                guard lstat(path, &metadata) == 0 else { continue }
+
+                switch metadata.st_mode & S_IFMT {
+                case S_IFDIR:
+                    directories.append(path)
+                case S_IFREG where name.hasSuffix(".jsonl"):
+                    let stem = String(name.dropLast(".jsonl".count))
+                    guard stem.count >= 36 else { continue }
+                    let candidate = String(stem.suffix(36)).lowercased()
+                    if UUID(uuidString: candidate) != nil {
+                        index[candidate] = URL(fileURLWithPath: path)
+                    }
+                default:
+                    continue
+                }
             }
         }
         return index
-    }()
+    }
 
     // MARK: - File-Helfer (eigene Kopien — die Watcher-Pendants sind private)
 
