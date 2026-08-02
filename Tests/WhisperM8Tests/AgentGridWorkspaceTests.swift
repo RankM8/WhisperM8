@@ -298,7 +298,9 @@ final class AgentGridWorkspaceTests: XCTestCase {
         var state = try JSONDecoder().decode(AgentUIState.self, from: Data(json.utf8))
         state.migrateIfNeeded(workspace: makeWorkspace(sessions: s))
 
-        XCTAssertEqual(state.schemaVersion, 4)
+        // Gegen die Konstante pruefen, nicht gegen eine feste Zahl: Der Test
+        // will sagen „migriert bis zum aktuellen Schema", nicht „genau v4".
+        XCTAssertEqual(state.schemaVersion, AgentUIState.currentSchemaVersion)
         XCTAssertEqual(state.gridWorkspaces.count, 1)
         XCTAssertEqual(state.gridWorkspaces[0].name, "Grid")
         XCTAssertEqual(state.gridWorkspaces[0].capacity, 2)

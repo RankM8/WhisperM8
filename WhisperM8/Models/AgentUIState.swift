@@ -137,7 +137,19 @@ struct AgentUIState: Codable, Equatable {
     var primaryWindowID: UUID
     /// Globale Grid-Workspaces (Schema v4). Die Array-Reihenfolge IST die
     /// Sidebar-Reihenfolge — bewusst keine zweite Order-Liste.
+    ///
+    /// **Wird von `layouts` abgeloest (Schema v5).** Bleibt vorerst bestehen,
+    /// bis die Oberflaeche umgestellt ist; entfaellt dann in einem Schritt.
     var gridWorkspaces: [AgentGridWorkspace]
+
+    /// Die neuen Anordnungen (Schema v5) — Zellen mit Stapeln statt fester
+    /// Plaetze. Reihenfolge ist wie bei `gridWorkspaces` die Sidebar-Reihenfolge.
+    ///
+    /// Warum das alte Modell nicht reichte: Dort IST die Position die
+    /// Identitaet, weshalb Verdichten und automatisches Anordnen sich
+    /// gegenseitig ausschliessen. Begruendung und Plan:
+    /// `docs/plans/workspace-umbau/`.
+    var layouts: [WorkspaceLayout]
     /// In der Sidebar EINGEKLAPPTE Workspace-Gruppen (nur der Header bleibt
     /// sichtbar). Global wie die Pins; `decodeIfPresent` mit Default `[]`,
     /// kein Schema-Bump — ältere Builds ignorieren das Feld.
@@ -152,7 +164,7 @@ struct AgentUIState: Codable, Equatable {
     /// bei der Migration — zur Laufzeit darf die Bar mehr Tabs zeigen
     /// (sie scrollt), beim nächsten Load wird gekappt.
     static let maxOpenTabs = 12
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
 
     static let empty = AgentUIState()
 
@@ -167,6 +179,7 @@ struct AgentUIState: Codable, Equatable {
         case windows
         case primaryWindowID
         case gridWorkspaces
+        case layouts
         case collapsedGridWorkspaceIDs
         // v1-Keys, nur fürs Decoding
         case openTabIDsByProject
@@ -184,6 +197,7 @@ struct AgentUIState: Codable, Equatable {
         windows: [AgentChatWindowState] = [],
         primaryWindowID: UUID? = nil,
         gridWorkspaces: [AgentGridWorkspace] = [],
+        layouts: [WorkspaceLayout] = [],
         collapsedGridWorkspaceIDs: [UUID] = [],
         legacyOpenTabIDsByProject: [UUID: [UUID]] = [:],
         legacySelectedSessionIDByProject: [UUID: UUID] = [:]
@@ -198,6 +212,7 @@ struct AgentUIState: Codable, Equatable {
         self.unreadSubagentSessionIDs = unreadSubagentSessionIDs
         self.primaryWindowID = resolvedPrimaryWindowID
         self.gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces)
+        self.layouts = layouts.map(LayoutNormalizer.normalize)
         self.collapsedGridWorkspaceIDs = collapsedGridWorkspaceIDs
         if windows.isEmpty {
             self.windows = [
@@ -234,6 +249,7 @@ struct AgentUIState: Codable, Equatable {
             ?? windows.first(where: \.isPrimary)?.id
             ?? UUID()
         gridWorkspaces = try c.decodeIfPresent([AgentGridWorkspace].self, forKey: .gridWorkspaces) ?? []
+        layouts = try c.decodeIfPresent([WorkspaceLayout].self, forKey: .layouts) ?? []
         collapsedGridWorkspaceIDs = try c.decodeIfPresent([UUID].self, forKey: .collapsedGridWorkspaceIDs) ?? []
         legacyOpenTabIDsByProject = try c.decodeIfPresent([UUID: [UUID]].self, forKey: .openTabIDsByProject) ?? [:]
         legacySelectedSessionIDByProject = try c.decodeIfPresent([UUID: UUID].self, forKey: .selectedSessionIDByProject) ?? [:]
@@ -251,6 +267,7 @@ struct AgentUIState: Codable, Equatable {
         try c.encode(windows, forKey: .windows)
         try c.encode(primaryWindowID, forKey: .primaryWindowID)
         try c.encode(gridWorkspaces, forKey: .gridWorkspaces)
+        try c.encode(layouts, forKey: .layouts)
         try c.encode(collapsedGridWorkspaceIDs, forKey: .collapsedGridWorkspaceIDs)
         // v1-Felder werden bewusst nicht mehr geschrieben.
     }
@@ -340,6 +357,22 @@ struct AgentUIState: Codable, Equatable {
             windows = Self.normalizedWindows(
                 windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces
             )
+        }
+
+        if schemaVersion < 5 {
+            // v5: Das Positionsraster wird zur Anordnung aus Zellen. Der
+            // Bestand wird dabei NICHT umgeordnet — jedes vorhandene Layout
+            // kommt als `manual` herueber und behaelt seine Aufteilung exakt.
+            // Die automatische Anordnung ist zwar besser, aber sie ungefragt
+            // ueber eine gewachsene Einrichtung zu legen fuehlt sich wie
+            // Datenverlust an. Der Weg dorthin ist der sichtbare Schalter.
+            //
+            // `gridWorkspaces` bleibt vorerst stehen: Solange die Oberflaeche
+            // noch darauf laeuft, waere ein Entfernen ein Rueckweg weniger.
+            // Es entfaellt in einem Schritt, wenn die Umstellung durch ist.
+            if layouts.isEmpty {
+                layouts = WorkspaceLayoutMigration.migrate(gridWorkspaces)
+            }
         }
 
         syncLegacyWindowMirror()
