@@ -29,9 +29,70 @@ Die gesamte Logik des Umbaus ist gebaut und geprüft — ohne eine Zeile SwiftUI
 | `Services/AgentChats/Layout/LayoutDividerDrag.swift` | Dehn-Technik beim Trenner | 12 |
 | `Views/Workspace/WorkspaceLayoutView.swift` | Zeichnet die Flächen — **noch nicht eingehängt** | — |
 
+## Nachtrag 02.08., später Abend — S4b und S5 sind fertig
+
+Erledigt und committet (`0ce54b0`, `4e610f0`, `06d42d5`), **2302 Tests grün**:
+
+| Schritt | Was steht |
+|---|---|
+| **S4b** | `WorkspaceLayoutView` ist vollständig verdrahtet — Ziehen, Zielvorschau, Trenner mit Dehn-Technik |
+| **S5** | Zoom als reine Sichtbarkeit |
+
+Drei Entscheidungen, die der Plan offengelassen hatte:
+
+1. **Griff statt Fläche.** Die Ziehgeste hängt an einer Kopfleiste je Zelle,
+   nicht auf der ganzen Fläche. Grund: SwiftTerms `NSView` verarbeitet
+   Mausereignisse selbst — eine Geste darüber löst entweder nicht aus oder
+   zerstört die Textmarkierung im Terminal. Deshalb bekommt auch eine Zelle mit
+   nur einem Chat die Leiste; ohne sie gäbe es keinen Ort zum Anfassen.
+2. **`DragGesture` statt `NSEvent`-Monitor.** Die Warnung im Plan gilt
+   `.draggable` (Transferable/`NSItemProvider`) — eine `DragGesture` mit
+   `minimumDistance: 0` ist davon nicht betroffen und reicht, weil die
+   Entscheidung „Klick oder Zug" ohnehin in `LayoutDragState` fällt.
+3. **Dehnen heißt `scaleEffect`.** `.frame()` bleibt während des Ziehens
+   konstant, gedehnt wird per Transformation. Nur so bekommt SwiftTerm kein
+   SIGWINCH. Ein Neuberechnen der Rechtecke hätte exakt die 24 ms erzeugt, die
+   die Technik vermeiden soll.
+
+Neu dazugekommen, weil es fehlte: `LayoutDividerGeometry.swift` mit
+`LayoutGeometry.dividers(for:in:)` und `LayoutDividerApply` — der Plan setzte
+Trenner-Positionen voraus, `LayoutGeometry` kannte aber nur Flächen. 12 Tests,
+darunter der wichtigste: **der Griff muss auf dem sichtbaren Spalt sitzen**
+(dieselbe Rundung wie `place`, sonst greift man ins Leere).
+
 ## Was zu tun ist
 
-### 1. Verdrahtung (Rest von S4b)
+### 0. S6 — Bestandsaufnahme vom 02.08. (gezählt, nicht geschätzt)
+
+**80 Fundstellen in 12 Dateien.** Der Plan nannte 82; die Differenz sind zwei
+Stellen, die mit S4b entfallen sind.
+
+| Datei | Stellen | Zeilen | Schicksal |
+|---|---|---|---|
+| `WorkspaceSlotOps.swift` | 26 | 273 | entfällt — `LayoutEngine` ersetzt es |
+| `AgentChatsView+Grid.swift` | 19 | 1008 | ersetzt durch `WorkspaceLayoutView` |
+| `AgentControlRequestHandler.swift` | 7 | 1455 | **echte Anpassung** — `chats workspace add/remove` der CLI |
+| `AgentGridWorkspace.swift` | 6 | 207 | entfällt |
+| `GridDropZoneResolver.swift` | 5 | 50 | entfällt — `LayoutDropResolver` steht |
+| `WorkspaceLayoutMigration.swift` | 5 | 167 | Ableitungs-Krücke entfernen |
+| `AgentWindowStore.swift` | 4 | 1057 | **echte Anpassung** |
+| `AgentUIState.swift` | 3 | 835 | `gridWorkspaces` entfernen |
+| `AgentChatsView+Workspaces.swift` | 2 | 426 | echte Anpassung |
+| `GridShrinkSelectionViews.swift` | 1 | 245 | entfällt ersatzlos |
+| `AgentChatsView.swift` | 1 | 3590 | Einhängepunkt (Zeile 2238) |
+| `AgentJobWorkspaceSync.swift` | 1 | 350 | echte Anpassung |
+
+**Der erste Schritt ist nicht die Ansicht, sondern der Store:**
+`AgentUIState.layouts` existiert seit S2, aber `AgentWindowStore` exponiert es
+nicht — es gibt dort nur `gridWorkspaces`/`gridWorkspace(id:)`. Ohne einen
+`layouts`-Zugang samt Mutationen kann die neue Ansicht nicht angeschlossen
+werden. Danach `gridWorkspace` (in `+Grid.swift:201`, gerufen aus
+`AgentChatsView.swift:2238`) auf `WorkspaceLayoutView` umstellen, dann löschen.
+
+Nicht vergessen: `AgentGridLayoutTests.swift` prüft das alte Modell und fällt
+mit ihm weg.
+
+### 1. Verdrahtung (Rest von S4b) — ERLEDIGT, siehe Nachtrag oben
 
 `WorkspaceLayoutView` muss die Bausteine benutzen:
 
