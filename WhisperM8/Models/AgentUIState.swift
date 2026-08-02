@@ -384,7 +384,12 @@ struct AgentUIState: Codable, Equatable {
             // `gridWorkspaces` bleibt vorerst stehen: Solange die Oberflaeche
             // noch darauf laeuft, waere ein Entfernen ein Rueckweg weniger.
             // Es entfaellt in einem Schritt, wenn die Umstellung durch ist.
+            // Nur ableiten, wenn noch nichts da ist: Seit S6 ist `layouts`
+        // fuehrend, eine vorhandene Anordnung darf die Uebersetzung des alten
+        // Modells nicht ueberschreiben.
+        if layouts.isEmpty {
             layouts = WorkspaceLayoutMigration.migrate(gridWorkspaces)
+        }
         }
 
         syncLegacyWindowMirror()

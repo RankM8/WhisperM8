@@ -27,7 +27,7 @@ extension AgentChatsView {
     func sessionContextMenu(
         _ session: AgentChatSession,
         context: SessionMenuContext,
-        removalWorkspace: AgentGridWorkspace? = nil
+        removalWorkspace: WorkspaceLayout? = nil
     ) -> some View {
         let plan = SessionMenuPolicy.plan(for: context, traits: sessionMenuTraits(for: session))
 

@@ -90,9 +90,10 @@ extension AgentChatsView {
         VStack(alignment: .leading, spacing: 1) {
             workspaceGroupHeader(entity, isActiveHere: isActiveHere, isCollapsed: isCollapsed)
             if !isCollapsed {
-                ForEach(Array(entity.slots.enumerated()), id: \.offset) { index, slot in
-                    if let sessionID = slot,
-                       let session = workspace.sessions.first(where: { $0.id == sessionID }) {
+                // Zellen statt Slots: keine Loecher mehr, deshalb auch kein
+                // `if let slot` — jede Zelle hat genau einen sichtbaren Chat.
+                ForEach(Array(entity.visibleSessions.enumerated()), id: \.element) { index, sessionID in
+                    if let session = workspace.sessions.first(where: { $0.id == sessionID }) {
                         // Split EINMAL pro Parent (Muster ProjectChatGroup) —
                         // speist Chip UND Kinder-Aufteilung.
                         let children = subagentChildrenByParent[session.id] ?? []
@@ -132,7 +133,8 @@ extension AgentChatsView {
         isActiveHere: Bool,
         isCollapsed: Bool
     ) -> some View {
-        HStack(spacing: 6) {
+        let belegungText = "\(entity.allSessions.count)"
+        return HStack(spacing: 6) {
             // Chevron = NUR ein-/ausklappen (eigener Button — der Rest des
             // Headers öffnet das Grid; verschachtelte Buttons würden sich
             // die Klicks streitig machen).
@@ -169,7 +171,10 @@ extension AgentChatsView {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
-                Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity)")
+                // Vorberechnet statt interpoliert: Der Typechecker gab bei
+                // diesem Header auf ("unable to type-check in reasonable
+                // time"), sobald hier eine Interpolation stand.
+                Text(belegungText)
                     .font(.system(size: 9.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
                 Image(systemName: "square.grid.2x2")
@@ -351,8 +356,7 @@ extension AgentChatsView {
         }
         let id = windowStore.createGridWorkspace(
             name: nextFreeWorkspaceName(),
-            capacity: WorkspaceLayoutmax( accepted.count),
-            slots: accepted.map { $0 },
+            slots: accepted,
             activateIn: windowID
         )
         // Messung mit der NEUEN Entity (nicht dem alten Workspace).

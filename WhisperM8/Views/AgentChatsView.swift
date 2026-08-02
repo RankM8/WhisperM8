@@ -148,7 +148,7 @@ struct AgentChatsView: View {
     @State var renameWorkspaceTargetID: UUID?
     @State var renameWorkspaceDraft = ""
     /// Löschen-Bestätigung für Workspace-Gruppen (analog projectPendingDeletion).
-    @State var workspacePendingDeletion: AgentGridWorkspace?
+    @State var workspacePendingDeletion: WorkspaceLayout?
     /// Tear-off: die Detach-Drop-Zone (Content) ist gerade Drop-Ziel.
     @State private var detachZoneTargeted = false
     /// Grid-Ansicht: Pane, über der die Maus gerade schwebt — Klick-Routing

@@ -276,13 +276,7 @@ extension AgentChatsView {
     /// keine Obergrenze mehr — jeder Chat wird eine Flaeche.
     @discardableResult
     func handleGridGroupDrop(_ payload: DraggableSession, workspaceID: UUID) -> Bool {
-        var added = false
-        for sessionID in payload.sessionIDs {
-            if windowStore.addSession(sessionID, toGridWorkspace: workspaceID) == .added {
-                added = true
-            }
-        }
-        return added
+        windowStore.addSession(payload.sessionID, toGridWorkspace: workspaceID) == .added
     }
 
 

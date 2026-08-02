@@ -498,21 +498,18 @@ final class AgentWindowStoreTests: XCTestCase {
                        "Selektionswechsel ist eine echte Aenderung")
     }
 
-    func testNoOpGridWorkspaceMutationDoesNotDirtyStore() {
+func testNoOpGridWorkspaceMutationDoesNotDirtyStore() {
         let store = makeStore()
         let id = store.createGridWorkspace(name: "Test")
-        guard let fractions = store.gridWorkspace(id: id)?.columnFractions else {
-            XCTFail("frisch angelegter Workspace muss auffindbar sein")
-            return
-        }
         let revision = store.dirtyRevision
 
         // Kein Caller-Guard auf diesem Pfad — prueft das zentrale Gate in
-        // `mutate` fuer identische Werte.
-        store.setGridColumnFractions(ofGridWorkspace: id, fractions)
+        // `mutate` fuer identische Werte. Statt der entfallenen Spalten-
+        // Anteile: ein Umbenennen auf denselben Namen.
+        _ = store.renameGridWorkspace(id, to: "Test")
 
         XCTAssertEqual(store.dirtyRevision, revision,
-                       "identische Fractions sind ein No-op ohne Revision/Save")
+                       "identische Werte sind ein No-op ohne Revision/Save")
     }
 
     func testMultiSelectionIsNotPersisted() {
