@@ -18,7 +18,11 @@ struct AgentSessionIndexStats: Equatable {
 }
 
 struct AgentSessionIndexCache {
-    static let currentSchemaVersion = 2
+    /// Version 3 (02.08.2026): Zeitstempel als ganzzahlige Mikrosekunden statt
+    /// `Date` — siehe `stamp(_:)`. Der Bump verwirft den alten Cache einmalig
+    /// und baut ihn sauber neu auf; ohne ihn traefe kein einziger Alt-Eintrag,
+    /// weil das Feld einen anderen Namen hat.
+    static let currentSchemaVersion = 3
 
     private var entries: [String: Entry] = [:]
     private(set) var isDirty = false
@@ -44,7 +48,7 @@ struct AgentSessionIndexCache {
             let cacheKey = Self.cacheKey(provider: provider, fileURL: fileURL)
             let entry = Entry(
                 fileSize: metadata.fileSize,
-                modifiedAt: metadata.modifiedAt,
+                modifiedAtStamp: Self.stamp(metadata.modifiedAt),
                 session: newValue
             )
             guard entries[cacheKey] != entry else { return }
@@ -57,7 +61,7 @@ struct AgentSessionIndexCache {
         let cacheKey = Self.cacheKey(provider: provider, fileURL: fileURL)
         guard let entry = entries[cacheKey],
               entry.fileSize == metadata.fileSize,
-              entry.modifiedAt == metadata.modifiedAt else {
+              entry.modifiedAtStamp == Self.stamp(metadata.modifiedAt) else {
             return .miss
         }
         return .hit(entry.session)
@@ -103,8 +107,35 @@ struct AgentSessionIndexCache {
 
     private struct Entry: Codable, Equatable {
         var fileSize: Int64
-        var modifiedAt: Date?
+        /// Aenderungszeit als ganzzahlige Mikrosekunden seit 1970 — NICHT als
+        /// `Date`. Begruendung bei `stamp(_:)`.
+        var modifiedAtStamp: Int64?
         var session: IndexedAgentSession?
+    }
+
+    /// Wandelt eine Aenderungszeit in einen ganzzahligen Stempel.
+    ///
+    /// **Warum nicht einfach das `Date` vergleichen (Befund 02.08.2026):** Der
+    /// Cache wurde mit `dateEncodingStrategy = .secondsSince1970` geschrieben.
+    /// `Date` haelt intern Sekunden seit 2001 (~8,05e8); die Kodierung addiert
+    /// 978307200 und landet bei ~1,78e9, wo ein Double gut zehnmal groeber
+    /// aufloest. Beim Lesen wird wieder subtrahiert — und **rund 52 % aller
+    /// Werte kommen um das letzte Bit veraendert zurueck**. Der anschliessende
+    /// `==`-Vergleich schlug damit systematisch fehl.
+    ///
+    /// Die Wirkung war kein Schoenheitsfehler: Bei 760 Transcript-Dateien
+    /// verfehlten **397 bei jedem Scan** den Cache — immer dieselben, immer
+    /// wieder. Der Indexer las pro Durchlauf 86 MB neu und parste 389 Dateien,
+    /// obwohl sich nichts geaendert hatte. `index.scan` brauchte bis zu 8,3 s
+    /// und verdraengte dabei alles andere.
+    ///
+    /// Mikrosekunden sind die richtige Aufloesung: fein genug, dass keine
+    /// echte Aenderung durchrutscht, und mit ~1,78e15 weit innerhalb dessen,
+    /// was `Double` und `Int64` exakt darstellen — der Wert ist damit
+    /// reproduzierbar, egal wie oft er durch JSON laeuft.
+    private static func stamp(_ date: Date?) -> Int64? {
+        guard let date else { return nil }
+        return Int64((date.timeIntervalSince1970 * 1_000_000).rounded())
     }
 
     private enum CodingKeys: String, CodingKey {

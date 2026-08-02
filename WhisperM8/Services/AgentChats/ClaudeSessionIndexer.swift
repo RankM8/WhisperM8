@@ -71,7 +71,18 @@ struct ClaudeSessionIndexer {
         }
 
         var seenKeys: Set<String> = []
-        for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
+        while let object = enumerator.nextObject() {
+            guard let fileURL = object as? URL else { continue }
+
+            // Subagent-Verzeichnisse gar nicht erst betreten. Sie enthalten die
+            // MEHRHEIT aller Dateien — gemessen 2.257 von 3.017 —, und keine
+            // davon wird indiziert. Sie einzeln aufzuzaehlen und danach
+            // wegzuwerfen kostet einen `stat` je Datei fuer nichts.
+            if fileURL.hasDirectoryPath, fileURL.lastPathComponent == "subagents" {
+                enumerator.skipDescendants()
+                continue
+            }
+            guard fileURL.pathExtension == "jsonl" else { continue }
             guard !fileURL.path.contains("/subagents/") else {
                 stats.skippedFiles += 1
                 continue

@@ -3,6 +3,56 @@ import XCTest
 @testable import WhisperM8
 
 final class AgentSessionIndexCacheStoreTests: XCTestCase {
+    /// Aenderungszeiten, die im Feld tatsaechlich vorkommen — und an denen der
+    /// Cache bis zum 02.08.2026 scheiterte.
+    ///
+    /// **Warum diese Liste noetig ist:** Der Test darunter pruefte nur
+    /// `1_700_000_000.123456`. Dieser eine Wert ueberlebt den JSON-Roundtrip
+    /// zufaellig, deshalb blieb er gruen — waehrend im Betrieb **52 % aller
+    /// Dateien** den Cache bei jedem Scan verfehlten. Ein einzelner
+    /// gutmuetiger Testwert taeuscht Sicherheit vor; hier stehen deshalb reale
+    /// mtimes aus `~/.claude/projects`, von denen mehrere den alten Vergleich
+    /// garantiert gebrochen haetten.
+    private static let realWorldModificationDates: [TimeInterval] = [
+        1_783_453_675.138_979,   // brach den alten Roundtrip
+        1_783_630_153.862_598_4, // brach den alten Roundtrip
+        1_700_000_000.123_456,   // ueberlebte ihn zufaellig
+        1_783_453_675.000_001,
+        1_783_453_675.999_999,
+    ]
+
+    /// Jede realistische Aenderungszeit muss den Weg durch die Cache-Datei
+    /// unveraendert ueberstehen — sonst ist der Cache fuer diese Datei wertlos
+    /// und der Indexer liest sie bei JEDEM Scan neu.
+    func testCacheSurvivesRealWorldModificationDates() throws {
+        for (index, seconds) in Self.realWorldModificationDates.enumerated() {
+            let fixture = try makeCodexFixture(name: "mtime-\(index)")
+            defer { try? FileManager.default.removeItem(at: fixture.root) }
+            let cacheURL = fixture.root.appendingPathComponent("cache/index.json")
+            let store = AgentSessionIndexCacheStore(fileURL: cacheURL)
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date(timeIntervalSince1970: seconds)],
+                ofItemAtPath: fixture.file.path
+            )
+
+            var cache = AgentSessionIndexCache()
+            _ = CodexSessionIndexer(sessionsDirectory: fixture.sessionsRoot)
+                .indexedSessionResult(cache: &cache)
+            XCTAssertTrue(store.save(&cache))
+
+            var reloaded = store.load()
+            let warm = CodexSessionIndexer(sessionsDirectory: fixture.sessionsRoot)
+                .indexedSessionResult(cache: &reloaded)
+
+            XCTAssertEqual(
+                warm.stats.cacheHits, 1,
+                "mtime \(seconds) verfehlt den Cache — der Indexer liest die Datei bei jedem Scan neu"
+            )
+            XCTAssertEqual(warm.stats.cacheMisses, 0, "mtime \(seconds)")
+            XCTAssertEqual(warm.stats.bytesRead, 0, "mtime \(seconds): nichts gelesen erwartet")
+        }
+    }
+
     func testDiskRoundtripPreservesFractionalModificationDateAndWarmScanHitsCache() throws {
         let fixture = try makeCodexFixture(name: "fractional-mtime")
         defer { try? FileManager.default.removeItem(at: fixture.root) }

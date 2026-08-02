@@ -46,6 +46,18 @@ final class AgentDirectoryEventMonitor {
         paths.filter { path in
             path.hasSuffix(".jsonl")
                 && (path.contains("/projects/") || path.contains("/sessions/"))
+                // Subagent-Transcripts ueberspringt der Indexer grundsaetzlich
+                // (`ClaudeSessionIndexer`, Filter auf `/subagents/`). Ein Scan,
+                // den sie ausloesen, kann per Konstruktion nichts finden — er
+                // laeuft nur ueber alle 3.030 Dateien und verdraengt dabei
+                // alles andere. Und sie sind die MEHRHEIT: 2.270 der 3.030
+                // vorhandenen JSONL liegen unter `/subagents/`, jeder laufende
+                // Subagent schreibt im Sekundentakt.
+                //
+                // ACHTUNG: Diese Bedingung gehoert mit dem Filter im Indexer
+                // zusammen. Sollen Subagent-Transcripts kuenftig indiziert
+                // werden, muessen BEIDE Stellen gemeinsam geaendert werden.
+                && !path.contains("/subagents/")
                 && !watchedTranscriptPaths.contains(path)
         }
     }
