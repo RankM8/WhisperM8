@@ -148,7 +148,7 @@ struct AgentChatsView: View {
     @State var renameWorkspaceTargetID: UUID?
     @State var renameWorkspaceDraft = ""
     /// Löschen-Bestätigung für Workspace-Gruppen (analog projectPendingDeletion).
-    @State var workspacePendingDeletion: WorkspaceLayout?
+    @State var workspacePendingDeletion: AgentGridWorkspace?
     /// Tear-off: die Detach-Drop-Zone (Content) ist gerade Drop-Ziel.
     @State private var detachZoneTargeted = false
     /// Grid-Ansicht: Pane, über der die Maus gerade schwebt — Klick-Routing
@@ -168,6 +168,7 @@ struct AgentChatsView: View {
     /// Laufende Verkleinerung mit echtem Überhang: der User markiert im Grid,
     /// welche Chats bleiben. Passt die Belegung nach dem Kompaktieren ohnehin,
     /// wird ohne Rückfrage angewendet und das hier bleibt `nil`.
+    @State var gridShrinkSelection: GridShrinkSelection?
     /// Gemessene Grid-Fläche — der Kapazitäts-Picker sitzt seit dem Umzug in
     /// die Header-Zeile außerhalb des Grids und braucht die Fläche weiterhin,
     /// um nicht passende Stufen auszublenden.

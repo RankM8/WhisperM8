@@ -511,8 +511,10 @@ final class ChatsWindowAndWorkspaceRefTests: XCTestCase {
     }
 
     func testResolveGridWorkspaceRefExactBeatsSubstring() {
-        let base = WorkspaceLayout(name: "Workspace")
-        let second = WorkspaceLayout(name: "Workspace 2")
+        let base = AgentGridWorkspace(name: "Workspace", colorHex: AgentGridWorkspace.defaultColorHex,
+                                      slots: [], capacity: 2)
+        let second = AgentGridWorkspace(name: "Workspace 2", colorHex: AgentGridWorkspace.defaultColorHex,
+                                        slots: [], capacity: 2)
         let all = [base, second]
 
         if case .success(let match) = AgentControlRequestHandler.resolveGridWorkspaceRef("Workspace", all: all) {

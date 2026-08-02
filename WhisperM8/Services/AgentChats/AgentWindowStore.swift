@@ -4,13 +4,6 @@ import Observation
 /// Ergebnis einer Workspace-Aktivierung — Konflikte werden als Werte
 /// gemeldet statt als Teilmutationen ausgeführt (Single-Owner-Politik,
 /// Plan-Abschnitt 03: kein stilles Stehlen von Terminal-Hierarchien).
-/// Ergebnis einer Aufnahme in einen Workspace.
-enum WorkspaceAddResult: Equatable {
-    case added
-    case alreadyMember
-    case rejected
-}
-
 enum GridActivationResult: Equatable {
     case activated
     /// Workspace war diesem Fenster schon zugeordnet (idempotent; Grid
@@ -279,17 +272,17 @@ final class AgentWindowStore {
         updateWindow(windowID) { $0.showsGrid = shows }
     }
 
-    // MARK: - Workspaces: Reads (global, Schema v5)
+    // MARK: - Grid-Workspaces: Reads (global, Schema v4)
 
-    var gridWorkspaces: [WorkspaceLayout] { state.layouts }
+    var gridWorkspaces: [AgentGridWorkspace] { state.gridWorkspaces }
 
-    func gridWorkspace(id: UUID) -> WorkspaceLayout? {
-        state.layouts.first { $0.id == id }
+    func gridWorkspace(id: UUID) -> AgentGridWorkspace? {
+        state.gridWorkspaces.first { $0.id == id }
     }
 
     /// Der Workspace, den das Fenster referenziert (Grid ODER
     /// Rücksprungziel der Einzelansicht).
-    func activeGridWorkspace(in windowID: UUID) -> WorkspaceLayout? {
+    func activeGridWorkspace(in windowID: UUID) -> AgentGridWorkspace? {
         guard let id = window(for: windowID).activeWorkspaceID else { return nil }
         return gridWorkspace(id: id)
     }
@@ -297,6 +290,10 @@ final class AgentWindowStore {
     /// Besitzerfenster eines Workspace (`nil` = nirgends referenziert).
     func windowID(owningGridWorkspace workspaceID: UUID) -> UUID? {
         state.windows.first { $0.activeWorkspaceID == workspaceID }?.id
+    }
+
+    func slotIndex(of sessionID: UUID, inGridWorkspace workspaceID: UUID) -> Int? {
+        gridWorkspace(id: workspaceID)?.slotIndex(of: sessionID)
     }
 
     /// Sidebar: Workspace-Gruppe ein-/ausgeklappt (persistiert, global).
@@ -325,7 +322,7 @@ final class AgentWindowStore {
     @discardableResult
     func createGridWorkspace(
         name: String,
-        colorHex: String = WorkspaceLayout.defaultColorHex,
+        colorHex: String = AgentGridWorkspace.defaultColorHex,
         capacity: Int = 2,
         slots: [UUID?] = [],
         activateIn windowID: UUID? = nil
@@ -335,17 +332,14 @@ final class AgentWindowStore {
                 .filter { $0.status != .archived }
                 .map(\.id)
         )
-        // `slots` ist die Altlast der Aufrufer: eine Liste mit Löchern. Im
-        // neuen Modell gibt es keine Löcher — jede gültige Session wird eine
-        // Zelle, der Rest verschwindet ersatzlos.
-        let cells = slots
-            .compactMap { $0 }
-            .filter { eligible.contains($0) }
-            .map { WorkspaceLayout.Cell(session: $0) }
-        let entity = LayoutNormalizer.normalize(
-            WorkspaceLayout(name: name, colorHex: colorHex, cells: cells)
+        let validatedSlots = slots.map { slot -> UUID? in
+            guard let slot, eligible.contains(slot) else { return nil }
+            return slot
+        }
+        let entity = AgentGridWorkspace(
+            name: name, colorHex: colorHex, slots: validatedSlots, capacity: capacity
         )
-        mutate { $0.layouts.append(entity) }
+        mutate { $0.gridWorkspaces.append(entity) }
         if let windowID {
             // Läuft im selben MainActor-Turn wie das Anlegen — der Debounce
             // bündelt beide Mutationen zu einem Save.
@@ -367,7 +361,7 @@ final class AgentWindowStore {
 
     @discardableResult
     func setGridWorkspaceColor(_ workspaceID: UUID, colorHex: String) -> Bool {
-        guard let canonical = WorkspaceLayout.canonicalColorHex(colorHex),
+        guard let canonical = AgentGridWorkspace.canonicalColorHex(colorHex),
               let entity = gridWorkspace(id: workspaceID),
               entity.colorHex != canonical else { return false }
         mutateGridWorkspace(workspaceID) { $0.colorHex = canonical }
@@ -381,7 +375,7 @@ final class AgentWindowStore {
     func deleteGridWorkspace(_ workspaceID: UUID) -> Bool {
         guard gridWorkspace(id: workspaceID) != nil else { return false }
         mutate { state in
-            state.layouts.removeAll { $0.id == workspaceID }
+            state.gridWorkspaces.removeAll { $0.id == workspaceID }
             state.collapsedGridWorkspaceIDs.removeAll { $0 == workspaceID }
             for index in state.windows.indices
                 where state.windows[index].activeWorkspaceID == workspaceID {
@@ -401,53 +395,59 @@ final class AgentWindowStore {
         mutate { state in
             var seen = Set<UUID>()
             let byID = Dictionary(
-                uniqueKeysWithValues: state.layouts.map { ($0.id, $0) }
+                uniqueKeysWithValues: state.gridWorkspaces.map { ($0.id, $0) }
             )
-            var reordered: [WorkspaceLayout] = []
+            var reordered: [AgentGridWorkspace] = []
             for id in orderedIDs {
                 guard let entity = byID[id], seen.insert(id).inserted else { continue }
                 reordered.append(entity)
             }
-            for entity in state.layouts where seen.insert(entity.id).inserted {
+            for entity in state.gridWorkspaces where seen.insert(entity.id).inserted {
                 reordered.append(entity)
             }
-            state.layouts = reordered
+            state.gridWorkspaces = reordered
         }
     }
 
-    // MARK: - Workspaces: Mitgliedschaft (Schema v5)
+    // MARK: - Grid-Workspaces: Slot-Mutationen
 
-    /// Nimmt eine Session in den Workspace auf. Unbekannte/archivierte
-    /// Sessions werden abgewiesen. Gehoert die Session als Tab einem ANDEREN
-    /// Fenster, wird die MITGLIEDSCHAFT trotzdem aufgenommen, aber weder Tab
-    /// noch Fokus angefasst (kein Terminal-Stehlen).
-    ///
-    /// `targetSlot` gibt es nicht mehr: Wo ein Chat landet, entscheidet die
-    /// Engine — genau das war der Sinn des Umbaus.
+    /// Nimmt eine Session in den Workspace auf (Semantik siehe
+    /// `WorkspaceSlotOps.add`). Unbekannte/archivierte Sessions werden
+    /// abgewiesen. Gehört die Session als Tab einem ANDEREN Fenster, wird
+    /// die MITGLIEDSCHAFT trotzdem aufgenommen, aber weder Tab noch Fokus
+    /// angefasst (kein Terminal-Stehlen — der Render-Guard zeigt im
+    /// Besitzerfenster den Übernahme-Platzhalter). Sonst wird der Tab im
+    /// Besitzerfenster materialisiert und (bei sichtbarem Grid) fokussiert —
+    /// alles in EINER Mutation.
     @discardableResult
     func addSession(
         _ sessionID: UUID,
         toGridWorkspace workspaceID: UUID,
         at targetSlot: Int? = nil,
         focusIfActive: Bool = true
-    ) -> WorkspaceAddResult {
+    ) -> WorkspaceSlotOps.AddResult {
         guard let entity = gridWorkspace(id: workspaceID) else { return .rejected }
+        // Session-Validierung gegen den Domain-Workspace (In-Memory-Read,
+        // kein Subprozess).
         let domain = persistence.loadWorkspace()
         guard let session = domain.sessions.first(where: { $0.id == sessionID }),
               session.status != .archived else { return .rejected }
-        guard !entity.contains(sessionID) else { return .alreadyMember }
 
-        let updated = LayoutEngine.add(
-            sessionID, to: entity,
-            focused: window(for: windowID(owningGridWorkspace: workspaceID) ?? primaryWindowID)
-                .gridFocusSessionID
-        )
+        let (updated, result) = WorkspaceSlotOps.add(sessionID, to: entity, at: targetSlot)
+        switch result {
+        case .alreadyMember, .full, .rejected:
+            return result
+        case .added, .replaced, .swapped:
+            break
+        }
         mutate { state in
-            guard let index = state.layouts.firstIndex(where: { $0.id == workspaceID })
+            guard let index = state.gridWorkspaces.firstIndex(where: { $0.id == workspaceID })
             else { return }
-            state.layouts[index] = updated
+            state.gridWorkspaces[index] = updated
             guard let ownerID = state.windows.first(where: { $0.activeWorkspaceID == workspaceID })?.id
             else { return }
+            // Tab-Materialisierung nur, wenn KEIN anderes Fenster den Tab
+            // hält (sonst bleibt die Pane ein Übernahme-Platzhalter).
             let foreignHost = state.windows.first {
                 $0.id != ownerID && $0.openTabIDs.contains(sessionID)
             }
@@ -462,96 +462,123 @@ final class AgentWindowStore {
             }
             state.upsertWindow(window)
         }
-        return .added
+        return result
     }
 
-    /// Nimmt die Session aus dem Workspace (Tab + Prozess bleiben). Wird ihre
-    /// Zelle dadurch leer, verschwindet die Zelle und die Flaeche verdichtet
-    /// sich — im Slot-Modell blieb hier ein Loch stehen.
+    /// Leert den Slot der Session (Tab + Prozess bleiben; nichts rückt
+    /// nach). Repariert den Pane-Fokus des Besitzerfensters deterministisch:
+    /// nächster belegter Slot, sonst vorheriger, sonst `nil`.
     @discardableResult
     func removeSession(_ sessionID: UUID, fromGridWorkspace workspaceID: UUID) -> Bool {
-        guard let entity = gridWorkspace(id: workspaceID), entity.contains(sessionID)
-        else { return false }
-        let updated = LayoutEngine.remove(sessionID, from: entity)
+        guard let entity = gridWorkspace(id: workspaceID),
+              let removedIndex = entity.slotIndex(of: sessionID) else { return false }
+        let (updated, removed) = WorkspaceSlotOps.remove(sessionID, from: entity)
+        guard removed else { return false }
         mutate { state in
-            guard let index = state.layouts.firstIndex(where: { $0.id == workspaceID })
+            guard let index = state.gridWorkspaces.firstIndex(where: { $0.id == workspaceID })
             else { return }
-            state.layouts[index] = updated
+            state.gridWorkspaces[index] = updated
             guard let ownerID = state.windows.first(where: { $0.activeWorkspaceID == workspaceID })?.id
             else { return }
             var window = state.windowState(for: ownerID)
             if window.showsGrid, window.selectedSessionID == sessionID {
-                let fallback = updated.visibleSessions.first
-                window.selectedSessionID = fallback
-                window.gridFocusSessionID = fallback
+                window.selectedSessionID = Self.gridFocusFallback(
+                    in: updated, removedIndex: removedIndex
+                )
             }
             state.upsertWindow(window)
         }
         return true
     }
 
-    /// Vertauscht die Plaetze zweier Chats.
     @discardableResult
-    func swapSessions(inGridWorkspace workspaceID: UUID, _ first: UUID, _ second: UUID) -> Bool {
+    func moveSlot(inGridWorkspace workspaceID: UUID, from source: Int, to target: Int) -> Bool {
+        guard let entity = gridWorkspace(id: workspaceID) else { return false }
+        let (updated, moved) = WorkspaceSlotOps.moveSlot(in: entity, from: source, to: target)
+        guard moved else { return false }
+        mutateGridWorkspace(workspaceID) { $0 = updated }
+        return true
+    }
+
+    @discardableResult
+    func swapSlots(inGridWorkspace workspaceID: UUID, _ first: Int, _ second: Int) -> Bool {
+        guard let entity = gridWorkspace(id: workspaceID) else { return false }
+        let (updated, swapped) = WorkspaceSlotOps.swapSlots(in: entity, first, second)
+        guard swapped else { return false }
+        mutateGridWorkspace(workspaceID) { $0 = updated }
+        return true
+    }
+
+    /// Persistiert die Spalten-Gewichte (Commit am Drag-Ende — die
+    /// Live-Werte hält `AgentGridSplitContainer` lokal). Falsche Länge/
+    /// ungültige Werte repariert die Entity-Normalisierung achsenweise.
+    func setGridColumnFractions(ofGridWorkspace workspaceID: UUID, _ fractions: [Double]) {
         guard let entity = gridWorkspace(id: workspaceID),
-              entity.contains(first), entity.contains(second), first != second
-        else { return false }
-        mutateGridWorkspace(workspaceID) { $0 = LayoutEngine.swap(first, second, in: $0) }
-        return true
+              entity.columnFractions != fractions else { return }
+        mutateGridWorkspace(workspaceID) { $0.columnFractions = fractions }
     }
 
-    /// Wendet einen Zug an (Ziel kommt aus `LayoutDropResolver`).
-    @discardableResult
-    func applyDrop(
-        _ sessionID: UUID,
-        target: LayoutDropResolver.Target,
-        inGridWorkspace workspaceID: UUID
-    ) -> Bool {
-        guard gridWorkspace(id: workspaceID) != nil else { return false }
-        switch target {
-        case let .replace(cellID):
-            mutateGridWorkspace(workspaceID) {
-                $0 = LayoutEngine.drop(sessionID, onto: cellID, mode: .replace, in: $0)
+    func setGridRowFractions(ofGridWorkspace workspaceID: UUID, _ fractions: [Double]) {
+        guard let entity = gridWorkspace(id: workspaceID),
+              entity.rowFractions != fractions else { return }
+        mutateGridWorkspace(workspaceID) { $0.rowFractions = fractions }
+    }
+
+    /// Welche Sessions würde ein Wechsel auf `capacity` entfernen (geordnet)?
+    /// `keeping` = die vom User im Grid gewählten Behalter; `nil` = die
+    /// Auto-Politik (vordere Belegte bleiben).
+    func previewCapacityChange(
+        of workspaceID: UUID,
+        to capacity: Int,
+        keeping retainedSessionIDs: [UUID]? = nil
+    ) -> [UUID] {
+        guard let entity = gridWorkspace(id: workspaceID) else { return [] }
+        return WorkspaceSlotOps.previewCapacityChange(
+            of: entity, to: capacity, keeping: retainedSessionIDs
+        )
+    }
+
+    /// Kapazität setzen. Shrink verlangt die exakt bestätigte
+    /// Eviction-Liste (`.confirmationRequired` sonst) und flusht sofort —
+    /// destruktive User-Entscheidung. Fokus wird repariert, falls die
+    /// fokussierte Pane den Workspace verlässt.
+    func setCapacity(
+        ofGridWorkspace workspaceID: UUID,
+        to capacity: Int,
+        keeping retainedSessionIDs: [UUID]? = nil,
+        expectedEvictedSessionIDs: [UUID] = []
+    ) -> WorkspaceSlotOps.CapacityResult {
+        guard let entity = gridWorkspace(id: workspaceID) else { return .rejected }
+        let (updated, result) = WorkspaceSlotOps.setCapacity(
+            of: entity,
+            to: capacity,
+            keeping: retainedSessionIDs,
+            expectedEvictedSessionIDs: expectedEvictedSessionIDs
+        )
+        guard result == .applied else { return result }
+        let isShrink = capacity < entity.capacity
+        mutate { state in
+            guard let index = state.gridWorkspaces.firstIndex(where: { $0.id == workspaceID })
+            else { return }
+            state.gridWorkspaces[index] = updated
+            guard let ownerID = state.windows.first(where: { $0.activeWorkspaceID == workspaceID })?.id
+            else { return }
+            var window = state.windowState(for: ownerID)
+            if window.showsGrid, let selected = window.selectedSessionID,
+               updated.slotIndex(of: selected) == nil {
+                // Deterministischer Fallback wie beim Entfernen: vom ALTEN
+                // Fokus-Index aus nächster belegter Slot, sonst vorheriger
+                // (nicht pauschal der erste — Review-Finding).
+                let oldIndex = entity.slotIndex(of: selected) ?? 0
+                let anchor = min(oldIndex, max(0, updated.slots.count - 1))
+                let fallback = Self.gridFocusFallback(in: updated, removedIndex: anchor)
+                window.selectedSessionID = fallback
+                window.gridFocusSessionID = fallback
             }
-        case let .stack(cellID):
-            mutateGridWorkspace(workspaceID) {
-                $0 = LayoutEngine.drop(sessionID, onto: cellID, mode: .stack, in: $0)
-            }
-        case let .edge(cellID, edge):
-            mutateGridWorkspace(workspaceID) {
-                $0 = LayoutEngine.insert(sessionID, atEdge: edge, of: cellID, in: $0)
-            }
-        case .none:
-            return false
+            state.upsertWindow(window)
         }
-        return true
-    }
-
-    /// Verschiebt eine Trennlinie. Wird EINMAL beim Loslassen gerufen — die
-    /// Bewegung selbst dehnt nur die Darstellung.
-    func moveDivider(
-        inGridWorkspace workspaceID: UUID,
-        leadingCellID: UUID,
-        trailingCellID: UUID,
-        offset: CGFloat,
-        available: CGFloat
-    ) {
-        mutateGridWorkspace(workspaceID) {
-            $0 = LayoutDividerApply.apply(
-                leadingCellID: leadingCellID, trailingCellID: trailingCellID,
-                offset: offset, available: available, in: $0
-            )
-        }
-    }
-
-    /// Zurueck zur automatischen Anordnung (F6).
-    func resetArrangement(ofGridWorkspace workspaceID: UUID) {
-        mutateGridWorkspace(workspaceID) { $0 = LayoutEngine.resetToAutomatic($0) }
-    }
-
-    /// Wechselt den sichtbaren Chat einer gestapelten Zelle.
-    func activateInStack(_ sessionID: UUID, inGridWorkspace workspaceID: UUID) {
-        mutateGridWorkspace(workspaceID) { $0 = LayoutEngine.activate(sessionID, in: $0) }
+        if isShrink { flush() }
+        return result
     }
 
     // MARK: - Grid-Workspaces: Fenster-/Fokus-Mutationen
@@ -620,7 +647,7 @@ final class AgentWindowStore {
     func navigateToSession(_ sessionID: UUID, in windowID: UUID) {
         if let entity = activeGridWorkspace(in: windowID),
            window(for: windowID).showsGrid,
-           entity.contains(sessionID) {
+           entity.slotIndex(of: sessionID) != nil {
             // Slot ohne Tab (z. B. Tab geschlossen, Mitgliedschaft blieb):
             // Tab materialisieren + fokussieren in EINER Mutation — sonst
             // verwürfe die Normalisierung die Selektion sofort wieder.
@@ -660,7 +687,7 @@ final class AgentWindowStore {
     func setGridFocusedSession(_ sessionID: UUID, in windowID: UUID) {
         guard let entity = activeGridWorkspace(in: windowID),
               window(for: windowID).showsGrid,
-              entity.contains(sessionID) else { return }
+              entity.slotIndex(of: sessionID) != nil else { return }
         updateWindow(windowID) { window in
             window.selectedSessionID = sessionID
             window.gridFocusSessionID = sessionID
@@ -707,13 +734,13 @@ final class AgentWindowStore {
     // MARK: - Grid-Workspaces: Helfer
 
     /// Ändert genau eine Entity (per ID) in einer Store-Mutation.
-    private func mutateGridWorkspace(_ workspaceID: UUID, _ transform: (inout WorkspaceLayout) -> Void) {
+    private func mutateGridWorkspace(_ workspaceID: UUID, _ transform: (inout AgentGridWorkspace) -> Void) {
         mutate { state in
-            guard let index = state.layouts.firstIndex(where: { $0.id == workspaceID })
+            guard let index = state.gridWorkspaces.firstIndex(where: { $0.id == workspaceID })
             else { return }
-            var entity = state.layouts[index]
+            var entity = state.gridWorkspaces[index]
             transform(&entity)
-            state.layouts[index] = LayoutNormalizer.normalize(entity)
+            state.gridWorkspaces[index] = entity.normalized()
         }
     }
 
@@ -723,7 +750,7 @@ final class AgentWindowStore {
     /// Fenster — kein Stehlen, der Render-Guard zeigt den Platzhalter).
     private static func materializeSlotTabs(
         _ window: inout AgentChatWindowState,
-        entity: WorkspaceLayout,
+        entity: AgentGridWorkspace,
         skipping foreignHosted: Set<UUID> = []
     ) {
         for sessionID in entity.occupiedSessionIDs
@@ -737,15 +764,15 @@ final class AgentWindowStore {
     /// „Zurück zum Workspace" exakt wiederherstellt), sonst erster belegter
     /// Slot; leerer Workspace → `nil`.
     private static func repairGridFocus(
-        _ window: inout AgentChatWindowState, entity: WorkspaceLayout
+        _ window: inout AgentChatWindowState, entity: AgentGridWorkspace
     ) {
         if let selected = window.selectedSessionID,
-           entity.contains(selected) {
+           entity.slotIndex(of: selected) != nil {
             window.gridFocusSessionID = selected
             return
         }
         if let remembered = window.gridFocusSessionID,
-           entity.contains(remembered) {
+           entity.slotIndex(of: remembered) != nil {
             window.selectedSessionID = remembered
             return
         }
@@ -757,11 +784,12 @@ final class AgentWindowStore {
     /// Slots: nächster belegter Slot nach dem entfernten Index, sonst der
     /// vorherige, sonst `nil`.
     private static func gridFocusFallback(
-        in entity: WorkspaceLayout, removedIndex: Int
+        in entity: AgentGridWorkspace, removedIndex: Int
     ) -> UUID? {
-        // Ohne Slots gibt es keinen Index mehr: der erste sichtbare Chat
-        // in Lesereihenfolge ist der deterministische Rueckfall.
-        return entity.visibleSessions.first
+        if let next = entity.slots[removedIndex...].compactMap({ $0 }).first {
+            return next
+        }
+        return entity.slots[..<removedIndex].compactMap { $0 }.last
     }
 
     /// Entfernt ein leeres Sekundaerfenster aus dem State. Gibt `true` zurueck,

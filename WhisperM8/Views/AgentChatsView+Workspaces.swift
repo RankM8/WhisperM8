@@ -80,7 +80,7 @@ extension AgentChatsView {
 
     @ViewBuilder
     private func workspaceGroup(
-        _ entity: WorkspaceLayout,
+        _ entity: AgentGridWorkspace,
         subagentChildrenByParent: [UUID: [AgentChatSession]],
         workingSubagentIDs: Set<UUID>,
         erroredSubagentIDs: Set<UUID>
@@ -90,10 +90,9 @@ extension AgentChatsView {
         VStack(alignment: .leading, spacing: 1) {
             workspaceGroupHeader(entity, isActiveHere: isActiveHere, isCollapsed: isCollapsed)
             if !isCollapsed {
-                // Zellen statt Slots: keine Loecher mehr, deshalb auch kein
-                // `if let slot` — jede Zelle hat genau einen sichtbaren Chat.
-                ForEach(Array(entity.visibleSessions.enumerated()), id: \.element) { index, sessionID in
-                    if let session = workspace.sessions.first(where: { $0.id == sessionID }) {
+                ForEach(Array(entity.slots.enumerated()), id: \.offset) { index, slot in
+                    if let sessionID = slot,
+                       let session = workspace.sessions.first(where: { $0.id == sessionID }) {
                         // Split EINMAL pro Parent (Muster ProjectChatGroup) —
                         // speist Chip UND Kinder-Aufteilung.
                         let children = subagentChildrenByParent[session.id] ?? []
@@ -129,12 +128,11 @@ extension AgentChatsView {
     }
 
     private func workspaceGroupHeader(
-        _ entity: WorkspaceLayout,
+        _ entity: AgentGridWorkspace,
         isActiveHere: Bool,
         isCollapsed: Bool
     ) -> some View {
-        let belegungText = "\(entity.allSessions.count)"
-        return HStack(spacing: 6) {
+        HStack(spacing: 6) {
             // Chevron = NUR ein-/ausklappen (eigener Button — der Rest des
             // Headers öffnet das Grid; verschachtelte Buttons würden sich
             // die Klicks streitig machen).
@@ -171,10 +169,7 @@ extension AgentChatsView {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
-                // Vorberechnet statt interpoliert: Der Typechecker gab bei
-                // diesem Header auf ("unable to type-check in reasonable
-                // time"), sobald hier eine Interpolation stand.
-                Text(belegungText)
+                Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity)")
                     .font(.system(size: 9.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
                 Image(systemName: "square.grid.2x2")
@@ -209,7 +204,7 @@ extension AgentChatsView {
 
     private func workspaceRow(
         _ session: AgentChatSession,
-        entity: WorkspaceLayout,
+        entity: AgentGridWorkspace,
         slotIndex: Int,
         split: SubagentChildSplit? = nil
     ) -> some View {
@@ -269,7 +264,7 @@ extension AgentChatsView {
     }
 
     @ViewBuilder
-    private func workspaceContextMenu(_ entity: WorkspaceLayout) -> some View {
+    private func workspaceContextMenu(_ entity: AgentGridWorkspace) -> some View {
         Button("Als Grid öffnen", systemImage: "square.grid.2x2") {
             activateWorkspaceFromSidebar(entity)
         }
@@ -307,7 +302,7 @@ extension AgentChatsView {
 
     /// Header-/⊞-Klick: Workspace als Grid öffnen. Single-Owner-Konflikte
     /// werden als Werte gemeldet — kein stilles Stehlen.
-    func activateWorkspaceFromSidebar(_ entity: WorkspaceLayout) {
+    func activateWorkspaceFromSidebar(_ entity: AgentGridWorkspace) {
         let wasVisibleHere = isGridActive
             && windowStore.window(for: windowID).activeWorkspaceID == entity.id
         switch windowStore.activateGridWorkspace(entity.id, in: windowID) {
@@ -356,7 +351,8 @@ extension AgentChatsView {
         }
         let id = windowStore.createGridWorkspace(
             name: nextFreeWorkspaceName(),
-            slots: accepted,
+            capacity: AgentGridWorkspace.smallestCapacity(fitting: accepted.count),
+            slots: accepted.map { $0 },
             activateIn: windowID
         )
         // Messung mit der NEUEN Entity (nicht dem alten Workspace).

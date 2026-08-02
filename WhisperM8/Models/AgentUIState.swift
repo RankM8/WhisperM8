@@ -140,6 +140,7 @@ struct AgentUIState: Codable, Equatable {
     ///
     /// **Wird von `layouts` abgeloest (Schema v5).** Bleibt vorerst bestehen,
     /// bis die Oberflaeche umgestellt ist; entfaellt dann in einem Schritt.
+    var gridWorkspaces: [AgentGridWorkspace]
 
     /// Die neuen Anordnungen (Schema v5) — Zellen mit Stapeln statt fester
     /// Plaetze. Reihenfolge ist wie bei `gridWorkspaces` die Sidebar-Reihenfolge.
@@ -149,11 +150,6 @@ struct AgentUIState: Codable, Equatable {
     /// gegenseitig ausschliessen. Begruendung und Plan:
     /// `docs/plans/workspace-umbau/`.
     var layouts: [WorkspaceLayout]
-
-    /// NUR noch Eingang der Migration: aus alten Dateien gelesen, nach
-    /// `layouts` uebersetzt und **nie wieder geschrieben** (Schema v5). Die
-    /// Oberflaeche fasst das Feld nicht mehr an.
-    var gridWorkspaces: [AgentGridWorkspace] = []
     /// In der Sidebar EINGEKLAPPTE Workspace-Gruppen (nur der Header bleibt
     /// sichtbar). Global wie die Pins; `decodeIfPresent` mit Default `[]`,
     /// kein Schema-Bump — ältere Builds ignorieren das Feld.
@@ -200,6 +196,7 @@ struct AgentUIState: Codable, Equatable {
         unreadSubagentSessionIDs: [UUID] = [],
         windows: [AgentChatWindowState] = [],
         primaryWindowID: UUID? = nil,
+        gridWorkspaces: [AgentGridWorkspace] = [],
         layouts: [WorkspaceLayout] = [],
         collapsedGridWorkspaceIDs: [UUID] = [],
         legacyOpenTabIDsByProject: [UUID: [UUID]] = [:],
@@ -214,6 +211,7 @@ struct AgentUIState: Codable, Equatable {
         self.expandedProjectIDs = expandedProjectIDs
         self.unreadSubagentSessionIDs = unreadSubagentSessionIDs
         self.primaryWindowID = resolvedPrimaryWindowID
+        self.gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces)
         self.layouts = layouts.map(LayoutNormalizer.normalize)
         self.collapsedGridWorkspaceIDs = collapsedGridWorkspaceIDs
         if windows.isEmpty {
@@ -250,18 +248,8 @@ struct AgentUIState: Codable, Equatable {
         primaryWindowID = try c.decodeIfPresent(UUID.self, forKey: .primaryWindowID)
             ?? windows.first(where: \.isPrimary)?.id
             ?? UUID()
-        // `gridWorkspaces` ist mit Schema v5 verschwunden. Aeltere Dateien
-        // tragen es noch — es wird gelesen, nach `layouts` uebersetzt und nie
-        // wieder geschrieben. Nur wenn `layouts` fehlt: eine v5-Datei ist
-        // fuehrend, ihre Anordnung darf nicht von einer veralteten Spiegelung
-        // ueberschrieben werden.
         gridWorkspaces = try c.decodeIfPresent([AgentGridWorkspace].self, forKey: .gridWorkspaces) ?? []
-        let decodedLayouts = try c.decodeIfPresent([WorkspaceLayout].self, forKey: .layouts) ?? []
-        // Eine v5-Datei ist fuehrend; ihre Anordnung darf nicht von einer
-        // veralteten Spiegelung ueberschrieben werden.
-        layouts = decodedLayouts.isEmpty
-            ? WorkspaceLayoutMigration.migrate(gridWorkspaces)
-            : decodedLayouts
+        layouts = try c.decodeIfPresent([WorkspaceLayout].self, forKey: .layouts) ?? []
         collapsedGridWorkspaceIDs = try c.decodeIfPresent([UUID].self, forKey: .collapsedGridWorkspaceIDs) ?? []
         legacyOpenTabIDsByProject = try c.decodeIfPresent([UUID: [UUID]].self, forKey: .openTabIDsByProject) ?? [:]
         legacySelectedSessionIDByProject = try c.decodeIfPresent([UUID: UUID].self, forKey: .selectedSessionIDByProject) ?? [:]
@@ -278,6 +266,7 @@ struct AgentUIState: Codable, Equatable {
         try c.encode(unreadSubagentSessionIDs, forKey: .unreadSubagentSessionIDs)
         try c.encode(windows, forKey: .windows)
         try c.encode(primaryWindowID, forKey: .primaryWindowID)
+        try c.encode(gridWorkspaces, forKey: .gridWorkspaces)
         try c.encode(layouts, forKey: .layouts)
         try c.encode(collapsedGridWorkspaceIDs, forKey: .collapsedGridWorkspaceIDs)
         // v1-Felder werden bewusst nicht mehr geschrieben.
@@ -297,10 +286,17 @@ struct AgentUIState: Codable, Equatable {
         legacySplits: (column: Double, row: Double)? = nil
     ) {
         guard schemaVersion < Self.currentSchemaVersion else {
-            // `layouts` ist seit S6 FUEHREND — es wird nicht mehr aus einer
-            // Spiegelung abgeleitet. Die frueher hier stehende Ableitung haette
-            // ab jetzt jede Aenderung beim naechsten Laden ueberschrieben.
-            layouts = layouts.map(LayoutNormalizer.normalize)
+            gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces)
+            // ÜBERGANGSZUSTAND: Solange die Oberfläche noch `gridWorkspaces`
+            // schreibt, wird `layouts` bei jedem Laden daraus abgeleitet statt
+            // eigenständig fortgeschrieben. Ohne das driften beide auseinander,
+            // sobald jemand nach der Migration einen Chat verschiebt — und der
+            // spätere Umstieg übernähme eine veraltete Anordnung.
+            //
+            // Diese Zeile ENTFÄLLT mit S6: Ab dann ist `layouts` führend und
+            // `gridWorkspaces` verschwindet. Bis dahin ist die Ableitung
+            // billig (zwei Layouts) und schließt die Lücke vollständig.
+            layouts = WorkspaceLayoutMigration.migrate(gridWorkspaces)
             windows = Self.normalizedWindows(
                 windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces
             )
@@ -384,12 +380,7 @@ struct AgentUIState: Codable, Equatable {
             // `gridWorkspaces` bleibt vorerst stehen: Solange die Oberflaeche
             // noch darauf laeuft, waere ein Entfernen ein Rueckweg weniger.
             // Es entfaellt in einem Schritt, wenn die Umstellung durch ist.
-            // Nur ableiten, wenn noch nichts da ist: Seit S6 ist `layouts`
-        // fuehrend, eine vorhandene Anordnung darf die Uebersetzung des alten
-        // Modells nicht ueberschreiben.
-        if layouts.isEmpty {
             layouts = WorkspaceLayoutMigration.migrate(gridWorkspaces)
-        }
         }
 
         syncLegacyWindowMirror()

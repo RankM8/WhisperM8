@@ -65,31 +65,8 @@ struct WorkspaceLayout: Identifiable, Codable, Equatable {
         self.source = source
     }
 
-    /// Vorgabefarbe neuer Workspaces — uebernommen aus dem abgeloesten
-    /// Slot-Modell, damit bestehende Workspaces nach der Migration gleich
-    /// aussehen.
-    static let defaultColorHex = "#6E6ADE"
-
-    /// Prueft und normalisiert eine Farbangabe auf `#RRGGBB` in Grossbuchstaben.
-    /// `nil` heisst: unbrauchbar, Aufrufer behaelt die bisherige Farbe.
-    static func canonicalColorHex(_ raw: String) -> String? {
-        var wert = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if wert.hasPrefix("#") { wert.removeFirst() }
-        guard wert.count == 6, wert.allSatisfy(\.isHexDigit) else { return nil }
-        return "#\(wert)"
-    }
-
     /// Alle Sessions in Lesereihenfolge, ueber alle Zellen und Stapel hinweg.
     var allSessions: [UUID] { cells.flatMap(\.sessions) }
-
-    /// Die Sessions, die tatsaechlich im Layout liegen — Ersatz fuer das
-    /// fruehere `occupiedSessionIDs` des Slot-Modells.
-    var occupiedSessionIDs: [UUID] { allSessions }
-
-    /// Ob die Session Mitglied dieses Workspace ist.
-    func contains(_ session: UUID) -> Bool {
-        cells.contains { $0.sessions.contains(session) }
-    }
 
     /// Die sichtbaren Sessions — genau eine je Zelle.
     var visibleSessions: [UUID] { cells.map(\.active) }
