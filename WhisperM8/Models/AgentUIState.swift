@@ -287,6 +287,16 @@ struct AgentUIState: Codable, Equatable {
     ) {
         guard schemaVersion < Self.currentSchemaVersion else {
             gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces)
+            // ÜBERGANGSZUSTAND: Solange die Oberfläche noch `gridWorkspaces`
+            // schreibt, wird `layouts` bei jedem Laden daraus abgeleitet statt
+            // eigenständig fortgeschrieben. Ohne das driften beide auseinander,
+            // sobald jemand nach der Migration einen Chat verschiebt — und der
+            // spätere Umstieg übernähme eine veraltete Anordnung.
+            //
+            // Diese Zeile ENTFÄLLT mit S6: Ab dann ist `layouts` führend und
+            // `gridWorkspaces` verschwindet. Bis dahin ist die Ableitung
+            // billig (zwei Layouts) und schließt die Lücke vollständig.
+            layouts = WorkspaceLayoutMigration.migrate(gridWorkspaces)
             windows = Self.normalizedWindows(
                 windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces
             )
@@ -370,9 +380,7 @@ struct AgentUIState: Codable, Equatable {
             // `gridWorkspaces` bleibt vorerst stehen: Solange die Oberflaeche
             // noch darauf laeuft, waere ein Entfernen ein Rueckweg weniger.
             // Es entfaellt in einem Schritt, wenn die Umstellung durch ist.
-            if layouts.isEmpty {
-                layouts = WorkspaceLayoutMigration.migrate(gridWorkspaces)
-            }
+            layouts = WorkspaceLayoutMigration.migrate(gridWorkspaces)
         }
 
         syncLegacyWindowMirror()

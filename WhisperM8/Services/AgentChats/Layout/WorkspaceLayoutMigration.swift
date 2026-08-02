@@ -33,7 +33,17 @@ enum WorkspaceLayoutMigration {
 
         for (index, slot) in visible.enumerated() {
             guard let session = slot else { continue }
-            cells.append(WorkspaceLayout.Cell(session: session))
+            // Zell-ID = Session-ID. Bei der Migration hat jede Zelle genau
+            // einen Chat, damit ist das eindeutig — und vor allem
+            // DETERMINISTISCH.
+            //
+            // Der Grund ist kein Schoenheitsfehler: Solange die Oberflaeche
+            // noch `gridWorkspaces` schreibt, wird `layouts` bei jedem Laden
+            // neu abgeleitet. Mit frischen UUIDs bekaeme jede Zelle dabei eine
+            // andere Identitaet — und wechselnde IDs sind in SwiftUI genau
+            // das, was Ansichten neu aufbaut. Bei Terminal-Panes hiesse das:
+            // Scrollback weg, laufender Befehl weg.
+            cells.append(WorkspaceLayout.Cell(id: session, session: session))
             positions.append(index)
         }
 
@@ -42,7 +52,7 @@ enum WorkspaceLayoutMigration {
         // Version), gehen sie nicht verloren, sondern kommen hinten dazu.
         for slot in old.slots.dropFirst(old.capacity) {
             guard let session = slot else { continue }
-            cells.append(WorkspaceLayout.Cell(session: session))
+            cells.append(WorkspaceLayout.Cell(id: session, session: session))
         }
 
         var layout = WorkspaceLayout(

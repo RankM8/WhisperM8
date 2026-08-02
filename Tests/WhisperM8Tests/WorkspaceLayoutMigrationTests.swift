@@ -186,17 +186,23 @@ final class WorkspaceLayoutMigrationTests: XCTestCase {
         XCTAssertEqual(state.layouts.count, 1)
         XCTAssertEqual(Set(state.layouts[0].allSessions), [s1, s2])
 
-        // Zweiter Lauf darf nichts mehr tun — sonst wuerde ein Fehlschlag bei
-        // jedem Start denselben Schaden erneut anrichten.
+        // Ein zweiter Lauf muss dasselbe Ergebnis liefern — sonst waere jedes
+        // Laden eine Aenderung, und in SwiftUI hiesse das neu gebaute
+        // Ansichten samt neuer Terminals.
         let vorher = state.layouts
         state.migrateIfNeeded(workspace: .empty)
-        XCTAssertEqual(state.layouts, vorher)
+        XCTAssertEqual(state.layouts, vorher, "Ableitung muss deterministisch sein")
     }
 
-    /// Sind bereits Layouts vorhanden, darf die Migration sie nicht
-    /// ueberschreiben — sonst verlöre ein halb migrierter Stand die neue
-    /// Anordnung zugunsten der alten.
-    func testStateMigrationDoesNotOverwriteExistingLayouts() {
+    /// **Uebergangszustand:** Solange die Oberflaeche noch `gridWorkspaces`
+    /// schreibt, wird `layouts` bei jedem Laden daraus abgeleitet. Sonst
+    /// driften beide auseinander, sobald nach der Migration jemand einen Chat
+    /// verschiebt — und der spaetere Umstieg uebernaehme eine veraltete
+    /// Anordnung.
+    ///
+    /// Dieser Test kehrt sich mit S6 um: Ab dann ist `layouts` fuehrend und
+    /// darf nicht mehr ueberschrieben werden.
+    func testStateMigrationDerivesLayoutsFromGridWorkspaces() {
         let bestehend = WorkspaceLayout(cells: [WorkspaceLayout.Cell(session: s3)])
         var state = AgentUIState(
             schemaVersion: 4,
@@ -204,6 +210,17 @@ final class WorkspaceLayoutMigrationTests: XCTestCase {
             layouts: [bestehend]
         )
         state.migrateIfNeeded(workspace: .empty)
-        XCTAssertEqual(state.layouts.map(\.allSessions), [[s3]])
+        XCTAssertEqual(state.layouts.map { Set($0.allSessions) }, [[s1, s2]],
+                       "Die Ableitung gewinnt, solange gridWorkspaces fuehrend ist")
+    }
+
+    /// Zell-IDs muessen aus dem Inhalt folgen, nicht zufaellig sein — sonst
+    /// bekaeme jede Ableitung neue Identitaeten.
+    func testCellIDsAreDeterministic() {
+        let source = old(slots: [s1, s2], capacity: 2)
+        let a = WorkspaceLayoutMigration.migrate(source)
+        let b = WorkspaceLayoutMigration.migrate(source)
+        XCTAssertEqual(a, b)
+        XCTAssertEqual(a.cells.map(\.id), [s1, s2], "Zell-ID folgt der Session")
     }
 }
