@@ -168,7 +168,6 @@ struct AgentChatsView: View {
     /// Laufende Verkleinerung mit echtem Überhang: der User markiert im Grid,
     /// welche Chats bleiben. Passt die Belegung nach dem Kompaktieren ohnehin,
     /// wird ohne Rückfrage angewendet und das hier bleibt `nil`.
-    @State var gridShrinkSelection: GridShrinkSelection?
     /// Gemessene Grid-Fläche — der Kapazitäts-Picker sitzt seit dem Umzug in
     /// die Header-Zeile außerhalb des Grids und braucht die Fläche weiterhin,
     /// um nicht passende Stufen auszublenden.

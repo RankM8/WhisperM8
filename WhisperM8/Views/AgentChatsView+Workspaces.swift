@@ -351,7 +351,7 @@ extension AgentChatsView {
         }
         let id = windowStore.createGridWorkspace(
             name: nextFreeWorkspaceName(),
-            capacity: WorkspaceLayout.smallestCapacity(fitting: accepted.count),
+            capacity: WorkspaceLayoutmax( accepted.count),
             slots: accepted.map { $0 },
             activateIn: windowID
         )

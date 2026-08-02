@@ -731,8 +731,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     return .ok("added", workspaceEntity)
                 case .alreadyMember:
                     return .ok("alreadyMember", workspaceEntity)
-                case .full:
-                    return .fail(.conflict, "Workspace „\(workspaceEntity.name)\" ist voll (Kapazität \(workspaceEntity.capacity)) — Slot mit --slot ersetzen oder Kapazität in der App erhöhen")
+                case .alreadyMember:
+                    return .fail(.conflict, "Workspace „\(workspaceEntity.name)\" ist voll (Kapazität \(workspaceEntity.cells.count)) — Slot mit --slot ersetzen oder Kapazität in der App erhöhen")
                 case .rejected:
                     return .fail(.notFound, "Session nicht gefunden/archiviert oder Slot ungültig")
                 }
