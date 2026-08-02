@@ -1,0 +1,393 @@
+<meta charset="utf-8">
+<title>Umsetzung Schritt für Schritt — Workspace-Umbau</title>
+<style>
+  :root { --bg:#0f1014; --panel:#16181f; --panel2:#1c1f28; --line:#272b36;
+    --text:#e6e8ee; --dim:#9aa1b0; --accent:#6E6ADE; --gut:#4ea86b; --warn:#d99a3f;
+    --bad:#d16a6a; --mono:ui-monospace,"SF Mono",Menlo,monospace; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f7f8fa; --panel:#fff;
+    --panel2:#f0f2f6; --line:#dfe3ea; --text:#1a1d24; --dim:#5d6472; } }
+  :root[data-theme="dark"] { --bg:#0f1014; --panel:#16181f; --panel2:#1c1f28;
+    --line:#272b36; --text:#e6e8ee; --dim:#9aa1b0; }
+  :root[data-theme="light"] { --bg:#f7f8fa; --panel:#fff; --panel2:#f0f2f6;
+    --line:#dfe3ea; --text:#1a1d24; --dim:#5d6472; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .wrap { max-width:960px; margin:0 auto; padding:0 28px; }
+  header { border-bottom:1px solid var(--line); padding:48px 0 28px; }
+  .zurueck { color:var(--dim); text-decoration:none; font-size:13px; }
+  h1 { font-size:29px; margin:10px 0 10px; letter-spacing:-.02em; }
+  h1 em { font-style:normal; color:var(--accent); }
+  .lead { color:var(--dim); font-size:16.5px; max-width:70ch; margin:0; }
+  nav { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line);
+    padding:11px 0; z-index:9; font-size:13px; }
+  nav .wrap { display:flex; gap:16px; flex-wrap:wrap; }
+  nav a { color:var(--dim); text-decoration:none; }
+  nav a:hover { color:var(--text); }
+  section { padding:34px 0; border-bottom:1px solid var(--line); }
+  h2 { font-size:22px; margin:0 0 6px; letter-spacing:-.01em; }
+  h2 em { font-style:normal; color:var(--dim); font-weight:400; }
+  h3 { font-size:16px; margin:24px 0 8px; }
+  h4 { font-size:14px; margin:18px 0 6px; color:var(--dim);
+    text-transform:uppercase; letter-spacing:.05em; }
+  .sub { color:var(--dim); margin:0 0 18px; }
+  p { max-width:76ch; }
+  code { font-family:var(--mono); font-size:.88em; background:var(--panel2);
+    padding:1px 5px; border-radius:4px; }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:9px;
+    padding:15px 17px; overflow-x:auto; font-family:var(--mono); font-size:12.5px;
+    line-height:1.6; }
+  pre .k { color:#c678dd; } pre .t { color:#61afef; } pre .c { color:var(--dim); }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 11px; border-bottom:1px solid var(--line);
+    vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12.5px; text-transform:uppercase;
+    letter-spacing:.04em; }
+  .schritt { background:var(--panel); border:1px solid var(--line); border-radius:11px;
+    padding:22px 24px; margin:22px 0; }
+  .schritt .kopf { display:flex; gap:12px; align-items:baseline; margin-bottom:6px; }
+  .schritt .nr { font-family:var(--mono); font-size:13px; color:var(--accent);
+    font-weight:600; }
+  .schritt h3 { margin:0; font-size:19px; flex:1; }
+  .schritt .dauer { color:var(--dim); font-size:12.5px; }
+  .box { border-radius:9px; padding:15px 17px; margin:16px 0;
+    border:1px solid var(--line); background:var(--panel2); }
+  .box .t { font-weight:600; margin-bottom:6px; font-size:14px; }
+  .gut { border-left:3px solid var(--gut); }
+  .warn { border-left:3px solid var(--warn); }
+  .bad { border-left:3px solid var(--bad); }
+  .abnahme { border-left:3px solid var(--accent); background:var(--panel2);
+    border-radius:9px; padding:15px 17px; margin:16px 0; }
+  .abnahme .t { font-weight:600; color:var(--accent); font-size:12.5px;
+    text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px; }
+  .abnahme ul { margin:0; padding-left:19px; font-size:14px; }
+  .abnahme li { margin:5px 0; }
+  footer { padding:30px 0 60px; color:var(--dim); font-size:13.5px; }
+</style>
+
+<header><div class="wrap">
+  <a class="zurueck" href="../index.html">← Übersicht</a>
+  <h1>Umsetzung — <em>Schritt für Schritt</em></h1>
+  <p class="lead">Sechs Schritte. Jeder lässt die App benutzbar, hat ein prüfbares
+  Abnahmekriterium und ein Budget aus einer echten Messung. Wer diesen Plan liest, kann anfangen,
+  ohne nachzufragen.</p>
+</div></header>
+
+<nav><div class="wrap">
+  <a href="#offen">Zuletzt offen</a><a href="#s1">S1 Engine</a><a href="#s2">S2 Modell</a>
+  <a href="#s3">S3 Anzeige</a><a href="#s4">S4 Ziehen</a><a href="#s5">S5 Zoom</a>
+  <a href="#s6">S6 Aufräumen</a><a href="#budgets">Budgets</a>
+</div></nav>
+
+<section id="offen"><div class="wrap">
+  <h2>Die zwei letzten offenen Punkte — hiermit entschieden</h2>
+  <p class="sub">Beide waren als Annahme markiert. Hier werden sie festgelegt, damit beim Bauen
+  nichts geraten wird.</p>
+  <table>
+    <tr><th>Punkt</th><th>Festlegung</th><th>Begründung</th></tr>
+    <tr><td>Tab-Leiste im Einzelchat-Modus</td>
+        <td><strong>Verhält sich wie heute</strong> — sie zeigt die offenen Chats des Fensters.</td>
+        <td>Der Rückweg in den Workspace läuft über die Seitenleiste (E2), die Leiste muss ihn also nicht liefern. Alles andere wäre eine zweite Bedienlogik ohne Gegenwert.</td></tr>
+    <tr><td>Workspace in einem zweiten Fenster öffnen</td>
+        <td><strong>Er wandert.</strong> Das erste Fenster fällt auf Einzelchat-Ansicht zurück und zeigt den zuletzt fokussierten Chat.</td>
+        <td>Ablehnen wäre eine Fehlermeldung auf eine sinnvolle Handlung. Wandern entspricht dem, was Fenstersysteme sonst tun, und E9 verbietet nur die <em>gleichzeitige</em> Anzeige.</td></tr>
+  </table>
+</div></section>
+
+<section id="s1"><div class="wrap">
+  <div class="schritt">
+    <div class="kopf"><span class="nr">S1</span><h3>Die Engine als pure Logik</h3>
+      <span class="dauer">größter Einzelschritt</span></div>
+    <p>Kein SwiftUI, kein AppKit, keine Abhängigkeit zum Store. Nur Daten hinein, Daten heraus —
+    und damit vollständig unter Tests. Das ist die Voraussetzung dafür, dass der spätere Umbau der
+    75 Aufrufstellen mechanisch statt riskant wird.</p>
+
+    <h4>Neue Dateien</h4>
+    <table>
+      <tr><th>Datei</th><th>Inhalt</th></tr>
+      <tr><td><code>Models/WorkspaceLayout.swift</code></td><td>Die Typen aus Paket 01: <code>WorkspaceLayout</code>, <code>Cell</code>, <code>Arrangement</code>, <code>SplitNode</code>, <code>Source</code></td></tr>
+      <tr><td><code>Services/AgentChats/Layout/LayoutEngine.swift</code></td><td>Die Operationen — jede pur, jede mit Rückgabewert statt Mutation</td></tr>
+      <tr><td><code>Services/AgentChats/Layout/LayoutNormalizer.swift</code></td><td>Die eine Stelle, die alle Invarianten durchsetzt</td></tr>
+      <tr><td><code>Services/AgentChats/Layout/LayoutGeometry.swift</code></td><td>Baum → Rechtecke, mit Mindestgrößen</td></tr>
+    </table>
+
+    <h4>Die Engine-Schnittstelle, vollständig</h4>
+<pre><span class="k">enum</span> <span class="t">LayoutEngine</span> {
+    <span class="c">// ─ Mitgliedschaft ─────────────────────────────────────────</span>
+
+    <span class="c">/// Fügt einen Chat hinzu. Bei `automatic` ordnet die Engine ihn ein;</span>
+    <span class="c">/// bei `manual` kommt er in die zuletzt fokussierte Zelle als Stapel.</span>
+    <span class="k">static func</span> add(_ session: UUID, to layout: WorkspaceLayout,
+                    focused: UUID?) -> WorkspaceLayout
+
+    <span class="c">/// Nimmt einen Chat heraus (× am Tab, E10). Wird die Zelle dadurch</span>
+    <span class="c">/// leer, verschwindet sie und die Fläche verdichtet sich (E4/F4).</span>
+    <span class="k">static func</span> remove(_ session: UUID, from layout: WorkspaceLayout) -> WorkspaceLayout
+
+    <span class="c">/// Ein beendeter Chat verschwindet aus JEDEM Layout — Invariante aus</span>
+    <span class="c">/// E8. Wird zentral beim Sessionende gerufen, nicht pro Ansicht.</span>
+    <span class="k">static func</span> purge(_ session: UUID, from layouts: [WorkspaceLayout]) -> [WorkspaceLayout]
+
+    <span class="c">// ─ Anordnen ───────────────────────────────────────────────</span>
+
+    <span class="c">/// Zwei Zellen tauschen ihre Plätze. Bei `automatic` heißt das:</span>
+    <span class="c">/// Reihenfolge in `cells` tauschen. Bei `manual`: Blätter tauschen.</span>
+    <span class="k">static func</span> swap(_ a: UUID, _ b: UUID, in layout: WorkspaceLayout) -> WorkspaceLayout
+
+    <span class="c">/// Chat auf eine Zelle ziehen: ersetzt deren Inhalt (äußerer Ring)</span>
+    <span class="c">/// oder legt ihn auf den Stapel (innerer Kern) — F2.</span>
+    <span class="k">static func</span> drop(_ session: UUID, onto cell: UUID,
+                     mode: DropMode, in layout: WorkspaceLayout) -> WorkspaceLayout
+
+    <span class="c">/// Chat auf eine Trennlinie ziehen (E7): dort entsteht eine neue</span>
+    <span class="c">/// Fläche, und die Anordnung wird dadurch `manual`.</span>
+    <span class="k">static func</span> insert(_ session: UUID, atEdge edge: Edge, of cell: UUID,
+                       in layout: WorkspaceLayout) -> WorkspaceLayout
+
+    <span class="c">/// Zurück zur automatischen Anordnung (F6). Der Baum wird verworfen,</span>
+    <span class="c">/// Zellen und Stapel bleiben.</span>
+    <span class="k">static func</span> resetToAutomatic(_ layout: WorkspaceLayout) -> WorkspaceLayout
+
+    <span class="c">// ─ Sichtbarkeit ───────────────────────────────────────────</span>
+
+    <span class="c">/// Welcher Chat einer Zelle sichtbar ist.</span>
+    <span class="k">static func</span> activate(_ session: UUID, in layout: WorkspaceLayout) -> WorkspaceLayout
+}
+
+<span class="k">enum</span> <span class="t">DropMode</span> { <span class="k">case</span> replace, stack }
+<span class="k">enum</span> <span class="t">Edge</span> { <span class="k">case</span> leading, trailing, top, bottom }</pre>
+
+    <h4>Die Geometrie</h4>
+<pre><span class="k">enum</span> <span class="t">LayoutGeometry</span> {
+    <span class="c">/// Berechnet für jede Zelle ihr Rechteck. Bei `automatic` aus der</span>
+    <span class="c">/// Zellenzahl, bei `manual` aus dem Baum.</span>
+    <span class="c">///</span>
+    <span class="c">/// `minimum` setzt die weiche Grenze aus F7 durch: Passt eine</span>
+    <span class="c">/// weitere Fläche nicht mehr in Mindestgröße, wird gestapelt statt</span>
+    <span class="c">/// geteilt. Vorgabe 80×24 Zeichen, umgerechnet über die Zellmaße.</span>
+    <span class="k">static func</span> frames(for layout: WorkspaceLayout, in bounds: CGRect,
+                       minimum: CGSize) -> [UUID: CGRect]
+
+    <span class="c">/// Wie viele Spalten/Zeilen die automatische Anordnung bei n Zellen</span>
+    <span class="c">/// wählt. Ausgelagert, weil es die meistgetestete Einzelregel ist.</span>
+    <span class="k">static func</span> automaticArrangement(cellCount: Int, aspect: CGFloat) -> (columns: Int, rows: Int)
+}</pre>
+
+    <div class="box gut">
+      <div class="t">Vorlage ist der HTML-Zwilling</div>
+      <p style="margin:0">Jede dieser Funktionen existiert dort als JavaScript und ist mit echter
+      Maus erprobt: <code>reflowAuto</code>, <code>buildAutoTree</code>, <code>framesOf</code>,
+      <code>swapCells</code>, <code>replaceInCell</code>, <code>dropSession</code>,
+      <code>throwIn</code>. Die Übersetzung nach Swift ist Fleißarbeit mit bekanntem Ergebnis —
+      nicht Entwurf.</p>
+    </div>
+
+    <div class="abnahme"><div class="t">Abnahme</div>
+      <ul>
+        <li>Jede Invariante aus Paket 01 hat mindestens einen Test, der sie <em>verletzt</em> und prüft, dass der Normalisierer sie repariert</li>
+        <li>Jede Engine-Funktion hat einen Test für den Normalfall und einen für den Randfall (leeres Layout, letzte Zelle, unbekannte ID)</li>
+        <li><code>LayoutGeometry.frames</code> gibt bei gleichen Eingaben immer dieselben Rechtecke — Rundung auf ganze Punkte, damit keine Fugen entstehen</li>
+        <li>Kein Import von SwiftUI oder AppKit in den vier neuen Dateien. Prüfbar per <code>grep</code>.</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="s2"><div class="wrap">
+  <div class="schritt">
+    <div class="kopf"><span class="nr">S2</span><h3>Modell und Migration</h3>
+      <span class="dauer">klein, aber unumkehrbar</span></div>
+    <p>Erst wenn S1 steht. Die Migration wird gegen echte v4-Daten getestet, nicht gegen
+    konstruierte.</p>
+
+    <h4>Was passiert</h4>
+    <table>
+      <tr><th>Schritt</th><th>Datei</th></tr>
+      <tr><td><code>AgentUIState.currentSchemaVersion</code> auf 5</td><td><code>Models/AgentUIState.swift:114</code></td></tr>
+      <tr><td>Migration v4 → v5 als pure Funktion</td><td><code>Models/AgentUIState.swift:271ff</code> (bestehender Pfad)</td></tr>
+      <tr><td>Rohsnapshot der v4-Datei vor der Umstellung</td><td>neben <code>agent-ui-state.json</code>, Muster wie die Generationen-Backups</td></tr>
+      <tr><td><code>AgentGridWorkspace</code> bleibt vorerst bestehen</td><td>wird erst in S6 entfernt</td></tr>
+    </table>
+
+    <div class="box warn">
+      <div class="t">Die Migration ist die einzige unumkehrbare Stelle</div>
+      <p style="margin:0 0 8px">Deshalb: Rohsnapshot <em>vor</em> dem ersten Schreiben, und die
+      Migration läuft genau einmal, erkennbar an der Schemaversion. Schlägt sie fehl, darf sie
+      nicht bei jedem Start erneut denselben Schaden anrichten.</p>
+      <p style="margin:0"><strong>Bestand wird als <code>manual</code> übernommen</strong>
+      (Paket 01): Die bestehende Anordnung bleibt exakt erhalten. Der Weg zur Automatik ist der
+      sichtbare Schalter aus F6.</p>
+    </div>
+
+    <div class="abnahme"><div class="t">Abnahme</div>
+      <ul>
+        <li>Migration mit einer echten <code>agent-ui-state.json</code> aus dem Feld getestet, nicht nur mit erzeugten Daten</li>
+        <li>Jedes v4-Layout ergibt ein v5-Layout mit denselben Chats an denselben Stellen — als Test, nicht als Sichtprüfung</li>
+        <li>Ein absichtlich kaputtes v4-Layout macht nicht die ganze Datei unlesbar</li>
+        <li>Zweiter Start migriert nicht erneut</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="s3"><div class="wrap">
+  <div class="schritt">
+    <div class="kopf"><span class="nr">S3</span><h3>Anzeigen — ohne Interaktion</h3>
+      <span class="dauer">der Terminal-kritische Schritt</span></div>
+    <p>Das Layout wird gezeichnet, mehr nicht. Kein Ziehen, kein Zoom. Ziel ist ausschließlich:
+    <strong>Terminals überleben jede Anordnungsänderung.</strong></p>
+
+    <h4>Was gebaut wird</h4>
+    <table>
+      <tr><th>Datei</th><th>Inhalt</th></tr>
+      <tr><td><code>Views/Workspace/WorkspaceLayoutView.swift</code></td><td>Zeichnet die Rechtecke aus <code>LayoutGeometry.frames</code></td></tr>
+      <tr><td><code>Views/Workspace/WorkspaceCellView.swift</code></td><td>Eine Zelle: aktiver Chat plus Stapelleiste, wenn mehr als einer</td></tr>
+    </table>
+
+    <div class="box bad">
+      <div class="t">Die eine Regel, an der dieser Schritt hängt</div>
+      <p style="margin:0 0 8px">Ein Terminal darf beim Umsortieren <strong>niemals</strong> neu
+      aufgebaut werden. Ein neuer PTY heißt: Scrollback weg, laufender Befehl weg. Das wäre
+      schlimmer als jedes Layoutproblem.</p>
+      <p style="margin:0">Technisch: Die Identität einer Pane ist die Session-ID, nicht ihre
+      Position. In SwiftUI heißt das <code>.id(sessionID)</code> auf der Terminal-Ansicht und
+      <em>keine</em> Verschachtelung, die bei Umsortierung die Sicht-Identität ändert. Der Zähler
+      <code>pane.mounted</code> deckt jeden Verstoß auf.</p>
+    </div>
+
+    <div class="abnahme"><div class="t">Abnahme</div>
+      <ul>
+        <li><strong>Der wichtigste Test:</strong> In ein Terminal tippen, Layout ändern, Text ist noch da — und <code>pane.mounted</code> ist nicht gestiegen</li>
+        <li>Chat schließen → Fläche verdichtet sich, übrige Terminals unberührt</li>
+        <li><code>sidebar.workspaceChangeFollowUp</code> reißt sein 50-ms-Budget nicht</li>
+        <li>Neun Flächen mit Last: kein Eintrag von <code>main_thread_freeze</code> im Log</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="s4"><div class="wrap">
+  <div class="schritt">
+    <div class="kopf"><span class="nr">S4</span><h3>Ziehen und Trenner</h3>
+      <span class="dauer">der riskanteste Schritt</span></div>
+    <p>Erst jetzt, auf gesichertem Fundament. Hier steckt der bekannte Präzedenzfall: Im Mai 2026
+    hat SwiftUIs Drag-API mit <code>LazyVStack</code> die App eingefroren (Fix 60ca683,
+    Kommentar in <code>AgentChatsSidebarViews.swift:199</code>).</p>
+
+    <h4>Vorgehen</h4>
+    <table>
+      <tr><th>Teil</th><th>Wie</th></tr>
+      <tr><td>Zeigegerät statt Drag-API</td><td>Wie im Zwilling: Schwelle von 4 Punkten, dann Ziehen. Kein <code>.draggable</code>.</td></tr>
+      <tr><td>Zielbestimmung</td><td>Pure Funktion: Mausposition plus Rechtecke ⟶ Ziel (Zelle-ersetzen · Zelle-stapeln · Kante). Vollständig testbar ohne Maus.</td></tr>
+      <tr><td>Vorschau</td><td>Pflicht, nicht Zierde: Ohne sichtbare Zone ist F2 ein Ratespiel.</td></tr>
+      <tr><td><strong>Trenner ziehen: dehnen, nicht ändern</strong></td><td>Siehe Messung. Während des Ziehens nur die Darstellung strecken; die echte Größenänderung erst beim Loslassen.</td></tr>
+    </table>
+
+    <div class="box warn">
+      <div class="t">Warum das Dehnen von Anfang an eingeplant sein muss</div>
+      <p style="margin:0">Gemessen: Neun Flächen kosten 11,24 ms allein auf der Terminal-Seite,
+      plus etwa dieselbe Menge für die Neuzeichnung durch die laufenden Programme — rund 24 ms.
+      Ein 60-Hz-Bild hat 16,7. Wer erst durchreicht und später dehnen will, muss die gesamte
+      Geometrie-Kette umbauen, weil überall unterschieden werden muss, ob eine Größe vorläufig
+      oder endgültig ist.</p>
+    </div>
+
+    <div class="abnahme"><div class="t">Abnahme</div>
+      <ul>
+        <li>Zielbestimmung vollständig unter Tests — jede Zone, jede Kante, jeder Randfall</li>
+        <li>Trenner ziehen bei neun Flächen: <code>grid.dividerTick</code> unter 16 ms</li>
+        <li>Kein <code>main_thread_freeze</code> während einer Minute Dauerziehen</li>
+        <li>Ein Klick bleibt ein Klick — unter 4 Punkten Bewegung wird nichts gezogen</li>
+        <li>Terminals überleben jedes Ziehen: <code>pane.mounted</code> unverändert</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="s5"><div class="wrap">
+  <div class="schritt">
+    <div class="kopf"><span class="nr">S5</span><h3>Zoom und Betriebsarten</h3>
+      <span class="dauer">klein</span></div>
+    <p>Der Zoom ist <strong>keine Layoutänderung</strong>, sondern eine reine Sichtbarkeitsfrage.
+    Das ist die entscheidende Festlegung: Die verdeckten Terminals behalten ihre Größe und werden
+    nicht neu gezeichnet — sonst kostet jedes Ein- und Auszoomen zweimal die volle Neuzeichnung
+    aller Flächen.</p>
+
+    <table>
+      <tr><th>Verhalten</th><th>Woher</th></tr>
+      <tr><td>Klick in der Seitenleiste bei aktivem Zoom wechselt den Inhalt, der Zoom bleibt</td><td>E4</td></tr>
+      <tr><td>Klick auf einen Chat außerhalb des Workspace verlässt ihn</td><td>E1</td></tr>
+      <tr><td>Rückweg über die Seitenleiste</td><td>E2</td></tr>
+      <tr><td>Zoom überlebt das Verlassen <em>nicht</em></td><td>E6</td></tr>
+      <tr><td>Zwei Betriebsarten der Hauptansicht: Workspace · Einzelchat</td><td>Folge aus E1, gehört in den Fenster-Zustand</td></tr>
+    </table>
+
+    <div class="abnahme"><div class="t">Abnahme</div>
+      <ul>
+        <li>Ein- und Auszoomen ändert keine Terminal-Größe — nachweisbar daran, dass kein neuer Output entsteht</li>
+        <li>Zoom, dann anderen Chat des Workspace anklicken: Inhalt wechselt, Zoom bleibt</li>
+        <li>Workspace verlassen und zurückkehren: Anordnung ist da, Zoom ist weg</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="s6"><div class="wrap">
+  <div class="schritt">
+    <div class="kopf"><span class="nr">S6</span><h3>Das alte Modell entfernen</h3>
+      <span class="dauer">mechanisch</span></div>
+    <p>In <em>einem</em> Schritt, nicht schrittweise. Zwei Layoutmodelle nebeneinander wären der
+    teuerste Weg: jede Änderung doppelt, und Fehler verstecken sich im Übergang.</p>
+    <table>
+      <tr><th>Was weg kann</th><th>Umfang</th></tr>
+      <tr><td><code>AgentGridWorkspace.slots</code>, <code>.capacity</code>, <code>allowedCapacities</code></td><td>75 Aufrufstellen</td></tr>
+      <tr><td><code>AgentGridSplitContainer</code> in seiner heutigen Form</td><td>ersetzt durch <code>WorkspaceLayoutView</code></td></tr>
+      <tr><td>Kapazitäts-Auswahl in der Oberfläche</td><td>ersatzlos — das ist der Kern der Beschwerde</td></tr>
+    </table>
+    <div class="abnahme"><div class="t">Abnahme</div>
+      <ul>
+        <li><code>grep -rn "\.slots\|\.capacity" WhisperM8</code> liefert nichts mehr</li>
+        <li>Volle Testsuite grün</li>
+        <li>Ein Durchlauf mit <code>scripts/perf-report.sh</code> zeigt keine neuen Budget-Verletzungen gegenüber vorher</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="budgets"><div class="wrap">
+  <h2>Budgets <em>— aus Messungen, nicht geschätzt</em></h2>
+  <table>
+    <tr><th>Messpunkt</th><th>Budget</th><th>Herkunft</th></tr>
+    <tr><td><code>grid.dividerTick</code></td><td>16 ms</td><td>60-Hz-Bild. Erreichbar nur mit der Dehn-Technik — 9 Flächen kosten sonst ~24 ms.</td></tr>
+    <tr><td>Layout berechnen (neu)</td><td>2 ms</td><td>Reine Rechnung ohne I/O; alles darüber deutet auf einen Fehler im Algorithmus.</td></tr>
+    <tr><td><code>pane.mounted</code></td><td><strong>0</strong> bei Layoutänderung</td><td>Harte Regel, kein Schwellwert. Jeder Wiederaufbau ist ein Fehler.</td></tr>
+    <tr><td><code>sidebar.workspaceChangeFollowUp</code></td><td>50 ms</td><td>Bestehender Messpunkt vom 02.08.2026</td></tr>
+    <tr><td><code>main_thread_freeze</code></td><td>keiner</td><td>Beim Ziehen und Zoomen darf kein einziger auftreten</td></tr>
+  </table>
+
+  <div class="box gut">
+    <div class="t">Abnahme heißt: Budget gerissen = Schritt nicht fertig</div>
+    <p style="margin:0">Nicht nachher messen, sondern als Bedingung. Das ist die Lehre aus dem
+    01./02.08.2026: Drei vermeintlich größte Hebel waren Fehlalarme, weil zuerst geschätzt und
+    dann gemessen wurde. Hier steht das Budget vor der Zeile Code.</p>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Reihenfolge <em>— und warum sie nicht tauschbar ist</em></h2>
+  <table>
+    <tr><th>Schritt</th><th>Setzt voraus</th><th>Warum nicht früher</th></tr>
+    <tr><td>S1 Engine</td><td>—</td><td>Alles Weitere baut darauf. Ohne getestete Engine ist jeder Folgeschritt Rätselraten.</td></tr>
+    <tr><td>S2 Modell</td><td>S1</td><td>Die Migration muss in die Zielform übersetzen — die muss vorher feststehen.</td></tr>
+    <tr><td>S3 Anzeige</td><td>S2</td><td>Ohne migrierte Daten gäbe es nichts zu zeichnen.</td></tr>
+    <tr><td>S4 Ziehen</td><td>S3</td><td>Der riskanteste Teil gehört auf gesichertes Fundament. Bricht hier etwas, muss klar sein, dass es an der Interaktion liegt.</td></tr>
+    <tr><td>S5 Zoom</td><td>S3</td><td>Braucht die Anzeige, nicht das Ziehen — könnte auch parallel zu S4 laufen.</td></tr>
+    <tr><td>S6 Aufräumen</td><td>alle</td><td>Solange etwas fehlt, ist das alte Modell der Rückweg.</td></tr>
+  </table>
+</div></section>
+
+<footer><div class="wrap">
+  Entscheidungen E1–E10 und F1–F7: <code>../02-entscheidungen/01-offene-fragen.html</code><br>
+  Datenmodell und Invarianten: <code>../01-datenmodell/01-modell-und-migration.html</code><br>
+  Verhalten zum Nachsehen: <code>docs/design/agent-chats-layout-engine.html</code>
+</div></footer>
