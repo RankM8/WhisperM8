@@ -176,11 +176,9 @@ final class WorkspaceLayoutMigrationTests: XCTestCase {
     // MARK: - Einbindung in den Schema-Pfad
 
     func testStateMigrationFillsLayoutsOnce() {
-        var state = AgentUIState(
-            schemaVersion: 4,
-            gridWorkspaces: [old(slots: [s1, s2], capacity: 2)]
-        )
-        state.migrateIfNeeded(workspace: .empty)
+        var state = AgentUIState(schemaVersion: 4)
+        state.gridWorkspaces = [old(slots: [s1, s2], capacity: 2)]
+        state.migrateIfNeeded(workspace: AgentWorkspace.empty)
 
         XCTAssertEqual(state.schemaVersion, AgentUIState.currentSchemaVersion)
         XCTAssertEqual(state.layouts.count, 1)
@@ -190,28 +188,20 @@ final class WorkspaceLayoutMigrationTests: XCTestCase {
         // Laden eine Aenderung, und in SwiftUI hiesse das neu gebaute
         // Ansichten samt neuer Terminals.
         let vorher = state.layouts
-        state.migrateIfNeeded(workspace: .empty)
+        state.migrateIfNeeded(workspace: AgentWorkspace.empty)
         XCTAssertEqual(state.layouts, vorher, "Ableitung muss deterministisch sein")
     }
 
-    /// **Uebergangszustand:** Solange die Oberflaeche noch `gridWorkspaces`
-    /// schreibt, wird `layouts` bei jedem Laden daraus abgeleitet. Sonst
-    /// driften beide auseinander, sobald nach der Migration jemand einen Chat
-    /// verschiebt — und der spaetere Umstieg uebernaehme eine veraltete
-    /// Anordnung.
-    ///
-    /// Dieser Test kehrt sich mit S6 um: Ab dann ist `layouts` fuehrend und
-    /// darf nicht mehr ueberschrieben werden.
-    func testStateMigrationDerivesLayoutsFromGridWorkspaces() {
+    /// **Umgekehrt mit S6:** `layouts` ist jetzt fuehrend. Eine vorhandene
+    /// Anordnung darf NICHT mehr aus `gridWorkspaces` ueberschrieben werden —
+    /// sonst verloere jede Verschiebung beim naechsten Laden ihre Wirkung.
+    func testStateMigrationKeepsExistingLayouts() {
         let bestehend = WorkspaceLayout(cells: [WorkspaceLayout.Cell(session: s3)])
-        var state = AgentUIState(
-            schemaVersion: 4,
-            gridWorkspaces: [old(slots: [s1, s2], capacity: 2)],
-            layouts: [bestehend]
-        )
-        state.migrateIfNeeded(workspace: .empty)
-        XCTAssertEqual(state.layouts.map { Set($0.allSessions) }, [[s1, s2]],
-                       "Die Ableitung gewinnt, solange gridWorkspaces fuehrend ist")
+        var state = AgentUIState(schemaVersion: 4, layouts: [bestehend])
+        state.gridWorkspaces = [old(slots: [s1, s2], capacity: 2)]
+        state.migrateIfNeeded(workspace: AgentWorkspace.empty)
+        XCTAssertEqual(state.layouts.map { Set($0.allSessions) }, [[s3]],
+                       "Vorhandene layouts sind fuehrend und werden nicht ueberschrieben")
     }
 
     /// Zell-IDs muessen aus dem Inhalt folgen, nicht zufaellig sein — sonst
