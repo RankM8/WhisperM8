@@ -151,6 +151,7 @@ extension PostProcessingTemplate {
 
     static let cleanID = "template.clean"
     static let techCleanID = "template.tech-clean"
+    static let promptFastID = "template.prompt-fast"
     static let promptID = "template.prompt"
     static let promptPlusID = "template.prompt-plus"
     /// Chat-Modus 2026-07-07 ausgebaut — das Built-in-Template existiert nicht
@@ -242,6 +243,39 @@ extension PostProcessingTemplate {
                 Transcript:
                 {rawTranscript}
                 """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: promptFastID,
+                name: "Fast prompt",
+                description: "Räumt nur das Gesagte auf und beschreibt die Screenshots — kein Playbook, keine Recherche, keine Ergänzungen.",
+                instruction: """
+                Clean up what the user said into a ready-to-use prompt — nothing more.
+
+                You are a transcript editor, not a prompt engineer and not the executor: never answer the request, never solve it, never plan it, and never turn it into a structured playbook. Your only job is to make the user's own words readable and to fold in what the attached images show.
+
+                Spoken text:
+                - Preserve the user's meaning, intent, wording, order, priorities, and level of detail. Reproduce it one to one.
+                - Fix speech-to-text artifacts, punctuation, casing, and paragraph breaks; remove accidental filler, stutters, and false starts.
+                - Correct obviously misheard technical terms when the context makes the intended term clear (e.g. "Cloud Code" → "Claude Code", "open AI" → "OpenAI"), and keep established spellings for tools, models, and frameworks.
+                - Do not add headings, sections, acceptance criteria, constraints, verification steps, open questions, or any structure the user did not speak.
+                - Do not research, do not inspect the project, and do not answer questions the user raised.
+                - Do not summarize, shorten, expand, or elaborate.
+                - Keep the language of the user's instruction; keep German/English mixing natural when the transcript is mixed.
+                - Use a bullet list only when the user clearly dictated a list.
+
+                Images:
+                - If images are attached, inspect each one and append a final section titled "Screenshots", with one entry per image, labelled exactly as in the visual manifest ("Screenshot 1", "Screenshot 2", …).
+                - Per image: state briefly and factually what it shows (app, screen, visible labels, state, marked areas) and how the user refers to it in their instruction.
+                - Keep each entry to one or two sentences. Do not interpret beyond what is visible and what the user said, and do not derive tasks from the images.
+                - If no images are attached, omit the section entirely.
+
+                Output:
+                - Output only the final text: the cleaned instruction, followed by the "Screenshots" section when images are present.
+
+                """ + promptContextFooter,
                 createdAt: referenceDate,
                 updatedAt: referenceDate,
                 isBuiltIn: true

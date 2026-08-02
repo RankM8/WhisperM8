@@ -25,8 +25,14 @@ Directory bekommt.
 | `builtIn` | Verwendet einen eingebauten Modus mit festem Built-in-Template und optionalem Kontext. |
 | `custom` | User-Modus aus `OutputModes.json`, mit editierbarem Namen, Label, Template, Kontext- und Codex-Einstellungen. |
 
-Die eingebauten Modi sind `Fast`, `Clean`, `Prompt`, `Ultra-Prompt`, `Task`,
-`Email`, `Slack`, `WhatsApp` und `Notes`. `Fast` ist der Raw-Fallback und bleibt
+Die eingebauten Modi sind `Fast`, `Clean`, `Fast Prompt`, `Prompt`,
+`Ultra-Prompt`, `Task`, `Email`, `Slack`, `WhatsApp` und `Notes`. `Fast Prompt`
+ist die Stufe zwischen `Clean` und `Prompt`: er räumt das Gesagte nur auf und
+hängt zu jedem übergebenen Bild eine kurze, sachliche Beschreibung an (was zu
+sehen ist und wie der Sprecher sich darauf bezieht). Er baut kein Playbook,
+recherchiert nicht, liest kein Projekt und ergänzt nichts, was nicht gesprochen
+wurde; entsprechend läuft er per Mode-Override auf Reasoning `Low` statt auf dem
+globalen Default. `Fast` ist der Raw-Fallback und bleibt
 sichtbar; alle anderen Modi gelten als Codex-abhängig. Zusätzlich existiert das
 eingebaute Template `Tech/Denglisch clean transcript`; es ist kein eigener
 Built-in-Mode, ist aber in der Templates-UI sichtbar und kann als Custom-
@@ -195,6 +201,7 @@ Report; wenn noch kein Report geladen oder vorhanden ist, kann
 
 AI Output, KI-Ausgabe, Codex-Nachbearbeitung, Post-Processing,
 Transkript-Nachbearbeitung, Output-Modus, Ausgabemodus, Fast, Raw, Clean,
+Fast Prompt, `prompt-fast`, `template.prompt-fast`,
 Prompt, Ultra-Prompt, Task, Email, Slack, WhatsApp, Notes, Template, Vorlage,
 Tech-Denglisch, `template.tech-clean`, Custom Mode, Built-in Mode, Test-Lab,
 Run-Report, Output-Archiv, Latest Run, `OutputArchiveFallback`,

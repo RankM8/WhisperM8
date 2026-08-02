@@ -113,7 +113,8 @@ Der Prompt ist die Verkettung aus Globalvertrag, optionalem Agent-Chat-Kontext,
 Captured-Context-Block und gerenderter Mode-Instruktion.
 
 `ReplyIntentRouter` klassifiziert vor dem Promptbau den Zweck des Runs.
-`Prompt` und `Ultra-Prompt` werden `promptPackage`, `Task` wird `taskPrompt`.
+`Fast Prompt`, `Prompt` und `Ultra-Prompt` werden `promptPackage`, `Task` wird
+`taskPrompt`.
 Email/Slack/WhatsApp werden je nach Text und Kontext als `rewrite`,
 `contextAnswer` oder `agenticReply` eingestuft; Trigger wie recherchieren,
 prüfen, look up oder bildbezogene Fragen führen zu `agenticReply`.

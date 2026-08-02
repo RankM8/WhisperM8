@@ -145,6 +145,7 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
 extension OutputMode {
     static let rawID = "raw"
     static let cleanID = "clean"
+    static let promptFastID = "prompt-fast"
     static let promptID = "prompt"
     static let promptPlusID = "prompt-plus"
     static let taskID = "task"
@@ -182,6 +183,21 @@ extension OutputMode {
             templateID: PostProcessingTemplate.cleanID,
             isEnabled: true,
             isDefault: false
+        ),
+        OutputMode(
+            id: promptFastID,
+            name: "Fast Prompt",
+            shortLabel: "Fast Prompt",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.promptFastID,
+            isEnabled: true,
+            isDefault: false,
+            contextPolicy: .auto,
+            pasteVisualAttachments: true,
+            // Stufe zwischen Clean und Prompt: nur aufräumen + Bilder beschreiben.
+            // Deshalb bewusst Low statt des globalen Reasoning-Defaults (High) —
+            // der Modus soll schnell sein, nicht gründlich.
+            codexReasoningEffortRawOverride: CodexReasoningEffort.low.rawValue
         ),
         OutputMode(
             id: promptID,
@@ -292,7 +308,7 @@ extension OutputMode {
 
     static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {
         switch id {
-        case promptID, promptPlusID, taskID, emailID, slackID, whatsappID:
+        case promptFastID, promptID, promptPlusID, taskID, emailID, slackID, whatsappID:
             return .auto
         default:
             return .off
@@ -320,7 +336,7 @@ extension OutputMode {
         }
 
         switch id {
-        case promptID, promptPlusID, taskID, emailID, slackID, whatsappID:
+        case promptFastID, promptID, promptPlusID, taskID, emailID, slackID, whatsappID:
             return true
         default:
             return false

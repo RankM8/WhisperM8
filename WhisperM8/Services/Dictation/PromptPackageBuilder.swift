@@ -48,7 +48,7 @@ enum ReplyIntentKind: String, Codable, Equatable {
 
 struct ReplyIntentRouter {
     func route(rawText: String, mode: OutputMode, contextBundle: TranscriptContextBundle) -> ReplyIntentKind {
-        if mode.id == OutputMode.promptID || mode.id == OutputMode.promptPlusID {
+        if Self.promptModeIDs.contains(mode.id) {
             return .promptPackage
         }
         if mode.id == OutputMode.taskID {
@@ -69,6 +69,14 @@ struct ReplyIntentRouter {
 
         return .rewrite
     }
+
+    /// Alle Modi, die einen Prompt für einen anderen Agenten bauen statt die
+    /// Aufgabe selbst zu erledigen — Fast Prompt räumt dabei nur auf.
+    private static let promptModeIDs: Set<String> = [
+        OutputMode.promptFastID,
+        OutputMode.promptID,
+        OutputMode.promptPlusID
+    ]
 
     private static let replyModeIDs: Set<String> = [
         OutputMode.emailID,
@@ -319,7 +327,8 @@ struct PromptPackageBuilder {
         - Output mode: \(mode.name)
         - Router decision: \(intent.displayName)
         - For Slack, WhatsApp, and Email, always return the finished message, never a prompt for the user to run elsewhere.
-        - For Prompt modes, follow the mode instruction's playbook and return only the final Markdown prompt for Claude Code or Codex — never perform the task itself.
+        - For Prompt modes, follow the mode instruction and return only the final prompt for Claude Code or Codex — never perform the task itself.
+        - Fast Prompt is the cleanup stage: return the user's own instruction tidied up plus short factual descriptions of the attached images, and add no structure or content the user did not speak.
         - For Task mode, execute the user's task as far as the current Codex session can do non-interactively, then return the final answer or deliverable.
         - Task mode must not return a prompt unless the user explicitly asks for a prompt.
         - If a Task mode request cannot be completed because required external access, credentials, or write permissions are unavailable, return the best safe result plus the exact blocker.
