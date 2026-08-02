@@ -111,6 +111,17 @@ struct AgentWorkspaceRepository {
                 at: fileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
+            // `prettyPrinted`/`sortedKeys` sehen nach einem lohnenden Sparziel
+            // aus — sind es nicht. Nachgemessen am echten Workspace (1971
+            // Sessions, 1,47 MB): mit beidem 17,5 ms, ohne beides 15,2 ms.
+            // **2,3 ms Unterschied.** Die Formatierung ist nicht das Problem.
+            //
+            // Der Widerspruch dazu, dass `encodeMs` im Betrieb 235–578 ms
+            // meldet, ist selbst der Befund: Die Rechenarbeit ist dieselbe,
+            // es fehlt ungestoerte Rechenzeit. Dieser Save laeuft auf
+            // Utility-Prioritaet und wird verdraengt, waehrend der
+            // Indexer-Vollscan (bis 8,3 s) CPU und Platte belegt. Wer hier
+            // optimiert, behandelt das Symptom.
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
