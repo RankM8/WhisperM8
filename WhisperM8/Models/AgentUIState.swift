@@ -140,7 +140,6 @@ struct AgentUIState: Codable, Equatable {
     ///
     /// **Wird von `layouts` abgeloest (Schema v5).** Bleibt vorerst bestehen,
     /// bis die Oberflaeche umgestellt ist; entfaellt dann in einem Schritt.
-    var gridWorkspaces: [AgentGridWorkspace]
 
     /// Die neuen Anordnungen (Schema v5) — Zellen mit Stapeln statt fester
     /// Plaetze. Reihenfolge ist wie bei `gridWorkspaces` die Sidebar-Reihenfolge.
