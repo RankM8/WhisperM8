@@ -130,6 +130,55 @@ extension AgentChatsView {
         }
     }
 
+    /// Einstiegspunkt der Sidebar-Hover-Aktion: welche Semantik gilt, sagt
+    /// `SidebarCloseAction` (Scope „Aktiv" = beenden, sonst archivieren) —
+    /// dieselbe Quelle, aus der die Row Icon + Tooltip zieht.
+    func performSidebarCloseAction(_ sessions: [AgentChatSession]) {
+        if effectiveScope == .active {
+            requestEndSession(sessions)
+        } else {
+            requestArchive(sessions)
+        }
+    }
+
+    /// Gegenstück zu `requestArchive` für den Scope „Aktiv": Tab schließen +
+    /// Chat beenden, OHNE zu archivieren. Terminals werden wie überall
+    /// geschlossen (kein Resume, kein Archiv). Läuft in der Gruppe mindestens
+    /// ein PTY, fragt ein confirmationDialog nach — das Terminieren ist die
+    /// einzige irreversible Nebenwirkung.
+    func requestEndSession(_ sessions: [AgentChatSession]) {
+        sessions.filter(\.isTerminal).forEach { closeTerminalSession($0) }
+
+        let endable = sessions.filter { !$0.isTerminal }
+        guard !endable.isEmpty else { return }
+        let hasRunning = endable.contains {
+            terminalRegistry.controller(for: $0.id)?.isRunning == true
+        }
+        if hasRunning {
+            sessionsPendingEnd = endable
+        } else {
+            commitEndSession(endable)
+        }
+    }
+
+    /// Führt das Beenden aus (direkt oder nach Dialog-Bestätigung). Der
+    /// Auswahl-Reset lebt — wie bei `commitArchive` — hier, damit „Abbrechen"
+    /// die Mehrfach-Auswahl erhält.
+    func commitEndSession(_ sessions: [AgentChatSession]) {
+        sessions.forEach { endSession($0) }
+        multiSelection = []
+    }
+
+    /// „Tab schließen und Chat beenden": laufendes Terminal beenden, Status auf
+    /// `.closed`, Tab entfernen. Bewusst KEIN Archiv-Eintrag und bewusst KEIN
+    /// Unpinnen — der Chat bleibt eine gewöhnliche, resumebare Session und
+    /// erscheint unter „Zuletzt"; das Anpinnen ist eine eigene
+    /// Nutzer-Entscheidung, die ein Schließen nicht widerruft.
+    func endSession(_ session: AgentChatSession) {
+        markSession(session.id, status: .closed)
+        closeTab(session)
+    }
+
     /// Terminal-Session schließen: laufende Shell beenden, Session komplett
     /// aus dem Workspace löschen (nichts wiederherstellbar), Pin + Tab weg.
     func closeTerminalSession(_ session: AgentChatSession) {

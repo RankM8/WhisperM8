@@ -16,6 +16,11 @@ struct ProjectChatGroup: View {
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
     var onCloseSession: (AgentChatSession) -> Void
+    /// Scope der Sidebar — bestimmt, ob die Hover-Aktion rechts archiviert
+    /// oder den Chat beendet (`SidebarCloseAction`). Bewusst als WERT statt
+    /// als Closure: die Rows vergleichen nur die abgeleiteten Strings und
+    /// bleiben damit memoizable.
+    var sidebarScope: SidebarScope = .all
     var onRename: (UUID, String) -> Void
     /// Vereinheitlichtes Kontextmenü der Chat-Zeilen — von der Call-Site
     /// injiziert (`sessionContextMenu(_:context:)` in +SessionMenus), damit
@@ -267,6 +272,7 @@ struct ProjectChatGroup: View {
     /// (Kinder kleben an ihrem Parent) und mit reduziertem Kontextmenü.
     @ViewBuilder
     private func subagentChildRow(_ child: AgentChatSession) -> some View {
+        let closeAction = SidebarCloseAction.resolve(scope: sidebarScope, session: child)
         SessionListButton(
             session: child,
             isSelected: selectedSessionID == child.id,
@@ -276,6 +282,8 @@ struct ProjectChatGroup: View {
             statusStore: statusStore,
             isAutoRenaming: false,
             isMissingTranscript: false,
+            closeIcon: closeAction.icon,
+            closeHelp: closeAction.help,
             indentAsSubagent: true,
             isUnreadSubagentResult: unreadSubagentSessionIDs.contains(child.id),
             onSelect: { onSelectSession(child.id) },
@@ -291,6 +299,7 @@ struct ProjectChatGroup: View {
     private func sessionRow(_ session: AgentChatSession, split: SubagentChildSplit?) -> some View {
         // Der Fortschritts-Chip speist sich aus dem Split (einmal pro Parent
         // berechnet): laufend = Nenner-Abzug, verborgen fertig = Chevron.
+        let closeAction = SidebarCloseAction.resolve(scope: sidebarScope, session: session)
         SessionListButton(
             session: session,
             isSelected: selectedSessionID == session.id,
@@ -300,7 +309,8 @@ struct ProjectChatGroup: View {
             statusStore: statusStore,
             isAutoRenaming: autoRenamingSessionIDs.contains(session.id),
             isMissingTranscript: missingTranscriptSessionIDs.contains(session.id),
-            closeHelp: session.isTerminal ? "Terminal schließen" : "Archivieren",
+            closeIcon: closeAction.icon,
+            closeHelp: closeAction.help,
             isUnreadSubagentResult: unreadSubagentSessionIDs.contains(session.id),
             runningChildCount: split?.workingCount ?? 0,
             erroredChildCount: split?.erroredCount ?? 0,
@@ -976,6 +986,11 @@ struct PinnedSessionRow: View {
     /// `true` wenn das Transkript dieser Session nicht mehr auf der Platte
     /// liegt — toter Zeiger, ausgegraut + Hinweis (siehe `SessionListButton`).
     var isMissingTranscript: Bool = false
+    /// Icon + Tooltip der Hover-Aktion rechts — wie bei `SessionListButton`
+    /// aus `SidebarCloseAction` gespeist. Default = Archivieren; `nil` beim
+    /// Tooltip fällt auf die terminal-bewusste Beschriftung zurück.
+    var closeIcon: String = "xmark"
+    var closeHelp: String?
     /// Slot-Platzierung in einer Workspace-Gruppe („S1"–„S9") — nur die
     /// Workspace-Sektion setzt das; Gepinnt-Rows bleiben unverändert.
     var slotBadge: String? = nil
@@ -1055,14 +1070,14 @@ struct PinnedSessionRow: View {
     @ViewBuilder
     private var trailingIndicator: some View {
         if isHovered {
-            Image(systemName: "xmark")
+            Image(systemName: closeIcon)
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .frame(width: 16, height: 16)
                 .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
-                .help(session.isTerminal ? "Terminal schließen" : "Archivieren")
+                .help(closeHelp ?? (session.isTerminal ? "Terminal schließen" : "Archivieren"))
         } else if isMissingTranscript {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10, weight: .medium))

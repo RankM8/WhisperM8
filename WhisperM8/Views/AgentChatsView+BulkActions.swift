@@ -49,6 +49,14 @@ extension AgentChatsView {
         requestArchive(sessions(in: actionGroup(forID: id)))
     }
 
+    /// Hover-Aktion der Sidebar-Zeile für die Gruppe: im Scope „Aktiv" wird
+    /// beendet (Tab zu, Terminal gestoppt, kein Archiv-Eintrag), sonst
+    /// archiviert — `performSidebarCloseAction` entscheidet. Der Auswahl-Reset
+    /// passiert wie beim Archivieren erst beim Commit.
+    func closeSelectionFromSidebar(forID id: UUID) {
+        performSidebarCloseAction(sessions(in: actionGroup(forID: id)))
+    }
+
     /// Pin/Unpin für die Gruppe — normalisiert. Auswahl bleibt erhalten.
     func togglePinSelection(forID id: UUID) {
         let group = actionGroup(forID: id)

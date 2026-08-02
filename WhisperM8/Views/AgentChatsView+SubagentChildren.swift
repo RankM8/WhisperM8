@@ -52,6 +52,7 @@ extension AgentChatsView {
         _ child: AgentChatSession,
         extraLeadingInset: CGFloat
     ) -> some View {
+        let closeAction = sidebarCloseAction(for: child)
         SessionListButton(
             session: child,
             isSelected: selectedSessionID == child.id,
@@ -61,13 +62,15 @@ extension AgentChatsView {
             statusStore: runtimeStatusStore,
             isAutoRenaming: false,
             isMissingTranscript: false,
+            closeIcon: closeAction.icon,
+            closeHelp: closeAction.help,
             indentAsSubagent: true,
             isUnreadSubagentResult: windowStore.unreadSubagentSessionIDs.contains(child.id),
             onSelect: {
                 selectedSessionID = child.id
                 multiSelection = []
             },
-            onClose: { requestArchive([child]) }
+            onClose: { performSidebarCloseAction([child]) }
         )
         .equatable()
         .padding(.leading, extraLeadingInset)
