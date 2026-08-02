@@ -80,7 +80,7 @@ extension AgentChatsView {
 
     @ViewBuilder
     private func workspaceGroup(
-        _ entity: AgentGridWorkspace,
+        _ entity: WorkspaceLayout,
         subagentChildrenByParent: [UUID: [AgentChatSession]],
         workingSubagentIDs: Set<UUID>,
         erroredSubagentIDs: Set<UUID>
@@ -128,7 +128,7 @@ extension AgentChatsView {
     }
 
     private func workspaceGroupHeader(
-        _ entity: AgentGridWorkspace,
+        _ entity: WorkspaceLayout,
         isActiveHere: Bool,
         isCollapsed: Bool
     ) -> some View {
@@ -204,7 +204,7 @@ extension AgentChatsView {
 
     private func workspaceRow(
         _ session: AgentChatSession,
-        entity: AgentGridWorkspace,
+        entity: WorkspaceLayout,
         slotIndex: Int,
         split: SubagentChildSplit? = nil
     ) -> some View {
@@ -264,7 +264,7 @@ extension AgentChatsView {
     }
 
     @ViewBuilder
-    private func workspaceContextMenu(_ entity: AgentGridWorkspace) -> some View {
+    private func workspaceContextMenu(_ entity: WorkspaceLayout) -> some View {
         Button("Als Grid öffnen", systemImage: "square.grid.2x2") {
             activateWorkspaceFromSidebar(entity)
         }
@@ -302,7 +302,7 @@ extension AgentChatsView {
 
     /// Header-/⊞-Klick: Workspace als Grid öffnen. Single-Owner-Konflikte
     /// werden als Werte gemeldet — kein stilles Stehlen.
-    func activateWorkspaceFromSidebar(_ entity: AgentGridWorkspace) {
+    func activateWorkspaceFromSidebar(_ entity: WorkspaceLayout) {
         let wasVisibleHere = isGridActive
             && windowStore.window(for: windowID).activeWorkspaceID == entity.id
         switch windowStore.activateGridWorkspace(entity.id, in: windowID) {
@@ -351,7 +351,7 @@ extension AgentChatsView {
         }
         let id = windowStore.createGridWorkspace(
             name: nextFreeWorkspaceName(),
-            capacity: AgentGridWorkspace.smallestCapacity(fitting: accepted.count),
+            capacity: WorkspaceLayout.smallestCapacity(fitting: accepted.count),
             slots: accepted.map { $0 },
             activateIn: windowID
         )

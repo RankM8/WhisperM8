@@ -717,17 +717,17 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         }
         let isAdd = request.method == "gridWorkspace.add"
 
-        enum MembershipOutcome { case ok(String, AgentGridWorkspace); case fail(ChatsControlErrorCode, String) }
+        enum MembershipOutcome { case ok(String, WorkspaceLayout); case fail(ChatsControlErrorCode, String) }
         let outcome: MembershipOutcome = await MainActor.run {
             let store = AgentWindowStore.shared
-            let workspaceEntity: AgentGridWorkspace
+            let workspaceEntity: WorkspaceLayout
             switch Self.resolveGridWorkspaceRef(workspaceRef, all: store.gridWorkspaces) {
             case .success(let entity): workspaceEntity = entity
             case .failure(let message): return .fail(.notFound, message)
             }
             if isAdd {
                 switch store.addSession(targetID, toGridWorkspace: workspaceEntity.id, at: slot) {
-                case .added, .replaced, .swapped:
+                case .added:
                     return .ok("added", workspaceEntity)
                 case .alreadyMember:
                     return .ok("alreadyMember", workspaceEntity)
@@ -864,7 +864,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
         let result: OpenOutcome = await MainActor.run {
             let store = AgentWindowStore.shared
-            let entity: AgentGridWorkspace
+            let entity: WorkspaceLayout
             switch Self.resolveGridWorkspaceRef(workspaceRef, all: store.gridWorkspaces) {
             case .success(let match): entity = match
             case .failure(let message): return .fail(.notFound, message)
@@ -872,9 +872,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
             // Slot-Index VOR der Aktivierung prüfen — ein ungültiger Index soll
             // nicht erst das Fenster umschalten und dann scheitern.
-            if let slot, slot < 0 || slot >= entity.capacity {
+            if let slot, slot < 0 || slot >= entity.cells.count {
                 return .fail(.invalid,
-                             "Slot \(slot + 1) liegt außerhalb von „\(entity.name)\" (Kapazität \(entity.capacity))")
+                             "Slot \(slot + 1) liegt außerhalb von „\(entity.name)\" (Kapazität \(entity.cells.count))")
             }
 
             // Zielfenster: das besitzende, sonst das Hauptfenster.
@@ -904,7 +904,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             var slotOccupied: Bool?
             if let slot {
                 let current = store.gridWorkspace(id: entity.id) ?? entity
-                let sessionID = slot < current.slots.count ? current.slots[slot] : nil
+                let sessionID = slot < current.visibleSessions.count ? current.visibleSessions[slot] : nil
                 slotOccupied = sessionID != nil
                 if let sessionID {
                     store.setGridFocusedSession(sessionID, in: targetWindowID)
@@ -944,7 +944,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// Ergebnis der Grid-Workspace-Auflösung (String taugt nicht als
     /// `Result`-Error).
     enum GridRefResolution {
-        case success(AgentGridWorkspace)
+        case success(WorkspaceLayout)
         case failure(String)
     }
 
@@ -953,7 +953,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// (Extrahiert aus `gridWorkspaceRename` — eine Auflösung für alle
     /// Workspace-Befehle.)
     static func resolveGridWorkspaceRef(
-        _ ref: String, all: [AgentGridWorkspace]
+        _ ref: String, all: [WorkspaceLayout]
     ) -> GridRefResolution {
         if let id = UUID(uuidString: ref), let match = all.first(where: { $0.id == id }) {
             return .success(match)
@@ -1259,8 +1259,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 // eine Modell-Invariante (`workspace add --slot N` adressiert
                 // ihn), und ein Loch darf nicht wegrutschen.
                 var slots: [[String: Any]] = []
-                for index in 0..<ws.capacity {
-                    let sessionID = index < ws.slots.count ? ws.slots[index] : nil
+                for index in 0..<ws.cells.count {
+                    let sessionID: UUID? = ws.visibleSessions[index]
                     // 1-basiert wie in der CLI.
                     var slot: [String: Any] = ["index": index + 1]
                     // Eine Slot-UUID ohne lebende Session gilt NICHT als
@@ -1285,7 +1285,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 var dict: [String: Any] = [
                     "id": ws.id.uuidString,
                     "name": ws.name,
-                    "capacity": ws.capacity,
+                    "cells": ws.cells.count,
                     "gridVisible": gridVisible,
                     "slots": slots,
                 ]
@@ -1307,7 +1307,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         let outcome: GridOutcome = await MainActor.run {
             // Auflösung: exakte ID → exakter (normalisierter) Name →
             // eindeutiger Substring. Mehrdeutig → Fehler (nie raten).
-            let workspace: AgentGridWorkspace
+            let workspace: WorkspaceLayout
             switch Self.resolveGridWorkspaceRef(ref, all: AgentWindowStore.shared.gridWorkspaces) {
             case .success(let entity): workspace = entity
             case .failure(let message): return .fail(.notFound, message)

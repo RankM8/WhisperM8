@@ -713,7 +713,7 @@ final class AgentWindowStore {
             else { return }
             var entity = state.layouts[index]
             transform(&entity)
-            state.layouts[index] = entity.normalized()
+            state.layouts[index] = LayoutNormalizer.normalize(entity)
         }
     }
 
