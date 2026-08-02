@@ -42,12 +42,21 @@ struct WorkspaceLayoutView<Content: View>: View {
     /// Ein Zug wurde ueber einem gueltigen Ziel losgelassen. Der Aufrufer
     /// wendet ihn ueber `LayoutEngine` an — die Ansicht aendert nie selbst.
     var onDrop: (UUID, LayoutDropResolver.Target) -> Void = { _, _ in }
+    /// Ein Trenner wurde losgelassen. Erst hier bekommen die Terminals ihre
+    /// neue Groesse — waehrend des Ziehens wird nur gedehnt.
+    var onDividerMoved: (LayoutGeometry.DividerHandle, CGFloat) -> Void = { _, _ in }
     /// Der Inhalt einer Flaeche.
     @ViewBuilder let content: (UUID) -> Content
 
     /// Der laufende Zug. Alle Uebergaenge stecken in der Zustandsmaschine,
     /// hier steht nur, was gerade zu zeichnen ist.
     @State private var drag = LayoutDragState()
+    /// Der laufende Trenner-Zug — nur Versatz, kein Layout.
+    @State private var dividerDrag = LayoutDividerDrag()
+    /// Welcher Trenner gezogen wird. Gebraucht, um die betroffenen Zweige zu
+    /// kennen: Ein Trenner bewegt alles links und alles rechts von sich, bei
+    /// verschachtelten Splits sind das mehrere Flaechen.
+    @State private var activeDivider: LayoutGeometry.DividerHandle?
 
     /// Eigener Koordinatenraum: Die Geste meldet Positionen relativ zur
     /// Layout-Flaeche, damit sie ohne Umrechnung zu den `frames` passen.
@@ -67,11 +76,24 @@ struct WorkspaceLayoutView<Content: View>: View {
                 // Umsortieren nur Rahmen aendern, keine Baeume umbauen.
                 ForEach(layout.cells) { cell in
                     if let frame = frames[cell.id] {
+                        let gedehnt = stretched(frame, cellID: cell.id)
                         cellView(cell, in: frame, frames: frames)
+                            // Die Groesse bleibt waehrend des Ziehens
+                            // UNVERAENDERT — nur so bekommt SwiftTerm kein
+                            // SIGWINCH und baut sein Bild nicht neu auf.
                             .frame(width: max(frame.width - gap, 0),
                                    height: max(frame.height - gap, 0))
-                            .offset(x: frame.minX, y: frame.minY)
+                            // Gedehnt wird rein visuell. Eine Transformation
+                            // kostet keinen Layout-Durchlauf.
+                            .scaleEffect(x: gedehnt.scaleX, y: gedehnt.scaleY, anchor: .topLeading)
+                            .offset(x: gedehnt.origin.x, y: gedehnt.origin.y)
                     }
+                }
+
+                // Trenner-Griffe. Schmal, unsichtbar, aber treffbar — der
+                // sichtbare Spalt ist nur einen Punkt breit.
+                ForEach(LayoutGeometry.dividers(for: layout, in: bounds(proxy))) { handle in
+                    dividerHandle(handle)
                 }
 
                 // Die Zielvorschau liegt ueber allem und faengt nichts ab.
@@ -152,6 +174,118 @@ struct WorkspaceLayoutView<Content: View>: View {
                     onFocus(cell.active)
                 }
             }
+    }
+
+    // MARK: - Trenner
+
+    private func bounds(_ proxy: GeometryProxy) -> CGRect {
+        CGRect(origin: .zero, size: proxy.size)
+    }
+
+    @ViewBuilder
+    private func dividerHandle(_ handle: LayoutGeometry.DividerHandle) -> some View {
+        Rectangle()
+            .fill(Color.clear)
+            .contentShape(Rectangle())
+            .frame(width: handle.rect.width, height: handle.rect.height)
+            .offset(x: handle.rect.minX, y: handle.rect.minY)
+            .onHover { innen in
+                // Der Zeiger sagt, dass hier etwas zu holen ist. Waehrend
+                // eines laufenden Zuges nicht zuruecksetzen — sonst flackert
+                // er, sobald man den Griff verlaesst.
+                if innen {
+                    handle.axis == .horizontal
+                        ? NSCursor.resizeLeftRight.push()
+                        : NSCursor.resizeUpDown.push()
+                } else if !dividerDrag.isActive {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(dividerGesture(handle))
+    }
+
+    private func dividerGesture(_ handle: LayoutGeometry.DividerHandle) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                let position = handle.axis == .horizontal ? value.location.x : value.location.y
+                if !dividerDrag.isActive {
+                    activeDivider = handle
+                    dividerDrag.begin(
+                        LayoutDividerDrag.Divider(
+                            leadingCellID: handle.leadingCellID,
+                            trailingCellID: handle.trailingCellID,
+                            axis: handle.axis
+                        ),
+                        at: handle.axis == .horizontal ? value.startLocation.x : value.startLocation.y
+                    )
+                }
+                dividerDrag.move(to: position, limits: limits(for: handle))
+            }
+            .onEnded { _ in
+                // Erst jetzt aendert sich das Layout — einmal statt
+                // dreissigmal pro Sekunde.
+                if let ergebnis = dividerDrag.end(), let aktiv = activeDivider {
+                    onDividerMoved(aktiv, ergebnis.offset)
+                }
+                activeDivider = nil
+                NSCursor.pop()
+            }
+    }
+
+    /// Wie weit sich ein Trenner schieben laesst: Kein Zweig darf ganz
+    /// verschwinden. Die 20 Punkte Rest sind grosszuegig — die eigentliche
+    /// Grenze zieht `resolvedFractions` ueber die Mindestanteile.
+    private func limits(for handle: LayoutGeometry.DividerHandle) -> ClosedRange<CGFloat> {
+        let vorne = handle.axis == .horizontal ? handle.leadingRect.width : handle.leadingRect.height
+        let hinten = handle.axis == .horizontal ? handle.trailingRect.width : handle.trailingRect.height
+        return -(max(vorne - 20, 0))...max(hinten - 20, 0)
+    }
+
+    /// Der visuelle Versatz einer Flaeche waehrend eines Trenner-Zuges.
+    ///
+    /// Der ganze Zweig links des Trenners dehnt sich um den Versatz, der
+    /// rechte schrumpft um denselben Betrag und rueckt nach. Innerhalb eines
+    /// Zweigs behalten die Flaechen ihre Verhaeltnisse — deshalb wird die
+    /// Position relativ zum Zweig skaliert, nicht absolut verschoben.
+    private func stretched(
+        _ frame: CGRect,
+        cellID: UUID
+    ) -> (origin: CGPoint, scaleX: CGFloat, scaleY: CGFloat) {
+        guard dividerDrag.isActive, let handle = activeDivider, dividerDrag.offset != 0 else {
+            return (frame.origin, 1, 1)
+        }
+
+        if handle.leadingCellIDs.contains(cellID) {
+            return branchStretch(frame, branch: handle.leadingRect, axis: handle.axis,
+                                 delta: dividerDrag.offset, shift: 0)
+        }
+        if handle.trailingCellIDs.contains(cellID) {
+            return branchStretch(frame, branch: handle.trailingRect, axis: handle.axis,
+                                 delta: -dividerDrag.offset, shift: dividerDrag.offset)
+        }
+        return (frame.origin, 1, 1)
+    }
+
+    private func branchStretch(
+        _ frame: CGRect,
+        branch: CGRect,
+        axis: WorkspaceLayout.Axis,
+        delta: CGFloat,
+        shift: CGFloat
+    ) -> (origin: CGPoint, scaleX: CGFloat, scaleY: CGFloat) {
+        switch axis {
+        case .horizontal:
+            guard branch.width > 0 else { return (frame.origin, 1, 1) }
+            let faktor = max((branch.width + delta) / branch.width, 0.02)
+            let x = branch.minX + shift + (frame.minX - branch.minX) * faktor
+            return (CGPoint(x: x, y: frame.minY), faktor, 1)
+
+        case .vertical:
+            guard branch.height > 0 else { return (frame.origin, 1, 1) }
+            let faktor = max((branch.height + delta) / branch.height, 0.02)
+            let y = branch.minY + shift + (frame.minY - branch.minY) * faktor
+            return (CGPoint(x: frame.minX, y: y), 1, faktor)
+        }
     }
 
     // MARK: - Zielvorschau
