@@ -58,16 +58,67 @@
 </div></header>
 
 <section><div class="wrap">
+  <h2>Entschieden am 02.08.2026</h2>
+  <p class="sub">Sechs Festlegungen aus dem Gespräch. <strong>Zwei widersprechen der Empfehlung,
+  die hier ursprünglich stand</strong> — sie sind unten bei der jeweiligen Frage vermerkt.</p>
+
+  <table>
+    <tr><th>Nr.</th><th>Frage</th><th>Entscheidung</th></tr>
+    <tr><td>E1</td><td>Klick in der Seitenleiste auf einen Chat, der <em>nicht</em> im Workspace ist</td>
+        <td><strong>Workspace verlassen</strong>, der Chat füllt die Fläche allein</td></tr>
+    <tr><td>E2</td><td>Rückweg in den Workspace</td>
+        <td>Über die Seitenleiste — Workspaces stehen dort und werden angeklickt wie ein Chat. Kein eigener Schalter.</td></tr>
+    <tr><td>E3</td><td>Gast-Zustand</td>
+        <td><strong>Gestrichen.</strong> Er war für genau diesen Klick gedacht; mit E1 ist er gegenstandslos.</td></tr>
+    <tr><td>E4</td><td>Klick bei maximiertem Chat</td>
+        <td><strong>Zoom bleibt, Inhalt wechselt</strong> — Durchblättern ohne Ein- und Auszoomen</td></tr>
+    <tr><td>E5</td><td>Tab-Leiste im Workspace</td>
+        <td>Zeigt die <strong>Chats des Workspace</strong>. Tab anklicken = fokussieren.</td></tr>
+    <tr><td>E6</td><td>Was die Rückkehr überlebt</td>
+        <td><strong>Nur die Anordnung.</strong> Nicht der Zoom, nicht der Fokus.</td></tr>
+  </table>
+
+  <div class="box gut">
+    <div class="t">Was E1 und E3 zusammen bewirken</div>
+    <p style="margin:0 0 9px">Der Gast war der komplizierteste Teil des Entwurfs: ein Zustand
+    zwischen „drin" und „nicht drin", mit eigener Darstellung, eigenen Regeln fürs Enden und einem
+    Sonderfall in jeder Layout-Berechnung. <strong>Er entfällt ersatzlos.</strong></p>
+    <p style="margin:0">Die zugrundeliegende Einsicht ist einfacher als mein Vorschlag: Ein Klick
+    in der Seitenleiste heißt „ich will diesen Chat sehen" — nicht „ich will ihn zu meiner
+    Arbeitsfläche hinzufügen". In den Workspace kommt ein Chat nur bewusst, per Ziehen oder
+    Kontextmenü. Das Modell verliert ein Feld und einen Sonderfall.</p>
+  </div>
+
+  <div class="box warn">
+    <div class="t">Was daraus folgt und noch zu klären ist</div>
+    <p style="margin:0 0 9px"><strong>Die Hauptansicht hat jetzt zwei Betriebsarten</strong> —
+    Workspace oder Einzelchat — und die Seitenleiste schaltet zwischen ihnen um. Das war vorher
+    nicht ausgesprochen und muss ins Modell: Woran erkennt die Ansicht, in welcher Betriebsart sie
+    ist, und wo wird das gespeichert?</p>
+    <p style="margin:0"><strong>E5 trifft auf E1:</strong> Zeigt die Tab-Leiste die Chats des
+    Workspace — was zeigt sie dann im Einzelchat-Modus? Nach E2 ist der Rückweg die Seitenleiste,
+    die Tabs müssen ihn also nicht liefern. Naheliegend: Im Einzelchat-Modus verhält sich die
+    Leiste wie heute (offene Chats), im Workspace zeigt sie dessen Mitglieder. Das ist eine
+    Annahme, keine Entscheidung — sie gehört bestätigt, bevor sie in Code wandert.</p>
+  </div>
+</div></section>
+
+<section><div class="wrap">
   <div class="frage">
     <span class="nr">F1</span>
     <h3>Was passiert beim Klick auf einen Chat in der Seitenleiste?</h3>
     <div class="zeile"><div class="k">Zusammenhang</div><div>Heute braucht ein Chat einen freien Platz, sonst passiert nichts Brauchbares. Genau daher kommt „nicht genug Möglichkeit, Chats von außen schnell reinzuhauen".</div></div>
     <div class="zeile"><div class="k">Möglichkeiten</div><div><strong>a)</strong> Der Chat wird sofort dauerhaftes Mitglied.<br><strong>b)</strong> Er erscheint als flüchtiger Gast; <code>⌥↵</code> oder ein Zug macht ihn dauerhaft.<br><strong>c)</strong> Er ersetzt den fokussierten Chat.</div></div>
     <div class="zeile"><div class="k">Auswirkung</div><div>Bei (a) wächst der Workspace bei jedem neugierigen Klick — nach einer Woche steht dort alles Mögliche. Bei (b) braucht es einen sichtbaren Hinweis, sonst ist unklar, warum ein Chat wieder verschwindet.</div></div>
-    <div class="empf"><div class="t">Empfehlung: (b)</div>
-      Ein Klick ist meist „mal schauen", kein „dauerhaft dazunehmen". Der Gast liefert genau das
-      und hält den Workspace sauber, ohne eine Entscheidung zu erzwingen. Im Zwilling erprobt;
-      der Gastzustand ist am Rahmen erkennbar.</div>
+    <div class="empf" style="border-left-color:var(--bad)">
+      <div class="t" style="color:var(--bad)">Verworfen — entschieden wurde etwas Besseres</div>
+      Ich hatte (b) empfohlen: Gast im Workspace. <strong>Entschieden wurde: den Workspace
+      verlassen und den Chat allein zeigen</strong> (E1), Rückweg über die Seitenleiste (E2).
+      <br><br>
+      Der Grund, warum das besser ist: Mein Vorschlag baute einen dritten Zustand zwischen „drin"
+      und „draußen", um eine Frage zu lösen, die sich gar nicht stellt. Wer in der Seitenleiste
+      klickt, will den Chat <em>sehen</em> — nicht die Arbeitsfläche umbauen. Die einfachere
+      Antwort war auch die richtige; der Gast ist ersatzlos gestrichen (E3).</div>
   </div>
 
   <div class="frage">
@@ -146,7 +197,7 @@
   <h2>Zusammengefasst</h2>
   <table>
     <tr><th>Frage</th><th>Empfehlung</th><th>Vertagbar?</th></tr>
-    <tr><td>F1 Klickverhalten</td><td>Gast, dauerhaft per <code>⌥↵</code> oder Zug</td><td>nein — bestimmt das Modell</td></tr>
+    <tr><td>F1 Klickverhalten</td><td style="color:var(--bad)">verworfen → <strong>E1:</strong> Workspace verlassen</td><td>entschieden</td></tr>
     <tr><td>F2 Ziehen auf die Mitte</td><td>Zwei Zonen mit deutlicher Vorschau</td><td>nein — Kernfunktion</td></tr>
     <tr><td>F3 Stapel überlebt Neuanordnung</td><td>ja, über <code>bindings</code></td><td>nein — sonst ist die Automatik ein Rückschritt</td></tr>
     <tr><td>F4 Letzter Chat geschlossen</td><td>verdichten, bei manueller Anordnung Fläche aufteilen</td><td>nein — der Kern der Beschwerde</td></tr>

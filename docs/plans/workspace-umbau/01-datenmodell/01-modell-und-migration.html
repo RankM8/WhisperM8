@@ -123,8 +123,11 @@
     <span class="c">/// Neuanordnung; ohne das würde Verdichten Stapel zerreißen.</span>
     <span class="k">var</span> bindings: [UUID: UUID]
 
-    <span class="c">/// Kurzzeitiger Gast — sichtbar, aber kein Mitglied.</span>
-    <span class="k">var</span> guest: UUID?
+    <span class="c">/// KEIN `guest`-Feld. Der Gast war für den Sidebar-Klick gedacht —</span>
+    <span class="c">/// und der verlässt den Workspace jetzt, statt einen Gast anzulegen</span>
+    <span class="c">/// (Entscheidung 02.08.2026, Paket 02 / E1). Damit entfallen ein Feld,</span>
+    <span class="c">/// ein Sonderfall in jeder Layout-Berechnung und die Frage, wann ein</span>
+    <span class="c">/// Gast endet.</span>
 
     <span class="c">/// Nur bei abgeleiteten Layouts (Projekt-Workspaces): Chats,</span>
     <span class="c">/// die der Nutzer ausgeblendet hat. Löschen geht dort nicht,</span>
@@ -196,7 +199,6 @@
     <tr><td>Ein Chat liegt in höchstens einer Zelle</td><td>Zwei Ansichten desselben PTY. Technisch möglich, für den Nutzer verwirrend, und die Fokus-Verwaltung würde mehrdeutig.</td></tr>
     <tr><td>Bei <code>manual</code>: jedes Blatt zeigt auf eine existierende Zelle, jede Zelle kommt genau einmal vor</td><td>Chats, die niemand sieht, obwohl sie Mitglied sind — oder doppelt gezeichnete Flächen.</td></tr>
     <tr><td><code>fractions</code>: positiv, endlich, Summe 1, so viele wie Kinder</td><td>Flächen mit Breite 0 oder <code>NaN</code>. Beim heutigen Modell schon einmal aufgetreten.</td></tr>
-    <tr><td><code>guest</code> ist kein Mitglied</td><td>Dass eine flüchtige Vorschau versehentlich dauerhaft wird — der Nutzer würde seinen Workspace langsam zumüllen, ohne es zu merken.</td></tr>
     <tr><td>Bei <code>source: .project</code>: <code>cells</code> wird abgeleitet, nie direkt gesetzt</td><td>Dass die Ableitung und der gespeicherte Stand auseinanderlaufen und niemand weiß, welcher gilt.</td></tr>
   </table>
 
@@ -220,7 +222,7 @@
     <tr><td>Jeder belegte <code>slot</code></td><td>Eine Zelle mit einem Chat</td><td>Der einfachste treue Fall.</td></tr>
     <tr><td><code>nil</code>-Slots</td><td>Entfallen</td><td>Sie waren nie Inhalt, nur Lücke. Sie zu übernehmen hieße, den Fehler mitzunehmen.</td></tr>
     <tr><td><code>capacity</code> + <code>fractions</code></td><td><code>manual(SplitNode)</code></td><td><strong>Wichtig:</strong> Die bestehende Anordnung bleibt exakt erhalten. Wer sich sein Raster gebaut hat, findet es unverändert vor.</td></tr>
-    <tr><td>—</td><td><code>bindings: [:]</code>, <code>guest: nil</code>, <code>hidden: []</code></td><td>Neue Möglichkeiten, keine Altlasten.</td></tr>
+    <tr><td>—</td><td><code>bindings: [:]</code>, <code>hidden: []</code></td><td>Neue Möglichkeiten, keine Altlasten.</td></tr>
   </table>
 
   <div class="box gut">
