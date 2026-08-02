@@ -501,7 +501,10 @@ extension AgentChatsView {
         case 2: return "1×2"
         case 3: return "2+1"
         case 4: return "2×2"
+        case 5: return "3+2"
         case 6: return "3×2"
+        case 7: return "3+3+1"
+        case 8: return "3+3+2"
         case 9: return "3×3"
         default: return "\(capacity)"
         }

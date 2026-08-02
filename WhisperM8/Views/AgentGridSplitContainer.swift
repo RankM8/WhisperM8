@@ -93,23 +93,18 @@ struct AgentGridSplitContainer<Pane: View>: View {
 
     @ViewBuilder
     private func gridBody(colSizes: [CGFloat], rowSizes: [CGFloat]) -> some View {
-        let columns = layout.columns
         let rows = layout.rows
         VStack(spacing: 1) {
             ForEach(0 ..< rows, id: \.self) { row in
                 HStack(spacing: 1) {
-                    // twoPlusOne: die untere Pane läuft in voller Breite durch.
-                    if layout == .twoPlusOne, row == 1 {
-                        pane(2)
-                    } else {
-                        ForEach(0 ..< columns, id: \.self) { column in
-                            let index = row * columns + column
-                            if column < columns - 1 {
-                                pane(index).frame(width: colSizes[column])
-                            } else {
-                                // Letzte Spur füllt — nimmt den Rundungsrest.
-                                pane(index)
-                            }
+                    let blocks = Self.blocks(inRow: row, layout: layout)
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { position, block in
+                        if position < blocks.count - 1 {
+                            pane(block.slot).frame(width: width(of: block, colSizes: colSizes))
+                        } else {
+                            // Letzter Block der Zeile füllt — nimmt den
+                            // Rundungsrest, wie bisher die letzte Spur.
+                            pane(block.slot)
                         }
                     }
                 }
@@ -118,20 +113,93 @@ struct AgentGridSplitContainer<Pane: View>: View {
         }
     }
 
+    /// Ein Pane einer Zeile samt der Spalten-Spuren, über die es läuft.
+    struct RowBlock: Equatable {
+        let slot: Int
+        let tracks: ClosedRange<Int>
+    }
+
+    /// Wie sich eine Zeile auf die Spalten-Spuren aufteilt.
+    ///
+    /// **Warum nicht stur `columns` Panes je Zeile:** Die letzte Zeile hat oft
+    /// weniger Chats als Spalten (5 Chats bei 3 Spalten: unten zwei). Wer
+    /// trotzdem `rows × columns` durchläuft, rendert Flächen für Slots, die es
+    /// im Modell nicht gibt — sichtbar als „Slot 6 · Chat hier ablegen", das
+    /// jeden Drop ablehnt und nebenbei die Growzone unterdrückt.
+    ///
+    /// Die übrigen Chats verteilen sich **spurenbündig**: Ein Block endet immer
+    /// auf einer Spaltengrenze. Nur so bleiben die Trennlinien durchgehend
+    /// gerade und die Spalten-Griffe gültig — bei gleichmäßiger Verteilung
+    /// (jeder Block gleich breit) säße die untere Grenze auf keiner Spur.
+    ///
+    /// Das verallgemeinert den früheren `twoPlusOne`-Sonderfall: drei Chats
+    /// ergeben unverändert „zwei oben, einer über die volle Breite".
+    static func blocks(inRow row: Int, layout: AgentGridAutoLayout) -> [RowBlock] {
+        let columns = layout.columns
+        let first = row * columns
+        let remaining = layout.paneCount - first
+        guard remaining > 0 else { return [] }
+        let count = min(columns, remaining)
+        guard count < columns else {
+            return (0 ..< columns).map { RowBlock(slot: first + $0, tracks: $0 ... $0) }
+        }
+        // Aufrunden verteilt den Rest nach vorn: zwei Blöcke auf drei Spuren
+        // ergeben 2 + 1, nicht 1 + 2. Das entspricht der Lesereihenfolge.
+        func grenze(_ index: Int) -> Int {
+            Int((Double(index * columns) / Double(count)).rounded(.up))
+        }
+        return (0 ..< count).map { index in
+            RowBlock(slot: first + index, tracks: grenze(index) ... (grenze(index + 1) - 1))
+        }
+    }
+
+    /// Breite eines Blocks: seine Spuren plus die Trennlinien dazwischen, die
+    /// er überdeckt (1 pt je verschluckter Grenze — sonst entsteht ein Spalt
+    /// mitten in der Pane).
+    private func width(of block: RowBlock, colSizes: [CGFloat]) -> CGFloat {
+        let spuren = block.tracks.reduce(into: CGFloat(0)) { summe, index in
+            summe += colSizes.indices.contains(index) ? colSizes[index] : 0
+        }
+        return spuren + CGFloat(block.tracks.count - 1)
+    }
+
+    /// Bis zu welcher Zeile die Spaltengrenze `dividerIndex` wirklich zwei
+    /// Panes trennt. Darunter liegt sie innerhalb eines Blocks — dort gäbe es
+    /// nichts zu ziehen, und ein Griff über einer unsichtbaren Linie wäre eine
+    /// Falle.
+    private func lastRow(forColumnDivider dividerIndex: Int) -> Int {
+        var letzte = -1
+        for row in 0 ..< layout.rows {
+            let real = Self.blocks(inRow: row, layout: layout).contains { $0.tracks.upperBound == dividerIndex }
+            if real { letzte = row }
+        }
+        return letzte
+    }
+
     /// Spalten-Griffe an jeder inneren Spaltengrenze. Bei `twoPlusOne` nur
     /// über der oberen Reihe (unten läuft die Pane in voller Breite durch).
     @ViewBuilder
     private func columnHandles(colSizes: [CGFloat], rowSizes: [CGFloat], totalWidth: CGFloat) -> some View {
         ForEach(0 ..< max(0, layout.columns - 1), id: \.self) { dividerIndex in
             let offset = cumulativeOffset(colSizes, upTo: dividerIndex)
-            columnHandle(dividerIndex: dividerIndex, totalWidth: totalWidth)
-                .frame(height: layout == .twoPlusOne ? rowSizes.first : nil)
-                .frame(
-                    maxWidth: .infinity,
-                    maxHeight: layout == .twoPlusOne ? .infinity : nil,
-                    alignment: layout == .twoPlusOne ? .topLeading : .leading
-                )
-                .offset(x: offset - 4)
+            let letzteZeile = lastRow(forColumnDivider: dividerIndex)
+            // Der Griff reicht nur so weit, wie die Linie wirklich zwei Panes
+            // trennt. Bei fünf Chats endet die linke Grenze nach der oberen
+            // Zeile, weil unten ein Block über beide Spuren läuft.
+            let voll = letzteZeile >= layout.rows - 1
+            let hoehe: CGFloat? = voll ? nil : rowSizes.prefix(letzteZeile + 1).reduce(0, +)
+                + CGFloat(max(0, letzteZeile))
+
+            if letzteZeile >= 0 {
+                columnHandle(dividerIndex: dividerIndex, totalWidth: totalWidth)
+                    .frame(height: hoehe)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: voll ? nil : .infinity,
+                        alignment: voll ? .leading : .topLeading
+                    )
+                    .offset(x: offset - 4)
+            }
         }
     }
 
