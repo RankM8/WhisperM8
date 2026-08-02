@@ -30,19 +30,21 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
     static let defaultName = "Workspace"
     static let defaultColorHex = "#6E6ADE"
     /// Erlaubte Kapazitäts-Stufen (Auto-Wachsen 2→3→4→6→9).
-    static let allowedCapacities = [2, 3, 4, 6, 9]
+    /// Jede Anzahl bekommt ihr eigenes Layout — 5 Chats sollen nicht in einer
+    /// 6er-Stufe mit leerem Platz landen (Nutzerbefund 02.08.2026).
+    static let allowedCapacities = [2, 3, 4, 5, 6, 7, 8, 9]
 
     // MARK: - Layout-Geometrie
 
     /// Spalten/Zeilen je Stufe: 2 = 1×2 · 3 = „2 oben + 1 breit" (Slot 2
     /// spannt die untere Zeile) · 4 = 2×2 · 6 = 3×2 · 9 = 3×3.
     static func columns(forCapacity capacity: Int) -> Int {
-        capacity >= 6 ? 3 : 2
+        capacity >= 5 ? 3 : 2
     }
 
     static func rows(forCapacity capacity: Int) -> Int {
         switch capacity {
-        case 9: return 3
+        case 7, 8, 9: return 3
         case 2: return 1
         default: return 2
         }

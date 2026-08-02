@@ -102,11 +102,11 @@ final class AgentGridWorkspaceTests: XCTestCase {
     func testInvalidCapacityIsInferredFromHighestOccupiedSlot() {
         let a = UUID()
         var slots: [UUID?] = Array(repeating: nil, count: 5)
-        slots[4] = a // höchster belegter Index 4 → Stufe 6
+        slots[4] = a // höchster belegter Index 4 → Stufe 5
         let workspace = AgentGridWorkspace(slots: slots, capacity: 5)
-        XCTAssertEqual(workspace.capacity, 6)
+        XCTAssertEqual(workspace.capacity, 5, "5 ist eine eigene Stufe — kein Sprung auf 6")
         XCTAssertEqual(workspace.slots[4], a, "Position bleibt erhalten")
-        XCTAssertEqual(workspace.slots.count, 6)
+        XCTAssertEqual(workspace.slots.count, 5)
     }
 
     func testSlotsArePaddedToCapacity() {
@@ -118,9 +118,9 @@ final class AgentGridWorkspaceTests: XCTestCase {
     func testSlotsBeyondCapacityGrowToNextAllowedStage() {
         let ids = (0 ..< 5).map { _ in UUID() }
         let workspace = AgentGridWorkspace(slots: ids.map { $0 }, capacity: 4)
-        XCTAssertEqual(workspace.capacity, 6, "kleinste passende erlaubte Stufe")
-        XCTAssertEqual(workspace.slots.prefix(5).compactMap { $0 }, ids)
-        XCTAssertNil(workspace.slots[5])
+        XCTAssertEqual(workspace.capacity, 5, "kleinste passende Stufe — fuenf Chats, fuenf Plaetze")
+        XCTAssertEqual(workspace.slots.compactMap { $0 }, ids)
+        XCTAssertEqual(workspace.slots.count, 5, "kein leerer Platz mehr")
     }
 
     func testSlotsBeyondNineAreDeterministicallyTruncated() {
@@ -477,7 +477,8 @@ final class AgentGridWorkspaceTests: XCTestCase {
     }
 
     func testV3MigrationSelectsHigherCapacityStages() throws {
-        for (memberCount, expectedCapacity) in [(5, 6), (7, 9)] {
+        // Lueckenlos: 5 Mitglieder bekommen 5 Plaetze, nicht 6.
+        for (memberCount, expectedCapacity) in [(5, 5), (7, 7)] {
             let s = (0 ..< memberCount).map { _ in makeSession() }
             let windowID = UUID()
             let json = v3JSON(

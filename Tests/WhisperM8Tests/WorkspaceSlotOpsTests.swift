@@ -66,7 +66,9 @@ final class WorkspaceSlotOpsTests: XCTestCase {
     // MARK: - Auto-Wachsen
 
     func testAutoGrowClimbsAllStages() {
-        for (from, to) in [(2, 3), (3, 4), (4, 6), (6, 9)] {
+        // Lueckenlose Stufen: jeder Chat bekommt seinen Platz, statt auf
+        // die naechste Grobstufe zu springen.
+        for (from, to) in [(2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9)] {
             let ids = (0 ..< from).map { _ in UUID() }
             let new = UUID()
             let (updated, result) = WorkspaceSlotOps.add(
@@ -257,7 +259,8 @@ final class WorkspaceSlotOpsTests: XCTestCase {
 
     func testInvalidExplicitCapacityIsRejected() {
         let original = workspace(slots: [], capacity: 4)
-        let (updated, result) = WorkspaceSlotOps.setCapacity(of: original, to: 5)
+        // 5 ist inzwischen eine gueltige Stufe — 10 liegt ausserhalb.
+        let (updated, result) = WorkspaceSlotOps.setCapacity(of: original, to: 10)
         XCTAssertEqual(result, .rejected)
         XCTAssertEqual(updated, original)
     }

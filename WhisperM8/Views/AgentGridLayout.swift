@@ -15,8 +15,15 @@ enum AgentGridAutoLayout: Equatable {
     case twoPlusOne
     /// Kapazität 4: 2×2.
     case grid2x2
+    /// Kapazität 5: drei oben, zwei unten — die untere Zeile teilt sich die
+    /// drei Spalten (links zwei, rechts eine). Kein leerer Platz.
+    case threePlusTwo
     /// Kapazität 6: 3×2 (Paket 3).
     case grid3x2
+    /// Kapazität 7: 3×3, unterste Zeile ein Chat ueber volle Breite.
+    case threeThreePlusOne
+    /// Kapazität 8: 3×3, unterste Zeile zwei Chats.
+    case threeThreePlusTwo
     /// Kapazität 9: 3×3 (Paket 3).
     case grid3x3
 
@@ -35,7 +42,10 @@ enum AgentGridAutoLayout: Equatable {
         case ...2: .cols2
         case 3: .twoPlusOne
         case 4: .grid2x2
+        case 5: .threePlusTwo
         case 6: .grid3x2
+        case 7: .threeThreePlusOne
+        case 8: .threeThreePlusTwo
         default: .grid3x3
         }
     }
@@ -46,7 +56,10 @@ enum AgentGridAutoLayout: Equatable {
         case .cols2: 2
         case .twoPlusOne: 3
         case .grid2x2: 4
+        case .threePlusTwo: 5
         case .grid3x2: 6
+        case .threeThreePlusOne: 7
+        case .threeThreePlusTwo: 8
         case .grid3x3: 9
         }
     }
@@ -57,21 +70,32 @@ enum AgentGridAutoLayout: Equatable {
         switch self {
         case .single: 1
         case .cols2, .twoPlusOne, .grid2x2: 2
-        case .grid3x2, .grid3x3: 3
+        case .threePlusTwo, .grid3x2, .threeThreePlusOne, .threeThreePlusTwo, .grid3x3: 3
         }
     }
 
     var rows: Int {
         switch self {
         case .single, .cols2: 1
-        case .twoPlusOne, .grid2x2, .grid3x2: 2
-        case .grid3x3: 3
+        case .twoPlusOne, .grid2x2, .threePlusTwo, .grid3x2: 2
+        case .threeThreePlusOne, .threeThreePlusTwo, .grid3x3: 3
         }
     }
 
     /// Zell-Geometrie eines Slot-Index: Zeile + Spaltenbereich (der
     /// twoPlusOne-Slot 2 spannt beide Spalten).
     func cell(forSlot index: Int) -> (row: Int, cols: ClosedRange<Int>)? {
+        // Die letzte Zeile verteilt ihre Chats ueber die volle Breite, statt
+        // einen leeren Platz stehen zu lassen — dasselbe Muster wie bei drei
+        // Chats, nur fuer 5, 7 und 8.
+        switch self {
+        case .threePlusTwo where index == 3: return (1, 0 ... 1)
+        case .threePlusTwo where index == 4: return (1, 2 ... 2)
+        case .threeThreePlusOne where index == 6: return (2, 0 ... 2)
+        case .threeThreePlusTwo where index == 6: return (2, 0 ... 1)
+        case .threeThreePlusTwo where index == 7: return (2, 2 ... 2)
+        default: break
+        }
         if self == .twoPlusOne {
             switch index {
             case 0: return (0, 0 ... 0)
