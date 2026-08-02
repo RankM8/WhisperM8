@@ -1,7 +1,7 @@
 import Foundation
 
 // ==============================================================================
-// Erkennung der Codewort-Phrase („Jarvis Pause" / „Jarvis weiter").
+// Erkennung der Codewort-Phrase („Anna Pause" / „Anna weiter").
 //
 // Bewusst ohne Speech-Framework-Typen: der Matcher bekommt nur normalisierte
 // Segmente mit Zeitstempeln und ist damit vollstaendig unit-testbar. Die
@@ -69,6 +69,11 @@ struct VoiceGateVocabulary: Equatable {
     var carrier: String = "anna"
     var muteCommand: String = "pause"
     var unmuteCommand: String = "weiter"
+    /// Explizite, weiterhin exakt zu erkennende Alltagsvarianten. Der Carrier
+    /// bleibt Pflicht; dadurch erweitern „Stopp" und „Resume" die Bedienung,
+    /// ohne mitten in einem normalen Satz auszulösen.
+    var muteAliases: [String] = ["pause", "stopp", "stop"]
+    var unmuteAliases: [String] = ["weiter", "resume", "resumee"]
 
     /// Zugelassene Tippdistanz fuer das Traegerwort — Erkenner verbiegen
     /// Eigennamen gern („Jarvis" → „Jervis").
@@ -150,10 +155,9 @@ struct VoiceGateCommandMatcher {
     /// passt — dann uebernimmt die normale Zwei-Segment-Suche samt ihrer
     /// aussagekraeftigeren Ablehnungsgruende.
     private func matchGlued(_ segments: [NormalizedSegment]) -> VoiceGateMatch? {
-        let candidates: [(text: String, intent: VoiceGateIntent)] = [
-            (Self.normalize(vocabulary.carrier + vocabulary.muteCommand), .mute),
-            (Self.normalize(vocabulary.carrier + vocabulary.unmuteCommand), .unmute)
-        ]
+        let candidates = commandCandidates().map {
+            (text: Self.normalize(vocabulary.carrier + $0.text), intent: $0.intent)
+        }
 
         for index in segments.indices.reversed() {
             let segment = segments[index]
@@ -225,13 +229,33 @@ struct VoiceGateCommandMatcher {
     }
 
     private func intent(for text: String) -> VoiceGateIntent? {
-        if Self.isWithinEditDistance(text, vocabulary.muteCommand, maxDistance: vocabulary.maxCommandEditDistance) {
-            return .mute
-        }
-        if Self.isWithinEditDistance(text, vocabulary.unmuteCommand, maxDistance: vocabulary.maxCommandEditDistance) {
-            return .unmute
+        for candidate in commandCandidates() {
+            if Self.isWithinEditDistance(
+                text,
+                candidate.text,
+                maxDistance: vocabulary.maxCommandEditDistance
+            ) {
+                return candidate.intent
+            }
         }
         return nil
+    }
+
+    private func commandCandidates() -> [(text: String, intent: VoiceGateIntent)] {
+        var seen: Set<String> = []
+        var result: [(String, VoiceGateIntent)] = []
+        let values: [(String, VoiceGateIntent)] =
+            [(vocabulary.muteCommand, .mute)]
+            + vocabulary.muteAliases.map { ($0, .mute) }
+            + [(vocabulary.unmuteCommand, .unmute)]
+            + vocabulary.unmuteAliases.map { ($0, .unmute) }
+
+        for (text, intent) in values {
+            let normalized = Self.normalize(text)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
+            result.append((normalized, intent))
+        }
+        return result
     }
 
     // MARK: - Normalisierung & Distanz

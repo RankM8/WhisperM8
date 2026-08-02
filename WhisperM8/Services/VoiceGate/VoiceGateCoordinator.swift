@@ -275,9 +275,10 @@ final class VoiceGateCoordinator {
 
     private func handle(_ hypothesis: VoiceGateHypothesis) {
         let vocabulary = Self.vocabularyFromPreferences()
-        logVerbose(hypothesis, vocabulary: vocabulary)
+        let match = VoiceGateCommandMatcher(vocabulary: vocabulary).match(segments: hypothesis.segments)
+        logVerbose(hypothesis, vocabulary: vocabulary, match: match)
 
-        switch VoiceGateCommandMatcher(vocabulary: vocabulary).match(segments: hypothesis.segments) {
+        switch match {
         case .rejected(let reason):
             // Nur finale Hypothesen zaehlen, sonst explodiert die Statistik
             // durch Teilergebnisse.
@@ -321,15 +322,13 @@ final class VoiceGateCoordinator {
             // greift, ohne Rebuild und ohne Neustart.
             guard !AppPreferences.shared.isCodexVoiceGateDryRun else {
                 wouldPressCount += 1
-                stateMachine.confirmPress(intent, now: date)
-                assumedState = stateMachine.assumed
                 note("\(phrase(for: intent)) erkannt — WÜRDE drücken (\(reason.rawValue))")
                 Logger.voiceGate.info(
                     """
                     would_press intent=\(intent.rawValue, privacy: .public) \
                     reason=\(reason.rawValue, privacy: .public) \
                     confidence=\(String(format: "%.2f", confidence), privacy: .public) \
-                    assumedAfter=\(self.stateMachine.assumed.rawValue, privacy: .public)
+                    assumedUnchanged=\(self.stateMachine.assumed.rawValue, privacy: .public)
                     """
                 )
                 playFeedbackSound()
@@ -438,7 +437,11 @@ final class VoiceGateCoordinator {
     /// Nur mit ausdruecklich eingeschalteter Diagnose: zeigt, WAS der Erkenner
     /// verstanden hat und gegen welches Vokabular geprueft wurde. Ohne das ist
     /// „mein Codewort greift nicht" nicht diagnostizierbar.
-    private func logVerbose(_ hypothesis: VoiceGateHypothesis, vocabulary: VoiceGateVocabulary) {
+    private func logVerbose(
+        _ hypothesis: VoiceGateHypothesis,
+        vocabulary: VoiceGateVocabulary,
+        match: VoiceGateMatch
+    ) {
         guard AppPreferences.shared.isCodexVoiceGateVerboseLoggingEnabled else { return }
 
         // Nur auf finale Ergebnisse zu warten war nutzlos: die Phrase steckt
@@ -447,7 +450,17 @@ final class VoiceGateCoordinator {
         // Eintrag ueber eine ganze Testreihe). Also Teilergebnisse mitnehmen,
         // aber gedrosselt, sonst ertrinkt das Log.
         let now = hypothesis.receivedAt
-        if let lastVerboseLogAt, now.timeIntervalSince(lastVerboseLogAt) < 2.0 { return }
+        let isMatch: Bool
+        let outcome: String
+        switch match {
+        case .matched(let intent, _, _):
+            isMatch = true
+            outcome = "match:\(intent.rawValue)"
+        case .rejected(let reason):
+            isMatch = false
+            outcome = "rejected:\(reason.rawValue)"
+        }
+        if !isMatch, let lastVerboseLogAt, now.timeIntervalSince(lastVerboseLogAt) < 2.0 { return }
 
         let heard = hypothesis.segments
             .map { VoiceGateCommandMatcher.normalize($0.text) }
@@ -456,9 +469,13 @@ final class VoiceGateCoordinator {
         guard !heard.isEmpty else { return }
         lastVerboseLogAt = now
 
-        Logger.voiceGate.debug(
+        // Die Option heißt ausdrücklich „erkannte Wörter protokollieren".
+        // Deshalb INFO statt DEBUG: Nur so bleibt der Eintrag in `log show`
+        // nachträglich abrufbar und ist nicht ausschließlich live sichtbar.
+        Logger.voiceGate.info(
             """
             heard="\(heard, privacy: .public)" final=\(hypothesis.isFinal, privacy: .public) \
+            outcome=\(outcome, privacy: .public) \
             vocabulary="\(vocabulary.carrier, privacy: .public)/\
             \(vocabulary.muteCommand, privacy: .public)/\
             \(vocabulary.unmuteCommand, privacy: .public)"

@@ -87,20 +87,26 @@ struct CodexVoiceSessionProbe {
 
     // MARK: - Log-Auswertung
 
-    /// Juengster `realtime_session_started`-Eintrag aus dem heutigen Log-Ordner.
+    /// Juengster `realtime_session_started`-Eintrag aus den aktuellen
+    /// Log-Ordnern.
+    ///
+    /// Codex benennt die Tagesordner nach UTC, waehrend WhisperM8 bisher nur
+    /// das lokale Kalenderdatum geprueft hat. In positiven Zeitzonen war das
+    /// Gate dadurch nach lokaler Mitternacht mehrere Stunden lang blind.
+    /// Aktueller und vorheriger lokaler Tag decken beide UTC-Rollover ab.
     func lastRealtimeSessionStart() -> Date? {
-        guard let directory = todaysLogDirectory() else { return nil }
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey]
-        ) else { return nil }
-
-        let logs = files
+        let logs = candidateLogDirectories()
+            .flatMap { directory -> [URL] in
+                guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else {
+                    return []
+                }
+                return names.map { directory.appendingPathComponent($0, isDirectory: false) }
+            }
             .filter { $0.pathExtension == "log" }
             .sorted { lhs, rhs in
                 (modificationDate(of: lhs) ?? .distantPast) > (modificationDate(of: rhs) ?? .distantPast)
             }
-            .prefix(4)
+            .prefix(12)
 
         var newest: Date?
         for log in logs {
@@ -112,22 +118,34 @@ struct CodexVoiceSessionProbe {
         return newest
     }
 
-    private func todaysLogDirectory() -> URL? {
+    private func candidateLogDirectories() -> [URL] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
-        let parts = calendar.dateComponents([.year, .month, .day], from: now())
-        guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
-        let path = String(format: "%04d/%02d/%02d", year, month, day)
-        let directory = logRoot.appendingPathComponent(path, isDirectory: true)
-        return FileManager.default.fileExists(atPath: directory.path) ? directory : nil
+        let current = now()
+
+        return [0, -1].compactMap { dayOffset in
+            guard let date = calendar.date(byAdding: .day, value: dayOffset, to: current) else {
+                return nil
+            }
+            let parts = calendar.dateComponents([.year, .month, .day], from: date)
+            guard let year = parts.year, let month = parts.month, let day = parts.day else {
+                return nil
+            }
+            let path = String(format: "%04d/%02d/%02d", year, month, day)
+            let directory = logRoot.appendingPathComponent(path, isDirectory: true)
+            return FileManager.default.fileExists(atPath: directory.path) ? directory : nil
+        }
     }
 
     private func modificationDate(of url: URL) -> Date? {
         try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
-    /// Nur das Ende der Datei lesen — die Logs werden mehrere hundert KB gross.
-    static func readTail(of url: URL, maxBytes: Int = 64 * 1024) -> String? {
+    /// Nur das Ende der Datei lesen. Acht MiB halten den Session-Start auch
+    /// dann im Fenster, wenn waehrend eines langen Voice-Chats viele normale
+    /// App-Logs folgen. Die frueheren 64 KiB verloren den Marker schon nach
+    /// rund 50 Minuten.
+    static func readTail(of url: URL, maxBytes: Int = 8 * 1024 * 1024) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
 

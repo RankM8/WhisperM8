@@ -127,6 +127,10 @@ struct AgentChatsVoiceAgentTab: View {
             }
 
             SettingsHelpText(carrierToleranceHint, tone: .secondary)
+            SettingsHelpText(
+                "Built-in exact aliases: “Anna Stopp/Stop” also mutes; “Anna Resume/Resümee” also resumes. The carrier word and a short pause are still required.",
+                tone: .secondary
+            )
         }
     }
 
@@ -253,6 +257,9 @@ struct AgentChatsVoiceAgentTab: View {
 
         switch gate.armState {
         case .armed:
+            if dryRun {
+                return "Dry run active — commands are recognized, but Codex is never switched."
+            }
             return "Active — listening while the Codex voice chat is running."
         case .codexNotRunning:
             return "Idle — Codex is not running, the microphone stays untouched."
