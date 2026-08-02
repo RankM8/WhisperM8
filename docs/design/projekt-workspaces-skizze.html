@@ -1,0 +1,167 @@
+<meta charset="utf-8">
+<title>Projekt-Workspaces — Bausteinskizze</title>
+<!--
+  NICHT-INVASIVE SKIZZE zum Konzept „Projekt-Workspaces".
+  Statisch und bewusst klein: sie zeigt die BAUSTEINE und ZUSTÄNDE, nicht das
+  Verhalten. Die lebende Vorlage bleibt agent-chats-layout-engine.html; hier
+  wird nichts davon nachgebaut, was dort schon funktioniert (Auto-Tiling,
+  Drag & Drop, Snapshots).
+  Farben 1:1 aus WhisperM8/Support/AppTheme.swift (Dark).
+-->
+<style>
+  :root{
+    --ink:rgb(255 255 255/92%); --muted:rgb(255 255 255/55%); --faint:rgb(255 255 255/38%);
+    --line:rgb(255 255 255/6%); --line-strong:rgb(255 255 255/10%);
+    --canvas:#0B0C0D; --sidebar:#131415; --paper:#121213; --surface:#171719; --control:#242426;
+    --indigo:#7C84E8; --green:#4CC38A; --orange:#E9B949; --red:#E5594F;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#08090a;color:var(--ink);padding:28px 32px 60px;font-size:13px;line-height:1.5;}
+  h1{font-size:17px;font-weight:650;margin-bottom:4px;}
+  h2{font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin:30px 0 10px;}
+  p.lead{color:var(--muted);max-width:760px;margin-bottom:6px;}
+  .note{color:var(--faint);font-size:11px;max-width:760px;margin-top:6px;}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .card > .cap{padding:7px 10px;border-bottom:1px solid var(--line);color:var(--faint);font-size:10px;
+    font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:var(--paper);}
+  .card > .body{padding:12px;}
+
+  /* — Sidebar-Zeile — */
+  .sb{background:var(--sidebar);border-radius:7px;padding:6px 0;}
+  .prow{display:flex;align-items:center;gap:9px;height:28px;margin:0 8px;padding:0 7px 0 8px;
+    border-radius:6px;font-size:12px;font-weight:600;}
+  .prow.hover{background:rgb(255 255 255/4%);}
+  .prow.aktiv{background:rgb(124 132 232/16%);box-shadow:inset 2.5px 0 var(--indigo);}
+  .av{width:17px;height:17px;border-radius:4px;display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff;flex:none;}
+  .branch{color:var(--muted);font:9.5px ui-monospace,Menlo,monospace;}
+  .cnt{margin-left:auto;color:var(--faint);font-size:9px;font-weight:500;}
+  .gridbtn{width:19px;height:19px;display:grid;place-items:center;border-radius:5px;color:var(--muted);font-size:11px;flex:none;}
+  .prow.hover .gridbtn{color:var(--indigo);background:rgb(124 132 232/16%);}
+  .prow.aktiv .gridbtn{color:var(--indigo);}
+
+  /* — Projektkopf — */
+  .head{display:flex;align-items:center;gap:8px;height:31px;padding:0 9px 0 12px;background:var(--paper);
+    border-bottom:1px solid var(--line);font-size:11px;}
+  .head .titel{font-weight:650;}
+  .head .pfad{color:var(--faint);font:9px ui-monospace,Menlo,monospace;}
+  .zaehler{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:9px;}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:3px;}
+  .chip{height:20px;display:inline-flex;align-items:center;gap:5px;padding:0 7px;border-radius:6px;
+    background:var(--control);color:var(--muted);font-size:8.5px;}
+  .chip.an{background:rgb(124 132 232/18%);color:#a9a4f7;}
+  .rechts{margin-left:auto;display:flex;align-items:center;gap:5px;}
+  .btn{height:21px;display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:5px;
+    color:var(--muted);font-size:8.5px;background:transparent;}
+  .btn.stark{background:var(--control);color:var(--ink);}
+
+  /* — Grid-Andeutung — */
+  .stage{background:var(--canvas);display:grid;gap:1px;grid-template-columns:1fr 1fr;height:150px;}
+  .pane{background:var(--surface);display:grid;grid-template-rows:20px 1fr;}
+  .pane.fokus{outline:2px solid var(--indigo);outline-offset:-2px;}
+  .pane .ph{display:flex;align-items:center;gap:5px;padding:0 6px;border-bottom:1px solid var(--line);
+    background:var(--paper);font-size:8.5px;}
+  .pane .pb{padding:6px 8px;font:7.5px/1.5 ui-monospace,Menlo,monospace;color:var(--muted);}
+  .leer{grid-column:1/-1;display:grid;place-items:center;text-align:center;color:var(--faint);font-size:11px;background:var(--surface);}
+  .leer strong{display:block;color:var(--muted);font-size:12px;margin-bottom:4px;font-weight:600;}
+  .leer .cta{margin-top:9px;display:inline-flex;gap:6px;}
+
+  table{border-collapse:collapse;width:100%;font-size:12px;}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top;}
+  th{background:var(--paper);color:var(--faint);font-size:10px;text-transform:uppercase;letter-spacing:.05em;}
+  code{font:11px ui-monospace,Menlo,monospace;color:#a9a4f7;}
+</style>
+
+<h1>Projekt-Workspaces — Bausteinskizze</h1>
+<p class="lead">Ein Projekt lässt sich als eigener Workspace im Grid betrachten. Diese Skizze zeigt die
+Bausteine und Zustände; das Verhalten (Auto-Tiling, Ziehen, Snapshots) bleibt unverändert das der
+bestehenden Layout-Vorlage.</p>
+
+<h2>1 — Einstieg in der Sidebar</h2>
+<div class="grid2">
+  <div class="card"><div class="cap">Ruhezustand</div><div class="body"><div class="sb">
+    <div class="prow"><span class="av" style="background:#5576c7">W</span><span>whisperm8</span>
+      <span class="branch">⑂ main</span><span class="cnt">9</span></div>
+  </div>
+  <p class="note">Klick auf die Zeile klappt wie bisher auf und zu. Der Grid-Knopf erscheint erst beim Überfahren.</p>
+  </div></div>
+
+  <div class="card"><div class="cap">Überfahren — Projektaktion sichtbar</div><div class="body"><div class="sb">
+    <div class="prow hover"><span class="av" style="background:#5576c7">W</span><span>whisperm8</span>
+      <span class="branch">⑂ main</span><span class="cnt">9</span><span class="gridbtn">⊞</span></div>
+  </div>
+  <p class="note">⊞ öffnet die Projekt-Ansicht. Sie ist eine <em>Ansicht</em>, kein Lebenszyklus: nichts wird gestartet oder beendet.</p>
+  </div></div>
+
+  <div class="card"><div class="cap">Aktiv — Projekt-Ansicht offen</div><div class="body"><div class="sb">
+    <div class="prow aktiv"><span class="av" style="background:#5576c7">W</span><span>whisperm8</span>
+      <span class="branch">⑂ main</span><span class="cnt">9</span><span class="gridbtn">⊞</span></div>
+  </div>
+  <p class="note">Aktiver Zustand wie bei kuratierten Workspaces: getönte Fläche plus Marke links. Nur ein Eintrag trägt ihn.</p>
+  </div></div>
+</div>
+
+<h2>2 — Projektkopf</h2>
+<div class="card">
+  <div class="cap">Kopfzeile der Projekt-Ansicht</div>
+  <div class="head">
+    <span class="av" style="background:#5576c7">W</span>
+    <span class="titel">whisperm8</span>
+    <span class="branch">⑂ main</span>
+    <span class="pfad">~/repos/whisperm8</span>
+    <span class="zaehler"><span><i class="dot" style="background:var(--orange)"></i>2 arbeiten</span>
+      <span><i class="dot" style="background:var(--indigo)"></i>1 wartet</span>
+      <span><i class="dot" style="background:var(--faint)"></i>6 ruhen</span></span>
+    <span class="chip">Aktive · 3 von 9</span>
+    <span class="chip an">● Automatik</span>
+    <span class="rechts">
+      <span class="btn stark">＋ Chat hier</span><span class="btn">↗ IDE</span>
+      <span class="btn">⚖ Balance</span><span class="btn">•••</span>
+    </span>
+  </div>
+  <div class="stage">
+    <div class="pane fokus"><div class="ph"><i class="dot" style="background:var(--orange)"></i><b>Tab-Gruppen und Sidebar</b></div><div class="pb">❯ Chrome-artige Tab-Gruppen …</div></div>
+    <div class="pane"><div class="ph"><i class="dot" style="background:var(--indigo)"></i><b>GPT-Workflow Skill</b></div><div class="pb">❯ Backend-Einstellungen prüfen …</div></div>
+  </div>
+</div>
+<p class="note">Der Kopf ersetzt die Workspace-Leiste nur inhaltlich — Layout-Chip, Balance und ••• bleiben
+identisch, damit beide Workspace-Arten gleich bedient werden. Neu sind Branch, Pfad, Statuszähler,
+der Sichtbarkeitsfilter und „Chat hier".</p>
+
+<h2>3 — Leere Zustände</h2>
+<div class="grid2">
+  <div class="card"><div class="cap">Projekt ohne Chats</div><div class="stage"><div class="leer">
+    <div><strong>Noch kein Chat in whisperm8</strong>Starte den ersten — er erscheint sofort hier.
+    <div class="cta"><span class="btn stark">＋ Claude</span><span class="btn stark">＋ Codex</span><span class="btn">▣ Terminal</span></div></div>
+  </div></div></div>
+
+  <div class="card"><div class="cap">Alles weggefiltert</div><div class="stage"><div class="leer">
+    <div><strong>9 Chats, keiner aktiv</strong>Der Filter zeigt gerade nur laufende Sitzungen.
+    <div class="cta"><span class="btn stark">Alle 9 zeigen</span></div></div>
+  </div></div></div>
+
+  <div class="card"><div class="cap">Projektordner fehlt</div><div class="stage"><div class="leer">
+    <div><strong>Ordner nicht gefunden</strong><span style="color:var(--red)">~/repos/whisperm8</span> existiert nicht mehr.
+    <div class="cta"><span class="btn stark">Ordner wählen…</span><span class="btn">Transkripte trotzdem zeigen</span></div></div>
+  </div></div></div>
+</div>
+
+<h2>4 — Abgrenzung der drei Aktionen</h2>
+<table>
+  <tr><th>Aktion</th><th>Auslöser</th><th>Wirkung</th><th>Prozesse</th></tr>
+  <tr><td><b>Öffnen</b></td><td>Klick auf einen Chat</td><td>Ein Chat wird sichtbar (Tab bzw. Fokus-Pane)</td><td>unverändert</td></tr>
+  <tr><td><b>Projekt-Ansicht</b></td><td>⊞ an der Projektzeile</td><td>Alle Chats des Projekts im Grid, eigenes Layout</td><td><b>unverändert</b> — nichts wird gestartet</td></tr>
+  <tr><td><b>Schließen</b></td><td>× am Tab / ⊖ an der Pane</td><td>Nur die Darstellung endet</td><td>laufen weiter</td></tr>
+</table>
+<p class="note">Wichtig: „Ansicht verlassen" ist kein Schließen. Der Rückweg (Esc oder ‹ Zurück) führt zur
+vorherigen Ansicht, ohne einen Chat zu beenden.</p>
+
+<h2>5 — Was im Grid anders heißt</h2>
+<table>
+  <tr><th>Kuratierter Workspace</th><th>Projekt-Workspace</th><th>Warum</th></tr>
+  <tr><td>Chat hinzufügen (Drop)</td><td>entfällt für fremde Chats</td><td>Mitgliedschaft folgt dem Projekt, nicht der Kuratierung</td></tr>
+  <tr><td>⊖ Aus dem Workspace nehmen</td><td>⊘ In dieser Ansicht ausblenden</td><td>Ein Projektchat kann sein Projekt nicht verlassen</td></tr>
+  <tr><td>Mitglieder sind gespeichert</td><td>Mitglieder werden abgeleitet</td><td>Neue Chats erscheinen automatisch</td></tr>
+  <tr><td>Layout pro Workspace</td><td>Layout pro Projekt</td><td>gleiche Mechanik, andere Schlüssel</td></tr>
+</table>
