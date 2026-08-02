@@ -31,6 +31,14 @@ struct WorkspaceLayoutView<Content: View>: View {
     let layout: WorkspaceLayout
     /// Welche Session gerade den Fokus hat — nur zur Darstellung.
     var focusedSessionID: UUID?
+    /// Welche Session die Flaeche allein ausfuellt, falls gezoomt wird.
+    ///
+    /// Zoom ist **keine** Layoutaenderung: Die uebrigen Flaechen behalten ihre
+    /// Groesse und bleiben in der Hierarchie, sie werden nur verdeckt. Wuerden
+    /// sie entfernt oder umgerechnet, baute SwiftUI ihre Terminals neu auf —
+    /// Scrollback weg, laufender Befehl weg. Nur die gezoomte Flaeche aendert
+    /// ihre Groesse, und zwar einmal statt fortlaufend.
+    var zoomedSessionID: UUID?
     /// Abstand zwischen den Flaechen, in Punkten.
     var gap: CGFloat = 1
     /// Beschriftung der Kopfleiste; ohne Zuordnung greift ein Platzhalter.
@@ -76,24 +84,39 @@ struct WorkspaceLayoutView<Content: View>: View {
                 // Umsortieren nur Rahmen aendern, keine Baeume umbauen.
                 ForEach(layout.cells) { cell in
                     if let frame = frames[cell.id] {
-                        let gedehnt = stretched(frame, cellID: cell.id)
-                        cellView(cell, in: frame, frames: frames)
+                        let gezoomt = isZoomed(cell)
+                        let verdeckt = zoomedSessionID != nil && !gezoomt
+                        // Die gezoomte Flaeche nimmt alles ein; alle anderen
+                        // behalten exakt ihr bisheriges Rechteck.
+                        let ziel = gezoomt ? bounds(proxy) : frame
+                        let gedehnt = stretched(ziel, cellID: cell.id)
+
+                        cellView(cell, in: ziel, frames: frames)
                             // Die Groesse bleibt waehrend des Ziehens
                             // UNVERAENDERT — nur so bekommt SwiftTerm kein
                             // SIGWINCH und baut sein Bild nicht neu auf.
-                            .frame(width: max(frame.width - gap, 0),
-                                   height: max(frame.height - gap, 0))
+                            .frame(width: max(ziel.width - gap, 0),
+                                   height: max(ziel.height - gap, 0))
                             // Gedehnt wird rein visuell. Eine Transformation
                             // kostet keinen Layout-Durchlauf.
                             .scaleEffect(x: gedehnt.scaleX, y: gedehnt.scaleY, anchor: .topLeading)
                             .offset(x: gedehnt.origin.x, y: gedehnt.origin.y)
+                            // Verdeckte werden unsichtbar, aber NICHT entfernt
+                            // — `if` statt `opacity` wuerde ihre Terminals
+                            // zerstoeren.
+                            .opacity(verdeckt ? 0 : 1)
+                            .allowsHitTesting(!verdeckt)
+                            .zIndex(gezoomt ? 1 : 0)
                     }
                 }
 
                 // Trenner-Griffe. Schmal, unsichtbar, aber treffbar — der
-                // sichtbare Spalt ist nur einen Punkt breit.
-                ForEach(LayoutGeometry.dividers(for: layout, in: bounds(proxy))) { handle in
-                    dividerHandle(handle)
+                // sichtbare Spalt ist nur einen Punkt breit. Beim Zoom gibt es
+                // nichts zu teilen.
+                if zoomedSessionID == nil {
+                    ForEach(LayoutGeometry.dividers(for: layout, in: bounds(proxy))) { handle in
+                        dividerHandle(handle)
+                    }
                 }
 
                 // Die Zielvorschau liegt ueber allem und faengt nichts ab.
@@ -174,6 +197,18 @@ struct WorkspaceLayoutView<Content: View>: View {
                     onFocus(cell.active)
                 }
             }
+    }
+
+    // MARK: - Zoom
+
+    /// Ob diese Zelle die gezoomte ist.
+    ///
+    /// Geprueft wird gegen den ganzen Stapel, nicht nur gegen `active`: Wer im
+    /// Zoom den Chat wechselt, bleibt im Zoom (Entscheidung E4). Waere nur
+    /// `active` gemeint, spraenge das Bild beim Umschalten zurueck.
+    private func isZoomed(_ cell: WorkspaceLayout.Cell) -> Bool {
+        guard let zoomedSessionID else { return false }
+        return cell.sessions.contains(zoomedSessionID)
     }
 
     // MARK: - Trenner
