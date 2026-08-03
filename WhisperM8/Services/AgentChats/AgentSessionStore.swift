@@ -200,14 +200,6 @@ struct AgentSessionStore {
         }
     }
 
-    /// Default-Context-Profil des Projekts (`nil` = kein Overlay). Nur die
-    /// Referenz — die Profil-Definition lebt im `ClaudeContextProfileStore`.
-    func setProjectContextProfile(id: UUID, profileID: UUID?) throws {
-        try updateProject(id: id) { project in
-            project.contextProfileID = profileID
-        }
-    }
-
     /// Vom User explizit ausgewähltes Icon (File-Picker auf ein Bild beliebiger
     /// Lage). Hat Vorrang vor `iconRelativePath`.
     func setProjectCustomIcon(id: UUID, absolutePath: String?) throws {
@@ -551,8 +543,7 @@ struct AgentSessionStore {
         backgroundPermissionMode: String? = nil,
         forkSourceSessionID: String? = nil,
         claudeProfileName: String? = nil,
-        claudeBackendModel: String? = nil,
-        contextProfileID: UUID? = nil
+        claudeBackendModel: String? = nil
     ) throws -> AgentChatSession {
         let project = try upsertProject(
             path: projectPath,
@@ -576,8 +567,7 @@ struct AgentSessionStore {
             backgroundPermissionMode: backgroundPermissionMode,
             forkSourceSessionID: forkSourceSessionID,
             claudeProfileName: claudeProfileName,
-            claudeBackendModel: claudeBackendModel,
-            contextProfileID: contextProfileID
+            claudeBackendModel: claudeBackendModel
         )
         let stored = try upsertSession(session)
         // Crash-safe: strukturelle Erstellung SOFORT persistieren statt auf den

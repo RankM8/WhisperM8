@@ -207,16 +207,10 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(sounds.played, ["Submarine"])
     }
 
-    /// 4-Fälle-Matrix der Settings-Vorbereitung (Hooks-Preference ×
-    /// Context-Profil): welche Datei entsteht, welche Keys sie enthält und
-    /// ob die Hook-Bridge tracken darf.
+    /// Settings-Vorbereitung nach Hooks-Preference: welche Datei entsteht,
+    /// welche Keys sie enthält und ob die Hook-Bridge tracken darf.
     func testPrepareLaunchSettingsMatrix() throws {
         let (coordinator, sessionID, _, _, preferences) = try makeCoordinator()
-        let profile = ClaudeContextProfile(
-            name: "Coding",
-            deniedMcpServers: ["claude.ai Gmail"],
-            environment: ["ENABLE_CLAUDEAI_MCP_SERVERS": "false"]
-        )
 
         func settingsKeys(_ path: String?) throws -> Set<String> {
             let path = try XCTUnwrap(path)
@@ -225,43 +219,22 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             return Set(dict.keys)
         }
 
-        // Hooks an + Profil → hooks UND Profil-Keys in EINER Datei, Tracking an.
-        let both = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: profile)
-        XCTAssertEqual(both.settingsArguments.first, "--settings")
-        XCTAssertTrue(both.hooksActive)
-        XCTAssertEqual(try settingsKeys(both.settingsFilePath), ["hooks", "deniedMcpServers", "env"])
-
-        // Hooks an + kein Profil → nur hooks (heutiges Verhalten).
-        let hooksOnly = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: nil)
+        // Hooks an → Datei mit Hook-Keys, Tracking an.
+        let hooksOnly = coordinator.prepareLaunchSettings(localSessionID: sessionID)
+        XCTAssertEqual(hooksOnly.settingsArguments.first, "--settings")
         XCTAssertTrue(hooksOnly.hooksActive)
         XCTAssertEqual(try settingsKeys(hooksOnly.settingsFilePath), ["hooks"])
 
-        // Hooks aus + Profil → NUR Profil-Keys, kein Tracking.
+        // Hooks aus → keine Datei, keine Args.
         preferences.value.hooksEnabled = false
-        let profileOnly = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: profile)
-        XCTAssertFalse(profileOnly.hooksActive)
-        XCTAssertEqual(try settingsKeys(profileOnly.settingsFilePath), ["deniedMcpServers", "env"])
-
-        // Hooks aus + kein Profil → keine Datei, keine Args.
-        let nothing = coordinator.prepareLaunchSettings(localSessionID: sessionID, contextProfile: nil)
+        let nothing = coordinator.prepareLaunchSettings(localSessionID: sessionID)
         XCTAssertNil(nothing.settingsFilePath)
         XCTAssertTrue(nothing.settingsArguments.isEmpty)
         XCTAssertFalse(nothing.hooksActive)
-
-        // Leeres Profil zählt wie kein Profil.
-        let empty = coordinator.prepareLaunchSettings(
-            localSessionID: sessionID,
-            contextProfile: ClaudeContextProfile(name: "Leer")
-        )
-        XCTAssertNil(empty.settingsFilePath)
     }
 
     func testPrepareLaunchSettingsMergesInjectedGPTCatalogIndependently() throws {
         let (coordinator, sessionID, _, _, preferences) = try makeCoordinator()
-        let profile = ClaudeContextProfile(
-            name: "Coding",
-            deniedMcpServers: ["claude.ai Gmail"]
-        )
         let expectedModels = ["default", "gpt-test", "gpt-test-fast"]
         var resolvedSessionModel: String?
         coordinator.gptModelsFragmentResolver = { sessionModel in
@@ -275,22 +248,20 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             return try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         }
 
-        // Hooks + Profil + Backend-Fragment landen gemeinsam in einer Datei.
+        // Hooks + Backend-Fragment landen gemeinsam in einer Datei.
         let allFragments = coordinator.prepareLaunchSettings(
-            localSessionID: sessionID,
-            contextProfile: profile
+            localSessionID: sessionID
         )
         XCTAssertTrue(allFragments.hooksActive)
         XCTAssertEqual(resolvedSessionModel, "gpt-5.5-historical-fast")
         let allSettings = try settings(allFragments.settingsFilePath)
-        XCTAssertEqual(Set(allSettings.keys), ["hooks", "deniedMcpServers", "availableModels"])
+        XCTAssertEqual(Set(allSettings.keys), ["hooks", "availableModels"])
         XCTAssertEqual(allSettings["availableModels"] as? [String], expectedModels)
 
-        // Ohne Hooks und Profil reicht das Backend-Fragment allein für die Datei.
+        // Ohne Hooks reicht das Backend-Fragment allein für die Datei.
         preferences.value.hooksEnabled = false
         let modelsOnly = coordinator.prepareLaunchSettings(
-            localSessionID: sessionID,
-            contextProfile: nil
+            localSessionID: sessionID
         )
         XCTAssertFalse(modelsOnly.hooksActive)
         let modelSettings = try settings(modelsOnly.settingsFilePath)
@@ -299,31 +270,22 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
 
         let fallback = coordinator.prepareLaunchSettings(
             localSessionID: sessionID,
-            contextProfile: nil,
             includeGPTModelCatalog: false
         )
         XCTAssertNil(fallback.settingsFilePath)
 
-        // Backend aus, Hooks aus, kein Profil: unverändert keine Settings-Datei.
+        // Backend aus, Hooks aus: unverändert keine Settings-Datei.
         coordinator.gptModelsFragmentResolver = { _ in nil }
         let nothing = coordinator.prepareLaunchSettings(
-            localSessionID: sessionID,
-            contextProfile: nil
+            localSessionID: sessionID
         )
         XCTAssertEqual(nothing.settingsArguments, [])
         XCTAssertFalse(nothing.hooksActive)
     }
 
-    func testPrepareLaunchSettingsDeepMergesWorkerEnvironmentAndInternalValuesWin() throws {
+    func testPrepareLaunchSettingsWritesWorkerEnvironmentWithoutHooks() throws {
         let (coordinator, sessionID, _, _, preferences) = try makeCoordinator()
         preferences.value.hooksEnabled = false
-        let profile = ClaudeContextProfile(
-            name: "Worker",
-            environment: [
-                "PROFILE_ONLY": "profile",
-                "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "profile-value",
-            ]
-        )
         let workerEnvironment = [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
@@ -331,7 +293,6 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
 
         let preparation = coordinator.prepareLaunchSettings(
             localSessionID: sessionID,
-            contextProfile: profile,
             includeGPTModelCatalog: false,
             workerEnvironment: workerEnvironment
         )
@@ -341,11 +302,7 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
             try JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
 
-        XCTAssertEqual(settings["env"] as? [String: String], [
-            "PROFILE_ONLY": "profile",
-            "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
-            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-        ])
+        XCTAssertEqual(settings["env"] as? [String: String], workerEnvironment)
         XCTAssertFalse(preparation.hooksActive)
     }
 
@@ -374,7 +331,6 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
 
         let failed = coordinator.prepareLaunchSettings(
             localSessionID: session.id,
-            contextProfile: nil,
             includeGPTModelCatalog: false,
             workerEnvironment: routerEnvironment
         )

@@ -77,15 +77,15 @@ final class ClaudeHookBridge {
     /// Background-Spawn). `nil` bei IO-Fehlern; der Caller faellt dann auf
     /// einen Launch ohne Hook-Bridge zurueck.
     ///
-    /// `contextFragment` (Context-Profil-Keys, siehe
-    /// `ClaudeContextSettingsBuilder`) wird mit dem Hook-Fragment in EINE
-    /// Datei gemerged — Claude nimmt nur ein `--settings`. Mit
-    /// `includeHooks: false` entsteht eine reine Profil-Datei ohne
-    /// Event-File-Setup (Hook-Bridge deaktiviert, Profil soll trotzdem
+    /// `extraFragment` (z. B. GPT-Modellkatalog oder internes Worker-Env,
+    /// siehe `AgentSessionStatusCoordinator.prepareLaunchSettings`) wird mit
+    /// dem Hook-Fragment in EINE Datei gemerged — Claude nimmt nur ein
+    /// `--settings`. Mit `includeHooks: false` entsteht eine Datei ohne
+    /// Event-File-Setup (Hook-Bridge deaktiviert, Fragment soll trotzdem
     /// wirken). Sind beide Teile leer, gibt es nichts zu schreiben → nil.
     func prepareSettingsFile(
         localSessionID: UUID,
-        contextFragment: [String: Any]? = nil,
+        extraFragment: [String: Any]? = nil,
         includeHooks: Bool = true
     ) -> String? {
         let settingsURL = paths.settingsFileURL(localSessionID: localSessionID)
@@ -105,10 +105,10 @@ final class ClaudeHookBridge {
                 )
                 fragments.append(ClaudeHookSettingsBuilder.makeSettings(eventFilePath: eventURL.path))
             }
-            if let contextFragment, !contextFragment.isEmpty {
-                fragments.append(contextFragment)
+            if let extraFragment, !extraFragment.isEmpty {
+                fragments.append(extraFragment)
             }
-            let settings = ClaudeContextSettingsBuilder.merged(fragments)
+            let settings = ClaudeHookSettingsBuilder.merged(fragments)
             guard !settings.isEmpty else { return nil }
             try ClaudeHookSettingsBuilder.write(settings: settings, to: settingsURL)
             return settingsURL.path

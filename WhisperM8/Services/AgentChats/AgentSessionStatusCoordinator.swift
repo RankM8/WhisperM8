@@ -111,9 +111,9 @@ final class AgentSessionStatusCoordinator {
     // MARK: - Lifecycle-API (von den Views gerufen)
 
     /// Ergebnis der Launch-Settings-Vorbereitung. `hooksActive` sagt, ob die
-    /// Hook-Bridge tracken soll — seit Context-Profilen kann eine
-    /// Settings-Datei auch OHNE Hooks existieren (nur Profil-Keys), deshalb
-    /// ist `settingsFilePath != nil` KEIN gültiger Hooks-Indikator mehr.
+    /// Hook-Bridge tracken soll — eine Settings-Datei kann auch OHNE Hooks
+    /// existieren (nur GPT-Katalog-/Worker-Env-Keys), deshalb ist
+    /// `settingsFilePath != nil` KEIN gültiger Hooks-Indikator.
     struct LaunchSettingsPreparation {
         var settingsFilePath: String?
         var hooksActive: Bool
@@ -127,23 +127,18 @@ final class AgentSessionStatusCoordinator {
     }
 
     /// Zentrale Settings-Vorbereitung für interaktive UND Background-Launches.
-    /// Hooks, Context-Profil, GPT-Modellkatalog und internes Worker-Env werden
-    /// unabhängig kombiniert. Worker-Env wird nur intern erzeugt und gewinnt
-    /// im tief gemergten `env` bei Kollisionen gegen das Context-Profil.
-    /// - Hooks an                → Datei mit Hooks, Tracking aktiv
-    /// - Context-Profil vorhanden → dessen nicht-leere Profil-Keys in derselben Datei
-    /// - GPT-Backend an          → `availableModels` in derselben Datei
-    /// Existiert keines der drei Fragmente, wird keine Datei geschrieben.
+    /// Hooks, GPT-Modellkatalog und internes Worker-Env werden unabhängig
+    /// kombiniert.
+    /// - Hooks an       → Datei mit Hooks, Tracking aktiv
+    /// - GPT-Backend an → `availableModels` in derselben Datei
+    /// - Worker-Env     → `env` in derselben Datei
+    /// Existiert keines der Fragmente, wird keine Datei geschrieben.
     func prepareLaunchSettings(
         localSessionID: UUID,
-        contextProfile: ClaudeContextProfile?,
         includeGPTModelCatalog: Bool = true,
         workerEnvironment: [String: String]? = nil
     ) -> LaunchSettingsPreparation {
         let hooksEnabled = loadPreferences().hooksEnabled
-        let contextFragment = contextProfile.map {
-            ClaudeContextSettingsBuilder.settingsFragment(for: $0)
-        } ?? [:]
         let sessionModel = store.loadWorkspace().sessions
             .first(where: { $0.id == localSessionID })?
             .claudeBackendModel
@@ -151,15 +146,14 @@ final class AgentSessionStatusCoordinator {
             ? gptModelsFragmentResolver(sessionModel) ?? [:]
             : [:]
         let workerFragment: [String: Any] = workerEnvironment.map { ["env": $0] } ?? [:]
-        let fragment = ClaudeContextSettingsBuilder.merged([
-            contextFragment,
+        let fragment = ClaudeHookSettingsBuilder.merged([
             gptModelsFragment,
             workerFragment,
         ])
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         let path = hookBridge.prepareSettingsFile(
             localSessionID: localSessionID,
-            contextFragment: fragment,
+            extraFragment: fragment,
             includeHooks: hooksEnabled
         )
         return LaunchSettingsPreparation(

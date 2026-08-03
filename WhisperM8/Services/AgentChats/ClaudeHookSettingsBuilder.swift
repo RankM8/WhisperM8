@@ -72,10 +72,33 @@ enum ClaudeHookSettingsBuilder {
         try write(settings: makeSettings(eventFilePath: eventFilePath), to: outURL)
     }
 
+    /// Tiefer Merge mehrerer Settings-Fragmente (Hooks, GPT-Modellkatalog,
+    /// internes Worker-Env). Verschachtelte Dictionaries (insbesondere `env`)
+    /// werden rekursiv kombiniert; bei Blatt-Kollisionen gewinnt das spaetere
+    /// Fragment — interne Werte siegen so deterministisch.
+    static func merged(_ fragments: [[String: Any]]) -> [String: Any] {
+        fragments.reduce(into: [:]) { result, fragment in
+            result = deepMerged(result, fragment)
+        }
+    }
+
+    private static func deepMerged(
+        _ existing: [String: Any],
+        _ incoming: [String: Any]
+    ) -> [String: Any] {
+        existing.merging(incoming) { old, new in
+            if let oldDictionary = old as? [String: Any],
+               let newDictionary = new as? [String: Any] {
+                return deepMerged(oldDictionary, newDictionary)
+            }
+            return new
+        }
+    }
+
     /// Generische Variante: schreibt ein beliebiges Settings-Dict atomisch
     /// mit POSIX-0600 und deterministischer Serialisierung. Genutzt vom
-    /// Compose-Pfad, der Hook- und Context-Profil-Fragmente in EINE Datei
-    /// merged (`ClaudeHookBridge.prepareSettingsFile`).
+    /// Compose-Pfad, der die Settings-Fragmente in EINE Datei merged
+    /// (`ClaudeHookBridge.prepareSettingsFile`).
     static func write(settings: [String: Any], to outURL: URL) throws {
         try FileManager.default.createDirectory(
             at: outURL.deletingLastPathComponent(),

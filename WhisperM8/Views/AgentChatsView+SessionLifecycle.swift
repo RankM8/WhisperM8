@@ -27,8 +27,7 @@ extension AgentChatsView {
 
     func createSession(
         provider: AgentProvider,
-        kind: AgentSessionKind? = nil,
-        contextProfileOverride: UUID? = nil
+        kind: AgentSessionKind? = nil
     ) {
         guard let selectedProject else { return }
         do {
@@ -69,12 +68,7 @@ extension AgentChatsView {
                 claudeProfileName: provider == .claude
                     ? ClaudeAccountProfiles().activeProfileNameOrNil()
                     : nil,
-                claudeBackendModel: claudeBackendModel,
-                // Context-Profil stempeln (Override aus dem New-Chat-Menue >
-                // Projekt-Default). Nur Claude — Codex kennt kein `--settings`.
-                contextProfileID: provider == .claude
-                    ? (contextProfileOverride ?? selectedProject.contextProfileID)
-                    : nil
+                claudeBackendModel: claudeBackendModel
             )
             openTab(session.id)
             selectedSessionID = session.id
@@ -109,9 +103,7 @@ extension AgentChatsView {
                 // Fork erbt das Account-Profil der Quelle — `--resume` der
                 // Quell-Session funktioniert nur unter deren Config-Dir.
                 claudeProfileName: source.claudeProfileName,
-                claudeBackendModel: source.claudeBackendModel,
-                // Fork erbt auch das Context-Profil der Quelle.
-                contextProfileID: source.contextProfileID
+                claudeBackendModel: source.claudeBackendModel
             )
             // Farbe der Quelle erben, damit Fork und Original visuell
             // zusammengehören.

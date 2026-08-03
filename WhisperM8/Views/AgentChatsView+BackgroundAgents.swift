@@ -41,11 +41,7 @@ extension AgentChatsView {
     /// 3. Attach — Short-ID auf Session schreiben + sessionActionRequest senden.
     @MainActor
     func dispatchBackgroundAgent(in project: AgentProject, request: BackgroundDispatchRequest) async {
-        // 1. Stub-Session anlegen (ohne Short-ID), Tab oeffnen. Das Context-
-        //    Profil des Projekts wird auf die Session gestempelt — der
-        //    Supervisor brennt die Spawn-Settings ein, Profil-Aenderungen
-        //    wirken bei Background-Agents erst ab Respawn.
-        let contextProfile = ClaudeContextProfileStore.shared.profile(id: project.contextProfileID)
+        // 1. Stub-Session anlegen (ohne Short-ID), Tab oeffnen.
         let session: AgentChatSession
         do {
             session = try store.createSession(
@@ -59,8 +55,7 @@ extension AgentChatsView {
                 shouldLaunchOnOpen: false,
                 kind: .backgroundChat,
                 backgroundSubAgent: request.subAgent,
-                backgroundPermissionMode: request.permissionMode,
-                contextProfileID: contextProfile?.id
+                backgroundPermissionMode: request.permissionMode
             )
         } catch {
             errorMessage = error.localizedDescription
@@ -105,7 +100,7 @@ extension AgentChatsView {
             )
         }.value
 
-        // 3. Settings vorbereiten (Hook-Bridge + Context-Profil + Worker-Env) —
+        // 3. Settings vorbereiten (Hook-Bridge + Worker-Env) —
         //    die Background-Session erbt die Settings vom Supervisor, also
         //    muessen wir `--settings <path>` schon beim Spawn-Subprocess
         //    setzen, nicht erst beim spaeteren `claude attach`. Ohne aktives
@@ -114,7 +109,6 @@ extension AgentChatsView {
         //    Dispatcher erhielte.
         let launchPreparation = AgentSessionStatusCoordinator.shared.prepareLaunchSettings(
             localSessionID: session.id,
-            contextProfile: contextProfile,
             includeGPTModelCatalog: routerEnvironment != nil,
             workerEnvironment: routerEnvironment
         )
