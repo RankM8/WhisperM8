@@ -375,6 +375,22 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentTerminalMetalEnabled) }
     }
 
+    /// Zeilen Scrollback pro Agent-Terminal — Default 5 000 statt SwiftTerms
+    /// 500. Begründung, Messwerte und die Grenzen stehen in
+    /// `TerminalScrollbackPolicy`; kurz: bei vollem Ringpuffer senkt jede neue
+    /// Ausgabezeile die Leseposition um 1, mit 500 Zeilen schob ein
+    /// arbeitender Agent den lesenden Nutzer nach ~200 Zeilen Output an den
+    /// oberen Anschlag. Anpassen mit
+    /// `defaults write com.whisperm8.app agentTerminalScrollbackLines -int 20000`
+    /// (wirkt für neu geöffnete Chats).
+    var agentTerminalScrollbackLines: Int {
+        get {
+            let raw = defaults.object(forKey: Keys.agentTerminalScrollbackLines) as? Int
+            return TerminalScrollbackPolicy.resolve(configured: raw)
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentTerminalScrollbackLines) }
+    }
+
     /// Detail-Messung für Performance-Untersuchungen — **Opt-in, Default aus**.
     ///
     /// Aus heißt nicht „keine Messung": die Stufe-1-Messpunkte
@@ -656,6 +672,7 @@ enum PreferenceKeys {
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
+    static let agentTerminalScrollbackLines = "agentTerminalScrollbackLines"
     static let agentPerfDetailEnabled = "agentPerfDetailEnabled"
     static let agentStopSoundEnabled = "agentStopSoundEnabled"
     static let agentStopSoundName = "agentStopSoundName"
