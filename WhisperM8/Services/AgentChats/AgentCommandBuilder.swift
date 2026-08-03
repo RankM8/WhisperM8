@@ -233,13 +233,27 @@ struct AgentCommandBuilder {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": pickerDescription,
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            // Drei gemeinsame Invarianten für jede direkt gestartete CLI.
-            // MAX_CONTEXT beschreibt das gewählte GPT-Profil; bei 372k lässt
-            // der Modellguard ausschließlich Sol zu. Der 1M-Deckel lässt native
-            // Fable-/Opus-Modelle ungekappt, die eigene Variable korrigiert nur
-            // die GPT-Anzeige. Background-Worker erhalten dasselbe Trio über
-            // ihr internes session-scoped Settings-`env`.
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": gptContextWindow,
+            // **KEIN `CLAUDE_CODE_MAX_CONTEXT_TOKENS`.** Die Variable ist
+            // prozessweit und gilt damit für JEDES Modell der Sitzung, nicht
+            // nur für GPT. Gemessen am 02.08.2026: Mit gesetztem Wert (372k)
+            // meldete Claude Code für einen reinen Fable-Chat 200k und
+            // verdichtete auch dort — vier Fünftel des Fensters weg, das dem
+            // Modell zusteht. Ohne die Variable meldet derselbe Chat 1M.
+            // Offenbar verwirft Claude Code einen Wert, der zu keinem
+            // bekannten Modellprofil passt, und fällt auf den konservativen
+            // Default zurück.
+            //
+            // Der Preis ist bewusst: GPT-5.6 Sol nutzt damit Claude Codes
+            // Default statt der 372k seines Profils, verdichtet also früher
+            // als nötig. Das ist der Fehler in die sichere Richtung — zu früh
+            // verdichten kostet Effizienz, zu spät bricht die Anfrage. Die
+            // tatsächliche GPT-Kapazität kennt weiterhin
+            // `WHISPERM8_GPT56_CONTEXT_WINDOW`; Proxy und Statusline lesen sie
+            // dort (`context_profile_matches_model` in whisperm8-statusline.sh).
+            //
+            // Modellabhängig setzen geht NICHT: Welches Modell gilt, entscheidet
+            // sich erst zur Laufzeit im `/model`-Picker — beim Start ist es
+            // unbekannt.
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": String(Self.routerAutoCompactCeiling),
             "WHISPERM8_GPT56_CONTEXT_WINDOW": gptContextWindow,
         ]

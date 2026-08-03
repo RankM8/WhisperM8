@@ -491,7 +491,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "272000",
         ])
@@ -514,7 +513,8 @@ extension AgentCommandBuilderTests {
             "Standard-Tier — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         )
         XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol-fast")
-        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        XCTAssertNil(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "prozessweiter Kontext-Deckel wuerde auch Claude-Modelle kappen")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
     }
 
@@ -535,7 +535,8 @@ extension AgentCommandBuilderTests {
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
             "Standard-Tier — experimentelles 372k-Profil: nur GPT-5.6 Sol"
         )
-        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "372000")
+        XCTAssertNil(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "prozessweiter Kontext-Deckel wuerde auch Claude-Modelle kappen")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
         XCTAssertEqual(environment?["WHISPERM8_GPT56_CONTEXT_WINDOW"], "372000")
     }
@@ -549,7 +550,8 @@ extension AgentCommandBuilderTests {
 
         let environment = builder.gptRouterCoreEnvironment()
 
-        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        XCTAssertNil(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "prozessweiter Kontext-Deckel wuerde auch Claude-Modelle kappen")
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
     }
 
@@ -671,7 +673,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "272000",
         ])
@@ -720,7 +721,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "250000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "250000",
         ])
@@ -746,7 +746,8 @@ extension AgentCommandBuilderTests {
         let command = try builder.command(for: session, project: project)
 
         XCTAssertEqual(command.arguments, ["--model", "gpt-5.6-sol"])
-        XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "372000")
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "prozessweiter Kontext-Deckel wuerde auch Claude-Modelle kappen")
         XCTAssertEqual(command.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
     }
 
@@ -780,7 +781,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Standard-Tier — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "260000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "260000",
         ])
@@ -897,7 +897,8 @@ extension AgentCommandBuilderTests {
         XCTAssertFalse(command.arguments.contains("--model"))
         XCTAssertNil(command.environmentOverrides["ANTHROPIC_DEFAULT_HAIKU_MODEL"])
         XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"])
-        XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "prozessweiter Kontext-Deckel wuerde auch Claude-Modelle kappen")
         XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
         XCTAssertEqual(command.environmentOverrides["WHISPERM8_GPT56_CONTEXT_WINDOW"], "272000")
         XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18766")
@@ -930,7 +931,8 @@ extension AgentCommandBuilderTests {
             command.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"],
             "gpt-5.6-sol-fast"
         )
-        XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "prozessweiter Kontext-Deckel wuerde auch Claude-Modelle kappen")
         XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
         XCTAssertEqual(command.environmentOverrides["WHISPERM8_GPT56_CONTEXT_WINDOW"], "272000")
     }
@@ -1035,14 +1037,20 @@ extension AgentCommandBuilderTests {
 
         let command = try builder.command(for: session, project: project)
 
-        XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        XCTAssertNil(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "prozessweiter Kontext-Deckel wuerde auch Claude-Modelle kappen")
         XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
         XCTAssertEqual(command.environmentOverrides["WHISPERM8_GPT56_CONTEXT_WINDOW"], "272000")
 
         builder.extraArgumentsResolver = { _ in ["--model", "gpt-5.6-terra"] }
         let gptCommand = try builder.command(for: session, project: project)
-        XCTAssertEqual(gptCommand.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        // Auch mit ausdruecklichem GPT-Modell kein prozessweiter Deckel: Wer
+        // spaeter im Picker zurueck auf Fable wechselt, saesse sonst wieder
+        // auf einem gekappten Fenster.
+        XCTAssertNil(gptCommand.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"])
         XCTAssertEqual(gptCommand.environmentOverrides["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
+        XCTAssertEqual(gptCommand.environmentOverrides["WHISPERM8_GPT56_CONTEXT_WINDOW"], "272000",
+                       "die GPT-Kapazitaet bleibt ueber die eigene Variable bekannt")
     }
 
     func testClaudeGPTBackendLeavesPlainUserExtraModelAsLastFlagWinsOptOut() throws {
@@ -1280,7 +1288,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "272000",
         ]
