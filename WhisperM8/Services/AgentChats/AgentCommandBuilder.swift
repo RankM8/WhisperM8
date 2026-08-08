@@ -16,6 +16,12 @@ struct AgentLaunchCommand: Equatable {
     /// Keys, die auch aus dem geerbten Login-/App-Environment entfernt werden
     /// muessen. Attach nutzt dies, um keine fremden GPT-Kapazitaetswerte zu erben.
     var environmentRemovals: Set<String> = []
+    /// `true` wenn der Builder statt des angefragten `--resume` ein
+    /// `claude attach` gebaut hat, weil die Session gerade als Background-
+    /// Agent beim Supervisor laeuft. Die View unterlaesst dann das
+    /// Hook-Bridge-Tracking — die `--settings`-Argumente der Bridge wurden
+    /// im Attach-Argv nicht angehaengt.
+    var isBackgroundAttachFallback: Bool = false
 }
 
 enum AgentCommandError: LocalizedError, Equatable {
@@ -117,6 +123,19 @@ struct AgentCommandBuilder {
     /// Default: echter Datei-Lookup, im Test ueberschreibbar.
     var claudeTranscriptLocator: (String, String) -> URL? = { externalSessionID, cwd in
         AgentTranscriptLocator.locate(provider: .claude, externalSessionID: externalSessionID, cwd: cwd)
+    }
+
+    /// Liefert die Short-ID des Supervisor-Workers, der die Session gerade
+    /// als Background-Agent hostet — `nil` wenn keiner laeuft.
+    /// (externalSessionID, profileName) → Short-ID. Default liest das
+    /// Daemon-Roster des passenden Account-Profils; im Test ueberschreibbar.
+    var backgroundWorkerShortIDResolver: (String, String?) -> String? = { sessionID, profileName in
+        SupervisorRosterReader.activeWorkerShortID(
+            forSessionID: sessionID,
+            configDir: ClaudeAccountProfiles().configDir(
+                forProfile: profileName ?? ClaudeAccountProfiles.mainProfileName
+            )
+        )
     }
 
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
@@ -558,6 +577,7 @@ struct AgentCommandBuilder {
         // der REALE Ablageort den Stempel. Kein Fund (z. B. Transcript noch
         // nicht geschrieben) → Stempel wie bisher.
         var effectiveProfileEnvironment = profileEnvironment
+        var effectiveProfileName = session.claudeProfileName
         if let resumeSessionID,
            let transcript = resumeTranscriptURL {
             let actualProfile = ClaudeAccountProfiles.profileName(forTranscriptPath: transcript.path)
@@ -565,8 +585,44 @@ struct AgentCommandBuilder {
                 Logger.agentStore.warning(
                     "claude_profile_stamp_mismatch session=\(resumeSessionID, privacy: .public) stamped=\(session.claudeProfileName ?? "main", privacy: .public) actual=\(actualProfile ?? "main", privacy: .public) — Launch folgt dem realen Transcript-Root"
                 )
+                effectiveProfileName = actualProfile
                 effectiveProfileEnvironment = claudeProfileEnvironmentResolver(actualProfile)
             }
+        }
+
+        // Attach-Fallback: Laeuft die Resume-Session gerade als Background-
+        // Agent beim Supervisor (z. B. versehentlich per Left-Arrow /
+        // `/background` gebackgroundet), wuerde `claude --resume` mit
+        // "currently running as a background agent" abbrechen und den User
+        // in die CLI schicken. Stattdessen klemmen wir uns direkt per
+        // `claude attach <short-id>` an den laufenden Worker — die Session
+        // laeuft dann normal interaktiv im Tab weiter. Forks bleiben Forks:
+        // `--resume --fork-session` ist auch fuer bg-Sessions erlaubt und
+        // laesst das Original bewusst weiterlaufen.
+        if !isFork, let resumeSessionID,
+           let workerShortID = backgroundWorkerShortIDResolver(resumeSessionID, effectiveProfileName) {
+            Logger.agentStore.info(
+                "resume_attach_fallback session=\(resumeSessionID, privacy: .public) worker=\(workerShortID, privacy: .public) — Session laeuft als Background-Agent, attach statt --resume"
+            )
+            var attachArguments: [String] = ["attach"]
+            attachArguments.append(contentsOf: userArguments)
+            attachArguments.append(workerShortID)
+            var attachEnvironment = applyRouterEnvironment(effectiveProfileEnvironment, false)
+            // Gleicher Grund wie im Background-Chat-Attach oben: der Attach-
+            // Prozess kennt das reale Worker-Kontextfenster nicht — keine
+            // GPT-Kontextwerte erben oder erfinden.
+            for key in Self.gptContextEnvironmentKeys {
+                attachEnvironment.removeValue(forKey: key)
+            }
+            return AgentLaunchCommand(
+                executablePath: executable,
+                arguments: attachArguments,
+                workingDirectory: project.path,
+                keyboardProfile: .claudeCodeChat,
+                environmentOverrides: attachEnvironment,
+                environmentRemovals: Set(Self.gptContextEnvironmentKeys),
+                isBackgroundAttachFallback: true
+            )
         }
 
         if let resumeSessionID {

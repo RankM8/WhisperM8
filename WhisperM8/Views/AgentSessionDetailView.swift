@@ -491,8 +491,11 @@ struct AgentSessionDetailView: View {
                 }
             }
             // Tracking nur bei aktiver Hook-Bridge — eine Settings-Datei kann
-            // auch OHNE Hooks existieren (GPT-Katalog).
-            if launchPreparation.hooksActive {
+            // auch OHNE Hooks existieren (GPT-Katalog). Beim Attach-Fallback
+            // (Resume-Ziel laeuft als Background-Agent) hat der Builder die
+            // `--settings`-Argumente nicht angehaengt — ein Watcher auf die
+            // Event-Datei wuerde nie feuern.
+            if launchPreparation.hooksActive && !command.isBackgroundAttachFallback {
                 onClaudeHookLaunched(launchSession.id)
             }
             errorMessage = nil

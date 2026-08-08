@@ -206,6 +206,87 @@ final class AgentCommandBuilderTests: XCTestCase {
         }
     }
 
+    // MARK: - Resume→Attach-Fallback (Resume-Ziel laeuft als Background-Agent)
+
+    func testAgentCommandBuilderFallsBackToAttachWhenResumeTargetRunsAsBackgroundAgent() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        var resolvedQueries: [String] = []
+        builder.backgroundWorkerShortIDResolver = { sessionID, _ in
+            resolvedQueries.append(sessionID)
+            return sessionID == "607d545a-01fa-4569-a4a7-72fe6072a1b7" ? "607d545a" : nil
+        }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "607d545a-01fa-4569-a4a7-72fe6072a1b7",
+            title: "Versehentlich gebackgroundet",
+            hasLaunchedInitialPrompt: true
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["attach", "607d545a"])
+        XCTAssertTrue(command.isBackgroundAttachFallback)
+        XCTAssertEqual(command.keyboardProfile, .claudeCodeChat)
+        XCTAssertEqual(
+            command.environmentRemovals,
+            Set(AgentCommandBuilder.gptContextEnvironmentKeys),
+            "Attach darf keine GPT-Kontextwerte erben"
+        )
+        XCTAssertEqual(resolvedQueries, ["607d545a-01fa-4569-a4a7-72fe6072a1b7"])
+    }
+
+    func testAgentCommandBuilderResumesNormallyWhenNoBackgroundWorkerHostsSession() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.backgroundWorkerShortIDResolver = { _, _ in nil }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "claude-session",
+            title: "Claude",
+            hasLaunchedInitialPrompt: true
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--resume", "claude-session"])
+        XCTAssertFalse(command.isBackgroundAttachFallback)
+    }
+
+    func testAgentCommandBuilderKeepsForkEvenWhenSourceRunsAsBackgroundAgent() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        var resolverCalled = false
+        builder.backgroundWorkerShortIDResolver = { _, _ in
+            resolverCalled = true
+            return "deadbeef"
+        }
+        // Fork von einer bg-laufenden Quelle ist erlaubt und laesst das
+        // Original bewusst weiterlaufen — kein Attach-Umweg.
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: nil,
+            title: "Chat (Fork)",
+            hasLaunchedInitialPrompt: false,
+            forkSourceSessionID: "SOURCE-1111"
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--resume", "SOURCE-1111", "--fork-session"])
+        XCTAssertFalse(command.isBackgroundAttachFallback)
+        XCTAssertFalse(resolverCalled, "Fork-Pfad darf den Worker-Lookup gar nicht erst machen")
+    }
+
     func testBackgroundSpawnArgumentsBuildsMinimalArgs() {
         let args = AgentCommandBuilder.backgroundSpawnArguments(
             initialPrompt: "investigate flaky test"
