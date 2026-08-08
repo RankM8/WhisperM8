@@ -289,6 +289,51 @@ extension AgentSidebarModelBuilderTests {
         )
     }
 
+    func testActiveSessionIDsByProjectIsScopeIndependentAndExcludesPinned() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo", createdManually: true)
+        let running = makeSidebarSession(projectID: project.id, title: "Läuft")
+        let tabbed = makeSidebarSession(projectID: project.id, title: "Tab offen")
+        let idle = makeSidebarSession(projectID: project.id, title: "Inaktiv")
+        let pinnedTab = makeSidebarSession(projectID: project.id, title: "Pin")
+        let workspace = AgentWorkspace(
+            projects: [project],
+            sessions: [running, tabbed, idle, pinnedTab]
+        )
+
+        for scope in [SidebarScope.active, .recent, .all] {
+            let snapshot = AgentSidebarModelBuilder.snapshot(
+                workspace: workspace,
+                pinnedSessionIDs: [pinnedTab.id],
+                scope: snapshotFilter(
+                    scope,
+                    running: [running.id],
+                    openTabs: [tabbed.id, pinnedTab.id]
+                ),
+                layout: .grouped,
+                query: "",
+                flatVisibleLimit: 50,
+                selectedSessionID: nil
+            )
+            XCTAssertEqual(
+                snapshot.activeSessionIDsByProject[project.id],
+                [running.id, tabbed.id],
+                "Scope \(scope): aktiv = laufend ∪ offener Tab, ohne Gepinnte"
+            )
+            // Kontrakt von „Projekt als Workspace öffnen": die GEORDNETE
+            // Aktiv-Liste ist in JEDEM Scope per Filterung über
+            // sessionsByProject gewinnbar (aktive Sessions sind überall
+            // sichtbar).
+            let ordered = (snapshot.sessionsByProject[project.id] ?? [])
+                .filter {
+                    snapshot.activeSessionIDsByProject[project.id]?.contains($0.id) == true
+                }
+            XCTAssertEqual(
+                Set(ordered.map(\.id)), [running.id, tabbed.id],
+                "Scope \(scope): Aktiv-Menge vollständig in sessionsByProject enthalten"
+            )
+        }
+    }
+
     func testGroupedSnapshotMatchesExistingBuildersAndSkipsFlatLayout() {
         let project = AgentProject(
             name: "Repo",

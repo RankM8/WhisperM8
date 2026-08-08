@@ -26,6 +26,12 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
     /// gleichverteilt repariert.
     var columnFractions: [Double]
     var rowFractions: [Double]
+    /// Projekt, aus dem dieser Workspace per ⊞ am Projekt-Header entstand —
+    /// macht den Button idempotent (erneuter Klick aktiviert statt zu
+    /// duplizieren). Nach der Anlage bleibt der Workspace unabhängig (Name/
+    /// Farbe folgen dem Projekt NICHT); `AgentUIState.prune` räumt den
+    /// Verweis, wenn das Projekt verschwindet — der Workspace selbst bleibt.
+    var sourceProjectID: UUID?
 
     static let defaultName = "Workspace"
     static let defaultColorHex = "#6E6ADE"
@@ -77,7 +83,8 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
         slots: [UUID?] = [],
         capacity: Int = 2,
         columnFractions: [Double] = [],
-        rowFractions: [Double] = []
+        rowFractions: [Double] = [],
+        sourceProjectID: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -86,11 +93,13 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
         self.capacity = capacity
         self.columnFractions = columnFractions
         self.rowFractions = rowFractions
+        self.sourceProjectID = sourceProjectID
         normalize()
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, colorHex, slots, capacity, columnFractions, rowFractions
+        case sourceProjectID
     }
 
     /// Manueller Decoder mit `decodeIfPresent` (Repo-Muster gegen den
@@ -109,6 +118,7 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
         capacity = decodedCapacity ?? 0
         columnFractions = try c.decodeIfPresent([Double].self, forKey: .columnFractions) ?? []
         rowFractions = try c.decodeIfPresent([Double].self, forKey: .rowFractions) ?? []
+        sourceProjectID = try c.decodeIfPresent(UUID.self, forKey: .sourceProjectID)
         normalize()
     }
 
@@ -121,6 +131,7 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
         try c.encode(capacity, forKey: .capacity)
         try c.encode(columnFractions, forKey: .columnFractions)
         try c.encode(rowFractions, forKey: .rowFractions)
+        try c.encodeIfPresent(sourceProjectID, forKey: .sourceProjectID)
     }
 
     // MARK: - Intrinsische Normalisierung

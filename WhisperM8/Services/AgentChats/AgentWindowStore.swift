@@ -325,6 +325,7 @@ final class AgentWindowStore {
         colorHex: String = AgentGridWorkspace.defaultColorHex,
         capacity: Int = 2,
         slots: [UUID?] = [],
+        sourceProjectID: UUID? = nil,
         activateIn windowID: UUID? = nil
     ) -> UUID {
         let eligible = Set(
@@ -337,7 +338,8 @@ final class AgentWindowStore {
             return slot
         }
         let entity = AgentGridWorkspace(
-            name: name, colorHex: colorHex, slots: validatedSlots, capacity: capacity
+            name: name, colorHex: colorHex, slots: validatedSlots, capacity: capacity,
+            sourceProjectID: sourceProjectID
         )
         mutate { $0.gridWorkspaces.append(entity) }
         if let windowID {

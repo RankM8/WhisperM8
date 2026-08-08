@@ -62,6 +62,20 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
                        "unbekannt/archiviert → nil; leere Tail-Slots kappt die Kapazität")
     }
 
+    func testCreateGridWorkspaceStoresSourceProjectID() throws {
+        let (store, persistence) = makeStore()
+        let session = try seedSession(persistence)
+        let projectID = UUID()
+        let id = store.createGridWorkspace(
+            name: "akquise-ai", slots: [session], sourceProjectID: projectID
+        )
+        XCTAssertEqual(store.gridWorkspace(id: id)?.sourceProjectID, projectID)
+        // Idempotenz-Lookup des ⊞-Buttons: Bindung ist über die Liste findbar.
+        XCTAssertEqual(
+            store.gridWorkspaces.first { $0.sourceProjectID == projectID }?.id, id
+        )
+    }
+
     func testRenameGridWorkspaceTrimsAndRejectsEmptyName() {
         let (store, _) = makeStore()
         let id = store.createGridWorkspace(name: "Alt")

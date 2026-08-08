@@ -1472,6 +1472,14 @@ struct AgentChatsView: View {
                                 expandedProjectIDs.insert(project.id)
                                 createDefaultSession()
                             },
+                            canOpenAsWorkspace: !(snapshot.activeSessionIDsByProject[project.id]?.isEmpty ?? true),
+                            onOpenAsWorkspace: {
+                                let activeIDs = snapshot.activeSessionIDsByProject[project.id] ?? []
+                                openProjectAsWorkspace(
+                                    project,
+                                    activeChats: projectSessions.filter { activeIDs.contains($0.id) }
+                                )
+                            },
                             onCloseSession: { closeSelectionFromSidebar(forID: $0.id) },
                             sidebarScope: effectiveScope,
                             onRename: renameSession,

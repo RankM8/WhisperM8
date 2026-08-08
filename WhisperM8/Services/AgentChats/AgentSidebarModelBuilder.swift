@@ -111,6 +111,12 @@ struct AgentSidebarSnapshot {
     var projectByID: [UUID: AgentProject]
     var subagentChildrenByParent: [UUID: [AgentChatSession]]
     var sessionsByProject: [UUID: [AgentChatSession]]
+    /// AKTIVE Root-Chats (laufend ∪ offener Tab, inkl. Parents laufender
+    /// Subagent-Kinder) pro Projekt — scope-UNABHÄNGIG, damit „Projekt als
+    /// Workspace öffnen" in jedem Filter-Tab dieselben Chats nimmt. Aktive
+    /// Sessions sind in jedem Scope sichtbar, die geordnete Liste liefert
+    /// deshalb immer `sessionsByProject`-Filterung über diese Menge.
+    var activeSessionIDsByProject: [UUID: Set<UUID>]
     var visibleProjects: [AgentProject]
     var visibleFlatSessions: [AgentChatSession]
     var visibleFlatOrderIDs: [UUID]
@@ -201,6 +207,7 @@ struct AgentSidebarModelBuilder {
         var activeCount = 0
         var recentCount = 0
         var allCount = 0
+        var activeSessionIDsByProject: [UUID: Set<UUID>] = [:]
         var grouped: [UUID: [AgentChatSession]] = [:]
         var flat: [AgentChatSession] = []
         var sessionByID: [UUID: AgentChatSession] = [:]
@@ -222,6 +229,7 @@ struct AgentSidebarModelBuilder {
             if isActive {
                 activeCount += 1
                 recentCount += 1
+                activeSessionIDsByProject[session.projectID, default: []].insert(session.id)
             } else if session.lastActivityAt >= recentThreshold {
                 recentCount += 1
             }
@@ -294,6 +302,7 @@ struct AgentSidebarModelBuilder {
             projectByID: projectByID,
             subagentChildrenByParent: subagents.byParentLocalID,
             sessionsByProject: sessionsByProject,
+            activeSessionIDsByProject: activeSessionIDsByProject,
             visibleProjects: visibleProjects,
             visibleFlatSessions: visibleFlatSessions,
             visibleFlatOrderIDs: visibleFlatOrderIDs,

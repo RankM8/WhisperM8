@@ -364,6 +364,39 @@ extension AgentChatsView {
         multiSelection = []
     }
 
+    /// ⊞ am Projekt-Header / Kontextmenü „Als Workspace öffnen" — idempotent:
+    /// Existiert schon ein an dieses Projekt gebundener Workspace
+    /// (`sourceProjectID`), wird er nur aktiviert (inkl. Single-Owner-
+    /// Konflikten); sonst entsteht einer mit Name + Farbe des Projekts aus
+    /// den übergebenen aktiven Chats (Sidebar-Reihenfolge, max. 9 —
+    /// Überzählige werden benannt abgelehnt, Muster
+    /// `createWorkspaceFromSelection`). Danach ist er ein ganz normaler
+    /// Workspace: Mitgliedschaft statisch, Name/Farbe folgen dem Projekt
+    /// nicht mehr.
+    func openProjectAsWorkspace(_ project: AgentProject, activeChats: [AgentChatSession]) {
+        if let existing = windowStore.gridWorkspaces.first(where: { $0.sourceProjectID == project.id }) {
+            activateWorkspaceFromSidebar(existing)
+            return
+        }
+        guard !activeChats.isEmpty else { return }
+        let accepted = Array(activeChats.prefix(9))
+        if activeChats.count > 9 {
+            errorMessage = "Ein Workspace zeigt höchstens 9 Chats — die ersten 9 aktiven Chats von „\(project.name)“ wurden aufgenommen, \(activeChats.count - 9) nicht."
+        }
+        let id = windowStore.createGridWorkspace(
+            name: project.name,
+            colorHex: project.color,
+            capacity: AgentGridWorkspace.smallestCapacity(fitting: accepted.count),
+            slots: accepted.map { $0.id },
+            sourceProjectID: project.id,
+            activateIn: windowID
+        )
+        if let entity = windowStore.gridWorkspace(id: id) {
+            beginGridBuildMeasurement(for: entity)
+        }
+        multiSelection = []
+    }
+
     /// Kontextmenü-Eintrag (Tabs + Sidebar, count-abhängiges Label).
     @ViewBuilder
     func newWorkspaceFromSelectionButton(for session: AgentChatSession) -> some View {

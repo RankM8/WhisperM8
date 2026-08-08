@@ -54,6 +54,22 @@ final class AgentGridWorkspaceTests: XCTestCase {
         XCTAssertEqual(decoded.columnFractions, [0.3, 0.7])
     }
 
+    func testSourceProjectIDRoundTripsAndDefaultsToNil() throws {
+        let bound = AgentGridWorkspace(name: "Projekt-WS", sourceProjectID: projectID)
+        let decoded = try JSONDecoder().decode(
+            AgentGridWorkspace.self,
+            from: JSONEncoder().encode(bound)
+        )
+        XCTAssertEqual(decoded.sourceProjectID, projectID)
+        XCTAssertEqual(decoded, bound)
+
+        // Bestandsdateien ohne den Key (Pre-Feature) → nil, kein Decode-Fehler.
+        let legacy = try JSONDecoder().decode(
+            AgentGridWorkspace.self, from: Data("{}".utf8)
+        )
+        XCTAssertNil(legacy.sourceProjectID)
+    }
+
     func testWorkspaceMissingKeysDecodeWithSafeDefaults() throws {
         let decoded = try JSONDecoder().decode(
             AgentGridWorkspace.self, from: Data("{}".utf8)
@@ -235,6 +251,20 @@ final class AgentGridWorkspaceTests: XCTestCase {
         state.prune(workspace: makeWorkspace(sessions: [live, archived]))
         XCTAssertEqual(state.gridWorkspaces[0].slots, [nil, live.id],
                        "archiviert → Slot nil, Kapazität unverändert")
+    }
+
+    func testPruneClearsSourceProjectIDOfDeadProjectButKeepsWorkspace() {
+        let live = makeSession()
+        let bound = AgentGridWorkspace(slots: [live.id], sourceProjectID: projectID)
+        let orphaned = AgentGridWorkspace(slots: [live.id], sourceProjectID: UUID())
+        var state = AgentUIState(gridWorkspaces: [bound, orphaned])
+        state.prune(workspace: makeWorkspace(sessions: [live]))
+        XCTAssertEqual(state.gridWorkspaces[0].sourceProjectID, projectID,
+                       "lebendes Projekt → Bindung bleibt")
+        XCTAssertNil(state.gridWorkspaces[1].sourceProjectID,
+                     "totes Projekt → nur die Bindung fällt")
+        XCTAssertEqual(state.gridWorkspaces[1].slots, [live.id, nil],
+                       "der Workspace selbst bleibt bestehen")
     }
 
     func testPruneKeepsClosedSessionsInSlots() {

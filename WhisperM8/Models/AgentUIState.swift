@@ -530,6 +530,12 @@ struct AgentUIState: Codable, Equatable {
                 guard let slot, liveSessionIDs.contains(slot) else { return nil }
                 return slot
             }
+            // Projekt-Bindung (⊞ am Projekt-Header) toter Projekte lösen —
+            // der Workspace bleibt als normaler Workspace bestehen, aber ein
+            // neues gleichnamiges Projekt erbt ihn nicht versehentlich.
+            if let source = copy.sourceProjectID, !liveProjectIDs.contains(source) {
+                copy.sourceProjectID = nil
+            }
             return copy
         }
 

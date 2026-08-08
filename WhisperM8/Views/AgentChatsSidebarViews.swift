@@ -15,6 +15,12 @@ struct ProjectChatGroup: View {
     var onToggleExpanded: () -> Void
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
+    /// ⊞ am Header / Kontextmenü: Projekt als Workspace öffnen (aktive Chats
+    /// als Grid, idempotent). `canOpenAsWorkspace` steuert nur den
+    /// Enabled-Zustand — WELCHE Chats aktiv sind, weiß allein der Aufrufer
+    /// (scope-unabhängige Aktiv-Definition aus dem Sidebar-Snapshot).
+    var canOpenAsWorkspace: Bool
+    var onOpenAsWorkspace: () -> Void
     var onCloseSession: (AgentChatSession) -> Void
     /// Scope der Sidebar — bestimmt, ob die Hover-Aktion rechts archiviert
     /// oder den Chat beendet (`SidebarCloseAction`). Bewusst als WERT statt
@@ -395,6 +401,20 @@ struct ProjectChatGroup: View {
                 Spacer(minLength: 6)
 
                 if isHeaderHovered {
+                    Button(action: onOpenAsWorkspace) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(canOpenAsWorkspace
+                                ? AgentTheme.textSecondary
+                                : AgentTheme.textTertiary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canOpenAsWorkspace)
+                    .help(canOpenAsWorkspace
+                        ? "Aktive Chats als Workspace öffnen"
+                        : "Keine aktiven Chats in diesem Projekt")
                     Button(action: onNewChat) {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .bold))
@@ -438,6 +458,11 @@ struct ProjectChatGroup: View {
             return true
         } isTargeted: { isSessionDragOver = $0 }
         .contextMenu {
+            Button("Als Workspace öffnen", systemImage: "square.grid.2x2") {
+                onOpenAsWorkspace()
+            }
+            .disabled(!canOpenAsWorkspace)
+            Divider()
             Button("Umbenennen…", systemImage: "pencil") {
                 onRenameProjectRequest(project)
             }
