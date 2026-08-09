@@ -200,6 +200,15 @@ extension AgentChatsView {
             guard let dropped = items.first, dropped.workspaceID != entity.id else { return false }
             return reorderWorkspace(dropped.workspaceID, before: entity.id)
         }
+        // Session-Drop AUCH am Header (Muster ProjectChatGroup: zwei typisierte
+        // Ziele auf derselben View): Das Workspace-Reorder-Ziel oben maskiert
+        // im Header-Bereich sonst den Session-Drop des Gruppen-Containers —
+        // ein LEERER oder zugeklappter Workspace bestünde nur aus dem Header
+        // und wäre als Drop-Anker komplett unreaktiv (Nutzerbefund 2026-08-08).
+        .dropDestination(for: DraggableSession.self) { items, _ in
+            guard let dropped = items.first else { return false }
+            return handleGridGroupDrop(dropped, workspaceID: entity.id)
+        }
     }
 
     private func workspaceRow(
