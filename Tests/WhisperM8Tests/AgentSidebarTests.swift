@@ -1097,6 +1097,21 @@ final class SidebarCloseActionTests: XCTestCase {
         XCTAssertEqual(SidebarCloseAction.resolve(scope: .active, session: chat(kind: .subagentJob)), .endSession)
         XCTAssertEqual(SidebarCloseAction.resolve(scope: .all, session: chat(kind: .subagentJob)), .archive)
     }
+
+    // MARK: Workspace-Rows (scope-unabhängig)
+
+    func testWorkspaceRowEndsAndRemovesInsteadOfArchiving() {
+        let action = SidebarCloseAction.resolveForWorkspaceRow(session: chat())
+        XCTAssertEqual(action, .endAndRemoveFromWorkspace)
+        XCTAssertEqual(action.icon, "minus")
+        XCTAssertEqual(action.help, "Tab schließen, Chat beenden und aus dem Workspace nehmen")
+    }
+
+    func testWorkspaceRowKeepsTerminalClose() {
+        let action = SidebarCloseAction.resolveForWorkspaceRow(session: chat(kind: .terminal))
+        XCTAssertEqual(action, .closeTerminal)
+        XCTAssertEqual(action.icon, "xmark")
+    }
 }
 
 /// Belegt die Wirkung des Beendens auf die Sichtbarkeit: ohne laufendes PTY

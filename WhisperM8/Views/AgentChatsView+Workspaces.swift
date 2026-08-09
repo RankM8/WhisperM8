@@ -218,6 +218,9 @@ extension AgentChatsView {
         split: SubagentChildSplit? = nil
     ) -> some View {
         let rowOrder = entity.occupiedSessionIDs
+        // Workspace = Arbeitsset: Minus (beenden + aus dem Workspace nehmen)
+        // statt X/Archivieren — Zuordnung wie überall über SidebarCloseAction.
+        let closeAction = SidebarCloseAction.resolveForWorkspaceRow(session: session)
         return PinnedSessionRow(
             session: session,
             project: workspace.projects.first { $0.id == session.projectID },
@@ -225,6 +228,8 @@ extension AgentChatsView {
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
             isMissingTranscript: missingTranscriptIDs.contains(session.id),
+            closeIcon: closeAction.icon,
+            closeHelp: closeAction.help,
             slotBadge: "S\(slotIndex + 1)",
             runningChildCount: split?.workingCount ?? 0,
             erroredChildCount: split?.erroredCount ?? 0,
@@ -239,7 +244,7 @@ extension AgentChatsView {
                     selectedSessionID = session.id
                 }
             },
-            onClose: { requestArchive([session]) }
+            onClose: { requestEndSession([session], removingFrom: entity) }
         )
         .padding(.leading, 10)
         .contextMenu {

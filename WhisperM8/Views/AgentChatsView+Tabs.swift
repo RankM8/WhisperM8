@@ -1,6 +1,16 @@
 import AppKit
 import SwiftUI
 
+/// Ausstehende „Chat beenden?"-Bestätigung (laufendes PTY in der Gruppe).
+/// Trägt neben den Sessions den optionalen Workspace, dessen Mitgliedschaft
+/// nach der Bestätigung zusätzlich gelöst wird (Minus der Workspace-Sektion)
+/// — Name im Dialogtext, ID für den Commit. Snapshot zum Request-Zeitpunkt;
+/// ein zwischenzeitliches Umbenennen ist verschmerzbar.
+struct SessionEndRequest {
+    var sessions: [AgentChatSession]
+    var removeFromWorkspace: AgentGridWorkspace?
+}
+
 /// Tab-Verwaltung der AgentChatsView: Tab oeffnen/schliessen, Chat
 /// archivieren, Tab-Reorder per Drag (dropTab/dropTabAtEnd), Multi-Select +
 /// Tear-off (moveSelectionToNewWindow/detachDroppedToNewWindow). Aus
@@ -146,8 +156,24 @@ extension AgentChatsView {
     /// geschlossen (kein Resume, kein Archiv). Läuft in der Gruppe mindestens
     /// ein PTY, fragt ein confirmationDialog nach — das Terminieren ist die
     /// einzige irreversible Nebenwirkung.
-    func requestEndSession(_ sessions: [AgentChatSession]) {
-        sessions.filter(\.isTerminal).forEach { closeTerminalSession($0) }
+    ///
+    /// `removingFrom`: Minus in der WORKSPACE-Sektion — nach dem Beenden
+    /// verliert der Chat zusätzlich die Mitgliedschaft in genau diesem
+    /// Workspace. Das Entfernen lebt im Commit-Pfad: „Abbrechen" im Dialog
+    /// darf auch die Mitgliedschaft nicht anrühren.
+    func requestEndSession(
+        _ sessions: [AgentChatSession],
+        removingFrom workspaceEntity: AgentGridWorkspace? = nil
+    ) {
+        // Terminals: Session wird komplett gelöscht — den Slot trotzdem
+        // explizit leeren, damit er sofort frei ist statt erst bei der
+        // nächsten Store-Normalisierung.
+        sessions.filter(\.isTerminal).forEach { terminal in
+            if let workspaceEntity {
+                removeSessionFromWorkspace(terminal.id, workspaceID: workspaceEntity.id)
+            }
+            closeTerminalSession(terminal)
+        }
 
         let endable = sessions.filter { !$0.isTerminal }
         guard !endable.isEmpty else { return }
@@ -155,17 +181,23 @@ extension AgentChatsView {
             terminalRegistry.controller(for: $0.id)?.isRunning == true
         }
         if hasRunning {
-            sessionsPendingEnd = endable
+            sessionsPendingEnd = SessionEndRequest(sessions: endable, removeFromWorkspace: workspaceEntity)
         } else {
-            commitEndSession(endable)
+            commitEndSession(endable, removingFromWorkspaceID: workspaceEntity?.id)
         }
     }
 
     /// Führt das Beenden aus (direkt oder nach Dialog-Bestätigung). Der
     /// Auswahl-Reset lebt — wie bei `commitArchive` — hier, damit „Abbrechen"
     /// die Mehrfach-Auswahl erhält.
-    func commitEndSession(_ sessions: [AgentChatSession]) {
+    func commitEndSession(
+        _ sessions: [AgentChatSession],
+        removingFromWorkspaceID workspaceID: UUID? = nil
+    ) {
         sessions.forEach { endSession($0) }
+        if let workspaceID {
+            sessions.forEach { removeSessionFromWorkspace($0.id, workspaceID: workspaceID) }
+        }
         multiSelection = []
     }
 

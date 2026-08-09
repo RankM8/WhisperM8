@@ -314,9 +314,11 @@ struct AgentChatsView: View {
     /// (nur gesetzt, wenn mindestens ein Terminal der Gruppe läuft).
     @State var sessionsPendingArchive: [AgentChatSession]?
     /// Sessions, für die gerade der Beenden-Bestätigungsdialog offen ist
-    /// (Hover-Aktion im Scope „Aktiv"; nur gesetzt, wenn mindestens ein
-    /// Terminal der Gruppe läuft — nichts Laufendes stirbt unbestätigt).
-    @State var sessionsPendingEnd: [AgentChatSession]?
+    /// (Hover-Aktion im Scope „Aktiv" bzw. der Workspace-Sektion; nur
+    /// gesetzt, wenn mindestens ein Terminal der Gruppe läuft — nichts
+    /// Laufendes stirbt unbestätigt). Trägt optional den Workspace, aus dem
+    /// die Chats nach Bestätigung zusätzlich entfernt werden.
+    @State var sessionsPendingEnd: SessionEndRequest?
     /// `true` solange die Sidebar den Archiv-Modus zeigt (Footer-Button) —
     /// gleiche Listen-UI, aber archivierte Chats mit „Wiederherstellen".
     @State var archiveModeActive = false
@@ -811,18 +813,25 @@ struct AgentChatsView: View {
                 set: { if !$0 { sessionsPendingEnd = nil } }
             ),
             presenting: sessionsPendingEnd
-        ) { sessions in
-            Button(sessions.count == 1 ? "Beenden" : "\(sessions.count) Chats beenden") {
-                commitEndSession(sessions)
+        ) { pending in
+            Button(pending.sessions.count == 1 ? "Beenden" : "\(pending.sessions.count) Chats beenden") {
+                commitEndSession(pending.sessions, removingFromWorkspaceID: pending.removeFromWorkspace?.id)
                 sessionsPendingEnd = nil
             }
             Button("Abbrechen", role: .cancel) {}
-        } message: { sessions in
+        } message: { pending in
+            let sessions = pending.sessions
             let running = sessions.filter {
                 terminalRegistry.controller(for: $0.id)?.isRunning == true
             }.count
+            // Minus der Workspace-Sektion: das zusätzliche Entfernen aus dem
+            // Workspace gehört benannt — es ist der Unterschied zum Minus der
+            // Chats-Sektion.
+            let removalSuffix = pending.removeFromWorkspace.map {
+                " Der Chat wird außerdem aus dem Workspace „\($0.name)“ entfernt."
+            } ?? ""
             Text(sessions.count == 1
-                ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen. Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
+                ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen.\(removalSuffix) Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
                 : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.")
         }
         .sheet(item: $pendingBackgroundDispatch) { pending in
