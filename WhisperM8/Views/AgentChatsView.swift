@@ -1295,7 +1295,10 @@ struct AgentChatsView: View {
                     layout: sidebarLayout,
                     query: searchText,
                     flatVisibleLimit: flatVisibleSessionLimit,
-                    selectedSessionID: selectedSessionID
+                    selectedSessionID: selectedSessionID,
+                    // Projekt-View-Aktivmenge: Tabs ALLER Fenster — die
+                    // fensterlokale Sicht speist nur die Sidebar-Listen.
+                    globalOpenTabIDs: windowStore.allWindowOpenTabIDs
                 )
             }
             snapshot = builtSnapshot
@@ -1319,11 +1322,17 @@ struct AgentChatsView: View {
             .padding(.trailing, 8)
             .frame(height: 28)
             // Live-Sync der offenen Projekt-Views: feuert bei jeder Änderung
-            // der Aktiv-Mengen (Chat startet/Tab zu/Archiv) UND einmal beim
-            // Erscheinen (Relaunch-Aufholung). Im Archiv-Modus gibt es keinen
-            // Snapshot — dann bewusst KEIN Sync (leere Map hieße fälschlich
-            // „keine aktiven Chats" und würde alle Slots räumen).
-            .task(id: snapshot?.activeSessionIDsByProject) {
+            // der Aktiv-Mengen (Chat startet/Tab zu/Archiv), bei jeder
+            // SLOT-Änderung einer aktiven Projekt-View (Selbstheilung gegen
+            // Umgehungspfade wie CLI-Mutationen) UND einmal beim Erscheinen
+            // (Relaunch-Aufholung). Im Archiv-Modus gibt es keinen Snapshot —
+            // dann bewusst KEIN Sync (leere Map hieße fälschlich „keine
+            // aktiven Chats"); Grids sind dort ohnehin nicht sichtbar, und
+            // beim Verlassen holt der id-Wechsel nil→Map alles nach.
+            .task(id: ProjectViewSyncTrigger(
+                activeByProject: snapshot?.activeSessionIDsByProject,
+                slotsFingerprint: windowStore.activeProjectViewSlotsFingerprint
+            )) {
                 guard let active = snapshot?.activeSessionIDsByProject else { return }
                 windowStore.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: active)
             }

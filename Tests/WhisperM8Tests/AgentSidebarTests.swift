@@ -289,7 +289,7 @@ extension AgentSidebarModelBuilderTests {
         )
     }
 
-    func testActiveSessionIDsByProjectIsScopeIndependentAndExcludesPinned() {
+    func testActiveSessionIDsByProjectIsScopeIndependentAndIncludesPinned() {
         let project = AgentProject(name: "Repo", path: "/tmp/repo", createdManually: true)
         let running = makeSidebarSession(projectID: project.id, title: "Läuft")
         let tabbed = makeSidebarSession(projectID: project.id, title: "Tab offen")
@@ -314,24 +314,50 @@ extension AgentSidebarModelBuilderTests {
                 flatVisibleLimit: 50,
                 selectedSessionID: nil
             )
+            // Review-Befund 2026-08-12: gepinnte AKTIVE Chats gehören ins
+            // Live-Grid (Aktiv-Definition = laufend ∪ offener Tab) — nur die
+            // Sidebar-Listen bleiben pin-bereinigt.
             XCTAssertEqual(
                 snapshot.activeSessionIDsByProject[project.id],
-                [running.id, tabbed.id],
-                "Scope \(scope): aktiv = laufend ∪ offener Tab, ohne Gepinnte"
+                [running.id, tabbed.id, pinnedTab.id],
+                "Scope \(scope): aktiv = laufend ∪ offener Tab, inkl. Gepinnter"
             )
-            // Kontrakt von „Projekt als Workspace öffnen": die GEORDNETE
-            // Aktiv-Liste ist in JEDEM Scope per Filterung über
-            // sessionsByProject gewinnbar (aktive Sessions sind überall
-            // sichtbar).
-            let ordered = (snapshot.sessionsByProject[project.id] ?? [])
-                .filter {
-                    snapshot.activeSessionIDsByProject[project.id]?.contains($0.id) == true
-                }
-            XCTAssertEqual(
-                Set(ordered.map(\.id)), [running.id, tabbed.id],
-                "Scope \(scope): Aktiv-Menge vollständig in sessionsByProject enthalten"
+            XCTAssertFalse(
+                (snapshot.sessionsByProject[project.id] ?? []).contains { $0.id == pinnedTab.id },
+                "Scope \(scope): die Projektliste der Sidebar bleibt pin-bereinigt"
             )
         }
+    }
+
+    func testActiveSessionIDsByProjectUsesGlobalTabsAcrossWindows() {
+        let project = AgentProject(name: "Repo", path: "/tmp/repo", createdManually: true)
+        let localTab = makeSidebarSession(projectID: project.id, title: "Tab hier")
+        let remoteTab = makeSidebarSession(projectID: project.id, title: "Tab anderes Fenster")
+        let workspace = AgentWorkspace(projects: [project], sessions: [localTab, remoteTab])
+
+        // Fensterlokale Sicht kennt nur localTab — die Projekt-View-Menge
+        // muss trotzdem beide führen (Tabs ALLER Fenster), sonst
+        // überschreiben sich zwei Fenster gegenseitig die Mitglieder.
+        let snapshot = AgentSidebarModelBuilder.snapshot(
+            workspace: workspace,
+            pinnedSessionIDs: [],
+            scope: snapshotFilter(.active, running: [], openTabs: [localTab.id]),
+            layout: .grouped,
+            query: "",
+            flatVisibleLimit: 50,
+            selectedSessionID: nil,
+            globalOpenTabIDs: [localTab.id, remoteTab.id]
+        )
+        XCTAssertEqual(
+            snapshot.activeSessionIDsByProject[project.id],
+            [localTab.id, remoteTab.id]
+        )
+        // Die Sidebar-LISTE folgt weiter der fensterlokalen Sicht.
+        XCTAssertEqual(
+            (snapshot.sessionsByProject[project.id] ?? []).map(\.id),
+            [localTab.id],
+            "Aktiv-Scope der Liste bleibt fensterlokal"
+        )
     }
 
     func testGroupedSnapshotMatchesExistingBuildersAndSkipsFlatLayout() {

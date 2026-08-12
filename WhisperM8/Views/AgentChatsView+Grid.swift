@@ -99,7 +99,13 @@ extension AgentChatsView {
                         } label: {
                             Text(slotPlacementLabel(entity: entity, index: index))
                         }
-                        .disabled(entity.slots[index] == session.id)
+                        // Projekt-View: Nicht-Mitglieder dürfen keinen
+                        // belegten Slot ersetzen (Store lehnt ab — der
+                        // Eintrag wäre eine leere Geste).
+                        .disabled(entity.slots[index] == session.id
+                            || (entity.sourceProjectID != nil
+                                && entity.slots[index] != nil
+                                && entity.slotIndex(of: session.id) == nil))
                     }
                 } label: {
                     Label("Im Workspace platzieren", systemImage: "square.grid.3x3.topleft.filled")
@@ -173,7 +179,9 @@ extension AgentChatsView {
         if !isGridActive, let entity = activeGridWorkspaceEntity {
             HeaderIconButton(
                 systemImage: "square.grid.2x2",
-                help: "Zurück zum Workspace „\(entity.name)“"
+                help: entity.sourceProjectID == nil
+                    ? "Zurück zum Workspace „\(entity.name)“"
+                    : "Zurück zur Projekt-Ansicht „\(entity.name)“"
             ) {
                 returnToWorkspace()
             }
@@ -963,11 +971,15 @@ extension AgentChatsView {
         // Vereinheitlichtes Session-Kontextmenü — bewusst am HEADER, nicht
         // am Terminal-Inhalt (dort gehört der Rechtsklick dem PTY). Die
         // Header-Buttons bleiben als Schnellzugriff unverändert.
+        // Projekt-Views reichen KEIN removalWorkspace ein: „Aus Workspace
+        // entfernen" gibt es dort nicht (der Store lehnt es inzwischen auch
+        // ab) — raus geht nur über Tab schließen/archivieren.
         .contextMenu {
+            let menuEntity = windowStore.gridWorkspace(id: workspaceID)
             sessionContextMenu(
                 session,
                 context: .gridPane,
-                removalWorkspace: windowStore.gridWorkspace(id: workspaceID)
+                removalWorkspace: menuEntity?.sourceProjectID == nil ? menuEntity : nil
             )
         }
     }

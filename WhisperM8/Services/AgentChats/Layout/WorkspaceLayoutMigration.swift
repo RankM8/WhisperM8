@@ -61,7 +61,11 @@ enum WorkspaceLayoutMigration {
             colorHex: old.colorHex,
             cells: cells,
             arrangement: .automatic,
-            source: .manual
+            // Projekt-Views (⊞, verstecktes Entity) MÜSSEN ihre Bindung in
+            // die v5-Welt mitnehmen — als `.manual` migriert würden sie beim
+            // Umschalten auf `layouts` als normale Workspaces sichtbar und
+            // verlören ihre Live-Semantik (Review-Befund 2026-08-12).
+            source: old.sourceProjectID.map(WorkspaceLayout.Source.project) ?? .manual
         )
 
         // Erst ab zwei Zellen ist eine Aufteilung ueberhaupt sichtbar. Bei

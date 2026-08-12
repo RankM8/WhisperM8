@@ -112,10 +112,12 @@ struct AgentSidebarSnapshot {
     var subagentChildrenByParent: [UUID: [AgentChatSession]]
     var sessionsByProject: [UUID: [AgentChatSession]]
     /// AKTIVE Root-Chats (laufend ∪ offener Tab, inkl. Parents laufender
-    /// Subagent-Kinder) pro Projekt — scope-UNABHÄNGIG, damit „Projekt als
-    /// Workspace öffnen" in jedem Filter-Tab dieselben Chats nimmt. Aktive
-    /// Sessions sind in jedem Scope sichtbar, die geordnete Liste liefert
-    /// deshalb immer `sessionsByProject`-Filterung über diese Menge.
+    /// Subagent-Kinder) pro Projekt — scope-, fenster- UND pin-unabhängig:
+    /// Tabs zählen über ALLE Fenster (`globalOpenTabIDs`), gepinnte aktive
+    /// Chats sind enthalten (nur die Sidebar-LISTEN bleiben pin-bereinigt).
+    /// Diese Menge speist die Projekt-Views (⊞) — fensterlokale Sichten
+    /// würden sich im Mehrfensterbetrieb gegenseitig die Mitglieder
+    /// überschreiben (Review-Befund 2026-08-12).
     var activeSessionIDsByProject: [UUID: Set<UUID>]
     var visibleProjects: [AgentProject]
     var visibleFlatSessions: [AgentChatSession]
@@ -150,7 +152,8 @@ struct AgentSidebarModelBuilder {
         layout: SidebarLayout,
         query: String,
         flatVisibleLimit: Int,
-        selectedSessionID: UUID?
+        selectedSessionID: UUID?,
+        globalOpenTabIDs: Set<UUID>? = nil
     ) -> AgentSidebarSnapshot {
         let manualProjects: [AgentProject]
         let hasManualProjects: Bool
@@ -200,6 +203,16 @@ struct AgentSidebarModelBuilder {
             now: scope.now,
             recentWindow: scope.recentWindow
         )
+        // Aktiv-Menge der Projekt-Views: Tabs über ALLE Fenster (die
+        // fensterlokalen scope.openTabIDs speisen nur die Sidebar-Listen),
+        // mit derselben Parent-Expansion für Subagent-Kinder wie oben.
+        let globalTabs = globalOpenTabIDs ?? scope.openTabIDs
+        var effectiveGlobalActiveIDs = effectiveRunningSessionIDs.union(globalTabs)
+        for childID in globalTabs {
+            if let parentID = parentIDByChildID[childID] {
+                effectiveGlobalActiveIDs.insert(parentID)
+            }
+        }
         let pinnedIDSet = Set(pinnedSessionIDs)
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let recentThreshold = effectiveScope.now.addingTimeInterval(-effectiveScope.recentWindow)
@@ -219,9 +232,18 @@ struct AgentSidebarModelBuilder {
             }
             guard session.status != .archived,
                   session.isManuallyCreated,
-                  !pinnedIDSet.contains(session.id),
                   !subagentChildIDs.contains(session.id)
             else { continue }
+
+            // Projekt-View-Aktivmenge VOR dem Pin-Filter: gepinnte aktive
+            // Chats gehören ins Live-Grid (Aktiv-Definition = laufend ∪
+            // offener Tab, sonst hätte ein Projekt aus lauter gepinnten
+            // aktiven Chats einen toten ⊞) — nur die Sidebar-Listen und
+            // Scope-Zähler bleiben pin-bereinigt.
+            if effectiveGlobalActiveIDs.contains(session.id) {
+                activeSessionIDsByProject[session.projectID, default: []].insert(session.id)
+            }
+            guard !pinnedIDSet.contains(session.id) else { continue }
 
             allCount += 1
             let isActive = effectiveScope.runningSessionIDs.contains(session.id)
@@ -229,7 +251,6 @@ struct AgentSidebarModelBuilder {
             if isActive {
                 activeCount += 1
                 recentCount += 1
-                activeSessionIDsByProject[session.projectID, default: []].insert(session.id)
             } else if session.lastActivityAt >= recentThreshold {
                 recentCount += 1
             }

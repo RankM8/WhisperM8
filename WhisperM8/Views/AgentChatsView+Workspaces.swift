@@ -1,6 +1,17 @@
 import AppKit
 import SwiftUI
 
+/// Trigger-Identität des Projekt-View-Live-Syncs (`.task(id:)` in
+/// AgentChatsView): Aktiv-Mengen + Slot-Belegung der offenen Views — ändert
+/// sich eins von beidem, läuft der Sync neu. Der Slot-Teil ist die
+/// Selbstheilung: Mutiert eine Umgehung (CLI, künftige Pfade) die Slots ohne
+/// Aktivmengen-Änderung, konvergiert der nächste Tick zurück zum
+/// Live-Zustand.
+struct ProjectViewSyncTrigger: Equatable {
+    var activeByProject: [UUID: Set<UUID>]?
+    var slotsFingerprint: [UUID: [UUID?]]
+}
+
 /// Sidebar-Abschnitt WORKSPACES (Plan F5): einklappbare Sektion unter
 /// GEPINNT mit voller Chat-Listen-Optik — Gruppen-Header (Farbe/Initial +
 /// Name + Belegung + ⊞) und darunter `PinnedSessionRow`-Rows mit
@@ -389,7 +400,11 @@ extension AgentChatsView {
     /// Single-Owner-Konflikte wie beim Workspace-Header: Besitzerfenster
     /// nach vorn statt Terminals zu stehlen.
     func openProjectAsWorkspace(_ project: AgentProject, activeSessionIDs: Set<UUID>) {
-        guard !activeSessionIDs.isEmpty else { return }
+        // Leere Aktiv-Menge: nur der ERSTE Klick braucht Chats — existiert
+        // die View schon, ist ⊞ der Rücksprung-Anker und muss auch ein
+        // leeres Grid wieder anzeigen können.
+        let existing = windowStore.gridWorkspaces.first { $0.sourceProjectID == project.id }
+        guard !activeSessionIDs.isEmpty || existing != nil else { return }
         let wasVisibleHere = isGridActive
             && activeGridWorkspaceEntity?.sourceProjectID == project.id
         switch windowStore.activateProjectGridWorkspace(
@@ -439,7 +454,14 @@ extension AgentChatsView {
     }
 
     private func nextFreeWorkspaceName() -> String {
-        let used = Set(windowStore.gridWorkspaces.map(\.name))
+        // Nur kuratierte Namen zählen — ein Projekt namens „Workspace"
+        // soll den ersten sichtbaren Workspace nicht auf „Workspace 2"
+        // zwingen.
+        let used = Set(
+            windowStore.gridWorkspaces
+                .filter { $0.sourceProjectID == nil }
+                .map(\.name)
+        )
         if !used.contains("Workspace") { return "Workspace" }
         var suffix = 2
         while used.contains("Workspace \(suffix)") { suffix += 1 }

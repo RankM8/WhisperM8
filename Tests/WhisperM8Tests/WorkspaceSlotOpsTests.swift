@@ -494,4 +494,46 @@ final class WorkspaceSlotOpsTests: XCTestCase {
         )
         XCTAssertEqual(slots, [nil, nil, nil])
     }
+
+    func testProjectSyncHoldsDuplicateInvariantItself() {
+        let a = UUID(); let b = UUID()
+        // Duplikate dürfen weder doppelt platzieren noch die Kappe fressen.
+        let slots = WorkspaceSlotOps.syncedProjectSlots(
+            current: [],
+            activeOrdered: Array(repeating: a, count: 12) + [b]
+        )
+        XCTAssertEqual(slots, [a, b])
+    }
+
+    // MARK: - Tail-Kappung (Projekt-Views atmen nach unten)
+
+    func testTrimmedProjectTailShrinksToSmallestFittingStage() {
+        let a = UUID(); let b = UUID()
+        // Screenshot-Fall 2026-08-12: 2 Belegte in einem 4er-Grid → 1×2.
+        let trimmed = WorkspaceSlotOps.trimmedProjectTail([a, b, nil, nil])
+        XCTAssertEqual(trimmed.slots, [a, b])
+        XCTAssertEqual(trimmed.capacity, 2)
+    }
+
+    func testTrimmedProjectTailKeepsMidHolesAndOwnerPositions() {
+        let a = UUID(); let c = UUID()
+        // Loch in der Mitte bleibt (Positionsstabilität) — gekappt wird nur
+        // der leere Tail; Stufe 3 trägt den höchsten belegten Index 2.
+        let trimmed = WorkspaceSlotOps.trimmedProjectTail([a, nil, c, nil, nil, nil])
+        XCTAssertEqual(trimmed.slots, [a, nil, c])
+        XCTAssertEqual(trimmed.capacity, 3)
+    }
+
+    func testTrimmedProjectTailEmptyViewFallsToMinimumStage() {
+        let trimmed = WorkspaceSlotOps.trimmedProjectTail([nil, nil, nil, nil, nil, nil])
+        XCTAssertEqual(trimmed.capacity, 2)
+        XCTAssertEqual(trimmed.slots, [nil, nil])
+    }
+
+    func testTrimmedProjectTailFullNineStaysNine() {
+        let owners = (0 ..< 9).map { _ in UUID() }
+        let trimmed = WorkspaceSlotOps.trimmedProjectTail(owners)
+        XCTAssertEqual(trimmed.slots, owners)
+        XCTAssertEqual(trimmed.capacity, 9)
+    }
 }

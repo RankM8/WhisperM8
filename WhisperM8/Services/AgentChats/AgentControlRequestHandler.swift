@@ -687,10 +687,16 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     "showsGrid": store.showsGrid(in: id),
                 ]
                 let active = store.activeGridWorkspace(in: id)
-                dict["activeWorkspaceID"] = active?.id.uuidString ?? NSNull()
+                // Projekt-Views sind für die CLI keine Workspaces — ihre
+                // Entity-ID bleibt verborgen (sonst wäre sie über
+                // gridWorkspace.*-Refs doch adressierbar); stattdessen als
+                // Projekt-Ansicht gekennzeichnet.
+                let isProjectView = active?.sourceProjectID != nil
+                dict["activeWorkspaceID"] = (isProjectView ? nil : active?.id.uuidString) ?? NSNull()
                 // Name mitliefern, damit ein Agent für die Aussage nicht
                 // zusätzlich `workspace list` aufrufen muss.
-                dict["activeWorkspaceName"] = active?.name ?? NSNull()
+                dict["activeWorkspaceName"] = (isProjectView ? nil : active?.name) ?? NSNull()
+                dict["activeProjectViewName"] = (isProjectView ? active?.name : nil) ?? NSNull()
                 return dict
             }
         }

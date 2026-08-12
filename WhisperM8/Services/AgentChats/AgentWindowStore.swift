@@ -364,6 +364,29 @@ final class AgentWindowStore {
         )
     }
 
+    /// Tabs ALLER Fenster — die fensterübergreifende Zutat der
+    /// Aktiv-Definition der Projekt-Views. Die fensterlokalen `openTabIDs`
+    /// dürfen den Sync nie speisen: zwei Fenster mit verschiedenen Tabs
+    /// desselben Projekts würden sich sonst gegenseitig die Mitglieder
+    /// überschreiben (Last-Writer-Wins, Review-Befund 2026-08-12).
+    var allWindowOpenTabIDs: Set<UUID> {
+        Set(state.windows.flatMap(\.openTabIDs))
+    }
+
+    /// Slot-Belegung aller AKTIVEN Projekt-Views — Fingerprint für den
+    /// Sync-Trigger der View: ändert eine Umgehung (Kontextmenü, Drop,
+    /// CLI) die Slots, ohne dass sich die Aktiv-Menge bewegt, stößt der
+    /// nächste Tick die Reconciliation an und der Live-Zustand heilt sich.
+    var activeProjectViewSlotsFingerprint: [UUID: [UUID?]] {
+        let referenced = Set(state.windows.compactMap(\.activeWorkspaceID))
+        var result: [UUID: [UUID?]] = [:]
+        for entity in state.gridWorkspaces
+        where entity.sourceProjectID != nil && referenced.contains(entity.id) {
+            result[entity.id] = entity.slots
+        }
+        return result
+    }
+
     /// ⊞ am Projekt-Header: Projekt als Live-Grid öffnen. Das versteckte
     /// Entity (`sourceProjectID`) entsteht beim ersten Mal und trägt danach
     /// nur das Layout-Gedächtnis (Splitter, Pane-Positionen) — es erscheint
@@ -380,6 +403,13 @@ final class AgentWindowStore {
         let entityID: UUID
         if let existing = state.gridWorkspaces.first(where: { $0.sourceProjectID == projectID }) {
             entityID = existing.id
+            // Ownership VOR dem Sync prüfen — `.alreadyActive` verspricht
+            // laut Aktivierungs-Vertrag „nichts mutiert"; das Grid des
+            // Besitzerfensters darf ein fremder ⊞-Klick nicht erst
+            // umschreiben (Review-Befund 2026-08-12).
+            if let owner = self.windowID(owningGridWorkspace: entityID), owner != windowID {
+                return .alreadyActive(ownerWindowID: owner)
+            }
         } else {
             entityID = createGridWorkspace(
                 name: name, colorHex: colorHex, sourceProjectID: projectID
@@ -431,9 +461,15 @@ final class AgentWindowStore {
         ).map(\.id)
 
         var updated = entity
-        updated.slots = WorkspaceSlotOps.syncedProjectSlots(
+        let synced = WorkspaceSlotOps.syncedProjectSlots(
             current: entity.slots, activeOrdered: ordered
         )
+        // Nach unten atmen: leere Tail-Slots kappen, Kapazität folgt der
+        // kleinsten passenden Stufe (kein Besitzer rückt — normalize()
+        // allein behielte die einmal erreichte Stufe für immer).
+        let trimmed = WorkspaceSlotOps.trimmedProjectTail(synced)
+        updated.slots = trimmed.slots
+        updated.capacity = trimmed.capacity
         if let name { updated.name = name }
         if let colorHex { updated.colorHex = colorHex }
         updated.normalize()
@@ -546,6 +582,21 @@ final class AgentWindowStore {
         let domain = persistence.loadWorkspace()
         guard let session = domain.sessions.first(where: { $0.id == sessionID }),
               session.status != .archived else { return .rejected }
+        // Projekt-View-Guards (Store-seitig, nicht nur UI): nur eigene
+        // Projekt-Chats, und ein NICHT-Mitglied darf nie einen belegten
+        // Slot ersetzen — der Verdrängungs-Drop würde einen aktiven
+        // Slot-Besitzer rauswerfen, den der Live-Sync dann an anderer
+        // Position wieder anhängt (Positionsstabilität gebrochen;
+        // Review-Befund 2026-08-12). Mitglieder dürfen weiterhin gezielt
+        // platzieren (= Swap, kein Besitzer verlässt die View).
+        if let sourceProjectID = entity.sourceProjectID {
+            guard session.projectID == sourceProjectID else { return .rejected }
+            if let targetSlot, entity.slots.indices.contains(targetSlot),
+               let occupant = entity.slots[targetSlot], occupant != sessionID,
+               entity.slotIndex(of: sessionID) == nil {
+                return .rejected
+            }
+        }
 
         let (updated, result) = WorkspaceSlotOps.add(sessionID, to: entity, at: targetSlot)
         switch result {
@@ -585,6 +636,11 @@ final class AgentWindowStore {
     @discardableResult
     func removeSession(_ sessionID: UUID, fromGridWorkspace workspaceID: UUID) -> Bool {
         guard let entity = gridWorkspace(id: workspaceID),
+              // Projekt-Views kennen kein manuelles Entfernen — Mitglied ist,
+              // wer aktiv ist; raus geht nur über Tab schließen/archivieren.
+              // (Der frühere Kontextmenü-Pfad konnte einen aktiven Chat
+              // dauerhaft aus der Live-Ansicht werfen; Review-Befund.)
+              entity.sourceProjectID == nil,
               let removedIndex = entity.slotIndex(of: sessionID) else { return false }
         let (updated, removed) = WorkspaceSlotOps.remove(
             sessionID, from: entity,
@@ -665,7 +721,11 @@ final class AgentWindowStore {
         keeping retainedSessionIDs: [UUID]? = nil,
         expectedEvictedSessionIDs: [UUID] = []
     ) -> WorkspaceSlotOps.CapacityResult {
-        guard let entity = gridWorkspace(id: workspaceID) else { return .rejected }
+        // Projekt-Views: Kapazität verwaltet ausschließlich der Live-Sync
+        // (Auto-Wachsen + Tail-Kappung) — manuelles Setzen würde mit ihm
+        // kämpfen.
+        guard let entity = gridWorkspace(id: workspaceID),
+              entity.sourceProjectID == nil else { return .rejected }
         let (updated, result) = WorkspaceSlotOps.setCapacity(
             of: entity,
             to: capacity,

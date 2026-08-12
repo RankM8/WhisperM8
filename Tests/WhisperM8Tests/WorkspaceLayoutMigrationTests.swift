@@ -68,6 +68,18 @@ final class WorkspaceLayoutMigrationTests: XCTestCase {
     // MARK: - Anordnung bleibt erhalten
 
     /// Die zentrale Zusage: Der Bestand wird nicht umgeordnet.
+    func testProjectViewBindingSurvivesMigration() {
+        let projectID = UUID()
+        var source = old(slots: [s1], capacity: 2)
+        source.sourceProjectID = projectID
+        let result = WorkspaceLayoutMigration.migrate(source)
+        XCTAssertEqual(result.source, .project(projectID),
+                       "Projekt-Views dürfen in v5 nicht als .manual sichtbar werden")
+
+        let manual = WorkspaceLayoutMigration.migrate(old(slots: [s1], capacity: 2))
+        XCTAssertEqual(manual.source, .manual)
+    }
+
     func testExistingArrangementBecomesManual() {
         let result = WorkspaceLayoutMigration.migrate(old(slots: [s1, s2], capacity: 2))
         XCTAssertFalse(result.arrangement.isAutomatic,

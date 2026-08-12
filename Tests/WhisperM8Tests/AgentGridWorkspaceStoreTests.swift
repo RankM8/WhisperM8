@@ -185,6 +185,111 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
                           "Fokus verlässt die entfernte Pane")
     }
 
+    func testProjectSyncTrimsEmptyTailSlotsAndCapacity() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let projectID = UUID()
+        let sessions = try (0 ..< 4).map { index in
+            try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: Double(400 - index)))
+        }
+        _ = store.activateProjectGridWorkspace(
+            projectID: projectID, name: "P", colorHex: "#3E8E63",
+            activeSessionIDs: Set(sessions), in: w
+        )
+        let entityID = try XCTUnwrap(store.gridWorkspaces.first { $0.sourceProjectID == projectID }?.id)
+        XCTAssertEqual(store.gridWorkspace(id: entityID)?.capacity, 4)
+
+        // Nutzerbefund 2026-08-12: zwei Chats verlassen die Aktiv-Menge —
+        // die leeren Tail-Panes müssen automatisch verschwinden (in
+        // Projekt-Views gibt es keinen Kapazitäts-Picker als Ausweg).
+        store.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: [
+            projectID: Set(sessions.prefix(2))
+        ])
+        let trimmed = try XCTUnwrap(store.gridWorkspace(id: entityID))
+        XCTAssertEqual(trimmed.capacity, 2)
+        XCTAssertEqual(trimmed.slots, [sessions[0], sessions[1]])
+    }
+
+    func testActivateProjectViewOwnedElsewhereReturnsWithoutMutation() throws {
+        let (store, persistence) = makeStore()
+        let primary = store.primaryWindowID
+        let tab = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 50))
+        store.openTab(tab, in: primary)
+        let second = store.detachToNewWindow(tab, from: primary)
+        let projectID = UUID()
+        let member = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 100))
+        _ = store.activateProjectGridWorkspace(
+            projectID: projectID, name: "P", colorHex: "#3E8E63",
+            activeSessionIDs: [member], in: primary
+        )
+        let entityID = try XCTUnwrap(store.gridWorkspaces.first { $0.sourceProjectID == projectID }?.id)
+        let before = store.gridWorkspace(id: entityID)?.slots
+
+        // Fremder ⊞-Klick (Fenster 2, abweichende Aktivmenge): `.alreadyActive`
+        // verspricht „nichts mutiert" — das Grid des Besitzers bleibt exakt.
+        let other = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 200))
+        let result = store.activateProjectGridWorkspace(
+            projectID: projectID, name: "P", colorHex: "#3E8E63",
+            activeSessionIDs: [other], in: second
+        )
+        XCTAssertEqual(result, .alreadyActive(ownerWindowID: primary))
+        XCTAssertEqual(store.gridWorkspace(id: entityID)?.slots, before)
+    }
+
+    func testProjectViewGuardsRejectRemovalCapacityAndDisplacingAdd() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let projectID = UUID()
+        var memberA = AgentChatSession(
+            id: UUID(), provider: .claude, projectID: projectID, title: "A",
+            lastActivityAt: Date(timeIntervalSince1970: 200), createdManually: true
+        )
+        memberA.status = .closed
+        var memberB = AgentChatSession(
+            id: UUID(), provider: .claude, projectID: projectID, title: "B",
+            lastActivityAt: Date(timeIntervalSince1970: 100), createdManually: true
+        )
+        memberB.status = .closed
+        var inactive = AgentChatSession(
+            id: UUID(), provider: .claude, projectID: projectID, title: "C",
+            lastActivityAt: Date(timeIntervalSince1970: 50), createdManually: true
+        )
+        inactive.status = .closed
+        var foreign = AgentChatSession(
+            id: UUID(), provider: .claude, projectID: UUID(), title: "F",
+            lastActivityAt: Date(timeIntervalSince1970: 50), createdManually: true
+        )
+        foreign.status = .closed
+        for session in [memberA, memberB, inactive, foreign] {
+            _ = try persistence.upsertSession(session)
+        }
+        _ = store.activateProjectGridWorkspace(
+            projectID: projectID, name: "P", colorHex: "#3E8E63",
+            activeSessionIDs: [memberA.id, memberB.id], in: w
+        )
+        let entityID = try XCTUnwrap(store.gridWorkspaces.first { $0.sourceProjectID == projectID }?.id)
+
+        // Manuelles Entfernen gibt es nicht (Mitglied ist, wer aktiv ist).
+        XCTAssertFalse(store.removeSession(memberA.id, fromGridWorkspace: entityID))
+        // Kapazität verwaltet der Sync.
+        XCTAssertEqual(
+            store.setCapacity(ofGridWorkspace: entityID, to: 4), .rejected
+        )
+        // Fremd-Projekt: nie Mitglied.
+        XCTAssertEqual(
+            store.addSession(foreign.id, toGridWorkspace: entityID), .rejected
+        )
+        // Nicht-Mitglied darf keinen Besitzer verdrängen …
+        XCTAssertEqual(
+            store.addSession(inactive.id, toGridWorkspace: entityID, at: 0), .rejected
+        )
+        // … aber Mitglieder dürfen gezielt tauschen (Reorder bleibt).
+        XCTAssertEqual(
+            store.addSession(memberB.id, toGridWorkspace: entityID, at: 0),
+            .swapped(from: 1, to: 0)
+        )
+    }
+
     func testRenameGridWorkspaceTrimsAndRejectsEmptyName() {
         let (store, _) = makeStore()
         let id = store.createGridWorkspace(name: "Alt")

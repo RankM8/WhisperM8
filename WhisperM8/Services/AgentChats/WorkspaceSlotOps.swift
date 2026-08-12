@@ -66,21 +66,39 @@ enum WorkspaceSlotOps {
             guard let slot, active.contains(slot) else { return nil }
             return slot
         }
-        let members = Set(slots.compactMap { $0 })
-        var occupiedCount = members.count
+        // `members` wächst mit — die Duplikat-Invariante muss die pure
+        // Funktion selbst halten (doppelte Einträge in `activeOrdered`
+        // dürfen weder zweimal platzieren noch die 9er-Kappe auffressen).
+        var members = Set(slots.compactMap { $0 })
         let cap = AgentGridWorkspace.allowedCapacities.last!
-        for sessionID in activeOrdered where !members.contains(sessionID) {
-            guard occupiedCount < cap else { break }
+        for sessionID in activeOrdered {
+            guard members.count < cap, !members.contains(sessionID) else { continue }
             if let free = slots.firstIndex(where: { $0 == nil }) {
                 slots[free] = sessionID
             } else if slots.count < cap {
                 slots.append(sessionID)
             } else {
-                break
+                continue
             }
-            occupiedCount += 1
+            members.insert(sessionID)
         }
         return slots
+    }
+
+    /// Projekt-Views atmen auch nach unten: LEERE Tail-Slots werden bis zur
+    /// kleinsten erlaubten Stufe gekappt, die den höchsten belegten Index
+    /// noch trägt — kein Besitzer rückt, Lücken in der Mitte bleiben
+    /// (Positionsstabilität). Ohne diese Kappung behielte `normalize()` die
+    /// einmal erreichte Stufe für immer: nach Chat-Schwund zeigte jedes
+    /// Öffnen dauerhaft leere Panes, die sich in Projekt-Views (kein
+    /// Kapazitäts-Picker) nicht mal manuell entfernen ließen
+    /// (Nutzerbefund 2026-08-12).
+    static func trimmedProjectTail(_ slots: [UUID?]) -> (slots: [UUID?], capacity: Int) {
+        let highestOccupied = slots.indices.reversed().first { slots[$0] != nil }
+        let capacity = AgentGridWorkspace.smallestCapacity(
+            fitting: highestOccupied.map { $0 + 1 } ?? 0
+        )
+        return (Array(slots.prefix(capacity)), capacity)
     }
 
     // MARK: - Hinzufügen / Platzieren
