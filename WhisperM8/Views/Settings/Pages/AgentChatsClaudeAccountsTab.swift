@@ -59,12 +59,13 @@ struct AgentChatsClaudeAccountsTab: View {
 
             SettingsButtonRow(
                 title: "Update usage",
-                subtitle: "Fetches live limits for all accounts and re-authenticates expired logins (one token refresh per account, rate-limit protected)."
+                subtitle: "Fetches live limits for all accounts. Expired tokens are renewed via a tiny Claude-CLI ping per account (a haiku one-liner — may start a fresh 5h window on an idle account)."
             ) {
                 Button("Update") {
-                    reload(allowTokenRefresh: true)
+                    updateUsage()
                 }
                 .buttonStyle(SettingsButtonStyle.standard)
+                .disabled(isFetchingUsage)
             }
         }
         .onAppear { reload() }
@@ -341,9 +342,9 @@ struct AgentChatsClaudeAccountsTab: View {
         case .refreshBlockedBySession:
             return "token expired — the running session refreshes it, retry shortly"
         case .tokenExpired:
-            return "token expired — press “Update” below to fetch fresh limits"
+            return "token expired — press “Update” below (renews via a short Claude-CLI ping)"
         case .refreshCoolingDown(let until):
-            return "rate-limited — next update possible at \(timeText(until))"
+            return "recently pinged — next attempt possible at \(timeText(until))"
         case .httpStatus(429):
             return "rate-limited by Anthropic — try again in a few minutes"
         case .httpStatus(let status):
@@ -361,22 +362,21 @@ struct AgentChatsClaudeAccountsTab: View {
 
     // MARK: - Actions
 
-    /// `allowTokenRefresh` nur beim manuellen Update-Button — automatische
-    /// Reloads (onAppear, nach Account-Aktionen) bleiben passiv und treffen
-    /// den streng gedrosselten OAuth-Token-Endpoint nie.
-    private func reload(allowTokenRefresh: Bool = false) {
+    /// Automatische Reloads (onAppear, nach Account-Aktionen) sind strikt
+    /// passiv — Tokens erneuert nur der manuelle Update-Button (CLI-Ping).
+    private func reload() {
         profiles = profileService.profiles()
         activeProfileName = profileService.activeProfileName()
         // Statusline-Marker nachziehen (heilt auch aeltere Profile ohne Datei)
         for profile in profiles where !profile.isMain {
             profileService.writeKeychainServiceMarker(forProfile: profile.name)
         }
-        fetchUsageForAllProfiles(allowTokenRefresh: allowTokenRefresh)
+        fetchUsageForAllProfiles()
     }
 
     /// Holt die Limits ALLER eingeloggten Accounts parallel — live vom
     /// oauth/usage-Endpoint, mit Statusline-Cache als Fallback.
-    private func fetchUsageForAllProfiles(allowTokenRefresh: Bool) {
+    private func fetchUsageForAllProfiles() {
         guard !isFetchingUsage else { return }
         isFetchingUsage = true
         let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
@@ -385,7 +385,7 @@ struct AgentChatsClaudeAccountsTab: View {
             await withTaskGroup(of: (String, ClaudeAccountUsage?).self) { group in
                 for name in loggedIn {
                     group.addTask {
-                        (name, await usageFetcher.fetchUsage(forProfile: name, allowTokenRefresh: allowTokenRefresh))
+                        (name, await usageFetcher.fetchUsage(forProfile: name))
                     }
                 }
                 for await (name, usage) in group {
@@ -398,6 +398,49 @@ struct AgentChatsClaudeAccountsTab: View {
                 isFetchingUsage = false
             }
         }
+    }
+
+    /// Update-Button: passive Limits für alle, dann abgelaufene Tokens
+    /// seriell per CLI-Ping erneuern (`ClaudeUsageUpdateFlow`). Die Zeilen
+    /// aktualisieren einzeln, sobald ein Profil durch ist.
+    private func updateUsage() {
+        guard !isFetchingUsage else { return }
+        isFetchingUsage = true
+        let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
+        Task {
+            let summary = await ClaudeUsageUpdateFlow.run(profileNames: loggedIn) { name, usage in
+                usageByProfile[name] = usage
+            }
+            await MainActor.run {
+                isFetchingUsage = false
+                showUpdateSummary(summary)
+            }
+        }
+    }
+
+    private func showUpdateSummary(_ summary: ClaudeUsageUpdateFlow.Summary) {
+        if summary.claudeMissing {
+            showFeedback("Claude CLI not found — install Claude Code first.", tone: .error)
+            return
+        }
+        var parts: [String] = []
+        if !summary.renewed.isEmpty {
+            parts.append("Renewed via CLI ping: \(summary.renewed.joined(separator: ", ")).")
+        }
+        if !summary.loginRequired.isEmpty {
+            parts.append("Login expired (re-login via ⋯ menu): \(summary.loginRequired.joined(separator: ", ")).")
+        }
+        if !summary.failed.isEmpty {
+            parts.append("Ping failed: \(summary.failed.joined(separator: ", ")).")
+        }
+        guard !parts.isEmpty else {
+            showFeedback("Limits updated.", tone: .secondary)
+            return
+        }
+        let tone: SettingsHelpText.Tone = summary.loginRequired.isEmpty && summary.failed.isEmpty
+            ? .secondary
+            : .warning
+        showFeedback(parts.joined(separator: " "), tone: tone)
     }
 
     private func setActive(_ profile: ClaudeAccountProfile) {

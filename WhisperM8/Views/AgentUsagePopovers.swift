@@ -141,9 +141,9 @@ private struct ClaudeUsagePopoverView: View {
                 PopoverHeader(title: "Claude · Usage-Limits", subtitle: "Alle verbundenen Accounts")
                 Spacer(minLength: 0)
                 // Manuelles Update: einziger Weg, abgelaufene Tokens zu
-                // refreshen — onAppear bleibt passiv (Rate-Limit-Schutz).
+                // erneuern (CLI-Ping) — onAppear bleibt passiv.
                 Button {
-                    load(allowTokenRefresh: true)
+                    update()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11, weight: .semibold))
@@ -153,7 +153,7 @@ private struct ClaudeUsagePopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoading)
-                .help("Live aktualisieren — loggt abgelaufene Tokens neu ein")
+                .help("Live aktualisieren — erneuert abgelaufene Tokens per Claude-CLI-Ping")
             }
 
             if isLoading, usageByProfile.isEmpty {
@@ -236,9 +236,9 @@ private struct ClaudeUsagePopoverView: View {
         case .refreshBlockedBySession:
             return "Token abgelaufen — die laufende Session erneuert ihn gleich"
         case .tokenExpired:
-            return "Token abgelaufen — mit ↻ oben aktualisieren"
+            return "Token abgelaufen — ↻ erneuert ihn per CLI-Ping"
         case .refreshCoolingDown(let until):
-            return "Rate-Limit — Update wieder möglich ab \(AgentChatsClaudeAccountsTab.timeText(until)) Uhr"
+            return "Gerade gepingt — nächster Versuch ab \(AgentChatsClaudeAccountsTab.timeText(until)) Uhr"
         case .httpStatus(429):
             return "Rate-Limit von Anthropic — gleich nochmal versuchen"
         case .httpStatus(let status):
@@ -248,9 +248,8 @@ private struct ClaudeUsagePopoverView: View {
         }
     }
 
-    /// Passiv per Default — nur der ↻-Button darf abgelaufene Tokens
-    /// refreshen (`allowTokenRefresh: true`), sonst Cache + Hinweis.
-    private func load(allowTokenRefresh: Bool = false) {
+    /// Passiv (onAppear): nur lesen, nie Tokens anfassen.
+    private func load() {
         isLoading = true
         profiles = profileService.profiles()
         activeProfileName = profileService.activeProfileName()
@@ -260,7 +259,7 @@ private struct ClaudeUsagePopoverView: View {
             await withTaskGroup(of: (String, ClaudeAccountUsage?).self) { group in
                 for name in loggedIn {
                     group.addTask {
-                        (name, await fetcher.fetchUsage(forProfile: name, allowTokenRefresh: allowTokenRefresh))
+                        (name, await fetcher.fetchUsage(forProfile: name))
                     }
                 }
                 for await (name, usage) in group {
@@ -272,6 +271,23 @@ private struct ClaudeUsagePopoverView: View {
                 usageByProfile = finalResults
                 isLoading = false
             }
+        }
+    }
+
+    /// ↻-Button: gemeinsamer Update-Flow mit dem Accounts-Tab — abgelaufene
+    /// Tokens werden seriell per CLI-Ping erneuert, Zeilen aktualisieren
+    /// einzeln.
+    private func update() {
+        guard !isLoading else { return }
+        isLoading = true
+        profiles = profileService.profiles()
+        activeProfileName = profileService.activeProfileName()
+        let loggedIn = profiles.filter(\.isLoggedIn).map(\.name)
+        Task {
+            _ = await ClaudeUsageUpdateFlow.run(profileNames: loggedIn) { name, usage in
+                usageByProfile[name] = usage
+            }
+            await MainActor.run { isLoading = false }
         }
     }
 }

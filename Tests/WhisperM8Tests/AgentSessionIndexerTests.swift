@@ -125,6 +125,29 @@ final class AgentSessionIndexerTests: XCTestCase {
         XCTAssertEqual(sessions.first?.title, "Fix hooks")
     }
 
+    func testClaudeSessionIndexerSkipsLimitPingDirectories() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8ClaudePingIndex-\(UUID().uuidString)", isDirectory: true)
+        // Encodierter Name des Ping-Arbeitsordners (ClaudeAccountLimitPinger):
+        // die Sessions darin sind Token-Refresh-Artefakte, keine Chats.
+        let pingDirectory = root.appendingPathComponent(
+            "-Users-test-Library-Application Support-WhisperM8-whisperm8-limit-ping",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: pingDirectory, withIntermediateDirectories: true)
+
+        try """
+        {"type":"user","timestamp":"2026-08-09T12:00:00.000Z","sessionId":"33333333-3333-4333-8333-333333333333","cwd":"/Users/test/Library/Application Support/WhisperM8/whisperm8-limit-ping","message":{"role":"user","content":"Antworte nur mit: ok"}}
+        """.write(
+            to: pingDirectory.appendingPathComponent("33333333-3333-4333-8333-333333333333.jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(ClaudeSessionIndexer(projectsDirectory: root).indexedSessions().isEmpty)
+    }
+
     func testClaudeSessionIndexerReadsBoundedLinesAndCachesResults() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8ClaudeBoundedIndex-\(UUID().uuidString)", isDirectory: true)

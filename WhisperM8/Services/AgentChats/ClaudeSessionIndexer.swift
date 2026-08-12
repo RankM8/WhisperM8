@@ -82,8 +82,23 @@ struct ClaudeSessionIndexer {
                 enumerator.skipDescendants()
                 continue
             }
+            // Limit-Ping-Arbeitsordner (ClaudeAccountLimitPinger): dessen
+            // Sessions sind reine Token-Refresh-Artefakte und dürfen nie als
+            // Chats importiert werden — auch nicht im Zeitfenster zwischen
+            // CLI-Lauf und Aufräumen (FSEvents triggert Scans in Sekunden).
+            if fileURL.hasDirectoryPath,
+               ClaudeAccountLimitPinger.isPingProjectsDirectory(fileURL.lastPathComponent) {
+                enumerator.skipDescendants()
+                continue
+            }
             guard fileURL.pathExtension == "jsonl" else { continue }
             guard !fileURL.path.contains("/subagents/") else {
+                stats.skippedFiles += 1
+                continue
+            }
+            guard !ClaudeAccountLimitPinger.isPingProjectsDirectory(
+                fileURL.deletingLastPathComponent().lastPathComponent
+            ) else {
                 stats.skippedFiles += 1
                 continue
             }

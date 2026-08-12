@@ -439,7 +439,8 @@ extension ClaudeAccountUsageFetcherTests {
     }
 }
 
-// MARK: - Live-Fetch mit Token-Refresh
+// MARK: - Passiver Live-Fetch (Token-Rotation macht ausschliesslich der
+// CLI-Ping, siehe ClaudeAccountLimitPingerTests)
 
 extension ClaudeAccountUsageFetcherTests {
     private static let usageJSON = """
@@ -450,15 +451,13 @@ extension ClaudeAccountUsageFetcherTests {
     /// Sammelt Keychain- und HTTP-Aufrufe der injizierten Fakes.
     private final class Recorder: @unchecked Sendable {
         var securityCalls: [[String]] = []
-        var tokenRequests: [URLRequest] = []
-        var usageTokens: [String] = []
+        var requests: [URLRequest] = []
     }
 
-    /// Fetcher mit Fake-Keychain und Fake-Endpoints: der Token-Endpoint
-    /// rotiert r1 → (a2, r2), der Usage-Endpoint akzeptiert nur `validTokens`.
+    /// Fetcher mit Fake-Keychain und Fake-Usage-Endpoint, der nur
+    /// `validTokens` akzeptiert (sonst 401).
     private func makeFetcher(
         secretJSON: String?,
-        tokenEndpointStatus: Int = 200,
         validTokens: Set<String>,
         busy: Set<String> = [],
         recorder: Recorder
@@ -484,15 +483,9 @@ extension ClaudeAccountUsageFetcherTests {
         // sonst koppeln Tests ueber Profilnamen aneinander.
         fetcher.refreshThrottle = ClaudeTokenRefreshThrottle()
         fetcher.httpResponse = { request in
-            let url = request.url?.absoluteString ?? ""
-            if url.contains("console.anthropic.com/v1/oauth/token") {
-                recorder.tokenRequests.append(request)
-                guard tokenEndpointStatus == 200 else { return (Data("{}".utf8), tokenEndpointStatus) }
-                return (Data(#"{"access_token": "a2", "refresh_token": "r2", "expires_in": 28800}"#.utf8), 200)
-            }
+            recorder.requests.append(request)
             let token = (request.value(forHTTPHeaderField: "Authorization") ?? "")
                 .replacingOccurrences(of: "Bearer ", with: "")
-            recorder.usageTokens.append(token)
             guard validTokens.contains(token) else { return (Data("{}".utf8), 401) }
             return (Data(Self.usageJSON.utf8), 200)
         }
@@ -508,39 +501,16 @@ extension ClaudeAccountUsageFetcherTests {
         #"{"claudeAiOauth":{"accessToken":"a1","refreshToken":"r1","expiresAt":4000000000000}}"#
     }
 
-    func testExpiredTokenIsRefreshedRotatedAndWrittenBack() async throws {
+    func testValidTokenFetchesLiveUsageAndWritesCache() async throws {
         let recorder = Recorder()
-        let fetcher = try makeFetcher(secretJSON: expiredSecret, validTokens: ["a2"], recorder: recorder)
+        let fetcher = try makeFetcher(secretJSON: validSecret, validTokens: ["a1"], recorder: recorder)
 
-        let fetched = await fetcher.fetchUsage(forProfile: "acc", allowTokenRefresh: true)
+        let fetched = await fetcher.fetchUsage(forProfile: "acc")
         let usage = try XCTUnwrap(fetched)
         XCTAssertTrue(usage.isLive)
         XCTAssertNil(usage.liveFetchProblem)
         XCTAssertEqual(usage.fiveHourPercent, 7.0)
-
-        // Genau eine Rotation; Usage nur mit dem frischen Token abgefragt.
-        XCTAssertEqual(recorder.tokenRequests.count, 1)
-        XCTAssertEqual(recorder.usageTokens, ["a2"])
-        let tokenBody = try XCTUnwrap(recorder.tokenRequests.first?.httpBody)
-        let tokenParams = try XCTUnwrap(JSONSerialization.jsonObject(with: tokenBody) as? [String: String])
-        XCTAssertEqual(tokenParams["grant_type"], "refresh_token")
-        XCTAssertEqual(tokenParams["refresh_token"], "r1")
-        XCTAssertEqual(tokenParams["client_id"], ClaudeAccountUsageFetcher.oauthClientID)
-
-        // Write-back: rotiertes Secret feld-erhaltend zurueck in die Keychain.
-        let addCall = try XCTUnwrap(recorder.securityCalls.first { $0.first == "add-generic-password" })
-        XCTAssertTrue(addCall.contains("-U"))
-        let wIndex = try XCTUnwrap(addCall.firstIndex(of: "-w"))
-        let payload = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: Data(addCall[wIndex + 1].utf8)) as? [String: Any]
-        )
-        let oauth = try XCTUnwrap(payload["claudeAiOauth"] as? [String: Any])
-        XCTAssertEqual(oauth["accessToken"] as? String, "a2")
-        XCTAssertEqual(oauth["refreshToken"] as? String, "r2")
-        XCTAssertEqual(oauth["subscriptionType"] as? String, "team")
-        XCTAssertNotNil(payload["mcpOAuth"], "fremde Felder (mcpOAuth) muessen den Write-back ueberleben")
-        let expiresAt = try XCTUnwrap(oauth["expiresAt"] as? Double)
-        XCTAssertGreaterThan(expiresAt / 1000, Date().timeIntervalSince1970)
+        XCTAssertEqual(recorder.requests.count, 1)
 
         // Frische Antwort landet im TMPDIR-Cache.
         let cachePath = (fetcher.temporaryDirectory as NSString)
@@ -548,42 +518,24 @@ extension ClaudeAccountUsageFetcherTests {
         XCTAssertTrue(FileManager.default.fileExists(atPath: cachePath))
     }
 
-    func testUnauthorizedTriggersExactlyOneRefreshRetry() async throws {
+    func testExpiredTokenNeverIssuesARequestAndFallsBackToCache() async throws {
         let recorder = Recorder()
-        let fetcher = try makeFetcher(secretJSON: validSecret, validTokens: ["a2"], recorder: recorder)
-
-        let fetched = await fetcher.fetchUsage(forProfile: "acc", allowTokenRefresh: true)
-        let usage = try XCTUnwrap(fetched)
-        XCTAssertTrue(usage.isLive)
-        // Erst 401 mit a1, dann Refresh, dann Erfolg mit a2 — kein weiterer Versuch.
-        XCTAssertEqual(recorder.usageTokens, ["a1", "a2"])
-        XCTAssertEqual(recorder.tokenRequests.count, 1)
-    }
-
-    func testRefreshFailureFallsBackToCacheWithLoginExpired() async throws {
-        let recorder = Recorder()
-        let fetcher = try makeFetcher(
-            secretJSON: expiredSecret,
-            tokenEndpointStatus: 429,
-            validTokens: [],
-            recorder: recorder
-        )
+        let fetcher = try makeFetcher(secretJSON: expiredSecret, validTokens: [], recorder: recorder)
         let cachePath = (fetcher.temporaryDirectory as NSString)
             .appendingPathComponent("claude-usage-cache-acc.json")
         try #"{"five_hour": {"utilization": 63.0}}"#.write(toFile: cachePath, atomically: true, encoding: .utf8)
 
-        let fetched = await fetcher.fetchUsage(forProfile: "acc", allowTokenRefresh: true)
+        let fetched = await fetcher.fetchUsage(forProfile: "acc")
         let usage = try XCTUnwrap(fetched)
+        XCTAssertTrue(recorder.requests.isEmpty, "abgelaufen → nicht mal ein Usage-GET")
         XCTAssertFalse(usage.isLive)
-        // Rate-Limit auf dem Token-Endpoint ist KEIN toter Login — die UI darf
-        // nicht faelschlich zum Re-Login auffordern.
-        XCTAssertEqual(usage.liveFetchProblem, .httpStatus(429))
+        XCTAssertEqual(usage.liveFetchProblem, .tokenExpired)
         XCTAssertEqual(usage.fiveHourPercent, 63.0)
-        // Kein Write-back, wenn nichts rotiert wurde.
+        // Der Fetcher rotiert NIE — kein Keychain-Write-back-Versuch.
         XCTAssertNil(recorder.securityCalls.first { $0.first == "add-generic-password" })
     }
 
-    func testBusyProfileNeverRotatesTheToken() async throws {
+    func testExpiredTokenWithRunningSessionReportsSessionWillRefresh() async throws {
         let recorder = Recorder()
         let fetcher = try makeFetcher(
             secretJSON: expiredSecret,
@@ -592,12 +544,23 @@ extension ClaudeAccountUsageFetcherTests {
             recorder: recorder
         )
 
-        let fetched = await fetcher.fetchUsage(forProfile: "acc", allowTokenRefresh: true)
+        let fetched = await fetcher.fetchUsage(forProfile: "acc")
         let usage = try XCTUnwrap(fetched)
-        // Laufende Session unter dem Profil → der Token-Endpoint bleibt tabu.
-        XCTAssertTrue(recorder.tokenRequests.isEmpty)
+        XCTAssertTrue(recorder.requests.isEmpty)
         XCTAssertEqual(usage.liveFetchProblem, .refreshBlockedBySession)
         XCTAssertFalse(usage.hasLimitData)
+    }
+
+    func testUnauthorizedDespiteValidStampReportsTokenExpired() async throws {
+        let recorder = Recorder()
+        let fetcher = try makeFetcher(secretJSON: validSecret, validTokens: [], recorder: recorder)
+
+        // 401 trotz gueltigem Stempel (vorzeitig entwertet): gleiche Auskunft
+        // wie „abgelaufen" — der Update-Ping hilft auch hier.
+        let fetched = await fetcher.fetchUsage(forProfile: "acc")
+        let usage = try XCTUnwrap(fetched)
+        XCTAssertEqual(recorder.requests.count, 1)
+        XCTAssertEqual(usage.liveFetchProblem, .tokenExpired)
     }
 
     func testMissingKeychainSecretWithoutCacheReturnsNil() async throws {
@@ -623,65 +586,32 @@ extension ClaudeAccountUsageFetcherTests {
         XCTAssertEqual(usage.liveFetchProblem, .noCredentials)
     }
 
-    func testPassiveFetchNeverTouchesTokenEndpoint() async throws {
+    func testThrottleEntryFromPingSurfacesPreciseProblemOnPassiveFetch() async throws {
         let recorder = Recorder()
         let fetcher = try makeFetcher(secretJSON: expiredSecret, validTokens: [], recorder: recorder)
-        let cachePath = (fetcher.temporaryDirectory as NSString)
-            .appendingPathComponent("claude-usage-cache-acc.json")
-        try #"{"five_hour": {"utilization": 63.0}}"#.write(toFile: cachePath, atomically: true, encoding: .utf8)
 
-        // Default = passiv (onAppear von Tab/Popover): abgelaufenes Token →
-        // KEIN POST auf den Token-Endpoint, nicht mal ein Usage-GET.
+        // Der letzte Ping meldete einen toten Login — passive Folge-Fetches
+        // (Popover erneut geoeffnet) zeigen den praezisen Grund statt
+        // „Update druecken".
+        fetcher.refreshThrottle.record(
+            profile: "acc",
+            nextAllowedAt: Date().addingTimeInterval(600),
+            problem: .loginExpired
+        )
         let fetched = await fetcher.fetchUsage(forProfile: "acc")
         let usage = try XCTUnwrap(fetched)
-        XCTAssertTrue(recorder.tokenRequests.isEmpty)
-        XCTAssertTrue(recorder.usageTokens.isEmpty)
-        XCTAssertFalse(usage.isLive)
-        XCTAssertEqual(usage.liveFetchProblem, .tokenExpired)
-        XCTAssertEqual(usage.fiveHourPercent, 63.0)
+        XCTAssertEqual(usage.liveFetchProblem, .loginExpired)
     }
 
-    func testRateLimitedUpdateEntersCooldownAndBlocksSecondAttempt() async throws {
+    func testThrottleEntryWithoutProblemShowsCooldownWindow() async throws {
         let recorder = Recorder()
-        let fetcher = try makeFetcher(
-            secretJSON: expiredSecret,
-            tokenEndpointStatus: 429,
-            validTokens: [],
-            recorder: recorder
-        )
+        let fetcher = try makeFetcher(secretJSON: expiredSecret, validTokens: [], recorder: recorder)
 
-        let first = await fetcher.fetchUsage(forProfile: "acc", allowTokenRefresh: true)
-        XCTAssertEqual(try XCTUnwrap(first).liveFetchProblem, .httpStatus(429))
-        XCTAssertEqual(recorder.tokenRequests.count, 1)
-
-        // Zweiter Update-Klick innerhalb des Cooldowns: kein weiterer POST,
-        // stattdessen Cooldown-Hinweis mit Freigabezeit.
-        let second = await fetcher.fetchUsage(forProfile: "acc", allowTokenRefresh: true)
-        XCTAssertEqual(recorder.tokenRequests.count, 1)
-        guard case .refreshCoolingDown(let until)? = try XCTUnwrap(second).liveFetchProblem else {
-            return XCTFail("erwartet .refreshCoolingDown, war \(String(describing: second?.liveFetchProblem))")
-        }
-        XCTAssertGreaterThan(until, Date())
-    }
-
-    func testRejectedRefreshShowsLoginExpiredAlsoOnLaterPassiveFetches() async throws {
-        let recorder = Recorder()
-        let fetcher = try makeFetcher(
-            secretJSON: expiredSecret,
-            tokenEndpointStatus: 400,
-            validTokens: [],
-            recorder: recorder
-        )
-
-        let active = await fetcher.fetchUsage(forProfile: "acc", allowTokenRefresh: true)
-        XCTAssertEqual(try XCTUnwrap(active).liveFetchProblem, .loginExpired)
-        XCTAssertEqual(recorder.tokenRequests.count, 1)
-
-        // Passive Folge-Fetches (Popover erneut geoeffnet) zeigen waehrend des
-        // Cooldowns weiter den praezisen Grund statt „Update druecken".
-        let passive = await fetcher.fetchUsage(forProfile: "acc")
-        XCTAssertEqual(recorder.tokenRequests.count, 1)
-        XCTAssertEqual(try XCTUnwrap(passive).liveFetchProblem, .loginExpired)
+        let until = Date().addingTimeInterval(300)
+        fetcher.refreshThrottle.record(profile: "acc", nextAllowedAt: until, problem: nil)
+        let fetched = await fetcher.fetchUsage(forProfile: "acc")
+        let usage = try XCTUnwrap(fetched)
+        XCTAssertEqual(usage.liveFetchProblem, .refreshCoolingDown(until: until))
     }
 }
 
