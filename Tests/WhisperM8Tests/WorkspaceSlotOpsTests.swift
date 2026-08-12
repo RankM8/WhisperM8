@@ -438,4 +438,60 @@ final class WorkspaceSlotOpsTests: XCTestCase {
             XCTAssertTrue(Set(retained).isDisjoint(with: Set(evicted)))
         }
     }
+
+    // MARK: - Projekt-View-Sync (Live-Grid)
+
+    func testProjectSyncKeepsSlotOwnersClearsInactiveAndFillsFreeSlots() {
+        let ids = (0 ..< 5).map { _ in UUID() }
+        // ids[1] wird inaktiv (Tab zu), ids[3]+ids[4] kommen neu dazu.
+        let slots = WorkspaceSlotOps.syncedProjectSlots(
+            current: [ids[0], ids[1], nil, ids[2]],
+            activeOrdered: [ids[3], ids[0], ids[2], ids[4]]
+        )
+        XCTAssertEqual(
+            slots, [ids[0], ids[3], ids[4], ids[2]],
+            "Besitzer positionsstabil, Inaktive am Index geräumt, Neue in freie Slots"
+        )
+    }
+
+    func testProjectSyncGrowsByAppendingBeyondCurrentSlots() {
+        let ids = (0 ..< 3).map { _ in UUID() }
+        let slots = WorkspaceSlotOps.syncedProjectSlots(
+            current: [ids[0], ids[1]],
+            activeOrdered: [ids[0], ids[1], ids[2]]
+        )
+        XCTAssertEqual(slots, [ids[0], ids[1], ids[2]])
+    }
+
+    func testProjectSyncCapsAtNineWithoutEvictingOwners() {
+        let owners = (0 ..< 9).map { _ in UUID() }
+        let newcomers = (0 ..< 3).map { _ in UUID() }
+        // 9 Besitzer + 3 neue Aktive: Kappe greift, kein Besitzer fliegt.
+        let slots = WorkspaceSlotOps.syncedProjectSlots(
+            current: owners,
+            activeOrdered: newcomers + owners
+        )
+        XCTAssertEqual(slots, owners, "Überzählige bleiben draußen — nie Verdrängung")
+    }
+
+    func testProjectSyncFillsFreedSlotBeforeAppending() {
+        let ids = (0 ..< 10).map { _ in UUID() }
+        // 9er-Grid, Besitzer an Index 4 wird inaktiv, ein Neuer wartet →
+        // der Neue übernimmt exakt den freigewordenen Slot.
+        var current: [UUID?] = Array(ids[0 ..< 9])
+        current[4] = nil
+        let active = ids[0 ..< 9].filter { $0 != ids[4] } + [ids[9]]
+        let slots = WorkspaceSlotOps.syncedProjectSlots(current: current, activeOrdered: active)
+        XCTAssertEqual(slots[4], ids[9])
+        XCTAssertEqual(slots.compactMap { $0 }.count, 9)
+    }
+
+    func testProjectSyncEmptyActiveClearsAllSlotsPositionStable() {
+        let ids = (0 ..< 2).map { _ in UUID() }
+        let slots = WorkspaceSlotOps.syncedProjectSlots(
+            current: [ids[0], nil, ids[1]],
+            activeOrdered: []
+        )
+        XCTAssertEqual(slots, [nil, nil, nil])
+    }
 }

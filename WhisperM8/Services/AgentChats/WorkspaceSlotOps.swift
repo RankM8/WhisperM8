@@ -52,6 +52,37 @@ enum WorkspaceSlotOps {
         let evicted: [UUID]
     }
 
+    // MARK: - Projekt-View-Sync (Projekt als Live-Grid)
+
+    /// Gleicht die Slots einer Projekt-View an die aktuelle Aktiv-Menge des
+    /// Projekts an. Positionsstabil: Wer einen Slot hat und aktiv bleibt,
+    /// behält ihn; Inaktive werden am eigenen Index `nil`; Neue füllen freie
+    /// Slots (danach Anhängen = Auto-Wachsen), gedeckelt bei 9 — es wird NIE
+    /// ein Slot-Besitzer verdrängt, Überzählige bleiben draußen
+    /// (Kappungs-Anzeige „9/N" macht der Header).
+    static func syncedProjectSlots(current: [UUID?], activeOrdered: [UUID]) -> [UUID?] {
+        let active = Set(activeOrdered)
+        var slots = current.map { slot -> UUID? in
+            guard let slot, active.contains(slot) else { return nil }
+            return slot
+        }
+        let members = Set(slots.compactMap { $0 })
+        var occupiedCount = members.count
+        let cap = AgentGridWorkspace.allowedCapacities.last!
+        for sessionID in activeOrdered where !members.contains(sessionID) {
+            guard occupiedCount < cap else { break }
+            if let free = slots.firstIndex(where: { $0 == nil }) {
+                slots[free] = sessionID
+            } else if slots.count < cap {
+                slots.append(sessionID)
+            } else {
+                break
+            }
+            occupiedCount += 1
+        }
+        return slots
+    }
+
     // MARK: - Hinzufügen / Platzieren
 
     /// Nimmt `sessionID` in den Workspace auf.

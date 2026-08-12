@@ -522,19 +522,21 @@ struct AgentUIState: Codable, Equatable {
             focusAnchors[window.id] = (workspaceID, index)
         }
 
-        gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces).map { entity in
+        gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces).compactMap { entity in
+            // Projekt-Views (verstecktes Entity, ⊞ am Projekt-Header) toter
+            // Projekte KOMPLETT entfernen — sie sind reine Ableitung plus
+            // Layout-Gedächtnis und dürfen nie als verwaister sichtbarer
+            // Workspace auftauchen. Fenster-Referenzen räumt
+            // normalizedWindows unten.
+            if let source = entity.sourceProjectID, !liveProjectIDs.contains(source) {
+                return nil
+            }
             var copy = entity
             // Indexstabil: toter Verweis wird am eigenen Index nil — nie
             // kompaktieren, nie schrumpfen.
             copy.slots = copy.slots.map { slot in
                 guard let slot, liveSessionIDs.contains(slot) else { return nil }
                 return slot
-            }
-            // Projekt-Bindung (⊞ am Projekt-Header) toter Projekte lösen —
-            // der Workspace bleibt als normaler Workspace bestehen, aber ein
-            // neues gleichnamiges Projekt erbt ihn nicht versehentlich.
-            if let source = copy.sourceProjectID, !liveProjectIDs.contains(source) {
-                copy.sourceProjectID = nil
             }
             return copy
         }

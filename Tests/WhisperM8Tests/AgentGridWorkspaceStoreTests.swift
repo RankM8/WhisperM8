@@ -76,6 +76,115 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         )
     }
 
+    /// Session mit steuerbarer Aktivitätszeit — die Projekt-View-Sortierung
+    /// (Sidebar-Reihenfolge) hängt an `lastActivityAt`.
+    @discardableResult
+    private func seedSession(
+        _ persistence: AgentSessionStore,
+        lastActivityAt: Date
+    ) throws -> UUID {
+        var session = AgentChatSession(
+            id: UUID(),
+            provider: .claude,
+            projectID: UUID(),
+            title: "Chat",
+            lastActivityAt: lastActivityAt,
+            createdManually: true
+        )
+        session.status = .closed
+        _ = try persistence.upsertSession(session)
+        return session.id
+    }
+
+    // MARK: - Projekt-Views (Projekt als Live-Grid)
+
+    func testActivateProjectGridWorkspaceCreatesHiddenEntityOnceAndSyncs() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let projectID = UUID()
+        let older = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 100))
+        let newer = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 200))
+
+        let first = store.activateProjectGridWorkspace(
+            projectID: projectID, name: "akquise-ai", colorHex: "#3E8E63",
+            activeSessionIDs: [older, newer], in: w
+        )
+        XCTAssertEqual(first, .activated)
+        let entity = try XCTUnwrap(store.gridWorkspaces.first { $0.sourceProjectID == projectID })
+        XCTAssertEqual(entity.name, "akquise-ai")
+        XCTAssertEqual(entity.occupiedSessionIDs, [newer, older],
+                       "neue Mitglieder in Sidebar-Reihenfolge (Aktivität absteigend)")
+        XCTAssertTrue(store.showsGrid(in: w))
+
+        // Zweites Öffnen: KEIN zweites Entity, Slots positionsstabil gesynct
+        // (older fällt raus → Slot nil, ein Neuer übernimmt den Platz).
+        let third = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 300))
+        let second = store.activateProjectGridWorkspace(
+            projectID: projectID, name: "akquise-ai", colorHex: "#3E8E63",
+            activeSessionIDs: [newer, third], in: w
+        )
+        XCTAssertEqual(second, .alreadyActiveHere)
+        XCTAssertEqual(store.gridWorkspaces.filter { $0.sourceProjectID == projectID }.count, 1)
+        let synced = try XCTUnwrap(store.gridWorkspace(id: entity.id))
+        XCTAssertEqual(synced.slots, [newer, third],
+                       "newer behält Slot 1, third übernimmt den frei gewordenen Slot 2")
+    }
+
+    func testSyncActiveProjectGridWorkspacesTouchesOnlyReferencedViews() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let projectA = UUID(); let projectB = UUID()
+        let a1 = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 100))
+        let b1 = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 100))
+
+        _ = store.activateProjectGridWorkspace(
+            projectID: projectA, name: "A", colorHex: "#3E8E63",
+            activeSessionIDs: [a1], in: w
+        )
+        // View B existiert, ist aber nirgends aktiv.
+        let idB = store.createGridWorkspace(name: "B", sourceProjectID: projectB)
+        XCTAssertEqual(store.activeProjectViewProjectIDs, [projectA])
+
+        let a2 = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 200))
+        let b2 = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 200))
+        store.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: [
+            projectA: [a1, a2],
+            projectB: [b1, b2],
+        ])
+
+        let viewA = try XCTUnwrap(store.gridWorkspaces.first { $0.sourceProjectID == projectA })
+        XCTAssertEqual(Set(viewA.occupiedSessionIDs), [a1, a2], "aktive View folgt live")
+        XCTAssertTrue(store.gridWorkspace(id: idB)!.occupiedSessionIDs.isEmpty,
+                      "nicht offene View bleibt unangetastet — sie synct beim nächsten ⊞")
+    }
+
+    func testProjectSyncMaterializesNewTabAndRepairsFocusOnRemoval() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let projectID = UUID()
+        let leaving = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 200))
+        let staying = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 100))
+        _ = store.activateProjectGridWorkspace(
+            projectID: projectID, name: "P", colorHex: "#3E8E63",
+            activeSessionIDs: [leaving, staying], in: w
+        )
+        store.setGridFocusedSession(leaving, in: w)
+        let entityID = try XCTUnwrap(store.gridWorkspaces.first { $0.sourceProjectID == projectID }?.id)
+
+        let joining = try seedSession(persistence, lastActivityAt: Date(timeIntervalSince1970: 300))
+        store.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: [
+            projectID: [staying, joining]
+        ])
+
+        let synced = try XCTUnwrap(store.gridWorkspace(id: entityID))
+        XCTAssertEqual(synced.slots, [joining, staying],
+                       "leaving am Index geräumt, joining übernimmt den Slot")
+        XCTAssertTrue(store.openTabIDs(in: w).contains(joining),
+                      "neues Mitglied materialisiert seinen Tab im Besitzerfenster")
+        XCTAssertNotEqual(store.selectedSession(in: w), leaving,
+                          "Fokus verlässt die entfernte Pane")
+    }
+
     func testRenameGridWorkspaceTrimsAndRejectsEmptyName() {
         let (store, _) = makeStore()
         let id = store.createGridWorkspace(name: "Alt")

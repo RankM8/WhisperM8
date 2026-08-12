@@ -721,7 +721,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         let outcome: MembershipOutcome = await MainActor.run {
             let store = AgentWindowStore.shared
             let workspaceEntity: AgentGridWorkspace
-            switch Self.resolveGridWorkspaceRef(workspaceRef, all: store.gridWorkspaces) {
+            switch Self.resolveGridWorkspaceRef(
+                workspaceRef, all: store.gridWorkspaces.filter { $0.sourceProjectID == nil }
+            ) {
             case .success(let entity): workspaceEntity = entity
             case .failure(let message): return .fail(.notFound, message)
             }
@@ -865,7 +867,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         let result: OpenOutcome = await MainActor.run {
             let store = AgentWindowStore.shared
             let entity: AgentGridWorkspace
-            switch Self.resolveGridWorkspaceRef(workspaceRef, all: store.gridWorkspaces) {
+            switch Self.resolveGridWorkspaceRef(
+                workspaceRef, all: store.gridWorkspaces.filter { $0.sourceProjectID == nil }
+            ) {
             case .success(let match): entity = match
             case .failure(let message): return .fail(.notFound, message)
             }
@@ -1251,7 +1255,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             let projectBySession = Dictionary(
                 uniqueKeysWithValues: sessions.map { ($0.id, projects[$0.projectID] ?? "?") })
 
-            return store.gridWorkspaces.map { ws in
+            // Projekt-Views (Live-Ableitung, ⊞ am Projekt-Header) sind keine
+            // kuratierten Workspaces — für die CLI unsichtbar.
+            return store.gridWorkspaces.filter { $0.sourceProjectID == nil }.map { ws in
                 let hostWindowID = store.windowID(owningGridWorkspace: ws.id)
                 let gridVisible = hostWindowID.map { store.showsGrid(in: $0) } ?? false
 
@@ -1308,7 +1314,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             // Auflösung: exakte ID → exakter (normalisierter) Name →
             // eindeutiger Substring. Mehrdeutig → Fehler (nie raten).
             let workspace: AgentGridWorkspace
-            switch Self.resolveGridWorkspaceRef(ref, all: AgentWindowStore.shared.gridWorkspaces) {
+            switch Self.resolveGridWorkspaceRef(
+                ref, all: AgentWindowStore.shared.gridWorkspaces.filter { $0.sourceProjectID == nil }
+            ) {
             case .success(let entity): workspace = entity
             case .failure(let message): return .fail(.notFound, message)
             }

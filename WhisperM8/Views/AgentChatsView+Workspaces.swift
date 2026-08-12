@@ -17,7 +17,10 @@ extension AgentChatsView {
         workingSubagentIDs: Set<UUID>,
         erroredSubagentIDs: Set<UUID>
     ) -> some View {
-        let workspaces = windowStore.gridWorkspaces
+        // Projekt-Views (⊞ am Projekt-Header, sourceProjectID gesetzt) sind
+        // versteckte Entities — ihr Anker ist der Projekt-Header in CHATS,
+        // hier erscheinen nur kuratierte Workspaces.
+        let workspaces = windowStore.gridWorkspaces.filter { $0.sourceProjectID == nil }
         if !workspaces.isEmpty {
             workspacesSectionHeader(count: workspaces.count)
             if !workspacesSectionCollapsed {
@@ -378,37 +381,50 @@ extension AgentChatsView {
         multiSelection = []
     }
 
-    /// ⊞ am Projekt-Header / Kontextmenü „Als Workspace öffnen" — idempotent:
-    /// Existiert schon ein an dieses Projekt gebundener Workspace
-    /// (`sourceProjectID`), wird er nur aktiviert (inkl. Single-Owner-
-    /// Konflikten); sonst entsteht einer mit Name + Farbe des Projekts aus
-    /// den übergebenen aktiven Chats (Sidebar-Reihenfolge, max. 9 —
-    /// Überzählige werden benannt abgelehnt, Muster
-    /// `createWorkspaceFromSelection`). Danach ist er ein ganz normaler
-    /// Workspace: Mitgliedschaft statisch, Name/Farbe folgen dem Projekt
-    /// nicht mehr.
-    func openProjectAsWorkspace(_ project: AgentProject, activeChats: [AgentChatSession]) {
-        if let existing = windowStore.gridWorkspaces.first(where: { $0.sourceProjectID == project.id }) {
-            activateWorkspaceFromSidebar(existing)
-            return
-        }
-        guard !activeChats.isEmpty else { return }
-        let accepted = Array(activeChats.prefix(9))
-        if activeChats.count > 9 {
-            errorMessage = "Ein Workspace zeigt höchstens 9 Chats — die ersten 9 aktiven Chats von „\(project.name)“ wurden aufgenommen, \(activeChats.count - 9) nicht."
-        }
-        let id = windowStore.createGridWorkspace(
+    /// ⊞ am Projekt-Header / Kontextmenü „Als Workspace öffnen": Projekt als
+    /// LIVE-Grid seiner aktiven Chats öffnen. Kein sichtbares Workspace-
+    /// Entity — der Store hält pro Projekt eine versteckte View (Layout-
+    /// Gedächtnis), deren Mitglieder ausschließlich die Aktiv-Ableitung
+    /// verwaltet (`syncActiveProjectGridWorkspaces` hält sie danach live).
+    /// Single-Owner-Konflikte wie beim Workspace-Header: Besitzerfenster
+    /// nach vorn statt Terminals zu stehlen.
+    func openProjectAsWorkspace(_ project: AgentProject, activeSessionIDs: Set<UUID>) {
+        guard !activeSessionIDs.isEmpty else { return }
+        let wasVisibleHere = isGridActive
+            && activeGridWorkspaceEntity?.sourceProjectID == project.id
+        switch windowStore.activateProjectGridWorkspace(
+            projectID: project.id,
             name: project.name,
             colorHex: project.color,
-            capacity: AgentGridWorkspace.smallestCapacity(fitting: accepted.count),
-            slots: accepted.map { $0.id },
-            sourceProjectID: project.id,
-            activateIn: windowID
-        )
-        if let entity = windowStore.gridWorkspace(id: id) {
-            beginGridBuildMeasurement(for: entity)
+            activeSessionIDs: activeSessionIDs,
+            in: windowID
+        ) {
+        case .activated, .alreadyActiveHere:
+            if !wasVisibleHere, let entity = windowStore.gridWorkspaces.first(
+                where: { $0.sourceProjectID == project.id }
+            ) {
+                beginGridBuildMeasurement(for: entity)
+            }
+            multiSelection = []
+        case .alreadyActive(let owner):
+            focusWindow(owner)
+        case .blockedByWindowOwnership(let conflicts):
+            errorMessage = "„\(project.name)“ kann hier nicht als Workspace öffnen: \(conflicts.count) \(conflicts.count == 1 ? "Chat läuft" : "Chats laufen") als Tab in einem anderen Fenster."
+        case .rejected:
+            break
         }
-        multiSelection = []
+    }
+
+    /// Kappungs-Anzeige „9/N" am Projekt-Header: nur wenn die OFFENE
+    /// Projekt-View dieses Fensters weniger zeigt, als aktiv sind (Endstufe
+    /// 3×3 erreicht) — sonst `nil` (Header zeigt die normale Chat-Zahl).
+    func projectViewOccupancyLabel(for project: AgentProject, activeCount: Int) -> String? {
+        guard isGridActive,
+              let entity = activeGridWorkspaceEntity,
+              entity.sourceProjectID == project.id else { return nil }
+        let shown = entity.occupiedSessionIDs.count
+        guard activeCount > shown else { return nil }
+        return "\(shown)/\(activeCount)"
     }
 
     /// Kontextmenü-Eintrag (Tabs + Sidebar, count-abhängiges Label).

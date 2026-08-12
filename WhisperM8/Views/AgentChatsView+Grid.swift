@@ -62,7 +62,10 @@ extension AgentChatsView {
         for session: AgentChatSession,
         includeRemoval: Bool = true
     ) -> some View {
-        let workspaces = windowStore.gridWorkspaces
+        // Nur kuratierte Workspaces — Projekt-Views verwalten ihre Mitglieder
+        // selbst (Live-Ableitung), manuelles Hinzufügen/Entfernen gibt es
+        // dort nicht.
+        let workspaces = windowStore.gridWorkspaces.filter { $0.sourceProjectID == nil }
         if !workspaces.isEmpty {
             Menu {
                 ForEach(workspaces) { entity in
@@ -82,8 +85,11 @@ extension AgentChatsView {
             }
 
             // Präziser Weg ohne Drag: gezielt in einen Slot des SICHTBAREN
-            // Workspace platzieren (ersetzt/tauscht wie ein Slot-Drop).
-            if isGridActive, let entity = activeGridWorkspaceEntity {
+            // Workspace platzieren (ersetzt/tauscht wie ein Slot-Drop). Im
+            // Projekt-Grid nur für Chats DIESES Projekts (Fremde würde der
+            // Live-Sync sofort wieder entfernen).
+            if isGridActive, let entity = activeGridWorkspaceEntity,
+               entity.sourceProjectID == nil || entity.sourceProjectID == session.projectID {
                 Menu {
                     ForEach(0 ..< entity.capacity, id: \.self) { index in
                         Button {
@@ -343,22 +349,29 @@ extension AgentChatsView {
                 .foregroundStyle(AgentTheme.textPrimary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity) belegt")
-                .font(.system(size: 11).monospacedDigit())
-                .foregroundStyle(AgentTheme.textTertiary)
+            if entity.sourceProjectID != nil {
+                Text("\(entity.occupiedSessionIDs.count) aktiv · Live-Ansicht des Projekts")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textTertiary)
+            } else {
+                Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity) belegt")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textTertiary)
+            }
 
             Spacer(minLength: 8)
 
             // Während der Auswahl übernimmt die Aktionsleiste den Platz des
             // Pickers — eine weitere Stufe zu wählen wäre mitten in der
-            // Entscheidung nur verwirrend.
+            // Entscheidung nur verwirrend. Projekt-Views haben KEINEN Picker:
+            // ihre Kapazität verwaltet der Live-Sync (Auto-Wachsen bis 9).
             if let gridShrinkSelection, gridShrinkSelection.workspaceID == entity.id {
                 GridShrinkActionBar(
                     selection: gridShrinkSelection,
                     onCommit: { commitGridShrink(gridShrinkSelection) },
                     onCancel: { self.gridShrinkSelection = nil }
                 )
-            } else {
+            } else if entity.sourceProjectID == nil {
                 gridCapacityPicker(entity: entity, available: gridAreaSize)
             }
         }
@@ -528,6 +541,7 @@ extension AgentChatsView {
         // würde die gerade getroffene Entscheidung unter der Hand verschieben.
         guard gridShrinkSelection == nil else { return false }
         guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
+        guard allowsProjectViewDrop(payload, entity: entity) else { return false }
         let members = payload.groupMemberIDs.flatMap { $0.isEmpty ? nil : $0 }
         let candidates = (members ?? [payload.sessionID])
             .filter { entity.slotIndex(of: $0) == nil }
@@ -560,6 +574,7 @@ extension AgentChatsView {
     func handleGridSlotDrop(_ payload: DraggableSession, targetSlot: Int, workspaceID: UUID) -> Bool {
         guard gridShrinkSelection == nil else { return false }
         guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
+        guard allowsProjectViewDrop(payload, entity: entity) else { return false }
         switch GridDropZoneResolver.action(
             sessionID: payload.sessionID,
             sourceWorkspaceID: payload.sourceWorkspaceID,
@@ -585,6 +600,25 @@ extension AgentChatsView {
         case .none:
             return false
         }
+    }
+
+    /// Drop-Regel des Projekt-Grids: Nur Chats des EIGENEN Projekts. Ein
+    /// „Verschieben" fremder Chats existiert im Modell nicht — der
+    /// Indexer-Merge setzt die Projekt-Zuordnung beim nächsten Scan ohnehin
+    /// auf den realen Transcript-Pfad zurück (die Platte gewinnt) — deshalb
+    /// benannte Ablehnung statt Schein-Erfolg. Eigene Chats laufen die
+    /// normalen Pfade (Platzieren aktiviert sie: Tab wird materialisiert,
+    /// der Live-Sync behält sie als Mitglied).
+    private func allowsProjectViewDrop(_ payload: DraggableSession, entity: AgentGridWorkspace) -> Bool {
+        guard let sourceProjectID = entity.sourceProjectID else { return true }
+        let members = payload.groupMemberIDs.flatMap { $0.isEmpty ? nil : $0 } ?? [payload.sessionID]
+        let sessionsByID = Dictionary(
+            workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }
+        )
+        let hasForeign = members.contains { sessionsByID[$0]?.projectID != sourceProjectID }
+        guard hasForeign else { return true }
+        errorMessage = "„\(entity.name)“ zeigt live die aktiven Chats des Projekts — Chats anderer Projekte können hier nicht aufgenommen werden."
+        return false
     }
 
     /// Nach ERFOLGREICHER Mitgliedschafts-Mutation: hält ein anderes Fenster
@@ -876,8 +910,19 @@ extension AgentChatsView {
             .buttonStyle(.plain)
             .help("Diesen Chat maximieren („Zurück zum Workspace“ stellt das Grid wieder her)")
             .accessibilityLabel("\(session.title) maximieren")
+            // Projekt-View: „aus dem Workspace nehmen" gibt es nicht (der
+            // Live-Sync brächte den aktiven Chat sofort zurück) — ⊖ schließt
+            // hier den TAB. Nicht mehr aktiv = raus aus der Ansicht; läuft
+            // der Chat noch, bleibt er per Definition Mitglied (Platzhalter
+            // bis zur Wieder-Öffnung). Kuratierte Workspaces: ⊖ leert nur
+            // den Slot; Tabs schließt man in der Tab-Leiste (✕, ⌘W).
+            let isProjectView = windowStore.gridWorkspace(id: workspaceID)?.sourceProjectID != nil
             Button {
-                removeSessionFromWorkspace(session.id, workspaceID: workspaceID)
+                if isProjectView {
+                    closeTab(session)
+                } else {
+                    removeSessionFromWorkspace(session.id, workspaceID: workspaceID)
+                }
             } label: {
                 Image(systemName: "minus")
                     .font(.system(size: 9, weight: .bold))
@@ -887,10 +932,12 @@ extension AgentChatsView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            // Bewusst KEIN Tab-Schließen im Pane-Header — ⊖ leert nur den
-            // Slot; Tabs schließt man in der Tab-Leiste (✕, ⌘W, Mittelklick).
-            .help("Aus dem Workspace nehmen (Slot bleibt frei, Tab bleibt offen)")
-            .accessibilityLabel("\(session.title) aus dem Workspace nehmen")
+            .help(isProjectView
+                ? "Tab schließen — der Chat verlässt die Projekt-Ansicht (läuft er noch, bleibt er als aktives Mitglied)"
+                : "Aus dem Workspace nehmen (Slot bleibt frei, Tab bleibt offen)")
+            .accessibilityLabel(isProjectView
+                ? "Tab von \(session.title) schließen"
+                : "\(session.title) aus dem Workspace nehmen")
         }
         .padding(.horizontal, 10)
         .frame(height: 28)

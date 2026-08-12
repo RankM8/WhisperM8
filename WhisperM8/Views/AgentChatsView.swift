@@ -405,7 +405,9 @@ struct AgentChatsView: View {
     /// gewinnt vor der Projektzugehörigkeit.
     private var tabWorkspaceBySession: [UUID: UUID] {
         var result: [UUID: UUID] = [:]
-        for entity in windowStore.gridWorkspaces {
+        // Projekt-Views zählen nicht als Tab-Herkunft — sonst trüge jeder
+        // aktive Chat plötzlich eine „Workspace"-Färbung.
+        for entity in windowStore.gridWorkspaces where entity.sourceProjectID == nil {
             for sessionID in entity.occupiedSessionIDs where result[sessionID] == nil {
                 result[sessionID] = entity.id
             }
@@ -1316,6 +1318,15 @@ struct AgentChatsView: View {
             }
             .padding(.trailing, 8)
             .frame(height: 28)
+            // Live-Sync der offenen Projekt-Views: feuert bei jeder Änderung
+            // der Aktiv-Mengen (Chat startet/Tab zu/Archiv) UND einmal beim
+            // Erscheinen (Relaunch-Aufholung). Im Archiv-Modus gibt es keinen
+            // Snapshot — dann bewusst KEIN Sync (leere Map hieße fälschlich
+            // „keine aktiven Chats" und würde alle Slots räumen).
+            .task(id: snapshot?.activeSessionIDsByProject) {
+                guard let active = snapshot?.activeSessionIDsByProject else { return }
+                windowStore.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: active)
+            }
 
             if isIndexingSessions {
                 Label("Sessions werden gescannt", systemImage: "arrow.triangle.2.circlepath")
@@ -1482,11 +1493,16 @@ struct AgentChatsView: View {
                                 createDefaultSession()
                             },
                             canOpenAsWorkspace: !(snapshot.activeSessionIDsByProject[project.id]?.isEmpty ?? true),
+                            isWorkspaceOpen: isGridActive
+                                && activeGridWorkspaceEntity?.sourceProjectID == project.id,
+                            workspaceOccupancyLabel: projectViewOccupancyLabel(
+                                for: project,
+                                activeCount: snapshot.activeSessionIDsByProject[project.id]?.count ?? 0
+                            ),
                             onOpenAsWorkspace: {
-                                let activeIDs = snapshot.activeSessionIDsByProject[project.id] ?? []
                                 openProjectAsWorkspace(
                                     project,
-                                    activeChats: projectSessions.filter { activeIDs.contains($0.id) }
+                                    activeSessionIDs: snapshot.activeSessionIDsByProject[project.id] ?? []
                                 )
                             },
                             onCloseSession: { closeSelectionFromSidebar(forID: $0.id) },

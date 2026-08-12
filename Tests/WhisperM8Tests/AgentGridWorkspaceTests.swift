@@ -253,18 +253,19 @@ final class AgentGridWorkspaceTests: XCTestCase {
                        "archiviert → Slot nil, Kapazität unverändert")
     }
 
-    func testPruneClearsSourceProjectIDOfDeadProjectButKeepsWorkspace() {
+    func testPruneRemovesProjectViewsOfDeadProjectsEntirely() {
         let live = makeSession()
         let bound = AgentGridWorkspace(slots: [live.id], sourceProjectID: projectID)
         let orphaned = AgentGridWorkspace(slots: [live.id], sourceProjectID: UUID())
-        var state = AgentUIState(gridWorkspaces: [bound, orphaned])
+        let manual = AgentGridWorkspace(name: "Kuratiert", slots: [live.id])
+        var state = AgentUIState(gridWorkspaces: [bound, orphaned, manual])
         state.prune(workspace: makeWorkspace(sessions: [live]))
-        XCTAssertEqual(state.gridWorkspaces[0].sourceProjectID, projectID,
-                       "lebendes Projekt → Bindung bleibt")
-        XCTAssertNil(state.gridWorkspaces[1].sourceProjectID,
-                     "totes Projekt → nur die Bindung fällt")
-        XCTAssertEqual(state.gridWorkspaces[1].slots, [live.id, nil],
-                       "der Workspace selbst bleibt bestehen")
+        XCTAssertEqual(
+            state.gridWorkspaces.map(\.id), [bound.id, manual.id],
+            "Projekt-View eines toten Projekts verschwindet komplett — "
+                + "lebende Bindung und kuratierte Workspaces bleiben"
+        )
+        XCTAssertEqual(state.gridWorkspaces[0].sourceProjectID, projectID)
     }
 
     func testPruneKeepsClosedSessionsInSlots() {

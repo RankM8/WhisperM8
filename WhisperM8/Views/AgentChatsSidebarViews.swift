@@ -15,11 +15,18 @@ struct ProjectChatGroup: View {
     var onToggleExpanded: () -> Void
     var onSelectSession: (UUID) -> Void
     var onNewChat: () -> Void
-    /// ⊞ am Header / Kontextmenü: Projekt als Workspace öffnen (aktive Chats
-    /// als Grid, idempotent). `canOpenAsWorkspace` steuert nur den
-    /// Enabled-Zustand — WELCHE Chats aktiv sind, weiß allein der Aufrufer
-    /// (scope-unabhängige Aktiv-Definition aus dem Sidebar-Snapshot).
+    /// ⊞ am Header / Kontextmenü: Projekt als LIVE-Grid seiner aktiven Chats
+    /// öffnen. `canOpenAsWorkspace` steuert nur den Enabled-Zustand — WELCHE
+    /// Chats aktiv sind, weiß allein der Aufrufer (scope-unabhängige
+    /// Aktiv-Definition aus dem Sidebar-Snapshot).
     var canOpenAsWorkspace: Bool
+    /// Der Projekt-Header IST der Workspace-Header der Projekt-View: solange
+    /// ihr Grid in diesem Fenster offen ist, trägt er die Aktiv-Markierung
+    /// und der ⊞ bleibt sichtbar/getintet (Rücksprung-Anker).
+    var isWorkspaceOpen: Bool = false
+    /// Kappungs-Anzeige „9/N", wenn das offene Projekt-Grid nicht alle
+    /// aktiven Chats aufnehmen kann (Endstufe 3×3) — `nil` = alles sichtbar.
+    var workspaceOccupancyLabel: String?
     var onOpenAsWorkspace: () -> Void
     var onCloseSession: (AgentChatSession) -> Void
     /// Scope der Sidebar — bestimmt, ob die Hover-Aktion rechts archiviert
@@ -400,30 +407,45 @@ struct ProjectChatGroup: View {
 
                 Spacer(minLength: 6)
 
-                if isHeaderHovered {
+                if isHeaderHovered || isWorkspaceOpen {
                     Button(action: onOpenAsWorkspace) {
                         Image(systemName: "square.grid.2x2")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(canOpenAsWorkspace
-                                ? AgentTheme.textSecondary
-                                : AgentTheme.textTertiary)
+                            .foregroundStyle(isWorkspaceOpen
+                                ? AgentTheme.accent
+                                : canOpenAsWorkspace
+                                    ? AgentTheme.textSecondary
+                                    : AgentTheme.textTertiary)
                             .frame(width: 20, height: 20)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(!canOpenAsWorkspace)
-                    .help(canOpenAsWorkspace
-                        ? "Aktive Chats als Workspace öffnen"
-                        : "Keine aktiven Chats in diesem Projekt")
-                    Button(action: onNewChat) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(AgentTheme.textSecondary)
-                            .frame(width: 20, height: 20)
-                            .contentShape(Rectangle())
+                    .disabled(!canOpenAsWorkspace && !isWorkspaceOpen)
+                    .help(isWorkspaceOpen
+                        ? "Projekt-Grid wieder anzeigen"
+                        : canOpenAsWorkspace
+                            ? "Projekt als Workspace öffnen (Live-Grid der aktiven Chats)"
+                            : "Keine aktiven Chats in diesem Projekt")
+                    if isHeaderHovered {
+                        Button(action: onNewChat) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(AgentTheme.textSecondary)
+                                .frame(width: 20, height: 20)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Neuen Codex Chat im Projekt starten")
+                    } else if let workspaceOccupancyLabel {
+                        Text(workspaceOccupancyLabel)
+                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(AgentTheme.accent)
+                            .help("Das Grid zeigt \(workspaceOccupancyLabel) aktive Chats — Endstufe 3×3 erreicht")
                     }
-                    .buttonStyle(.plain)
-                    .help("Neuen Codex Chat im Projekt starten")
+                } else if let workspaceOccupancyLabel {
+                    Text(workspaceOccupancyLabel)
+                        .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(AgentTheme.accent)
                 } else if !sessions.isEmpty {
                     Text("\(sessions.count)")
                         .font(.system(size: 10, weight: .medium).monospacedDigit())
@@ -461,7 +483,7 @@ struct ProjectChatGroup: View {
             Button("Als Workspace öffnen", systemImage: "square.grid.2x2") {
                 onOpenAsWorkspace()
             }
-            .disabled(!canOpenAsWorkspace)
+            .disabled(!canOpenAsWorkspace && !isWorkspaceOpen)
             Divider()
             Button("Umbenennen…", systemImage: "pencil") {
                 onRenameProjectRequest(project)
@@ -500,9 +522,12 @@ struct ProjectChatGroup: View {
         }
     }
 
-    /// Projekt-Header werden nicht mehr als „selektiert" hervorgehoben —
-    /// genau EINE Markierung in der Sidebar: die aktive Chat-Zeile.
+    /// Projekt-Header werden nicht als „selektiert" hervorgehoben — genau
+    /// EINE Selektions-Markierung in der Sidebar: die aktive Chat-Zeile.
+    /// Ausnahme: Als Anker der offenen Projekt-View trägt der Header die
+    /// Workspace-Aktiv-Tönung (gleiche Optik wie Workspace-Header).
     private var headerBackground: Color {
+        if isWorkspaceOpen { return AgentTheme.accentTint }
         if isHeaderHovered { return AgentTheme.hover }
         return Color.clear
     }

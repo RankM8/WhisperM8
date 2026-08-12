@@ -350,6 +350,118 @@ final class AgentWindowStore {
         return entity.id
     }
 
+    // MARK: - Projekt-Views (Projekt als Live-Grid, verstecktes Entity)
+
+    /// Projekt-IDs mit AKTIVER Projekt-View (irgendein Fenster referenziert
+    /// deren verstecktes Entity als `activeWorkspaceID`) — nur die werden
+    /// live gesynct; nicht offene Views gleichen sich beim nächsten ⊞ an.
+    var activeProjectViewProjectIDs: Set<UUID> {
+        let referenced = Set(state.windows.compactMap(\.activeWorkspaceID))
+        return Set(
+            state.gridWorkspaces
+                .filter { referenced.contains($0.id) }
+                .compactMap(\.sourceProjectID)
+        )
+    }
+
+    /// ⊞ am Projekt-Header: Projekt als Live-Grid öffnen. Das versteckte
+    /// Entity (`sourceProjectID`) entsteht beim ersten Mal und trägt danach
+    /// nur das Layout-Gedächtnis (Splitter, Pane-Positionen) — es erscheint
+    /// in keiner Workspace-Liste. Name/Farbe folgen dem Projekt bei jedem
+    /// Öffnen, die Slots gleicht der Sync an die Aktiv-Menge an.
+    @discardableResult
+    func activateProjectGridWorkspace(
+        projectID: UUID,
+        name: String,
+        colorHex: String,
+        activeSessionIDs: Set<UUID>,
+        in windowID: UUID
+    ) -> GridActivationResult {
+        let entityID: UUID
+        if let existing = state.gridWorkspaces.first(where: { $0.sourceProjectID == projectID }) {
+            entityID = existing.id
+        } else {
+            entityID = createGridWorkspace(
+                name: name, colorHex: colorHex, sourceProjectID: projectID
+            )
+        }
+        syncProjectGridWorkspace(
+            entityID, name: name, colorHex: colorHex, activeSessionIDs: activeSessionIDs
+        )
+        return activateGridWorkspace(entityID, in: windowID)
+    }
+
+    /// Live-Sync aller AKTIVEN Projekt-Views gegen die aktuelle Aktiv-Menge
+    /// pro Projekt (Aufrufer liefert sie aus dem Sidebar-Snapshot — dieselbe
+    /// Definition wie die „Aktiv"-Zählung: laufend ∪ offener Tab).
+    func syncActiveProjectGridWorkspaces(activeSessionIDsByProject: [UUID: Set<UUID>]) {
+        let referenced = Set(state.windows.compactMap(\.activeWorkspaceID))
+        for entity in state.gridWorkspaces {
+            guard let projectID = entity.sourceProjectID,
+                  referenced.contains(entity.id) else { continue }
+            syncProjectGridWorkspace(
+                entity.id,
+                activeSessionIDs: activeSessionIDsByProject[projectID] ?? []
+            )
+        }
+    }
+
+    /// Slots einer Projekt-View an die Aktiv-Menge angleichen (pure Logik:
+    /// `WorkspaceSlotOps.syncedProjectSlots` — positionsstabil, Kappe 9, nie
+    /// Verdrängung). Ordnung neuer Mitglieder = Sidebar-Sortierung. Neue
+    /// Slots materialisieren ihren Tab im Besitzerfenster (fremd-gehostete
+    /// bleiben Übernahme-Platzhalter, kein Stehlen), der Pane-Fokus wird bei
+    /// sichtbarem Grid repariert — alles in EINER Mutation.
+    @discardableResult
+    func syncProjectGridWorkspace(
+        _ workspaceID: UUID,
+        name: String? = nil,
+        colorHex: String? = nil,
+        activeSessionIDs: Set<UUID>
+    ) -> Bool {
+        guard let entity = gridWorkspace(id: workspaceID),
+              entity.sourceProjectID != nil else { return false }
+        // Validierung + Ordnung gegen den Domain-Workspace (In-Memory-Read,
+        // kein Subprozess — Store-Lock-Regel).
+        let domain = persistence.loadWorkspace()
+        let ordered = AgentSessionStore.sortedSessions(
+            domain.sessions.filter {
+                activeSessionIDs.contains($0.id) && $0.status != .archived
+            }
+        ).map(\.id)
+
+        var updated = entity
+        updated.slots = WorkspaceSlotOps.syncedProjectSlots(
+            current: entity.slots, activeOrdered: ordered
+        )
+        if let name { updated.name = name }
+        if let colorHex { updated.colorHex = colorHex }
+        updated.normalize()
+        guard updated != entity else { return false }
+
+        mutate { state in
+            guard let index = state.gridWorkspaces.firstIndex(where: { $0.id == workspaceID })
+            else { return }
+            state.gridWorkspaces[index] = updated
+            guard let ownerID = state.windows.first(where: { $0.activeWorkspaceID == workspaceID })?.id
+            else { return }
+            var window = state.windowState(for: ownerID)
+            var foreignHosted = Set<UUID>()
+            for sessionID in updated.occupiedSessionIDs
+            where state.windows.contains(where: {
+                $0.id != ownerID && $0.openTabIDs.contains(sessionID)
+            }) {
+                foreignHosted.insert(sessionID)
+            }
+            Self.materializeSlotTabs(&window, entity: updated, skipping: foreignHosted)
+            if window.showsGrid {
+                Self.repairGridFocus(&window, entity: updated)
+            }
+            state.upsertWindow(window)
+        }
+        return true
+    }
+
     /// Umbenennen (getrimmt; leer/unbekannt = No-op ohne Save-Aktivität).
     @discardableResult
     func renameGridWorkspace(_ workspaceID: UUID, to newName: String) -> Bool {
