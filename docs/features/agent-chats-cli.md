@@ -135,10 +135,33 @@ bewusst schwache Schwester von `archive`. Contract:
   werden im Ziel geöffnet). Fenster-Refs: `primary` oder ID/-Präfix ≥ 8 aus
   `window list`. Neue Fenster kann nur die App-UI öffnen (SwiftUI-Scene) —
   CLI-detach bleibt Backlog.
-- **`workspace add <ws> <ref> [--slot N]` / `workspace remove <ws> <ref>`**
-  ändern NUR die Grid-Slot-Mitgliedschaft (`WorkspaceSlotOps`-Semantik; voller
-  Workspace → Exit 4). `--slot` ist 1-basiert. Tab und Prozess bleiben —
-  identisch zur Sidebar-Aktion.
+- **`workspace add <ws> <ref> [--slot N]` / `workspace remove <ws> <ref>
+  [--keep-slot]`** ändern NUR die Grid-Slot-Mitgliedschaft
+  (`WorkspaceSlotOps`-Semantik). `--slot` ist 1-basiert. Tab und Prozess
+  bleiben — identisch zur Sidebar-Aktion. Seit 2026-08-17 (Jarvis-Befunde):
+  - `--slot N` jenseits der aktuellen Stufe **erweitert das Grid** auf die
+    kleinste tragende Stufe (bis 3×3; Outcome-Feld `grewTo`). Nur `--slot` > 9
+    ist ein Fehler (Exit 1). Volle Endstufe ohne `--slot` → Exit 4.
+  - Ein vorhandenes Mitglied wird mit `--slot N` **verschoben/getauscht**
+    (Outcome `moved` mit `fromSlot`) — kein remove+add mehr nötig.
+  - Die Outcomes sind unterscheidbar: `added`/`moved`/`replaced`
+    (`displacedSessionID`)/`alreadyMember`, jeweils mit `slot` (1-basiert).
+  - `remove` **kompaktiert per Default** (übrige rücken nach vorn, Stufe
+    fällt — global abschaltbar via `gridAutoCompactEnabled`); `--keep-slot`
+    erzwingt für diesen Aufruf stabile Positionen (Slot wird nur leer,
+    Outcome-Feld `keptSlot`).
+  - Ablehnungen sind benannt statt gesammelt: Session nicht gefunden →
+    Exit 3, Session archiviert → Exit 4 (+ `unarchive`-Hinweis), Slot
+    außerhalb → Exit 1.
+- **`workspace create "<name>" [--color #RRGGBB] [<ref> …]`** legt einen
+  Grid-Workspace an (`gridWorkspace.create`); weitere Refs füllen die Slots in
+  Reihenfolge, die Kapazität wächst passend mit (max. 9). Mitglieder werden
+  hart validiert (unbekannt → Exit 3, archiviert → Exit 4) — kein stilles
+  Loch. Antwort enthält `workspace.id` für Folgebefehle.
+- **`workspace delete <name|id> [--force]`** löscht die kuratierte Gruppe
+  (`gridWorkspace.delete`) — Slots sind Referenzen, Chats/Tabs/Prozesse
+  bleiben. Belegte Workspaces verlangen `--force` (Tippfehler-Schutz,
+  Exit 4); Fenster-Referenzen räumt der Store in einer Mutation.
 
 ## Archiv: Suche + gezieltes Reaktivieren
 

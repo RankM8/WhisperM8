@@ -313,6 +313,52 @@ final class ChatsCloseSupportTests: XCTestCase {
     }
 }
 
+final class ChatsWorkspaceMembershipSupportTests: XCTestCase {
+    private func line(
+        _ outcome: String, slot: Int? = nil, fromSlot: Int? = nil,
+        grewTo: Int? = nil, keptSlot: Bool = false
+    ) -> String {
+        ChatsWorkspaceMembershipSupport.humanLine(
+            name: "Recherche", outcome: outcome, slot: slot,
+            fromSlot: fromSlot, grewTo: grewTo, keptSlot: keptSlot)
+    }
+
+    func testAddedNamesSlotAndGrowth() {
+        let text = line("added", slot: 4, grewTo: 4)
+        XCTAssertTrue(text.contains("aufgenommen"))
+        XCTAssertTrue(text.contains("Slot 4"))
+        XCTAssertTrue(text.contains("Grid auf 4 erweitert"))
+    }
+
+    func testMovedIsDistinguishableFromAdded() {
+        // Kritisch für Agenten-Vertrauen: Ein Move darf nicht wie eine
+        // Neuaufnahme klingen — vorher meldete die CLI beides als
+        // „aufgenommen".
+        let text = line("moved", slot: 4, fromSlot: 1)
+        XCTAssertTrue(text.contains("verschoben"))
+        XCTAssertTrue(text.contains("Slot 4"))
+        XCTAssertTrue(text.contains("vorher Slot 1"))
+        XCTAssertFalse(text.contains("aufgenommen"))
+    }
+
+    func testReplacedSaysDisplacedChatSurvivesAsTab() {
+        let text = line("replaced", slot: 2)
+        XCTAssertTrue(text.contains("ersetzt"))
+        XCTAssertTrue(text.contains("bleibt Tab"))
+    }
+
+    func testRemovedWithKeptSlotNamesTheHole() {
+        XCTAssertTrue(line("removed", keptSlot: true).contains("Slot bleibt leer"))
+        XCTAssertFalse(line("removed").contains("Slot bleibt leer"))
+    }
+
+    func testAlreadyMemberShowsCurrentSlot() {
+        let text = line("alreadyMember", slot: 2)
+        XCTAssertTrue(text.contains("schon Mitglied"))
+        XCTAssertTrue(text.contains("Slot 2"))
+    }
+}
+
 final class ChatsWorkspaceOpenSupportTests: XCTestCase {
     private func line(_ outcome: String, slot: Int? = nil, occupied: Bool? = nil,
                       title: String? = nil) -> String {

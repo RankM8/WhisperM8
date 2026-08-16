@@ -40,24 +40,39 @@ whisperm8 chats archived [query] [--project P] [--group G] [--provider claude|co
 Handeln (App muss laufen — sonst Exit 5). **Vor jeder dieser Aktionen: Regeln unten beachten.**
 ```bash
 whisperm8 chats send <ref> -- "<prompt>"  [--if-status S,S] [--no-submit] [--force]
+whisperm8 chats enqueue <ref> -- "<prompt>"          # Folgeauftrag vormerken (auch bei working)
+whisperm8 chats queue [<ref>]                        # was wartet? (auch bei geschlossener App)
+whisperm8 chats dequeue <ref> --all | --id <UUID>    # offene Aufträge stornieren
 whisperm8 chats interrupt <ref> [--force]            # ein ESC an eine working-Session
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
 whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
+whisperm8 chats close <ref> --stop [--force]         # Tab zu + Agent beenden (kein Archiv, Verlauf bleibt);
+                                                     # working ist geschützt → Exit 4 ohne --force
 whisperm8 chats close --others|--right <ref>         # alle anderen / rechts vom Anker (dessen Fenster)
 whisperm8 chats reopen                               # zuletzt geschlossenen Tab wiederherstellen
 whisperm8 chats pin <ref> [<ref>…] | unpin …         # Sidebar-Pin setzen/entfernen (idempotent)
 whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehendes Fenster (window list zeigt IDs)
-whisperm8 chats window list                          # Fenster-Inventar
+whisperm8 chats window list                          # Fenster-Inventar (+ showsGrid, activeWorkspace)
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
 whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"]
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
 whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
 whisperm8 chats unarchive <ref> [--resume|--open]    # NUR Markierung weg; Start nur via Flag
-whisperm8 chats workspace list                       # Grid-Workspaces (Sidebar-Sektion WORKSPACES)
+whisperm8 chats workspace list                       # Grid-Workspaces + Slots, hostWindowID, gridVisible
+whisperm8 chats workspace create "<name>" [--color #RRGGBB] [<ref> …]
+                                                     # anlegen; Refs füllen Slots in Reihenfolge
+whisperm8 chats workspace open <name|id> [--slot N]  # sichtbar machen + Fenster nach vorn (rein visuell)
 whisperm8 chats workspace rename <name|id> "<neu>"   # Grid-Workspace umbenennen
-whisperm8 chats workspace add <name|id> <ref> [--slot N]    # Session in Grid-Slot aufnehmen
-whisperm8 chats workspace remove <name|id> <ref>     # nur Slot leeren — Tab/Prozess bleiben
+whisperm8 chats workspace add <name|id> <ref> [--slot N]    # Session in Grid-Slot aufnehmen;
+                                                     # --slot über der Stufe erweitert das Grid (bis 3×3),
+                                                     # vorhandenes Mitglied wird verschoben (Outcome moved)
+whisperm8 chats workspace remove <name|id> <ref> [--keep-slot]
+                                                     # Slot leeren — Tab/Prozess bleiben. Default kompaktiert
+                                                     # (übrige rücken nach vorn); --keep-slot lässt das Loch
+                                                     # stehen (stabile Positionen, z. B. „sitzt unten rechts")
+whisperm8 chats workspace delete <name|id> [--force] # Gruppe löschen — Chats/Tabs bleiben;
+                                                     # belegte Workspaces verlangen --force
 ```
 
 ## Referenzen (`<ref>`)
@@ -88,13 +103,23 @@ wieder hochfahren macht `resume` (setzt Auto-Launch + Fokus → App startet mit
 
 - `close` schließt AUSSCHLIESSLICH den UI-Tab. Die Session bleibt in der
   Sidebar, ein laufendes PTY läuft weiter (erneutes Öffnen zeigt denselben
-  Terminal-Zustand), Pin und Transcript bleiben. Deshalb gibt es kein
-  `--force`: auch working/awaitingInput-Sessions dürfen geschlossen werden —
+  Terminal-Zustand), Pin und Transcript bleiben. Deshalb ohne Flag kein
+  Guard: auch working/awaitingInput-Sessions dürfen geschlossen werden —
   es geht nur die Ansicht zu, nie die Arbeit. Mehrere Refs = ein Batch;
   bereits geschlossene Tabs sind kein Fehler (idempotent).
+- `close <ref> --stop` ist die Zwischenstufe: Tab zu UND der laufende Agent
+  wird beendet (graceful, mit letztem Transcript-Flush). Es wird NICHT
+  archiviert und NICHTS gelöscht — die Session bleibt in der Sidebar, Pin und
+  Verlauf bleiben, `resume` fährt sie wieder hoch. Für „stopp den Agenten",
+  „beende den Prozess, aber behalte den Chat", „der dreht sich im Kreis".
+  Arbeitende Ziele sind geschützt: ist auch nur EINES `working`, scheitert der
+  ganze Aufruf mit Exit 4 und NICHTS wird geschlossen. Dann Optionen zeigen
+  (warten / `interrupt` / `--stop --force`) statt selbst zu erzwingen —
+  `--force` nur auf ausdrückliche Ansage des Users (Regel 3).
 - `archive` ist die stärkere Aktion: Session verschwindet aus Sidebar + Tabs,
   ein laufendes Terminal wird TERMINIERT. Bei „schließ/räum die Tabs auf" →
-  `close`; nur bei „archivier X"/„weg damit" → `archive` (mit Bestätigung).
+  `close`; bei „stopp den Agenten" → `close --stop`; nur bei „archivier X"/
+  „weg damit" → `archive` (mit Bestätigung).
 - `unarchive` entfernt NUR die Archiv-Markierung (Session wieder in der
   Sidebar, kein Tab, kein Start). `resume` startet nie eine archivierte
   Session (Exit 4) — der einzige, explizite Compound ist
@@ -138,8 +163,11 @@ unterbrochen.
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte
    Titel), sobald der User es verlangt — kein Sonderschutz. `open`/`close`/
    `reopen`/`pin`/`unpin`/`move`/`new`/`resume`/`unarchive`/`workspace
-   rename|add|remove` direkt aus einem klaren User-Auftrag brauchen keine
-   Extra-Frage (alles UI-only bzw. nicht destruktiv); `new` aus
+   create|open|rename|add|remove` direkt aus einem klaren User-Auftrag
+   brauchen keine Extra-Frage (alles UI-only bzw. nicht destruktiv);
+   `workspace delete` eines LEEREN Workspace ebenso — ein belegter verlangt
+   `--force`, also Regel 3: nur wenn der User genau das verlangt hat
+   (Chats/Tabs überleben, aber das kuratierte Layout ist weg); `new` aus
    **Eigeninitiative** erst vorschlagen (Projekt + Initial-Prompt zeigen),
    dann starten. Für BATCH-`close` („alle, die ich nicht brauche") und
    `close --others` gilt Regel 6: erst Kandidatenliste bestätigen lassen.
@@ -161,6 +189,27 @@ unterbrochen.
 8. **Fehler sauber erklären:** Exit 4 → Konflikt benennen (z. B. „arbeitet
    gerade") + Optionen; Exit 5 → „WhisperM8-App starten", Lese-Befehle gehen
    weiter.
+9. **Nie Sichtbarkeit behaupten.** Was der User auf dem Bildschirm sieht,
+   weiß die CLI NICHT. `workspace list --json` sagt nur, welchem Fenster ein
+   Workspace zugeordnet ist (`hostWindowID`) und ob dieses Fenster das Grid
+   zeigt (`gridVisible`) — beides zusammen heißt „logisch angeordnet", nicht
+   „sichtbar". Ein geschlossenes Hauptfenster meldet weiter `gridVisible`;
+   minimiert oder verdeckt ist gar nicht erkennbar. Ebenso: Ein belegter Slot
+   mit `rendered: false` zeigt im Grid nur einen Platzhalter, weil der Chat
+   als Tab in einem anderen Fenster lebt. Formuliere deshalb „X ist im Grid
+   angeordnet" oder „ich habe X nach vorn geholt" — **nie** „du siehst X".
+   Vor jeder Aussage über Ansichten: `workspace list --json` bzw.
+   `window list --json` lesen, nicht aus Tabs oder Status ableiten.
+10. **Stau erkennen statt erzwingen.** Nach einem `resume` und immer, wenn eine
+   Queue nicht abfließt, zuerst `show <ref>` und `tail <ref> --turns 1` prüfen.
+   Zeigt der Chat `working`, obwohl kein neuer Turn begonnen hat und das
+   Transcript nicht wächst (`show` → Größe/Revision bleibt gleich), ist der
+   Status unglaubwürdig: Ein vorgemerkter Auftrag wird dann nicht zugestellt,
+   weil die Zustellung am Turn-Ende hängt. Melde diesen Stau klar („Chat X
+   meldet seit N min working, Transcript unverändert, 2 Aufträge warten") und
+   nenne dem User die Optionen. **Niemals** eigenmächtig `interrupt`,
+   `--force` oder `close --stop` einsetzen, um den Stau aufzulösen — das
+   bricht möglicherweise echte Arbeit ab. Die Entscheidung trifft der User.
 
 ## Supervisor-Modus („sei mein Jarvis")
 

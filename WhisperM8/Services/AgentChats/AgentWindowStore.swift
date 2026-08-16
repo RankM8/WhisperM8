@@ -576,12 +576,17 @@ final class AgentWindowStore {
         at targetSlot: Int? = nil,
         focusIfActive: Bool = true
     ) -> WorkspaceSlotOps.AddResult {
-        guard let entity = gridWorkspace(id: workspaceID) else { return .rejected }
+        guard let entity = gridWorkspace(id: workspaceID) else {
+            return .rejected(.workspaceUnknown)
+        }
         // Session-Validierung gegen den Domain-Workspace (In-Memory-Read,
-        // kein Subprozess).
+        // kein Subprozess). Benannte Gründe statt Sammel-Ablehnung — die
+        // CLI übersetzt sie in unterscheidbare Fehler.
         let domain = persistence.loadWorkspace()
-        guard let session = domain.sessions.first(where: { $0.id == sessionID }),
-              session.status != .archived else { return .rejected }
+        guard let session = domain.sessions.first(where: { $0.id == sessionID }) else {
+            return .rejected(.sessionUnknown)
+        }
+        guard session.status != .archived else { return .rejected(.sessionArchived) }
         // Projekt-View-Guards (Store-seitig, nicht nur UI): nur eigene
         // Projekt-Chats, und ein NICHT-Mitglied darf nie einen belegten
         // Slot ersetzen — der Verdrängungs-Drop würde einen aktiven
@@ -590,11 +595,13 @@ final class AgentWindowStore {
         // Review-Befund 2026-08-12). Mitglieder dürfen weiterhin gezielt
         // platzieren (= Swap, kein Besitzer verlässt die View).
         if let sourceProjectID = entity.sourceProjectID {
-            guard session.projectID == sourceProjectID else { return .rejected }
+            guard session.projectID == sourceProjectID else {
+                return .rejected(.projectViewForeignSession)
+            }
             if let targetSlot, entity.slots.indices.contains(targetSlot),
                let occupant = entity.slots[targetSlot], occupant != sessionID,
                entity.slotIndex(of: sessionID) == nil {
-                return .rejected
+                return .rejected(.projectViewDisplacement)
             }
         }
 
@@ -630,11 +637,20 @@ final class AgentWindowStore {
         return result
     }
 
-    /// Leert den Slot der Session (Tab + Prozess bleiben; nichts rückt
-    /// nach). Repariert den Pane-Fokus des Besitzerfensters deterministisch:
-    /// nächster belegter Slot, sonst vorheriger, sonst `nil`.
+    /// Leert den Slot der Session (Tab + Prozess bleiben). Standardmäßig
+    /// rücken die übrigen Chats nach und die Stufe fällt auf die kleinste
+    /// passende (`isGridAutoCompactEnabled`, Default an — Kill-Switch:
+    /// `defaults write com.whisperm8.app gridAutoCompactEnabled -bool NO`);
+    /// `compacting: false` erzwingt für DIESEN Aufruf stabile Positionen
+    /// (Slot wird nur `nil` — CLI `remove --keep-slot`). Repariert den
+    /// Pane-Fokus des Besitzerfensters deterministisch: nächster belegter
+    /// Slot, sonst vorheriger, sonst `nil`.
     @discardableResult
-    func removeSession(_ sessionID: UUID, fromGridWorkspace workspaceID: UUID) -> Bool {
+    func removeSession(
+        _ sessionID: UUID,
+        fromGridWorkspace workspaceID: UUID,
+        compacting: Bool? = nil
+    ) -> Bool {
         guard let entity = gridWorkspace(id: workspaceID),
               // Projekt-Views kennen kein manuelles Entfernen — Mitglied ist,
               // wer aktiv ist; raus geht nur über Tab schließen/archivieren.
@@ -644,7 +660,7 @@ final class AgentWindowStore {
               let removedIndex = entity.slotIndex(of: sessionID) else { return false }
         let (updated, removed) = WorkspaceSlotOps.remove(
             sessionID, from: entity,
-            compacting: AppPreferences.shared.isGridAutoCompactEnabled
+            compacting: compacting ?? AppPreferences.shared.isGridAutoCompactEnabled
         )
         guard removed else { return false }
         mutate { state in

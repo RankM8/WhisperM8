@@ -741,16 +741,55 @@ enum ChatsWorkspaceOpenSupport {
     }
 }
 
+/// Pure Ausgabelogik von `workspace add`/`remove` — die Outcome-Sprache
+/// (aufgenommen/verschoben/ersetzt/erweitert/Slot bleibt leer) ist die
+/// eigentliche Aussage des Befehls und bleibt ohne laufende App testbar.
+enum ChatsWorkspaceMembershipSupport {
+    static func humanLine(
+        name: String,
+        outcome: String?,
+        slot: Int?,
+        fromSlot: Int?,
+        grewTo: Int?,
+        keptSlot: Bool
+    ) -> String {
+        let grow = grewTo.map { " · Grid auf \($0) erweitert" } ?? ""
+        switch outcome {
+        case "added":
+            let position = slot.map { " (Slot \($0))" } ?? ""
+            return "✓ in Workspace „\(name)\" aufgenommen\(position)\(grow)"
+        case "moved":
+            let from = fromSlot.map { " (vorher Slot \($0))" } ?? ""
+            let target = slot.map { "auf Slot \($0) " } ?? ""
+            return "✓ in „\(name)\" \(target)verschoben\(from)\(grow)"
+        case "replaced":
+            let position = slot.map { "Slot \($0)" } ?? "Slot"
+            return "✓ \(position) in „\(name)\" ersetzt — der bisherige Chat bleibt Tab\(grow)"
+        case "alreadyMember":
+            let position = slot.map { " (Slot \($0))" } ?? ""
+            return "– schon Mitglied von „\(name)\"\(position)"
+        case "removed":
+            return keptSlot
+                ? "✓ aus Workspace „\(name)\" entfernt · Slot bleibt leer"
+                : "✓ aus Workspace „\(name)\" entfernt"
+        default:
+            return "– war kein Mitglied von „\(name)\""
+        }
+    }
+}
+
 enum ChatsWorkspaceCommand {
     static func run(_ arguments: [String]) -> Int32 {
         guard let sub = arguments.first else {
-            CLIIO.err("Usage: whisperm8 chats workspace list | open <name|id> [--slot N] | rename <name|id> \"<neu>\" | add <name|id> <ref> [--slot N] | remove <name|id> <ref>")
+            CLIIO.err("Usage: whisperm8 chats workspace list | create \"<name>\" [--color #RRGGBB] [<ref>…] | open <name|id> [--slot N] | rename <name|id> \"<neu>\" | add <name|id> <ref> [--slot N] | remove <name|id> <ref> [--keep-slot] | delete <name|id> [--force]")
             return ChatsCLIExit.usage
         }
         let rest = Array(arguments.dropFirst())
         switch sub {
         case "list":
             return list(rest)
+        case "create":
+            return create(rest)
         case "open":
             return open(rest)
         case "rename":
@@ -759,8 +798,10 @@ enum ChatsWorkspaceCommand {
             return membership(rest, add: true)
         case "remove":
             return membership(rest, add: false)
+        case "delete":
+            return delete(rest)
         default:
-            CLIIO.err("Unbekannter workspace-Befehl: \(sub) (list | open | rename | add | remove)")
+            CLIIO.err("Unbekannter workspace-Befehl: \(sub) (list | create | open | rename | add | remove | delete)")
             return ChatsCLIExit.usage
         }
     }
@@ -816,12 +857,17 @@ enum ChatsWorkspaceCommand {
         }
     }
 
-    /// `workspace add <ws> <ref> [--slot N]` / `workspace remove <ws> <ref>`.
-    /// Nur die Slot-MITGLIEDSCHAFT ändert sich — Tabs und Prozesse bleiben
-    /// (identisch zur Sidebar-Aktion in der App).
+    /// `workspace add <ws> <ref> [--slot N]` / `workspace remove <ws> <ref>
+    /// [--keep-slot]`. Nur die Slot-MITGLIEDSCHAFT ändert sich — Tabs und
+    /// Prozesse bleiben (identisch zur Sidebar-Aktion in der App).
+    /// `--slot N` jenseits der aktuellen Stufe erweitert das Grid (bis 3×3);
+    /// ein vorhandenes Mitglied wird mit `--slot N` verschoben/getauscht.
+    /// `--keep-slot` lässt beim Entfernen den Slot leer stehen (nichts rückt
+    /// nach), statt der Default-Kompaktierung.
     private static func membership(_ arguments: [String], add: Bool) -> Int32 {
         var positionals: [String] = []
         var slot: Int?
+        var keepSlot = false
         var json = false
         var index = 0
         while index < arguments.count {
@@ -834,6 +880,12 @@ enum ChatsWorkspaceCommand {
                     return ChatsCLIExit.usage
                 }
                 slot = value - 1    // menschlich 1-basiert → Slot-Index
+            case "--keep-slot":
+                guard !add else {
+                    CLIIO.err("--keep-slot gibt es nur bei remove.")
+                    return ChatsCLIExit.usage
+                }
+                keepSlot = true
             case "--json": json = true
             default:
                 if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
@@ -842,7 +894,7 @@ enum ChatsWorkspaceCommand {
             index += 1
         }
         guard positionals.count == 2 else {
-            CLIIO.err("Usage: whisperm8 chats workspace \(add ? "add" : "remove") <name|id> <ref>\(add ? " [--slot N]" : "")")
+            CLIIO.err("Usage: whisperm8 chats workspace \(add ? "add" : "remove") <name|id> <ref>\(add ? " [--slot N]" : " [--keep-slot]")")
             return ChatsCLIExit.usage
         }
         let workspaceRef = positionals[0]
@@ -853,21 +905,119 @@ enum ChatsWorkspaceCommand {
         }
         var params: [String: Any] = ["workspaceRef": workspaceRef, "targetSessionID": targetID.uuidString]
         if let slot { params["slot"] = slot }
+        if keepSlot { params["keepSlot"] = true }
         switch ChatsLiveSupport.perform(method: add ? "gridWorkspace.add" : "gridWorkspace.remove", params: params) {
         case .failed(let code): return code
         case .ok(let response):
             guard response.ok else { return ChatsLiveSupport.mapError(response) }
             ChatsLiveSupport.printResult(response, json: json) { result in
-                let name = result["workspace"]?["name"]?.stringValue ?? workspaceRef
-                switch result["outcome"]?.stringValue {
-                case "added": return "✓ in Workspace „\(name)\" aufgenommen"
-                case "alreadyMember": return "– schon Mitglied von „\(name)\""
-                case "removed": return "✓ aus Workspace „\(name)\" entfernt"
-                default: return "– war kein Mitglied von „\(name)\""
-                }
+                ChatsWorkspaceMembershipSupport.humanLine(
+                    name: result["workspace"]?["name"]?.stringValue ?? workspaceRef,
+                    outcome: result["outcome"]?.stringValue,
+                    slot: intValue(result["slot"]),
+                    fromSlot: intValue(result["fromSlot"]),
+                    grewTo: intValue(result["grewTo"]),
+                    keptSlot: result["keptSlot"]?.boolValue ?? false)
             }
             return ChatsCLIExit.ok
         }
+    }
+
+    /// `workspace create "<name>" [--color #RRGGBB] [<ref> …]` — legt einen
+    /// Grid-Workspace an; weitere Positionals sind Initial-Mitglieder
+    /// (Slots in Reihenfolge, Kapazität wächst passend mit).
+    private static func create(_ arguments: [String]) -> Int32 {
+        var positionals: [String] = []
+        var colorHex: String?
+        var json = false
+        var index = 0
+        while index < arguments.count {
+            let arg = arguments[index]
+            switch arg {
+            case "--color":
+                index += 1
+                guard index < arguments.count else {
+                    CLIIO.err("--color erwartet eine Farbe im Format #RRGGBB.")
+                    return ChatsCLIExit.usage
+                }
+                colorHex = arguments[index]
+            case "--json": json = true
+            default:
+                if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
+                positionals.append(arg)
+            }
+            index += 1
+        }
+        guard let name = positionals.first,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            CLIIO.err("Usage: whisperm8 chats workspace create \"<name>\" [--color #RRGGBB] [<ref> …] [--json]")
+            return ChatsCLIExit.usage
+        }
+        var memberIDs: [String] = []
+        for ref in positionals.dropFirst() {
+            switch ChatsLiveSupport.resolveTarget(ref: ref) {
+            case .resolved(let id, _): memberIDs.append(id.uuidString)
+            case .failed(let code): return code
+            }
+        }
+        var params: [String: Any] = ["name": name]
+        if let colorHex { params["colorHex"] = colorHex }
+        if !memberIDs.isEmpty { params["memberSessionIDs"] = memberIDs }
+        switch ChatsLiveSupport.perform(method: "gridWorkspace.create", params: params) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            ChatsLiveSupport.printResult(response, json: json) { result in
+                let createdName = result["workspace"]?["name"]?.stringValue ?? name
+                let id = result["workspace"]?["id"]?.stringValue ?? ""
+                let short = String(id.replacingOccurrences(of: "-", with: "").lowercased().prefix(8))
+                let members = intValue(result["members"]) ?? 0
+                let capacity = intValue(result["capacity"]) ?? 2
+                let filling = members == 0
+                    ? "leer" : "\(members) Mitglied\(members == 1 ? "" : "er")"
+                return "✓ Workspace „\(createdName)\" angelegt (\(short)) · \(filling) · Kapazität \(capacity)"
+            }
+            return ChatsCLIExit.ok
+        }
+    }
+
+    /// `workspace delete <name|id> [--force]` — löscht die kuratierte
+    /// Gruppe. Slots sind nur Referenzen: Chats, Tabs und Prozesse bleiben.
+    /// Belegte Workspaces verlangen `--force` (Tippfehler-Schutz).
+    private static func delete(_ arguments: [String]) -> Int32 {
+        var positionals: [String] = []
+        var force = false
+        var json = false
+        for arg in arguments {
+            if arg == "--force" { force = true }
+            else if arg == "--json" { json = true }
+            else if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
+            else { positionals.append(arg) }
+        }
+        guard positionals.count == 1 else {
+            CLIIO.err("Usage: whisperm8 chats workspace delete <name|id> [--force] [--json]")
+            return ChatsCLIExit.usage
+        }
+        var params: [String: Any] = ["ref": positionals[0]]
+        if force { params["force"] = true }
+        switch ChatsLiveSupport.perform(method: "gridWorkspace.delete", params: params) {
+        case .failed(let code): return code
+        case .ok(let response):
+            guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            ChatsLiveSupport.printResult(response, json: json) { result in
+                let name = result["workspace"]?["name"]?.stringValue ?? positionals[0]
+                let freed = intValue(result["freedSlots"]) ?? 0
+                return freed == 0
+                    ? "✓ Workspace „\(name)\" gelöscht"
+                    : "✓ Workspace „\(name)\" gelöscht (\(freed) Slot\(freed == 1 ? "" : "s") freigegeben — Chats/Tabs bleiben)"
+            }
+            return ChatsCLIExit.ok
+        }
+    }
+
+    private static func intValue(_ json: ChatsControlJSON?) -> Int? {
+        guard case .number(let value) = json else { return nil }
+        return Int(value)
     }
 
     private static func list(_ arguments: [String]) -> Int32 {

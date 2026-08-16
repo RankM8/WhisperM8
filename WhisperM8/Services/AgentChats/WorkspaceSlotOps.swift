@@ -12,9 +12,32 @@ import Foundation
 /// ausdrücklich angeforderte Verkleinern (`planCapacityChange`): dort rücken
 /// die Belegten nach vorn, damit Löcher keine Chats kosten.
 enum WorkspaceSlotOps {
+    /// Benannter Ablehnungsgrund eines Adds — die CLI muss unterscheiden
+    /// können, WARUM nichts passiert ist (Jarvis-Befund 2026-08-17: „Session
+    /// nicht gefunden/archiviert oder Slot ungültig" war für Agenten
+    /// unbrauchbar mehrdeutig). Die pure Funktion kennt nur
+    /// `slotOutOfRange`; die Session-/Guard-Fälle liefert der
+    /// `AgentWindowStore`.
+    enum AddRejection: Equatable {
+        /// Workspace-Entity unbekannt (Store).
+        case workspaceUnknown
+        /// Session nicht im Domain-Workspace (Store).
+        case sessionUnknown
+        /// Session ist archiviert (Store).
+        case sessionArchived
+        /// Ziel-Slot jenseits der Endstufe 3×3 oder negativ (pure Funktion).
+        case slotOutOfRange(maxSlots: Int)
+        /// Projekt-View: Session gehört nicht zum Quell-Projekt (Store).
+        case projectViewForeignSession
+        /// Projekt-View: Nicht-Mitglied würde einen Slot-Besitzer
+        /// verdrängen (Store).
+        case projectViewDisplacement
+    }
+
     enum AddResult: Equatable {
         /// In einen freien Slot gelegt; `grewTo` = neue Kapazität, falls
-        /// dafür gewachsen wurde.
+        /// dafür gewachsen wurde (auch bei gezieltem `--slot N` jenseits
+        /// der aktuellen Stufe).
         case added(slotIndex: Int, grewTo: Int?)
         /// Ohne Ziel-Slot und schon Mitglied: No-op.
         case alreadyMember(slotIndex: Int)
@@ -22,13 +45,13 @@ enum WorkspaceSlotOps {
         /// ersetzte Chat bleibt Tab — Aufräumen ist Sache des Aufrufers).
         case replaced(slotIndex: Int, displaced: UUID)
         /// Gezielte Platzierung eines vorhandenen Mitglieds: Quell- und
-        /// Zielinhalt wurden getauscht.
+        /// Zielinhalt wurden getauscht (leeres Ziel = stabiler Move).
         case swapped(from: Int, to: Int)
         /// Volle Endstufe 3×3 ohne Ziel-Slot — Drop wird benannt abgelehnt
         /// (gezieltes Ersetzen bleibt möglich).
         case full
-        /// Ungültiger Ziel-Slot.
-        case rejected
+        /// Benannt abgelehnt — Grund siehe `AddRejection`.
+        case rejected(AddRejection)
     }
 
     enum CapacityResult: Equatable {
@@ -112,7 +135,11 @@ enum WorkspaceSlotOps {
     ///
     /// Mit `targetSlot`: ersetzt den bisherigen Inhalt; war die Session
     /// bereits in einem anderen Slot DESSELBEN Workspace, tauschen Quelle
-    /// und Ziel (kein Duplikat).
+    /// und Ziel (kein Duplikat). Liegt der Ziel-Slot jenseits der aktuellen
+    /// Stufe, wächst das Grid auf die kleinste Stufe, die ihn trägt
+    /// (Jarvis-Befund 2026-08-17: `add --slot 4` auf einem 2er-Grid soll
+    /// erweitern statt mit „Slot ungültig" abzubrechen) — nur jenseits der
+    /// Endstufe 3×3 bleibt es eine benannte Ablehnung.
     static func add(
         _ sessionID: UUID,
         to workspace: AgentGridWorkspace,
@@ -138,8 +165,16 @@ enum WorkspaceSlotOps {
             return (copy, .added(slotIndex: firstNewSlot, grewTo: next))
         }
 
-        guard copy.slots.indices.contains(targetSlot) else {
-            return (workspace, .rejected)
+        let maxSlots = AgentGridWorkspace.allowedCapacities.last!
+        guard targetSlot >= 0, targetSlot < maxSlots else {
+            return (workspace, .rejected(.slotOutOfRange(maxSlots: maxSlots)))
+        }
+        var grewTo: Int?
+        if !copy.slots.indices.contains(targetSlot) {
+            let next = AgentGridWorkspace.smallestCapacity(fitting: targetSlot + 1)
+            copy.capacity = next
+            copy.normalize() // polstert Slots, repariert Fraction-Achsen
+            grewTo = next
         }
         let displaced = copy.slots[targetSlot]
         if displaced == sessionID {
@@ -154,7 +189,7 @@ enum WorkspaceSlotOps {
         if let displaced {
             return (copy, .replaced(slotIndex: targetSlot, displaced: displaced))
         }
-        return (copy, .added(slotIndex: targetSlot, grewTo: nil))
+        return (copy, .added(slotIndex: targetSlot, grewTo: grewTo))
     }
 
     // MARK: - Entfernen / Verschieben / Tauschen

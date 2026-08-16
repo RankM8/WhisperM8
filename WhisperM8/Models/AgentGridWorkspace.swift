@@ -8,10 +8,14 @@ import Foundation
 /// zweite Order-Liste, die divergieren könnte). Identität ist ausschließlich
 /// `id` — doppelte Namen sind erlaubt.
 ///
-/// Slots referenzieren Sessions (nicht Tabs) und sind POSITIONSSTABIL:
-/// Entfernen/Archivieren setzt den Index auf `nil`, nichts rückt nach.
-/// Dieselbe Session darf in mehreren Workspaces liegen (Referenzen, wie
-/// Playlists), aber nie doppelt IM SELBEN Workspace.
+/// Slots referenzieren Sessions (nicht Tabs). Positionsstabilität ist
+/// KONFIGURIERBAR: standardmäßig kompaktiert Entfernen/Archivieren die
+/// Belegung (übrige rücken nach vorn, Stufe fällt auf die kleinste
+/// passende — `WorkspaceSlotOps.remove(compacting:)`); mit
+/// `gridAutoCompactEnabled = NO` bzw. CLI `remove --keep-slot` wird der
+/// Index nur `nil` und nichts rückt nach. Dieselbe Session darf in
+/// mehreren Workspaces liegen (Referenzen, wie Playlists), aber nie
+/// doppelt IM SELBEN Workspace.
 struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
     var id: UUID
     var name: String

@@ -823,6 +823,9 @@ enum ChatsCLIHelp {
                                nur Archiv-Markierung entfernen; Start/Fokus NUR
                                über die expliziten Flags (Compound)
       whisperm8 chats workspace list [--json]            Grid-Workspaces (Sidebar-Sektion)
+      whisperm8 chats workspace create "<name>" [--color #RRGGBB] [<ref> …] [--json]
+                               Workspace anlegen; weitere <ref>s füllen die Slots
+                               in Reihenfolge (Kapazität wächst passend mit).
       whisperm8 chats workspace open <name|id> [--slot N] [--json]
                                Workspace sichtbar machen + Fenster nach vorn.
                                Rein visuell: startet keine Prozesse, ändert keine
@@ -831,7 +834,16 @@ enum ChatsCLIHelp {
                                einem anderen Fenster, wird dieses fokussiert.
       whisperm8 chats workspace rename <name|id> "<neu>" [--json]
       whisperm8 chats workspace add <name|id> <ref> [--slot N] [--json]
-      whisperm8 chats workspace remove <name|id> <ref> [--json]   nur Slot — Tab/Prozess bleiben
+                               --slot N jenseits der aktuellen Stufe erweitert das
+                               Grid automatisch (bis 3×3); ein vorhandenes Mitglied
+                               wird mit --slot N verschoben/getauscht.
+      whisperm8 chats workspace remove <name|id> <ref> [--keep-slot] [--json]
+                               nur Slot — Tab/Prozess bleiben. Default kompaktiert
+                               (übrige rücken nach vorn, Stufe fällt); --keep-slot
+                               lässt den Slot leer stehen (Positionen stabil).
+      whisperm8 chats workspace delete <name|id> [--force] [--json]
+                               Gruppe löschen — Slots sind Referenzen, Chats/Tabs
+                               bleiben. Belegte Workspaces verlangen --force.
 
     REFERENZEN (<ref>)
       projekt/titel-fragment   Fuzzy, muss eindeutig sein (sonst Exit 3 + Kandidaten)

@@ -56,10 +56,43 @@ final class WorkspaceSlotOpsTests: XCTestCase {
         XCTAssertEqual(updated.slots, [b, a], "Tausch statt Duplikat")
     }
 
-    func testTargetedAddToInvalidSlotIsRejected() {
+    func testTargetedAddBeyondCapacityGrowsGrid() {
+        // Jarvis-Befund 2026-08-17: `add --slot 4` auf einem 2er-Grid soll
+        // erweitern statt abweisen. Slot-Index 3 → kleinste tragende Stufe 4.
+        let a = UUID(); let new = UUID()
+        let (updated, result) = WorkspaceSlotOps.add(
+            new, to: workspace(slots: [a, nil], capacity: 2), at: 3
+        )
+        XCTAssertEqual(result, .added(slotIndex: 3, grewTo: 4))
+        XCTAssertEqual(updated.capacity, 4)
+        XCTAssertEqual(updated.slots, [a, nil, nil, new],
+                       "bestehende Positionen exakt erhalten, Lücken bleiben")
+    }
+
+    func testTargetedAddOfExistingMemberBeyondCapacityMovesWithGrow() {
+        // Vorhandenes Mitglied + Ziel-Slot jenseits der Stufe = Move in den
+        // neuen (leeren) Slot; die Quelle wird nil.
+        let a = UUID(); let b = UUID()
+        let (updated, result) = WorkspaceSlotOps.add(
+            a, to: workspace(slots: [a, b], capacity: 2), at: 3
+        )
+        XCTAssertEqual(result, .swapped(from: 0, to: 3))
+        XCTAssertEqual(updated.capacity, 4)
+        XCTAssertEqual(updated.slots, [nil, b, nil, a])
+    }
+
+    func testTargetedAddBeyondFinalStageIsRejected() {
         let original = workspace(slots: [UUID(), nil], capacity: 2)
-        let (updated, result) = WorkspaceSlotOps.add(UUID(), to: original, at: 7)
-        XCTAssertEqual(result, .rejected)
+        let (updated, result) = WorkspaceSlotOps.add(UUID(), to: original, at: 9)
+        XCTAssertEqual(result, .rejected(.slotOutOfRange(maxSlots: 9)),
+                       "jenseits der Endstufe 3×3 bleibt es eine benannte Ablehnung")
+        XCTAssertEqual(updated, original)
+    }
+
+    func testTargetedAddToNegativeSlotIsRejected() {
+        let original = workspace(slots: [UUID(), nil], capacity: 2)
+        let (updated, result) = WorkspaceSlotOps.add(UUID(), to: original, at: -1)
+        XCTAssertEqual(result, .rejected(.slotOutOfRange(maxSlots: 9)))
         XCTAssertEqual(updated, original)
     }
 

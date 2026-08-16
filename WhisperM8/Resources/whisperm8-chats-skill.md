@@ -60,9 +60,19 @@ whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
 whisperm8 chats unarchive <ref> [--resume|--open]    # NUR Markierung weg; Start nur via Flag
 whisperm8 chats workspace list                       # Grid-Workspaces + Slots, hostWindowID, gridVisible
+whisperm8 chats workspace create "<name>" [--color #RRGGBB] [<ref> …]
+                                                     # anlegen; Refs füllen Slots in Reihenfolge
+whisperm8 chats workspace open <name|id> [--slot N]  # sichtbar machen + Fenster nach vorn (rein visuell)
 whisperm8 chats workspace rename <name|id> "<neu>"   # Grid-Workspace umbenennen
-whisperm8 chats workspace add <name|id> <ref> [--slot N]    # Session in Grid-Slot aufnehmen
-whisperm8 chats workspace remove <name|id> <ref>     # nur Slot leeren — Tab/Prozess bleiben
+whisperm8 chats workspace add <name|id> <ref> [--slot N]    # Session in Grid-Slot aufnehmen;
+                                                     # --slot über der Stufe erweitert das Grid (bis 3×3),
+                                                     # vorhandenes Mitglied wird verschoben (Outcome moved)
+whisperm8 chats workspace remove <name|id> <ref> [--keep-slot]
+                                                     # Slot leeren — Tab/Prozess bleiben. Default kompaktiert
+                                                     # (übrige rücken nach vorn); --keep-slot lässt das Loch
+                                                     # stehen (stabile Positionen, z. B. „sitzt unten rechts")
+whisperm8 chats workspace delete <name|id> [--force] # Gruppe löschen — Chats/Tabs bleiben;
+                                                     # belegte Workspaces verlangen --force
 ```
 
 ## Referenzen (`<ref>`)
@@ -153,8 +163,11 @@ unterbrochen.
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte
    Titel), sobald der User es verlangt — kein Sonderschutz. `open`/`close`/
    `reopen`/`pin`/`unpin`/`move`/`new`/`resume`/`unarchive`/`workspace
-   rename|add|remove` direkt aus einem klaren User-Auftrag brauchen keine
-   Extra-Frage (alles UI-only bzw. nicht destruktiv); `new` aus
+   create|open|rename|add|remove` direkt aus einem klaren User-Auftrag
+   brauchen keine Extra-Frage (alles UI-only bzw. nicht destruktiv);
+   `workspace delete` eines LEEREN Workspace ebenso — ein belegter verlangt
+   `--force`, also Regel 3: nur wenn der User genau das verlangt hat
+   (Chats/Tabs überleben, aber das kuratierte Layout ist weg); `new` aus
    **Eigeninitiative** erst vorschlagen (Projekt + Initial-Prompt zeigen),
    dann starten. Für BATCH-`close` („alle, die ich nicht brauche") und
    `close --others` gilt Regel 6: erst Kandidatenliste bestätigen lassen.

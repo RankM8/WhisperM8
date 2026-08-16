@@ -277,11 +277,13 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         )
         // Fremd-Projekt: nie Mitglied.
         XCTAssertEqual(
-            store.addSession(foreign.id, toGridWorkspace: entityID), .rejected
+            store.addSession(foreign.id, toGridWorkspace: entityID),
+            .rejected(.projectViewForeignSession)
         )
         // Nicht-Mitglied darf keinen Besitzer verdrängen …
         XCTAssertEqual(
-            store.addSession(inactive.id, toGridWorkspace: entityID, at: 0), .rejected
+            store.addSession(inactive.id, toGridWorkspace: entityID, at: 0),
+            .rejected(.projectViewDisplacement)
         )
         // … aber Mitglieder dürfen gezielt tauschen (Reorder bleibt).
         XCTAssertEqual(
@@ -531,8 +533,12 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         let id = store.createGridWorkspace(name: "G")
         let archived = try seedSession(persistence, status: .archived)
 
-        XCTAssertEqual(store.addSession(UUID(), toGridWorkspace: id), .rejected)
-        XCTAssertEqual(store.addSession(archived, toGridWorkspace: id), .rejected)
+        XCTAssertEqual(
+            store.addSession(UUID(), toGridWorkspace: id), .rejected(.sessionUnknown)
+        )
+        XCTAssertEqual(
+            store.addSession(archived, toGridWorkspace: id), .rejected(.sessionArchived)
+        )
         XCTAssertEqual(store.gridWorkspace(id: id)?.occupiedSessionIDs, [])
     }
 
@@ -635,6 +641,35 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], s[2]])
         XCTAssertEqual(store.selectedSession(in: w), s[2], "nächster belegter Slot")
         XCTAssertTrue(store.openTabIDs(in: w).contains(s[1]), "Tab bleibt offen")
+    }
+
+    /// CLI `remove --keep-slot`: Der Override erzwingt stabile Positionen
+    /// für genau diesen Aufruf — trotz eingeschaltetem Auto-Compact-Default.
+    func testRemoveWithKeepSlotOverridesCompaction() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 3)
+        let id = store.createGridWorkspace(name: "G", slots: s.map { $0 }, activateIn: w)
+
+        XCTAssertTrue(store.removeSession(s[1], fromGridWorkspace: id, compacting: false))
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], nil, s[2]],
+                       "Loch bleibt stehen, nichts rückt nach")
+        XCTAssertEqual(store.gridWorkspace(id: id)?.capacity, 3, "Stufe bleibt")
+    }
+
+    /// CLI `add --slot N` jenseits der Stufe: Grid wächst statt abzulehnen
+    /// (Jarvis-Befund 2026-08-17) — auch über die Store-Ebene persistiert.
+    func testAddSessionAtSlotBeyondCapacityGrowsGrid() throws {
+        let (store, persistence) = makeStore()
+        let s = try seed(persistence, count: 2)
+        let id = store.createGridWorkspace(name: "G", slots: [s[0]])
+
+        XCTAssertEqual(
+            store.addSession(s[1], toGridWorkspace: id, at: 3),
+            .added(slotIndex: 3, grewTo: 4)
+        )
+        XCTAssertEqual(store.gridWorkspace(id: id)?.capacity, 4)
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], nil, nil, s[1]])
     }
 
     func testRemoveLastSessionLeavesEmptyWorkspaceWithNilFocusFallback() throws {

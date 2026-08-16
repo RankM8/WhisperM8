@@ -61,6 +61,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await workspaceUnarchive(request)
         case "gridWorkspace.list":
             return await gridWorkspaceList(request)
+        case "gridWorkspace.create":
+            return await gridWorkspaceCreate(request)
+        case "gridWorkspace.delete":
+            return await gridWorkspaceDelete(request)
         case "gridWorkspace.rename":
             return await gridWorkspaceRename(request)
         case "gridWorkspace.open":
@@ -705,10 +709,27 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
     // MARK: gridWorkspace.add / .remove
 
+    /// Kompakte Erfolgs-Beschreibung einer Mitgliedschafts-Mutation —
+    /// Sendable-tauglich über die MainActor-Grenze (kein `[String: Any]`).
+    private struct MembershipDetail: Sendable {
+        var outcome: String
+        /// 1-basiert (CLI-Sicht) — hier schon konvertiert, damit CLI und
+        /// Payload dieselbe Zahl zeigen.
+        var slot: Int?
+        var fromSlot: Int?
+        /// Neue Kapazität, falls der Add das Grid erweitert hat.
+        var grewTo: Int?
+        var displaced: UUID?
+        var keptSlot: Bool?
+    }
+
     /// Grid-Workspace-Mitgliedschaft (Slots). `add` nutzt die Slot-Semantik
-    /// von `WorkspaceSlotOps.add` (nächster freier Slot bzw. `--slot`),
-    /// `remove` leert nur den Slot — Tab und Prozess bleiben (identisch zur
-    /// Sidebar-Aktion in der App).
+    /// von `WorkspaceSlotOps.add` (nächster freier Slot bzw. `--slot`,
+    /// inkl. Auto-Wachsen auf höhere Slots); `remove` leert den Slot —
+    /// Tab und Prozess bleiben (identisch zur Sidebar-Aktion in der App),
+    /// standardmäßig kompaktierend, mit `keepSlot` positionsstabil.
+    /// Ablehnungen kommen benannt zurück (Session unbekannt ≠ archiviert
+    /// ≠ Slot außerhalb) — Agenten entscheiden am Exit-Code.
     private func gridWorkspaceMembership(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         guard let workspaceRef = request.params["workspaceRef"]?.stringValue, !workspaceRef.isEmpty else {
             return .failure(requestID: request.requestID, code: .invalid, message: "workspaceRef fehlt")
@@ -721,9 +742,13 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             if case .number(let value) = json { return Int(value) }
             return nil
         }
+        let keepSlot = request.params["keepSlot"]?.boolValue ?? false
         let isAdd = request.method == "gridWorkspace.add"
 
-        enum MembershipOutcome { case ok(String, AgentGridWorkspace); case fail(ChatsControlErrorCode, String) }
+        enum MembershipOutcome {
+            case ok(MembershipDetail, AgentGridWorkspace)
+            case fail(ChatsControlErrorCode, String)
+        }
         let outcome: MembershipOutcome = await MainActor.run {
             let store = AgentWindowStore.shared
             let workspaceEntity: AgentGridWorkspace
@@ -734,34 +759,208 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             case .failure(let message): return .fail(.notFound, message)
             }
             if isAdd {
+                let capacityBefore = workspaceEntity.capacity
                 switch store.addSession(targetID, toGridWorkspace: workspaceEntity.id, at: slot) {
-                case .added, .replaced, .swapped:
-                    return .ok("added", workspaceEntity)
-                case .alreadyMember:
-                    return .ok("alreadyMember", workspaceEntity)
+                case .added(let slotIndex, let grewTo):
+                    return .ok(MembershipDetail(
+                        outcome: "added", slot: slotIndex + 1, grewTo: grewTo
+                    ), workspaceEntity)
+                case .replaced(let slotIndex, let displaced):
+                    return .ok(MembershipDetail(
+                        outcome: "replaced", slot: slotIndex + 1, displaced: displaced
+                    ), workspaceEntity)
+                case .swapped(let from, let to):
+                    // Move/Swap kennt kein `grewTo` — Kapazitätsvergleich
+                    // vorher/nachher liefert dieselbe Information.
+                    let capacityAfter = store.gridWorkspace(id: workspaceEntity.id)?
+                        .capacity ?? capacityBefore
+                    return .ok(MembershipDetail(
+                        outcome: "moved", slot: to + 1, fromSlot: from + 1,
+                        grewTo: capacityAfter > capacityBefore ? capacityAfter : nil
+                    ), workspaceEntity)
+                case .alreadyMember(let slotIndex):
+                    return .ok(MembershipDetail(
+                        outcome: "alreadyMember", slot: slotIndex + 1
+                    ), workspaceEntity)
                 case .full:
-                    return .fail(.conflict, "Workspace „\(workspaceEntity.name)\" ist voll (Kapazität \(workspaceEntity.capacity)) — Slot mit --slot ersetzen oder Kapazität in der App erhöhen")
-                case .rejected:
-                    return .fail(.notFound, "Session nicht gefunden/archiviert oder Slot ungültig")
+                    return .fail(.conflict, "Workspace „\(workspaceEntity.name)\" ist voll (Endstufe 3×3, Kapazität 9) — gezielt mit --slot N ersetzen")
+                case .rejected(let reason):
+                    switch reason {
+                    case .workspaceUnknown:
+                        return .fail(.notFound, "Workspace nicht gefunden")
+                    case .sessionUnknown:
+                        return .fail(.notFound, "Session nicht gefunden")
+                    case .sessionArchived:
+                        return .fail(.conflict, "Session ist archiviert — erst `chats unarchive`, dann erneut aufnehmen")
+                    case .slotOutOfRange(let maxSlots):
+                        return .fail(.invalid, "Slot \((slot ?? 0) + 1) liegt außerhalb — Maximum \(maxSlots) (Endstufe 3×3)")
+                    case .projectViewForeignSession, .projectViewDisplacement:
+                        return .fail(.conflict, "Projekt-Views verwalten ihre Mitglieder selbst (aktiv = Mitglied)")
+                    }
                 }
             } else {
-                let removed = store.removeSession(targetID, fromGridWorkspace: workspaceEntity.id)
-                return .ok(removed ? "removed" : "notMember", workspaceEntity)
+                let removed = store.removeSession(
+                    targetID, fromGridWorkspace: workspaceEntity.id,
+                    compacting: keepSlot ? false : nil
+                )
+                return .ok(MembershipDetail(
+                    outcome: removed ? "removed" : "notMember",
+                    keptSlot: (removed && keepSlot) ? true : nil
+                ), workspaceEntity)
             }
         }
         switch outcome {
         case .fail(let code, let message):
             return .failure(requestID: request.requestID, code: code, message: message)
-        case .ok(let result, let entity):
-            if result == "added" || result == "removed" {
+        case .ok(let detail, let entity):
+            if detail.outcome != "alreadyMember" && detail.outcome != "notMember" {
                 let label = await sessionLabel(targetID)
                 await audit(request.actor, method: isAdd ? "workspace-add" : "workspace-remove",
                             target: "\(entity.name) ← \(label)", outcome: "ok", prompt: nil)
             }
-            return .success(requestID: request.requestID, result: .object([
-                "ok": true, "outcome": result,
+            var payload: [String: Any] = [
+                "ok": true, "outcome": detail.outcome,
                 "workspace": ["id": entity.id.uuidString, "name": entity.name],
                 "target": ["id": targetID.uuidString],
+            ]
+            if let slot = detail.slot { payload["slot"] = slot }
+            if let fromSlot = detail.fromSlot { payload["fromSlot"] = fromSlot }
+            if let grewTo = detail.grewTo { payload["grewTo"] = grewTo }
+            if let displaced = detail.displaced {
+                payload["displacedSessionID"] = displaced.uuidString
+            }
+            if let keptSlot = detail.keptSlot { payload["keptSlot"] = keptSlot }
+            return .success(requestID: request.requestID, result: .object(payload))
+        }
+    }
+
+    // MARK: gridWorkspace.create / .delete
+
+    /// Legt einen Grid-Workspace an — optional mit Initial-Mitgliedern
+    /// (Slots in übergebener Reihenfolge, Kapazität wächst passend mit).
+    /// Mitglieder werden VOR dem Anlegen hart validiert: eine unbekannte
+    /// oder archivierte Session ist ein Fehler, kein stilles Loch
+    /// (deterministisch für Agenten — `createGridWorkspace` würde sonst
+    /// kommentarlos `nil` einsetzen).
+    private func gridWorkspaceCreate(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let rawName = request.params["name"]?.stringValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !rawName.isEmpty else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "name fehlt")
+        }
+        var colorHex = AgentGridWorkspace.defaultColorHex
+        if let raw = request.params["colorHex"]?.stringValue {
+            guard let canonical = AgentGridWorkspace.canonicalColorHex(raw) else {
+                return .failure(requestID: request.requestID, code: .invalid,
+                                message: "Ungültige Farbe „\(raw)\" — erwartet #RRGGBB")
+            }
+            colorHex = canonical
+        }
+        var memberIDs: [UUID] = []
+        if let rawMembers = request.params["memberSessionIDs"]?.arrayValue {
+            var seen = Set<UUID>()
+            for value in rawMembers {
+                guard let string = value.stringValue, let id = UUID(uuidString: string) else {
+                    return .failure(requestID: request.requestID, code: .invalid,
+                                    message: "memberSessionIDs enthält eine ungültige UUID")
+                }
+                // Duplikate in Reihenfolge deduplizieren (normalize() würde
+                // sie sonst zu stillen Löchern machen).
+                if seen.insert(id).inserted { memberIDs.append(id) }
+            }
+        }
+        let maxSlots = AgentGridWorkspace.allowedCapacities.last!
+        guard memberIDs.count <= maxSlots else {
+            return .failure(requestID: request.requestID, code: .invalid,
+                            message: "Höchstens \(maxSlots) Mitglieder (Endstufe 3×3)")
+        }
+
+        enum CreateOutcome {
+            case ok(id: UUID, name: String, capacity: Int, members: Int)
+            case fail(ChatsControlErrorCode, String)
+        }
+        let name = rawName
+        let color = colorHex
+        let members = memberIDs
+        let outcome: CreateOutcome = await MainActor.run {
+            // Mitglieder gegen den Domain-Workspace validieren (In-Memory-
+            // Read, kein Subprozess) — gleiche Quelle wie `addSession`.
+            let sessions = AgentSessionStore().loadWorkspace().sessions
+            for id in members {
+                guard let session = sessions.first(where: { $0.id == id }) else {
+                    return .fail(.notFound, "Session \(id.uuidString) nicht gefunden")
+                }
+                guard session.status != .archived else {
+                    return .fail(.conflict, "Session „\(session.title)\" ist archiviert — erst `chats unarchive`")
+                }
+            }
+            let store = AgentWindowStore.shared
+            let workspaceID = store.createGridWorkspace(
+                name: name, colorHex: color, slots: members.map { Optional($0) }
+            )
+            let entity = store.gridWorkspace(id: workspaceID)
+            return .ok(id: workspaceID, name: entity?.name ?? name,
+                       capacity: entity?.capacity ?? 2,
+                       members: entity?.occupiedSessionIDs.count ?? members.count)
+        }
+        switch outcome {
+        case .fail(let code, let message):
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .ok(let id, let name, let capacity, let members):
+            await audit(request.actor, method: "workspace-create", target: name,
+                        outcome: "ok", prompt: nil)
+            return .success(requestID: request.requestID, result: .object([
+                "ok": true, "outcome": "created",
+                "workspace": ["id": id.uuidString, "name": name],
+                "capacity": capacity,
+                "members": members,
+            ]))
+        }
+    }
+
+    /// Löscht einen Grid-Workspace (nur die kuratierte Gruppe — Slots sind
+    /// Referenzen, Tabs/Sessions/Prozesse bleiben unangetastet). Belegte
+    /// Workspaces verlangen `force`, damit ein Tippfehler kein kuratiertes
+    /// Layout kostet. Projekt-Views sind nicht adressierbar (gefiltert wie
+    /// bei allen `gridWorkspace.*`-Refs).
+    private func gridWorkspaceDelete(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        guard let ref = request.params["ref"]?.stringValue, !ref.isEmpty else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "ref fehlt")
+        }
+        let force = request.params["force"]?.boolValue ?? false
+
+        enum DeleteOutcome {
+            case ok(name: String, id: UUID, freedSlots: Int)
+            case fail(ChatsControlErrorCode, String)
+        }
+        let outcome: DeleteOutcome = await MainActor.run {
+            let store = AgentWindowStore.shared
+            let entity: AgentGridWorkspace
+            switch Self.resolveGridWorkspaceRef(
+                ref, all: store.gridWorkspaces.filter { $0.sourceProjectID == nil }
+            ) {
+            case .success(let resolved): entity = resolved
+            case .failure(let message): return .fail(.notFound, message)
+            }
+            let occupied = entity.occupiedSessionIDs.count
+            guard occupied == 0 || force else {
+                return .fail(.conflict, "Workspace „\(entity.name)\" hat \(occupied) belegte\(occupied == 1 ? "n" : "") Slot\(occupied == 1 ? "" : "s") — mit --force löschen (Chats/Tabs bleiben erhalten)")
+            }
+            guard store.deleteGridWorkspace(entity.id) else {
+                return .fail(.notFound, "Workspace nicht gefunden")
+            }
+            return .ok(name: entity.name, id: entity.id, freedSlots: occupied)
+        }
+        switch outcome {
+        case .fail(let code, let message):
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .ok(let name, let id, let freedSlots):
+            await audit(request.actor, method: "workspace-delete", target: name,
+                        outcome: "ok", prompt: nil)
+            return .success(requestID: request.requestID, result: .object([
+                "ok": true, "outcome": "deleted",
+                "workspace": ["id": id.uuidString, "name": name],
+                "freedSlots": freedSlots,
             ]))
         }
     }
