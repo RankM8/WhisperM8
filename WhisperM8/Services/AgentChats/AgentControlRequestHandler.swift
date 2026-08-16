@@ -181,6 +181,11 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             }
             // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop, entschieden).
             let marked = Self.markedPrompt(prompt, actor: markerActor)
+            // Zustell-Token VOR dem Paste: autorisiert genau EINE Submission
+            // dieses Texts beim UserPromptSubmit-Guard (Wiedervorlage-Schutz,
+            // Vorfall 2026-08-17). Auch für --no-submit — der User schickt
+            // den gestagten Text später selbst ab.
+            SendDeliveryTokenStore().stage(promptText: marked)
             controller.sendPrompt(marked, submit: submit)
             return .success(session)
         }
@@ -246,6 +251,21 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return .success(session)
         }
 
+        // `--clear-input` (opt-in): Nach dem ESC legt die Claude-CLI den
+        // Prompt des abgebrochenen Turns in den Composer zurück — ein
+        // verzögertes Ctrl+C leert ihn (Vorfall 2026-08-17). Opt-in, weil
+        // es auch einen echten User-Entwurf löschen würde. Fire-and-forget:
+        // die Response wartet nicht auf die TUI.
+        let clearInput = request.params["clearInput"]?.boolValue ?? false
+        if clearInput, case .success = outcome {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard let controller = AgentTerminalRegistry.shared.controller(for: targetID),
+                      controller.isRunning else { return }
+                controller.sendComposerClear()
+            }
+        }
+
         switch outcome {
         case .failure(let code, let message):
             await audit(request.actor, method: "interrupt", target: nil, outcome: code.rawValue, prompt: nil)
@@ -253,10 +273,12 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         case .success(let session):
             let targetLabel = await sessionLabel(targetID)
             await audit(request.actor, method: "interrupt", target: targetLabel, outcome: "ok", prompt: nil)
-            return .success(requestID: request.requestID, result: .object([
+            var payload: [String: Any] = [
                 "ack": "interrupted",
                 "target": ["id": session.id.uuidString, "title": session.title],
-            ]))
+            ]
+            if clearInput { payload["clearInput"] = true }
+            return .success(requestID: request.requestID, result: .object(payload))
         }
     }
 
@@ -1609,9 +1631,11 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     // MARK: - Audit + Marker
 
     /// Marker-Zeile für gesendete Prompts (Kennzeichnung + Ein-Hop-Regel).
+    /// Das Präfix ist geteilt mit dem Send-Guard (`ChatsPromptGuard`) —
+    /// er erkennt Wiedervorlagen genau an dieser Zeile.
     static func markedPrompt(_ prompt: String, actor: String) -> String {
         let time = markerTimeFormatter.string(from: Date())
-        return "[via whisperm8 chats · von \(actor) · \(time)]\n\(prompt)"
+        return "\(ChatsPromptGuard.markerPrefix) · von \(actor) · \(time)]\n\(prompt)"
     }
 
     private func auditActorLabel(_ actor: ChatsControlActor) async -> String {

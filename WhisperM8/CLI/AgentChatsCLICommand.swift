@@ -92,6 +92,10 @@ enum AgentChatsCLICommand {
             return ChatsUnarchiveCommand.run(rest)
         case "workspace":
             return ChatsWorkspaceCommand.run(rest)
+        case "_prompt-guard":
+            // Interner UserPromptSubmit-Hook (Send-Guard) — bewusst nicht in
+            // der Hilfe: Vertragsbestandteil der Hook-Bridge, nicht der CLI.
+            return ChatsPromptGuardCommand.run(rest)
         case "audit":
             return ChatsAuditCommand.run(rest)
         default:
@@ -799,7 +803,12 @@ enum ChatsCLIHelp {
                                der Chat frei, geht es sofort raus.
       whisperm8 chats queue [<ref>] [--json]             Was wartet? (auch bei geschlossener App)
       whisperm8 chats dequeue <ref> --all | --id <UUID>  offene Aufträge stornieren
-      whisperm8 chats interrupt <ref> [--force] [--json]   ESC an working-Session
+      whisperm8 chats interrupt <ref> [--force] [--clear-input] [--json]
+                               ESC an working-Session. --clear-input schickt
+                               danach ein Ctrl+C hinterher und leert den
+                               Composer (die CLI legt den abgebrochenen Prompt
+                               sonst dorthin zurück) — löscht auch einen
+                               etwaigen User-Entwurf, deshalb opt-in.
       whisperm8 chats open <ref> [--json]
       whisperm8 chats close <ref> [<ref>…] [--json]      NUR den UI-Tab schließen — Session,
                                                          PTY, Pin und Transcript bleiben

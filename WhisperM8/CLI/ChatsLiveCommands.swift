@@ -175,12 +175,14 @@ enum ChatsInterruptCommand {
     static func run(_ arguments: [String]) -> Int32 {
         var ref: String?
         var force = false
+        var clearInput = false
         var json = false
         var index = 0
         while index < arguments.count {
             let arg = arguments[index]
             switch arg {
             case "--force": force = true
+            case "--clear-input": clearInput = true
             case "--json": json = true
             default:
                 if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
@@ -189,7 +191,7 @@ enum ChatsInterruptCommand {
             index += 1
         }
         guard let ref else {
-            CLIIO.err("Usage: whisperm8 chats interrupt <ref> [--force]")
+            CLIIO.err("Usage: whisperm8 chats interrupt <ref> [--force] [--clear-input]")
             return ChatsCLIExit.usage
         }
         let targetID: UUID
@@ -197,14 +199,17 @@ enum ChatsInterruptCommand {
         case .resolved(let id, _): targetID = id
         case .failed(let code): return code
         }
-        let params: [String: Any] = ["targetSessionID": targetID.uuidString, "force": force]
+        var params: [String: Any] = ["targetSessionID": targetID.uuidString, "force": force]
+        if clearInput { params["clearInput"] = true }
         switch ChatsLiveSupport.perform(method: "session.interrupt", params: params) {
         case .failed(let code): return code
         case .ok(let response):
             guard response.ok else { return ChatsLiveSupport.mapError(response) }
             ChatsLiveSupport.printResult(response, json: json) { result in
                 let title = result["target"]?["title"]?.stringValue ?? ref
-                return "✓ Interrupt an \(title) gesendet (ESC)"
+                let cleared = result["clearInput"]?.boolValue == true
+                    ? " · Composer wird geleert" : ""
+                return "✓ Interrupt an \(title) gesendet (ESC)\(cleared)"
             }
             return ChatsCLIExit.ok
         }

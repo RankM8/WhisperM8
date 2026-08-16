@@ -411,6 +411,17 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.gridAutoCompactEnabled) }
     }
 
+    /// Send-Guard der Hook-Bridge: `UserPromptSubmit`-Hook blockt die
+    /// Wiedervorlage zugestellter `[via whisperm8 chats]`-Prompts (die CLI
+    /// legt sie nach ESC-Abbruch selbst in den Composer zurück — Vorfall
+    /// 2026-08-17). Aus = Settings ohne Guard-Eintrag; wirkt für NEU
+    /// gestartete Sessions.
+    /// `defaults write com.whisperm8.app chatsPromptGuardEnabled -bool NO`
+    var isChatsPromptGuardEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.chatsPromptGuardEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.chatsPromptGuardEnabled) }
+    }
+
     var isAgentEventDrivenWatchEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.agentEventDrivenWatchEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.agentEventDrivenWatchEnabled) }
@@ -652,6 +663,7 @@ enum PreferenceKeys {
     static let agentTabGroupingEnabled = "agentTabGroupingEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
+    static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"

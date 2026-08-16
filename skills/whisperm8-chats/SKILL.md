@@ -43,7 +43,12 @@ whisperm8 chats send <ref> -- "<prompt>"  [--if-status S,S] [--no-submit] [--for
 whisperm8 chats enqueue <ref> -- "<prompt>"          # Folgeauftrag vormerken (auch bei working)
 whisperm8 chats queue [<ref>]                        # was wartet? (auch bei geschlossener App)
 whisperm8 chats dequeue <ref> --all | --id <UUID>    # offene Aufträge stornieren
-whisperm8 chats interrupt <ref> [--force]            # ein ESC an eine working-Session
+whisperm8 chats interrupt <ref> [--force] [--clear-input]
+                                                     # ein ESC an eine working-Session. --clear-input
+                                                     # leert danach den Composer (Ctrl+C) — nutzen, wenn
+                                                     # ein zugestellter Auftrag ZURÜCKGEZOGEN wird (die
+                                                     # CLI legt den Prompt sonst dorthin zurück); löscht
+                                                     # auch User-Entwürfe, deshalb opt-in
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
 whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
 whisperm8 chats close <ref> --stop [--force]         # Tab zu + Agent beenden (kein Archiv, Verlauf bleibt);
@@ -157,7 +162,12 @@ unterbrochen.
    das Ziel; frage per AskUserQuestion (Senden / Anpassen / Abbrechen) oder im
    Text. **Ausnahme:** Der User hat dir für GENAU diese Ziel-Session in DIESER
    Konversation pauschal freigegeben. Freigaben gelten nie über die
-   Konversation hinaus.
+   Konversation hinaus. — Hinweis: Ein Send-Guard (UserPromptSubmit-Hook)
+   blockt in Claude-Sessions die WIEDERVORLAGE bereits zugestellter
+   `[via whisperm8 chats]`-Prompts (die CLI legt sie nach ESC-Abbruch in den
+   Composer zurück). Sieht ein Chat diese Block-Meldung, ist das kein Fehler —
+   bei echter Absicht den Auftrag per `chats send` neu zustellen. Zieht der
+   User einen Auftrag zurück, `interrupt --clear-input` anbieten.
 2. **Vor `interrupt`, `archive`: ebenfalls bestätigen lassen.** `interrupt`
    bricht einen laufenden Turn ab — nur nach expliziter User-Freigabe (im
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte

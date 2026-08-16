@@ -103,7 +103,18 @@ final class ClaudeHookBridge {
                     [.posixPermissions: 0o600],
                     ofItemAtPath: eventURL.path
                 )
-                fragments.append(ClaudeHookSettingsBuilder.makeSettings(eventFilePath: eventURL.path))
+                // Send-Guard nur mit auffindbarem Binary und aktivem
+                // Kill-Switch (`chatsPromptGuardEnabled`, Default an) —
+                // ohne Guard bleiben die Settings wie bisher.
+                var guardCommand: String?
+                if AppPreferences.shared.isChatsPromptGuardEnabled,
+                   let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() {
+                    guardCommand = ClaudeHookSettingsBuilder.promptGuardCommand(
+                        executablePath: executable.path)
+                }
+                fragments.append(ClaudeHookSettingsBuilder.makeSettings(
+                    eventFilePath: eventURL.path,
+                    promptGuardCommand: guardCommand))
             }
             if let extraFragment, !extraFragment.isEmpty {
                 fragments.append(extraFragment)

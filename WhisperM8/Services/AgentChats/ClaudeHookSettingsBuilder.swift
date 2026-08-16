@@ -39,7 +39,10 @@ enum ClaudeHookSettingsBuilder {
     /// keine externen Tools wie `jq`. Background-Sessions setzen das
     /// beim `--bg`-Spawn (siehe `BackgroundAgentSpawner`), normale
     /// Chats beim Launch des PTY.
-    static func makeSettings(eventFilePath: String) -> [String: Any] {
+    static func makeSettings(
+        eventFilePath: String,
+        promptGuardCommand: String? = nil
+    ) -> [String: Any] {
         let command = appendCommand(eventFilePath: eventFilePath)
         let entry: [String: Any] = [
             "matcher": ".*",
@@ -54,7 +57,33 @@ enum ClaudeHookSettingsBuilder {
         for name in trackedEventNames {
             hooks[name] = [entry]
         }
+        // Send-Guard: zweiter, additiver UserPromptSubmit-Eintrag. Exit 2
+        // blockt die Submission (Wiedervorlage eines [via whisperm8 chats]-
+        // Prompts ohne frisches Zustell-Token — Vorfall 2026-08-17). Läuft
+        // NACH dem Append-Command, damit das Event-Tracking auch für
+        // geblockte Prompts vollständig bleibt.
+        if let promptGuardCommand {
+            var userPromptEntries = hooks["UserPromptSubmit"] as? [[String: Any]] ?? []
+            userPromptEntries.append([
+                "matcher": ".*",
+                "hooks": [
+                    [
+                        "type": "command",
+                        "command": promptGuardCommand
+                    ]
+                ]
+            ])
+            hooks["UserPromptSubmit"] = userPromptEntries
+        }
         return ["hooks": hooks]
+    }
+
+    /// Hook-Command des Send-Guards: absoluter Pfad zum eigenen Binary
+    /// (App und CLI sind dasselbe signierte Executable) + internes
+    /// Subcommand. Kein PATH-/Symlink-Vertrauen — der Symlink-Install
+    /// (`~/.local/bin/whisperm8`) kann fehlen oder veraltet sein.
+    static func promptGuardCommand(executablePath: String) -> String {
+        "\"\(shellEscapeDoubleQuoted(executablePath))\" chats _prompt-guard"
     }
 
     /// Serialisiert die Settings als utf8-JSON-Daten. Sortierung der Keys

@@ -64,6 +64,9 @@ final class AgentPromptQueueDelivery {
 
         let marked = AgentControlRequestHandler.markedPrompt(
             reserved.prompt, actor: "Warteschlange · \(reserved.enqueuedBy)")
+        // Zustell-Token VOR dem Paste — gleicher Wiedervorlage-Schutz wie in
+        // der Send-Pipeline (UserPromptSubmit-Guard konsumiert es).
+        SendDeliveryTokenStore().stage(promptText: marked)
         controller.sendPrompt(marked, submit: true)
         store.markDelivered(id: reserved.id)
 

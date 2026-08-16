@@ -696,6 +696,16 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         terminal.send([0x1B])
     }
 
+    /// Sendet ein einzelnes Ctrl+C — leert in Claude Code den NICHT-leeren
+    /// Composer (`chats interrupt --clear-input`: die CLI legt nach einem
+    /// ESC-Abbruch den Prompt des abgebrochenen Turns dorthin zurück). Bei
+    /// leerem Composer zeigt die TUI nur den harmlosen Exit-Hinweis. Wie
+    /// `sendInterrupt` bewusst genau EIN Signal, kein generisches send-keys.
+    func sendComposerClear() {
+        guard isRunning else { return }
+        terminal.send([0x03])
+    }
+
     /// Wird gefeuert, wenn der Subprocess den Terminal-Titel per
     /// Escape-Sequenz setzt (OSC 0/2 — Shells melden so laufendes Kommando
     /// bzw. cwd). Genutzt von `.terminal`-Tabs für den Live-Tab-Titel;
