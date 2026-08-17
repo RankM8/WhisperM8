@@ -188,6 +188,14 @@ final class AgentSessionRuntimeWatcher {
         pollOne(sessionID: sessionID)
     }
 
+    /// Letzte bekannte Transcript-mtime einer beobachteten Session (aus dem
+    /// Tick-Cache — kein zusätzliches I/O). Der Coordinator nutzt sie als
+    /// „lebt der Turn noch?"-Beleg bei einem Abort-Verdacht: wächst die
+    /// Datei zwischen Verdacht und Verifikation, streamt der Turn weiter.
+    func cachedTranscriptMTime(sessionID: UUID) -> Date? {
+        watched[sessionID]?.lastStat?.mtime
+    }
+
     /// Beendet das Tracking nach Prozessende. Den finalen Status
     /// (`stopped`/`errored`) setzt der `AgentSessionStatusCoordinator` über
     /// die State-Machine — hier passiert nur noch Ressourcen-Cleanup.

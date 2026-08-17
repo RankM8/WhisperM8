@@ -82,6 +82,31 @@ final class AgentSessionStatusCoordinator {
     /// Hook-Zustände überschreiben — mit den heutigen Claude-JSONL-Zeilentypen
     /// stufte das arbeitende Chats laufend fälschlich auf idle herab.
     private var hookLiveSessions: Set<UUID> = []
+    /// Zeitstempel des letzten Hook-Events pro Session — Grundlage der
+    /// Stau-Heilung: „working" ohne jedes Hook-Event UND ohne
+    /// Transcript-Wachstum ist kein Arbeiten (ESC-Interrupt ohne Stop-Hook,
+    /// Vorfall/QA 2026-08-17).
+    private var lastHookEventAt: [UUID: Date] = [:]
+    /// Offene Abort-Verdachte (ESC beobachtet / `chats interrupt` gesendet),
+    /// die nach `abortVerifySeconds` gegen Hook- und Transcript-Aktivität
+    /// verifiziert werden.
+    private var abortSuspicions: [UUID: AbortSuspicion] = [:]
+
+    struct AbortSuspicion: Equatable {
+        var raisedAt: Date
+        var lastHookEventAt: Date?
+        var transcriptMTime: Date?
+    }
+
+    /// Verifikationsfenster eines Abort-Verdachts: lange genug, dass ein
+    /// weiterlaufender Turn sich verrät (Streaming schreibt sekündlich ins
+    /// JSONL, Tool-Läufe stempeln Hook-Events), kurz genug für ein
+    /// responsives Statusbild nach echtem Abbruch.
+    nonisolated static let abortVerifySeconds: TimeInterval = 5
+
+    /// Test-Injection für die Transcript-mtime (Default: Tick-Cache des
+    /// Watchers) — Muster `terminalExternalIDUpdater`.
+    var transcriptMTimeOverride: ((UUID) -> Date?)?
 
     init(
         store: AgentSessionStore = AgentSessionStore(),
@@ -256,6 +281,7 @@ final class AgentSessionStatusCoordinator {
     /// Session als hook-live — ab dann sind Hooks die alleinige Statusquelle.
     func handleHookEvent(localID: UUID, event: ClaudeHookEvent) {
         hookLiveSessions.insert(localID)
+        lastHookEventAt[localID] = Date()
         if event.hookEventName == .sessionStart {
             bindExternalSessionID(localID: localID, event: event)
         }
@@ -325,10 +351,88 @@ final class AgentSessionStatusCoordinator {
             case .stopped, .errored:
                 break // liefert der Decider nicht — defensiv ignorieren
             }
+        } else if Self.shouldHealSilentHookWorking(
+            decisionStatus: decision.status,
+            runtimeStatus: states[sessionID]?.runtimeStatus,
+            lastHookEventAt: lastHookEventAt[sessionID],
+            now: Date()
+        ) {
+            // Stilles Netz gegen den working-Stau (Vorfall/QA 2026-08-17):
+            // Ein ESC-Interrupt VOR dem ersten Output hinterlässt weder
+            // Stop-Hook noch Transcript-Marker — hook-live blieb dann für
+            // immer „working". Details am puren Prädikat.
+            Logger.claudeBinding.notice(
+                "hook_silent_working_healed sessionID=\(sessionID.uuidString, privacy: .public)")
+            apply(.turnAborted, to: sessionID)
         }
         if decision.turnFinished {
             performTurnFinishedBookkeeping(sessionID: sessionID)
         }
+    }
+
+    // MARK: - working-Stau-Heilung (hook-live ohne Stop-Event)
+
+    /// Frist des stillen Netzes: großzügiger als der 120-s-Transcript-Stall
+    /// des Deciders, damit BEIDE Belege (Transcript still + Hooks still)
+    /// unabhängig gealtert sind. Restrisiko: eine >3-min-Thinking-Phase
+    /// ohne einen einzigen Transcript-Write würde kurz als idle angezeigt —
+    /// der nächste Hook-Event (Tool/Stop) korrigiert sofort.
+    nonisolated static let hookSilentHealSeconds: TimeInterval = 180
+
+    /// Pure Heilungs-Bedingung fürs stille Netz. STRIKT nur `working`:
+    /// `awaitingInput` ist legitim lange still (Permission-Dialoge erzeugen
+    /// weder Hook-Events noch Transcript-Writes) und bleibt unangetastet.
+    /// `decisionStatus == .idle` heißt: Der Transcript-Decider sieht ein
+    /// Turn-Ende ODER seinen 120-s-Stall — zusammen mit >180 s Hook-Stille
+    /// ist „arbeitet noch" ausgeschlossen (Streaming schreibt sekündlich,
+    /// Tool-Läufe stempeln Pre-/PostToolUse).
+    nonisolated static func shouldHealSilentHookWorking(
+        decisionStatus: AgentSessionRuntimeStatus,
+        runtimeStatus: AgentSessionRuntimeStatus?,
+        lastHookEventAt: Date?,
+        now: Date
+    ) -> Bool {
+        guard decisionStatus == .idle,
+              runtimeStatus == .working,
+              let lastHookEventAt else { return false }
+        return now.timeIntervalSince(lastHookEventAt) > hookSilentHealSeconds
+    }
+
+    /// Abort-Verdacht anmelden — Trigger: `chats interrupt` (App sendet ESC)
+    /// oder ein beobachtetes ESC im Terminal einer working-Session. Startet
+    /// das Verifikationsfenster; bestätigt wird NUR, wenn der Turn sich in
+    /// `abortVerifySeconds` weder über ein Hook-Event noch über
+    /// Transcript-Wachstum als lebendig erweist. Damit bleibt ein ESC, das
+    /// in der TUI etwas anderes tat (Menü zu, Rewind-Picker), folgenlos.
+    func suspectTurnAborted(_ sessionID: UUID) {
+        guard hookLiveSessions.contains(sessionID),
+              states[sessionID]?.runtimeStatus == .working else { return }
+        abortSuspicions[sessionID] = AbortSuspicion(
+            raisedAt: Date(),
+            lastHookEventAt: lastHookEventAt[sessionID],
+            transcriptMTime: currentTranscriptMTime(sessionID))
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(
+                nanoseconds: UInt64(Self.abortVerifySeconds * 1_000_000_000))
+            self?.verifyAbortSuspicion(sessionID)
+        }
+    }
+
+    /// Verifikationsschritt (internal, damit Tests ihn ohne 5-s-Sleep direkt
+    /// treiben können). Konsumiert den Verdacht in jedem Fall.
+    func verifyAbortSuspicion(_ sessionID: UUID) {
+        guard let suspicion = abortSuspicions.removeValue(forKey: sessionID) else { return }
+        guard states[sessionID]?.runtimeStatus == .working else { return }
+        guard lastHookEventAt[sessionID] == suspicion.lastHookEventAt else { return }
+        guard currentTranscriptMTime(sessionID) == suspicion.transcriptMTime else { return }
+        Logger.claudeBinding.notice(
+            "turn_abort_confirmed sessionID=\(sessionID.uuidString, privacy: .public)")
+        apply(.turnAborted, to: sessionID)
+    }
+
+    private func currentTranscriptMTime(_ sessionID: UUID) -> Date? {
+        transcriptMTimeOverride?(sessionID)
+            ?? watcher.cachedTranscriptMTime(sessionID: sessionID)
     }
 
     // MARK: - State-Machine-Anbindung

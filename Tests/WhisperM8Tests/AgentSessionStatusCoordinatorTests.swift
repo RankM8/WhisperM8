@@ -166,6 +166,101 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(poster.posted.count, 1)
     }
 
+    // MARK: working-Stau nach ESC-Interrupt (QA-Befund 2026-08-17)
+
+    func testAbortSuspicionConfirmsWhenHooksAndTranscriptStaySilent() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        let frozenMTime = Date(timeIntervalSince1970: 1_000)
+        coordinator.transcriptMTimeOverride = { _ in frozenMTime }
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+
+        coordinator.suspectTurnAborted(sessionID)
+        coordinator.verifyAbortSuspicion(sessionID)
+
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle,
+                       "ESC ohne jede Folge-Aktivität = Turn abgebrochen")
+    }
+
+    func testAbortSuspicionCancelledByNewHookEvent() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.transcriptMTimeOverride = { _ in Date(timeIntervalSince1970: 1_000) }
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+
+        coordinator.suspectTurnAborted(sessionID)
+        // Der Turn lebt: ein Tool startet (das ESC hat z. B. nur ein
+        // TUI-Menü geschlossen).
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.preToolUse, tool: "Bash"))
+        coordinator.verifyAbortSuspicion(sessionID)
+
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working,
+                       "Hook-Aktivität im Fenster widerlegt den Verdacht")
+    }
+
+    func testAbortSuspicionCancelledByTranscriptGrowth() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        var mtime = Date(timeIntervalSince1970: 1_000)
+        coordinator.transcriptMTimeOverride = { _ in mtime }
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+
+        coordinator.suspectTurnAborted(sessionID)
+        // Der Turn streamt weiter (reine Text-Antwort ohne Tools erzeugt
+        // KEINE Hook-Events — nur das Transcript wächst).
+        mtime = Date(timeIntervalSince1970: 1_010)
+        coordinator.verifyAbortSuspicion(sessionID)
+
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working,
+                       "Transcript-Wachstum widerlegt den Verdacht")
+    }
+
+    func testAbortSuspicionRequiresWorkingHookLiveSession() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.transcriptMTimeOverride = { _ in nil }
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle)
+
+        coordinator.suspectTurnAborted(sessionID)
+        coordinator.verifyAbortSuspicion(sessionID)
+
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle,
+                       "kein Verdacht ohne working — und keine Zustandsänderung")
+    }
+
+    func testSilentHealPredicateMatrix() {
+        let old = Date(timeIntervalSinceNow: -300)
+        let fresh = Date(timeIntervalSinceNow: -10)
+        let now = Date()
+        // Der Heilungsfall: Decider sagt idle, Zustand working, Hooks lange still.
+        XCTAssertTrue(AgentSessionStatusCoordinator.shouldHealSilentHookWorking(
+            decisionStatus: .idle, runtimeStatus: .working, lastHookEventAt: old, now: now))
+        // Frische Hook-Events → kein Eingriff (Tool könnte gerade laufen).
+        XCTAssertFalse(AgentSessionStatusCoordinator.shouldHealSilentHookWorking(
+            decisionStatus: .idle, runtimeStatus: .working, lastHookEventAt: fresh, now: now))
+        // Decider sieht noch Arbeit (z. B. tool_use-Continuation) → kein Eingriff.
+        XCTAssertFalse(AgentSessionStatusCoordinator.shouldHealSilentHookWorking(
+            decisionStatus: .working, runtimeStatus: .working, lastHookEventAt: old, now: now))
+        // awaitingInput ist legitim lange still (Permission-Dialog) — NIE anfassen.
+        XCTAssertFalse(AgentSessionStatusCoordinator.shouldHealSilentHookWorking(
+            decisionStatus: .idle, runtimeStatus: .awaitingInput, lastHookEventAt: old, now: now))
+        // Ohne jedes Hook-Event keine Aussage (nicht hook-live genug).
+        XCTAssertFalse(AgentSessionStatusCoordinator.shouldHealSilentHookWorking(
+            decisionStatus: .idle, runtimeStatus: .working, lastHookEventAt: nil, now: now))
+    }
+
+    func testSilentHealIntegrationLeavesFreshWorkingAlone() throws {
+        // Integrationsseite: hook-live + frisches Event → die idle-Meinung
+        // des Deciders wird weiterhin ignoriert (kein vorschnelles Heal).
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+
+        coordinator.handleTranscriptDecision(
+            sessionID: sessionID,
+            decision: .init(status: .idle, turnFinished: false)
+        )
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
+    }
+
     func testTranscriptActivityCannotOverrideAwaiting() throws {
         let (coordinator, sessionID, _, _, _) = try makeCoordinator()
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))

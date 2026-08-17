@@ -223,6 +223,11 @@ unterbrochen.
    nenne dem User die Optionen. **Niemals** eigenmächtig `interrupt`,
    `--force` oder `close --stop` einsetzen, um den Stau aufzulösen — das
    bricht möglicherweise echte Arbeit ab. Die Entscheidung trifft der User.
+   Hinweis: Die App heilt working-Staus nach ESC-Abbrüchen inzwischen selbst
+   (nach `chats interrupt`/Terminal-ESC binnen ~5 s, sonst spätestens nach
+   ~3 min Hook- und Transcript-Stille). Hält ein working trotzdem länger,
+   ist es entweder echte stille Arbeit (langer Tool-Lauf) oder ein neuer
+   Befund — dann wie oben melden.
 
 ## Supervisor-Modus („sei mein Jarvis")
 

@@ -42,8 +42,29 @@ extension AgentChatsView {
             guard let event = handleNewChatShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
             guard let event = handleGridFocusShortcut(event) else { return nil }
+            observeTerminalInterruptKey(event)
             return handleCloseTabShortcut(event)
         }
+    }
+
+    /// Reiner BEOBACHTER (konsumiert nie): Ein ESC ohne Modifier, das im
+    /// Terminal einer working-Session landet, ist in der Claude-TUI der
+    /// Turn-Abbruch — der Stop-Hook feuert dabei nicht, und ein Abbruch vor
+    /// dem ersten Output hinterlässt auch keinen Transcript-Marker; die
+    /// Session bliebe im working-Stau (QA-Befund 2026-08-17). Der Coordinator
+    /// verifiziert den Verdacht (5 s Hook- UND Transcript-Stille), bevor er
+    /// den Status dreht — ein ESC mit anderer TUI-Bedeutung bleibt folgenlos.
+    private func observeTerminalInterruptKey(_ event: NSEvent) {
+        guard let hostWindow, event.window === hostWindow,
+              event.keyCode == 53, // ESC
+              event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
+              let sessionID = selectedSession?.id,
+              AgentSessionStatusCoordinator.shared.statusStore
+                  .status(for: sessionID) == .working,
+              let responder = hostWindow.firstResponder,
+              String(describing: type(of: responder)).contains("TerminalView")
+        else { return }
+        AgentSessionStatusCoordinator.shared.suspectTurnAborted(sessionID)
     }
 
     /// Verarbeitet ⌃⌘←/→/↑/↓ als Pane-Fokuswechsel im sichtbaren Grid
