@@ -259,6 +259,10 @@ final class AgentSessionStatusCoordinator {
         if event.hookEventName == .sessionStart {
             bindExternalSessionID(localID: localID, event: event)
         }
+        if event.hookEventName == .promptGuardBlock {
+            handlePromptGuardBlock(localID: localID)
+            return
+        }
         if event.hookEventName == .sessionEnd {
             let reason = event.reason ?? "unknown"
             Logger.claudeBinding.info("binding_session_end localID=\(localID.uuidString, privacy: .public) reason=\(reason, privacy: .public)")
@@ -275,6 +279,27 @@ final class AgentSessionStatusCoordinator {
            states[localID] == .stopped,
            isBackgroundSession(localID) {
             watcher.markTerminated(sessionID: localID)
+        }
+    }
+
+    /// Send-Guard hat eine Wiedervorlage geblockt (Vorfall 2026-08-17 #2):
+    /// 1. Das „working" des geblockten `UserPromptSubmit` zurücknehmen —
+    ///    der Turn ist nie gelaufen; ohne die Rücknahme stünde die Session
+    ///    im working-Stau und wiese `chats send`-Retries mit conflict ab
+    ///    (Doppelblockade: Composer gesperrt UND send gesperrt).
+    /// 2. Den Composer leeren (verzögertes Ctrl+C) — der geblockte Text
+    ///    bleibt sonst kleben und der User kann nicht mehr prompten.
+    ///    Nach einem Block ist der Composer-Inhalt definitionsgemäß der
+    ///    zurückgelegte Marker-Prompt, kein User-Entwurf.
+    private func handlePromptGuardBlock(localID: UUID) {
+        Logger.claudeBinding.notice(
+            "prompt_guard_block localID=\(localID.uuidString, privacy: .public)")
+        apply(.turnAborted, to: localID)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let controller = AgentTerminalRegistry.shared.controller(for: localID),
+                  controller.isRunning else { return }
+            controller.sendComposerClear()
         }
     }
 

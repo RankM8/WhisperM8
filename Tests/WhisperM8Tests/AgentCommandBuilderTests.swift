@@ -572,7 +572,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "272000",
         ])
@@ -595,7 +594,8 @@ extension AgentCommandBuilderTests {
             "Standard-Tier — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         )
         XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol-fast")
-        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
+        XCTAssertNil(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "das Router-Core-Env erreicht jede Claude-Session — die Variable stempelt nur das GPT-Session-Gate im Launch-Pfad (Regression 2026-08-17)")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
     }
 
@@ -616,7 +616,8 @@ extension AgentCommandBuilderTests {
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
             "Standard-Tier — experimentelles 372k-Profil: nur GPT-5.6 Sol"
         )
-        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "372000")
+        XCTAssertNil(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "das Router-Core-Env erreicht jede Claude-Session — die Variable stempelt nur das GPT-Session-Gate im Launch-Pfad (Regression 2026-08-17)")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
         XCTAssertEqual(environment?["WHISPERM8_GPT56_CONTEXT_WINDOW"], "372000")
     }
@@ -630,8 +631,8 @@ extension AgentCommandBuilderTests {
 
         let environment = builder.gptRouterCoreEnvironment()
 
-        XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000",
-                       "500k ist kein gültiges Profil — normalisiert auf Standard 272k")
+        XCTAssertNil(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+                     "das Router-Core-Env erreicht jede Claude-Session — die Variable stempelt nur das GPT-Session-Gate im Launch-Pfad (Regression 2026-08-17)")
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
     }
 
@@ -715,6 +716,9 @@ extension AgentCommandBuilderTests {
         )
     }
 
+    // Regression-Guard 2026-08-17: Eine Claude-Session ohne GPT-Stempel darf
+    // CLAUDE_CODE_MAX_CONTEXT_TOKENS NIEMALS erhalten — ein realer Fable-Chat
+    // lief mit der prozessweiten Variante auf einem 200k-Fenster.
     func testClaudeGPTRouterWithoutSessionStampKeepsArgumentsAndAddsRouterEnvironment() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
@@ -753,7 +757,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "272000",
         ])
@@ -1371,7 +1374,6 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
             "WHISPERM8_GPT56_CONTEXT_WINDOW": "272000",
         ]

@@ -166,8 +166,11 @@ unterbrochen.
    blockt in Claude-Sessions die WIEDERVORLAGE bereits zugestellter
    `[via whisperm8 chats]`-Prompts (die CLI legt sie nach ESC-Abbruch in den
    Composer zurück). Sieht ein Chat diese Block-Meldung, ist das kein Fehler —
-   bei echter Absicht den Auftrag per `chats send` neu zustellen. Zieht der
-   User einen Auftrag zurück, `interrupt --clear-input` anbieten.
+   das Eingabefeld leert die App danach automatisch; bei echter Absicht den
+   Auftrag per `chats send` neu zustellen. AUSNAHME automatisch erlaubt:
+   Scheiterte die Erstausführung an einem Modell-Fehler („Prompt is too
+   long", „API Error"), lässt der Guard die Wiedervorlage als Retry durch.
+   Zieht der User einen Auftrag zurück, `interrupt --clear-input` anbieten.
 2. **Vor `interrupt`, `archive`: ebenfalls bestätigen lassen.** `interrupt`
    bricht einen laufenden Turn ab — nur nach expliziter User-Freigabe (im
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte

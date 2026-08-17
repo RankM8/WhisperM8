@@ -53,14 +53,26 @@ struct SendDeliveryTokenStore {
             .appendingPathComponent("send-tokens", isDirectory: true)
     }
 
-    /// Normalisierung vor dem Hashen: Die TUI kann Rand-Whitespace des
-    /// gepasteten Texts trimmen, bevor der Hook den Prompt sieht — ohne
-    /// dieselbe Normalisierung auf beiden Seiten blockte ein
-    /// Hash-Mismatch legitime Zustellungen.
+    /// Normalisierung vor dem Hashen: ALLE Whitespace-Läufe werden zu einem
+    /// Space kollabiert. Die TUI verändert Whitespace nachweislich — beim
+    /// Zurücklegen eines Prompts in den Composer materialisiert sie
+    /// Soft-Wrap-Umbrüche als `\n  ` mitten im Text (Vorfall 2026-08-17,
+    /// Review-Agents: 640 vs. 665 Zeichen für denselben Prompt). Ein
+    /// byte-exakter Hash blockte solche Texte fälschlich; der Marker-Inhalt
+    /// bleibt auch kollabiert eindeutig identifizierend.
     static func promptHash(_ prompt: String) -> String {
-        let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let digest = SHA256.hash(data: Data(normalized.utf8))
+        let collapsed = normalizedForMatching(prompt)
+        let digest = SHA256.hash(data: Data(collapsed.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Whitespace-tolerante Vergleichsform (geteilt mit der
+    /// Retry-Probe, damit Token-Match und Transcript-Match dieselbe
+    /// Toleranz haben).
+    static func normalizedForMatching(_ text: String) -> String {
+        text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     /// Legt ein Token ab (eine Datei pro Zustellung, UUID-Name) und räumt
@@ -156,21 +168,89 @@ enum ChatsPromptGuard {
         case block(reason: String)
     }
 
-    /// `consumeToken` kapselt den Store-Zugriff (Hash-Match + Konsum) —
-    /// im Test ein Closure, im Hook der `SendDeliveryTokenStore`.
+    /// `consumeToken` kapselt den Store-Zugriff (Hash-Match + Konsum),
+    /// `failedTurnEvidence` die Transcript-Tail-Probe: Liefert sie `true`,
+    /// ist die ERSTE Ausführung dieses Prompts nachweislich mit einem
+    /// Modell-/API-Fehler gescheitert („Prompt is too long", Vorfall
+    /// 2026-08-17 #2) — dann ist die Wiedervorlage ein legitimer Retry und
+    /// passiert ohne Token. Läuft der Retry durch, ist der letzte Outcome
+    /// wieder „ausgeführt" und die Sperre greift erneut.
     static func decide(
         prompt: String,
-        consumeToken: (String) -> Bool
+        consumeToken: (String) -> Bool,
+        failedTurnEvidence: (String) -> Bool = { _ in false }
     ) -> Verdict {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(markerPrefix) else { return .allow }
-        guard consumeToken(prompt) else {
-            return .block(reason:
-                "WhisperM8-Send-Guard: Dieser [via whisperm8 chats]-Prompt wurde bereits "
-                + "zugestellt oder zurückgezogen — vermutlich hat die CLI ihn nach einem "
-                + "Abbruch (ESC) ins Eingabefeld zurückgelegt. Nicht erneut ausgeführt. "
-                + "Falls die Zustellung doch gewollt ist: per `whisperm8 chats send` neu senden.")
+        if consumeToken(prompt) { return .allow }
+        if failedTurnEvidence(prompt) { return .allow }
+        return .block(reason:
+            "WhisperM8-Send-Guard: Dieser [via whisperm8 chats]-Prompt wurde bereits "
+            + "zugestellt oder zurückgezogen — vermutlich hat die CLI ihn nach einem "
+            + "Abbruch (ESC) ins Eingabefeld zurückgelegt. Nicht erneut ausgeführt; "
+            + "das Eingabefeld wird geleert. "
+            + "Falls die Zustellung doch gewollt ist: per `whisperm8 chats send` neu senden.")
+    }
+}
+
+/// Transcript-Tail-Probe des Guards: War die letzte Ausführung GENAU dieses
+/// Prompts ein Modell-/API-Fehler? Dann ist ein Composer-Retry legitim
+/// („einmal zugestellt" ≠ „einmal erfolgreich ausgeführt" — Vorfall
+/// 2026-08-17 #2: „Prompt is too long" nach `chats send`, die Wiedervorlage
+/// war der einzige Weg und wurde fälschlich geblockt).
+///
+/// Bewusst ENG: Nur ein expliziter Fehlertext des Assistant zählt als
+/// Beleg. Ein per ESC abgebrochener Turn hinterlässt KEINEN solchen Eintrag
+/// (Teil-Output oder nichts) — das Abbruch-Szenario bleibt gesperrt.
+enum PromptGuardRetryProbe {
+    /// Fehlertexte, mit denen die Claude-CLI einen gescheiterten Turn als
+    /// Assistant-Eintrag materialisiert. Präfix-Match, eng halten.
+    static let assistantErrorPrefixes = [
+        "Prompt is too long",
+        "API Error",
+        "Credit balance is too low",
+    ]
+
+    /// `transcriptTail` = die letzten JSONL-Zeilen des Session-Transcripts
+    /// (Reihenfolge wie in der Datei). Liefert `true`, wenn der letzte
+    /// user-Eintrag mit diesem Prompt-Text existiert und danach als einzige
+    /// inhaltliche Antwort ein Fehlertext kam.
+    static func failedTurnEvidence(prompt: String, transcriptTail: String) -> Bool {
+        let wanted = SendDeliveryTokenStore.normalizedForMatching(prompt)
+        guard !wanted.isEmpty else { return false }
+
+        var lastMatchIndex: Int?
+        var entries: [(type: String, text: String)] = []
+        for line in transcriptTail.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard let data = String(line).data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { continue }
+            let type = (object["type"] as? String) ?? ""
+            entries.append((type: type, text: Self.messageText(object)))
+            if type == "user",
+               SendDeliveryTokenStore.normalizedForMatching(entries.last!.text) == wanted {
+                lastMatchIndex = entries.count - 1
+            }
         }
-        return .allow
+        guard let lastMatchIndex else { return false }
+
+        // Nach dem Prompt: erster inhaltlicher Assistant-Eintrag entscheidet.
+        // Fehlertext → Retry erlaubt; normaler Text → ausgeführt → gesperrt.
+        // Gar kein Assistant-Text (ESC vor erstem Output) → gesperrt.
+        for entry in entries[(lastMatchIndex + 1)...] where entry.type == "assistant" {
+            let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            return assistantErrorPrefixes.contains { text.hasPrefix($0) }
+        }
+        return false
+    }
+
+    private static func messageText(_ object: [String: Any]) -> String {
+        guard let message = object["message"] as? [String: Any] else { return "" }
+        if let text = message["content"] as? String { return text }
+        guard let parts = message["content"] as? [[String: Any]] else { return "" }
+        return parts.compactMap { part in
+            (part["type"] as? String) == "text" ? part["text"] as? String : nil
+        }.joined()
     }
 }

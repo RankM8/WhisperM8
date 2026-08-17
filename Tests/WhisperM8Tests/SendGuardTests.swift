@@ -114,6 +114,126 @@ final class SendGuardTests: XCTestCase {
         return reason
     }
 
+    // MARK: - Whitespace-Umformung durch die TUI (Vorfall 2026-08-17 #2)
+
+    func testConsumeToleratesTUIRewrappedPrompt() {
+        // Beim Zurücklegen in den Composer materialisiert die TUI
+        // Soft-Wrap-Umbrüche als "\n  " mitten im Text (Review-Agents:
+        // 640 → 665 Zeichen). Der Hash muss beide Formen matchen.
+        let original = "[via whisperm8 chats · von akquise-ai/Jarvis-Überwachung aktiver akquise-ai Sessions · 10:29]\n[vom User] Go für beides: (1) Committe deine 5 Dateien per Pathspec."
+        let rewrapped = "[via whisperm8 chats · von akquise-ai/Jarvis-Überwachung \n  aktiver akquise-ai Sessions · 10:29]\n  [vom User] Go für beides: (1) Committe deine 5 Dateien per Pathspec."
+        store.stage(promptText: original)
+        XCTAssertTrue(store.consume(promptText: rewrapped),
+                      "umgeformter Text muss dasselbe Token finden")
+    }
+
+    // MARK: - Retry nach Fehl-Turn (PromptGuardRetryProbe)
+
+    private let deliveredPrompt = "[via whisperm8 chats · von jarvis · 10:29]\nMach X."
+
+    private func transcriptLine(type: String, text: String) -> String {
+        let object: [String: Any] = ["type": type, "message": ["content": text]]
+        return String(data: try! JSONSerialization.data(withJSONObject: object), encoding: .utf8)!
+    }
+
+    func testFailedTurnAllowsRetry() {
+        // Der Vorfalls-Fall: zugestellt, Turn scheiterte an „Prompt is too
+        // long" — die Wiedervorlage ist der einzige Weg und muss durch.
+        let tail = [
+            transcriptLine(type: "user", text: deliveredPrompt),
+            transcriptLine(type: "assistant", text: "Prompt is too long"),
+        ].joined(separator: "\n")
+        XCTAssertTrue(PromptGuardRetryProbe.failedTurnEvidence(
+            prompt: deliveredPrompt, transcriptTail: tail))
+        XCTAssertEqual(
+            ChatsPromptGuard.decide(
+                prompt: deliveredPrompt,
+                consumeToken: { _ in false },
+                failedTurnEvidence: { _ in
+                    PromptGuardRetryProbe.failedTurnEvidence(
+                        prompt: self.deliveredPrompt, transcriptTail: tail)
+                }),
+            .allow)
+    }
+
+    func testExecutedTurnStaysBlocked() {
+        // Normaler Output nach dem Prompt = ausgeführt → Wiedervorlage
+        // bleibt gesperrt (das ESC-nach-Erfolg-Szenario).
+        let tail = [
+            transcriptLine(type: "user", text: deliveredPrompt),
+            transcriptLine(type: "assistant", text: "Alles klar, ich lege los."),
+        ].joined(separator: "\n")
+        XCTAssertFalse(PromptGuardRetryProbe.failedTurnEvidence(
+            prompt: deliveredPrompt, transcriptTail: tail))
+    }
+
+    func testAbortedTurnWithoutOutputStaysBlocked() {
+        // ESC vor dem ersten Output: kein Assistant-Text, kein Fehlerbeleg —
+        // genau das Wiedervorlage-Szenario, das gesperrt bleiben muss.
+        let tail = [
+            transcriptLine(type: "user", text: deliveredPrompt),
+            transcriptLine(type: "system", text: ""),
+        ].joined(separator: "\n")
+        XCTAssertFalse(PromptGuardRetryProbe.failedTurnEvidence(
+            prompt: deliveredPrompt, transcriptTail: tail))
+    }
+
+    func testRetryProbeMatchesRewrappedSubmission() {
+        // Die Wiedervorlage kommt in der TUI-umgeformten Fassung — sie muss
+        // den Original-user-Eintrag im Transcript trotzdem finden.
+        let rewrapped = "[via whisperm8 chats · von jarvis \n  · 10:29]\n  Mach X."
+        let tail = [
+            transcriptLine(type: "user", text: deliveredPrompt),
+            transcriptLine(type: "assistant", text: "API Error: overloaded"),
+        ].joined(separator: "\n")
+        XCTAssertTrue(PromptGuardRetryProbe.failedTurnEvidence(
+            prompt: rewrapped, transcriptTail: tail))
+    }
+
+    func testRetryProbeUsesLatestDeliveryOfSamePrompt() {
+        // Frühere fehlgeschlagene Zustellung, spätere erfolgreiche: Der
+        // LETZTE Ausgang zählt — gesperrt.
+        let tail = [
+            transcriptLine(type: "user", text: deliveredPrompt),
+            transcriptLine(type: "assistant", text: "Prompt is too long"),
+            transcriptLine(type: "user", text: deliveredPrompt),
+            transcriptLine(type: "assistant", text: "Erledigt."),
+        ].joined(separator: "\n")
+        XCTAssertFalse(PromptGuardRetryProbe.failedTurnEvidence(
+            prompt: deliveredPrompt, transcriptTail: tail))
+    }
+
+    func testUnknownPromptHasNoRetryEvidence() {
+        let tail = transcriptLine(type: "assistant", text: "Prompt is too long")
+        XCTAssertFalse(PromptGuardRetryProbe.failedTurnEvidence(
+            prompt: deliveredPrompt, transcriptTail: tail))
+    }
+
+    // MARK: - Block-Event-Rückkanal
+
+    func testEventStoreParsesPromptGuardBlockLine() {
+        let line = #"{"hook_event_name":"WhisperM8PromptGuardBlock","session_id":"f5e3cda1"}"#
+        let event = ClaudeHookEventStore.parseLine(line)
+        XCTAssertEqual(event?.hookEventName, .promptGuardBlock)
+        XCTAssertEqual(event?.sessionID, "f5e3cda1")
+    }
+
+    func testPromptGuardBlockMapsToNoDirectSignal() {
+        // Der Coordinator übersetzt den Block selbst (turnAborted + Clear) —
+        // das Signal-Mapping darf daraus nie „Aktivität" machen.
+        let event = ClaudeHookEvent(
+            hookEventName: .promptGuardBlock, sessionID: "x", transcriptPath: nil,
+            cwd: nil, reason: nil, toolName: nil, rawJSON: "{}")
+        XCTAssertNil(AgentSessionSignal(hookEvent: event))
+    }
+
+    func testBuilderGuardCommandCarriesEventsPath() {
+        let command = ClaudeHookSettingsBuilder.promptGuardCommand(
+            executablePath: "/Applications/WhisperM8.app/Contents/MacOS/WhisperM8",
+            eventFilePath: "/tmp/events dir/events.jsonl")
+        XCTAssertTrue(command.contains("--events \"/tmp/events dir/events.jsonl\""))
+    }
+
     // MARK: - Kopplung an markedPrompt
 
     func testMarkedPromptStartsWithGuardMarkerPrefix() {

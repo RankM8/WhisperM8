@@ -82,8 +82,14 @@ enum ClaudeHookSettingsBuilder {
     /// (App und CLI sind dasselbe signierte Executable) + internes
     /// Subcommand. Kein PATH-/Symlink-Vertrauen — der Symlink-Install
     /// (`~/.local/bin/whisperm8`) kann fehlen oder veraltet sein.
-    static func promptGuardCommand(executablePath: String) -> String {
-        "\"\(shellEscapeDoubleQuoted(executablePath))\" chats _prompt-guard"
+    /// `eventFilePath` gibt dem Guard den Rückkanal für Block-Events
+    /// (App leert daraufhin den Composer).
+    static func promptGuardCommand(executablePath: String, eventFilePath: String? = nil) -> String {
+        var command = "\"\(shellEscapeDoubleQuoted(executablePath))\" chats _prompt-guard"
+        if let eventFilePath {
+            command += " --events \"\(shellEscapeDoubleQuoted(eventFilePath))\""
+        }
+        return command
     }
 
     /// Serialisiert die Settings als utf8-JSON-Daten. Sortierung der Keys

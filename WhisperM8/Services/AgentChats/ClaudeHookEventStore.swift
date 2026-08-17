@@ -30,6 +30,12 @@ struct ClaudeHookEvent: Equatable, Codable {
         case notification = "Notification"
         /// Claude hat den Turn beendet — „idle" + optionaler Ton.
         case stop = "Stop"
+        /// EIGENES Event (kein Claude-Hook): Der Send-Guard
+        /// (`chats _prompt-guard`) hat eine Wiedervorlage geblockt und
+        /// meldet das über denselben Event-File-Kanal. Die App leert
+        /// daraufhin den Composer (der geblockte Text bliebe sonst kleben)
+        /// und nimmt das „working" des geblockten Submits zurück.
+        case promptGuardBlock = "WhisperM8PromptGuardBlock"
         case other
     }
 

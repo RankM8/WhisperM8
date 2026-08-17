@@ -89,6 +89,25 @@ erneute **Absenden**:
   Block**, klare Meldung mit Ausweg (`chats send` erneut). Jeder
   Parse-/IO-Fehler ist fail-open — der Guard darf normales Arbeiten nie
   blockieren. Pure Entscheidung: `ChatsPromptGuard.decide`.
+- **Hashes sind Whitespace-tolerant** (alle Läufe → ein Space): Die TUI
+  materialisiert beim Zurücklegen eines Prompts Soft-Wrap-Umbrüche als
+  `\n  ` mitten im Text (Vorfall #2, Review-Agents: 640 → 665 Zeichen für
+  denselben Prompt) — ein byte-exakter Hash blockte solche Texte fälschlich.
+- **Retry nach Fehl-Turn ist erlaubt** (Vorfall #2, gleicher Tag): „einmal
+  zugestellt" ≠ „einmal erfolgreich ausgeführt". Scheitert der Turn mit
+  einem expliziten Assistant-Fehlertext („Prompt is too long", „API Error",
+  „Credit balance is too low" — `PromptGuardRetryProbe`, Transcript-Tail
+  256 KB via `transcript_path` aus dem Hook-Input), passiert die
+  Wiedervorlage ohne Token; sobald ein Durchlauf gelingt, sperrt der Guard
+  wieder. ESC-Abbrüche hinterlassen keinen Fehlertext → bleiben gesperrt.
+- **Block-Event-Rückkanal**: Bei Block appended der Guard eine
+  `WhisperM8PromptGuardBlock`-Zeile ins Event-File der Hook-Bridge
+  (`--events`-Argument, vom Settings-Builder gesetzt). Die App reagiert
+  doppelt: `turnAborted` (nimmt das „working" des geblockten Submits zurück
+  — sonst Doppelblockade: Composer gesperrt UND `chats send` wegen
+  working-Konflikt gesperrt) und verzögertes Ctrl+C (leert den klebenden
+  Composer-Text; nach einem Block ist das definitionsgemäß der
+  zurückgelegte Marker-Prompt, kein User-Entwurf).
 - Grenzen: wirkt nur für App-gestartete **Claude**-Sessions (Codex hat keine
   Hooks — Restrisiko bleibt) und erst für nach dem Update gestartete
   Sessions. Kill-Switch:

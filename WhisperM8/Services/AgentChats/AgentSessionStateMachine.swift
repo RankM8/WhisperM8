@@ -113,6 +113,12 @@ enum AgentSessionSignal: Equatable {
             self = .permissionRequested
         case .stop:
             self = .turnStopped
+        case .promptGuardBlock:
+            // Kein eigenes Signal-Mapping: Der Coordinator übersetzt den
+            // Block in `.turnAborted` (das „working" des geblockten
+            // UserPromptSubmit muss ZURÜCKgenommen werden — der Turn ist
+            // nie gelaufen) und leert den Composer.
+            return nil
         case .notification, .other:
             return nil
         }

@@ -110,7 +110,8 @@ final class ClaudeHookBridge {
                 if AppPreferences.shared.isChatsPromptGuardEnabled,
                    let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() {
                     guardCommand = ClaudeHookSettingsBuilder.promptGuardCommand(
-                        executablePath: executable.path)
+                        executablePath: executable.path,
+                        eventFilePath: eventURL.path)
                 }
                 fragments.append(ClaudeHookSettingsBuilder.makeSettings(
                     eventFilePath: eventURL.path,
