@@ -252,27 +252,32 @@ struct AgentCommandBuilder {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": pickerDescription,
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            // **KEIN `CLAUDE_CODE_MAX_CONTEXT_TOKENS`.** Die Variable ist
-            // prozessweit und gilt damit für JEDES Modell der Sitzung, nicht
-            // nur für GPT. Gemessen am 02.08.2026: Mit gesetztem Wert (372k)
-            // meldete Claude Code für einen reinen Fable-Chat 200k und
-            // verdichtete auch dort — vier Fünftel des Fensters weg, das dem
-            // Modell zusteht. Ohne die Variable meldet derselbe Chat 1M.
-            // Offenbar verwirft Claude Code einen Wert, der zu keinem
-            // bekannten Modellprofil passt, und fällt auf den konservativen
-            // Default zurück.
+            // `CLAUDE_CODE_MAX_CONTEXT_TOKENS` teilt der CLI das echte
+            // GPT-Fenster des Kontextprofils mit. Ohne den Wert behandelt
+            // Claude Code `gpt-5.6-*` als unbekanntes Modell und erzwingt ein
+            // 200k-Default-Fenster. Vorfall 2026-08-17 (akquise-ai-Workflow):
+            // drei GPT-Subagents starben CLIENTSEITIG mit "Prompt is too
+            // long" bei ~177k Tokens (200k − 20k Output-Reserve − 3k Puffer),
+            // während das Backend real 250k+ akzeptierte — der Request ging
+            // nie raus. Subagents kompaktieren nie; für sie ist der Block
+            // terminal, deshalb ist das korrekte Fenster hier Pflicht.
             //
-            // Der Preis ist bewusst: GPT-5.6 Sol nutzt damit Claude Codes
-            // Default statt der 372k seines Profils, verdichtet also früher
-            // als nötig. Das ist der Fehler in die sichere Richtung — zu früh
-            // verdichten kostet Effizienz, zu spät bricht die Anfrage. Die
-            // tatsächliche GPT-Kapazität kennt weiterhin
-            // `WHISPERM8_GPT56_CONTEXT_WINDOW`; Proxy und Statusline lesen sie
-            // dort (`context_profile_matches_model` in whisperm8-statusline.sh).
+            // Die Variable ist prozessweit, wirkt aber seit CLI 2.1.233
+            // nachweislich NUR auf Modelle, deren ID nicht mit `claude-`
+            // beginnt (Fensterauflösung prüft `!model.startsWith("claude-")`).
+            // Gegenprobe 2026-08-17 über die CLI-Debug-Zeile
+            // `autocompact: … effectiveWindow=`: fable[1m] bleibt mit
+            // gesetztem 372k-Wert bei 980000, fable(200k) bei 180000;
+            // gpt-5.6-sol springt von 180000 auf 352000. Die Messung vom
+            // 02.08.2026 („Fable auf 200k vergiftet") ist damit obsolet —
+            // sie galt für eine ältere CLI ohne diesen Guard.
             //
-            // Modellabhängig setzen geht NICHT: Welches Modell gilt, entscheidet
-            // sich erst zur Laufzeit im `/model`-Picker — beim Start ist es
-            // unbekannt.
+            // GPT-Modellwechsel in der Session bleiben konsistent: der Wert
+            // folgt dem Profil (272k geteilt; 372k nur Sol), und beim
+            // 372k-Profil lehnt der MixRouter andere GPT-Modelle ohnehin ab
+            // (`gptModelValidationErrorResponse`). Die Statusline liest die
+            // Kapazität weiterhin aus `WHISPERM8_GPT56_CONTEXT_WINDOW`.
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": gptContextWindow,
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": String(Self.routerAutoCompactCeiling),
             "WHISPERM8_GPT56_CONTEXT_WINDOW": gptContextWindow,
         ]
