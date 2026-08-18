@@ -175,7 +175,7 @@ struct ProjectDetailPanel: View {
     private func openInPhpStorm(relativePath: String) {
         guard let projectPath = project?.path else { return }
         let absolute = (projectPath as NSString).appendingPathComponent(relativePath)
-        if !PhpStormLauncher.open(path: absolute) {
+        if !PhpStormLauncher.open(path: absolute, projectPath: projectPath) {
             NSWorkspace.shared.open(URL(fileURLWithPath: absolute))
         }
     }

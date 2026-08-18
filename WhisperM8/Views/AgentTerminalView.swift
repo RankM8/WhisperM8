@@ -990,8 +990,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         switch action {
         case .openInEditor(let url):
             // Code/Markdown → PhpStorm (fokussiert das exakte Fenster); fehlt
-            // PhpStorm, auf die Standard-App ausweichen.
-            if !PhpStormLauncher.open(path: url.path) {
+            // PhpStorm, auf die Standard-App ausweichen. Das Arbeitsverzeichnis
+            // der Session dient als Projekt-Hint — sonst legte PhpStorm für
+            // Dateien ohne offenes Projekt ein NEUES Projekt im Datei-Ordner an.
+            if !PhpStormLauncher.open(path: url.path, projectPath: command.workingDirectory) {
                 NSWorkspace.shared.open(url)
             }
         case .openWeb(let url), .openFile(let url), .openFolder(let url):

@@ -159,3 +159,70 @@ final class GitChangesPanelTests: XCTestCase {
         XCTAssertEqual(tiny, InspectorWidthResolver.minWidth)
     }
 }
+
+// MARK: - PhpStorm-Launch-Argumente
+
+extension GitChangesPanelTests {
+    func testLaunchArgumentsPrependProjectRootForFiles() {
+        // Hint gültig (enthält Datei, ist Git-Root) → [projekt, datei].
+        XCTAssertEqual(
+            PhpStormLauncher.launchArguments(
+                filePath: "/repos/whisperm8/docs/a.md",
+                projectPathHint: "/repos/whisperm8",
+                hasGitDirectory: { $0 == "/repos/whisperm8" }
+            ),
+            ["/repos/whisperm8", "/repos/whisperm8/docs/a.md"]
+        )
+
+        // Projekt selbst öffnen → ein Argument (kein Doppel).
+        XCTAssertEqual(
+            PhpStormLauncher.launchArguments(
+                filePath: "/repos/whisperm8",
+                projectPathHint: "/repos/whisperm8",
+                hasGitDirectory: { _ in true }
+            ),
+            ["/repos/whisperm8"]
+        )
+
+        // Hint ist Unterordner ohne .git (Terminal-cwd) → Aufwärtssuche ab
+        // der Datei findet das echte Repo-Root.
+        XCTAssertEqual(
+            PhpStormLauncher.launchArguments(
+                filePath: "/repos/whisperm8/docs/plans/x/plan.md",
+                projectPathHint: "/repos/whisperm8/docs",
+                hasGitDirectory: { $0 == "/repos/whisperm8" }
+            ),
+            ["/repos/whisperm8", "/repos/whisperm8/docs/plans/x/plan.md"]
+        )
+
+        // Datei liegt AUSSERHALB des Hints → Hint verwerfen, Root der Datei.
+        XCTAssertEqual(
+            PhpStormLauncher.launchArguments(
+                filePath: "/repos/andere/lib.php",
+                projectPathHint: "/repos/whisperm8",
+                hasGitDirectory: { $0 == "/repos/andere" }
+            ),
+            ["/repos/andere", "/repos/andere/lib.php"]
+        )
+
+        // Nirgendwo ein .git → bisheriges Verhalten (nur Datei).
+        XCTAssertEqual(
+            PhpStormLauncher.launchArguments(
+                filePath: "/Users/x/Downloads/notiz.md",
+                projectPathHint: nil,
+                hasGitDirectory: { _ in false }
+            ),
+            ["/Users/x/Downloads/notiz.md"]
+        )
+
+        // Prefix-Falle: /repos/whisperm8-fork liegt NICHT in /repos/whisperm8.
+        XCTAssertEqual(
+            PhpStormLauncher.launchArguments(
+                filePath: "/repos/whisperm8-fork/a.md",
+                projectPathHint: "/repos/whisperm8",
+                hasGitDirectory: { $0 == "/repos/whisperm8-fork" }
+            ),
+            ["/repos/whisperm8-fork", "/repos/whisperm8-fork/a.md"]
+        )
+    }
+}
