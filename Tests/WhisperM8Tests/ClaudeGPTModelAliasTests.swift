@@ -108,22 +108,47 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
             ClaudeGPTModelAlias.supportedEffectiveModel(
                 "gpt-5.6-sol",
                 fastEnabled: false,
-                contextWindow: 372_000
+                contextWindow: 900_000
             ),
             "gpt-5.6-sol"
         )
-        XCTAssertNil(
+        // Terra/Luna und GPT-5.4 tragen den 900k-Vertrag (Messung 2026-08-18);
+        // gpt-5.5 und gpt-5.4-mini bleiben beim 272k-Profil.
+        XCTAssertEqual(
             ClaudeGPTModelAlias.supportedEffectiveModel(
                 "gpt-5.6-terra",
                 fastEnabled: false,
-                contextWindow: 372_000
+                contextWindow: 900_000
+            ),
+            "gpt-5.6-terra"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedEffectiveModel(
+                "gpt-5.4",
+                fastEnabled: false,
+                contextWindow: 900_000
+            ),
+            "gpt-5.4"
+        )
+        XCTAssertNil(
+            ClaudeGPTModelAlias.supportedEffectiveModel(
+                "gpt-5.5",
+                fastEnabled: false,
+                contextWindow: 900_000
+            )
+        )
+        XCTAssertNil(
+            ClaudeGPTModelAlias.supportedEffectiveModel(
+                "gpt-5.4-mini",
+                fastEnabled: false,
+                contextWindow: 900_000
             )
         )
         XCTAssertNil(
             ClaudeGPTModelAlias.supportedEffectiveModel(
                 "gpt-5.6-sol",
                 fastEnabled: false,
-                contextWindow: 372_001
+                contextWindow: 900_001
             )
         )
     }
@@ -173,15 +198,16 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
     func testContextProfilesExposeExpectedCompactBudgets() {
         XCTAssertEqual(ClaudeGPTContextProfile.standard.rawValue, 272_000)
         XCTAssertEqual(ClaudeGPTContextProfile.standard.expectedAutoCompactTokens, 238_000)
-        XCTAssertEqual(ClaudeGPTContextProfile.experimentalSol372K.rawValue, 372_000)
+        XCTAssertEqual(ClaudeGPTContextProfile.extended900K.rawValue, 900_000)
         XCTAssertEqual(
-            ClaudeGPTContextProfile.experimentalSol372K.expectedAutoCompactTokens,
-            339_000
+            ClaudeGPTContextProfile.extended900K.expectedAutoCompactTokens,
+            830_000
         )
         XCTAssertEqual(
-            ClaudeGPTContextProfile.matching(contextWindow: 372_000),
-            .experimentalSol372K
+            ClaudeGPTContextProfile.matching(contextWindow: 900_000),
+            .extended900K
         )
+        XCTAssertNil(ClaudeGPTContextProfile.matching(contextWindow: 372_000))
         XCTAssertNil(ClaudeGPTContextProfile.matching(contextWindow: 250_000))
     }
 }

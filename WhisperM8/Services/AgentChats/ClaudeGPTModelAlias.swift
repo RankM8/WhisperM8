@@ -5,7 +5,7 @@ import Foundation
 /// bewusst angebotenen Presets und ihre erwartete Claude-Code-Compact-Grenze.
 enum ClaudeGPTContextProfile: Int, CaseIterable, Identifiable {
     case standard = 272_000
-    case experimentalSol372K = 372_000
+    case extended900K = 900_000
 
     var id: Int { rawValue }
 
@@ -13,8 +13,8 @@ enum ClaudeGPTContextProfile: Int, CaseIterable, Identifiable {
         switch self {
         case .standard:
             return "Standard — 272k"
-        case .experimentalSol372K:
-            return "Experimentell: Sol — 372k"
+        case .extended900K:
+            return "Erweitert — 900k (1M-Backend)"
         }
     }
 
@@ -22,8 +22,8 @@ enum ClaudeGPTContextProfile: Int, CaseIterable, Identifiable {
         switch self {
         case .standard:
             return 238_000
-        case .experimentalSol372K:
-            return 339_000
+        case .extended900K:
+            return 830_000
         }
     }
 
@@ -38,10 +38,13 @@ enum ClaudeGPTModelAlias {
     /// Gemeinsame, konservative Kapazität aller freigegebenen GPT-Aliasse.
     static let maximumKnownSharedContextWindow = ClaudeGPTContextProfile.standard.rawValue
 
-    /// Größtes auswählbares Profil. 372k ist experimentell und ausschließlich
-    /// für GPT-5.6 Sol über Codex-Subscription/OAuth verifiziert.
+    /// Größtes auswählbares Profil. 900k ist per Direktmessung gegen den
+    /// Codex-Upstream verifiziert (2026-08-18, Subscription/OAuth): Sol, Terra,
+    /// Luna und GPT-5.4 nahmen 903k–913k Input-Tokens vollständig an, ~924k
+    /// wies der Upstream mit `request_too_large` ab. GPT-5.5 und GPT-5.4-Mini
+    /// lehnten dieselbe 903k-Probe ab und bleiben beim 272k-Vertrag.
     static let maximumConfigurableContextWindow =
-        ClaudeGPTContextProfile.experimentalSol372K.rawValue
+        ClaudeGPTContextProfile.extended900K.rawValue
 
     private static let mainModelBases: Set<String> = [
         "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
@@ -74,17 +77,24 @@ enum ClaudeGPTModelAlias {
             && canonicalBaseModel != "gpt-5.4-mini"
     }
 
+    /// Modelle mit verifiziertem 900k-Vertrag (Direktmessung 2026-08-18,
+    /// ~903k-Probe gegen `/v1/messages` des codex-proxy je Modell angenommen;
+    /// Sol zusätzlich bis 913.887 belegt, ~924k → `request_too_large`).
+    private static let extendedWindowModelBases: Set<String> = [
+        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4",
+    ]
+
     /// Obergrenze des tatsächlich getesteten Profils pro kanonischem Modell.
-    /// Sol akzeptierte über denselben Subscription-/OAuth-Pfad 360k vollständig;
-    /// 372k/380k wurden vom Upstream abgewiesen. Claude Codes interne Reserve
-    /// kompaktifiziert beim 372k-Profil erwartbar um 339k und bleibt damit unter
-    /// der nachgewiesenen Annahmegrenze. Alle anderen Modelle bleiben bei 272k.
+    /// Die frühere 372k-Messung (Sol-only) ist seit dem 1M-Rollout des
+    /// Codex-Backends obsolet. Claude Codes interne Reserve kompaktifiziert
+    /// beim 900k-Profil erwartbar um 830k und bleibt damit klar unter der
+    /// nachgewiesenen Annahmegrenze. GPT-5.5 und GPT-5.4-Mini bleiben bei 272k.
     static func maximumContextWindow(for canonicalModel: String) -> Int? {
         let base = canonicalModel.hasSuffix("-fast")
             ? String(canonicalModel.dropLast("-fast".count))
             : canonicalModel
         guard mainModelBases.contains(base) else { return nil }
-        return base == "gpt-5.6-sol"
+        return extendedWindowModelBases.contains(base)
             ? maximumConfigurableContextWindow
             : maximumKnownSharedContextWindow
     }

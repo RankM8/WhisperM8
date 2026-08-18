@@ -54,23 +54,29 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: "gpt-5.6-sol",
-                contextWindow: 372_000
+                contextWindow: 900_000
             )
         )
-        let extendedTerraBody = try XCTUnwrap(
+        XCTAssertNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: "gpt-5.6-terra",
-                contextWindow: 372_000
+                contextWindow: 900_000
+            )
+        )
+        let extendedFivePointFiveBody = try XCTUnwrap(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-5.5",
+                contextWindow: 900_000
             )
         )
         XCTAssertTrue(
-            String(decoding: extendedTerraBody, as: UTF8.self)
+            String(decoding: extendedFivePointFiveBody, as: UTF8.self)
                 .contains("verified only for gpt-5.6-sol")
         )
         XCTAssertNotNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: "gpt-5.6-sol",
-                contextWindow: 372_001
+                contextWindow: 900_001
             )
         )
         XCTAssertNotNil(
@@ -96,7 +102,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
     /// Trennt die zwei Ablehnungsgruende scharf: eine unbekannte Modellbasis ist
     /// eine ungueltige Kennung (unabhaengig vom Profil), ein bekanntes Modell
     /// jenseits seiner verifizierten Kapazitaet ist ein Profilproblem. Vorher
-    /// liefen beide in dieselbe Meldung, und beim Sol-372k-Profil wurde daraus
+    /// liefen beide in dieselbe Meldung, und beim 900k-Profil wurde daraus
     /// die falsche Handlungsempfehlung "wechsle zu Sol / nimm 272k".
     func testGPTModelGuardSeparatesUnknownIdentifierFromContextProfileRejection() throws {
         func message(for model: String, contextWindow: Int) throws -> String {
@@ -114,8 +120,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
             return try XCTUnwrap(error["message"] as? String)
         }
 
-        // Unbekannte Basis: gleiche Meldung im Standard- UND im Sol-Profil.
-        for window in [272_000, 372_000] {
+        // Unbekannte Basis: gleiche Meldung im Standard- UND im 900k-Profil.
+        for window in [272_000, 900_000] {
             for model in ["gpt-9.9-erfunden", "gpt-5.3-codex-spark", "gpt-5.6-orbit"] {
                 let text = try message(for: model, contextWindow: window)
                 XCTAssertEqual(
@@ -129,14 +135,14 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         // Auch eine nicht-kanonische unbekannte Basis darf nicht zum Retry mit
         // einer weiterhin ungueltigen ID raten.
         XCTAssertEqual(
-            try message(for: " GPT-9.9-ERFUNDEN[1M] ", contextWindow: 372_000),
+            try message(for: " GPT-9.9-ERFUNDEN[1M] ", contextWindow: 900_000),
             "Invalid GPT model identifier."
         )
 
         // Bekannt, aber jenseits der verifizierten Kapazitaet: Profilmeldung.
-        let terra = try message(for: "gpt-5.6-terra", contextWindow: 372_000)
-        XCTAssertTrue(terra.contains("verified only for gpt-5.6-sol"), terra)
-        XCTAssertFalse(terra.contains("Invalid GPT model identifier"), terra)
+        let fivePointFive = try message(for: "gpt-5.5", contextWindow: 900_000)
+        XCTAssertTrue(fivePointFive.contains("verified only for gpt-5.6-sol"), fivePointFive)
+        XCTAssertFalse(fivePointFive.contains("Invalid GPT model identifier"), fivePointFive)
 
         // Bekannte Basis mit unzulaessiger -fast-Variante bleibt ebenfalls ein
         // Kapazitaets-/Variantenproblem, keine ungueltige Kennung.
@@ -148,7 +154,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: "gpt-5.6-sol",
-                contextWindow: 372_000
+                contextWindow: 900_000
             )
         )
         let noncanonicalKnown = try message(
@@ -670,7 +676,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
     /// Der Overflow-Fallback muss die TATSAECHLICH konfigurierte Kapazitaet
     /// melden, nicht die gemeinsame 272k-Standardgrenze. Ohne diesen Test bliebe
     /// eine Rueckklammerung auf `maximumKnownSharedContextWindow` unentdeckt:
-    /// der 272k-Test oben bliebe gruen, und genau das aktive Sol-372k-Profil
+    /// der 272k-Test oben bliebe gruen, und genau das aktive 900k-Profil
     /// bekaeme eine zu kleine Grenze gemeldet.
     func testRouterReportsConfiguredSolProfileLimitInSyntheticOverflow() throws {
         let stream = Data((

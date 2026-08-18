@@ -83,25 +83,30 @@ final class ClaudeGPTModelCatalogTests: XCTestCase {
     }
 
     func testCatalogOmitsAllGPTAboveLargestVerifiedProfile() throws {
-        let catalog = try models(contextWindow: 400_000)
+        let catalog = try models(contextWindow: 1_000_000)
 
         XCTAssertEqual(catalog, ClaudeGPTModelCatalog.claudeAliases)
     }
 
-    func testExperimental372KCatalogContainsOnlySolVariants() throws {
+    func testExtended900KCatalogOmitsStandardOnlyModels() throws {
         let catalog = Set(try models(
             defaultModel: "gpt-5.6-terra",
             pickerModel: "gpt-5.6-luna-fast",
             subagentModel: "gpt-5.6-terra-fast",
             sessionModel: "gpt-5.5",
-            contextWindow: 372_000
+            contextWindow: 900_000
         ))
 
+        // Sol/Terra/Luna und GPT-5.4 tragen den 900k-Vertrag (Messung
+        // 2026-08-18); gpt-5.5 und gpt-5.4-mini bleiben beim 272k-Profil
+        // und fallen aus dem Picker.
         XCTAssertTrue(catalog.contains("gpt-5.6-sol"))
         XCTAssertTrue(catalog.contains("gpt-5.6-sol-fast"))
-        XCTAssertFalse(catalog.contains("gpt-5.6-terra"))
-        XCTAssertFalse(catalog.contains("gpt-5.6-luna"))
+        XCTAssertTrue(catalog.contains("gpt-5.6-terra"))
+        XCTAssertTrue(catalog.contains("gpt-5.6-luna"))
+        XCTAssertTrue(catalog.contains("gpt-5.4"))
         XCTAssertFalse(catalog.contains("gpt-5.5"))
+        XCTAssertFalse(catalog.contains("gpt-5.4-mini"))
     }
 
     func testCatalogDeduplicatesConfiguredModels() throws {

@@ -310,7 +310,7 @@ struct AppPreferences {
     }
 
     /// Konservatives Standardprofil aller freigegebenen GPT-Modelle. Ein
-    /// experimentelles 372k-Profil ist ausschließlich für GPT-5.6 Sol
+    /// erweitertes 900k-Profil ist für GPT-5.6 Sol/Terra/Luna und GPT-5.4
     /// verfügbar und bleibt Opt-in. Bei aktivem MixRouter wird der Wert als
     /// `CLAUDE_CODE_MAX_CONTEXT_TOKENS` gesetzt; der prozessweite Auto-Compact-
     /// Deckel bleibt getrennt bei 1M, damit native 1M-Modelle unberührt bleiben.
@@ -318,16 +318,21 @@ struct AppPreferences {
         ClaudeGPTContextProfile.standard.rawValue
 
     /// Persistierbare Grenzen. Werte bis 272k bleiben als historische Custom-
-    /// Profile gültig; oberhalb davon ist ausschließlich das exakte 372k-Profil
-    /// ein Opt-in. Der Key behält aus Kompatibilitätsgründen seinen historischen
-    /// `claudeGPTAutoCompactWindow`-Namen.
+    /// Profile gültig; oberhalb davon ist ausschließlich das exakte 900k-Profil
+    /// ein Opt-in. Der historische 372k-Opt-in (Sol-Experiment bis 2026-08-18)
+    /// migriert beim Lesen auf 900k — wer das Experiment gewählt hatte, wollte
+    /// das größte verifizierte Fenster. Der Key behält aus Kompatibilitätsgründen
+    /// seinen historischen `claudeGPTAutoCompactWindow`-Namen.
     static let claudeGPTContextWindowRange =
         10_000...ClaudeGPTModelAlias.maximumConfigurableContextWindow
 
+    private static let legacyExperimentalSol372K = 372_000
+
     static func normalizedClaudeGPTContextWindow(_ value: Int) -> Int {
         guard value > 0 else { return claudeGPTDefaultContextWindow }
-        if value == ClaudeGPTContextProfile.experimentalSol372K.rawValue {
-            return value
+        if value == ClaudeGPTContextProfile.extended900K.rawValue
+            || value == legacyExperimentalSol372K {
+            return ClaudeGPTContextProfile.extended900K.rawValue
         }
         return min(
             max(value, claudeGPTContextWindowRange.lowerBound),

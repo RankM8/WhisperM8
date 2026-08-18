@@ -599,27 +599,35 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
     }
 
-    func testExperimental372KProfileForcesSolAndKeepsNativeOneMillionCeiling() {
+    func testExtended900KProfileKeepsTerraAndForcesSolForStandardOnlyModels() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "gpt-5.6-terra" }
         builder.gptDefaultModelResolver = { "gpt-5.6-luna" }
         builder.gptSubagentModelResolver = { "gpt-5.6-terra-fast" }
-        builder.gptContextWindowResolver = { 372_000 }
+        builder.gptContextWindowResolver = { 900_000 }
 
         let environment = builder.gptRouterCoreEnvironment()
 
-        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
-        XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol")
+        // Terra traegt den 900k-Vertrag (Messung 2026-08-18) und bleibt Picker.
+        XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-terra")
+        XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-terra-fast")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Standard-Tier — experimentelles 372k-Profil: nur GPT-5.6 Sol"
+            "Standard-Tier — erweitertes 900k-Profil: GPT-5.6 Sol/Terra/Luna und GPT-5.4"
         )
         XCTAssertNil(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
                      "das Router-Core-Env erreicht jede Claude-Session — die Variable stempelt nur das GPT-Session-Gate im Launch-Pfad (Regression 2026-08-17)")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
-        XCTAssertEqual(environment?["WHISPERM8_GPT56_CONTEXT_WINDOW"], "372000")
+        XCTAssertEqual(environment?["WHISPERM8_GPT56_CONTEXT_WINDOW"], "900000")
+
+        // gpt-5.5 bleibt beim 272k-Vertrag → Zwangs-Fallback auf Sol.
+        builder.gptPickerModelResolver = { "gpt-5.5" }
+        builder.gptSubagentModelResolver = { "gpt-5.5" }
+        let fallbackEnvironment = builder.gptRouterCoreEnvironment()
+        XCTAssertEqual(fallbackEnvironment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
+        XCTAssertEqual(fallbackEnvironment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol")
     }
 
     func testOversizedContextValueFallsBackToStandardProfile() {
@@ -811,7 +819,7 @@ extension AgentCommandBuilderTests {
         ])
     }
 
-    func testExperimental372KFreshTerraSessionFallsBackToSolStamp() throws {
+    func testExtended900KFreshTerraKeepsStampAndFivePointFiveFallsBackToSol() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.extraArgumentsResolver = { _ in [] }
@@ -820,19 +828,36 @@ extension AgentCommandBuilderTests {
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "gpt-5.6-terra" }
         builder.gptSubagentModelResolver = { "" }
-        builder.gptContextWindowResolver = { 372_000 }
-        let session = AgentChatSession(
+        builder.gptContextWindowResolver = { 900_000 }
+        let terraSession = AgentChatSession(
             provider: .claude,
             projectID: project.id,
             title: "Claude",
             claudeBackendModel: "gpt-5.6-terra"
         )
 
-        let command = try builder.command(for: session, project: project)
+        let terraCommand = try builder.command(for: terraSession, project: project)
 
-        XCTAssertEqual(command.arguments, ["--model", "gpt-5.6-sol"])
-        XCTAssertEqual(command.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "372000")
-        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
+        // Terra traegt den 900k-Vertrag und startet direkt mit eigenem Stempel.
+        XCTAssertEqual(terraCommand.arguments, ["--model", "gpt-5.6-terra"])
+        XCTAssertEqual(terraCommand.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "900000")
+        XCTAssertEqual(terraCommand.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-terra")
+
+        // gpt-5.5 bleibt beim 272k-Vertrag → frischer Start faellt auf Sol.
+        let fivePointFiveSession = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            title: "Claude",
+            claudeBackendModel: "gpt-5.5"
+        )
+
+        let fallbackCommand = try builder.command(for: fivePointFiveSession, project: project)
+
+        XCTAssertEqual(fallbackCommand.arguments, ["--model", "gpt-5.6-sol"])
+        XCTAssertEqual(fallbackCommand.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "900000")
+        // Der Custom-Picker-Slot folgt dem konfigurierten Picker (Terra),
+        // nicht dem Session-Modell — nur der --model-Stempel faellt zurueck.
+        XCTAssertEqual(fallbackCommand.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-terra")
     }
 
     func testClaudeGPTBackendResumeOmitsModelStampAndRouterTuning() throws {

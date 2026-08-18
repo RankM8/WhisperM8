@@ -103,8 +103,9 @@ struct AgentCommandBuilder {
     }
 
     /// Gewähltes GPT-Kontextprofil. Bis 272k gilt es für die gemeinsame
-    /// Allowlist; das experimentelle 372k-Profil lässt per Modellguard nur Sol
-    /// zu und kompaktifiziert durch Claude Codes interne Reserve um 339k.
+    /// Allowlist; das erweiterte 900k-Profil lässt per Modellguard nur die
+    /// verifizierten Modelle zu (Sol/Terra/Luna/GPT-5.4) und kompaktifiziert
+    /// durch Claude Codes interne Reserve um 830k.
     /// Der prozessweite Auto-Compact-Deckel bleibt davon getrennt bei 1M, damit
     /// native 1M-Modelle in derselben Mischsession nicht begrenzt werden.
     var gptContextWindowResolver: () -> Int = {
@@ -240,7 +241,7 @@ struct AgentCommandBuilder {
         )!
         let isFastPickerModel = effectivePickerModel.hasSuffix("-fast")
         let supportedDescription = contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow
-            ? "experimentelles 372k-Profil: nur GPT-5.6 Sol"
+            ? "erweitertes 900k-Profil: GPT-5.6 Sol/Terra/Luna und GPT-5.4"
             : "unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         let pickerDescription = isFastPickerModel
             ? "Priority-Tier (1,5× Speed, 2,5× Credits) — \(supportedDescription)"
@@ -407,13 +408,14 @@ struct AgentCommandBuilder {
                 return supported
             }
 
-            // Das 372k-Profil ist ein Sol-only-Opt-in. Ein für den normalen
-            // 272k-Vertrag bekanntes Modell fällt bei einem FRISCHEN Start auf
-            // Sol zurück, statt still ohne GPT-Stempel als Claude zu starten.
-            // Unbekannte GPT-IDs bleiben weiterhin abgelehnt; Resume/Fork folgt
-            // unverändert der Transcript-Wahl und benötigt für Nicht-Sol das
-            // Standardprofil.
-            guard contextWindow == ClaudeGPTContextProfile.experimentalSol372K.rawValue,
+            // Das 900k-Profil trägt nicht jedes Modell (gpt-5.5/gpt-5.4-mini
+            // bleiben beim 272k-Vertrag). Ein für den normalen 272k-Vertrag
+            // bekanntes Modell fällt bei einem FRISCHEN Start auf Sol zurück,
+            // statt still ohne GPT-Stempel als Claude zu starten. Unbekannte
+            // GPT-IDs bleiben weiterhin abgelehnt; Resume/Fork folgt
+            // unverändert der Transcript-Wahl und benötigt für diese Modelle
+            // das Standardprofil.
+            guard contextWindow == ClaudeGPTContextProfile.extended900K.rawValue,
                   let canonical = ClaudeGPTModelAlias.canonicalGPTModel(model),
                   ClaudeGPTModelAlias.maximumContextWindow(for: canonical) != nil else {
                 return nil

@@ -14,7 +14,7 @@ enum ClaudeGPTModelCatalog {
 
     /// Nur GPT-Modelle mit bekannter, zum gewählten MAX_CONTEXT-Profil
     /// kompatibler Kapazität werden in den Picker aufgenommen. Beim
-    /// experimentellen 372k-Profil bleibt dadurch ausschließlich Sol sichtbar.
+    /// erweiterten 900k-Profil fallen dadurch gpt-5.5 und gpt-5.4-mini raus.
     static func availableModelsFragment(
         defaultModel: String,
         pickerModel: String,

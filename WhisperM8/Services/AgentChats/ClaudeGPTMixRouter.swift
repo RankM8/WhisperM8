@@ -337,7 +337,7 @@ final class ClaudeGPTMixRouter {
         // `canonicalGPTModel` normalisiert nur (Lowercase, `[1m]`) und prueft die
         // Allowlist NICHT — fuer jedes `gpt-`-Praefix kommt ein Wert zurueck.
         // Ohne den zweiten Guard fiel eine unbekannte Basis erst in die
-        // Kapazitaetspruefung und bekam beim Sol-372k-Profil die Profilmeldung:
+        // Kapazitaetspruefung und bekam beim 900k-Profil die Profilmeldung:
         // ein Tippfehler im Modellnamen las sich dann als Kontextfensterproblem.
         // Die Basis-Pruefung laeuft absichtlich VOR der Kanonik-Meldung — sonst
         // riete die Antwort zum Retry mit einer weiterhin ungueltigen ID.
@@ -359,7 +359,7 @@ final class ClaudeGPTMixRouter {
             if contextWindow > ClaudeGPTModelAlias.maximumConfigurableContextWindow {
                 message = "The configured GPT context window exceeds the largest verified profile of \(ClaudeGPTModelAlias.maximumConfigurableContextWindow) tokens. Reduce the setting and retry."
             } else if contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow {
-                message = "The experimental 372k context profile is verified only for gpt-5.6-sol. Switch to Sol or select the standard 272k profile and retry."
+                message = "The extended 900k context profile is verified only for gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, and gpt-5.4. Switch to one of these models or select the standard 272k profile and retry."
             } else {
                 message = "Unsupported GPT model for the configured context profile. Supported models: gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, and gpt-5.4-mini. All except gpt-5.4-mini optionally support -fast."
             }
