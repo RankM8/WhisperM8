@@ -253,17 +253,20 @@ struct AgentCommandBuilder {
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": pickerDescription,
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
-            // **KEIN `CLAUDE_CODE_MAX_CONTEXT_TOKENS` im Router-Core-Env.**
-            // Das Core-Env erreicht per Design JEDE Claude-PTY-Session
-            // (Mischsession-Konzept). Die Variable gehört aber ausschließlich
-            // in GPT-gestempelte Sessions: Am 17.08.2026 stand sie kurz hier
-            // (Commit 57b41b9) und ein realer Fable-Chat lief daraufhin mit
-            // 200k-Fenster, obwohl Headless-Proben (`claude -p --debug`,
-            // `autocompact: effectiveWindow=`) fable[1m] unverändert bei
-            // 980000 zeigten — das prozessweite Risiko ist real, auch wenn
-            // der genaue Mechanismus je nach Modellwahl/Session-Zustand
-            // variiert. Das Stempeln passiert deshalb im Launch-Pfad hinter
-            // dem GPT-Session-Gate (siehe `command(for:)`).
+            // `CLAUDE_CODE_MAX_CONTEXT_TOKENS` prozessweit im Router-Core-Env:
+            // Nur so bekommt auch ein /model-Wechsel auf ein GPT-Modell in
+            // einer als Claude gestarteten Session das große Fenster (Env ist
+            // beim Prozessstart fix). Die Sorge des Rückbaus vom 17.08.2026
+            // (57b41b9: "realer Fable-Chat lief mit 200k") ist per Messreihe
+            // vom 18.08.2026 (CLI 2.1.234, Mock-Upstream, siehe Commit)
+            // ausgeräumt: sonnet[1m]/fable[1m] werden mit gesetztem Wert NICHT
+            // gekappt, natives sonnet wird NICHT aufgeblasen, und der
+            // suffixlose fable-Alias blockt bei >200k MIT wie OHNE Variable
+            // identisch — der 200k-Fall von damals war dieser prä-existierende
+            // Alias-Effekt (deshalb steht fable[1m] im Picker-Katalog), nicht
+            // die Variable. Seit CLI 2.1.233 wirkt sie nur auf Modelle, deren
+            // ID nicht mit `claude-` beginnt.
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": gptContextWindow,
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": String(Self.routerAutoCompactCeiling),
             "WHISPERM8_GPT56_CONTEXT_WINDOW": gptContextWindow,
         ]
@@ -635,19 +638,13 @@ struct AgentCommandBuilder {
             shouldApplyGPTModelStamp
         )
 
-        // `CLAUDE_CODE_MAX_CONTEXT_TOKENS` NUR für GPT-Sessions (Stempel oder
-        // Legacy-[1m]-Resume): Ohne den Wert deckelt die CLI unbekannte
-        // GPT-Modelle auf 200k und Subagents sterben clientseitig bei ~177k
-        // mit "Prompt is too long" (Vorfall 2026-08-17 — Subagents
-        // kompaktieren nie, der Block ist terminal). Prozessweit über das
-        // Router-Core-Env darf die Variable NICHT gesetzt werden: Ein realer
-        // Fable-Chat lief damit auf einem 200k-Fenster (Regression
-        // 2026-08-17, Rückbau aus 57b41b9). Konsequenz des Gates: Reine
-        // Claude-Sessions, die per `/model`-Picker auf GPT wechseln, und
-        // `gpt`-Subagents unter einer Claude-Main-Session behalten die
-        // 200k-Schranke — Fehler in die sichere Richtung; Mitigation für
-        // Workflows steht im Skill `gpt-workflow` (Scopes splitten, Diffs
-        // referenzieren statt einbetten).
+        // `CLAUDE_CODE_MAX_CONTEXT_TOKENS` kommt seit dem 18.08.2026 bereits
+        // prozessweit aus dem Router-Core-Env (Messreihe: für `claude-*`
+        // neutral, siehe `gptRouterCoreEnvironment()`). Der Launch-Pfad
+        // stempelt GPT-Sessions weiterhin explizit — bewusst redundant, damit
+        // GPT-Sessions auch dann das richtige Fenster tragen, wenn das
+        // Core-Env einmal nicht anliegt (z. B. Background-Attach-Pfade, die
+        // Kontextwerte gezielt filtern).
         if routerEnabled, gptBackendModel != nil || legacyResumeModel != nil {
             effectiveProfileEnvironment["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] =
                 String(normalizedGPTContextWindow())
