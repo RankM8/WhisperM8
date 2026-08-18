@@ -36,9 +36,8 @@ struct AgentChatsView: View {
     /// Inhalts-Koordinatenraum der Tab-Leiste — Frame-Messung UND Drop-Location
     /// liegen darin (scroll-sicher, kein `.global`/`.local`-Mismatch).
     private static let tabStripContentSpace = "tabStripContent"
-    /// Festbreite des rechten Inspectors (ProjectDetailPanel) — geht auch in
-    /// die Sidebar-Max-Breite ein (`SidebarWidthResolver.maxWidth`).
-    private static let inspectorPanelWidth: CGFloat = 292
+    // (Inspector-Breite ist seit dem Changes-Panel per Drag anpassbar —
+    // Wunschwert in `storedInspectorWidth`, Clamping in `InspectorWidthResolver`.)
 
     let windowID: UUID
     @Environment(\.openWindow) var openWindow
@@ -235,6 +234,9 @@ struct AgentChatsView: View {
     /// Live-Breite waehrend eines aktiven Handle-Drags (ephemer, nicht
     /// persistiert — Commit erst beim Loslassen in `commitSidebarDrag`).
     @State private var sidebarLiveWidth: CGFloat?
+    @AppStorage("agentInspectorWidth") private var storedInspectorWidth: Double = Double(InspectorWidthResolver.defaultWidth)
+    @State private var inspectorDragBaseWidth: CGFloat?
+    @State private var inspectorLiveWidth: CGFloat?
     /// IDs abgeschlossener Sessions, deren Transkript nicht mehr auf der Platte
     /// liegt („tote Zeiger"). Off-main berechnet (`refreshMissingTranscripts`),
     /// driftet die Sidebar zum Ausgrauen + Hinweis. Ephemeral, nicht persistiert.
@@ -685,14 +687,21 @@ struct AgentChatsView: View {
                 if isInspectorVisible {
                     ProjectDetailPanel(
                         project: selectedProject,
-                        session: selectedSession,
-                        sessions: projectSessions,
-                        onRefresh: { AgentScanCoordinator.shared.requestScan(reason: .manual) },
-                        onNewCodexChat: { createSession(provider: .codex) },
-                        onNewClaudeChat: { createSession(provider: .claude) },
                         onOpenPHPStorm: openSelectedProjectInPHPStorm
                     )
-                    .frame(width: Self.inspectorPanelWidth)
+                    .frame(width: currentInspectorWidth(windowWidth: geo.size.width))
+                    .overlay(alignment: .leading) {
+                        SidebarResizeHandle(
+                            onDragChanged: { translation in
+                                handleInspectorDrag(translation: translation, windowWidth: geo.size.width)
+                            },
+                            onDragEnded: commitInspectorDrag,
+                            onDoubleClick: resetInspectorWidth,
+                            onHoverChanged: { hovering in hostWindow?.isMovable = !hovering }
+                        )
+                        .offset(x: -4.5)
+                    }
+                    .zIndex(1)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1058,7 +1067,50 @@ struct AgentChatsView: View {
     /// Inspector-Anteil, der in die Sidebar-Obergrenze eingeht — nur wenn er
     /// gerade sichtbar ist.
     private var activeInspectorWidth: CGFloat {
-        isInspectorVisible ? Self.inspectorPanelWidth : 0
+        guard isInspectorVisible else { return 0 }
+        return inspectorLiveWidth ?? CGFloat(storedInspectorWidth)
+    }
+
+    /// Sidebar-Anteil aus Sicht des Inspector-Clampings (Gegenrichtung).
+    private var activeSidebarWidth: CGFloat {
+        sidebarLiveWidth ?? CGFloat(storedSidebarWidth)
+    }
+
+    /// Die zu layoutende Inspector-Breite — Spiegel von `currentSidebarWidth`.
+    private func currentInspectorWidth(windowWidth: CGFloat) -> CGFloat {
+        if let live = inspectorLiveWidth { return live }
+        return InspectorWidthResolver.effectiveWidth(
+            stored: CGFloat(storedInspectorWidth),
+            windowWidth: windowWidth,
+            sidebarWidth: activeSidebarWidth
+        )
+    }
+
+    private func handleInspectorDrag(translation: CGFloat, windowWidth: CGFloat) {
+        if inspectorDragBaseWidth == nil {
+            inspectorDragBaseWidth = currentInspectorWidth(windowWidth: windowWidth)
+        }
+        guard let base = inspectorDragBaseWidth else { return }
+        inspectorLiveWidth = InspectorWidthResolver.widthDuringDrag(
+            startWidth: base,
+            translation: translation,
+            windowWidth: windowWidth,
+            sidebarWidth: activeSidebarWidth
+        )
+    }
+
+    private func commitInspectorDrag() {
+        if let final = inspectorLiveWidth {
+            storedInspectorWidth = Double(final)
+        }
+        inspectorDragBaseWidth = nil
+        inspectorLiveWidth = nil
+    }
+
+    private func resetInspectorWidth() {
+        storedInspectorWidth = Double(InspectorWidthResolver.defaultWidth)
+        inspectorDragBaseWidth = nil
+        inspectorLiveWidth = nil
     }
 
     /// Die zu layoutende Sidebar-Breite: waehrend eines Drags der Live-Wert,

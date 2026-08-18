@@ -46,7 +46,9 @@ struct GitProjectStatus {
         }.value
     }
 
-    @Sendable private static func git(_ arguments: [String]) -> String? {
+    /// Intern statt private: `GitChangesSnapshot` nutzt denselben Runner
+    /// (gleiche Deadline-/Drain-Disziplin, kein zweiter Spawn-Pfad).
+    @Sendable static func git(_ arguments: [String]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
