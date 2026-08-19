@@ -904,6 +904,108 @@ extension AgentCommandBuilderTests {
         XCTAssertNil(command.environmentOverrides["ANTHROPIC_AUTH_TOKEN"])
     }
 
+    /// Resume einer nativen Claude-Session: die suffixlose Transcript-ID
+    /// bekommt `[1m]` zurueck, sonst faellt Claude Codes `Esd()` bei leeren
+    /// Modell-Metadaten auf 200000 (Messung 2026-08-19, CLI 2.1.235). Der
+    /// Stempel wechselt das Modell NICHT — nur die Kapazitaetskennung.
+    func testNativeClaudeResumeStampsOneMillionSuffix() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("native-resume-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        try #"{"type":"assistant","message":{"model":"claude-fable-5","content":[{"type":"text","text":"ok"}]}}"#
+            .write(to: transcript, atomically: true, encoding: .utf8)
+
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptFastModeEnabledResolver = { false }
+        builder.gptPickerModelResolver = { "" }
+        builder.gptSubagentModelResolver = { "" }
+        builder.claudeTranscriptLocator = { _, _ in transcript }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "native-resume",
+            title: "Fable",
+            hasLaunchedInitialPrompt: true
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, ["--model", "claude-fable-5[1m]", "--resume", "native-resume"])
+    }
+
+    /// Der Stempel greift auch OHNE GPT-Backend — es ist ein reiner
+    /// Claude-Pfad.
+    func testNativeClaudeResumeStampWorksWithoutGPTBackend() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("native-resume-nogpt-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        try #"{"type":"assistant","message":{"model":"claude-opus-5","content":[{"type":"text","text":"ok"}]}}"#
+            .write(to: transcript, atomically: true, encoding: .utf8)
+
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { false }
+        builder.claudeTranscriptLocator = { _, _ in transcript }
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "native-resume-nogpt",
+            title: "Opus",
+            hasLaunchedInitialPrompt: true
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(
+            command.arguments,
+            ["--model", "claude-opus-5[1m]", "--resume", "native-resume-nogpt"]
+        )
+    }
+
+    /// Nicht-1M-faehige und bereits gestempelte Modelle bleiben unangetastet —
+    /// und ein GPT-Transcript geht weiterhin ueber den Legacy-Pfad.
+    func testNativeClaudeResumeStampSkipsHaikuAndAlreadyStampedAndGPT() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+
+        func argumentsForTranscript(model: String, sessionID: String) throws -> [String] {
+            let transcript = FileManager.default.temporaryDirectory
+                .appendingPathComponent("native-skip-\(UUID().uuidString).jsonl")
+            defer { try? FileManager.default.removeItem(at: transcript) }
+            try "{\"type\":\"assistant\",\"message\":{\"model\":\"\(model)\",\"content\":[]}}"
+                .write(to: transcript, atomically: true, encoding: .utf8)
+            var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+            builder.extraArgumentsResolver = { _ in [] }
+            builder.claudeProfileEnvironmentResolver = { _ in [:] }
+            builder.gptBackendEnabledResolver = { false }
+            builder.claudeTranscriptLocator = { _, _ in transcript }
+            let session = AgentChatSession(
+                provider: .claude,
+                projectID: project.id,
+                externalSessionID: sessionID,
+                title: "T",
+                hasLaunchedInitialPrompt: true
+            )
+            return try builder.command(for: session, project: project).arguments
+        }
+
+        // Haiku ist nicht 1M-faehig → kein --model.
+        XCTAssertEqual(
+            try argumentsForTranscript(model: "claude-haiku-4-5", sessionID: "haiku"),
+            ["--resume", "haiku"]
+        )
+        // Schon gestempelt → kein zweiter Stempel.
+        XCTAssertEqual(
+            try argumentsForTranscript(model: "claude-fable-5[1m]", sessionID: "stamped"),
+            ["--resume", "stamped"]
+        )
+    }
+
     func testLegacyResumeFindsGPTMemorySuffixBeforeHugeTrailingUserLineWithPlainStamp() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         let transcript = FileManager.default.temporaryDirectory
@@ -941,7 +1043,12 @@ extension AgentCommandBuilderTests {
         ])
     }
 
-    func testLegacyResumeDoesNotOverrideLaterClaudeModelSwitch() throws {
+    /// Nach einem Wechsel GPT → Claude darf der Resume KEIN GPT-Modell
+    /// aufzwingen. Seit 2026-08-19 bekommt das Claude-Modell stattdessen den
+    /// nativen 1M-Stempel: dasselbe Modell, nur mit `[1m]` — der Wechsel des
+    /// Users bleibt respektiert, und genau dieser Pfad (GPT-Zwischenwechsel,
+    /// dann Resume) war der beobachtete 200k-Fall.
+    func testLegacyResumeStampsNativeOneMillionAfterClaudeModelSwitch() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         let transcript = FileManager.default.temporaryDirectory
             .appendingPathComponent("legacy-switched-\(UUID().uuidString).jsonl")
@@ -970,7 +1077,13 @@ extension AgentCommandBuilderTests {
 
         let command = try builder.command(for: session, project: project)
 
-        XCTAssertEqual(command.arguments, ["--resume", "switched-resume"])
+        // Kein GPT-Stempel (das war der Kern des Tests) — aber der native
+        // 1M-Stempel fuer das gewechselte Claude-Modell.
+        XCTAssertEqual(
+            command.arguments,
+            ["--model", "claude-fable-5[1m]", "--resume", "switched-resume"]
+        )
+        XCTAssertFalse(command.arguments.contains("gpt-5.6-sol"))
     }
 
     func testArgumentsContainResumeFlagRecognizesAllOfficialForms() {

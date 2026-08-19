@@ -518,12 +518,14 @@ struct AgentCommandBuilder {
         let resumeTranscriptURL = resumeSessionID.flatMap {
             claudeTranscriptLocator($0, project.path)
         }
+        // Ein Read pro Launch: beide Resume-Stempel (GPT-Legacy und nativer
+        // 1M-Alias) lesen dasselbe letzte Assistant-Modell.
+        let restoredTranscriptModel = resumeTranscriptURL.flatMap {
+            ClaudeTranscriptReader.lastAssistantModel(fileURL: $0)
+        }
         let legacyResumeModel: String? = {
             guard routerEnabled,
-                  let resumeTranscriptURL,
-                  let restoredModel = ClaudeTranscriptReader.lastAssistantModel(
-                      fileURL: resumeTranscriptURL
-                  ),
+                  let restoredModel = restoredTranscriptModel,
                   ClaudeGPTModelAlias.hasMemorySuffix(restoredModel) else {
                 return nil
             }
@@ -531,6 +533,19 @@ struct AgentCommandBuilder {
                 restoredModel,
                 fastEnabled: false,
                 contextWindow: normalizedGPTContextWindow()
+            )
+        }()
+        // Nativer 1M-Stempel: Transcripts speichern die Modell-ID suffixlos,
+        // und Claude Codes `jw()` erkennt 1M NUR am String `[1m]`. Ohne
+        // Stempel faellt die CLI bei leeren Modell-Metadaten (nach einem
+        // CLI-Update regelmaessig der Fall) auf 200000 zurueck — die Session
+        // laeuft dann mit 200k statt 1M. Siehe ClaudeNativeContextAlias.
+        // Bewusst unabhaengig von `routerEnabled`: das ist ein reiner
+        // Claude-Pfad und gilt auch ohne GPT-Backend.
+        let nativeOneMillionResumeModel: String? = {
+            guard let restoredModel = restoredTranscriptModel else { return nil }
+            return ClaudeNativeContextAlias.oneMillionAlias(
+                forTranscriptModel: restoredModel
             )
         }()
 
@@ -553,6 +568,10 @@ struct AgentCommandBuilder {
             arguments.append(contentsOf: ["--model", gptBackendModel])
         } else if hasResumeArgument, let legacyResumeModel {
             arguments.append(contentsOf: ["--model", legacyResumeModel])
+        } else if hasResumeArgument, let nativeOneMillionResumeModel {
+            // Reiner Kapazitaets-Stempel: dasselbe Modell, nur mit `[1m]` —
+            // wechselt die Modellwahl der Session also nicht.
+            arguments.append(contentsOf: ["--model", nativeOneMillionResumeModel])
         }
         // User-defined extras (z. B. --dangerously-skip-permissions) vor dem
         // Resume-Block, damit sie auch beim Resume durchgehen.
