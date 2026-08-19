@@ -44,13 +44,16 @@ ccs_profile=$(sanitize_text "$ccs_profile")
 # ── Tuning ────────────────────────────────────────────────────────────────
 # Reines Anzeige-Budget: Claude Code entscheidet die echte Auto-Kompaktierung
 # selbst. Für die beiden sichtbaren GPT-Profile spiegeln feste Budgets die
-# beobachtete/interne Reserve (272k → ~238k, 372k → ~339k). Native Modelle und
+# beobachtete/interne Reserve (272k → ~238k, 900k → ~830k). Native Modelle und
 # benutzerdefinierte Altwerte behalten die bisherige konservative 85-%-Anzeige.
 COMPACT_AT=85
 GPT_STANDARD_CONTEXT_WINDOW=272000
 GPT_STANDARD_COMPACT_BUDGET=238000
-GPT_SOL_EXTENDED_CONTEXT_WINDOW=372000
-GPT_SOL_EXTENDED_COMPACT_BUDGET=339000
+# Erweitertes Profil (2026-08-19): 900k statt des abgelösten 372k-Experiments,
+# freigegeben für Sol/Terra/Luna und GPT-5.4 (Messung 2026-08-18). Ohne diesen
+# Wert fiele die Anzeige auf den 200k-Report der CLI zurück.
+GPT_EXTENDED_CONTEXT_WINDOW=900000
+GPT_EXTENDED_COMPACT_BUDGET=830000
 GPT_CONTEXT_WINDOW="${WHISPERM8_GPT56_CONTEXT_WINDOW:-0}"
 case "$GPT_CONTEXT_WINDOW" in
     ''|*[!0-9]*) GPT_CONTEXT_WINDOW=0 ;;
@@ -343,14 +346,18 @@ else
     size=$reported_size
     # Nur Modelle, für die das konfigurierte Profil freigegeben ist, erhalten
     # die Kapazitätskorrektur: historische Custom-Werte bis 272k gelten für die
-    # gemeinsame Allowlist, das experimentelle 372k-Profil ausschließlich Sol.
+    # gemeinsame Allowlist, das erweiterte 900k-Profil für Sol/Terra/Luna und
+    # GPT-5.4 (identische Allowlist wie ClaudeGPTModelAlias — beide Stellen
+    # gehören zusammen).
     context_profile_matches_model=0
     if [ "$is_supported_gpt" -eq 1 ] && [ "$GPT_CONTEXT_WINDOW" -gt 0 ]; then
         if [ "$GPT_CONTEXT_WINDOW" -le "$GPT_STANDARD_CONTEXT_WINDOW" ]; then
             context_profile_matches_model=1
-        elif [ "$GPT_CONTEXT_WINDOW" -eq "$GPT_SOL_EXTENDED_CONTEXT_WINDOW" ] \
-            && [ "$model_base" = "gpt-5.6-sol" ]; then
-            context_profile_matches_model=1
+        elif [ "$GPT_CONTEXT_WINDOW" -eq "$GPT_EXTENDED_CONTEXT_WINDOW" ]; then
+            case "$model_base" in
+                gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.4)
+                    context_profile_matches_model=1 ;;
+            esac
         fi
     fi
     if [ "$context_profile_matches_model" -eq 1 ] \
@@ -367,8 +374,11 @@ else
         compact_budget=$((size * COMPACT_AT / 100))
         if [ "$is_supported_gpt" -eq 1 ]; then
             case "${model_base}:${size}" in
-                "gpt-5.6-sol:${GPT_SOL_EXTENDED_CONTEXT_WINDOW}")
-                    compact_budget=$GPT_SOL_EXTENDED_COMPACT_BUDGET
+                "gpt-5.6-sol:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
+                "gpt-5.6-terra:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
+                "gpt-5.6-luna:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
+                "gpt-5.4:${GPT_EXTENDED_CONTEXT_WINDOW}")
+                    compact_budget=$GPT_EXTENDED_COMPACT_BUDGET
                     ;;
                 *":${GPT_STANDARD_CONTEXT_WINDOW}")
                     compact_budget=$GPT_STANDARD_COMPACT_BUDGET

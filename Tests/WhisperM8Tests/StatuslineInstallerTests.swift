@@ -496,7 +496,7 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertFalse(text.contains("9k/1000k"), text)
     }
 
-    func testMainStatuslineUsesSol372KCompactBudgetAt339K() throws {
+    func testMainStatuslineUsesExtended900KCompactBudgetAt830K() throws {
         func input(currentTokens: Int) -> [String: Any] {
             [
                 "model": ["display_name": "gpt-5.6-sol-fast"],
@@ -515,27 +515,30 @@ final class StatuslineInstallerTests: XCTestCase {
 
         let beforeOutput = try runStatuslineScript(
             try makeInstaller().bundledScript(),
-            named: "main-sol-372k-before-compact-statusline.sh",
-            input: input(currentTokens: 338_000),
-            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "372000"]
+            named: "main-sol-900k-before-compact-statusline.sh",
+            input: input(currentTokens: 829_000),
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "900000"]
         )
         let beforeText = String(decoding: beforeOutput, as: UTF8.self)
         XCTAssertTrue(beforeText.contains("99%"), beforeText)
-        XCTAssertTrue(beforeText.contains("338k/372k"), beforeText)
+        XCTAssertTrue(beforeText.contains("829k/900k"), beforeText)
 
         let atOutput = try runStatuslineScript(
             try makeInstaller().bundledScript(),
-            named: "main-sol-372k-at-compact-statusline.sh",
-            input: input(currentTokens: 339_000),
-            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "372000"]
+            named: "main-sol-900k-at-compact-statusline.sh",
+            input: input(currentTokens: 830_000),
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "900000"]
         )
         let atText = String(decoding: atOutput, as: UTF8.self)
         XCTAssertTrue(atText.contains("100%"), atText)
-        XCTAssertTrue(atText.contains("339k/372k"), atText)
+        XCTAssertTrue(atText.contains("830k/900k"), atText)
     }
 
-    func testMainStatuslineDoesNotApplySol372KProfileToTerra() throws {
-        let input: [String: Any] = [
+    /// Terra/Luna/GPT-5.4 tragen das 900k-Profil mit (Messung 2026-08-18) —
+    /// abgelehnt wird jetzt, was beim 272k-Vertrag bleibt (gpt-5.5): dort
+    /// faellt die Anzeige bewusst auf den 200k-Report der CLI zurueck.
+    func testMainStatuslineAppliesExtendedProfileToTerraButNotToFivePointFive() throws {
+        let terraInput: [String: Any] = [
             "model": ["display_name": "gpt-5.6-terra-fast"],
             "cost": ["total_cost_usd": 0],
             "context_window": [
@@ -549,16 +552,26 @@ final class StatuslineInstallerTests: XCTestCase {
             "mcp_servers": [],
         ]
 
-        let output = try runStatuslineScript(
+        let terraOutput = try runStatuslineScript(
             try makeInstaller().bundledScript(),
-            named: "main-terra-rejects-sol-372k-statusline.sh",
-            input: input,
-            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "372000"]
+            named: "main-terra-accepts-900k-statusline.sh",
+            input: terraInput,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "900000"]
         )
-        let text = String(decoding: output, as: UTF8.self)
+        let terraText = String(decoding: terraOutput, as: UTF8.self)
+        XCTAssertTrue(terraText.contains("9k/900k"), terraText)
 
-        XCTAssertTrue(text.contains("9k/200k"), text)
-        XCTAssertFalse(text.contains("9k/372k"), text)
+        var fiveFiveInput = terraInput
+        fiveFiveInput["model"] = ["display_name": "gpt-5.5"]
+        let fiveFiveOutput = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-five-five-rejects-900k-statusline.sh",
+            input: fiveFiveInput,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "900000"]
+        )
+        let fiveFiveText = String(decoding: fiveFiveOutput, as: UTF8.self)
+        XCTAssertTrue(fiveFiveText.contains("9k/200k"), fiveFiveText)
+        XCTAssertFalse(fiveFiveText.contains("9k/900k"), fiveFiveText)
     }
 
     func testMainStatuslineDoesNotRewriteSimilarGPTCustomID() throws {
