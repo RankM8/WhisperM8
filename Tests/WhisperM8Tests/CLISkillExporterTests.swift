@@ -99,7 +99,7 @@ final class CLISkillExporterTests: XCTestCase {
 
         XCTAssertTrue(markdown.hasPrefix("---"), "Skill braucht YAML-Frontmatter")
         XCTAssertTrue(markdown.contains("name: gpt-workflow"))
-        XCTAssertTrue(markdown.contains("version: 1.0.2"))
+        XCTAssertTrue(markdown.contains("version: 1.1.0"))
         XCTAssertTrue(markdown.contains("examples/wf-code-review.js"))
         XCTAssertTrue(markdown.contains("examples/wf-docs-review.js"))
         XCTAssertEqual(exporter.definition.assets.count, 2)

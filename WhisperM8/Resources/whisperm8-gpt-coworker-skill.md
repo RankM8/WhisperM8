@@ -23,8 +23,10 @@ Dieser Modus gilt ab Aufruf **session-weit**, bis der User ihn beendet
   ist GPT die bessere Wahl.
 - **GPT hat deutlich höhere Limits als Claude.** Lieber ein GPT-Agent zu
   viel als zu wenig: Zweitmeinungen, parallele Reviews und
-  Planungs-Perspektiven kosten praktisch nichts, schonen aber
-  Claude-Limits und Main-Kontext.
+  Planungs-Perspektiven schonen Claude-Limits und Main-Kontext. Gratis
+  sind sie nicht — der Fast-Default läuft im Priority-Tier mit 2,5×
+  ChatGPT-Credits (Gotcha „Kosten" in codex-subagent): bei größeren
+  Fan-outs die Agent-Spanne nennen, sinnlose Doppel-Spawns vermeiden.
 
 ## Harte Default-Regel: Subagent = GPT
 
@@ -32,8 +34,8 @@ Für jeden Subagent-Spawn mit klar definiertem Auftrag gilt
 `subagent_type: "gpt"` als Standard. Claude-Subagents (Fable/Opus/Sonnet)
 nur mit explizitem Grund — z. B. wenn bewusst ein *Claude*-Zweiturteil
 gegen einen GPT-Befund gewünscht ist oder es um Claude-spezifisches
-Verhalten geht. Der `model`-Parameter des Agent-Tools kann KEIN GPT
-(Whitelist) — GPT geht nur über den Agent-TYP.
+Verhalten geht. GPT geht nur über den Agent-TYP, nie über den
+`model`-Parameter (Gotcha „Model-Parameter-Whitelist" in codex-subagent).
 
 ## Delegations-Reflex
 
@@ -54,9 +56,14 @@ relevante Konventionen (z. B. CLAUDE.md-Regeln des Repos) gehören ins
 Briefing. Wenn das Briefing länger würde als die Arbeit selbst: nicht
 delegieren, sondern selbst machen. Kein Delegations-Theater.
 
-**Ergebnis-Meldepflicht:** Jeden GPT-Agent explizit instruieren, sein
-Resultat in der finalen Antwort zu liefern — sonst enden manche mit
-bloßer Idle-Meldung (bekanntes Gotcha, siehe codex-subagent).
+**Ergebnis-Meldepflicht** (Gotcha in codex-subagent): das Resultat
+immer in der finalen Antwort einfordern.
+
+**Kontextbudget:** GPT-Subagents aus einer Claude-Main-Session haben nur
+das 200k-Fenster, ~177k nutzbar (272k/900k gibt es nur in GPT-gestempelten
+Main-Sessions — Gotcha „Kontextfenster" in codex-subagent). Große Scopes
+vor der Delegation splitten; Diffs und Dateien im Briefing referenzieren
+statt einbetten — ein volles Fenster tötet den Agent samt Ergebnis.
 
 ## Parallelität: Lesen breit, Schreiben seriell
 
@@ -92,20 +99,18 @@ Testdatei) kommen mit Diff + Tests durch.
 - Aufgaben, die tiefen Session-Kontext bräuchten, der teuer zu
   übergeben ist
 - Kommunikation mit dem User
-- **Commits und Pushes — GPT-Agents committen/pushen NIE.** Committet
-  wird erst nach bestandenem Review-Gate.
+- **Commits und Pushes** (Gotcha „Kein Commit durch GPT-Agents" in
+  codex-subagent): committet wird erst nach bestandenem Review-Gate.
 
 ## Fallback, wenn GPT nicht verfügbar
 
-„Agent type 'gpt' not found" oder Backend aus → kurz melden (mit
-Ursache: Registry lädt nur beim Session-Start; `ANTHROPIC_BASE_URL`
-muss auf den lokalen Router zeigen — Details in codex-subagent), dann
-ohne Rückfrage mit Claude-Subagents weiterarbeiten. Die Arbeit blockiert
-nie. Für detachte Langläufer ersatzweise den CLI-Weg (`whisperm8 agent`)
-erwägen.
+„Agent type 'gpt' not found" oder Backend aus → kurz melden (Diagnose:
+gleichnamiges Gotcha in codex-subagent), dann ohne Rückfrage mit
+Claude-Subagents weiterarbeiten. Die Arbeit blockiert nie. Für detachte
+Langläufer ersatzweise den CLI-Weg (`whisperm8 agent`) erwägen.
 
 ## Verifikation
 
-Selbstauskunft der Agents ist wertlos (sie halten sich für
-Claude/Opus). Wenn Modell-Nachweis gebraucht wird: `"model"`-Felder im
-Session-JSONL prüfen (Details in codex-subagent).
+Wenn Modell-Nachweis gebraucht wird: Gotcha „Modell-Nachweis" in
+codex-subagent — Selbstauskunft ist wertlos, es zählen nur die
+`"model"`-Felder im Session-JSONL.

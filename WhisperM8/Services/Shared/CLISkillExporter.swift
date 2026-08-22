@@ -48,6 +48,10 @@ struct CLISkillExporter {
             resourceName: "whisperm8-agent-skill",
             references: [
                 SkillReference(
+                    fileName: "codex-cli.md",
+                    resourceName: "whisperm8-agent-skill-ref-codex-cli"
+                ),
+                SkillReference(
                     fileName: "playwright-browser-qa.md",
                     resourceName: "whisperm8-agent-skill-ref-playwright-browser-qa"
                 ),

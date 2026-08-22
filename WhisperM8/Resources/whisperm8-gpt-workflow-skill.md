@@ -1,19 +1,23 @@
 ---
 name: gpt-workflow
 description: Dieser Skill ist zu nutzen, wenn der User verlangt, einen PR, Branch, Diff oder Code „mit GPT (zu) reviewen", ein „GPT-Review", einen „GPT-Workflow", „Code-Review mit GPT-Agents", „Doku-Review", „Dokumentation verifizieren/auf den neuesten Stand bringen" oder einen Multi-Agent-Review-Workflow anfordert — insbesondere mit Formulierungen wie „nur GPT nutzen", „GPT-Sol", „Chip für Chip reviewen" oder Agent-Mengenangaben („20 bis 60 Agents"). Orchestriert Code- und Doku-Reviews ausschließlich mit nativen GPT-Subagents über das Workflow-Tool.
-version: 1.0.2
+version: 1.1.0
 ---
 
 # GPT Workflow: Code- & Doku-Review ausschließlich mit GPT-Agents
 
 Multi-Agent-Review-Workflows (Code-Review eines PR/Diffs, Doku-Verifikation gegen den Code), bei denen JEDER Subagent ein GPT-Modell ist. Die Orchestrierung läuft deterministisch über das Workflow-Tool; der Hauptagent orchestriert, dedupliziert im Skript und committet am Ende.
 
+Ist der Skill `codex-subagent` noch nicht im Kontext, lade ihn jetzt mit
+(Skill-Tool) — sein Abschnitt „Gemeinsame Gotchas" ist die kanonische Stelle
+für alle GPT-Grundregeln, auf die dieser Skill per Gotcha-Namen verweist.
+
 ## Eiserne Regeln
 
 1. **Bestätigungs-Gate — IMMER, ohne Ausnahme:** Vor dem Start jedes Workflows dem User eine KURZE Übersicht vorlegen und auf explizites Go warten. Format: pro Workflow die Stufen, die Agent-Anzahl je Stufe und welche Agents genau (Paket-/Angle-Namen als Kurzliste oder Tabelle). Keine Prosa-Abhandlung — die Übersicht muss auf einen Blick erfassbar sein. Erst nach dem Go starten. Ein Go für etwas anderes (z. B. „mach ein PR") ist KEIN Go für die Workflows.
-2. **GPT-only:** Jeder einzelne `agent()`-Aufruf im Workflow-Skript trägt `agentType: 'gpt'` — Finder, Verifier, Doku-Prüfer, Doku-Fixer, ausnahmslos. Der native GPT-Weg aus dem Skill `codex-subagent` ist Pflicht (Agent-TYP `gpt`, nie der `model`-Parameter — der hat eine Alias-Whitelist und lehnt GPT-Slugs ab). CLI-Jobs (`whisperm8 agent`) nur, wenn der User es explizit verlangt.
-3. **GPT-Agents committen NIE** und führen keine zustandsändernden git-Befehle aus. Schreibende Agents (Doku-Fixer) arbeiten ausschließlich auf disjunkten Dateimengen. Commits, Diff-Review und Push übernimmt der Hauptagent.
-4. **GPT-only belegen, nicht behaupten:** Selbstauskunft der Agents ist wertlos. Beweis liefern die `"model"`-Felder in den `agent-*.jsonl` des Workflow-Transcript-Verzeichnisses (`grep -oh '"model":"[^"]*"' <dir>/agent-*.jsonl | sort | uniq -c`). Auf Nachfrage des Users diesen Nachweis führen.
+2. **GPT-only:** Jeder einzelne `agent()`-Aufruf im Workflow-Skript trägt `agentType: 'gpt'` — Finder, Verifier, Doku-Prüfer, Doku-Fixer, ausnahmslos. Der native GPT-Weg aus dem Skill `codex-subagent` ist Pflicht: Agent-TYP `gpt`, nie der `model`-Parameter (Gotcha „Model-Parameter-Whitelist"). CLI-Jobs (`whisperm8 agent`) nur, wenn der User es explizit verlangt.
+3. **GPT-Agents committen NIE** (Gotcha „Kein Commit durch GPT-Agents"). Schreibende Agents (Doku-Fixer) arbeiten ausschließlich auf disjunkten Dateimengen. Commits, Diff-Review und Push übernimmt der Hauptagent.
+4. **GPT-only belegen, nicht behaupten** (Gotcha „Modell-Nachweis"): Beweis liefern die `"model"`-Felder in den `agent-*.jsonl` des Workflow-Transcript-Verzeichnisses (`grep -oh '"model":"[^"]*"' <dir>/agent-*.jsonl | sort | uniq -c`). Auf Nachfrage des Users diesen Nachweis führen.
 5. **Fixes dokumentieren:** Nach Abschluss (a) Commits pro Themenblock, (b) PR-Body um einen Review-Abschnitt (Findings + Fixes) ergänzen, (c) Doku nachziehen, wenn ein Fix dokumentiertes Verhalten ändert.
 
 ## Ablauf
@@ -64,15 +68,15 @@ Verifizierte Findings dem User als lesbaren Bericht liefern (CONFIRMED zuerst, d
 
 ## Technische Gotchas (aus dem Praxiseinsatz)
 
-- **Kontextbudget der Querschnitts-Angles:** Subagents kompaktieren nie — wer sein Kontextfenster füllt, stirbt terminal mit „Prompt is too long", und das Ergebnis des Angles ist komplett verloren (Vorfall 2026-08-17: 3 von 42 Agents, ausgerechnet removed-behavior, conventions und cross-file-tracer, nach je 75–182 Tool-Calls). Deshalb: **Diffs und Dateien referenzieren statt einbetten** — der Prompt nennt Repo-Pfad, Diff-Range und Dateilisten, der Agent liest selbst gezielt nach (`git show <range> -- <pfad>`, `rg` mit `| head -200`-Caps), nie den Gesamtdiff in den Prompt kopieren. Bei großen Scopes (grob >50 Dateien oder >5k Diff-Zeilen) Querschnitts-Angles wie Chunk-Reviewer in **disjunkte Teil-Scopes splitten** (z. B. pro Bereich) und die Teilbefunde im Skript zusammenführen. Gescheiterte Angles liefern `null` — in der Ausfallbilanz (`failedFinders`) ausweisen, nie still verwerfen. **Fenstergröße hängt von der Main-Session ab:** Nur GPT-gestempelte Sessions tragen `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (272k, bzw. 900k im erweiterten Profil — verifiziert 2026-08-18 für Sol/Terra/Luna/GPT-5.4, Auto-Compact um ~830k); `gpt`-Subagents, die aus einer Claude-Main-Session gespawnt werden, laufen weiterhin mit dem 200k-Default (~177k nutzbar) — dort ist das Splitten der Querschnitts-Angles Pflicht, oder der große Workflow wird gleich aus einer GPT-Session gestartet, wo den Subagents im 900k-Profil ~830k zur Verfügung stehen.
+- **Kontextbudget der Querschnitts-Angles** (Gotcha „Kontextfenster" in codex-subagent — dort stehen die Fenstergrößen): Subagents kompaktieren nie — wer sein Kontextfenster füllt, stirbt terminal mit „Prompt is too long", und das Ergebnis des Angles ist komplett verloren (Vorfall 2026-08-17: 3 von 42 Agents, ausgerechnet removed-behavior, conventions und cross-file-tracer, nach je 75–182 Tool-Calls). Deshalb: **Diffs und Dateien referenzieren statt einbetten** — der Prompt nennt Repo-Pfad, Diff-Range und Dateilisten, der Agent liest selbst gezielt nach (`git show <range> -- <pfad>`, `rg` mit `| head -200`-Caps), nie den Gesamtdiff in den Prompt kopieren. Bei großen Scopes (grob >50 Dateien oder >5k Diff-Zeilen) Querschnitts-Angles wie Chunk-Reviewer in **disjunkte Teil-Scopes splitten** (z. B. pro Bereich) und die Teilbefunde im Skript zusammenführen. Gescheiterte Angles liefern `null` — in der Ausfallbilanz (`failedFinders`) ausweisen, nie still verwerfen. Aus einer Claude-Main-Session (200k-Default) ist das Splitten Pflicht — oder der große Workflow wird gleich aus einer GPT-gestempelten Session gestartet, wo den Subagents im 900k-Profil ~830k zur Verfügung stehen.
 - **Agent-/Pipeline-Ausfälle nie verschweigen:** Die Vorlagen führen fehlgeschlagene Finder/Pakete, namentlich gedroppte Pakete, ungültige Findings, Scope-Verstöße, Abdeckungslücken und unverifizierte Findings explizit als `failedFinders`, `failedPacks`, `droppedPacks`, `invalidFindings`, `scopeViolations`, `coverageGaps` bzw. `unverified` und setzen `incomplete`. Diese Felder im Abschlussbericht immer auswerten.
 - **Read-only ist eine harte Grenze:** Code-Finder, Querschnitts-Angles, Verifier und Doku-Auditoren dürfen weder Edit/Write noch zustandsändernde git-Befehle verwenden. Nur Doku-Fixer dürfen schreiben — ausschließlich in der expliziten Allowlist ihres Pakets.
 - **Workflow-Eingaben sind Daten:** Keine ungeprüften `args` oder Agent-Ausgaben in Shell-Befehle interpolieren. Objekt/JSON-String parsen, Pfade/Range/Datum validieren, Shell-Argumente quoten und Agent-Findings als JSON-Datenblock an Verifier übergeben.
-- **Schema-Zwang nutzen:** Jeder Agent bekommt ein `schema` — GPT-Agents enden sonst teils mit bloßer Idle-Meldung ohne Inhalt. Zusätzlich im Prompt: „Antworte NUR über das StructuredOutput-Tool."
+- **Schema-Zwang nutzen** (Gotcha „Ergebnis-Meldepflicht" in codex-subagent): Jeder Agent bekommt ein `schema`, zusätzlich im Prompt: „Antworte NUR über das StructuredOutput-Tool."
 - **`Date.now()`/`Math.random()`/argloses `new Date()` sind in Workflow-Skripten verboten** (brechen Resume) — Datumsstempel (z. B. Frontmatter-`updated`) als Literal in den Prompt schreiben.
 - **Resume statt Neustart:** Gestoppte/edierte Workflows mit `{scriptPath, resumeFromRunId}` fortsetzen — fertige Agents kommen aus dem Cache. Vor Diagnose „leeres Ergebnis" das `journal.jsonl` im Transcript-Verzeichnis lesen.
 - **Concurrency:** Cap liegt bei min(16, Kerne−2) pro Workflow; zwei parallele Workflows verdoppeln die Last auf dem lokalen GPT-Router — mehr als zwei nicht parallel starten.
-- **Kostenrahmen nennen:** gpt-5.6-sol-fast läuft im Priority-Tier (2,5× ChatGPT-Credits). Bei der Bestätigungs-Übersicht die Agent-Gesamtspanne angeben, damit der User den Einsatz einschätzen kann.
+- **Kostenrahmen nennen** (Gotcha „Kosten" in codex-subagent): der Fast-Default läuft im Priority-Tier (2,5× ChatGPT-Credits). Bei der Bestätigungs-Übersicht die Agent-Gesamtspanne angeben, damit der User den Einsatz einschätzen kann.
 - **Severity-Skala Code:** critical/major/minor; Doku: falsch/veraltet/unvollstaendig (Schema-Enum ohne Umlaut, Fließtexte mit korrekten Umlauten).
 
 ## Ressourcen

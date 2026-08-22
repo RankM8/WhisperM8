@@ -254,6 +254,7 @@ _bundle:
 	@cp "WhisperM8/Resources/ProviderCodex@2x.png" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-cli-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-agent-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
+	@cp "WhisperM8/Resources/whisperm8-agent-skill-ref-codex-cli.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-agent-skill-ref-playwright-browser-qa.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-agent-skill-ref-1password-cli.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-agent-skill-ref-claude-workflows.md" "$(APP_BUNDLE)/Contents/Resources/"

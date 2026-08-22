@@ -62,6 +62,7 @@ let package = Package(
                 .copy("Resources/whisperm8-gpt-workflow-skill.md"),
                 .copy("Resources/whisperm8-gpt-workflow-example-code-review.js"),
                 .copy("Resources/whisperm8-gpt-workflow-example-docs-review.js"),
+                .copy("Resources/whisperm8-agent-skill-ref-codex-cli.md"),
                 .copy("Resources/whisperm8-agent-skill-ref-playwright-browser-qa.md"),
                 .copy("Resources/whisperm8-agent-skill-ref-1password-cli.md"),
                 .copy("Resources/whisperm8-agent-skill-ref-claude-workflows.md"),
