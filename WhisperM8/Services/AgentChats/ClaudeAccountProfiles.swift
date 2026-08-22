@@ -23,6 +23,18 @@ struct ClaudeAccountProfile: Identifiable, Equatable {
     var isLoggedIn: Bool { emailAddress != nil }
 }
 
+/// Wie das Claude-Account-Profil einer NEU erstellten Session bestimmt wird.
+/// Trennt „nicht angegeben" von „ausdruecklich main" — mit einem blossen
+/// `String?` waeren beide `nil`, und genau diese Zweideutigkeit war die
+/// Ursache dafuer, dass ueber die CLI erstellte Chats still im Haupt-Account
+/// landeten (Befund 2026-08-22, docs/plans/claude-account-routing.md).
+enum ClaudeProfileSelection: Equatable {
+    /// Kein Profil angegeben → das in den Settings aktive Profil gewinnt.
+    case activeDefault
+    /// Ausdrueckliche Wahl; `nil` = Haupt-Account (`main`).
+    case explicit(String?)
+}
+
 /// Verwaltung der Claude-Account-Profile (Discovery, aktives Profil,
 /// Env-Injektion). Dateibasiert und zustandslos — SSoT sind die Verzeichnisse
 /// und die `.active`-Datei, die auch das `ccs`-CLI liest/schreibt.
@@ -171,6 +183,38 @@ struct ClaudeAccountProfiles {
     func activeProfileNameOrNil() -> String? {
         let name = activeProfileName()
         return name == Self.mainProfileName ? nil : name
+    }
+
+    /// Fehler bei einer AUSDRUECKLICHEN Profilangabe (`chats new --account`).
+    enum SelectionError: LocalizedError, Equatable {
+        case unknownProfile(String)
+        case notLoggedIn(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .unknownProfile(let name):
+                return "Account-Profil „\(name)“ existiert nicht."
+            case .notLoggedIn(let name):
+                return "Account-Profil „\(name)“ ist nicht eingeloggt — bitte zuerst in den Einstellungen anmelden."
+            }
+        }
+    }
+
+    /// Prueft eine ausdrueckliche Profilangabe und normalisiert sie auf den
+    /// Stempel-Wert (`nil` = main). Anders als `environmentOverrides` faellt
+    /// hier bewusst NICHTS auf main zurueck: wer ein Profil ausdruecklich
+    /// nennt, bekommt es — oder einen Fehler. Ein stiller Main-Fallback waere
+    /// exakt der Bedienfehler, den die explizite Angabe verhindern soll.
+    func validatedProfileName(_ raw: String) throws -> String? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != Self.mainProfileName else { return nil }
+        guard fileManager.fileExists(atPath: configDir(forProfile: name).path) else {
+            throw SelectionError.unknownProfile(name)
+        }
+        guard profile(named: name).isLoggedIn else {
+            throw SelectionError.notLoggedIn(name)
+        }
+        return name
     }
 
     func setActiveProfile(_ name: String) throws {

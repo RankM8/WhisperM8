@@ -64,10 +64,9 @@ extension AgentChatsView {
                 shouldLaunchOnOpen: true,
                 kind: kind,
                 // Multi-Account: neue Claude-Sessions laufen unter dem in den
-                // Settings gewaehlten aktiven Profil (nil = Haupt-Account).
-                claudeProfileName: provider == .claude
-                    ? ClaudeAccountProfiles().activeProfileNameOrNil()
-                    : nil,
+                // Settings gewaehlten aktiven Profil. Die Aufloesung liegt im
+                // Store, damit sie kein Erstellungspfad mehr vergessen kann.
+                claudeProfile: .activeDefault,
                 claudeBackendModel: claudeBackendModel
             )
             openTab(session.id)
@@ -102,7 +101,9 @@ extension AgentChatsView {
                 forkSourceSessionID: sourceExternalID,
                 // Fork erbt das Account-Profil der Quelle — `--resume` der
                 // Quell-Session funktioniert nur unter deren Config-Dir.
-                claudeProfileName: source.claudeProfileName,
+                // Ausdruecklich, nicht `.activeDefault`: ein zwischenzeitlich
+                // gewechselter Aktiv-Account darf den Fork nicht umhaengen.
+                claudeProfile: .explicit(source.claudeProfileName),
                 claudeBackendModel: source.claudeBackendModel
             )
             // Farbe der Quelle erben, damit Fork und Original visuell

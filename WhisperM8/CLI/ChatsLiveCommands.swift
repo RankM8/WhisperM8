@@ -584,42 +584,108 @@ enum ChatsResumeCommand {
 
 // MARK: - new
 
-enum ChatsNewCommand {
-    static func run(_ arguments: [String]) -> Int32 {
+/// Reines Argument-Parsing fuer `chats new` — getrennt vom Kommando, damit
+/// der Vertrag (Flags, Pflichtfelder, Fehlermeldungen) ohne Socket testbar
+/// bleibt.
+struct ChatsNewArguments: Equatable {
+    var project: String
+    var provider: String
+    var title: String?
+    var prompt: String?
+    /// Ausdrueckliches Account-Profil. `nil` = das in den Einstellungen
+    /// aktive Profil (Default-Regel, siehe docs/features/agent-chats-cli.md).
+    var account: String?
+    var json: Bool
+
+    static let usage = "Usage: whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt \"…\"] [--account <profil>]"
+
+    enum ParseError: Error, Equatable {
+        case missingValue(String)
+        case unknownOption(String)
+        case projectMissing
+        case invalidProvider(String)
+
+        var message: String {
+            switch self {
+            case .missingValue(let flag): return "\(flag) erwartet einen Wert."
+            case .unknownOption(let option): return "Unbekannte Option: \(option)"
+            case .projectMissing: return ChatsNewArguments.usage
+            case .invalidProvider: return "--provider muss claude oder codex sein."
+            }
+        }
+    }
+
+    static func parse(_ arguments: [String]) -> Result<ChatsNewArguments, ParseError> {
         var project: String?
         var provider = "claude"
         var title: String?
         var prompt: String?
+        var account: String?
         var json = false
         var index = 0
-        func value(_ flag: String) -> String? {
-            index += 1
-            guard index < arguments.count else { CLIIO.err("\(flag) erwartet einen Wert."); return nil }
-            return arguments[index]
-        }
         while index < arguments.count {
             let arg = arguments[index]
+            func value() -> String? {
+                index += 1
+                guard index < arguments.count else { return nil }
+                return arguments[index]
+            }
             switch arg {
-            case "--project": guard let v = value(arg) else { return ChatsCLIExit.usage }; project = v
-            case "--provider": guard let v = value(arg) else { return ChatsCLIExit.usage }; provider = v
-            case "--title": guard let v = value(arg) else { return ChatsCLIExit.usage }; title = v
-            case "--prompt": guard let v = value(arg) else { return ChatsCLIExit.usage }; prompt = v
-            case "--json": json = true
-            default: CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage
+            case "--project":
+                guard let v = value() else { return .failure(.missingValue(arg)) }
+                project = v
+            case "--provider":
+                guard let v = value() else { return .failure(.missingValue(arg)) }
+                provider = v
+            case "--title":
+                guard let v = value() else { return .failure(.missingValue(arg)) }
+                title = v
+            case "--prompt":
+                guard let v = value() else { return .failure(.missingValue(arg)) }
+                prompt = v
+            case "--account":
+                guard let v = value() else { return .failure(.missingValue(arg)) }
+                account = v
+            case "--json":
+                json = true
+            default:
+                return .failure(.unknownOption(arg))
             }
             index += 1
         }
-        guard let project else {
-            CLIIO.err("Usage: whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt \"…\"]")
-            return ChatsCLIExit.usage
-        }
+        guard let project, !project.isEmpty else { return .failure(.projectMissing) }
         guard provider == "claude" || provider == "codex" else {
-            CLIIO.err("--provider muss claude oder codex sein.")
-            return ChatsCLIExit.usage
+            return .failure(.invalidProvider(provider))
         }
+        return .success(ChatsNewArguments(
+            project: project, provider: provider, title: title,
+            prompt: prompt, account: account, json: json))
+    }
+
+    /// Params fuer `session.new`. Leere Optionalwerte bleiben weg, damit der
+    /// Handler „nicht angegeben" von „ausdruecklich leer" unterscheiden kann.
+    var controlParams: [String: Any] {
         var params: [String: Any] = ["project": project, "provider": provider]
         if let title { params["title"] = title }
         if let prompt { params["prompt"] = prompt }
+        if let account { params["account"] = account }
+        return params
+    }
+}
+
+enum ChatsNewCommand {
+    static func run(_ arguments: [String]) -> Int32 {
+        let parsed: ChatsNewArguments
+        switch ChatsNewArguments.parse(arguments) {
+        case .failure(let error):
+            CLIIO.err(error.message)
+            return ChatsCLIExit.usage
+        case .success(let value):
+            parsed = value
+        }
+        let project = parsed.project
+        let json = parsed.json
+        let params = parsed.controlParams
         switch ChatsLiveSupport.perform(method: "session.new", params: params) {
         case .failed(let code): return code
         case .ok(let response):
@@ -629,7 +695,8 @@ enum ChatsNewCommand {
                 let name = session?["project"]?.stringValue ?? project
                 let sessionTitle = session?["title"]?.stringValue ?? "?"
                 let id = session?["id"]?.stringValue ?? ""
-                return "✓ Neue Session \(name)/\(sessionTitle) gestartet (\(ChatsOutput.shortID(UUID(uuidString: id) ?? UUID())))"
+                let account = session?["account"]?.stringValue ?? "?"
+                return "✓ Neue Session \(name)/\(sessionTitle) gestartet (\(ChatsOutput.shortID(UUID(uuidString: id) ?? UUID())), Account: \(account))"
             }
             return ChatsCLIExit.ok
         }

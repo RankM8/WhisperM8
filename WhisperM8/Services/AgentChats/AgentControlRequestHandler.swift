@@ -1276,19 +1276,28 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         }
         let title = request.params["title"]?.stringValue
         let prompt = request.params["prompt"]?.stringValue
+        let account = request.params["account"]?.stringValue
 
         let result = await MainActor.run {
             AgentChatLaunchService().openChatViaControl(
-                provider: provider, projectRef: projectRef, title: title, prompt: prompt)
+                provider: provider, projectRef: projectRef, title: title, prompt: prompt,
+                account: account)
         }
         switch result {
         case .failure(let error):
             return .failure(requestID: request.requestID, code: .notFound, message: error.message)
         case .success(let launch):
-            await audit(request.actor, method: "new", target: "\(launch.projectName)/\(launch.title)", outcome: "ok", prompt: prompt)
+            let profileLabel = launch.profileName ?? ClaudeAccountProfiles.mainProfileName
+            await audit(
+                request.actor, method: "new",
+                target: "\(launch.projectName)/\(launch.title) [\(profileLabel)]",
+                outcome: "ok", prompt: prompt)
             return .success(requestID: request.requestID, result: .object([
                 "ok": true,
-                "session": ["id": launch.id.uuidString, "title": launch.title, "project": launch.projectName],
+                "session": [
+                    "id": launch.id.uuidString, "title": launch.title,
+                    "project": launch.projectName, "account": profileLabel,
+                ],
             ]))
         }
     }

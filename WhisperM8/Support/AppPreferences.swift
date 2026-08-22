@@ -432,6 +432,25 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentEventDrivenWatchEnabled) }
     }
 
+    /// Kill-Switch fuer den Account-Default neuer Claude-Chats: an heisst,
+    /// eine neue Session ohne ausdrueckliche Profilangabe uebernimmt das in
+    /// den Einstellungen aktive Account-Profil. Aus stellt das alte Verhalten
+    /// her (alles Neue startet im Haupt-Account). Eine AUSDRUECKLICHE Angabe
+    /// (`chats new --account`) bleibt in beiden Stellungen wirksam.
+    /// `defaults write com.whisperm8.app chatsNewProfileDefaultEnabled -bool NO`
+    var isChatsNewProfileDefaultEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.chatsNewProfileDefaultEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.chatsNewProfileDefaultEnabled) }
+    }
+
+    /// Kill-Switch fuer den Mehrfach-Kontowechsel (Auswahl → anderer Account).
+    /// Aus blendet nur die Bulk-Aktion aus; der Einzel-Umzug bleibt nutzbar.
+    /// `defaults write com.whisperm8.app accountBulkMoveEnabled -bool NO`
+    var isAccountBulkMoveEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.accountBulkMoveEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.accountBulkMoveEnabled) }
+    }
+
     /// Kill-Switch für die Retention der CLI-Subagent-Spiegel. Aus heißt: die
     /// verwaisten Einträge bleiben für immer in der Sidebar stehen (der
     /// Zustand vor 2026-08-01):
@@ -669,6 +688,8 @@ enum PreferenceKeys {
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
+    static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"
+    static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"

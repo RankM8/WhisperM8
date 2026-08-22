@@ -59,7 +59,10 @@ whisperm8 chats pin <ref> [<ref>…] | unpin …         # Sidebar-Pin setzen/en
 whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehendes Fenster (window list zeigt IDs)
 whisperm8 chats window list                          # Fenster-Inventar (+ showsGrid, activeWorkspace)
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
-whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"]
+whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"] [--account <profil>]
+                                                     # ohne --account: das in den WhisperM8-Einstellungen
+                                                     # aktive Claude-Konto; unbekanntes/ausgeloggtes
+                                                     # Profil bricht ab (kein stiller Main-Fallback)
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
 whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force

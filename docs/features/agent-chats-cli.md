@@ -33,6 +33,36 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 | `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived` | Lesen | Disk (+ optionaler Live-Merge) |
 | `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
 
+### Claude-Account-Profil neuer Chats
+
+`new` legt einen Claude-Chat immer in **einem** Account an — und zwar in dem,
+der in den WhisperM8-Einstellungen (Agent Chats → Claude Accounts) aktiv ist.
+Das gilt für jeden Erstellungsweg gleichermaßen: GUI, CLI und Jarvis.
+
+```bash
+whisperm8 chats new --project whisperm8 --title "Analyse"            # aktives Profil
+whisperm8 chats new --project whisperm8 --title "Analyse" --account main      # ausdrücklich Haupt-Account
+whisperm8 chats new --project whisperm8 --title "Analyse" --account PowerUser # ausdrücklich Zusatzkonto
+```
+
+Die Erfolgsmeldung nennt das Konto (`Account: …`), im `--json`-Modus steht es
+unter `session.account`. Ein `--account`, das kein Profil benennt oder auf ein
+nicht eingeloggtes Profil zeigt, lässt den Befehl **fehlschlagen** — bewusst
+kein stiller Rückfall auf den Haupt-Account, denn eine im falschen Konto
+entstandene Session lässt sich nur noch per Transcript-Umzug korrigieren.
+
+Der Stempel wird beim Anlegen eingefroren: ein späterer Wechsel des aktiven
+Kontos hängt bestehende Chats nicht um, weil deren `--resume` sonst im falschen
+`projects/`-Root suchen würde. Zum nachträglichen Umziehen dient „Zu Account
+verschieben" in der App.
+
+Kill-Switch (stellt das alte Verhalten her — alles Neue startet im
+Haupt-Account): `defaults write com.whisperm8.app chatsNewProfileDefaultEnabled -bool NO`.
+
+**Ausnahme Background-Agenten** (`claude --bg`): laufen weiterhin immer im
+Haupt-Account. Supervisor-Daemon, `~/.claude/jobs/` und die Lifecycle-Aufrufe
+(`claude logs/stop`) sind fest darauf verdrahtet.
+
 `overview` = `list --sort attention --format board`. Alle Befehle mit `--json`
 (schemaVersion 1). Referenzen: `projekt/titel`, UUID-Präfix ≥ 8, `@self`.
 Exit-Codes: 0 ok, 1 usage, 3 nicht gefunden/mehrdeutig, 4 Guard-Konflikt, 5 App

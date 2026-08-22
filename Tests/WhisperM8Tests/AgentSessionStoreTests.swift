@@ -1132,7 +1132,7 @@ final class AgentSessionStoreTests: XCTestCase {
             provider: .claude,
             projectPath: projectPath,
             title: "Main-Chat",
-            claudeProfileName: "PowerUser"
+            claudeProfile: .explicit("PowerUser")
         )
         session.externalSessionID = "ext-stale-stamp-1"
         session.hasLaunchedInitialPrompt = true
@@ -1446,7 +1446,7 @@ final class AgentSessionStoreTests: XCTestCase {
             provider: .claude,
             projectPath: projectPath,
             title: "Chat",
-            claudeProfileName: "PowerUser"
+            claudeProfile: .explicit("PowerUser")
         )
         session.externalSessionID = "ext-dupe-1"
         session.hasLaunchedInitialPrompt = true
