@@ -1,6 +1,6 @@
 # Plan: Claude-Account-Routing — aktives Profil als Default + kontrollierter Kontowechsel
 
-**Stand:** 2026-08-22 · **Status:** Entwurf, wartet auf Freigabe · **Scope:** Agent Chats (Claude), CLI `whisperm8 chats`, Workspace-Store
+**Stand:** 2026-08-22 · **Status:** Slice 5 + 6 umgesetzt (Branch `feature/claude-account-routing`); Slice 7 offen · **Scope:** Agent Chats (Claude), CLI `whisperm8 chats`, Workspace-Store
 **Vorgänger:** `claude-account-switcher.md` (Slice 1–4 umgesetzt 2026-07-12) — dieser Plan ist dessen Slice 5–7.
 
 ## Ausgangslage
@@ -267,6 +267,48 @@ Nach Nutzen sortiert, jede Stufe einzeln entscheidbar:
 6. **Automatischer Wechsel bei Limit-Erschöpfung** — `ClaudeAccountLimitPinger` hat die Daten, aber
    ein automatischer Move kollidiert frontal mit dem Running-Guard. Frühestens ganz zuletzt, und
    dann als Vorschlag an den Nutzer statt als Automatik.
+
+## Abweichungen von der Planung (bei der Umsetzung festgestellt)
+
+**Die Begründung der Scan-Pause war falsch, die Maßnahme richtig.** Der Plan
+nahm an, ein Scan mitten im Bulk könne Sessions als verwaist schließen. Der
+reale Code widerlegt das: Das Stale-Closing (`AgentSessionStore.swift:933`)
+greift nur bei `status == .running` ohne aktives PTY — es hängt am
+Prozesszustand, nicht am Index. Und `removeUnresumableClaudeSessions`
+(Zeile 1371) räumt ausschließlich Sessions **ohne** `externalSessionID`;
+bewegte Sessions haben immer eine. Die Pause bleibt trotzdem zwingend, aus zwei
+anderen Gründen: (1) zwischen bewegter Datei und noch altem Stempel zöge die
+Stempel-Selbstheilung (Zeile 1057) den Stempel zurück, (2) jede bewegte Datei
+löst wegen des pfadbasierten Index-Cache-Keys eine volle Neuindizierung aus,
+die während des Umzugs nur Arbeit doppelt.
+
+**Das Journal ist ISO8601 und damit nicht sub-sekundengenau.** Ein
+Roundtrip-Vergleich schlägt auf den Sekundenbruchteilen fehl. Bewusst so
+belassen: ein Journal, das im Fehlerfall ein Mensch aufmacht, ist lesbar mehr
+wert als bit-genau; der Test prüft sekundengenau.
+
+**Die Scan-Steuerung liegt als Closure im Service, nicht als
+Coordinator-Referenz.** Beim Testen zeigte sich, dass `resumeScans()` einen
+echten Scan gegen die Produktions-Workspace-Datei startet — in einem Unit-Test
+ein Seiteneffekt auf die Daten des Nutzers. Der Service bekommt jetzt
+`suspendScans`/`resumeScans` als injizierbare Closures.
+
+**Der Einzel-Umzug führt durch dieselbe Vorschau wie der Bulk.** Der Plan sah
+den bestehenden Einzelweg unverändert vor. Zwei Wege nebeneinander hätten aber
+bedeutet, dass der Einzel-Umzug an Journal und Scan-Pause vorbeiläuft — also
+ohne Rückgängig und ohne Schutz. Die alte `moveSession`-Implementierung ist
+entfernt.
+
+**Nicht umgesetzt: Background-Agenten im aktiven Konto.** Die Freigabe nannte
+sie, der Plan führt sie als Slice 7.5. Der Umbau bleibt so groß wie
+beschrieben: `SupervisorJobReader.defaultJobsDirectory` ist an sechs Stellen
+hart auf `~/.claude/jobs` verdrahtet — darunter `ChatsStatusProbe` (die
+app-unabhängige CLI-Leseseite), `AgentChatTailExtractor` und
+`ActiveBackgroundSessionTracker` — und `BackgroundAgentLifecycle` ruft
+`claude logs/stop` mit leerem Environment. Ein Profil-Env allein beim Spawn
+erzeugte einen zweiten Supervisor-Daemon, dessen Jobs die App weder lesen noch
+stoppen könnte. Die Call-Site ist jetzt immerhin ausdrücklich `.explicit(nil)`
+mit Verweis hierher, statt zufällig auf dem Default zu landen.
 
 ## Reihenfolge und Freigabe
 

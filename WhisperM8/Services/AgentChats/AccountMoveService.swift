@@ -35,7 +35,12 @@ struct AccountMoveService {
     var store: AgentSessionStore = AgentSessionStore()
     var profiles: ClaudeAccountProfiles = ClaudeAccountProfiles()
     var journal: AccountMoveJournal = AccountMoveJournal()
-    var scanCoordinator: AgentScanCoordinator = .shared
+    /// Scan-Steuerung als Closures statt als Coordinator-Referenz: der
+    /// Coordinator ist ein Singleton, das beim Fortsetzen einen ECHTEN Scan
+    /// gegen die Produktions-Workspace-Datei startet — in Tests waere das ein
+    /// Seiteneffekt auf die Daten des Nutzers.
+    var suspendScans: () -> Void = { AgentScanCoordinator.shared.suspendScans() }
+    var resumeScans: () -> Void = { AgentScanCoordinator.shared.resumeScans() }
 
     /// - Parameters:
     ///   - progress: nach jeder Session (erledigt, gesamt).
@@ -54,8 +59,8 @@ struct AccountMoveService {
     ) -> Outcome {
         guard !moves.isEmpty else { return Outcome() }
 
-        scanCoordinator.suspendScans()
-        defer { scanCoordinator.resumeScans() }
+        suspendScans()
+        defer { resumeScans() }
 
         var outcome = Outcome()
         for (index, move) in moves.enumerated() {
