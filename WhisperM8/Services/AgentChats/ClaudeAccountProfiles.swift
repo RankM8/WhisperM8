@@ -444,6 +444,36 @@ struct ClaudeAccountProfiles {
         }
     }
 
+    /// Liegt im Ziel-Root schon eine Datei (oder ein Subagent-Ordner) mit
+    /// dieser Session-ID? Reine Vorschau-Pruefung fuer den Umzugs-Planer —
+    /// `moveTranscript` prueft vor der Bewegung erneut, weil zwischen Vorschau
+    /// und Bestaetigung Zeit vergeht.
+    func transcriptConflictExists(
+        externalSessionID: String,
+        cwd: String,
+        toProfile targetName: String?
+    ) -> Bool {
+        let target = targetName ?? Self.mainProfileName
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        let targetDir = configDir(forProfile: target)
+            .appendingPathComponent("projects", isDirectory: true)
+            .appendingPathComponent(encoded, isDirectory: true)
+        let targetFile = targetDir.appendingPathComponent("\(externalSessionID).jsonl")
+        // Liegt die Datei bereits im Ziel, ist das kein Konflikt, sondern ein
+        // No-op — das trennt `moveTranscript` ueber den Pfadvergleich ebenso.
+        for root in claudeProjectsRoots() {
+            let candidate = root
+                .appendingPathComponent(encoded, isDirectory: true)
+                .appendingPathComponent("\(externalSessionID).jsonl")
+            if fileManager.fileExists(atPath: candidate.path) {
+                if candidate.path == targetFile.path { return false }
+                break
+            }
+        }
+        return fileManager.fileExists(atPath: targetFile.path)
+            || fileManager.fileExists(atPath: targetFile.deletingPathExtension().path)
+    }
+
     /// Verschiebt das Transcript einer Session in den `projects/`-Root des
     /// Ziel-Profils (`nil` = main) — der lokale Verlauf ist nicht account-
     /// gebunden, nur sein Ablageort entscheidet, unter welchem Account

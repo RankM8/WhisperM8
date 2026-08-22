@@ -105,6 +105,12 @@ struct AgentChatsView: View {
     @State var errorMessage: String?
     @State var isIndexingSessions = false
     @State var sessionActionRequest: AgentSessionActionRequest?
+    /// Konto-Umzug (Slice 6): Vorschau/Fortschritt/Ergebnis des Sheets.
+    /// `accountMoveCancelRequested` wird VOR jeder Session geprueft — der
+    /// Abbruch wirkt nach dem aktuellen Chat, nie mitten im Move.
+    @State var pendingAccountMove: PendingAccountMove?
+    @State var accountMovePhase: AgentMoveToAccountSheet.Phase = .preview
+    @State var accountMoveCancelRequested = false
     @StateObject var terminalRegistry = AgentTerminalRegistry.shared
     /// Live-Status-Store für die Sidebar-Indikatoren — die app-weite Instanz
     /// des `AgentSessionStatusCoordinator` (alle Fenster sehen denselben
@@ -844,6 +850,21 @@ struct AgentChatsView: View {
             Text(sessions.count == 1
                 ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen.\(removalSuffix) Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
                 : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.")
+        }
+        .sheet(item: $pendingAccountMove) { pending in
+            AgentMoveToAccountSheet(
+                plan: pending.plan,
+                targetDisplayName: pending.targetDisplayName,
+                phase: $accountMovePhase,
+                onConfirm: { commitAccountMove(pending) },
+                onCancelRun: { accountMoveCancelRequested = true },
+                onUndo: { undoLastAccountMove() },
+                onClose: {
+                    pendingAccountMove = nil
+                    accountMovePhase = .preview
+                    accountMoveCancelRequested = false
+                }
+            )
         }
         .sheet(item: $pendingBackgroundDispatch) { pending in
             BackgroundDispatchModal(

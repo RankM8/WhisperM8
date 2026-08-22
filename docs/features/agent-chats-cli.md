@@ -63,6 +63,36 @@ Haupt-Account): `defaults write com.whisperm8.app chatsNewProfileDefaultEnabled 
 Haupt-Account. Supervisor-Daemon, `~/.claude/jobs/` und die Lifecycle-Aufrufe
 (`claude logs/stop`) sind fest darauf verdrahtet.
 
+### Bestehende Chats umziehen
+
+In der App über das Kontextmenü eines Chats bzw. einer Auswahl: **„Zu Account
+verschieben"**. Der Umzug bewegt das Transcript in den `projects/`-Root des
+Zielkontos — nur dort sucht `claude --resume`, der Ablageort entscheidet also,
+unter welchem Konto der Chat weiterläuft. Eine CLI-Entsprechung gibt es (noch)
+nicht.
+
+Vor der Ausführung zeigt eine Vorschau, was verschoben und was übersprungen
+wird — mit Grund je Chat: laufend, Hintergrund-Agent, kein Claude-Chat, schon
+im Zielkonto, Namenskollision im Ziel, Zielkonto nicht eingeloggt. Laufende
+Chats werden nie stillschweigend gestoppt; der Prozess hält seine Registry im
+alten Config-Dir und schriebe weiter in die alte Datei.
+
+Was mitwandert: der vollständige Gesprächsverlauf samt Subagent-Transcripts.
+Was zurückbleibt: Checkpoints und Datei-Historie (`file-history/<session-id>/`,
+`session-env/<session-id>/`) — sie liegen außerhalb von `projects/`. Ab dem
+nächsten Start zahlt das Kontingent des Zielkontos.
+
+Während des Umzugs pausiert der Indexer-Scan; danach läuft genau einer. Ein
+Abbruch wirkt nach dem aktuellen Chat, nie mitten in einer Bewegung. Bereits
+verschobene Chats bleiben verschoben — ein Bulk ist nicht atomar, und ein
+automatischer Rollback nach halber Strecke könnte selbst scheitern. Stattdessen
+protokolliert `account-moves.jsonl` jeden Batch, und **„Letzten Kontowechsel
+rückgängig machen"** fährt ihn zurück (dieselbe Bewegung mit vertauschten
+Argumenten).
+
+Kill-Switch für den Mehrfach-Umzug (der Einzel-Umzug bleibt):
+`defaults write com.whisperm8.app accountBulkMoveEnabled -bool NO`.
+
 `overview` = `list --sort attention --format board`. Alle Befehle mit `--json`
 (schemaVersion 1). Referenzen: `projekt/titel`, UUID-Präfix ≥ 8, `@self`.
 Exit-Codes: 0 ok, 1 usage, 3 nicht gefunden/mehrdeutig, 4 Guard-Konflikt, 5 App
