@@ -7,19 +7,19 @@
 	<key>CFBundleName</key>
 	<string>WhisperM8</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.19.0</string>
+	<string>2.20.0</string>
 	<key>CFBundleVersion</key>
-	<string>2.19.0</string>
+	<string>2.20.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>WhisperM8 erkennt ein kurzes Codewort lokal auf diesem Mac, um die Codex-Sprachsitzung stummzuschalten. Die Erkennung läuft ausschließlich on-device; es wird kein Audio gespeichert oder gesendet.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>WhisperM8 kann Screenshots und kurze Bildschirmaufnahmen als optionalen Kontext für die Nachbearbeitung verwenden.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>WhisperM8 erkennt ein kurzes Codewort lokal auf diesem Mac, um die Codex-Sprachsitzung stummzuschalten. Die Erkennung läuft ausschließlich on-device; es wird kein Audio gespeichert oder gesendet.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
