@@ -268,8 +268,8 @@ extension AgentChatsView {
     /// Gating (sonst Event durchreichen):
     /// - nur dieses Fenster, nur Trackpad (`hasPreciseScrollingDeltas`) —
     ///   Mausräder gehören dem Tab-Strip-Monitor bzw. dem Terminal;
-    /// - nicht über dem Tab-Strip (`isHoveringTabStrip`) — dort scrollt die
-    ///   Leiste nativ horizontal.
+    /// - nicht über dem Tab-Strip (`isPointerInTabStripBand`, zustandslos) —
+    ///   dort scrollt die Leiste nativ horizontal.
     ///
     /// Die Gesten-Logik (Achsen-Entscheid, Schwellwert, Einmal-Trigger,
     /// Momentum-Schlucken) lebt pur und getestet im
@@ -285,7 +285,7 @@ extension AgentChatsView {
     private func handleTabSwipeScroll(_ event: NSEvent) -> NSEvent? {
         guard let hostWindow, event.window === hostWindow,
               event.hasPreciseScrollingDeltas,
-              !isHoveringTabStrip else { return event }
+              !isPointerInTabStripBand(event) else { return event }
 
         let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
         var recognizer = tabScrollSwipeRecognizer
@@ -347,14 +347,14 @@ extension AgentChatsView {
               event.window === window,
               let contentView = window.contentView else { return event }
 
-        // Muss zur Höhe der Tab-Zeile passen (34pt seit dem Chrome-Redesign).
-        let topZone: CGFloat = 34
+        // Bandhöhe zentral in `TabStripBand.height` (34pt, Chrome-Redesign).
         let trafficLightWidth: CGFloat = 80
         let location = event.locationInWindow
-        let inTopBand = location.y >= contentView.bounds.height - topZone
+        let inTopBand = location.y >= contentView.bounds.height - TabStripBand.height
 
-        // Nur im freien Band: nicht über den Tabs, nicht über den Ampel-Buttons.
-        if inTopBand, location.x >= trafficLightWidth, !isHoveringTabStrip {
+        // Nur im freien Band: nicht über den Tabs (zustandsloser Hit-Test,
+        // Vorfall 2026-08-23), nicht über den Ampel-Buttons.
+        if inTopBand, location.x >= trafficLightWidth, !isPointerInTabStripBand(event) {
             TitleBarZoom.performSystemDoubleClickAction(on: window)
             return nil
         }
@@ -384,12 +384,29 @@ extension AgentChatsView {
         }
     }
 
+    /// Zustandsloser Hit-Test: liegt der Zeiger JETZT über dem Tab-Strip-Band?
+    /// Gating für die Scroll-Monitore und den Doppelklick-Zoom — bewusst KEIN
+    /// `isHoveringTabStrip` mehr (Vorfall 2026-08-23: das Hover-Flag blieb
+    /// hängen, der Monitor schluckte jedes Mausrad-Event im Fenster, Scrollen
+    /// war app-weit tot; Details in `TabStripBand`). Das Flag bleibt nur noch
+    /// fürs `isMovable`-Toggle im Einsatz, wo ein Hänger kein Event kapert.
+    func isPointerInTabStripBand(_ event: NSEvent) -> Bool {
+        guard let window = hostWindow,
+              let contentView = window.contentView else { return false }
+        return TabStripBand.contains(
+            event.locationInWindow,
+            contentViewHeight: contentView.bounds.height,
+            stripFrame: stripFrameInWindow
+        )
+    }
+
     /// Übersetzt vertikales Mausrad über dem Tab-Strip in tab-weises
     /// horizontales Scrollen. Gibt `nil` zurück, wenn das Event konsumiert wurde.
     ///
     /// Gating (sonst Event durchreichen):
-    /// - nur dieses Fenster, nur das oberste 28px-Band, nur innerhalb der
-    ///   gemessenen X-Spanne des Strips → Sidebar/Terminal werden nie gekapert;
+    /// - nur dieses Fenster, nur das oberste Band in der gemessenen X-Spanne
+    ///   des Strips (`isPointerInTabStripBand`, zustandslos pro Event) →
+    ///   Sidebar/Terminal werden nie gekapert, nichts kann hängen bleiben;
     /// - nur „echtes" Mausrad (`hasPreciseScrollingDeltas == false`); Trackpad
     ///   reichen wir durch, damit dessen native horizontale Geste glatt bleibt.
     ///
@@ -398,14 +415,9 @@ extension AgentChatsView {
     /// System-„natürliches Scrollen" steckt bereits im Vorzeichen von `delta`.
     private func handleTabStripScroll(_ event: NSEvent) -> NSEvent? {
         let tabs = visibleHeaderTabs
-        // Gating per Hover-Flag statt Koordinaten-Hit-Test: nur Events
-        // konsumieren, während die Maus über dem Strip schwebt. Echtes Mausrad
-        // (`hasPreciseScrollingDeltas == false`) übersetzen wir in Tab-Schritte;
-        // Trackpad reichen wir durch, damit dessen native horizontale Geste
-        // glatt bleibt. Sidebar/Terminal werden nie gekapert.
-        guard isHoveringTabStrip,
-              let window = hostWindow,
+        guard let window = hostWindow,
               event.window === window,
+              isPointerInTabStripBand(event),
               !tabs.isEmpty,
               !event.hasPreciseScrollingDeltas else { return event }
 

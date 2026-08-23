@@ -295,7 +295,7 @@ struct AgentChatsView: View {
     /// fürs Hit-Test-Gating. Bewusst window-relativ statt `.global`, damit der
     /// Vergleich mit `event.locationInWindow.x` auch auf Zweit-Monitoren und im
     /// Vollbild stimmt (gleicher Ursprung am linken Fensterrand).
-    @State private var stripFrameInWindow: CGRect = .zero
+    @State var stripFrameInWindow: CGRect = .zero
     /// „Anker"-Session, an die das Mausrad den Strip scrollt (führender Tab).
     /// Als UUID (nicht Index) gespeichert, damit die Identität über Reorder und
     /// Tab-Close stabil bleibt — kein veralteter Index, kein Out-of-Range.
@@ -303,10 +303,15 @@ struct AgentChatsView: View {
     /// Bump-Trigger: erhöht sich pro Mausrad-Rasterung, der ScrollViewReader
     /// scrollt daraufhin zu `stripWheelAnchorID`.
     @State var stripWheelTick: Int = 0
-    /// `true` während die Maus über dem Tab-Strip schwebt. Gating für den
-    /// Mausrad-Monitor — robust statt fragiler Koordinaten-Umrechnung
-    /// (AppKit `locationInWindow` ↔ SwiftUI-Frame brach im Fenstermodus durch
-    /// den Titelleisten-Versatz). `.onHover` ist in beiden Modi identisch.
+    /// `true` während die Maus über dem Tab-Strip schwebt. Seit dem Vorfall
+    /// 2026-08-23 NUR noch fürs `isMovable`-Toggle im Einsatz: SwiftUI kann
+    /// das `onHover(false)` verlieren (Kontextmenü/Drag über der Leiste), das
+    /// Flag hing dann auf `true` — und der Scroll-Monitor, der allein daran
+    /// gated war, konsumierte JEDES Mausrad-Event im Fenster (Scrollen
+    /// app-weit tot). Die Event-Monitore gaten deshalb zustandslos per
+    /// Koordinaten-Hit-Test (`isPointerInTabStripBand`/`TabStripBand`); ein
+    /// hängendes Flag kostet höchstens das Fenster-Verschieben bis zum
+    /// nächsten Hover, kapert aber nie wieder Events.
     @State var isHoveringTabStrip = false
     /// Sichtbare Breite des Tab-Strip-ScrollViews + Gesamtbreite seines Inhalts.
     /// Differenz > 0 ⇒ Überlauf ⇒ Chevron-Overflow-Menü einblenden.
@@ -2775,8 +2780,10 @@ struct AgentChatsView: View {
                             stripFrameInWindow = frame
                             stripViewportWidth = frame.width
                         }
-                        // Hover-Gating für den Mausrad-Monitor — robust in
-                        // Fenster- UND Vollbildmodus (kein Koordinaten-Hit-Test).
+                        // Hover-Flag nur noch fürs `isMovable`-Toggle — die
+                        // Scroll-Monitore gaten zustandslos über
+                        // `isPointerInTabStripBand` (Vorfall 2026-08-23:
+                        // hängendes Flag machte Scrollen app-weit tot).
                         .onHover { isHoveringTabStrip = $0 }
                         // Bei Tab-Wechsel (⌘⌥←/→, ⌘1–⌘9, Sidebar) den aktiven Tab
                         // in Sicht scrollen, falls die Bar überläuft. Hält außerdem
