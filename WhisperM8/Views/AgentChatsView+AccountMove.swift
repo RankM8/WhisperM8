@@ -120,8 +120,12 @@ extension AgentChatsView {
     }
 
     /// `true`, sobald ein zuruecknehmbarer Batch im Journal liegt.
+    /// Bewusst die stempel-gecachte Abfrage: dieser Getter haengt im
+    /// `.contextMenu`-Builder und laeuft damit bei jedem Body-Rebuild
+    /// (CPU-Befund 2026-08-23) — ein voller Journal-Read pro Render waere
+    /// genau die Sorte Menue-I/O, die die App dauerhaft beschaeftigt hat.
     var hasUndoableAccountMove: Bool {
-        !AccountMoveJournal().lastBatch().isEmpty
+        AccountMoveJournal().hasUndoableBatch()
     }
 
     // MARK: - Menue

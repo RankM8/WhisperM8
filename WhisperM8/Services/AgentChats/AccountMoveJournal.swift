@@ -96,6 +96,40 @@ struct AccountMoveJournal {
         return entries.filter { $0.batchID == lastID }
     }
 
+    /// Prozessweiter Stempel-Cache fuer `hasUndoableBatch()`, validiert ueber
+    /// (mtime, size) der Journal-Datei. Grund (CPU-Befund 2026-08-23): die
+    /// Abfrage haengt im `.contextMenu`-Builder und wurde damit bei jedem
+    /// Body-Rebuild jedes Tabs/jeder Row ausgewertet — ohne Cache ein
+    /// vollstaendiger Datei-Read + JSONL-Parse pro Render-Pass. Ein Append
+    /// invalidiert automatisch (mtime/size aendern sich); explizite
+    /// Invalidierung braucht es nicht.
+    private static let statCacheLock = NSLock()
+    private static var statCache: [String: (mtime: Date, size: Int, hasBatch: Bool)] = [:]
+
+    /// Billige Menue-Abfrage: liegt ein zuruecknehmbarer Batch im Journal?
+    /// Unveraendertes Journal kostet nur ein stat(); fehlende Datei ist ohne
+    /// Read `false`.
+    func hasUndoableBatch() -> Bool {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let mtime = attrs[.modificationDate] as? Date,
+              let size = (attrs[.size] as? NSNumber)?.intValue else {
+            return false
+        }
+
+        Self.statCacheLock.lock()
+        let cached = Self.statCache[fileURL.path]
+        Self.statCacheLock.unlock()
+        if let cached, cached.mtime == mtime, cached.size == size {
+            return cached.hasBatch
+        }
+
+        let hasBatch = !lastBatch().isEmpty
+        Self.statCacheLock.lock()
+        Self.statCache[fileURL.path] = (mtime, size, hasBatch)
+        Self.statCacheLock.unlock()
+        return hasBatch
+    }
+
     /// Dreht einen Batch um: jede Session zurueck in ihr Herkunftskonto.
     /// Reihenfolge umgekehrt, damit ein Umzug, der zwei Sessions ueber
     /// dasselbe Zwischenziel gefuehrt hat, in der Gegenrichtung dieselbe

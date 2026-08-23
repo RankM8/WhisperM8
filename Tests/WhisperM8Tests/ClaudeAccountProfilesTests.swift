@@ -64,6 +64,25 @@ final class ClaudeAccountProfilesTests: XCTestCase {
         XCTAssertFalse(profile.isLoggedIn)
     }
 
+    /// Die `oauthAccount`-Metadaten laufen ueber einen (mtime, size)-Cache
+    /// (CPU-Befund 2026-08-23: `.contextMenu` parste die JSONs bei jedem
+    /// Render neu). Eine umgeschriebene `.claude.json` (Login-Wechsel) muss
+    /// den Cache sofort invalidieren, eine geloeschte den Login-Zustand
+    /// zuruecksetzen.
+    func testAccountInfoCacheRefreshesOnFileChange() throws {
+        let dir = try makeProfileDir("firma")
+        let json = dir.appendingPathComponent(".claude.json")
+        try writeClaudeJSON(email: "alt@b.de", org: "ACME", to: json)
+        XCTAssertEqual(service.profile(named: "firma").emailAddress, "alt@b.de")
+
+        // Cache ist jetzt warm — der neue Inhalt muss trotzdem sofort greifen.
+        try writeClaudeJSON(email: "neu@b.de", org: "ACME", to: json)
+        XCTAssertEqual(service.profile(named: "firma").emailAddress, "neu@b.de")
+
+        try FileManager.default.removeItem(at: json)
+        XCTAssertFalse(service.profile(named: "firma").isLoggedIn)
+    }
+
     // MARK: - Aktives Profil
 
     func testActiveProfileDefaultsToMain() {

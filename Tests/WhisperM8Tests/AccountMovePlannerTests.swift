@@ -243,6 +243,25 @@ final class AccountMoveJournalTests: XCTestCase {
         XCTAssertTrue(journal.lastBatch().isEmpty)
     }
 
+    /// Die Menue-Abfrage laeuft ueber einen (mtime, size)-Stempel-Cache
+    /// (CPU-Befund 2026-08-23) — sie muss den Datei-Lebenszyklus trotzdem
+    /// korrekt abbilden: fehlend → false, nach Append → true (auch aus dem
+    /// Cache), nach Loeschen → wieder false.
+    func testHasUndoableBatchFollowsFileLifecycle() {
+        let journal = makeJournal()
+        defer { try? FileManager.default.removeItem(at: journal.fileURL) }
+
+        XCTAssertFalse(journal.hasUndoableBatch())
+
+        journal.append([entry(batchID: UUID(), title: "A", from: nil, to: "ai3")])
+        XCTAssertTrue(journal.hasUndoableBatch())
+        // Zweiter Aufruf bedient sich aus dem Stempel-Cache.
+        XCTAssertTrue(journal.hasUndoableBatch())
+
+        try? FileManager.default.removeItem(at: journal.fileURL)
+        XCTAssertFalse(journal.hasUndoableBatch())
+    }
+
     func testCorruptLineIsSkipped() throws {
         let journal = makeJournal()
         defer { try? FileManager.default.removeItem(at: journal.fileURL) }
