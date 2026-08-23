@@ -44,14 +44,23 @@ struct AgentChatLaunchService {
         var id: UUID
         var title: String
         var projectName: String
+        /// Account-Profil der neuen Session (`nil` = Haupt-Account) — geht in
+        /// die CLI-Antwort, damit der Aufrufer nie raten muss, wo sein Chat
+        /// gelandet ist.
+        var profileName: String?
     }
 
+    /// - Parameter account: ausdrueckliches Account-Profil. `nil`/leer = das in
+    ///   den Einstellungen aktive Profil (`.activeDefault`). Ein angegebenes,
+    ///   aber unbekanntes oder ausgeloggtes Profil laesst den Start scheitern
+    ///   statt still im Haupt-Account zu landen.
     @MainActor
     func openChatViaControl(
         provider: AgentProvider,
         projectRef: String,
         title: String?,
-        prompt: String?
+        prompt: String?,
+        account: String? = nil
     ) -> Result<ControlLaunchResult, ControlLaunchError> {
         // Projekt auflösen: existierender Pfad → direkt; sonst als
         // Name/Pfadfragment gegen den Workspace matchen (eindeutig).
@@ -74,6 +83,20 @@ struct AgentChatLaunchService {
             projectPath = matches[0].path
         }
 
+        // Account-Wahl VOR dem Anlegen pruefen: eine Session, die im falschen
+        // Konto entstanden ist, laesst sich nur noch per Transcript-Umzug
+        // korrigieren — der Fehler gehoert also vor die Erstellung.
+        let profileSelection: ClaudeProfileSelection
+        if provider == .claude, let account, !account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            do {
+                profileSelection = .explicit(try ClaudeAccountProfiles().validatedProfileName(account))
+            } catch {
+                return .failure(ControlLaunchError(message: error.localizedDescription))
+            }
+        } else {
+            profileSelection = .activeDefault
+        }
+
         let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let effectiveTitle = (trimmedTitle?.isEmpty == false ? trimmedTitle! : "Neue Session")
         do {
@@ -89,11 +112,17 @@ struct AgentChatLaunchService {
             case .claude:
                 session = try store.createSession(
                     provider: .claude, projectPath: project.path, title: effectiveTitle,
-                    initialPrompt: prompt, shouldLaunchOnOpen: true)
+                    initialPrompt: prompt, shouldLaunchOnOpen: true,
+                    claudeProfile: profileSelection)
             }
             WindowRequestCenter.shared.request(.agentChats)
             WindowRequestCenter.shared.requestSessionFocus(sessionID: session.id)
-            return .success(ControlLaunchResult(id: session.id, title: session.title, projectName: project.name))
+            return .success(ControlLaunchResult(
+                id: session.id,
+                title: session.title,
+                projectName: project.name,
+                profileName: session.claudeProfileName
+            ))
         } catch {
             return .failure(ControlLaunchError(message: error.localizedDescription))
         }

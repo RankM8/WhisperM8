@@ -39,15 +39,25 @@ final class AgentControlServer: @unchecked Sendable {
     private var boundStat: stat?
     private var started = false
 
-    /// Wartezeiten zwischen den `flock`-Versuchen. Hintergrund: Bei einem
-    /// App-Neustart (`make dev`) kann der eben beendete Vorgänger seinen Lock
-    /// noch Sekundenbruchteile halten — der Kernel gibt ihn erst frei, wenn der
-    /// Prozess wirklich abgeräumt ist. Ohne Retry blieb die CLI-Steuerung dann
-    /// für die GESAMTE Laufzeit tot (Vorfall 2026-07-24: ein einziger Konflikt
-    /// 2 s nach dem Start legte alle `chats`-Handeln-Befehle lahm). Fail-closed
-    /// bleibt erhalten: Ein fremder Lock wird nie übernommen, wir geben nur
-    /// nicht mehr beim ersten Versuch endgültig auf.
+    /// Wartezeiten der ESKALATIONSPHASE zwischen den `flock`-Versuchen.
+    /// Hintergrund: Bei einem App-Neustart (`make dev`) kann der eben beendete
+    /// Vorgänger seinen Lock noch halten — der Kernel gibt ihn erst frei, wenn
+    /// der Prozess wirklich abgeräumt ist (Vorfall 2026-07-24). Nach der
+    /// Eskalation wird NICHT mehr endgültig aufgegeben, sondern im
+    /// `lockRetryTailDelay`-Takt unbegrenzt weiterversucht: Am 2026-08-23
+    /// brauchte der Vorgänger-Shutdown länger als das ~8-s-Eskalationsfenster,
+    /// der Server gab auf, und die CLI-Steuerung blieb für die gesamte
+    /// Laufzeit (Stunden) tot, obwohl der Lock Sekunden später frei war.
+    /// Ein Neustart-Überlapp ist der Normalfall, kein Doppelstart. Fail-closed
+    /// bleibt erhalten: Ein fremder Lock wird nie übernommen — läuft wirklich
+    /// eine zweite Instanz dauerhaft, schlägt der Retry einfach leise weiter
+    /// fehl (fremder flock bleibt bestehen, kein Socket-Übernehmen).
     static let lockRetryDelays: [TimeInterval] = [0.25, 0.5, 1, 2, 4]
+    /// Takt der unbegrenzten Dauer-Retry-Phase nach der Eskalation.
+    static let lockRetryTailDelay: TimeInterval = 10
+    /// Jeder wievielte Dauer-Retry eine notice loggt (~alle 5 Minuten) —
+    /// ein echter Doppelstart soll das Log nicht mit 6 Zeilen/Minute fluten.
+    static let lockRetryTailLogEvery = 30
     private var lockAttempt = 0
     /// Verhindert, dass ein eingeplanter Retry nach einem `stop()` doch noch
     /// einen Server hochzieht.
@@ -110,20 +120,32 @@ final class AgentControlServer: @unchecked Sendable {
         guard flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
             cleanupPartialStart()
             let attempt = lockAttempt
-            guard attempt < Self.lockRetryDelays.count else {
-                // Erst hier ist es ein echter Doppelstart: Eine andere Instanz
-                // hält den Lock dauerhaft. Als `error`, damit der Ausfall im
-                // `log stream` sichtbar ist statt still zu bleiben.
-                Logger.agentStore.error(
-                    "control_server_lock_held_by_other_instance_giving_up attempts=\(attempt + 1)"
-                )
-                return
-            }
             lockAttempt = attempt + 1
-            let delay = Self.lockRetryDelays[attempt]
-            Logger.agentStore.notice(
-                "control_server_lock_held_retrying attempt=\(attempt + 1) delaySeconds=\(delay)"
-            )
+            let delay: TimeInterval
+            if attempt < Self.lockRetryDelays.count {
+                delay = Self.lockRetryDelays[attempt]
+                Logger.agentStore.notice(
+                    "control_server_lock_held_retrying attempt=\(attempt + 1) delaySeconds=\(delay)"
+                )
+            } else {
+                // Dauer-Retry statt endgültigem Aufgeben (Vorfall 2026-08-23:
+                // Der Vorgänger-Shutdown überdauerte die Eskalation, der Lock
+                // wurde Sekunden SPÄTER frei — mit Aufgeben blieb die CLI-
+                // Steuerung stundenlang tot). Beim Eintritt einmal als `error`,
+                // damit ein dauerhaft fremder Lock im `log stream` auffällt;
+                // danach gedrosselte notices statt Log-Flut.
+                delay = Self.lockRetryTailDelay
+                let tailAttempt = attempt - Self.lockRetryDelays.count
+                if tailAttempt == 0 {
+                    Logger.agentStore.error(
+                        "control_server_lock_still_held_entering_endless_retry delaySeconds=\(delay)"
+                    )
+                } else if tailAttempt % Self.lockRetryTailLogEvery == 0 {
+                    Logger.agentStore.notice(
+                        "control_server_lock_still_held attempt=\(attempt + 1)"
+                    )
+                }
+            }
             queue.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.startLocked(handler: handler)
             }

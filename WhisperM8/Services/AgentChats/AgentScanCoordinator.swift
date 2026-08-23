@@ -33,9 +33,13 @@ final class AgentScanCoordinator {
         case manual        // User-Klick auf "Aktualisieren"
         case afterCreate   // nach createSession (optional)
         case fsEvent       // FSEvents-Trigger: neue Transcript-Dateien (P2)
+        case accountMove   // nach einem Konto-Umzug (Transcripts haben den Root gewechselt)
     }
 
     private var inFlight = false
+    /// Zaehler statt Bool: verschachtelte Pausen (Bulk-Umzug, danach dessen
+    /// Rueckgaengig) duerfen sich nicht gegenseitig vorzeitig freigeben.
+    private var suspendCount = 0
     private var lastCompletedAt: Date?
     private let cooldown: TimeInterval = 30
     /// Kürzerer Cooldown für FSEvents-Trigger — die sind bereits 5 s
@@ -75,7 +79,44 @@ final class AgentScanCoordinator {
     /// - In-flight: ignoriere weitere Requests
     /// - Cooldown aktiv und Reason != .manual: ignoriere
     /// - sonst: starte Scan
+    /// Haelt neue Scans an. Fuer Operationen, die Transcripts zwischen den
+    /// `projects/`-Roots bewegen (Konto-Umzug): waehrend der Schleife liegt
+    /// eine Datei kurzzeitig schon im Ziel, waehrend der Session-Stempel noch
+    /// auf die Quelle zeigt — ein Scan in genau diesem Fenster zoege den
+    /// Stempel per Selbstheilung hin und her. Dazu kostet jede bewegte Datei
+    /// eine volle Neuindizierung (der Index-Cache ist pfadbasiert), die
+    /// waehrend des Umzugs nur Arbeit doppelt.
+    ///
+    /// Ein bereits LAUFENDER Scan wird nicht abgebrochen — er liest die Roots
+    /// so, wie sie in diesem Moment sind, und der abschliessende
+    /// `.accountMove`-Scan korrigiert das Ergebnis ohnehin.
+    func suspendScans() {
+        suspendCount += 1
+    }
+
+    /// Gegenstueck zu `suspendScans()`. Loest beim Verlassen der letzten
+    /// Pause genau einen Scan aus — den waehrenddessen gemerkten oder einen
+    /// `.accountMove`-Scan, damit die neuen Ablageorte sofort im Workspace
+    /// ankommen. Der Cooldown wird bewusst umgangen: die Datei-Bewegung ist
+    /// ein echtes, gerade eben eingetretenes Ereignis.
+    func resumeScans(triggerScan: Bool = true) {
+        guard suspendCount > 0 else { return }
+        suspendCount -= 1
+        guard suspendCount == 0, triggerScan else { return }
+        let reason = pendingReason ?? .accountMove
+        pendingReason = nil
+        startScan(reason: reason)
+    }
+
+    var isSuspended: Bool { suspendCount > 0 }
+
     func requestScan(reason: Reason) {
+        if suspendCount > 0 {
+            // Nicht verwerfen: `resumeScans()` holt ihn nach.
+            pendingReason = pendingReason ?? reason
+            Logger.agentPerformance.debug("agent_scan_deferred reason=\(reason.rawValue, privacy: .public) cause=suspended")
+            return
+        }
         if inFlight {
             // NICHT verwerfen (Review-Befund 2026-07-13): Eine Datei, die
             // NACH dem Enumerator-Durchlauf des laufenden Scans entsteht,

@@ -55,7 +55,17 @@ extension AgentChatsView {
                 shouldLaunchOnOpen: false,
                 kind: .backgroundChat,
                 backgroundSubAgent: request.subAgent,
-                backgroundPermissionMode: request.permissionMode
+                backgroundPermissionMode: request.permissionMode,
+                // BEWUSST main, nicht `.activeDefault`: der Supervisor-
+                // Daemon, `~/.claude/jobs/<short-id>/state.json`
+                // (`SupervisorJobReader.defaultJobsDirectory`) und die
+                // Lifecycle-Aufrufe (`claude logs/stop`) sind samt CLI-
+                // Statusprobe fest auf den Haupt-Account verdrahtet. Ein
+                // Profil-Env nur beim Spawn erzeugte einen zweiten Supervisor,
+                // dessen Jobs die App weder lesen noch stoppen koennte.
+                // Umstellung nur zusammen mit Reader + Lifecycle + Roster —
+                // siehe docs/plans/claude-account-routing.md, Slice 7.5.
+                claudeProfile: .explicit(nil)
             )
         } catch {
             errorMessage = error.localizedDescription

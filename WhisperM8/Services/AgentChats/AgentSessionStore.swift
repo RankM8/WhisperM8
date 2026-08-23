@@ -8,6 +8,16 @@ struct AgentSessionStore {
     private let workspaceStore: AgentWorkspaceStore
     private let uiStateFileURL: URL
 
+    /// Liefert das Profil, das eine neue Claude-Session ohne ausdrueckliche
+    /// Angabe bekommt (`nil` = Haupt-Account). Als Closure injizierbar, damit
+    /// Tests ohne `~/.claude-profiles` auskommen. Wird IMMER vor der
+    /// Store-Mutation aufgeloest — der Resolver liest eine Datei, und unter
+    /// dem Store-Lock ist blockierendes I/O verboten.
+    var activeClaudeProfileResolver: () -> String? = {
+        guard AppPreferences.shared.isChatsNewProfileDefaultEnabled else { return nil }
+        return ClaudeAccountProfiles().activeProfileNameOrNil()
+    }
+
     init(fileURL: URL? = nil, uiStateFileURL: URL? = nil) {
         self.workspaceStore = AgentWorkspaceStoreRegistry.store(
             for: fileURL ?? AgentWorkspaceRepository.defaultFileURL()
@@ -542,9 +552,20 @@ struct AgentSessionStore {
         backgroundSubAgent: String? = nil,
         backgroundPermissionMode: String? = nil,
         forkSourceSessionID: String? = nil,
-        claudeProfileName: String? = nil,
+        claudeProfile: ClaudeProfileSelection = .activeDefault,
         claudeBackendModel: String? = nil
     ) throws -> AgentChatSession {
+        // Profil VOR der Mutation aufloesen (Datei-I/O gehoert nicht unter den
+        // Store-Lock). Codex kennt keine Account-Profile — dort immer `nil`.
+        let claudeProfileName: String? = {
+            guard provider == .claude else { return nil }
+            switch claudeProfile {
+            case .explicit(let name):
+                return (name?.isEmpty ?? true) ? nil : name
+            case .activeDefault:
+                return activeClaudeProfileResolver()
+            }
+        }()
         let project = try upsertProject(
             path: projectPath,
             createdManually: createdManually,

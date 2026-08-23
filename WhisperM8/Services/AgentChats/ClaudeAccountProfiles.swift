@@ -23,6 +23,18 @@ struct ClaudeAccountProfile: Identifiable, Equatable {
     var isLoggedIn: Bool { emailAddress != nil }
 }
 
+/// Wie das Claude-Account-Profil einer NEU erstellten Session bestimmt wird.
+/// Trennt „nicht angegeben" von „ausdruecklich main" — mit einem blossen
+/// `String?` waeren beide `nil`, und genau diese Zweideutigkeit war die
+/// Ursache dafuer, dass ueber die CLI erstellte Chats still im Haupt-Account
+/// landeten (Befund 2026-08-22, docs/plans/claude-account-routing.md).
+enum ClaudeProfileSelection: Equatable {
+    /// Kein Profil angegeben → das in den Settings aktive Profil gewinnt.
+    case activeDefault
+    /// Ausdrueckliche Wahl; `nil` = Haupt-Account (`main`).
+    case explicit(String?)
+}
+
 /// Verwaltung der Claude-Account-Profile (Discovery, aktives Profil,
 /// Env-Injektion). Dateibasiert und zustandslos — SSoT sind die Verzeichnisse
 /// und die `.active`-Datei, die auch das `ccs`-CLI liest/schreibt.
@@ -86,17 +98,60 @@ struct ClaudeAccountProfiles {
         return configDir(forProfile: name).appendingPathComponent(".claude.json", isDirectory: false)
     }
 
-    private func accountInfo(forProfile name: String) -> (email: String?, organization: String?, displayName: String?, plan: String?)? {
-        guard let data = try? Data(contentsOf: claudeJSONURL(forProfile: name)),
+    private struct AccountInfo {
+        var email: String?
+        var organization: String?
+        var displayName: String?
+        var plan: String?
+    }
+
+    /// Prozessweiter Cache der geparsten `oauthAccount`-Metadaten, validiert
+    /// ueber (mtime, size) der jeweiligen `.claude.json`. Grund (CPU-Befund
+    /// 2026-08-23): SwiftUI wertet `.contextMenu`-Inhalte bei JEDEM
+    /// Body-Rebuild aus — `moveToAccountMenu` liess damit jeden Render-Pass
+    /// jedes Tabs und jeder Sidebar-Row alle Profil-JSONs (~730 KB) neu von
+    /// Disk parsen: konstant 60–70 % CPU im Leerlauf (~36 % der Prozesszeit
+    /// allein in `profiles()`, per sample belegt). Mit dem Cache kostet ein
+    /// unveraendertes Profil nur noch ein stat(); Login/Logout oder ein von
+    /// der Claude-CLI umgeschriebenes `.claude.json` greifen ueber den
+    /// mtime/size-Vergleich sofort. Fehlende Dateien werden bewusst nicht
+    /// gecacht — der Fehlpfad ist ein einzelner billiger Syscall.
+    private static let accountInfoCacheLock = NSLock()
+    private static var accountInfoCache: [String: (mtime: Date, size: Int, info: AccountInfo?)] = [:]
+
+    private func accountInfo(forProfile name: String) -> AccountInfo? {
+        let url = claudeJSONURL(forProfile: name)
+        guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+              let mtime = attrs[.modificationDate] as? Date,
+              let size = (attrs[.size] as? NSNumber)?.intValue else {
+            return nil
+        }
+
+        Self.accountInfoCacheLock.lock()
+        let cached = Self.accountInfoCache[url.path]
+        Self.accountInfoCacheLock.unlock()
+        if let cached, cached.mtime == mtime, cached.size == size {
+            return cached.info
+        }
+
+        let info = Self.parseAccountInfo(at: url)
+        Self.accountInfoCacheLock.lock()
+        Self.accountInfoCache[url.path] = (mtime, size, info)
+        Self.accountInfoCacheLock.unlock()
+        return info
+    }
+
+    private static func parseAccountInfo(at url: URL) -> AccountInfo? {
+        guard let data = try? Data(contentsOf: url),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let account = obj["oauthAccount"] as? [String: Any] else {
             return nil
         }
-        return (
-            account["emailAddress"] as? String,
-            account["organizationName"] as? String,
-            account["displayName"] as? String,
-            Self.planLabel(
+        return AccountInfo(
+            email: account["emailAddress"] as? String,
+            organization: account["organizationName"] as? String,
+            displayName: account["displayName"] as? String,
+            plan: Self.planLabel(
                 organizationType: account["organizationType"] as? String,
                 seatTier: account["seatTier"] as? String,
                 userRateLimitTier: account["userRateLimitTier"] as? String,
@@ -171,6 +226,38 @@ struct ClaudeAccountProfiles {
     func activeProfileNameOrNil() -> String? {
         let name = activeProfileName()
         return name == Self.mainProfileName ? nil : name
+    }
+
+    /// Fehler bei einer AUSDRUECKLICHEN Profilangabe (`chats new --account`).
+    enum SelectionError: LocalizedError, Equatable {
+        case unknownProfile(String)
+        case notLoggedIn(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .unknownProfile(let name):
+                return "Account-Profil „\(name)“ existiert nicht."
+            case .notLoggedIn(let name):
+                return "Account-Profil „\(name)“ ist nicht eingeloggt — bitte zuerst in den Einstellungen anmelden."
+            }
+        }
+    }
+
+    /// Prueft eine ausdrueckliche Profilangabe und normalisiert sie auf den
+    /// Stempel-Wert (`nil` = main). Anders als `environmentOverrides` faellt
+    /// hier bewusst NICHTS auf main zurueck: wer ein Profil ausdruecklich
+    /// nennt, bekommt es — oder einen Fehler. Ein stiller Main-Fallback waere
+    /// exakt der Bedienfehler, den die explizite Angabe verhindern soll.
+    func validatedProfileName(_ raw: String) throws -> String? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != Self.mainProfileName else { return nil }
+        guard fileManager.fileExists(atPath: configDir(forProfile: name).path) else {
+            throw SelectionError.unknownProfile(name)
+        }
+        guard profile(named: name).isLoggedIn else {
+            throw SelectionError.notLoggedIn(name)
+        }
+        return name
     }
 
     func setActiveProfile(_ name: String) throws {
@@ -398,6 +485,36 @@ struct ClaudeAccountProfiles {
                 return "A transcript with this session ID already exists in the target account: \(path)"
             }
         }
+    }
+
+    /// Liegt im Ziel-Root schon eine Datei (oder ein Subagent-Ordner) mit
+    /// dieser Session-ID? Reine Vorschau-Pruefung fuer den Umzugs-Planer —
+    /// `moveTranscript` prueft vor der Bewegung erneut, weil zwischen Vorschau
+    /// und Bestaetigung Zeit vergeht.
+    func transcriptConflictExists(
+        externalSessionID: String,
+        cwd: String,
+        toProfile targetName: String?
+    ) -> Bool {
+        let target = targetName ?? Self.mainProfileName
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        let targetDir = configDir(forProfile: target)
+            .appendingPathComponent("projects", isDirectory: true)
+            .appendingPathComponent(encoded, isDirectory: true)
+        let targetFile = targetDir.appendingPathComponent("\(externalSessionID).jsonl")
+        // Liegt die Datei bereits im Ziel, ist das kein Konflikt, sondern ein
+        // No-op — das trennt `moveTranscript` ueber den Pfadvergleich ebenso.
+        for root in claudeProjectsRoots() {
+            let candidate = root
+                .appendingPathComponent(encoded, isDirectory: true)
+                .appendingPathComponent("\(externalSessionID).jsonl")
+            if fileManager.fileExists(atPath: candidate.path) {
+                if candidate.path == targetFile.path { return false }
+                break
+            }
+        }
+        return fileManager.fileExists(atPath: targetFile.path)
+            || fileManager.fileExists(atPath: targetFile.deletingPathExtension().path)
     }
 
     /// Verschiebt das Transcript einer Session in den `projects/`-Root des
