@@ -639,7 +639,12 @@ final class AgentControlServerRoundtripTests: XCTestCase {
 /// Vorfall 2026-07-24: Ein `make dev`-Neustart traf den `flock` des eben
 /// beendeten Vorgängers. Der Server gab beim ERSTEN Konflikt endgültig auf —
 /// die CLI-Steuerung blieb für die gesamte App-Laufzeit tot, ohne zweiten
-/// Versuch. Diese Tests pinnen die Retry-Politik und die Kernannahme dahinter.
+/// Versuch. Vorfall 2026-08-23: Der Vorgänger-Shutdown überdauerte auch das
+/// endliche Eskalationsfenster (~8 s) — wieder Totalausfall für Stunden,
+/// obwohl der Lock Sekunden nach dem Aufgeben frei war. Seitdem gibt es KEIN
+/// endgültiges Aufgeben mehr: nach der Eskalation läuft ein unbegrenzter
+/// Dauer-Retry im gedeckelten Takt. Diese Tests pinnen die Retry-Politik und
+/// die Kernannahme dahinter.
 final class AgentControlServerLockRetryTests: XCTestCase {
     func testRetryDelaysCoverATypicalRestartWindow() {
         let delays = AgentControlServer.lockRetryDelays
@@ -647,10 +652,24 @@ final class AgentControlServerLockRetryTests: XCTestCase {
         XCTAssertFalse(delays.isEmpty, "ohne Retry wäre der Vorfall wieder möglich")
         XCTAssertEqual(delays, delays.sorted(), "Backoff muss monoton wachsen")
         XCTAssertTrue(delays.allSatisfy { $0 > 0 })
-        // Gesamtfenster großzügig über dem beobachteten Konflikt (< 1 s), aber
-        // endlich — ein echter Doppelstart muss weiterhin klar aufgeben.
+        // Eskalationsfenster großzügig über dem beobachteten Konflikt (< 1 s);
+        // dass es endlich ist, ist ok — danach übernimmt der Dauer-Retry.
         XCTAssertGreaterThanOrEqual(delays.reduce(0, +), 5)
         XCTAssertLessThanOrEqual(delays.reduce(0, +), 30)
+    }
+
+    /// Der Dauer-Retry ist die Lehre aus 2026-08-23: schnell genug, dass die
+    /// CLI-Steuerung nach einem zähen Neustart-Überlapp binnen Sekunden
+    /// nachzieht — und langsam genug, dass ein echter Doppelstart weder CPU
+    /// noch Log flutet (notices zusätzlich auf jeden N-ten Versuch gedrosselt).
+    func testEndlessTailRetryIsCappedAndQuiet() {
+        XCTAssertGreaterThanOrEqual(AgentControlServer.lockRetryTailDelay, 5)
+        XCTAssertLessThanOrEqual(AgentControlServer.lockRetryTailDelay, 60)
+        XCTAssertGreaterThanOrEqual(
+            AgentControlServer.lockRetryTailDelay * TimeInterval(AgentControlServer.lockRetryTailLogEvery),
+            60,
+            "gedrosselte notices: höchstens grob eine pro Minute"
+        )
     }
 
     /// Die Annahme des Fixes: Ein von einem anderen Deskriptor gehaltener
