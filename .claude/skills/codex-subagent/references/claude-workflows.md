@@ -35,7 +35,18 @@ Workflow-Skript (JS)
 
 Liegt im Projekt ein `.claude/agents/codex-runner.md` (in WhisperM8 selbst
 vorhanden), ist der Wrapper-Kontrakt dort fest verdrahtet — explizit
-`model: gpt-5.6-sol`, nur Bash, mechanisches Relay. Dann genügt im Workflow:
+`model: gpt-5.6-sol`, nur Bash, mechanisches Relay.
+
+**Preflight in Fremd-Projekten:** `.claude/agents/codex-runner.md` und
+`.claude/workflows/` existieren nur in Repos, die sie eingerichtet haben — in
+Fremd-Projekten (z. B. akquise-ai) fehlen sie. Vor dem Bau eines
+CLI-Workflow-Steps prüfen (`test -f .claude/agents/codex-runner.md`); fehlt der
+Runner, die Definition aus dem WhisperM8-Repo ins Zielprojekt kopieren oder den
+manuellen Wrapper-Kontrakt (unten) mit `agentType: 'gpt'` fahren (global
+definiert, explizit gpt-5.6-sol) — nie stillschweigend mit
+`agentType: 'codex-runner'` starten und scheitern lassen.
+
+Mit vorhandenem Runner genügt im Workflow:
 
 ```js
 agent(`Führe genau diesen Befehl aus:\n\n${cmd}\n\n${relayHinweis}`,
@@ -160,7 +171,7 @@ const preflight = await agent(wrapperPrompt(
   { agentType: 'codex-runner', schema: RESULT, phase: 'Preflight' })
 ```
 
-## Bekannte Grenzen (fortgeschrieben bis 2026-07-20, Codex 0.144.0)
+## Bekannte Grenzen (fortgeschrieben bis 2026-08-19, Codex 0.147)
 
 - **Commits: behoben (Fix vom 2026-07-08).** Codex' Sandbox behandelt `.git`
   jeder writable root als read-only; das CLI ermittelt das gemeinsame

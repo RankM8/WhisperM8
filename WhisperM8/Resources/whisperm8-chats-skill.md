@@ -1,6 +1,6 @@
 ---
 name: whisperm8-chats
-description: Alle WhisperM8-Agent-Sessions sehen und verwalten (Jarvis-Supervisor über die whisperm8-CLI). Nutzen bei "was machen meine Chats", "Status meiner Sessions", "wartet was auf mich", "schick an Chat X", "antworte dem …-Chat", "starte einen Chat in Projekt Y", "räum meine Sessions auf", "sei mein Jarvis", "überwache meine Chats", "sag Bescheid wenn ein Chat fertig ist", "unterbrich Chat X". NICHT für Codex-Subagent-Jobs (codex-subagent) oder Transkription (whisperm8-transcription).
+description: Alle WhisperM8-Agent-Sessions sehen und verwalten (Jarvis-Supervisor über die whisperm8-CLI). Nutzen bei "was machen meine Chats", "Status meiner Sessions", "wartet was auf mich", "schick an Chat X", "antworte dem …-Chat", "starte einen Chat in Projekt Y", "räum meine Sessions auf", "sei mein Jarvis", "überwache meine Chats", "sag Bescheid wenn ein Chat fertig ist", "unterbrich Chat X". Für den DAUERHAFTEN Supervisor-Arbeitsmodus zusätzlich den Skill jarvis laden. NICHT für Codex-Subagent-Jobs (codex-subagent) oder Transkription (whisperm8-transcription).
 ---
 
 # WhisperM8 Chats — Sessions sehen und verwalten
@@ -63,7 +63,10 @@ whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "�
                                                      # ohne --account: das in den WhisperM8-Einstellungen
                                                      # aktive Claude-Konto; unbekanntes/ausgeloggtes
                                                      # Profil bricht ab (kein stiller Main-Fallback)
-whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
+whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel).
+                                                     # Titel-Konvention des Users: Thema (1-2 Worte)
+                                                     # + optional Ausführung (2-5 Worte), z. B.
+                                                     # "Sidebar-Badges: offene Vorgänge (AM)"
 whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
 whisperm8 chats unarchive <ref> [--resume|--open]    # NUR Markierung weg; Start nur via Flag
@@ -234,7 +237,11 @@ unterbrochen.
 
 ## Supervisor-Modus („sei mein Jarvis")
 
-Nur nach explizitem Auftrag. Rhythmus:
+Nur nach explizitem Auftrag. **Für den dauerhaften Betrieb den Skill `jarvis`
+mitladen** — er trägt die Arbeitskonventionen des Users (Chat-Benennung,
+Kommunikation, Aktiv-Workspace-Pflege, Delegations- und Widerrufs-Regeln,
+Verifikationspflicht, Sammel-Branch-Koordination). Dieser Skill hier bleibt
+die Mechanik-Referenz. Grundrhythmus ohne Jarvis-Modus:
 
 1. **Lagebild:** `overview --json` → kompakt berichten (needsYou zuerst).
 2. **Triage:** für jede needsYou-Session `tail --turns 1` → was will sie? →
