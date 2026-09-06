@@ -23,9 +23,9 @@ struct CodexCatalogModel: Equatable, Sendable, Identifiable {
     let defaultEffort: String
     /// In Server-Reihenfolge (aufsteigend: low → … → ultra).
     let efforts: [CodexEffortOption]
-    /// TUI-Picker-Reihenfolge. ACHTUNG: 0 ist NICHT das neueste Modell
-    /// (gpt-5.5 hat 0, gpt-5.6-sol hat 1) — für „neuestes" siehe
-    /// `CodexModelCatalog.frontierModel`.
+    /// TUI-Picker-Reihenfolge. ACHTUNG: die kleinste priority ist NICHT
+    /// verlässlich das neueste Modell (Cache 0.144: gpt-5.5 = 0, gpt-5.6-sol
+    /// = 1) — für „neuestes" siehe `CodexModelCatalog.frontierModel`.
     let priority: Int
 
     var id: String { slug }
@@ -67,8 +67,9 @@ struct CodexModelCatalog: Equatable, Sendable {
     var defaultModel: CodexCatalogModel? { models.first }
 
     /// „Neuestes" Modell: höchste aus dem Slug geparste Version
-    /// (`gpt-<major>.<minor>`), Tie-Break kleinste priority — heute
-    /// gpt-5.6-sol. `priority` allein taugt nicht (gpt-5.5 = 0).
+    /// (`gpt-<major>.<minor>` oder `gpt-<major>-<name>`), Tie-Break kleinste
+    /// priority — heute gpt-6-astra. `priority` allein taugt nicht (gpt-5.5 = 0
+    /// in älteren Caches).
     /// Kein parsebarer Slug im Katalog → defaultModel.
     var frontierModel: CodexCatalogModel? {
         let versioned = models.compactMap { model -> (CodexCatalogModel, Int, Int)? in
@@ -159,31 +160,37 @@ struct CodexModelCatalog: Equatable, Sendable {
         CodexEffortOption(effort: "xhigh", detail: nil),
     ]
 
-    /// Eingebetteter Fallback-Katalog — Stand Codex CLI 0.144.0 (2026-07-09).
+    /// Eingebetteter Fallback-Katalog — Stand Codex CLI 0.153.3 (2026-09-04,
+    /// GPT-6 Astra ergänzt; Prioritäten wie im Server-Cache dieses Datums).
     /// Bei Codex-Updates gelegentlich gegen ~/.codex/models_cache.json
     /// abgleichen; er muss nur „mindestens so gut wie das älteste unterstützte
     /// Binary" sein, der Cache gewinnt pro Slug.
     static let fallback = CodexModelCatalog(
         models: [
             CodexCatalogModel(
-                slug: "gpt-5.5", displayName: "GPT-5.5",
-                detail: "Frontier model for complex coding, research, and real-world work.",
-                defaultEffort: "medium", efforts: effortRange(through: "xhigh"), priority: 0
+                slug: "gpt-6-astra", displayName: "GPT-6-Astra",
+                detail: "Our most capable model for complex, demanding work.",
+                defaultEffort: "medium", efforts: effortRange(through: "ultra"), priority: 1
             ),
             CodexCatalogModel(
                 slug: "gpt-5.6-sol", displayName: "GPT-5.6-Sol",
                 detail: "Latest frontier agentic coding model.",
-                defaultEffort: "low", efforts: effortRange(through: "ultra"), priority: 1
+                defaultEffort: "low", efforts: effortRange(through: "ultra"), priority: 6
             ),
             CodexCatalogModel(
                 slug: "gpt-5.6-terra", displayName: "GPT-5.6-Terra",
                 detail: "Balanced agentic coding model for everyday work.",
-                defaultEffort: "medium", efforts: effortRange(through: "ultra"), priority: 2
+                defaultEffort: "medium", efforts: effortRange(through: "ultra"), priority: 7
             ),
             CodexCatalogModel(
                 slug: "gpt-5.6-luna", displayName: "GPT-5.6-Luna",
                 detail: "Fast and affordable agentic coding model.",
-                defaultEffort: "medium", efforts: effortRange(through: "max"), priority: 3
+                defaultEffort: "medium", efforts: effortRange(through: "max"), priority: 8
+            ),
+            CodexCatalogModel(
+                slug: "gpt-5.5", displayName: "GPT-5.5",
+                detail: "Frontier model for complex coding, research, and real-world work.",
+                defaultEffort: "medium", efforts: effortRange(through: "xhigh"), priority: 12
             ),
             CodexCatalogModel(
                 slug: "gpt-5.4", displayName: "GPT-5.4",
@@ -212,19 +219,27 @@ struct CodexModelCatalog: Equatable, Sendable {
         return canonicalEffortOrder[...end].map { CodexEffortOption(effort: $0, detail: nil) }
     }
 
-    /// `gpt-<major>.<minor>…` → (major, minor); alles andere nil.
+    /// `gpt-<major>.<minor>…` → (major, minor); `gpt-<major>-…` bzw.
+    /// `gpt-<major>` (GPT-6 Astra: `gpt-6-astra`) → (major, 0); alles andere
+    /// nil — auch `gpt-4o`-artige Slugs, bei denen direkt ein Buchstabe folgt.
     /// (Bewusst ohne Regex-Literal — BareSlashRegexLiterals ist in SwiftPM
     /// nicht aktiviert, und für zwei Zahlen reicht String-Parsing.)
     static func parseSlugVersion(_ slug: String) -> (major: Int, minor: Int)? {
         guard slug.hasPrefix("gpt-") else { return nil }
         let version = slug.dropFirst("gpt-".count)
         let majorDigits = version.prefix { $0.isNumber }
-        guard !majorDigits.isEmpty,
-              version.dropFirst(majorDigits.count).first == "." else { return nil }
-        let minorDigits = version.dropFirst(majorDigits.count + 1).prefix { $0.isNumber }
-        guard !minorDigits.isEmpty,
-              let major = Int(majorDigits), let minor = Int(minorDigits) else { return nil }
-        return (major, minor)
+        guard !majorDigits.isEmpty, let major = Int(majorDigits) else { return nil }
+        let afterMajor = version.dropFirst(majorDigits.count)
+        switch afterMajor.first {
+        case nil, "-":
+            return (major, 0)
+        case ".":
+            let minorDigits = afterMajor.dropFirst().prefix { $0.isNumber }
+            guard !minorDigits.isEmpty, let minor = Int(minorDigits) else { return nil }
+            return (major, minor)
+        default:
+            return nil
+        }
     }
 }
 

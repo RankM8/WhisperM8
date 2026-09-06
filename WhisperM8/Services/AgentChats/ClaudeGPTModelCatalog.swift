@@ -28,6 +28,7 @@ enum ClaudeGPTModelCatalog {
             pickerModel,
             subagentModel,
             sessionModel ?? "",
+            "gpt-6-astra",
             "gpt-5.6-luna",
             "gpt-5.6-terra",
             "gpt-5.5",

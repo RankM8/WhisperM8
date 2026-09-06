@@ -39,6 +39,7 @@ final class ClaudeGPTModelCatalogTests: XCTestCase {
     func testCatalogContainsPlainAndFastPairsForEveryVerifiedGPTModel() throws {
         let catalog = Set(try models())
         let bases = [
+            "gpt-6-astra",
             "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
             "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
         ]
@@ -107,6 +108,9 @@ final class ClaudeGPTModelCatalogTests: XCTestCase {
         XCTAssertTrue(catalog.contains("gpt-5.4"))
         XCTAssertFalse(catalog.contains("gpt-5.5"))
         XCTAssertFalse(catalog.contains("gpt-5.4-mini"))
+        // GPT-6 Astra: 900k noch ungemessen → im erweiterten Profil kein Eintrag.
+        XCTAssertFalse(catalog.contains("gpt-6-astra"))
+        XCTAssertFalse(catalog.contains("gpt-6-astra-fast"))
     }
 
     func testCatalogDeduplicatesConfiguredModels() throws {

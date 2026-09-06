@@ -97,6 +97,23 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
                 contextWindow: 272_000
             )
         )
+        // GPT-6 Astra: im Standardprofil samt -fast zulässig, 900k ungemessen.
+        XCTAssertNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-6-astra-fast",
+                contextWindow: 272_000
+            )
+        )
+        let extendedAstraBody = try XCTUnwrap(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-6-astra",
+                contextWindow: 900_000
+            )
+        )
+        XCTAssertTrue(
+            String(decoding: extendedAstraBody, as: UTF8.self)
+                .contains("gpt-6-astra is not measured yet")
+        )
     }
 
     /// Trennt die zwei Ablehnungsgruende scharf: eine unbekannte Modellbasis ist

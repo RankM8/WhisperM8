@@ -167,7 +167,34 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         )
     }
 
-    func testSubagentPolicyAllowsOnlySolAndTerra() {
+    func testAstraIsMainAndSubagentCapableButStandardProfileOnly() {
+        // Codex-Katalog 2026-09-04: Fast-Tier vorhanden, 900k ungemessen.
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.effectiveModel("GPT-6-ASTRA[1M]", fastEnabled: true),
+            "gpt-6-astra-fast"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedEffectiveModel("gpt-6-astra", fastEnabled: false),
+            "gpt-6-astra"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedSubagentModel("gpt-6-astra", fastEnabled: true),
+            "gpt-6-astra-fast"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.maximumContextWindow(for: "gpt-6-astra-fast"),
+            ClaudeGPTContextProfile.standard.rawValue
+        )
+        XCTAssertNil(
+            ClaudeGPTModelAlias.supportedEffectiveModel(
+                "gpt-6-astra",
+                fastEnabled: false,
+                contextWindow: 900_000
+            )
+        )
+    }
+
+    func testSubagentPolicyAllowsOnlyAstraSolAndTerra() {
         XCTAssertEqual(
             ClaudeGPTModelAlias.supportedSubagentModel(
                 "GPT-5.6-TERRA[1M]",

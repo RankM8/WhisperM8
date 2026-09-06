@@ -443,6 +443,32 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertTrue(text.contains("9k/272k"), text)
     }
 
+    func testMainStatuslineTreatsAstraAsSupportedGPTModel() throws {
+        let input: [String: Any] = [
+            "model": ["display_name": "gpt-6-astra-fast"],
+            "cost": ["total_cost_usd": 0],
+            "context_window": [
+                "current_usage": [
+                    "input_tokens": 9_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                ],
+                "context_window_size": 200_000,
+            ],
+            "mcp_servers": [],
+        ]
+
+        let output = try runStatuslineScript(
+            try makeInstaller().bundledScript(),
+            named: "main-astra-context-statusline.sh",
+            input: input,
+            environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "272000"]
+        )
+        let text = String(decoding: output, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("9k/272k"), text)
+    }
+
     func testMainStatuslineWithoutExplicitGPTCapacityKeepsReported200K() throws {
         let input: [String: Any] = [
             "model": ["display_name": "gpt-5.6-sol"],

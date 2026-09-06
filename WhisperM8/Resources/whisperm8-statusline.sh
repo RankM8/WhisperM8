@@ -77,7 +77,7 @@ case "$model_base" in
 esac
 is_supported_gpt=0
 case "$model_base" in
-    gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.5|gpt-5.4|gpt-5.4-mini)
+    gpt-6-astra|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.5|gpt-5.4|gpt-5.4-mini)
         if [ "$unsupported_mini_fast" -eq 0 ]; then is_supported_gpt=1; fi
         ;;
 esac

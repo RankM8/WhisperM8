@@ -46,12 +46,16 @@ enum ClaudeGPTModelAlias {
     static let maximumConfigurableContextWindow =
         ClaudeGPTContextProfile.extended900K.rawValue
 
+    /// GPT-6 Astra (Codex-Katalog 2026-09-04: Efforts bis ultra, Fast-Tier
+    /// „2x speed", 272k Standard) braucht claude-code-proxy ≥ main@55bf0b58
+    /// (PR #129) — ältere Proxy-Binaries lehnen die ID mit „Unknown model" ab.
     private static let mainModelBases: Set<String> = [
+        "gpt-6-astra",
         "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
         "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
     ]
     private static let subagentModelBases: Set<String> = [
-        "gpt-5.6-sol", "gpt-5.6-terra",
+        "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra",
     ]
 
     /// Lowercase, ohne Whitespace und ohne `[1m]`. Native Claude-Aliasse werden
@@ -80,6 +84,8 @@ enum ClaudeGPTModelAlias {
     /// Modelle mit verifiziertem 900k-Vertrag (Direktmessung 2026-08-18,
     /// ~903k-Probe gegen `/v1/messages` des codex-proxy je Modell angenommen;
     /// Sol zusätzlich bis 913.887 belegt, ~924k → `request_too_large`).
+    /// GPT-6 Astra meldet im Katalog dasselbe `max_context_window` (872k) wie
+    /// Sol, ist aber noch nicht gemessen — bis dahin bewusst nur 272k.
     private static let extendedWindowModelBases: Set<String> = [
         "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4",
     ]

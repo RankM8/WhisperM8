@@ -97,8 +97,9 @@ final class CodexModelCatalogTests: XCTestCase {
 
         XCTAssertNotNil(catalog.model(slug: "gpt-5.6-sol"), "Fallback muss fehlende Binary-Modelle ergänzen")
         XCTAssertNotNil(catalog.model(slug: "gpt-5.6-luna"))
-        // Priority-Sortierung über Merge-Grenzen hinweg: 5.5 (0) vor sol (1) vor 5.4 (16).
-        XCTAssertEqual(catalog.models.prefix(4).map(\.slug), ["gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
+        // Priority-Sortierung über Merge-Grenzen hinweg: 5.5 (Cache: 0) vor
+        // astra (Fallback: 1) vor sol (6) vor terra (7); 5.4 (16) dahinter.
+        XCTAssertEqual(catalog.models.prefix(4).map(\.slug), ["gpt-5.5", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"])
     }
 
     func testCacheWinsOverFallbackForSameSlug() throws {
@@ -114,21 +115,37 @@ final class CodexModelCatalogTests: XCTestCase {
 
     // MARK: - Frontier
 
-    func testFrontierPrefersHighestSlugVersionNotPriority() throws {
-        let catalog = try XCTUnwrap(parse([
-            modelJSON(slug: "gpt-5.5", priority: 0),
-            modelJSON(slug: "gpt-5.6-sol", priority: 1),
-            modelJSON(slug: "gpt-5.6-terra", priority: 2),
-        ].joined(separator: ",")))
+    func testFrontierPrefersHighestSlugVersionNotPriority() {
+        // Ohne Fallback-Merge, damit der Tie-Break isoliert prüfbar bleibt
+        // (der Fallback brächte gpt-6-astra mit).
+        let catalog = CodexModelCatalog(
+            models: ["gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra"].enumerated().map { index, slug in
+                CodexCatalogModel(slug: slug, displayName: slug, detail: nil,
+                                  defaultEffort: "medium",
+                                  efforts: CodexModelCatalog.baselineEfforts, priority: index)
+            },
+            fetchedAt: nil
+        )
         XCTAssertEqual(catalog.frontierModel?.slug, "gpt-5.6-sol", "höchste Version, Tie-Break kleinste priority")
     }
 
     func testFrontierPicksHypotheticalNewerVersionAutomatically() throws {
         let catalog = try XCTUnwrap(parse([
             modelJSON(slug: "gpt-5.6-sol", priority: 1),
-            modelJSON(slug: "gpt-5.7-nova", priority: 9),
+            modelJSON(slug: "gpt-6.1-nova", priority: 9),
         ].joined(separator: ",")))
-        XCTAssertEqual(catalog.frontierModel?.slug, "gpt-5.7-nova")
+        // Der Fallback bringt gpt-6-astra (= 6.0) mit; ein 6.1 aus dem Cache
+        // muss trotzdem automatisch gewinnen.
+        XCTAssertEqual(catalog.frontierModel?.slug, "gpt-6.1-nova")
+    }
+
+    func testFrontierPrefersMajorOnlySlugOverHigherMinorOfOlderMajor() throws {
+        // Reiner Cache-Fixture-Vergleich: 6.0 (Astra) schlägt 5.9.
+        let catalog = try XCTUnwrap(parse([
+            modelJSON(slug: "gpt-5.9-nova", priority: 0),
+            modelJSON(slug: "gpt-6-astra", priority: 1),
+        ].joined(separator: ",")))
+        XCTAssertEqual(catalog.frontierModel?.slug, "gpt-6-astra")
     }
 
     func testFrontierIgnoresUnparsableSlugs() {
@@ -147,6 +164,13 @@ final class CodexModelCatalogTests: XCTestCase {
     func testSlugVersionParsing() {
         XCTAssertEqual(CodexModelCatalog.parseSlugVersion("gpt-5.6-sol")?.minor, 6)
         XCTAssertEqual(CodexModelCatalog.parseSlugVersion("gpt-6.0")?.major, 6)
+        // Major-only-Slugs (GPT-6 Astra) zählen als <major>.0 — sonst bliebe
+        // „auto" für immer auf der 5.6-Familie hängen.
+        XCTAssertEqual(CodexModelCatalog.parseSlugVersion("gpt-6-astra")?.major, 6)
+        XCTAssertEqual(CodexModelCatalog.parseSlugVersion("gpt-6-astra")?.minor, 0)
+        XCTAssertEqual(CodexModelCatalog.parseSlugVersion("gpt-7")?.major, 7)
+        XCTAssertNil(CodexModelCatalog.parseSlugVersion("gpt-4o"))
+        XCTAssertNil(CodexModelCatalog.parseSlugVersion("gpt-6."))
         XCTAssertNil(CodexModelCatalog.parseSlugVersion("codex-auto-review"))
         XCTAssertNil(CodexModelCatalog.parseSlugVersion("o3-pro"))
     }
@@ -159,7 +183,8 @@ final class CodexModelCatalogTests: XCTestCase {
         XCTAssertEqual(slugs.first, "gpt-9.9-nova", "persistierter Fremdwert darf nie still verschwinden")
         XCTAssertTrue(slugs.contains("gpt-5.6-sol"))
         // Bekannte und leere Werte werden nicht dupliziert/vorangestellt.
-        XCTAssertEqual(catalog.pickerModelSlugs(including: "gpt-5.5").first, "gpt-5.5")
+        XCTAssertEqual(catalog.pickerModelSlugs(including: "gpt-6-astra").first, "gpt-6-astra")
+        XCTAssertEqual(catalog.pickerModelSlugs(including: "gpt-5.5").filter { $0 == "gpt-5.5" }.count, 1)
         XCTAssertFalse(catalog.pickerModelSlugs(including: "").contains(""))
         // "auto" wird an der UI-Schicht separat vorangestellt — nicht hier.
         XCTAssertFalse(catalog.pickerModelSlugs(including: "auto").contains("auto"))
@@ -212,7 +237,7 @@ final class CodexModelCatalogTests: XCTestCase {
     func testResolveSlugAutoPicksFrontier() {
         XCTAssertEqual(
             CodexModelSelection.resolveSlug("auto", catalog: .fallback),
-            "gpt-5.6-sol"
+            "gpt-6-astra"
         )
         XCTAssertEqual(
             CodexModelSelection.resolveSlug("gpt-5.4", catalog: .fallback),
@@ -220,7 +245,7 @@ final class CodexModelCatalogTests: XCTestCase {
         )
         XCTAssertEqual(
             CodexModelSelection.resolveSlug(" auto ", catalog: .fallback),
-            "gpt-5.6-sol", "Whitespace tolerieren"
+            "gpt-6-astra", "Whitespace tolerieren"
         )
     }
 
