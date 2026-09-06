@@ -24,7 +24,7 @@ deklarierten Custom-Agent `codex-runner` als dünnen Wrapper:
 ```
 Workflow-Skript (JS)
   └─ agent(wrapperPrompt, {agentType:'codex-runner', schema:RESULT})
-       └─ codex-runner [gpt-5.6-sol, nur Bash]
+       └─ codex-runner [gpt-auto = neuestes Codex-Modell, nur Bash]
             └─ Bash: whisperm8 agent run --wait --json … ; echo "EXIT:$?"
                  └─ codex exec (ein Turn)
        ←─ stdout-JSON als validiertes StructuredOutput
@@ -35,7 +35,7 @@ Workflow-Skript (JS)
 
 Liegt im Projekt ein `.claude/agents/codex-runner.md` (in WhisperM8 selbst
 vorhanden), ist der Wrapper-Kontrakt dort fest verdrahtet — explizit
-`model: gpt-5.6-sol`, nur Bash, mechanisches Relay.
+`model: gpt-auto` (neuestes Codex-Modell), nur Bash, mechanisches Relay.
 
 **Preflight in Fremd-Projekten:** `.claude/agents/codex-runner.md` und
 `.claude/workflows/` existieren nur in Repos, die sie eingerichtet haben — in
@@ -43,7 +43,7 @@ Fremd-Projekten (z. B. akquise-ai) fehlen sie. Vor dem Bau eines
 CLI-Workflow-Steps prüfen (`test -f .claude/agents/codex-runner.md`); fehlt der
 Runner, die Definition aus dem WhisperM8-Repo ins Zielprojekt kopieren oder den
 manuellen Wrapper-Kontrakt (unten) mit `agentType: 'gpt'` fahren (global
-definiert, explizit gpt-5.6-sol) — nie stillschweigend mit
+definiert, neuestes Codex-Modell) — nie stillschweigend mit
 `agentType: 'codex-runner'` starten und scheitern lassen.
 
 Mit vorhandenem Runner genügt im Workflow:
@@ -139,8 +139,8 @@ User hat übernommen, Step überspringen), `4` = Umgebung (abbrechen, loggen).
    nicht gibt, und „widerlegte" damit zwei echte Defekte. Für Refuter/Reviewer
    `--effort high`; `low` taugt nur zum Smoke-Test der Mechanik. Oberhalb von
    `high` existieren seit codex 0.144.0 `xhigh`, `max` und `ultra`
-   (modellabhängig — gpt-5.6-sol/terra bis `ultra`, gpt-5.6-luna bis `max`);
-   für die härtesten Verifikationen `--model gpt-5.6-sol --effort xhigh`
+   (modellabhängig — Frontier-Modelle bis `ultra`, kleinere bis `max`);
+   für die härtesten Verifikationen `--model auto --effort xhigh`
    aufwärts erwägen. Verfügbare Level pro Modell: `~/.codex/models_cache.json`.
 
 ## Bewährte CLI-Spezialmuster
@@ -164,7 +164,7 @@ Minimalbeispiel für einen expliziten Browser-QA-Preflight:
 ```js
 phase('Preflight')
 const preflight = await agent(wrapperPrompt(
-  'whisperm8 agent run --wait --json --sandbox read-only --model gpt-5.6-sol --effort high ' +
+  'whisperm8 agent run --wait --json --sandbox read-only --model auto --effort high ' +
   '--playwright-storage-state ' + STATE + ' --cd ' + REPO +
   ' "Prüfe ausschließlich, ob die geschützte Route authentifiziert erreichbar ist. ' +
   'Bei Login-Redirect NICHT PRUEFBAR melden; nicht einloggen und keine Daten ändern."'),

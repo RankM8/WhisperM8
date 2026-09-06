@@ -3,6 +3,11 @@ import XCTest
 @testable import WhisperM8
 
 final class AgentCommandBuilderTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        useFallbackGPTCatalogForTests()
+    }
+
     func testAgentCommandBuilderBuildsCodexNewAndResumeCommands() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
@@ -566,11 +571,12 @@ extension AgentCommandBuilderTests {
         builder.gptDefaultModelResolver = { "" }
         builder.gptSubagentModelResolver = { "" }
 
+        // Leerer Picker + leerer Default = `auto` = Frontier laut Katalog.
         XCTAssertEqual(builder.gptRouterCoreEnvironment(), [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-6-astra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-6-astra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
@@ -592,9 +598,9 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.4-mini")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Standard-Tier — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            AgentCommandBuilder.gptPickerDescription(fast: false, contextWindow: 272_000)
         )
-        XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol-fast")
+        XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-6-astra-fast")
         // Seit 2026-08-18 prozessweit: die Messreihe (CLI 2.1.234, Mock-
         // Upstream) belegt, dass die Variable claude-* Modelle weder kappt
         // noch aufblaest — nur so bekommt ein /model-Wechsel auf GPT das
@@ -603,7 +609,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
     }
 
-    func testExtended900KProfileKeepsTerraAndForcesSolForStandardOnlyModels() {
+    func testExtended900KProfileKeepsTerraAndForcesFrontierForStandardOnlyModels() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
         builder.gptFastModeEnabledResolver = { false }
@@ -619,18 +625,18 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-terra-fast")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Standard-Tier — erweitertes 900k-Profil: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna und GPT-5.4"
+            AgentCommandBuilder.gptPickerDescription(fast: false, contextWindow: 900_000)
         )
         XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "900000")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
         XCTAssertEqual(environment?["WHISPERM8_GPT56_CONTEXT_WINDOW"], "900000")
 
-        // gpt-5.5 bleibt beim 272k-Vertrag → Zwangs-Fallback auf Sol.
+        // gpt-5.5 bleibt beim 272k-Vertrag → Zwangs-Fallback auf das Frontier-Modell.
         builder.gptPickerModelResolver = { "gpt-5.5" }
         builder.gptSubagentModelResolver = { "gpt-5.5" }
         let fallbackEnvironment = builder.gptRouterCoreEnvironment()
-        XCTAssertEqual(fallbackEnvironment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-sol")
-        XCTAssertEqual(fallbackEnvironment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol")
+        XCTAssertEqual(fallbackEnvironment?["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-6-astra")
+        XCTAssertEqual(fallbackEnvironment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-6-astra")
     }
 
     func testOversizedContextValueFallsBackToStandardProfile() {
@@ -655,7 +661,7 @@ extension AgentCommandBuilderTests {
 
         XCTAssertEqual(
             builder.gptRouterCoreEnvironment()?["ANTHROPIC_CUSTOM_MODEL_OPTION"],
-            "gpt-5.6-sol"
+            "gpt-6-astra"
         )
     }
 
@@ -672,7 +678,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-luna-fast")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000)
         )
     }
 
@@ -689,7 +695,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-terra-fast")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000)
         )
     }
 
@@ -708,11 +714,11 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-terra")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Standard-Tier — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            AgentCommandBuilder.gptPickerDescription(fast: false, contextWindow: 272_000)
         )
     }
 
-    func testGPTRouterCoreFallsBackToFastSolForDisallowedSubagentModel() {
+    func testGPTRouterCoreAcceptsEveryCatalogModelAsSubagentAndFallsBackForUnknown() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
         builder.gptPickerModelResolver = { "" }
@@ -721,9 +727,22 @@ extension AgentCommandBuilderTests {
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
         builder.gptSubagentModelResolver = { "  gpt-5.6-luna  " }
 
+        // Seit dem Katalog-Umbau gibt es keine versteckte Subagent-Zweitliste.
         XCTAssertEqual(
             builder.gptRouterCoreEnvironment()?["CLAUDE_CODE_SUBAGENT_MODEL"],
-            "gpt-5.6-sol-fast"
+            "gpt-5.6-luna-fast"
+        )
+
+        builder.gptSubagentModelResolver = { "gpt-5.6-orbit" }
+        XCTAssertEqual(
+            builder.gptRouterCoreEnvironment()?["CLAUDE_CODE_SUBAGENT_MODEL"],
+            "gpt-6-astra-fast"
+        )
+
+        builder.gptSubagentModelResolver = { "auto" }
+        XCTAssertEqual(
+            builder.gptRouterCoreEnvironment()?["CLAUDE_CODE_SUBAGENT_MODEL"],
+            "gpt-6-astra-fast"
         )
     }
 
@@ -761,14 +780,14 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.arguments, [
             "--dangerously-skip-permissions", "--resume", "claude-session",
         ])
-        // Ohne konfiguriertes Standard-Modell registriert das kanonische
+        // Ohne konfiguriertes Standard-Modell registriert das Frontier-
         // Modell die /model-Picker-Option; Effort-Steuerung ist immer aktiv.
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-6-astra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-6-astra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
@@ -813,9 +832,9 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-6-astra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-6-astra-fast",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),
             "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
@@ -825,7 +844,7 @@ extension AgentCommandBuilderTests {
         ])
     }
 
-    func testExtended900KFreshTerraKeepsStampAndFivePointFiveFallsBackToSol() throws {
+    func testExtended900KFreshTerraKeepsStampAndFivePointFiveFallsBackToFrontier() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.extraArgumentsResolver = { _ in [] }
@@ -849,7 +868,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(terraCommand.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "900000")
         XCTAssertEqual(terraCommand.environmentOverrides["ANTHROPIC_CUSTOM_MODEL_OPTION"], "gpt-5.6-terra")
 
-        // gpt-5.5 bleibt beim 272k-Vertrag → frischer Start faellt auf Sol.
+        // gpt-5.5 bleibt beim 272k-Vertrag → frischer Start faellt auf das Frontier-Modell.
         let fivePointFiveSession = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -859,7 +878,7 @@ extension AgentCommandBuilderTests {
 
         let fallbackCommand = try builder.command(for: fivePointFiveSession, project: project)
 
-        XCTAssertEqual(fallbackCommand.arguments, ["--model", "gpt-5.6-sol"])
+        XCTAssertEqual(fallbackCommand.arguments, ["--model", "gpt-6-astra"])
         XCTAssertEqual(fallbackCommand.environmentOverrides["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "900000")
         // Der Custom-Picker-Slot folgt dem konfigurierten Picker (Terra),
         // nicht dem Session-Modell — nur der --model-Stempel faellt zurueck.
@@ -894,7 +913,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Standard-Tier — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: false, contextWindow: 272_000),
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "260000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
@@ -1370,7 +1389,7 @@ extension AgentCommandBuilderTests {
         )
     }
 
-    func testClaudeGPTBackendFastToggleOffKeepsPickerPlainAndFallsBackToPlainSolSubagent() throws {
+    func testClaudeGPTBackendFastToggleOffKeepsPickerAndSubagentPlain() throws {
         // Fast-aus muss ALLE Emissionspunkte plain lassen — nicht nur das
         // Haupt-`--model`, sondern auch Picker-Option und Subagent-Env.
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
@@ -1399,7 +1418,7 @@ extension AgentCommandBuilderTests {
         )
         XCTAssertEqual(
             command.environmentOverrides["CLAUDE_CODE_SUBAGENT_MODEL"],
-            "gpt-5.6-sol"
+            "gpt-5.6-luna"
         )
     }
 
@@ -1515,7 +1534,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-terra-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",

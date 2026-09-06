@@ -18,8 +18,8 @@ Dieser Modus gilt ab Aufruf **session-weit**, bis der User ihn beendet
 
 ## Arbeitsannahme (vom User so festgelegt)
 
-- **GPT 5.6 (gpt-5.6-sol) ist bei klar definierten Tasks ≈ Fable-Niveau
-  und über Opus.** Wo du sonst einen Opus/Sonnet-Subagent nehmen würdest,
+- **Das neueste Codex-Modell (`auto`, derzeit GPT-6 Astra) ist bei klar
+  definierten Tasks ≈ Fable-Niveau und über Opus.** Wo du sonst einen Opus/Sonnet-Subagent nehmen würdest,
   ist GPT die bessere Wahl.
 - **GPT hat deutlich höhere Limits als Claude.** Lieber ein GPT-Agent zu
   viel als zu wenig: Zweitmeinungen, parallele Reviews und

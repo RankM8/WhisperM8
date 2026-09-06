@@ -26,15 +26,16 @@ Skill-Argumente: `/codex-subagent <aufgabe>` → nativ. `/codex-subagent --cli
 
 **Für jeden CLI-Einsatz zuerst `references/codex-cli.md` laden** — dort stehen
 Befehle, run-Optionen, Exit-Codes, Arbeitsregeln (inkl. Modellwahl
-`--model gpt-5.6-sol --effort high`), Browser-QA mit Playwright-State,
+`--model auto --effort high`), Browser-QA mit Playwright-State,
 CLI-Steps in Dynamic Workflows, Kopiervorlagen und Troubleshooting. Diese
 Hauptdatei deckt nur den nativen Weg und die gemeinsamen Grundregeln ab.
 
 ## Nativer Weg (Standard): Agent-Typ `gpt`
 
 Das WhisperM8-GPT-Backend verwaltet eine Agent-Definition
-(`<config-dir>/agents/gpt.md`, Frontmatter `model: gpt-5.6-sol` — bei
-aktivem Fast-Modus, dem Default, `model: gpt-5.6-sol-fast`) für das
+(`<config-dir>/agents/gpt.md`, Frontmatter `model: <neuestes Codex-Modell>`
+— derzeit gpt-6-astra, bei jedem Backend-Start aus dem Codex-Katalog neu
+aufgelöst; bei aktivem Fast-Modus mit `-fast`-Suffix) für das
 Main-Profil UND jedes Account-Profil; alle Requests laufen über den lokalen
 Mix-Router. Nutzung: normales Agent-Tool mit `subagent_type: "gpt"` — ein
 Spawn pro Teilaufgabe, parallele Fan-outs ausdrücklich erwünscht. Effort ist
@@ -85,33 +86,34 @@ vornehmen, nirgends duplizieren.
   Deshalb große Scopes vor der Delegation splitten und Diffs/Dateien
   referenzieren statt einbetten.
 - **Kosten:** Delegation schont Claude-Limits und Main-Kontext, ist aber
-  nicht gratis: der Fast-Default (`gpt-5.6-sol-fast`) läuft im Priority-Tier
-  mit 2,5× ChatGPT-Credits. Bei größeren Fan-outs dem User die
+  nicht gratis: ein aktiver Fast-Modus (`-fast`-Alias) läuft im Priority-Tier
+  mit deutlich mehr ChatGPT-Credits. Bei größeren Fan-outs dem User die
   Agent-Gesamtspanne nennen, damit er den Einsatz einschätzen kann.
 
 ### Verbindliche Modell-Deklaration bei jedem Subagent
 
 Jeder Spawn muss das Modell **technisch und explizit** deklarieren, damit Claude
-Codes Agents-Ansicht den echten Modell-Chip (`[gpt-5.6-sol]`, die zugehörige
-`-fast`-Variante oder Terra) zeigt:
+Codes Agents-Ansicht den echten Modell-Chip (z. B. `[gpt-6-astra]` oder die
+zugehörige `-fast`-Variante) zeigt:
 
 - Standard-Aufruf: immer `subagent_type: "gpt"`; in Workflows ausnahmslos
   `agentType: "gpt"`. Den Agent-Typ niemals weglassen und nie nur im Prompt
   behaupten, dass GPT verwendet werde.
 - Ein spezialisierter Custom Agent darf seinen eigenen `subagent_type` bzw.
   `agentType` behalten, **wenn** dessen Definition im Frontmatter explizit
-  `model: gpt-5.6-sol` oder `model: gpt-5.6-terra` setzt. Vor dem Spawn prüfen;
+  `model: gpt-auto` (= neuestes Codex-Modell, vom Mix-Router aufgelöst) oder
+  eine konkrete GPT-ID aus dem Codex-Katalog setzt. Vor dem Spawn prüfen;
   Custom-Prompt und Tool-Grenzen dürfen nicht durch `gpt` ersetzt werden.
-- Zulässige Subagent-Modelle sind ausschließlich **GPT-5.6 Sol** (Standard) oder
-  **GPT-5.6 Terra**. Niemals Haiku verwenden. Ist keine explizite Terra-
-  Definition verfügbar, auf den verwalteten `gpt`-Typ (Sol) zurückfallen —
-  nicht auf ein implizit geerbtes Modell.
+- Standard-Subagent-Modell ist immer das **neueste Codex-Modell** (`auto`,
+  derzeit GPT-6 Astra); eine andere Katalog-ID nur auf ausdrücklichen
+  User-Wunsch. Niemals Haiku verwenden und nie auf ein implizit geerbtes
+  Modell zurückfallen — im Zweifel den verwalteten `gpt`-Typ nehmen.
 - Bei Custom-Agent-Definitionen muss `model:` im Frontmatter gesetzt sein; keine
   Definition mit impliziter Vererbung starten. Name/Label beschreibt die
   Aufgabe, nicht das Modell — den Modell-Chip rendert Claude Code aus der
   tatsächlich aufgelösten Definition.
-- CLI-Jobs deklarieren das Modell weiterhin zwingend über `--model
-  gpt-5.6-sol` oder ein ausdrücklich gewünschtes `--model gpt-5.6-terra`.
+- CLI-Jobs deklarieren das Modell weiterhin zwingend über `--model auto`
+  (neuestes Codex-Modell) oder eine ausdrücklich gewünschte Katalog-ID.
 - Die sichtbare Deklaration ist ein Kontrollsignal, aber der verbindliche
   Nachweis bleibt das `"model"`-Feld im Agent-Transcript.
 

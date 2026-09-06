@@ -299,6 +299,30 @@ final class ClaudeGPTMixRouter {
         return model
     }
 
+    /// Ersetzt `auto`, `gpt-auto` (jeweils optional `-fast`, `[1m]`) im
+    /// Request-Body durch den kanonischen Frontier-Alias. Alle anderen
+    /// Bodies bleiben byte-identisch.
+    static func resolvingAutoModel(in body: Data) -> Data {
+        guard let model = model(in: body) else { return body }
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let stripped = normalized.hasSuffix("[1m]") ? String(normalized.dropLast(4)) : normalized
+        let base = stripped.hasSuffix("-fast") ? String(stripped.dropLast("-fast".count)) : stripped
+        guard ClaudeGPTModelAlias.isAutoModel(base),
+              let resolved = ClaudeGPTModelAlias.canonicalGPTModel(stripped),
+              let object = try? JSONSerialization.jsonObject(with: body),
+              var dictionary = object as? [String: Any] else {
+            return body
+        }
+        dictionary["model"] = resolved
+        guard let rewritten = try? JSONSerialization.data(withJSONObject: dictionary) else {
+            return body
+        }
+        Logger.claudeGPTRouter.info(
+            "gpt_auto_model_resolved requested=\(model, privacy: .public) resolved=\(resolved, privacy: .public)"
+        )
+        return rewritten
+    }
+
     static func upstream(for body: Data) -> Upstream {
         guard let model = model(in: body) else { return .anthropic }
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -359,9 +383,9 @@ final class ClaudeGPTMixRouter {
             if contextWindow > ClaudeGPTModelAlias.maximumConfigurableContextWindow {
                 message = "The configured GPT context window exceeds the largest verified profile of \(ClaudeGPTModelAlias.maximumConfigurableContextWindow) tokens. Reduce the setting and retry."
             } else if contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow {
-                message = "The extended 900k context profile is verified only for gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, and gpt-5.4. Switch to one of these models or select the standard 272k profile and retry."
+                message = "The extended 900k context profile is available only for 1M-class models per the Codex catalog: \(ClaudeGPTModelAlias.supportedModelsSummary(contextWindow: contextWindow)). Switch to one of these models or select the standard 272k profile and retry."
             } else {
-                message = "Unsupported GPT model for the configured context profile. Supported models: gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, and gpt-5.4-mini. All except gpt-5.4-mini optionally support -fast."
+                message = "Unsupported GPT model for the configured context profile. Supported models per the Codex catalog: \(ClaudeGPTModelAlias.supportedModelsSummary(contextWindow: contextWindow)). Models with a priority tier optionally support -fast."
             }
             return anthropicInvalidRequestBody(message: message)
         }
@@ -691,6 +715,10 @@ private extension ClaudeGPTMixRouter {
                 return
             }
 
+            // `auto`/`gpt-auto` (z. B. aus Agent-Frontmatter) wird hier auf das
+            // neueste Katalogmodell umgeschrieben — der Aufrufer muss keine
+            // konkrete ID kennen, die morgen veraltet ist.
+            let body = ClaudeGPTMixRouter.resolvingAutoModel(in: body)
             let model = ClaudeGPTMixRouter.model(in: body)
             let upstream = ClaudeGPTMixRouter.upstream(for: body)
             if let errorBody = ClaudeGPTMixRouter.gptModelValidationErrorResponse(

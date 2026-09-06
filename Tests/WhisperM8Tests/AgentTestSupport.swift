@@ -1,4 +1,5 @@
 import Foundation
+@testable import WhisperM8
 import XCTest
 
 // Gemeinsame Test-Helper für die Agent-Chats-Testdateien.
@@ -84,4 +85,13 @@ extension XCTestCase {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("AgentSessions.json")
     }
+}
+
+// MARK: - GPT-Katalog-Fixture
+
+/// Bindet das GPT-Backend in Tests an den eingebetteten Fallback-Katalog statt
+/// an ~/.codex/models_cache.json der Maschine — sonst kippten Erwartungen,
+/// sobald die Codex-CLI ein neues Modell holt.
+func useFallbackGPTCatalogForTests() {
+    ClaudeGPTModelAlias.catalogResolver = { .fallback }
 }

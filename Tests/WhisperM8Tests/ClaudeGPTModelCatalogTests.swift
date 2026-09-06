@@ -2,6 +2,11 @@ import XCTest
 @testable import WhisperM8
 
 final class ClaudeGPTModelCatalogTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        useFallbackGPTCatalogForTests()
+    }
+
     private func models(
         defaultModel: String = "",
         pickerModel: String = "",

@@ -27,8 +27,56 @@ struct CodexCatalogModel: Equatable, Sendable, Identifiable {
     /// verlässlich das neueste Modell (Cache 0.144: gpt-5.5 = 0, gpt-5.6-sol
     /// = 1) — für „neuestes" siehe `CodexModelCatalog.frontierModel`.
     let priority: Int
+    /// `context_window` des Servers — das Standardfenster des Modells.
+    let contextWindow: Int
+    /// `max_context_window` des Servers. Liegt es über dem Standardfenster,
+    /// gehört das Modell zur 1M-Klasse und trägt das erweiterte GPT-Profil.
+    let maxContextWindow: Int
+    /// `additional_speed_tiers` enthält "fast" — der Priority-Tier existiert.
+    let supportsFastTier: Bool
+    /// `supported_in_api` — nur solche Modelle nimmt der codex-proxy an.
+    let supportedInAPI: Bool
+
+    init(
+        slug: String,
+        displayName: String,
+        detail: String?,
+        defaultEffort: String,
+        efforts: [CodexEffortOption],
+        priority: Int,
+        contextWindow: Int = CodexCatalogModel.defaultContextWindow,
+        maxContextWindow: Int? = nil,
+        supportsFastTier: Bool = true,
+        supportedInAPI: Bool = true
+    ) {
+        self.slug = slug
+        self.displayName = displayName
+        self.detail = detail
+        self.defaultEffort = defaultEffort
+        self.efforts = efforts
+        self.priority = priority
+        self.contextWindow = contextWindow
+        self.maxContextWindow = max(maxContextWindow ?? contextWindow, contextWindow)
+        self.supportsFastTier = supportsFastTier
+        self.supportedInAPI = supportedInAPI
+    }
+
+    /// Standardfenster der aktuellen GPT-Generationen (Server-Wert 272000).
+    static let defaultContextWindow = 272_000
 
     var id: String { slug }
+
+    /// GPT-Backend-tauglich: `gpt-`-Slug, API-fähig und mindestens das
+    /// Standardfenster des GPT-Profils (schließt 128k-Altmodelle aus).
+    var isGPTBackendEligible: Bool {
+        slug.hasPrefix("gpt-") && supportedInAPI
+            && contextWindow >= Self.defaultContextWindow
+    }
+
+    /// 1M-Klasse laut Katalog — Voraussetzung für das erweiterte 900k-Profil.
+    var supportsExtendedContextProfile: Bool {
+        maxContextWindow > contextWindow
+    }
     /// Höchstes verfügbares Level — „höchste Qualität immer wählbar".
     var maxEffort: String { efforts.last?.effort ?? defaultEffort }
 
@@ -55,6 +103,18 @@ struct CodexModelCatalog: Equatable, Sendable {
 
     func model(slug: String) -> CodexCatalogModel? {
         models.first { $0.slug == slug }
+    }
+
+    /// Modelle, die das GPT-Backend (Claude Code → Mix-Router → codex-proxy)
+    /// anbieten darf — in Katalogreihenfolge.
+    var gptBackendModels: [CodexCatalogModel] {
+        models.filter(\.isGPTBackendEligible)
+    }
+
+    /// Frontier-Modell des GPT-Backends: neueste Version unter den
+    /// backend-tauglichen Modellen (Tie-Break kleinste priority).
+    var gptBackendFrontierModel: CodexCatalogModel? {
+        CodexModelCatalog(models: gptBackendModels, fetchedAt: fetchedAt).frontierModel
     }
 
     /// Efforts des Modells; unbekannter Slug → konservative Basis-Levels,
@@ -170,22 +230,26 @@ struct CodexModelCatalog: Equatable, Sendable {
             CodexCatalogModel(
                 slug: "gpt-6-astra", displayName: "GPT-6-Astra",
                 detail: "Our most capable model for complex, demanding work.",
-                defaultEffort: "medium", efforts: effortRange(through: "ultra"), priority: 1
+                defaultEffort: "medium", efforts: effortRange(through: "ultra"), priority: 1,
+                maxContextWindow: oneMillionClassMaxContextWindow
             ),
             CodexCatalogModel(
                 slug: "gpt-5.6-sol", displayName: "GPT-5.6-Sol",
                 detail: "Latest frontier agentic coding model.",
-                defaultEffort: "low", efforts: effortRange(through: "ultra"), priority: 6
+                defaultEffort: "low", efforts: effortRange(through: "ultra"), priority: 6,
+                maxContextWindow: oneMillionClassMaxContextWindow
             ),
             CodexCatalogModel(
                 slug: "gpt-5.6-terra", displayName: "GPT-5.6-Terra",
                 detail: "Balanced agentic coding model for everyday work.",
-                defaultEffort: "medium", efforts: effortRange(through: "ultra"), priority: 7
+                defaultEffort: "medium", efforts: effortRange(through: "ultra"), priority: 7,
+                maxContextWindow: oneMillionClassMaxContextWindow
             ),
             CodexCatalogModel(
                 slug: "gpt-5.6-luna", displayName: "GPT-5.6-Luna",
                 detail: "Fast and affordable agentic coding model.",
-                defaultEffort: "medium", efforts: effortRange(through: "max"), priority: 8
+                defaultEffort: "medium", efforts: effortRange(through: "max"), priority: 8,
+                maxContextWindow: oneMillionClassMaxContextWindow
             ),
             CodexCatalogModel(
                 slug: "gpt-5.5", displayName: "GPT-5.5",
@@ -195,21 +259,27 @@ struct CodexModelCatalog: Equatable, Sendable {
             CodexCatalogModel(
                 slug: "gpt-5.4", displayName: "GPT-5.4",
                 detail: "Strong model for everyday coding.",
-                defaultEffort: "medium", efforts: effortRange(through: "xhigh"), priority: 16
+                defaultEffort: "medium", efforts: effortRange(through: "xhigh"), priority: 16,
+                maxContextWindow: oneMillionClassMaxContextWindow
             ),
             CodexCatalogModel(
                 slug: "gpt-5.4-mini", displayName: "GPT-5.4-Mini",
                 detail: "Small, fast, and cost-efficient model for simpler coding tasks.",
-                defaultEffort: "medium", efforts: effortRange(through: "xhigh"), priority: 23
+                defaultEffort: "medium", efforts: effortRange(through: "xhigh"), priority: 23,
+                supportsFastTier: false
             ),
             CodexCatalogModel(
                 slug: "gpt-5.3-codex-spark", displayName: "GPT-5.3-Codex-Spark",
                 detail: "Ultra-fast coding model.",
-                defaultEffort: "high", efforts: effortRange(through: "xhigh"), priority: 26
+                defaultEffort: "high", efforts: effortRange(through: "xhigh"), priority: 26,
+                contextWindow: 128_000, supportsFastTier: false, supportedInAPI: false
             ),
         ],
         fetchedAt: nil
     )
+
+    /// `max_context_window` der 1M-Klasse laut Server-Cache (2026-09-04).
+    private static let oneMillionClassMaxContextWindow = 872_000
 
     /// Kanonische Effort-Rangfolge (aufsteigend) — Quelle für den Fallback.
     private static let canonicalEffortOrder = ["low", "medium", "high", "xhigh", "max", "ultra"]
@@ -350,6 +420,10 @@ final class CodexModelCatalogStore: @unchecked Sendable {
         let supportedReasoningLevels: [CacheEffort]?
         let visibility: String?
         let priority: Int?
+        let contextWindow: Int?
+        let maxContextWindow: Int?
+        let additionalSpeedTiers: [String]?
+        let supportedInAPI: Bool?
 
         enum CodingKeys: String, CodingKey {
             case slug
@@ -359,6 +433,10 @@ final class CodexModelCatalogStore: @unchecked Sendable {
             case supportedReasoningLevels = "supported_reasoning_levels"
             case visibility
             case priority
+            case contextWindow = "context_window"
+            case maxContextWindow = "max_context_window"
+            case additionalSpeedTiers = "additional_speed_tiers"
+            case supportedInAPI = "supported_in_api"
         }
     }
 
@@ -384,7 +462,13 @@ final class CodexModelCatalogStore: @unchecked Sendable {
                     defaultEffort: raw.defaultReasoningLevel
                         ?? efforts.first?.effort ?? "medium",
                     efforts: efforts.isEmpty ? CodexModelCatalog.baselineEfforts : efforts,
-                    priority: raw.priority ?? Int.max
+                    priority: raw.priority ?? Int.max,
+                    contextWindow: raw.contextWindow ?? CodexCatalogModel.defaultContextWindow,
+                    maxContextWindow: raw.maxContextWindow,
+                    // Fehlt das Feld ganz (älterer Cache), Fast-Tier annehmen —
+                    // ein leeres Array dagegen ist eine echte Server-Aussage.
+                    supportsFastTier: raw.additionalSpeedTiers.map { $0.contains("fast") } ?? true,
+                    supportedInAPI: raw.supportedInAPI ?? true
                 )
                 return (model, raw.visibility)
             }

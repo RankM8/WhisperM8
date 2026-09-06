@@ -55,8 +55,8 @@ whisperm8 agent help                             # Hilfetext
 | `--allow-network` | Netzwerk in der Sandbox (u.a. `git push`, Paketinstallationen). Default aus — vorher den User fragen. |
 | `--config <key=value>` | Generischer Codex-Config-Override, wiederholbar — wird 1:1 als `-c` an codex exec durchgereicht und gilt auch für Folge-Turns (`send`). Kommt NACH den eingebauten Configs, übersteuert sie also (z.B. `--config tools.web_search=true`). Werte mit führendem `-` werden abgelehnt (Exit 1) — codex läse sie als Flag. |
 | `--playwright-storage-state <path>` | Browser-QA: startet den Playwright-MCP im Codex-Subagent isoliert mit dieser storageState-Datei (`--isolated --storage-state`). Relative Pfade werden relativ zu `--cd`/CWD aufgelöst; fehlt die Datei, bricht `run` sofort mit Exit 1 ab. Browser-Traffic braucht KEIN `--allow-network`. |
-| `--model <name>` | Codex-Modell-Override. **IMMER explizit `--model gpt-5.6-sol` setzen** (Frontier-Modell) — NIEMALS `gpt-5.5` oder älter, und nie weglassen (ohne Flag gilt die `~/.codex/config.toml`, deren Effort-Default niedrig ist). Freier String, keine Whitelist — neue Modelle funktionieren sofort; verfügbare Modelle listet `~/.codex/models_cache.json`. |
-| `--effort <level>` | `model_reasoning_effort`-Override: minimal/low/medium/high/xhigh/max/ultra — modellabhängig (bis `ultra` nur gpt-5.6-sol/terra; gpt-5.6-luna bis `max`; ältere Modelle bis `xhigh`). **IMMER explizit setzen, Standard `high`** (ohne Flag greift der config.toml-Default `low`); für die härtesten Verifikationen `xhigh`+. Verfügbare Level pro Modell: `~/.codex/models_cache.json`. |
+| `--model <name>` | Codex-Modell-Override. **IMMER explizit `--model auto` setzen** — `auto` löst WhisperM8 auf das neueste Modell des Codex-Katalogs auf (derzeit gpt-6-astra), damit neue Modelle ohne Skill-Änderung greifen. NIEMALS ein älteres Modell wählen und das Flag nie weglassen (ohne Flag gilt die `~/.codex/config.toml`, deren Effort-Default niedrig ist). Konkrete IDs nur auf ausdrücklichen User-Wunsch; verfügbare Modelle listet `~/.codex/models_cache.json`. |
+| `--effort <level>` | `model_reasoning_effort`-Override: minimal/low/medium/high/xhigh/max/ultra — modellabhängig (die Frontier-Modelle bis `ultra`, kleinere bis `max`/`xhigh`). **IMMER explizit setzen, Standard `high`** (ohne Flag greift der config.toml-Default `low`); für die härtesten Verifikationen `xhigh`+. Verfügbare Level pro Modell: `~/.codex/models_cache.json`. |
 | `--parent <session-id>` | Claude-Session-ID des spawnenden Chats — nur nötig, wenn du eine echte ID kennst. OHNE das Flag ordnet WhisperM8 den Job automatisch über den Prozessbaum dem Chat zu, in dem du läufst (`$CLAUDE_SESSION_ID` existiert NICHT als Env-Variable — nicht verwenden). |
 
 ## Exit-Codes (verbindlich — kein Text-Parsing nötig)
@@ -113,13 +113,13 @@ whisperm8 agent help                             # Hilfetext
 ## Arbeitsregeln
 
 0. **Modellwahl ist festgelegt, nicht deine Entscheidung:** jeder `run`
-   bekommt `--model gpt-5.6-sol --effort high` (das beste verfügbare
-   Modell). NIEMALS `gpt-5.5` oder ein anderes älteres Modell wählen und
-   die Flags NIE weglassen — ohne sie zieht die `~/.codex/config.toml`
-   mit Effort `low`. Härteste Verifikationen/Adjudikationen: `--effort
-   xhigh` bis `ultra`. Vom Sol-Default nur auf ausdrücklichen User-Wunsch zu
-   `gpt-5.6-terra` wechseln; andere Modellfamilien und ältere GPT-Generationen
-   bleiben ausgeschlossen.
+   bekommt `--model auto --effort high`. `auto` ist immer das neueste
+   Modell des Codex-Katalogs (derzeit gpt-6-astra) — so greifen neue
+   Modelle ohne Skill-Änderung. NIEMALS ein älteres Modell wählen und die
+   Flags NIE weglassen — ohne sie zieht die `~/.codex/config.toml` mit
+   Effort `low`. Härteste Verifikationen/Adjudikationen: `--effort xhigh`
+   bis `ultra`. Eine konkrete Modell-ID nur auf ausdrücklichen User-Wunsch;
+   andere Modellfamilien bleiben ausgeschlossen.
 1. **Parent-Zuordnung ist automatisch:** Läufst du in einem
    WhisperM8-Chat, erkennt das CLI den spawnenden Chat über den
    Prozessbaum — kein `--parent` nötig. (`$CLAUDE_SESSION_ID` ist als
@@ -227,7 +227,7 @@ Probe-Subagent:
 
 ```bash
 whisperm8 agent run --wait --json --cd /pfad/zum/repo \
-  --model gpt-5.6-sol --effort high \
+  --model auto --effort high \
   --playwright-storage-state .qa/auth/akquise-admin.storageState.json \
   "Browser-QA Preflight. Öffne https://akquise.test/admin/kunden mit Playwright-MCP. Prüfe: keine Weiterleitung zu /login oder auth.akquise.test, Titel AkquiseAI, sichtbarer Auth-Indikator Admin AkquiseAI oder admin@akquise.ai. Schreibe .qa/reports/preflight.md. Keine App-Daten ändern."
 ```
@@ -269,7 +269,8 @@ Nur wenn ein Auftrag ausdrücklich Codex-CLI-Eigenschaften benötigt, etwa einen
 detachten Job, Browser-QA oder `image_gen`, darf ein eigener Workflow-Step die
 CLI verwenden. Das Workflow-Skript kann nicht selbst shellen; jeder solche
 Codex-Aufruf läuft über den Custom-Agent `codex-runner`. Dessen Frontmatter
-setzt das Modell explizit auf `gpt-5.6-sol` und beschränkt die Tools auf Bash;
+setzt das Modell explizit auf `gpt-auto` (neuestes Codex-Modell, vom
+Mix-Router aufgelöst) und beschränkt die Tools auf Bash;
 Haiku, Sonnet oder ein implizit geerbtes Modell sind auch für mechanische
 Wrapper verboten. Der Runner nutzt `run --wait --json`, `; echo "EXIT:$?"` und
 reicht das stdout-JSON schemageprüft weiter.
@@ -280,7 +281,7 @@ WhisperM8 vorhanden; in Fremd-Projekten wie akquise-ai fehlen sie). Vor dem Bau
 eines CLI-Workflow-Steps prüfen (`test -f .claude/agents/codex-runner.md`);
 fehlt der Runner, die Definition aus dem WhisperM8-Repo ins Zielprojekt
 kopieren oder den Wrapper-Prompt mit `agentType: 'gpt'` fahren (global
-definiert, explizit gpt-5.6-sol) — nie stillschweigend mit
+definiert, neuestes Codex-Modell) — nie stillschweigend mit
 `agentType: 'codex-runner'` starten und scheitern lassen.
 
 Exit-Codes wertet das Skript aus, nicht der Wrapper. `status <id>` statt `list`
@@ -300,7 +301,7 @@ bekannte Grenzen: **`references/claude-workflows.md`**.
 ```bash
 # 1) Detachter, in der App sichtbarer Langläufer
 whisperm8 agent run --json --sandbox read-only \
-  --model gpt-5.6-sol --effort high \
+  --model auto --effort high \
   "Führe eine langlaufende Repository-Inventur durch. Nur Analyse, keine Edits. Fasse Risiken und offene Fragen im Abschluss-Report zusammen."
 
 # 2) Parallele Implementierung, isoliert (als Background-Task starten!)
@@ -308,11 +309,11 @@ whisperm8 agent run --json --sandbox read-only \
 #    (z.B. swift test --filter <Y>), Commit-Anweisung — quoting-fest,
 #    auch mit typografischen Anführungszeichen und Mehrzeilern.
 whisperm8 agent run --wait --json --worktree \
-  --model gpt-5.6-sol --effort high \
+  --model auto --effort high \
   "$(cat /pfad/zu/prompt.txt)"
 
 # 3) Fire-and-forget mit späterem Abholen
-ID=$(whisperm8 agent run --json --cd /pfad/repo --model gpt-5.6-sol --effort high "$(cat /pfad/zu/prompt.txt)" | sed -E 's/.*"shortId":"([a-f0-9]+)".*/\1/')
+ID=$(whisperm8 agent run --json --cd /pfad/repo --model auto --effort high "$(cat /pfad/zu/prompt.txt)" | sed -E 's/.*"shortId":"([a-f0-9]+)".*/\1/')
 # … später:
 whisperm8 agent status "$ID" --json
 

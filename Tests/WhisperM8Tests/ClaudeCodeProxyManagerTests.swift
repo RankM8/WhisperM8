@@ -429,6 +429,9 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
     ) -> ClaudeCodeProxyManager {
         ClaudeCodeProxyManager(
             commandResolver: commandResolver,
+            // Kein Zugriff auf das echte Managed-Binary in App Support —
+            // sonst haengt der Test am Dateisystem der Maschine.
+            managedBinaryResolver: { nil },
             reachabilityResolver: reachability,
             processLauncher: launcher,
             commandRunner: commandRunner,

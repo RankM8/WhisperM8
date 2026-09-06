@@ -139,6 +139,8 @@ final class ClaudeCodeProxyManager {
     typealias RouterStopper = () -> Void
 
     private let commandResolver: (String) -> String?
+
+    private let managedBinaryResolver: () -> String?
     private let reachabilityResolver: (Int) -> Bool
     private let processLauncher: ProcessLauncher
     private let commandRunner: CommandRunner
@@ -160,6 +162,10 @@ final class ClaudeCodeProxyManager {
 
     init(
         commandResolver: @escaping (String) -> String? = { AgentCommandBuilder.commandPath($0) },
+        managedBinaryResolver: @escaping () -> String? = {
+            let managed = ClaudeCodeProxyBinaryInstaller().binaryURL
+            return FileManager.default.isExecutableFile(atPath: managed.path) ? managed.path : nil
+        },
         reachabilityResolver: @escaping (Int) -> Bool = { ClaudeCodeProxyManager.isReachable(port: $0) },
         processLauncher: @escaping ProcessLauncher = ClaudeCodeProxyManager.launchProcess,
         commandRunner: @escaping CommandRunner = {
@@ -181,6 +187,7 @@ final class ClaudeCodeProxyManager {
         notificationCenter: NotificationCenter = .default
     ) {
         self.commandResolver = commandResolver
+        self.managedBinaryResolver = managedBinaryResolver
         self.reachabilityResolver = reachabilityResolver
         self.processLauncher = processLauncher
         self.commandRunner = commandRunner
@@ -331,11 +338,7 @@ final class ClaudeCodeProxyManager {
         if let fromPath = commandResolver("claude-code-proxy") {
             return fromPath
         }
-        let managed = ClaudeCodeProxyBinaryInstaller().binaryURL
-        guard FileManager.default.isExecutableFile(atPath: managed.path) else {
-            return nil
-        }
-        return managed.path
+        return managedBinaryResolver()
     }
 
     /// Startet den Device-Code-Flow als langlebigen Prozess. Der Manager

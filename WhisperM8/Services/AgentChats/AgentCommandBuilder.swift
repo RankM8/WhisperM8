@@ -227,25 +227,22 @@ struct AgentCommandBuilder {
         let defaultModel = gptDefaultModelResolver()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let pickerModel = configuredPickerModel.isEmpty
-            ? (defaultModel.isEmpty ? AppPreferences.claudeGPTCanonicalModel : defaultModel)
+            ? (defaultModel.isEmpty ? ClaudeGPTModelAlias.autoModel : defaultModel)
             : configuredPickerModel
         let contextWindow = normalizedGPTContextWindow()
         let effectivePickerModel = ClaudeGPTModelAlias.supportedEffectiveModel(
             pickerModel,
             fastEnabled: fastModeEnabled,
             contextWindow: contextWindow
-        ) ?? ClaudeGPTModelAlias.supportedEffectiveModel(
-            AppPreferences.claudeGPTCanonicalModel,
+        ) ?? ClaudeGPTModelAlias.fallbackEffectiveModel(
             fastEnabled: fastModeEnabled,
             contextWindow: contextWindow
-        )!
+        )
         let isFastPickerModel = effectivePickerModel.hasSuffix("-fast")
-        let supportedDescription = contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow
-            ? "erweitertes 900k-Profil: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna und GPT-5.4"
-            : "unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
-        let pickerDescription = isFastPickerModel
-            ? "Priority-Tier (1,5× Speed, 2,5× Credits) — \(supportedDescription)"
-            : "Standard-Tier — \(supportedDescription)"
+        let pickerDescription = Self.gptPickerDescription(
+            fast: isFastPickerModel,
+            contextWindow: contextWindow
+        )
         let gptContextWindow = String(contextWindow)
         var environment = [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:\(gptRouterPortResolver())",
@@ -277,14 +274,25 @@ struct AgentCommandBuilder {
                 subagentModel,
                 fastEnabled: fastModeEnabled,
                 contextWindow: contextWindow
-            ) ?? ClaudeGPTModelAlias.supportedSubagentModel(
-                AppPreferences.claudeGPTCanonicalModel,
+            ) ?? ClaudeGPTModelAlias.fallbackEffectiveModel(
                 fastEnabled: fastModeEnabled,
                 contextWindow: contextWindow
-            )!
+            )
             environment["CLAUDE_CODE_SUBAGENT_MODEL"] = effectiveSubagentModel
         }
         return environment
+    }
+
+    /// Beschreibung des Custom-Eintrags im /model-Picker — Modellliste aus
+    /// dem Codex-Katalog, damit neue Modelle ohne Codeänderung erscheinen.
+    static func gptPickerDescription(fast: Bool, contextWindow: Int) -> String {
+        let models = ClaudeGPTModelAlias.supportedModelsSummary(contextWindow: contextWindow)
+        let supportedDescription = contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+            ? "erweitertes 900k-Profil (1M-Klasse laut Codex-Katalog): \(models)"
+            : "unterstützt laut Codex-Katalog: \(models)"
+        return fast
+            ? "Priority-Tier (schneller, mehr Credits) — \(supportedDescription)"
+            : "Standard-Tier — \(supportedDescription)"
     }
 
     /// Zusaetzliche CLI-Argumente, die VOR den session-spezifischen Args
@@ -411,9 +419,9 @@ struct AgentCommandBuilder {
                 return supported
             }
 
-            // Das 900k-Profil trägt nicht jedes Modell (gpt-5.5/gpt-5.4-mini
-            // bleiben beim 272k-Vertrag). Ein für den normalen 272k-Vertrag
-            // bekanntes Modell fällt bei einem FRISCHEN Start auf Sol zurück,
+            // Das 900k-Profil trägt nicht jedes Modell (nur die 1M-Klasse laut
+            // Katalog). Ein für den normalen 272k-Vertrag bekanntes Modell
+            // fällt bei einem FRISCHEN Start auf das Frontier-Modell zurück,
             // statt still ohne GPT-Stempel als Claude zu starten. Unbekannte
             // GPT-IDs bleiben weiterhin abgelehnt; Resume/Fork folgt
             // unverändert der Transcript-Wahl und benötigt für diese Modelle
@@ -423,8 +431,7 @@ struct AgentCommandBuilder {
                   ClaudeGPTModelAlias.maximumContextWindow(for: canonical) != nil else {
                 return nil
             }
-            return ClaudeGPTModelAlias.supportedEffectiveModel(
-                AppPreferences.claudeGPTCanonicalModel,
+            return ClaudeGPTModelAlias.fallbackEffectiveModel(
                 fastEnabled: fastModeEnabled,
                 contextWindow: contextWindow
             )

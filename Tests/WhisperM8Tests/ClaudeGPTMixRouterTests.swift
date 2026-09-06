@@ -5,6 +5,11 @@ import XCTest
 @testable import WhisperM8
 
 final class ClaudeGPTMixRouterTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        useFallbackGPTCatalogForTests()
+    }
+
     func testDispatchRoutesOnlyGPTPrefixToCodexProxy() {
         XCTAssertEqual(
             ClaudeGPTMixRouter.upstream(for: Data(#"{"model":"  GPT-5.6-SOL-FAST[1M]  "}"#.utf8)),
@@ -71,7 +76,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         XCTAssertTrue(
             String(decoding: extendedFivePointFiveBody, as: UTF8.self)
-                .contains("verified only for gpt-6-astra, gpt-5.6-sol")
+                .contains("1M-class models per the Codex catalog: gpt-6-astra, gpt-5.6-sol")
         )
         XCTAssertNotNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
@@ -124,6 +129,31 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
     /// jenseits seiner verifizierten Kapazitaet ist ein Profilproblem. Vorher
     /// liefen beide in dieselbe Meldung, und beim 900k-Profil wurde daraus
     /// die falsche Handlungsempfehlung "wechsle zu Sol / nimm 272k".
+    func testAutoModelBodyIsRewrittenToCatalogFrontier() throws {
+        let cases: [(String, String)] = [
+            ("auto", "gpt-6-astra"),
+            ("gpt-auto", "gpt-6-astra"),
+            ("GPT-AUTO-FAST[1M]", "gpt-6-astra-fast"),
+            ("auto-fast", "gpt-6-astra-fast"),
+        ]
+        for (requested, expected) in cases {
+            let body = Data(#"{"model":"\#(requested)","messages":[],"max_tokens":8}"#.utf8)
+            let rewritten = ClaudeGPTMixRouter.resolvingAutoModel(in: body)
+            XCTAssertEqual(ClaudeGPTMixRouter.model(in: rewritten), expected, requested)
+            XCTAssertEqual(ClaudeGPTMixRouter.upstream(for: rewritten), .codexProxy, requested)
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: rewritten) as? [String: Any])
+            XCTAssertEqual(object["max_tokens"] as? Int, 8, "übrige Felder bleiben erhalten")
+        }
+
+        // Alles andere bleibt byte-identisch — auch Tippfehler wie "automatic".
+        for untouched in ["gpt-5.6-sol", "claude-opus-4-8[1m]", "automatic"] {
+            let body = Data(#"{"model":"\#(untouched)","messages":[]}"#.utf8)
+            XCTAssertEqual(ClaudeGPTMixRouter.resolvingAutoModel(in: body), body, untouched)
+        }
+        let noModel = Data(#"{"messages":[]}"#.utf8)
+        XCTAssertEqual(ClaudeGPTMixRouter.resolvingAutoModel(in: noModel), noModel)
+    }
+
     func testGPTModelGuardSeparatesUnknownIdentifierFromContextProfileRejection() throws {
         func message(for model: String, contextWindow: Int) throws -> String {
             let body = try XCTUnwrap(
@@ -161,7 +191,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
 
         // Bekannt, aber jenseits der verifizierten Kapazitaet: Profilmeldung.
         let fivePointFive = try message(for: "gpt-5.5", contextWindow: 900_000)
-        XCTAssertTrue(fivePointFive.contains("verified only for gpt-6-astra, gpt-5.6-sol"), fivePointFive)
+        XCTAssertTrue(fivePointFive.contains("1M-class models per the Codex catalog: gpt-6-astra, gpt-5.6-sol"), fivePointFive)
         XCTAssertFalse(fivePointFive.contains("Invalid GPT model identifier"), fivePointFive)
 
         // Bekannte Basis mit unzulaessiger -fast-Variante bleibt ebenfalls ein

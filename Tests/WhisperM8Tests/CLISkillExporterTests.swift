@@ -54,7 +54,7 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertTrue(markdown.contains("Niemals Haiku"))
     }
 
-    func testCodexRunnerDeclaresGPT56SolModel() throws {
+    func testCodexRunnerDeclaresAutoGPTModel() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -64,7 +64,8 @@ final class CLISkillExporterTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(definition.contains("model: gpt-5.6-sol"))
+        // `gpt-auto` löst der Mix-Router auf das neueste Codex-Modell auf.
+        XCTAssertTrue(definition.contains("model: gpt-auto"))
         XCTAssertFalse(definition.contains("model: sonnet"))
         XCTAssertFalse(definition.contains("model: haiku"))
     }

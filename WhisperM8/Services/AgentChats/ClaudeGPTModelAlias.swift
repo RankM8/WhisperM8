@@ -32,42 +32,134 @@ enum ClaudeGPTContextProfile: Int, CaseIterable, Identifiable {
     }
 }
 
-/// Kanonisiert die von WhisperM8 erzeugten GPT-Modell-Aliasse und kapselt die
-/// pro Modell verifizierten Kapazitätsverträge des MixRouters.
+/// Kanonisiert die von WhisperM8 erzeugten GPT-Modell-Aliasse und leitet die
+/// Kapazitätsverträge des MixRouters aus dem Codex-Modellkatalog ab.
+///
+/// Einzige Quelle ist `~/.codex/models_cache.json` (∪ eingebetteter Fallback,
+/// siehe `CodexModelCatalog`): Die Codex-CLI holt neue Modelle selbst vom
+/// Server — sie erscheinen damit ohne Codeänderung im GPT-Backend. Statt
+/// hart codierter Allowlists gelten Katalog-Metadaten: `supported_in_api`
+/// (Backend-tauglich), `additional_speed_tiers` (Fast-Tier) und
+/// `max_context_window` (1M-Klasse → erweitertes 900k-Profil). Der Sentinel
+/// `auto` steht überall für das jeweils neueste Backend-Modell (Frontier).
 enum ClaudeGPTModelAlias {
     /// Gemeinsame, konservative Kapazität aller freigegebenen GPT-Aliasse.
     static let maximumKnownSharedContextWindow = ClaudeGPTContextProfile.standard.rawValue
 
     /// Größtes auswählbares Profil. 900k ist per Direktmessung gegen den
-    /// Codex-Upstream verifiziert (2026-08-18, Subscription/OAuth): Sol, Terra,
-    /// Luna und GPT-5.4 nahmen 903k–913k Input-Tokens vollständig an, ~924k
-    /// wies der Upstream mit `request_too_large` ab. GPT-6 Astra nahm am
-    /// 2026-09-06 905.911 Input-Tokens an. GPT-5.5 und GPT-5.4-Mini lehnten
-    /// dieselbe 903k-Probe ab und bleiben beim 272k-Vertrag.
+    /// Codex-Upstream verifiziert (Subscription/OAuth): Sol, Terra, Luna und
+    /// GPT-5.4 nahmen am 2026-08-18 903k–913k Input-Tokens an, ~924k wies der
+    /// Upstream mit `request_too_large` ab; GPT-6 Astra nahm am 2026-09-06
+    /// 905.911 Tokens an. Der Katalog meldet für diese Modelle
+    /// `max_context_window` 872k — die Klassifikation „1M-Klasse" kommt aus
+    /// dem Katalog, die Profilgröße bleibt der gemessene Wert.
     static let maximumConfigurableContextWindow =
         ClaudeGPTContextProfile.extended900K.rawValue
 
-    /// GPT-6 Astra (Codex-Katalog 2026-09-04: Efforts bis ultra, Fast-Tier
-    /// „2x speed", 272k Standard) braucht claude-code-proxy ≥ main@55bf0b58
-    /// (PR #129) — ältere Proxy-Binaries lehnen die ID mit „Unknown model" ab.
-    private static let mainModelBases: Set<String> = [
-        "gpt-6-astra",
-        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
-        "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
-    ]
-    private static let subagentModelBases: Set<String> = [
-        "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra",
-    ]
+    /// Sentinel für „neuestes Backend-Modell". Wird an jeder Egress-Grenze
+    /// (Stempel, Picker, Subagent-Definition, Router) auf den Frontier-Slug
+    /// aufgelöst; `gpt-auto` ist als Schreibweise ebenfalls zulässig.
+    static let autoModel = "auto"
 
-    /// Lowercase, ohne Whitespace und ohne `[1m]`. Native Claude-Aliasse werden
-    /// bewusst nicht kanonisiert, weil deren Suffix echte Modell-Metadaten ist.
-    static func canonicalGPTModel(_ model: String) -> String? {
+    /// Katalogquelle — injizierbar, damit Tests deterministisch gegen den
+    /// eingebetteten Fallback laufen statt gegen die lokale Cache-Datei.
+    nonisolated(unsafe) static var catalogResolver: () -> CodexModelCatalog = {
+        CodexModelCatalogStore.shared.catalog()
+    }
+
+    static func catalog() -> CodexModelCatalog { catalogResolver() }
+
+    static func isAutoModel(_ model: String) -> Bool {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == autoModel || normalized == "gpt-\(autoModel)"
+    }
+
+    /// Slug des neuesten Backend-Modells. Der eingebettete Fallback garantiert
+    /// immer einen Treffer — dieser Wert ersetzt die frühere Konstante
+    /// `gpt-5.6-sol` an allen Fallback-Stellen.
+    static func frontierModel(catalog: CodexModelCatalog = catalog()) -> String {
+        catalog.gptBackendFrontierModel?.slug
+            ?? CodexModelCatalog.fallback.gptBackendFrontierModel?.slug
+            ?? "gpt-6-astra"
+    }
+
+    /// Alle Backend-Modelle in Katalogreihenfolge (ohne Fast-Varianten).
+    static func backendModelSlugs(catalog: CodexModelCatalog = catalog()) -> [String] {
+        catalog.gptBackendModels.map(\.slug)
+    }
+
+    /// Backend-Modelle, die das gegebene Profil tragen.
+    static func backendModels(
+        contextWindow: Int,
+        catalog: CodexModelCatalog = catalog()
+    ) -> [CodexCatalogModel] {
+        catalog.gptBackendModels.filter { model in
+            contextWindow <= maximumContextWindow(for: model)
+        }
+    }
+
+    /// Vorschlagsliste für Settings-Felder: `auto` zuerst, dann jedes Modell,
+    /// optional gefolgt von seiner Fast-Variante.
+    static func suggestions(
+        includeFastVariants: Bool,
+        catalog: CodexModelCatalog = catalog()
+    ) -> [String] {
+        var result = [autoModel]
+        for model in catalog.gptBackendModels {
+            result.append(model.slug)
+            if includeFastVariants, model.supportsFastTier {
+                result.append("\(model.slug)-fast")
+            }
+        }
+        return result
+    }
+
+    /// Lesbare Aufzählung der Modelle eines Profils (Picker-Beschreibung,
+    /// Router-Meldungen, Settings-Texte) — z. B. „gpt-6-astra, gpt-5.6-sol".
+    static func supportedModelsSummary(
+        contextWindow: Int,
+        catalog: CodexModelCatalog = catalog()
+    ) -> String {
+        backendModels(contextWindow: contextWindow, catalog: catalog)
+            .map(\.slug)
+            .joined(separator: ", ")
+    }
+
+    private static func backendModel(
+        _ base: String,
+        catalog: CodexModelCatalog
+    ) -> CodexCatalogModel? {
+        guard let model = catalog.model(slug: base), model.isGPTBackendEligible else {
+            return nil
+        }
+        return model
+    }
+
+    private static func stripFast(_ model: String) -> (base: String, hadFast: Bool) {
+        model.hasSuffix("-fast")
+            ? (String(model.dropLast("-fast".count)), true)
+            : (model, false)
+    }
+
+    /// Lowercase, ohne Whitespace und ohne `[1m]`; `auto` → Frontier-Slug.
+    /// Native Claude-Aliasse werden bewusst nicht kanonisiert, weil deren
+    /// Suffix echte Modell-Metadaten ist.
+    static func canonicalGPTModel(
+        _ model: String,
+        catalog: CodexModelCatalog = catalog()
+    ) -> String? {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         var normalized = trimmed.lowercased()
-        guard normalized.hasPrefix("gpt-") else { return nil }
         if normalized.hasSuffix("[1m]") {
             normalized.removeLast(4)
         }
+        if isAutoModel(normalized) {
+            return frontierModel(catalog: catalog)
+        }
+        if normalized == "\(autoModel)-fast" || normalized == "gpt-\(autoModel)-fast" {
+            return "\(frontierModel(catalog: catalog))-fast"
+        }
+        guard normalized.hasPrefix("gpt-") else { return nil }
         return normalized
     }
 
@@ -77,71 +169,63 @@ enum ClaudeGPTModelAlias {
             && trimmed.lowercased().hasSuffix("[1m]")
     }
 
-    static func supportsFast(_ canonicalBaseModel: String) -> Bool {
-        mainModelBases.contains(canonicalBaseModel)
-            && canonicalBaseModel != "gpt-5.4-mini"
+    static func supportsFast(
+        _ canonicalBaseModel: String,
+        catalog: CodexModelCatalog = catalog()
+    ) -> Bool {
+        backendModel(canonicalBaseModel, catalog: catalog)?.supportsFastTier ?? false
     }
 
-    /// Modelle mit verifiziertem 900k-Vertrag (Direktmessung 2026-08-18,
-    /// ~903k-Probe gegen `/v1/messages` des codex-proxy je Modell angenommen;
-    /// Sol zusätzlich bis 913.887 belegt, ~924k → `request_too_large`).
-    /// GPT-6 Astra: 905.911 Input-Tokens angenommen (Direktmessung 2026-09-06,
-    /// gleicher Aufbau wie am 2026-08-18).
-    private static let extendedWindowModelBases: Set<String> = [
-        "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4",
-    ]
-
-    /// Obergrenze des tatsächlich getesteten Profils pro kanonischem Modell.
-    /// Die frühere 372k-Messung (Sol-only) ist seit dem 1M-Rollout des
-    /// Codex-Backends obsolet. Claude Codes interne Reserve kompaktifiziert
-    /// beim 900k-Profil erwartbar um 830k und bleibt damit klar unter der
-    /// nachgewiesenen Annahmegrenze. GPT-5.5 und GPT-5.4-Mini bleiben bei 272k.
-    /// GPT-6 Astra trägt den 900k-Vertrag seit der Messung vom 2026-09-06.
-    static func maximumContextWindow(for canonicalModel: String) -> Int? {
-        let base = canonicalModel.hasSuffix("-fast")
-            ? String(canonicalModel.dropLast("-fast".count))
-            : canonicalModel
-        guard mainModelBases.contains(base) else { return nil }
-        return extendedWindowModelBases.contains(base)
+    private static func maximumContextWindow(for model: CodexCatalogModel) -> Int {
+        model.supportsExtendedContextProfile
             ? maximumConfigurableContextWindow
             : maximumKnownSharedContextWindow
     }
 
+    /// Obergrenze des Profils pro kanonischem Modell: 1M-Klasse laut Katalog
+    /// → 900k, sonst 272k; unbekannte oder nicht backend-taugliche IDs → nil.
+    static func maximumContextWindow(
+        for canonicalModel: String,
+        catalog: CodexModelCatalog = catalog()
+    ) -> Int? {
+        let base = stripFast(canonicalModel).base
+        guard let model = backendModel(base, catalog: catalog) else { return nil }
+        return maximumContextWindow(for: model)
+    }
+
     static func isSupportedCanonicalModel(
         _ model: String,
-        contextWindow: Int = maximumKnownSharedContextWindow
+        contextWindow: Int = maximumKnownSharedContextWindow,
+        catalog: CodexModelCatalog = catalog()
     ) -> Bool {
         guard contextWindow > 0,
-              let maximumContextWindow = maximumContextWindow(for: model),
+              let maximumContextWindow = maximumContextWindow(for: model, catalog: catalog),
               contextWindow <= maximumContextWindow else {
             return false
         }
-        let hasFast = model.hasSuffix("-fast")
-        let base = hasFast ? String(model.dropLast("-fast".count)) : model
-        guard mainModelBases.contains(base) else { return false }
-        return !hasFast || supportsFast(base)
+        let (base, hasFast) = stripFast(model)
+        guard backendModel(base, catalog: catalog) != nil else { return false }
+        return !hasFast || supportsFast(base, catalog: catalog)
     }
 
+    /// Subagent-Override: jedes Backend-Modell ist zulässig — die Wahl
+    /// trifft der User, das Backend hält keine versteckte Zweitliste mehr.
     static func isSupportedSubagentCanonicalModel(
         _ model: String,
-        contextWindow: Int = maximumKnownSharedContextWindow
+        contextWindow: Int = maximumKnownSharedContextWindow,
+        catalog: CodexModelCatalog = catalog()
     ) -> Bool {
-        guard isSupportedCanonicalModel(model, contextWindow: contextWindow) else {
-            return false
-        }
-        let base = model.hasSuffix("-fast")
-            ? String(model.dropLast("-fast".count))
-            : model
-        return subagentModelBases.contains(base)
+        isSupportedCanonicalModel(model, contextWindow: contextWindow, catalog: catalog)
     }
 
     static func supportedEffectiveModel(
         _ model: String,
         fastEnabled: Bool,
-        contextWindow: Int = maximumKnownSharedContextWindow
+        contextWindow: Int = maximumKnownSharedContextWindow,
+        catalog: CodexModelCatalog = catalog()
     ) -> String? {
-        let effective = effectiveModel(model, fastEnabled: fastEnabled)
-        return isSupportedCanonicalModel(effective, contextWindow: contextWindow)
+        let effective = effectiveModel(model, fastEnabled: fastEnabled, catalog: catalog)
+        return isSupportedCanonicalModel(effective, contextWindow: contextWindow, catalog: catalog)
             ? effective
             : nil
     }
@@ -149,24 +233,59 @@ enum ClaudeGPTModelAlias {
     static func supportedSubagentModel(
         _ model: String,
         fastEnabled: Bool,
-        contextWindow: Int = maximumKnownSharedContextWindow
+        contextWindow: Int = maximumKnownSharedContextWindow,
+        catalog: CodexModelCatalog = catalog()
     ) -> String? {
-        let effective = effectiveModel(model, fastEnabled: fastEnabled)
-        return isSupportedSubagentCanonicalModel(effective, contextWindow: contextWindow)
-            ? effective
-            : nil
+        let effective = effectiveModel(model, fastEnabled: fastEnabled, catalog: catalog)
+        return isSupportedSubagentCanonicalModel(
+            effective,
+            contextWindow: contextWindow,
+            catalog: catalog
+        ) ? effective : nil
+    }
+
+    /// Frontier-Modell im wirksamen Alias für das Profil — der Fallback an
+    /// jeder Stelle, an der eine Konfiguration nicht trägt. Das Frontier-
+    /// Modell ist per Katalog immer backend-tauglich; trägt es das Profil
+    /// nicht, greift das nächste tragende Modell in Katalogreihenfolge.
+    static func fallbackEffectiveModel(
+        fastEnabled: Bool,
+        contextWindow: Int = maximumKnownSharedContextWindow,
+        catalog: CodexModelCatalog = catalog()
+    ) -> String {
+        if let frontier = supportedEffectiveModel(
+            frontierModel(catalog: catalog),
+            fastEnabled: fastEnabled,
+            contextWindow: contextWindow,
+            catalog: catalog
+        ) {
+            return frontier
+        }
+        for model in backendModels(contextWindow: contextWindow, catalog: catalog) {
+            if let supported = supportedEffectiveModel(
+                model.slug,
+                fastEnabled: fastEnabled,
+                contextWindow: contextWindow,
+                catalog: catalog
+            ) {
+                return supported
+            }
+        }
+        return effectiveModel(frontierModel(catalog: catalog), fastEnabled: fastEnabled, catalog: catalog)
     }
 
     /// Leitet den pro Request wirksamen Alias ab. Fast wird nur erzeugt, wenn
-    /// der lokale Modellkatalog einen Priority-Tier belegt. Insbesondere bleibt
-    /// GPT-5.4 Mini auch bei aktivem Fast-Modus suffixlos.
-    static func effectiveModel(_ model: String, fastEnabled: Bool) -> String {
+    /// der Katalog einen Priority-Tier belegt (GPT-5.4 Mini bleibt suffixlos).
+    static func effectiveModel(
+        _ model: String,
+        fastEnabled: Bool,
+        catalog: CodexModelCatalog = catalog()
+    ) -> String {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let canonical = canonicalGPTModel(trimmed) else { return trimmed }
-        let hadFast = canonical.hasSuffix("-fast")
-        let base = hadFast ? String(canonical.dropLast("-fast".count)) : canonical
-        guard mainModelBases.contains(base) else { return canonical }
-        if supportsFast(base), fastEnabled || hadFast {
+        guard let canonical = canonicalGPTModel(trimmed, catalog: catalog) else { return trimmed }
+        let (base, hadFast) = stripFast(canonical)
+        guard backendModel(base, catalog: catalog) != nil else { return canonical }
+        if supportsFast(base, catalog: catalog), fastEnabled || hadFast {
             return "\(base)-fast"
         }
         return base

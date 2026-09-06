@@ -84,7 +84,9 @@ enum AgentRunCLI {
             parentSessionID: options.parentSessionID,
             codexVersion: codexVersion
         )
-        initial.model = options.model
+        // `--model auto` = neuestes Codex-Modell laut Katalog (Frontier) —
+        // dieselbe Auflösung wie im Post-Processing und in den Chats.
+        initial.model = options.model.map { CodexModelSelection.resolveSlug($0) }
         initial.effort = options.effort
         initial.allowNetwork = options.allowNetwork
         initial.configOverrides = options.configOverrides.isEmpty ? nil : options.configOverrides

@@ -3,6 +3,11 @@ import XCTest
 @testable import WhisperM8
 
 final class PreferencesTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        useFallbackGPTCatalogForTests()
+    }
+
     func testDefaultsUseExpectedValues() {
         withIsolatedPreferences { preferences in
             XCTAssertEqual(preferences.language, "de")

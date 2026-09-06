@@ -280,7 +280,9 @@ struct AppPreferences {
     /// Kanonisches GPT-Standardmodell (immer mit High-Effort gedacht) —
     /// Fallback fuer die /model-Picker-Option und die verwaltete
     /// Agent-Definition, wenn kein eigenes Standard-Modell konfiguriert ist.
-    static let claudeGPTCanonicalModel = "gpt-5.6-sol"
+    /// Seit 2026-09-06 keine Konstante mehr, sondern das jeweils neueste
+    /// Backend-Modell laut Codex-Katalog (`ClaudeGPTModelAlias.frontierModel`).
+    static var claudeGPTCanonicalModel: String { ClaudeGPTModelAlias.frontierModel() }
 
     var claudeGPTBackendDefaultModel: String {
         // Leer = kein GPT-Stempel: neue Claude-Chats starten mit den

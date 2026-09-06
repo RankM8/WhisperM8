@@ -27,25 +27,29 @@ struct GPTBackendSettingsPage: View {
     @State private var refreshQueued = false
 
     private let proxyManager = ClaudeCodeProxyManager.shared
-    private let modelSuggestions = [
-        "gpt-6-astra",
-        "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra",
-        "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
-    ]
-    private let pickerModelSuggestions = [
-        "gpt-6-astra", "gpt-6-astra-fast",
-        "gpt-5.6-sol", "gpt-5.6-sol-fast",
-        "gpt-5.6-luna", "gpt-5.6-luna-fast",
-        "gpt-5.6-terra", "gpt-5.6-terra-fast",
-        "gpt-5.5", "gpt-5.5-fast",
-        "gpt-5.4", "gpt-5.4-fast",
-        "gpt-5.4-mini",
-    ]
-    private let subagentModelSuggestions = [
-        "gpt-6-astra", "gpt-6-astra-fast",
-        "gpt-5.6-sol", "gpt-5.6-sol-fast",
-        "gpt-5.6-terra", "gpt-5.6-terra-fast",
-    ]
+    /// Vorschläge kommen aus dem Codex-Modellkatalog (`~/.codex/models_cache.json`
+    /// ∪ Fallback) — neue Modelle erscheinen hier ohne App-Update. `auto` steht
+    /// immer an erster Stelle und meint das jeweils neueste Modell.
+    private var modelSuggestions: [String] {
+        ClaudeGPTModelAlias.suggestions(includeFastVariants: false)
+    }
+    private var pickerModelSuggestions: [String] {
+        ClaudeGPTModelAlias.suggestions(includeFastVariants: true)
+    }
+    private var subagentModelSuggestions: [String] {
+        ClaudeGPTModelAlias.suggestions(includeFastVariants: true)
+    }
+    private var frontierModelName: String { ClaudeGPTModelAlias.frontierModel() }
+    private var catalogModelSummary: String {
+        ClaudeGPTModelAlias.supportedModelsSummary(
+            contextWindow: ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+        )
+    }
+    private var extendedProfileModelSummary: String {
+        ClaudeGPTModelAlias.supportedModelsSummary(
+            contextWindow: ClaudeGPTModelAlias.maximumConfigurableContextWindow
+        )
+    }
 
     var body: some View {
         SettingsPageContainer(
@@ -266,21 +270,21 @@ struct GPTBackendSettingsPage: View {
 
             editableModelRow(
                 title: "Standard-Modell für neue Claude-Chats",
-                subtitle: "Leer = neue Chats starten wie gewohnt mit Claude; GPT nur, wenn hier ein freigegebenes Modell steht. Unbekannte oder kapazitätsinkompatible GPT-IDs werden nicht gestempelt.",
-                placeholder: "Leer = Claude (Standard)",
+                subtitle: "Leer = neue Chats starten wie gewohnt mit Claude. ›auto‹ = immer das neueste GPT-Modell laut Codex-Katalog (derzeit \(frontierModelName)) — empfohlen, damit neue Modelle automatisch übernommen werden. Alternativ eine feste ID aus dem Katalog. Unbekannte oder kapazitätsinkompatible GPT-IDs werden nicht gestempelt.",
+                placeholder: "Leer = Claude · auto = neuestes GPT",
                 text: $defaultModel,
                 suggestions: modelSuggestions
             )
 
             SettingsToggleRow(
                 title: "Fast-Modus (Priority-Tier)",
-                subtitle: "Rund 1,5× schneller (GPT-6 Astra: 2×), verbraucht aber deutlich mehr ChatGPT-Credits (GPT-5.6: 2,5×). Gilt für neu gestartete Chats samt Subagents — nicht für Background-Agents (claude --bg). Vorrang behalten: ein eigenes --model in den Claude-Extra-Argumenten, ein explizites ›-fast‹ im Modellnamen sowie eine globale Proxy-Konfiguration.",
+                subtitle: "Priority-Tier des Codex-Backends: deutlich schneller (laut Katalog 1,5× bis 2×), verbraucht aber erheblich mehr ChatGPT-Credits. Gilt für neu gestartete Chats samt Subagents — nicht für Background-Agents (claude --bg). Vorrang behalten: ein eigenes --model in den Claude-Extra-Argumenten, ein explizites ›-fast‹ im Modellnamen sowie eine globale Proxy-Konfiguration.",
                 isOn: $fastModeEnabled
             )
 
             editableModelRow(
                 title: "GPT-Modell im /model-Picker",
-                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer oder unbekannt = gpt-5.6-sol; der Fast-Modus wird nur bei aktiviertem Schalter angewendet. Zulässig sind GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4 und GPT-5.4 Mini. Alle außer Mini unterstützen optional ›-fast‹; Mini bleibt immer suffixlos. Ältere und unbekannte GPT-IDs lehnt der Router klar ab. GPT-6 Astra braucht einen claude-code-proxy neuer als v0.1.35.",
+                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer = Standard-Modell; ›auto‹ oder unbekannt = neuestes Modell (derzeit \(frontierModelName)). Zulässig ist jedes Backend-Modell des Codex-Katalogs (derzeit: \(catalogModelSummary)); Modelle mit Priority-Tier optional mit ›-fast‹. Ältere und unbekannte GPT-IDs lehnt der Router klar ab. Neue Modelle brauchen zusätzlich einen claude-code-proxy, der sie kennt.",
                 placeholder: "Leer = automatisch",
                 text: $pickerModel,
                 suggestions: pickerModelSuggestions
@@ -288,7 +292,7 @@ struct GPTBackendSettingsPage: View {
 
             editableModelRow(
                 title: "Subagent-Modell (CLAUDE_CODE_SUBAGENT_MODEL)",
-                subtitle: "Zwangs-Override für ALLE nativen Subagents. Zulässig sind ausschließlich GPT-6 Astra, GPT-5.6 Sol oder Terra, jeweils optional mit ›-fast‹; jede andere nichtleere Konfiguration fällt sicher auf Sol zurück. Empfehlung: leer lassen und GPT-Subagents über den Agent-Typ »gpt« wählen lassen.",
+                subtitle: "Zwangs-Override für ALLE nativen Subagents. Zulässig ist jedes Backend-Modell des Codex-Katalogs, optional mit ›-fast‹; ›auto‹ = neuestes Modell (derzeit \(frontierModelName)); Unbekanntes fällt sicher auf das neueste Modell zurück. Empfehlung: leer lassen und GPT-Subagents über den Agent-Typ »gpt« wählen lassen.",
                 placeholder: "Leer = aus (empfohlen)",
                 text: $subagentModel,
                 suggestions: subagentModelSuggestions
@@ -367,7 +371,7 @@ struct GPTBackendSettingsPage: View {
         case .some(.standard):
             return "Sicherer Default für alle freigegebenen GPT-Modelle. Claude Code kompaktifiziert erfahrungsgemäß bei ungefähr \(ClaudeGPTContextProfile.standard.expectedAutoCompactTokens / 1_000)k; native 1M-Modelle bleiben unberührt."
         case .some(.extended900K):
-            return "Opt-in über Codex-Subscription/OAuth (1M-Rollout des Codex-Backends): 900k Rohprofil, erwartetes Auto-Compact um \(ClaudeGPTContextProfile.extended900K.expectedAutoCompactTokens / 1_000)k. Verifiziert für GPT-6 Astra (Direktmessung 2026-09-06: 905k angenommen) sowie GPT-5.6 Sol/Terra/Luna und GPT-5.4 (2026-08-18: 903k+ angenommen, ~924k abgewiesen); gpt-5.5 und gpt-5.4-mini fallen in diesem Profil aus dem Picker und frische Starts damit auf Sol zurück. Kann ChatGPT-Credits schneller verbrauchen — bei Upstream-Overflow auf Standard zurückstellen."
+            return "Opt-in über Codex-Subscription/OAuth (1M-Rollout des Codex-Backends): 900k Rohprofil, erwartetes Auto-Compact um \(ClaudeGPTContextProfile.extended900K.expectedAutoCompactTokens / 1_000)k. Gilt für die 1M-Klasse laut Codex-Katalog (derzeit: \(extendedProfileModelSummary)); Direktmessungen 2026-08-18 und 2026-09-06: 903k–913k angenommen, ~924k abgewiesen. Andere Modelle fallen in diesem Profil aus dem Picker, frische Starts damit auf das neueste Modell zurück. Kann ChatGPT-Credits schneller verbrauchen — bei Upstream-Overflow auf Standard zurückstellen."
         case .none:
             return "Bestehender benutzerdefinierter Wert. Für eine klar getestete Konfiguration Standard 272k oder das erweiterte 900k-Profil wählen."
         }

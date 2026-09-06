@@ -586,10 +586,10 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertTrue(atText.contains("830k/900k"), atText)
     }
 
-    /// Terra/Luna/GPT-5.4 tragen das 900k-Profil mit (Messung 2026-08-18) —
-    /// abgelehnt wird jetzt, was beim 272k-Vertrag bleibt (gpt-5.5): dort
-    /// faellt die Anzeige bewusst auf den 200k-Report der CLI zurueck.
-    func testMainStatuslineAppliesExtendedProfileToTerraButNotToFivePointFive() throws {
+    /// Die App stempelt WHISPERM8_GPT56_CONTEXT_WINDOW nur in Sessions, deren
+    /// Modell das Profil laut Codex-Katalog traegt — das Script fuehrt keine
+    /// eigene Allowlist mehr und uebernimmt den Wert fuer jedes gpt-*-Modell.
+    func testMainStatuslineTrustsStampedProfileForEveryGPTModel() throws {
         let terraInput: [String: Any] = [
             "model": ["display_name": "gpt-5.6-terra-fast"],
             "cost": ["total_cost_usd": 0],
@@ -622,8 +622,7 @@ final class StatuslineInstallerTests: XCTestCase {
             environmentOverrides: ["WHISPERM8_GPT56_CONTEXT_WINDOW": "900000"]
         )
         let fiveFiveText = String(decoding: fiveFiveOutput, as: UTF8.self)
-        XCTAssertTrue(fiveFiveText.contains("9k/200k"), fiveFiveText)
-        XCTAssertFalse(fiveFiveText.contains("9k/900k"), fiveFiveText)
+        XCTAssertTrue(fiveFiveText.contains("9k/900k"), fiveFiveText)
     }
 
     func testMainStatuslineDoesNotRewriteSimilarGPTCustomID() throws {

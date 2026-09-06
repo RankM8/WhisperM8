@@ -50,8 +50,8 @@ COMPACT_AT=85
 GPT_STANDARD_CONTEXT_WINDOW=272000
 GPT_STANDARD_COMPACT_BUDGET=238000
 # Erweitertes Profil (2026-08-19): 900k statt des abgelösten 372k-Experiments,
-# freigegeben für Sol/Terra/Luna und GPT-5.4 (Messung 2026-08-18). Ohne diesen
-# Wert fiele die Anzeige auf den 200k-Report der CLI zurück.
+# für die 1M-Klasse laut Codex-Katalog (Messungen 2026-08-18/2026-09-06). Ohne
+# diesen Wert fiele die Anzeige auf den 200k-Report der CLI zurück.
 GPT_EXTENDED_CONTEXT_WINDOW=900000
 GPT_EXTENDED_COMPACT_BUDGET=830000
 GPT_CONTEXT_WINDOW="${WHISPERM8_GPT56_CONTEXT_WINDOW:-0}"
@@ -68,18 +68,15 @@ model_base=$model_lower
 case "$model_base" in
     *'[1m]') model_base=${model_base%'[1m]'} ;;
 esac
-unsupported_mini_fast=0
-case "$model_base" in
-    gpt-5.4-mini-fast) unsupported_mini_fast=1 ;;
-esac
 case "$model_base" in
     *-fast) model_base=${model_base%-fast} ;;
 esac
+# Jedes gpt-*-Modell gilt als GPT-Backend-Modell. Welche IDs der Router
+# tatsächlich annimmt, entscheidet der Codex-Katalog in der App
+# (ClaudeGPTModelAlias) — hier keine zweite Allowlist, die veralten könnte.
 is_supported_gpt=0
 case "$model_base" in
-    gpt-6-astra|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.5|gpt-5.4|gpt-5.4-mini)
-        if [ "$unsupported_mini_fast" -eq 0 ]; then is_supported_gpt=1; fi
-        ;;
+    gpt-*) is_supported_gpt=1 ;;
 esac
 
 # Projektname (Hauptrepo-Name, kein Pfad/Ordner)
@@ -344,21 +341,11 @@ else
         ''|*[!0-9]*) reported_size=0 ;;
     esac
     size=$reported_size
-    # Nur Modelle, für die das konfigurierte Profil freigegeben ist, erhalten
-    # die Kapazitätskorrektur: historische Custom-Werte bis 272k gelten für die
-    # gemeinsame Allowlist, das erweiterte 900k-Profil für Sol/Terra/Luna und
-    # GPT-5.4 (identische Allowlist wie ClaudeGPTModelAlias — beide Stellen
-    # gehören zusammen).
+    # Die App stempelt WHISPERM8_GPT56_CONTEXT_WINDOW nur in Sessions, deren
+    # Modell das Profil laut Katalog trägt — der Wert ist damit autoritativ.
     context_profile_matches_model=0
     if [ "$is_supported_gpt" -eq 1 ] && [ "$GPT_CONTEXT_WINDOW" -gt 0 ]; then
-        if [ "$GPT_CONTEXT_WINDOW" -le "$GPT_STANDARD_CONTEXT_WINDOW" ]; then
-            context_profile_matches_model=1
-        elif [ "$GPT_CONTEXT_WINDOW" -eq "$GPT_EXTENDED_CONTEXT_WINDOW" ]; then
-            case "$model_base" in
-                gpt-6-astra|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.4)
-                    context_profile_matches_model=1 ;;
-            esac
-        fi
+        context_profile_matches_model=1
     fi
     if [ "$context_profile_matches_model" -eq 1 ] \
         && { [ "$reported_size" -eq 0 ] || [ "$reported_size" -eq 200000 ]; }; then
@@ -373,15 +360,11 @@ else
     else
         compact_budget=$((size * COMPACT_AT / 100))
         if [ "$is_supported_gpt" -eq 1 ]; then
-            case "${model_base}:${size}" in
-                "gpt-6-astra:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
-                "gpt-5.6-sol:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
-                "gpt-5.6-terra:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
-                "gpt-5.6-luna:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
-                "gpt-5.4:${GPT_EXTENDED_CONTEXT_WINDOW}")
+            case "$size" in
+                "$GPT_EXTENDED_CONTEXT_WINDOW")
                     compact_budget=$GPT_EXTENDED_COMPACT_BUDGET
                     ;;
-                *":${GPT_STANDARD_CONTEXT_WINDOW}")
+                "$GPT_STANDARD_CONTEXT_WINDOW")
                     compact_budget=$GPT_STANDARD_COMPACT_BUDGET
                     ;;
             esac

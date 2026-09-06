@@ -2,6 +2,11 @@ import XCTest
 @testable import WhisperM8
 
 final class ClaudeGPTModelAliasTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        useFallbackGPTCatalogForTests()
+    }
+
     func testFastEnabledAddsAliasToPlainGPTModel() {
         XCTAssertEqual(
             ClaudeGPTModelAlias.effectiveModel("gpt-5.6-sol", fastEnabled: true),
@@ -211,7 +216,7 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         )
     }
 
-    func testSubagentPolicyAllowsOnlyAstraSolAndTerra() {
+    func testSubagentPolicyAllowsEveryCatalogModel() {
         XCTAssertEqual(
             ClaudeGPTModelAlias.supportedSubagentModel(
                 "GPT-5.6-TERRA[1M]",
@@ -219,23 +224,82 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
             ),
             "gpt-5.6-terra-fast"
         )
-        XCTAssertNil(
-            ClaudeGPTModelAlias.supportedSubagentModel(
-                "gpt-5.6-luna",
-                fastEnabled: false
-            )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedSubagentModel("gpt-5.6-luna", fastEnabled: false),
+            "gpt-5.6-luna"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedSubagentModel("gpt-5.5", fastEnabled: false),
+            "gpt-5.5"
+        )
+        // Mini hat laut Katalog keinen Fast-Tier — bleibt auch hier suffixlos.
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedSubagentModel("gpt-5.4-mini", fastEnabled: true),
+            "gpt-5.4-mini"
         )
         XCTAssertNil(
-            ClaudeGPTModelAlias.supportedSubagentModel(
-                "gpt-5.5",
-                fastEnabled: false
-            )
+            ClaudeGPTModelAlias.supportedSubagentModel("gpt-5.6-orbit", fastEnabled: true)
+        )
+    }
+
+    func testAutoSentinelResolvesToCatalogFrontier() {
+        XCTAssertEqual(ClaudeGPTModelAlias.frontierModel(), "gpt-6-astra")
+        XCTAssertEqual(ClaudeGPTModelAlias.canonicalGPTModel("auto"), "gpt-6-astra")
+        XCTAssertEqual(ClaudeGPTModelAlias.canonicalGPTModel(" GPT-AUTO[1M] "), "gpt-6-astra")
+        XCTAssertEqual(ClaudeGPTModelAlias.canonicalGPTModel("auto-fast"), "gpt-6-astra-fast")
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedEffectiveModel("auto", fastEnabled: true, contextWindow: 900_000),
+            "gpt-6-astra-fast"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.fallbackEffectiveModel(fastEnabled: false, contextWindow: 900_000),
+            "gpt-6-astra"
+        )
+        XCTAssertNil(ClaudeGPTModelAlias.canonicalGPTModel("automatic"))
+    }
+
+    func testCapabilitiesComeFromCatalogMetadata() {
+        // Fiktiver Katalog: ein neues Modell ohne Codeänderung, eines ohne
+        // Fast-Tier, eines ohne API-Freigabe, eines mit 128k.
+        let catalog = CodexModelCatalog(
+            models: [
+                CodexCatalogModel(slug: "gpt-7-nova", displayName: "GPT-7-Nova", detail: nil,
+                                  defaultEffort: "medium", efforts: CodexModelCatalog.baselineEfforts,
+                                  priority: 0, maxContextWindow: 872_000),
+                CodexCatalogModel(slug: "gpt-7-nova-mini", displayName: "Mini", detail: nil,
+                                  defaultEffort: "medium", efforts: CodexModelCatalog.baselineEfforts,
+                                  priority: 1, supportsFastTier: false),
+                CodexCatalogModel(slug: "gpt-7-internal", displayName: "Internal", detail: nil,
+                                  defaultEffort: "medium", efforts: CodexModelCatalog.baselineEfforts,
+                                  priority: 2, supportedInAPI: false),
+                CodexCatalogModel(slug: "gpt-6.9-spark", displayName: "Spark", detail: nil,
+                                  defaultEffort: "medium", efforts: CodexModelCatalog.baselineEfforts,
+                                  priority: 3, contextWindow: 128_000),
+            ],
+            fetchedAt: nil
+        )
+        XCTAssertEqual(ClaudeGPTModelAlias.frontierModel(catalog: catalog), "gpt-7-nova")
+        XCTAssertEqual(ClaudeGPTModelAlias.backendModelSlugs(catalog: catalog), ["gpt-7-nova", "gpt-7-nova-mini"])
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedEffectiveModel("gpt-7-nova", fastEnabled: true, contextWindow: 900_000, catalog: catalog),
+            "gpt-7-nova-fast"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedEffectiveModel("gpt-7-nova-mini", fastEnabled: true, catalog: catalog),
+            "gpt-7-nova-mini"
         )
         XCTAssertNil(
-            ClaudeGPTModelAlias.supportedSubagentModel(
-                "gpt-5.4-mini",
-                fastEnabled: true
-            )
+            ClaudeGPTModelAlias.supportedEffectiveModel("gpt-7-nova-mini", fastEnabled: false, contextWindow: 900_000, catalog: catalog)
+        )
+        XCTAssertNil(ClaudeGPTModelAlias.supportedEffectiveModel("gpt-7-internal", fastEnabled: false, catalog: catalog))
+        XCTAssertNil(ClaudeGPTModelAlias.supportedEffectiveModel("gpt-6.9-spark", fastEnabled: false, catalog: catalog))
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.suggestions(includeFastVariants: true, catalog: catalog),
+            ["auto", "gpt-7-nova", "gpt-7-nova-fast", "gpt-7-nova-mini"]
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedModelsSummary(contextWindow: 900_000, catalog: catalog),
+            "gpt-7-nova"
         )
     }
 

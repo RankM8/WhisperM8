@@ -3,6 +3,11 @@ import XCTest
 @testable import WhisperM8
 
 final class ClaudeGPTAgentDefinitionTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        useFallbackGPTCatalogForTests()
+    }
+
     private var directory: URL!
     private var mainFileURL: URL!
     private var installer: ClaudeGPTAgentDefinitionInstaller!
@@ -101,7 +106,7 @@ final class ClaudeGPTAgentDefinitionTests: XCTestCase {
         XCTAssertFalse(content.lowercased().contains("gpt-5.6-sol-fast[1m]"))
     }
 
-    func testDisallowedSubagentModelsFallBackToCanonicalSol() throws {
+    func testEveryCatalogModelIsAllowedAndUnknownOrAutoResolvesToFrontier() throws {
         XCTAssertEqual(
             installer.sync(
                 backendEnabled: true,
@@ -110,19 +115,32 @@ final class ClaudeGPTAgentDefinitionTests: XCTestCase {
             ),
             [.installed]
         )
-        XCTAssertEqual(
-            installer.sync(
-                backendEnabled: true,
-                model: "gpt-5.5",
-                fastEnabled: true
-            ),
-            [.upToDate]
+        try assertFrontmatterModel(
+            "gpt-5.6-luna-fast",
+            in: String(contentsOf: mainFileURL, encoding: .utf8)
         )
 
-        let content = try String(contentsOf: mainFileURL, encoding: .utf8)
-        try assertFrontmatterModel("gpt-5.6-sol-fast", in: content)
-        XCTAssertFalse(content.lowercased().contains("gpt-5.6-luna"))
-        XCTAssertFalse(content.lowercased().contains("gpt-5.5"))
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "gpt-5.6-orbit", fastEnabled: true),
+            [.updated]
+        )
+        try assertFrontmatterModel(
+            "gpt-6-astra-fast",
+            in: String(contentsOf: mainFileURL, encoding: .utf8)
+        )
+
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "auto", fastEnabled: true),
+            [.upToDate]
+        )
+        XCTAssertEqual(
+            installer.sync(backendEnabled: true, model: "", fastEnabled: false),
+            [.updated]
+        )
+        try assertFrontmatterModel(
+            "gpt-6-astra",
+            in: String(contentsOf: mainFileURL, encoding: .utf8)
+        )
     }
 
     func testToggleChangeUpdatesManagedDefinition() throws {

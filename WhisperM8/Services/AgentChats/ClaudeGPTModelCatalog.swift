@@ -12,33 +12,32 @@ enum ClaudeGPTModelCatalog {
         "opus[1m]", "sonnet[1m]", "opusplan",
     ]
 
-    /// Nur GPT-Modelle mit bekannter, zum gewählten MAX_CONTEXT-Profil
-    /// kompatibler Kapazität werden in den Picker aufgenommen. Beim
-    /// erweiterten 900k-Profil fallen dadurch gpt-5.5 und gpt-5.4-mini raus.
+    /// Alle Backend-Modelle des Codex-Katalogs, die das gewählte
+    /// MAX_CONTEXT-Profil tragen, plus konfigurierte Werte (kanonisiert; `auto`
+    /// → Frontier). Beim erweiterten 900k-Profil fallen dadurch Modelle
+    /// ohne 1M-Klasse (z. B. gpt-5.5, gpt-5.4-mini) aus dem Picker.
     static func availableModelsFragment(
         defaultModel: String,
         pickerModel: String,
         subagentModel: String,
         sessionModel: String? = nil,
-        contextWindow: Int = ClaudeGPTModelAlias.maximumKnownSharedContextWindow
+        contextWindow: Int = ClaudeGPTModelAlias.maximumKnownSharedContextWindow,
+        catalog: CodexModelCatalog = ClaudeGPTModelAlias.catalog()
     ) -> [String: Any] {
         let configuredModels = [
-            AppPreferences.claudeGPTCanonicalModel,
+            ClaudeGPTModelAlias.autoModel,
             defaultModel,
             pickerModel,
             subagentModel,
             sessionModel ?? "",
-            "gpt-6-astra",
-            "gpt-5.6-luna",
-            "gpt-5.6-terra",
-            "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.4-mini",
-        ]
+        ] + ClaudeGPTModelAlias.backendModelSlugs(catalog: catalog)
 
         var gptModels = Set<String>()
         for configuredModel in configuredModels {
-            guard var plainModel = ClaudeGPTModelAlias.canonicalGPTModel(configuredModel) else {
+            guard var plainModel = ClaudeGPTModelAlias.canonicalGPTModel(
+                configuredModel,
+                catalog: catalog
+            ) else {
                 continue
             }
             if plainModel.hasSuffix("-fast") {
@@ -46,12 +45,13 @@ enum ClaudeGPTModelCatalog {
             }
             guard ClaudeGPTModelAlias.isSupportedCanonicalModel(
                 plainModel,
-                contextWindow: contextWindow
+                contextWindow: contextWindow,
+                catalog: catalog
             ) else {
                 continue
             }
             gptModels.insert(plainModel)
-            if ClaudeGPTModelAlias.supportsFast(plainModel) {
+            if ClaudeGPTModelAlias.supportsFast(plainModel, catalog: catalog) {
                 gptModels.insert("\(plainModel)-fast")
             }
         }
