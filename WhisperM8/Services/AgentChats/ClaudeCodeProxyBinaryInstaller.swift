@@ -3,6 +3,14 @@ import Foundation
 
 /// Managed Download des `claude-code-proxy`-Binarys (MIT-lizenziert) aus den
 /// GitHub-Releases nach `~/Library/Application Support/WhisperM8/bin/`.
+///
+/// Quelle ist seit 2026-09-06 der WhisperM8-Fork (`GiulianoCosta71/claude-code-proxy`,
+/// Branch `whisperm8-release`): Er trägt die katalog-getriebene Modell-
+/// Allowlist (liest `~/.codex/models_cache.json`, Upstream-PR raine#130),
+/// damit neue Codex-Modelle ohne Proxy-Release funktionieren. Upstream
+/// (`raine/claude-code-proxy`) releast Modell-Ergänzungen nur mit Verzug;
+/// sobald der PR gemerged und released ist, kann `repository` zurück auf
+/// Upstream wechseln.
 /// Ein PATH-Binary bleibt der Power-User-Override — der Manager nutzt den
 /// verwalteten Pfad nur als Fallback, wenn `which` nichts findet.
 ///
@@ -12,16 +20,17 @@ import Foundation
 /// vollständig in Temp-Dateien und werden atomar an den Zielpfad bewegt.
 struct ClaudeCodeProxyBinaryInstaller {
     /// Von uns getestete Version — der Ein-Klick-Setup installiert genau sie.
-    static let knownGoodVersion = "0.1.21"
+    /// Fork-Release: Upstream 0.1.35 + Katalog-Allowlist (main@55bf0b58 + PR #130).
+    static let knownGoodVersion = "0.1.36-whisperm8.1"
 
-    /// SHA-256 der Release-Tarballs der known-good-Version (2026-07-19 von
-    /// den Release-Sidecars übernommen und lokal gegengeprüft).
+    /// SHA-256 der Release-Tarballs der known-good-Version (2026-09-06 von
+    /// den Release-Sidecars des Fork-Releases übernommen und lokal gegengeprüft).
     static let pinnedTarballSHA256: [String: String] = [
-        "0.1.21/darwin-arm64": "12c340342f0dcd476a29041272eb65476c5d73054f00c9bba1ca9300020cf267",
-        "0.1.21/darwin-amd64": "1b4a1259dc74da299ee2cd72832f7b18cd5b82dc056cb19cd21fd940ebd6bf1c",
+        "0.1.36-whisperm8.1/darwin-arm64": "d7c11eb6ce4e8a244f190b7f4c59d3403772ce7027d715d67df0a782e9e5d153",
+        "0.1.36-whisperm8.1/darwin-amd64": "c12a227a91b21baab22ada7d1533539639d1aca9207da73cc13040451d3316f0",
     ]
 
-    static let repository = "raine/claude-code-proxy"
+    static let repository = "GiulianoCosta71/claude-code-proxy"
     static let binaryName = "claude-code-proxy"
 
     /// Serialisiert Binary-Replace + Versions-Stempel prozessweit — Setup-

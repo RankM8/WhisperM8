@@ -219,6 +219,10 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
         XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.21", newerThan: "0.1.21"))
         // Fehlende Komponenten zaehlen als 0.
         XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.isVersion("0.2", newerThan: "0.1.21"))
+        // Fork-Releases tragen ein Prerelease-Suffix — die numerischen Teile zählen.
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.36-whisperm8.1", newerThan: "0.1.35"))
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.36-whisperm8.2", newerThan: "0.1.36-whisperm8.1"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1.36", newerThan: "0.1.36-whisperm8.1"))
         XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1", newerThan: "0.1.0"))
     }
 
@@ -249,12 +253,12 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
     func testAssetURLsFollowReleaseNamingScheme() {
         let installer = makeInstaller { _ in Data() }
         XCTAssertEqual(
-            installer.assetURL(version: "0.1.21").absoluteString,
-            "https://github.com/raine/claude-code-proxy/releases/download/v0.1.21/claude-code-proxy-darwin-arm64.tar.gz"
+            installer.assetURL(version: "0.1.36-whisperm8.1").absoluteString,
+            "https://github.com/GiulianoCosta71/claude-code-proxy/releases/download/v0.1.36-whisperm8.1/claude-code-proxy-darwin-arm64.tar.gz"
         )
         XCTAssertEqual(
-            installer.checksumSidecarURL(version: "0.1.21").absoluteString,
-            "https://github.com/raine/claude-code-proxy/releases/download/v0.1.21/claude-code-proxy-darwin-arm64.sha256"
+            installer.checksumSidecarURL(version: "0.1.36-whisperm8.1").absoluteString,
+            "https://github.com/GiulianoCosta71/claude-code-proxy/releases/download/v0.1.36-whisperm8.1/claude-code-proxy-darwin-arm64.sha256"
         )
     }
 }
