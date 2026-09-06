@@ -167,8 +167,9 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         )
     }
 
-    func testAstraIsMainAndSubagentCapableButStandardProfileOnly() {
-        // Codex-Katalog 2026-09-04: Fast-Tier vorhanden, 900k ungemessen.
+    func testAstraIsMainAndSubagentCapableAcrossBothProfiles() {
+        // Codex-Katalog 2026-09-04: Fast-Tier vorhanden; 900k per Direktmessung
+        // 2026-09-06 (905.911 Input-Tokens angenommen) verifiziert.
         XCTAssertEqual(
             ClaudeGPTModelAlias.effectiveModel("GPT-6-ASTRA[1M]", fastEnabled: true),
             "gpt-6-astra-fast"
@@ -183,13 +184,29 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         )
         XCTAssertEqual(
             ClaudeGPTModelAlias.maximumContextWindow(for: "gpt-6-astra-fast"),
-            ClaudeGPTContextProfile.standard.rawValue
+            ClaudeGPTContextProfile.extended900K.rawValue
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedEffectiveModel(
+                "gpt-6-astra",
+                fastEnabled: false,
+                contextWindow: 900_000
+            ),
+            "gpt-6-astra"
+        )
+        XCTAssertEqual(
+            ClaudeGPTModelAlias.supportedSubagentModel(
+                "gpt-6-astra",
+                fastEnabled: false,
+                contextWindow: 900_000
+            ),
+            "gpt-6-astra"
         )
         XCTAssertNil(
             ClaudeGPTModelAlias.supportedEffectiveModel(
                 "gpt-6-astra",
                 fastEnabled: false,
-                contextWindow: 900_000
+                contextWindow: 900_001
             )
         )
     }

@@ -570,7 +570,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
@@ -592,7 +592,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.4-mini")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Standard-Tier — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            "Standard-Tier — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         )
         XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-sol-fast")
         // Seit 2026-08-18 prozessweit: die Messreihe (CLI 2.1.234, Mock-
@@ -619,7 +619,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-terra-fast")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Standard-Tier — erweitertes 900k-Profil: GPT-5.6 Sol/Terra/Luna und GPT-5.4"
+            "Standard-Tier — erweitertes 900k-Profil: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna und GPT-5.4"
         )
         XCTAssertEqual(environment?["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "900000")
         XCTAssertEqual(environment?["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
@@ -672,7 +672,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-luna-fast")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         )
     }
 
@@ -689,7 +689,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-terra-fast")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         )
     }
 
@@ -708,7 +708,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"], "gpt-5.6-terra")
         XCTAssertEqual(
             environment?["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"],
-            "Standard-Tier — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            "Standard-Tier — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         )
     }
 
@@ -768,7 +768,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
@@ -815,7 +815,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": "3",
@@ -894,7 +894,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Standard-Tier — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Standard-Tier — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "260000",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
@@ -1515,7 +1515,7 @@ extension AgentCommandBuilderTests {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-terra-fast",
-            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": "Priority-Tier (1,5× Speed, 2,5× Credits) — unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini",
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": "1",
             "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.6-sol-fast",
             "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",

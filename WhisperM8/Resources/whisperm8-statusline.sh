@@ -355,7 +355,7 @@ else
             context_profile_matches_model=1
         elif [ "$GPT_CONTEXT_WINDOW" -eq "$GPT_EXTENDED_CONTEXT_WINDOW" ]; then
             case "$model_base" in
-                gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.4)
+                gpt-6-astra|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.4)
                     context_profile_matches_model=1 ;;
             esac
         fi
@@ -374,6 +374,7 @@ else
         compact_budget=$((size * COMPACT_AT / 100))
         if [ "$is_supported_gpt" -eq 1 ]; then
             case "${model_base}:${size}" in
+                "gpt-6-astra:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
                 "gpt-5.6-sol:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
                 "gpt-5.6-terra:${GPT_EXTENDED_CONTEXT_WINDOW}"|\
                 "gpt-5.6-luna:${GPT_EXTENDED_CONTEXT_WINDOW}"|\

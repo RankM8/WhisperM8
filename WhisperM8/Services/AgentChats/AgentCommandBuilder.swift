@@ -241,8 +241,8 @@ struct AgentCommandBuilder {
         )!
         let isFastPickerModel = effectivePickerModel.hasSuffix("-fast")
         let supportedDescription = contextWindow > ClaudeGPTModelAlias.maximumKnownSharedContextWindow
-            ? "erweitertes 900k-Profil: GPT-5.6 Sol/Terra/Luna und GPT-5.4"
-            : "unterstützt: GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
+            ? "erweitertes 900k-Profil: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna und GPT-5.4"
+            : "unterstützt: GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, GPT-5.5 und GPT-5.4/Mini"
         let pickerDescription = isFastPickerModel
             ? "Priority-Tier (1,5× Speed, 2,5× Credits) — \(supportedDescription)"
             : "Standard-Tier — \(supportedDescription)"

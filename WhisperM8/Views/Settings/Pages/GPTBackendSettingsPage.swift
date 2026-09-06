@@ -367,7 +367,7 @@ struct GPTBackendSettingsPage: View {
         case .some(.standard):
             return "Sicherer Default für alle freigegebenen GPT-Modelle. Claude Code kompaktifiziert erfahrungsgemäß bei ungefähr \(ClaudeGPTContextProfile.standard.expectedAutoCompactTokens / 1_000)k; native 1M-Modelle bleiben unberührt."
         case .some(.extended900K):
-            return "Opt-in über Codex-Subscription/OAuth (1M-Rollout des Codex-Backends): 900k Rohprofil, erwartetes Auto-Compact um \(ClaudeGPTContextProfile.extended900K.expectedAutoCompactTokens / 1_000)k. Verifiziert für GPT-5.6 Sol/Terra/Luna und GPT-5.4 (Direktmessung 2026-08-18: 903k+ angenommen, ~924k abgewiesen); GPT-6 Astra ist noch nicht gemessen und fällt wie gpt-5.5 und gpt-5.4-mini in diesem Profil aus dem Picker und frische Starts damit auf Sol zurück. Kann ChatGPT-Credits schneller verbrauchen — bei Upstream-Overflow auf Standard zurückstellen."
+            return "Opt-in über Codex-Subscription/OAuth (1M-Rollout des Codex-Backends): 900k Rohprofil, erwartetes Auto-Compact um \(ClaudeGPTContextProfile.extended900K.expectedAutoCompactTokens / 1_000)k. Verifiziert für GPT-6 Astra (Direktmessung 2026-09-06: 905k angenommen) sowie GPT-5.6 Sol/Terra/Luna und GPT-5.4 (2026-08-18: 903k+ angenommen, ~924k abgewiesen); gpt-5.5 und gpt-5.4-mini fallen in diesem Profil aus dem Picker und frische Starts damit auf Sol zurück. Kann ChatGPT-Credits schneller verbrauchen — bei Upstream-Overflow auf Standard zurückstellen."
         case .none:
             return "Bestehender benutzerdefinierter Wert. Für eine klar getestete Konfiguration Standard 272k oder das erweiterte 900k-Profil wählen."
         }

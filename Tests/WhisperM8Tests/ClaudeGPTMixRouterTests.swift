@@ -71,7 +71,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         XCTAssertTrue(
             String(decoding: extendedFivePointFiveBody, as: UTF8.self)
-                .contains("verified only for gpt-5.6-sol")
+                .contains("verified only for gpt-6-astra, gpt-5.6-sol")
         )
         XCTAssertNotNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
@@ -97,22 +97,25 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
                 contextWindow: 272_000
             )
         )
-        // GPT-6 Astra: im Standardprofil samt -fast zulässig, 900k ungemessen.
+        // GPT-6 Astra: in beiden Profilen samt -fast zulässig (900k-Messung
+        // 2026-09-06); oberhalb des größten Profils weiterhin abgelehnt.
         XCTAssertNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: "gpt-6-astra-fast",
                 contextWindow: 272_000
             )
         )
-        let extendedAstraBody = try XCTUnwrap(
+        XCTAssertNil(
             ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: "gpt-6-astra",
                 contextWindow: 900_000
             )
         )
-        XCTAssertTrue(
-            String(decoding: extendedAstraBody, as: UTF8.self)
-                .contains("gpt-6-astra is not measured yet")
+        XCTAssertNotNil(
+            ClaudeGPTMixRouter.gptModelValidationErrorResponse(
+                for: "gpt-6-astra",
+                contextWindow: 900_001
+            )
         )
     }
 
@@ -158,7 +161,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
 
         // Bekannt, aber jenseits der verifizierten Kapazitaet: Profilmeldung.
         let fivePointFive = try message(for: "gpt-5.5", contextWindow: 900_000)
-        XCTAssertTrue(fivePointFive.contains("verified only for gpt-5.6-sol"), fivePointFive)
+        XCTAssertTrue(fivePointFive.contains("verified only for gpt-6-astra, gpt-5.6-sol"), fivePointFive)
         XCTAssertFalse(fivePointFive.contains("Invalid GPT model identifier"), fivePointFive)
 
         // Bekannte Basis mit unzulaessiger -fast-Variante bleibt ebenfalls ein

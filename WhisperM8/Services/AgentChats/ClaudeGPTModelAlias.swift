@@ -41,8 +41,9 @@ enum ClaudeGPTModelAlias {
     /// Größtes auswählbares Profil. 900k ist per Direktmessung gegen den
     /// Codex-Upstream verifiziert (2026-08-18, Subscription/OAuth): Sol, Terra,
     /// Luna und GPT-5.4 nahmen 903k–913k Input-Tokens vollständig an, ~924k
-    /// wies der Upstream mit `request_too_large` ab. GPT-5.5 und GPT-5.4-Mini
-    /// lehnten dieselbe 903k-Probe ab und bleiben beim 272k-Vertrag.
+    /// wies der Upstream mit `request_too_large` ab. GPT-6 Astra nahm am
+    /// 2026-09-06 905.911 Input-Tokens an. GPT-5.5 und GPT-5.4-Mini lehnten
+    /// dieselbe 903k-Probe ab und bleiben beim 272k-Vertrag.
     static let maximumConfigurableContextWindow =
         ClaudeGPTContextProfile.extended900K.rawValue
 
@@ -84,10 +85,10 @@ enum ClaudeGPTModelAlias {
     /// Modelle mit verifiziertem 900k-Vertrag (Direktmessung 2026-08-18,
     /// ~903k-Probe gegen `/v1/messages` des codex-proxy je Modell angenommen;
     /// Sol zusätzlich bis 913.887 belegt, ~924k → `request_too_large`).
-    /// GPT-6 Astra meldet im Katalog dasselbe `max_context_window` (872k) wie
-    /// Sol, ist aber noch nicht gemessen — bis dahin bewusst nur 272k.
+    /// GPT-6 Astra: 905.911 Input-Tokens angenommen (Direktmessung 2026-09-06,
+    /// gleicher Aufbau wie am 2026-08-18).
     private static let extendedWindowModelBases: Set<String> = [
-        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4",
+        "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4",
     ]
 
     /// Obergrenze des tatsächlich getesteten Profils pro kanonischem Modell.
@@ -95,6 +96,7 @@ enum ClaudeGPTModelAlias {
     /// Codex-Backends obsolet. Claude Codes interne Reserve kompaktifiziert
     /// beim 900k-Profil erwartbar um 830k und bleibt damit klar unter der
     /// nachgewiesenen Annahmegrenze. GPT-5.5 und GPT-5.4-Mini bleiben bei 272k.
+    /// GPT-6 Astra trägt den 900k-Vertrag seit der Messung vom 2026-09-06.
     static func maximumContextWindow(for canonicalModel: String) -> Int? {
         let base = canonicalModel.hasSuffix("-fast")
             ? String(canonicalModel.dropLast("-fast".count))

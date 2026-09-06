@@ -108,9 +108,9 @@ final class ClaudeGPTModelCatalogTests: XCTestCase {
         XCTAssertTrue(catalog.contains("gpt-5.4"))
         XCTAssertFalse(catalog.contains("gpt-5.5"))
         XCTAssertFalse(catalog.contains("gpt-5.4-mini"))
-        // GPT-6 Astra: 900k noch ungemessen → im erweiterten Profil kein Eintrag.
-        XCTAssertFalse(catalog.contains("gpt-6-astra"))
-        XCTAssertFalse(catalog.contains("gpt-6-astra-fast"))
+        // GPT-6 Astra trägt den 900k-Vertrag (Messung 2026-09-06).
+        XCTAssertTrue(catalog.contains("gpt-6-astra"))
+        XCTAssertTrue(catalog.contains("gpt-6-astra-fast"))
     }
 
     func testCatalogDeduplicatesConfiguredModels() throws {
