@@ -36,6 +36,10 @@ struct CodexCatalogModel: Equatable, Sendable, Identifiable {
     let supportsFastTier: Bool
     /// `supported_in_api` — nur solche Modelle nimmt der codex-proxy an.
     let supportedInAPI: Bool
+    /// `upgrade.model` — vom Server benannter Nachfolger (Abkündigung).
+    let upgradeModel: String?
+    /// `upgrade.retirement_at` — ab wann der Server das Modell abschaltet.
+    let retirementDate: Date?
 
     init(
         slug: String,
@@ -47,7 +51,9 @@ struct CodexCatalogModel: Equatable, Sendable, Identifiable {
         contextWindow: Int = CodexCatalogModel.defaultContextWindow,
         maxContextWindow: Int? = nil,
         supportsFastTier: Bool = true,
-        supportedInAPI: Bool = true
+        supportedInAPI: Bool = true,
+        upgradeModel: String? = nil,
+        retirementDate: Date? = nil
     ) {
         self.slug = slug
         self.displayName = displayName
@@ -59,6 +65,14 @@ struct CodexCatalogModel: Equatable, Sendable, Identifiable {
         self.maxContextWindow = max(maxContextWindow ?? contextWindow, contextWindow)
         self.supportsFastTier = supportsFastTier
         self.supportedInAPI = supportedInAPI
+        self.upgradeModel = upgradeModel
+        self.retirementDate = retirementDate
+    }
+
+    /// Laut Server abgeschaltet (`retirement_at` liegt in der Vergangenheit).
+    func isRetired(at now: Date = Date()) -> Bool {
+        guard let retirementDate else { return false }
+        return retirementDate <= now
     }
 
     /// Standardfenster der aktuellen GPT-Generationen (Server-Wert 272000).
@@ -66,10 +80,11 @@ struct CodexCatalogModel: Equatable, Sendable, Identifiable {
 
     var id: String { slug }
 
-    /// GPT-Backend-tauglich: `gpt-`-Slug, API-fähig und mindestens das
-    /// Standardfenster des GPT-Profils (schließt 128k-Altmodelle aus).
+    /// GPT-Backend-tauglich: `gpt-`-Slug, API-fähig, nicht abgeschaltet und
+    /// mindestens das Standardfenster des GPT-Profils (schließt 128k-Altmodelle
+    /// aus). Abgekündigte Modelle bleiben bis zum Stichtag nutzbar.
     var isGPTBackendEligible: Bool {
-        slug.hasPrefix("gpt-") && supportedInAPI
+        slug.hasPrefix("gpt-") && supportedInAPI && !isRetired()
             && contextWindow >= Self.defaultContextWindow
     }
 
@@ -424,6 +439,7 @@ final class CodexModelCatalogStore: @unchecked Sendable {
         let maxContextWindow: Int?
         let additionalSpeedTiers: [String]?
         let supportedInAPI: Bool?
+        let upgrade: CacheUpgrade?
 
         enum CodingKeys: String, CodingKey {
             case slug
@@ -437,6 +453,24 @@ final class CodexModelCatalogStore: @unchecked Sendable {
             case maxContextWindow = "max_context_window"
             case additionalSpeedTiers = "additional_speed_tiers"
             case supportedInAPI = "supported_in_api"
+            case upgrade
+        }
+    }
+
+    /// Ein kaputtes `upgrade`-Objekt darf das Modell nicht verwerfen.
+    private struct CacheUpgrade: Decodable {
+        let model: String?
+        let retirementAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case model
+            case retirementAt = "retirement_at"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try? decoder.container(keyedBy: CodingKeys.self)
+            model = try? container?.decodeIfPresent(String.self, forKey: .model)
+            retirementAt = try? container?.decodeIfPresent(String.self, forKey: .retirementAt)
         }
     }
 
@@ -468,7 +502,9 @@ final class CodexModelCatalogStore: @unchecked Sendable {
                     // Fehlt das Feld ganz (älterer Cache), Fast-Tier annehmen —
                     // ein leeres Array dagegen ist eine echte Server-Aussage.
                     supportsFastTier: raw.additionalSpeedTiers.map { $0.contains("fast") } ?? true,
-                    supportedInAPI: raw.supportedInAPI ?? true
+                    supportedInAPI: raw.supportedInAPI ?? true,
+                    upgradeModel: raw.upgrade?.model,
+                    retirementDate: parseDate(raw.upgrade?.retirementAt)
                 )
                 return (model, raw.visibility)
             }

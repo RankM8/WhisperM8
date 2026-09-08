@@ -448,7 +448,12 @@ struct AgentCommandBuilder {
 
             var environment = baseEnvironment.merging(routerEnvironment) { _, router in router }
             if includesGPTTuning {
-                environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "gpt-5.4-mini"
+                // Kleines Modell aus dem Katalog, passend zum Profil — ein
+                // festes gpt-5.4-mini lehnte der Router im 900k-Profil ab und
+                // damit scheiterten Web Search und Fetch (2026-09-08).
+                environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = ClaudeGPTModelAlias.smallModel(
+                    contextWindow: normalizedGPTContextWindow()
+                )
                 environment["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"] = "3"
             }
             return environment

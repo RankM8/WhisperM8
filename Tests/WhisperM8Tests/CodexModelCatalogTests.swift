@@ -70,6 +70,23 @@ final class CodexModelCatalogTests: XCTestCase {
         XCTAssertNotNil(catalog.fetchedAt)
     }
 
+    func testUpgradeAndRetirementAreParsed() throws {
+        let catalog = try XCTUnwrap(parse("""
+        {
+          "slug": "gpt-5.4-mini", "priority": 23, "visibility": "list",
+          "upgrade": {"model": "gpt-5.6-luna", "retirement_at": "2026-08-31T19:00:00Z", "migration_markdown": "x"}
+        },
+        {"slug": "gpt-5.6-sol", "priority": 6, "visibility": "list", "upgrade": "kaputt"}
+        """))
+        let mini = try XCTUnwrap(catalog.model(slug: "gpt-5.4-mini"))
+        XCTAssertEqual(mini.upgradeModel, "gpt-5.6-luna")
+        XCTAssertTrue(mini.isRetired(at: ISO8601DateFormatter().date(from: "2026-09-01T00:00:00Z")!))
+        XCTAssertFalse(mini.isRetired(at: ISO8601DateFormatter().date(from: "2026-08-01T00:00:00Z")!))
+        let sol = try XCTUnwrap(catalog.model(slug: "gpt-5.6-sol"), "kaputtes upgrade-Objekt verwirft das Modell nicht")
+        XCTAssertNil(sol.upgradeModel)
+        XCTAssertFalse(sol.isRetired())
+    }
+
     func testLenientDecodeSkipsBrokenModelObject() throws {
         // Ein Objekt ohne slug (Pflichtfeld) darf die übrigen nicht verwerfen.
         let catalog = try XCTUnwrap(parse([

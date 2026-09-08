@@ -258,6 +258,36 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         XCTAssertNil(ClaudeGPTModelAlias.canonicalGPTModel("automatic"))
     }
 
+    func testSmallModelFollowsCatalogOrderProfileAndUpgradeChain() {
+        // Fallback-Katalog: Mini ist das letzte Backend-Modell → 272k-Profil.
+        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 272_000), "gpt-5.4-mini")
+        // 900k: Mini trägt das Profil nicht → Nachfolger laut Katalog (Luna).
+        let retiredMini = CodexCatalogModel(
+            slug: "gpt-5.4-mini", displayName: "Mini", detail: nil, defaultEffort: "medium",
+            efforts: CodexModelCatalog.baselineEfforts, priority: 23, supportsFastTier: false,
+            upgradeModel: "gpt-5.6-luna", retirementDate: Date(timeIntervalSince1970: 0)
+        )
+        var models = CodexModelCatalog.fallback.models.filter { $0.slug != "gpt-5.4-mini" }
+        models.append(retiredMini)
+        let catalog = CodexModelCatalog(models: models, fetchedAt: nil)
+        // Fallback-Katalog (ohne Abkündigung): Mini/5.5 tragen 900k nicht, das
+        // nächste kleinere Modell mit 1M-Klasse ist GPT-5.4.
+        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 900_000, catalog: .fallback), "gpt-5.4")
+        // Live-Situation (Cache 2026-09-04: kein gpt-5.4 mehr, Mini abgekündigt → Luna).
+        let live = CodexModelCatalog(models: models.filter { $0.slug != "gpt-5.4" }, fetchedAt: nil)
+        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 900_000, catalog: live), "gpt-5.6-luna")
+        // Abgekündigt: auch im 272k-Profil nicht mehr wählbar → Nachfolger.
+        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 272_000, catalog: catalog), "gpt-5.6-luna")
+        XCTAssertNil(ClaudeGPTModelAlias.supportedEffectiveModel("gpt-5.4-mini", fastEnabled: false, catalog: catalog))
+        XCTAssertFalse(ClaudeGPTModelAlias.backendModelSlugs(catalog: catalog).contains("gpt-5.4-mini"))
+        // Nur ein Modell im Katalog → Frontier, nie ein abgelehntes Modell.
+        let single = CodexModelCatalog(models: [CodexCatalogModel(
+            slug: "gpt-7-nova", displayName: "Nova", detail: nil, defaultEffort: "medium",
+            efforts: CodexModelCatalog.baselineEfforts, priority: 0, maxContextWindow: 872_000
+        )], fetchedAt: nil)
+        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 900_000, catalog: single), "gpt-7-nova")
+    }
+
     func testCapabilitiesComeFromCatalogMetadata() {
         // Fiktiver Katalog: ein neues Modell ohne Codeänderung, eines ohne
         // Fast-Tier, eines ohne API-Freigabe, eines mit 128k.
