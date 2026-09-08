@@ -14,8 +14,20 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
         var errorDescription: String? { "Download blockiert (Test)" }
     }
 
+    private static func candidate(
+        _ path: String,
+        catalogCapable: Bool = true
+    ) -> ClaudeCodeProxyBinaryCandidate {
+        ClaudeCodeProxyBinaryCandidate(
+            path: path,
+            source: .path,
+            version: catalogCapable ? "0.1.36-whisperm8.1" : "0.1.21",
+            supportsCatalogAllowlist: catalogCapable
+        )
+    }
+
     private func makeRunner(
-        binary: String? = "/usr/local/bin/claude-code-proxy",
+        binary: ClaudeCodeProxyBinaryCandidate? = candidate("/usr/local/bin/claude-code-proxy"),
         proxy: Result<Void, ClaudeCodeProxyError> = .success(()),
         auth: ClaudeCodeProxyAuthStatus = .authenticated(account: "user@example.com", expires: "2026-08-01")
     ) -> GPTBackendSetupRunner {
@@ -77,7 +89,26 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
 
         _ = await collect(runner)
 
-        XCTAssertFalse(installerCalled, "PATH-Binary hat Vorrang vor dem Managed Download")
+        XCTAssertFalse(installerCalled, "Katalog-fähiges PATH-Binary hat Vorrang vor dem Managed Download")
+    }
+
+    func testOutdatedBinaryTriggersManagedInstall() async {
+        // Vorfall 2026-09-08: Homebrew 0.1.21 gefunden → Setup meldete „ok"
+        // und liess das Binary stehen, das gpt-6-astra nicht kannte.
+        var installerCalled = false
+        var runner = makeRunner(
+            binary: Self.candidate("/opt/homebrew/bin/claude-code-proxy", catalogCapable: false)
+        )
+        runner.binaryInstaller = {
+            installerCalled = true
+            return "/managed/bin/claude-code-proxy"
+        }
+
+        let (outcome, events) = await collect(runner)
+
+        XCTAssertEqual(outcome, .ready)
+        XCTAssertTrue(installerCalled, "Binary ohne Katalog-Allowlist muss den Managed Download auslösen")
+        XCTAssertEqual(events[1].1, .ok("/managed/bin/claude-code-proxy"))
     }
 
     func testInstallerFailureAbortsBeforeProxyStart() async {

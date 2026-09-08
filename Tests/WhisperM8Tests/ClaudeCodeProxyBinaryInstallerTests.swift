@@ -226,6 +226,35 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
         XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1", newerThan: "0.1.0"))
     }
 
+    // MARK: Katalog-Allowlist
+
+    func testCatalogAllowlistRequiresForkReleaseUntilUpstreamShipsIt() {
+        // Fork ab known-good: ja (auch spätere Fork-Builds).
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.36-whisperm8.1"))
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.36-whisperm8.2"))
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.37-whisperm8.1"))
+        // Upstream (Homebrew) kennt nur die einkompilierte Liste — solange
+        // raine#130 nicht released ist, auch in der numerisch gleichen 0.1.36.
+        XCTAssertNil(ClaudeCodeProxyBinaryInstaller.minimumUpstreamCatalogVersion)
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.21"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.36"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.99"))
+        // Unbekannt/leer: nein.
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: nil))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "  "))
+    }
+
+    func testVersionOutputParserReadsBinaryVersionLine() {
+        XCTAssertEqual(ClaudeCodeProxyBinaryInstaller.parseVersionOutput("claude-code-proxy 0.1.21\n"), "0.1.21")
+        XCTAssertEqual(
+            ClaudeCodeProxyBinaryInstaller.parseVersionOutput("claude-code-proxy 0.1.36-whisperm8.1"),
+            "0.1.36-whisperm8.1"
+        )
+        XCTAssertEqual(ClaudeCodeProxyBinaryInstaller.parseVersionOutput("v0.2.0"), "0.2.0")
+        XCTAssertNil(ClaudeCodeProxyBinaryInstaller.parseVersionOutput(""))
+        XCTAssertNil(ClaudeCodeProxyBinaryInstaller.parseVersionOutput("error: unknown flag --version"))
+    }
+
     // MARK: Update-Check
 
     func testLatestVersionStripsTagPrefix() async throws {

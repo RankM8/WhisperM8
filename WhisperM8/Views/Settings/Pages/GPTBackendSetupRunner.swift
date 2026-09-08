@@ -38,11 +38,11 @@ struct GPTBackendSetupRunner {
         case failed(Step)
     }
 
-    var binaryResolver: () -> String? = {
-        ClaudeCodeProxyManager.shared.resolvedBinaryPath()
+    var binaryResolver: () -> ClaudeCodeProxyBinaryCandidate? = {
+        ClaudeCodeProxyManager.shared.resolvedBinary()
     }
-    /// Managed Download der known-good-Version, wenn kein Binary gefunden
-    /// wird — liefert den installierten Pfad.
+    /// Managed Download der known-good-Version, wenn kein katalog-fähiges
+    /// Binary gefunden wird — liefert den installierten Pfad.
     var binaryInstaller: () async throws -> String = {
         try await ClaudeCodeProxyBinaryInstaller().installKnownGood().path
     }
@@ -59,11 +59,12 @@ struct GPTBackendSetupRunner {
     func run(port: Int, onStep: (Step, StepState) -> Void) async -> Outcome {
         onStep(.binary, .running)
         let binaryPath: String
-        if let resolved = binaryResolver() {
-            binaryPath = resolved
+        if let resolved = binaryResolver(), resolved.supportsCatalogAllowlist {
+            binaryPath = resolved.path
         } else {
-            // Kein PATH- und kein verwaltetes Binary → Managed Download der
-            // gepinnten known-good-Version (Checksummen-verifiziert).
+            // Kein Binary — oder nur eines ohne Katalog-Allowlist (z. B. ein
+            // altes Homebrew-Release, Vorfall 2026-09-08) → Managed Download
+            // der gepinnten known-good-Version (Checksummen-verifiziert).
             do {
                 binaryPath = try await binaryInstaller()
             } catch {

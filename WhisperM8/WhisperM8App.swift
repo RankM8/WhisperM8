@@ -339,6 +339,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 )
             }
         }
+        // Codex-Modellkatalog beobachten: ein neues Modell (z. B. gpt-6-astra)
+        // soll ohne App-Neustart in der verwalteten `gpt`-Agent-Definition
+        // landen. Router und Fork-Proxy lesen den Katalog ohnehin pro Request;
+        // nur die Definition wurde bisher erst beim nächsten Backend-Start
+        // nachgezogen. Läuft unabhängig vom Toggle — der Sync ist idempotent.
+        CodexModelCatalogWatcher.shared.start()
 
         // Routing: Onboarding nur, wenn die zwei essenziellen System-Permissions
         // (Mikrofon + Accessibility) noch nicht erteilt sind. Ohne diese ist die

@@ -11,8 +11,12 @@ import Foundation
 /// (`raine/claude-code-proxy`) releast Modell-Ergänzungen nur mit Verzug;
 /// sobald der PR gemerged und released ist, kann `repository` zurück auf
 /// Upstream wechseln.
-/// Ein PATH-Binary bleibt der Power-User-Override — der Manager nutzt den
-/// verwalteten Pfad nur als Fallback, wenn `which` nichts findet.
+/// Ein PATH-Binary bleibt der Power-User-Override — aber nur, wenn es die
+/// Katalog-Allowlist beherrscht (`supportsCatalogAllowlist`). Ein älteres
+/// PATH-Binary (Vorfall 2026-09-08: Homebrew 0.1.21 vom Juli) kennt nur seine
+/// einkompilierte Liste und lehnte `gpt-6-astra` ab, obwohl Router und
+/// `gpt.md` das Modell längst aus dem Katalog kannten — der Manager zieht
+/// dann das verwaltete Binary vor bzw. installiert es.
 ///
 /// Sicherheitsmodell: Die App pinnt Version UND SHA-256 der known-good-
 /// Version; für neuere Versionen (Update-Flow) wird gegen das
@@ -32,6 +36,46 @@ struct ClaudeCodeProxyBinaryInstaller {
 
     static let repository = "GiulianoCosta71/claude-code-proxy"
     static let binaryName = "claude-code-proxy"
+
+    /// Erste Version mit katalog-getriebener Modell-Allowlist. Alles darunter
+    /// führt nur die einkompilierte Liste und lehnt jedes neuere Codex-Modell
+    /// mit „Unknown model" ab.
+    static let minimumCatalogVersion = knownGoodVersion
+    /// Kennung der Fork-Releases im Versionsstring (`0.1.36-whisperm8.1`).
+    static let forkVersionMarker = "whisperm8"
+    /// Erstes UPSTREAM-Release mit der Katalog-Allowlist (raine#130) — nil,
+    /// solange der PR nicht gemerged und released ist. Danach hier eintragen,
+    /// dann gilt auch ein Homebrew-Binary ab dieser Version als vollwertig.
+    static let minimumUpstreamCatalogVersion: String? = nil
+
+    /// Beherrscht ein Binary dieser Version die Katalog-Allowlist? Fork-
+    /// Releases ab `minimumCatalogVersion` ja; Upstream erst ab
+    /// `minimumUpstreamCatalogVersion`. Unbekannte Version (kein `--version`-
+    /// Output) zählt als nein — lieber das verwaltete Binary als ein blindes.
+    static func supportsCatalogAllowlist(version: String?) -> Bool {
+        guard let version else { return false }
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if trimmed.localizedCaseInsensitiveContains(forkVersionMarker) {
+            return !isVersion(minimumCatalogVersion, newerThan: trimmed)
+        }
+        guard let upstream = minimumUpstreamCatalogVersion else { return false }
+        return !isVersion(upstream, newerThan: trimmed)
+    }
+
+    /// Version aus der `--version`-Ausgabe (`claude-code-proxy 0.1.21`).
+    /// Erstes Token, das wie eine Versionsnummer aussieht; `v`-Präfix fällt.
+    static func parseVersionOutput(_ output: String) -> String? {
+        for rawToken in output.split(whereSeparator: { $0.isWhitespace }) {
+            var token = Substring(rawToken)
+            if token.hasPrefix("v") { token = token.dropFirst() }
+            guard let first = token.first, first.isNumber else { continue }
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-+"))
+            guard token.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { continue }
+            return String(token)
+        }
+        return nil
+    }
 
     /// Serialisiert Binary-Replace + Versions-Stempel prozessweit — Setup-
     /// Wizard und Settings-Update laufen sonst mit getrennten Instanzen

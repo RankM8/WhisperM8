@@ -11,7 +11,8 @@ struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTAutoCompactWindow) private var gptContextWindow =
         AppPreferences.claudeGPTDefaultContextWindow
 
-    @State private var binaryPath: String?
+    @State private var binary: ClaudeCodeProxyBinaryCandidate?
+    private var binaryPath: String? { binary?.path }
     @State private var proxyReachable: Bool?
     @State private var authStatus: ClaudeCodeProxyAuthStatus = .unknown
     @State private var didRefresh = false
@@ -180,11 +181,9 @@ struct GPTBackendSettingsPage: View {
         SettingsSection("Status") {
             SettingsStatusRow(
                 title: "Binary",
-                subtitle: didRefresh && binaryPath == nil
-                    ? "„Jetzt komplett einrichten“ lädt es automatisch; alternativ manuell aus dem GitHub-Release raine/claude-code-proxy in den PATH."
-                    : nil,
-                tone: didRefresh ? (binaryPath == nil ? .error : .ok) : .off,
-                detail: binaryPath.map { "Gefunden: \($0)" } ?? (didRefresh ? "Fehlt" : "Wird geprüft…")
+                subtitle: binaryStatusSubtitle,
+                tone: binaryStatusTone,
+                detail: binaryStatusDetail
             )
 
             SettingsStatusRow(
@@ -413,9 +412,36 @@ struct GPTBackendSettingsPage: View {
     private var binaryManagementSubtitle: String {
         let installer = ClaudeCodeProxyBinaryInstaller()
         if let managed = installer.installedManagedVersion() {
-            return "Verwaltet von WhisperM8: v\(managed) (\(installer.binaryURL.path)). Ein PATH-Binary hätte Vorrang."
+            return "Verwaltet von WhisperM8: v\(managed) (\(installer.binaryURL.path)). Ein PATH-Binary hätte Vorrang, sofern es die Katalog-Allowlist beherrscht (ab v\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion))."
         }
-        return "Kein verwaltetes Binary — es zählt die PATH-Installation. „Nach Update suchen“ vergleicht mit dem neuesten GitHub-Release."
+        return "Kein verwaltetes Binary — es zählt die PATH-Installation, solange sie die Katalog-Allowlist beherrscht (ab v\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion)). „Nach Update suchen“ vergleicht mit dem neuesten GitHub-Release."
+    }
+
+    private var binaryStatusDetail: String {
+        guard let binary else { return didRefresh ? "Fehlt" : "Wird geprüft…" }
+        return "Gefunden: \(binary.path) (v\(binary.version ?? "unbekannt"), \(binary.sourceLabel))"
+    }
+
+    private var binaryStatusTone: SettingsStatusTone {
+        guard didRefresh else { return .off }
+        guard let binary else { return .error }
+        return binary.supportsCatalogAllowlist ? .ok : .warn
+    }
+
+    /// Ein Binary ohne Katalog-Allowlist kennt nur seine einkompilierte
+    /// Modell-Liste — neue Codex-Modelle scheitern dort mit „Unknown model",
+    /// obwohl Router und `gpt`-Agent sie aus dem Katalog längst anbieten.
+    private var binaryStatusSubtitle: String? {
+        guard didRefresh else { return nil }
+        guard let binary else {
+            return "„Jetzt komplett einrichten“ lädt es automatisch; alternativ manuell aus dem GitHub-Release \(ClaudeCodeProxyBinaryInstaller.repository) in den PATH."
+        }
+        guard !binary.supportsCatalogAllowlist else { return nil }
+        var text = "Diese Version kennt nur ihre einkompilierte Modell-Liste — neue Codex-Modelle scheitern mit „Unknown model“. Die Katalog-Allowlist gibt es ab v\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion); „Jetzt komplett einrichten“ installiert das verwaltete Binary, das dann Vorrang hat."
+        if let installError = proxyManager.lastManagedInstallError {
+            text += " Letzter automatischer Versuch: \(installError)"
+        }
+        return text
     }
 
     private func checkForBinaryUpdate() {
@@ -543,12 +569,12 @@ struct GPTBackendSettingsPage: View {
         Task {
             let snapshot = await Task.detached(priority: .userInitiated) {
                 (
-                    manager.resolvedBinaryPath(),
+                    manager.resolvedBinary(),
                     manager.isReachable(port: checkedPort),
                     manager.authStatus()
                 )
             }.value
-            binaryPath = snapshot.0
+            binary = snapshot.0
             proxyReachable = snapshot.1
             authStatus = snapshot.2
             didRefresh = true
@@ -608,7 +634,7 @@ struct GPTBackendSettingsPage: View {
     }
 
     private func clearStatus() {
-        binaryPath = nil
+        binary = nil
         proxyReachable = nil
         authStatus = .unknown
         didRefresh = false

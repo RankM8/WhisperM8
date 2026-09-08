@@ -409,6 +409,194 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(completionCode, 0)
     }
 
+    // MARK: Binary-Auswahl (Katalog-Allowlist)
+
+    private static let forkVersionOutput = "claude-code-proxy 0.1.36-whisperm8.1\n"
+    private static let homebrewVersionOutput = "claude-code-proxy 0.1.21\n"
+
+    /// `--version` pro Pfad beantworten; alles andere scheitert.
+    private static func versionRunner(
+        _ versions: [String: String],
+        calls: (() -> Void)? = nil
+    ) -> ClaudeCodeProxyManager.CommandRunner {
+        { executable, arguments, _ in
+            guard arguments == ["--version"], let output = versions[executable] else {
+                return ClaudeCodeProxyCommandResult(exitCode: 1, stdout: "", stderr: "")
+            }
+            calls?()
+            return ClaudeCodeProxyCommandResult(exitCode: 0, stdout: output, stderr: "")
+        }
+    }
+
+    func testCatalogCapablePathBinaryKeepsPrecedenceOverManaged() {
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            commandRunner: Self.versionRunner([
+                "/opt/homebrew/bin/claude-code-proxy": Self.forkVersionOutput,
+                "/managed/claude-code-proxy": Self.forkVersionOutput,
+            ]),
+            managedBinary: { "/managed/claude-code-proxy" }
+        )
+
+        let binary = manager.resolvedBinary()
+        XCTAssertEqual(binary?.path, "/opt/homebrew/bin/claude-code-proxy")
+        XCTAssertEqual(binary?.source, .path)
+        XCTAssertEqual(binary?.version, "0.1.36-whisperm8.1")
+        XCTAssertEqual(binary?.supportsCatalogAllowlist, true)
+    }
+
+    func testOutdatedPathBinaryYieldsToCatalogCapableManagedBinary() {
+        // Vorfall 2026-09-08: Homebrew 0.1.21 (einkompilierte Liste bis
+        // gpt-5.6) gewann gegen alles und lehnte gpt-6-astra ab.
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            commandRunner: Self.versionRunner([
+                "/opt/homebrew/bin/claude-code-proxy": Self.homebrewVersionOutput,
+                "/managed/claude-code-proxy": Self.forkVersionOutput,
+            ]),
+            managedBinary: { "/managed/claude-code-proxy" }
+        )
+
+        let binary = manager.resolvedBinary()
+        XCTAssertEqual(binary?.path, "/managed/claude-code-proxy")
+        XCTAssertEqual(binary?.source, .managed)
+        XCTAssertEqual(binary?.supportsCatalogAllowlist, true)
+        XCTAssertEqual(manager.resolvedBinaryPath(), "/managed/claude-code-proxy")
+    }
+
+    func testOnlyOutdatedPathBinaryIsReportedAsOutdatedCandidate() {
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            commandRunner: Self.versionRunner([
+                "/opt/homebrew/bin/claude-code-proxy": Self.homebrewVersionOutput,
+            ])
+        )
+
+        let binary = manager.resolvedBinary()
+        XCTAssertEqual(binary?.path, "/opt/homebrew/bin/claude-code-proxy")
+        XCTAssertEqual(binary?.version, "0.1.21")
+        XCTAssertEqual(binary?.supportsCatalogAllowlist, false)
+    }
+
+    func testUnknownVersionCountsAsOutdated() {
+        // Kein `--version`-Output (Default-Runner scheitert) → lieber das
+        // verwaltete Binary als ein blindes.
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            managedBinary: { "/managed/claude-code-proxy" }
+        )
+        // Beide unbekannt → PATH bleibt (kein Grund zu wechseln) …
+        XCTAssertEqual(manager.resolvedBinary()?.path, "/opt/homebrew/bin/claude-code-proxy")
+        XCTAssertEqual(manager.resolvedBinary()?.supportsCatalogAllowlist, false)
+    }
+
+    func testEnsureRunningInstallsManagedBinaryWhenOnlyOutdatedPathBinaryExists() {
+        var installCalls = 0
+        var launched: [String] = []
+        var managedInstalled = false
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            reachability: { _ in launched.isEmpty ? false : true },
+            launcher: { executable, _, _ in
+                launched.append(executable)
+                return Self.processHandle()
+            },
+            commandRunner: Self.versionRunner([
+                "/opt/homebrew/bin/claude-code-proxy": Self.homebrewVersionOutput,
+                "/managed/claude-code-proxy": Self.forkVersionOutput,
+            ]),
+            managedBinary: { managedInstalled ? "/managed/claude-code-proxy" : nil },
+            managedInstaller: {
+                installCalls += 1
+                managedInstalled = true
+                return "/managed/claude-code-proxy"
+            }
+        )
+
+        assertSuccess(manager.ensureRunning(port: 18_765))
+
+        XCTAssertEqual(installCalls, 1)
+        XCTAssertEqual(launched, ["/managed/claude-code-proxy"], "Nach der Installation muss der Fork starten, nicht Homebrew")
+        XCTAssertNil(manager.lastManagedInstallError)
+    }
+
+    func testFailedManagedInstallFallsBackToOutdatedBinaryAndIsNotRetried() {
+        var installCalls = 0
+        var launched: [String] = []
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            reachability: { _ in !launched.isEmpty },
+            launcher: { executable, _, _ in
+                launched.append(executable)
+                return Self.processHandle()
+            },
+            commandRunner: Self.versionRunner([
+                "/opt/homebrew/bin/claude-code-proxy": Self.homebrewVersionOutput,
+            ]),
+            managedInstaller: {
+                installCalls += 1
+                throw TestInstallError.downloadBlocked
+            }
+        )
+
+        assertSuccess(manager.ensureRunning(port: 18_765))
+        XCTAssertEqual(launched, ["/opt/homebrew/bin/claude-code-proxy"], "Ohne Fork bleibt der alte Proxy besser als keiner")
+        XCTAssertEqual(manager.lastManagedInstallError, "Download blockiert (Test)")
+
+        // Zweiter Start (Proxy weg): kein erneuter Download-Versuch.
+        launched.removeAll()
+        manager.stopIfSelfStarted()
+        assertSuccess(manager.ensureRunning(port: 18_765))
+        XCTAssertEqual(installCalls, 1)
+    }
+
+    func testEnsureRunningDoesNotInstallWhenPathBinaryIsCatalogCapable() {
+        var installCalls = 0
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            reachability: { _ in true },
+            commandRunner: Self.versionRunner([
+                "/opt/homebrew/bin/claude-code-proxy": Self.forkVersionOutput,
+            ]),
+            managedInstaller: {
+                installCalls += 1
+                return "/managed/claude-code-proxy"
+            }
+        )
+        assertSuccess(manager.ensureRunning(port: 18_765))
+        XCTAssertEqual(installCalls, 0)
+    }
+
+    func testBinaryVersionIsCachedPerPath() {
+        var versionCalls = 0
+        let manager = makeManager(
+            commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
+            commandRunner: Self.versionRunner(
+                ["/opt/homebrew/bin/claude-code-proxy": Self.forkVersionOutput],
+                calls: { versionCalls += 1 }
+            )
+        )
+        _ = manager.resolvedBinary()
+        _ = manager.resolvedBinary()
+        _ = manager.resolvedBinaryPath()
+        XCTAssertEqual(versionCalls, 1, "Status-Refresh, Chat-Start und Auth-Check dürfen nicht je einen Subprozess kosten")
+    }
+
+    private enum TestInstallError: Error, LocalizedError {
+        case downloadBlocked
+        var errorDescription: String? { "Download blockiert (Test)" }
+    }
+
+    private func assertSuccess(
+        _ result: Result<Void, ClaudeCodeProxyError>,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        if case .failure(let error) = result {
+            XCTFail("Erwartet Erfolg, erhalten \(error)", file: file, line: line)
+        }
+    }
+
     private func makeManager(
         commandResolver: @escaping (String) -> String? = { _ in "/usr/local/bin/claude-code-proxy" },
         reachability: @escaping (Int) -> Bool = { _ in false },
@@ -425,13 +613,17 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         agentDefinitionSyncer: @escaping () -> Void = {},
         environment: @escaping () -> [String: String] = { [:] },
         retryAttempts: Int = 1,
-        notificationCenter: NotificationCenter = NotificationCenter()
+        notificationCenter: NotificationCenter = NotificationCenter(),
+        managedBinary: @escaping () -> String? = { nil },
+        // Tests duerfen nie den echten Managed Download treffen.
+        managedInstaller: @escaping () throws -> String = { throw TestInstallError.downloadBlocked }
     ) -> ClaudeCodeProxyManager {
         ClaudeCodeProxyManager(
             commandResolver: commandResolver,
             // Kein Zugriff auf das echte Managed-Binary in App Support —
             // sonst haengt der Test am Dateisystem der Maschine.
-            managedBinaryResolver: { nil },
+            managedBinaryResolver: managedBinary,
+            managedInstaller: managedInstaller,
             reachabilityResolver: reachability,
             processLauncher: launcher,
             commandRunner: commandRunner,

@@ -75,6 +75,24 @@ private final class ClaudeCodeProxyHandleBox {
     var value: ClaudeCodeProxyProcessHandle?
 }
 
+/// Ergebnis-Box fuer die Semaphore-Bruecke der Managed-Installation.
+private final class ClaudeCodeProxyInstallOutcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Result<String, Error> = .failure(ClaudeCodeProxyError.binaryMissing)
+
+    var value: Result<String, Error> {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func store(_ value: Result<String, Error>) {
+        lock.lock()
+        storage = value
+        lock.unlock()
+    }
+}
+
 enum ClaudeCodeProxyAuthStatus: Equatable {
     case authenticated(account: String, expires: String)
     case notAuthenticated
@@ -90,6 +108,29 @@ struct ClaudeCodeProxyCommandResult: Equatable {
 struct ClaudeCodeProxyDeviceCodeInfo: Equatable {
     var visitURL: String
     var code: String
+}
+
+enum ClaudeCodeProxyBinarySource: Equatable {
+    /// Ueber `which` im Login-Shell-PATH gefunden (Homebrew, manuell).
+    case path
+    /// Managed Download in `~/Library/Application Support/WhisperM8/bin/`.
+    case managed
+}
+
+/// Ein Proxy-Binary-Kandidat samt dem, was ueber ihn entscheidet: Version
+/// (aus `--version`, mtime-gecacht) und ob er die Katalog-Allowlist kann.
+struct ClaudeCodeProxyBinaryCandidate: Equatable {
+    var path: String
+    var source: ClaudeCodeProxyBinarySource
+    var version: String?
+    var supportsCatalogAllowlist: Bool
+
+    var sourceLabel: String {
+        switch source {
+        case .path: return "PATH"
+        case .managed: return "verwaltet"
+        }
+    }
 }
 
 /// Abstrakter Prozessgriff fuer den langlebigen Proxy. Tests koennen damit
@@ -141,6 +182,7 @@ final class ClaudeCodeProxyManager {
     private let commandResolver: (String) -> String?
 
     private let managedBinaryResolver: () -> String?
+    private let managedInstaller: () throws -> String
     private let reachabilityResolver: (Int) -> Bool
     private let processLauncher: ProcessLauncher
     private let commandRunner: CommandRunner
@@ -159,12 +201,25 @@ final class ClaudeCodeProxyManager {
     private var selfStartedProcess: ClaudeCodeProxyProcessHandle?
     private var deviceLoginProcess: ClaudeCodeProxyProcessHandle?
     private var terminateObserver: NSObjectProtocol?
+    /// `--version`-Ergebnis pro Binary-Pfad, gueltig solange die mtime gleich
+    /// bleibt — resolvedBinary() laeuft bei jedem Status-Refresh, Chat-Start
+    /// und Auth-Check; ein Subprozess pro Aufruf waere zu teuer.
+    private let versionCacheLock = NSLock()
+    private var versionCache: [String: (modified: Date?, version: String?)] = [:]
+    /// Die automatische Fork-Installation laeuft hoechstens einmal pro
+    /// App-Lauf — ein blockierter Download darf nicht jeden Chat-Start
+    /// erneut Sekunden kosten. Der Setup-Wizard installiert unabhaengig davon.
+    private var didAttemptManagedInstall = false
+    private(set) var lastManagedInstallError: String?
 
     init(
         commandResolver: @escaping (String) -> String? = { AgentCommandBuilder.commandPath($0) },
         managedBinaryResolver: @escaping () -> String? = {
             let managed = ClaudeCodeProxyBinaryInstaller().binaryURL
             return FileManager.default.isExecutableFile(atPath: managed.path) ? managed.path : nil
+        },
+        managedInstaller: @escaping () throws -> String = {
+            try ClaudeCodeProxyManager.installKnownGoodBlocking()
         },
         reachabilityResolver: @escaping (Int) -> Bool = { ClaudeCodeProxyManager.isReachable(port: $0) },
         processLauncher: @escaping ProcessLauncher = ClaudeCodeProxyManager.launchProcess,
@@ -188,6 +243,7 @@ final class ClaudeCodeProxyManager {
     ) {
         self.commandResolver = commandResolver
         self.managedBinaryResolver = managedBinaryResolver
+        self.managedInstaller = managedInstaller
         self.reachabilityResolver = reachabilityResolver
         self.processLauncher = processLauncher
         self.commandRunner = commandRunner
@@ -235,9 +291,10 @@ final class ClaudeCodeProxyManager {
             // weiterleben noch durch einen neuen Handle verdeckt werden.
             replaceSelfStartedProcess(with: nil)
 
-            guard let executable = resolvedBinaryPath() else {
+            guard let binary = catalogCapableBinaryInstallingIfNeeded() else {
                 return .failure(.binaryMissing)
             }
+            let executable = binary.path
 
             let process: ClaudeCodeProxyProcessHandle
             do {
@@ -331,14 +388,122 @@ final class ClaudeCodeProxyManager {
         }
     }
 
-    /// PATH-Binary gewinnt (Power-User-Override); Fallback ist das von
-    /// WhisperM8 verwaltete Binary aus dem Managed Download
-    /// (`~/Library/Application Support/WhisperM8/bin/`).
+    /// Pfad des gewaehlten Binarys — fuer Auth-Status und Device-Login, die
+    /// mit jeder Version auskommen. Reihenfolge siehe `resolvedBinary()`.
     func resolvedBinaryPath() -> String? {
-        if let fromPath = commandResolver("claude-code-proxy") {
-            return fromPath
+        resolvedBinary()?.path
+    }
+
+    /// Auswahl des Proxy-Binarys. Ein PATH-Binary bleibt der Power-User-
+    /// Override, aber nur, wenn es die Katalog-Allowlist beherrscht — sonst
+    /// gewinnt das verwaltete Binary. Vorfall 2026-09-08: Homebrew 0.1.21
+    /// (Juli) hatte Vorrang vor allem, kannte aber nur seine einkompilierte
+    /// Modell-Liste bis gpt-5.6; Router und `gpt.md` boten aus dem Katalog
+    /// laengst gpt-6-astra an, jeder `gpt`-Spawn starb mit „Unknown model".
+    /// Gibt es nur veraltete Binaries, kommt das PATH-Binary zurueck
+    /// (`supportsCatalogAllowlist == false`) — `ensureRunning` versucht dann
+    /// zuerst die Installation des verwalteten Binarys.
+    func resolvedBinary() -> ClaudeCodeProxyBinaryCandidate? {
+        let pathCandidate = commandResolver("claude-code-proxy").map {
+            candidate(path: $0, source: .path)
         }
-        return managedBinaryResolver()
+        if let pathCandidate, pathCandidate.supportsCatalogAllowlist {
+            return pathCandidate
+        }
+        if let managed = managedBinaryResolver() {
+            let managedCandidate = candidate(path: managed, source: .managed)
+            if managedCandidate.supportsCatalogAllowlist || pathCandidate == nil {
+                return managedCandidate
+            }
+        }
+        return pathCandidate
+    }
+
+    /// Liefert ein katalog-faehiges Binary; ist keins da, wird EINMAL pro
+    /// App-Lauf das verwaltete Fork-Release installiert. Schlaegt das fehl,
+    /// laeuft der Proxy mit dem veralteten Binary weiter (aeltere Modelle
+    /// funktionieren dann noch) — mit Warnung im Log und in den Settings.
+    private func catalogCapableBinaryInstallingIfNeeded() -> ClaudeCodeProxyBinaryCandidate? {
+        guard let binary = resolvedBinary() else { return nil }
+        guard !binary.supportsCatalogAllowlist else { return binary }
+
+        Logger.claudeGPTRouter.warning(
+            "claude_code_proxy_binary_outdated path=\(binary.path, privacy: .public) version=\(binary.version ?? "unbekannt", privacy: .public) required=\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion, privacy: .public)"
+        )
+        guard !didAttemptManagedInstall else { return binary }
+        didAttemptManagedInstall = true
+
+        do {
+            let installedPath = try managedInstaller()
+            lastManagedInstallError = nil
+            invalidateVersionCache(for: installedPath)
+            Logger.claudeGPTRouter.info(
+                "claude_code_proxy_managed_installed path=\(installedPath, privacy: .public)"
+            )
+        } catch {
+            lastManagedInstallError = error.localizedDescription
+            Logger.claudeGPTRouter.error(
+                "claude_code_proxy_managed_install_failed error=\(error.localizedDescription, privacy: .public) — Proxy laeuft mit veraltetem Binary weiter"
+            )
+            return binary
+        }
+        // Neu aufloesen: jetzt sollte das verwaltete Binary gewinnen.
+        return resolvedBinary() ?? binary
+    }
+
+    private func candidate(path: String, source: ClaudeCodeProxyBinarySource) -> ClaudeCodeProxyBinaryCandidate {
+        let version = binaryVersion(at: path)
+        return ClaudeCodeProxyBinaryCandidate(
+            path: path,
+            source: source,
+            version: version,
+            supportsCatalogAllowlist: ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: version)
+        )
+    }
+
+    /// `claude-code-proxy --version`, gecacht pro (Pfad, mtime).
+    func binaryVersion(at path: String) -> String? {
+        let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        versionCacheLock.lock()
+        if let cached = versionCache[path], cached.modified == modified {
+            versionCacheLock.unlock()
+            return cached.version
+        }
+        versionCacheLock.unlock()
+
+        var version: String?
+        if let result = try? commandRunner(path, ["--version"], environmentResolver()),
+           result.exitCode == 0 {
+            version = ClaudeCodeProxyBinaryInstaller.parseVersionOutput(result.stdout)
+        }
+        versionCacheLock.lock()
+        versionCache[path] = (modified, version)
+        versionCacheLock.unlock()
+        return version
+    }
+
+    private func invalidateVersionCache(for path: String) {
+        versionCacheLock.lock()
+        versionCache.removeValue(forKey: path)
+        versionCacheLock.unlock()
+    }
+
+    /// Bruecke fuer die synchrone Startsequenz: `installKnownGood()` ist
+    /// async (URLSession), `ensureRunning` laeuft blockierend auf einem
+    /// Hintergrund-Thread unter `ensureLock`. Nie auf dem Main Thread rufen.
+    static func installKnownGoodBlocking() throws -> String {
+        let done = DispatchSemaphore(value: 0)
+        let outcome = ClaudeCodeProxyInstallOutcome()
+        Task.detached(priority: .userInitiated) {
+            do {
+                outcome.store(.success(try await ClaudeCodeProxyBinaryInstaller().installKnownGood().path))
+            } catch {
+                outcome.store(.failure(error))
+            }
+            done.signal()
+        }
+        done.wait()
+        return try outcome.value.get()
     }
 
     /// Startet den Device-Code-Flow als langlebigen Prozess. Der Manager
