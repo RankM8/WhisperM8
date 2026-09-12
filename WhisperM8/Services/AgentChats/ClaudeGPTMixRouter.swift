@@ -323,6 +323,64 @@ final class ClaudeGPTMixRouter {
         return rewritten
     }
 
+    struct ToolSchemaSanitization: Equatable {
+        var body: Data
+        var removedPatterns: Int
+        var affectedTools: [String]
+    }
+
+    /// true, wenn ein JSON-Schema-`pattern` Konstrukte enthält, die die
+    /// Schema-Validierung des Codex-Backends nicht kennt (Unicode-Klassen
+    /// `\p{…}`/`\P{…}`). ASCII-Patterns bleiben unangetastet.
+    static func isUnsupportedUpstreamPattern(_ pattern: String) -> Bool {
+        pattern.contains("\\p{") || pattern.contains("\\P{")
+    }
+
+    /// Entfernt in `tools[*].input_schema` rekursiv jedes `pattern`, das das
+    /// Backend ablehnen würde. Bodies ohne Befund bleiben byte-identisch.
+    static func sanitizingToolSchemas(in body: Data) -> ToolSchemaSanitization {
+        let untouched = ToolSchemaSanitization(body: body, removedPatterns: 0, affectedTools: [])
+        guard let object = try? JSONSerialization.jsonObject(with: body),
+              var dictionary = object as? [String: Any],
+              var tools = dictionary["tools"] as? [[String: Any]] else {
+            return untouched
+        }
+        var removed = 0
+        var affected: [String] = []
+        for index in tools.indices {
+            guard let schema = tools[index]["input_schema"] else { continue }
+            var count = 0
+            let cleaned = strippingUnsupportedPatterns(schema, removed: &count)
+            guard count > 0 else { continue }
+            tools[index]["input_schema"] = cleaned
+            removed += count
+            affected.append(tools[index]["name"] as? String ?? "#\(index)")
+        }
+        guard removed > 0 else { return untouched }
+        dictionary["tools"] = tools
+        guard let rewritten = try? JSONSerialization.data(withJSONObject: dictionary) else {
+            return untouched
+        }
+        return ToolSchemaSanitization(body: rewritten, removedPatterns: removed, affectedTools: affected)
+    }
+
+    private static func strippingUnsupportedPatterns(_ node: Any, removed: inout Int) -> Any {
+        if var dictionary = node as? [String: Any] {
+            if let pattern = dictionary["pattern"] as? String, isUnsupportedUpstreamPattern(pattern) {
+                dictionary.removeValue(forKey: "pattern")
+                removed += 1
+            }
+            for (key, value) in dictionary {
+                dictionary[key] = strippingUnsupportedPatterns(value, removed: &removed)
+            }
+            return dictionary
+        }
+        if let array = node as? [Any] {
+            return array.map { strippingUnsupportedPatterns($0, removed: &removed) }
+        }
+        return node
+    }
+
     static func upstream(for body: Data) -> Upstream {
         guard let model = model(in: body) else { return .anthropic }
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -718,9 +776,24 @@ private extension ClaudeGPTMixRouter {
             // `auto`/`gpt-auto` (z. B. aus Agent-Frontmatter) wird hier auf das
             // neueste Katalogmodell umgeschrieben — der Aufrufer muss keine
             // konkrete ID kennen, die morgen veraltet ist.
-            let body = ClaudeGPTMixRouter.resolvingAutoModel(in: body)
+            var body = ClaudeGPTMixRouter.resolvingAutoModel(in: body)
             let model = ClaudeGPTMixRouter.model(in: body)
             let upstream = ClaudeGPTMixRouter.upstream(for: body)
+            if upstream == .codexProxy {
+                // Das OpenAI-Backend validiert Tool-Schemas mit einer Regex-
+                // Engine ohne Unicode-Klassen; Claude Codes Artifact-Tool
+                // trägt `\p{Cc}…` im `pattern` → 400 „is not a 'regex'" und
+                // jeder gpt-/general-purpose-Subagent starb sofort
+                // (Befund 2026-09-09/12). Nur für den Codex-Upstream, Anthropic
+                // versteht die Patterns.
+                let sanitized = ClaudeGPTMixRouter.sanitizingToolSchemas(in: body)
+                if sanitized.removedPatterns > 0 {
+                    Logger.claudeGPTRouter.info(
+                        "gpt_tool_schema_patterns_stripped count=\(sanitized.removedPatterns) tools=\(sanitized.affectedTools.joined(separator: ","), privacy: .public)"
+                    )
+                    body = sanitized.body
+                }
+            }
             if let errorBody = ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: model,
                 contextWindow: gptContextWindowResolver()

@@ -129,6 +129,46 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
     /// jenseits seiner verifizierten Kapazitaet ist ein Profilproblem. Vorher
     /// liefen beide in dieselbe Meldung, und beim 900k-Profil wurde daraus
     /// die falsche Handlungsempfehlung "wechsle zu Sol / nimm 272k".
+    func testToolSchemaSanitizerStripsOnlyUnicodePatternsRecursively() throws {
+        // Artifact-Tool von Claude Code (Befund 2026-09-12): `\p{…}` im pattern
+        // → Codex-Backend 400 „is not a 'regex'". ASCII-Patterns bleiben.
+        let body = Data(#"""
+        {"model":"gpt-6-astra","messages":[],"tools":[
+          {"name":"Artifact","input_schema":{"type":"object","properties":{
+             "collection":{"type":"string","pattern":"^(?!__.*__$)[^\\p{Cc}\\p{Cf}]{1,200}$"},
+             "doc_id":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,200}$"},
+             "writes":{"type":"array","items":{"type":"object","properties":{
+                "collection":{"type":"string","pattern":"^[^\\P{L}]+$"}}}}}}},
+          {"name":"Read","input_schema":{"type":"object","properties":{"file_path":{"type":"string"}}}}
+        ]}
+        """#.utf8)
+        let result = ClaudeGPTMixRouter.sanitizingToolSchemas(in: body)
+        XCTAssertEqual(result.removedPatterns, 2)
+        XCTAssertEqual(result.affectedTools, ["Artifact"])
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: result.body) as? [String: Any])
+        let tools = try XCTUnwrap(object["tools"] as? [[String: Any]])
+        let artifact = try XCTUnwrap(tools[0]["input_schema"] as? [String: Any])
+        let properties = try XCTUnwrap(artifact["properties"] as? [String: Any])
+        let collection = try XCTUnwrap(properties["collection"] as? [String: Any])
+        XCTAssertNil(collection["pattern"])
+        let docID = try XCTUnwrap(properties["doc_id"] as? [String: Any])
+        XCTAssertEqual(docID["pattern"] as? String, "^[A-Za-z0-9_-]{1,200}$", "ASCII-Pattern bleibt")
+        let writes = try XCTUnwrap(properties["writes"] as? [String: Any])
+        let items = try XCTUnwrap(writes["items"] as? [String: Any])
+        let nested = try XCTUnwrap((items["properties"] as? [String: Any])?["collection"] as? [String: Any])
+        XCTAssertNil(nested["pattern"], "verschachtelte Patterns werden ebenfalls entfernt")
+        XCTAssertEqual(object["model"] as? String, "gpt-6-astra", "übrige Felder bleiben erhalten")
+        XCTAssertEqual(tools.count, 2)
+
+        // Ohne Befund bleibt der Body byte-identisch — auch ohne tools.
+        let clean = Data(#"{"model":"gpt-6-astra","messages":[],"tools":[{"name":"Read","input_schema":{"type":"object"}}]}"#.utf8)
+        XCTAssertEqual(ClaudeGPTMixRouter.sanitizingToolSchemas(in: clean), .init(body: clean, removedPatterns: 0, affectedTools: []))
+        let noTools = Data(#"{"model":"gpt-6-astra","messages":[]}"#.utf8)
+        XCTAssertEqual(ClaudeGPTMixRouter.sanitizingToolSchemas(in: noTools).body, noTools)
+        XCTAssertTrue(ClaudeGPTMixRouter.isUnsupportedUpstreamPattern(#"[\P{Cc}]"#))
+        XCTAssertFalse(ClaudeGPTMixRouter.isUnsupportedUpstreamPattern(#"^[a-z]+$"#))
+    }
+
     func testAutoModelBodyIsRewrittenToCatalogFrontier() throws {
         let cases: [(String, String)] = [
             ("auto", "gpt-6-astra"),
