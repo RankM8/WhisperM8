@@ -350,6 +350,15 @@ whisperm8 agent send a3f81c2e --wait --json \
 - **Report meldet Commits, aber `git log` kennt sie nicht als neu**: Codex
   referenziert gern existierende SHAs — Commits IMMER per git verifizieren,
   besonders bei read-only-Jobs (die können gar nicht committen).
+- **Docker/OrbStack und Chromium aus dem Job heraus** (Befund 2026-09-12,
+  ListM8): Die Codex-Sandbox (macOS Seatbelt) verweigert den Docker-Socket
+  (`~/.orbstack/run/docker.sock`: permission denied) und den Start von
+  Chromium (`MachPortRendezvousServer: Permission denied`) — auch mit
+  `--allow-network`, das nur den Netzwerkzugang öffnet. Deshalb keine
+  Container-Tests, Migrationen oder Headless-Browser innerhalb eines Jobs.
+  Muster: der Job liefert Code und Testplan, die Container-/Browser-Schritte
+  laufen mit Host-Werkzeugen im Hauptchat (oder Browser-QA über den
+  Playwright-MCP, der außerhalb der Sandbox läuft, siehe oben).
 
 ## Referenzen
 
