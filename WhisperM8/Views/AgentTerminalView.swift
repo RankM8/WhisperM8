@@ -33,6 +33,52 @@ final class QuietableTerminalView: LocalProcessTerminalView {
         if scrollerStyle != .legacy {
             scrollerStyle = .legacy
         }
+        applyScrollbackConfiguration()
+        syncScrollerVisibility()
+    }
+
+    // MARK: - Scrollback
+
+    /// Einmal pro View: SwiftTerms 500-Zeilen-Default auf den konfigurierten
+    /// Wert heben. Begründung und Messwerte in `TerminalScrollbackPolicy` —
+    /// mit 500 Zeilen schob ein arbeitender Agent den lesenden Nutzer nach
+    /// ~200 Zeilen Output an den oberen Anschlag.
+    private var didApplyScrollback = false
+
+    private func applyScrollbackConfiguration() {
+        guard !didApplyScrollback else { return }
+        didApplyScrollback = true
+        let lines = AppPreferences.shared.agentTerminalScrollbackLines
+        getTerminal().changeScrollback(lines)
+        Logger.agentPerformance.info("terminal_scrollback_configured lines=\(lines, privacy: .public)")
+    }
+
+    // MARK: - Scrollbar-Sichtbarkeit
+
+    /// SwiftTerms `updateScroller()` setzt `isEnabled = canScroll`, versteckt
+    /// den Scroller aber nie. Ein deaktivierter `NSScroller` zeichnet den
+    /// Track ohne Knob — mit `.legacy` (siehe oben) blieb dadurch dauerhaft
+    /// eine leere Rinne stehen, die Scrollbarkeit vortäuscht, wo keine ist
+    /// (frischer Chat: die TUI rendert per Cursor-Up in-place, es läuft nichts
+    /// in den Scrollback). Wir blenden ihn in dem Fall ganz aus. Der Platz
+    /// bleibt via Auto-Layout reserviert, der Text springt also nicht.
+    private weak var cachedScroller: NSScroller?
+
+    private var terminalScroller: NSScroller? {
+        if let cachedScroller { return cachedScroller }
+        let found = subviews.compactMap { $0 as? NSScroller }.first
+        cachedScroller = found
+        return found
+    }
+
+    /// Läuft auch aus den Scroll-Callbacks, also potenziell sehr häufig —
+    /// deshalb gecachte Referenz und Schreiben nur bei echter Änderung.
+    private func syncScrollerVisibility() {
+        guard let scroller = terminalScroller else { return }
+        let shouldHide = !canScroll
+        if scroller.isHidden != shouldHide {
+            scroller.isHidden = shouldHide
+        }
     }
 
     /// SwiftTerms Metal-GPU-Renderer — Opt-in, Default aus (Begründung in
@@ -157,6 +203,7 @@ final class QuietableTerminalView: LocalProcessTerminalView {
         isOutputScrollInFlight = true
         super.scrolled(source: terminal, yDisp: yDisp)
         isOutputScrollInFlight = false
+        syncScrollerVisibility()
 
         // Alt-Buffer (TUI-Modus) hat keinen Scrollback — Auto-Follow ist
         // die einzige sinnvolle Option. Trackpad-Wheel-Events werden ueber
@@ -185,6 +232,7 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     /// (Trackpad-Wheel, Scrollbar-Drag, Page-Up/Down).
     override func scrolled(source: TerminalView, position: Double) {
         super.scrolled(source: source, position: position)
+        syncScrollerVisibility()
 
         if isRestoringScroll || isOutputScrollInFlight { return }
         if getTerminal().isCurrentBufferAlternate {
@@ -205,8 +253,18 @@ final class QuietableTerminalView: LocalProcessTerminalView {
 
 /// Faengt Mausrad-Events VOR der Dispatch zur SwiftTerm-View ab.
 ///
-/// **Problem 1 — Propagation-Leak:** TUIs wie `claude agents` rendern im
-/// Alternate-Screen-Buffer der per Definition keinen Scrollback hat.
+/// **Stand 03.08.2026 — dieser Pfad ist derzeit inaktiv.** Gemessen an
+/// Claude Code 2.1.220 und Codex (PTY-Mitschnitt der DEC-Private-Modes):
+/// weder `claude`, noch `claude agents`, noch `codex` schalten den
+/// Alternate-Screen (`ESC[?1049h`) oder Mouse-Tracking (1000/1002/1003/1006)
+/// ein — sie rendern per Cursor-Up + Erase-Line im Normal-Buffer. Der Guard
+/// reicht Events deshalb heute immer durch. Er bleibt als Absicherung fuer
+/// TUIs, die den Alt-Buffer doch nutzen (frueher tat `claude agents` das).
+/// Wer ihn wieder scharf schaltet, beachte: `scrollThreshold` ist 1.0 gegen
+/// ein Pixel-Delta — eine Trackpad-Geste erzeugt damit hunderte Wheel-Events.
+///
+/// **Problem 1 — Propagation-Leak:** TUIs im Alternate-Screen-Buffer haben
+/// per Definition keinen Scrollback.
 /// SwiftTerm's Default-`scrollWheel` macht in Alt-Buffer-Mode zwar visuell
 /// nichts, aber das Event kann in unerwartete SwiftUI/NSResponder-Stellen
 /// propagieren (User berichtet: Trackpad-Scroll im `claude agents`-Chat
