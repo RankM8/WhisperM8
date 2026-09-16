@@ -2,18 +2,19 @@ import Foundation
 
 enum AgentHeadlessCLIError: Error, LocalizedError, Equatable {
     case timedOut(TimeInterval)
-    case nonZeroExit(Int32, stderr: String)
+    case nonZeroExit(Int32, stderr: String, stdout: String = "")
+
+    /// Diagnose bleibt im Fehlerobjekt, nicht im Log; pro Stream höchstens 4 KiB.
+    static let diagnosticByteLimit = 4096
 
     var errorDescription: String? {
         switch self {
         case .timedOut(let timeout):
             return "Headless-CLI timed out after \(Int(timeout)) seconds."
-        case .nonZeroExit(let code, let stderr):
-            let message = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            if message.isEmpty {
-                return "Headless-CLI exited with code \(code)."
-            }
-            return message
+        case .nonZeroExit(let code, _, _):
+            // LocalizedError wird von Callern geloggt: keine CLI-Ausgaben mit
+            // möglichen Tokens oder Prompt-Inhalten in die Beschreibung nehmen.
+            return "Headless-CLI exited with code \(code)."
         }
     }
 }
@@ -190,8 +191,10 @@ private final class AgentHeadlessCLIState: @unchecked Sendable {
             return .failure(timedOutError)
         }
         guard exitStatus == 0 else {
-            let stderr = String(data: stderrData, encoding: .utf8) ?? ""
-            return .failure(AgentHeadlessCLIError.nonZeroExit(exitStatus, stderr: stderr))
+            let limit = AgentHeadlessCLIError.diagnosticByteLimit
+            let stderr = String(decoding: stderrData.prefix(limit), as: UTF8.self)
+            let stdout = String(decoding: stdoutData.prefix(limit), as: UTF8.self)
+            return .failure(AgentHeadlessCLIError.nonZeroExit(exitStatus, stderr: stderr, stdout: stdout))
         }
         return .success(String(data: stdoutData, encoding: .utf8) ?? "")
     }

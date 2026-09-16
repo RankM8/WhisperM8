@@ -95,7 +95,10 @@ enum AgentTranscriptExcerpt {
 enum AgentTitleGeneratorError: Error, LocalizedError {
     case executableNotFound(AgentProvider)
     case emptyOutput
-    case nonZeroExit(Int32)
+    case missingTranscript
+    case emptyExcerpt
+    case unavailableBackendModel
+    case nonZeroExit(Int32, stderr: String = "", stdout: String = "")
     case timedOut(TimeInterval)
 
     var errorDescription: String? {
@@ -104,7 +107,13 @@ enum AgentTitleGeneratorError: Error, LocalizedError {
             return "Konnte das CLI für \(provider.displayName) nicht finden."
         case .emptyOutput:
             return "Headless-Call lieferte keinen Title."
-        case .nonZeroExit(let code):
+        case .missingTranscript:
+            return "Transcript für die Titelgenerierung noch nicht gefunden."
+        case .emptyExcerpt:
+            return "Transcript enthält noch keine verwendbaren Nachrichten."
+        case .unavailableBackendModel:
+            return "Das Backend-Modell der Session ist derzeit nicht verfügbar."
+        case .nonZeroExit(let code, _, _):
             return "Headless-Call beendet mit Exit-Code \(code)."
         case .timedOut(let timeout):
             return "Headless-Call nach \(Int(timeout)) Sekunden abgebrochen."
@@ -118,6 +127,10 @@ enum AgentTitleGeneratorError: Error, LocalizedError {
 struct AgentTitleGenerator {
     var executableResolver: (AgentProvider) -> String?
     var runner: (URL, [String], [String: String]) async throws -> String
+    var commandBuilder = AgentCommandBuilder()
+    var environmentProvider: () -> [String: String] = {
+        LoginShellEnvironment.shared.processEnvironment()
+    }
 
     static let live = AgentTitleGenerator(
         executableResolver: { provider in
@@ -129,20 +142,36 @@ struct AgentTitleGenerator {
         runner: AgentTitleGenerator.defaultRunner
     )
 
-    func generate(provider: AgentProvider, excerpt: String) async throws -> String {
+    func generate(session: AgentChatSession, excerpt: String) async throws -> String {
+        let provider = session.provider
         guard let path = executableResolver(provider) else {
             throw AgentTitleGeneratorError.executableNotFound(provider)
         }
         let prompt = Self.titlePrompt(for: excerpt)
         let executable = URL(fileURLWithPath: path)
-        let args: [String]
+        var args: [String]
+        // Die Bereinigung bleibt VOR den expliziten Launch-Overrides: ein
+        // geerbtes CLAUDE_CONFIG_DIR darf nie das Session-Profil ersetzen.
+        var env = environmentProvider()
         switch provider {
         case .claude:
             args = ["-p", prompt, "--output-format", "text", "--no-session-persistence"]
+            env.merge(commandBuilder.claudeProfileEnvironmentResolver(session.claudeProfileName)) { _, explicit in explicit }
+            if let router = commandBuilder.gptRouterCoreEnvironment() {
+                env.merge(router) { _, explicit in explicit }
+            }
+            if let model = session.claudeBackendModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !model.isEmpty {
+                guard let effectiveModel = commandBuilder.effectiveClaudeBackendModel(model) else {
+                    // Kein stiller Wechsel auf das native Profil-Modell bei
+                    // deaktiviertem Router oder ungültigem GPT-Stempel.
+                    throw AgentTitleGeneratorError.unavailableBackendModel
+                }
+                args.append(contentsOf: ["--model", effectiveModel])
+            }
         case .codex:
-            args = ["exec", "--skip-git-repo-check", "--ephemeral", prompt]
+            args = ["exec", "--skip-git-repo-check", "--ephemeral", "--model", session.model, prompt]
         }
-        let env = LoginShellEnvironment.shared.processEnvironment()
         let stdout = try await runner(executable, args, env)
         let cleaned = Self.cleanTitle(stdout)
         guard !cleaned.isEmpty else {
@@ -154,7 +183,10 @@ struct AgentTitleGenerator {
     static func titlePrompt(for excerpt: String) -> String {
         """
         Below is a short excerpt of an agent coding session.
-        Reply with a single concise title of 3 to 6 words that describes what the user is working on.
+        Reply with a single concise German title, ALWAYS starting with exactly two clearly understandable topic words.
+        Optionally add a colon followed by a short concrete task, ideally 3 to 5 words (never more than 5).
+        Examples: Apify Review: Fehler prüfen und beheben
+        Chat Benennung: Automatik reparieren
         Title only — no quotes, no trailing punctuation, no preamble.
 
         \(excerpt)
@@ -198,6 +230,9 @@ struct AgentTitleGenerator {
     /// unbekannte Option ab, liefert dies die argv für genau einen Retry ohne
     /// das Flag (Ergebnis geht vor Junk-Schutz; sichtbar geloggt). Sonst `nil`.
     static func retryArgumentsAfterUnknownOption(arguments: [String], stderr: String) -> [String]? {
+        let diagnostic = stderr.lowercased()
+        guard diagnostic.contains("unknown option") || diagnostic.contains("unexpected argument")
+                || diagnostic.contains("unrecognized option") else { return nil }
         guard let flag = sessionPersistenceOptOutFlags.first(where: {
             arguments.contains($0) && stderr.contains($0)
         }) else { return nil }
@@ -205,7 +240,8 @@ struct AgentTitleGenerator {
     }
 
     /// Default-Process-Runner: spawned das CLI mit den gegebenen Args + ENV,
-    /// wartet auf Exit, liefert stdout. Stderr wird in den Logs notiert.
+    /// wartet auf Exit, liefert stdout. Fehlerausgaben bleiben begrenzt im
+    /// Fehlerobjekt; Logs enthalten nur Exit-Code und Ausgabelängen.
     /// Läuft mit Scratch-cwd (P0.4a) — ohne explizites cwd erben Hilfsläufe
     /// das App-cwd ("/") und tauchen als Junk-Sessions im Root-Projekt auf.
     static func defaultRunner(
@@ -223,8 +259,8 @@ struct AgentTitleGenerator {
                 environment: environment,
                 workingDirectory: scratch
             )
-        } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr) {
-            if let retryArgs = retryArgumentsAfterUnknownOption(arguments: arguments, stderr: stderr) {
+        } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr, let stdout) {
+            if let retryArgs = retryArgumentsAfterUnknownOption(arguments: arguments, stderr: stderr + "\n" + stdout) {
                 Logger.agentPerformance.warning(
                     "headless_persistence_flag_unsupported — retry ohne Opt-out-Flag (ältere CLI)"
                 )
@@ -233,9 +269,9 @@ struct AgentTitleGenerator {
                 )
             }
             Logger.agentPerformance.warning(
-                "auto_namer_subprocess_exit code=\(code) stderr=\(stderr.prefix(200), privacy: .public)"
+                "auto_namer_subprocess_exit code=\(code) stdoutBytes=\(stdout.utf8.count) stderrBytes=\(stderr.utf8.count)"
             )
-            throw AgentTitleGeneratorError.nonZeroExit(code)
+            throw AgentTitleGeneratorError.nonZeroExit(code, stderr: stderr, stdout: stdout)
         } catch AgentHeadlessCLIError.timedOut(let timeout) {
             Logger.agentPerformance.warning(
                 "auto_namer_subprocess_timeout timeout=\(timeout)"
@@ -256,7 +292,7 @@ struct AgentTitleGenerator {
 final class AgentSessionAutoNamer {
     private let store: AgentSessionStore
     private let titleGenerator: AgentTitleGenerator
-    /// Sessions fuer die aktuell ein Auto-Naming-Headless-Call laeuft.
+    /// Sessions mit laufendem oder bereits eingereihtem Auto-Naming-Auftrag.
     private(set) var inFlight: Set<UUID> = [] {
         didSet {
             guard oldValue != inFlight else { return }
@@ -266,145 +302,179 @@ final class AgentSessionAutoNamer {
             )
         }
     }
-    /// IDs, die in dieser App-Session schon einmal (erfolgreich oder erfolglos)
-    /// ausgewertet wurden. Verhindert Endlosschleifen, falls die Title-
-    /// Generierung permanent fehlschlägt.
-    private var alreadyAttempted: Set<UUID> = []
+    private struct Request {
+        var session: AgentChatSession
+        var cwd: String
+        var onCompletion: ((Result<String, Error>) -> Void)?
+    }
 
-    /// Wird gepostet wenn sich der `inFlight`-Set veraendert. UI bindet darauf
-    /// fuer den Sparkles-Spinner im Sidebar-Tab.
+    private struct Failure {
+        var count: Int
+        var retryAfter: Date
+    }
+
+    private var completed: Set<UUID> = []
+    private var failures: [UUID: Failure] = [:]
+    private var pending: [Request] = []
+    private var activeCount = 0
+    private let maxParallel: Int
+    private let now: () -> Date
+    private let isEnabled: () -> Bool
+    private let excerptLoader: (AgentChatSession, String) async throws -> String
+
     static let inFlightDidChangeNotification = Notification.Name("AgentSessionAutoNamer.inFlightDidChange")
 
-    init(store: AgentSessionStore, titleGenerator: AgentTitleGenerator = .live) {
+    init(
+        store: AgentSessionStore,
+        titleGenerator: AgentTitleGenerator = .live,
+        maxParallel: Int = 2,
+        now: @escaping () -> Date = Date.init,
+        isEnabled: @escaping () -> Bool = { AppPreferences.shared.isAutoChatRenameEnabled },
+        excerptLoader: @escaping (AgentChatSession, String) async throws -> String = AgentSessionAutoNamer.loadExcerpt
+    ) {
         self.store = store
         self.titleGenerator = titleGenerator
+        self.maxParallel = max(1, maxParallel)
+        self.now = now
+        self.isEnabled = isEnabled
+        self.excerptLoader = excerptLoader
     }
 
     func isInFlight(_ sessionID: UUID) -> Bool {
         inFlight.contains(sessionID)
     }
 
-    /// Wird vom `AgentSessionRuntimeWatcher` via `onTurnFinished` aufgerufen.
-    /// Führt nur dann zum Headless-Call, wenn:
-    /// - die Session laut `canAutoRenameTitle` Auto-Rename erlaubt,
-    /// - sie eine `externalSessionID` hat (sonst kein Transcript lokalisierbar),
-    /// - sie noch keinen `lastTurnAt`-Stempel trägt (= erstes Turn-End),
-    /// - in dieser App-Session noch kein Auto-Naming-Versuch lief.
+    /// Erster Turn-End und Scan teilen sich Backoff + Duplikatschutz.
     func handleTurnFinished(
         session: AgentChatSession,
         cwd: String,
         onCompletion: ((Result<String, Error>) -> Void)? = nil
     ) {
-        guard AppPreferences.shared.isAutoChatRenameEnabled else { return }
-        guard session.canAutoRenameTitle else { return }
         guard session.lastTurnAt == nil else { return }
-        guard !alreadyAttempted.contains(session.id) else { return }
-        guard !inFlight.contains(session.id) else { return }
-        guard let externalSessionID = session.externalSessionID, !externalSessionID.isEmpty else {
-            return
-        }
-
-        runTitleGeneration(
-            sessionID: session.id,
-            provider: session.provider,
-            externalSessionID: externalSessionID,
-            cwd: cwd,
-            onCompletion: onCompletion
-        )
+        generateTitleIfNeeded(session: session, cwd: cwd, onCompletion: onCompletion)
     }
 
-    /// Wie `handleTurnFinished`, aber ohne `lastTurnAt`-Check und mit
-    /// Reset des `alreadyAttempted`-Markers für die jeweilige Session.
-    /// Aufgerufen vom „Sessions scannen"-Trigger, damit alte/gescannte Sessions
-    /// und Sessions mit zuvor fehlgeschlagenem Auto-Naming explizit
-    /// nachträglich benannt werden können.
-    ///
-    /// `canAutoRenameTitle == false` (= User hat manuell umbenannt) wird
-    /// weiterhin respektiert — wir überschreiben niemals einen User-Namen.
-    /// `inFlight`-Schutz bleibt aktiv.
+    /// Automatischer Scan: alte Sessions sind erlaubt, Fehler umgehen aber
+    /// NICHT die Wartezeit. Weitere Scans nehmen fällige Versuche wieder auf.
+    func generateTitleIfNeeded(
+        session: AgentChatSession,
+        cwd: String,
+        onCompletion: ((Result<String, Error>) -> Void)? = nil
+    ) {
+        guard !completed.contains(session.id) else { return }
+        if let failure = failures[session.id], now() < failure.retryAfter { return }
+        enqueue(session: session, cwd: cwd, onCompletion: onCompletion)
+    }
+
+    /// Nur die ausdrückliche Einzelaktion darf Backoff/Erfolg umgehen.
+    /// Queue-Limit, Duplikatschutz und manuelle Namen bleiben geschützt.
     func forceGenerateTitle(
         session: AgentChatSession,
         cwd: String,
         onCompletion: ((Result<String, Error>) -> Void)? = nil
     ) {
-        guard AppPreferences.shared.isAutoChatRenameEnabled else { return }
-        guard session.canAutoRenameTitle else { return }
-        guard !inFlight.contains(session.id) else { return }
-        guard let externalSessionID = session.externalSessionID, !externalSessionID.isEmpty else {
-            return
-        }
-
-        alreadyAttempted.remove(session.id)
-        runTitleGeneration(
-            sessionID: session.id,
-            provider: session.provider,
-            externalSessionID: externalSessionID,
-            cwd: cwd,
-            onCompletion: onCompletion
-        )
+        enqueue(session: session, cwd: cwd, onCompletion: onCompletion)
     }
 
-    /// Reset für Tests + manuelle „erneut versuchen"-Trigger.
     func resetAttemptTracking() {
-        inFlight.removeAll()
-        alreadyAttempted.removeAll()
+        completed.removeAll()
+        failures.removeAll()
+        // Laufende/queued Aufträge niemals entmarkieren: sonst könnte ein
+        // Reset einen zweiten Subprozess für dieselbe Session zulassen.
     }
 
-    /// Backwards-compatible alias (Tests rufen das vor der Umbenennung auf).
     func resetTrackingForTesting() {
         resetAttemptTracking()
     }
 
-    // MARK: - Shared title-generation pipeline
-
-    private func runTitleGeneration(
-        sessionID: UUID,
-        provider: AgentProvider,
-        externalSessionID: String,
+    private func enqueue(
+        session: AgentChatSession,
         cwd: String,
         onCompletion: ((Result<String, Error>) -> Void)?
     ) {
-        inFlight.insert(sessionID)
-        alreadyAttempted.insert(sessionID)
-        let store = store
-        let generator = titleGenerator
+        guard isEnabled(), session.canAutoRenameTitle,
+              !inFlight.contains(session.id),
+              let externalID = session.externalSessionID, !externalID.isEmpty else { return }
+        inFlight.insert(session.id)
+        pending.append(Request(session: session, cwd: cwd, onCompletion: onCompletion))
+        startPendingRequests()
+    }
 
-        Task { [weak self] in
-            defer {
-                Task { @MainActor [weak self] in
-                    self?.inFlight.remove(sessionID)
-                }
+    private func startPendingRequests() {
+        while activeCount < maxParallel, !pending.isEmpty {
+            let request = pending.removeFirst()
+            // Während des Wartens kann der User umbenannt/archiviert oder
+            // Auto-Naming abgeschaltet haben. Keine unnötigen Modellaufrufe.
+            guard isEnabled(),
+                  let session = store.loadWorkspace().sessions.first(where: { $0.id == request.session.id }),
+                  session.canAutoRenameTitle, session.status != .archived else {
+                inFlight.remove(request.session.id)
+                continue
+            }
+            activeCount += 1
+            runTitleGeneration(request: request, session: session)
+        }
+    }
+
+    nonisolated static func loadExcerpt(session: AgentChatSession, cwd: String) async throws -> String {
+        // Locate + File-I/O bleiben off-main (Codex-Lookup kann rekursiv sein).
+        try await Task.detached(priority: .utility) {
+            guard let externalID = session.externalSessionID,
+                  let url = AgentTranscriptLocator.locate(
+                    provider: session.provider, externalSessionID: externalID, cwd: cwd
+                  ) else {
+                throw AgentTitleGeneratorError.missingTranscript
             }
             do {
-                // P3 S3: Locate (rekursiver Codex-Walk) + Excerpt-Build
-                // (File-I/O) laufen OFF-MAIN — das `Task {}` hier erbt sonst
-                // die MainActor-Isolation der Klasse und blockiert die UI.
-                let excerpt = try await Task.detached(priority: .utility) {
-                    guard let url = AgentTranscriptLocator.locate(
-                        provider: provider,
-                        externalSessionID: externalSessionID,
-                        cwd: cwd
-                    ) else {
-                        throw AgentTitleGeneratorError.emptyOutput
-                    }
-                    return try AgentTranscriptExcerpt.build(from: url, provider: provider)
-                }.value
-                guard !excerpt.isEmpty else {
-                    onCompletion?(.failure(AgentTitleGeneratorError.emptyOutput))
-                    return
-                }
-                let title = try await generator.generate(provider: provider, excerpt: excerpt)
-                try store.applyAutoGeneratedTitle(id: sessionID, title: title)
-                Logger.agentPerformance.info(
-                    "auto_named session=\(sessionID.uuidString, privacy: .public) provider=\(provider.rawValue, privacy: .public) title=\"\(title, privacy: .public)\""
-                )
-                onCompletion?(.success(title))
-            } catch {
-                Logger.agentPerformance.warning(
-                    "auto_naming_failed session=\(sessionID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
-                )
-                onCompletion?(.failure(error))
+                let excerpt = try AgentTranscriptExcerpt.build(from: url, provider: session.provider)
+                guard !excerpt.isEmpty else { throw AgentTitleGeneratorError.emptyExcerpt }
+                return excerpt
+            } catch let error as NSError where error.domain == NSCocoaErrorDomain
+                && (error.code == NSFileReadNoSuchFileError || error.code == NSFileNoSuchFileError) {
+                throw AgentTitleGeneratorError.missingTranscript
             }
+        }.value
+    }
+
+    private func runTitleGeneration(request: Request, session: AgentChatSession) {
+        let sessionID = session.id
+        Task {
+            let result: Result<String, Error>
+            do {
+                let excerpt = try await excerptLoader(session, request.cwd)
+                guard !excerpt.isEmpty else { throw AgentTitleGeneratorError.emptyExcerpt }
+                let title = try await titleGenerator.generate(session: session, excerpt: excerpt)
+                try store.applyAutoGeneratedTitle(id: sessionID, title: title)
+                failures.removeValue(forKey: sessionID)
+                completed.insert(sessionID)
+                Logger.agentPerformance.info(
+                    "auto_named session=\(sessionID.uuidString, privacy: .public) provider=\(session.provider.rawValue, privacy: .public)"
+                )
+                result = .success(title)
+            } catch {
+                completed.remove(sessionID)
+                let count = min((failures[sessionID]?.count ?? 0) + 1, 16)
+                let awaitingTranscript: Bool
+                switch error {
+                case AgentTitleGeneratorError.missingTranscript, AgentTitleGeneratorError.emptyExcerpt:
+                    awaitingTranscript = true
+                default:
+                    awaitingTranscript = false
+                }
+                let delay = min(awaitingTranscript ? 300.0 : 3600.0,
+                                (awaitingTranscript ? 15.0 : 60.0) * pow(2, Double(count - 1)))
+                failures[sessionID] = Failure(count: count, retryAfter: now().addingTimeInterval(delay))
+                // Keine beliebigen localizedDescription-Texte loggen: CLI-
+                // Ausgaben können Secrets oder Inhalte des Prompts enthalten.
+                Logger.agentPerformance.warning(
+                    "auto_naming_failed session=\(sessionID.uuidString, privacy: .public) awaitingTranscript=\(awaitingTranscript) attempt=\(count) retrySeconds=\(delay)"
+                )
+                result = .failure(error)
+            }
+            activeCount -= 1
+            inFlight.remove(sessionID)
+            request.onCompletion?(result)
+            startPendingRequests()
         }
     }
 }

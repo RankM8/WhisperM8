@@ -1061,7 +1061,7 @@ struct AgentChatsView: View {
                 loadWorkspaceFast()
                 attemptAutoDetectProjectIcons()
                 // Auto-Rename fuer alle generisch-benannten Sessions anstossen.
-                forceAutoNameUntitledSessions()
+                autoNameUntitledSessions()
             }
         }
     }
@@ -3295,10 +3295,9 @@ struct AgentChatsView: View {
 
     /// Geht durch alle nicht-archivierten Sessions, die noch einen generischen
     /// Default-Namen tragen ("Claude Chat" / "Codex Chat" / "… Chat") und ruft
-    /// den Auto-Namer im Force-Modus auf. Nutzt `forceGenerateTitle`, das
-    /// `lastTurnAt` und `alreadyAttempted` ignoriert — `canAutoRenameTitle`
-    /// bleibt aber Schutz gegen User-Renames.
-    func forceAutoNameUntitledSessions() {
+    /// den Auto-Namer automatisch auf. Backoff und Parallelitätslimit bleiben
+    /// aktiv; nur die manuelle Einzelaktion darf einen Retry erzwingen.
+    func autoNameUntitledSessions() {
         guard let autoNamer else { return }
 
         // Projekte einmal indizieren statt pro Session linear zu suchen: Bei
@@ -3320,7 +3319,7 @@ struct AgentChatsView: View {
         guard !candidates.isEmpty else { return }
 
         for entry in candidates {
-            autoNamer.forceGenerateTitle(session: entry.session, cwd: entry.project.path) { _ in }
+            autoNamer.generateTitleIfNeeded(session: entry.session, cwd: entry.project.path) { _ in }
         }
     }
 

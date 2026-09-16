@@ -40,7 +40,7 @@ final class AgentSessionAutoNamerTests: XCTestCase {
                 environment: [:]
             )
             XCTFail("Expected non-zero exit")
-        } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr) {
+        } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr, _) {
             XCTAssertEqual(code, 7)
             XCTAssertTrue(stderr.contains("nope"))
         }
@@ -160,17 +160,10 @@ final class AgentSessionAutoNamerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         let store = AgentSessionStore(fileURL: url)
 
-        // Echtes Claude-Transcript anlegen, damit der Locator + Excerpt-Builder Daten sehen.
         let projectDir = try makeTempProjectDirectory()
         defer { try? FileManager.default.removeItem(at: projectDir) }
         let externalSessionID = "11111111-2222-3333-4444-555555555555"
-        let claudeBase = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude")
-            .appendingPathComponent("projects")
-            .appendingPathComponent(AgentTranscriptLocator.encodeClaudeCwd(projectDir.path))
-        try? FileManager.default.createDirectory(at: claudeBase, withIntermediateDirectories: true)
-        let transcriptURL = claudeBase.appendingPathComponent("\(externalSessionID).jsonl")
-        defer { try? FileManager.default.removeItem(at: transcriptURL) }
+        let transcriptURL = projectDir.appendingPathComponent("transcript.jsonl")
         let transcript = #"""
         {"type":"user","message":{"role":"user","content":"refactor my login flow"}}
         {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Here is a plan."}],"stop_reason":"end_turn"}}
@@ -190,7 +183,12 @@ final class AgentSessionAutoNamerTests: XCTestCase {
             executableResolver: { _ in "/usr/bin/true" },
             runner: { _, _, _ in "Login Flow Refactor" }
         )
-        let namer = await AgentSessionAutoNamer(store: store, titleGenerator: stub)
+        let namer = await AgentSessionAutoNamer(
+            store: store, titleGenerator: stub, isEnabled: { true },
+            excerptLoader: { session, _ in
+                try AgentTranscriptExcerpt.build(from: transcriptURL, provider: session.provider)
+            }
+        )
         await namer.resetAttemptTracking()
         // Auch wenn sie zuvor schon mal blockiert war, force soll es trotzdem tun.
         await namer.handleTurnFinished(session: session, cwd: projectDir.path)
@@ -268,7 +266,7 @@ final class AgentSessionAutoNamerTests: XCTestCase {
                 return "Ein Titel"
             }
         )
-        _ = try await generator.generate(provider: .claude, excerpt: "excerpt")
+        _ = try await generator.generate(session: AgentChatSession(provider: .claude, projectID: UUID(), title: "Claude Chat"), excerpt: "excerpt")
         XCTAssertTrue(capturedArgs.contains("--no-session-persistence"),
                       "Claude-Printlauf darf keine Session persistieren")
         XCTAssertTrue(capturedArgs.contains("-p"), "bleibt ein Printlauf")
@@ -283,7 +281,7 @@ final class AgentSessionAutoNamerTests: XCTestCase {
                 return "Ein Titel"
             }
         )
-        _ = try await generator.generate(provider: .codex, excerpt: "excerpt")
+        _ = try await generator.generate(session: AgentChatSession(provider: .codex, projectID: UUID(), title: "Codex Chat"), excerpt: "excerpt")
         XCTAssertTrue(capturedArgs.contains("--ephemeral"),
                       "Codex-exec-Hilfslauf darf keine Rollout-Datei hinterlassen")
         XCTAssertEqual(capturedArgs.first, "exec")

@@ -283,6 +283,40 @@ struct AgentCommandBuilder {
         return environment
     }
 
+    /// Gemeinsamer Modellstempel für interaktive Starts und Headless-Hilfsläufe.
+    func effectiveClaudeBackendModel(_ backendModel: String?) -> String? {
+        let fastModeEnabled = gptFastModeEnabledResolver()
+        guard gptBackendEnabledResolver() else { return nil }
+        let model = backendModel?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !model.isEmpty else { return nil }
+        let contextWindow = normalizedGPTContextWindow()
+        if let supported = ClaudeGPTModelAlias.supportedEffectiveModel(
+            model,
+            fastEnabled: fastModeEnabled,
+            contextWindow: contextWindow
+        ) {
+            return supported
+        }
+
+        // Das 900k-Profil trägt nicht jedes Modell (nur die 1M-Klasse laut
+        // Katalog). Ein für den normalen 272k-Vertrag bekanntes Modell
+        // fällt bei einem FRISCHEN Start auf das Frontier-Modell zurück,
+        // statt still ohne GPT-Stempel als Claude zu starten. Unbekannte
+        // GPT-IDs bleiben weiterhin abgelehnt; Resume/Fork folgt
+        // unverändert der Transcript-Wahl und benötigt für diese Modelle
+        // das Standardprofil.
+        guard contextWindow == ClaudeGPTContextProfile.extended900K.rawValue,
+              let canonical = ClaudeGPTModelAlias.canonicalGPTModel(model),
+              ClaudeGPTModelAlias.maximumContextWindow(for: canonical) != nil else {
+            return nil
+        }
+        return ClaudeGPTModelAlias.fallbackEffectiveModel(
+            fastEnabled: fastModeEnabled,
+            contextWindow: contextWindow
+        )
+    }
+
     /// Beschreibung des Custom-Eintrags im /model-Picker — Modellliste aus
     /// dem Codex-Katalog, damit neue Modelle ohne Codeänderung erscheinen.
     static func gptPickerDescription(fast: Bool, contextWindow: Int) -> String {
@@ -404,38 +438,7 @@ struct AgentCommandBuilder {
         let profileEnvironment = claudeProfileEnvironmentResolver(session.claudeProfileName)
 
         let routerEnabled = gptBackendEnabledResolver()
-        let fastModeEnabled = routerEnabled && gptFastModeEnabledResolver()
-        let gptBackendModel: String? = {
-            guard routerEnabled else { return nil }
-            let model = session.claudeBackendModel?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !model.isEmpty else { return nil }
-            let contextWindow = normalizedGPTContextWindow()
-            if let supported = ClaudeGPTModelAlias.supportedEffectiveModel(
-                model,
-                fastEnabled: fastModeEnabled,
-                contextWindow: contextWindow
-            ) {
-                return supported
-            }
-
-            // Das 900k-Profil trägt nicht jedes Modell (nur die 1M-Klasse laut
-            // Katalog). Ein für den normalen 272k-Vertrag bekanntes Modell
-            // fällt bei einem FRISCHEN Start auf das Frontier-Modell zurück,
-            // statt still ohne GPT-Stempel als Claude zu starten. Unbekannte
-            // GPT-IDs bleiben weiterhin abgelehnt; Resume/Fork folgt
-            // unverändert der Transcript-Wahl und benötigt für diese Modelle
-            // das Standardprofil.
-            guard contextWindow == ClaudeGPTContextProfile.extended900K.rawValue,
-                  let canonical = ClaudeGPTModelAlias.canonicalGPTModel(model),
-                  ClaudeGPTModelAlias.maximumContextWindow(for: canonical) != nil else {
-                return nil
-            }
-            return ClaudeGPTModelAlias.fallbackEffectiveModel(
-                fastEnabled: fastModeEnabled,
-                contextWindow: contextWindow
-            )
-        }()
+        let gptBackendModel = effectiveClaudeBackendModel(session.claudeBackendModel)
 
         // Der Router gilt bewusst fuer jede Claude-PTY-Session. So koennen
         // auch Sessions ohne GPT-Stempel spaeter per `/model` wechseln und
