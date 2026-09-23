@@ -14,6 +14,9 @@ enum WhisperM8EntryPoint {
     static func main() {
         let arguments = CommandLine.arguments
         guard CLIModeDetector.shouldRunCLI(arguments) else {
+            // Vor allem anderen: ein SIGPIPE hat die App am 23.09.2026 samt
+            // aller Chats wortlos beendet (Details in SigpipeGuard).
+            SigpipeGuard.install()
             WhisperM8App.main()
             return
         }

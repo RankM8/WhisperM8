@@ -105,7 +105,10 @@ struct CodexPostProcessor: PostProcessing {
             try process.run()
             CodexProcessRegistry.shared.register(process)
             if let data = prompt.data(using: .utf8) {
-                inputPipe.fileHandleForWriting.write(data)
+                // Throwing-API: das alte `write(_:)` wirft bei EPIPE (Codex
+                // vor dem Lesen beendet) eine NSException — die beendet die
+                // App genauso wie ein SIGPIPE (siehe SigpipeGuard).
+                try? inputPipe.fileHandleForWriting.write(contentsOf: data)
             }
             try? inputPipe.fileHandleForWriting.close()
         } catch {
