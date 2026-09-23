@@ -121,107 +121,11 @@ enum AgentTitleGeneratorError: Error, LocalizedError {
     }
 }
 
-/// Ruft Claude/Codex headless auf, um einen kurzen Title zu generieren.
-/// Trennt CLI-Resolver + Process-Runner als Closures, damit der Generator in
-/// Tests ohne echte Subprocesses verwendbar ist.
-struct AgentTitleGenerator {
-    var executableResolver: (AgentProvider) -> String?
-    var runner: (URL, [String], [String: String]) async throws -> String
-    var commandBuilder = AgentCommandBuilder()
-    var environmentProvider: () -> [String: String] = {
-        LoginShellEnvironment.shared.processEnvironment()
-    }
-
-    static let live = AgentTitleGenerator(
-        executableResolver: { provider in
-            switch provider {
-            case .claude: return AgentCommandBuilder.commandPath("claude")
-            case .codex: return AgentCommandBuilder.commandPath("codex")
-            }
-        },
-        runner: AgentTitleGenerator.defaultRunner
-    )
-
-    func generate(session: AgentChatSession, excerpt: String) async throws -> String {
-        let provider = session.provider
-        guard let path = executableResolver(provider) else {
-            throw AgentTitleGeneratorError.executableNotFound(provider)
-        }
-        let prompt = Self.titlePrompt(for: excerpt)
-        let executable = URL(fileURLWithPath: path)
-        var args: [String]
-        // Die Bereinigung bleibt VOR den expliziten Launch-Overrides: ein
-        // geerbtes CLAUDE_CONFIG_DIR darf nie das Session-Profil ersetzen.
-        var env = environmentProvider()
-        switch provider {
-        case .claude:
-            args = ["-p", prompt, "--output-format", "text", "--no-session-persistence"]
-            env.merge(commandBuilder.claudeProfileEnvironmentResolver(session.claudeProfileName)) { _, explicit in explicit }
-            if let router = commandBuilder.gptRouterCoreEnvironment() {
-                env.merge(router) { _, explicit in explicit }
-            }
-            if let model = session.claudeBackendModel?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !model.isEmpty {
-                guard let effectiveModel = commandBuilder.effectiveClaudeBackendModel(model) else {
-                    // Kein stiller Wechsel auf das native Profil-Modell bei
-                    // deaktiviertem Router oder ungültigem GPT-Stempel.
-                    throw AgentTitleGeneratorError.unavailableBackendModel
-                }
-                args.append(contentsOf: ["--model", effectiveModel])
-            }
-        case .codex:
-            args = ["exec", "--skip-git-repo-check", "--ephemeral", "--model", session.model, prompt]
-        }
-        let stdout = try await runner(executable, args, env)
-        let cleaned = Self.cleanTitle(stdout)
-        guard !cleaned.isEmpty else {
-            throw AgentTitleGeneratorError.emptyOutput
-        }
-        return cleaned
-    }
-
-    static func titlePrompt(for excerpt: String) -> String {
-        """
-        Below is a short excerpt of an agent coding session.
-        Reply with a single concise German title, ALWAYS starting with exactly two clearly understandable topic words.
-        Optionally add a colon followed by a short concrete task, ideally 3 to 5 words (never more than 5).
-        Examples: Apify Review: Fehler prüfen und beheben
-        Chat Benennung: Automatik reparieren
-        Title only — no quotes, no trailing punctuation, no preamble.
-
-        \(excerpt)
-        """
-    }
-
-    static func cleanTitle(_ raw: String) -> String {
-        let firstLine = raw.split(omittingEmptySubsequences: true) { $0.isNewline }
-            .first
-            .map(String.init) ?? raw
-        var trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("\""), trimmed.hasSuffix("\""), trimmed.count >= 2 {
-            trimmed = String(trimmed.dropFirst().dropLast())
-        }
-        if trimmed.hasPrefix("'"), trimmed.hasSuffix("'"), trimmed.count >= 2 {
-            trimmed = String(trimmed.dropFirst().dropLast())
-        }
-        // Strip leading bullet-style prefixes like "Title: ".
-        for prefix in ["Title:", "TITLE:", "title:"] {
-            if trimmed.hasPrefix(prefix) {
-                trimmed = String(trimmed.dropFirst(prefix.count))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-        // Drop trailing punctuation.
-        while let last = trimmed.last, ".!?,;:".contains(last) {
-            trimmed = String(trimmed.dropLast())
-        }
-        if trimmed.count > 60 {
-            trimmed = String(trimmed.prefix(60))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        return trimmed
-    }
-
+/// Headless-Prozess-Infrastruktur (Runner, Opt-out-Flags, Fehlerbild), die
+/// der `AgentSessionSummarizer` weiter nutzt. Die Titel-Generierung per
+/// Modellaufruf ist seit 2026-09-23 entfernt — Titel kommen nativ aus dem
+/// Transcript (`NativeSessionTitle`).
+enum AgentTitleGenerator {
     /// Persistenz-Opt-outs der Hilfsläufe (P0.4a): interne Printläufe dürfen
     /// keine importierbaren Provider-Sessions hinterlassen.
     static let sessionPersistenceOptOutFlags = ["--no-session-persistence", "--ephemeral"]
@@ -281,9 +185,14 @@ struct AgentTitleGenerator {
     }
 }
 
-/// Triggert beim ersten Turn-End einer Session den Headless-Title-Generator.
-/// Respektiert `AgentChatSession.canAutoRenameTitle` und blockt sich gegen
-/// parallele Re-Entries für dieselbe Session.
+/// Übernimmt den Titel, den das CLI selbst vergeben hat (`NativeSessionTitle`:
+/// Claudes `/rename` > Claudes generierter Titel > erster echter Prompt; Codex:
+/// erster Prompt). Seit 2026-09-23 OHNE eigenen Modellaufruf — der frühere
+/// Headless-Generator startete pro Session einen `claude -p`/`codex exec`.
+/// Läuft bei jedem Turn-Ende (billig: Head/Tail-Lesen off-main), damit ein
+/// später eintreffender generierter Titel oder ein `/rename` im Terminal
+/// ankommt. Respektiert `AgentChatSession.canAutoRenameTitle`: ein in
+/// WhisperM8 vergebener Name gewinnt, bis er aufgehoben wird.
 ///
 /// Exponiert den aktuellen `inFlight`-Set publik fuer UI-Feedback. State-
 /// Aenderungen werden via NotificationCenter (`inFlightDidChangeNotification`)
@@ -291,7 +200,6 @@ struct AgentTitleGenerator {
 @MainActor
 final class AgentSessionAutoNamer {
     private let store: AgentSessionStore
-    private let titleGenerator: AgentTitleGenerator
     /// Sessions mit laufendem oder bereits eingereihtem Auto-Naming-Auftrag.
     private(set) var inFlight: Set<UUID> = [] {
         didSet {
@@ -320,37 +228,37 @@ final class AgentSessionAutoNamer {
     private let maxParallel: Int
     private let now: () -> Date
     private let isEnabled: () -> Bool
-    private let excerptLoader: (AgentChatSession, String) async throws -> String
+    private let titleLoader: (AgentChatSession, String) async throws -> String
 
     static let inFlightDidChangeNotification = Notification.Name("AgentSessionAutoNamer.inFlightDidChange")
 
     init(
         store: AgentSessionStore,
-        titleGenerator: AgentTitleGenerator = .live,
         maxParallel: Int = 2,
         now: @escaping () -> Date = Date.init,
         isEnabled: @escaping () -> Bool = { AppPreferences.shared.isAutoChatRenameEnabled },
-        excerptLoader: @escaping (AgentChatSession, String) async throws -> String = AgentSessionAutoNamer.loadExcerpt
+        titleLoader: @escaping (AgentChatSession, String) async throws -> String = AgentSessionAutoNamer.loadNativeTitle
     ) {
         self.store = store
-        self.titleGenerator = titleGenerator
         self.maxParallel = max(1, maxParallel)
         self.now = now
         self.isEnabled = isEnabled
-        self.excerptLoader = excerptLoader
+        self.titleLoader = titleLoader
     }
 
     func isInFlight(_ sessionID: UUID) -> Bool {
         inFlight.contains(sessionID)
     }
 
-    /// Erster Turn-End und Scan teilen sich Backoff + Duplikatschutz.
+    /// Jedes Turn-Ende liest den nativen Titel neu (kein Modellaufruf):
+    /// Claudes generierter Titel kommt asynchron nach dem ersten Prompt, ein
+    /// `/rename` jederzeit. Backoff + Duplikatschutz bleiben aktiv.
     func handleTurnFinished(
         session: AgentChatSession,
         cwd: String,
         onCompletion: ((Result<String, Error>) -> Void)? = nil
     ) {
-        guard session.lastTurnAt == nil else { return }
+        completed.remove(session.id)
         generateTitleIfNeeded(session: session, cwd: cwd, onCompletion: onCompletion)
     }
 
@@ -416,23 +324,21 @@ final class AgentSessionAutoNamer {
         }
     }
 
-    nonisolated static func loadExcerpt(session: AgentChatSession, cwd: String) async throws -> String {
-        // Locate + File-I/O bleiben off-main (Codex-Lookup kann rekursiv sein).
+    /// Transcript lokalisieren und den nativen Titel lesen — off-main.
+    nonisolated static func loadNativeTitle(session: AgentChatSession, cwd: String) async throws -> String {
         try await Task.detached(priority: .utility) {
             guard let externalID = session.externalSessionID,
                   let url = AgentTranscriptLocator.locate(
                     provider: session.provider, externalSessionID: externalID, cwd: cwd
-                  ) else {
+                  ),
+                  FileManager.default.fileExists(atPath: url.path) else {
                 throw AgentTitleGeneratorError.missingTranscript
             }
-            do {
-                let excerpt = try AgentTranscriptExcerpt.build(from: url, provider: session.provider)
-                guard !excerpt.isEmpty else { throw AgentTitleGeneratorError.emptyExcerpt }
-                return excerpt
-            } catch let error as NSError where error.domain == NSCocoaErrorDomain
-                && (error.code == NSFileReadNoSuchFileError || error.code == NSFileNoSuchFileError) {
-                throw AgentTitleGeneratorError.missingTranscript
+            guard let title = NativeSessionTitle.resolve(provider: session.provider, transcriptURL: url) else {
+                // Noch kein Prompt im Transcript — später erneut versuchen.
+                throw AgentTitleGeneratorError.emptyExcerpt
             }
+            return title
         }.value
     }
 
@@ -441,10 +347,11 @@ final class AgentSessionAutoNamer {
         Task {
             let result: Result<String, Error>
             do {
-                let excerpt = try await excerptLoader(session, request.cwd)
-                guard !excerpt.isEmpty else { throw AgentTitleGeneratorError.emptyExcerpt }
-                let title = try await titleGenerator.generate(session: session, excerpt: excerpt)
-                try store.applyAutoGeneratedTitle(id: sessionID, title: title)
+                let title = try await titleLoader(session, request.cwd)
+                guard !title.isEmpty else { throw AgentTitleGeneratorError.emptyExcerpt }
+                if title != session.title {
+                    try store.applyAutoGeneratedTitle(id: sessionID, title: title)
+                }
                 failures.removeValue(forKey: sessionID)
                 completed.insert(sessionID)
                 Logger.agentPerformance.info(

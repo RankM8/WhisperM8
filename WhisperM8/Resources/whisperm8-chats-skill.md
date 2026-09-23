@@ -64,6 +64,7 @@ whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "�
                                                      # aktive Claude-Konto; unbekanntes/ausgeloggtes
                                                      # Profil bricht ab (kein stiller Main-Fallback)
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel).
+whisperm8 chats rename <ref> --reset                  # hebt den Namen auf → nativer Titel des CLI (Claudes /rename bzw. generierter Titel, sonst erster Prompt)
                                                      # Titel-Konvention des Users: Thema (1-2 Worte)
                                                      # + optional Ausführung (2-5 Worte), z. B.
                                                      # "Sidebar-Badges: offene Vorgänge (AM)"

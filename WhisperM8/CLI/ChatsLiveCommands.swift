@@ -710,11 +710,13 @@ enum ChatsMutationCommand {
         var positionals: [String] = []
         var force = false
         var clear = false
+        var reset = false
         var json = false
         for arg in arguments {
             switch arg {
             case "--force": force = true
             case "--clear": clear = true
+            case "--reset" where kind == .rename: reset = true
             case "--json": json = true
             default:
                 if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
@@ -733,8 +735,12 @@ enum ChatsMutationCommand {
         var params: [String: Any] = ["targetSessionID": targetID.uuidString, "force": force]
         switch kind {
         case .rename:
-            guard positionals.count >= 2 else { CLIIO.err("Titel fehlt."); return ChatsCLIExit.usage }
-            params["title"] = positionals[1...].joined(separator: " ")
+            if reset {
+                params["reset"] = true
+            } else {
+                guard positionals.count >= 2 else { CLIIO.err("Titel fehlt (oder --reset)."); return ChatsCLIExit.usage }
+                params["title"] = positionals[1...].joined(separator: " ")
+            }
         case .group:
             if clear {
                 params["clear"] = true
@@ -753,7 +759,10 @@ enum ChatsMutationCommand {
                 let before = result["before"]?.stringValue ?? ""
                 let after = result["after"]?.stringValue ?? ""
                 switch kind {
-                case .rename: return "✓ umbenannt: „\(before)\" → „\(after)\""
+                case .rename:
+                    return reset
+                        ? "✓ Benennung aufgehoben: „\(before)\" → nativer Titel des CLI"
+                        : "✓ umbenannt: „\(before)\" → „\(after)\""
                 case .group: return after.isEmpty ? "✓ Gruppe entfernt" : "✓ Gruppe gesetzt: \(after)"
                 case .archive: return "✓ archiviert"
                 }
@@ -768,7 +777,7 @@ enum ChatsMutationCommand {
         var method: String { self == .rename ? "workspace.rename" : self == .group ? "workspace.group" : "workspace.archive" }
         var argHint: String {
             switch self {
-            case .rename: return "\"<titel>\""
+            case .rename: return "\"<titel>\" | --reset"
             case .group: return "\"<gruppe>\" | --clear"
             case .archive: return "[--force]"
             }

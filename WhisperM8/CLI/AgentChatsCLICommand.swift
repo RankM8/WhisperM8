@@ -825,7 +825,7 @@ enum ChatsCLIHelp {
       whisperm8 chats window list [--json]               Fenster-Inventar (IDs für move)
       whisperm8 chats resume <ref> [--json]              geschlossenen Chat wieder hochfahren
       whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt "…"] [--json]
-      whisperm8 chats rename <ref> "<titel>" [--json]
+      whisperm8 chats rename <ref> "<titel>" | --reset [--json]
       whisperm8 chats group <ref> "<gruppe>" | --clear [--json]
       whisperm8 chats archive <ref> [--force] [--json]
       whisperm8 chats unarchive <ref> [--resume|--open] [--json]

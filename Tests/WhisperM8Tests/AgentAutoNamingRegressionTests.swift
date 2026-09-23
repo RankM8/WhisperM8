@@ -3,103 +3,6 @@ import XCTest
 @testable import WhisperM8
 
 final class AgentAutoNamingRegressionTests: XCTestCase {
-    private func builder(enabled: Bool = true, fast: Bool = false) -> AgentCommandBuilder {
-        var builder = AgentCommandBuilder()
-        builder.claudeProfileEnvironmentResolver = { name in
-            name.map { ["CLAUDE_CONFIG_DIR": "/profiles/\($0)"] } ?? [:]
-        }
-        builder.gptBackendEnabledResolver = { enabled }
-        builder.gptFastModeEnabledResolver = { fast }
-        builder.gptRouterPortResolver = { 18766 }
-        builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
-        builder.gptPickerModelResolver = { "" }
-        builder.gptSubagentModelResolver = { "gpt-5.6-sol" }
-        builder.gptContextWindowResolver = { 272_000 }
-        return builder
-    }
-
-    func testProfileAndGPTRoutingAreAppliedAfterEnvironmentCleanup() async throws {
-        var capturedArgs: [String] = []
-        var capturedEnvironment: [String: String] = [:]
-        var generator = AgentTitleGenerator(
-            executableResolver: { _ in "/unused" },
-            runner: { _, args, env in
-                capturedArgs = args
-                capturedEnvironment = env
-                return "Chat Benennung: Automatik reparieren"
-            }
-        )
-        generator.commandBuilder = builder(fast: true)
-        let login = LoginShellEnvironment(pathLoader: { "/usr/bin:/bin" })
-        generator.environmentProvider = {
-            login.processEnvironment(base: [
-                "CLAUDE_CONFIG_DIR": "/profiles/WRONG",
-                "CLAUDECODE": "1",
-                "CLAUDE_CODE_SESSION_ID": "parent",
-                "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "999",
-                "ANTHROPIC_BASE_URL": "http://wrong.invalid",
-            ])
-        }
-        let session = AgentChatSession(
-            provider: .claude, projectID: UUID(), title: "Claude Chat",
-            claudeProfileName: "PowerUser", claudeBackendModel: "gpt-5.6-sol"
-        )
-        _ = try await generator.generate(session: session, excerpt: "User: Benennung reparieren")
-        XCTAssertEqual(capturedEnvironment["CLAUDE_CONFIG_DIR"], "/profiles/PowerUser")
-        XCTAssertNil(capturedEnvironment["CLAUDECODE"])
-        XCTAssertNil(capturedEnvironment["CLAUDE_CODE_SESSION_ID"])
-        XCTAssertEqual(capturedEnvironment["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18766")
-        XCTAssertEqual(capturedEnvironment["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "272000")
-        XCTAssertEqual(capturedEnvironment["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "1000000")
-        XCTAssertEqual(capturedArgs.suffix(2), ["--model", "gpt-5.6-sol-fast"])
-        XCTAssertTrue(capturedArgs.contains("--no-session-persistence"))
-        XCTAssertFalse(capturedArgs.contains("--resume"))
-    }
-
-    func testNativeProfilesDoNotInheritForeignAccountAndCodexUsesExplicitModel() async throws {
-        var args: [String] = []
-        var environment: [String: String] = [:]
-        var generator = AgentTitleGenerator(executableResolver: { _ in "/unused" }, runner: { _, a, e in
-            args = a
-            environment = e
-            return "Chat Benennung"
-        })
-        generator.commandBuilder = builder(enabled: false)
-        let login = LoginShellEnvironment(pathLoader: { "/usr/bin:/bin" })
-        generator.environmentProvider = { login.processEnvironment(base: ["CLAUDE_CONFIG_DIR": "/wrong"]) }
-        var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "Claude Chat")
-        _ = try await generator.generate(session: session, excerpt: "excerpt")
-        XCTAssertNil(environment["CLAUDE_CONFIG_DIR"])
-        XCTAssertNil(environment["ANTHROPIC_BASE_URL"])
-        XCTAssertFalse(args.contains("--model"), "Native Modellwahl bleibt beim korrekten Profil")
-        session.claudeProfileName = "Work"
-        _ = try await generator.generate(session: session, excerpt: "excerpt")
-        XCTAssertEqual(environment["CLAUDE_CONFIG_DIR"], "/profiles/Work")
-        session.provider = .codex
-        session.model = "gpt-5.6-sol"
-        _ = try await generator.generate(session: session, excerpt: "excerpt")
-        XCTAssertNil(environment["CLAUDE_CONFIG_DIR"])
-        XCTAssertEqual(args.suffix(3).first, "--model")
-        XCTAssertEqual(args.suffix(2).first, "gpt-5.6-sol")
-        XCTAssertTrue(args.contains("--ephemeral"))
-    }
-
-    func testDisabledOrUnknownGPTModelNeverFallsBackToNativeCall() async throws {
-        for (enabled, model) in [(false, "gpt-5.6-sol"), (true, "gpt-invalid-model")] {
-            var generator = AgentTitleGenerator(executableResolver: { _ in "/unused" }, runner: { _, _, _ in
-                XCTFail("Kein Request an das falsche Backend")
-                return "Chat Benennung"
-            })
-            generator.commandBuilder = builder(enabled: enabled)
-            generator.environmentProvider = { [:] }
-            let session = AgentChatSession(provider: .claude, projectID: UUID(), title: "Claude Chat", claudeBackendModel: model)
-            do {
-                _ = try await generator.generate(session: session, excerpt: "excerpt")
-                XCTFail("Expected unavailable model")
-            } catch AgentTitleGeneratorError.unavailableBackendModel { }
-        }
-    }
-
     func testNonZeroExitRetainsBoundedStdoutAndStderrWithoutLoggingContents() async throws {
         do {
             _ = try await AgentHeadlessCLI(timeout: 5).run(
@@ -138,20 +41,6 @@ final class AgentAutoNamingRegressionTests: XCTestCase {
         }
     }
 
-    func testPromptRequiresTwoTopicWordsAndShortTask() {
-        let prompt = AgentTitleGenerator.titlePrompt(for: "EXCERPT")
-        XCTAssertTrue(prompt.contains("exactly two clearly understandable topic words"))
-        XCTAssertTrue(prompt.contains("never more than 5"))
-        XCTAssertTrue(prompt.contains("Apify Review: Fehler prüfen und beheben"))
-        XCTAssertTrue(prompt.contains("Chat Benennung: Automatik reparieren"))
-        XCTAssertTrue(prompt.hasSuffix("EXCERPT"))
-        XCTAssertEqual(AgentTitleGenerator.cleanTitle("Apify Review: Fehler prüfen und beheben"),
-                       "Apify Review: Fehler prüfen und beheben")
-        XCTAssertNil(AgentTitleGenerator.retryArgumentsAfterUnknownOption(
-            arguments: ["--ephemeral"], stderr: "authentication failed while using --ephemeral"
-        ))
-    }
-
     @MainActor
     func testAutomaticFailuresBackOffAndManualRetryBypassesDelay() async throws {
         let url = makeTempStoreURL()
@@ -165,16 +54,11 @@ final class AgentAutoNamingRegressionTests: XCTestCase {
         _ = try store.upsertSession(session)
         var clock = Date(timeIntervalSince1970: 1000)
         var calls = 0
-        var generator = AgentTitleGenerator(executableResolver: { _ in "/unused" }, runner: { _, args, env in
+        let namer = AgentSessionAutoNamer(store: store, now: { clock }, isEnabled: { true },
+                                         titleLoader: { _, _ in
             calls += 1
-            XCTAssertEqual(env["CLAUDE_CONFIG_DIR"], "/profiles/Work")
-            XCTAssertEqual(args.suffix(2), ["--model", "gpt-5.6-sol"])
             throw AgentTitleGeneratorError.nonZeroExit(1)
         })
-        generator.commandBuilder = builder()
-        generator.environmentProvider = { [:] }
-        let namer = AgentSessionAutoNamer(store: store, titleGenerator: generator, now: { clock },
-                                         isEnabled: { true }, excerptLoader: { _, _ in "excerpt" })
         func attempt(force: Bool = false) async {
             await withCheckedContinuation { continuation in
                 let done: (Result<String, Error>) -> Void = { result in
@@ -207,7 +91,7 @@ final class AgentAutoNamingRegressionTests: XCTestCase {
         var session = try store.createSession(provider: .claude, projectPath: NSTemporaryDirectory(), title: "Claude Chat")
         // Kein Lookup in echten Account-Roots für den Missing-Transcript-Test.
         do {
-            _ = try await AgentSessionAutoNamer.loadExcerpt(session: session, cwd: "/unused")
+            _ = try await AgentSessionAutoNamer.loadNativeTitle(session: session, cwd: "/unused")
             XCTFail("Expected missing transcript")
         } catch AgentTitleGeneratorError.missingTranscript { }
         session.externalSessionID = UUID().uuidString
@@ -215,14 +99,11 @@ final class AgentAutoNamingRegressionTests: XCTestCase {
         var ready = false
         var calls = 0
         var clock = Date(timeIntervalSince1970: 1000)
-        let generator = AgentTitleGenerator(executableResolver: { _ in "/unused" }, runner: { _, _, _ in
+        let namer = AgentSessionAutoNamer(store: store, now: { clock }, isEnabled: { true },
+                                         titleLoader: { _, _ in
+            if !ready { throw AgentTitleGeneratorError.missingTranscript }
             calls += 1
             return "Chat Benennung"
-        })
-        let namer = AgentSessionAutoNamer(store: store, titleGenerator: generator, now: { clock },
-                                         isEnabled: { true }, excerptLoader: { _, _ in
-            if !ready { throw AgentTitleGeneratorError.missingTranscript }
-            return "excerpt"
         })
         await withCheckedContinuation { continuation in
             namer.generateTitleIfNeeded(session: session, cwd: "/unused") { result in
@@ -274,11 +155,8 @@ final class AgentAutoNamingRegressionTests: XCTestCase {
             default: XCTFail("Unexpected duplicate")
             }
         }
-        let generator = AgentTitleGenerator(executableResolver: { _ in "/unused" }, runner: { _, _, _ in
-            try await gate.run()
-        })
-        let namer = AgentSessionAutoNamer(store: store, titleGenerator: generator, isEnabled: { true },
-                                         excerptLoader: { _, _ in "excerpt" })
+        let namer = AgentSessionAutoNamer(store: store, isEnabled: { true },
+                                         titleLoader: { _, _ in try await gate.run() })
         let completed = expectation(description: "all complete")
         completed.expectedFulfillmentCount = 4
         for session in sessions {

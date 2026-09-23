@@ -117,7 +117,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
 
                 SettingsToggleRow(
                     title: "Rename chats automatically",
-                    subtitle: "Generates a title after the first completed turn.",
+                    subtitle: "Uses the title the CLI already has — Claude's /rename or generated title, otherwise the first prompt. No extra model call. A name you set in WhisperM8 wins until you reset it.",
                     isOn: $isAutoChatRenameEnabled
                 )
 

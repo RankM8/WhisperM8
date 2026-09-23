@@ -170,20 +170,21 @@ struct ClaudeSessionIndexer {
             if cwd == nil {
                 cwd = object["cwd"] as? String
             }
-            if title == nil {
-                title = object["customTitle"] as? String
-                    ?? object["aiTitle"] as? String
-                    ?? firstPromptTitle(from: object)
-            }
             if let timestamp = parseDate(object["timestamp"] as? String) {
                 createdAt = min(createdAt ?? timestamp, timestamp)
                 lastMessageDate = max(lastMessageDate ?? timestamp, timestamp)
             }
 
-            if sessionID != nil, cwd != nil, title != nil, createdAt != nil {
+            if sessionID != nil, cwd != nil, createdAt != nil,
+               line.contains("\"ai-title\"") || line.contains("\"custom-title\"") {
                 break
             }
         }
+
+        // Titel wie Claude selbst: /rename > generierter Titel > erster echter
+        // Prompt (ohne Befehls-/Kontextblöcke) — gleiche Logik wie der
+        // Auto-Namer (`NativeSessionTitle`), hier auf dem Kopf der Datei.
+        title = NativeSessionTitle.claudeTitle(fromJSONL: read.lines.joined(separator: "\n"))
 
         guard let cwd else {
             return nil
@@ -222,30 +223,6 @@ struct ClaudeSessionIndexer {
             modifiedAt: resourceValues.contentModificationDate,
             createdAt: resourceValues.creationDate
         )
-    }
-
-    private func firstPromptTitle(from object: [String: Any]) -> String? {
-        guard object["type"] as? String == "user" else {
-            return nil
-        }
-
-        if let content = object["content"] as? String {
-            return shortTitle(content)
-        }
-        if let content = (object["message"] as? [String: Any])?["content"] as? String {
-            return shortTitle(content)
-        }
-        return nil
-    }
-
-    private func shortTitle(_ text: String) -> String {
-        let normalized = text
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard normalized.count > 46 else {
-            return normalized
-        }
-        return "\(normalized.prefix(46))..."
     }
 
     private func parseDate(_ string: String?) -> Date? {

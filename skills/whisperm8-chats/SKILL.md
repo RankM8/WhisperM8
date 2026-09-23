@@ -61,6 +61,7 @@ whisperm8 chats window list                          # Fenster-Inventar (+ shows
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
 whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"]
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
+whisperm8 chats rename <ref> --reset                  # hebt den Namen auf → nativer Titel des CLI
 whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
 whisperm8 chats unarchive <ref> [--resume|--open]    # NUR Markierung weg; Start nur via Flag
