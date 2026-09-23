@@ -93,6 +93,17 @@ Argumenten).
 Kill-Switch für den Mehrfach-Umzug (der Einzel-Umzug bleibt):
 `defaults write com.whisperm8.app accountBulkMoveEnabled -bool NO`.
 
+### GPT-Konto: bisher nur lesbar
+
+Das **ChatGPT-Konto des GPT-Backends** ist ein zweiter, vom Claude-Account
+unabhängiger Stempel (`gptProfileName`, `null` = Hauptkonto). Die CLI zeigt ihn
+in `whisperm8 chats show --json` unter `detail.gptProfileName`; ein Flag zum
+Setzen (`new --gpt-account`) und eine Konto-Spalte in `list`/`overview` gibt es
+noch nicht. Neue Chats aus der CLI erben wie in der GUI das in den
+Einstellungen aktive GPT-Konto; umstellen lässt sich ein bestehender Chat nur
+im Kontextmenü der App. Details:
+[GPT-Konten](agent-chats/gpt-konten.md).
+
 `overview` = `list --sort attention --format board`. Alle Befehle mit `--json`
 (schemaVersion 1). Referenzen: `projekt/titel`, UUID-Präfix ≥ 8, `@self`.
 Exit-Codes: 0 ok, 1 usage, 3 nicht gefunden/mehrdeutig, 4 Guard-Konflikt, 5 App

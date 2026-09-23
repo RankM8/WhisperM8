@@ -12,7 +12,7 @@ Die Doku ist in **fünf Bereiche** organisiert — die vier Produkt-Säulen der 
 | Säule | Inhalt | Unterordner |
 |---|---|---|
 | [`dictation/`](dictation/) | Diktieren: Hotkey → Aufnahme → STT → AI-Nachbearbeitung → Einfügen | `recording/`, `transcription/`, `ai-output/`, `visual-context/` |
-| [`agent-chats/`](agent-chats/) | Das Agent-Chats-Fenster: Sessions verwalten, beobachten, spawnen | `ui/`, `sessions/`, `sub-agents/`, `background-agents/`, `codex-exec/` |
+| [`agent-chats/`](agent-chats/) | Das Agent-Chats-Fenster: Sessions verwalten, beobachten, spawnen | `ui/`, `sessions/`, `sub-agents/`, `background-agents/`, `codex-exec/`, [`gpt-konten.md`](agent-chats/gpt-konten.md) |
 | [`cli/`](cli/) | Das `whisperm8`-Binary: transcribe / agent / agent-supervise | — |
 | [`settings/`](settings/) | Einstellungen: 10-Seiten-Struktur, Settings-Kit, Routing | — |
 | [`app-shell/`](app-shell/) | App-Hülle: Profile (Dock/MenuBar), Onboarding, Menüleiste, Updates, Fenster-Routing | — |
