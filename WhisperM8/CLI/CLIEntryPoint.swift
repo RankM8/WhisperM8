@@ -14,6 +14,13 @@ enum WhisperM8EntryPoint {
     static func main() {
         let arguments = CommandLine.arguments
         guard CLIModeDetector.shouldRunCLI(arguments) else {
+            if let message = GUILaunchGuard.refusalMessage(
+                bundleURL: Bundle.main.bundleURL,
+                bundleIdentifier: Bundle.main.bundleIdentifier
+            ) {
+                FileHandle.standardError.write(Data((message + "\n").utf8))
+                exit(GUILaunchGuard.refusalExitCode)
+            }
             // Vor allem anderen: ein SIGPIPE hat die App am 23.09.2026 samt
             // aller Chats wortlos beendet (Details in SigpipeGuard).
             SigpipeGuard.install()
@@ -22,6 +29,32 @@ enum WhisperM8EntryPoint {
         }
         let exitCode = CLIRuntime.runBlocking(arguments: Array(arguments.dropFirst()))
         exit(exitCode)
+    }
+}
+
+// MARK: - Startsperre ohne App-Bundle
+
+/// Verweigert den GUI-Start, wenn das Binary nicht aus einem `.app`-Bundle
+/// läuft (z. B. `swift run` ohne Argumente oder `.build/debug/WhisperM8`).
+///
+/// Vorfall 23.09.2026: Ein Agent-Chat rief `swift run --skip-build` auf —
+/// die nackte Debug-Instanz starb in `applicationDidFinishLaunching` an
+/// `UNUserNotificationCenter.current()` (NSAssertion: kein Bundle) mit
+/// SIGABRT. macOS zeigte „WhisperM8 wurde unerwartet beendet", und
+/// „Erneut öffnen" startete dasselbe Binary über Terminal.app gleich wieder.
+/// Der CLI-Pfad (`swift run WhisperM8 chats list` usw.) bleibt unberührt.
+enum GUILaunchGuard {
+    /// EX_USAGE — falscher Aufruf, kein Absturz.
+    static let refusalExitCode: Int32 = 64
+
+    static func refusalMessage(bundleURL: URL, bundleIdentifier: String?) -> String? {
+        guard bundleIdentifier == nil || bundleURL.pathExtension != "app" else { return nil }
+        return """
+        WhisperM8: Die App-Oberfläche startet nur aus dem .app-Bundle \
+        (make dev bzw. /Applications/WhisperM8.app).
+        Ohne Bundle nur als CLI, z. B.: swift run WhisperM8 --help \
+        oder swift run WhisperM8 chats list. Tests: swift test
+        """
     }
 }
 
