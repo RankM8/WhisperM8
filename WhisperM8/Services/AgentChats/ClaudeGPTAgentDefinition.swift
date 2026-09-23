@@ -130,7 +130,10 @@ struct ClaudeGPTAgentDefinitionInstaller {
         defer { Self.syncLock.unlock() }
         performSync(
             backendEnabled: AppPreferences.shared.claudeGPTBackendEnabled,
-            model: AppPreferences.shared.claudeGPTBackendDefaultModel,
+            // Eine Quelle für „das GPT-Modell": Picker-Eintrag, „Neuer
+            // GPT-Chat" und `gpt`-Subagent folgen demselben Feld (leer/auto =
+            // neuestes Modell aus Codex-Katalog ∩ Proxy).
+            model: AppPreferences.shared.claudeGPTPickerModel,
             fastEnabled: AppPreferences.shared.claudeGPTFastModeEnabled
         )
     }

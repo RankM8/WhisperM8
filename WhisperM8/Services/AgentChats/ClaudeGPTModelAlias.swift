@@ -63,8 +63,10 @@ enum ClaudeGPTModelAlias {
 
     /// Katalogquelle — injizierbar, damit Tests deterministisch gegen den
     /// eingebetteten Fallback laufen statt gegen die lokale Cache-Datei.
+    /// Produktiv: Codex-Katalog ∩ Modelle des laufenden Proxys.
     nonisolated(unsafe) static var catalogResolver: () -> CodexModelCatalog = {
         CodexModelCatalogStore.shared.catalog()
+            .restricted(toProxyModels: ClaudeCodeProxyModelRegistry.shared.knownModels)
     }
 
     static func catalog() -> CodexModelCatalog { catalogResolver() }
@@ -112,36 +114,6 @@ enum ClaudeGPTModelAlias {
             }
         }
         return result
-    }
-
-    /// Kleines Modell für Claude Codes Haiku-Rolle (Web Search, Fetch,
-    /// Hilfsaufrufe) im gegebenen Profil. Katalogreihenfolge rückwärts (die
-    /// TUI listet die kleinen Modelle hinten): das erste Modell, das das
-    /// Profil trägt, gewinnt; ein abgekündigtes oder für das Profil zu kleines
-    /// Modell übergibt an seinen vom Server benannten Nachfolger (gpt-5.4-mini
-    /// → gpt-5.6-luna). Ohne Treffer bleibt das Frontier-Modell — teurer, aber
-    /// nie ein Modell, das der Router ablehnt (Befund 2026-09-08: Web Search
-    /// scheiterte im 900k-Profil an einem fest verdrahteten Mini).
-    static func smallModel(
-        contextWindow: Int = maximumKnownSharedContextWindow,
-        catalog: CodexModelCatalog = catalog()
-    ) -> String {
-        let supported = backendModels(contextWindow: contextWindow, catalog: catalog)
-        func supports(_ slug: String) -> Bool {
-            supported.contains { $0.slug == slug }
-        }
-        let candidates = catalog.models
-            .filter { $0.slug.hasPrefix("gpt-") }
-            .sorted { $0.priority > $1.priority }
-        for candidate in candidates {
-            if supports(candidate.slug) {
-                return candidate.slug
-            }
-            if let upgrade = candidate.upgradeModel, supports(upgrade) {
-                return upgrade
-            }
-        }
-        return frontierModel(catalog: catalog)
     }
 
     /// Lesbare Aufzählung der Modelle eines Profils (Picker-Beschreibung,

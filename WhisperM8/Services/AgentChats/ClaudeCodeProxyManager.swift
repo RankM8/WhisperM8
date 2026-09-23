@@ -126,12 +126,12 @@ enum ClaudeCodeProxyBinarySource: Equatable {
 }
 
 /// Ein Proxy-Binary-Kandidat samt dem, was ueber ihn entscheidet: Version
-/// (aus `--version`, mtime-gecacht) und ob er die Katalog-Allowlist kann.
+/// (aus `--version`, mtime-gecacht) und ob er die Mindestversion erfuellt.
 struct ClaudeCodeProxyBinaryCandidate: Equatable {
     var path: String
     var source: ClaudeCodeProxyBinarySource
     var version: String?
-    var supportsCatalogAllowlist: Bool
+    var meetsMinimumVersion: Bool
 
     var sourceLabel: String {
         switch source {
@@ -199,6 +199,7 @@ final class ClaudeCodeProxyManager {
 
     private let managedBinaryResolver: () -> String?
     private let managedInstaller: () throws -> String
+    private let modelListRefresher: (Int) -> Void
     private let reachabilityResolver: (Int) -> Bool
     private let processLauncher: ProcessLauncher
     private let commandRunner: CommandRunner
@@ -222,7 +223,7 @@ final class ClaudeCodeProxyManager {
     /// und Auth-Check; ein Subprozess pro Aufruf waere zu teuer.
     private let versionCacheLock = NSLock()
     private var versionCache: [String: (modified: Date?, version: String?)] = [:]
-    /// Die automatische Fork-Installation laeuft hoechstens einmal pro
+    /// Die automatische Installation laeuft hoechstens einmal pro
     /// App-Lauf — ein blockierter Download darf nicht jeden Chat-Start
     /// erneut Sekunden kosten. Der Setup-Wizard installiert unabhaengig davon.
     private var didAttemptManagedInstall = false
@@ -294,6 +295,9 @@ final class ClaudeCodeProxyManager {
         agentDefinitionSyncer: @escaping () -> Void = {
             ClaudeGPTAgentDefinitionInstaller().syncFromPreferences()
         },
+        modelListRefresher: @escaping (Int) -> Void = { port in
+            ClaudeCodeProxyModelRegistry.shared.refresh(proxyPort: port)
+        },
         environmentResolver: @escaping () -> [String: String] = {
             LoginShellEnvironment.shared.processEnvironment()
         },
@@ -305,6 +309,7 @@ final class ClaudeCodeProxyManager {
         self.commandResolver = commandResolver
         self.managedBinaryResolver = managedBinaryResolver
         self.managedInstaller = managedInstaller
+        self.modelListRefresher = modelListRefresher
         self.reachabilityResolver = reachabilityResolver
         self.processLauncher = processLauncher
         self.commandRunner = commandRunner
@@ -353,7 +358,7 @@ final class ClaudeCodeProxyManager {
             // weiterleben noch durch einen neuen Handle verdeckt werden.
             replaceSelfStartedProcess(with: nil)
 
-            guard let binary = catalogCapableBinaryInstallingIfNeeded() else {
+            guard let binary = currentBinaryInstallingIfNeeded() else {
                 return .failure(.binaryMissing)
             }
             let executable = binary.path
@@ -405,6 +410,10 @@ final class ClaudeCodeProxyManager {
                 return .failure(.notReachable(port: port))
             }
         }
+
+        // Welche GPT-Modelle der laufende Proxy kennt — Grundlage fuer die
+        // Schnittmenge mit dem Codex-Katalog (Router, Picker, `gpt.md`).
+        modelListRefresher(port)
 
         switch routerStarter(routerPortResolver()) {
         case .success:
@@ -458,7 +467,7 @@ final class ClaudeCodeProxyManager {
                 // neuer Handle ihn verdeckt.
                 discardProfileInstance(profile, expecting: existing.process)
             }
-            guard let binary = catalogCapableBinaryInstallingIfNeeded() else {
+            guard let binary = currentBinaryInstallingIfNeeded() else {
                 return .failure(.binaryMissing)
             }
             guard let port = allocateProfilePort() else {
@@ -777,40 +786,40 @@ final class ClaudeCodeProxyManager {
     }
 
     /// Auswahl des Proxy-Binarys. Ein PATH-Binary bleibt der Power-User-
-    /// Override, aber nur, wenn es die Katalog-Allowlist beherrscht — sonst
+    /// Override, aber nur ab `minimumVersion` — sonst
     /// gewinnt das verwaltete Binary. Vorfall 2026-09-08: Homebrew 0.1.21
     /// (Juli) hatte Vorrang vor allem, kannte aber nur seine einkompilierte
     /// Modell-Liste bis gpt-5.6; Router und `gpt.md` boten aus dem Katalog
     /// laengst gpt-6-astra an, jeder `gpt`-Spawn starb mit „Unknown model".
     /// Gibt es nur veraltete Binaries, kommt das PATH-Binary zurueck
-    /// (`supportsCatalogAllowlist == false`) — `ensureRunning` versucht dann
+    /// (`meetsMinimumVersion == false`) — `ensureRunning` versucht dann
     /// zuerst die Installation des verwalteten Binarys.
     func resolvedBinary() -> ClaudeCodeProxyBinaryCandidate? {
         let pathCandidate = commandResolver("claude-code-proxy").map {
             candidate(path: $0, source: .path)
         }
-        if let pathCandidate, pathCandidate.supportsCatalogAllowlist {
+        if let pathCandidate, pathCandidate.meetsMinimumVersion {
             return pathCandidate
         }
         if let managed = managedBinaryResolver() {
             let managedCandidate = candidate(path: managed, source: .managed)
-            if managedCandidate.supportsCatalogAllowlist || pathCandidate == nil {
+            if managedCandidate.meetsMinimumVersion || pathCandidate == nil {
                 return managedCandidate
             }
         }
         return pathCandidate
     }
 
-    /// Liefert ein katalog-faehiges Binary; ist keins da, wird EINMAL pro
-    /// App-Lauf das verwaltete Fork-Release installiert. Schlaegt das fehl,
+    /// Liefert ein aktuelles Binary; ist keins da, wird EINMAL pro
+    /// App-Lauf das verwaltete Upstream-Release installiert. Schlaegt das fehl,
     /// laeuft der Proxy mit dem veralteten Binary weiter (aeltere Modelle
     /// funktionieren dann noch) — mit Warnung im Log und in den Settings.
-    private func catalogCapableBinaryInstallingIfNeeded() -> ClaudeCodeProxyBinaryCandidate? {
+    private func currentBinaryInstallingIfNeeded() -> ClaudeCodeProxyBinaryCandidate? {
         guard let binary = resolvedBinary() else { return nil }
-        guard !binary.supportsCatalogAllowlist else { return binary }
+        guard !binary.meetsMinimumVersion else { return binary }
 
         Logger.claudeGPTRouter.warning(
-            "claude_code_proxy_binary_outdated path=\(binary.path, privacy: .public) version=\(binary.version ?? "unbekannt", privacy: .public) required=\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion, privacy: .public)"
+            "claude_code_proxy_binary_outdated path=\(binary.path, privacy: .public) version=\(binary.version ?? "unbekannt", privacy: .public) required=\(ClaudeCodeProxyBinaryInstaller.minimumVersion, privacy: .public)"
         )
         guard !didAttemptManagedInstall else { return binary }
         didAttemptManagedInstall = true
@@ -839,7 +848,7 @@ final class ClaudeCodeProxyManager {
             path: path,
             source: source,
             version: version,
-            supportsCatalogAllowlist: ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: version)
+            meetsMinimumVersion: ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: version)
         )
     }
 
@@ -873,6 +882,34 @@ final class ClaudeCodeProxyManager {
     /// Bruecke fuer die synchrone Startsequenz: `installKnownGood()` ist
     /// async (URLSession), `ensureRunning` laeuft blockierend auf einem
     /// Hintergrund-Thread unter `ensureLock`. Nie auf dem Main Thread rufen.
+    /// Hebt das VERWALTETE Binary auf das neueste Upstream-Release
+    /// (Sidecar-SHA-verifiziert). Laeuft im Hintergrund beim App-Start; ein
+    /// laufender Proxy wird nicht angetastet — die neue Version gilt ab dem
+    /// naechsten Proxy-Start. Ein PATH-Binary (Power-User) bleibt unberuehrt.
+    static func autoUpdateManagedBinary(
+        installer: ClaudeCodeProxyBinaryInstaller = ClaudeCodeProxyBinaryInstaller()
+    ) async {
+        guard ClaudeCodeProxyBinaryInstaller.autoUpdateEnabled else { return }
+        do {
+            let latest = try await installer.latestVersion()
+            let installed = installer.installedManagedVersion()
+            let baseline = installed ?? ClaudeCodeProxyBinaryInstaller.knownGoodVersion
+            guard installed == nil
+                || ClaudeCodeProxyBinaryInstaller.isVersion(latest, newerThan: baseline) else { return }
+            guard !ClaudeCodeProxyBinaryInstaller.isVersion(
+                ClaudeCodeProxyBinaryInstaller.minimumVersion, newerThan: latest
+            ) else { return }
+            _ = try await installer.install(version: latest)
+            Logger.claudeGPTRouter.info(
+                "claude_code_proxy_auto_updated from=\(installed ?? "none", privacy: .public) to=\(latest, privacy: .public)"
+            )
+        } catch {
+            Logger.claudeGPTRouter.warning(
+                "claude_code_proxy_auto_update_failed error=\(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
     static func installKnownGoodBlocking() throws -> String {
         let done = DispatchSemaphore(value: 0)
         let outcome = ClaudeCodeProxyInstallOutcome()

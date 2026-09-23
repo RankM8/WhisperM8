@@ -2,65 +2,57 @@ import CryptoKit
 import Foundation
 
 /// Managed Download des `claude-code-proxy`-Binarys (MIT-lizenziert) aus den
-/// GitHub-Releases nach `~/Library/Application Support/WhisperM8/bin/`.
+/// GitHub-Releases von Upstream (`raine/claude-code-proxy`) nach
+/// `~/Library/Application Support/WhisperM8/bin/`.
 ///
-/// Quelle ist seit 2026-09-06 der WhisperM8-Fork (`GiulianoCosta71/claude-code-proxy`,
-/// Branch `whisperm8-release`): Er trägt die katalog-getriebene Modell-
-/// Allowlist (liest `~/.codex/models_cache.json`, Upstream-PR raine#130),
-/// damit neue Codex-Modelle ohne Proxy-Release funktionieren. Upstream
-/// (`raine/claude-code-proxy`) releast Modell-Ergänzungen nur mit Verzug;
-/// sobald der PR gemerged und released ist, kann `repository` zurück auf
-/// Upstream wechseln.
-/// Ein PATH-Binary bleibt der Power-User-Override — aber nur, wenn es die
-/// Katalog-Allowlist beherrscht (`supportsCatalogAllowlist`). Ein älteres
-/// PATH-Binary (Vorfall 2026-09-08: Homebrew 0.1.21 vom Juli) kennt nur seine
-/// einkompilierte Liste und lehnte `gpt-6-astra` ab, obwohl Router und
-/// `gpt.md` das Modell längst aus dem Katalog kannten — der Manager zieht
-/// dann das verwaltete Binary vor bzw. installiert es.
+/// Welche Codex-Modelle angeboten werden, entscheidet nicht mehr ein
+/// eigener Proxy-Fork (2026-09-06 bis 2026-09-23), sondern die Schnittmenge
+/// aus Codex-Katalog und `/v1/models` des laufenden Proxys
+/// (`ClaudeCodeProxyModelRegistry`). Neue Modelle kommen mit dem nächsten
+/// Upstream-Release; `ensureRunning` hält das verwaltete Binary dafür
+/// automatisch auf dem neuesten Release (`autoUpdateEnabled`).
+///
+/// Ein PATH-Binary bleibt der Power-User-Override — aber nur ab
+/// `minimumVersion`. Ein älteres PATH-Binary (Vorfall 2026-09-08: Homebrew
+/// 0.1.21 vom Juli) verliert den Vorrang gegen das verwaltete.
 ///
 /// Sicherheitsmodell: Die App pinnt Version UND SHA-256 der known-good-
-/// Version; für neuere Versionen (Update-Flow) wird gegen das
+/// Version; für neuere Versionen (Auto-Update, Update-Button) wird gegen das
 /// `.sha256`-Sidecar desselben Releases verifiziert. Downloads laufen
 /// vollständig in Temp-Dateien und werden atomar an den Zielpfad bewegt.
 struct ClaudeCodeProxyBinaryInstaller {
     /// Von uns getestete Version — der Ein-Klick-Setup installiert genau sie.
-    /// Fork-Release: Upstream 0.1.35 + Katalog-Allowlist (main@55bf0b58 + PR #130).
-    static let knownGoodVersion = "0.1.36-whisperm8.1"
+    static let knownGoodVersion = "0.1.42"
 
-    /// SHA-256 der Release-Tarballs der known-good-Version (2026-09-06 von
-    /// den Release-Sidecars des Fork-Releases übernommen und lokal gegengeprüft).
+    /// SHA-256 der Release-Tarballs der known-good-Version (2026-09-23 von
+    /// den Release-Sidecars übernommen).
     static let pinnedTarballSHA256: [String: String] = [
-        "0.1.36-whisperm8.1/darwin-arm64": "d7c11eb6ce4e8a244f190b7f4c59d3403772ce7027d715d67df0a782e9e5d153",
-        "0.1.36-whisperm8.1/darwin-amd64": "c12a227a91b21baab22ada7d1533539639d1aca9207da73cc13040451d3316f0",
+        "0.1.42/darwin-arm64": "97542c34398db90227210c6feb6de864c80f92e7a16379024340b2f50f14b696",
+        "0.1.42/darwin-amd64": "e4bdd6f0b9478f30c914947ae7a75db9b25c6d05efbd9b2cd2fc012a83866ce7",
     ]
 
-    static let repository = "GiulianoCosta71/claude-code-proxy"
+    static let repository = "raine/claude-code-proxy"
     static let binaryName = "claude-code-proxy"
 
-    /// Erste Version mit katalog-getriebener Modell-Allowlist. Alles darunter
-    /// führt nur die einkompilierte Liste und lehnt jedes neuere Codex-Modell
-    /// mit „Unknown model" ab.
-    static let minimumCatalogVersion = knownGoodVersion
-    /// Kennung der Fork-Releases im Versionsstring (`0.1.36-whisperm8.1`).
-    static let forkVersionMarker = "whisperm8"
-    /// Erstes UPSTREAM-Release mit der Katalog-Allowlist (raine#130) — nil,
-    /// solange der PR nicht gemerged und released ist. Danach hier eintragen,
-    /// dann gilt auch ein Homebrew-Binary ab dieser Version als vollwertig.
-    static let minimumUpstreamCatalogVersion: String? = nil
+    /// Kill-Switch für das automatische Update auf das neueste Upstream-
+    /// Release: `defaults write com.whisperm8.app claudeCodeProxyAutoUpdateEnabled -bool NO`.
+    static var autoUpdateEnabled: Bool {
+        UserDefaults.standard.object(forKey: "claudeCodeProxyAutoUpdateEnabled") as? Bool ?? true
+    }
 
-    /// Beherrscht ein Binary dieser Version die Katalog-Allowlist? Fork-
-    /// Releases ab `minimumCatalogVersion` ja; Upstream erst ab
-    /// `minimumUpstreamCatalogVersion`. Unbekannte Version (kein `--version`-
-    /// Output) zählt als nein — lieber das verwaltete Binary als ein blindes.
-    static func supportsCatalogAllowlist(version: String?) -> Bool {
+    /// Älteste Version, die WhisperM8 als vollwertig startet. Frühere
+    /// WhisperM8-Fork-Builds (`0.1.36-whisperm8.1`) liegen numerisch darunter
+    /// und werden damit ebenfalls durch das Upstream-Release ersetzt.
+    static let minimumVersion = knownGoodVersion
+
+    /// Erfüllt ein Binary dieser Version die Mindestversion? Unbekannte
+    /// Version (kein `--version`-Output) zählt als nein — lieber das
+    /// verwaltete Binary als ein blindes.
+    static func meetsMinimumVersion(version: String?) -> Bool {
         guard let version else { return false }
         let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        if trimmed.localizedCaseInsensitiveContains(forkVersionMarker) {
-            return !isVersion(minimumCatalogVersion, newerThan: trimmed)
-        }
-        guard let upstream = minimumUpstreamCatalogVersion else { return false }
-        return !isVersion(upstream, newerThan: trimmed)
+        return !isVersion(minimumVersion, newerThan: trimmed)
     }
 
     /// Version aus der `--version`-Ausgabe (`claude-code-proxy 0.1.21`).

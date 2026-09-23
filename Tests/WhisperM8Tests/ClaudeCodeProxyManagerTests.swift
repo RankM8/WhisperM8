@@ -835,7 +835,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
 
     // MARK: Binary-Auswahl (Katalog-Allowlist)
 
-    private static let forkVersionOutput = "claude-code-proxy 0.1.36-whisperm8.1\n"
+    private static let currentVersionOutput = "claude-code-proxy 0.1.42\n"
     private static let homebrewVersionOutput = "claude-code-proxy 0.1.21\n"
 
     /// `--version` pro Pfad beantworten; alles andere scheitert.
@@ -856,8 +856,8 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         let manager = makeManager(
             commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
             commandRunner: Self.versionRunner([
-                "/opt/homebrew/bin/claude-code-proxy": Self.forkVersionOutput,
-                "/managed/claude-code-proxy": Self.forkVersionOutput,
+                "/opt/homebrew/bin/claude-code-proxy": Self.currentVersionOutput,
+                "/managed/claude-code-proxy": Self.currentVersionOutput,
             ]),
             managedBinary: { "/managed/claude-code-proxy" }
         )
@@ -865,8 +865,8 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         let binary = manager.resolvedBinary()
         XCTAssertEqual(binary?.path, "/opt/homebrew/bin/claude-code-proxy")
         XCTAssertEqual(binary?.source, .path)
-        XCTAssertEqual(binary?.version, "0.1.36-whisperm8.1")
-        XCTAssertEqual(binary?.supportsCatalogAllowlist, true)
+        XCTAssertEqual(binary?.version, "0.1.42")
+        XCTAssertEqual(binary?.meetsMinimumVersion, true)
     }
 
     func testOutdatedPathBinaryYieldsToCatalogCapableManagedBinary() {
@@ -876,7 +876,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
             commandRunner: Self.versionRunner([
                 "/opt/homebrew/bin/claude-code-proxy": Self.homebrewVersionOutput,
-                "/managed/claude-code-proxy": Self.forkVersionOutput,
+                "/managed/claude-code-proxy": Self.currentVersionOutput,
             ]),
             managedBinary: { "/managed/claude-code-proxy" }
         )
@@ -884,7 +884,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         let binary = manager.resolvedBinary()
         XCTAssertEqual(binary?.path, "/managed/claude-code-proxy")
         XCTAssertEqual(binary?.source, .managed)
-        XCTAssertEqual(binary?.supportsCatalogAllowlist, true)
+        XCTAssertEqual(binary?.meetsMinimumVersion, true)
         XCTAssertEqual(manager.resolvedBinaryPath(), "/managed/claude-code-proxy")
     }
 
@@ -899,7 +899,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         let binary = manager.resolvedBinary()
         XCTAssertEqual(binary?.path, "/opt/homebrew/bin/claude-code-proxy")
         XCTAssertEqual(binary?.version, "0.1.21")
-        XCTAssertEqual(binary?.supportsCatalogAllowlist, false)
+        XCTAssertEqual(binary?.meetsMinimumVersion, false)
     }
 
     func testUnknownVersionCountsAsOutdated() {
@@ -911,7 +911,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         )
         // Beide unbekannt → PATH bleibt (kein Grund zu wechseln) …
         XCTAssertEqual(manager.resolvedBinary()?.path, "/opt/homebrew/bin/claude-code-proxy")
-        XCTAssertEqual(manager.resolvedBinary()?.supportsCatalogAllowlist, false)
+        XCTAssertEqual(manager.resolvedBinary()?.meetsMinimumVersion, false)
     }
 
     func testEnsureRunningInstallsManagedBinaryWhenOnlyOutdatedPathBinaryExists() {
@@ -927,7 +927,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             },
             commandRunner: Self.versionRunner([
                 "/opt/homebrew/bin/claude-code-proxy": Self.homebrewVersionOutput,
-                "/managed/claude-code-proxy": Self.forkVersionOutput,
+                "/managed/claude-code-proxy": Self.currentVersionOutput,
             ]),
             managedBinary: { managedInstalled ? "/managed/claude-code-proxy" : nil },
             managedInstaller: {
@@ -940,7 +940,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         assertSuccess(manager.ensureRunning(port: 18_765))
 
         XCTAssertEqual(installCalls, 1)
-        XCTAssertEqual(launched, ["/managed/claude-code-proxy"], "Nach der Installation muss der Fork starten, nicht Homebrew")
+        XCTAssertEqual(launched, ["/managed/claude-code-proxy"], "Nach der Installation muss das verwaltete Binary starten, nicht das alte Homebrew")
         XCTAssertNil(manager.lastManagedInstallError)
     }
 
@@ -964,7 +964,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         )
 
         assertSuccess(manager.ensureRunning(port: 18_765))
-        XCTAssertEqual(launched, ["/opt/homebrew/bin/claude-code-proxy"], "Ohne Fork bleibt der alte Proxy besser als keiner")
+        XCTAssertEqual(launched, ["/opt/homebrew/bin/claude-code-proxy"], "Ohne aktuelles Binary bleibt der alte Proxy besser als keiner")
         XCTAssertEqual(manager.lastManagedInstallError, "Download blockiert (Test)")
 
         // Zweiter Start (Proxy weg): kein erneuter Download-Versuch.
@@ -980,7 +980,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
             reachability: { _ in true },
             commandRunner: Self.versionRunner([
-                "/opt/homebrew/bin/claude-code-proxy": Self.forkVersionOutput,
+                "/opt/homebrew/bin/claude-code-proxy": Self.currentVersionOutput,
             ]),
             managedInstaller: {
                 installCalls += 1
@@ -996,7 +996,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         let manager = makeManager(
             commandResolver: { _ in "/opt/homebrew/bin/claude-code-proxy" },
             commandRunner: Self.versionRunner(
-                ["/opt/homebrew/bin/claude-code-proxy": Self.forkVersionOutput],
+                ["/opt/homebrew/bin/claude-code-proxy": Self.currentVersionOutput],
                 calls: { versionCalls += 1 }
             )
         )
@@ -1056,6 +1056,8 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             routerStopper: routerStopper,
             routerPortResolver: routerPort,
             agentDefinitionSyncer: agentDefinitionSyncer,
+            // Nie den echten Proxy auf 127.0.0.1 abfragen.
+            modelListRefresher: { _ in },
             environmentResolver: environment,
             sleepResolver: { _ in },
             retryAttempts: retryAttempts,

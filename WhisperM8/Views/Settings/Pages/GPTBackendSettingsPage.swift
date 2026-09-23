@@ -4,7 +4,6 @@ import SwiftUI
 struct GPTBackendSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeGPTBackendEnabled) private var backendEnabled = false
     @AppStorage(PreferenceKeys.claudeGPTBackendPort) private var port = 18_765
-    @AppStorage(PreferenceKeys.claudeGPTBackendDefaultModel) private var defaultModel = ""
     @AppStorage(PreferenceKeys.claudeGPTFastModeEnabled) private var fastModeEnabled = false
     @AppStorage(PreferenceKeys.claudeGPTPickerModel) private var pickerModel = ""
     @AppStorage(PreferenceKeys.claudeGPTSubagentModel) private var subagentModel = ""
@@ -32,9 +31,6 @@ struct GPTBackendSettingsPage: View {
     /// Vorschläge kommen aus dem Codex-Modellkatalog (`~/.codex/models_cache.json`
     /// ∪ Fallback) — neue Modelle erscheinen hier ohne App-Update. `auto` steht
     /// immer an erster Stelle und meint das jeweils neueste Modell.
-    private var modelSuggestions: [String] {
-        ClaudeGPTModelAlias.suggestions(includeFastVariants: false)
-    }
     private var pickerModelSuggestions: [String] {
         ClaudeGPTModelAlias.suggestions(includeFastVariants: true)
     }
@@ -146,7 +142,7 @@ struct GPTBackendSettingsPage: View {
             // aktiv → anlegen/aktualisieren, deaktiviert → entfernen.
             syncAgentDefinition()
         }
-        .onChange(of: defaultModel) { _, _ in
+        .onChange(of: pickerModel) { _, _ in
             syncAgentDefinition()
         }
         .onChange(of: fastModeEnabled) { _, _ in
@@ -279,14 +275,6 @@ struct GPTBackendSettingsPage: View {
                     .frame(width: 100)
             }
 
-            editableModelRow(
-                title: "Standard-Modell für neue Claude-Chats",
-                subtitle: "Leer = neue Chats starten wie gewohnt mit Claude. ›auto‹ = immer das neueste GPT-Modell laut Codex-Katalog (derzeit \(frontierModelName)) — empfohlen, damit neue Modelle automatisch übernommen werden. Alternativ eine feste ID aus dem Katalog. Unbekannte oder kapazitätsinkompatible GPT-IDs werden nicht gestempelt.",
-                placeholder: "Leer = Claude · auto = neuestes GPT",
-                text: $defaultModel,
-                suggestions: modelSuggestions
-            )
-
             SettingsToggleRow(
                 title: "Fast-Modus (Priority-Tier)",
                 subtitle: "Priority-Tier des Codex-Backends: deutlich schneller (laut Katalog 1,5× bis 2×), verbraucht aber erheblich mehr ChatGPT-Credits. Gilt für neu gestartete Chats samt Subagents — nicht für Background-Agents (claude --bg). Vorrang behalten: ein eigenes --model in den Claude-Extra-Argumenten, ein explizites ›-fast‹ im Modellnamen sowie eine globale Proxy-Konfiguration.",
@@ -294,8 +282,8 @@ struct GPTBackendSettingsPage: View {
             )
 
             editableModelRow(
-                title: "GPT-Modell im /model-Picker",
-                subtitle: "Belegt den einen Custom-Eintrag, den Claude Code im /model-Picker erlaubt. Leer = Standard-Modell; ›auto‹ oder unbekannt = neuestes Modell (derzeit \(frontierModelName)). Zulässig ist jedes Backend-Modell des Codex-Katalogs (derzeit: \(catalogModelSummary)); Modelle mit Priority-Tier optional mit ›-fast‹. Ältere und unbekannte GPT-IDs lehnt der Router klar ab. Neue Modelle brauchen zusätzlich einen claude-code-proxy, der sie kennt.",
+                title: "GPT-Modell",
+                subtitle: "Das GPT-Modell für den /model-Picker, für „Neuer GPT-Chat“ und für GPT-Subagents (Agent-Typ »gpt«). Welches Modell ein neuer Chat nutzt, entscheidet Claude Code selbst: in einem Chat /model wählen und mit Enter als Standard speichern — GPT oder Claude. Leer, ›auto‹ oder unbekannt = neuestes Modell (derzeit \(frontierModelName)). Zulässig ist jedes Backend-Modell des Codex-Katalogs (derzeit: \(catalogModelSummary)); Modelle mit Priority-Tier optional mit ›-fast‹. Ältere und unbekannte GPT-IDs lehnt der Router klar ab. Neue Modelle brauchen zusätzlich einen claude-code-proxy, der sie kennt.",
                 placeholder: "Leer = automatisch",
                 text: $pickerModel,
                 suggestions: pickerModelSuggestions
@@ -424,9 +412,9 @@ struct GPTBackendSettingsPage: View {
     private var binaryManagementSubtitle: String {
         let installer = ClaudeCodeProxyBinaryInstaller()
         if let managed = installer.installedManagedVersion() {
-            return "Verwaltet von WhisperM8: v\(managed) (\(installer.binaryURL.path)). Ein PATH-Binary hätte Vorrang, sofern es die Katalog-Allowlist beherrscht (ab v\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion))."
+            return "Verwaltet von WhisperM8: v\(managed) (\(installer.binaryURL.path)), wird beim App-Start automatisch auf das neueste Upstream-Release gehoben. Ein PATH-Binary hätte Vorrang, sofern es mindestens v\(ClaudeCodeProxyBinaryInstaller.minimumVersion) ist."
         }
-        return "Kein verwaltetes Binary — es zählt die PATH-Installation, solange sie die Katalog-Allowlist beherrscht (ab v\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion)). „Nach Update suchen“ vergleicht mit dem neuesten GitHub-Release."
+        return "Kein verwaltetes Binary — es zählt die PATH-Installation, solange sie mindestens v\(ClaudeCodeProxyBinaryInstaller.minimumVersion) ist. „Nach Update suchen“ vergleicht mit dem neuesten GitHub-Release."
     }
 
     private var binaryStatusDetail: String {
@@ -437,19 +425,18 @@ struct GPTBackendSettingsPage: View {
     private var binaryStatusTone: SettingsStatusTone {
         guard didRefresh else { return .off }
         guard let binary else { return .error }
-        return binary.supportsCatalogAllowlist ? .ok : .warn
+        return binary.meetsMinimumVersion ? .ok : .warn
     }
 
-    /// Ein Binary ohne Katalog-Allowlist kennt nur seine einkompilierte
-    /// Modell-Liste — neue Codex-Modelle scheitern dort mit „Unknown model",
-    /// obwohl Router und `gpt`-Agent sie aus dem Katalog längst anbieten.
+    /// Ein Binary unter der Mindestversion kennt nur ältere Modelle; WhisperM8
+    /// bietet ohnehin nur an, was der laufende Proxy unter `/v1/models` meldet.
     private var binaryStatusSubtitle: String? {
         guard didRefresh else { return nil }
         guard let binary else {
             return "„Jetzt komplett einrichten“ lädt es automatisch; alternativ manuell aus dem GitHub-Release \(ClaudeCodeProxyBinaryInstaller.repository) in den PATH."
         }
-        guard !binary.supportsCatalogAllowlist else { return nil }
-        var text = "Diese Version kennt nur ihre einkompilierte Modell-Liste — neue Codex-Modelle scheitern mit „Unknown model“. Die Katalog-Allowlist gibt es ab v\(ClaudeCodeProxyBinaryInstaller.minimumCatalogVersion); „Jetzt komplett einrichten“ installiert das verwaltete Binary, das dann Vorrang hat."
+        guard !binary.meetsMinimumVersion else { return nil }
+        var text = "Diese Version ist älter als v\(ClaudeCodeProxyBinaryInstaller.minimumVersion) und kennt neuere Codex-Modelle nicht. „Jetzt komplett einrichten“ installiert das verwaltete Binary, das dann Vorrang hat."
         if let installError = proxyManager.lastManagedInstallError {
             text += " Letzter automatischer Versuch: \(installError)"
         }

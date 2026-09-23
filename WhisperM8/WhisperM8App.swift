@@ -337,11 +337,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 _ = ClaudeCodeProxyManager.shared.ensureRunning(
                     port: AppPreferences.shared.claudeGPTBackendPort
                 )
+                // Neuestes Upstream-Release holen (wirkt ab dem nächsten
+                // Proxy-Start) — so kommen neue Codex-Modelle ohne App-Update.
+                await ClaudeCodeProxyManager.autoUpdateManagedBinary()
             }
         }
         // Codex-Modellkatalog beobachten: ein neues Modell (z. B. gpt-6-astra)
         // soll ohne App-Neustart in der verwalteten `gpt`-Agent-Definition
-        // landen. Router und Fork-Proxy lesen den Katalog ohnehin pro Request;
+        // landen. Der Router liest den Katalog ohnehin pro Request;
         // nur die Definition wurde bisher erst beim nächsten Backend-Start
         // nachgezogen. Läuft unabhängig vom Toggle — der Sync ist idempotent.
         CodexModelCatalogWatcher.shared.start()

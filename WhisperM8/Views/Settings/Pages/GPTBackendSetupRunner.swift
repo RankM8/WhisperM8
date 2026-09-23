@@ -59,10 +59,10 @@ struct GPTBackendSetupRunner {
     func run(port: Int, onStep: (Step, StepState) -> Void) async -> Outcome {
         onStep(.binary, .running)
         let binaryPath: String
-        if let resolved = binaryResolver(), resolved.supportsCatalogAllowlist {
+        if let resolved = binaryResolver(), resolved.meetsMinimumVersion {
             binaryPath = resolved.path
         } else {
-            // Kein Binary — oder nur eines ohne Katalog-Allowlist (z. B. ein
+            // Kein Binary — oder nur eines unter der Mindestversion (z. B. ein
             // altes Homebrew-Release, Vorfall 2026-09-08) → Managed Download
             // der gepinnten known-good-Version (Checksummen-verifiziert).
             do {

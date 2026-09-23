@@ -27,7 +27,8 @@ extension AgentChatsView {
 
     func createSession(
         provider: AgentProvider,
-        kind: AgentSessionKind? = nil
+        kind: AgentSessionKind? = nil,
+        gptMainModel: Bool = false
     ) {
         guard let selectedProject else { return }
         do {
@@ -47,12 +48,19 @@ extension AgentChatsView {
             // Ein erzwungenes `--session-id` war die Wurzel der „No conversation
             // found"-Fehler (Claude persistierte nicht zuverlässig darunter).
             let externalSessionID: String? = nil
-            let backendDefault = AppPreferences.shared.claudeGPTBackendDefaultModel
+            // Das Modell neuer Claude-Chats entscheidet Claude Code selbst
+            // (`/model` + Enter speichert den Default im Profil). WhisperM8
+            // stempelt nur noch für den ausdrücklichen „Neuer GPT-Chat" — ein
+            // `--model` gilt laut Claude-Code-Doku nur für diese eine Session
+            // und überschreibt den gespeicherten Default nicht. Das frühere
+            // Feld „Standard-Modell für neue Claude-Chats" stempelte JEDEN
+            // Chat und hebelte `/model` aus (entfernt 2026-09-23).
+            let gptPick = AppPreferences.shared.claudeGPTPickerModel
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let claudeBackendModel = provider == .claude
+            let claudeBackendModel = gptMainModel
+                && provider == .claude
                 && AppPreferences.shared.claudeGPTBackendEnabled
-                && !backendDefault.isEmpty
-                ? backendDefault
+                ? (gptPick.isEmpty ? ClaudeGPTModelAlias.autoModel : gptPick)
                 : nil
             let session = try store.createSession(
                 provider: provider,

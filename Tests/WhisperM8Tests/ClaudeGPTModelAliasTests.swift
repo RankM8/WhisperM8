@@ -258,10 +258,7 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         XCTAssertNil(ClaudeGPTModelAlias.canonicalGPTModel("automatic"))
     }
 
-    func testSmallModelFollowsCatalogOrderProfileAndUpgradeChain() {
-        // Fallback-Katalog: Mini ist das letzte Backend-Modell → 272k-Profil.
-        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 272_000), "gpt-5.4-mini")
-        // 900k: Mini trägt das Profil nicht → Nachfolger laut Katalog (Luna).
+    func testRetiredModelIsNotBackendEligible() {
         let retiredMini = CodexCatalogModel(
             slug: "gpt-5.4-mini", displayName: "Mini", detail: nil, defaultEffort: "medium",
             efforts: CodexModelCatalog.baselineEfforts, priority: 23, supportsFastTier: false,
@@ -270,22 +267,34 @@ final class ClaudeGPTModelAliasTests: XCTestCase {
         var models = CodexModelCatalog.fallback.models.filter { $0.slug != "gpt-5.4-mini" }
         models.append(retiredMini)
         let catalog = CodexModelCatalog(models: models, fetchedAt: nil)
-        // Fallback-Katalog (ohne Abkündigung): Mini/5.5 tragen 900k nicht, das
-        // nächste kleinere Modell mit 1M-Klasse ist GPT-5.4.
-        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 900_000, catalog: .fallback), "gpt-5.4")
-        // Live-Situation (Cache 2026-09-04: kein gpt-5.4 mehr, Mini abgekündigt → Luna).
-        let live = CodexModelCatalog(models: models.filter { $0.slug != "gpt-5.4" }, fetchedAt: nil)
-        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 900_000, catalog: live), "gpt-5.6-luna")
-        // Abgekündigt: auch im 272k-Profil nicht mehr wählbar → Nachfolger.
-        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 272_000, catalog: catalog), "gpt-5.6-luna")
         XCTAssertNil(ClaudeGPTModelAlias.supportedEffectiveModel("gpt-5.4-mini", fastEnabled: false, catalog: catalog))
         XCTAssertFalse(ClaudeGPTModelAlias.backendModelSlugs(catalog: catalog).contains("gpt-5.4-mini"))
-        // Nur ein Modell im Katalog → Frontier, nie ein abgelehntes Modell.
-        let single = CodexModelCatalog(models: [CodexCatalogModel(
-            slug: "gpt-7-nova", displayName: "Nova", detail: nil, defaultEffort: "medium",
-            efforts: CodexModelCatalog.baselineEfforts, priority: 0, maxContextWindow: 872_000
-        )], fetchedAt: nil)
-        XCTAssertEqual(ClaudeGPTModelAlias.smallModel(contextWindow: 900_000, catalog: single), "gpt-7-nova")
+    }
+
+    func testProxyModelListRestrictsCatalog() {
+        // Schnittmenge Codex-Katalog ∩ /v1/models des Proxys.
+        let restricted = CodexModelCatalog.fallback.restricted(toProxyModels: ["gpt-5.6-sol", "gpt-5.6-terra"])
+        XCTAssertEqual(ClaudeGPTModelAlias.backendModelSlugs(catalog: restricted), ["gpt-5.6-sol", "gpt-5.6-terra"])
+        XCTAssertEqual(ClaudeGPTModelAlias.frontierModel(catalog: restricted), "gpt-5.6-sol")
+        XCTAssertNil(ClaudeGPTModelAlias.supportedEffectiveModel("gpt-6-astra", fastEnabled: false, catalog: restricted))
+        // Unbekannt (Proxy nicht abgefragt) → Katalog unverändert.
+        XCTAssertEqual(CodexModelCatalog.fallback.restricted(toProxyModels: nil), .fallback)
+        // Nicht-GPT-Einträge bleiben immer.
+        let withOther = CodexModelCatalog(models: CodexModelCatalog.fallback.models + [CodexCatalogModel(
+            slug: "o9", displayName: "o9", detail: nil, defaultEffort: "medium",
+            efforts: CodexModelCatalog.baselineEfforts, priority: 99)], fetchedAt: nil)
+        XCTAssertNotNil(withOther.restricted(toProxyModels: []).model(slug: "o9"))
+    }
+
+    func testProxyModelParserReadsBaseIDsWithoutFast() {
+        let data = Data(#"{"data":[{"id":"gpt-6-astra"},{"id":"gpt-6-astra-fast"},{"id":"GPT-5.6-SOL"},{"id":"claude-fable-5"},{"id":"kimi-k2.6"},{"nope":1}]}"#.utf8)
+        XCTAssertEqual(ClaudeCodeProxyModelRegistry.parseModelIDs(data), ["gpt-6-astra", "gpt-5.6-sol"])
+        XCTAssertNil(ClaudeCodeProxyModelRegistry.parseModelIDs(Data("x".utf8)))
+        // Fehlschlag überschreibt eine bekannte Liste nicht.
+        let registry = ClaudeCodeProxyModelRegistry(fetcher: { _ in nil })
+        registry.setForTesting(["gpt-5.6-sol"])
+        registry.refresh(proxyPort: 1)
+        XCTAssertEqual(registry.knownModels, ["gpt-5.6-sol"])
     }
 
     func testCapabilitiesComeFromCatalogMetadata() {

@@ -226,22 +226,24 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
         XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.isVersion("0.1", newerThan: "0.1.0"))
     }
 
-    // MARK: Katalog-Allowlist
+    // MARK: Mindestversion
 
-    func testCatalogAllowlistRequiresForkReleaseUntilUpstreamShipsIt() {
-        // Fork ab known-good: ja (auch spätere Fork-Builds).
-        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.36-whisperm8.1"))
-        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.36-whisperm8.2"))
-        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.37-whisperm8.1"))
-        // Upstream (Homebrew) kennt nur die einkompilierte Liste — solange
-        // raine#130 nicht released ist, auch in der numerisch gleichen 0.1.36.
-        XCTAssertNil(ClaudeCodeProxyBinaryInstaller.minimumUpstreamCatalogVersion)
-        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.21"))
-        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.36"))
-        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "0.1.99"))
-        // Unbekannt/leer: nein.
-        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: nil))
-        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.supportsCatalogAllowlist(version: "  "))
+    func testMinimumVersionReplacesOldHomebrewAndForkBuilds() {
+        XCTAssertEqual(ClaudeCodeProxyBinaryInstaller.minimumVersion, ClaudeCodeProxyBinaryInstaller.knownGoodVersion)
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: "0.1.42"))
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: "0.1.50"))
+        XCTAssertTrue(ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: "0.2.0"))
+        // Altes Homebrew (Vorfall 2026-09-08) und die abgelösten Fork-Builds.
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: "0.1.21"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: "0.1.36-whisperm8.1"))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: nil))
+        XCTAssertFalse(ClaudeCodeProxyBinaryInstaller.meetsMinimumVersion(version: "  "))
+    }
+
+    func testInstallerPointsAtUpstream() {
+        XCTAssertEqual(ClaudeCodeProxyBinaryInstaller.repository, "raine/claude-code-proxy")
+        XCTAssertNotNil(ClaudeCodeProxyBinaryInstaller.pinnedTarballSHA256["\(ClaudeCodeProxyBinaryInstaller.knownGoodVersion)/darwin-arm64"])
+        XCTAssertNotNil(ClaudeCodeProxyBinaryInstaller.pinnedTarballSHA256["\(ClaudeCodeProxyBinaryInstaller.knownGoodVersion)/darwin-amd64"])
     }
 
     func testVersionOutputParserReadsBinaryVersionLine() {
@@ -282,12 +284,12 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
     func testAssetURLsFollowReleaseNamingScheme() {
         let installer = makeInstaller { _ in Data() }
         XCTAssertEqual(
-            installer.assetURL(version: "0.1.36-whisperm8.1").absoluteString,
-            "https://github.com/GiulianoCosta71/claude-code-proxy/releases/download/v0.1.36-whisperm8.1/claude-code-proxy-darwin-arm64.tar.gz"
+            installer.assetURL(version: "0.1.42").absoluteString,
+            "https://github.com/raine/claude-code-proxy/releases/download/v0.1.42/claude-code-proxy-darwin-arm64.tar.gz"
         )
         XCTAssertEqual(
-            installer.checksumSidecarURL(version: "0.1.36-whisperm8.1").absoluteString,
-            "https://github.com/GiulianoCosta71/claude-code-proxy/releases/download/v0.1.36-whisperm8.1/claude-code-proxy-darwin-arm64.sha256"
+            installer.checksumSidecarURL(version: "0.1.42").absoluteString,
+            "https://github.com/raine/claude-code-proxy/releases/download/v0.1.42/claude-code-proxy-darwin-arm64.sha256"
         )
     }
 }

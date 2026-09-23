@@ -3,7 +3,7 @@ import Foundation
 /// Beobachtet `~/.codex/models_cache.json` (den Server-Katalog, den die
 /// Codex-CLI selbst per ETag-Fetch aktualisiert) und stößt bei Änderung den
 /// Abgleich der verwalteten `gpt`-Agent-Definition an. Grund (2026-09-08):
-/// Router und Fork-Proxy lesen den Katalog pro Request (stat-gecacht), die
+/// Router liest den Katalog (∩ Proxy-Modelle) pro Request (stat-gecacht), die
 /// `gpt.md` aber trug das beim letzten Backend-Start aufgelöste Modell —
 /// ein neues Frontier-Modell wäre dort erst nach App-Neustart angekommen.
 ///

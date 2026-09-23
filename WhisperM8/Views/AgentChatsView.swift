@@ -2848,6 +2848,11 @@ struct AgentChatsView: View {
                 Menu {
                     Button("Neuer Codex Chat") { createSession(provider: .codex) }
                     Button("Neuer Claude Chat") { createSession(provider: .claude) }
+                    if AppPreferences.shared.claudeGPTBackendEnabled {
+                        // Claude-Code-Chat mit GPT als Hauptmodell, nur für
+                        // diesen Chat — der gespeicherte /model-Default bleibt.
+                        Button("Neuer GPT-Chat") { createSession(provider: .claude, gptMainModel: true) }
+                    }
                     // Kein Agent: normale Login-Shell im Projektverzeichnis.
                     // Der Provider ist nur Schema-Platzhalter (siehe
                     // AgentSessionKind.terminal).

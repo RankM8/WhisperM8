@@ -121,11 +121,10 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTSubagentModel
     }
 
-    /// Konfiguriertes GPT-Standardmodell (leer = keins). Dient bei
-    /// automatischer Picker-Belegung als Fallback vor dem kanonischen Modell.
-    var gptDefaultModelResolver: () -> String = {
-        AppPreferences.shared.claudeGPTBackendDefaultModel
-    }
+    /// Früheres „Standard-Modell für neue Claude-Chats" — seit 2026-09-23
+    /// ohne UI und ohne Wirkung (ein Altwert darf den Picker nicht mehr
+    /// prägen). Bleibt als Test-Naht erhalten.
+    var gptDefaultModelResolver: () -> String = { "" }
 
     /// Explizites Modell fuer den einen Custom-Eintrag im `/model`-Picker.
     /// Leer behaelt die automatische Ableitung aus Standard-/Canonical-Modell.
@@ -474,8 +473,8 @@ struct AgentCommandBuilder {
         // Der Router gilt bewusst fuer jede Claude-PTY-Session. So koennen
         // auch Sessions ohne GPT-Stempel spaeter per `/model` wechseln und
         // konfigurierte GPT-Subagents verwenden.
-        let applyRouterEnvironment: ([String: String], Bool) -> [String: String] = {
-            baseEnvironment, includesGPTTuning in
+        let applyRouterEnvironment: ([String: String]) -> [String: String] = {
+            baseEnvironment in
             guard let routerEnvironment = gptRouterCoreEnvironment() else {
                 return baseEnvironment
             }
@@ -490,15 +489,12 @@ struct AgentCommandBuilder {
                 environment[Self.customHeadersEnvironmentKey] =
                     "\(ClaudeGPTMixRouter.profileHeaderName): \(gptProfile)"
             }
-            if includesGPTTuning {
-                // Kleines Modell aus dem Katalog, passend zum Profil — ein
-                // festes gpt-5.4-mini lehnte der Router im 900k-Profil ab und
-                // damit scheiterten Web Search und Fetch (2026-09-08).
-                environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = ClaudeGPTModelAlias.smallModel(
-                    contextWindow: normalizedGPTContextWindow()
-                )
-                environment["CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY"] = "3"
-            }
+            // Bewusst KEIN Haiku-Ersatz und kein Concurrency-Deckel mehr
+            // (2026-09-23): Hintergrundaufgaben, Web Search, Fetch und Claudes
+            // native Session-Titel laufen über echtes Haiku — der Router reicht
+            // claude-* an Anthropic durch. Der frühere GPT-Ersatz scheiterte im
+            // 900k-Profil (Web Search tot, keine Titel in GPT-Sessions), und
+            // für den Deckel auf 3 parallele Tool-Calls fand sich kein Beleg.
             return environment
         }
 
@@ -515,7 +511,7 @@ struct AgentCommandBuilder {
                 arguments: arguments,
                 workingDirectory: project.path,
                 keyboardProfile: .claudeAgentsView,
-                environmentOverrides: applyRouterEnvironment(profileEnvironment, false)
+                environmentOverrides: applyRouterEnvironment(profileEnvironment)
             )
         }
 
@@ -533,7 +529,7 @@ struct AgentCommandBuilder {
             // User-defined extras zuerst, falls jemand z. B. `--verbose` will.
             arguments.append(contentsOf: extraArgumentsResolver(.claude))
             arguments.append(shortID)
-            var attachEnvironment = applyRouterEnvironment(profileEnvironment, false)
+            var attachEnvironment = applyRouterEnvironment(profileEnvironment)
             // Der Attach-Prozess kennt das reale Worker-Fenster nicht: Claude
             // Code 2.1.216 persistiert die drei Kontextwerte nicht garantiert
             // in den Supervisor-Worker. Ohne Metadaten zeigt die Statusline den
@@ -676,7 +672,7 @@ struct AgentCommandBuilder {
             var attachArguments: [String] = ["attach"]
             attachArguments.append(contentsOf: userArguments)
             attachArguments.append(workerShortID)
-            var attachEnvironment = applyRouterEnvironment(effectiveProfileEnvironment, false)
+            var attachEnvironment = applyRouterEnvironment(effectiveProfileEnvironment)
             // Gleicher Grund wie im Background-Chat-Attach oben: der Attach-
             // Prozess kennt das reale Worker-Kontextfenster nicht — keine
             // GPT-Kontextwerte erben oder erfinden.
@@ -707,10 +703,7 @@ struct AgentCommandBuilder {
             arguments.append(initialPrompt)
         }
 
-        effectiveProfileEnvironment = applyRouterEnvironment(
-            effectiveProfileEnvironment,
-            shouldApplyGPTModelStamp
-        )
+        effectiveProfileEnvironment = applyRouterEnvironment(effectiveProfileEnvironment)
 
         // `CLAUDE_CODE_MAX_CONTEXT_TOKENS` kommt seit dem 18.08.2026 bereits
         // prozessweit aus dem Router-Core-Env (Messreihe: für `claude-*`

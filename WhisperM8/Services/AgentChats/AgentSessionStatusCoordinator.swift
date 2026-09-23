@@ -64,7 +64,7 @@ final class AgentSessionStatusCoordinator {
         let preferences = AppPreferences.shared
         guard preferences.claudeGPTBackendEnabled else { return nil }
         return ClaudeGPTModelCatalog.availableModelsFragment(
-            defaultModel: preferences.claudeGPTBackendDefaultModel,
+            defaultModel: "",
             pickerModel: preferences.claudeGPTPickerModel,
             subagentModel: preferences.claudeGPTSubagentModel,
             sessionModel: sessionModel,

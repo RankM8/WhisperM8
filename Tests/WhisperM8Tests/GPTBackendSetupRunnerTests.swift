@@ -21,8 +21,8 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
         ClaudeCodeProxyBinaryCandidate(
             path: path,
             source: .path,
-            version: catalogCapable ? "0.1.36-whisperm8.1" : "0.1.21",
-            supportsCatalogAllowlist: catalogCapable
+            version: catalogCapable ? "0.1.42" : "0.1.21",
+            meetsMinimumVersion: catalogCapable
         )
     }
 
