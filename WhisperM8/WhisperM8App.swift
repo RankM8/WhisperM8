@@ -334,6 +334,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Healthcheck wartet; Fehler zeigt die Settings-Seite beim Öffnen.
         if AppPreferences.shared.claudeGPTBackendEnabled {
             Task.detached(priority: .utility) {
+                // Veralteten Waisen-Proxy vom letzten App-Lauf (SIGTERM ohne
+                // willTerminate) räumen, bevor ensureRunning ihn weiterbenutzt.
+                ClaudeCodeProxyOrphanGuard.replaceIfOutdated(
+                    port: AppPreferences.shared.claudeGPTBackendPort,
+                    resolvedBinaryPath: ClaudeCodeProxyManager.shared.resolvedBinaryPath()
+                )
                 _ = ClaudeCodeProxyManager.shared.ensureRunning(
                     port: AppPreferences.shared.claudeGPTBackendPort
                 )
