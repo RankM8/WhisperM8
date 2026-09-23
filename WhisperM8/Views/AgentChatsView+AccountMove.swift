@@ -74,13 +74,19 @@ extension AgentChatsView {
             uniquingKeysWith: { first, _ in first }
         )
         let outcome = AccountMoveService().undoLastBatch(
+            isRunning: { terminalRegistry.controller(for: $0)?.isRunning == true },
             cwdResolver: { id in
                 guard let session = sessionsByID[id] else { return nil }
                 return session.subagentCwd ?? projectsByID[session.projectID]?.path
             },
             externalIDResolver: { sessionsByID[$0]?.externalSessionID }
         )
-        if outcome.moved.isEmpty, outcome.failed.isEmpty {
+        if !outcome.skippedRunning.isEmpty {
+            // Auch ohne offenes Sheet sichtbar (Rueckgaengig aus dem Kontextmenue).
+            errorMessage = "Nicht zurückgenommen, weil gerade laufend: "
+                + outcome.skippedRunning.joined(separator: ", ")
+                + " — Chat anhalten und „Letzten Kontowechsel rückgängig machen“ erneut wählen."
+        } else if outcome.moved.isEmpty, outcome.failed.isEmpty {
             errorMessage = "Es gibt keinen Kontowechsel, der zurückgenommen werden könnte."
         }
         accountMovePhase = .finished(outcome)

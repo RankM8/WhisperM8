@@ -131,6 +131,14 @@ struct AgentMoveToAccountSheet: View {
                         titles: outcome.moved.map(\.sessionTitle)
                     )
                 }
+                if !outcome.skippedRunning.isEmpty {
+                    section(
+                        title: "Nicht zurückgenommen — läuft gerade (\(outcome.skippedRunning.count))",
+                        systemImage: "play.circle",
+                        titles: outcome.skippedRunning,
+                        muted: true
+                    )
+                }
                 if outcome.wasCancelled {
                     Label("Abgebrochen — die bereits verschobenen Chats bleiben im Zielkonto.",
                           systemImage: "stop.circle")

@@ -12,10 +12,14 @@ struct AccountMoveService {
         /// Session-Titel + Fehlertext, fuer den Abschlussbericht.
         var failed: [(title: String, message: String)] = []
         var wasCancelled = false
+        /// Nur beim Zuruecknehmen: Titel der Chats, die gerade laufen und
+        /// deshalb NICHT zurueckbewegt wurden. Sie bleiben im Journal.
+        var skippedRunning: [String] = []
 
         static func == (lhs: Outcome, rhs: Outcome) -> Bool {
             lhs.moved == rhs.moved
                 && lhs.wasCancelled == rhs.wasCancelled
+                && lhs.skippedRunning == rhs.skippedRunning
                 && lhs.failed.map(\.title) == rhs.failed.map(\.title)
                 && lhs.failed.map(\.message) == rhs.failed.map(\.message)
         }
@@ -112,13 +116,25 @@ struct AccountMoveService {
     }
 
     /// Nimmt den zuletzt protokollierten Batch zurueck.
+    ///
+    /// - Parameter isRunning: Laufende Chats werden uebersprungen und in
+    ///   `Outcome.skippedRunning` gemeldet. Ihr Prozess haelt die Registry im
+    ///   jetzigen Config-Dir und schreibt weiter in die jetzige Datei — ein
+    ///   Rueckzug unter ihm teilte den Verlauf auf zwei Dateien auf (dieselbe
+    ///   Regel wie `AccountMovePlanner.SkipReason.running` beim Hinweg). Ihre
+    ///   Journal-Eintraege bleiben stehen: nach dem Anhalten nimmt ein
+    ///   erneutes „Rueckgaengig" genau sie zurueck.
     func undoLastBatch(
+        isRunning: (UUID) -> Bool = { _ in false },
         cwdResolver: (UUID) -> String?,
         externalIDResolver: (UUID) -> String?
     ) -> Outcome {
         let batch = journal.lastBatch()
         guard !batch.isEmpty else { return Outcome() }
-        let moves: [Move] = AccountMoveJournal.inverted(batch).compactMap { entry in
+        let inverted = AccountMoveJournal.inverted(batch)
+        let running = inverted.filter { isRunning($0.sessionID) }
+        let runningIDs = Set(running.map(\.sessionID))
+        let moves: [Move] = inverted.filter { !runningIDs.contains($0.sessionID) }.compactMap { entry in
             guard let cwd = cwdResolver(entry.sessionID) else { return nil }
             return Move(
                 sessionID: entry.sessionID,
@@ -131,18 +147,26 @@ struct AccountMoveService {
         }
         // Der Rueckweg wird bewusst NICHT journalisiert — sonst waere er der
         // neueste Batch und ein zweites „Rueckgaengig" pendelte zurueck.
-        let outcome = perform(moves, recordInJournal: false)
+        var outcome = perform(moves, recordInJournal: false)
+        outcome.skippedRunning = running.map(\.sessionTitle)
+        if !running.isEmpty {
+            Logger.agentStore.notice("account_move_undo_skipped_running count=\(running.count)")
+        }
         if !outcome.moved.isEmpty {
-            clearLastBatch(batch)
+            clearLastBatch(batch, keeping: runningIDs)
         }
         return outcome
     }
 
     /// Entfernt den zurueckgenommenen Batch aus dem Journal, damit
-    /// „Rueckgaengig" nicht zweimal dasselbe anbietet.
-    private func clearLastBatch(_ batch: [AccountMoveJournal.Entry]) {
+    /// „Rueckgaengig" nicht zweimal dasselbe anbietet. Eintraege der
+    /// uebersprungenen, laufenden Chats (`keeping`) bleiben — mit derselben
+    /// Batch-ID, also weiterhin der zuletzt zuruecknehmbare Batch.
+    private func clearLastBatch(_ batch: [AccountMoveJournal.Entry], keeping keptSessionIDs: Set<UUID>) {
         guard let batchID = batch.first?.batchID else { return }
-        let remaining = journal.allEntries().filter { $0.batchID != batchID }
+        let remaining = journal.allEntries().filter {
+            $0.batchID != batchID || keptSessionIDs.contains($0.sessionID)
+        }
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601

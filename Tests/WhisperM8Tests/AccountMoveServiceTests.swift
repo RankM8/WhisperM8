@@ -195,6 +195,64 @@ final class AccountMoveServiceTests: XCTestCase {
         XCTAssertNil(store.loadWorkspace().sessions.first { $0.id == session.id }?.claudeProfileName)
     }
 
+    /// Rueckgaengig darf einem laufenden Chat den Verlauf nicht wegziehen —
+    /// sein Prozess schriebe weiter in die jetzige Datei. Er wird gemeldet
+    /// und bleibt im Journal, damit ein spaeteres Rueckgaengig ihn nachholt.
+    func testUndoSkipsRunningChatAndKeepsItUndoable() throws {
+        let running = try makeSession(externalID: "svc-10", profile: nil)
+        let idle = try makeSession(externalID: "svc-11", profile: nil)
+        try writeTranscript("svc-10", in: "main")
+        try writeTranscript("svc-11", in: "main")
+        _ = service.perform([move(running, to: "ai3"), move(idle, to: "ai3")])
+        let externalIDs = [running.id: "svc-10", idle.id: "svc-11"]
+
+        let undo = service.undoLastBatch(
+            isRunning: { $0 == running.id },
+            cwdResolver: { _ in self.cwd },
+            externalIDResolver: { externalIDs[$0] }
+        )
+
+        XCTAssertEqual(undo.moved.map(\.sessionID), [idle.id])
+        XCTAssertEqual(undo.skippedRunning, [running.title])
+        let sessions = store.loadWorkspace().sessions
+        XCTAssertEqual(sessions.first { $0.id == running.id }?.claudeProfileName, "ai3")
+        XCTAssertNil(sessions.first { $0.id == idle.id }?.claudeProfileName)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: projectsDir("ai3").appendingPathComponent("svc-10.jsonl").path
+        ), "der laufende Chat behaelt seinen Verlauf")
+        XCTAssertEqual(
+            AccountMoveJournal(fileURL: journalURL).lastBatch().map(\.sessionID), [running.id],
+            "nur der uebersprungene Chat bleibt zuruecknehmbar"
+        )
+
+        // Nach dem Anhalten holt ein zweites Rueckgaengig ihn nach.
+        let second = service.undoLastBatch(
+            cwdResolver: { _ in self.cwd },
+            externalIDResolver: { externalIDs[$0] }
+        )
+        XCTAssertEqual(second.moved.map(\.sessionID), [running.id])
+        XCTAssertTrue(second.skippedRunning.isEmpty)
+        XCTAssertNil(store.loadWorkspace().sessions.first { $0.id == running.id }?.claudeProfileName)
+        XCTAssertTrue(AccountMoveJournal(fileURL: journalURL).lastBatch().isEmpty)
+    }
+
+    func testUndoWithOnlyRunningChatsChangesNothing() throws {
+        let session = try makeSession(externalID: "svc-12", profile: nil)
+        try writeTranscript("svc-12", in: "main")
+        _ = service.perform([move(session, to: "ai3")])
+
+        let undo = service.undoLastBatch(
+            isRunning: { _ in true },
+            cwdResolver: { _ in self.cwd },
+            externalIDResolver: { _ in "svc-12" }
+        )
+
+        XCTAssertTrue(undo.moved.isEmpty)
+        XCTAssertEqual(undo.skippedRunning, [session.title])
+        XCTAssertEqual(store.loadWorkspace().sessions.first { $0.id == session.id }?.claudeProfileName, "ai3")
+        XCTAssertEqual(AccountMoveJournal(fileURL: journalURL).lastBatch().map(\.sessionID), [session.id])
+    }
+
     func testScanStaysSuspendedForTheWholeBatch() throws {
         let session = try makeSession(externalID: "svc-9", profile: nil)
         try writeTranscript("svc-9", in: "main")

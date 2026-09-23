@@ -88,7 +88,10 @@ verschobene Chats bleiben verschoben — ein Bulk ist nicht atomar, und ein
 automatischer Rollback nach halber Strecke könnte selbst scheitern. Stattdessen
 protokolliert `account-moves.jsonl` jeden Batch, und **„Letzten Kontowechsel
 rückgängig machen"** fährt ihn zurück (dieselbe Bewegung mit vertauschten
-Argumenten).
+Argumenten). Chats, die in dem Moment laufen, nimmt „Rückgängig" nicht zurück: ihr
+Prozess schreibt weiter in die jetzige Datei, ein Rückzug darunter teilte den
+Verlauf auf zwei Dateien auf. Sie werden gemeldet und bleiben im Journal —
+nach dem Anhalten holt ein erneutes „Rückgängig" genau sie nach.
 
 Kill-Switch für den Mehrfach-Umzug (der Einzel-Umzug bleibt):
 `defaults write com.whisperm8.app accountBulkMoveEnabled -bool NO`.
