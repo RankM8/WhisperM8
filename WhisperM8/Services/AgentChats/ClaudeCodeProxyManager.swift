@@ -212,6 +212,23 @@ final class ClaudeCodeProxyManager {
     private var didAttemptManagedInstall = false
     private(set) var lastManagedInstallError: String?
 
+    /// Env-Overrides eines GPT-Konto-Profils (`CCP_CONFIG_DIR`) fuer
+    /// Auth-Status, Device-Login und (ab Slice 2) den Proxy-Start. `nil`/main
+    /// → leeres Dict, der Proxy nimmt seinen Default-Store. Injizierbar, damit
+    /// Tests ohne `~/.gpt-profiles` auskommen.
+    var profileEnvironmentResolver: (String?) -> [String: String] = { profile in
+        GPTAccountProfiles().environmentOverrides(forProfile: profile)
+    }
+
+    /// Die im Profil gespeicherte `accountId` (Datei-Beleg) — Grundlage des
+    /// Fallback-Guards in `authStatus(profile:)`. `nil` = keine eigene
+    /// Auth-Datei. Fuer main nicht benoetigt (Default-Store ist der Fallback
+    /// selbst).
+    var storedAccountIDResolver: (String?) -> String? = { profile in
+        guard let profile, profile != GPTAccountProfiles.mainProfileName else { return nil }
+        return GPTAccountProfiles().storedAccountID(forProfile: profile)
+    }
+
     init(
         commandResolver: @escaping (String) -> String? = { AgentCommandBuilder.commandPath($0) },
         managedBinaryResolver: @escaping () -> String? = {
@@ -373,19 +390,80 @@ final class ClaudeCodeProxyManager {
     }
 
     func authStatus() -> ClaudeCodeProxyAuthStatus {
+        authStatus(profile: nil)
+    }
+
+    /// Auth-Status des Proxy-Stores eines GPT-Konto-Profils (`nil` = main).
+    ///
+    /// Fallback-Guard: Der Proxy meldet fuer ein Config-Dir OHNE eigene
+    /// Auth-Datei nicht „Not authenticated", sondern still das Konto des
+    /// Default-Stores bzw. der Codex-CLI (reproduziert 2026-09-16). Ein
+    /// Zusatzprofil gilt deshalb nur als angemeldet, wenn seine Datei eine
+    /// `accountId` traegt UND der Statusbefehl genau diese meldet.
+    func authStatus(profile: String?) -> ClaudeCodeProxyAuthStatus {
         guard let executable = resolvedBinaryPath() else {
             return .unknown
+        }
+        let isMain = Self.isMainProfile(profile)
+        let storedAccountID = storedAccountIDResolver(profile)
+        if !isMain, storedAccountID == nil {
+            return .notAuthenticated
         }
         do {
             let result = try commandRunner(
                 executable,
                 ["codex", "auth", "status"],
-                environmentResolver()
+                environment(forProfile: profile)
             )
-            return Self.parseAuthStatus(result.stdout)
+            let reported = Self.parseAuthStatus(result.stdout)
+            let reconciled = Self.reconcileAuthStatus(
+                reported,
+                storedAccountID: storedAccountID,
+                isMain: isMain
+            )
+            if reconciled != reported, case .authenticated(let account, _) = reported {
+                Logger.agentStore.warning(
+                    "gpt_profile_auth_fallback_detected profile=\(profile ?? "main", privacy: .public) reported=\(account, privacy: .public) stored=\(storedAccountID ?? "nil", privacy: .public) — Proxy antwortet mit fremdem Konto, Profil gilt als nicht angemeldet"
+                )
+            }
+            return reconciled
         } catch {
             return .unknown
         }
+    }
+
+    /// Pure Entscheidung des Fallback-Guards: fuer main gilt die Meldung des
+    /// Proxys unveraendert; ein Zusatzprofil ist nur angemeldet, wenn die
+    /// gemeldete `Account:`-ID mit der Datei uebereinstimmt.
+    static func reconcileAuthStatus(
+        _ reported: ClaudeCodeProxyAuthStatus,
+        storedAccountID: String?,
+        isMain: Bool
+    ) -> ClaudeCodeProxyAuthStatus {
+        guard !isMain, case .authenticated(let account, _) = reported else {
+            return reported
+        }
+        guard let storedAccountID, account == storedAccountID else {
+            return .notAuthenticated
+        }
+        return reported
+    }
+
+    static func isMainProfile(_ profile: String?) -> Bool {
+        guard let profile else { return true }
+        let trimmed = profile.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed == GPTAccountProfiles.mainProfileName
+    }
+
+    /// Login-Shell-Env plus Profil-Overrides. Ein geerbtes `CCP_CONFIG_DIR`
+    /// wird IMMER ueberschrieben bzw. entfernt — Routing laeuft nur ueber
+    /// explizite Per-Aufruf-Overrides, nie ueber Vererbung (Regel wie bei
+    /// `CLAUDE_CONFIG_DIR` in `LoginShellEnvironment`).
+    private func environment(forProfile profile: String?) -> [String: String] {
+        var environment = environmentResolver()
+        environment.removeValue(forKey: GPTAccountProfiles.configDirEnvironmentKey)
+        environment.merge(profileEnvironmentResolver(profile)) { _, override in override }
+        return environment
     }
 
     /// Pfad des gewaehlten Binarys — fuer Auth-Status und Device-Login, die
@@ -514,9 +592,22 @@ final class ClaudeCodeProxyManager {
         onCodeInfo: @escaping (ClaudeCodeProxyDeviceCodeInfo) -> Void,
         onCompletion: @escaping (Int32) -> Void
     ) -> Result<Void, ClaudeCodeProxyError> {
+        startDeviceLogin(profile: nil, onCodeInfo: onCodeInfo, onCompletion: onCompletion)
+    }
+
+    /// Device-Code-Login in den Store eines GPT-Konto-Profils (`nil` = main).
+    /// Der Proxy schreibt den Grant nach `<CCP_CONFIG_DIR>/codex/auth.json`;
+    /// das Verzeichnis muss existieren (`GPTAccountProfiles.createProfile`).
+    @discardableResult
+    func startDeviceLogin(
+        profile: String?,
+        onCodeInfo: @escaping (ClaudeCodeProxyDeviceCodeInfo) -> Void,
+        onCompletion: @escaping (Int32) -> Void
+    ) -> Result<Void, ClaudeCodeProxyError> {
         guard let executable = resolvedBinaryPath() else {
             return .failure(.binaryMissing)
         }
+        let loginEnvironment = environment(forProfile: profile)
 
         // Ein noch laufender frueherer Login-Prozess wird zuerst beendet —
         // sonst liefe er verwaist weiter und ueberlebte den App-Quit.
@@ -535,7 +626,7 @@ final class ClaudeCodeProxyManager {
             let process = try deviceLoginLauncher(
                 executable,
                 ["codex", "auth", "device"],
-                environmentResolver(),
+                loginEnvironment,
                 { chunk in
                     outputLock.lock()
                     accumulatedOutput += chunk

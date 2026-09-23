@@ -146,11 +146,49 @@ struct CodexUsageReader {
 /// Fallback bei Fehlern: JSONL-Snapshot via `CodexUsageReader`. Token bleibt
 /// in-process, wird nie geloggt oder persistiert.
 struct CodexUsageFetcher {
+    /// Access-Token + Konto-ID fuer den Endpoint, aus einem der beiden
+    /// Stores auf dieser Maschine gelesen (siehe `Credentials`).
+    struct Credentials: Equatable {
+        var accessToken: String
+        var accountID: String?
+    }
+
     var codexHome: URL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".codex", isDirectory: true)
     /// Test-Injektion: URL-Request ausfuehren, Antwort-Body liefern.
     var httpBody: (URLRequest) async -> Data? = { request in
         try? await URLSession.shared.data(for: request).0
+    }
+    /// Woher die Credentials kommen. Default: `~/.codex/auth.json` der
+    /// Codex-CLI (Diktat, `whisperm8 agent`, ChatGPT.app). Fuer das
+    /// GPT-Backend ist das die FALSCHE Quelle — der Proxy hat einen eigenen
+    /// Grant (Befund 2026-09-16: Popover zeigte das neue CLI-Konto, GPT lief
+    /// weiter gegen das gesperrte Proxy-Konto); dafuer `init(proxyAuthFile:)`.
+    var credentialsResolver: () -> Credentials?
+
+    init(
+        codexHome: URL? = nil,
+        httpBody: ((URLRequest) async -> Data?)? = nil
+    ) {
+        if let codexHome { self.codexHome = codexHome }
+        if let httpBody { self.httpBody = httpBody }
+        let home = self.codexHome
+        self.credentialsResolver = {
+            Self.codexCLICredentials(at: home.appendingPathComponent("auth.json"))
+        }
+    }
+
+    /// Usage des Kontos, das hinter einem Proxy-Store steht
+    /// (`<CCP_CONFIG_DIR>/codex/auth.json`, Schema `access`/`accountId`).
+    /// Der JSONL-Fallback bleibt der der Codex-CLI — fuer ein Proxy-Konto gibt
+    /// es keine lokalen Session-Dateien.
+    init(
+        proxyAuthFile: URL,
+        codexHome: URL? = nil,
+        httpBody: ((URLRequest) async -> Data?)? = nil
+    ) {
+        self.init(codexHome: codexHome, httpBody: httpBody)
+        self.credentialsResolver = { Self.proxyStoreCredentials(at: proxyAuthFile) }
     }
 
     func fetchUsage() async -> CodexUsage? {
@@ -162,25 +200,42 @@ struct CodexUsageFetcher {
         ).latestUsage()
     }
 
-    private func fetchLiveUsage() async -> CodexUsage? {
-        let authURL = codexHome.appendingPathComponent("auth.json")
-        guard let data = try? Data(contentsOf: authURL),
-              let auth = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tokens = auth["tokens"] as? [String: Any],
-              let token = tokens["access_token"] as? String, !token.isEmpty else {
-            return nil
-        }
+    /// Nur der Live-Abruf, ohne JSONL-Fallback — fuer Proxy-Konten, deren
+    /// Snapshot aus den CLI-Sessions das falsche Konto beschriebe.
+    func fetchLiveUsage() async -> CodexUsage? {
+        guard let credentials = credentialsResolver() else { return nil }
 
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!)
         request.timeoutInterval = 6
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let accountID = tokens["account_id"] as? String, !accountID.isEmpty {
+        if let accountID = credentials.accountID, !accountID.isEmpty {
             request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-ID")
         }
 
         guard let body = await httpBody(request) else { return nil }
         return Self.parseWhamUsage(body, fetchedAt: Date())
+    }
+
+    /// `~/.codex/auth.json`: `tokens.access_token` + `tokens.account_id`.
+    static func codexCLICredentials(at url: URL) -> Credentials? {
+        guard let data = try? Data(contentsOf: url),
+              let auth = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tokens = auth["tokens"] as? [String: Any],
+              let token = tokens["access_token"] as? String, !token.isEmpty else {
+            return nil
+        }
+        return Credentials(accessToken: token, accountID: tokens["account_id"] as? String)
+    }
+
+    /// Proxy-Store: `access` + `accountId` (flach, kein `tokens`-Objekt).
+    static func proxyStoreCredentials(at url: URL) -> Credentials? {
+        guard let data = try? Data(contentsOf: url),
+              let auth = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = auth["access"] as? String, !token.isEmpty else {
+            return nil
+        }
+        return Credentials(accessToken: token, accountID: auth["accountId"] as? String)
     }
 
     /// Parst die wham/usage-Antwort: `plan_type`, `email`,

@@ -345,6 +345,140 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(invocation?.2, ["PATH": "/login-shell/bin"])
     }
 
+    // MARK: - GPT-Konto-Profile (CCP_CONFIG_DIR)
+
+    func testAuthStatusForProfileInjectsConfigDirAndStripsInheritedOne() {
+        var invocation: (String, [String], [String: String])?
+        let manager = makeManager(
+            commandRunner: { executable, arguments, environment in
+                invocation = (executable, arguments, environment)
+                return ClaudeCodeProxyCommandResult(
+                    exitCode: 0,
+                    stdout: "Account: acct-zweit\nExpires: 2026-10-01T00:00:00Z\n",
+                    stderr: ""
+                )
+            },
+            // Geerbtes CCP_CONFIG_DIR aus der Login-Shell darf nie gewinnen.
+            environment: { ["PATH": "/login-shell/bin", "CCP_CONFIG_DIR": "/geerbt"] }
+        )
+        manager.profileEnvironmentResolver = { profile in
+            profile == "zweit" ? ["CCP_CONFIG_DIR": "/profiles/zweit"] : [:]
+        }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        XCTAssertEqual(
+            manager.authStatus(profile: "zweit"),
+            .authenticated(account: "acct-zweit", expires: "2026-10-01T00:00:00Z")
+        )
+        XCTAssertEqual(invocation?.1, ["codex", "auth", "status"])
+        XCTAssertEqual(invocation?.2, ["PATH": "/login-shell/bin", "CCP_CONFIG_DIR": "/profiles/zweit"])
+    }
+
+    func testAuthStatusForMainRemovesInheritedConfigDir() {
+        var environment: [String: String]?
+        let manager = makeManager(
+            commandRunner: { _, _, env in
+                environment = env
+                return ClaudeCodeProxyCommandResult(exitCode: 0, stdout: "Not authenticated", stderr: "")
+            },
+            environment: { ["PATH": "/bin", "CCP_CONFIG_DIR": "/geerbt"] }
+        )
+        manager.profileEnvironmentResolver = { _ in [:] }
+
+        XCTAssertEqual(manager.authStatus(profile: nil), .notAuthenticated)
+        XCTAssertEqual(environment, ["PATH": "/bin"])
+    }
+
+    func testAuthStatusForProfileWithoutOwnAuthFileNeverRunsCommand() {
+        // Fallback-Falle: ohne eigene Datei meldet der Proxy still das
+        // Standardkonto — der Befehl darf gar nicht erst laufen.
+        // Der Runner sieht auch den `--version`-Aufruf der Binary-Auswahl —
+        // gezaehlt wird deshalb nur der Auth-Befehl selbst.
+        var didRun = false
+        let manager = makeManager(
+            commandRunner: { _, arguments, _ in
+                if arguments == ["codex", "auth", "status"] { didRun = true }
+                return ClaudeCodeProxyCommandResult(exitCode: 0, stdout: "Account: fremd\nExpires: x\n", stderr: "")
+            }
+        )
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/leer"] }
+        manager.storedAccountIDResolver = { _ in nil }
+
+        XCTAssertEqual(manager.authStatus(profile: "leer"), .notAuthenticated)
+        XCTAssertFalse(didRun)
+    }
+
+    func testAuthStatusForProfileRejectsForeignAccountReportedByProxy() {
+        let manager = makeManager(
+            commandRunner: { _, _, _ in
+                ClaudeCodeProxyCommandResult(
+                    exitCode: 0,
+                    stdout: "Account: acct-default\nExpires: 2026-10-01T00:00:00Z\n",
+                    stderr: ""
+                )
+            }
+        )
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/zweit"] }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        XCTAssertEqual(manager.authStatus(profile: "zweit"), .notAuthenticated)
+    }
+
+    func testReconcileAuthStatusPureDecision() {
+        let authenticated = ClaudeCodeProxyAuthStatus.authenticated(account: "a", expires: "e")
+        // main: Meldung des Proxys gilt unveraendert.
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: nil, isMain: true),
+            authenticated
+        )
+        // Zusatzprofil: nur bei uebereinstimmender ID angemeldet.
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: "a", isMain: false),
+            authenticated
+        )
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: "b", isMain: false),
+            .notAuthenticated
+        )
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: nil, isMain: false),
+            .notAuthenticated
+        )
+        // Nicht-angemeldet und unbekannt bleiben, was sie sind.
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(.notAuthenticated, storedAccountID: "a", isMain: false),
+            .notAuthenticated
+        )
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(.unknown, storedAccountID: "a", isMain: false),
+            .unknown
+        )
+        XCTAssertTrue(ClaudeCodeProxyManager.isMainProfile(nil))
+        XCTAssertTrue(ClaudeCodeProxyManager.isMainProfile("main"))
+        XCTAssertTrue(ClaudeCodeProxyManager.isMainProfile(" "))
+        XCTAssertFalse(ClaudeCodeProxyManager.isMainProfile("zweit"))
+    }
+
+    func testDeviceLoginForProfileInjectsConfigDir() throws {
+        var launch: (String, [String], [String: String])?
+        let manager = makeManager(
+            deviceLoginLauncher: { executable, arguments, environment, _, _ in
+                launch = (executable, arguments, environment)
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin", "CCP_CONFIG_DIR": "/geerbt"] }
+        )
+        manager.profileEnvironmentResolver = { profile in
+            profile == "zweit" ? ["CCP_CONFIG_DIR": "/profiles/zweit"] : [:]
+        }
+
+        XCTAssertNoThrow(
+            try manager.startDeviceLogin(profile: "zweit", onCodeInfo: { _ in }, onCompletion: { _ in }).get()
+        )
+        XCTAssertEqual(launch?.1, ["codex", "auth", "device"])
+        XCTAssertEqual(launch?.2, ["PATH": "/bin", "CCP_CONFIG_DIR": "/profiles/zweit"])
+    }
+
     func testAuthStatusParserRecognizesAuthenticatedOutput() {
         XCTAssertEqual(
             ClaudeCodeProxyManager.parseAuthStatus(

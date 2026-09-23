@@ -453,6 +453,16 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.accountBulkMoveEnabled) }
     }
 
+    /// Kill-Switch fuer die ChatGPT-Konto-Profile des GPT-Backends (mehrere
+    /// Konten, je eigener Proxy-Store unter `~/.gpt-profiles/<name>`). Aus
+    /// stellt das alte Verhalten her: ein Proxy, ein Konto (der Default-Store),
+    /// Profil-Stempel an Sessions werden beim Launch ignoriert.
+    /// `defaults write com.whisperm8.app gptAccountProfilesEnabled -bool NO`
+    var isGPTAccountProfilesEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.gptAccountProfilesEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.gptAccountProfilesEnabled) }
+    }
+
     /// Kill-Switch für die Retention der CLI-Subagent-Spiegel. Aus heißt: die
     /// verwaisten Einträge bleiben für immer in der Sidebar stehen (der
     /// Zustand vor 2026-08-01):
@@ -692,6 +702,7 @@ enum PreferenceKeys {
     static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"
     static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
+    static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"
