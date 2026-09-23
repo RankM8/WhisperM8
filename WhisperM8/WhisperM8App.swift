@@ -310,6 +310,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // markieren statt blind erneut zu senden (höchstens-einmal-Garantie).
         // Zusätzlich alte abgeschlossene Einträge aufräumen.
         AgentPromptQueueStore.shared.reconcileOnLaunch()
+        // Nach einem Absturz die damals laufenden Chats wieder hochfahren
+        // (Resume beim Anzeigen des Tabs); Details in AgentCrashRecovery.
+        MainActor.assumeIsolated { AgentCrashRecoveryCoordinator.start() }
         // P2: FSEvents auf ~/.claude/projects + ~/.codex/sessions — extern
         // gestartete Sessions tauchen damit nach Sekunden auf statt erst beim
         // nächsten Foreground-Scan.
@@ -399,6 +402,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// nicht aus dem Store werfen, sonst waere der Launch-Restore nach jedem
     /// Neustart leer. Nie zurueckgenommen — der Prozess endet.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Sauberes Ende (Cmd+Q, Menü, SIGTERM von `make dev`): Absturz-Marker
+        // weg, BEVOR die PTYs beim Quit sterben — der nächste Start fährt dann
+        // nichts automatisch hoch.
+        AgentCrashRecoveryMarker.shared.endRunCleanly()
         MainActor.assumeIsolated {
             AgentWindowStore.shared.suspendCloseTracking()
             // Terminal-Staende der noch laufenden Chats einfrieren, solange

@@ -472,6 +472,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.subagentJobRetentionEnabled) }
     }
 
+    /// Kill-Switch für die Wiederaufnahme nach einem Absturz
+    /// (`AgentCrashRecovery`). Aus heißt: nach einem unsauberen Ende bleiben
+    /// die zuvor laufenden Chats gestoppt, bis man sie selbst anstößt:
+    /// `defaults write com.whisperm8.app agentCrashRecoveryEnabled -bool NO`
+    var isAgentCrashRecoveryEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentCrashRecoveryEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentCrashRecoveryEnabled) }
+    }
+
     /// Aufbewahrungsdauer abgeschlossener Subagent-Jobs in Tagen. 0 oder
     /// negativ = Default (7). Anpassbar ohne Rebuild:
     /// `defaults write com.whisperm8.app subagentJobRetentionDays -int 30`
@@ -704,6 +713,7 @@ enum PreferenceKeys {
     static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
     static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
+    static let agentCrashRecoveryEnabled = "agentCrashRecoveryEnabled"
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"

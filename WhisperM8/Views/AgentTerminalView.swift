@@ -348,6 +348,10 @@ final class AgentTerminalRegistry: ObservableObject {
 
     @Published private var controllers: [UUID: AgentTerminalController] = [:]
 
+    /// Meldet jede Änderung des Satzes laufender PTYs — Quelle des
+    /// Absturz-Markers (`AgentCrashRecoveryMarker`).
+    var onRunningSetChanged: ((Set<UUID>) -> Void)?
+
     var activeSessionIDs: Set<UUID> {
         Set(controllers.values.filter(\.isRunning).map(\.sessionID))
     }
@@ -377,16 +381,25 @@ final class AgentTerminalRegistry: ObservableObject {
             sessionID: sessionID,
             command: command,
             onLaunched: onLaunched,
-            onTerminated: onTerminated
+            onTerminated: { [weak self] exitCode in
+                onTerminated(exitCode)
+                self?.notifyRunningSetChanged()
+            }
         )
         controllers[sessionID] = controller
         controller.start()
+        notifyRunningSetChanged()
         return controller
     }
 
     func terminate(sessionID: UUID) {
         controllers[sessionID]?.terminate()
         controllers[sessionID] = nil
+        notifyRunningSetChanged()
+    }
+
+    private func notifyRunningSetChanged() {
+        onRunningSetChanged?(activeSessionIDs)
     }
 
     /// Terminiert alle laufenden Vordergrund-PTYs (je Controller graceful:
