@@ -78,6 +78,37 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTBackendEnabled
     }
 
+    /// Name des GPT-Konto-Profils, den die Session als Request-Header an den
+    /// Router traegt. Bei aktivem Kill-Switch IMMER gesetzt — auch „main"
+    /// ausdruecklich: ohne Header faellt der Router auf das gerade aktive
+    /// Profil zurueck (E4, fuer Sessions von vor dem Update), und ein
+    /// main-Chat waere sonst nicht kontostabil (Review-Blocker 2026-09-23).
+    /// Ein geloeschtes Profil wird mit Warnung zu „main" statt jeden Request
+    /// mit 503 zu beantworten. `nil` nur bei ausgeschaltetem Kill-Switch.
+    var gptProfileHeaderResolver: (String?) -> String? = { profile in
+        guard AppPreferences.shared.isGPTAccountProfilesEnabled else { return nil }
+        guard let profile, profile != GPTAccountProfiles.mainProfileName else {
+            return GPTAccountProfiles.mainProfileName
+        }
+        let profiles = GPTAccountProfiles()
+        guard !profiles.environmentOverrides(forProfile: profile).isEmpty,
+              profiles.profile(named: profile).isLoggedIn else {
+            // Entfernt oder abgemeldet: der Chat laeuft ueber das Hauptkonto,
+            // statt ohne GPT-Backend zu starten (Launch-Guard) oder in 503 zu
+            // laufen. Der Stempel bleibt, damit ein Re-Login wieder greift.
+            Logger.agentStore.warning(
+                "gpt_profile_unavailable_fallback_main profile=\(profile, privacy: .public)"
+            )
+            return GPTAccountProfiles.mainProfileName
+        }
+        return profile
+    }
+
+    /// Env-Variable, ueber die Claude Code jedem Request eigene Header
+    /// mitgibt (Format `Name: Wert`, verifiziert 2026-09-16 gegen einen
+    /// lokalen Dummy-Endpoint: kommt bei jedem Request inkl. Retries an).
+    static let customHeadersEnvironmentKey = "ANTHROPIC_CUSTOM_HEADERS"
+
     var gptFastModeEnabledResolver: () -> Bool = {
         AppPreferences.shared.claudeGPTFastModeEnabled
     }
@@ -450,6 +481,15 @@ struct AgentCommandBuilder {
             }
 
             var environment = baseEnvironment.merging(routerEnvironment) { _, router in router }
+            // GPT-Konto der Session als Header — beim Spawn eingefroren, also
+            // session-stabil wie CLAUDE_CONFIG_DIR. Subagents erben das Env
+            // und damit das Konto ihrer Elternsession.
+            if let gptProfile = gptProfileHeaderResolver(session.gptProfileName),
+               gptProfile == GPTAccountProfiles.mainProfileName
+                || GPTAccountProfiles.isValidProfileName(gptProfile) {
+                environment[Self.customHeadersEnvironmentKey] =
+                    "\(ClaudeGPTMixRouter.profileHeaderName): \(gptProfile)"
+            }
             if includesGPTTuning {
                 // Kleines Modell aus dem Katalog, passend zum Profil — ein
                 // festes gpt-5.4-mini lehnte der Router im 900k-Profil ab und

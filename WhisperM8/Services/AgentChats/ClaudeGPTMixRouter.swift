@@ -84,6 +84,91 @@ final class ClaudeGPTMixRouter {
 
     private let upstreamURLResolver: UpstreamURLResolver
     private let gptContextWindowResolver: GPTContextWindowResolver
+
+    // MARK: GPT-Konto-Profile (Routing pro Session)
+
+    /// Request-Header, mit dem eine Session ihr GPT-Konto nennt. Gesetzt vom
+    /// `AgentCommandBuilder` ueber `ANTHROPIC_CUSTOM_HEADERS`; wird vor JEDEM
+    /// Upstream entfernt (Anthropic soll ihn nie sehen).
+    static let profileHeaderName = "X-WhisperM8-GPT-Profile"
+
+    /// Kill-Switch: aus → Header ignorieren, alles laeuft ueber main.
+    var profilesEnabledResolver: () -> Bool = { AppPreferences.shared.isGPTAccountProfilesEnabled }
+
+    /// Ziel-URL der Proxy-Instanz eines Zusatzprofils; `nil` = laeuft nicht.
+    var codexProxyURLResolver: (String) -> URL? = { profile in
+        guard let port = ClaudeCodeProxyManager.shared.port(forProfile: profile) else { return nil }
+        return URL(string: "http://127.0.0.1:\(port)")
+    }
+
+    /// Profil fuer Requests OHNE Header (Sessions von vor dem Update, extern
+    /// gestartete Prozesse mit Router-URL): das aktive Profil, nicht stur
+    /// main — sonst liefe ein alter Chat nach dem Kontowechsel weiter gegen
+    /// das erschoepfte Konto (Entscheidung E4 im Plan).
+    var activeProfileResolver: () -> String? = { GPTAccountProfiles().activeProfileNameOrNil() }
+
+    /// Fire-and-forget-Start einer fehlenden Instanz, damit der naechste
+    /// Request durchkommt. Laeuft off-queue; der aktuelle Request bekommt 503.
+    var profileInstanceStarter: (String) -> Void = { profile in
+        ClaudeCodeProxyManager.shared.startInstanceInBackground(profile: profile)
+    }
+
+    /// Profilname aus dem Request-Header: „main" (ausdruecklich das Hauptkonto,
+    /// kontostabil auch bei aktivem Zusatzprofil) oder ein gueltiger Profilname.
+    /// Alles andere gilt als nicht gesetzt → E4-Fallback auf das aktive Profil.
+    static func profileName(in headers: [HTTPHeader]) -> String? {
+        guard let header = headers.first(where: {
+            $0.name.caseInsensitiveCompare(profileHeaderName) == .orderedSame
+        }) else {
+            return nil
+        }
+        let value = header.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value == GPTAccountProfiles.mainProfileName { return value }
+        guard GPTAccountProfiles.isValidProfileName(value) else { return nil }
+        return value
+    }
+
+    /// Ist das Profil angemeldet (eigene Auth-Datei)? Entscheidet im 503-Pfad,
+    /// ob ein Start ueberhaupt Sinn hat — sonst versprach die Antwort „startet
+    /// gleich" fuer ein abgemeldetes Konto in Endlosschleife.
+    var profileLoggedInResolver: (String) -> Bool = { profile in
+        GPTAccountProfiles().profile(named: profile).isLoggedIn
+    }
+
+    /// Snapshot der Profil-Routing-Closures fuer eine Client-Verbindung —
+    /// beim Annehmen der Verbindung gezogen, damit Tests die Resolver vor dem
+    /// Start setzen koennen und die Verbindung keinen Router-Backref braucht.
+    struct ProfileRouting {
+        var isEnabled: () -> Bool
+        var proxyURL: (String) -> URL?
+        var activeProfile: () -> String?
+        var startInstance: (String) -> Void
+        var isLoggedIn: (String) -> Bool
+    }
+
+    private func makeProfileRouting() -> ProfileRouting {
+        ProfileRouting(
+            isEnabled: profilesEnabledResolver,
+            proxyURL: codexProxyURLResolver,
+            activeProfile: activeProfileResolver,
+            startInstance: profileInstanceStarter,
+            isLoggedIn: profileLoggedInResolver
+        )
+    }
+
+    /// Anthropic-foermiger `api_error` — fuer Zustaende, die kein Fehler des
+    /// Requests sind (Instanz des Kontos nicht erreichbar).
+    static func anthropicAPIErrorBody(message: String) -> Data {
+        let payload: [String: Any] = [
+            "type": "error",
+            "error": [
+                "type": "api_error",
+                "message": message,
+            ],
+        ]
+        return (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+            ?? Data(#"{"type":"error","error":{"type":"api_error","message":"GPT backend unavailable."}}"#.utf8)
+    }
     private let listenerQueue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.listener")
     private let lifecycleQueue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.lifecycle")
     private var listener: NWListener?
@@ -125,6 +210,14 @@ final class ClaudeGPTMixRouter {
             },
             gptContextWindowResolver: { gptContextWindow }
         )
+        // Feste Upstream-URLs = Test-/Sonderbetrieb ohne Konto-Profile. Die
+        // Resolver bleiben setzbar; ohne ausdrueckliche Zuweisung darf kein
+        // Test am echten `~/.gpt-profiles/.active` der Maschine haengen.
+        profilesEnabledResolver = { false }
+        activeProfileResolver = { nil }
+        codexProxyURLResolver = { _ in nil }
+        profileInstanceStarter = { _ in }
+        profileLoggedInResolver = { _ in true }
     }
 
     var listeningPort: Int? {
@@ -531,6 +624,11 @@ final class ClaudeGPTMixRouter {
         bodyLength: Int
     ) -> [HTTPHeader] {
         var result = filteredHeaders(headers)
+        // Der Konto-Header ist ein reines Router-Signal — weder Anthropic noch
+        // der Proxy bekommen ihn zu sehen.
+        result.removeAll {
+            $0.name.caseInsensitiveCompare(profileHeaderName) == .orderedSame
+        }
         if upstream == .codexProxy {
             result.removeAll { header in
                 let name = header.name.lowercased()
@@ -631,6 +729,7 @@ final class ClaudeGPTMixRouter {
                 connection: connection,
                 upstreamURLResolver: upstreamURLResolver,
                 gptContextWindowResolver: gptContextWindowResolver,
+                profileRouting: makeProfileRouting(),
                 onFinish: { [weak self] in self?.removeConnection(id: id) }
             )
             connections[id] = client
@@ -653,6 +752,7 @@ private extension ClaudeGPTMixRouter {
         private let connection: NWConnection
         private let upstreamURLResolver: UpstreamURLResolver
         private let gptContextWindowResolver: GPTContextWindowResolver
+        private let profileRouting: ProfileRouting
         private let onFinish: () -> Void
         private let queue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.client")
         private var buffer = Data()
@@ -666,6 +766,8 @@ private extension ClaudeGPTMixRouter {
         private var didScheduleResponse = false
         private var requestModel: String?
         private var requestUpstream: Upstream?
+        /// GPT-Konto-Profil des Requests (nur Codex-Upstream, `nil` = main).
+        private var requestProfile: String?
         private var upstreamStatusCode: Int?
         private var upstreamErrorBuffer: Data?
         private var upstreamErrorBytes = 0
@@ -678,11 +780,13 @@ private extension ClaudeGPTMixRouter {
             connection: NWConnection,
             upstreamURLResolver: @escaping UpstreamURLResolver,
             gptContextWindowResolver: @escaping GPTContextWindowResolver,
+            profileRouting: ProfileRouting,
             onFinish: @escaping () -> Void
         ) {
             self.connection = connection
             self.upstreamURLResolver = upstreamURLResolver
             self.gptContextWindowResolver = gptContextWindowResolver
+            self.profileRouting = profileRouting
             self.onFinish = onFinish
         }
 
@@ -806,7 +910,42 @@ private extension ClaudeGPTMixRouter {
                 sendJSONResponse(status: 400, reason: "Bad Request", body: errorBody)
                 return
             }
-            let baseURL = upstreamURLResolver(upstream)
+            var baseURL = upstreamURLResolver(upstream)
+            if upstream == .codexProxy, profileRouting.isEnabled() {
+                // Konto der Session: Header, sonst das aktive Profil (E4).
+                // `nil` = main → Backend-Port wie bisher.
+                let profile = ClaudeGPTMixRouter.profileName(in: requestHead.headers)
+                    ?? profileRouting.activeProfile()
+                if let profile, profile != GPTAccountProfiles.mainProfileName {
+                    requestProfile = profile
+                    guard let profileURL = profileRouting.proxyURL(profile) else {
+                        requestModel = model
+                        requestUpstream = upstream
+                        let message: String
+                        if profileRouting.isLoggedIn(profile) {
+                            Logger.claudeGPTRouter.warning(
+                                "gpt_profile_proxy_unavailable profile=\(profile, privacy: .public) — Instanz wird gestartet, Request bekommt 503"
+                            )
+                            profileRouting.startInstance(profile)
+                            message = "GPT-Konto „\(profile)“ ist nicht verbunden. WhisperM8 startet die Proxy-Instanz — bitte in wenigen Sekunden erneut senden."
+                        } else {
+                            Logger.claudeGPTRouter.warning(
+                                "gpt_profile_not_logged_in profile=\(profile, privacy: .public) — Request bekommt 503"
+                            )
+                            message = "GPT-Konto „\(profile)“ ist nicht angemeldet. Bitte in den Einstellungen (GPT-Backend) anmelden oder den Chat im Kontextmenü auf ein anderes Konto umstellen."
+                        }
+                        sendJSONResponse(
+                            status: 503,
+                            reason: "Service Unavailable",
+                            body: ClaudeGPTMixRouter.anthropicAPIErrorBody(message: message)
+                        )
+                        return
+                    }
+                    baseURL = profileURL
+                } else if profile != nil {
+                    requestProfile = GPTAccountProfiles.mainProfileName
+                }
+            }
             guard
                 let url = URL(string: requestHead.target, relativeTo: baseURL)?.absoluteURL,
                 url.scheme == baseURL.scheme,
@@ -1068,7 +1207,7 @@ private extension ClaudeGPTMixRouter {
 
         private func log(status: Int) {
             Logger.claudeGPTRouter.info(
-                "model=\(self.requestModel ?? "nil", privacy: .public) upstream=\(self.requestUpstream?.rawValue ?? "unknown", privacy: .public) status=\(status)"
+                "model=\(self.requestModel ?? "nil", privacy: .public) upstream=\(self.requestUpstream?.rawValue ?? "unknown", privacy: .public) profile=\(self.requestProfile ?? "main", privacy: .public) status=\(status)"
             )
         }
 

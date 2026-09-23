@@ -335,6 +335,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             },
             environment: { ["PATH": "/login-shell/bin"] }
         )
+        manager.storedAccountIDResolver = { _ in "user@example.com" }
 
         XCTAssertEqual(
             manager.authStatus(),
@@ -343,6 +344,429 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(invocation?.0, "/usr/local/bin/claude-code-proxy")
         XCTAssertEqual(invocation?.1, ["codex", "auth", "status"])
         XCTAssertEqual(invocation?.2, ["PATH": "/login-shell/bin"])
+    }
+
+    // MARK: - GPT-Konto-Profile (CCP_CONFIG_DIR)
+
+    func testAuthStatusForProfileInjectsConfigDirAndStripsInheritedOne() {
+        var invocation: (String, [String], [String: String])?
+        let manager = makeManager(
+            commandRunner: { executable, arguments, environment in
+                invocation = (executable, arguments, environment)
+                return ClaudeCodeProxyCommandResult(
+                    exitCode: 0,
+                    stdout: "Account: acct-zweit\nExpires: 2026-10-01T00:00:00Z\n",
+                    stderr: ""
+                )
+            },
+            // Geerbtes CCP_CONFIG_DIR aus der Login-Shell darf nie gewinnen.
+            environment: { ["PATH": "/login-shell/bin", "CCP_CONFIG_DIR": "/geerbt"] }
+        )
+        manager.profileEnvironmentResolver = { profile in
+            profile == "zweit" ? ["CCP_CONFIG_DIR": "/profiles/zweit"] : [:]
+        }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        XCTAssertEqual(
+            manager.authStatus(profile: "zweit"),
+            .authenticated(account: "acct-zweit", expires: "2026-10-01T00:00:00Z")
+        )
+        XCTAssertEqual(invocation?.1, ["codex", "auth", "status"])
+        XCTAssertEqual(invocation?.2, ["PATH": "/login-shell/bin", "CCP_CONFIG_DIR": "/profiles/zweit"])
+    }
+
+    func testAuthStatusForMainRemovesInheritedConfigDir() {
+        var environment: [String: String]?
+        let manager = makeManager(
+            commandRunner: { _, _, env in
+                environment = env
+                return ClaudeCodeProxyCommandResult(exitCode: 0, stdout: "Not authenticated", stderr: "")
+            },
+            environment: { ["PATH": "/bin", "CCP_CONFIG_DIR": "/geerbt"] }
+        )
+        manager.profileEnvironmentResolver = { _ in [:] }
+        manager.storedAccountIDResolver = { _ in "acct-main" }
+
+        XCTAssertEqual(manager.authStatus(profile: nil), .notAuthenticated)
+        XCTAssertEqual(environment, ["PATH": "/bin"])
+    }
+
+    func testAuthStatusForMainAppliesFallbackGuardWhenProfilesEnabled() {
+        // main laeuft im Datei-Modus → ohne eigene Datei meldet der Proxy still
+        // das Codex-CLI-Konto. Das darf nicht als „angemeldet" durchgehen.
+        var didRunAuth = false
+        let manager = makeManager(
+            commandRunner: { _, arguments, _ in
+                if arguments == ["codex", "auth", "status"] { didRunAuth = true }
+                return ClaudeCodeProxyCommandResult(exitCode: 0, stdout: "Account: cli-konto\nExpires: x\n", stderr: "")
+            }
+        )
+        manager.profilesEnabledResolver = { true }
+        manager.storedAccountIDResolver = { _ in nil }
+        XCTAssertEqual(manager.authStatus(profile: nil), .notAuthenticated)
+        XCTAssertFalse(didRunAuth)
+
+        // Datei da, Proxy meldet ein anderes Konto → ebenfalls nicht angemeldet.
+        manager.storedAccountIDResolver = { _ in "acct-main" }
+        XCTAssertEqual(manager.authStatus(profile: nil), .notAuthenticated)
+
+        // Kill-Switch aus → Proxy-Meldung fuer main gilt unveraendert.
+        manager.profilesEnabledResolver = { false }
+        manager.storedAccountIDResolver = { _ in nil }
+        XCTAssertEqual(manager.authStatus(profile: nil), .authenticated(account: "cli-konto", expires: "x"))
+    }
+
+    func testStopIfSelfStartedAlsoStopsProfileInstances() throws {
+        var terminations = 0
+        let manager = makeManager(
+            reachability: { _ in terminations == 0 },
+            launcher: { _, _, _ in Self.processHandle { terminations += 1 } },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/p"] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+        try manager.ensureRunning(profile: "zweit").get()
+
+        manager.stopIfSelfStarted()
+
+        XCTAssertEqual(terminations, 1)
+        XCTAssertTrue(manager.runningProfileInstances().isEmpty)
+    }
+
+    func testEnsureRunningProfileRelaunchesDeadInstance() throws {
+        var firstDied = false
+        var launches = 0
+        let manager = makeManager(
+            reachability: { _ in launches > 0 && !(launches == 1 && firstDied) },
+            launcher: { _, _, _ in
+                launches += 1
+                let index = launches
+                return ClaudeCodeProxyProcessHandle(
+                    isRunning: { index == 1 ? !firstDied : true },
+                    terminate: {}
+                )
+            },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/p"] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+
+        try manager.ensureRunning(profile: "zweit").get()
+        firstDied = true
+        XCTAssertNil(manager.port(forProfile: "zweit"), "tote Instanz darf nicht als Ziel gelten")
+        try manager.ensureRunning(profile: "zweit").get()
+        XCTAssertEqual(launches, 2)
+        XCTAssertEqual(manager.runningProfileInstances().count, 1)
+        XCTAssertNotNil(manager.port(forProfile: "zweit"))
+    }
+
+    func testStartInstanceInBackgroundLaunchesOncePerProfileWhileStarting() throws {
+        let launched = expectation(description: "launch")
+        launched.assertForOverFulfill = false
+        var launches = 0
+        let manager = makeManager(
+            reachability: { _ in launches > 0 },
+            launcher: { _, _, _ in
+                launches += 1
+                launched.fulfill()
+                return Self.processHandle()
+            },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/p"] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+
+        manager.startInstanceInBackground(profile: "zweit")
+        manager.startInstanceInBackground(profile: "zweit")
+        manager.startInstanceInBackground(profile: "zweit")
+        wait(for: [launched], timeout: 2)
+        // Kurz warten, bis der Hintergrund-Task die Registry geschrieben hat.
+        let registered = expectation(description: "registered")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { registered.fulfill() }
+        wait(for: [registered], timeout: 2)
+        XCTAssertEqual(launches, 1)
+        XCTAssertEqual(manager.port(forProfile: "zweit"), 18_775)
+    }
+
+    func testAuthStatusForProfileWithoutOwnAuthFileNeverRunsCommand() {
+        // Fallback-Falle: ohne eigene Datei meldet der Proxy still das
+        // Standardkonto — der Befehl darf gar nicht erst laufen.
+        // Der Runner sieht auch den `--version`-Aufruf der Binary-Auswahl —
+        // gezaehlt wird deshalb nur der Auth-Befehl selbst.
+        var didRun = false
+        let manager = makeManager(
+            commandRunner: { _, arguments, _ in
+                if arguments == ["codex", "auth", "status"] { didRun = true }
+                return ClaudeCodeProxyCommandResult(exitCode: 0, stdout: "Account: fremd\nExpires: x\n", stderr: "")
+            }
+        )
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/leer"] }
+        manager.storedAccountIDResolver = { _ in nil }
+
+        XCTAssertEqual(manager.authStatus(profile: "leer"), .notAuthenticated)
+        XCTAssertFalse(didRun)
+    }
+
+    func testAuthStatusForProfileRejectsForeignAccountReportedByProxy() {
+        let manager = makeManager(
+            commandRunner: { _, _, _ in
+                ClaudeCodeProxyCommandResult(
+                    exitCode: 0,
+                    stdout: "Account: acct-default\nExpires: 2026-10-01T00:00:00Z\n",
+                    stderr: ""
+                )
+            }
+        )
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/zweit"] }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        XCTAssertEqual(manager.authStatus(profile: "zweit"), .notAuthenticated)
+    }
+
+    func testReconcileAuthStatusPureDecision() {
+        let authenticated = ClaudeCodeProxyAuthStatus.authenticated(account: "a", expires: "e")
+        // main: Meldung des Proxys gilt unveraendert.
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: nil, isMain: true),
+            authenticated
+        )
+        // Zusatzprofil: nur bei uebereinstimmender ID angemeldet.
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: "a", isMain: false),
+            authenticated
+        )
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: "b", isMain: false),
+            .notAuthenticated
+        )
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(authenticated, storedAccountID: nil, isMain: false),
+            .notAuthenticated
+        )
+        // Nicht-angemeldet und unbekannt bleiben, was sie sind.
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(.notAuthenticated, storedAccountID: "a", isMain: false),
+            .notAuthenticated
+        )
+        XCTAssertEqual(
+            ClaudeCodeProxyManager.reconcileAuthStatus(.unknown, storedAccountID: "a", isMain: false),
+            .unknown
+        )
+        XCTAssertTrue(ClaudeCodeProxyManager.isMainProfile(nil))
+        XCTAssertTrue(ClaudeCodeProxyManager.isMainProfile("main"))
+        XCTAssertTrue(ClaudeCodeProxyManager.isMainProfile(" "))
+        XCTAssertFalse(ClaudeCodeProxyManager.isMainProfile("zweit"))
+    }
+
+    func testDeviceLoginForProfileInjectsConfigDir() throws {
+        var launch: (String, [String], [String: String])?
+        let manager = makeManager(
+            deviceLoginLauncher: { executable, arguments, environment, _, _ in
+                launch = (executable, arguments, environment)
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin", "CCP_CONFIG_DIR": "/geerbt"] }
+        )
+        manager.profileEnvironmentResolver = { profile in
+            profile == "zweit" ? ["CCP_CONFIG_DIR": "/profiles/zweit"] : [:]
+        }
+
+        XCTAssertNoThrow(
+            try manager.startDeviceLogin(profile: "zweit", onCodeInfo: { _ in }, onCompletion: { _ in }).get()
+        )
+        XCTAssertEqual(launch?.1, ["codex", "auth", "device"])
+        XCTAssertEqual(launch?.2, ["PATH": "/bin", "CCP_CONFIG_DIR": "/profiles/zweit"])
+    }
+
+    func testMainStartCarriesConfigDirFromResolver() throws {
+        var launch: [String: String]?
+        let manager = makeManager(
+            reachability: { _ in launch != nil },
+            launcher: { _, _, environment in
+                launch = environment
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin"] },
+            retryAttempts: 1
+        )
+        manager.profileEnvironmentResolver = { profile in
+            profile == nil ? ["CCP_CONFIG_DIR": "/Users/x/.config/claude-code-proxy"] : [:]
+        }
+
+        try manager.ensureRunning(port: 18_765).get()
+        XCTAssertEqual(launch, [
+            "PATH": "/bin",
+            "CCP_CONFIG_DIR": "/Users/x/.config/claude-code-proxy",
+            "CCP_BIND_ADDRESS": "127.0.0.1",
+        ])
+    }
+
+    func testEnsureRunningProfileLaunchesInstanceWithConfigDirAndOwnPort() throws {
+        var launch: (String, [String], [String: String])?
+        var routerStarts = 0
+        let manager = makeManager(
+            reachability: { port in port == 18_775 && launch != nil },
+            launcher: { executable, arguments, environment in
+                launch = (executable, arguments, environment)
+                return Self.processHandle()
+            },
+            routerStarter: { _ in
+                routerStarts += 1
+                return .success(())
+            },
+            environment: { ["PATH": "/bin", "CCP_CONFIG_DIR": "/geerbt", "CCP_CODEX_SERVICE_TIER": "priority"] },
+            retryAttempts: 2
+        )
+        manager.profilesEnabledResolver = { true }
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/zweit"] }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        XCTAssertNoThrow(try manager.ensureRunning(profile: "zweit").get())
+        XCTAssertEqual(launch?.1, ["serve", "--no-monitor", "--port", "18775"])
+        XCTAssertEqual(launch?.2, [
+            "PATH": "/bin",
+            "CCP_CONFIG_DIR": "/profiles/zweit",
+            "CCP_BIND_ADDRESS": "127.0.0.1",
+        ])
+        XCTAssertEqual(manager.port(forProfile: "zweit"), 18_775)
+        XCTAssertEqual(manager.port(forProfile: nil), 18_765)
+        XCTAssertEqual(manager.runningProfileInstances(), ["zweit": 18_775])
+        XCTAssertEqual(routerStarts, 1)
+    }
+
+    func testEnsureRunningProfileReusesHealthyInstance() throws {
+        var launches = 0
+        let manager = makeManager(
+            reachability: { _ in launches > 0 },
+            launcher: { _, _, _ in
+                launches += 1
+                return Self.processHandle()
+            },
+            retryAttempts: 1
+        )
+        manager.profilesEnabledResolver = { true }
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/zweit"] }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        try manager.ensureRunning(profile: "zweit").get()
+        try manager.ensureRunning(profile: "zweit").get()
+        XCTAssertEqual(launches, 1)
+    }
+
+    func testEnsureRunningProfileRefusesWithoutOwnLogin() {
+        var didLaunch = false
+        let manager = makeManager(
+            reachability: { _ in false },
+            launcher: { _, _, _ in
+                didLaunch = true
+                return Self.processHandle()
+            }
+        )
+        manager.profilesEnabledResolver = { true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/leer"] }
+        manager.storedAccountIDResolver = { _ in nil }
+
+        assertFailure(manager.ensureRunning(profile: "leer"), equals: .profileNotLoggedIn("leer"))
+        XCTAssertFalse(didLaunch, "ohne eigene Auth-Datei darf keine Instanz starten (stiller Fallback)")
+        XCTAssertNil(manager.port(forProfile: "leer"))
+    }
+
+    func testEnsureRunningProfileFallsBackToMainPathWhenProfilesDisabled() throws {
+        var launch: [String]?
+        let manager = makeManager(
+            reachability: { _ in launch != nil },
+            launcher: { _, arguments, _ in
+                launch = arguments
+                return Self.processHandle()
+            },
+            retryAttempts: 1
+        )
+        manager.profilesEnabledResolver = { false }
+        manager.mainPortResolver = { 18_765 }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        try manager.ensureRunning(profile: "zweit").get()
+        XCTAssertEqual(launch, ["serve", "--no-monitor", "--port", "18765"])
+        XCTAssertEqual(manager.port(forProfile: "zweit"), 18_765)
+    }
+
+    func testProfilePortAllocationSkipsTakenPorts() throws {
+        var launchedPorts: [String] = []
+        let manager = makeManager(
+            reachability: { _ in !launchedPorts.isEmpty },
+            launcher: { _, arguments, _ in
+                launchedPorts.append(arguments.last ?? "")
+                return Self.processHandle()
+            },
+            retryAttempts: 1
+        )
+        manager.profilesEnabledResolver = { true }
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { port in port != 18_775 }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/x"] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+
+        try manager.ensureRunning(profile: "zweit").get()
+        XCTAssertEqual(launchedPorts, ["18776"])
+    }
+
+    func testStopAllProfileInstancesTerminatesEveryInstance() throws {
+        var terminations = 0
+        let manager = makeManager(
+            reachability: { _ in terminations == 0 },
+            launcher: { _, _, _ in Self.processHandle { terminations += 1 } },
+            retryAttempts: 1
+        )
+        manager.profilesEnabledResolver = { true }
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/p"] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+
+        try manager.ensureRunning(profile: "a").get()
+        try manager.ensureRunning(profile: "b").get()
+        XCTAssertEqual(manager.runningProfileInstances().count, 2)
+
+        manager.stopAllProfileInstances()
+        XCTAssertEqual(terminations, 2)
+        XCTAssertTrue(manager.runningProfileInstances().isEmpty)
+    }
+
+    func testLogoutRunsCommandWithProfileConfigDirAndStopsInstance() throws {
+        var terminations = 0
+        var invocation: ([String], [String: String])?
+        let manager = makeManager(
+            reachability: { _ in true },
+            launcher: { _, _, _ in Self.processHandle { terminations += 1 } },
+            commandRunner: { _, arguments, environment in
+                if arguments.first == "codex" { invocation = (arguments, environment) }
+                return ClaudeCodeProxyCommandResult(exitCode: 0, stdout: "", stderr: "")
+            },
+            environment: { ["PATH": "/bin"] },
+            retryAttempts: 1
+        )
+        manager.profilesEnabledResolver = { true }
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/zweit"] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+        try manager.ensureRunning(profile: "zweit").get()
+
+        XCTAssertNoThrow(try manager.logout(profile: "zweit").get())
+        XCTAssertEqual(invocation?.0, ["codex", "auth", "logout"])
+        XCTAssertEqual(invocation?.1, ["PATH": "/bin", "CCP_CONFIG_DIR": "/profiles/zweit"])
+        XCTAssertEqual(terminations, 1)
+        XCTAssertNil(manager.port(forProfile: "zweit"))
     }
 
     func testAuthStatusParserRecognizesAuthenticatedOutput() {
@@ -618,7 +1042,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         // Tests duerfen nie den echten Managed Download treffen.
         managedInstaller: @escaping () throws -> String = { throw TestInstallError.downloadBlocked }
     ) -> ClaudeCodeProxyManager {
-        ClaudeCodeProxyManager(
+        let manager = ClaudeCodeProxyManager(
             commandResolver: commandResolver,
             // Kein Zugriff auf das echte Managed-Binary in App Support —
             // sonst haengt der Test am Dateisystem der Maschine.
@@ -638,6 +1062,11 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             retryDelay: 0,
             notificationCenter: notificationCenter
         )
+        // Tests haengen nie an den echten `~/.gpt-profiles` / Preferences.
+        manager.profileEnvironmentResolver = { _ in [:] }
+        manager.storedAccountIDResolver = { _ in nil }
+        manager.profilesEnabledResolver = { true }
+        return manager
     }
 
     private static func processHandle(

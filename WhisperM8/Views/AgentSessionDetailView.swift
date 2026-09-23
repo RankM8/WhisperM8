@@ -369,9 +369,20 @@ struct AgentSessionDetailView: View {
             if launchSession.provider == .claude,
                !launchSession.isTerminal,
                AppPreferences.shared.claudeGPTBackendEnabled {
-                switch ClaudeCodeProxyManager.shared.ensureRunning(
-                    port: AppPreferences.shared.claudeGPTBackendPort
-                ) {
+                // Instanz des GPT-Kontos der Session (main → Backend-Port).
+                // Ein entferntes/abgemeldetes Profil faellt auf main zurueck —
+                // der Builder setzt dann auch den Header auf main; der Chat
+                // soll deshalb nicht ohne GPT-Backend starten.
+                var guardResult = ClaudeCodeProxyManager.shared.ensureRunning(
+                    profile: launchSession.gptProfileName
+                )
+                if case .failure(.profileNotLoggedIn(let name)) = guardResult {
+                    Logger.claudeGPTRouter.warning(
+                        "launch_guard_profile_not_logged_in profile=\(name, privacy: .public) — Launch ueber main"
+                    )
+                    guardResult = ClaudeCodeProxyManager.shared.ensureRunning(profile: nil)
+                }
+                switch guardResult {
                 case .success:
                     launchGuardResult = .ready
                 case .failure(let error):

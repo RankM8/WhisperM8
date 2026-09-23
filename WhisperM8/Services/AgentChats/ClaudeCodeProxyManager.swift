@@ -6,6 +6,10 @@ enum ClaudeCodeProxyError: LocalizedError, Equatable {
     case startFailed(String)
     case notReachable(port: Int)
     case routerStartFailed(String)
+    /// Das GPT-Konto-Profil hat keine eigene Auth-Datei — eine Instanz liefe
+    /// sonst still auf dem Default-Konto (Fallback des Proxys).
+    case profileNotLoggedIn(String)
+    case noFreePort
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +21,10 @@ enum ClaudeCodeProxyError: LocalizedError, Equatable {
             return "Der GPT-Proxy ist nach dem Start auf 127.0.0.1:\(port) nicht erreichbar."
         case .routerStartFailed(let reason):
             return "Der GPT-Mix-Router konnte nicht gestartet werden: \(reason)"
+        case .profileNotLoggedIn(let name):
+            return "GPT-Konto „\(name)“ ist nicht angemeldet — bitte zuerst in den Einstellungen (GPT-Backend) anmelden."
+        case .noFreePort:
+            return "Kein freier Port fuer eine weitere GPT-Proxy-Instanz gefunden."
         }
     }
 }
@@ -154,8 +162,16 @@ final class ClaudeCodeProxyProcessHandle {
     }
 }
 
+/// Eine von WhisperM8 gestartete Proxy-Instanz fuer ein GPT-Konto-Profil.
+struct ClaudeCodeProxyProfileInstance {
+    var port: Int
+    var process: ClaudeCodeProxyProcessHandle
+}
+
 /// Verwaltet ausschliesslich den von WhisperM8 gestarteten GPT-Proxy. Bereits
 /// extern laufende Instanzen werden erkannt, aber niemals uebernommen/beendet.
+/// Seit den GPT-Konto-Profilen zusaetzlich eine Instanz je Zusatzprofil
+/// (`ensureRunning(profile:)`), jede mit eigenem `CCP_CONFIG_DIR` und Port.
 final class ClaudeCodeProxyManager {
     static let shared = ClaudeCodeProxyManager()
 
@@ -212,6 +228,51 @@ final class ClaudeCodeProxyManager {
     private var didAttemptManagedInstall = false
     private(set) var lastManagedInstallError: String?
 
+    /// Env-Overrides eines GPT-Konto-Profils (`CCP_CONFIG_DIR`) fuer
+    /// Auth-Status, Device-Login und (ab Slice 2) den Proxy-Start. `nil`/main
+    /// → leeres Dict, der Proxy nimmt seinen Default-Store. Injizierbar, damit
+    /// Tests ohne `~/.gpt-profiles` auskommen.
+    var profileEnvironmentResolver: (String?) -> [String: String] = { profile in
+        // Kill-Switch aus → alles laeuft wie frueher ohne Variable (Keychain-
+        // Modus des Proxys, ein Konto).
+        guard AppPreferences.shared.isGPTAccountProfilesEnabled else { return [:] }
+        return GPTAccountProfiles().environmentOverrides(forProfile: profile)
+    }
+
+    /// Die im Profil gespeicherte `accountId` (Datei-Beleg) — Grundlage des
+    /// Fallback-Guards in `authStatus(profile:)`. `nil` = keine eigene
+    /// Auth-Datei. Fuer main nicht benoetigt (Default-Store ist der Fallback
+    /// selbst).
+    var storedAccountIDResolver: (String?) -> String? = { profile in
+        GPTAccountProfiles().storedAccountID(forProfile: profile ?? GPTAccountProfiles.mainProfileName)
+    }
+
+    /// Profile, deren Instanz gerade im Hintergrund hochfaehrt (503-Pfad des
+    /// Routers). Verhindert, dass jeder Retry des Clients einen weiteren
+    /// blockierten Start-Task erzeugt. Zugriff unter `processLock`.
+    private var startingProfiles: Set<String> = []
+
+    /// Kill-Switch der Konto-Profile: aus → jedes Profil wird wie main
+    /// behandelt (ein Proxy, ein Konto).
+    var profilesEnabledResolver: () -> Bool = { AppPreferences.shared.isGPTAccountProfilesEnabled }
+
+    /// Port des main-Proxys (Default-Store). Zusatzprofile bekommen Ports
+    /// oberhalb davon (`profilePortRangeStart`).
+    var mainPortResolver: () -> Int = { AppPreferences.shared.claudeGPTBackendPort }
+
+    /// Ist der Port lokal noch frei? Default: Bind-Probe auf 127.0.0.1.
+    var portAvailabilityResolver: (Int) -> Bool = { ClaudeCodeProxyManager.isPortFree($0) }
+
+    /// Abstand zum main-Port, ab dem Profil-Instanzen Ports bekommen — genug
+    /// Luft fuer den Router (main + 1) und manuelle Zweitinstanzen.
+    static let profilePortOffset = 10
+    static let profilePortSearchWidth = 40
+
+    /// Laufende Instanzen je Zusatzprofil (main lebt in `selfStartedProcess`
+    /// bzw. extern). Zugriff nur unter `processLock`; der Start selbst ist
+    /// ueber `ensureLock` serialisiert wie bei main.
+    private var profileInstances: [String: ClaudeCodeProxyProfileInstance] = [:]
+
     init(
         commandResolver: @escaping (String) -> String? = { AgentCommandBuilder.commandPath($0) },
         managedBinaryResolver: @escaping () -> String? = {
@@ -264,6 +325,7 @@ final class ClaudeCodeProxyManager {
             queue: nil
         ) { [weak self] _ in
             self?.stopIfSelfStarted()
+            self?.stopAllProfileInstances()
             self?.stopDeviceLogin()
         }
     }
@@ -298,7 +360,9 @@ final class ClaudeCodeProxyManager {
 
             let process: ClaudeCodeProxyProcessHandle
             do {
-                var environment = environmentResolver()
+                // main mit CCP_CONFIG_DIR auf dem Default-Store (Datei-Modus,
+                // siehe GPTAccountProfiles.environmentOverrides).
+                var environment = environment(forProfile: nil)
                 // Die Tier-Env des Proxy hat Vorrang vor jedem Modell-Alias
                 // und wuerde damit Toggle, plain /model sowie den guenstigen
                 // Haiku-Ersatz global ueberstimmen. Ein bewusster Override in
@@ -356,6 +420,255 @@ final class ClaudeCodeProxyManager {
         }
     }
 
+    // MARK: - Instanz je GPT-Konto-Profil
+
+    /// Stellt sicher, dass fuer das Profil einer Session ein Proxy laeuft und
+    /// der Router steht. `nil`/main (oder Kill-Switch aus) → der bekannte
+    /// main-Pfad. Zusatzprofil → eigene Instanz mit `CCP_CONFIG_DIR` auf einem
+    /// eigenen Port; laeuft sie schon und antwortet, wird sie wiederverwendet.
+    /// Ein Profil ohne eigene Auth-Datei wird NIE gestartet — die Instanz
+    /// liefe sonst still auf dem Default-Konto.
+    func ensureRunning(profile: String?) -> Result<Void, ClaudeCodeProxyError> {
+        guard profilesEnabledResolver(), !Self.isMainProfile(profile), let profile else {
+            return ensureRunning(port: mainPortResolver())
+        }
+
+        ensureLock.lock()
+        defer { ensureLock.unlock() }
+
+        guard storedAccountIDResolver(profile) != nil else {
+            return .failure(.profileNotLoggedIn(profile))
+        }
+        let profileEnvironment = profileEnvironmentResolver(profile)
+        guard profileEnvironment[GPTAccountProfiles.configDirEnvironmentKey] != nil else {
+            // Verzeichnis weg (Profil entfernt) — kein stiller main-Fallback.
+            return .failure(.profileNotLoggedIn(profile))
+        }
+
+        processLock.lock()
+        let existing = profileInstances[profile]
+        processLock.unlock()
+
+        var processStartedForThisAttempt: ClaudeCodeProxyProcessHandle?
+        if let existing, existing.process.isRunning, isReachable(port: existing.port) {
+            // wiederverwenden
+        } else {
+            if let existing {
+                // Registriert, aber nicht mehr gesund: weg damit, bevor ein
+                // neuer Handle ihn verdeckt.
+                discardProfileInstance(profile, expecting: existing.process)
+            }
+            guard let binary = catalogCapableBinaryInstallingIfNeeded() else {
+                return .failure(.binaryMissing)
+            }
+            guard let port = allocateProfilePort() else {
+                return .failure(.noFreePort)
+            }
+
+            let process: ClaudeCodeProxyProcessHandle
+            do {
+                var environment = environment(forProfile: profile)
+                if environment.removeValue(forKey: "CCP_CODEX_SERVICE_TIER") != nil {
+                    Logger.agentStore.warning(
+                        "claude_code_proxy_inherited_service_tier_removed key=CCP_CODEX_SERVICE_TIER profile=\(profile, privacy: .public)"
+                    )
+                }
+                environment["CCP_BIND_ADDRESS"] = "127.0.0.1"
+                process = try processLauncher(
+                    binary.path,
+                    ["serve", "--no-monitor", "--port", String(port)],
+                    environment
+                )
+            } catch {
+                return .failure(.startFailed(error.localizedDescription))
+            }
+
+            processLock.lock()
+            profileInstances[profile] = ClaudeCodeProxyProfileInstance(port: port, process: process)
+            processLock.unlock()
+            processStartedForThisAttempt = process
+
+            var becameReachable = false
+            for _ in 0..<max(0, retryAttempts) {
+                if isReachable(port: port) {
+                    becameReachable = true
+                    break
+                }
+                sleepResolver(retryDelay)
+            }
+            if !becameReachable, !isReachable(port: port) {
+                discardProfileInstance(profile, expecting: process)
+                return .failure(.notReachable(port: port))
+            }
+            Logger.agentStore.info(
+                "gpt_profile_proxy_started profile=\(profile, privacy: .public) port=\(port)"
+            )
+        }
+
+        switch routerStarter(routerPortResolver()) {
+        case .success:
+            agentDefinitionSyncer()
+            return .success(())
+        case .failure(let error):
+            if let processStartedForThisAttempt {
+                discardProfileInstance(profile, expecting: processStartedForThisAttempt)
+            }
+            return .failure(.routerStartFailed(error.localizedDescription))
+        }
+    }
+
+    /// Port, ueber den Requests fuer dieses Profil laufen: main → Backend-Port
+    /// (auch extern gestartet), Zusatzprofil → nur wenn die Instanz laeuft.
+    func port(forProfile profile: String?) -> Int? {
+        guard profilesEnabledResolver(), !Self.isMainProfile(profile), let profile else {
+            return mainPortResolver()
+        }
+        processLock.lock()
+        defer { processLock.unlock() }
+        guard let instance = profileInstances[profile], instance.process.isRunning else {
+            return nil
+        }
+        return instance.port
+    }
+
+    /// Alle laufenden Profil-Instanzen (fuer Status-Anzeigen).
+    func runningProfileInstances() -> [String: Int] {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return profileInstances
+            .filter { $0.value.process.isRunning }
+            .mapValues(\.port)
+    }
+
+    /// Beendet die Instanz eines Profils. Serialisiert ueber `ensureLock`
+    /// gegen einen gleichzeitigen `ensureRunning(profile:)`: sonst koennte
+    /// ein gerade gestarteter, noch nicht registrierter Prozess nach dem
+    /// Stop registriert werden und mit einem abgemeldeten Grant weiterlaufen.
+    func stopInstance(profile: String) {
+        ensureLock.lock()
+        defer { ensureLock.unlock() }
+        stopInstanceLocked(profile: profile)
+    }
+
+    private func stopInstanceLocked(profile: String) {
+        processLock.lock()
+        let instance = profileInstances.removeValue(forKey: profile)
+        processLock.unlock()
+        if let instance, instance.process.isRunning {
+            instance.process.terminate()
+        }
+    }
+
+    func stopAllProfileInstances() {
+        ensureLock.lock()
+        defer { ensureLock.unlock() }
+        processLock.lock()
+        let instances = profileInstances
+        profileInstances = [:]
+        processLock.unlock()
+        for instance in instances.values where instance.process.isRunning {
+            instance.process.terminate()
+        }
+    }
+
+    /// Start im Hintergrund fuer den 503-Pfad des Routers — pro Profil nur
+    /// ein Versuch gleichzeitig, Ergebnis wird geloggt statt verworfen.
+    func startInstanceInBackground(profile: String) {
+        processLock.lock()
+        let alreadyStarting = !startingProfiles.insert(profile).inserted
+        processLock.unlock()
+        guard !alreadyStarting else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.ensureRunning(profile: profile)
+            self.processLock.lock()
+            self.startingProfiles.remove(profile)
+            self.processLock.unlock()
+            if case .failure(let error) = result {
+                Logger.agentStore.error(
+                    "gpt_profile_instance_start_failed profile=\(profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+    }
+
+    /// `codex auth logout` im Store des Profils; die laufende Instanz wird
+    /// vorher beendet, weil sie den Grant sonst im Speicher weiterbenutzt.
+    /// Unter `ensureLock`, damit kein paralleler Start die Instanz nach dem
+    /// Logout wieder registriert.
+    func logout(profile: String?) -> Result<Void, ClaudeCodeProxyError> {
+        guard let executable = resolvedBinaryPath() else {
+            return .failure(.binaryMissing)
+        }
+        ensureLock.lock()
+        defer { ensureLock.unlock() }
+        if let profile, !Self.isMainProfile(profile) {
+            stopInstanceLocked(profile: profile)
+        }
+        do {
+            let result = try commandRunner(
+                executable,
+                ["codex", "auth", "logout"],
+                environment(forProfile: profile)
+            )
+            guard result.exitCode == 0 else {
+                return .failure(.startFailed(result.stderr.isEmpty ? result.stdout : result.stderr))
+            }
+            return .success(())
+        } catch {
+            return .failure(.startFailed(error.localizedDescription))
+        }
+    }
+
+    private func discardProfileInstance(_ profile: String, expecting process: ClaudeCodeProxyProcessHandle) {
+        processLock.lock()
+        if profileInstances[profile]?.process === process {
+            profileInstances.removeValue(forKey: profile)
+        }
+        processLock.unlock()
+        if process.isRunning {
+            process.terminate()
+        }
+    }
+
+    /// Erster freier Port oberhalb von main + Offset, der weder von einer
+    /// registrierten Instanz belegt noch lokal gebunden ist. Muss unter
+    /// `ensureLock` laufen (Aufrufer), damit zwei Starts nicht denselben Port
+    /// waehlen.
+    private func allocateProfilePort() -> Int? {
+        processLock.lock()
+        let taken = Set(profileInstances.values.map(\.port))
+        processLock.unlock()
+        let start = mainPortResolver() + Self.profilePortOffset
+        for port in start..<(start + Self.profilePortSearchWidth)
+        where !taken.contains(port) && port != routerPortResolver() && port != mainPortResolver() {
+            if portAvailabilityResolver(port) {
+                return port
+            }
+        }
+        return nil
+    }
+
+    /// Bind-Probe: gelingt ein Bind auf 127.0.0.1:<port>, ist er frei.
+    static func isPortFree(_ port: Int) -> Bool {
+        let socketFD = socket(AF_INET, SOCK_STREAM, 0)
+        guard socketFD >= 0 else { return false }
+        defer { close(socketFD) }
+        var reuse: Int32 = 1
+        setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = in_port_t(UInt16(port).bigEndian)
+        address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+        let result = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                bind(socketFD, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        return result == 0
+    }
+
     func stopIfSelfStarted() {
         // Der In-Process-Router versorgt bereits laufende PTY-Sessions
         // (ANTHROPIC_BASE_URL ist beim Spawn eingefroren). Er faellt deshalb
@@ -370,22 +683,91 @@ final class ClaudeCodeProxyManager {
             routerStopper()
         }
         replaceSelfStartedProcess(with: nil)
+        // „Proxy stoppen" / Backend aus: die Profil-Instanzen gehoeren dazu —
+        // sonst liefen sie unsichtbar bis zum App-Quit weiter.
+        stopAllProfileInstances()
     }
 
     func authStatus() -> ClaudeCodeProxyAuthStatus {
+        authStatus(profile: nil)
+    }
+
+    /// Auth-Status des Proxy-Stores eines GPT-Konto-Profils (`nil` = main).
+    ///
+    /// Fallback-Guard: Der Proxy meldet fuer ein Config-Dir OHNE eigene
+    /// Auth-Datei nicht „Not authenticated", sondern still das Konto des
+    /// Default-Stores bzw. der Codex-CLI (reproduziert 2026-09-16). Ein
+    /// Zusatzprofil gilt deshalb nur als angemeldet, wenn seine Datei eine
+    /// `accountId` traegt UND der Statusbefehl genau diese meldet.
+    func authStatus(profile: String?) -> ClaudeCodeProxyAuthStatus {
         guard let executable = resolvedBinaryPath() else {
             return .unknown
+        }
+        // Mit aktiven Konto-Profilen laeuft auch main im Datei-Modus — und
+        // damit gilt fuer main dieselbe Fallback-Falle: ohne eigene Datei
+        // meldet der Proxy still das Codex-CLI-Konto. Dann main wie ein
+        // Zusatzprofil pruefen; nur bei ausgeschaltetem Feature bleibt die
+        // Proxy-Meldung fuer main unangetastet (Keychain-Modus).
+        let isMain = Self.isMainProfile(profile) && !profilesEnabledResolver()
+        let storedAccountID = storedAccountIDResolver(profile)
+        if !isMain, storedAccountID == nil {
+            return .notAuthenticated
         }
         do {
             let result = try commandRunner(
                 executable,
                 ["codex", "auth", "status"],
-                environmentResolver()
+                environment(forProfile: profile)
             )
-            return Self.parseAuthStatus(result.stdout)
+            let reported = Self.parseAuthStatus(result.stdout)
+            let reconciled = Self.reconcileAuthStatus(
+                reported,
+                storedAccountID: storedAccountID,
+                isMain: isMain
+            )
+            if reconciled != reported, case .authenticated(let account, _) = reported {
+                Logger.agentStore.warning(
+                    "gpt_profile_auth_fallback_detected profile=\(profile ?? "main", privacy: .public) reported=\(account, privacy: .public) stored=\(storedAccountID ?? "nil", privacy: .public) — Proxy antwortet mit fremdem Konto, Profil gilt als nicht angemeldet"
+                )
+            }
+            return reconciled
         } catch {
             return .unknown
         }
+    }
+
+    /// Pure Entscheidung des Fallback-Guards: fuer main gilt die Meldung des
+    /// Proxys unveraendert; ein Zusatzprofil ist nur angemeldet, wenn die
+    /// gemeldete `Account:`-ID mit der Datei uebereinstimmt.
+    static func reconcileAuthStatus(
+        _ reported: ClaudeCodeProxyAuthStatus,
+        storedAccountID: String?,
+        isMain: Bool
+    ) -> ClaudeCodeProxyAuthStatus {
+        guard !isMain, case .authenticated(let account, _) = reported else {
+            return reported
+        }
+        guard let storedAccountID, account == storedAccountID else {
+            return .notAuthenticated
+        }
+        return reported
+    }
+
+    static func isMainProfile(_ profile: String?) -> Bool {
+        guard let profile else { return true }
+        let trimmed = profile.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed == GPTAccountProfiles.mainProfileName
+    }
+
+    /// Login-Shell-Env plus Profil-Overrides. Ein geerbtes `CCP_CONFIG_DIR`
+    /// wird IMMER ueberschrieben bzw. entfernt — Routing laeuft nur ueber
+    /// explizite Per-Aufruf-Overrides, nie ueber Vererbung (Regel wie bei
+    /// `CLAUDE_CONFIG_DIR` in `LoginShellEnvironment`).
+    private func environment(forProfile profile: String?) -> [String: String] {
+        var environment = environmentResolver()
+        environment.removeValue(forKey: GPTAccountProfiles.configDirEnvironmentKey)
+        environment.merge(profileEnvironmentResolver(profile)) { _, override in override }
+        return environment
     }
 
     /// Pfad des gewaehlten Binarys — fuer Auth-Status und Device-Login, die
@@ -506,6 +888,23 @@ final class ClaudeCodeProxyManager {
         return try outcome.value.get()
     }
 
+    /// Laeuft gerade ein Device-Code-Login (egal von welcher Seite gestartet)?
+    /// Beide Oberflaechen (gefuehrte Einrichtung, Kontoliste) sperren ihre
+    /// Login-Buttons daran — der Manager erlaubt nur einen Login gleichzeitig
+    /// und wuerde einen laufenden sonst kommentarlos beenden.
+    var isDeviceLoginRunning: Bool {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return deviceLoginProcess?.isRunning == true
+    }
+
+    /// Bricht einen laufenden Device-Code-Login ab (z. B. weil das Profil
+    /// gerade entfernt wird — sonst legte der Browser-Abschluss den Grant in
+    /// ein bereits geloeschtes Verzeichnis zurueck).
+    func cancelDeviceLogin() {
+        stopDeviceLogin()
+    }
+
     /// Startet den Device-Code-Flow als langlebigen Prozess. Der Manager
     /// puffert Chunks, weil URL und Code auch mitten in einer Pipe-Lieferung
     /// getrennt werden koennen.
@@ -514,9 +913,22 @@ final class ClaudeCodeProxyManager {
         onCodeInfo: @escaping (ClaudeCodeProxyDeviceCodeInfo) -> Void,
         onCompletion: @escaping (Int32) -> Void
     ) -> Result<Void, ClaudeCodeProxyError> {
+        startDeviceLogin(profile: nil, onCodeInfo: onCodeInfo, onCompletion: onCompletion)
+    }
+
+    /// Device-Code-Login in den Store eines GPT-Konto-Profils (`nil` = main).
+    /// Der Proxy schreibt den Grant nach `<CCP_CONFIG_DIR>/codex/auth.json`;
+    /// das Verzeichnis muss existieren (`GPTAccountProfiles.createProfile`).
+    @discardableResult
+    func startDeviceLogin(
+        profile: String?,
+        onCodeInfo: @escaping (ClaudeCodeProxyDeviceCodeInfo) -> Void,
+        onCompletion: @escaping (Int32) -> Void
+    ) -> Result<Void, ClaudeCodeProxyError> {
         guard let executable = resolvedBinaryPath() else {
             return .failure(.binaryMissing)
         }
+        let loginEnvironment = environment(forProfile: profile)
 
         // Ein noch laufender frueherer Login-Prozess wird zuerst beendet —
         // sonst liefe er verwaist weiter und ueberlebte den App-Quit.
@@ -535,7 +947,7 @@ final class ClaudeCodeProxyManager {
             let process = try deviceLoginLauncher(
                 executable,
                 ["codex", "auth", "device"],
-                environmentResolver(),
+                loginEnvironment,
                 { chunk in
                     outputLock.lock()
                     accumulatedOutput += chunk

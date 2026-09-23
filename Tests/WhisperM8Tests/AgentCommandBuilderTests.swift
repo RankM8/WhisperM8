@@ -565,6 +565,7 @@ extension AgentCommandBuilderTests {
     func testBackgroundDispatcherCoreEnvironmentUsesCanonicalPickerAndContextInvariants() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptFastModeEnabledResolver = { true }
         builder.gptRouterPortResolver = { 19_002 }
@@ -587,6 +588,7 @@ extension AgentCommandBuilderTests {
     func testRouterCoreCanonicalizesKnownPickerAndRejectsUnknownConfiguredModels() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { true }
         builder.gptPickerModelResolver = { "  GPT-5.4-MINI-FAST[1M]  " }
         builder.gptSubagentModelResolver = { "gpt-5.3-codex-spark" }
@@ -612,6 +614,7 @@ extension AgentCommandBuilderTests {
     func testExtended900KProfileKeepsTerraAndForcesFrontierForStandardOnlyModels() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "gpt-5.6-terra" }
         builder.gptDefaultModelResolver = { "gpt-5.6-luna" }
@@ -642,6 +645,7 @@ extension AgentCommandBuilderTests {
     func testOversizedContextValueFallsBackToStandardProfile() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "gpt-5.6-sol" }
         builder.gptContextWindowResolver = { 500_000 }
@@ -656,6 +660,7 @@ extension AgentCommandBuilderTests {
     func testRouterCoreFallsBackToCanonicalPickerForUnknownID() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "gpt-5.6-orbit" }
 
@@ -668,6 +673,7 @@ extension AgentCommandBuilderTests {
     func testGPTRouterCoreEnvironmentFastifiesExplicitPlainPickerModel() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { true }
         builder.gptPickerModelResolver = { "  gpt-5.6-luna  " }
         builder.gptDefaultModelResolver = { "gpt-5.6-terra" }
@@ -685,6 +691,7 @@ extension AgentCommandBuilderTests {
     func testGPTRouterCoreEnvironmentKeepsExplicitFastPickerModelWhenToggleIsOff() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "gpt-5.6-terra-fast" }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
@@ -702,6 +709,7 @@ extension AgentCommandBuilderTests {
     func testGPTRouterCoreEnvironmentKeepsModelsPlainWhenFastModeIsDisabled() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptRouterPortResolver = { 19_003 }
@@ -721,6 +729,7 @@ extension AgentCommandBuilderTests {
     func testGPTRouterCoreAcceptsEveryCatalogModelAsSubagentAndFallsBackForUnknown() {
         var builder = AgentCommandBuilder()
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptFastModeEnabledResolver = { true }
         builder.gptRouterPortResolver = { 19_004 }
@@ -762,6 +771,7 @@ extension AgentCommandBuilderTests {
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
         }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 19_002 }
         builder.gptSubagentModelResolver = { "" }
@@ -807,6 +817,7 @@ extension AgentCommandBuilderTests {
             ["CLAUDE_CONFIG_DIR": "/profiles/firma"]
         }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 19_001 }
         builder.gptSubagentModelResolver = { "" }
@@ -850,6 +861,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "gpt-5.6-terra" }
         builder.gptSubagentModelResolver = { "" }
@@ -892,6 +904,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in ["--verbose"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
@@ -939,6 +952,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "" }
         builder.gptSubagentModelResolver = { "" }
@@ -1041,6 +1055,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { false }
         builder.gptPickerModelResolver = { "" }
         builder.gptSubagentModelResolver = { "" }
@@ -1082,6 +1097,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptSubagentModelResolver = { "" }
         builder.claudeTranscriptLocator = { _, _ in transcript }
@@ -1128,6 +1144,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in ["--resume=restored-session"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
@@ -1158,6 +1175,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
@@ -1195,6 +1213,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptFastModeEnabledResolver = { true }
         builder.gptPickerModelResolver = { "" }
         builder.gptSubagentModelResolver = { "" }
@@ -1224,6 +1243,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "" }
@@ -1245,6 +1265,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptSubagentModelResolver = { "" }
         let session = AgentChatSession(
@@ -1273,6 +1294,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in ["--model", "claude-opus-4-6"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "" }
@@ -1309,6 +1331,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in ["--model", "gpt-5.6-sol"] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "" }
@@ -1335,6 +1358,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "gpt-5.6-luna[1M]" }
         builder.gptSubagentModelResolver = { "gpt-5.6-terra-fast[1m]" }
         let session = AgentChatSession(
@@ -1372,6 +1396,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "gpt-5.6-terra" }
@@ -1398,6 +1423,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptDefaultModelResolver = { "gpt-5.6-sol" }
@@ -1429,6 +1455,7 @@ extension AgentCommandBuilderTests {
         builder.extraArgumentsResolver = { _ in [] }
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "  \n " }
@@ -1503,6 +1530,7 @@ extension AgentCommandBuilderTests {
             profile == "firma" ? ["CLAUDE_CONFIG_DIR": "/profiles/firma"] : [:]
         }
         builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in nil }
         builder.gptPickerModelResolver = { "" }
         builder.gptRouterPortResolver = { 18_766 }
         builder.gptSubagentModelResolver = { "gpt-5.6-sol" }

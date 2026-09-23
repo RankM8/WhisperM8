@@ -157,4 +157,19 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertNil(envDict["CLAUDE_CONFIG_DIR"])
         XCTAssertEqual(envDict["HOME"], "/Users/test")
     }
+
+    func testStripsInheritedGPTAccountRoutingVariables() {
+        // Dieselbe Regel fuer die GPT-Konto-Profile: `make dev` aus einer auf
+        // `ai` gestempelten Shell darf nicht alle main-Sessions auf ai ziehen,
+        // und ein geerbtes CCP_CONFIG_DIR keinen Proxy-Store umhaengen.
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let envDict = env.processEnvironment(base: [
+            "ANTHROPIC_CUSTOM_HEADERS": "X-WhisperM8-GPT-Profile: ai",
+            "CCP_CONFIG_DIR": "/Users/test/.gpt-profiles/ai",
+            "HOME": "/Users/test"
+        ])
+        XCTAssertNil(envDict["ANTHROPIC_CUSTOM_HEADERS"])
+        XCTAssertNil(envDict["CCP_CONFIG_DIR"])
+        XCTAssertEqual(envDict["HOME"], "/Users/test")
+    }
 }

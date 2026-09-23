@@ -66,6 +66,12 @@ Codex-Läufe. Sie vereinheitlicht JSONL-Streaming, Thread-Resume,
 Sandbox-Argumente, Status-Proben und den strukturierten Report-Vertrag. Job-
 und UI-Zustand bleiben bewusst bei den aufrufenden Teilsystemen.
 
+## Einzeldokumente
+
+- [`gpt-konten.md`](gpt-konten.md) — mehrere ChatGPT-Konten im GPT-Backend:
+  Profile, Proxy-Instanz je Konto, Session-Stempel, Bedienung in den
+  Einstellungen und die Trennung vom `codex login` der Codex-CLI.
+
 ## Schlüsseldateien
 
 - `WhisperM8/Views/AgentChatsView.swift` orchestriert Fensterlayout, Store-Bridges, Sidebar, Tabs, Detailauswahl, Inspector und Sheets.
@@ -83,7 +89,7 @@ und UI-Zustand bleiben bewusst bei den aufrufenden Teilsystemen.
 ## Verwandte Bereiche
 
 - [`../cli/`](../cli/) dokumentiert das `whisperm8`-Binary und insbesondere den öffentlichen Namespace `whisperm8 agent` für Codex-Jobs.
-- [`../settings/`](../settings/) beschreibt die Settings-Navigation; die Gruppe **Agents** enthält die Seiten **Agent Chats** sowie **CLI & Skills**.
+- [`../settings/`](../settings/) beschreibt die Settings-Navigation; die Gruppe **Agents** enthält die Seiten **Agent Chats** sowie **CLI & Skills**, die Gruppe **Claude Code** die Seiten **Accounts**, **Hooks** und **GPT-Backend**.
 
 ## Keywords
 
@@ -94,4 +100,5 @@ Multiwindow, Tab-Tear-off, Terminal, SwiftTerm, PTY, Detailfläche,
 Runtime-Status, Hook-Bridge, Claude Background Agent, Codex-Subagent,
 Codex-Job, `whisperm8 agent`, Codex-Exec, `codex exec --json`,
 `AgentChatsView`, `AgentWindowStore`, `AgentSessionStore`, `AgentJobStore`,
-`AgentSessionStatusCoordinator`, `ClaudeHookBridge`, `CodexExecRunner`.
+`AgentSessionStatusCoordinator`, `ClaudeHookBridge`, `CodexExecRunner`,
+GPT-Backend, GPT-Konten, ChatGPT-Konten, Konto-Profil, `gptProfileName`.

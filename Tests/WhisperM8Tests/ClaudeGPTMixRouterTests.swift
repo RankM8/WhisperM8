@@ -1068,6 +1068,222 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertEqual(response.body, original)
     }
 
+    // MARK: - GPT-Konto-Profile (Routing pro Session)
+
+    func testProfileHeaderParsingAcceptsOnlyValidProfileNames() {
+        typealias Header = ClaudeGPTMixRouter.HTTPHeader
+        XCTAssertEqual(
+            ClaudeGPTMixRouter.profileName(in: [Header(name: "x-whisperm8-gpt-profile", value: " zweit ")]),
+            "zweit"
+        )
+        // „main" ist ein gueltiger, ausdruecklicher Wert (kontostabil).
+        XCTAssertEqual(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "main")]), "main")
+        XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "../x")]))
+        XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "mein konto")]))
+        XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "")]))
+        XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-Other", value: "zweit")]))
+    }
+
+    func testUpstreamHeadersStripProfileHeaderForBothUpstreams() {
+        let headers = [
+            ClaudeGPTMixRouter.HTTPHeader(name: "X-WhisperM8-GPT-Profile", value: "zweit"),
+            ClaudeGPTMixRouter.HTTPHeader(name: "Authorization", value: "Bearer abo"),
+        ]
+        for upstream in [ClaudeGPTMixRouter.Upstream.codexProxy, .anthropic] {
+            let forwarded = ClaudeGPTMixRouter.upstreamHeaders(
+                from: headers, upstream: upstream, host: "h", bodyLength: 0
+            )
+            XCTAssertFalse(
+                forwarded.contains { $0.name.caseInsensitiveCompare("X-WhisperM8-GPT-Profile") == .orderedSame },
+                "\(upstream)"
+            )
+        }
+    }
+
+    func testRouterRoutesProfileHeaderToProfileInstanceAndStripsIt() throws {
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [Data("data: main\n\n".utf8)])
+        let profileMock = try LocalHTTPMockServer(status: 202, responseChunks: [Data("data: zweit\n\n".utf8)])
+        defer {
+            mainMock.stop()
+            profileMock.stop()
+        }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        router.profilesEnabledResolver = { true }
+        router.activeProfileResolver = { nil }
+        router.codexProxyURLResolver = { profile in
+            profile == "zweit" ? URL(string: "http://127.0.0.1:\(profileMock.port)") : nil
+        }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+        let body = Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8)
+
+        let stamped = try Self.sendRawRequest(
+            port: routerPort, body: body, authorization: "Bearer x",
+            extraHeaders: ["X-WhisperM8-GPT-Profile: zweit"]
+        )
+        XCTAssertTrue(stamped.head.hasPrefix("HTTP/1.1 202"))
+        XCTAssertEqual(profileMock.lastRequest?.jsonModel, "gpt-5.6-sol")
+        XCTAssertNil(profileMock.lastRequest?.header(named: "x-whisperm8-gpt-profile"))
+        XCTAssertNil(mainMock.lastRequest)
+
+        let unstamped = try Self.sendRawRequest(port: routerPort, body: body, authorization: "Bearer x")
+        XCTAssertTrue(unstamped.head.hasPrefix("HTTP/1.1 201"))
+        XCTAssertEqual(mainMock.lastRequest?.jsonModel, "gpt-5.6-sol")
+    }
+
+    func testRouterUsesActiveProfileWhenHeaderMissing() throws {
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        let profileMock = try LocalHTTPMockServer(status: 202, responseChunks: [])
+        defer {
+            mainMock.stop()
+            profileMock.stop()
+        }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        router.profilesEnabledResolver = { true }
+        router.activeProfileResolver = { "zweit" }
+        router.codexProxyURLResolver = { _ in URL(string: "http://127.0.0.1:\(profileMock.port)") }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        let response = try Self.sendRawRequest(
+            port: routerPort,
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer x"
+        )
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 202"))
+        XCTAssertNil(mainMock.lastRequest)
+        // Anthropic-Modelle bleiben vom Profil unberuehrt.
+        _ = try Self.sendRawRequest(
+            port: routerPort,
+            body: Data(#"{"model":"claude-fable-5","messages":[]}"#.utf8),
+            authorization: "Bearer x"
+        )
+        XCTAssertEqual(mainMock.lastRequest?.jsonModel, "claude-fable-5")
+    }
+
+    func testRouterKeepsExplicitMainOnBackendPortWhileAnotherProfileIsActive() throws {
+        // Review-Blocker B1: ein main-Chat darf dem Aktivwechsel nicht folgen.
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        let profileMock = try LocalHTTPMockServer(status: 202, responseChunks: [])
+        defer {
+            mainMock.stop()
+            profileMock.stop()
+        }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        router.profilesEnabledResolver = { true }
+        router.activeProfileResolver = { "zweit" }
+        router.codexProxyURLResolver = { _ in URL(string: "http://127.0.0.1:\(profileMock.port)") }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        let response = try Self.sendRawRequest(
+            port: routerPort,
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer x",
+            extraHeaders: ["X-WhisperM8-GPT-Profile: main"]
+        )
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 201"), response.head)
+        XCTAssertEqual(mainMock.lastRequest?.jsonModel, "gpt-5.6-sol")
+        XCTAssertNil(mainMock.lastRequest?.header(named: "x-whisperm8-gpt-profile"))
+        XCTAssertNil(profileMock.lastRequest)
+    }
+
+    func testRouterAnswers503WithoutStartForProfileThatIsNotLoggedIn() throws {
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        defer { mainMock.stop() }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        var started: [String] = []
+        router.profilesEnabledResolver = { true }
+        router.codexProxyURLResolver = { _ in nil }
+        router.profileLoggedInResolver = { _ in false }
+        router.profileInstanceStarter = { started.append($0) }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        let body = Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8)
+        var request = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nX-WhisperM8-GPT-Profile: zweit\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        request.append(body)
+        let response = try Self.splitResponse(try Self.exchange(port: routerPort, request: request))
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 503"), response.head)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        let message = (json["error"] as? [String: Any])?["message"] as? String ?? ""
+        XCTAssertTrue(message.contains("nicht angemeldet"), message)
+        XCTAssertTrue(started.isEmpty, "abgemeldetes Profil darf keinen Start ausloesen")
+        XCTAssertNil(mainMock.lastRequest)
+    }
+
+    func testRouterAnswers503AndTriggersInstanceStartWhenProfileProxyMissing() throws {
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        defer { mainMock.stop() }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        var started: [String] = []
+        router.profilesEnabledResolver = { true }
+        router.codexProxyURLResolver = { _ in nil }
+        router.profileInstanceStarter = { started.append($0) }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        // Fehlerantworten kommen mit Content-Length, nicht chunked — daher
+        // der rohe Austausch statt `sendRawRequest`.
+        let body = Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8)
+        var request = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nX-WhisperM8-GPT-Profile: zweit\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        request.append(body)
+        let response = try Self.splitResponse(try Self.exchange(port: routerPort, request: request))
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 503"), response.head)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        XCTAssertEqual((json["error"] as? [String: Any])?["type"] as? String, "api_error")
+        XCTAssertEqual(started, ["zweit"])
+        XCTAssertNil(mainMock.lastRequest, "kein stiller main-Fallback")
+    }
+
+    func testRouterIgnoresProfileHeaderWhenProfilesDisabled() throws {
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        defer { mainMock.stop() }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        router.profilesEnabledResolver = { false }
+        router.codexProxyURLResolver = { _ in nil }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        let response = try Self.sendRawRequest(
+            port: routerPort,
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer x",
+            extraHeaders: ["X-WhisperM8-GPT-Profile: zweit"]
+        )
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 201"))
+        XCTAssertEqual(mainMock.lastRequest?.jsonModel, "gpt-5.6-sol")
+        XCTAssertNil(mainMock.lastRequest?.header(named: "x-whisperm8-gpt-profile"))
+    }
+
     private static func gzipCompress(_ data: Data) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
@@ -1109,10 +1325,12 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
     private static func sendRawRequest(
         port: Int,
         body: Data,
-        authorization: String
+        authorization: String,
+        extraHeaders: [String] = []
     ) throws -> (head: String, body: Data) {
+        let extra = extraHeaders.map { "\($0)\r\n" }.joined()
         var request = Data(
-            "POST /v1/messages HTTP/1.1\r\nHost: stale.example\r\nAuthorization: \(authorization)\r\nanthropic-beta: oauth-2025-04-20\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
+            "POST /v1/messages HTTP/1.1\r\nHost: stale.example\r\nAuthorization: \(authorization)\r\nanthropic-beta: oauth-2025-04-20\r\n\(extra)Content-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
         )
         request.append(body)
         let response = try exchange(port: port, request: request)

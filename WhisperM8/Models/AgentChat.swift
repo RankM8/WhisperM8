@@ -305,6 +305,11 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// direkten Anthropic-Pfad; ein GPT-Modell wird nur bei aktivem globalem
     /// Kill-Switch an den lokalen Proxy geroutet.
     var claudeBackendModel: String?
+    /// GPT-Konto-Profil des GPT-Backends (`~/.gpt-profiles/<name>`, eigene
+    /// Proxy-Instanz). `nil` = Default-Store (main). Beim Erstellen aus dem
+    /// aktiven Profil gestempelt und session-stabil: der Router ordnet jeden
+    /// Request ueber den beim Spawn eingefrorenen Header diesem Konto zu.
+    var gptProfileName: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -339,6 +344,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case subagentCwd
         case claudeProfileName
         case claudeBackendModel
+        case gptProfileName
     }
 
     init(
@@ -373,7 +379,8 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         subagentParentSessionID: String? = nil,
         subagentCwd: String? = nil,
         claudeProfileName: String? = nil,
-        claudeBackendModel: String? = nil
+        claudeBackendModel: String? = nil,
+        gptProfileName: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -407,6 +414,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         self.subagentCwd = subagentCwd
         self.claudeProfileName = claudeProfileName
         self.claudeBackendModel = claudeBackendModel
+        self.gptProfileName = gptProfileName
     }
 
     init(from decoder: Decoder) throws {
@@ -447,6 +455,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         subagentCwd = try container.decodeIfPresent(String.self, forKey: .subagentCwd)
         claudeProfileName = try container.decodeIfPresent(String.self, forKey: .claudeProfileName)
         claudeBackendModel = try container.decodeIfPresent(String.self, forKey: .claudeBackendModel)
+        gptProfileName = try container.decodeIfPresent(String.self, forKey: .gptProfileName)
     }
 
     var isManuallyCreated: Bool { createdManually == true }

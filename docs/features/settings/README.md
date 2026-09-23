@@ -21,7 +21,12 @@ Aktuelle Code-Aufhängung: `SettingsPage` und `SettingsView` in
 `WhisperM8/Views/Settings/Kit/`, testbare Zustandsmodelle in
 `WhisperM8/Views/Settings/Models/`.
 
-## Aktuelle 10 Seiten
+## Aktuelle Seiten
+
+Die Tabelle beschreibt die 10 Seiten des Refactors. Seither ist die Gruppe
+**Claude Code** mit den Seiten **Accounts** (`claude-accounts`), **Hooks**
+(`claude-hooks`) und **GPT-Backend** (`gpt-backend`) dazugekommen; die
+GPT-Backend-Seite ist unten eigens beschrieben.
 
 | Gruppe | Seite | Route | Page-Datei | Inhalt | Fachlicher Besitzer |
 |---|---|---|---|---|---|
@@ -35,6 +40,29 @@ Aktuelle Code-Aufhängung: `SettingsPage` und `SettingsView` in
 | App | Permissions | `permissions` | `PermissionsSettingsPage.swift` | Microphone, Accessibility und optional Screen Recording. | [App-Architektur](../../ARCHITECTURE.md) |
 | App | About | `about` | `AboutSettingsPage.swift` | Version, Updates und Hersteller-Link. | [App-Architektur](../../ARCHITECTURE.md) |
 | Workspace | Output | `output` | `OutputWorkspacePage.swift` | Latest Run, Output-Archiv, Filter und Löschaktion. | [AI Output](../dictation/ai-output/) |
+
+## Seite „GPT-Backend" (`gpt-backend`)
+
+Gruppe **Claude Code**, Page-Datei `GPTBackendSettingsPage.swift`. Die Seite
+schaltet das GPT-Backend ein, richtet es ein und verwaltet die ChatGPT-Konten,
+über die Claude-Chats mit GPT-Modellen laufen. Reihenfolge der Abschnitte:
+
+| Abschnitt | Inhalt |
+|---|---|
+| Aktivierung | Schalter „GPT-Backend aktivieren". Aus: alle Claude-Chats verbinden sich direkt mit Anthropic, vorhandene GPT-Stempel bleiben ungenutzt. |
+| Einrichtung | Nur bei unvollständigem Setup: geführte Einrichtung (Binary prüfen und ggf. verifiziert laden → Proxy und Router starten → ChatGPT-Login). |
+| Status | Ampeln für Binary, Prozess und Authentifizierung, mit Knopf „Proxy starten". |
+| **ChatGPT-Konten (GPT-Backend)** | Kontoliste mit Radio-Auswahl des aktiven Kontos, Plan-Badge, E-Mail, Port der laufenden Proxy-Instanz, Wochen-Limits und ⋯-Menü (Anmelden, Neu anmelden, Abmelden, Entfernen). |
+| **Konto hinzufügen** | Namensfeld plus „Anlegen & anmelden…" (Gerätecode-Login) und „Limits aktualisieren". |
+| Konfiguration | Proxy-Port, Standard-Modell neuer Chats, Fast-Modus, GPT-Modell im `/model`-Picker, Subagent-Modell und GPT-Kontextprofil. |
+| Aktionen | Proxy stoppen bzw. neu prüfen sowie Update des Proxy-Binaries. |
+
+Die beiden Konto-Abschnitte ersetzen die frühere Sektion „ChatGPT-Konto" mit
+ihrem einzelnen Device-Login-Knopf. Diese erscheint nur noch für den Login,
+den die geführte Einrichtung selbst startet, oder wenn der Kill-Switch
+`gptAccountProfilesEnabled` ausgeschaltet ist. Fachlich beschrieben sind
+Konten, Routing und Bedienung in
+[GPT-Konten](../agent-chats/gpt-konten.md).
 
 ## Legacy-Aliasse
 
@@ -78,7 +106,10 @@ Die aktuelle Struktur ist in [ARCHITECTURE.md](ARCHITECTURE.md) dokumentiert:
 `SettingsRouteTarget`, `Deep-Link`, `Legacy-Alias`, `AIOutputPageTab`,
 `AgentChatsSettingsPageTab`, `SettingsKit`, `Settings-Routing`, `10 Seiten`,
 `Recording`, `Transcription`, `AI Output`, `Context & Privacy`, `Agent Chats`,
-`CLI & Skills`, `General`, `Permissions`, `About`, `Output`
+`CLI & Skills`, `General`, `Permissions`, `About`, `Output`, `GPT-Backend`,
+`gpt-backend`, `GPTBackendSettingsPage`, `GPTAccountsSection`,
+ChatGPT-Konten, GPT-Konten, Gerätecode-Login, `claude-accounts`,
+`claude-hooks`
 
 ## Historische Referenzen
 
