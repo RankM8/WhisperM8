@@ -453,8 +453,26 @@ else
     account_display="${ansi_escape}[2m⇄main${ansi_escape}[0m"
 fi
 
+# GPT-Konto der Session (GPT-Backend): unabhängig vom Claude-Konto. Der
+# AgentCommandBuilder legt es als Request-Header in ANTHROPIC_CUSTOM_HEADERS
+# ab, das die Statusline von der CLI erbt. Ohne Header laufen GPT-Modelle
+# über das Hauptkonto (Default-Store des Proxys) — dann dezent „gpt:main",
+# damit „main" nicht mit dem Claude-Konto oder dem Git-Branch verwechselt wird.
+gpt_profile=""
+case "${ANTHROPIC_CUSTOM_HEADERS:-}" in
+    *X-WhisperM8-GPT-Profile:*)
+        gpt_profile=$(printf '%s' "$ANTHROPIC_CUSTOM_HEADERS" | sed -n 's/.*X-WhisperM8-GPT-Profile:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p')
+        ;;
+esac
+gpt_profile=$(sanitize_text "$gpt_profile")
+if [ -n "$gpt_profile" ]; then
+    account_display="${account_display} ${ansi_escape}[1;33m⇄gpt:${gpt_profile}${ansi_escape}[0m"
+elif printf '%s' "$model" | grep -qi 'gpt'; then
+    account_display="${account_display} ${ansi_escape}[2m⇄gpt:main${ansi_escape}[0m"
+fi
+
 # Ausgabe zusammenbauen
-# Format: repo (branch) ✗ ↑3 | 30% 258k/1000k | [Fable 5] ⇄PowerUser | high | 32%/5h · 42%/w ↻Sa | $16.20 | ⚡2 sub (Fable, GPT) | MCP:1 server:4%
+# Format: repo (branch) ✗ ↑3 | 30% 258k/1000k | [Fable 5] ⇄PowerUser ⇄gpt:ai | high | 32%/5h · 42%/w ↻Sa | $16.20 | ⚡2 sub (Fable, GPT) | MCP:1 server:4%
 output="${repo_display}"
 
 if [ -n "$branch_display" ]; then

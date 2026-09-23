@@ -183,7 +183,9 @@ struct GPTAccountsSection: View {
                         .foregroundStyle(AppTheme.textTertiary)
                 }
                 if let port = runningPorts[profile.name] {
-                    Text("Proxy-Instanz auf Port \(port)")
+                    // verbatim: SwiftUI formatiert interpolierte Ints sonst mit
+                    // Tausendertrennzeichen („18'775").
+                    Text(verbatim: "Proxy-Instanz auf Port \(port)")
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppTheme.textTertiary)
                 }

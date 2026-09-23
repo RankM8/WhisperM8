@@ -191,9 +191,12 @@ final class GPTAccountProfilesTests: XCTestCase {
 
     // MARK: - Env-Injektion
 
-    func testEnvironmentOverridesForMainAndNilAreEmpty() {
-        XCTAssertEqual(service.environmentOverrides(forProfile: nil), [:])
-        XCTAssertEqual(service.environmentOverrides(forProfile: "main"), [:])
+    func testEnvironmentOverridesForMainPointToDefaultStore() {
+        // Datei-Modus auch fuer main: derselbe Pfad, den der Proxy ohne
+        // Variable naehme — nur eben ohne Keychain-Vorrang.
+        let expected = ["CCP_CONFIG_DIR": home.appendingPathComponent(".config/claude-code-proxy").path]
+        XCTAssertEqual(service.environmentOverrides(forProfile: nil), expected)
+        XCTAssertEqual(service.environmentOverrides(forProfile: "main"), expected)
     }
 
     func testEnvironmentOverridesForProfileSetConfigDir() throws {

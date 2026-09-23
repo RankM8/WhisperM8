@@ -479,6 +479,29 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(launch?.2, ["PATH": "/bin", "CCP_CONFIG_DIR": "/profiles/zweit"])
     }
 
+    func testMainStartCarriesConfigDirFromResolver() throws {
+        var launch: [String: String]?
+        let manager = makeManager(
+            reachability: { _ in launch != nil },
+            launcher: { _, _, environment in
+                launch = environment
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin"] },
+            retryAttempts: 1
+        )
+        manager.profileEnvironmentResolver = { profile in
+            profile == nil ? ["CCP_CONFIG_DIR": "/Users/x/.config/claude-code-proxy"] : [:]
+        }
+
+        try manager.ensureRunning(port: 18_765).get()
+        XCTAssertEqual(launch, [
+            "PATH": "/bin",
+            "CCP_CONFIG_DIR": "/Users/x/.config/claude-code-proxy",
+            "CCP_BIND_ADDRESS": "127.0.0.1",
+        ])
+    }
+
     func testEnsureRunningProfileLaunchesInstanceWithConfigDirAndOwnPort() throws {
         var launch: (String, [String], [String: String])?
         var routerStarts = 0
@@ -914,7 +937,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         // Tests duerfen nie den echten Managed Download treffen.
         managedInstaller: @escaping () throws -> String = { throw TestInstallError.downloadBlocked }
     ) -> ClaudeCodeProxyManager {
-        ClaudeCodeProxyManager(
+        let manager = ClaudeCodeProxyManager(
             commandResolver: commandResolver,
             // Kein Zugriff auf das echte Managed-Binary in App Support —
             // sonst haengt der Test am Dateisystem der Maschine.
@@ -934,6 +957,11 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             retryDelay: 0,
             notificationCenter: notificationCenter
         )
+        // Tests haengen nie an den echten `~/.gpt-profiles` / Preferences.
+        manager.profileEnvironmentResolver = { _ in [:] }
+        manager.storedAccountIDResolver = { _ in nil }
+        manager.profilesEnabledResolver = { true }
+        return manager
     }
 
     private static func processHandle(

@@ -233,7 +233,12 @@ final class ClaudeCodeProxyManager {
     /// → leeres Dict, der Proxy nimmt seinen Default-Store. Injizierbar, damit
     /// Tests ohne `~/.gpt-profiles` auskommen.
     var profileEnvironmentResolver: (String?) -> [String: String] = { profile in
-        GPTAccountProfiles().environmentOverrides(forProfile: profile)
+        // Kill-Switch aus → main laeuft wie frueher ohne Variable (Keychain-
+        // Modus des Proxys); Zusatzprofile gibt es dann ohnehin nicht.
+        if ClaudeCodeProxyManager.isMainProfile(profile), !AppPreferences.shared.isGPTAccountProfilesEnabled {
+            return [:]
+        }
+        return GPTAccountProfiles().environmentOverrides(forProfile: profile)
     }
 
     /// Die im Profil gespeicherte `accountId` (Datei-Beleg) — Grundlage des
@@ -353,7 +358,9 @@ final class ClaudeCodeProxyManager {
 
             let process: ClaudeCodeProxyProcessHandle
             do {
-                var environment = environmentResolver()
+                // main mit CCP_CONFIG_DIR auf dem Default-Store (Datei-Modus,
+                // siehe GPTAccountProfiles.environmentOverrides).
+                var environment = environment(forProfile: nil)
                 // Die Tier-Env des Proxy hat Vorrang vor jedem Modell-Alias
                 // und wuerde damit Toggle, plain /model sowie den guenstigen
                 // Haiku-Ersatz global ueberstimmen. Ein bewusster Override in

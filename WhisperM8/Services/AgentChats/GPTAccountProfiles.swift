@@ -270,11 +270,21 @@ struct GPTAccountProfiles {
     // MARK: - Env-Injektion
 
     /// `CCP_CONFIG_DIR`-Override fuer Proxy-Start, Auth-Status und Login.
-    /// Leer fuer `main` (der Proxy nimmt dann seinen Default-Store) und fuer
+    ///
+    /// Auch `main` bekommt die Variable — auf seinen bisherigen Default-Store,
+    /// also denselben Pfad, den der Proxy ohne Variable naehme. Grund
+    /// (Fork-Quellcode, 2026-09-23): OHNE `CCP_CONFIG_DIR` bevorzugt der Proxy
+    /// auf macOS den Keychain; dessen Schreibzugriff scheitert im
+    /// nicht-interaktiven Modus grundsaetzlich, und refreshte Tokens landeten
+    /// nicht in der Datei — die Anzeige las einen seit dem 16.09. abgelaufenen
+    /// Token, obwohl die Instanz lief. MIT der Variable arbeitet der Proxy
+    /// rein dateibasiert und schreibt jeden Refresh zurueck. Leer nur fuer
     /// Profile, deren Verzeichnis nicht (mehr) existiert — ein frisch
     /// angelegtes, leeres Config-Dir liefe sonst still auf dem Default-Konto.
     func environmentOverrides(forProfile name: String?) -> [String: String] {
-        guard let name, name != Self.mainProfileName else { return [:] }
+        guard let name, name != Self.mainProfileName else {
+            return [Self.configDirEnvironmentKey: configDir(forProfile: Self.mainProfileName).path]
+        }
         let dir = configDir(forProfile: name)
         guard fileManager.fileExists(atPath: dir.path) else {
             Logger.agentStore.warning(
