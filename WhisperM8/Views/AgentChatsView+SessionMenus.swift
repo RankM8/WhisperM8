@@ -78,6 +78,7 @@ extension AgentChatsView {
         if plan.showsManagement {
             forkMenuItem(session)
             moveToAccountMenu(session)
+            gptAccountMenu(session)
         }
 
         // Fenster / Workspace

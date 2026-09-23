@@ -104,7 +104,10 @@ extension AgentChatsView {
                 // Ausdruecklich, nicht `.activeDefault`: ein zwischenzeitlich
                 // gewechselter Aktiv-Account darf den Fork nicht umhaengen.
                 claudeProfile: .explicit(source.claudeProfileName),
-                claudeBackendModel: source.claudeBackendModel
+                claudeBackendModel: source.claudeBackendModel,
+                // GPT-Konto ebenfalls von der Quelle — der Fork setzt deren
+                // Verlauf fort und soll dasselbe Kontingent belasten.
+                gptProfile: .explicit(source.gptProfileName)
             )
             // Farbe der Quelle erben, damit Fork und Original visuell
             // zusammengehören.

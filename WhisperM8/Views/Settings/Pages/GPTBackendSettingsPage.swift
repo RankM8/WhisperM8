@@ -72,7 +72,16 @@ struct GPTBackendSettingsPage: View {
 
                 statusSection
 
-                if authStatus == .notAuthenticated {
+                // Device-Code-Anzeige nur fuer den Login, den die gefuehrte
+                // Einrichtung selbst gestartet hat; alle anderen Logins laufen
+                // ueber die Kontoliste darunter.
+                if isDeviceLoginRunning || deviceCodeInfo != nil {
+                    deviceLoginSection
+                }
+
+                if AppPreferences.shared.isGPTAccountProfilesEnabled {
+                    GPTAccountsSection(onAccountsChanged: { refreshStatus() })
+                } else if authStatus == .notAuthenticated {
                     deviceLoginSection
                 }
             }

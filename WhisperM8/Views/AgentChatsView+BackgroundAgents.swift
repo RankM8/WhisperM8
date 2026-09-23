@@ -65,7 +65,10 @@ extension AgentChatsView {
                 // dessen Jobs die App weder lesen noch stoppen koennte.
                 // Umstellung nur zusammen mit Reader + Lifecycle + Roster —
                 // siehe docs/plans/claude-account-routing.md, Slice 7.5.
-                claudeProfile: .explicit(nil)
+                claudeProfile: .explicit(nil),
+                // Background-Agents laufen ueber den main-Proxy (Launch-Guard
+                // ist portbasiert); ein Profil-Stempel waere hier eine Luege.
+                gptProfile: .explicit(nil)
             )
         } catch {
             errorMessage = error.localizedDescription

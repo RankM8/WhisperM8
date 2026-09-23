@@ -369,8 +369,9 @@ struct AgentSessionDetailView: View {
             if launchSession.provider == .claude,
                !launchSession.isTerminal,
                AppPreferences.shared.claudeGPTBackendEnabled {
+                // Instanz des GPT-Kontos der Session (main → Backend-Port).
                 switch ClaudeCodeProxyManager.shared.ensureRunning(
-                    port: AppPreferences.shared.claudeGPTBackendPort
+                    profile: launchSession.gptProfileName
                 ) {
                 case .success:
                     launchGuardResult = .ready

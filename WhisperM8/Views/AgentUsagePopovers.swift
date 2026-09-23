@@ -294,64 +294,155 @@ private struct ClaudeUsagePopoverView: View {
 
 // MARK: - ChatGPT / Codex
 
+/// Zwei Bloecke: die Konten des GPT-Backends (Proxy-Logins, je eigener
+/// Store — das sind die Konten, die GPT-Chats tatsaechlich belasten) und
+/// darunter das Konto der Codex-CLI (`~/.codex/auth.json`: Diktat,
+/// `whisperm8 agent`, ChatGPT-App). Die Trennung ist Absicht: am 16.09.2026
+/// zeigte das Popover das frisch umgeloggte CLI-Konto mit freiem Kontingent,
+/// waehrend jede GPT-Session weiter gegen das gesperrte Proxy-Konto lief.
 private struct CodexUsagePopoverView: View {
-    @State private var usage: CodexUsage?
+    private let profileService = GPTAccountProfiles()
+
+    @State private var profiles: [GPTAccountProfile] = []
+    @State private var activeProfileName = GPTAccountProfiles.mainProfileName
+    @State private var usageByProfile: [String: CodexUsage] = [:]
+    @State private var failedProfiles: Set<String> = []
+    @State private var cliUsage: CodexUsage?
     @State private var isLoading = true
+
+    private var profilesEnabled: Bool { AppPreferences.shared.isGPTAccountProfilesEnabled }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PopoverHeader(title: "ChatGPT / Codex · Usage-Limits", subtitle: "Verbundener Account")
+            PopoverHeader(
+                title: "ChatGPT · GPT-Backend",
+                subtitle: profilesEnabled ? "Konten des GPT-Backends (Proxy-Login)" : "Verbundenes Konto (Proxy-Login)"
+            )
 
-            if let usage {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        if let plan = usage.planType {
-                            Text(plan.capitalized)
-                                .font(.system(size: 8.5, weight: .semibold))
-                                .foregroundStyle(AppTheme.textSecondary)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(AppTheme.textTertiary.opacity(0.12), in: Capsule())
-                        }
-                        Spacer(minLength: 0)
-                        if let email = usage.emailAddress {
-                            Text(email)
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(AppTheme.textTertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
-
-                    if let primary = usage.primary {
-                        UsageGaugeLine(label: primary.label, percent: primary.usedPercent, resetsAt: primary.resetsAt)
-                    }
-                    if let secondary = usage.secondary {
-                        UsageGaugeLine(label: secondary.label, percent: secondary.usedPercent, resetsAt: secondary.resetsAt)
-                    }
-                    ForEach(usage.scopedLimits, id: \.name) { scoped in
-                        UsageGaugeLine(label: scoped.name, percent: scoped.window.usedPercent, resetsAt: scoped.window.resetsAt, labelWidth: 88)
-                    }
-
-                    if !usage.isLive, let capturedAt = usage.capturedAt {
-                        Text("Snapshot der letzten Codex-Session · \(Self.age(capturedAt))")
-                            .font(.system(size: 9.5))
-                            .foregroundStyle(AppTheme.textTertiary)
-                    }
-                }
-            } else if isLoading {
+            if isLoading, usageByProfile.isEmpty {
                 Text("lade Limits…")
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
-            } else {
-                Text("Keine Daten — Codex nicht eingeloggt oder noch keine Session gelaufen.")
+            }
+
+            let loggedIn = profiles.filter(\.isLoggedIn)
+            if loggedIn.isEmpty, !isLoading {
+                Text("Kein GPT-Konto angemeldet — Einstellungen → GPT-Backend.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(AppTheme.textTertiary)
+            }
+
+            ForEach(loggedIn) { profile in
+                accountBlock(profile)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Codex-CLI / Diktat")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(AppTheme.textPrimary)
+                if let usage = cliUsage {
+                    usageRows(usage, showEmail: true)
+                } else if !isLoading {
+                    Text("Keine Daten — Codex nicht eingeloggt oder noch keine Session gelaufen.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(AppTheme.textTertiary)
+                }
             }
         }
         .padding(14)
         .frame(width: 320, alignment: .leading)
         .onAppear(perform: load)
+    }
+
+    @ViewBuilder
+    private func accountBlock(_ profile: GPTAccountProfile) -> some View {
+        let isActive = profile.name == activeProfileName
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(profile.name)
+                    .font(.system(size: 11.5, weight: isActive ? .semibold : .medium))
+                    .foregroundStyle(isActive ? AppTheme.statusWorking : AppTheme.textPrimary)
+                if let plan = profile.planDisplayName
+                    ?? usageByProfile[profile.name]?.planType.flatMap(GPTAccountProfiles.planDisplayName) {
+                    Text(plan)
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(AppTheme.textTertiary.opacity(0.12), in: Capsule())
+                }
+                if isActive, profilesEnabled {
+                    Text("aktiv")
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(AppTheme.statusWorking)
+                }
+                Spacer(minLength: 0)
+                if let email = profile.emailAddress ?? usageByProfile[profile.name]?.emailAddress {
+                    Text(email)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            if let usage = usageByProfile[profile.name] {
+                usageRows(usage, showEmail: false)
+            } else if failedProfiles.contains(profile.name) {
+                Text("Limits nicht abrufbar (Token in der Datei veraltet)")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(AppTheme.statusAwaiting)
+            } else if !isLoading {
+                Text("keine Daten")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppTheme.textTertiary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func usageRows(_ usage: CodexUsage, showEmail: Bool) -> some View {
+        if showEmail {
+            HStack(spacing: 6) {
+                if let plan = GPTAccountProfiles.planDisplayName(usage.planType) {
+                    Text(plan)
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(AppTheme.textTertiary.opacity(0.12), in: Capsule())
+                }
+                Spacer(minLength: 0)
+                if let email = usage.emailAddress {
+                    Text(email)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        if let primary = usage.primary {
+            UsageGaugeLine(label: primary.label, percent: primary.usedPercent, resetsAt: primary.resetsAt)
+        }
+        if let secondary = usage.secondary {
+            UsageGaugeLine(label: secondary.label, percent: secondary.usedPercent, resetsAt: secondary.resetsAt)
+        }
+        ForEach(usage.scopedLimits, id: \.name) { scoped in
+            UsageGaugeLine(label: scoped.name, percent: scoped.window.usedPercent, resetsAt: scoped.window.resetsAt, labelWidth: 88)
+        }
+        if usage.isLimitReached {
+            Text("Gesperrt — Kontingent erschöpft")
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(AppTheme.statusError)
+        }
+        if !usage.isLive, let capturedAt = usage.capturedAt {
+            Text("Snapshot der letzten Codex-Session · \(Self.age(capturedAt))")
+                .font(.system(size: 9.5))
+                .foregroundStyle(AppTheme.textTertiary)
+        }
     }
 
     private static func age(_ date: Date) -> String {
@@ -361,10 +452,26 @@ private struct CodexUsagePopoverView: View {
     }
 
     private func load() {
+        profiles = profileService.profiles()
+        activeProfileName = profileService.activeProfileName()
+        let service = profileService
+        let targets = profiles.filter(\.isLoggedIn)
         Task {
-            let result = await CodexUsageFetcher().fetchUsage()
+            for profile in targets {
+                let usage = await CodexUsageFetcher(
+                    proxyAuthFile: service.authFileURL(forProfile: profile.name)
+                ).fetchLiveUsage()
+                await MainActor.run {
+                    if let usage {
+                        usageByProfile[profile.name] = usage
+                    } else {
+                        failedProfiles.insert(profile.name)
+                    }
+                }
+            }
+            let cli = await CodexUsageFetcher().fetchUsage()
             await MainActor.run {
-                usage = result
+                cliUsage = cli
                 isLoading = false
             }
         }

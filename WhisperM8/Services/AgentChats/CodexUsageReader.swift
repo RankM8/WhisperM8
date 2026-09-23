@@ -34,6 +34,10 @@ struct CodexUsage: Equatable {
     var scopedLimits: [ScopedLimit] = []
     var planType: String?
     var emailAddress: String?
+    /// `rate_limit.limit_reached` bzw. `allowed == false` der Live-Antwort:
+    /// das Konto nimmt gerade KEINE Requests an. Ohne dieses Feld sah ein
+    /// gesperrtes Konto aus wie eines bei 100 % (Befund 2026-09-16).
+    var isLimitReached = false
     /// Zeitstempel des Events — die Daten sind so frisch wie der letzte
     /// Codex-Turn (JSONL) bzw. der Abruf (live).
     var capturedAt: Date?
@@ -275,12 +279,15 @@ struct CodexUsageFetcher {
             scoped.append(CodexUsage.ScopedLimit(name: name, window: limitWindow))
         }
 
+        let limitReached = (rateLimit["limit_reached"] as? Bool) == true
+            || (rateLimit["allowed"] as? Bool) == false
         return CodexUsage(
             primary: primary,
             secondary: secondary,
             scopedLimits: scoped,
             planType: obj["plan_type"] as? String,
             emailAddress: obj["email"] as? String,
+            isLimitReached: limitReached,
             capturedAt: fetchedAt,
             isLive: true
         )

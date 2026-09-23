@@ -1,6 +1,6 @@
 # Plan: GPT-Backend Account-Switcher — mehrere ChatGPT-Konten, Wechsel nach Belieben
 
-**Stand:** 2026-09-16 · **Status:** Slice 1 umgesetzt (Branch `feature/gpt-account-switcher`, ungetestet gegen die laufende App), Slice 2–4 offen · **Scope:** GPT-Backend (Proxy, Router, Agent Chats, Settings, CLI)
+**Stand:** 2026-09-23 · **Status:** Slice 1–3 umgesetzt, Slice 4 teilweise (Kontextmenü „GPT-Konto" für bestehende Chats; Hot-Switch und CLI-Flags offen) — Branch `feature/gpt-account-switcher`, Unit-Tests grün, **manuelle QA in der App steht aus** (Protokoll unten) · **Scope:** GPT-Backend (Proxy, Router, Agent Chats, Settings, CLI)
 **Vorbild:** `claude-account-switcher.md` (Slice 1–4) und `claude-account-routing.md` (Slice 5–6) — dieselben Muster, aber ein **Parallelbau**, keine Parametrisierung (es gibt keine Provider-Abstraktion, `ClaudeAccountProfiles` ist bis in den Store hinein auf Claude verdrahtet: `AgentSessionStore.swift:561` erzwingt für Codex `nil`).
 
 ## Ziel
@@ -91,7 +91,9 @@ Umgesetzt wie unten beschrieben; Abweichungen: `main`-Metadaten liegen unter `~/
 - **Tests** (`GPTAccountProfilesTests`, Temp-Root): Discovery mit/ohne `.active`, gelöschtes Profil → main, `validatedProfileName` wirft bei unbekannt/nicht eingeloggt, `isLoggedIn` verlangt `accountId`, `environmentOverrides` leer für main und für fehlendes Verzeichnis. `ClaudeCodeProxyManagerTests`: Login/Status-Befehle tragen `CCP_CONFIG_DIR` (Spy auf `commandRunner`).
 - **Abnahme:** Zweites Konto per Device-Login in ein Profil eingeloggt; `codex auth status` mit dessen `CCP_CONFIG_DIR` zeigt die andere `accountId`; der Default-Store ist unverändert.
 
-## Slice 2 — Proxy-Instanz je Profil und Routing pro Session
+## Slice 2 — Proxy-Instanz je Profil und Routing pro Session ✅ (umgesetzt 2026-09-23)
+
+Umgesetzt wie unten; Abweichungen und Details: Die Instanz-Registry lebt in-memory im Manager (`profileInstances`, Ports ab main + 10, Bind-Probe `isPortFree`, Router- und main-Port ausgespart). Der Router nimmt den Profil-Header über einen `ProfileRouting`-Snapshot pro Verbindung (vier Closures, testbar ohne Router-Backref); der `convenience init(codexProxyURL:anthropicURL:)` schaltet das Profil-Routing aus, damit kein Test am echten `~/.gpt-profiles/.active` hängt. Fehlt die Instanz, antwortet der Router 503 (`api_error`) und stößt den Start asynchron an — der nächste Request kommt durch. Der Stempel gilt für **jede** Claude-Session (auch ohne GPT-Modell), damit ein späterer `/model`-Wechsel auf GPT das beim Erstellen aktive Konto trifft; Codex-Sessions und Background-Agents bekommen `nil`. Kein Stripping eines geerbten `ANTHROPIC_CUSTOM_HEADERS` in `LoginShellEnvironment` — die App erbt es nicht, der Builder überschreibt es bei Stempel. Tests: `GPTAccountRoutingTests` (8), Router (+6), Manager (+7).
 
 - **`ClaudeCodeProxyManager.ensureRunning(profile:)`**: Registry `[profileName: (port, handle)]` unter `ensureLock`; `main` = heutiger Pfad (Port aus Preferences, ggf. extern laufend); Zusatzprofil → Port aus E2, Env mit `CCP_CONFIG_DIR`, `/healthz`-Probe, `willTerminate` beendet alle selbstgestarteten Instanzen (`stopIfSelfStarted`, `:360-373`). **Startet nie** ein Profil ohne eigene Auth-Datei (Fehler `.profileNotLoggedIn`). Router-Start bleibt einmalig.
 - **`ClaudeGPTMixRouter`**: `Upstream.codexProxy` bekommt den Profilnamen (`case codexProxy(profile: String?)`); `upstream(for:headers:)` liest `X-WhisperM8-GPT-Profile`, fehlt er → E4. `upstreamHeaders` entfernt den Header vor **beiden** Upstreams (Anthropic soll ihn nie sehen). `upstreamURLResolver` fragt die Port-Registry; unbekanntes/nicht laufendes Profil → 503 mit klarer Anthropic-förmiger Fehlermeldung („GPT-Konto ‚x' ist nicht eingeloggt") statt stillem main.
@@ -101,7 +103,9 @@ Umgesetzt wie unten beschrieben; Abweichungen: `main`-Metadaten liegen unter `~/
 - **Tests:** Router — Header wird geparst, entfernt, an keinen Upstream weitergereicht; fehlender Header → Resolver-Default; unbekanntes Profil → 503 vor jedem Upstream (Muster `testRouterRejectsNoncanonicalGPTBeforeEitherUpstream`). Manager — zweites Profil startet mit `CCP_CONFIG_DIR` und eigenem Port; nicht eingeloggt → kein Start. Builder — Env enthält den Header genau bei Stempel. Store — Default-Resolver wird vor der Mutation aufgelöst, Codex bekommt `nil`.
 - **Abnahme:** Zwei GPT-Chats laufen gleichzeitig auf zwei Konten (`lsof` zeigt zwei `serve`-Prozesse, `log stream` zeigt je Request das Profil); `/model`-Wechsel innerhalb einer Session bleibt beim Konto der Session; ein `gpt`-Subagent nutzt das Konto seiner Elternsession.
 
-## Slice 3 — Settings-Tab „GPT-Konten" und Usage pro Konto
+## Slice 3 — Settings-Tab „GPT-Konten" und Usage pro Konto ✅ (umgesetzt 2026-09-23)
+
+Umgesetzt als `Views/Settings/Pages/GPTAccountsSection.swift` auf der GPT-Backend-Seite (E5): Sektionen „ChatGPT-Konten (GPT-Backend)" und „Konto hinzufügen", Radio-Auswahl, Plan-Badge, E-Mail (aus `whisperm8-account.json`, nach jedem erfolgreichen Usage-Abruf geschrieben), Wochen-Gauge mit „Gesperrt — Kontingent erschöpft · frei ab …", laufende Instanz mit Port, ⋯-Menü (Neu anmelden, Abmelden, Entfernen mit `NSAlert`). Device-Code inline; nach dem Login prüft die Sektion die neue Account-ID gegen alle anderen Profile und warnt bei Dublette (Browser war im falschen Konto angemeldet — Befund vom 23.09.). Die alte Sektion „ChatGPT-Konto" erscheint nur noch für den Login, den die geführte Einrichtung selbst startet, oder bei ausgeschaltetem Kill-Switch. Popover: ein Block je angemeldetem GPT-Konto (aktiv markiert) plus getrennter Block „Codex-CLI / Diktat". 401 beim Usage-Abruf wird als „Token in der Datei veraltet" gezeigt, die Instanz gilt weiter als funktionsfähig (V1/V4).
 
 - **Neu `Views/Settings/Pages/GPTAccountsTab.swift`** nach `AgentChatsClaudeAccountsTab.swift` (Radio-Auswahl `:109`, Identitätsspalte `:138`, Gauges `:191`, Verwaltungsmenü `:215`): Liste aller Profile mit E-Mail/Plan/Login-Status, „Aktiv" schreibt `.active`, „Neu & anmelden…" (Profil anlegen + Device-Login mit Code-Anzeige, bestehende Mechanik aus `GPTBackendSettingsPage.swift:608-634`), „Anmelden…"/„Abmelden"/„Entfernen" (Entfernen stoppt die Instanz und löscht das Verzeichnis). Die heutige Sektion „ChatGPT-Konto" der GPT-Backend-Seite verweist auf den Tab bzw. zeigt nur noch main.
 - **`CodexUsageFetcher`**: zweiter Konstruktor aus dem Proxy-Store (`access` + `accountId`) → derselbe Endpoint. **Zusätzlich** `allowed`/`limit_reached`/`model_usage` parsen und im Gauge als „gesperrt bis …" zeigen — der Fehlbefund von heute.
@@ -109,7 +113,19 @@ Umgesetzt wie unten beschrieben; Abweichungen: `main`-Metadaten liegen unter `~/
 - **Tests:** `parseWhamUsage` mit `limit_reached`-Payload (Fixture vom 2026-09-16); Fetcher liest den Proxy-Store. UI → manuelle QA.
 - **Abnahme:** Popover zeigt office@ als „gesperrt bis Mo 12:29" und ai@ mit freiem Kontingent, und nennt, welches Konto aktiv ist.
 
-## Slice 4 — Kontowechsel bestehender Chats und CLI
+## Slice 4 — Kontowechsel bestehender Chats und CLI (teilweise, 2026-09-23)
+
+Umgesetzt: Kontextmenü „GPT-Konto" (`Views/AgentChatsView+GPTAccount.swift`, Einzel + Auswahl über `actionGroup`), setzt nur den Stempel (`AgentSessionStore.setGPTSessionProfile`), Hinweis „Wirkt beim nächsten Start des Chats". Offen: Hot-Switch laufender Chats (Session-ID-Header + Override-Map im Router), `whisperm8 chats new --gpt-account`, Konto-Spalte in `chats list`.
+
+### Manuelle QA nach `make dev` (Slice 1–3)
+
+1. Settings → GPT-Backend: Sektion „ChatGPT-Konten" zeigt `main` (office@, Pro) und `ai` (ai@, Pro Lite) mit Wochen-Gauge; gesperrte Konten stehen als „Gesperrt … frei ab" da. Popover in der Sidebar zeigt beide Blöcke plus „Codex-CLI / Diktat".
+2. `ai` per Radio aktivieren → Feedback „Neue GPT-Chats laufen jetzt über ai", nach kurzer Zeit „Proxy-Instanz auf Port 18775" in der Zeile; `pgrep -fl "claude-code-proxy serve"` zeigt zwei App-Instanzen (18765 main, 18775 ai).
+3. Neuen Claude-Chat mit GPT-Modell starten, kurze Frage stellen → `log stream --predicate 'subsystem == "com.whisperm8.app"' | grep gpt-router` zeigt `profile=ai`, `proxy.log` eine Zeile mit `port 18775`. Kein 503, kein „working"-Hänger.
+4. Radio zurück auf `main`, im selben Chat weitere Frage → weiterhin `profile=ai` (Session-stabil). Neuer Chat → `profile=main`.
+5. Kontextmenü eines geschlossenen Chats → „GPT-Konto" → anderes Konto wählen, Chat starten → Log zeigt das neue Profil.
+6. „Konto hinzufügen" mit Name `test` → Device-Code erscheint inline, Login in einem Inkognito-Fenster mit einem bereits verbundenen Konto → Warnung „bereits als … verbunden". Danach `test` über ⋯ entfernen (Alert).
+7. Kill-Switch `defaults write com.whisperm8.app gptAccountProfilesEnabled -bool NO` + App-Neustart → alte Sektion „ChatGPT-Konto", alle GPT-Chats über 18765.
 
 - **Nicht laufende Chats:** Kontextmenü „GPT-Konto → …" (Einzel + Bulk über `actionGroup`/`bulkLabel`), setzt nur den Stempel; kein Transcript-Umzug nötig. Archivierte/Background/Terminal wie im Claude-Slice ausgeschlossen.
 - **Laufende Chats (Hot-Switch):** Der Router hält eine Override-Map `sessionID → profile`; die Session sendet dafür zusätzlich `X-WhisperM8-Session-ID` (aus `WHISPERM8_SESSION_ID`, wird beim PTY-Spawn ohnehin injiziert). Wechsel = Stempel + Map-Eintrag, wirkt ab dem nächsten Request, ohne Neustart. Hinweis im Dialog: „Kontingent wechselt ab der nächsten Antwort."

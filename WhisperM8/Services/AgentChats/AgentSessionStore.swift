@@ -18,6 +18,16 @@ struct AgentSessionStore {
         return ClaudeAccountProfiles().activeProfileNameOrNil()
     }
 
+    /// GPT-Konto-Profil fuer eine neue Claude-Session ohne ausdrueckliche
+    /// Angabe (`nil` = Default-Store). Gilt fuer JEDE Claude-Session, nicht
+    /// nur fuer GPT-gestempelte: auch ein spaeterer `/model`-Wechsel auf GPT
+    /// soll auf dem beim Erstellen aktiven Konto landen. Aufloesung vor der
+    /// Mutation (Datei-I/O), Kill-Switch beachtet.
+    var activeGPTProfileResolver: () -> String? = {
+        guard AppPreferences.shared.isGPTAccountProfilesEnabled else { return nil }
+        return GPTAccountProfiles().activeProfileNameOrNil()
+    }
+
     init(fileURL: URL? = nil, uiStateFileURL: URL? = nil) {
         self.workspaceStore = AgentWorkspaceStoreRegistry.store(
             for: fileURL ?? AgentWorkspaceRepository.defaultFileURL()
@@ -350,6 +360,25 @@ struct AgentSessionStore {
         }
     }
 
+    /// Stempelt Sessions auf ein anderes GPT-Konto-Profil um (`nil` = main).
+    /// Nur Metadaten — anders als beim Claude-Profil zieht kein Transcript
+    /// um; der Router folgt beim naechsten Launch dem neuen Stempel. Eine
+    /// Mutation und eine Publikation fuer die ganze Auswahl.
+    func setGPTSessionProfile(ids: [UUID], profileName: String?) throws {
+        let targets = Set(ids)
+        try mutateWorkspaceIfChanged { workspace in
+            var changed = false
+            for index in workspace.sessions.indices
+            where targets.contains(workspace.sessions[index].id)
+                && workspace.sessions[index].provider == .claude
+                && workspace.sessions[index].gptProfileName != profileName {
+                workspace.sessions[index].gptProfileName = profileName
+                changed = true
+            }
+            return changed
+        }
+    }
+
     /// Zieht nach einem Profil-Rename die Stempel ALLER betroffenen Sessions
     /// nach — die Transcripts sind mit dem Verzeichnis bereits umgezogen,
     /// nur die Metadaten zeigen noch auf den alten Namen.
@@ -553,7 +582,8 @@ struct AgentSessionStore {
         backgroundPermissionMode: String? = nil,
         forkSourceSessionID: String? = nil,
         claudeProfile: ClaudeProfileSelection = .activeDefault,
-        claudeBackendModel: String? = nil
+        claudeBackendModel: String? = nil,
+        gptProfile: GPTProfileSelection = .activeDefault
     ) throws -> AgentChatSession {
         // Profil VOR der Mutation aufloesen (Datei-I/O gehoert nicht unter den
         // Store-Lock). Codex kennt keine Account-Profile — dort immer `nil`.
@@ -564,6 +594,15 @@ struct AgentSessionStore {
                 return (name?.isEmpty ?? true) ? nil : name
             case .activeDefault:
                 return activeClaudeProfileResolver()
+            }
+        }()
+        let gptProfileName: String? = {
+            guard provider == .claude else { return nil }
+            switch gptProfile {
+            case .explicit(let name):
+                return (name?.isEmpty ?? true) ? nil : name
+            case .activeDefault:
+                return activeGPTProfileResolver()
             }
         }()
         let project = try upsertProject(
@@ -588,7 +627,8 @@ struct AgentSessionStore {
             backgroundPermissionMode: backgroundPermissionMode,
             forkSourceSessionID: forkSourceSessionID,
             claudeProfileName: claudeProfileName,
-            claudeBackendModel: claudeBackendModel
+            claudeBackendModel: claudeBackendModel,
+            gptProfileName: gptProfileName
         )
         let stored = try upsertSession(session)
         // Crash-safe: strukturelle Erstellung SOFORT persistieren statt auf den
