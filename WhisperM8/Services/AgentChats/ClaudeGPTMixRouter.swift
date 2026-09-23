@@ -110,13 +110,12 @@ final class ClaudeGPTMixRouter {
     /// Fire-and-forget-Start einer fehlenden Instanz, damit der naechste
     /// Request durchkommt. Laeuft off-queue; der aktuelle Request bekommt 503.
     var profileInstanceStarter: (String) -> Void = { profile in
-        DispatchQueue.global(qos: .userInitiated).async {
-            _ = ClaudeCodeProxyManager.shared.ensureRunning(profile: profile)
-        }
+        ClaudeCodeProxyManager.shared.startInstanceInBackground(profile: profile)
     }
 
-    /// Profilname aus dem Request-Header — nur gueltige Profilnamen, alles
-    /// andere gilt als nicht gesetzt.
+    /// Profilname aus dem Request-Header: „main" (ausdruecklich das Hauptkonto,
+    /// kontostabil auch bei aktivem Zusatzprofil) oder ein gueltiger Profilname.
+    /// Alles andere gilt als nicht gesetzt → E4-Fallback auf das aktive Profil.
     static func profileName(in headers: [HTTPHeader]) -> String? {
         guard let header = headers.first(where: {
             $0.name.caseInsensitiveCompare(profileHeaderName) == .orderedSame
@@ -124,8 +123,16 @@ final class ClaudeGPTMixRouter {
             return nil
         }
         let value = header.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value == GPTAccountProfiles.mainProfileName { return value }
         guard GPTAccountProfiles.isValidProfileName(value) else { return nil }
         return value
+    }
+
+    /// Ist das Profil angemeldet (eigene Auth-Datei)? Entscheidet im 503-Pfad,
+    /// ob ein Start ueberhaupt Sinn hat — sonst versprach die Antwort „startet
+    /// gleich" fuer ein abgemeldetes Konto in Endlosschleife.
+    var profileLoggedInResolver: (String) -> Bool = { profile in
+        GPTAccountProfiles().profile(named: profile).isLoggedIn
     }
 
     /// Snapshot der Profil-Routing-Closures fuer eine Client-Verbindung —
@@ -136,6 +143,7 @@ final class ClaudeGPTMixRouter {
         var proxyURL: (String) -> URL?
         var activeProfile: () -> String?
         var startInstance: (String) -> Void
+        var isLoggedIn: (String) -> Bool
     }
 
     private func makeProfileRouting() -> ProfileRouting {
@@ -143,7 +151,8 @@ final class ClaudeGPTMixRouter {
             isEnabled: profilesEnabledResolver,
             proxyURL: codexProxyURLResolver,
             activeProfile: activeProfileResolver,
-            startInstance: profileInstanceStarter
+            startInstance: profileInstanceStarter,
+            isLoggedIn: profileLoggedInResolver
         )
     }
 
@@ -208,6 +217,7 @@ final class ClaudeGPTMixRouter {
         activeProfileResolver = { nil }
         codexProxyURLResolver = { _ in nil }
         profileInstanceStarter = { _ in }
+        profileLoggedInResolver = { _ in true }
     }
 
     var listeningPort: Int? {
@@ -906,25 +916,34 @@ private extension ClaudeGPTMixRouter {
                 // `nil` = main → Backend-Port wie bisher.
                 let profile = ClaudeGPTMixRouter.profileName(in: requestHead.headers)
                     ?? profileRouting.activeProfile()
-                if let profile {
+                if let profile, profile != GPTAccountProfiles.mainProfileName {
                     requestProfile = profile
                     guard let profileURL = profileRouting.proxyURL(profile) else {
                         requestModel = model
                         requestUpstream = upstream
-                        Logger.claudeGPTRouter.warning(
-                            "gpt_profile_proxy_unavailable profile=\(profile, privacy: .public) — Instanz wird gestartet, Request bekommt 503"
-                        )
-                        profileRouting.startInstance(profile)
+                        let message: String
+                        if profileRouting.isLoggedIn(profile) {
+                            Logger.claudeGPTRouter.warning(
+                                "gpt_profile_proxy_unavailable profile=\(profile, privacy: .public) — Instanz wird gestartet, Request bekommt 503"
+                            )
+                            profileRouting.startInstance(profile)
+                            message = "GPT-Konto „\(profile)“ ist nicht verbunden. WhisperM8 startet die Proxy-Instanz — bitte in wenigen Sekunden erneut senden."
+                        } else {
+                            Logger.claudeGPTRouter.warning(
+                                "gpt_profile_not_logged_in profile=\(profile, privacy: .public) — Request bekommt 503"
+                            )
+                            message = "GPT-Konto „\(profile)“ ist nicht angemeldet. Bitte in den Einstellungen (GPT-Backend) anmelden oder den Chat im Kontextmenü auf ein anderes Konto umstellen."
+                        }
                         sendJSONResponse(
                             status: 503,
                             reason: "Service Unavailable",
-                            body: ClaudeGPTMixRouter.anthropicAPIErrorBody(
-                                message: "GPT-Konto „\(profile)“ ist nicht verbunden. WhisperM8 startet die Proxy-Instanz — bitte in wenigen Sekunden erneut senden. Bleibt der Fehler, das Konto in den Einstellungen (GPT-Backend) anmelden."
-                            )
+                            body: ClaudeGPTMixRouter.anthropicAPIErrorBody(message: message)
                         )
                         return
                     }
                     baseURL = profileURL
+                } else if profile != nil {
+                    requestProfile = GPTAccountProfiles.mainProfileName
                 }
             }
             guard

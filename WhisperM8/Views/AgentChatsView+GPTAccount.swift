@@ -13,10 +13,14 @@ extension AgentChatsView {
             && AppPreferences.shared.isGPTAccountProfilesEnabled
     }
 
+    /// `allowsBulk` kommt aus der `SessionMenuPolicy` — Header-Menue und
+    /// Grid-Pane sind strikt singulaer, wie bei den uebrigen Bulk-Bausteinen.
     @ViewBuilder
-    func gptAccountMenu(_ session: AgentChatSession) -> some View {
+    func gptAccountMenu(_ session: AgentChatSession, allowsBulk: Bool = true) -> some View {
         if canSwitchGPTAccount(session) {
-            let group = actionGroup(for: session)
+            let group = allowsBulk && AppPreferences.shared.isAccountBulkMoveEnabled
+                ? actionGroup(for: session)
+                : [session.id]
             let sessions = workspace.sessions.filter { group.contains($0.id) && canSwitchGPTAccount($0) }
             let currentProfiles = Set(sessions.map { $0.gptProfileName ?? GPTAccountProfiles.mainProfileName })
             let label = sessions.count == 1
@@ -24,17 +28,14 @@ extension AgentChatsView {
                 : "\(sessions.count) Chats: GPT-Konto"
             Menu(label, systemImage: "person.crop.circle") {
                 ForEach(GPTAccountProfiles().profiles()) { profile in
-                    let isCurrent = currentProfiles == [profile.name]
-                    Button {
-                        setGPTAccount(sessions, toProfile: profile)
-                    } label: {
-                        if isCurrent {
-                            Label(gptAccountLabel(profile), systemImage: "checkmark")
-                        } else {
-                            Text(gptAccountLabel(profile))
+                    // Aktuelles Konto ausblenden (wie beim Claude-Menue) — bei
+                    // gemischter Auswahl bleibt es sichtbar.
+                    if currentProfiles != [profile.name] {
+                        Button(gptAccountLabel(profile)) {
+                            setGPTAccount(sessions, toProfile: profile)
                         }
+                        .disabled(!profile.isLoggedIn)
                     }
-                    .disabled(!profile.isLoggedIn || isCurrent)
                 }
                 Divider()
                 Text("Wirkt beim nächsten Start des Chats")

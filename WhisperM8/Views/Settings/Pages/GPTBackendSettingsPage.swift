@@ -28,6 +28,7 @@ struct GPTBackendSettingsPage: View {
     @State private var refreshQueued = false
 
     private let proxyManager = ClaudeCodeProxyManager.shared
+    private var profilesEnabled: Bool { AppPreferences.shared.isGPTAccountProfilesEnabled }
     /// Vorschläge kommen aus dem Codex-Modellkatalog (`~/.codex/models_cache.json`
     /// ∪ Fallback) — neue Modelle erscheinen hier ohne App-Update. `auto` steht
     /// immer an erster Stelle und meint das jeweils neueste Modell.
@@ -73,16 +74,16 @@ struct GPTBackendSettingsPage: View {
                 statusSection
 
                 // Device-Code-Anzeige nur fuer den Login, den die gefuehrte
-                // Einrichtung selbst gestartet hat; alle anderen Logins laufen
-                // ueber die Kontoliste darunter.
-                if isDeviceLoginRunning || deviceCodeInfo != nil {
+                // Einrichtung selbst gestartet hat, oder — bei ausgeschalteten
+                // Konto-Profilen — als klassischer Login-Einstieg. Genau EINE
+                // Entscheidung, sonst erschien die Sektion im Login-Moment doppelt.
+                let showsLegacyLogin = !profilesEnabled && authStatus == .notAuthenticated
+                if isDeviceLoginRunning || deviceCodeInfo != nil || showsLegacyLogin {
                     deviceLoginSection
                 }
 
-                if AppPreferences.shared.isGPTAccountProfilesEnabled {
+                if profilesEnabled {
                     GPTAccountsSection(onAccountsChanged: { refreshStatus() })
-                } else if authStatus == .notAuthenticated {
-                    deviceLoginSection
                 }
             }
 
@@ -93,7 +94,7 @@ struct GPTBackendSettingsPage: View {
             SettingsSection("Aktionen") {
                 SettingsButtonRow(
                     title: "Proxy verwalten",
-                    subtitle: "Stoppen beendet nur einen von WhisperM8 selbst gestarteten Proxy."
+                    subtitle: "Stoppen beendet nur von WhisperM8 selbst gestartete Proxy-Prozesse — den Hauptproxy und die Instanzen der Zusatzkonten."
                 ) {
                     Button("Proxy stoppen") {
                         proxyManager.stopIfSelfStarted()
@@ -177,7 +178,9 @@ struct GPTBackendSettingsPage: View {
                     runFullSetup(startLoginIfNeeded: true)
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
-                .disabled(isSetupRunning || isDeviceLoginRunning)
+                // Auch ein Login aus der Kontoliste sperrt: der Manager erlaubt
+                // nur einen Device-Login und beendet den laufenden sonst.
+                .disabled(isSetupRunning || isDeviceLoginRunning || proxyManager.isDeviceLoginRunning)
             }
 
             if let setupProgressText {
@@ -576,11 +579,17 @@ struct GPTBackendSettingsPage: View {
         let manager = proxyManager
 
         Task {
+            // Mit Konto-Profilen zaehlt der Status des AKTIVEN Kontos — sonst
+            // meldete die Seite „Nicht angemeldet" und bot die Einrichtung an,
+            // waehrend die Kontoliste darunter ein angemeldetes, aktives ai zeigt.
+            let statusProfile: String? = profilesEnabled
+                ? GPTAccountProfiles().activeProfileNameOrNil()
+                : nil
             let snapshot = await Task.detached(priority: .userInitiated) {
                 (
                     manager.resolvedBinary(),
                     manager.isReachable(port: checkedPort),
-                    manager.authStatus()
+                    manager.authStatus(profile: statusProfile)
                 )
             }.value
             binary = snapshot.0

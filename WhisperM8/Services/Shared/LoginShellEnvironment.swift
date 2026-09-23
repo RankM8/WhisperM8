@@ -118,6 +118,14 @@ final class LoginShellEnvironment: @unchecked Sendable {
         // environmentOverrides`), nie über geerbtes Env.
         env.removeValue(forKey: "CLAUDE_CONFIG_DIR")
 
+        // Dieselbe Regel fuer die GPT-Konto-Profile: `ANTHROPIC_CUSTOM_HEADERS`
+        // traegt den Konto-Header einer Session, `CCP_CONFIG_DIR` den Store des
+        // Proxys. Startet WhisperM8 aus einer gestempelten Shell, liefen sonst
+        // ALLE main-Sessions ueber das geerbte Konto. Routing nur ueber die
+        // expliziten per-Launch-Overrides (AgentCommandBuilder / ProxyManager).
+        env.removeValue(forKey: "ANTHROPIC_CUSTOM_HEADERS")
+        env.removeValue(forKey: "CCP_CONFIG_DIR")
+
         env["PATH"] = path
 
         if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {

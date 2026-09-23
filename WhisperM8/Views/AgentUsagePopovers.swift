@@ -314,10 +314,23 @@ private struct CodexUsagePopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PopoverHeader(
-                title: "ChatGPT · GPT-Backend",
-                subtitle: profilesEnabled ? "Konten des GPT-Backends (Proxy-Login)" : "Verbundenes Konto (Proxy-Login)"
-            )
+            HStack(alignment: .top) {
+                PopoverHeader(
+                    title: "ChatGPT · GPT-Backend",
+                    subtitle: profilesEnabled ? "Konten des GPT-Backends (Proxy-Login)" : "Verbundenes Konto (Proxy-Login)"
+                )
+                Spacer(minLength: 0)
+                Button {
+                    load()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoading)
+                .help("Limits neu abrufen")
+            }
 
             if isLoading, usageByProfile.isEmpty {
                 Text("lade Limits…")
@@ -452,25 +465,41 @@ private struct CodexUsagePopoverView: View {
     }
 
     private func load() {
-        profiles = profileService.profiles()
+        // Kill-Switch aus → nur das Hauptkonto, sonst listete das Popover
+        // Zusatzkonten, die kein Chat nutzen kann.
+        profiles = profilesEnabled
+            ? profileService.profiles()
+            : [profileService.profile(named: GPTAccountProfiles.mainProfileName)]
         activeProfileName = profileService.activeProfileName()
+        isLoading = true
+        failedProfiles = []
         let service = profileService
         let targets = profiles.filter(\.isLoggedIn)
         Task {
-            for profile in targets {
-                let usage = await CodexUsageFetcher(
-                    proxyAuthFile: service.authFileURL(forProfile: profile.name)
-                ).fetchLiveUsage()
-                await MainActor.run {
-                    if let usage {
-                        usageByProfile[profile.name] = usage
-                    } else {
-                        failedProfiles.insert(profile.name)
+            // Parallel: ein Konto im Timeout (6 s) darf die anderen nicht aufhalten.
+            let results = await withTaskGroup(of: (String, CodexUsage?).self) { group in
+                for profile in targets {
+                    group.addTask {
+                        let usage = await CodexUsageFetcher(
+                            proxyAuthFile: service.authFileURL(forProfile: profile.name)
+                        ).fetchLiveUsage()
+                        return (profile.name, usage)
                     }
                 }
+                var collected: [(String, CodexUsage?)] = []
+                for await result in group { collected.append(result) }
+                return collected
             }
             let cli = await CodexUsageFetcher().fetchUsage()
             await MainActor.run {
+                for (name, usage) in results {
+                    if let usage {
+                        usageByProfile[name] = usage
+                    } else {
+                        usageByProfile[name] = nil
+                        failedProfiles.insert(name)
+                    }
+                }
                 cliUsage = cli
                 isLoading = false
             }

@@ -465,10 +465,15 @@ case "${ANTHROPIC_CUSTOM_HEADERS:-}" in
         ;;
 esac
 gpt_profile=$(sanitize_text "$gpt_profile")
-if [ -n "$gpt_profile" ]; then
-    account_display="${account_display} ${ansi_escape}[1;33m⇄gpt:${gpt_profile}${ansi_escape}[0m"
-elif printf '%s' "$model" | grep -qi 'gpt'; then
-    account_display="${account_display} ${ansi_escape}[2m⇄gpt:main${ansi_escape}[0m"
+# Nur anzeigen, solange tatsaechlich ein GPT-Modell laeuft: der Stempel haengt
+# an jeder Claude-Session (fuer einen spaeteren /model-Wechsel), ein Sonnet-Chat
+# soll aber kein gelbes GPT-Konto tragen, ueber das gerade nichts laeuft.
+if [ "$is_supported_gpt" -eq 1 ]; then
+    if [ -n "$gpt_profile" ] && [ "$gpt_profile" != "main" ]; then
+        account_display="${account_display} ${ansi_escape}[1;33m⇄gpt:${gpt_profile}${ansi_escape}[0m"
+    else
+        account_display="${account_display} ${ansi_escape}[2m⇄gpt:main${ansi_escape}[0m"
+    fi
 fi
 
 # Ausgabe zusammenbauen

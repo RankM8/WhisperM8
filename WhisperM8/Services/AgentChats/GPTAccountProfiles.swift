@@ -89,9 +89,13 @@ struct GPTAccountProfiles {
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         )) ?? []
+        // Nur gueltige Namen: ein von Hand angelegtes Verzeichnis mit
+        // Leerzeichen oder Steuerzeichen darf weder ins Menue noch als
+        // Header-Wert in einen Request (der Router verwirft es still).
         let names = entries
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             .map(\.lastPathComponent)
+            .filter(Self.isValidProfileName)
             .sorted()
         result.append(contentsOf: names.map { profile(named: $0) })
         return result
@@ -188,12 +192,34 @@ struct GPTAccountProfiles {
 
     // MARK: - Kontometadaten
 
+    /// Gleicher (mtime, size)-Cache wie fuer die `accountId`: `profiles()`
+    /// laeuft im Body des Kontextmenues, also bei jedem Render-Pass.
+    private static let accountInfoCacheLock = NSLock()
+    private static var accountInfoCache: [String: (mtime: Date, size: Int, info: GPTAccountInfo?)] = [:]
+
     func readAccountInfo(forProfile name: String) -> GPTAccountInfo? {
         let url = accountInfoFileURL(forProfile: name)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(GPTAccountInfo.self, from: data)
+        guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+              let mtime = attrs[.modificationDate] as? Date,
+              let size = (attrs[.size] as? NSNumber)?.intValue else {
+            return nil
+        }
+        Self.accountInfoCacheLock.lock()
+        let cached = Self.accountInfoCache[url.path]
+        Self.accountInfoCacheLock.unlock()
+        if let cached, cached.mtime == mtime, cached.size == size {
+            return cached.info
+        }
+        let info: GPTAccountInfo? = {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try? decoder.decode(GPTAccountInfo.self, from: data)
+        }()
+        Self.accountInfoCacheLock.lock()
+        Self.accountInfoCache[url.path] = (mtime, size, info)
+        Self.accountInfoCacheLock.unlock()
+        return info
     }
 
     func writeAccountInfo(_ info: GPTAccountInfo, forProfile name: String) throws {
@@ -253,7 +279,8 @@ struct GPTAccountProfiles {
     func validatedProfileName(_ raw: String) throws -> String? {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name != Self.mainProfileName else { return nil }
-        guard fileManager.fileExists(atPath: configDir(forProfile: name).path) else {
+        guard Self.isValidProfileName(name),
+              fileManager.fileExists(atPath: configDir(forProfile: name).path) else {
             throw SelectionError.unknownProfile(name)
         }
         guard profile(named: name).isLoggedIn else {
@@ -284,6 +311,15 @@ struct GPTAccountProfiles {
     func environmentOverrides(forProfile name: String?) -> [String: String] {
         guard let name, name != Self.mainProfileName else {
             return [Self.configDirEnvironmentKey: configDir(forProfile: Self.mainProfileName).path]
+        }
+        guard Self.isValidProfileName(name) else {
+            // Kein Pfad aus einem Stempel wie "../x" — und kein stiller
+            // main-Fallback fuer einen kaputten Namen: leer heisst fuer den
+            // Manager „nicht angemeldet".
+            Logger.agentStore.warning(
+                "gpt_profile_invalid_name name=\(name, privacy: .public) — ignoriert"
+            )
+            return [:]
         }
         let dir = configDir(forProfile: name)
         guard fileManager.fileExists(atPath: dir.path) else {
@@ -325,10 +361,18 @@ struct GPTAccountProfiles {
         }
     }
 
+    /// ASCII-Buchstaben/-Ziffern, `-` und `_`; „main" ist reserviert. Bewusst
+    /// enger als Unicode-„isLetter": der Name wandert als Header-Wert in jeden
+    /// Request und als Verzeichnisname ins Dateisystem.
     static func isValidProfileName(_ name: String) -> Bool {
         !name.isEmpty
             && name != mainProfileName
-            && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+            && name.unicodeScalars.allSatisfy { scalar in
+                (scalar.value >= 0x30 && scalar.value <= 0x39)
+                    || (scalar.value >= 0x41 && scalar.value <= 0x5A)
+                    || (scalar.value >= 0x61 && scalar.value <= 0x7A)
+                    || scalar == "-" || scalar == "_"
+            }
     }
 
     /// Legt nur das Verzeichnis an. Der Login selbst bleibt interaktiv

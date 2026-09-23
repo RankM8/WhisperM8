@@ -169,6 +169,9 @@ struct CodexUsageFetcher {
     /// Grant (Befund 2026-09-16: Popover zeigte das neue CLI-Konto, GPT lief
     /// weiter gegen das gesperrte Proxy-Konto); dafuer `init(proxyAuthFile:)`.
     var credentialsResolver: () -> Credentials?
+    /// Proxy-Store-Fetcher: kein JSONL-Fallback — der beschriebe das
+    /// Codex-CLI-Konto, nicht das des Proxy-Grants.
+    private var usesProxyStore = false
 
     init(
         codexHome: URL? = nil,
@@ -193,12 +196,14 @@ struct CodexUsageFetcher {
     ) {
         self.init(codexHome: codexHome, httpBody: httpBody)
         self.credentialsResolver = { Self.proxyStoreCredentials(at: proxyAuthFile) }
+        self.usesProxyStore = true
     }
 
     func fetchUsage() async -> CodexUsage? {
         if let live = await fetchLiveUsage() {
             return live
         }
+        guard !usesProxyStore else { return nil }
         return CodexUsageReader(
             sessionsRoot: codexHome.appendingPathComponent("sessions", isDirectory: true)
         ).latestUsage()

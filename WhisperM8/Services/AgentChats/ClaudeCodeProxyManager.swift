@@ -233,11 +233,9 @@ final class ClaudeCodeProxyManager {
     /// → leeres Dict, der Proxy nimmt seinen Default-Store. Injizierbar, damit
     /// Tests ohne `~/.gpt-profiles` auskommen.
     var profileEnvironmentResolver: (String?) -> [String: String] = { profile in
-        // Kill-Switch aus → main laeuft wie frueher ohne Variable (Keychain-
-        // Modus des Proxys); Zusatzprofile gibt es dann ohnehin nicht.
-        if ClaudeCodeProxyManager.isMainProfile(profile), !AppPreferences.shared.isGPTAccountProfilesEnabled {
-            return [:]
-        }
+        // Kill-Switch aus → alles laeuft wie frueher ohne Variable (Keychain-
+        // Modus des Proxys, ein Konto).
+        guard AppPreferences.shared.isGPTAccountProfilesEnabled else { return [:] }
         return GPTAccountProfiles().environmentOverrides(forProfile: profile)
     }
 
@@ -246,9 +244,13 @@ final class ClaudeCodeProxyManager {
     /// Auth-Datei. Fuer main nicht benoetigt (Default-Store ist der Fallback
     /// selbst).
     var storedAccountIDResolver: (String?) -> String? = { profile in
-        guard let profile, profile != GPTAccountProfiles.mainProfileName else { return nil }
-        return GPTAccountProfiles().storedAccountID(forProfile: profile)
+        GPTAccountProfiles().storedAccountID(forProfile: profile ?? GPTAccountProfiles.mainProfileName)
     }
+
+    /// Profile, deren Instanz gerade im Hintergrund hochfaehrt (503-Pfad des
+    /// Routers). Verhindert, dass jeder Retry des Clients einen weiteren
+    /// blockierten Start-Task erzeugt. Zugriff unter `processLock`.
+    private var startingProfiles: Set<String> = []
 
     /// Kill-Switch der Konto-Profile: aus → jedes Profil wird wie main
     /// behandelt (ein Proxy, ein Konto).
@@ -538,7 +540,17 @@ final class ClaudeCodeProxyManager {
             .mapValues(\.port)
     }
 
+    /// Beendet die Instanz eines Profils. Serialisiert ueber `ensureLock`
+    /// gegen einen gleichzeitigen `ensureRunning(profile:)`: sonst koennte
+    /// ein gerade gestarteter, noch nicht registrierter Prozess nach dem
+    /// Stop registriert werden und mit einem abgemeldeten Grant weiterlaufen.
     func stopInstance(profile: String) {
+        ensureLock.lock()
+        defer { ensureLock.unlock() }
+        stopInstanceLocked(profile: profile)
+    }
+
+    private func stopInstanceLocked(profile: String) {
         processLock.lock()
         let instance = profileInstances.removeValue(forKey: profile)
         processLock.unlock()
@@ -548,6 +560,8 @@ final class ClaudeCodeProxyManager {
     }
 
     func stopAllProfileInstances() {
+        ensureLock.lock()
+        defer { ensureLock.unlock() }
         processLock.lock()
         let instances = profileInstances
         profileInstances = [:]
@@ -557,14 +571,39 @@ final class ClaudeCodeProxyManager {
         }
     }
 
+    /// Start im Hintergrund fuer den 503-Pfad des Routers — pro Profil nur
+    /// ein Versuch gleichzeitig, Ergebnis wird geloggt statt verworfen.
+    func startInstanceInBackground(profile: String) {
+        processLock.lock()
+        let alreadyStarting = !startingProfiles.insert(profile).inserted
+        processLock.unlock()
+        guard !alreadyStarting else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.ensureRunning(profile: profile)
+            self.processLock.lock()
+            self.startingProfiles.remove(profile)
+            self.processLock.unlock()
+            if case .failure(let error) = result {
+                Logger.agentStore.error(
+                    "gpt_profile_instance_start_failed profile=\(profile, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+    }
+
     /// `codex auth logout` im Store des Profils; die laufende Instanz wird
     /// vorher beendet, weil sie den Grant sonst im Speicher weiterbenutzt.
+    /// Unter `ensureLock`, damit kein paralleler Start die Instanz nach dem
+    /// Logout wieder registriert.
     func logout(profile: String?) -> Result<Void, ClaudeCodeProxyError> {
         guard let executable = resolvedBinaryPath() else {
             return .failure(.binaryMissing)
         }
+        ensureLock.lock()
+        defer { ensureLock.unlock() }
         if let profile, !Self.isMainProfile(profile) {
-            stopInstance(profile: profile)
+            stopInstanceLocked(profile: profile)
         }
         do {
             let result = try commandRunner(
@@ -644,6 +683,9 @@ final class ClaudeCodeProxyManager {
             routerStopper()
         }
         replaceSelfStartedProcess(with: nil)
+        // „Proxy stoppen" / Backend aus: die Profil-Instanzen gehoeren dazu —
+        // sonst liefen sie unsichtbar bis zum App-Quit weiter.
+        stopAllProfileInstances()
     }
 
     func authStatus() -> ClaudeCodeProxyAuthStatus {
@@ -661,7 +703,12 @@ final class ClaudeCodeProxyManager {
         guard let executable = resolvedBinaryPath() else {
             return .unknown
         }
-        let isMain = Self.isMainProfile(profile)
+        // Mit aktiven Konto-Profilen laeuft auch main im Datei-Modus — und
+        // damit gilt fuer main dieselbe Fallback-Falle: ohne eigene Datei
+        // meldet der Proxy still das Codex-CLI-Konto. Dann main wie ein
+        // Zusatzprofil pruefen; nur bei ausgeschaltetem Feature bleibt die
+        // Proxy-Meldung fuer main unangetastet (Keychain-Modus).
+        let isMain = Self.isMainProfile(profile) && !profilesEnabledResolver()
         let storedAccountID = storedAccountIDResolver(profile)
         if !isMain, storedAccountID == nil {
             return .notAuthenticated
@@ -839,6 +886,23 @@ final class ClaudeCodeProxyManager {
         }
         done.wait()
         return try outcome.value.get()
+    }
+
+    /// Laeuft gerade ein Device-Code-Login (egal von welcher Seite gestartet)?
+    /// Beide Oberflaechen (gefuehrte Einrichtung, Kontoliste) sperren ihre
+    /// Login-Buttons daran — der Manager erlaubt nur einen Login gleichzeitig
+    /// und wuerde einen laufenden sonst kommentarlos beenden.
+    var isDeviceLoginRunning: Bool {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return deviceLoginProcess?.isRunning == true
+    }
+
+    /// Bricht einen laufenden Device-Code-Login ab (z. B. weil das Profil
+    /// gerade entfernt wird — sonst legte der Browser-Abschluss den Grant in
+    /// ein bereits geloeschtes Verzeichnis zurueck).
+    func cancelDeviceLogin() {
+        stopDeviceLogin()
     }
 
     /// Startet den Device-Code-Flow als langlebigen Prozess. Der Manager

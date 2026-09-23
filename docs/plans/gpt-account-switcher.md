@@ -134,6 +134,23 @@ Umgesetzt: Kontextmenü „GPT-Konto" (`Views/AgentChatsView+GPTAccount.swift`, 
 - **Tests:** Override-Map im Router (Vorrang vor Header); CLI-Validierung; Store-Mutation für Bulk bleibt eine Publikation.
 - **Abnahme:** Chat läuft auf office@, wird auf ai@ umgestellt, die nächste Antwort kommt laut Log über die ai@-Instanz; Jarvis-`new` landet auf dem aktiven Konto.
 
+## Review 2026-09-23 (zwei Opus-Reviews vor dem Merge)
+
+**Eingearbeitet:**
+
+- **Blocker Kern:** Chats auf `main` schickten keinen Konto-Header und folgten damit über den E4-Fallback dem aktiven Profil (Kontingent des falschen Kontos, Kontextmenü/Statuszeile logen). Jetzt setzt der Builder bei aktivem Kill-Switch IMMER einen Header, `main` ausdrücklich; der Router akzeptiert `main` als expliziten Wert (→ Backend-Port). Ohne Header gilt E4 weiterhin nur für Sessions von vor dem Update.
+- Race `ensureRunning(profile:)` ↔ `stopInstance`/`logout`/Entfernen: Stop, Logout und Stop-all laufen jetzt unter `ensureLock`; `stopIfSelfStarted()` beendet auch die Profil-Instanzen („Proxy stoppen", Backend aus).
+- Fallback-Guard gilt mit aktiven Profilen auch für `main` (Datei-Modus): ohne eigene Datei bzw. bei fremder `Account:`-ID → nicht angemeldet, statt still das Codex-CLI-Konto zu melden.
+- Profilnamen nur ASCII-alnum + `-_`, validiert beim Listen, Stempeln, Header-Setzen und im Env-Override (kein Pfad-Traversal, keine Header-Injection); `readAccountInfo` gecacht (mtime/size); `ANTHROPIC_CUSTOM_HEADERS` und `CCP_CONFIG_DIR` werden aus dem geerbten Env gestrippt.
+- 503-Pfad: pro Profil nur ein Hintergrund-Start gleichzeitig (`startInstanceInBackground`), Startfehler geloggt, abgemeldetes Profil bekommt eine klare Meldung statt „startet gleich"; entferntes/abgemeldetes Profil fällt beim Launch auf `main` zurück (Builder-Header + Launch-Guard) statt ohne GPT-Backend zu starten.
+- UI: keine Doppel-Sektion bei Kill-Switch aus; Status/Einrichtung der Seite werten das aktive Profil aus; „Abmelden…" mit Alert; Entfernen stempelt betroffene Chats auf `main` um und bricht einen laufenden Login ab; Entfernen/Abmelden/Radio während eines Logins gesperrt (Manager kennt `isDeviceLoginRunning`, beide Oberflächen hängen daran); Erfolgsmeldung auch bei Re-Login; Gesperrt-Zeile nimmt das Reset des vollen Fensters; Modell-Limits auch in der Sektion; Usage parallel; Popover mit Aktualisieren und Kill-Switch-Respekt; Kontextmenü respektiert `allowsBulk` und die Bulk-Preference und blendet das aktuelle Konto aus; Statuszeile zeigt das GPT-Konto nur bei laufendem GPT-Modell.
+
+**Bewusst offen (Folge-Slices):**
+
+- Login-Zustand lebt im View: verlässt der User die Seite während eines Device-Logins, fehlt der Code beim Zurückkommen (der Prozess läuft weiter, die Buttons bleiben über den Manager gesperrt). Sauber wäre ein beobachtbarer Login-Zustand im Manager.
+- `.active` wird pro header-losem Request gelesen (nach dem Blocker-Fix selten); `ensureLock` deckt Reachability-Polling und ggf. die Managed-Installation ab; hängende, aber lebende Instanzen werden nicht erkannt; Instanzen werden nie idle abgeräumt (Ports ab Backend-Port + 10, Fenster 40).
+- Accessibility-Labels an den Gauges (teilt sich die Sektion mit dem Claude-Tab).
+
 ## Slice 5 — Ausbaustufen (nicht Teil der Freigabe)
 
 - **Limit-Erkennung im Router:** Codex-429 in `receive(response:)` (`ClaudeGPTMixRouter.swift:776-800`) erkennen, als klare Meldung an die Session reichen, Status sofort auf `turnAborted` statt 180 s „working".

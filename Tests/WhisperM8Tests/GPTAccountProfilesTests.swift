@@ -220,6 +220,24 @@ final class GPTAccountProfilesTests: XCTestCase {
         XCTAssertEqual(service.profiles().map(\.name), ["main", "neu"])
     }
 
+    func testProfilesIgnoreDirectoriesWithInvalidNames() throws {
+        _ = try makeProfileDir("gut")
+        _ = try makeProfileDir("mein konto")
+        _ = try makeProfileDir("ü")
+        XCTAssertEqual(service.profiles().map(\.name), ["main", "gut"])
+        XCTAssertEqual(service.environmentOverrides(forProfile: "mein konto"), [:])
+        XCTAssertEqual(service.environmentOverrides(forProfile: "../gut"), [:])
+        XCTAssertThrowsError(try service.validatedProfileName("../gut"))
+    }
+
+    func testProfileNameValidationIsASCIIOnly() {
+        XCTAssertTrue(GPTAccountProfiles.isValidProfileName("ai-2_b"))
+        XCTAssertFalse(GPTAccountProfiles.isValidProfileName("ü"))
+        XCTAssertFalse(GPTAccountProfiles.isValidProfileName("a b"))
+        XCTAssertFalse(GPTAccountProfiles.isValidProfileName("a\r\nb"))
+        XCTAssertFalse(GPTAccountProfiles.isValidProfileName("main"))
+    }
+
     func testCreateProfileRejectsInvalidNames() {
         for name in ["", "main", "a b", "x/y", "ü.ä"] {
             XCTAssertThrowsError(try service.createProfile(named: name), name)

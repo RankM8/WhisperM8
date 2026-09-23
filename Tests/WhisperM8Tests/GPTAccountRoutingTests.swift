@@ -137,6 +137,38 @@ final class GPTAccountRoutingTests: XCTestCase {
         XCTAssertEqual(command.environmentOverrides["ANTHROPIC_BASE_URL"], "http://127.0.0.1:19002")
     }
 
+    func testUnstampedSessionSendsExplicitMainHeaderWhenResolverSaysSo() throws {
+        // B1: main muss ausdruecklich im Header stehen, sonst folgt der Chat
+        // dem aktiven Profil.
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 19_002 }
+        builder.gptPickerModelResolver = { "" }
+        builder.gptSubagentModelResolver = { "" }
+        builder.gptDefaultModelResolver = { "" }
+        builder.gptProfileHeaderResolver = { $0 ?? "main" }
+        let session = AgentChatSession(provider: .claude, projectID: project.id, title: "Claude")
+
+        let command = try builder.command(for: session, project: project)
+        XCTAssertEqual(command.environmentOverrides["ANTHROPIC_CUSTOM_HEADERS"], "X-WhisperM8-GPT-Profile: main")
+
+        // Ungueltiger Name aus dem Resolver landet nie im Header.
+        builder.gptProfileHeaderResolver = { _ in "mein konto" }
+        let odd = try builder.command(for: session, project: project)
+        XCTAssertNil(odd.environmentOverrides["ANTHROPIC_CUSTOM_HEADERS"])
+    }
+
+    func testSetGPTSessionProfileRejectsInvalidNames() throws {
+        let fileURL = tempStoreURL()
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let store = makeStore(activeGPTProfile: nil, fileURL: fileURL)
+        let a = try store.createSession(provider: .claude, projectPath: FileManager.default.temporaryDirectory.path, title: "A")
+        XCTAssertThrowsError(try store.setGPTSessionProfile(ids: [a.id], profileName: "../x"))
+        XCTAssertNil(store.loadWorkspace().sessions.first { $0.id == a.id }?.gptProfileName)
+    }
+
     func testUnstampedSessionHasNoProfileHeader() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })

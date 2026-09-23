@@ -365,6 +365,9 @@ struct AgentSessionStore {
     /// um; der Router folgt beim naechsten Launch dem neuen Stempel. Eine
     /// Mutation und eine Publikation fuer die ganze Auswahl.
     func setGPTSessionProfile(ids: [UUID], profileName: String?) throws {
+        if let profileName, !GPTAccountProfiles.isValidProfileName(profileName) {
+            throw GPTAccountProfiles.SelectionError.unknownProfile(profileName)
+        }
         let targets = Set(ids)
         try mutateWorkspaceIfChanged { workspace in
             var changed = false

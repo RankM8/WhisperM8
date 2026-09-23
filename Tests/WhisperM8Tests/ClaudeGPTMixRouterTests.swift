@@ -1076,8 +1076,10 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
             ClaudeGPTMixRouter.profileName(in: [Header(name: "x-whisperm8-gpt-profile", value: " zweit ")]),
             "zweit"
         )
-        XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "main")]))
+        // „main" ist ein gueltiger, ausdruecklicher Wert (kontostabil).
+        XCTAssertEqual(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "main")]), "main")
         XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "../x")]))
+        XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "mein konto")]))
         XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-WhisperM8-GPT-Profile", value: "")]))
         XCTAssertNil(ClaudeGPTMixRouter.profileName(in: [Header(name: "X-Other", value: "zweit")]))
     }
@@ -1165,6 +1167,67 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
             authorization: "Bearer x"
         )
         XCTAssertEqual(mainMock.lastRequest?.jsonModel, "claude-fable-5")
+    }
+
+    func testRouterKeepsExplicitMainOnBackendPortWhileAnotherProfileIsActive() throws {
+        // Review-Blocker B1: ein main-Chat darf dem Aktivwechsel nicht folgen.
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        let profileMock = try LocalHTTPMockServer(status: 202, responseChunks: [])
+        defer {
+            mainMock.stop()
+            profileMock.stop()
+        }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        router.profilesEnabledResolver = { true }
+        router.activeProfileResolver = { "zweit" }
+        router.codexProxyURLResolver = { _ in URL(string: "http://127.0.0.1:\(profileMock.port)") }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        let response = try Self.sendRawRequest(
+            port: routerPort,
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer x",
+            extraHeaders: ["X-WhisperM8-GPT-Profile: main"]
+        )
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 201"), response.head)
+        XCTAssertEqual(mainMock.lastRequest?.jsonModel, "gpt-5.6-sol")
+        XCTAssertNil(mainMock.lastRequest?.header(named: "x-whisperm8-gpt-profile"))
+        XCTAssertNil(profileMock.lastRequest)
+    }
+
+    func testRouterAnswers503WithoutStartForProfileThatIsNotLoggedIn() throws {
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        defer { mainMock.stop() }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        var started: [String] = []
+        router.profilesEnabledResolver = { true }
+        router.codexProxyURLResolver = { _ in nil }
+        router.profileLoggedInResolver = { _ in false }
+        router.profileInstanceStarter = { started.append($0) }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        let body = Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8)
+        var request = Data(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nX-WhisperM8-GPT-Profile: zweit\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8
+        )
+        request.append(body)
+        let response = try Self.splitResponse(try Self.exchange(port: routerPort, request: request))
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 503"), response.head)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        let message = (json["error"] as? [String: Any])?["message"] as? String ?? ""
+        XCTAssertTrue(message.contains("nicht angemeldet"), message)
+        XCTAssertTrue(started.isEmpty, "abgemeldetes Profil darf keinen Start ausloesen")
+        XCTAssertNil(mainMock.lastRequest)
     }
 
     func testRouterAnswers503AndTriggersInstanceStartWhenProfileProxyMissing() throws {
