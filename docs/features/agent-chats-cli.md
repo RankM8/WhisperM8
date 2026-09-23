@@ -31,7 +31,7 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 | Befehl | Klasse | Pfad |
 |---|---|---|
 | `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived` | Lesen | Disk (+ optionaler Live-Merge) |
-| `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
+| `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `move-account`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
 
 ### Claude-Account-Profil neuer Chats
 
@@ -54,7 +54,7 @@ entstandene Session lässt sich nur noch per Transcript-Umzug korrigieren.
 Der Stempel wird beim Anlegen eingefroren: ein späterer Wechsel des aktiven
 Kontos hängt bestehende Chats nicht um, weil deren `--resume` sonst im falschen
 `projects/`-Root suchen würde. Zum nachträglichen Umziehen dient „Zu Account
-verschieben" in der App.
+verschieben" in der App bzw. `chats move-account` (unten).
 
 Kill-Switch (stellt das alte Verhalten her — alles Neue startet im
 Haupt-Account): `defaults write com.whisperm8.app chatsNewProfileDefaultEnabled -bool NO`.
@@ -68,8 +68,8 @@ Haupt-Account. Supervisor-Daemon, `~/.claude/jobs/` und die Lifecycle-Aufrufe
 In der App über das Kontextmenü eines Chats bzw. einer Auswahl: **„Zu Account
 verschieben"**. Der Umzug bewegt das Transcript in den `projects/`-Root des
 Zielkontos — nur dort sucht `claude --resume`, der Ablageort entscheidet also,
-unter welchem Konto der Chat weiterläuft. Eine CLI-Entsprechung gibt es (noch)
-nicht.
+unter welchem Konto der Chat weiterläuft. Die CLI-Entsprechung ist
+`whisperm8 chats move-account` (siehe unten).
 
 Vor der Ausführung zeigt eine Vorschau, was verschoben und was übersprungen
 wird — mit Grund je Chat: laufend, Hintergrund-Agent, kein Claude-Chat, schon
@@ -92,6 +92,56 @@ Argumenten).
 
 Kill-Switch für den Mehrfach-Umzug (der Einzel-Umzug bleibt):
 `defaults write com.whisperm8.app accountBulkMoveEnabled -bool NO`.
+Er wirkt nur auf das Kontextmenü; die CLI nimmt immer genau die genannten Refs.
+
+#### Per CLI: `move-account`
+
+```bash
+whisperm8 chats move-account <ref> [<ref>…] --to <profil> --dry-run   # Vorschau, ändert nichts
+whisperm8 chats move-account <ref> [<ref>…] --to <profil>             # umziehen
+whisperm8 chats move-account <ref> [<ref>…] --to <profil> --stop-and-resume [--force]
+```
+
+Dieselbe Kette wie das Kontextmenü (`AccountMoveFacts` → `AccountMovePlanner`
+→ `AccountMoveService`, Control-Methode `session.moveAccount`): identische
+Skip-Regeln, dasselbe Journal — „Letzten Kontowechsel rückgängig machen" in
+der App nimmt einen CLI-Umzug genauso zurück. `--to main` zieht zurück in den
+Haupt-Account; ein unbekanntes Profil scheitert mit Exit 3 und nennt die
+vorhandenen. Refs werden vorab alle aufgelöst (alles oder nichts), ohne
+Nachfrage — die Bestätigung holt der aufrufende Agent vorher ein.
+
+Ergebnis je Chat (`--json`: `result.results[]`): `outcome` = `wouldMove`
+(Vorschau) · `moved` · `skipped` (+ `reason` = Skip-Grund des Planers) ·
+`failed` · `notFound`. Exit: Vorschau 0; sonst 0 nur, wenn danach **jeder**
+genannte Chat im Zielkonto ist (umgezogen oder schon dort), andernfalls 4 —
+ein Supervisor erkennt „nicht alles erledigt" am Exit-Code.
+
+**Laufende Chats** werden ohne Flag übersprungen; die Vorschau markiert, welche
+`--stop-and-resume` mitnehmen würde (`stopAndResumePossible`). Mit dem Flag
+passiert für diese Chats:
+
+1. Anhalten wie `close --stop` (2× Ctrl+C, letzter Flush, SIGTERM); der Tab
+   bleibt offen.
+2. Warten, bis der Prozess **nachweislich beendet** ist (`ProcessExitWaiter`,
+   max. 5 s; ein Zombie zählt als beendet). Erst dann schreibt er garantiert
+   nicht mehr in die alte Datei — ein Umzug davor könnte eine späte Zeile an
+   den alten Ort schreiben lassen, der Verlauf läge dann in zwei Dateien.
+   Endet der Prozess nicht, wird weder umgezogen noch neu gestartet
+   (`failed`/`stopTimeout`).
+3. Frisch planen und umziehen (Kollisionen werden erneut geprüft).
+4. Neustart vormerken (`shouldLaunchOnOpen`, wie `resume` und die
+   Absturz-Wiederaufnahme): startet, sobald der Tab angezeigt wird — ein
+   gerade sichtbarer Tab sofort. Auch ein gescheiterter Umzug wird wieder
+   vorgemerkt, dann im bisherigen Konto.
+
+Geschützt bleiben: **arbeitende** Chats (ein Turn würde abgebrochen) und Chats,
+in deren Eingabefeld **vermutlich ungesendeter Text** steht (das Beenden der
+TUI verwirft ihn) — beide nur mit `--force`. Die Entwurfs-Schätzung
+(`TerminalComposerDraftTracker`) ist konservativ: getippte Zeichen, Einfügen,
+Datei-Drop und `send --no-submit` markieren, Return (ohne Shift/Option),
+Ctrl+C und ein zugestellter `send` heben die Markierung auf. Die
+**aufrufende Session** wird nie angehalten, auch nicht mit `--force`.
+Hintergrund-Agenten, Codex- und Terminal-Chats fasst das Flag nicht an.
 
 ### GPT-Konto: bisher nur lesbar
 

@@ -587,6 +587,10 @@ final class TerminalKeyboardShortcutHandler {
     /// `ActiveBackgroundSessionTracker`, der dadurch sofort refreshen kann).
     var onAnyTerminalKeyDown: (() -> Void)?
 
+    /// Wie `onAnyTerminalKeyDown`, aber mit dem Event — fuer die
+    /// Entwurfs-Schaetzung des Controllers (`TerminalComposerDraftTracker`).
+    var onTerminalKeyDownEvent: ((NSEvent) -> Void)?
+
     init(
         attachedTo terminalView: LocalProcessTerminalView,
         profile: TerminalKeyboardProfile
@@ -628,6 +632,7 @@ final class TerminalKeyboardShortcutHandler {
         // SwiftTerm verarbeitet Standardtasten (Pfeil, Enter, Buchstabe) selbst,
         // wir wollen aber auch DIESE Aktionen als "User-Aktivitaet" wissen.
         onAnyTerminalKeyDown?()
+        onTerminalKeyDownEvent?(event)
 
         guard let bytes = TerminalShortcut.bytes(
             keyCode: event.keyCode,
@@ -659,6 +664,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     @Published private(set) var isRunning = false
     @Published private(set) var hasStarted = false
     @Published private(set) var exitCode: Int32?
+    /// Steht im Composer vielleicht ungesendeter Text? Schutz fuer
+    /// `chats move-account --stop-and-resume`, das die TUI beendet.
+    private(set) var composerDraft = TerminalComposerDraftTracker()
 
     var processID: Int32? {
         let pid = terminal.process.shellPid
@@ -673,6 +681,12 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func sendUserText(_ text: String) {
         guard isRunning else { return }
         terminal.send(txt: text)
+        composerDraft.recordTextInserted()
+    }
+
+    /// Text wurde auf anderem Weg in die TUI gelegt (Datei-Drop).
+    func noteComposerTextInserted() {
+        composerDraft.recordTextInserted()
     }
 
     /// Sendet einen Prompt über den Control-Socket (`whisperm8 chats send`) in
@@ -692,7 +706,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         terminal.send(txt: "\u{1B}[200~")
         terminal.send(txt: text)
         terminal.send(txt: "\u{1B}[201~")
-        guard submit else { return }
+        guard submit else {
+            composerDraft.recordTextInserted()
+            return
+        }
+        composerDraft.recordSubmitted()
         // 80 ms Delay, damit die TUI den Paste-Block verarbeitet hat, bevor das
         // Return kommt (best-effort nach erfolgreichem Paste).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
@@ -717,6 +735,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func sendComposerClear() {
         guard isRunning else { return }
         terminal.send([0x03])
+        composerDraft.recordSubmitted()
     }
 
     /// Wird gefeuert, wenn der Subprocess den Terminal-Titel per
@@ -782,6 +801,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             attachedTo: terminal,
             profile: command.keyboardProfile
         )
+        keyboardShortcutHandler?.onTerminalKeyDownEvent = { [weak self] event in
+            self?.composerDraft.recordKeyDown(keyCode: event.keyCode, modifiers: event.modifierFlags)
+        }
 
         // Scroll-Guard: blockt Trackpad-Scrolls in Alt-Buffer-Mode (z. B.
         // `claude agents` TUI) damit das Event nicht in die SwiftUI-Sidebar
@@ -1179,6 +1201,9 @@ final class AgentTerminalContainerView: NSView {
         let payload = TerminalDropPayload.build(from: urls.map(\.path))
         // PTY frisst UTF-8 Bytes — keine `txt:`-API-Annahme, das ist sicherer.
         terminal.send(txt: payload)
+        if let sessionID {
+            AgentTerminalRegistry.shared.controller(for: sessionID)?.noteComposerTextInserted()
+        }
         // Terminal aktivieren, damit der Cursor blinkt und der nächste
         // Tastendruck dort landet.
         window?.makeFirstResponder(terminal)

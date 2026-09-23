@@ -71,6 +71,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await gridWorkspaceOpen(request)
         case "queue.enqueue", "queue.cancel":
             return await queueMutation(request)
+        case "session.moveAccount":
+            return await sessionMoveAccount(request)
         default:
             return .failure(requestID: request.requestID, code: .unsupported,
                             message: "Unbekannte Methode: \(request.method)")
@@ -1673,7 +1675,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         return await sessionLabel(id)
     }
 
-    private func sessionLabel(_ id: UUID) async -> String {
+    func sessionLabel(_ id: UUID) async -> String {
         await MainActor.run {
             let workspace = AgentWorkspaceUIModel.shared.workspace
             guard let session = workspace.sessions.first(where: { $0.id == id }) else { return id.uuidString }
@@ -1682,7 +1684,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         }
     }
 
-    private func audit(_ actor: ChatsControlActor, method: String, target: String?, outcome: String, prompt: String?) async {
+    func audit(_ actor: ChatsControlActor, method: String, target: String?, outcome: String, prompt: String?) async {
         let verified: Bool
         let label: String
         if let idString = actor.sessionID, let id = UUID(uuidString: idString) {

@@ -74,6 +74,8 @@ enum AgentChatsCLICommand {
             return ChatsPinCommand.run(rest, pinned: false)
         case "move":
             return ChatsMoveCommand.run(rest)
+        case "move-account":
+            return ChatsMoveAccountCommand.run(rest)
         case "window":
             return ChatsWindowCommand.run(rest)
         case "resume":
@@ -824,7 +826,23 @@ enum ChatsCLIHelp {
       whisperm8 chats move <ref> --window <primary|id>   Tab in anderes (bestehendes) Fenster
       whisperm8 chats window list [--json]               Fenster-Inventar (IDs für move)
       whisperm8 chats resume <ref> [--json]              geschlossenen Chat wieder hochfahren
-      whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt "…"] [--json]
+      whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt "…"]
+                          [--account <profil>] [--json]
+      whisperm8 chats move-account <ref> [<ref>…] --to <profil> [--dry-run] [--json]
+                               Bestehende Claude-Chats in ein anderes Claude-Konto
+                               umziehen (wie „Zu Account verschieben" in der App:
+                               Transcript wandert, Stempel folgt, Journal für
+                               „Letzten Kontowechsel rückgängig machen").
+                               --dry-run zeigt nur die Vorschau. Übersprungen mit
+                               Grund: laufend, Hintergrund-Agent, kein Claude-Chat,
+                               schon im Zielkonto, Kollision, Ziel nicht eingeloggt.
+                               Exit 0 = alle im Zielkonto, 4 = nicht alle.
+      whisperm8 chats move-account <ref>… --to <profil> --stop-and-resume [--force]
+                               Laufende Chats zusätzlich anhalten, nach dem
+                               Prozessende umziehen und zum Neustart vormerken
+                               (startet beim Anzeigen des Tabs). Arbeitende Chats
+                               und Chats mit vermutlich ungesendetem Entwurf nur
+                               mit --force; die eigene Session nie.
       whisperm8 chats rename <ref> "<titel>" | --reset [--json]
       whisperm8 chats group <ref> "<gruppe>" | --clear [--json]
       whisperm8 chats archive <ref> [--force] [--json]

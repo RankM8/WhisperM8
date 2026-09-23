@@ -7,31 +7,15 @@ import SwiftUI
 extension AgentChatsView {
     // MARK: - Vorschau
 
-    /// Sammelt die Fakten fuer den Planer. Das Ergebnis ist ein Snapshot: die
-    /// Kollisionspruefung wird beim tatsaechlichen Move erneut gemacht, weil
-    /// zwischen Vorschau und Bestaetigung Zeit vergeht.
+    /// Sammelt die Fakten fuer den Planer — derselbe Baustein wie
+    /// `whisperm8 chats move-account`, damit GUI und CLI gleich entscheiden.
     func accountMoveCandidates(for sessions: [AgentChatSession], target: String?) -> [AccountMovePlanner.Candidate] {
-        let profiles = ClaudeAccountProfiles()
-        return sessions.map { session in
-            let cwd = session.subagentCwd
-                ?? workspace.projects.first(where: { $0.id == session.projectID })?.path
-            let conflict: Bool = {
-                guard let externalID = session.externalSessionID, !externalID.isEmpty,
-                      let cwd else { return false }
-                return profiles.transcriptConflictExists(
-                    externalSessionID: externalID, cwd: cwd, toProfile: target
-                )
-            }()
-            return AccountMovePlanner.Candidate(
-                sessionID: session.id,
-                title: session.title,
-                currentProfile: session.claudeProfileName,
-                provider: session.provider,
-                kind: session.effectiveKind,
-                isRunning: terminalRegistry.controller(for: session.id)?.isRunning == true,
-                hasTargetConflict: conflict
-            )
-        }
+        AccountMoveFacts.candidates(
+            for: sessions,
+            projects: workspace.projects,
+            target: target,
+            isRunning: { terminalRegistry.controller(for: $0)?.isRunning == true }
+        )
     }
 
     /// Einstieg aus dem Kontextmenue — fuer einen Chat wie fuer eine Auswahl
@@ -57,28 +41,11 @@ extension AgentChatsView {
     func commitAccountMove(_ pending: PendingAccountMove) {
         let plan = pending.plan
         guard !plan.movable.isEmpty else { return }
-        let sessionsByID = Dictionary(
-            workspace.sessions.map { ($0.id, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-        let projectsByID = Dictionary(
-            workspace.projects.map { ($0.id, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-        let moves: [AccountMoveService.Move] = plan.movable.compactMap { candidate in
-            guard let session = sessionsByID[candidate.sessionID],
-                  let cwd = session.subagentCwd ?? projectsByID[session.projectID]?.path else {
-                return nil
-            }
-            return AccountMoveService.Move(
-                sessionID: session.id,
-                title: session.title,
-                externalSessionID: session.externalSessionID,
-                cwd: cwd,
-                fromProfile: session.claudeProfileName,
-                toProfile: plan.targetProfile
-            )
-        }
+        let moves = AccountMoveFacts.moves(
+            for: plan,
+            sessions: workspace.sessions,
+            projects: workspace.projects
+        ).moves
         guard !moves.isEmpty else { return }
 
         accountMovePhase = .running(done: 0, total: moves.count)

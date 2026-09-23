@@ -60,6 +60,13 @@ whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehende
 whisperm8 chats window list                          # Fenster-Inventar (+ showsGrid, activeWorkspace)
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
 whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"]
+whisperm8 chats move-account <ref> [<ref>…] --to <profil> [--dry-run]
+                                                     # bestehende Claude-Chats in ein anderes Claude-Konto
+                                                     # umziehen (wie „Zu Account verschieben"); laufende
+                                                     # Chats werden übersprungen. Exit 0 = alle im Ziel, 4 = nicht alle
+whisperm8 chats move-account <ref>… --to <profil> --stop-and-resume [--force]
+                                                     # laufende Chats anhalten → umziehen → Neustart vormerken;
+                                                     # working/Entwurf im Composer nur mit --force, @self nie
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel)
 whisperm8 chats rename <ref> --reset                  # hebt den Namen auf → nativer Titel des CLI
 whisperm8 chats group <ref> "<gruppe>" | --clear
@@ -185,6 +192,10 @@ unterbrochen.
    **Eigeninitiative** erst vorschlagen (Projekt + Initial-Prompt zeigen),
    dann starten. Für BATCH-`close` („alle, die ich nicht brauche") und
    `close --others` gilt Regel 6: erst Kandidatenliste bestätigen lassen.
+   **`move-account` immer bestätigen lassen** — erst `--dry-run` zeigen
+   (was zieht um, was bleibt warum), dann ausführen. `--stop-and-resume`
+   hält laufende Agenten an: nur, wenn der User das Anhalten ausdrücklich
+   will; `--force` dazu nur nach Regel 3.
    Nach einem versehentlichen Close: `reopen` stellt den letzten Tab wieder
    her (LIFO, ephemer — gilt nur bis zum App-Neustart).
 3. **Nie `--force` oder `--if-status working` aus Eigeninitiative.** Nur wenn
@@ -276,6 +287,16 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
   Vorher→Nachher, Archives markiert) → EINE Batch-Bestätigung (Multi-Select) →
   ausgewählte Aktionen ausführen → Ergebnis melden. Tabs nur zumachen =
   `close`; `archive` nur, wenn die Session wirklich weg soll.
+- **„Zieh alle aktiven Chats auf Konto ai3"** → `list --scope active --json`
+  → Claude-Chats sammeln → `move-account <refs…> --to ai3 --dry-run` →
+  Vorschau zeigen (umziehbar / übersprungen mit Grund; bei „läuft gerade"
+  sagen, ob `--stop-and-resume` sie mitnähme oder was sie blockiert:
+  arbeitet, Entwurf im Eingabefeld, eigene Session) → bestätigen lassen →
+  `move-account <refs…> --to ai3` (bzw. mit `--stop-and-resume`, wenn der
+  User laufende Chats mitnehmen will). Danach melden: N umgezogen, M
+  übersprungen (Grund), Neustarts starten beim Anzeigen des Tabs;
+  Rückgängig geht in der App („Letzten Kontowechsel rückgängig machen").
+  Hintergrund-Agenten bleiben immer im Haupt-Account.
 - **„Unterbrich X"** → bestätigen lassen → `interrupt X --if-status working`
   (Default-Guard; ohne `--force` nur bei laufender Session).
 
