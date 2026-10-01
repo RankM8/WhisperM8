@@ -94,10 +94,28 @@ struct ProjectChatGroup: View {
 
     /// Initiales Row-Limit pro Projekt; die "N weitere anzeigen"-Row hebt es
     /// an. Lebt pro Projekt-Identity (ForEach-id) und resettet bewusst, wenn
-    /// das Projekt den Suchfilter verlässt oder die Sidebar getoggelt wird
-    /// (View-Identity weg) — akzeptiertes Verhalten.
+    /// das Projekt den Suchfilter verlässt, die Sidebar getoggelt wird
+    /// (View-Identity weg) oder der Scope wechselt — akzeptiertes Verhalten.
     static let defaultVisibleSessionLimit = 20
-    @State private var visibleSessionLimit = ProjectChatGroup.defaultVisibleSessionLimit
+
+    /// Unter „Alle" nur 5 statt 20: Der Container ist nicht-lazy (siehe
+    /// `showMoreRow`), SwiftUI legt also für JEDE Zeile sofort die Layer an,
+    /// auch weit außerhalb des Sichtbaren. Gemessen 01.10.2026 (150 Projekte,
+    /// 31 aufgeklappt, einige hundert Zeilen): ~2,5 s Main-Thread-Arbeit
+    /// in `DisplayList.ViewUpdater.render`/`CALayer insertSublayer` beim
+    /// Klick auf „Alle" — der User sah 1–2 s Laden.
+    static let allScopeVisibleSessionLimit = 5
+
+    static func initialVisibleSessionLimit(for scope: SidebarScope) -> Int {
+        scope == .all ? allScopeVisibleSessionLimit : defaultVisibleSessionLimit
+    }
+
+    /// `nil` = Startwert des Scopes; „N weitere anzeigen" setzt ihn explizit.
+    @State private var expandedVisibleSessionLimit: Int?
+
+    private var visibleSessionLimit: Int {
+        expandedVisibleSessionLimit ?? Self.initialVisibleSessionLimit(for: sidebarScope)
+    }
 
     var body: some View {
         let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.projectGroup")
@@ -175,6 +193,9 @@ struct ProjectChatGroup: View {
                 }
             }
         }
+        // Wie `flatVisibleSessionLimit`: ein Scope-Wechsel startet wieder beim
+        // Startwert des neuen Scopes.
+        .onChange(of: sidebarScope) { _, _ in expandedVisibleSessionLimit = nil }
     }
 
     /// Row, die trotz Row-Limit sichtbar sein muss: die selektierte Session
@@ -214,7 +235,7 @@ struct ProjectChatGroup: View {
     /// bezahlbar bleibt.
     private func showMoreRow(hiddenCount: Int) -> some View {
         Button {
-            visibleSessionLimit += 50
+            expandedVisibleSessionLimit = visibleSessionLimit + 50
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.down.circle")

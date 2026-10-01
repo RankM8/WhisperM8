@@ -635,6 +635,30 @@ final class SidebarVisibleSliceTests: XCTestCase {
         return (0..<count).map { makeSidebarSession(projectID: projectID, title: "S\($0)") }
     }
 
+    func testAllScopeStartsWithFivePerProjectOtherScopesWithTwenty() {
+        XCTAssertEqual(ProjectChatGroup.initialVisibleSessionLimit(for: .all), 5)
+        XCTAssertEqual(ProjectChatGroup.initialVisibleSessionLimit(for: .active), 20)
+        XCTAssertEqual(ProjectChatGroup.initialVisibleSessionLimit(for: .recent), 20)
+
+        let result = ProjectChatGroup.visibleSlice(
+            of: makeSessions(25),
+            limit: ProjectChatGroup.initialVisibleSessionLimit(for: .all)
+        )
+        XCTAssertEqual(result.visible.count, 5)
+        XCTAssertEqual(result.hiddenCount, 20, "Rest kommt über „N weitere anzeigen“")
+    }
+
+    func testAllScopeLimitStillRevealsSelectedSession() {
+        let sessions = makeSessions(25)
+        let result = ProjectChatGroup.visibleSlice(
+            of: sessions,
+            limit: ProjectChatGroup.initialVisibleSessionLimit(for: .all),
+            mustIncludeID: sessions[12].id
+        )
+        XCTAssertEqual(result.visible.count, 13, "die Auswahl bleibt sichtbar")
+        XCTAssertEqual(result.hiddenCount, 12)
+    }
+
     func testSliceCapsAndCountsHidden() {
         let result = ProjectChatGroup.visibleSlice(of: makeSessions(25), limit: 20)
         XCTAssertEqual(result.visible.count, 20)
