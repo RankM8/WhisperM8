@@ -61,6 +61,7 @@ extension AgentChatsView {
             shouldCancel: { accountMoveCancelRequested }
         )
         accountMovePhase = .finished(outcome)
+        AccountMenuData.invalidateAll()
     }
 
     /// Nimmt den zuletzt protokollierten Umzug zurueck.
@@ -90,6 +91,7 @@ extension AgentChatsView {
             errorMessage = "Es gibt keinen Kontowechsel, der zurückgenommen werden könnte."
         }
         accountMovePhase = .finished(outcome)
+        AccountMenuData.invalidateAll()
     }
 
     /// `true`, sobald ein zuruecknehmbarer Batch im Journal liegt.
@@ -97,8 +99,11 @@ extension AgentChatsView {
     /// `.contextMenu`-Builder und laeuft damit bei jedem Body-Rebuild
     /// (CPU-Befund 2026-08-23) — ein voller Journal-Read pro Render waere
     /// genau die Sorte Menue-I/O, die die App dauerhaft beschaeftigt hat.
+    ///
+    /// Seit 30.09.2026 zusaetzlich ueber `AccountMenuData` (TTL-Cache): auch
+    /// der eine `stat` pro Zeile und Render summierte sich im Scope „Alle".
     var hasUndoableAccountMove: Bool {
-        AccountMoveJournal().hasUndoableBatch()
+        AccountMenuData.hasUndoableAccountMove.value
     }
 
     // MARK: - Menue
@@ -113,13 +118,15 @@ extension AgentChatsView {
             let group = AppPreferences.shared.isAccountBulkMoveEnabled
                 ? actionGroup(for: session)
                 : [session.id]
-            let sessions = workspace.sessions.filter { group.contains($0.id) }
+            // Ohne Mehrfachauswahl (der Normalfall jeder Zeile) direkt die
+            // Session selbst — kein Scan ueber alle Sessions pro Render.
+            let sessions = group == [session.id] ? [session] : self.sessions(in: group)
             let currentProfiles = Set(sessions.map { $0.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName })
             let label = sessions.count == 1
                 ? "Zu Account verschieben"
                 : "\(sessions.count) Chats zu Account verschieben"
             Menu(label, systemImage: "person.crop.circle.badge.checkmark") {
-                ForEach(ClaudeAccountProfiles().profiles()) { profile in
+                ForEach(AccountMenuData.claudeProfiles.value) { profile in
                     // Ziel ausblenden, wenn ALLE ausgewaehlten Chats schon dort
                     // sind — bei gemischter Auswahl bleibt es sichtbar.
                     if currentProfiles != [profile.name] {

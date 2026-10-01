@@ -21,13 +21,16 @@ extension AgentChatsView {
             let group = allowsBulk && AppPreferences.shared.isAccountBulkMoveEnabled
                 ? actionGroup(for: session)
                 : [session.id]
-            let sessions = workspace.sessions.filter { group.contains($0.id) && canSwitchGPTAccount($0) }
+            // Normalfall ohne Mehrfachauswahl: kein Scan ueber alle Sessions.
+            let sessions = group == [session.id]
+                ? [session]
+                : self.sessions(in: group).filter { canSwitchGPTAccount($0) }
             let currentProfiles = Set(sessions.map { $0.gptProfileName ?? GPTAccountProfiles.mainProfileName })
             let label = sessions.count == 1
                 ? "GPT-Konto"
                 : "\(sessions.count) Chats: GPT-Konto"
             Menu(label, systemImage: "person.crop.circle") {
-                ForEach(GPTAccountProfiles().profiles()) { profile in
+                ForEach(AccountMenuData.gptProfiles.value) { profile in
                     // Aktuelles Konto ausblenden (wie beim Claude-Menue) — bei
                     // gemischter Auswahl bleibt es sichtbar.
                     if currentProfiles != [profile.name] {

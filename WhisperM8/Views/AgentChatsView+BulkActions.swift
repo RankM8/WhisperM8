@@ -31,8 +31,18 @@ extension AgentChatsView {
         return unpin ? "\(group.count) lösen" : "\(group.count) anpinnen"
     }
 
-    private func sessions(in ids: [UUID]) -> [AgentChatSession] {
-        ids.compactMap { gid in workspace.sessions.first { $0.id == gid } }
+    /// Sessions zu `ids` in deren Reihenfolge — EIN Durchlauf über den
+    /// Workspace statt einem `first(where:)` pro ID. Läuft auch im
+    /// Kontextmenü-Bau (pro Zeile und Render).
+    func sessions(in ids: [UUID]) -> [AgentChatSession] {
+        guard !ids.isEmpty else { return [] }
+        let wanted = Set(ids)
+        var byID: [UUID: AgentChatSession] = [:]
+        for session in workspace.sessions where wanted.contains(session.id) && byID[session.id] == nil {
+            byID[session.id] = session
+            if byID.count == wanted.count { break }
+        }
+        return ids.compactMap { byID[$0] }
     }
 
     /// „Tab schließen" für die Gruppe (Sessions bleiben in der Sidebar).
@@ -86,7 +96,9 @@ extension AgentChatsView {
     /// statt archiviert (`requestArchive` teilt auf) — das Label sagt das
     /// ehrlich, auch bei gemischter Bulk-Auswahl.
     func archiveLabel(for session: AgentChatSession) -> String {
-        let group = sessions(in: actionGroup(forID: session.id))
+        let ids = actionGroup(forID: session.id)
+        // Einzelfall ohne Workspace-Lookup — läuft pro Zeile und Render.
+        let group = ids.count > 1 ? sessions(in: ids) : []
         guard group.count > 1 else {
             return session.isTerminal ? "Terminal schließen" : "Archivieren"
         }
