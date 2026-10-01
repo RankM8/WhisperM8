@@ -796,3 +796,48 @@ final class ChatsWorkspaceReaderTests: XCTestCase {
         XCTAssertNil(view.uiState)
     }
 }
+
+// MARK: - Modellanzeige in `chats show`
+
+/// `session.model` ist bei JEDEM Chat mit dem Codex-Standardmodell
+/// vorbelegt — auch bei Claude-Chats. `show` darf das dort nicht ausgeben.
+final class ChatsModelDisplayTests: XCTestCase {
+    private func session(_ provider: AgentProvider, stamp: String? = nil) -> AgentChatSession {
+        AgentChatSession(provider: provider, projectID: UUID(), title: "t",
+                         model: "gpt-codex-default", claudeBackendModel: stamp)
+    }
+
+    func testClaudeChatShowsLastTranscriptModelInsteadOfCodexDefault() {
+        let display = ChatsOutput.modelDisplay(session: session(.claude), transcriptModel: "claude-opus-5-5")
+        XCTAssertEqual(display, .init(model: "claude-opus-5-5", source: .transcript))
+        XCTAssertEqual(display.text, "claude-opus-5-5 (letzte Antwort)")
+    }
+
+    func testClaudeChatWithoutAnswerIsUnknownNotCodexDefault() {
+        let display = ChatsOutput.modelDisplay(session: session(.claude), transcriptModel: nil)
+        XCTAssertNil(display.model)
+        XCTAssertEqual(display.source, .unknown)
+        XCTAssertFalse(display.text.contains("gpt-codex-default"))
+    }
+
+    func testGPTBackendChatShowsStampAndDifferingLastModel() {
+        let auto = ChatsOutput.modelDisplay(session: session(.claude, stamp: "auto"), transcriptModel: "gpt-6-astra")
+        XCTAssertEqual(auto, .init(model: "auto", source: .gptStamp, lastTranscriptModel: "gpt-6-astra"))
+        XCTAssertEqual(auto.text, "auto (GPT-Stempel, zuletzt gpt-6-astra)")
+
+        let same = ChatsOutput.modelDisplay(session: session(.claude, stamp: "gpt-6-astra"), transcriptModel: "gpt-6-astra")
+        XCTAssertNil(same.lastTranscriptModel)
+    }
+
+    func testCodexChatKeepsSessionModel() {
+        let display = ChatsOutput.modelDisplay(session: session(.codex), transcriptModel: "ignored")
+        XCTAssertEqual(display, .init(model: "gpt-codex-default", source: .session))
+    }
+
+    func testDetailJSONCarriesModelSource() {
+        let entry = ChatsSessionEntry(session: session(.claude), projectName: "p", projectPath: "/p")
+        let json = ChatsOutput.detailJSON(entry: entry, transcriptModel: "claude-opus-5-5")
+        XCTAssertEqual(json["model"] as? String, "claude-opus-5-5")
+        XCTAssertEqual(json["modelSource"] as? String, "transcript")
+    }
+}

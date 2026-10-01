@@ -130,10 +130,64 @@ enum ChatsOutput {
         return dict
     }
 
-    static func detailJSON(entry: ChatsSessionEntry) -> [String: Any] {
+    /// Angezeigtes Modell eines Chats. `session.model` ist bei jedem Chat
+    /// mit dem Codex-Standardmodell vorbelegt (`createSession`), auch bei
+    /// Claude-Chats — dort sagt es nichts. Claude-Chats zeigen deshalb das
+    /// Modell der letzten Antwort aus dem Transcript, GPT-Backend-Chats ihren
+    /// GPT-Stempel (`claudeBackendModel`).
+    struct ModelDisplay: Equatable {
+        enum Source: String {
+            case session, gptStamp, transcript, unknown
+        }
+        /// `nil` = unbekannt (Claude-Chat ohne Antwort im Transcript).
+        var model: String?
+        var source: Source
+        /// Modell der letzten Antwort, falls es vom GPT-Stempel abweicht
+        /// (z. B. Stempel `auto`).
+        var lastTranscriptModel: String?
+
+        var text: String {
+            guard let model else { return "unbekannt (noch keine Antwort im Transcript)" }
+            switch source {
+            case .gptStamp:
+                let last = lastTranscriptModel.map { ", zuletzt \($0)" } ?? ""
+                return "\(model) (GPT-Stempel\(last))"
+            case .transcript:
+                return "\(model) (letzte Antwort)"
+            case .session, .unknown:
+                return model
+            }
+        }
+    }
+
+    static func modelDisplay(session: AgentChatSession, transcriptModel: String?) -> ModelDisplay {
+        guard session.provider == .claude else {
+            return ModelDisplay(model: session.model, source: .session)
+        }
+        func trimmed(_ value: String?) -> String? {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return nil }
+            return value
+        }
+        let transcriptModel = trimmed(transcriptModel)
+        if let stamp = trimmed(session.claudeBackendModel) {
+            return ModelDisplay(
+                model: stamp, source: .gptStamp,
+                lastTranscriptModel: transcriptModel == stamp ? nil : transcriptModel)
+        }
+        if let transcriptModel {
+            return ModelDisplay(model: transcriptModel, source: .transcript)
+        }
+        return ModelDisplay(model: nil, source: .unknown)
+    }
+
+    static func detailJSON(entry: ChatsSessionEntry, transcriptModel: String? = nil) -> [String: Any] {
         let session = entry.session
+        let model = modelDisplay(session: session, transcriptModel: transcriptModel)
         return [
-            "model": session.model,
+            "model": model.model ?? NSNull(),
+            "modelSource": model.source.rawValue,
+            "lastTranscriptModel": model.lastTranscriptModel ?? NSNull(),
             "reasoningEffort": session.reasoningEffort,
             "createdAt": iso(session.createdAt),
             "lastTurnAt": session.lastTurnAt.map(iso) ?? NSNull(),
@@ -226,7 +280,7 @@ enum ChatsOutput {
     }
 
     static func printShow(entry: ChatsSessionEntry, runtime: ChatsRuntimeInfo, selfID: UUID?, now: Date,
-                          isOpen: Bool = false, isPinned: Bool = false) {
+                          isOpen: Bool = false, isPinned: Bool = false, transcriptModel: String? = nil) {
         let session = entry.session
         var titleMarks = ""
         if isOpen { titleMarks += "  ⊙ offener Tab" }
@@ -236,7 +290,7 @@ enum ChatsOutput {
         CLIIO.out("Titel        \(session.title)\(titleMarks)")
         CLIIO.out("Projekt      \(entry.projectName)  (\(entry.projectPath))")
         CLIIO.out("Ref          \(shortID(session.id))  ·  \(session.id.uuidString)")
-        CLIIO.out("Provider     \(session.provider.rawValue) · \(session.effectiveKind.displayName) · Modell \(session.model)")
+        CLIIO.out("Provider     \(session.provider.rawValue) · \(session.effectiveKind.displayName) · Modell \(modelDisplay(session: session, transcriptModel: transcriptModel).text)")
         if let group = session.groupName { CLIIO.out("Gruppe       \(group)") }
         if let profile = session.claudeProfileName { CLIIO.out("Profil       \(profile)") }
         CLIIO.out("")

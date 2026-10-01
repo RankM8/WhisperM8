@@ -203,7 +203,9 @@ enum ClaudeTranscriptReader {
             return nil
         }
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        // `<synthetic>` stempelt Claude Code auf lokal erzeugte Meldungen
+        // (API-Fehler, Abbruch) — kein Modell, weiter rückwärts suchen.
+        return trimmed.isEmpty || trimmed == "<synthetic>" ? nil : trimmed
     }
 
     /// Lange Claude-JSONL-Zeilen werden nicht vollstaendig geparst. Der Parser
