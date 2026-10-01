@@ -113,6 +113,75 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(boundIDs.first?.1, "ext-neu")
     }
 
+    // MARK: Binding nach Background-Umwandlung (Vorfall 2026-09-30)
+
+    private func sessionStart(_ id: String, source: String) -> ClaudeHookEvent {
+        var event = hookEvent(.sessionStart, sessionID: id)
+        event.source = source
+        return event
+    }
+
+    /// Liest über dieselbe Datei — der Registry-Store ist pro URL derselbe.
+    private func externalID(_ coordinator: AgentSessionStatusCoordinator, _ sessionID: UUID) -> String? {
+        AgentSessionStore(fileURL: tempDir.appendingPathComponent("workspace.json"))
+            .loadWorkspace().sessions.first(where: { $0.id == sessionID })?.externalSessionID
+    }
+
+    /// Exakte Event-Folge aus Chat 06760440: resume → bg-Fork → leere
+    /// Vordergrund-Session (ohne Transcript) → beide enden. Der Chat muss
+    /// auf dem echten Verlauf bleiben.
+    func testBackgroundConversionKeepsOriginalTranscriptBinding() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        let withTranscript: Set<String> = ["ac020fd4", "08793d2e"]
+        coordinator.transcriptExistsOverride = { _, id, _ in withTranscript.contains(id) }
+
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("ac020fd4", source: "resume"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "ac020fd4")
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit, sessionID: "ac020fd4"))
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop, sessionID: "ac020fd4"))
+
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("08793d2e", source: "fork"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "ac020fd4", "bg-Fork übernimmt den Chat nicht")
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("8a5a7119", source: "startup"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "ac020fd4", "leere TUI-Session ohne Transcript übernimmt nicht")
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.sessionEnd, sessionID: "8a5a7119"))
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.sessionEnd, sessionID: "ac020fd4"))
+
+        XCTAssertEqual(externalID(coordinator, sessionID), "ac020fd4")
+    }
+
+    /// `/clear`: neue ID ohne Datei wird erst mit dem ersten Prompt gebunden.
+    func testPostponedBindingCommitsOnFirstTurnOfNewID() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "alt" }
+        var updated: [String] = []
+        coordinator.terminalExternalIDUpdater = { updated.append($1) }
+
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("alt", source: "startup"))
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("neu", source: "clear"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "alt")
+
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit, sessionID: "neu"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "neu")
+        XCTAssertEqual(updated, ["alt", "neu"])
+    }
+
+    func testExternalIDBindingDecisionRules() {
+        typealias C = AgentSessionStatusCoordinator
+        func decide(_ current: String?, _ source: String?, newExists: Bool, currentExists: Bool) -> C.ExternalIDBindingDecision {
+            C.externalIDBindingDecision(currentID: current, newID: "neu", source: source,
+                                        newTranscriptExists: newExists, currentTranscriptExists: currentExists)
+        }
+        XCTAssertEqual(decide(nil, "startup", newExists: false, currentExists: false), .bind, "Erstbindung")
+        XCTAssertEqual(decide(nil, "fork", newExists: false, currentExists: false), .bind, "WhisperM8-Fork (ungebunden)")
+        XCTAssertEqual(C.externalIDBindingDecision(currentID: "neu", newID: "neu", source: "resume",
+                                                   newTranscriptExists: true, currentTranscriptExists: true), .unchanged)
+        XCTAssertEqual(decide("alt", "fork", newExists: true, currentExists: true), .postpone, "bg-Fork")
+        XCTAssertEqual(decide("alt", "startup", newExists: false, currentExists: false), .bind, "alte ID ohne Datei")
+        XCTAssertEqual(decide("alt", "resume", newExists: true, currentExists: true), .bind, "/resume in der TUI")
+        XCTAssertEqual(decide("alt", "startup", newExists: false, currentExists: true), .postpone, "leere Session")
+    }
+
     // MARK: Rückfragen + Notifications
 
     func testPermissionRequestNotifiesOnceAndClearsOnPostToolUse() throws {

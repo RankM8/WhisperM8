@@ -108,6 +108,16 @@ final class AgentSessionStatusCoordinator {
     /// Watchers) — Muster `terminalExternalIDUpdater`.
     var transcriptMTimeOverride: ((UUID) -> Date?)?
 
+    /// Zurückgestellte SessionStart-IDs pro lokaler Session (Vorfall
+    /// 2026-09-30, Chat 06760440): übernommen erst, wenn diese ID einen
+    /// echten Turn zeigt. Siehe `externalIDBindingDecision`.
+    private var pendingExternalIDs: [UUID: String] = [:]
+
+    /// Test-Injection: Existiert das Transcript der Claude-Session
+    /// (localID, externalID, transcript_path aus dem Hook)? Default prüft
+    /// erst den Hook-Pfad, sonst den Locator mit dem Projekt-cwd.
+    var transcriptExistsOverride: ((UUID, String, String?) -> Bool)?
+
     init(
         store: AgentSessionStore = AgentSessionStore(),
         hookBridge: ClaudeHookBridge? = nil,
@@ -284,6 +294,8 @@ final class AgentSessionStatusCoordinator {
         lastHookEventAt[localID] = Date()
         if event.hookEventName == .sessionStart {
             bindExternalSessionID(localID: localID, event: event)
+        } else {
+            resolvePendingBinding(localID: localID, event: event)
         }
         if event.hookEventName == .promptGuardBlock {
             handlePromptGuardBlock(localID: localID)
@@ -561,8 +573,112 @@ final class AgentSessionStatusCoordinator {
         )
     }
 
+    // MARK: - Binding der externen Session-ID
+
+    enum ExternalIDBindingDecision: Equatable {
+        /// Neue ID sofort übernehmen.
+        case bind
+        /// Neue ID merken, erst beim ersten Turn-Event dieser ID übernehmen.
+        case postpone
+        /// Nichts zu tun (ID schon gebunden).
+        case unchanged
+    }
+
+    /// Pure Bindungs-Regel für `SessionStart`. Früher übernahm JEDES
+    /// SessionStart blind die neue ID — Vorfall 2026-09-30 (Chat 06760440):
+    /// Beim Umwandeln in einen Background-Agent meldet erst der bg-Fork
+    /// (`source: fork`, eigene ID) und danach die frische, leere
+    /// Vordergrund-Session der TUI (`source: startup`) ein SessionStart über
+    /// dieselbe Settings-Datei. Die leere Session schreibt ohne Prompt nie
+    /// ein Transcript — der Chat zeigte danach auf eine nicht existierende
+    /// Datei und hatte seinen Verlauf „verloren".
+    ///
+    /// - Erstbindung (noch keine ID, auch WhisperM8-Forks) → sofort.
+    /// - `fork` bei bereits gebundener ID kommt vom bg-Fork → zurückstellen.
+    /// - Bisherige ID ohne Transcript → nichts zu verlieren, sofort.
+    /// - Neue ID mit Transcript (`/resume` in der TUI) → sofort.
+    /// - Sonst (`/clear`, leere Session nach `/background`) → zurückstellen,
+    ///   bis die neue ID einen Turn zeigt.
+    nonisolated static func externalIDBindingDecision(
+        currentID: String?,
+        newID: String,
+        source: String?,
+        newTranscriptExists: Bool,
+        currentTranscriptExists: Bool
+    ) -> ExternalIDBindingDecision {
+        guard let currentID, !currentID.isEmpty else { return .bind }
+        if currentID == newID { return .unchanged }
+        if source == "fork" { return .postpone }
+        if !currentTranscriptExists { return .bind }
+        if newTranscriptExists { return .bind }
+        return .postpone
+    }
+
     private func bindExternalSessionID(localID: UUID, event: ClaudeHookEvent) {
         guard let newID = event.sessionID, !newID.isEmpty else { return }
+        let currentID = store.loadWorkspace().sessions
+            .first(where: { $0.id == localID })?.externalSessionID
+        // Dateisystem nur befragen, wo die Regel es wirklich braucht.
+        let needsFileCheck = currentID.map { !$0.isEmpty && $0 != newID && event.source != "fork" } ?? false
+        let currentExists = needsFileCheck
+            && transcriptExists(localID: localID, externalID: currentID ?? "", transcriptPath: nil)
+        let newExists = currentExists
+            && transcriptExists(localID: localID, externalID: newID, transcriptPath: event.transcriptPath)
+        let decision = Self.externalIDBindingDecision(
+            currentID: currentID,
+            newID: newID,
+            source: event.source,
+            newTranscriptExists: newExists,
+            currentTranscriptExists: currentExists
+        )
+        switch decision {
+        case .unchanged:
+            pendingExternalIDs[localID] = nil
+        case .bind:
+            pendingExternalIDs[localID] = nil
+            setExternalSessionID(localID: localID, newID: newID)
+        case .postpone:
+            pendingExternalIDs[localID] = newID
+            Logger.claudeBinding.notice("binding_postponed localID=\(localID.uuidString, privacy: .public) current=\(currentID ?? "nil", privacy: .public) new=\(newID, privacy: .public) source=\(event.source ?? "nil", privacy: .public)")
+        }
+    }
+
+    /// Zurückgestellte ID: übernehmen, sobald sie einen echten Turn zeigt
+    /// (Prompt, Tool, Stop) — dann schreibt sie nachweislich ein Transcript.
+    /// Endet sie vorher, wird sie verworfen.
+    private func resolvePendingBinding(localID: UUID, event: ClaudeHookEvent) {
+        guard let pendingID = pendingExternalIDs[localID],
+              event.sessionID == pendingID else { return }
+        switch event.hookEventName {
+        case .sessionEnd:
+            pendingExternalIDs[localID] = nil
+            Logger.claudeBinding.info("binding_postponed_dropped localID=\(localID.uuidString, privacy: .public) id=\(pendingID, privacy: .public)")
+        case .userPromptSubmit, .preToolUse, .postToolUse, .postToolUseFailure,
+             .permissionRequest, .stop:
+            pendingExternalIDs[localID] = nil
+            setExternalSessionID(localID: localID, newID: pendingID)
+        case .sessionStart, .notification, .promptGuardBlock, .other:
+            break
+        }
+    }
+
+    private func transcriptExists(localID: UUID, externalID: String, transcriptPath: String?) -> Bool {
+        if let transcriptExistsOverride {
+            return transcriptExistsOverride(localID, externalID, transcriptPath)
+        }
+        if let transcriptPath, FileManager.default.fileExists(atPath: transcriptPath) {
+            return true
+        }
+        let workspace = store.loadWorkspace()
+        guard let session = workspace.sessions.first(where: { $0.id == localID }),
+              let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
+            return false
+        }
+        return AgentTranscriptLocator.locate(
+            provider: .claude, externalSessionID: externalID, cwd: project.path) != nil
+    }
+
+    private func setExternalSessionID(localID: UUID, newID: String) {
         do {
             var didChange = false
             try store.updateSession(id: localID) { session in
