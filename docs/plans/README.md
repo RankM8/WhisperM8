@@ -9,6 +9,7 @@ Vorhaben, die beschlossen oder in Beratung, aber **noch nicht (vollständig) umg
 
 | Plan | Status | Inhalt |
 |---|---|---|
+| [`tab-switcher-workspace.md`](tab-switcher-workspace.md) | **Beschlossen** (2026-09-28), nicht umgesetzt | Ctrl+Tab-Switcher neu: kein globaler Modus mehr; im Grid Markierung der echten Panes, maximiert eine Mini-Map im Workspace-Layout, sonst Projekt-Liste; Leserichtung; Kacheln mit Stand-Zeile aus dem ohnehin gelesenen Transcript-Tail |
 | [`whisperm8-chats-cli/`](whisperm8-chats-cli/) | **Umgesetzt** (2026-07-19), Feature-Doku: [`../features/agent-chats-cli.md`](../features/agent-chats-cli.md) | Jarvis als CLI + Skill: Namespace `whisperm8 chats` (13 Befehle inkl. interrupt), Control-Socket in der App, Supervisor-Skill. Slices 1–4 gebaut + getestet (1582 Tests grün); Live-Test send/wait/interrupt nach App-Neustart durch User |
 | [`jarvis-supervisor/`](jarvis-supervisor/) | **Abgelöst** durch `whisperm8-chats-cli/` (2026-07-19) | Supervisor-Board über allen Agent-Sessions: Tier-1/2-Reports, Board-first UX, Vertical Slices; HTML-Doku mit UX-Mockups — bleibt als Konzept-Referenz (Attention-Modell, Digest-Routing) |
 | [`kompakt-chat-fenster.md`](kompakt-chat-fenster.md) | **Verworfen** (2026-07-12, Missverständnis; Code revertiert) | „Make window small": Kompakt-Zustand mit Projekt-Chat-Übersicht — gewollt war nur die Grid-View |
