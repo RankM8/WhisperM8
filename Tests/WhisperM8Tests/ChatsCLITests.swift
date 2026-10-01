@@ -166,6 +166,76 @@ final class ChatsStatusProbeTests: XCTestCase {
         XCTAssertEqual(index.count, 1)
     }
 
+    func testTranscriptIndexBuildsOnceForManyMisses() {
+        var builds = 0
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let index = ThrottledTranscriptIndex<URL>(now: { clock }) {
+            builds += 1
+            return [:]
+        }
+        for _ in 0..<500 { XCTAssertNil(index.lookup(UUID().uuidString) { $0 }) }
+        XCTAssertEqual(builds, 1, "Fehltreffer innerhalb des Intervalls dürfen keinen weiteren Walk auslösen")
+
+        clock.addTimeInterval(2)
+        XCTAssertNil(index.lookup(UUID().uuidString) { $0 })
+        XCTAssertEqual(builds, 2, "nach Ablauf des Intervalls baut ein Fehltreffer neu auf")
+    }
+
+    func testTranscriptIndexFindsFileCreatedAfterBuild() {
+        let id = UUID().uuidString.lowercased()
+        let url = URL(fileURLWithPath: "/tmp/rollout-\(id).jsonl")
+        var onDisk: [String: URL] = [:]
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let index = ThrottledTranscriptIndex<URL>(now: { clock }) { onDisk }
+
+        XCTAssertNil(index.lookup(id) { $0 })
+        onDisk[id] = url
+        XCTAssertNil(index.lookup(id) { $0 }, "innerhalb des Intervalls kein Neuaufbau")
+        clock.addTimeInterval(5)
+        XCTAssertEqual(index.lookup(id) { $0 }, url)
+    }
+
+    func testTranscriptIndexRejectedHitTriggersThrottledRebuild() {
+        let id = UUID().uuidString.lowercased()
+        let url = URL(fileURLWithPath: "/tmp/rollout-\(id).jsonl")
+        var builds = 0
+        var exists = true
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let index = ThrottledTranscriptIndex<URL>(now: { clock }) {
+            builds += 1
+            return [id: url]
+        }
+
+        XCTAssertEqual(index.lookup(id) { exists ? $0 : nil }, url)
+        exists = false
+        XCTAssertNil(index.lookup(id) { exists ? $0 : nil })
+        XCTAssertEqual(builds, 1)
+        clock.addTimeInterval(5)
+        XCTAssertNil(index.lookup(id) { exists ? $0 : nil })
+        XCTAssertEqual(builds, 2)
+    }
+
+    func testClaudeTranscriptIndexListsOneLevelAcrossRoots() throws {
+        let rootA = tempDir.appendingPathComponent("a/projects", isDirectory: true)
+        let rootB = tempDir.appendingPathComponent("b/projects", isDirectory: true)
+        let id = UUID().uuidString.lowercased()
+        let projA = rootA.appendingPathComponent("-Users-x-repo", isDirectory: true)
+        let projB = rootB.appendingPathComponent("-Users-x-moved", isDirectory: true)
+        let nested = projB.appendingPathComponent(id).appendingPathComponent("subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: projA, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data().write(to: projA.appendingPathComponent("\(id).jsonl"))
+        try Data().write(to: projB.appendingPathComponent("\(id).jsonl"))
+        try Data().write(to: nested.appendingPathComponent("agent-1.jsonl"))
+        try Data().write(to: projA.appendingPathComponent("notes.txt"))
+
+        let index = ChatsStatusProbe.buildClaudeTranscriptIndex(rootPaths: [rootA.path, rootB.path, "/nonexistent"])
+        XCTAssertEqual(index[id]?.map(\.lastPathComponent), ["\(id).jsonl", "\(id).jsonl"])
+        XCTAssertEqual(index[id]?.first?.deletingLastPathComponent().lastPathComponent, "-Users-x-repo")
+        XCTAssertNil(index["agent-1"], "Subagent-Transcripts liegen tiefer und zählen nicht")
+        XCTAssertEqual(index.count, 1)
+    }
+
     private var tempDir: URL!
 
     override func setUpWithError() throws {

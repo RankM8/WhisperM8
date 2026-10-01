@@ -197,33 +197,83 @@ enum ChatsStatusProbe {
 
     // MARK: - Locate-Fast-Path
 
-    /// Claude löst über den Locator auf (wenige fileExists-Checks). Codex
-    /// würde pro Session rekursiv über `~/.codex/sessions` walken — bei
-    /// hunderten indizierten Sessions O(n·m). Stattdessen EIN Walk pro
-    /// CLI-Prozess (lazy static = thread-safe einmalig), Fallback auf den
-    /// Locator für Dateien, die nach dem Index-Bau entstanden sind.
+    /// Der `AgentTranscriptLocator` ist für Einzel-Lookups gebaut; pro Session
+    /// aufgerufen wird er bei hunderten Sessions O(n·m):
+    /// - Codex walkt pro Lookup rekursiv über `~/.codex/sessions` (FileManager-
+    ///   Enumerator + ICU-Vergleich je Dateiname),
+    /// - Claude liest pro Lookup alle Profile neu (`claudeProjectsRoots()`)
+    ///   und listet bei fehlender Datei sämtliche Projekt-Ordner aller Roots.
+    /// Gemessen 30.09.2026 (4058 Sessions, davon 511 Codex- und viele Claude-
+    /// Sessions ohne Datei): `chats list --scope all --limit 0` 65–74 s.
+    ///
+    /// Deshalb hier: Roots einmal pro Prozess, je Provider ein Index aus EINEM
+    /// Walk, der sich bei Fehltreffern höchstens alle 2 s neu aufbaut (Dateien,
+    /// die nach dem Index-Bau entstehen — relevant für `chats wait`).
     static func locateFast(provider: AgentProvider, externalSessionID: String, cwd: String) -> URL? {
         switch provider {
         case .claude:
-            return AgentTranscriptLocator.locate(provider: .claude, externalSessionID: externalSessionID, cwd: cwd)
-        case .codex:
-            // Index-Treffer validieren — die Datei kann seit dem Index-Bau
-            // gelöscht/rotiert sein (GPT-Review); dann Locator-Fallback.
-            if let url = codexTranscriptIndex[externalSessionID.lowercased()],
-               FileManager.default.fileExists(atPath: url.path) {
+            // Stufe 1 wie im Locator: deterministischer Pfad, main zuerst.
+            if let url = AgentTranscriptLocator.locateClaude(
+                externalSessionID: externalSessionID,
+                cwd: cwd,
+                roots: claudeProjectsRoots,
+                globFallback: false
+            ) {
                 return url
             }
-            return AgentTranscriptLocator.locate(provider: .codex, externalSessionID: externalSessionID, cwd: cwd)
+            // Stufe 2 über den Index statt Glob — gleiche Verifikation wie im
+            // Locator: Treffer in fremdem Ordner nur, wenn der JSONL-Kopf
+            // denselben cwd trägt.
+            let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+            return claudeTranscriptIndex.lookup(externalSessionID) { candidates in
+                candidates.first { url in
+                    url.deletingLastPathComponent().lastPathComponent != encoded
+                        && FileManager.default.fileExists(atPath: url.path)
+                        && AgentTranscriptLocator.transcriptHeadMatchesCwd(url, expectedCwd: cwd)
+                }
+            }
+        case .codex:
+            return codexTranscriptIndex.lookup(externalSessionID.lowercased()) { url in
+                FileManager.default.fileExists(atPath: url.path) ? url : nil
+            }
         }
     }
 
+    private static let claudeProjectsRoots = ClaudeAccountProfiles().claudeProjectsRoots()
+
+    /// Claude-Session-ID (Dateistamm) → alle `<root>/<projekt>/<id>.jsonl`.
+    private static let claudeTranscriptIndex = ThrottledTranscriptIndex<[URL]> {
+        buildClaudeTranscriptIndex(rootPaths: claudeProjectsRoots.map(\.path))
+    }
+
     /// Codex-Session-ID (36-Zeichen-Suffix des Dateistamms) → JSONL-URL.
-    private static let codexTranscriptIndex: [String: URL] = {
+    private static let codexTranscriptIndex = ThrottledTranscriptIndex<URL> {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex")
             .appendingPathComponent("sessions")
         return buildCodexTranscriptIndex(rootPath: dir.path)
-    }()
+    }
+
+    /// Flacher Claude-Index über `<root>/<projekt>/*.jsonl` (eine Ebene, wie
+    /// der Locator; Subagent-Transcripts liegen tiefer und zählen nicht).
+    /// POSIX-only aus demselben Grund wie `buildCodexTranscriptIndex`.
+    static func buildClaudeTranscriptIndex(rootPaths: [String]) -> [String: [URL]] {
+        let fileManager = FileManager.default
+        var index: [String: [URL]] = [:]
+        for root in rootPaths {
+            guard let projectNames = try? fileManager.contentsOfDirectory(atPath: root) else { continue }
+            for projectName in projectNames where !projectName.hasPrefix(".") {
+                let projectPath = (root as NSString).appendingPathComponent(projectName)
+                guard let names = try? fileManager.contentsOfDirectory(atPath: projectPath) else { continue }
+                for name in names where name.hasSuffix(".jsonl") && !name.hasPrefix(".") {
+                    let stem = String(name.dropLast(".jsonl".count))
+                    let path = (projectPath as NSString).appendingPathComponent(name)
+                    index[stem, default: []].append(URL(fileURLWithPath: path))
+                }
+            }
+        }
+        return index
+    }
 
     /// Baut den Codex-Index ausschließlich über POSIX-Pfade auf.
     ///
@@ -287,5 +337,49 @@ enum ChatsStatusProbe {
         } catch {
             return nil
         }
+    }
+}
+
+// MARK: - Transcript-Index mit gedrosseltem Neuaufbau
+
+/// Thread-sicherer Transcript-Index für den CLI-Prozess (`probeAll` fragt
+/// parallel aus einer TaskGroup). `resolve` validiert einen Treffer (Datei
+/// kann seit dem Index-Bau gelöscht/rotiert sein) und liefert `nil` für
+/// „unbrauchbar". Bei Fehltreffer baut der Index sich neu auf, aber höchstens
+/// einmal pro `minRebuildInterval`: so zahlen hunderte fehlende Dateien in
+/// einem Lauf genau einen Walk statt einen pro Session.
+final class ThrottledTranscriptIndex<Value>: @unchecked Sendable {
+    private let build: () -> [String: Value]
+    private let now: () -> Date
+    private let minRebuildInterval: TimeInterval
+    private let lock = NSLock()
+    private var index: [String: Value]?
+    private var builtAt: Date = .distantPast
+
+    init(
+        minRebuildInterval: TimeInterval = 2,
+        now: @escaping () -> Date = Date.init,
+        build: @escaping () -> [String: Value]
+    ) {
+        self.build = build
+        self.now = now
+        self.minRebuildInterval = minRebuildInterval
+    }
+
+    func lookup<Result>(_ key: String, resolve: (Value) -> Result?) -> Result? {
+        lock.lock()
+        defer { lock.unlock() }
+        if index == nil { rebuild() }
+        if let value = index?[key], let result = resolve(value) { return result }
+        guard now().timeIntervalSince(builtAt) >= minRebuildInterval else { return nil }
+        rebuild()
+        if let value = index?[key], let result = resolve(value) { return result }
+        return nil
+    }
+
+    /// Nur unter `lock` aufrufen.
+    private func rebuild() {
+        index = build()
+        builtAt = now()
     }
 }
