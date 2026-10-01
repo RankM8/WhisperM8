@@ -80,6 +80,22 @@ final class AgentTranscriptReaderTests: XCTestCase {
         } else { XCTFail("Expected imagePlaceholder block") }
     }
 
+    /// `<synthetic>` (lokal erzeugte Fehlermeldung) ist kein Modell — der
+    /// Scan liefert die letzte echte Antwort davor.
+    func testLastAssistantModelSkipsSyntheticEntries() throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-claude-synthetic-model-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let lines = [
+            #"{"type":"assistant","message":{"model":"claude-opus-5-5","content":[]}}"#,
+            #"{"type":"assistant","message":{"model":"<synthetic>","content":[]}}"#,
+            "",
+        ]
+        try Data(lines.joined(separator: "\n").utf8).write(to: tempURL)
+
+        XCTAssertEqual(ClaudeTranscriptReader.lastAssistantModel(fileURL: tempURL), "claude-opus-5-5")
+    }
+
     func testLastAssistantModelReverseScanSkipsTwentyMegabyteTrailingLineWithoutMaterializingIt() throws {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("test-claude-reverse-model-\(UUID().uuidString).jsonl")

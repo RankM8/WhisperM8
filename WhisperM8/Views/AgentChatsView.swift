@@ -2250,8 +2250,38 @@ struct AgentChatsView: View {
                 runningSessionIDs: runningIDs
             )
             guard !Task.isCancelled else { return }
-            await MainActor.run { missingTranscriptIDs = missing }
+            // Selbstheilung: Claude-Chats, deren gebundene ID nie ein
+            // Transcript schrieb (Vorfall 2026-09-30, Background-Agent),
+            // fallen auf die zuletzt belegte ID mit Datei zurück.
+            let recoveries = ClaudeExternalIDRecovery.recoveries(
+                candidates: sessions.filter { missing.contains($0.id) })
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                missingTranscriptIDs = missing.subtracting(applyExternalIDRecoveries(recoveries))
+            }
         }
+    }
+
+    /// Schreibt die Rückfall-IDs — nur, wenn der Chat noch auf die kaputte
+    /// ID zeigt (keine Wettläufe mit einem frischen Binding).
+    /// - Returns: die geheilten Session-IDs.
+    private func applyExternalIDRecoveries(_ recoveries: [ClaudeExternalIDRecovery.Recovery]) -> Set<UUID> {
+        var healed = Set<UUID>()
+        for recovery in recoveries {
+            do {
+                try store.updateSession(id: recovery.localID) { session in
+                    guard session.externalSessionID == recovery.brokenID else { return }
+                    session.externalSessionID = recovery.recoveredID
+                    healed.insert(recovery.localID)
+                }
+            } catch {
+                continue
+            }
+            if healed.contains(recovery.localID) {
+                Logger.claudeBinding.notice("binding_recovered localID=\(recovery.localID.uuidString, privacy: .public) broken=\(recovery.brokenID, privacy: .public) recovered=\(recovery.recoveredID, privacy: .public)")
+            }
+        }
+        return healed
     }
 
     /// Scope-Umschalter (Aktiv·Zuletzt·Alle) + Layout-Toggle (gruppiert·flach)

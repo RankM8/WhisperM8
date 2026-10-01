@@ -588,6 +588,13 @@ enum ChatsShowCommand {
             for: entry.session.id,
             in: AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL()))
 
+        // Modell der letzten Antwort (nur Claude; ein Rückwärts-Scan).
+        let transcriptModel = entry.session.provider == .claude
+            ? runtime.transcriptPath.flatMap {
+                ClaudeTranscriptReader.lastAssistantModel(fileURL: URL(fileURLWithPath: $0))
+            }
+            : nil
+
         // Blockadeerklärung: warum fließt ein wartender Auftrag nicht ab?
         let transcriptModifiedAt = runtime.transcriptPath.flatMap { path -> Date? in
             (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
@@ -610,7 +617,7 @@ enum ChatsShowCommand {
             )
             payload["schemaVersion"] = 1
             payload["generatedAt"] = ChatsOutput.iso(context.now)
-            payload["detail"] = ChatsOutput.detailJSON(entry: entry)
+            payload["detail"] = ChatsOutput.detailJSON(entry: entry, transcriptModel: transcriptModel)
             let waiting = queued.filter(\.isOpen)
             var queueDict: [String: Any] = [
                 "openCount": waiting.count,
@@ -641,7 +648,8 @@ enum ChatsShowCommand {
         } else {
             ChatsOutput.printShow(entry: entry, runtime: runtime,
                                   selfID: context.caller.sessionID, now: context.now,
-                                  isOpen: isOpen, isPinned: isPinned)
+                                  isOpen: isOpen, isPinned: isPinned,
+                                  transcriptModel: transcriptModel)
             if let summary = ChatsQueueSupport.summary(open: queued) {
                 CLIIO.out("")
                 CLIIO.out("── WARTESCHLANGE " + String(repeating: "─", count: 36))

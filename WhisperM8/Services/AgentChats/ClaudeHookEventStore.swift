@@ -50,6 +50,11 @@ struct ClaudeHookEvent: Equatable, Codable {
     /// `AgentSessionStateMachine.awaitingKind(forToolName:)`).
     var toolName: String?
     var rawJSON: String
+    /// Bei SessionStart: `startup` / `resume` / `clear` / `compact` / `fork`.
+    /// `fork` meldet u. a. der Background-Fork beim Umwandeln eines Chats in
+    /// einen Background-Agent (`/background`, Left-Arrow) — über dieselbe
+    /// Settings-Datei, also im Event-File des Vordergrund-Chats.
+    var source: String? = nil
 }
 
 /// Tail-Reader fuer das JSONL-File einer lokalen Session. Speichert pro
@@ -138,7 +143,8 @@ final class ClaudeHookEventStore {
             cwd: object["cwd"] as? String,
             reason: object["reason"] as? String,
             toolName: object["tool_name"] as? String,
-            rawJSON: line
+            rawJSON: line,
+            source: object["source"] as? String
         )
     }
 
