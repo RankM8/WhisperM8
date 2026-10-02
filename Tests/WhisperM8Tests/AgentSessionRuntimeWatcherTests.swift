@@ -16,7 +16,8 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
         transcriptURL: URL?,
         lastStat: AgentTranscriptFileStat? = nil,
         externalSessionID: String? = "ext-1",
-        cachedLastEvent: AgentTranscriptEvent? = nil
+        cachedLastEvent: AgentTranscriptEvent? = nil,
+        cachedActivity: AgentSessionActivity? = nil
     ) -> WatchedSession {
         WatchedSession(
             id: UUID(),
@@ -26,7 +27,8 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
             transcriptURL: transcriptURL,
             lastTurnFinishedAt: nil,
             lastStat: lastStat,
-            cachedLastEvent: cachedLastEvent
+            cachedLastEvent: cachedLastEvent,
+            cachedActivity: cachedActivity
         )
     }
 
@@ -80,5 +82,37 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
         )
         XCTAssertTrue(tailFlag.value, "Geänderter Stat -> Tail-Read")
         XCTAssertEqual(snapshot.stat, newStat)
+    }
+
+    // MARK: - Stand-Zeile (Tab-Switcher)
+
+    func testTailReadLiefertActivityAusDemselbenTail() {
+        let stat = AgentTranscriptFileStat(mtime: Date(), size: 120)
+        let line = #"{"type":"assistant","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t","name":"Bash","input":{"command":"swift test"}}]}}"#
+        let snapshot = AgentSessionRuntimeWatcher.pollSnapshot(
+            for: entry(transcriptURL: url),
+            now: Date(),
+            statProvider: { _ in stat },
+            tailProvider: { _, _ in line + "\n" },
+            urlResolver: { _ in self.url }
+        )
+        XCTAssertEqual(snapshot.activity?.detail, .tool(name: "Bash", argument: "swift test"))
+    }
+
+    func testStatFirstBehaeltGecachteActivityOhneRead() {
+        let now = Date()
+        let stat = AgentTranscriptFileStat(mtime: now.addingTimeInterval(-1), size: 50)
+        let cached = AgentSessionActivity(detail: .reply("Fertig."))
+        let tailFlag = Flag()
+        let snapshot = AgentSessionRuntimeWatcher.pollSnapshot(
+            for: entry(transcriptURL: url, lastStat: stat,
+                       cachedLastEvent: .userMessage(timestamp: now), cachedActivity: cached),
+            now: now,
+            statProvider: { _ in stat },
+            tailProvider: { _, _ in tailFlag.value = true; return "" },
+            urlResolver: { _ in self.url }
+        )
+        XCTAssertFalse(tailFlag.value)
+        XCTAssertEqual(snapshot.activity, cached)
     }
 }

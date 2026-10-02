@@ -351,6 +351,109 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .working)
     }
 
+    // MARK: Stand-Daten für den Tab-Switcher (statusSince, Warte-Art)
+
+    /// Uhr-Box, damit die Tests Zeit gezielt vorstellen können.
+    private final class ClockBox {
+        var now = Date(timeIntervalSince1970: 1_000_000)
+        func advance(_ seconds: TimeInterval) { now = now.addingTimeInterval(seconds) }
+    }
+
+    func testStatusSinceNurBeiEchtemWechsel() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        let clock = ClockBox()
+        coordinator.now = { clock.now }
+        let activity = coordinator.activityStore
+
+        coordinator.sessionLaunched(sessionID: sessionID)
+        let launchedAt = clock.now
+        XCTAssertEqual(activity.statusSince(for: sessionID), launchedAt, "Erster Status = erster Wechsel")
+
+        // SessionStart: Lifecycle ready, Status bleibt idle → kein neuer Zeitpunkt.
+        clock.advance(5)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.sessionStart))
+        XCTAssertEqual(activity.statusSince(for: sessionID), launchedAt)
+
+        clock.advance(10)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        let workingSince = clock.now
+        XCTAssertEqual(activity.statusSince(for: sessionID), workingSince)
+
+        // Jedes Tool-Event ist wieder „working" — die Dauer darf nicht neu starten.
+        for _ in 0..<3 {
+            clock.advance(30)
+            coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.preToolUse, tool: "Bash"))
+            coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.postToolUse, tool: "Bash"))
+        }
+        XCTAssertEqual(activity.statusSince(for: sessionID), workingSince)
+
+        clock.advance(7)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.permissionRequest))
+        XCTAssertEqual(activity.statusSince(for: sessionID), clock.now, "working → awaitingInput ist ein Wechsel")
+
+        clock.advance(4)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
+        XCTAssertEqual(activity.statusSince(for: sessionID), clock.now)
+        let doneAt = clock.now
+
+        // Doppel-Stop: kein Wechsel.
+        clock.advance(4)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
+        XCTAssertEqual(activity.statusSince(for: sessionID), doneAt)
+    }
+
+    func testStatusSinceFuerSubagentJobsUndAbraeumen() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        let clock = ClockBox()
+        coordinator.now = { clock.now }
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .spawning)
+        let startedAt = clock.now
+        clock.advance(20)
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .running)
+        XCTAssertEqual(coordinator.activityStore.statusSince(for: sessionID), startedAt, "spawning und running sind beide working")
+
+        clock.advance(20)
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .done)
+        XCTAssertEqual(coordinator.activityStore.statusSince(for: sessionID), clock.now)
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .takenOver)
+        XCTAssertNil(coordinator.activityStore.statusSince(for: sessionID), "Kein Status → kein Zeitpunkt")
+    }
+
+    func testWarteArtAusDemHookLandetInDerActivity() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        let store = coordinator.activityStore
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        coordinator.handleTranscriptActivity(
+            sessionID: sessionID,
+            activity: AgentSessionActivity(detail: .tool(name: "Bash", argument: "git push")))
+
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.permissionRequest, tool: "Bash"))
+        XCTAssertEqual(store.activity(for: sessionID)?.awaitingKind, .permission)
+        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Freigabe: Bash git push")
+
+        // Weiterarbeit räumt die Warte-Art ab, der Tail-Stand bleibt.
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.postToolUse, tool: "Bash"))
+        XCTAssertNil(store.activity(for: sessionID)?.awaitingKind)
+        XCTAssertEqual(store.activity(for: sessionID)?.detail, .tool(name: "Bash", argument: "git push"))
+
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.preToolUse, tool: "ExitPlanMode"))
+        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Plan zur Freigabe")
+
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.preToolUse, tool: "AskUserQuestion"))
+        XCTAssertEqual(store.activity(for: sessionID)?.awaitingKind, .question)
+
+        // Transcript meldet „nichts mehr" → nur die Hook-Art bleibt.
+        coordinator.handleTranscriptActivity(sessionID: sessionID, activity: nil)
+        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Frage")
+
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
+        XCTAssertNil(store.activity(for: sessionID), "Leere Activity wird entfernt")
+        // Die Stand-Zeile ist kein Status: der Runtime-Status-Store bleibt unberührt.
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .idle)
+    }
+
     func testTranscriptActivityCannotOverrideAwaiting() throws {
         let (coordinator, sessionID, _, _, _) = try makeCoordinator()
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
