@@ -31,7 +31,8 @@ import SwiftUI
 /// AgentChatsView-Body — die P4-Regel „Body liest `.statuses` nie direkt"
 /// bleibt gewahrt.
 struct AgentTabSwitcherOverlay: View {
-    /// Offene Tabs in Anzeige-Reihenfolge (`headerTabs`).
+    /// Ziele des Durchlaufs in Umfangs-Reihenfolge (`TabSwitcherScope`:
+    /// Grid-Slots, Workspace-Slots oder offene Tabs desselben Projekts).
     let sessions: [AgentChatSession]
     let highlightedID: UUID?
     let projectsByID: [UUID: AgentProject]

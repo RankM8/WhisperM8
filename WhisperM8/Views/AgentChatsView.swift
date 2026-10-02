@@ -277,6 +277,11 @@ struct AgentChatsView: View {
     /// und stirbt mit einer einzigen Key-Interaktion in DIESEM Fenster.
     /// internal, da die Handler in +Shortcuts ihn steuern.
     @State var tabSwitcher: TabSwitcherModel?
+    /// Ziel-Sessions des laufenden Durchlaufs in Umfangs-Reihenfolge
+    /// (`TabSwitcherScope`) — Snapshot aus dem Key-Event-Pfad
+    /// (`refreshTabSwitcherScope`), damit der Overlay-Body nicht über alle
+    /// Sessions scannt. Leer, solange der Switcher inaktiv ist.
+    @State var tabSwitcherSessions: [AgentChatSession] = []
     /// Spaltenzahl des gerade gerenderten Switcher-Grids — vom Overlay
     /// gemeldet (`onColumnsChange`), von `+Shortcuts` als ↑/↓-Schrittweite
     /// benutzt (eine Reihe = `tabSwitcherColumns` Schritte).
@@ -966,7 +971,7 @@ struct AgentChatsView: View {
             // spätere Ctrl-Loslassen die frische Wahl wieder überstimmen.
             // Der eigene Commit räumt den Switcher VOR dem Selektieren
             // (siehe commitTabSwitcher) und ist hier deshalb ein No-op.
-            if tabSwitcher != nil { tabSwitcher = nil }
+            if tabSwitcher != nil { cancelTabSwitcher() }
             syncActiveAgentChat()
             // Kontext-Projekt folgt der Selektion — Tabs sind global, das
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
@@ -2447,7 +2452,7 @@ struct AgentChatsView: View {
     private var tabSwitcherOverlay: some View {
         if let tabSwitcher {
             AgentTabSwitcherOverlay(
-                sessions: visualHeaderTabs,
+                sessions: tabSwitcherSessions,
                 highlightedID: tabSwitcher.highlightedID,
                 projectsByID: Dictionary(
                     workspace.projects.map { ($0.id, $0) },
