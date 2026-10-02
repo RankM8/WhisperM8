@@ -17,6 +17,8 @@ enum ClaudeExternalIDRecovery {
         "\"hook_event_name\":\"UserPromptSubmit\"",
         "\"hook_event_name\":\"Stop\"",
     ]
+    private static let sessionStartMarker = "\"hook_event_name\":\"SessionStart\""
+    private static let forkSourceMarker = "\"source\":\"fork\""
 
     /// Rückfall-Kandidat: Session-ID + wo ihr Transcript HEUTE liegt.
     struct Candidate: Equatable {
@@ -38,9 +40,20 @@ enum ClaudeExternalIDRecovery {
         // Reihenfolge des letzten Turn-Belegs pro ID + jüngster Pfad.
         var lastTurnIndex: [String: Int] = [:]
         var pathByID: [String: String] = [:]
+        // Background-Forks (`SessionStart` mit `source: fork`) schreiben ihre
+        // Turns ins selbe Event-File und sind jünger als das Original — ohne
+        // Ausschluss fiele der Chat auf den bg-Agent zurück (Review 2026-10-02).
+        var forkIDs = Set<String>()
         var index = 0
         for line in eventLines {
             index += 1
+            if line.contains(sessionStartMarker), line.contains(forkSourceMarker),
+               let data = line.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let sessionID = object["session_id"] as? String {
+                forkIDs.insert(sessionID)
+                continue
+            }
             // Billiger Vorfilter: Tool-Events tragen teils MB-große Payloads
             // (Base64-Screenshots) — nur Turn-Zeilen werden geparst.
             guard turnEventMarkers.contains(where: { line.contains($0) }),
@@ -53,7 +66,7 @@ enum ClaudeExternalIDRecovery {
             lastTurnIndex[sessionID] = index
             pathByID[sessionID] = path
         }
-        for id in lastTurnIndex.sorted(by: { $0.value > $1.value }).map(\.key) {
+        for id in lastTurnIndex.sorted(by: { $0.value > $1.value }).map(\.key) where !forkIDs.contains(id) {
             if let url = locateTranscript(id, pathByID[id] ?? "") {
                 return Candidate(sessionID: id, transcriptURL: url)
             }
@@ -90,6 +103,9 @@ enum ClaudeExternalIDRecovery {
         let localID: UUID
         let brokenID: String
         let recoveredID: String
+        /// Profil des Chats beim Scan — angewendet wird nur, wenn es noch
+        /// gilt (ein Kontowechsel dazwischen gewinnt).
+        var expectedProfileName: String? = nil
         /// Profil, unter dem das Transcript heute liegt (`nil` = main).
         /// `--resume` findet die Session nur unter diesem Config-Dir — liegt
         /// die Datei nach einem Kontowechsel woanders, zieht das Profil des
@@ -141,6 +157,7 @@ enum ClaudeExternalIDRecovery {
                 localID: session.id,
                 brokenID: broken,
                 recoveredID: candidate.sessionID,
+                expectedProfileName: session.claudeProfileName,
                 recoveredProfileName: ClaudeAccountProfiles.profileName(
                     forTranscriptPath: candidate.transcriptURL.path)))
         }

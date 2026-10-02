@@ -150,6 +150,27 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(externalID(coordinator, sessionID), "ac020fd4")
     }
 
+    /// Umgekehrte Reihenfolge (Review 2026-10-02): erst die leere Vordergrund-
+    /// Session, DANN der bg-Fork — und der Fork arbeitet. Früher überschrieb
+    /// der Fork den einzigen Pending-Platz und sein Stop band den Chat an den
+    /// Background-Agent.
+    func testForkAfterEmptyStartupNeverTakesOverBinding() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "ac020fd4" || id == "08793d2e" }
+
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("ac020fd4", source: "resume"))
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("8a5a7119", source: "startup"))
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("08793d2e", source: "fork"))
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit, sessionID: "08793d2e"))
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop, sessionID: "08793d2e"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "ac020fd4", "bg-Fork bindet nie")
+
+        // Die leere Vordergrund-Session bleibt zurückgestellt und bindet erst,
+        // wenn der User dort wirklich etwas schreibt.
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit, sessionID: "8a5a7119"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "8a5a7119")
+    }
+
     /// `/clear`: neue ID ohne Datei wird erst mit dem ersten Prompt gebunden.
     func testPostponedBindingCommitsOnFirstTurnOfNewID() throws {
         let (coordinator, sessionID, _, _, _) = try makeCoordinator()
@@ -176,7 +197,7 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(decide(nil, "fork", newExists: false, currentExists: false), .bind, "WhisperM8-Fork (ungebunden)")
         XCTAssertEqual(C.externalIDBindingDecision(currentID: "neu", newID: "neu", source: "resume",
                                                    newTranscriptExists: true, currentTranscriptExists: true), .unchanged)
-        XCTAssertEqual(decide("alt", "fork", newExists: true, currentExists: true), .postpone, "bg-Fork")
+        XCTAssertEqual(decide("alt", "fork", newExists: true, currentExists: true), .ignoreFork, "bg-Fork")
         XCTAssertEqual(decide("alt", "startup", newExists: false, currentExists: false), .bind, "alte ID ohne Datei")
         XCTAssertEqual(decide("alt", "resume", newExists: true, currentExists: true), .bind, "/resume in der TUI")
         XCTAssertEqual(decide("alt", "startup", newExists: false, currentExists: true), .postpone, "leere Session")

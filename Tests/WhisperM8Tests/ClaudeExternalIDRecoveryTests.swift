@@ -47,6 +47,20 @@ final class ClaudeExternalIDRecoveryTests: XCTestCase {
         XCTAssertEqual(candidate?.sessionID, "ac020fd4", "Fork ohne Turn zählt nicht, nur der echte Verlauf")
     }
 
+    /// Review 2026-10-02: Der bg-Fork schreibt seine Turns ins selbe
+    /// Event-File und ist jünger als das Original — er darf nie gewählt werden.
+    func testSkipsBackgroundForkEvenWithNewerTurns() {
+        let lines = incidentLines + [
+            line("UserPromptSubmit", "08793d2e"),
+            line("Stop", "08793d2e"),
+        ]
+        let candidate = ClaudeExternalIDRecovery.recoverableCandidate(
+            eventLines: lines.map { Substring($0) },
+            brokenID: "8a5a7119",
+            locateTranscript: existingPaths(["/t/ac020fd4.jsonl", "/t/08793d2e.jsonl"]))
+        XCTAssertEqual(candidate?.sessionID, "ac020fd4")
+    }
+
     func testPrefersNewestTurnAndSkipsMissingFiles() {
         let lines = [line("Stop", "a"), line("Stop", "b"), line("UserPromptSubmit", "c")]
         let candidate = ClaudeExternalIDRecovery.recoverableCandidate(
@@ -123,7 +137,9 @@ final class ClaudeExternalIDRecoveryTests: XCTestCase {
                     : nil
             })
         XCTAssertEqual(recoveries, [.init(localID: session.id, brokenID: "8a5a7119",
-                                          recoveredID: "ac020fd4", recoveredProfileName: "PowerUser2")])
+                                          recoveredID: "ac020fd4", expectedProfileName: "RankM8",
+                                          recoveredProfileName: "PowerUser2")],
+                       "Profil beim Scan wird mitgeführt — angewendet nur, wenn es noch gilt")
     }
 
     /// Lebt der Verlauf schon in einem anderen Chat weiter (Ersatz-Chat

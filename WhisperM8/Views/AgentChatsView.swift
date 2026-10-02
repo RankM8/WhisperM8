@@ -2257,9 +2257,14 @@ struct AgentChatsView: View {
                 candidates: sessions.filter { missing.contains($0.id) },
                 projectPathByID: projectPathByID,
                 boundExternalIDs: Set(sessions.compactMap(\.externalSessionID)))
-            guard !Task.isCancelled else { return }
+            // Heilungen auch bei Abbruch anwenden: `recoveries` hat die Chats
+            // für diesen App-Lauf schon als versucht markiert — verworfen
+            // wären sie bis zum Neustart verloren (Review 2026-10-02). Der
+            // Vergleich auf ID + Profil im Store schützt vor Wettläufen.
+            let cancelled = Task.isCancelled
             await MainActor.run {
-                missingTranscriptIDs = missing.subtracting(applyExternalIDRecoveries(recoveries))
+                let healed = applyExternalIDRecoveries(recoveries)
+                if !cancelled { missingTranscriptIDs = missing.subtracting(healed) }
             }
         }
     }
@@ -2272,7 +2277,8 @@ struct AgentChatsView: View {
         for recovery in recoveries {
             do {
                 try store.updateSession(id: recovery.localID) { session in
-                    guard session.externalSessionID == recovery.brokenID else { return }
+                    guard session.externalSessionID == recovery.brokenID,
+                          session.claudeProfileName == recovery.expectedProfileName else { return }
                     session.externalSessionID = recovery.recoveredID
                     session.claudeProfileName = recovery.recoveredProfileName
                     healed.insert(recovery.localID)

@@ -113,6 +113,9 @@ final class AgentSessionStatusCoordinator {
     /// echten Turn zeigt. Siehe `externalIDBindingDecision`.
     private var pendingExternalIDs: [UUID: String] = [:]
 
+    /// IDs der Background-Forks pro lokaler Session — werden nie gebunden.
+    private var forkExternalIDs: [UUID: Set<String>] = [:]
+
     /// Test-Injection: Existiert das Transcript der Claude-Session
     /// (localID, externalID, transcript_path aus dem Hook)? Default prüft
     /// erst den Hook-Pfad, sonst den Locator mit dem Projekt-cwd.
@@ -580,6 +583,8 @@ final class AgentSessionStatusCoordinator {
         case bind
         /// Neue ID merken, erst beim ersten Turn-Event dieser ID übernehmen.
         case postpone
+        /// Background-Fork einer bereits gebundenen Session — nie binden.
+        case ignoreFork
         /// Nichts zu tun (ID schon gebunden).
         case unchanged
     }
@@ -594,7 +599,12 @@ final class AgentSessionStatusCoordinator {
     /// Datei und hatte seinen Verlauf „verloren".
     ///
     /// - Erstbindung (noch keine ID, auch WhisperM8-Forks) → sofort.
-    /// - `fork` bei bereits gebundener ID kommt vom bg-Fork → zurückstellen.
+    /// - `fork` bei bereits gebundener ID kommt vom bg-Fork → ignorieren.
+    ///   Früher „zurückstellen" — mit nur EINEM Pending-Platz überschrieb ein
+    ///   nach der leeren Vordergrund-Session eintreffender Fork den Platz, und
+    ///   sein erster Turn band den Chat an den Background-Agent (Review
+    ///   2026-10-02: die Reihenfolge der beiden SessionStarts ist nicht
+    ///   garantiert).
     /// - Bisherige ID ohne Transcript → nichts zu verlieren, sofort.
     /// - Neue ID mit Transcript (`/resume` in der TUI) → sofort.
     /// - Sonst (`/clear`, leere Session nach `/background`) → zurückstellen,
@@ -608,7 +618,7 @@ final class AgentSessionStatusCoordinator {
     ) -> ExternalIDBindingDecision {
         guard let currentID, !currentID.isEmpty else { return .bind }
         if currentID == newID { return .unchanged }
-        if source == "fork" { return .postpone }
+        if source == "fork" { return .ignoreFork }
         if !currentTranscriptExists { return .bind }
         if newTranscriptExists { return .bind }
         return .postpone
@@ -637,7 +647,12 @@ final class AgentSessionStatusCoordinator {
         case .bind:
             pendingExternalIDs[localID] = nil
             setExternalSessionID(localID: localID, newID: newID)
+        case .ignoreFork:
+            forkExternalIDs[localID, default: []].insert(newID)
+            if pendingExternalIDs[localID] == newID { pendingExternalIDs[localID] = nil }
+            Logger.claudeBinding.notice("binding_fork_ignored localID=\(localID.uuidString, privacy: .public) fork=\(newID, privacy: .public)")
         case .postpone:
+            guard forkExternalIDs[localID]?.contains(newID) != true else { return }
             pendingExternalIDs[localID] = newID
             Logger.claudeBinding.notice("binding_postponed localID=\(localID.uuidString, privacy: .public) current=\(currentID ?? "nil", privacy: .public) new=\(newID, privacy: .public) source=\(event.source ?? "nil", privacy: .public)")
         }
@@ -652,6 +667,7 @@ final class AgentSessionStatusCoordinator {
         switch event.hookEventName {
         case .sessionEnd:
             pendingExternalIDs[localID] = nil
+            forkExternalIDs[localID] = nil
             Logger.claudeBinding.info("binding_postponed_dropped localID=\(localID.uuidString, privacy: .public) id=\(pendingID, privacy: .public)")
         case .userPromptSubmit, .preToolUse, .postToolUse, .postToolUseFailure,
              .permissionRequest, .stop:
@@ -674,8 +690,12 @@ final class AgentSessionStatusCoordinator {
               let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
             return false
         }
+        // Ohne Glob-Fallback: läuft auf dem MainActor, und der Glob listet
+        // jeden Projekt-Ordner aller Profil-Roots (Review 2026-10-02). Stufe 1
+        // deckt alle Profile ab; der Hook-Pfad oben den Rest.
         return AgentTranscriptLocator.locate(
-            provider: .claude, externalSessionID: externalID, cwd: project.path) != nil
+            provider: .claude, externalSessionID: externalID, cwd: project.path,
+            globFallback: false) != nil
     }
 
     private func setExternalSessionID(localID: UUID, newID: String) {
