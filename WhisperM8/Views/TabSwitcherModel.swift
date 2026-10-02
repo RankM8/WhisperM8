@@ -90,3 +90,39 @@ enum TabSwitcherGridLayout {
         )
     }
 }
+
+/// Pure Layout-Mathematik der Projekt-Liste (Situation C, Plan
+/// `docs/plans/tab-switcher-workspace.md`): eine Spalte Kacheln in voller
+/// Listenbreite, je ~56 pt hoch. Erst wenn die Zeilen den verfügbaren Platz
+/// sprengen, scrollt die Liste (`needsScroll`). Liefert dieselben
+/// `TabSwitcherGridMetrics` wie das Karten-Grid (Spaltenzahl immer 1 — ↑/↓
+/// springt damit genau eine Zeile). Window-frei → unit-testbar.
+enum TabSwitcherListLayout {
+    static let rowHeight: CGFloat = 56
+    static let spacing: CGFloat = 6
+    /// Listenbreite: so breit wie lesbar, aber kein Zeilenband über den
+    /// ganzen Bildschirm.
+    static let minWidth: CGFloat = 320
+    static let maxWidth: CGFloat = 560
+
+    static func metrics(count: Int, availableSize: CGSize) -> TabSwitcherGridMetrics {
+        guard count > 0 else {
+            return TabSwitcherGridMetrics(columns: 0, rows: 0, visibleRows: 0, gridWidth: 0, gridHeight: 0)
+        }
+        // Gleiches Chrome wie das Karten-Grid (Overlay- + Karten-Padding, Footer).
+        let availableWidth = max(0, availableSize.width - TabSwitcherGridLayout.horizontalChrome)
+        let width = min(maxWidth, max(minWidth, availableWidth))
+
+        let availableHeight = max(0, availableSize.height - TabSwitcherGridLayout.verticalChrome)
+        let fittingRows = Int((availableHeight + spacing) / (rowHeight + spacing))
+        let visibleRows = max(1, min(count, fittingRows))
+
+        return TabSwitcherGridMetrics(
+            columns: 1,
+            rows: count,
+            visibleRows: visibleRows,
+            gridWidth: width,
+            gridHeight: CGFloat(visibleRows) * rowHeight + CGFloat(visibleRows - 1) * spacing
+        )
+    }
+}

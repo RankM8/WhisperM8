@@ -123,6 +123,18 @@ struct AgentChatsView: View {
     var runtimeStatusStore: AgentSessionRuntimeStatusStore {
         AgentSessionStatusCoordinator.shared.statusStore
     }
+    /// Stand-Zeilen + `statusSince` für den Ctrl+Tab-Switcher.
+    ///
+    /// Bewusst eine computed Property, KEIN `@ObservedObject`/`@StateObject`:
+    /// Die Stand-Zeile ändert sich bei arbeitenden Chats mit fast jedem
+    /// Transcript-Write — beobachtet die AgentChatsView den Store, würde ihr
+    /// gesamter Body (Sidebar, Tabs, Grid) bei jeder Änderung neu ausgewertet.
+    /// Beobachtet wird er nur im `AgentTabSwitcherOverlay`, das ausschließlich
+    /// während des Umschaltens existiert (Plan tab-switcher-workspace,
+    /// Performance-Regeln).
+    var tabSwitcherActivityStore: AgentSessionActivityStore {
+        AgentSessionStatusCoordinator.shared.activityStore
+    }
     /// Referenz auf den app-weiten Auto-Namer (Koordinator) — lazy in
     /// `setupRuntimeServicesIfNeeded()` gesetzt.
     @State var autoNamer: AgentSessionAutoNamer?
@@ -286,6 +298,10 @@ struct AgentChatsView: View {
     /// gemeldet (`onColumnsChange`), von `+Shortcuts` als ↑/↓-Schrittweite
     /// benutzt (eine Reihe = `tabSwitcherColumns` Schritte).
     @State var tabSwitcherColumns: Int = 1
+    /// Darstellung des laufenden Durchlaufs: Projekt-Liste (Situation C)
+    /// oder übergangsweise das Karten-Grid (A/B) — gesetzt im Key-Event-Pfad
+    /// (`refreshTabSwitcherScope`) aus dem aufgelösten `TabSwitcherScope`.
+    @State var tabSwitcherPresentation: AgentTabSwitcherOverlay.Presentation = .grid
     /// Lokaler `.flagsChanged`-Monitor: Loslassen von Control bei aktivem
     /// Switcher committet den hervorgehobenen Tab. `keyDown` sieht Modifier-
     /// Änderungen nicht — dafür braucht es diesen zweiten Monitor.
@@ -2454,11 +2470,12 @@ struct AgentChatsView: View {
             AgentTabSwitcherOverlay(
                 sessions: tabSwitcherSessions,
                 highlightedID: tabSwitcher.highlightedID,
-                projectsByID: Dictionary(
-                    workspace.projects.map { ($0.id, $0) },
-                    uniquingKeysWith: { a, _ in a }
-                ),
+                currentID: selectedSessionID,
+                presentation: tabSwitcherPresentation,
                 statusStore: runtimeStatusStore,
+                // Nur als Referenz durchgereicht — beobachtet wird der Store
+                // ausschließlich im Overlay selbst (siehe `tabSwitcherActivityStore`).
+                activityStore: tabSwitcherActivityStore,
                 onCommit: { commitTabSwitcher(to: $0) },
                 onCancel: { cancelTabSwitcher() },
                 onColumnsChange: { tabSwitcherColumns = $0 }
