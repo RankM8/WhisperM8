@@ -302,6 +302,11 @@ struct AgentChatsView: View {
     /// oder übergangsweise das Karten-Grid (A/B) — gesetzt im Key-Event-Pfad
     /// (`refreshTabSwitcherScope`) aus dem aufgelösten `TabSwitcherScope`.
     @State var tabSwitcherPresentation: AgentTabSwitcherOverlay.Presentation = .grid
+    /// Situation B (Einzelansicht im referenzierten Workspace): Snapshot des
+    /// Workspace für die Mini-Map (`AgentTabSwitcherMiniMap`), sonst `nil`.
+    /// Gesetzt im Key-Event-Pfad (`refreshTabSwitcherScope`); steuert auch
+    /// die räumlichen Pfeile und den Commit mit Fokus-Mitnahme.
+    @State var tabSwitcherMiniMapWorkspace: AgentGridWorkspace?
     /// Lokaler `.flagsChanged`-Monitor: Loslassen von Control bei aktivem
     /// Switcher committet den hervorgehobenen Tab. `keyDown` sieht Modifier-
     /// Änderungen nicht — dafür braucht es diesen zweiten Monitor.
@@ -2466,7 +2471,18 @@ struct AgentChatsView: View {
     /// die Monitore in +Shortcuts — hier nur Rendering + Maus-Callbacks.
     @ViewBuilder
     private var tabSwitcherOverlay: some View {
-        if let tabSwitcher {
+        if let tabSwitcher, let workspace = tabSwitcherMiniMapWorkspace {
+            AgentTabSwitcherMiniMap(
+                workspace: workspace,
+                sessions: tabSwitcherSessions,
+                highlightedID: tabSwitcher.highlightedID,
+                currentID: selectedSessionID,
+                statusStore: runtimeStatusStore,
+                activityStore: tabSwitcherActivityStore,
+                onCommit: { commitTabSwitcher(to: $0) },
+                onCancel: { cancelTabSwitcher() }
+            )
+        } else if let tabSwitcher {
             AgentTabSwitcherOverlay(
                 sessions: tabSwitcherSessions,
                 highlightedID: tabSwitcher.highlightedID,

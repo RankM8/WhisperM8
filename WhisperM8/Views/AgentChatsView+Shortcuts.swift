@@ -189,6 +189,13 @@ extension AgentChatsView {
             tabSwitcher?.advance(direction, order: refreshTabSwitcherScope())
             return nil
         }
+        // Mini-Map (Situation B): Pfeile räumlich wie ⌃⌘-Pfeile im Grid statt
+        // linear/Spalten-Schrittweite. Liste (C) und Karten-Grid unverändert.
+        if tabSwitcherMiniMapWorkspace != nil,
+           let spatial = Self.miniMapDirection(keyCode: event.keyCode) {
+            moveTabSwitcherInMiniMap(spatial)
+            return nil
+        }
         switch event.keyCode {
         case TerminalShortcut.KeyCode.leftArrow:
             tabSwitcher?.advance(-1, order: refreshTabSwitcherScope())
@@ -247,8 +254,7 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         guard let target = switcher.commitTarget(order: order) else { return }
-        selectedSessionID = target
-        multiSelection = []
+        selectTabSwitcherTarget(target)
     }
 
     /// Maus-Commit aus dem Overlay: Klick auf eine Zelle wählt diesen Chat
@@ -258,8 +264,51 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         guard order.contains(sessionID) else { return }
-        selectedSessionID = sessionID
+        selectTabSwitcherTarget(sessionID)
+    }
+
+    /// Gemeinsamer Commit-Schritt. In der Mini-Map (Situation B) bleibt die
+    /// Einzelansicht: das Ziel wird groß, Grid bleibt verborgen, die
+    /// Workspace-Referenz bleibt und der gemerkte Pane-Fokus zieht mit
+    /// (`showSingleSessionFollowingGridFocus`) — „Zurück zum Workspace" landet
+    /// so beim zuletzt angesehenen Chat. Sonst der zentrale Selektionspfad.
+    /// `tabSwitcherMiniMapWorkspace` stammt aus dem unmittelbar vorher
+    /// gelaufenen `refreshTabSwitcherScope()`.
+    private func selectTabSwitcherTarget(_ target: UUID) {
+        if tabSwitcherMiniMapWorkspace != nil {
+            windowStore.showSingleSessionFollowingGridFocus(target, in: windowID)
+        } else {
+            selectedSessionID = target
+        }
         multiSelection = []
+    }
+
+    /// Pfeiltaste → Richtung für die räumliche Mini-Map-Navigation.
+    private static func miniMapDirection(keyCode: UInt16) -> GridFocusDirection? {
+        switch keyCode {
+        case TerminalShortcut.KeyCode.leftArrow: return .left
+        case TerminalShortcut.KeyCode.rightArrow: return .right
+        case TabSwitcherShortcut.KeyCode.upArrow: return .up
+        case TabSwitcherShortcut.KeyCode.downArrow: return .down
+        default: return nil
+        }
+    }
+
+    /// Ein räumlicher Schritt in der Mini-Map (pure Logik in
+    /// `TabSwitcherMiniMapGeometry.spatialTarget`). Kein Ziel in der Richtung
+    /// → Highlight bleibt (kein Wrap-around, wie ⌃⌘-Pfeile). Das Highlight
+    /// wandert über `advance` um den Index-Abstand in der Umfangs-Reihenfolge
+    /// — `TabSwitcherModel` bleibt unverändert.
+    private func moveTabSwitcherInMiniMap(_ direction: GridFocusDirection) {
+        let order = refreshTabSwitcherScope()
+        guard let entity = tabSwitcherMiniMapWorkspace,
+              let current = tabSwitcher?.highlightedID,
+              let from = order.firstIndex(of: current),
+              let target = TabSwitcherMiniMapGeometry.spatialTarget(
+                  from: current, direction: direction, in: entity, order: order
+              ),
+              let to = order.firstIndex(of: target) else { return }
+        tabSwitcher?.advance(to - from, order: order)
     }
 
     func cancelTabSwitcher() {
@@ -294,6 +343,10 @@ extension AgentChatsView {
         let presentation: AgentTabSwitcherOverlay.Presentation
         if case .project = scope { presentation = .list } else { presentation = .grid }
         if tabSwitcherPresentation != presentation { tabSwitcherPresentation = presentation }
+        // Situation B: eigene Mini-Map-Darstellung (S4b).
+        let miniMapWorkspace: AgentGridWorkspace?
+        if case .workspaceMap = scope { miniMapWorkspace = activeGridWorkspaceEntity } else { miniMapWorkspace = nil }
+        if tabSwitcherMiniMapWorkspace != miniMapWorkspace { tabSwitcherMiniMapWorkspace = miniMapWorkspace }
         let byID = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let sessions = order.compactMap { byID[$0] }
         if tabSwitcherSessions != sessions { tabSwitcherSessions = sessions }

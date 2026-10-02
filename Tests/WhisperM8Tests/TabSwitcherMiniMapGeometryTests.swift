@@ -270,4 +270,72 @@ final class TabSwitcherMiniMapGeometryTests: XCTestCase {
         XCTAssertFalse(TabSwitcherTileDetail.statusAndTitle.showsActivity)
         XCTAssertFalse(TabSwitcherTileDetail.statusAndTitle.showsDuration)
     }
+
+    // MARK: - Größe mit Chrome
+
+    func testFittedMapSizeKeepsMapSizeWhenChromeFits() {
+        let content = CGSize(width: 2000, height: 1200)
+        let fitted = TabSwitcherMiniMapGeometry.fittedMapSize(
+            contentSize: content, chrome: CGSize(width: 80, height: 134)
+        )
+        XCTAssertEqual(fitted, TabSwitcherMiniMapGeometry.mapSize(contentSize: content))
+    }
+
+    func testFittedMapSizeShrinksUniformlyWhenChromeDoesNotFit() {
+        let content = CGSize(width: 600, height: 400)
+        let chrome = CGSize(width: 80, height: 134)
+        let fitted = TabSwitcherMiniMapGeometry.fittedMapSize(contentSize: content, chrome: chrome)
+        XCTAssertLessThanOrEqual(fitted.width + chrome.width, content.width + 0.001)
+        XCTAssertLessThanOrEqual(fitted.height + chrome.height, content.height + 0.001)
+        // Seitenverhältnis des Content-Bereichs bleibt (keine Verzerrung).
+        XCTAssertEqual(fitted.width / fitted.height, content.width / content.height, accuracy: 0.001)
+    }
+
+    func testFittedMapSizeIsZeroForEmptyContent() {
+        XCTAssertEqual(
+            TabSwitcherMiniMapGeometry.fittedMapSize(contentSize: .zero, chrome: CGSize(width: 80, height: 134)),
+            .zero
+        )
+    }
+
+    // MARK: - Räumliche Pfeil-Navigation
+
+    private func workspace(capacity: Int, filled: Int) -> (AgentGridWorkspace, [UUID]) {
+        let ids = (0 ..< filled).map { _ in UUID() }
+        return (AgentGridWorkspace(slots: ids, capacity: capacity), ids)
+    }
+
+    func testSpatialTargetFollowsRowsAndColumns() {
+        // 2×2: 0 1 / 2 3
+        let (entity, s) = workspace(capacity: 4, filled: 4)
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: s[0], direction: .right, in: entity, order: s), s[1])
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: s[0], direction: .down, in: entity, order: s), s[2])
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: s[3], direction: .up, in: entity, order: s), s[1])
+        XCTAssertNil(TabSwitcherMiniMapGeometry.spatialTarget(from: s[1], direction: .right, in: entity, order: s),
+                     "kein Wrap-around am Rand")
+    }
+
+    func testSpatialTargetHitsSpanningSlot() {
+        // 3 = „2 oben + 1 breit": Slot 2 überdeckt beide Spalten.
+        let (entity, s) = workspace(capacity: 3, filled: 3)
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: s[1], direction: .down, in: entity, order: s), s[2])
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: s[2], direction: .up, in: entity, order: s), s[0])
+    }
+
+    func testSpatialTargetSkipsSlotsOutsideScope() {
+        // 3×2: 0 1 2 / 3 4 5 — Slot 1 hält z. B. ein anderes Fenster (nicht im
+        // Umfang), Slot 4 ist leer: beide werden in der Richtung übersprungen.
+        var (entity, s) = workspace(capacity: 6, filled: 6)
+        entity.slots[4] = nil
+        let order = [s[0], s[2], s[3], s[5]]
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: s[0], direction: .right, in: entity, order: order), s[2])
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: s[3], direction: .right, in: entity, order: order), s[5])
+        XCTAssertNil(TabSwitcherMiniMapGeometry.spatialTarget(from: s[2], direction: .left, in: entity, order: [s[2], s[3]]))
+    }
+
+    func testSpatialTargetWithoutHighlightStartsAtFirstTarget() {
+        let (entity, s) = workspace(capacity: 4, filled: 4)
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: nil, direction: .right, in: entity, order: s), s[1])
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.spatialTarget(from: UUID(), direction: .down, in: entity, order: s), s[2])
+    }
 }

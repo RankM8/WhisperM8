@@ -145,6 +145,51 @@ enum TabSwitcherMiniMapGeometry {
         return CGSize(width: contentSize.width * factor, height: contentSize.height * factor)
     }
 
+    /// Größe der Mini-Map, wenn um sie herum noch Chrome (Titel, Footer,
+    /// Paddings der Karte) in den Content-Bereich passen muss: erst
+    /// `mapSize(contentSize:)`, dann — falls Map + Chrome den Bereich
+    /// sprengen — einheitlich verkleinert, sodass das Seitenverhältnis
+    /// erhalten bleibt. Wird es dadurch eng, greift `tileDetail` (die
+    /// Stand-Zeile entfällt, nie der Status).
+    static func fittedMapSize(contentSize: CGSize, chrome: CGSize) -> CGSize {
+        let map = mapSize(contentSize: contentSize)
+        guard map.width > 0, map.height > 0 else { return .zero }
+        let availableWidth = max(0, contentSize.width - chrome.width)
+        let availableHeight = max(0, contentSize.height - chrome.height)
+        let factor = min(1, availableWidth / map.width, availableHeight / map.height)
+        return CGSize(width: map.width * factor, height: map.height * factor)
+    }
+
+    // MARK: - Räumliche Pfeil-Navigation
+
+    /// Ziel einer Pfeiltaste in der Mini-Map — dieselbe Logik wie die
+    /// ⌃⌘-Pfeile im Grid (`GridFocusNavigator`): rechts/links in der Zeile,
+    /// oben/unten entlang der Spalte. Nur Slots, deren Session im
+    /// Durchlauf-Umfang (`order`) liegt, zählen als belegt — leere Slots und
+    /// Übernahme-Platzhalter werden in der Richtung übersprungen.
+    ///
+    /// Ohne Highlight (bzw. Highlight nicht im Workspace) startet die Suche
+    /// beim ersten Ziel des Umfangs. `nil` = in dieser Richtung kein Ziel
+    /// (die Taste bleibt dann wirkungslos, kein Wrap-around).
+    static func spatialTarget(
+        from highlightedID: UUID?,
+        direction: GridFocusDirection,
+        in entity: AgentGridWorkspace,
+        order: [UUID]
+    ) -> UUID? {
+        let eligible = Set(order)
+        guard let startID = highlightedID.flatMap({ eligible.contains($0) ? $0 : nil }) ?? order.first,
+              let startIndex = entity.slotIndex(of: startID) else { return nil }
+        let occupied = entity.slots.map { slot in slot.map { eligible.contains($0) } ?? false }
+        guard let targetIndex = GridFocusNavigator.target(
+            from: startIndex,
+            direction: direction,
+            layout: AgentGridAutoLayout.forCapacity(entity.capacity),
+            occupied: occupied
+        ), entity.slots.indices.contains(targetIndex) else { return nil }
+        return entity.slots[targetIndex]
+    }
+
     // MARK: - Detailstufe einer Kachel
 
     /// Mindestgröße einer Kachel, ab der neben Status + Titel noch die Dauer
