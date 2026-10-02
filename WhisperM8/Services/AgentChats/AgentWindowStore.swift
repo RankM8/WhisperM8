@@ -829,6 +829,31 @@ final class AgentWindowStore {
         }
     }
 
+    /// Ctrl+Tab-Commit aus der Mini-Map (Situation B, Plan
+    /// `docs/plans/tab-switcher-workspace.md`): wie `showSingleSession` —
+    /// Grid bleibt verborgen, die Workspace-Referenz bleibt („Zurück zum
+    /// Workspace" funktioniert weiter) —, zieht aber den gemerkten Pane-Fokus
+    /// (`gridFocusSessionID`) auf das Ziel mit. Sonst landete der Rücksprung
+    /// beim ursprünglich fokussierten statt beim zuletzt angesehenen Chat.
+    ///
+    /// Der Fokus wandert nur, wenn das Ziel im referenzierten Workspace liegt.
+    /// Hält ein ANDERES Fenster den Tab, passiert nichts (kein Stehlen — der
+    /// Switcher bietet solche Slots ohnehin nicht an).
+    func showSingleSessionFollowingGridFocus(_ sessionID: UUID, in windowID: UUID) {
+        if let host = self.windowID(containingTab: sessionID), host != windowID { return }
+        let isWorkspaceMember = activeGridWorkspace(in: windowID)?.slotIndex(of: sessionID) != nil
+        updateWindow(windowID) { window in
+            if !window.openTabIDs.contains(sessionID) {
+                window.openTabIDs.append(sessionID)
+            }
+            window.selectedSessionID = sessionID
+            window.showsGrid = false
+            if isWorkspaceMember {
+                window.gridFocusSessionID = sessionID
+            }
+        }
+    }
+
     /// ZENTRALE Klick-/Fokus-Navigation (quellenunabhängige Klickregel,
     /// Plan-Abschnitt 03): Liegt der Chat im SICHTBAREN Workspace dieses
     /// Fensters, wird seine Pane fokussiert; sonst öffnet die Einzelansicht
