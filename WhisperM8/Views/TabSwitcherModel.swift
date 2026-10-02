@@ -29,6 +29,14 @@ struct TabSwitcherModel: Equatable {
         highlightedID = adjacentTabID(in: order, current: highlightedID, direction: direction)
     }
 
+    /// Springt direkt auf ein Ziel (Pfeiltasten im Grid: geometrisch über
+    /// `GridFocusNavigator` statt linear). Nur Ziele im Umfang — sonst bleibt
+    /// das Highlight, wo es ist.
+    mutating func highlight(_ id: UUID, order: [UUID]) {
+        guard order.contains(id) else { return }
+        highlightedID = id
+    }
+
     /// Commit-Ziel beim Loslassen von Control — `nil`, wenn der hervorgehobene
     /// Tab inzwischen nicht mehr existiert (dann bleibt die Selektion, wie
     /// sie ist, statt auf einen willkürlichen Tab zu springen).
