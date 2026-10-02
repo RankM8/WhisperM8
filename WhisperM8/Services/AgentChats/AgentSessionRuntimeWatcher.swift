@@ -95,6 +95,11 @@ final class AgentSessionRuntimeWatcher {
     /// „neuer Chat pulsiert"-Bugs.
     var onDecision: ((UUID, AgentTranscriptStatusDecider.Decision) -> Void)?
 
+    /// Meldet eine GEÄNDERTE Stand-Zeile (Tab-Switcher) — aus demselben
+    /// Tail-Read wie die Statusentscheidung, also ohne zusätzliche I/O.
+    /// `nil` = nichts Verwertbares mehr im Tail (oder Datei weg).
+    var onActivity: ((UUID, AgentSessionActivity?) -> Void)?
+
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
     /// Trailing-Edge: kam während eines laufenden Polls ein vnode-Event,
@@ -181,6 +186,7 @@ final class AgentSessionRuntimeWatcher {
         entry.transcriptURL = resolveTranscriptURL(for: entry)
         entry.lastStat = nil
         entry.cachedLastEvent = nil
+        entry.cachedActivity = nil
         entry.generation += 1
         watched[sessionID] = entry
         detachEventSource(sessionID: sessionID)
@@ -225,6 +231,7 @@ final class AgentSessionRuntimeWatcher {
             entry.transcriptURL = nil
             entry.lastStat = nil
             entry.cachedLastEvent = nil
+            entry.cachedActivity = nil
             entry.generation += 1
             self.watched[sessionID] = entry
             self.detachEventSource(sessionID: sessionID)
@@ -355,8 +362,16 @@ final class AgentSessionRuntimeWatcher {
             current.transcriptURL = snapshot.transcriptURL
             current.lastStat = snapshot.stat
             current.cachedLastEvent = snapshot.lastEvent
+            let activityChanged = current.cachedActivity != snapshot.activity
+            current.cachedActivity = snapshot.activity
             if snapshot.transcriptURL == nil, current.provider == .codex {
                 current.resolveCooldown = Self.resolveCooldownTicks
+            }
+            // Vor der Decision-Weiche: auch „keine Meinung" zum Status kann
+            // eine neue (oder verschwundene) Stand-Zeile bedeuten.
+            if activityChanged {
+                self.watched[sessionID] = current
+                self.onActivity?(sessionID, snapshot.activity)
             }
 
             guard let decision = snapshot.decision else {
@@ -413,7 +428,7 @@ final class AgentSessionRuntimeWatcher {
         let transcriptURL = entry.transcriptURL ?? urlResolver(entry)
         guard let url = transcriptURL,
               let stat = statProvider(url) else {
-            return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: nil, stat: nil, lastEvent: nil)
+            return AgentSessionRuntimePollSnapshot(transcriptURL: transcriptURL, decision: nil, stat: nil, lastEvent: nil, activity: nil)
         }
 
         // Stat-first (P2 S1): Datei unverändert → KEIN 64-KB-Read; die
@@ -430,15 +445,21 @@ final class AgentSessionRuntimeWatcher {
                 transcriptURL: url,
                 decision: decision,
                 stat: stat,
-                lastEvent: entry.cachedLastEvent
+                lastEvent: entry.cachedLastEvent,
+                // Stat-first: Datei unverändert → Stand-Zeile auch.
+                activity: entry.cachedActivity
             )
         }
 
         guard let tail = tailProvider(url, tailReadBytes) else {
-            return AgentSessionRuntimePollSnapshot(transcriptURL: url, decision: nil, stat: nil, lastEvent: nil)
+            return AgentSessionRuntimePollSnapshot(transcriptURL: url, decision: nil, stat: nil, lastEvent: nil, activity: nil)
         }
 
         let lastEvent = AgentTranscriptParser.lastEvent(in: tail, provider: entry.provider)
+        // Stand-Zeile aus demselben Tail (Tab-Switcher). Kosten nur über
+        // Zähler, kein eigenes Signpost-Intervall — sie liegen ohnehin im
+        // umschließenden `sidebarStatusPoll`-Intervall.
+        let activity = Self.extractActivity(in: tail, provider: entry.provider)
         let decision = AgentTranscriptStatusDecider.decide(
             lastEvent: lastEvent,
             fileMTime: stat.mtime,
@@ -449,8 +470,23 @@ final class AgentSessionRuntimeWatcher {
             transcriptURL: url,
             decision: decision,
             stat: stat,
-            lastEvent: lastEvent
+            lastEvent: lastEvent,
+            activity: activity
         )
+    }
+
+    /// Extractor-Aufruf mit Kostenzähler. Die Uhr wird nur bei
+    /// eingeschalteter Detail-Stufe gelesen — im Normalbetrieb bleibt es beim
+    /// Bool-Vergleich in `PerformanceCounters`.
+    nonisolated static func extractActivity(in tail: String, provider: AgentProvider) -> AgentSessionActivity? {
+        guard PerfDetailGate.isEnabled else {
+            return AgentTranscriptActivityExtractor.activity(in: tail, provider: provider)
+        }
+        let start = DispatchTime.now().uptimeNanoseconds
+        let activity = AgentTranscriptActivityExtractor.activity(in: tail, provider: provider)
+        let micros = Int((DispatchTime.now().uptimeNanoseconds &- start) / 1_000)
+        PerformanceCounters.shared.count(.activityExtracted, bytes: micros)
+        return activity
     }
 
     nonisolated private static func fileStat(at url: URL) -> AgentTranscriptFileStat? {
@@ -496,6 +532,8 @@ struct WatchedSession {
     /// letzte Event. Unveränderter Stat → kein erneuter Tail-Read.
     var lastStat: AgentTranscriptFileStat?
     var cachedLastEvent: AgentTranscriptEvent?
+    /// Stand-Zeile aus demselben Read — bleibt im Stat-first-Pfad stehen.
+    var cachedActivity: AgentSessionActivity? = nil
     /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
     var resolveCooldown: Int = 0
     /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
@@ -509,4 +547,7 @@ struct AgentSessionRuntimePollSnapshot {
     /// Stat + geparstes Event zum Zurückschreiben in den WatchedSession-Cache.
     var stat: AgentTranscriptFileStat?
     var lastEvent: AgentTranscriptEvent?
+    /// Stand-Zeile (Tab-Switcher) aus dem Tail; im Stat-first-Pfad der
+    /// gecachte Wert.
+    var activity: AgentSessionActivity?
 }

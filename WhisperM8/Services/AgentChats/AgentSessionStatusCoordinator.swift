@@ -41,6 +41,10 @@ final class AgentSessionStatusCoordinator {
     nonisolated static let defaultLaunchGraceSeconds: TimeInterval = 6
 
     let statusStore = AgentSessionRuntimeStatusStore()
+    /// Stand-Zeile + `statusSince` für den Tab-Switcher. Eigener Store, damit
+    /// die Sidebar (beobachtet `statusStore`) von Stand-Zeilen-Updates nichts
+    /// mitbekommt — Begründung am Typ.
+    let activityStore = AgentSessionActivityStore()
     let hookBridge: ClaudeHookBridge
     let autoNamer: AgentSessionAutoNamer
 
@@ -121,6 +125,9 @@ final class AgentSessionStatusCoordinator {
     /// erst den Hook-Pfad, sonst den Locator mit dem Projekt-cwd.
     var transcriptExistsOverride: ((UUID, String, String?) -> Bool)?
 
+    /// Uhr für `statusSince` — in Tests austauschbar.
+    var now: () -> Date = { Date() }
+
     init(
         store: AgentSessionStore = AgentSessionStore(),
         hookBridge: ClaudeHookBridge? = nil,
@@ -143,6 +150,9 @@ final class AgentSessionStatusCoordinator {
         }
         watcher.onDecision = { [weak self] sessionID, decision in
             self?.handleTranscriptDecision(sessionID: sessionID, decision: decision)
+        }
+        watcher.onActivity = { [weak self] sessionID, activity in
+            self?.handleTranscriptActivity(sessionID: sessionID, activity: activity)
         }
     }
 
@@ -273,16 +283,16 @@ final class AgentSessionStatusCoordinator {
     func updateSubagentJobStatus(sessionID: UUID, state: AgentJobState.State) {
         switch state {
         case .spawning, .running:
-            statusStore.setStatus(.working, for: sessionID)
+            writeStatus(.working, for: sessionID)
         case .failed:
-            statusStore.setStatus(.errored, for: sessionID)
+            writeStatus(.errored, for: sessionID)
         case .done:
-            statusStore.setStatus(.idle, for: sessionID)
+            writeStatus(.idle, for: sessionID)
         case .stopped:
-            statusStore.setStatus(.stopped, for: sessionID)
+            writeStatus(.stopped, for: sessionID)
         case .takenOver:
             // Ab jetzt übernimmt der normale PTY-Status-Pfad.
-            statusStore.clear(sessionID: sessionID)
+            writeStatus(nil, for: sessionID)
         }
     }
 
@@ -310,6 +320,13 @@ final class AgentSessionStatusCoordinator {
         }
         guard let signal = AgentSessionSignal(hookEvent: event) else { return }
         apply(signal, to: localID)
+
+        // „Freigabe: Bash …" braucht den Tool-Namen des Permission-Dialogs —
+        // den kennt nur das Hook-Event, nicht der Lifecycle-Zustand.
+        if event.hookEventName == .permissionRequest,
+           states[localID] == .awaitingInput(.permission) {
+            activityStore.setAwaiting(.permission, toolName: event.toolName, for: localID)
+        }
 
         // Background-Agents haben keinen PTY: ihr Prozessende IST das
         // `SessionEnd` (Reducer → `.stopped`). Transcript-Watch beenden;
@@ -450,6 +467,46 @@ final class AgentSessionStatusCoordinator {
             ?? watcher.cachedTranscriptMTime(sessionID: sessionID)
     }
 
+    // MARK: - Stand-Zeile (Tab-Switcher)
+
+    /// Neue Stand-Zeile aus dem Transcript-Tail (Watcher meldet nur
+    /// Änderungen). Für hook-live Sessions genauso wie für Codex — der
+    /// Inhalt ist keine Statusmeinung, nur die Beschreibung.
+    func handleTranscriptActivity(sessionID: UUID, activity: AgentSessionActivity?) {
+        activityStore.setTranscriptDetail(activity?.detail, for: sessionID)
+    }
+
+    /// Einziger Schreibpfad in den `statusStore`. Setzt `statusSince` NUR bei
+    /// echtem Wechsel — wiederholte Signale desselben Status (jedes
+    /// PreToolUse ist „working") dürfen die Dauer nicht zurücksetzen.
+    private func writeStatus(_ status: AgentSessionRuntimeStatus?, for sessionID: UUID) {
+        let previous = statusStore.status(for: sessionID)
+        if let status {
+            statusStore.setStatus(status, for: sessionID)
+        } else {
+            statusStore.clear(sessionID: sessionID)
+        }
+        guard previous != status else { return }
+        if status != nil {
+            activityStore.noteStatusChange(for: sessionID, at: now())
+        } else {
+            activityStore.clearStatusSince(for: sessionID)
+        }
+    }
+
+    /// Warte-Art aus dem Lifecycle-Zustand in die Stand-Zeile spiegeln. Bei
+    /// gleicher Art bleibt ein vorhandener Tool-Name stehen (wiederholtes
+    /// PermissionRequest), jeder andere Zustand räumt sie ab.
+    private func updateAwaitingKind(_ state: AgentSessionLifecycleState, for sessionID: UUID) {
+        let current = activityStore.activity(for: sessionID)
+        if case .awaitingInput(let kind) = state {
+            guard current?.awaitingKind != kind else { return }
+            activityStore.setAwaiting(kind, toolName: nil, for: sessionID)
+        } else if current?.awaitingKind != nil {
+            activityStore.setAwaiting(nil, toolName: nil, for: sessionID)
+        }
+    }
+
     // MARK: - State-Machine-Anbindung
 
     private func apply(_ signal: AgentSessionSignal, to sessionID: UUID) {
@@ -457,11 +514,8 @@ final class AgentSessionStatusCoordinator {
         let transition = AgentSessionStateMachine.reduce(state: oldState, signal: signal)
         states[sessionID] = transition.state
 
-        if let status = transition.state.runtimeStatus {
-            statusStore.setStatus(status, for: sessionID)
-        } else {
-            statusStore.clear(sessionID: sessionID)
-        }
+        writeStatus(transition.state.runtimeStatus, for: sessionID)
+        updateAwaitingKind(transition.state, for: sessionID)
 
         // Statuswechsel protokollieren. Der Laufzeitstatus lebt sonst nur im
         // Speicher — bei der Nachanalyse eines Queue-Staus fehlte damit genau

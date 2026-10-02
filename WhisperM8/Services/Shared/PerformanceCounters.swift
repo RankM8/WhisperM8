@@ -42,6 +42,11 @@ final class PerformanceCounters: Sendable {
         case paneDismantled
         /// Das Grid hat sein Layout neu berechnet.
         case layoutSolved
+        /// Der Watcher hat die Stand-Zeile aus einem Transcript-Tail gezogen
+        /// (`AgentTranscriptActivityExtractor`). Die Menge ist hier keine
+        /// Byte-, sondern eine Zeitsumme in Mikrosekunden — Kosten pro
+        /// Aufruf = `activity.extracted.us` / `activity.extracted`.
+        case activityExtracted
 
         var label: String {
             switch self {
@@ -50,6 +55,15 @@ final class PerformanceCounters: Sendable {
             case .paneMounted: return "pane.mounted"
             case .paneDismantled: return "pane.dismantled"
             case .layoutSolved: return "layout.solved"
+            case .activityExtracted: return "activity.extracted"
+            }
+        }
+
+        /// Einheit der mitgezählten Menge in der Log-Zeile.
+        var amountLabel: String {
+            switch self {
+            case .activityExtracted: return "us"
+            default: return "bytes"
             }
         }
     }
@@ -130,7 +144,7 @@ final class PerformanceCounters: Sendable {
         for event in Event.allCases where snapshot[event.rawValue] > 0 {
             let n = snapshot[event.rawValue]
             let b = byteSnapshot[event.rawValue]
-            parts.append(b > 0 ? "\(event.label)=\(n) \(event.label).bytes=\(b)" : "\(event.label)=\(n)")
+            parts.append(b > 0 ? "\(event.label)=\(n) \(event.label).\(event.amountLabel)=\(b)" : "\(event.label)=\(n)")
         }
         if pending > 0 {
             parts.append("feed.pendingPeak=\(pending)")
