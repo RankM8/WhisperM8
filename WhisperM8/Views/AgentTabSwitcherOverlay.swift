@@ -4,52 +4,67 @@ import SwiftUI
 /// Liegt bewusst NUR über dem Content-Bereich (Anker: die Session-Group in
 /// `mainWorkspace`) — Sidebar und Tab-Strip bleiben sichtbar und bedienbar.
 ///
-/// Darstellung: Karten-Grid mit Umbruch statt einzeiliger Zellen-Reihe — der
-/// Switcher ist eine Übersicht, also müssen ALLE offenen Tabs lesbar sein.
-/// Jede Karte trägt die Kerninfos direkt (Status, Icon, Titel, Projekt +
-/// Branch, Summary-Headline); ein separater Detailbereich entfällt. Die
-/// Grid-Mathematik (Spalten/Reihen/Scroll) lebt pur und getestet in
-/// `TabSwitcherGridLayout`. Erst wenn die Reihen den verfügbaren Platz
-/// sprengen, scrollt das Grid vertikal und hält das Highlight in Sicht.
+/// Darstellung (Plan `docs/plans/tab-switcher-workspace.md`): jede Zelle ist
+/// eine `TabSwitcherTile` mit Status (Wort + Symbol + Tönung), Titel,
+/// Stand-Zeile und Dauer.
+/// - `.list` (Situation C, Projekt-Liste): eine Spalte Kacheln in voller
+///   Listenbreite (`TabSwitcherListLayout`), ↑/↓ = eine Zeile.
+/// - `.grid` (Situation A/B, übergangsweise bis S4b/S5): Karten-Grid mit
+///   Umbruch (`TabSwitcherGridLayout`), ↑/↓ = eine Grid-Reihe.
+/// Erst wenn die Zeilen den verfügbaren Platz sprengen, scrollt der Inhalt
+/// vertikal und hält das Highlight in Sicht.
 ///
 /// Interaktion:
 /// - Tastatur (Ctrl+Tab / Ctrl+Shift+Tab / ←→↑↓ / Esc / Return) läuft komplett
 ///   über die NSEvent-Monitore in `AgentChatsView+Shortcuts` — diese View
 ///   rendert nur den Zustand (`highlightedID`) und meldet die aktuelle
 ///   Spaltenzahl für die ↑/↓-Schrittweite zurück (`onColumnsChange`).
-/// - Maus: Klick auf eine Karte = sofortiger Commit (auch bei gehaltenem
-///   Ctrl), Klick auf den Scrim = Abbruch. Hover verstärkt eine Karte nur
+/// - Maus: Klick auf eine Kachel = sofortiger Commit (auch bei gehaltenem
+///   Ctrl), Klick auf den Scrim = Abbruch. Hover verstärkt eine Kachel nur
 ///   visuell und verschiebt NIE das Keyboard-Highlight — sonst kämpfen
 ///   Mausposition und Tab-Taste um das Highlight und ein Ctrl-Loslassen
 ///   committet überraschend den gehoverten statt den ertabbten Chat.
 ///
-/// Performance: rein speicherbasiert — Status ist ein Dictionary-Lookup,
-/// die Kontext-Zeile kommt aus dem bereits persistierten
-/// `session.summary?.headline`. Kein Transcript-Read, kein Terminal-Snapshot.
-/// Der Store wird als `@ObservedObject` beobachtet; das invalidiert nur diese
-/// Overlay-View (sie existiert nur während des Umschaltens), nicht den
-/// AgentChatsView-Body — die P4-Regel „Body liest `.statuses` nie direkt"
-/// bleibt gewahrt.
+/// Performance: rein speicherbasiert — Status, Stand-Zeile und `statusSince`
+/// sind Dictionary-Lookups je angezeigter Session, kein Transcript-Read, kein
+/// Scan über alle Sessions. Beide Stores werden HIER als `@ObservedObject`
+/// beobachtet: das invalidiert nur diese Overlay-View (sie existiert nur
+/// während des Umschaltens), nicht den AgentChatsView-Body. Die
+/// AgentChatsView reicht die Stores nur als Referenz durch (computed
+/// Property, kein Property-Wrapper) — die P4-Regel „Body liest `.statuses`
+/// nie direkt" und die Plan-Regel „nur der Switcher beobachtet den
+/// Activity-Store" bleiben gewahrt. Die Dauer tickt per `TimelineView` nur,
+/// solange das Overlay offen ist.
 struct AgentTabSwitcherOverlay: View {
+    enum Presentation: Equatable {
+        /// Situation C: Projekt-Liste, eine Spalte.
+        case list
+        /// Situation A/B (übergangsweise): Karten-Grid.
+        case grid
+    }
+
     /// Ziele des Durchlaufs in Umfangs-Reihenfolge (`TabSwitcherScope`:
     /// Grid-Slots, Workspace-Slots oder offene Tabs desselben Projekts).
     let sessions: [AgentChatSession]
     let highlightedID: UUID?
-    let projectsByID: [UUID: AgentProject]
+    /// Chat, von dem der Durchlauf ausging — trägt das „Hier"-Zeichen.
+    let currentID: UUID?
+    let presentation: Presentation
     @ObservedObject var statusStore: AgentSessionRuntimeStatusStore
+    @ObservedObject var activityStore: AgentSessionActivityStore
     let onCommit: (UUID) -> Void
     let onCancel: () -> Void
     /// Meldet die aktuell gerenderte Spaltenzahl an die AgentChatsView —
     /// die ↑/↓-Navigation in `+Shortcuts` springt damit exakt eine
-    /// Grid-Reihe (Schrittweite = Spalten).
+    /// Reihe (Schrittweite = Spalten, in der Liste 1).
     var onColumnsChange: (Int) -> Void = { _ in }
 
-    /// Nur Hover-Verstärkung der Karten (siehe oben) — kein Selektionszustand.
+    /// Nur Hover-Verstärkung der Kacheln (siehe oben) — kein Selektionszustand.
     @State private var hoveredID: UUID?
 
     var body: some View {
         GeometryReader { geo in
-            let metrics = TabSwitcherGridLayout.metrics(count: sessions.count, availableSize: geo.size)
+            let metrics = metrics(for: geo.size)
             ZStack {
                 // Scrim: Terminal scheint angedeutet durch; Klick daneben = Abbruch.
                 AgentTheme.background.opacity(0.62)
@@ -66,9 +81,18 @@ struct AgentTabSwitcherOverlay: View {
         .transition(.opacity)
     }
 
+    private func metrics(for size: CGSize) -> TabSwitcherGridMetrics {
+        switch presentation {
+        case .list:
+            return TabSwitcherListLayout.metrics(count: sessions.count, availableSize: size)
+        case .grid:
+            return TabSwitcherGridLayout.metrics(count: sessions.count, availableSize: size)
+        }
+    }
+
     private func card(metrics: TabSwitcherGridMetrics) -> some View {
         VStack(spacing: 10) {
-            grid(metrics: metrics)
+            tiles(metrics: metrics)
             footer
         }
         .padding(16)
@@ -85,21 +109,40 @@ struct AgentTabSwitcherOverlay: View {
         .onTapGesture {}
     }
 
-    // MARK: - Karten-Grid
+    // MARK: - Kacheln (Liste oder Grid)
 
-    private func grid(metrics: TabSwitcherGridMetrics) -> some View {
+    private func tiles(metrics: TabSwitcherGridMetrics) -> some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: metrics.needsScroll) {
-                LazyVGrid(
-                    columns: Array(
-                        repeating: GridItem(.fixed(TabSwitcherGridLayout.cardWidth), spacing: TabSwitcherGridLayout.spacing),
-                        count: max(1, metrics.columns)
-                    ),
-                    spacing: TabSwitcherGridLayout.spacing
-                ) {
-                    ForEach(sessions) { session in
-                        cardCell(for: session)
-                            .id(session.id)
+                // Dauer-Anzeigen ticken nur hier, solange das Overlay offen
+                // ist — nie in Sidebar oder Tabs (Plan, Performance-Regeln).
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    switch presentation {
+                    case .list:
+                        LazyVStack(spacing: TabSwitcherListLayout.spacing) {
+                            ForEach(sessions) { session in
+                                tileButton(for: session, now: context.date, arrangement: .row)
+                                    .frame(height: TabSwitcherListLayout.rowHeight)
+                                    .id(session.id)
+                            }
+                        }
+                    case .grid:
+                        LazyVGrid(
+                            columns: Array(
+                                repeating: GridItem(.fixed(TabSwitcherGridLayout.cardWidth), spacing: TabSwitcherGridLayout.spacing),
+                                count: max(1, metrics.columns)
+                            ),
+                            spacing: TabSwitcherGridLayout.spacing
+                        ) {
+                            ForEach(sessions) { session in
+                                tileButton(for: session, now: context.date, arrangement: .card)
+                                    .frame(
+                                        width: TabSwitcherGridLayout.cardWidth,
+                                        height: TabSwitcherGridLayout.cardHeight
+                                    )
+                                    .id(session.id)
+                            }
+                        }
                     }
                 }
             }
@@ -125,147 +168,54 @@ struct AgentTabSwitcherOverlay: View {
                 .font(.system(size: 10, weight: .medium).monospacedDigit())
                 .foregroundStyle(AgentTheme.textSecondary)
             Spacer(minLength: 12)
-            Text("⌃Tab weiter · ⇧ rückwärts · ←→↑↓ navigieren · Loslassen wechselt · Esc bricht ab")
+            Text(footerHint)
                 .font(.system(size: 10))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .lineLimit(1)
+                .truncationMode(.head)
         }
     }
 
-    // MARK: - Einzelkarte
+    private var footerHint: String {
+        switch presentation {
+        case .list:
+            return "⌃Tab weiter · ⇧ rückwärts · ↑↓ navigieren · Loslassen wechselt · Esc bricht ab"
+        case .grid:
+            return "⌃Tab weiter · ⇧ rückwärts · ←→↑↓ navigieren · Loslassen wechselt · Esc bricht ab"
+        }
+    }
 
-    private func cardCell(for session: AgentChatSession) -> some View {
-        let isHighlighted = session.id == highlightedID
-        let isHovered = session.id == hoveredID
-        let project = projectsByID[session.projectID]
+    // MARK: - Einzelkachel
 
+    /// Baut das Kachel-Modell aus O(1)-Lookups je Session (kein Scan).
+    private func tileButton(
+        for session: AgentChatSession,
+        now: Date,
+        arrangement: TabSwitcherTile.Arrangement
+    ) -> some View {
+        let model = TabSwitcherTileModel(
+            title: session.title,
+            status: statusStore.status(for: session.id),
+            activity: activityStore.activity(for: session.id),
+            statusSince: activityStore.statusSince(for: session.id),
+            lastActivityAt: session.lastActivityAt,
+            now: now
+        )
         return Button {
             onCommit(session.id)
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    // Status dauerhaft auf JEDER Karte sichtbar (kein Hover-only-UI).
-                    AgentStatusIndicator(status: statusStore.status(for: session.id))
-                    AgentSessionIcon(
-                        session: session,
-                        size: 11,
-                        tint: isHighlighted ? AgentTheme.textPrimary : AgentTheme.textSecondary
-                    )
-                    kindBadges(session)
-                    Spacer(minLength: 6)
-                    Text(SidebarRelativeTime.short(session.lastActivityAt))
-                        .font(.system(size: 9).monospacedDigit())
-                        .foregroundStyle(AgentTheme.textTertiary)
-                }
-
-                Text(session.title)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(isHighlighted ? AgentTheme.textPrimary : AgentTheme.textSecondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    // 2 Zeilen reservieren, damit alle Karten gleich hoch wirken.
-                    .frame(minHeight: 32, alignment: .topLeading)
-
-                projectRow(project)
-                summaryRow(session)
-            }
-            .padding(10)
-            .frame(
-                width: TabSwitcherGridLayout.cardWidth,
-                height: TabSwitcherGridLayout.cardHeight,
-                alignment: .topLeading
+            TabSwitcherTile(
+                model: model,
+                detail: .full,
+                arrangement: arrangement,
+                isHighlighted: session.id == highlightedID,
+                isCurrent: session.id == currentID,
+                isHovered: session.id == hoveredID
             )
-            .background(
-                isHighlighted
-                    ? AnyShapeStyle(AgentTheme.selectionStrong)
-                    : AnyShapeStyle(AgentTheme.control.opacity(isHovered ? 0.9 : 0.45)),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(
-                        isHighlighted ? AgentTheme.accent.opacity(0.85) : AgentTheme.border,
-                        lineWidth: isHighlighted ? 1.5 : 0.5
-                    )
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
             hoveredID = hovering ? session.id : (hoveredID == session.id ? nil : hoveredID)
         }
-    }
-
-    /// Sub-Kind-Badges (BG / VIEW / TERM) — gleiche Semantik wie im Header.
-    @ViewBuilder
-    private func kindBadges(_ session: AgentChatSession) -> some View {
-        if session.isBackgroundChat {
-            kindBadge("BG", color: .indigo)
-        } else if session.isAgentView {
-            kindBadge("VIEW", color: .orange)
-        } else if session.isTerminal {
-            kindBadge("TERM", color: .teal)
-        }
-    }
-
-    /// Projekt · Branch — gleiche Datenquellen wie `secondaryProjectRow`
-    /// in der AgentChatsView, nur mit reservierter Höhe (kein Springen).
-    @ViewBuilder
-    private func projectRow(_ project: AgentProject?) -> some View {
-        HStack(spacing: 5) {
-            if let project {
-                Image(systemName: "folder")
-                    .font(.system(size: 8.5))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                Text(project.name)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(AgentTheme.textSecondary)
-                    .lineLimit(1)
-                if let branch = project.lastBranch, !branch.isEmpty {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 8.5))
-                        .foregroundStyle(AgentTheme.textTertiary)
-                    Text(branch)
-                        .font(.system(size: 9.5, design: .monospaced))
-                        .foregroundStyle(AgentTheme.textTertiary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(height: 13)
-    }
-
-    /// Kontext-Zeile: die persistierte Summary-Headline („worum ging's").
-    /// Bewusst KEIN Live-Transcript-Read — null I/O pro Highlight-Wechsel.
-    @ViewBuilder
-    private func summaryRow(_ session: AgentChatSession) -> some View {
-        Group {
-            if let headline = session.summary?.headline, !headline.isEmpty {
-                Text(headline)
-                    .font(.system(size: 10))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            } else {
-                Color.clear
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private func kindBadge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 8, weight: .bold))
-            .tracking(0.04)
-            .foregroundStyle(color)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
-            .overlay(
-                RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.30), lineWidth: 0.5)
-            )
-            .fixedSize()
     }
 }

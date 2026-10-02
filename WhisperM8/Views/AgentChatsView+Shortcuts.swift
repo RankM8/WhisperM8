@@ -195,8 +195,9 @@ extension AgentChatsView {
         case TerminalShortcut.KeyCode.rightArrow:
             tabSwitcher?.advance(+1, order: refreshTabSwitcherScope())
         case TabSwitcherShortcut.KeyCode.upArrow:
-            // Eine Grid-Reihe hoch/runter: Schrittweite = Spaltenzahl des
-            // Karten-Grids (vom Overlay gemeldet), Wrap-around inklusive.
+            // Eine Reihe hoch/runter: Schrittweite = Spaltenzahl des Grids
+            // bzw. 1 in der Projekt-Liste (vom Overlay gemeldet), Wrap-around
+            // inklusive.
             tabSwitcher?.advance(-max(1, tabSwitcherColumns), order: refreshTabSwitcherScope())
         case TabSwitcherShortcut.KeyCode.downArrow:
             tabSwitcher?.advance(+max(1, tabSwitcherColumns), order: refreshTabSwitcherScope())
@@ -288,6 +289,11 @@ extension AgentChatsView {
             }
         )
         let order = scope?.order ?? []
+        // Situation C (Projekt-Liste) als eine Spalte, A/B übergangsweise im
+        // Karten-Grid (eigene Darstellungen folgen in S4b/S5).
+        let presentation: AgentTabSwitcherOverlay.Presentation
+        if case .project = scope { presentation = .list } else { presentation = .grid }
+        if tabSwitcherPresentation != presentation { tabSwitcherPresentation = presentation }
         let byID = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let sessions = order.compactMap { byID[$0] }
         if tabSwitcherSessions != sessions { tabSwitcherSessions = sessions }

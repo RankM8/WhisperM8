@@ -147,20 +147,22 @@ enum TabSwitcherMiniMapGeometry {
 
     // MARK: - Detailstufe einer Kachel
 
-    /// Was eine Kachel zeigt. Der Status bleibt in jeder Stufe — weggelassen
-    /// wird nur die Stand-Zeile.
-    enum TileDetail: Equatable {
-        /// Status, Titel, Stand-Zeile, Dauer.
-        case full
-        /// Status, Titel, Dauer — ohne Stand-Zeile.
-        case withoutActivity
-    }
+    /// Mindestgröße einer Kachel, ab der neben Status + Titel noch die Dauer
+    /// Platz hat („arbeitet · 12 min" in einer Zeile + Titel darunter).
+    static let minimumDurationTile = CGSize(width: 130, height: 52)
 
     /// Stufe aus der tatsächlichen Kachelgröße (Spann- und Gewichts-Kacheln
     /// können größer sein als eine 1/9-Kachel und behalten die Zeile dann).
-    static func tileDetail(for tileSize: CGSize) -> TileDetail {
-        tileSize.width >= minimumNinthTile.width && tileSize.height >= minimumNinthTile.height
-            ? .full
-            : .withoutActivity
+    /// Die Stufen selbst sind die gemeinsame `TabSwitcherTileDetail` der
+    /// Kachel — keine eigene Definition hier. Der Status bleibt in jeder
+    /// Stufe; weggelassen werden erst die Stand-Zeile, dann die Dauer.
+    static func tileDetail(for tileSize: CGSize) -> TabSwitcherTileDetail {
+        if tileSize.width >= minimumNinthTile.width && tileSize.height >= minimumNinthTile.height {
+            return .full
+        }
+        if tileSize.width >= minimumDurationTile.width && tileSize.height >= minimumDurationTile.height {
+            return .withoutActivity
+        }
+        return .statusAndTitle
     }
 }

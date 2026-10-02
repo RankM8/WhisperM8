@@ -256,5 +256,18 @@ final class TabSwitcherMiniMapGeometryTests: XCTestCase {
         XCTAssertEqual(TabSwitcherMiniMapGeometry.tileDetail(for: CGSize(width: 400, height: 200)), .full)
         XCTAssertEqual(TabSwitcherMiniMapGeometry.tileDetail(for: CGSize(width: 149, height: 200)), .withoutActivity)
         XCTAssertEqual(TabSwitcherMiniMapGeometry.tileDetail(for: CGSize(width: 400, height: 71)), .withoutActivity)
+        // Dritte Stufe: auch die Dauer entfällt, Status + Titel bleiben.
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.tileDetail(for: CGSize(width: 130, height: 52)), .withoutActivity)
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.tileDetail(for: CGSize(width: 129, height: 200)), .statusAndTitle)
+        XCTAssertEqual(TabSwitcherMiniMapGeometry.tileDetail(for: CGSize(width: 400, height: 51)), .statusAndTitle)
+    }
+
+    func testTileDetailStagesDropActivityBeforeDuration() {
+        XCTAssertTrue(TabSwitcherTileDetail.full.showsActivity)
+        XCTAssertTrue(TabSwitcherTileDetail.full.showsDuration)
+        XCTAssertFalse(TabSwitcherTileDetail.withoutActivity.showsActivity)
+        XCTAssertTrue(TabSwitcherTileDetail.withoutActivity.showsDuration)
+        XCTAssertFalse(TabSwitcherTileDetail.statusAndTitle.showsActivity)
+        XCTAssertFalse(TabSwitcherTileDetail.statusAndTitle.showsDuration)
     }
 }
