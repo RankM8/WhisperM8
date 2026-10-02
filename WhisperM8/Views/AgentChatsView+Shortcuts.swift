@@ -172,29 +172,34 @@ extension AgentChatsView {
             // Aktivierung braucht ≥ 2 Tabs — `begin` liefert sonst nil. Das
             // Event wird trotzdem konsumiert (No-op), damit kein Tab-Byte im
             // Terminal landet.
+            // Umfang (Grid / Workspace / Projekt) statt aller offenen Tabs —
+            // siehe `TabSwitcherScope`.
             tabSwitcher = TabSwitcherModel.begin(
-                order: visualTabOrderIDs,
+                order: refreshTabSwitcherScope(),
                 current: selectedSession?.id,
                 direction: direction
             )
+            if tabSwitcher == nil { tabSwitcherSessions = [] }
             return nil
         }
 
+        // Umfang bei jedem Schritt frisch auflösen — Tabs/Slots können sich
+        // während des Durchlaufs extern ändern (Archivierung, anderes Fenster).
         if let direction {
-            tabSwitcher?.advance(direction, order: visualTabOrderIDs)
+            tabSwitcher?.advance(direction, order: refreshTabSwitcherScope())
             return nil
         }
         switch event.keyCode {
         case TerminalShortcut.KeyCode.leftArrow:
-            tabSwitcher?.advance(-1, order: visualTabOrderIDs)
+            tabSwitcher?.advance(-1, order: refreshTabSwitcherScope())
         case TerminalShortcut.KeyCode.rightArrow:
-            tabSwitcher?.advance(+1, order: visualTabOrderIDs)
+            tabSwitcher?.advance(+1, order: refreshTabSwitcherScope())
         case TabSwitcherShortcut.KeyCode.upArrow:
             // Eine Grid-Reihe hoch/runter: Schrittweite = Spaltenzahl des
             // Karten-Grids (vom Overlay gemeldet), Wrap-around inklusive.
-            tabSwitcher?.advance(-max(1, tabSwitcherColumns), order: visualTabOrderIDs)
+            tabSwitcher?.advance(-max(1, tabSwitcherColumns), order: refreshTabSwitcherScope())
         case TabSwitcherShortcut.KeyCode.downArrow:
-            tabSwitcher?.advance(+max(1, tabSwitcherColumns), order: visualTabOrderIDs)
+            tabSwitcher?.advance(+max(1, tabSwitcherColumns), order: refreshTabSwitcherScope())
         case TabSwitcherShortcut.KeyCode.escape:
             cancelTabSwitcher()
         case TerminalShortcut.KeyCode.returnKey:
@@ -237,8 +242,10 @@ extension AgentChatsView {
         // Erst den Switcher-State räumen, DANN selektieren — der
         // `onChange(of: selectedSessionID)`-Cancel (Klick in Sidebar/Strip
         // bricht den Switcher ab) darf den eigenen Commit nicht anfassen.
+        let order = refreshTabSwitcherScope()
         tabSwitcher = nil
-        guard let target = switcher.commitTarget(order: visualTabOrderIDs) else { return }
+        tabSwitcherSessions = []
+        guard let target = switcher.commitTarget(order: order) else { return }
         selectedSessionID = target
         multiSelection = []
     }
@@ -246,14 +253,45 @@ extension AgentChatsView {
     /// Maus-Commit aus dem Overlay: Klick auf eine Zelle wählt diesen Chat
     /// sofort — auch wenn Control noch gehalten wird.
     func commitTabSwitcher(to sessionID: UUID) {
+        let order = refreshTabSwitcherScope()
         tabSwitcher = nil
-        guard headerTabs.contains(where: { $0.id == sessionID }) else { return }
+        tabSwitcherSessions = []
+        guard order.contains(sessionID) else { return }
         selectedSessionID = sessionID
         multiSelection = []
     }
 
     func cancelTabSwitcher() {
         tabSwitcher = nil
+        tabSwitcherSessions = []
+    }
+
+    /// Löst den Switcher-Umfang frisch auf (`TabSwitcherScope`) und legt die
+    /// Ziel-Sessions als Snapshot für das Overlay ab. Läuft NUR im
+    /// Key-/Maus-Event-Pfad, nie im View-Body — das Overlay liest den
+    /// Snapshot statt bei jedem Rebuild über alle Sessions zu gehen
+    /// (Performance-Regel aus docs/plans/tab-switcher-workspace.md).
+    /// Gibt die Reihenfolge zurück; leer, wenn es keinen Umfang gibt.
+    @discardableResult
+    func refreshTabSwitcherScope() -> [UUID] {
+        let tabs = visualHeaderTabs
+        let scope = TabSwitcherScope.resolve(
+            showsGrid: showsGrid,
+            activeWorkspace: activeGridWorkspaceEntity,
+            selectedSessionID: selectedSession?.id,
+            openTabs: tabs.map {
+                TabSwitcherScope.Tab(
+                    id: $0.id,
+                    projectID: $0.projectID,
+                    isArchived: $0.status == .archived
+                )
+            }
+        )
+        let order = scope?.order ?? []
+        let byID = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let sessions = order.compactMap { byID[$0] }
+        if tabSwitcherSessions != sessions { tabSwitcherSessions = sessions }
+        return order
     }
 
     // MARK: - Zwei-Finger-Swipe (Tab links/rechts)
