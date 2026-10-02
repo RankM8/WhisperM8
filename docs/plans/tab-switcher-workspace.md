@@ -1,6 +1,6 @@
 ---
 status: beschlossen
-stand: 2026-09-28
+stand: 2026-10-02
 ---
 
 # Ctrl+Tab-Switcher: Workspace statt global, mit Stand-Zeile
@@ -148,6 +148,31 @@ Dazu überall die Dauer im Zustand: „arbeitet · 2 min", „wartet · 4 min",
 Längen: Zeile auf 80 Zeichen gekappt, Pfade auf den Dateinamen reduziert,
 Zeilenumbrüche entfernt. Nichts davon wird persistiert.
 
+## Performance-Regeln (Abgleich 02.10.2026)
+
+Aus der Messung „Alle"-Klick (30.09.–01.10.2026, `perf/sidebar-cli`):
+SwiftUI baut `.contextMenu`-Inhalte bei jedem Body-Rebuild für jede Zeile
+mit, die Sidebar-Liste ist ein nicht-lazy `VStack` (jede Zeile bekommt sofort
+Layer), und jede Statusänderung zeichnet die Sidebar neu. Daraus für den
+Switcher:
+
+- **Kein I/O und kein Scan über alle Sessions im View-Body** von Kachel,
+  Overlay, Mini-Map und Pane-Markierung. Lookups über vorab gebaute
+  Dictionaries; Profile/Journal nie aus dem Body lesen.
+- **Kein `.contextMenu` auf Kacheln.**
+- **Die Sidebar beobachtet den `AgentSessionActivityStore` nie**, auch nicht
+  indirekt über einen gemeinsamen Elternwert. `statusSince` lebt dort, nicht
+  im `AgentSessionRuntimeStatusStore`.
+- **Dauer-Anzeigen ticken nur im offenen Switcher** (`TimelineView` innerhalb
+  des Overlays), nie in Sidebar-Zeilen oder Tabs.
+- **Extractor-Kosten über Zähler** (`PerformanceCounters`), kein zusätzliches
+  Signpost-Intervall pro Datei; er läuft im bestehenden
+  `PerfBudgets.sidebarStatusPoll`-Intervall. Vorher/nachher mit
+  `scripts/perf-load.sh` messen.
+- Situation A: Die Pane-Overlays hängen an einem kleinen, eigenen
+  Beobachtungswert (hervorgehobene ID), damit ein Schritt nicht das ganze
+  Grid samt Terminals neu auswertet.
+
 ## Umsetzung in Slices
 
 Jeder Slice ist einzeln baubar, testbar und committbar. Tests nach der
@@ -238,10 +263,10 @@ Hauskonvention (pure Logik, Closures statt DI-Framework).
 
 ## Offen / später
 
-- **Sprung zum nächsten wartenden Chat.** Vorgeschlagen war ⌃\`. Auf
-  deutschen ISO-Tastaturen liegt \` nicht auf einer eigenen Taste; die
-  Belegung ist deshalb offen. Eigener kleiner Slice nach S5, baut auf
-  `statusSince` auf (am längsten wartender zuerst).
+- **Sprung zum nächsten wartenden Chat: ⌃⌥Tab** (User, 02.10.2026). ⌃\`
+  lag auf deutschen ISO-Tastaturen auf der `<`-Taste; ⌃⌥Tab ist
+  layoutunabhängig und gehört sichtbar zur ⌃Tab-Familie. Eigener kleiner
+  Slice nach S5, baut auf `statusSince` auf (am längsten wartender zuerst).
 - **Codex-Warte-Art.** Ohne Hooks kennt Codex nur den Transcript-Status —
   die Zeile zeigt dort „wartet", ohne Art.
 - **Hintergrund-Agents und Agent-Views** haben ein anderes Transcript bzw.
