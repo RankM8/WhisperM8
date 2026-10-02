@@ -718,6 +718,27 @@ extension AgentChatsView {
                 onToggle: { if let occupied { gridShrinkSelection?.toggle(occupied) } }
             )
         }
+        // Ctrl+Tab-Markierung (Situation A) — ebenfalls unbedingt angehängt.
+        // Liest nur den eigenen Beobachtungswert, nicht `tabSwitcher`: ein
+        // Schritt invalidiert dieses Overlay, nicht den Grid-Body.
+        .overlay {
+            TabSwitcherGridPaneMarking(
+                marking: tabSwitcherGridMarking,
+                sessionID: occupied,
+                title: occupied.flatMap { sessionsByID[$0]?.title },
+                lastActivityAt: occupied.flatMap { sessionsByID[$0]?.lastActivityAt },
+                isCurrent: occupied != nil && occupied == selectedSessionID,
+                statusStore: runtimeStatusStore,
+                // Nur als Referenz — beobachtet wird er allein im Ziel-Chip.
+                activityStore: tabSwitcherActivityStore,
+                onCommit: { sessionID in
+                    // Maus-Commit nur bei laufendem Durchlauf (der Catcher
+                    // kann einen Frame länger montiert sein als der Switcher).
+                    if tabSwitcher != nil { commitTabSwitcher(to: sessionID) }
+                },
+                onCancel: { cancelTabSwitcher() }
+            )
+        }
     }
 
     /// Platzhalter für einen Slot, dessen Chat gerade KEIN Tab dieses
@@ -994,6 +1015,9 @@ extension AgentChatsView {
         // Events VOR der View-Zustellung und würde sonst nebenbei den
         // Pane-Fokus verschieben.
         guard gridShrinkSelection == nil else { return }
+        // Während des Ctrl+Tab-Durchlaufs gehört der Klick der Markierung
+        // (`TabSwitcherGridPaneMarking` committet bzw. bricht ab).
+        guard tabSwitcher == nil else { return }
         guard let hostWindow, event.window === hostWindow,
               isGridActive,
               let hovered = hoveredGridPaneID,

@@ -180,6 +180,7 @@ extension AgentChatsView {
                 direction: direction
             )
             if tabSwitcher == nil { tabSwitcherSessions = [] }
+            syncTabSwitcherGridMarking()
             return nil
         }
 
@@ -187,6 +188,12 @@ extension AgentChatsView {
         // während des Durchlaufs extern ändern (Archivierung, anderes Fenster).
         if let direction {
             tabSwitcher?.advance(direction, order: refreshTabSwitcherScope())
+            syncTabSwitcherGridMarking()
+            return nil
+        }
+        // Grid sichtbar (Situation A): Pfeiltasten geometrisch wie ⌃⌘-Pfeile.
+        if isGridActive, let gridDirection = TabSwitcherGridMarking.direction(keyCode: event.keyCode) {
+            moveTabSwitcherHighlightInGrid(gridDirection)
             return nil
         }
         switch event.keyCode {
@@ -208,7 +215,41 @@ extension AgentChatsView {
         default:
             cancelTabSwitcher()
         }
+        syncTabSwitcherGridMarking()
         return nil
+    }
+
+    /// Pfeiltaste bei gehaltenem Ctrl im sichtbaren Grid: Highlight springt
+    /// geometrisch (`TabSwitcherGridMarking.arrowTarget` → `GridFocusNavigator`,
+    /// dieselbe Logik wie ⌃⌘-Pfeile). Am Rand bleibt es stehen.
+    private func moveTabSwitcherHighlightInGrid(_ direction: GridFocusDirection) {
+        guard let entity = activeGridWorkspaceEntity else { return }
+        let order = refreshTabSwitcherScope()
+        if let target = TabSwitcherGridMarking.arrowTarget(
+            from: tabSwitcher?.highlightedID,
+            direction: direction,
+            entity: entity,
+            order: order
+        ) {
+            tabSwitcher?.highlight(target, order: order)
+        }
+        syncTabSwitcherGridMarking()
+    }
+
+    /// Spiegelt den Durchlauf in den kleinen Beobachtungswert der
+    /// Grid-Markierung (Situation A). Nur im Event-Pfad aufgerufen — nie aus
+    /// einem Body. Ohne Durchlauf oder ohne sichtbares Grid: Markierung aus.
+    /// Liest den Umfang aus dem Snapshot von `refreshTabSwitcherScope`
+    /// (kein zweites Auflösen).
+    func syncTabSwitcherGridMarking() {
+        guard let tabSwitcher, isGridActive else {
+            tabSwitcherGridMarking.reset()
+            return
+        }
+        tabSwitcherGridMarking.update(
+            highlightedID: tabSwitcher.highlightedID,
+            targets: tabSwitcherSessions.map(\.id)
+        )
     }
 
     /// Installiert den `.flagsChanged`-Monitor: Loslassen von Control bei
@@ -246,6 +287,7 @@ extension AgentChatsView {
         let order = refreshTabSwitcherScope()
         tabSwitcher = nil
         tabSwitcherSessions = []
+        tabSwitcherGridMarking.reset()
         guard let target = switcher.commitTarget(order: order) else { return }
         selectedSessionID = target
         multiSelection = []
@@ -257,6 +299,7 @@ extension AgentChatsView {
         let order = refreshTabSwitcherScope()
         tabSwitcher = nil
         tabSwitcherSessions = []
+        tabSwitcherGridMarking.reset()
         guard order.contains(sessionID) else { return }
         selectedSessionID = sessionID
         multiSelection = []
@@ -265,6 +308,7 @@ extension AgentChatsView {
     func cancelTabSwitcher() {
         tabSwitcher = nil
         tabSwitcherSessions = []
+        tabSwitcherGridMarking.reset()
     }
 
     /// Löst den Switcher-Umfang frisch auf (`TabSwitcherScope`) und legt die

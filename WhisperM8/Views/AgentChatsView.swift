@@ -302,6 +302,12 @@ struct AgentChatsView: View {
     /// oder übergangsweise das Karten-Grid (A/B) — gesetzt im Key-Event-Pfad
     /// (`refreshTabSwitcherScope`) aus dem aufgelösten `TabSwitcherScope`.
     @State var tabSwitcherPresentation: AgentTabSwitcherOverlay.Presentation = .grid
+    /// Grid-Markierung (Situation A): eigener kleiner Beobachtungswert,
+    /// gespiegelt aus `tabSwitcher` im Event-Pfad
+    /// (`syncTabSwitcherGridMarking`). Der Body reicht nur die Referenz an
+    /// die Pane-Overlays weiter und liest ihre Properties NIE selbst — ein
+    /// Ctrl+Tab-Schritt invalidiert so nur die Overlays, nicht das Grid.
+    @State var tabSwitcherGridMarking = TabSwitcherGridMarkingState()
     /// Lokaler `.flagsChanged`-Monitor: Loslassen von Control bei aktivem
     /// Switcher committet den hervorgehobenen Tab. `keyDown` sieht Modifier-
     /// Änderungen nicht — dafür braucht es diesen zweiten Monitor.
@@ -2418,14 +2424,12 @@ struct AgentChatsView: View {
                 // Split-Grid: alle offenen Tabs als bündige Panes — ersetzt
                 // nur den Detail-Bereich; Sidebar/Tab-Strip bleiben
                 // unverändert. Siehe AgentChatsView+Grid.swift.
+                // Ctrl+Tab-Switcher im Grid (Situation A): KEIN Overlay — die
+                // echten Panes werden markiert (`TabSwitcherGridPaneMarking`
+                // je Slot, siehe gridSlot). Bewusst liest dieser Zweig
+                // `tabSwitcher` nicht: sonst würde jeder Schritt den Body
+                // samt Grid und Terminals neu auswerten.
                 gridWorkspace
-                    // Ctrl+Tab-Switcher auch im Grid: der keyDown-Monitor
-                    // aktiviert ihn layoutunabhängig — ohne Overlay wäre er
-                    // unsichtbar und würde trotzdem alle Tasten konsumieren.
-                    .overlay {
-                        if tabSwitcher != nil { tabSwitcherOverlay }
-                    }
-                    .animation(.easeOut(duration: 0.1), value: tabSwitcher != nil)
             } else if let selectedSession, let project = selectedSessionProject {
                 // Detail-Pfad (Subagent-Job vs. PTY) geteilt mit den
                 // Grid-Panes — siehe sessionDetailContent in +Grid.
