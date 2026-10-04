@@ -13,13 +13,15 @@ private func makeEntry(
     lastActivityAt: Date = Date(),
     lastTurnAt: Date? = nil,
     kind: AgentSessionKind? = nil,
-    provider: AgentProvider = .claude
+    provider: AgentProvider = .claude,
+    externalSessionID: String? = nil
 ) -> ChatsSessionEntry {
     ChatsSessionEntry(
         session: AgentChatSession(
             id: id,
             provider: provider,
             projectID: UUID(),
+            externalSessionID: externalSessionID,
             title: title,
             status: status,
             groupName: groupName,
@@ -55,6 +57,52 @@ final class SessionRefResolverTests: XCTestCase {
         let entries = [makeEntry(title: "deadbeef-arbeit")]
         let result = SessionRefResolver.resolve(ref: "deadbeef", entries: entries, selfID: nil)
         XCTAssertEqual(try? result.get().session.title, "deadbeef-arbeit")
+    }
+
+    func testFullExternalSessionIDMatches() {
+        let id = UUID()
+        let entries = [
+            makeEntry(title: "video", id: id, externalSessionID: "81b10c61-acb5-4dac-93b0-819a4af84399"),
+            makeEntry(title: "other"),
+        ]
+        let result = SessionRefResolver.resolve(
+            ref: "81B10C61-ACB5-4DAC-93B0-819A4AF84399", entries: entries, selfID: nil)
+        XCTAssertEqual(try? result.get().session.id, id)
+    }
+
+    func testExternalSessionIDPrefixMatches() {
+        let id = UUID()
+        let entries = [
+            makeEntry(title: "video", id: id, externalSessionID: "81b10c61-acb5-4dac-93b0-819a4af84399"),
+            makeEntry(title: "other"),
+        ]
+        let result = SessionRefResolver.resolve(ref: "81b10c61", entries: entries, selfID: nil)
+        XCTAssertEqual(try? result.get().session.id, id)
+    }
+
+    func testWhisperM8IDWinsOverExternalSessionID() {
+        // Kollidiert eine Voll-UUID mit der externen ID einer anderen Session,
+        // gewinnt die WhisperM8-ID — sie ist der primäre Schlüssel.
+        let shared = UUID()
+        let entries = [
+            makeEntry(title: "fremd", externalSessionID: shared.uuidString.lowercased()),
+            makeEntry(title: "eigen", id: shared),
+        ]
+        let result = SessionRefResolver.resolve(ref: shared.uuidString, entries: entries, selfID: nil)
+        XCTAssertEqual(try? result.get().session.title, "eigen")
+    }
+
+    func testDuplicateExternalSessionIDIsAmbiguous() {
+        let external = "0bea7dcc-b113-476e-a42d-a8666cc7cc20"
+        let entries = [
+            makeEntry(title: "vorher", externalSessionID: external),
+            makeEntry(title: "nachher", externalSessionID: external),
+        ]
+        let result = SessionRefResolver.resolve(ref: external, entries: entries, selfID: nil)
+        guard case .failure(.ambiguous(_, let candidates)) = result else {
+            return XCTFail("Erwartet ambiguous, war \(result)")
+        }
+        XCTAssertEqual(candidates.count, 2)
     }
 
     func testAmbiguousPrefixFails() {

@@ -27,7 +27,9 @@ Lesen (immer erlaubt, ohne Rückfrage):
 ```bash
 whisperm8 chats overview [--json]                    # Lagebild, attention-sortiert
 whisperm8 chats list [--project P] [--status S] [--scope active|recent|all] \
-                     [--open] [--pinned] [--all] [--json]
+                     [--open] [--pinned] [--all] [--limit N] [--json]
+                     # höchstens 50 Zeilen (--limit 0 = alle); Kürzungs-Hinweis
+                     # steht auf stderr — nicht wegfiltern (2>&1 | grep …)
 whisperm8 chats show <ref> [--json]
 whisperm8 chats tail <ref> [--turns N] [--chars N] [--raw] [--json]
 whisperm8 chats wait [--ref R]… [--until attention|idle|statusChange] \
@@ -98,8 +100,15 @@ whisperm8 chats workspace delete <name|id> [--force] # Gruppe löschen — Chats
 
 - `projekt/titel-fragment` — bevorzugt (Fuzzy, muss eindeutig sein)
 - `titel-fragment` — Fuzzy über alle Projekte
-- UUID oder Präfix ≥ 8 Zeichen — exakt
+- UUID oder Präfix ≥ 8 Zeichen — exakt; passt auf die WhisperM8-ID UND auf
+  die Session-ID der CLI (Name der Transcript-Datei `<id>.jsonl`), ein über
+  das Transcript gefundener Chat lässt sich also direkt per `show`/`resume`
+  ansprechen
 - `@self` — die aufrufende Session
+
+**Chat suchen:** `show "<Titel-Fragment>"` statt `list --all | grep` — `list`
+ist gekürzt, der Resolver sieht alle Sessions. Erst wenn auch das nichts
+findet, ist der Chat WhisperM8 wirklich unbekannt.
 
 Mehrdeutige Referenz → Exit 3 mit Kandidatenliste. **Zeig dem User die
 Kandidaten, rate nie selbst.**
