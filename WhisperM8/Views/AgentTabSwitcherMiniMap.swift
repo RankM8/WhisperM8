@@ -102,7 +102,7 @@ struct AgentTabSwitcherMiniMap: View {
     }
 
     private var footer: some View {
-        Text("⌃Tab weiter · ⇧ zurück · Pfeile räumlich · Esc")
+        Text(TabSwitcherHint.miniMap)
             .font(.system(size: 10))
             .foregroundStyle(AgentTheme.textTertiary)
             .lineLimit(1)

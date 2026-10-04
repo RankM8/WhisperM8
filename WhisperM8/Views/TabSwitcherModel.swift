@@ -5,9 +5,9 @@ import Foundation
 /// gehalten). Ephemer — lebt als `@State` in der `AgentChatsView` und wird
 /// nie persistiert. Window-frei → unit-testbar.
 ///
-/// Die Reihenfolge wird bei jedem Schritt frisch hereingereicht
-/// (`headerTabs` kann sich extern ändern, z. B. durch Archivierung oder
-/// Workspace-Prune) — verschwindet der hervorgehobene Tab, fällt das
+/// Die Reihenfolge wird bei jedem Schritt frisch hereingereicht (der Umfang
+/// aus `TabSwitcherScope` kann sich extern ändern, z. B. durch Archivierung
+/// oder Workspace-Prune) — verschwindet der hervorgehobene Tab, fällt das
 /// Highlight über `adjacentTabID` auf den ersten Tab zurück statt zu hängen.
 struct TabSwitcherModel: Equatable {
     private(set) var highlightedID: UUID?
@@ -46,65 +46,21 @@ struct TabSwitcherModel: Equatable {
     }
 }
 
-/// Berechnetes Karten-Grid des Switchers.
-struct TabSwitcherGridMetrics: Equatable {
-    var columns: Int
+/// Berechnete Maße der Projekt-Liste (Situation C).
+struct TabSwitcherListMetrics: Equatable {
     var rows: Int
-    /// Reihen, die ohne Scrollen ins Overlay passen.
+    /// Zeilen, die ohne Scrollen ins Overlay passen.
     var visibleRows: Int
-    var gridWidth: CGFloat
-    var gridHeight: CGFloat
+    var width: CGFloat
+    var height: CGFloat
 
     var needsScroll: Bool { rows > visibleRows }
-}
-
-/// Pure Layout-Mathematik des Karten-Grids: Kartenmaß ist fix (Lesbarkeit),
-/// Spalten-/Reihenzahl leitet sich aus Tab-Anzahl und verfügbarem Platz ab.
-/// Alle Tabs werden mit Umbruch gezeigt; erst wenn die Reihen den verfügbaren
-/// Platz sprengen, scrollt das Grid vertikal (`needsScroll`). Window-frei →
-/// unit-testbar.
-enum TabSwitcherGridLayout {
-    static let cardWidth: CGFloat = 236
-    static let cardHeight: CGFloat = 128
-    static let spacing: CGFloat = 10
-    /// Obergrenze — mehr als 4 Spalten liest niemand mehr im Block.
-    static let maxColumns = 4
-    /// Chrome um das Grid: Overlay-Padding + Karten-Padding + Footer-Zeile.
-    /// Wird vom verfügbaren Platz abgezogen, bevor Spalten/Reihen berechnet
-    /// werden.
-    static let horizontalChrome: CGFloat = 96
-    static let verticalChrome: CGFloat = 132
-
-    static func metrics(count: Int, availableSize: CGSize) -> TabSwitcherGridMetrics {
-        guard count > 0 else {
-            return TabSwitcherGridMetrics(columns: 0, rows: 0, visibleRows: 0, gridWidth: 0, gridHeight: 0)
-        }
-
-        let availableWidth = max(0, availableSize.width - horizontalChrome)
-        let fittingColumns = Int((availableWidth + spacing) / (cardWidth + spacing))
-        let columns = max(1, min(count, maxColumns, fittingColumns))
-        let rows = (count + columns - 1) / columns
-
-        let availableHeight = max(0, availableSize.height - verticalChrome)
-        let fittingRows = Int((availableHeight + spacing) / (cardHeight + spacing))
-        let visibleRows = max(1, min(rows, fittingRows))
-
-        return TabSwitcherGridMetrics(
-            columns: columns,
-            rows: rows,
-            visibleRows: visibleRows,
-            gridWidth: CGFloat(columns) * cardWidth + CGFloat(columns - 1) * spacing,
-            gridHeight: CGFloat(visibleRows) * cardHeight + CGFloat(visibleRows - 1) * spacing
-        )
-    }
 }
 
 /// Pure Layout-Mathematik der Projekt-Liste (Situation C, Plan
 /// `docs/plans/tab-switcher-workspace.md`): eine Spalte Kacheln in voller
 /// Listenbreite, je ~56 pt hoch. Erst wenn die Zeilen den verfügbaren Platz
-/// sprengen, scrollt die Liste (`needsScroll`). Liefert dieselben
-/// `TabSwitcherGridMetrics` wie das Karten-Grid (Spaltenzahl immer 1 — ↑/↓
-/// springt damit genau eine Zeile). Window-frei → unit-testbar.
+/// sprengen, scrollt die Liste (`needsScroll`). Window-frei → unit-testbar.
 enum TabSwitcherListLayout {
     static let rowHeight: CGFloat = 56
     static let spacing: CGFloat = 6
@@ -112,25 +68,38 @@ enum TabSwitcherListLayout {
     /// ganzen Bildschirm.
     static let minWidth: CGFloat = 320
     static let maxWidth: CGFloat = 560
+    /// Chrome um die Liste: Overlay-Padding + Karten-Padding + Footer-Zeile.
+    /// Wird vom verfügbaren Platz abgezogen, bevor Breite/Zeilen berechnet
+    /// werden.
+    static let horizontalChrome: CGFloat = 96
+    static let verticalChrome: CGFloat = 132
 
-    static func metrics(count: Int, availableSize: CGSize) -> TabSwitcherGridMetrics {
+    static func metrics(count: Int, availableSize: CGSize) -> TabSwitcherListMetrics {
         guard count > 0 else {
-            return TabSwitcherGridMetrics(columns: 0, rows: 0, visibleRows: 0, gridWidth: 0, gridHeight: 0)
+            return TabSwitcherListMetrics(rows: 0, visibleRows: 0, width: 0, height: 0)
         }
-        // Gleiches Chrome wie das Karten-Grid (Overlay- + Karten-Padding, Footer).
-        let availableWidth = max(0, availableSize.width - TabSwitcherGridLayout.horizontalChrome)
+        let availableWidth = max(0, availableSize.width - horizontalChrome)
         let width = min(maxWidth, max(minWidth, availableWidth))
 
-        let availableHeight = max(0, availableSize.height - TabSwitcherGridLayout.verticalChrome)
+        let availableHeight = max(0, availableSize.height - verticalChrome)
         let fittingRows = Int((availableHeight + spacing) / (rowHeight + spacing))
         let visibleRows = max(1, min(count, fittingRows))
 
-        return TabSwitcherGridMetrics(
-            columns: 1,
+        return TabSwitcherListMetrics(
             rows: count,
             visibleRows: visibleRows,
-            gridWidth: width,
-            gridHeight: CGFloat(visibleRows) * rowHeight + CGFloat(visibleRows - 1) * spacing
+            width: width,
+            height: CGFloat(visibleRows) * rowHeight + CGFloat(visibleRows - 1) * spacing
         )
     }
+}
+
+/// Bedien-Hinweise der Switcher-Fußzeilen — an einer Stelle, damit Liste und
+/// Mini-Map gleich formuliert bleiben. Situation A (Grid-Markierung) hat kein
+/// Overlay und damit keine Fußzeile.
+enum TabSwitcherHint {
+    /// Situation C: ↑/↓ (und ←/→) = ein Schritt in der Liste.
+    static let list = "⌃Tab weiter · ⇧ zurück · ↑↓ wählen · Esc"
+    /// Situation B: Pfeile springen räumlich wie ⌃⌘-Pfeile im Grid.
+    static let miniMap = "⌃Tab weiter · ⇧ zurück · Pfeile räumlich · Esc"
 }

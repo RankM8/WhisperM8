@@ -135,35 +135,38 @@ final class TabSwitcherTileModelTests: XCTestCase {
 final class TabSwitcherListLayoutTests: XCTestCase {
     func testSingleColumnAndFullHeightWhenRowsFit() {
         let metrics = TabSwitcherListLayout.metrics(count: 4, availableSize: CGSize(width: 1400, height: 900))
-        XCTAssertEqual(metrics.columns, 1)
         XCTAssertEqual(metrics.rows, 4)
         XCTAssertEqual(metrics.visibleRows, 4)
         XCTAssertFalse(metrics.needsScroll)
-        XCTAssertEqual(metrics.gridWidth, TabSwitcherListLayout.maxWidth)
-        XCTAssertEqual(metrics.gridHeight, 4 * 56 + 3 * 6)
+        XCTAssertEqual(metrics.width, TabSwitcherListLayout.maxWidth)
+        XCTAssertEqual(metrics.height, 4 * 56 + 3 * 6)
     }
 
     func testScrollsWhenRowsExceedSpace() {
         // 400 pt Höhe − 132 Chrome = 268 pt → 4 Zeilen à 56 + 6.
         let metrics = TabSwitcherListLayout.metrics(count: 12, availableSize: CGSize(width: 900, height: 400))
-        XCTAssertEqual(metrics.columns, 1)
+        XCTAssertEqual(metrics.rows, 12)
         XCTAssertEqual(metrics.visibleRows, 4)
+        XCTAssertEqual(metrics.height, 4 * 56 + 3 * 6)
         XCTAssertTrue(metrics.needsScroll)
     }
 
     func testWidthClampedBetweenMinAndMax() {
         XCTAssertEqual(
-            TabSwitcherListLayout.metrics(count: 2, availableSize: CGSize(width: 300, height: 600)).gridWidth,
+            TabSwitcherListLayout.metrics(count: 2, availableSize: CGSize(width: 300, height: 600)).width,
             TabSwitcherListLayout.minWidth
         )
         XCTAssertEqual(
-            TabSwitcherListLayout.metrics(count: 2, availableSize: CGSize(width: 546, height: 600)).gridWidth,
+            TabSwitcherListLayout.metrics(count: 2, availableSize: CGSize(width: 546, height: 600)).width,
             450
         )
     }
 
     func testEmptyAndTinyAreas() {
-        XCTAssertEqual(TabSwitcherListLayout.metrics(count: 0, availableSize: CGSize(width: 900, height: 900)).columns, 0)
+        let empty = TabSwitcherListLayout.metrics(count: 0, availableSize: CGSize(width: 900, height: 900))
+        XCTAssertEqual(empty.rows, 0)
+        XCTAssertEqual(empty.width, 0)
+        XCTAssertEqual(empty.height, 0)
         let tiny = TabSwitcherListLayout.metrics(count: 3, availableSize: CGSize(width: 100, height: 50))
         XCTAssertEqual(tiny.visibleRows, 1)
         XCTAssertTrue(tiny.needsScroll)
