@@ -261,12 +261,36 @@ Hauskonvention (pure Logik, Closures statt DI-Framework).
   Stichpunkt in `CLAUDE.md` (Tabs-Abschnitt).
 - Eintrag hier auf „umgesetzt", Plan nach `docs/archive/`.
 
+### S7 — Sprung zum nächsten wartenden Chat: ⌃⌥Tab (umgesetzt 04.10.2026)
+
+Wunsch des Users vom 02.10.2026. ⌃\` lag auf deutschen ISO-Tastaturen auf
+der `<`-Taste; ⌃⌥Tab ist layoutunabhängig (keyCode 48) und gehört sichtbar
+zur ⌃Tab-Familie.
+
+- **Umfang:** alle nicht archivierten Chats des Workspace mit Status
+  `.awaitingInput`, nicht nur offene Tabs.
+- **Reihenfolge:** am längsten wartender zuerst (`statusSince` aus dem
+  `AgentSessionActivityStore` aufsteigend), ohne `statusSince` ans Ende,
+  Gleichstände stabil. Pur in `NextWaitingChatResolver`
+  (`NextWaitingChatResolverTests`).
+- **Rotation:** Ist der aktuelle Chat selbst wartend, springt ⌃⌥Tab zum
+  nächsten in dieser Reihenfolge (Wrap-around); sonst zum am längsten
+  wartenden. Ist der aktuelle der einzige wartende oder wartet keiner,
+  passiert nichts (kein Beep). Das Event wird in jedem Fall konsumiert.
+- **Navigation:** über den `selectedSessionID`-Setter wie ein Sidebar-Klick
+  (`navigateToSession`): öffnet einen nicht offenen Chat als Tab, setzt im
+  sichtbaren Grid den Pane-Fokus, routet in das Fenster, das den Tab hält.
+- **Erkennung:** `TabSwitcherShortcut.isNextWaitingChat` verlangt exakt
+  Control+Option; `direction` schließt ⌃⌥Tab aus — Switcher und Sprung
+  überschneiden sich nicht (Tests in `TabSwitcherShortcutTests`). Der
+  Handler sitzt im selben `keyDown`-Monitor direkt nach dem Switcher und
+  greift damit auch bei Fokus im Terminal. Bei aktivem Switcher gewinnt
+  dieser (er konsumiert alle Tasten und bricht bei ⌃⌥Tab ab).
+- **Performance:** Status und `statusSince` werden nur im Key-Event-Pfad
+  gelesen; kein Beobachter, kein Scan im View-Body.
+
 ## Offen / später
 
-- **Sprung zum nächsten wartenden Chat: ⌃⌥Tab** (User, 02.10.2026). ⌃\`
-  lag auf deutschen ISO-Tastaturen auf der `<`-Taste; ⌃⌥Tab ist
-  layoutunabhängig und gehört sichtbar zur ⌃Tab-Familie. Eigener kleiner
-  Slice nach S5, baut auf `statusSince` auf (am längsten wartender zuerst).
 - **Codex-Warte-Art.** Ohne Hooks kennt Codex nur den Transcript-Status —
   die Zeile zeigt dort „wartet", ohne Art.
 - **Hintergrund-Agents und Agent-Views** haben ein anderes Transcript bzw.

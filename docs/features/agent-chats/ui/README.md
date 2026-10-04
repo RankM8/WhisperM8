@@ -187,6 +187,12 @@ beziehungsweise Cmd+Shift+Pfeil, Ctrl-Tab-Switcher mit Pfeilnavigation,
 Tab-Strip-Mausradscroll, Zwei-Finger-Swipe für Tabwechsel und Doppelklick auf
 die freie Titelzone für System-Zoom.
 
+Ctrl+Option+Tab springt zum Chat, der am längsten auf Eingabe wartet
+(`.awaitingInput`, sortiert nach `statusSince`); wiederholt gedrückt geht es
+zum nächsten wartenden. Umfang sind alle nicht archivierten Chats, auch ohne
+offenen Tab — der Sprung öffnet sie wie ein Sidebar-Klick. Wartet keiner,
+passiert nichts. Die Reihenfolge liegt im puren `NextWaitingChatResolver`.
+
 Terminal-spezifische Tastenkombinationen sind vom Fenster-Shortcut getrennt:
 `TerminalKeyboardProfile` entscheidet, welche Bytes für Claude Code, Codex,
 `claude agents` oder eine Plain Shell an das PTY gesendet werden.

@@ -27,4 +27,14 @@ enum TabSwitcherShortcut {
         if mods == [.control, .shift] { return -1 }
         return nil
     }
+
+    /// ⌃⌥Tab: Sprung zum nächsten wartenden Chat (`NextWaitingChatResolver`).
+    /// Layoutunabhängig über den keyCode — ⌃\` lag auf deutschen
+    /// ISO-Tastaturen auf der `<`-Taste. Exakt Control+Option: mit Shift,
+    /// Command oder ohne Option ist es nicht dieser Sprung (⌃Tab/⌃⇧Tab
+    /// gehören dem Switcher, siehe `direction`, das ⌃⌥Tab ausschließt).
+    static func isNextWaitingChat(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard keyCode == KeyCode.tab else { return false }
+        return modifiers.intersection([.command, .option, .control, .shift]) == [.control, .option]
+    }
 }

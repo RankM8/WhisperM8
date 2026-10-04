@@ -34,11 +34,13 @@ extension AgentChatsView {
         closeTabKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             // Reihenfolge: Ctrl+Tab-Switcher (MUSS zuerst — bei aktivem
             // Switcher konsumiert er ALLE Tasten dieses Fensters, sonst würde
-            // z. B. ⌘N mitten im Durchtabben den Picker öffnen) → ⌘N (Picker
-            // öffnen) → ⌘⌥←/→ (Tab-Wechsel) → ⌘W (Tab schließen). Jeder
-            // Schritt gibt bei Treffer `nil` zurück (Event konsumiert), sonst
-            // das Event weiter an den nächsten.
+            // z. B. ⌘N mitten im Durchtabben den Picker öffnen) → ⌃⌥Tab
+            // (nächster wartender Chat) → ⌘N (Picker öffnen) → ⌘⌥←/→
+            // (Tab-Wechsel) → ⌘W (Tab schließen). Jeder Schritt gibt bei
+            // Treffer `nil` zurück (Event konsumiert), sonst das Event weiter
+            // an den nächsten.
             guard let event = handleTabSwitcherKeyDown(event) else { return nil }
+            guard let event = handleNextWaitingChatShortcut(event) else { return nil }
             guard let event = handleNewChatShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
             guard let event = handleGridFocusShortcut(event) else { return nil }
@@ -142,6 +144,50 @@ extension AgentChatsView {
             return event
         }
         selectAdjacentTab(direction)
+        return nil
+    }
+
+    // MARK: - ⌃⌥Tab: nächster wartender Chat
+
+    /// Verarbeitet ⌃⌥Tab: springt zum Chat, der am längsten auf Eingabe
+    /// wartet; wiederholt gedrückt zum nächsten (Reihenfolge und Rotation im
+    /// puren `NextWaitingChatResolver`). Umfang sind alle nicht archivierten
+    /// Chats des Workspace, nicht nur offene Tabs.
+    ///
+    /// Navigation über den `selectedSessionID`-Setter — derselbe Pfad wie ein
+    /// Sidebar-Klick: öffnet einen noch nicht offenen Chat als Tab, setzt im
+    /// sichtbaren Grid den Pane-Fokus und routet in das Fenster, das den Tab
+    /// hält.
+    ///
+    /// Kein wartender Chat → nichts passiert (kein Beep, kein Dialog); das
+    /// Event wird trotzdem konsumiert, damit kein Tab-Byte im Terminal
+    /// landet. Greift auch bei Fokus im Terminal: der Monitor läuft vor
+    /// SwiftTerms `keyDown`, und `TerminalShortcut.bytes` reicht
+    /// Control-Combos ohnehin durch.
+    ///
+    /// Status und `statusSince` werden NUR hier, im Key-Event-Pfad, gelesen —
+    /// kein Beobachter, kein Scan im View-Body (Performance-Regeln in
+    /// docs/plans/tab-switcher-workspace.md).
+    private func handleNextWaitingChatShortcut(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow,
+              TabSwitcherShortcut.isNextWaitingChat(
+                  keyCode: event.keyCode, modifiers: event.modifierFlags
+              ) else { return event }
+        let statusStore = runtimeStatusStore
+        let activityStore = tabSwitcherActivityStore
+        let candidates = workspace.sessions.map { session in
+            NextWaitingChatResolver.Candidate(
+                id: session.id,
+                isArchived: session.status == .archived,
+                status: statusStore.status(for: session.id),
+                statusSince: activityStore.statusSince(for: session.id)
+            )
+        }
+        guard let target = NextWaitingChatResolver.next(
+            candidates: candidates, current: selectedSessionID
+        ) else { return nil }
+        selectedSessionID = target
+        multiSelection = []
         return nil
     }
 
