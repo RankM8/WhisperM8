@@ -105,6 +105,17 @@ Statusänderung zeichnete die Sidebar neu. Daraus:
   `TabSwitcherGridMarkingState` (hervorgehobene ID). Ein Schritt invalidiert
   die Overlays, nicht das Grid samt Terminals; der Grid-Zweig des
   `AgentChatsView`-Body liest `tabSwitcher` nicht.
+- Situation B/C nach demselben Muster: Durchlauf, Highlight und
+  Umfangs-Snapshot liegen im `TabSwitcherRunState` (`@Observable`). Der
+  `AgentChatsView`-Body liest nur `isActive` (ändert sich beim Öffnen und
+  Schließen), Highlight, Sessions und Mini-Map-Workspace liest nur der
+  `TabSwitcherOverlayHost` — ein Schritt wertet so nicht den ganzen Body samt
+  Sidebar neu aus (Review 05.10.2026).
+- `statusStore` wird nur bei echter Änderung geschrieben — auch das Abräumen
+  eines gar nicht vorhandenen Status feuerte vorher `@Published` an alle
+  Beobachter.
+- ⌃⌥Tab baut Kandidaten nur für die wartenden Einträge des Status-Stores,
+  nicht für alle Sessions (`NextWaitingChatResolver.candidates`).
 
 ## ⌃⌥Tab — nächster wartender Chat
 

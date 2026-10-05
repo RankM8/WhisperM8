@@ -284,21 +284,38 @@ struct AgentChatsView: View {
     /// und `DropDelegate.dropExited`/`performDrop` feuern bei Cancel/Außerhalb-
     /// Drop nicht zuverlässig — mouseUp ist der einzige verlässliche Geber.
     @State var tabDragEndMonitor: Any?
-    /// Ctrl+Tab-Switcher: pure Durchlauf-Maschine (nil = inaktiv). Ephemer und
-    /// fensterlokal — bewusst `@State` statt AgentWindowStore: der Zustand lebt
-    /// und stirbt mit einer einzigen Key-Interaktion in DIESEM Fenster.
-    /// internal, da die Handler in +Shortcuts ihn steuern.
-    @State var tabSwitcher: TabSwitcherModel?
+    /// Ctrl+Tab-Switcher (Situation B/C): eigener kleiner Beobachtungswert.
+    /// Ephemer und fensterlokal — bewusst `@State` statt AgentWindowStore: der
+    /// Zustand lebt und stirbt mit einer einzigen Key-Interaktion in DIESEM
+    /// Fenster. Der Body liest davon NUR `isActive` (ändert sich nur beim
+    /// Öffnen/Schließen); Highlight, Umfang und Mini-Map-Workspace liest
+    /// ausschließlich der `TabSwitcherOverlayHost` — ein Schritt invalidiert
+    /// so nicht den ganzen Body samt Sidebar.
+    @State var tabSwitcherRun = TabSwitcherRunState()
+    /// Pure Durchlauf-Maschine (nil = inaktiv). Zugriff für die Handler in
+    /// +Shortcuts; nicht beobachtet (`@ObservationIgnored`), ein Lesen im
+    /// Body registriert also keine Abhängigkeit.
+    var tabSwitcher: TabSwitcherModel? {
+        get { tabSwitcherRun.model }
+        nonmutating set { tabSwitcherRun.model = newValue }
+    }
     /// Ziel-Sessions des laufenden Durchlaufs in Umfangs-Reihenfolge
     /// (`TabSwitcherScope`) — Snapshot aus dem Key-Event-Pfad
     /// (`refreshTabSwitcherScope`), damit der Overlay-Body nicht über alle
-    /// Sessions scannt. Leer, solange der Switcher inaktiv ist.
-    @State var tabSwitcherSessions: [AgentChatSession] = []
+    /// Sessions scannt. NIE im Body lesen (beobachtet → jeder Schritt).
+    var tabSwitcherSessions: [AgentChatSession] {
+        get { tabSwitcherRun.sessions }
+        nonmutating set { tabSwitcherRun.setSessions(newValue) }
+    }
     /// Situation B (Einzelansicht im referenzierten Workspace): Snapshot des
     /// Workspace für die Mini-Map (`AgentTabSwitcherMiniMap`), sonst `nil`.
     /// Gesetzt im Key-Event-Pfad (`refreshTabSwitcherScope`); steuert auch
-    /// die räumlichen Pfeile und den Commit mit Fokus-Mitnahme.
-    @State var tabSwitcherMiniMapWorkspace: AgentGridWorkspace?
+    /// die räumlichen Pfeile und den Commit mit Fokus-Mitnahme. NIE im Body
+    /// lesen.
+    var tabSwitcherMiniMapWorkspace: AgentGridWorkspace? {
+        get { tabSwitcherRun.miniMapWorkspace }
+        nonmutating set { tabSwitcherRun.setMiniMapWorkspace(newValue) }
+    }
     /// Grid-Markierung (Situation A): eigener kleiner Beobachtungswert,
     /// gespiegelt aus `tabSwitcher` im Event-Pfad
     /// (`syncTabSwitcherGridMarking`). Der Body reicht nur die Referenz an
@@ -453,8 +470,14 @@ struct AgentChatsView: View {
     }
 
     private var tabGroupingItems: [AgentTabGroupingItem] {
+        tabGroupingItems(for: headerTabs)
+    }
+
+    /// Wie `tabGroupingItems`, aber aus bereits gebauten `headerTabs` — der
+    /// Key-Event-Pfad des Ctrl+Tab-Switchers baut sie so nur einmal.
+    private func tabGroupingItems(for tabs: [AgentChatSession]) -> [AgentTabGroupingItem] {
         AgentTabGrouping.items(
-            entries: headerTabs.map {
+            entries: tabs.map {
                 AgentTabGroupingEntry(sessionID: $0.id, projectID: $0.projectID)
             },
             workspaceBySession: tabWorkspaceBySession,
@@ -467,7 +490,11 @@ struct AgentChatsView: View {
     /// müssen dieselbe Reihenfolge nutzen, sonst springt der Fokus entgegen der
     /// sichtbaren Leiste.
     var visualTabOrderIDs: [UUID] {
-        tabGroupingItems.flatMap { item in
+        Self.orderIDs(of: tabGroupingItems)
+    }
+
+    private static func orderIDs(of items: [AgentTabGroupingItem]) -> [UUID] {
+        items.flatMap { item in
             switch item {
             case .single(let id): [id]
             case .group(_, let sessionIDs): sessionIDs
@@ -602,8 +629,16 @@ struct AgentChatsView: View {
     private var tabSlotOrderIDs: [UUID] { tabStripSlots.map(\.leadingID) }
 
     var visualHeaderTabs: [AgentChatSession] {
-        let byID = Dictionary(headerTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return visualTabOrderIDs.compactMap { byID[$0] }
+        visualHeaderTabs(from: headerTabs)
+    }
+
+    /// `visualHeaderTabs` aus bereits gebauten `headerTabs`. Die computed
+    /// Property baute `headerTabs` (Dictionary über ALLE Sessions) zweimal —
+    /// einmal direkt, einmal über `visualTabOrderIDs`. Der Ctrl+Tab-Pfad
+    /// (`refreshTabSwitcherScope`, pro Taste) nutzt diese Variante.
+    func visualHeaderTabs(from tabs: [AgentChatSession]) -> [AgentChatSession] {
+        let byID = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return Self.orderIDs(of: tabGroupingItems(for: tabs)).compactMap { byID[$0] }
     }
 
     var visibleHeaderTabs: [AgentChatSession] {
@@ -2450,10 +2485,12 @@ struct AgentChatsView: View {
                 .animation(.easeOut(duration: 0.12), value: detachZoneTargeted)
                 // Ctrl+Tab-Switcher: liegt bewusst NUR über dem Terminal-
                 // Content — Sidebar und Tab-Strip bleiben sichtbar/bedienbar.
+                // Der Body liest nur `isActive` (Öffnen/Schließen), nie das
+                // Highlight — sonst wertete jeder Schritt Sidebar & Co. neu aus.
                 .overlay {
-                    if tabSwitcher != nil { tabSwitcherOverlay }
+                    if tabSwitcherRun.isActive { tabSwitcherOverlay }
                 }
-                .animation(.easeOut(duration: 0.1), value: tabSwitcher != nil)
+                .animation(.easeOut(duration: 0.1), value: tabSwitcherRun.isActive)
             } else {
                 ContentUnavailableView("Kein Agent Chat", systemImage: "terminal")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2467,33 +2504,19 @@ struct AgentChatsView: View {
     /// (Grid sichtbar) erreicht diesen Zweig nie — dort markieren die Panes.
     /// Die Tastatur-Steuerung (Tab/Shift+Tab/Pfeile/Esc/Return,
     /// Ctrl-Release-Commit) läuft über die Monitore in +Shortcuts — hier nur
-    /// Rendering + Maus-Callbacks.
-    @ViewBuilder
+    /// Rendering + Maus-Callbacks. Reicht nur die Referenz auf den
+    /// `TabSwitcherRunState` weiter — dereferenziert wird er erst im Host.
     private var tabSwitcherOverlay: some View {
-        if let tabSwitcher, let workspace = tabSwitcherMiniMapWorkspace {
-            AgentTabSwitcherMiniMap(
-                workspace: workspace,
-                sessions: tabSwitcherSessions,
-                highlightedID: tabSwitcher.highlightedID,
-                currentID: selectedSessionID,
-                statusStore: runtimeStatusStore,
-                activityStore: tabSwitcherActivityStore,
-                onCommit: { commitTabSwitcher(to: $0) },
-                onCancel: { cancelTabSwitcher() }
-            )
-        } else if let tabSwitcher {
-            AgentTabSwitcherOverlay(
-                sessions: tabSwitcherSessions,
-                highlightedID: tabSwitcher.highlightedID,
-                currentID: selectedSessionID,
-                statusStore: runtimeStatusStore,
-                // Nur als Referenz durchgereicht — beobachtet wird der Store
-                // ausschließlich im Overlay selbst (siehe `tabSwitcherActivityStore`).
-                activityStore: tabSwitcherActivityStore,
-                onCommit: { commitTabSwitcher(to: $0) },
-                onCancel: { cancelTabSwitcher() }
-            )
-        }
+        TabSwitcherOverlayHost(
+            run: tabSwitcherRun,
+            currentID: selectedSessionID,
+            statusStore: runtimeStatusStore,
+            // Nur als Referenz durchgereicht — beobachtet wird der Store
+            // ausschließlich im Overlay selbst (siehe `tabSwitcherActivityStore`).
+            activityStore: tabSwitcherActivityStore,
+            onCommit: { commitTabSwitcher(to: $0) },
+            onCancel: { cancelTabSwitcher() }
+        )
     }
 
     /// Banner-Indikator, der während eines Tab-Drags über dem Content erscheint

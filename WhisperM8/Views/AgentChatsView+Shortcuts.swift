@@ -173,16 +173,14 @@ extension AgentChatsView {
               TabSwitcherShortcut.isNextWaitingChat(
                   keyCode: event.keyCode, modifiers: event.modifierFlags
               ) else { return event }
-        let statusStore = runtimeStatusStore
         let activityStore = tabSwitcherActivityStore
-        let candidates = workspace.sessions.map { session in
-            NextWaitingChatResolver.Candidate(
-                id: session.id,
-                isArchived: session.status == .archived,
-                status: statusStore.status(for: session.id),
-                statusSince: activityStore.statusSince(for: session.id)
-            )
-        }
+        // Über die (wenigen) wartenden Einträge des Status-Stores statt über
+        // alle Sessions — siehe `NextWaitingChatResolver.candidates`.
+        let candidates = NextWaitingChatResolver.candidates(
+            statuses: runtimeStatusStore.statuses,
+            sessions: workspace.sessions,
+            statusSince: { activityStore.statusSince(for: $0) }
+        )
         guard let target = NextWaitingChatResolver.next(
             candidates: candidates, current: selectedSessionID
         ) else { return nil }
@@ -409,11 +407,14 @@ extension AgentChatsView {
     /// Gibt die Reihenfolge zurück; leer, wenn es keinen Umfang gibt.
     @discardableResult
     func refreshTabSwitcherScope() -> [UUID] {
-        let tabs = visualHeaderTabs
+        // `headerTabs` (Dictionary über ALLE Sessions) nur einmal pro Taste
+        // bauen und für Reihenfolge und Selektion wiederverwenden.
+        let openTabs = headerTabs
+        let tabs = visualHeaderTabs(from: openTabs)
         let scope = TabSwitcherScope.resolve(
             showsGrid: showsGrid,
             activeWorkspace: activeGridWorkspaceEntity,
-            selectedSessionID: selectedSession?.id,
+            selectedSessionID: tabSwitcherCurrentID(amongHeaderTabs: openTabs),
             openTabs: tabs.map {
                 TabSwitcherScope.Tab(
                     id: $0.id,
@@ -433,6 +434,16 @@ extension AgentChatsView {
         let sessions = order.compactMap { byID[$0] }
         if tabSwitcherSessions != sessions { tabSwitcherSessions = sessions }
         return order
+    }
+
+    /// `selectedSession?.id` ohne Linearsuche über alle Sessions, wenn die
+    /// Selektion ein offener Tab ist (der Normalfall). Ergebnis identisch:
+    /// Ein Treffer in `headerTabs` existiert und ist nicht archiviert — genau
+    /// das, was `selectedSession` sucht. Sonst der unveränderte Rückfall.
+    private func tabSwitcherCurrentID(amongHeaderTabs openTabs: [AgentChatSession]) -> UUID? {
+        guard let selectedSessionID else { return openTabs.first?.id }
+        if openTabs.contains(where: { $0.id == selectedSessionID }) { return selectedSessionID }
+        return selectedSession?.id
     }
 
     // MARK: - Zwei-Finger-Swipe (Tab links/rechts)

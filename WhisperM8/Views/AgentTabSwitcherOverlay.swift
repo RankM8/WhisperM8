@@ -162,3 +162,43 @@ struct AgentTabSwitcherOverlay: View {
         }
     }
 }
+
+/// Einzige View, die Highlight, Umfang und Mini-Map-Workspace des laufenden
+/// Durchlaufs liest (`TabSwitcherRunState`) und daraus Mini-Map (B) oder
+/// Projekt-Liste (C) wählt. Als eigene View, damit Observation pro
+/// Ctrl+Tab-Schritt nur sie (und ihr Kind) invalidiert — nicht den
+/// AgentChatsView-Body, der nur `isActive` liest.
+struct TabSwitcherOverlayHost: View {
+    let run: TabSwitcherRunState
+    /// Chat, von dem der Durchlauf ausging — trägt das „Hier"-Zeichen.
+    let currentID: UUID?
+    let statusStore: AgentSessionRuntimeStatusStore
+    let activityStore: AgentSessionActivityStore
+    let onCommit: (UUID) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        if let workspace = run.miniMapWorkspace {
+            AgentTabSwitcherMiniMap(
+                workspace: workspace,
+                sessions: run.sessions,
+                highlightedID: run.highlightedID,
+                currentID: currentID,
+                statusStore: statusStore,
+                activityStore: activityStore,
+                onCommit: onCommit,
+                onCancel: onCancel
+            )
+        } else {
+            AgentTabSwitcherOverlay(
+                sessions: run.sessions,
+                highlightedID: run.highlightedID,
+                currentID: currentID,
+                statusStore: statusStore,
+                activityStore: activityStore,
+                onCommit: onCommit,
+                onCancel: onCancel
+            )
+        }
+    }
+}

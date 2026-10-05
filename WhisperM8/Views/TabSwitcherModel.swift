@@ -1,9 +1,11 @@
+import AppKit
 import Foundation
+import Observation
 
 /// Pure State-Machine des Ctrl+Tab-Switchers: hält die Tab-Reihenfolge und
 /// das aktuell hervorgehobene Highlight während eines Durchlaufs (Control
-/// gehalten). Ephemer — lebt als `@State` in der `AgentChatsView` und wird
-/// nie persistiert. Window-frei → unit-testbar.
+/// gehalten). Ephemer — lebt im `TabSwitcherRunState` der `AgentChatsView`
+/// und wird nie persistiert. Window-frei → unit-testbar.
 ///
 /// Die Reihenfolge wird bei jedem Schritt frisch hereingereicht (der Umfang
 /// aus `TabSwitcherScope` kann sich extern ändern, z. B. durch Archivierung
@@ -43,6 +45,58 @@ struct TabSwitcherModel: Equatable {
     func commitTarget(order: [UUID]) -> UUID? {
         guard let highlightedID, order.contains(highlightedID) else { return nil }
         return highlightedID
+    }
+}
+
+/// Beobachtungswert des laufenden Ctrl+Tab-Durchlaufs für Mini-Map (B) und
+/// Projekt-Liste (C) — Gegenstück zum `TabSwitcherGridMarkingState` (A).
+///
+/// Warum kein `@State var tabSwitcher` mehr in der AgentChatsView: Ihr Body
+/// las ihn (`if tabSwitcher != nil`, `.animation(value:)`, Overlay-Argumente)
+/// — jeder Ctrl+Tab-Schritt wertete so den GANZEN Body samt Sidebar
+/// (nicht-lazy `VStack`, teuer bei Scope „Alle") neu aus. Jetzt liest der
+/// Body nur `isActive`, das sich nur beim Öffnen/Schließen ändert;
+/// `highlightedID`, `sessions` und `miniMapWorkspace` liest ausschließlich
+/// der kleine `TabSwitcherOverlayHost`.
+///
+/// Die Durchlauf-Maschine selbst (`model`) ist `@ObservationIgnored`: Die
+/// Event-Handler lesen sie ständig, keine View hängt an ihr. Jeder Write
+/// spiegelt diff-gated in die beobachteten Werte — `@Observable` meldet sonst
+/// auch gleiche Werte als Änderung.
+@MainActor
+@Observable
+final class TabSwitcherRunState {
+    /// Pure Durchlauf-Maschine (nil = inaktiv). Nur im Event-Pfad lesen.
+    @ObservationIgnored var model: TabSwitcherModel? {
+        didSet { syncFromModel() }
+    }
+    /// Zuletzt gesehener Modifier-Zustand (keyDown/flagsChanged im
+    /// Durchlauf) — Grundlage für `TabSwitcherShortcut.flagsChangeAction`.
+    /// Nur Event-Pfad, nie beobachtet.
+    @ObservationIgnored var lastModifiers: NSEvent.ModifierFlags = []
+
+    /// Einziger Wert, den der AgentChatsView-Body liest.
+    private(set) var isActive = false
+    private(set) var highlightedID: UUID?
+    /// Ziel-Sessions in Umfangs-Reihenfolge — Snapshot aus dem
+    /// Key-Event-Pfad (`refreshTabSwitcherScope`).
+    private(set) var sessions: [AgentChatSession] = []
+    /// Situation B: Workspace für die Mini-Map, sonst `nil`.
+    private(set) var miniMapWorkspace: AgentGridWorkspace?
+
+    func setSessions(_ newValue: [AgentChatSession]) {
+        if sessions != newValue { sessions = newValue }
+    }
+
+    func setMiniMapWorkspace(_ newValue: AgentGridWorkspace?) {
+        if miniMapWorkspace != newValue { miniMapWorkspace = newValue }
+    }
+
+    private func syncFromModel() {
+        let active = model != nil
+        if isActive != active { isActive = active }
+        let highlighted = model?.highlightedID
+        if highlightedID != highlighted { highlightedID = highlighted }
     }
 }
 
