@@ -170,45 +170,55 @@ final class AgentUIStateTests: XCTestCase {
         XCTAssertEqual(state.expandedProjectIDs, [pid])
     }
 
-    func testPruneCapsGlobalTabsAndPreservesSelected() {
+    /// User-Befund 05.10.2026: Mit mehr als 12 offenen Tabs gingen bei jedem
+    /// Neustart die zuletzt geöffneten verloren — `prune` kappte beim Load
+    /// still auf `maxOpenTabs`. Offene Tabs werden nie mehr gekappt.
+    func testPruneKeepsAllLiveTabsBeyondMigrationLimit() {
         let pid = UUID()
-        let ids = (0..<(AgentUIState.maxOpenTabs + 3)).map { _ in UUID() }
-        let selected = ids.last!
-        let workspace = makeWorkspace(
-            projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
-            sessions: ids.map { makeSession(id: $0, projectID: pid) }
-        )
-
-        var state = AgentUIState(openTabIDs: ids, selectedSessionID: selected)
-        state.prune(workspace: workspace)
-
-        XCTAssertEqual(state.openTabIDs.count, AgentUIState.maxOpenTabs)
-        XCTAssertTrue(state.openTabIDs.contains(selected), "Selektierter Tab überlebt die Kappung")
-        XCTAssertEqual(state.windows.first?.openTabIDs.count, AgentUIState.maxOpenTabs)
-        XCTAssertTrue(state.windows.first?.openTabIDs.contains(selected) == true)
-    }
-
-    func testPruneWithoutCapKeepsAllLiveTabs() {
-        let pid = UUID()
-        let sessions = (0..<(AgentUIState.maxOpenTabs + 3)).map { _ in makeSession(projectID: pid) }
+        let sessions = (0..<(AgentUIState.maxOpenTabs + 8)).map { _ in makeSession(projectID: pid) }
         let workspace = makeWorkspace(
             projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
             sessions: sessions
         )
-        let base = AgentUIState(
+        var state = AgentUIState(
             openTabIDs: sessions.map(\.id),
-            selectedSessionID: sessions.last?.id
+            selectedSessionID: sessions.first?.id
         )
+        state.prune(workspace: workspace)
 
-        var runtime = base
-        runtime.prune(workspace: workspace, capTabs: false)
-        XCTAssertEqual(runtime.openTabIDs.count, sessions.count,
-                       "Laufzeit-GC (capTabs: false) kappt die Bar nicht")
+        XCTAssertEqual(state.openTabIDs, sessions.map(\.id), "Reihenfolge und Anzahl bleiben")
+        XCTAssertEqual(state.windows.first?.openTabIDs, sessions.map(\.id))
+    }
 
-        var load = base
-        load.prune(workspace: workspace) // Default = Load-Pfad
-        XCTAssertEqual(load.openTabIDs.count, AgentUIState.maxOpenTabs,
-                       "Load-Pfad kappt weiterhin auf maxOpenTabs")
+    /// Der echte Weg: Fenster-Store schreibt beim Beenden (`flush`), ein
+    /// frischer Store liest beim Start (`loadUIState` → `prune`). 20 Tabs
+    /// müssen den Neustart vollständig überleben, auch die zuletzt geöffneten.
+    @MainActor
+    func testMoreThanTwelveTabsSurviveRestart() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wm8-tabs-restart-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let wsURL = dir.appendingPathComponent("ws.json")
+        let uiURL = dir.appendingPathComponent("ui.json")
+
+        let pid = UUID()
+        let sessions = (0..<20).map { _ in makeSession(projectID: pid) }
+        try AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL).saveWorkspace(makeWorkspace(
+            projects: [AgentProject(id: pid, name: "P", path: "/tmp/p")],
+            sessions: sessions
+        ))
+
+        let before = AgentWindowStore(persistence: AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL))
+        let window = before.primaryWindowID
+        for session in sessions { before.openTab(session.id, in: window) }
+        XCTAssertEqual(before.openTabIDs(in: window).count, 20)
+        before.flush()
+
+        let after = AgentWindowStore(persistence: AgentSessionStore(fileURL: wsURL, uiStateFileURL: uiURL))
+        XCTAssertEqual(after.openTabIDs(in: after.primaryWindowID), sessions.map(\.id),
+                       "alle 20 Tabs überleben den Neustart, auch die zuletzt geöffneten")
+        XCTAssertEqual(after.selectedSession(in: after.primaryWindowID), sessions.last?.id)
     }
 
     func testMoveTabToNewWindowRemovesItFromSourceAndCreatesTarget() {

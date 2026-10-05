@@ -1158,11 +1158,9 @@ final class AgentWindowStore {
     /// aufgerufen (`onChange(of: workspace)` in AgentChatsView). Diff-gated:
     /// ohne effektive Aenderung kein State-Write — sonst wuerde jeder
     /// Workspace-Tick alle Fenster re-rendern und leere Saves schedulen.
-    /// Bewusst OHNE Tab-Cap (`capTabs: false`): zur Laufzeit darf die Bar
-    /// mehr als `maxOpenTabs` zeigen, gekappt wird nur beim Load.
     func prune(workspace: AgentWorkspace) {
         var pruned = state
-        pruned.prune(workspace: workspace, capTabs: false)
+        pruned.prune(workspace: workspace)
         guard pruned != state else { return }
         state = pruned
         dirtyRevision += 1
@@ -1177,7 +1175,7 @@ final class AgentWindowStore {
     /// nicht verschluckt.
     func flush() {
         var pruned = state
-        pruned.prune(workspace: persistence.loadWorkspace(), capTabs: false)
+        pruned.prune(workspace: persistence.loadWorkspace())
         if pruned != state {
             state = pruned
             dirtyRevision += 1

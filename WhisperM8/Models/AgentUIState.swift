@@ -160,9 +160,12 @@ struct AgentUIState: Codable, Equatable {
     var legacyOpenTabIDsByProject: [UUID: [UUID]]
     var legacySelectedSessionIDByProject: [UUID: UUID]
 
-    /// Persistenz-Cap der globalen Tab-Liste. Greift nur in `prune` /
-    /// bei der Migration — zur Laufzeit darf die Bar mehr Tabs zeigen
-    /// (sie scrollt), beim nächsten Load wird gekappt.
+    /// Obergrenze NUR für die Erst-Migration (`initialMigration`), die eine
+    /// leere Tab-Leiste aus der Historie vorbefüllt. Offene Tabs werden nie
+    /// gekappt: Früher kappte jeder Load still auf 12 (aus der Zeit der
+    /// Pro-Projekt-Tabs, 45d0e45) und behielt die ältesten — wer mehr als 12
+    /// Tabs offen hatte, verlor bei JEDEM Neustart (Cmd+Q, `make dev`) die
+    /// zuletzt geöffneten (User-Befund 05.10.2026, „seit Monaten").
     static let maxOpenTabs = 12
     static let currentSchemaVersion = 5
 
@@ -493,12 +496,10 @@ struct AgentUIState: Codable, Equatable {
     /// Garbage-Collection: entfernt Eintraege fuer Projekte / Sessions, die
     /// nicht mehr im uebergebenen Workspace existieren. Wichtig damit
     /// stale UUIDs (z. B. nach manuellem Workspace-Delete) keine Geister-
-    /// Tabs in der UI hinterlassen. Kappt außerdem die globale Tab-Liste
-    /// auf `maxOpenTabs` (selektierter Tab überlebt die Kappung).
-    /// `capTabs: false` fuer den Laufzeit-Aufruf (AgentWindowStore.prune) —
-    /// zur Laufzeit darf die Bar mehr Tabs zeigen (sie scrollt), gekappt
-    /// wird nur beim Load.
-    mutating func prune(workspace: AgentWorkspace, capTabs: Bool = true) {
+    /// Tabs in der UI hinterlassen. Kappt bewusst NICHT die Anzahl offener
+    /// Tabs — ein Tab verschwindet nur, wenn der User ihn schließt oder die
+    /// Session archiviert/gelöscht ist (siehe `maxOpenTabs`).
+    mutating func prune(workspace: AgentWorkspace) {
         let liveProjectIDs = Set(workspace.projects.map(\.id))
         // ALLE UI-Referenzen (Tabs, Pins, Unread, Selektionen, Slots) zeigen
         // nur auf existierende, NICHT-archivierte Sessions — `.closed` ist
@@ -571,18 +572,12 @@ struct AgentUIState: Codable, Equatable {
             }
         }
 
-        let cleanedGlobal = Self.deduplicated(openTabIDs.filter { liveSessionIDs.contains($0) })
-        openTabIDs = capTabs
-            ? Self.cappedOpenTabIDs(cleanedGlobal, selectedID: selectedSessionID)
-            : cleanedGlobal
+        openTabIDs = Self.deduplicated(openTabIDs.filter { liveSessionIDs.contains($0) })
         windows = Self.normalizedWindows(
             windows, primaryWindowID: primaryWindowID, gridWorkspaces: gridWorkspaces
         ).map { window in
             var copy = window
-            let cleaned = Self.deduplicated(copy.openTabIDs.filter { liveSessionIDs.contains($0) })
-            copy.openTabIDs = capTabs
-                ? Self.cappedOpenTabIDs(cleaned, selectedID: copy.selectedSessionID)
-                : cleaned
+            copy.openTabIDs = Self.deduplicated(copy.openTabIDs.filter { liveSessionIDs.contains($0) })
             if let sid = copy.selectedSessionID, !liveSessionIDs.contains(sid) {
                 copy.selectedSessionID = copy.openTabIDs.first
             }
@@ -716,15 +711,6 @@ struct AgentUIState: Codable, Equatable {
     private static func deduplicated(_ ids: [UUID]) -> [UUID] {
         var seen = Set<UUID>()
         return ids.filter { seen.insert($0).inserted }
-    }
-
-    private static func cappedOpenTabIDs(_ ids: [UUID], selectedID: UUID?) -> [UUID] {
-        guard ids.count > maxOpenTabs else { return ids }
-        var capped = Array(ids.prefix(maxOpenTabs))
-        if let selectedID, ids.contains(selectedID), !capped.contains(selectedID) {
-            capped[maxOpenTabs - 1] = selectedID
-        }
-        return capped
     }
 
     private mutating func syncLegacyWindowMirror() {
