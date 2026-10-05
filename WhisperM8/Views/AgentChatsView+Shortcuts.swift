@@ -156,7 +156,8 @@ extension AgentChatsView {
     /// an die PTY schicken würde.
     ///
     /// Bei AKTIVEM Switcher werden alle `keyDown` dieses Fensters konsumiert:
-    /// Tab/Shift+Tab und ←/→ navigieren, Esc bricht ab (darf die TUI nie
+    /// Tab/Shift+Tab und die Pfeiltasten navigieren (Grid und Mini-Map
+    /// räumlich, Projekt-Liste linear), Esc bricht ab (darf die TUI nie
     /// erreichen — würde dort die laufende Generation abbrechen), Return
     /// committet sofort. Jede andere Taste bricht ab und wird geschluckt —
     /// wer mit gehaltenem Ctrl z. B. `C` drückt, will fast nie ein Ctrl+C an
@@ -196,25 +197,19 @@ extension AgentChatsView {
             moveTabSwitcherHighlightInGrid(gridDirection)
             return nil
         }
-        // Mini-Map (Situation B): Pfeile räumlich wie ⌃⌘-Pfeile im Grid statt
-        // linear/Spalten-Schrittweite. Liste (C) und Karten-Grid unverändert.
+        // Mini-Map (Situation B): Pfeile räumlich wie ⌃⌘-Pfeile im Grid.
         if tabSwitcherMiniMapWorkspace != nil,
            let spatial = Self.miniMapDirection(keyCode: event.keyCode) {
             moveTabSwitcherInMiniMap(spatial)
             return nil
         }
+        // Projekt-Liste (Situation C): jede Pfeiltaste = ein Schritt in der
+        // Liste, Wrap-around inklusive.
         switch event.keyCode {
-        case TerminalShortcut.KeyCode.leftArrow:
+        case TerminalShortcut.KeyCode.leftArrow, TabSwitcherShortcut.KeyCode.upArrow:
             tabSwitcher?.advance(-1, order: refreshTabSwitcherScope())
-        case TerminalShortcut.KeyCode.rightArrow:
+        case TerminalShortcut.KeyCode.rightArrow, TabSwitcherShortcut.KeyCode.downArrow:
             tabSwitcher?.advance(+1, order: refreshTabSwitcherScope())
-        case TabSwitcherShortcut.KeyCode.upArrow:
-            // Eine Reihe hoch/runter: Schrittweite = Spaltenzahl des Grids
-            // bzw. 1 in der Projekt-Liste (vom Overlay gemeldet), Wrap-around
-            // inklusive.
-            tabSwitcher?.advance(-max(1, tabSwitcherColumns), order: refreshTabSwitcherScope())
-        case TabSwitcherShortcut.KeyCode.downArrow:
-            tabSwitcher?.advance(+max(1, tabSwitcherColumns), order: refreshTabSwitcherScope())
         case TabSwitcherShortcut.KeyCode.escape:
             cancelTabSwitcher()
         case TerminalShortcut.KeyCode.returnKey:
@@ -382,12 +377,9 @@ extension AgentChatsView {
             }
         )
         let order = scope?.order ?? []
-        // Situation C (Projekt-Liste) als eine Spalte, A/B übergangsweise im
-        // Karten-Grid (eigene Darstellungen folgen in S4b/S5).
-        let presentation: AgentTabSwitcherOverlay.Presentation
-        if case .project = scope { presentation = .list } else { presentation = .grid }
-        if tabSwitcherPresentation != presentation { tabSwitcherPresentation = presentation }
-        // Situation B: eigene Mini-Map-Darstellung (S4b).
+        // Darstellung folgt dem Umfang: A (`.grid`) markiert die Panes und hat
+        // kein Overlay, B (`.workspaceMap`) zeigt die Mini-Map, C (`.project`)
+        // die Projekt-Liste (`AgentTabSwitcherOverlay`).
         let miniMapWorkspace: AgentGridWorkspace?
         if case .workspaceMap = scope { miniMapWorkspace = activeGridWorkspaceEntity } else { miniMapWorkspace = nil }
         if tabSwitcherMiniMapWorkspace != miniMapWorkspace { tabSwitcherMiniMapWorkspace = miniMapWorkspace }

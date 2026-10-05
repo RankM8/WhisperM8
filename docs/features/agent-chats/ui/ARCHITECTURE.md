@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-10-04
 ---
 
 # UI — Architektur
@@ -138,7 +138,7 @@ Scroller-Darstellung zurücksetzt, beobachtet der Applier
 ## Status-Anzeige
 
 `AgentStatusIndicator` ist die gemeinsame visuelle Sprache für Sidebar-Rows
-und den Ctrl-Tab-Switcher. `working` pulsiert grün, `awaitingInput` pulsiert
+und Statuspunkte. `working` pulsiert grün, `awaitingInput` pulsiert
 amber, `idle` ist ein ruhiger grauer Punkt, `errored` ist ein roter Ring und
 `stopped` beziehungsweise `nil` bleibt leer.
 
@@ -150,7 +150,8 @@ gedimmt grüne Idle-Darstellung; sie ist deshalb nicht identisch mit
 Die Statusdaten kommen aus `AgentSessionStatusCoordinator.shared.statusStore`.
 Rows und Tab-Switcher abonnieren einzelne IDs über `statusPublisher(for:)` oder
 lesen im kurzlebigen Overlay direkt aus dem Store; der Haupt-Body liest die
-Status-Map nicht.
+Status-Map nicht. Die Switcher-Kacheln (`TabSwitcherTile`) übernehmen dessen Farbzuordnung,
+zeigen den Status aber flächig und zusätzlich als Wort und Symbol.
 
 ## Ressourcenmonitor
 
@@ -181,7 +182,7 @@ Die Tab-Leiste nutzt mehrere pure Bausteine:
 
 - `WhisperM8/Views/AgentTabSelection.swift` enthält `TabSelectionResolver` für normalen Klick, Cmd-Klick, Shift-Klick und Gruppen-Pin-Normalisierung.
 - `WhisperM8/Views/AgentTabReorderDrop.swift` enthält `TabReorderGeometry` für Einfügeindex/-position, `TabGroupReorder` für Multi-Tab-Reorder und `TabReorderDropDelegate` für Move-Drops.
-- `WhisperM8/Views/TabSwitcherModel.swift` enthält `TabSwitcherModel`, `adjacentTabID`-basierte Navigation und `TabSwitcherGridLayout`.
+- `WhisperM8/Views/TabSwitcherModel.swift` enthält `TabSwitcherModel`, `adjacentTabID`-basierte Navigation und `TabSwitcherListLayout`; der Switcher insgesamt ist in [`tab-switcher.md`](tab-switcher.md) beschrieben.
 
 `AgentChatsView+Tabs` bindet diese Logik an Workspace und Store. Lokaler
 Reorder einer Multi-Auswahl schreibt eine neue Reihenfolge in
@@ -260,7 +261,7 @@ Recording-Start dem aktiven Agent-Chat zuzuordnen.
 - `WhisperM8/Views/AgentStatusIndicator.swift` ist die gemeinsame Statusanzeige für row-lokale Live-Zustände.
 - `WhisperM8/Views/AgentTabSelection.swift` ist die pure Multi-Select-Entscheidungslogik der Tab-Leiste.
 - `WhisperM8/Views/AgentTabReorderDrop.swift` ist die pure Reorder-Geometrie plus Drop-Delegate für die Tab-Leiste.
-- `WhisperM8/Views/TabSwitcherModel.swift` ist die pure State-Machine und Layout-Metrik des Ctrl-Tab-Switchers.
+- `WhisperM8/Views/TabSwitcherModel.swift` ist die pure State-Machine und Listen-Metrik des Ctrl-Tab-Switchers (Umfang: `TabSwitcherScope.swift`).
 - `WhisperM8/Views/Transcript/` ist die View-Schicht für Timeline, Activity, Report, Markdown, Summary und History.
 - `WhisperM8/Views/AgentSessionDetailView.swift` ist die Detailfläche für interaktive PTY-Sessions.
 - `WhisperM8/Views/SubagentJobDetailView.swift` ist die Detailfläche für headless Codex-Subagent-Jobs vor der Übernahme.
@@ -272,7 +273,7 @@ Recording-Start dem aktiven Agent-Chat zuzuordnen.
 - `Tests/WhisperM8Tests/AgentDragDropPlannerTests.swift` deckt beide Reorder-Richtungen, No-ops, Cross-Project-Moves, Projekt-Reorder und Store-Ausführung ab.
 - `Tests/WhisperM8Tests/AgentResourceMonitorTests.swift` deckt Prozessbaum-Aggregation, fehlenden Gesamtspeicher und nicht laufende Root-Prozesse ab.
 - `Tests/WhisperM8Tests/AgentWindowStoreTests.swift` und `Tests/WhisperM8Tests/AgentUIStateTests.swift` decken Fenster-/Tab-Store, Persistenz, Invarianten und Migration ab.
-- `Tests/WhisperM8Tests/TabSelectionResolverTests.swift`, `TabReorderGeometryTests.swift`, `TabGroupReorderTests.swift`, `TabNavigationTests.swift`, `TabNavShortcutTests.swift`, `TabSwitcherModelTests.swift`, `TabSwitcherShortcutTests.swift` und `TabScrollSwipeRecognizerTests.swift` decken Tab-Auswahl, Reorder, Navigation, Switcher und Swipe ab.
+- `Tests/WhisperM8Tests/TabSelectionResolverTests.swift`, `TabReorderGeometryTests.swift`, `TabGroupReorderTests.swift`, `TabNavigationTests.swift`, `TabNavShortcutTests.swift`, `TabSwitcherModelTests.swift`, `TabSwitcherShortcutTests.swift`, `TabSwitcherScopeTests.swift`, `TabSwitcherTileModelTests.swift`, `TabSwitcherMiniMapGeometryTests.swift`, `TabSwitcherGridMarkingTests.swift` und `TabScrollSwipeRecognizerTests.swift` decken Tab-Auswahl, Reorder, Navigation, Switcher und Swipe ab.
 - `Tests/WhisperM8Tests/TerminalKeyboardShortcutTests.swift`, `TerminalLinkResolverTests.swift` und `AgentTerminalSessionTests.swift` decken die terminalnahen UI-Resolver und Session-Integration ab.
 - `Tests/WhisperM8Tests/TranscriptTimelineBuilderTests.swift`, `MarkdownBlockParserTests.swift` und `TeammateMessageParserTests.swift` decken die UI-nahe Timeline-, Markdown- und Teammate-Projektion ab; Indexer, Runtime-Status, Transcript-Reader und Context-Bundle gehören zum Sessions-/Diktat-Datenkern und werden dort dokumentiert.
 

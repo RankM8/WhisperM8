@@ -294,14 +294,6 @@ struct AgentChatsView: View {
     /// (`refreshTabSwitcherScope`), damit der Overlay-Body nicht über alle
     /// Sessions scannt. Leer, solange der Switcher inaktiv ist.
     @State var tabSwitcherSessions: [AgentChatSession] = []
-    /// Spaltenzahl des gerade gerenderten Switcher-Grids — vom Overlay
-    /// gemeldet (`onColumnsChange`), von `+Shortcuts` als ↑/↓-Schrittweite
-    /// benutzt (eine Reihe = `tabSwitcherColumns` Schritte).
-    @State var tabSwitcherColumns: Int = 1
-    /// Darstellung des laufenden Durchlaufs: Projekt-Liste (Situation C)
-    /// oder übergangsweise das Karten-Grid (A/B) — gesetzt im Key-Event-Pfad
-    /// (`refreshTabSwitcherScope`) aus dem aufgelösten `TabSwitcherScope`.
-    @State var tabSwitcherPresentation: AgentTabSwitcherOverlay.Presentation = .grid
     /// Situation B (Einzelansicht im referenzierten Workspace): Snapshot des
     /// Workspace für die Mini-Map (`AgentTabSwitcherMiniMap`), sonst `nil`.
     /// Gesetzt im Key-Event-Pfad (`refreshTabSwitcherScope`); steuert auch
@@ -2470,9 +2462,12 @@ struct AgentChatsView: View {
         .background(AgentTheme.background)
     }
 
-    /// Ctrl+Tab-Switcher-Overlay über dem Terminal-Content. Die Tastatur-
-    /// Steuerung (Tab/Shift+Tab/Esc/Return, Ctrl-Release-Commit) läuft über
-    /// die Monitore in +Shortcuts — hier nur Rendering + Maus-Callbacks.
+    /// Ctrl+Tab-Switcher-Overlay über dem Terminal-Content der Einzelansicht:
+    /// Mini-Map (Situation B) oder Projekt-Liste (Situation C). Situation A
+    /// (Grid sichtbar) erreicht diesen Zweig nie — dort markieren die Panes.
+    /// Die Tastatur-Steuerung (Tab/Shift+Tab/Pfeile/Esc/Return,
+    /// Ctrl-Release-Commit) läuft über die Monitore in +Shortcuts — hier nur
+    /// Rendering + Maus-Callbacks.
     @ViewBuilder
     private var tabSwitcherOverlay: some View {
         if let tabSwitcher, let workspace = tabSwitcherMiniMapWorkspace {
@@ -2491,14 +2486,12 @@ struct AgentChatsView: View {
                 sessions: tabSwitcherSessions,
                 highlightedID: tabSwitcher.highlightedID,
                 currentID: selectedSessionID,
-                presentation: tabSwitcherPresentation,
                 statusStore: runtimeStatusStore,
                 // Nur als Referenz durchgereicht — beobachtet wird der Store
                 // ausschließlich im Overlay selbst (siehe `tabSwitcherActivityStore`).
                 activityStore: tabSwitcherActivityStore,
                 onCommit: { commitTabSwitcher(to: $0) },
-                onCancel: { cancelTabSwitcher() },
-                onColumnsChange: { tabSwitcherColumns = $0 }
+                onCancel: { cancelTabSwitcher() }
             )
         }
     }

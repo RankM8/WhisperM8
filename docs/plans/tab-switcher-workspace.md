@@ -1,9 +1,14 @@
 ---
-status: beschlossen
-stand: 2026-10-02
+status: umgesetzt
+stand: 2026-10-04
 ---
 
 # Ctrl+Tab-Switcher: Workspace statt global, mit Stand-Zeile
+
+> **Status (04.10.2026): umgesetzt, S1–S6.** Ist-Zustand:
+> [`../features/agent-chats/ui/tab-switcher.md`](../features/agent-chats/ui/tab-switcher.md).
+> Offen bleibt der Slice „⌃⌥Tab — nächster wartender Chat" (siehe
+> „Offen / später"); deshalb liegt der Plan noch hier und nicht im Archiv.
 
 ## Befund
 
@@ -260,6 +265,16 @@ Hauskonvention (pure Logik, Closures statt DI-Framework).
 - Feature-Doku: Abschnitt in `docs/features/agent-chats/ui/` und
   Stichpunkt in `CLAUDE.md` (Tabs-Abschnitt).
 - Eintrag hier auf „umgesetzt", Plan nach `docs/archive/`.
+
+**Erledigt (04.10.2026):** Karten-Grid samt `Presentation.grid`,
+`TabSwitcherGridLayout` und der Spalten-Schrittweite
+(`tabSwitcherColumns`/`onColumnsChange`) entfernt — kein Pfad erreichte es
+mehr (A rendert im Grid-Zweig ohne Overlay, B immer die Mini-Map). ↑/↓ in
+der Liste = ein Schritt. Fußzeilen zentral in `TabSwitcherHint`
+(C: `⌃Tab weiter · ⇧ zurück · ↑↓ wählen · Esc`, B: `… · Pfeile räumlich · Esc`;
+A hat kein Overlay und keinen Hinweis). Feature-Doku
+`docs/features/agent-chats/ui/tab-switcher.md`, Stichpunkt in `CLAUDE.md`.
+Archivierung zurückgestellt, solange ⌃⌥Tab offen ist.
 
 ## Offen / später
 

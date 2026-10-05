@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-10-04
 ---
 
 # UI — Fenster, Sidebar, Tabs, Terminal, Timeline
@@ -106,9 +106,11 @@ einen Tab oder eine Auswahl in ein neues Fenster ab. Die genaue
 Multi-Window-Mechanik ist in [`multiwindow.md`](multiwindow.md) dokumentiert.
 
 Für viele Tabs gibt es ein Overflow-Menü und den Ctrl-Tab-Switcher. Der
-Switcher rendert ein Karten-Grid über der Detailfläche, navigiert mit
-Ctrl+Tab, Ctrl+Shift+Tab und Pfeiltasten und committet beim Loslassen von
-Control.
+Switcher kennt keinen globalen Modus, sondern drei Situationen: Grid sichtbar
+→ die echten Panes werden markiert, maximierter Workspace-Chat → Mini-Map im
+Grid-Layout, sonst → Liste der offenen Tabs desselben Projekts. Kacheln zeigen
+Status, Stand-Zeile und Dauer; Commit beim Loslassen von Control. Details in
+[`tab-switcher.md`](tab-switcher.md).
 
 ## Header und Inspector
 
@@ -206,7 +208,7 @@ Terminal-spezifische Tastenkombinationen sind vom Fenster-Shortcut getrennt:
 - `WhisperM8/Views/AgentStatusIndicator.swift` rendert die kompakten Statusanzeigen für working, awaiting input, idle, errored und stopped.
 - `WhisperM8/Views/AgentTabSelection.swift` enthält die pure Multi-Select-Semantik der Tab-Leiste.
 - `WhisperM8/Views/AgentTabReorderDrop.swift` enthält pure Reorder-Geometrie, Gruppen-Reorder und den Drop-Delegate der Tab-Leiste.
-- `WhisperM8/Views/TabSwitcherModel.swift` enthält die pure Ctrl-Tab-State-Machine und Grid-Metrik.
+- `WhisperM8/Views/TabSwitcherModel.swift` enthält die pure Ctrl-Tab-State-Machine und die Metrik der Projekt-Liste; Umfang, Kachel, Mini-Map und Grid-Markierung stehen in [`tab-switcher.md`](tab-switcher.md).
 - `WhisperM8/Views/AgentTerminalView.swift` bindet SwiftTerm ein und verwaltet Controller, Registry, Keyboard-Profile, Scroll-Guard, Link-Routing und Datei-Drop.
 - `WhisperM8/Views/Transcript/` enthält die Timeline-, Markdown-, Report-, Summary- und History-Views der Transcript-Darstellung.
 - `WhisperM8/Views/AgentSessionDetailView.swift` ist die Detailansicht für interaktive PTY-Sessions.
@@ -224,7 +226,7 @@ blauer Unread-Dot, ungelesenes Subagent-Ergebnis, globale Tabs, Tab-Leiste, Pinn
 Multi-Select, Cmd-Klick, Shift-Klick, Bulk-Aktion, Tab-Reorder,
 Einfügelinie, Drag Drop, Sidebar-Reorder, richtungsabhängiger Reorder,
 Cross-Project-Move, Projekt-Reorder, `AgentDragDropPlanner`, Tear-off,
-neues Fenster, Ctrl-Tab-Switcher,
+neues Fenster, Ctrl-Tab-Switcher, Mini-Map, Grid-Markierung, Stand-Zeile,
 Overflow-Menü, Terminal, SwiftTerm, LocalProcessTerminalView, PTY,
 Ressourcenmonitor, CPU-Monitoring, RAM-Monitoring, RAM Share,
 Prozessbaum-Aggregation, `AgentResourceMonitor`, `AgentResourceSummaryButton`,
