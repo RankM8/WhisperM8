@@ -175,13 +175,13 @@ final class TranscriptTextRendererTests: XCTestCase {
         }
         XCTAssertGreaterThan(zeichen, 5_000_000, "Fixture soll wirklich groß sein")
 
-        let startRender = Date()
-        let lines = TranscriptTextRenderer.render(big)
-        let renderDauer = Date().timeIntervalSince(startRender)
-
-        let startDoc = Date()
-        let document = TranscriptTextDocument.make(lines: lines)
-        let docDauer = Date().timeIntervalSince(startDoc)
+        // CPU-Zeit des Threads statt Wandzeit — siehe `TestTiming`.
+        let (lines, renderDauer) = TestTiming.threadCPUSeconds {
+            TranscriptTextRenderer.render(big)
+        }
+        let (document, docDauer) = TestTiming.threadCPUSeconds {
+            TranscriptTextDocument.make(lines: lines)
+        }
 
         XCTAssertGreaterThan(lines.count, 30_000)
         XCTAssertGreaterThan(document.length, 5_000_000)
