@@ -452,14 +452,21 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
         }
         let parseHeavyTail = tail(parseHeavy)
 
-        let runs = 50
-        let start = Date()
-        for _ in 0..<runs {
-            XCTAssertNil(AgentTranscriptActivityExtractor.activity(in: claudeTail, provider: .claude))
-            XCTAssertNil(AgentTranscriptActivityExtractor.activity(in: codexTail, provider: .codex))
-            XCTAssertNil(AgentTranscriptActivityExtractor.activity(in: parseHeavyTail, provider: .claude))
+        // CPU-Zeit des Threads statt Wandzeit, bester von fünf Durchgängen —
+        // siehe `TestTiming`. Unter Last riss die Wandzeit das Budget ohne
+        // jede Code-Änderung.
+        let runs = 10
+        var perTail = TimeInterval.infinity
+        for _ in 0..<5 {
+            let (_, seconds) = TestTiming.threadCPUSeconds {
+                for _ in 0..<runs {
+                    XCTAssertNil(AgentTranscriptActivityExtractor.activity(in: claudeTail, provider: .claude))
+                    XCTAssertNil(AgentTranscriptActivityExtractor.activity(in: codexTail, provider: .codex))
+                    XCTAssertNil(AgentTranscriptActivityExtractor.activity(in: parseHeavyTail, provider: .claude))
+                }
+            }
+            perTail = min(perTail, seconds / Double(runs * 3))
         }
-        let perTail = Date().timeIntervalSince(start) / Double(runs * 3)
         print("activity_extractor_64kb_ms=\(String(format: "%.3f", perTail * 1000))")
         // Großzügig: soll eine echte Regression (quadratisch, Voll-Parse
         // jeder Tool-Ausgabe) fangen, nicht Maschinen-Schwankungen.
