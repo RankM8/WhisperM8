@@ -106,9 +106,19 @@ Statusänderung zeichnete die Sidebar neu. Daraus:
   die Overlays, nicht das Grid samt Terminals; der Grid-Zweig des
   `AgentChatsView`-Body liest `tabSwitcher` nicht.
 
+## ⌃⌥Tab — nächster wartender Chat
+
+Springt zum Chat, der am längsten auf Eingabe wartet (`.awaitingInput`,
+`statusSince` aufsteigend, ohne `statusSince` ans Ende) — über alle nicht
+archivierten Chats, nicht nur offene Tabs. Wiederholt gedrückt rotiert es
+durch die Wartenden; wartet keiner, passiert nichts. Navigation wie ein
+Sidebar-Klick (`navigateToSession`: Tab öffnen, Pane-Fokus im Grid, anderes
+Fenster). Pure Reihenfolge in `NextWaitingChatResolver`, Erkennung
+`TabSwitcherShortcut.isNextWaitingChat` (exakt Control+Option, überschneidet
+sich nicht mit Ctrl+Tab). Details: Plan, Abschnitt S7.
+
 ## Offen
 
-- **⌃⌥Tab — Sprung zum am längsten wartenden Chat** (baut auf `statusSince`).
 - Hintergrund-Agents und Agent-Views zeigen nur Status + Dauer.
 
 ## Manuelle QA (nicht unit-testbar)

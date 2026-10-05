@@ -44,6 +44,38 @@ final class TabSwitcherShortcutTests: XCTestCase {
         XCTAssertNil(TabSwitcherShortcut.direction(keyCode: tab, modifiers: [.control, .option]))
     }
 
+    // MARK: - ⌃⌥Tab (nächster wartender Chat) — getrennt vom Switcher
+
+    func testControlOptionTabIsNextWaitingChat() {
+        XCTAssertTrue(TabSwitcherShortcut.isNextWaitingChat(keyCode: tab, modifiers: [.control, .option]))
+        // Zusatz-Flags brechen den Match nicht.
+        XCTAssertTrue(TabSwitcherShortcut.isNextWaitingChat(
+            keyCode: tab, modifiers: [.control, .option, .capsLock, .function]
+        ))
+    }
+
+    func testOtherCombosAreNotNextWaitingChat() {
+        for modifiers: NSEvent.ModifierFlags in [
+            [.control], [.control, .shift], [.option], [.command, .option],
+            [.control, .option, .shift], [.control, .option, .command], [],
+        ] {
+            XCTAssertFalse(
+                TabSwitcherShortcut.isNextWaitingChat(keyCode: tab, modifiers: modifiers),
+                "\(modifiers)"
+            )
+        }
+        XCTAssertFalse(TabSwitcherShortcut.isNextWaitingChat(
+            keyCode: TabSwitcherShortcut.KeyCode.escape, modifiers: [.control, .option]
+        ))
+    }
+
+    func testSwitcherAndNextWaitingChatNeverOverlap() {
+        // ⌃⌥Tab löst den Switcher nicht aus, ⌃Tab/⌃⇧Tab nicht den Sprung.
+        XCTAssertNil(TabSwitcherShortcut.direction(keyCode: tab, modifiers: [.control, .option]))
+        XCTAssertFalse(TabSwitcherShortcut.isNextWaitingChat(keyCode: tab, modifiers: [.control]))
+        XCTAssertFalse(TabSwitcherShortcut.isNextWaitingChat(keyCode: tab, modifiers: [.control, .shift]))
+    }
+
     func testNonTabKeyDoesNotMatch() {
         // Escape (53) mit Control → kein Switcher-Schritt.
         XCTAssertNil(TabSwitcherShortcut.direction(
