@@ -199,26 +199,28 @@ extension AgentChatsView {
     /// Monitor konsumiert das Event, BEVOR SwiftTerms `keyDown` ein Tab-Byte
     /// an die PTY schicken würde.
     ///
-    /// Bei AKTIVEM Switcher werden alle `keyDown` dieses Fensters konsumiert:
-    /// Tab/Shift+Tab und die Pfeiltasten navigieren (Grid und Mini-Map
-    /// räumlich, Projekt-Liste linear), Esc bricht ab (darf die TUI nie
-    /// erreichen — würde dort die laufende Generation abbrechen), Return
-    /// committet sofort. Jede andere Taste bricht ab und wird geschluckt —
-    /// wer mit gehaltenem Ctrl z. B. `C` drückt, will fast nie ein Ctrl+C an
-    /// die laufende TUI schicken.
+    /// Bei AKTIVEM Switcher (Entscheidung pur in
+    /// `TabSwitcherShortcut.activeKeyAction`): Tab/Shift+Tab und die
+    /// Pfeiltasten navigieren (Grid und Mini-Map räumlich, Projekt-Liste
+    /// linear), Esc bricht ab (darf die TUI nie erreichen — würde dort die
+    /// laufende Generation abbrechen), Return committet sofort. Jede andere
+    /// Taste MIT Ctrl bricht ab und wird geschluckt — wer mit gehaltenem Ctrl
+    /// z. B. `C` drückt, will fast nie ein Ctrl+C an die laufende TUI
+    /// schicken. Eine Taste OHNE Ctrl heißt dagegen: das Loslassen ist uns
+    /// entgangen (Menü-Tracking) — Abbruch, und die Taste läuft normal weiter.
     private func handleTabSwitcherKeyDown(_ event: NSEvent) -> NSEvent? {
         guard let hostWindow, event.window === hostWindow else { return event }
-        let direction = TabSwitcherShortcut.direction(
-            keyCode: event.keyCode, modifiers: event.modifierFlags
-        )
 
         guard tabSwitcher != nil else {
-            guard let direction else { return event }
+            guard let direction = TabSwitcherShortcut.direction(
+                keyCode: event.keyCode, modifiers: event.modifierFlags
+            ) else { return event }
             // Aktivierung braucht ≥ 2 Tabs — `begin` liefert sonst nil. Das
             // Event wird trotzdem konsumiert (No-op), damit kein Tab-Byte im
             // Terminal landet.
             // Umfang (Grid / Workspace / Projekt) statt aller offenen Tabs —
             // siehe `TabSwitcherScope`.
+            tabSwitcherRun.lastModifiers = event.modifierFlags
             tabSwitcher = TabSwitcherModel.begin(
                 order: refreshTabSwitcherScope(),
                 current: selectedSession?.id,
@@ -229,37 +231,36 @@ extension AgentChatsView {
             return nil
         }
 
-        // Umfang bei jedem Schritt frisch auflösen — Tabs/Slots können sich
-        // während des Durchlaufs extern ändern (Archivierung, anderes Fenster).
-        if let direction {
-            tabSwitcher?.advance(direction, order: refreshTabSwitcherScope())
-            syncTabSwitcherGridMarking()
-            return nil
-        }
-        // Grid sichtbar (Situation A): Pfeiltasten geometrisch wie ⌃⌘-Pfeile.
-        if isGridActive, let gridDirection = TabSwitcherGridMarking.direction(keyCode: event.keyCode) {
-            moveTabSwitcherHighlightInGrid(gridDirection)
-            return nil
-        }
-        // Mini-Map (Situation B): Pfeile räumlich wie ⌃⌘-Pfeile im Grid.
-        if tabSwitcherMiniMapWorkspace != nil,
-           let spatial = Self.miniMapDirection(keyCode: event.keyCode) {
-            moveTabSwitcherInMiniMap(spatial)
-            return nil
-        }
-        // Projekt-Liste (Situation C): jede Pfeiltaste = ein Schritt in der
-        // Liste, Wrap-around inklusive.
-        switch event.keyCode {
-        case TerminalShortcut.KeyCode.leftArrow, TabSwitcherShortcut.KeyCode.upArrow:
-            tabSwitcher?.advance(-1, order: refreshTabSwitcherScope())
-        case TerminalShortcut.KeyCode.rightArrow, TabSwitcherShortcut.KeyCode.downArrow:
-            tabSwitcher?.advance(+1, order: refreshTabSwitcherScope())
-        case TabSwitcherShortcut.KeyCode.escape:
-            cancelTabSwitcher()
-        case TerminalShortcut.KeyCode.returnKey:
+        tabSwitcherRun.lastModifiers = event.modifierFlags
+        switch TabSwitcherShortcut.activeKeyAction(keyCode: event.keyCode, modifiers: event.modifierFlags) {
+        case .step(let step):
+            // Umfang bei jedem Schritt frisch auflösen — Tabs/Slots können
+            // sich während des Durchlaufs extern ändern (Archivierung,
+            // anderes Fenster).
+            tabSwitcher?.advance(step, order: refreshTabSwitcherScope())
+        case .arrow(let arrow):
+            if isGridActive {
+                // Grid sichtbar (Situation A): geometrisch wie ⌃⌘-Pfeile.
+                moveTabSwitcherHighlightInGrid(arrow)
+                return nil
+            } else if tabSwitcherMiniMapWorkspace != nil {
+                // Mini-Map (Situation B): räumlich wie ⌃⌘-Pfeile im Grid.
+                moveTabSwitcherInMiniMap(arrow)
+                return nil
+            }
+            // Projekt-Liste (Situation C): jede Pfeiltaste = ein Schritt in
+            // der Liste, Wrap-around inklusive.
+            let step = (arrow == .left || arrow == .up) ? -1 : +1
+            tabSwitcher?.advance(step, order: refreshTabSwitcherScope())
+        case .commit:
             commitTabSwitcher()
-        default:
+        case .cancel:
             cancelTabSwitcher()
+        case .cancelAndPassThrough:
+            // Ctrl-Loslassen verpasst (Menü-Tracking): Switcher weg, die
+            // Taste gehört wieder dem Terminal bzw. der normalen Pipeline.
+            cancelTabSwitcher()
+            return event
         }
         syncTabSwitcherGridMarking()
         return nil
@@ -303,15 +304,45 @@ extension AgentChatsView {
     /// anderen Monitore); der Guard auf `tabSwitcher` macht ihn im
     /// Normalbetrieb zu einem Bool-Check pro Modifier-Druck. Beobachtend —
     /// Modifier-Änderungen laufen unverändert weiter.
+    ///
+    /// Zusätzlich ein Observer auf `NSMenu.didBeginTrackingNotification`:
+    /// Lokale Monitore laufen während Menü-Tracking nicht (Ctrl+Klick =
+    /// Kontextmenü in Sidebar/Tab-Leiste mitten im Durchlauf). Ein dort
+    /// losgelassenes Ctrl sähe dieser Monitor nie — der Switcher bliebe
+    /// offen und ein späteres Shift committete ins alte Highlight. Deshalb
+    /// bricht jedes beginnende Menü-Tracking den Durchlauf ab.
     func installTabSwitcherFlagsMonitorIfNeeded() {
-        guard tabSwitcherFlagsMonitor == nil else { return }
-        tabSwitcherFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            guard tabSwitcher != nil else { return event }
-            // Control weg (egal ob Shift o. ä. noch gehalten wird) → Commit.
-            if !event.modifierFlags.contains(.control) {
-                commitTabSwitcher()
+        if tabSwitcherFlagsMonitor == nil {
+            tabSwitcherFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+                guard tabSwitcher != nil else { return event }
+                let action = TabSwitcherShortcut.flagsChangeAction(
+                    previous: tabSwitcherRun.lastModifiers,
+                    current: event.modifierFlags
+                )
+                tabSwitcherRun.lastModifiers = event.modifierFlags
+                switch action {
+                case .none: break
+                // Echtes Loslassen von Control (egal ob Shift o. ä. noch
+                // gehalten wird) → Commit.
+                case .commit: commitTabSwitcher()
+                // Control fehlt, ohne dass wir das Loslassen gesehen haben →
+                // nicht ins (veraltete) Highlight springen.
+                case .cancel: cancelTabSwitcher()
+                }
+                return event
             }
-            return event
+        }
+        if tabSwitcherMenuObserver == nil {
+            tabSwitcherMenuObserver = NotificationCenter.default.addObserver(
+                forName: NSMenu.didBeginTrackingNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                MainActor.assumeIsolated {
+                    guard tabSwitcher != nil else { return }
+                    cancelTabSwitcher()
+                }
+            }
         }
     }
 
@@ -319,6 +350,10 @@ extension AgentChatsView {
         if let tabSwitcherFlagsMonitor {
             NSEvent.removeMonitor(tabSwitcherFlagsMonitor)
             self.tabSwitcherFlagsMonitor = nil
+        }
+        if let tabSwitcherMenuObserver {
+            NotificationCenter.default.removeObserver(tabSwitcherMenuObserver)
+            self.tabSwitcherMenuObserver = nil
         }
     }
 
@@ -339,8 +374,12 @@ extension AgentChatsView {
     }
 
     /// Maus-Commit aus dem Overlay: Klick auf eine Zelle wählt diesen Chat
-    /// sofort — auch wenn Control noch gehalten wird.
+    /// sofort — auch wenn Control noch gehalten wird. Ohne laufenden
+    /// Durchlauf ein No-op: Mini-Map und Liste bleiben während der
+    /// Ausblend-Animation noch klickbar, ein Klick dort darf nach Commit/
+    /// Abbruch nicht erneut navigieren.
     func commitTabSwitcher(to sessionID: UUID) {
+        guard tabSwitcher != nil else { return }
         let order = refreshTabSwitcherScope()
         tabSwitcher = nil
         tabSwitcherSessions = []
@@ -363,17 +402,6 @@ extension AgentChatsView {
             selectedSessionID = target
         }
         multiSelection = []
-    }
-
-    /// Pfeiltaste → Richtung für die räumliche Mini-Map-Navigation.
-    private static func miniMapDirection(keyCode: UInt16) -> GridFocusDirection? {
-        switch keyCode {
-        case TerminalShortcut.KeyCode.leftArrow: return .left
-        case TerminalShortcut.KeyCode.rightArrow: return .right
-        case TabSwitcherShortcut.KeyCode.upArrow: return .up
-        case TabSwitcherShortcut.KeyCode.downArrow: return .down
-        default: return nil
-        }
     }
 
     /// Ein räumlicher Schritt in der Mini-Map (pure Logik in

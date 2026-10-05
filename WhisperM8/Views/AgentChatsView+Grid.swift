@@ -731,11 +731,10 @@ extension AgentChatsView {
                 statusStore: runtimeStatusStore,
                 // Nur als Referenz — beobachtet wird er allein im Ziel-Chip.
                 activityStore: tabSwitcherActivityStore,
-                onCommit: { sessionID in
-                    // Maus-Commit nur bei laufendem Durchlauf (der Catcher
-                    // kann einen Frame länger montiert sein als der Switcher).
-                    if tabSwitcher != nil { commitTabSwitcher(to: sessionID) }
-                },
+                // Maus-Commit nur bei laufendem Durchlauf (der Catcher kann
+                // einen Frame länger montiert sein als der Switcher) — der
+                // Guard sitzt in `commitTabSwitcher(to:)`.
+                onCommit: { commitTabSwitcher(to: $0) },
                 onCancel: { cancelTabSwitcher() }
             )
         }

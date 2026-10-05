@@ -326,6 +326,11 @@ struct AgentChatsView: View {
     /// Switcher committet den hervorgehobenen Tab. `keyDown` sieht Modifier-
     /// Änderungen nicht — dafür braucht es diesen zweiten Monitor.
     @State var tabSwitcherFlagsMonitor: Any?
+    /// Observer-Token für `NSMenu.didBeginTrackingNotification`: Menü-Tracking
+    /// (z. B. Ctrl+Klick-Kontextmenü) bricht einen laufenden Durchlauf ab —
+    /// dort sehen die lokalen Monitore das Ctrl-Loslassen nicht. Registriert/
+    /// entfernt zusammen mit `tabSwitcherFlagsMonitor`.
+    @State var tabSwitcherMenuObserver: (any NSObjectProtocol)?
     /// Zustand der Zwei-Finger-Swipe-Erkennung (Tab links/rechts, Safari-
     /// Stil) — pure State-Machine über eine Gesten-Lebensdauer, gefüttert vom
     /// `scrollWheel`-Monitor (siehe `handleTabSwipeScroll` in +Shortcuts).

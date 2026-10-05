@@ -41,8 +41,21 @@ auf eine andere Situation.
 Allen Situationen gemeinsam: ⌃Tab / ⌃⇧Tab mit Wrap-around, der erste
 Druck macht sofort einen Schritt (schneller Tap = Nachbar-Wechsel),
 Loslassen von ⌃ oder Return committet, Esc bricht ab, jede andere Taste
-bricht ab und wird geschluckt (ein ⌃C erreicht nie die TUI). Klick auf eine
-Kachel bzw. Pane committet sofort; Hover verschiebt nie das Highlight.
+mit ⌃ bricht ab und wird geschluckt (ein ⌃C erreicht nie die TUI). Klick auf
+eine Kachel bzw. Pane committet sofort, Klick auf einen leeren Slot oder
+Platzhalter (Grid wie Mini-Map) und auf den Scrim bricht ab; Hover verschiebt
+nie das Highlight. Ein Maus-Commit nach Ende des Durchlaufs (Klick in die
+Ausblend-Animation) ist ein No-op.
+
+**Verpasstes Loslassen von ⌃** (Review 05.10.2026): Lokale NSEvent-Monitore
+laufen während Menü-Tracking nicht — wer mitten im Durchlauf per Ctrl+Klick
+ein Kontextmenü öffnet und ⌃ dort loslässt, wurde nie gesehen. Dagegen drei
+Sicherungen: (1) beginnendes Menü-Tracking (`NSMenu.didBeginTrackingNotification`)
+bricht ab; (2) `flagsChanged` committet nur, wenn ⌃ zuletzt gehalten war und
+genau dieses Event ⌃ geändert hat, sonst Abbruch
+(`TabSwitcherShortcut.flagsChangeAction`); (3) eine Taste ohne ⌃ (außer
+Esc/Return) bricht ab und läuft normal weiter, statt geschluckt zu werden
+(`TabSwitcherShortcut.activeKeyAction`).
 
 | | Pfeiltasten | Fußzeile |
 |---|---|---|
