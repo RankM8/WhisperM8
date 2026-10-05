@@ -89,12 +89,15 @@ struct AgentSessionActivity: Equatable, Sendable {
             return "Frage"
         case .permission:
             // Der Tail kennt das Argument, der Hook den sicheren Namen. Passen
-            // beide zusammen, gewinnt die ausführliche Form.
+            // beide zusammen, gewinnt die ausführliche Form. Der Hook liefert
+            // MCP-Tools voll (`mcp__srv__tool`), der Tail gekürzt — verglichen
+            // und angezeigt wird deshalb beides in der Anzeigeform.
+            let hookName = awaitingToolName.map(AgentTranscriptActivityExtractor.displayToolName)
             if case .tool(let name, let argument) = detail,
-               awaitingToolName == nil || awaitingToolName == name {
+               hookName == nil || hookName == name {
                 return "Freigabe: " + [name, argument].compactMap { $0 }.joined(separator: " ")
             }
-            return awaitingToolName.map { "Freigabe: \($0)" } ?? "Freigabe"
+            return hookName.map { "Freigabe: \($0)" } ?? "Freigabe"
         case nil:
             // Codex (keine Hooks): Art unbekannt, nur was der Tail weiß.
             switch detail {
@@ -191,6 +194,13 @@ enum AgentTranscriptActivityExtractor {
             // System-Einschübe (`isMeta`) sind keine Eingabe des Nutzers.
             if object["isMeta"] as? Bool == true { return .skip }
             if object["isSidechain"] as? Bool == true { return .skip }
+            // Tool-Ergebnis, das der Byte-Vorfilter nicht erkannt hat (der
+            // Ergebnis-Text enthält selbst `"type":"assistant"`, dann gilt die
+            // Zeile oben als Assistant-Kandidat): keine Turn-Grenze.
+            if let blocks = message["content"] as? [[String: Any]],
+               blocks.contains(where: { $0["type"] as? String == "tool_result" }) {
+                return .skip
+            }
             return .boundary
         case "assistant":
             if object["isSidechain"] as? Bool == true { return .skip }

@@ -6,7 +6,7 @@ description_long: |
   Mini-Map, sonst → Projekt-Liste), Reihenfolge in Leserichtung der Slots,
   Kacheln mit Status, Stand-Zeile und Dauer aus dem ohnehin gelesenen
   Transcript-Tail. Plan und Begründung: docs/plans/tab-switcher-workspace.md.
-updated: 2026-10-04
+updated: 2026-10-05
 ---
 
 # Ctrl+Tab-Switcher
@@ -92,7 +92,20 @@ ohnehin liest — keine zusätzliche Datei-I/O, nur bei geänderter Datei.
 Tool mit erstem Argument, Frage aus `AskUserQuestion`, erster Satz der letzten
 Antwort; 80 Zeichen, Pfade auf den Dateinamen gekürzt, einzeilig. Warte-Art
 (Frage, Plan, Berechtigung) kommt bei Claude aus dem Hook-Pfad; Codex hat keine
-Hooks und zeigt nur „wartet". Nichts davon wird persistiert.
+Hooks und zeigt nur „wartet". Nichts davon wird persistiert. MCP-Tools
+heißen in der Zeile nur nach ihrem Tool-Teil (`mcp__srv__tool` → `tool`) —
+auch der Name aus dem `PermissionRequest`-Hook wird vor Vergleich und Anzeige
+so gekürzt („Freigabe: tool …").
+
+Bekannte, akzeptierte Grenze: Ist die letzte Transcript-Zeile größer als der
+64-KB-Tail (riesige Tool-Ausgabe oder Antwort), besteht der Tail nur aus ihrem
+abgeschnittenen Ende — kein gültiges JSON, also keine Stand-Zeile (die Kachel
+zeigt Status und Dauer), bis die nächste Zeile geschrieben ist. Ein größerer
+Tail kostete bei jedem Transcript-Write jeder aktiven Session.
+
+Tool-Ergebnis-Zeilen (`tool_result`) sind nie eine Turn-Grenze — auch dann
+nicht, wenn ihr strukturiertes `toolUseResult` (z. B. Subagent-Ergebnis) roh
+`"type":"assistant"` enthält und am Byte-Vorfilter vorbeirutscht.
 
 Ablage im eigenen `AgentSessionActivityStore` (Activity + `statusSince`),
 gesetzt im `AgentSessionStatusCoordinator` nur bei echtem Statuswechsel.
@@ -134,7 +147,10 @@ Statusänderung zeichnete die Sidebar neu. Daraus:
 
 Springt zum Chat, der am längsten auf Eingabe wartet (`.awaitingInput`,
 `statusSince` aufsteigend, ohne `statusSince` ans Ende) — über alle nicht
-archivierten Chats, nicht nur offene Tabs. Wiederholt gedrückt rotiert es
+archivierten Chats, nicht nur offene Tabs. `.awaitingInput` setzt nur der
+Hook-Pfad: Es zählen also nur Claude-Chats mit Hook-Status. Codex-Chats (keine
+Hooks, die Transcript-Heuristik meldet nie „wartet") und Subagent-Jobs
+(`--ask-for-approval never`) werden nie angesprungen. Wiederholt gedrückt rotiert es
 durch die Wartenden; wartet keiner, passiert nichts. Navigation wie ein
 Sidebar-Klick (`navigateToSession`: Tab öffnen, Pane-Fokus im Grid, anderes
 Fenster). Pure Reihenfolge in `NextWaitingChatResolver`, Erkennung
