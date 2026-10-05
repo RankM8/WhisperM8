@@ -23,6 +23,36 @@ enum NextWaitingChatResolver {
         var statusSince: Date?
     }
 
+    /// Kandidaten nur für die wartenden Chats statt für alle (~4000) Sessions:
+    /// die Statuswerte liefern die (wenigen) wartenden IDs, archiviert/
+    /// existiert wird erst danach nachgeschlagen. Ohne Wartende kein Lauf über
+    /// die Sessions; sonst endet er, sobald alle Wartenden gefunden sind.
+    ///
+    /// Die Kandidaten behalten die Workspace-Reihenfolge — der Gleichstand in
+    /// `order` hängt an der Eingangsreihenfolge, das Ergebnis ist damit
+    /// identisch zum früheren `sessions.map`. Status-Einträge ohne Session im
+    /// Workspace fallen wie dort heraus.
+    static func candidates(
+        statuses: [UUID: AgentSessionRuntimeStatus],
+        sessions: [AgentChatSession],
+        statusSince: (UUID) -> Date?
+    ) -> [Candidate] {
+        var remaining = Set(statuses.lazy.filter { $0.value == .awaitingInput }.map(\.key))
+        guard !remaining.isEmpty else { return [] }
+        var result: [Candidate] = []
+        for session in sessions {
+            guard remaining.remove(session.id) != nil else { continue }
+            result.append(Candidate(
+                id: session.id,
+                isArchived: session.status == .archived,
+                status: .awaitingInput,
+                statusSince: statusSince(session.id)
+            ))
+            if remaining.isEmpty { break }
+        }
+        return result
+    }
+
     /// Wartende Chats in Sprung-Reihenfolge.
     static func order(_ candidates: [Candidate]) -> [UUID] {
         candidates.enumerated()

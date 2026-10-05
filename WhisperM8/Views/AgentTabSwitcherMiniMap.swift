@@ -12,12 +12,14 @@ import SwiftUI
 /// - Kacheln: `TabSwitcherTile` (`.card`). Die maximierte Kachel trägt das
 ///   „Hier"-Zeichen (`currentID`).
 /// - Leere Slots und Slots außerhalb des Umfangs (Tab in einem anderen
-///   Fenster, archiviert) sind zurückhaltende Platzhalter und nicht anwählbar.
+///   Fenster, archiviert) sind zurückhaltende Platzhalter und nicht anwählbar;
+///   ein Klick darauf bricht ab — wie im Grid (`TabSwitcherGridPaneMarking`).
 ///
 /// Interaktion wie im `AgentTabSwitcherOverlay`: Tastatur komplett über die
 /// NSEvent-Monitore in `AgentChatsView+Shortcuts` (Pfeile hier räumlich über
 /// `TabSwitcherMiniMapGeometry.spatialTarget`), Klick auf eine Kachel =
-/// sofortiger Commit, Klick auf den Scrim = Abbruch, Hover nur visuell.
+/// sofortiger Commit, Klick auf den Scrim oder einen Platzhalter = Abbruch,
+/// Hover nur visuell.
 ///
 /// Performance: Lookups nur über die ≤ 9 Umfangs-Sessions (Dictionary je
 /// Rebuild), kein Scan über alle Sessions, kein I/O, kein `.contextMenu`.
@@ -79,8 +81,9 @@ struct AgentTabSwitcherMiniMap: View {
         .shadow(color: .black.opacity(0.30), radius: 26, y: 10)
         .padding(24)
         .fixedSize()
-        // Klicks auf die Karten-Fläche (Titel, Lücken, Platzhalter) dürfen
-        // nicht zum Scrim durchfallen und den Switcher abbrechen.
+        // Klicks auf die Karten-Fläche (Titel, Lücken zwischen Kacheln)
+        // dürfen nicht zum Scrim durchfallen und den Switcher abbrechen.
+        // Platzhalter brechen dagegen selbst ab (siehe `placeholder`).
         .onTapGesture {}
     }
 
@@ -148,7 +151,8 @@ struct AgentTabSwitcherMiniMap: View {
     }
 
     /// Leerer Slot bzw. Slot ohne anwählbaren Chat — sichtbar (das Layout
-    /// bleibt lesbar), aber ohne Aktion.
+    /// bleibt lesbar), nicht anwählbar. Ein Klick bricht ab, einheitlich mit
+    /// der Grid-Markierung (Situation A), statt still geschluckt zu werden.
     private func placeholder(isEmptySlot: Bool) -> some View {
         RoundedRectangle(cornerRadius: 10)
             .strokeBorder(
@@ -163,6 +167,8 @@ struct AgentTabSwitcherMiniMap: View {
                         .help("Chat ist hier nicht anwählbar (z. B. Tab in einem anderen Fenster)")
                 }
             }
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+            .onTapGesture { onCancel() }
             .accessibilityLabel(isEmptySlot ? "Leerer Slot" : "Chat nicht anwählbar")
     }
 

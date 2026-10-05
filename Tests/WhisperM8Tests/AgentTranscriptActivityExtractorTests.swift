@@ -209,6 +209,19 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
         XCTAssertEqual(activity?.detail, .tool(name: "navigate", argument: "https://example.com/a"))
     }
 
+    func testMcpToolInFreigabeZeileKombiniertHookUndTail() {
+        // Hook liefert den vollen MCP-Namen, der Tail den gekürzten — beide
+        // müssen als dasselbe Tool erkannt werden.
+        var activity = claude([claudeTool("mcp__claude-in-chrome__navigate", ["url": "https://example.com/a"])])
+        activity?.awaitingKind = .permission
+        activity?.awaitingToolName = "mcp__claude-in-chrome__navigate"
+        XCTAssertEqual(activity?.line(for: .awaitingInput), "Freigabe: navigate https://example.com/a")
+
+        // Hook ohne Tail: Anzeige ebenfalls gekürzt, nicht roh.
+        let hookOnly = AgentSessionActivity(awaitingKind: .permission, awaitingToolName: "mcp__srv__do_thing")
+        XCTAssertEqual(hookOnly.line(for: .awaitingInput), "Freigabe: do_thing")
+    }
+
     // MARK: - Claude: Randfälle
 
     func testAbgeschnitteneErsteZeileWirdIgnoriert() {
@@ -249,6 +262,45 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
         XCTAssertEqual(activity?.line(for: .working), "› Bash ls")
     }
 
+    func testToolErgebnisMitAssistantMarkerIstKeineGrenze() {
+        // `toolUseResult` ist strukturiertes JSON (z. B. Subagent-Ergebnis) —
+        // darin steht `"type":"assistant"` roh, der Byte-Vorfilter hält die
+        // Zeile für eine Assistant-Zeile. Sie ist trotzdem ein Tool-Ergebnis.
+        let result = json([
+            "type": "user",
+            "message": ["role": "user", "content": [
+                ["type": "tool_result", "tool_use_id": "toolu_1", "content": "fertig"],
+            ]],
+            "toolUseResult": ["type": "assistant", "content": [["type": "text", "text": "Sub fertig."]]],
+        ])
+        XCTAssertTrue(result.contains(#""type":"assistant""#), "Fixture muss den Marker roh enthalten")
+        let activity = claude([
+            claudeUser("Mach das mit einem Subagent"),
+            claudeTool("Task", ["description": "Recherche", "prompt": "Suche X"]),
+            result,
+        ])
+        XCTAssertEqual(activity?.line(for: .working), "› Task Recherche")
+    }
+
+    func testSidechainZeilenWerdenUebersprungen() {
+        // Subagent-Zeilen (`isSidechain`) sind weder Stand noch Turn-Grenze.
+        let sidechainPrompt = json([
+            "type": "user", "isSidechain": true,
+            "message": ["role": "user", "content": "Subagent-Auftrag"],
+        ])
+        let sidechainReply = json([
+            "type": "assistant", "isSidechain": true,
+            "message": ["role": "assistant", "content": [["type": "text", "text": "Subagent sagt etwas."]]],
+        ])
+        let activity = claude([
+            claudeUser("Hauptauftrag"),
+            claudeTool("Bash", ["command": "ls"]),
+            sidechainPrompt,
+            sidechainReply,
+        ])
+        XCTAssertEqual(activity?.line(for: .working), "› Bash ls")
+    }
+
     func testSehrLangerBashBefehlWirdEinzeiligUndGekappt() {
         let heredoc = "cat > /tmp/x.swift <<'EOF'\n" + String(repeating: "let wert = 1\n", count: 5_000) + "EOF"
         let activity = claude([claudeTool("Bash", ["command": heredoc])])
@@ -280,6 +332,22 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
         let line = claude([claudeText(sentence)])?.line(for: .idle)
         XCTAssertEqual(line?.count, AgentSessionActivity.maxLength)
         XCTAssertTrue(line?.hasSuffix("…") ?? false)
+    }
+
+    func testKuerzenMitEmojiGenauAnDerGrenze() {
+        let max = AgentSessionActivity.maxLength
+        // Genau 80 Zeichen, das letzte ein Emoji (ein Graphem) → unverändert.
+        let exact = String(repeating: "a", count: max - 1) + "😀"
+        XCTAssertEqual(AgentTranscriptActivityExtractor.capped(exact), exact)
+        // 81 Zeichen mit Emoji an Position 79 → Emoji bleibt ganz, dann „…".
+        let over = String(repeating: "a", count: max - 2) + "😀👨‍👩‍👧z"
+        let capped = AgentTranscriptActivityExtractor.capped(over)
+        XCTAssertEqual(capped.count, max)
+        XCTAssertEqual(capped, String(repeating: "a", count: max - 2) + "😀…")
+        // Zusammengesetztes Emoji genau auf dem letzten Platz vor „…" wird nicht zerteilt.
+        let family = String(repeating: "b", count: max - 2) + "👨‍👩‍👧" + "xy"
+        XCTAssertEqual(AgentTranscriptActivityExtractor.capped(family),
+                       String(repeating: "b", count: max - 2) + "👨‍👩‍👧…")
     }
 
     // MARK: - Codex

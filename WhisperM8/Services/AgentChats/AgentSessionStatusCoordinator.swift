@@ -479,14 +479,20 @@ final class AgentSessionStatusCoordinator {
     /// Einziger Schreibpfad in den `statusStore`. Setzt `statusSince` NUR bei
     /// echtem Wechsel — wiederholte Signale desselben Status (jedes
     /// PreToolUse ist „working") dürfen die Dauer nicht zurücksetzen.
+    ///
+    /// Der Gleichheits-Guard steht VOR dem Write: `setStatus` ist bei
+    /// gleichem Wert ohnehin ein No-op, `clear` auf einen fehlenden Eintrag
+    /// aber nicht — die Mutation feuerte `@Published` und damit
+    /// `objectWillChange` an alle beobachtenden Views, ohne dass sich etwas
+    /// geändert hatte (z. B. bei jedem Subagent-`takenOver`).
     private func writeStatus(_ status: AgentSessionRuntimeStatus?, for sessionID: UUID) {
         let previous = statusStore.status(for: sessionID)
+        guard previous != status else { return }
         if let status {
             statusStore.setStatus(status, for: sessionID)
         } else {
             statusStore.clear(sessionID: sessionID)
         }
-        guard previous != status else { return }
         if status != nil {
             activityStore.noteStatusChange(for: sessionID, at: now())
         } else {

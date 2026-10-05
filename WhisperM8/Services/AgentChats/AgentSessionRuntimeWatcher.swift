@@ -43,6 +43,9 @@ final class AgentSessionRuntimeStatusStore: ObservableObject {
     }
 
     func clear(sessionID: UUID) {
+        // Wie `setStatus`: ohne Eintrag kein Write — sonst feuert `@Published`
+        // für einen No-op an alle Beobachter.
+        guard statuses[sessionID] != nil else { return }
         statuses.removeValue(forKey: sessionID)
     }
 

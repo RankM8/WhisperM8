@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import WhisperM8
 
@@ -419,6 +420,49 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
 
         coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .takenOver)
         XCTAssertNil(coordinator.activityStore.statusSince(for: sessionID), "Kein Status → kein Zeitpunkt")
+    }
+
+    func testStatusSinceBleibtBeimWechselDerWarteArt() throws {
+        // permission → question ist derselbe Status (awaitingInput): die
+        // Dauer „wartet seit" darf nicht neu starten.
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        let clock = ClockBox()
+        coordinator.now = { clock.now }
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        clock.advance(5)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.permissionRequest, tool: "Bash"))
+        let waitingSince = clock.now
+        XCTAssertEqual(coordinator.activityStore.activity(for: sessionID)?.awaitingKind, .permission)
+
+        clock.advance(40)
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.preToolUse, tool: "AskUserQuestion"))
+        XCTAssertEqual(coordinator.statusStore.status(for: sessionID), .awaitingInput)
+        XCTAssertEqual(coordinator.activityStore.activity(for: sessionID)?.awaitingKind, .question)
+        XCTAssertEqual(coordinator.activityStore.statusSince(for: sessionID), waitingSince)
+    }
+
+    func testUnveraenderterStatusFeuertKeinObjectWillChange() throws {
+        // Jede Mutation des @Published-Dictionarys invalidiert alle
+        // beobachtenden Views — ein No-op darf deshalb gar nicht schreiben.
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        var emissions = 0
+        let cancellable = coordinator.statusStore.objectWillChange.sink { emissions += 1 }
+        defer { cancellable.cancel() }
+
+        // Kein Status vorhanden → Abräumen ist ein No-op.
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .takenOver)
+        XCTAssertEqual(emissions, 0)
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .running)
+        XCTAssertEqual(emissions, 1)
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .spawning)
+        XCTAssertEqual(emissions, 1, "spawning und running sind beide working")
+
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .takenOver)
+        XCTAssertEqual(emissions, 2)
+        XCTAssertNil(coordinator.statusStore.status(for: sessionID))
+        coordinator.updateSubagentJobStatus(sessionID: sessionID, state: .takenOver)
+        XCTAssertEqual(emissions, 2)
     }
 
     func testWarteArtAusDemHookLandetInDerActivity() throws {

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import XCTest
 @testable import WhisperM8
 
@@ -86,5 +87,71 @@ final class TabSwitcherModelTests: XCTestCase {
         let model = TabSwitcherModel.begin(order: [a, b, c], current: a, direction: 1)!
         // b existiert beim Loslassen nicht mehr → Selektion bleibt, wie sie ist.
         XCTAssertNil(model.commitTarget(order: [a, c]))
+    }
+
+    // MARK: - Beobachtungswert für Mini-Map/Liste (TabSwitcherRunState)
+
+    /// Ein Ctrl+Tab-Schritt darf nur das Highlight melden — der Body der
+    /// AgentChatsView hängt an `isActive` und würde sonst bei jedem Schritt
+    /// samt Sidebar neu ausgewertet.
+    @MainActor
+    func testStepReportsOnlyHighlight() {
+        let run = TabSwitcherRunState()
+        let order = [a, b, c]
+        run.setSessions(order.map {
+            AgentChatSession(id: $0, provider: .claude, projectID: UUID(), title: "t", status: .running)
+        })
+        run.model = TabSwitcherModel.begin(order: order, current: a, direction: 1)
+        XCTAssertTrue(run.isActive)
+        XCTAssertEqual(run.highlightedID, b)
+
+        var bodyChanged = false
+        withObservationTracking {
+            _ = run.isActive
+        } onChange: {
+            bodyChanged = true
+        }
+        var snapshotChanged = false
+        withObservationTracking {
+            _ = run.sessions
+            _ = run.miniMapWorkspace
+        } onChange: {
+            snapshotChanged = true
+        }
+        var highlightChanged = false
+        withObservationTracking {
+            _ = run.highlightedID
+        } onChange: {
+            highlightChanged = true
+        }
+
+        // Schritt wie im Key-Event-Pfad: Modell mutieren, gleichen Umfang
+        // erneut ablegen (diff-gated → kein Signal).
+        run.model?.advance(1, order: order)
+        run.setSessions(run.sessions)
+        run.setMiniMapWorkspace(nil)
+
+        XCTAssertEqual(run.highlightedID, c)
+        XCTAssertTrue(highlightChanged)
+        XCTAssertFalse(bodyChanged)
+        XCTAssertFalse(snapshotChanged)
+    }
+
+    @MainActor
+    func testOpenAndCloseToggleIsActive() {
+        let run = TabSwitcherRunState()
+        var changed = false
+        withObservationTracking {
+            _ = run.isActive
+        } onChange: {
+            changed = true
+        }
+        run.model = TabSwitcherModel.begin(order: [a, b], current: a, direction: 1)
+        XCTAssertTrue(changed)
+        XCTAssertTrue(run.isActive)
+
+        run.model = nil
+        XCTAssertFalse(run.isActive)
+        XCTAssertNil(run.highlightedID)
     }
 }

@@ -82,4 +82,85 @@ final class TabSwitcherShortcutTests: XCTestCase {
             keyCode: TabSwitcherShortcut.KeyCode.escape, modifiers: [.control]
         ))
     }
+
+    // MARK: - Tasten bei aktivem Switcher
+
+    private typealias Action = TabSwitcherShortcut.ActiveKeyAction
+    private let escape = TabSwitcherShortcut.KeyCode.escape
+    private let returnKey = TabSwitcherShortcut.KeyCode.returnKey
+
+    private func active(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) -> Action {
+        TabSwitcherShortcut.activeKeyAction(keyCode: keyCode, modifiers: modifiers)
+    }
+
+    func testActiveStepsWithControlTab() {
+        XCTAssertEqual(active(tab, [.control]), .step(1))
+        XCTAssertEqual(active(tab, [.control, .shift]), .step(-1))
+    }
+
+    func testActiveArrowsWithControlNavigate() {
+        // Pfeile tragen .function/.numericPad — der Match darf daran nicht scheitern.
+        XCTAssertEqual(active(123, [.control, .function, .numericPad]), .arrow(.left))
+        XCTAssertEqual(active(124, [.control]), .arrow(.right))
+        XCTAssertEqual(active(125, [.control, .shift]), .arrow(.down))
+        XCTAssertEqual(active(126, [.control, .function]), .arrow(.up))
+    }
+
+    func testActiveEscapeAndReturnWithOrWithoutControl() {
+        XCTAssertEqual(active(escape, []), .cancel)
+        XCTAssertEqual(active(escape, [.control]), .cancel)
+        XCTAssertEqual(active(returnKey, []), .commit)
+        XCTAssertEqual(active(returnKey, [.control]), .commit)
+    }
+
+    func testActiveOtherKeyWithControlIsSwallowed() {
+        // Ctrl+C (keyCode 8) darf nie die TUI erreichen.
+        XCTAssertEqual(active(8, [.control]), .cancel)
+        // ⌃⌥Tab mitten im Durchlauf: Abbruch, kein Sprung.
+        XCTAssertEqual(active(tab, [.control, .option]), .cancel)
+    }
+
+    func testActiveKeyWithoutControlCancelsAndPassesThrough() {
+        // Ctrl-Loslassen verpasst (Menü-Tracking): die nächste Taste gehört
+        // wieder dem Terminal.
+        XCTAssertEqual(active(0, []), .cancelAndPassThrough) // „a"
+        XCTAssertEqual(active(tab, []), .cancelAndPassThrough)
+        XCTAssertEqual(active(tab, [.shift]), .cancelAndPassThrough)
+        XCTAssertEqual(active(123, [.function, .numericPad]), .cancelAndPassThrough)
+        XCTAssertEqual(active(8, [.command]), .cancelAndPassThrough)
+    }
+
+    // MARK: - Modifier-Änderung bei aktivem Switcher
+
+    private func flags(_ previous: NSEvent.ModifierFlags, _ current: NSEvent.ModifierFlags) -> TabSwitcherShortcut.FlagsChangeAction {
+        TabSwitcherShortcut.flagsChangeAction(previous: previous, current: current)
+    }
+
+    func testControlReleaseCommits() {
+        XCTAssertEqual(flags([.control], []), .commit)
+        // Shift bleibt gehalten, Ctrl geht → Commit (Ctrl+Shift+Tab-Durchlauf).
+        XCTAssertEqual(flags([.control, .shift], [.shift]), .commit)
+        // CapsLock aktiv bleibt aktiv.
+        XCTAssertEqual(flags([.control, .capsLock], [.capsLock]), .commit)
+        // Pfeil-keyDown hinterließ .function — kein Grund für einen Abbruch.
+        XCTAssertEqual(flags([.control, .function, .numericPad], []), .commit)
+    }
+
+    func testControlStillHeldDoesNothing() {
+        XCTAssertEqual(flags([.control], [.control, .shift]), .none)
+        XCTAssertEqual(flags([.control, .shift], [.control]), .none)
+        XCTAssertEqual(flags([.control], [.control, .option]), .none)
+    }
+
+    func testMissedControlReleaseCancels() {
+        // Ctrl im Kontextmenü losgelassen, dann Shift gedrückt: Ctrl war
+        // zuletzt gesehen gehalten, aber dieses Event hat Shift geändert.
+        XCTAssertEqual(flags([.control], [.shift]), .cancel)
+        // Shift (seit dem Durchlauf gehalten) losgelassen, Ctrl längst weg.
+        XCTAssertEqual(flags([.control, .shift], []), .cancel)
+        // CapsLock-Toggle nach verpasstem Ctrl-Loslassen.
+        XCTAssertEqual(flags([.control], [.capsLock]), .cancel)
+        // Ctrl war schon vorher nicht gehalten.
+        XCTAssertEqual(flags([], [.shift]), .cancel)
+    }
 }
