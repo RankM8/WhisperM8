@@ -505,6 +505,17 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.chatGPTTranscriptionEnabled) }
     }
 
+    /// Debug-Steuerkanal (`whisperm8 debug …`, Doku docs/features/ui-testing.md):
+    /// Zustand lesen, Fenster öffnen und fotografieren, Diktat mit Audiodatei.
+    /// Default AUS — ein Fenster-Foto zeigt auch Chat-Inhalte, ein Diktat
+    /// schickt Audio an den Anbieter. Der Socket lässt ohnehin nur denselben
+    /// Benutzer herein; der Schalter ist die zweite Hürde. Wirkt sofort.
+    /// `defaults write com.whisperm8.app debugControlEnabled -bool YES`
+    var isDebugControlEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.debugControlEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.debugControlEnabled) }
+    }
+
     /// Kill-Switch für die Retention der CLI-Subagent-Spiegel. Aus heißt: die
     /// verwaisten Einträge bleiben für immer in der Sidebar stehen (der
     /// Zustand vor 2026-08-01):
@@ -758,6 +769,7 @@ enum PreferenceKeys {
     static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
     static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"
     static let chatGPTTranscriptionEnabled = "chatGPTTranscriptionEnabled"
+    static let debugControlEnabled = "debugControlEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
     static let agentCrashRecoveryEnabled = "agentCrashRecoveryEnabled"
     static let subagentJobRetentionDays = "subagentJobRetentionDays"

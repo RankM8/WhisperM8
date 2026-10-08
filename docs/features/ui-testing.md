@@ -1,5 +1,5 @@
 ---
-status: Stufe 1 umgesetzt (UI-Snapshots); Stufe 2 (Debug-Steuerkanal) folgt
+status: umgesetzt — Stufe 1 (UI-Snapshots) und Stufe 2 (Debug-Steuerkanal)
 stand: 2026-10-08
 feature: UI-Tests ohne Computer Use
 ---
@@ -12,7 +12,7 @@ Klick-Automation und ohne Bildschirmzugriff prüfbar sind, gibt es zwei Baustein
 | Stufe | Was | Wofür |
 |---|---|---|
 | 1 | **UI-Snapshots**: Ansichten in festen Zuständen als PNG | Layout, Texte, Zustände, Hell/Dunkel |
-| 2 | **Debug-Steuerkanal** (folgt) | Zustand auslesen, Fenster öffnen und fotografieren, Diktat mit Audiodatei |
+| 2 | **Debug-Steuerkanal** `whisperm8 debug` | Zustand auslesen, Fenster öffnen und fotografieren, Diktat mit Audiodatei — an der laufenden App |
 
 Klick-Automation über die Bedienungshilfen (XCUITest o. ä.) ist bewusst nicht
 gebaut: SwiftPM kann keine UI-Test-Bundles bauen, die App hat keine
@@ -70,3 +70,66 @@ Schon der erste Lauf fand einen Fehler: Bei abgeschaltetem Kill-Switch
 Transkriptions-Seite Groq mit **leerem** Modell-Picker. Jetzt zeigt sie das
 Modell, das die Diktat-Logik tatsächlich nimmt (Groq-Default), ohne die
 gespeicherte Wahl zu überschreiben.
+
+## Stufe 2: Debug-Steuerkanal (`whisperm8 debug`)
+
+Spricht über den vorhandenen Control-Socket (`AgentControlServer`, nur derselbe
+Benutzer, Socket 0600) mit der **laufenden** App. Zusätzlich hinter einem
+eigenen Schalter, Default aus — ein Fenster-Foto zeigt auch Chat-Inhalte, ein
+Diktat schickt Audio an den Anbieter:
+
+```bash
+defaults write com.whisperm8.app debugControlEnabled -bool YES   # wirkt sofort
+```
+
+| Befehl | Wirkung |
+|---|---|
+| `whisperm8 debug state` | JSON: Fenster (Nummer, Titel, Identifier, Frame, key), Diktat-Phase, Anbieter/Modell/Sprache, GPT-Backend, Chats/PTYs. Keine Diktat-Texte, nur Längen. |
+| `whisperm8 debug open <ziel>` | `settings[/<seite>]`, `agent-chats`, `onboarding`. Bringt die App nach vorn (Fokus!). Seiten = `SettingsPage`-Rohwerte plus Alt-Routen. |
+| `whisperm8 debug snapshot [--window <name>\|key\|all] [--out <ordner>]` | Fotografiert sichtbare Fenster samt Titelleiste als PNG (doppelte Dichte). Default-Ordner `~/Library/Application Support/WhisperM8/debug-snapshots/`. |
+| `whisperm8 debug dictate <datei> [--provider groq\|openai\|chatgpt] [--language de\|en\|auto] [--timeout <s>]` | Audiodatei durch den echten Transkriptions-Weg (Einstellungen, Zugangs-Gate, Service-Factory, ChatGPT-Abo inklusive). **Kein** Einfügen, keine Zwischenablage, kein Run-Report, keine Nachbearbeitung, `AppState` bleibt unberührt. |
+| `whisperm8 debug job <id>` | Stand eines Diktat-Auftrags. |
+
+Ausgabe immer JSON auf stdout; Exit 0 ok, 1 Aufruf, 3 nicht gefunden,
+4 Konflikt/Auftrag gescheitert, 5 App nicht erreichbar, 124 Timeout.
+
+### Typischer Ablauf (Agent)
+
+```bash
+whisperm8 debug open settings/transcription
+whisperm8 debug snapshot --window settings --out /tmp/shots   # PNG lesen
+whisperm8 debug dictate ~/test.m4a --provider chatgpt          # Text + ms
+whisperm8 debug state                                          # lastError etc.
+```
+
+### Bausteine
+
+- `Services/Shared/DebugControl.swift`: pure Teile — `OpenTarget`,
+  Fensterauswahl (`select`, Hilfsfenster wie Statusleiste/Popover raus,
+  minimierte raus), Dateinamen, `DebugJobStore`, `DebugDictation`.
+- `Services/AgentChats/AgentControlRequestHandler+Debug.swift`: Methoden
+  `debug.state|open|snapshot|dictate|job`, Schalter, Audit-Log (außer `job`).
+- `CLI/DebugCLICommand.swift`: Parser (`DebugCLIArguments`, relative Pfade
+  gegen das Arbeitsverzeichnis der CLI) und Ausgabe.
+- `WindowRequestCenter.requestSettings(routeID:)`: öffnet die Einstellungen auf
+  einer bestimmten Seite. Die Seite gilt bis zum nächsten normalen
+  `request(_:)` — bewusst nicht „einmal verbrauchen", weil die SettingsView die
+  Route beim Öffnen zweimal auswertet (`onAppear` + Erstwert des Publishers).
+
+### Warum `dictate` ein Auftrag ist
+
+Der Socket bricht jeden Request nach 10 s ab (`AgentControlServer`). Ein Diktat
+mit langer Aufnahme dauert länger; `debug.dictate` legt deshalb einen Auftrag an
+und antwortet sofort, die CLI pollt `debug.job` im Halbsekundentakt. Höchstens
+2 Aufträge gleichzeitig, fertige bleiben 10 min abfragbar.
+
+### Grenzen
+
+- Klicks und Eingaben gibt es nicht — Zustand ändern nur über `open` oder die
+  Einstellungen selbst.
+- Fenster mit Metal-Terminal (Opt-in `agentTerminalMetalEnabled`) können im
+  Foto leer bleiben; der Standard-Renderer zeichnet normal.
+- Das Foto läuft auf dem Main Thread (PNG-Kodierung großer Fenster ~100 ms) —
+  für Debugging gedacht, nicht für Dauerschleifen.
+- Eine App ohne diese Methoden (alter Build) antwortet „Unbekannte Methode";
+  die CLI rät dann zu `make dev`.
