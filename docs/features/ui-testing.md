@@ -86,7 +86,7 @@ defaults write com.whisperm8.app debugControlEnabled -bool YES   # wirkt sofort
 |---|---|
 | `whisperm8 debug state` | JSON: Fenster (Nummer, Titel, Identifier, Frame, key), Diktat-Phase, Anbieter/Modell/Sprache, GPT-Backend, Chats/PTYs. Keine Diktat-Texte, nur Längen. |
 | `whisperm8 debug open <ziel>` | `settings[/<seite>]`, `agent-chats`, `onboarding`. Bringt die App nach vorn (Fokus!). Seiten = `SettingsPage`-Rohwerte plus Alt-Routen. |
-| `whisperm8 debug snapshot [--window <name>\|key\|all] [--out <ordner>]` | Fotografiert sichtbare Fenster samt Titelleiste als PNG (doppelte Dichte). Default-Ordner `~/Library/Application Support/WhisperM8/debug-snapshots/`. |
+| `whisperm8 debug snapshot [--window <name>\|key\|all] [--out <ordner>]` | Fotografiert sichtbare Fenster samt Titelleiste als PNG über ScreenCaptureKit (`SCShareableContent.currentProcess`, nur eigene Fenster, mindestens 2×). Feld `method` nennt den Weg; Rückfall `cacheDisplay`. Default-Ordner `~/Library/Application Support/WhisperM8/debug-snapshots/`. |
 | `whisperm8 debug dictate <datei> [--provider groq\|openai\|chatgpt] [--language de\|en\|auto] [--timeout <s>]` | Audiodatei durch den echten Transkriptions-Weg (Einstellungen, Zugangs-Gate, Service-Factory, ChatGPT-Abo inklusive). **Kein** Einfügen, keine Zwischenablage, kein Run-Report, keine Nachbearbeitung, `AppState` bleibt unberührt. |
 | `whisperm8 debug job <id>` | Stand eines Diktat-Auftrags. |
 
@@ -127,9 +127,11 @@ und antwortet sofort, die CLI pollt `debug.job` im Halbsekundentakt. Höchstens
 
 - Klicks und Eingaben gibt es nicht — Zustand ändern nur über `open` oder die
   Einstellungen selbst.
-- Fenster mit Metal-Terminal (Opt-in `agentTerminalMetalEnabled`) können im
-  Foto leer bleiben; der Standard-Renderer zeichnet normal.
-- Das Foto läuft auf dem Main Thread (PNG-Kodierung großer Fenster ~100 ms) —
-  für Debugging gedacht, nicht für Dauerschleifen.
+- **Warum ScreenCaptureKit statt `cacheDisplay`** (Live-Befund 2026-10-08):
+  In der laufenden App zeichnete `cacheDisplay` nur die Titelleiste — SwiftUI
+  rendert dort über eigene Layer, die `cacheDisplay` nicht erfasst. In den
+  Offscreen-Fenstern der UI-Snapshots (Stufe 1) tritt das nicht auf. Der
+  Rückfall bleibt nur für macOS < 14.4 bzw. wenn ScreenCaptureKit scheitert
+  (dann `method: "cacheDisplay"` — das Bild kann leer sein).
 - Eine App ohne diese Methoden (alter Build) antwortet „Unbekannte Methode";
   die CLI rät dann zu `make dev`.

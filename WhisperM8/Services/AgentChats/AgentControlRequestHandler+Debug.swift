@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ScreenCaptureKit
 
 // MARK: - debug.* (`whisperm8 debug state|open|snapshot|dictate|job`)
 
@@ -39,7 +40,7 @@ extension AgentControlRequestHandler {
         let state = await MainActor.run { () -> [String: Any] in
             let appState = AppState.shared
             let preferences = AppPreferences.shared
-            let windows = Self.currentWindowInfos().filter(DebugControl.isRelevant)
+            let windows = Self.currentWindowInfos().filter { DebugControl.isRelevant($0) && ($0.isVisible || $0.isMiniaturized) }
             let workspace = AgentWorkspaceUIModel.shared.workspace
             let registry = AgentTerminalRegistry.shared
             let runningPTYs = workspace.sessions.filter { registry.controller(for: $0.id)?.isRunning == true }.count
@@ -117,35 +118,71 @@ extension AgentControlRequestHandler {
                             message: "Ordner nicht anlegbar: \(error.localizedDescription)")
         }
 
-        let outcome = await MainActor.run { () -> (files: [[String: Any]], error: String?) in
-            let infos = DebugControl.select(Self.currentWindowInfos(), selector: selector)
-            guard !infos.isEmpty else {
-                return ([], "Kein sichtbares Fenster passt auf „\(selector ?? "all")“ (siehe `whisperm8 debug state`).")
-            }
-            let now = Date()
-            var written: [[String: Any]] = []
-            for info in infos {
-                guard let window = NSApp.window(withWindowNumber: info.number),
-                      let content = window.contentView else { continue }
-                // Erst mit Titelleiste (Theme-Frame), sonst nur der Inhalt.
-                let candidates = [content.superview, content].compactMap { $0 }
-                guard let png = candidates.lazy.compactMap({ try? ViewSnapshotRenderer.pngData(of: $0) }).first else {
-                    continue
-                }
-                let file = directory.appendingPathComponent(DebugControl.snapshotFileName(for: info, date: now))
-                do {
-                    try png.write(to: file)
-                    written.append(["path": file.path, "window": info.displayName, "number": info.number])
-                } catch {
-                    Logger.agentStore.error("debug_snapshot_write_failed error=\(error.localizedDescription, privacy: .public)")
-                }
-            }
-            return written.isEmpty ? ([], "Kein Fenster ließ sich fotografieren.") : (written, nil)
+        let infos = await MainActor.run { DebugControl.select(Self.currentWindowInfos(), selector: selector) }
+        guard !infos.isEmpty else {
+            return .failure(requestID: request.requestID, code: .notFound,
+                            message: "Kein sichtbares Fenster passt auf „\(selector ?? "all")“ (siehe `whisperm8 debug state`).")
         }
-        if let message = outcome.error {
-            return .failure(requestID: request.requestID, code: .notFound, message: message)
+        let now = Date()
+        var written: [[String: Any]] = []
+        for info in infos {
+            guard let capture = await Self.captureWindow(info.number) else { continue }
+            let file = directory.appendingPathComponent(DebugControl.snapshotFileName(for: info, date: now))
+            do {
+                try capture.png.write(to: file)
+                written.append([
+                    "path": file.path, "window": info.displayName, "number": info.number, "method": capture.method,
+                ])
+            } catch {
+                Logger.agentStore.error("debug_snapshot_write_failed error=\(error.localizedDescription, privacy: .public)")
+            }
         }
-        return .success(requestID: request.requestID, result: .object(["files": outcome.files]))
+        guard !written.isEmpty else {
+            return .failure(requestID: request.requestID, code: .notFound, message: "Kein Fenster ließ sich fotografieren.")
+        }
+        return .success(requestID: request.requestID, result: .object(["files": written]))
+    }
+
+    /// Fenster-Foto. Erst ScreenCaptureKit: das System liefert das Fenster so,
+    /// wie es auf dem Bildschirm steht. `SCShareableContent.currentProcess`
+    /// (ab macOS 14.4) erfasst nur eigene Fenster — laut Apple ohne
+    /// Bildschirmaufnahme-Freigabe; WhisperM8 hat sie für den Bildschirm-Kontext
+    /// ohnehin. Rückfall `cacheDisplay` — der zeichnet
+    /// in der laufenden App aber nur die Titelleiste: SwiftUI rendert dort über
+    /// eigene Layer, die `cacheDisplay` nicht erfasst (Live-Befund 2026-10-08,
+    /// in Tests mit Offscreen-Fenstern fiel das nicht auf).
+    private static func captureWindow(_ windowNumber: Int) async -> (png: Data, method: String)? {
+        if #available(macOS 14.4, *) {
+            do {
+                let content = try await SCShareableContent.currentProcess
+                if let window = content.windows.first(where: { Int($0.windowID) == windowNumber }) {
+                    let filter = SCContentFilter(desktopIndependentWindow: window)
+                    let configuration = SCStreamConfiguration()
+                    // Mindestens 2×: auf Bildschirmen ohne Retina wäre die Schrift
+                    // im Foto sonst kaum lesbar.
+                    let scale = max(CGFloat(filter.pointPixelScale), 2)
+                    configuration.width = Int(filter.contentRect.width * scale)
+                    configuration.height = Int(filter.contentRect.height * scale)
+                    configuration.showsCursor = false
+                    configuration.ignoreShadowsSingleWindow = true
+                    let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+                    if let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+                        return (png, "screencapturekit")
+                    }
+                }
+            } catch {
+                Logger.agentStore.info("debug_snapshot_sck_failed window=\(windowNumber) error=\(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return await MainActor.run { () -> (png: Data, method: String)? in
+            guard let window = NSApp.window(withWindowNumber: windowNumber),
+                  let content = window.contentView else { return nil }
+            let candidates = [content.superview, content].compactMap { $0 }
+            guard let png = candidates.lazy.compactMap({ try? ViewSnapshotRenderer.pngData(of: $0) }).first else {
+                return nil
+            }
+            return (png, "cacheDisplay")
+        }
     }
 
     // MARK: dictate / job

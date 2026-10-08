@@ -65,6 +65,8 @@ final class DebugControlTests: XCTestCase {
             window(4, title: "Versteckt", isVisible: false),
             window(5, className: "NSStatusBarWindow"),
             window(6, title: "Winzig", size: CGSize(width: 1, height: 1)),
+            window(10, className: "NSToolTipPanel"),
+            window(11, className: "TUINSWindow"),
         ]
         XCTAssertEqual(DebugControl.select(windows, selector: nil).map(\.number), [1, 2])
         XCTAssertEqual(DebugControl.select(windows, selector: "all").map(\.number), [1, 2])
