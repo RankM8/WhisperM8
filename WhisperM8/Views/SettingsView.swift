@@ -164,6 +164,16 @@ struct SettingsView: View {
         // führt ausschließlich der explizite „Open Agent Chats"-Button.
         .onAppear {
             applySettingsRoute(windowRequestCenter.latestRequest)
+            // Ein frisch geöffnetes Fenster entsteht INNERHALB der
+            // `$latestRequest`-Benachrichtigung — `@Published` meldet in
+            // `willSet`, `latestRequest` hält da noch den alten Wert. Deshalb
+            // die Route nach diesem Durchlauf erneut lesen. Live-Befund
+            // 2026-10-08 (`whisperm8 debug open settings/transcription` landete
+            // auf „Recording"); beim offenen Fenster trägt `onReceive` den
+            // neuen Wert direkt als Parameter.
+            DispatchQueue.main.async {
+                applySettingsRoute(windowRequestCenter.latestRequest)
+            }
         }
         .onReceive(windowRequestCenter.$latestRequest.compactMap { $0 }) { request in
             applySettingsRoute(request)

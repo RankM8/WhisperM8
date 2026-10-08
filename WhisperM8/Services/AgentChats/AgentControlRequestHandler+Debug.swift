@@ -158,9 +158,10 @@ extension AgentControlRequestHandler {
                 if let window = content.windows.first(where: { Int($0.windowID) == windowNumber }) {
                     let filter = SCContentFilter(desktopIndependentWindow: window)
                     let configuration = SCStreamConfiguration()
-                    // Mindestens 2×: auf Bildschirmen ohne Retina wäre die Schrift
-                    // im Foto sonst kaum lesbar.
-                    let scale = max(CGFloat(filter.pointPixelScale), 2)
+                    // Native Dichte des Bildschirms. Eine erzwungene 2× vergrößerte
+                    // nur die Leinwand, der Inhalt blieb 1× in der Ecke (Live-Befund
+                    // 2026-10-08 auf einem Bildschirm ohne Retina).
+                    let scale = CGFloat(filter.pointPixelScale)
                     configuration.width = Int(filter.contentRect.width * scale)
                     configuration.height = Int(filter.contentRect.height * scale)
                     configuration.showsCursor = false
