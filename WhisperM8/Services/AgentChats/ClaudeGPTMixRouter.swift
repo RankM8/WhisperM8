@@ -128,6 +128,10 @@ final class ClaudeGPTMixRouter {
         return value
     }
 
+    /// Wurde das Profil in diesem App-Lauf zum Hauptkonto? Dann gilt sein
+    /// (beim Spawn eingefrorener) Header als main — der Grant liegt jetzt dort.
+    var promotedProfileResolver: (String) -> Bool = { GPTPromotedProfiles.shared.wasPromoted($0) }
+
     /// Ist das Profil angemeldet (eigene Auth-Datei)? Entscheidet im 503-Pfad,
     /// ob ein Start ueberhaupt Sinn hat — sonst versprach die Antwort „startet
     /// gleich" fuer ein abgemeldetes Konto in Endlosschleife.
@@ -144,6 +148,7 @@ final class ClaudeGPTMixRouter {
         var activeProfile: () -> String?
         var startInstance: (String) -> Void
         var isLoggedIn: (String) -> Bool
+        var wasPromotedToMain: (String) -> Bool = { _ in false }
     }
 
     private func makeProfileRouting() -> ProfileRouting {
@@ -152,7 +157,8 @@ final class ClaudeGPTMixRouter {
             proxyURL: codexProxyURLResolver,
             activeProfile: activeProfileResolver,
             startInstance: profileInstanceStarter,
-            isLoggedIn: profileLoggedInResolver
+            isLoggedIn: profileLoggedInResolver,
+            wasPromotedToMain: promotedProfileResolver
         )
     }
 
@@ -218,6 +224,7 @@ final class ClaudeGPTMixRouter {
         codexProxyURLResolver = { _ in nil }
         profileInstanceStarter = { _ in }
         profileLoggedInResolver = { _ in true }
+        promotedProfileResolver = { _ in false }
     }
 
     var listeningPort: Int? {
@@ -914,8 +921,11 @@ private extension ClaudeGPTMixRouter {
             if upstream == .codexProxy, profileRouting.isEnabled() {
                 // Konto der Session: Header, sonst das aktive Profil (E4).
                 // `nil` = main → Backend-Port wie bisher.
-                let profile = ClaudeGPTMixRouter.profileName(in: requestHead.headers)
+                var profile = ClaudeGPTMixRouter.profileName(in: requestHead.headers)
                     ?? profileRouting.activeProfile()
+                if let promoted = profile, profileRouting.wasPromotedToMain(promoted) {
+                    profile = GPTAccountProfiles.mainProfileName
+                }
                 if let profile, profile != GPTAccountProfiles.mainProfileName {
                     requestProfile = profile
                     guard let profileURL = profileRouting.proxyURL(profile) else {

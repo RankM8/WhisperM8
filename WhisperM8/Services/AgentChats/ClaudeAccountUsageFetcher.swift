@@ -268,6 +268,15 @@ struct ClaudeAccountUsageFetcher {
         "/tmp/claude-usage-cache-\(name).json"
     }
 
+    /// Verwirft den Cache eines Profils — nach „Als Hauptkonto übernehmen"
+    /// zeigte `main` sonst bis zum nächsten Live-Abruf die Limits des alten
+    /// Kontos.
+    func discardCache(forProfile name: String) {
+        for path in [cachePath(forProfile: name), legacyCachePath(forProfile: name)] {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+    }
+
     private func writeCache(_ body: Data, forProfile name: String) {
         FileManager.default.createFile(atPath: cachePath(forProfile: name), contents: body)
     }

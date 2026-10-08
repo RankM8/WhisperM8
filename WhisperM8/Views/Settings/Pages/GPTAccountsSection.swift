@@ -317,6 +317,10 @@ struct GPTAccountsSection: View {
                 Button("Abmelden…") { logout(profile) }
                     .disabled(isBusy || loginInProgress)
             }
+            if !profile.isMain, profile.isLoggedIn {
+                Button("Zum Hauptkonto machen…") { promoteToMain(profile) }
+                    .disabled(isBusy || loginInProgress)
+            }
             if !profile.isMain {
                 Divider()
                 Button("Entfernen…", role: .destructive) { removeProfile(profile) }
@@ -332,7 +336,7 @@ struct GPTAccountsSection: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Anmelden, abmelden, entfernen")
+        .help(profile.isMain ? "Anmelden, abmelden" : "Zum Hauptkonto machen, anmelden, abmelden, entfernen")
     }
 
     @ViewBuilder
@@ -540,6 +544,68 @@ struct GPTAccountsSection: View {
                     showFeedback("„\(profile.name)“ ist abgemeldet.", tone: .secondary)
                 case .failure(let error):
                     showFeedback("Abmelden fehlgeschlagen: \(error.localizedDescription)", tone: .error)
+                }
+                reload()
+                onAccountsChanged()
+            }
+        }
+    }
+
+    /// „Zum Hauptkonto machen": der Grant des Profils ersetzt den des
+    /// Default-Stores, das Profil verschwindet, seine Chats laufen ueber main
+    /// weiter (laufende per Router-Umleitung, gestoppte per Stempel). Der
+    /// main-Proxy startet dafuer kurz neu.
+    private func promoteToMain(_ profile: GPTAccountProfile) {
+        let main = profiles.first(where: \.isMain)
+        let oldMain = (main?.emailAddress ?? usageByProfile[GPTAccountProfiles.mainProfileName]?.emailAddress)
+            .map { " (\($0))" } ?? ""
+        let newAccount = (profile.emailAddress ?? usageByProfile[profile.name]?.emailAddress)
+            .map { " (\($0))" } ?? ""
+        let alert = NSAlert()
+        alert.messageText = "„\(profile.name)“ zum Hauptkonto machen?"
+        alert.informativeText = """
+        Der Proxy-Login von „\(profile.name)“\(newAccount) ersetzt den des Hauptkontos\(oldMain), der dabei abgemeldet wird — bei Bedarf unter „Konto hinzufügen“ wieder anmelden.
+
+        Chats auf „\(profile.name)“ laufen danach über das Hauptkonto weiter, das Profil verschwindet. Der Proxy des Hauptkontos startet dafür kurz neu.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Zum Hauptkonto machen")
+        alert.addButton(withTitle: "Abbrechen")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        isBusy = true
+        let manager = proxyManager
+        let service = profileService
+        let name = profile.name
+        Task.detached(priority: .userInitiated) {
+            let result = manager.replaceMainGrant(withProfile: name) {
+                try service.promoteToMain(name)
+            }
+            await MainActor.run {
+                isBusy = false
+                // Stempel auch bei gescheitertem main-Neustart umziehen, sobald
+                // das Profil weg ist — die Dateien sind dann schon getauscht.
+                let promoted = !FileManager.default.fileExists(
+                    atPath: service.configDir(forProfile: name).path
+                )
+                if promoted {
+                    let store = AgentSessionStore()
+                    let stamped = store.loadWorkspace().sessions
+                        .filter { $0.gptProfileName == name }
+                        .map(\.id)
+                    if !stamped.isEmpty {
+                        try? store.setGPTSessionProfile(ids: stamped, profileName: nil)
+                    }
+                    usageByProfile[GPTAccountProfiles.mainProfileName] = usageByProfile.removeValue(forKey: name)
+                    usageProblemByProfile[name] = nil
+                }
+                switch result {
+                case .success:
+                    showFeedback("„\(name)“ ist jetzt das Hauptkonto.", tone: .secondary)
+                case .failure(let error) where promoted:
+                    showFeedback("„\(name)“ ist jetzt das Hauptkonto, aber der Proxy startete nicht neu: \(error.localizedDescription)", tone: .warning)
+                case .failure(let error):
+                    showFeedback(error.localizedDescription, tone: .error)
                 }
                 reload()
                 onAccountsChanged()

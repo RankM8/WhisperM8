@@ -1091,3 +1091,87 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Als Hauptkonto übernehmen
+
+extension ClaudeCodeProxyManagerTests {
+    func testReplaceMainGrantRefusesExternalMainProxy() {
+        var moved = false
+        let manager = makeManager(reachability: { _ in true })
+        manager.mainPortResolver = { 18_765 }
+
+        let result = manager.replaceMainGrant(withProfile: "office") { moved = true }
+
+        assertFailure(result, equals: .mainProxyExternal(port: 18_765))
+        XCTAssertFalse(moved, "ein fremder Proxy schriebe seinen alten Grant zurueck")
+    }
+
+    func testReplaceMainGrantStopsBothProcessesBeforeMoveAndRestartsMain() throws {
+        var events: [String] = []
+        var mainAlive = false
+        var profileAlive = false
+        let manager = makeManager(
+            reachability: { port in port == 18_765 ? mainAlive : profileAlive },
+            launcher: { _, _, environment in
+                if environment["CCP_CONFIG_DIR"] == "/p" {
+                    profileAlive = true
+                    events.append("launch-profile")
+                    return ClaudeCodeProxyProcessHandle(
+                        isRunning: { profileAlive },
+                        terminate: { profileAlive = false; events.append("stop-profile") }
+                    )
+                }
+                mainAlive = true
+                events.append("launch-main")
+                return ClaudeCodeProxyProcessHandle(
+                    isRunning: { mainAlive },
+                    terminate: { mainAlive = false; events.append("stop-main") }
+                )
+            },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { $0 == "office" ? ["CCP_CONFIG_DIR": "/p"] : [:] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+        try manager.ensureRunning(port: 18_765).get()
+        try manager.ensureRunning(profile: "office").get()
+        events.removeAll()
+
+        try manager.replaceMainGrant(withProfile: "office") {
+            XCTAssertFalse(mainAlive)
+            XCTAssertFalse(profileAlive)
+            events.append("move")
+        }.get()
+
+        XCTAssertEqual(events, ["stop-profile", "stop-main", "move", "launch-main"])
+        XCTAssertTrue(manager.runningProfileInstances().isEmpty)
+    }
+
+    func testReplaceMainGrantLeavesStoppedMainStopped() throws {
+        var launches = 0
+        var moved = false
+        let manager = makeManager(
+            reachability: { _ in false },
+            launcher: { _, _, _ in launches += 1; return Self.processHandle() }
+        )
+        manager.mainPortResolver = { 18_765 }
+
+        try manager.replaceMainGrant(withProfile: "office") { moved = true }.get()
+
+        XCTAssertTrue(moved)
+        XCTAssertEqual(launches, 0)
+    }
+
+    func testReplaceMainGrantReportsMoveFailure() {
+        struct Boom: Error {}
+        let manager = makeManager(reachability: { _ in false })
+        manager.mainPortResolver = { 18_765 }
+
+        let result = manager.replaceMainGrant(withProfile: "office") { throw Boom() }
+
+        if case .failure(.promoteFailed) = result {} else {
+            XCTFail("Erwartet: promoteFailed, war \(result)")
+        }
+    }
+}

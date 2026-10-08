@@ -211,31 +211,37 @@ struct AgentChatsClaudeAccountsTab: View {
 
     /// ⋯-Menü: dauerhaft sichtbar (kein Hover-only), bündelt die seltenen
     /// Verwaltungs-Aktionen. Destruktives nur hier, nie als Flächen-Button.
-    @ViewBuilder
+    /// Auch `main` hat eins (bis 08.10.2026 nicht): ein totes Konto in main
+    /// (HTTP 403) liess sich sonst weder ersetzen noch loswerden.
     private func manageMenu(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
-        if !profile.isMain || !profile.isLoggedIn || needsRelogin(profile) {
-            Menu {
+        Menu {
+            if profile.isMain {
+                Button(profile.isLoggedIn ? "Log in with another account…" : "Log in…") {
+                    openLoginTerminal(for: profile)
+                }
+            } else {
                 if !profile.isLoggedIn || needsRelogin(profile) {
                     Button("Log in…") { openLoginTerminal(for: profile) }
                 }
-                if !profile.isMain {
-                    Button("Rename…") { renameProfile(profile) }
-                    Divider()
-                    Button("Remove…", role: .destructive) { removeProfile(profile) }
-                        .disabled(isActive)
+                if profile.isLoggedIn {
+                    Button("Make Main Account…") { promoteToMain(profile) }
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .frame(width: 26, height: 22)
-                    .contentShape(Rectangle())
+                Button("Rename…") { renameProfile(profile) }
+                Divider()
+                Button("Remove…", role: .destructive) { removeProfile(profile) }
+                    .disabled(isActive)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Rename, log in, remove")
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+                .frame(width: 26, height: 22)
+                .contentShape(Rectangle())
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(profile.isMain ? "Log in with another account" : "Make main, rename, log in, remove")
     }
 
     /// Limit-Anzeige pro Account: zwei ausgerichtete Gauge-Zeilen (5h-Fenster
@@ -475,14 +481,26 @@ struct AgentChatsClaudeAccountsTab: View {
             showFeedback("Claude CLI not found — install Claude Code first.", tone: .error)
             return
         }
+        // main: KEIN CLAUDE_CONFIG_DIR — auch nicht auf ~/.claude. Claude
+        // haengt den Keychain-Suffix an jedes gesetzte Config-Dir, der Login
+        // landete sonst in einem Item, das main nie liest.
+        let configLine = profile.isMain
+            ? "unset CLAUDE_CONFIG_DIR"
+            : "export CLAUDE_CONFIG_DIR=\"\(profile.configDir.path)\""
+        let hint = profile.isMain && profile.isLoggedIn
+            ? "Type /login and sign in with the account that should become main — it replaces the current main login."
+            : "Log in once (/login) — afterwards this profile stays signed in permanently."
         let script = """
         #!/bin/zsh
-        export CLAUDE_CONFIG_DIR="\(profile.configDir.path)"
+        \(configLine)
         echo "WhisperM8 · Claude account profile “\(profile.name)”"
-        echo "Log in once (/login) — afterwards this profile stays signed in permanently."
+        echo "\(hint)"
         exec "\(claudePath)"
         """
-        let commandURL = profile.configDir.appendingPathComponent("login.command")
+        // ~/.claude gehoert Claude Code — fuer main ins Temp-Verzeichnis.
+        let commandURL = profile.isMain
+            ? FileManager.default.temporaryDirectory.appendingPathComponent("whisperm8-claude-main-login.command")
+            : profile.configDir.appendingPathComponent("login.command")
         do {
             try script.write(to: commandURL, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes(
@@ -531,6 +549,61 @@ struct AgentChatsClaudeAccountsTab: View {
             showFeedback("Profile renamed to “\(newName)”. Login and chats moved along.", tone: .secondary)
         } catch {
             showFeedback(error.localizedDescription, tone: .error)
+        }
+    }
+
+    /// „Make Main Account": Login und Chats des Profils wandern nach main,
+    /// der bisherige main-Login wird ersetzt, der Profil-Ordner geht in den
+    /// Papierkorb. Blockiert wie Rename, solange eine Session des Profils
+    /// läuft — deren CLAUDE_CONFIG_DIR verschwindet dabei.
+    private func promoteToMain(_ profile: ClaudeAccountProfile) {
+        let store = AgentSessionStore()
+        let runningIDs = AgentTerminalRegistry.shared.activeSessionIDs
+        let runningCount = store.loadWorkspace().sessions.filter {
+            $0.claudeProfileName == profile.name && runningIDs.contains($0.id)
+        }.count
+        guard runningCount == 0 else {
+            showFeedback("“\(profile.name)” has \(runningCount) running chat\(runningCount == 1 ? "" : "s") — stop \(runningCount == 1 ? "it" : "them") before making it the main account.", tone: .warning)
+            return
+        }
+
+        let main = profiles.first(where: \.isMain)
+        let oldMain = main?.emailAddress.map { " (\($0))" } ?? ""
+        let newAccount = profile.emailAddress.map { " (\($0))" } ?? ""
+        let alert = NSAlert()
+        alert.messageText = "Make “\(profile.name)” the main account?"
+        alert.informativeText = """
+        The login of “\(profile.name)”\(newAccount) replaces the current main login\(oldMain), which is signed out for good — add it again as a new profile if you still need it.
+
+        All chats of “\(profile.name)” move to main and keep working; the profile folder goes to the Trash. Afterwards claude in the Terminal, background agents and every main chat use this account. Running main chats pick it up after a restart.
+
+        Close Terminal sessions started with this profile (ccs) first.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Make Main Account")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        // Kein Scan waehrend des Umzugs: der Indexer saehe Transcripts
+        // zwischen zwei Roots und adoptierte sie mit falschem Profil.
+        AgentScanCoordinator.shared.suspendScans()
+        defer { AgentScanCoordinator.shared.resumeScans() }
+        do {
+            let result = try profileService.promoteToMain(profile.name)
+            try store.renameClaudeSessionProfiles(from: profile.name, to: nil)
+            usageFetcher.discardCache(forProfile: ClaudeAccountProfiles.mainProfileName)
+            usageFetcher.discardCache(forProfile: profile.name)
+            usageByProfile = [:]
+            reload()
+            var message = "“\(profile.name)” is now the main account. Its chats moved to main."
+            if !result.conflicts.isEmpty {
+                let sample = result.conflicts.prefix(3).joined(separator: ", ")
+                message += " \(result.conflicts.count) file(s) already existed in main and stayed in the profile folder (now in the Trash): \(sample)\(result.conflicts.count > 3 ? ", …" : "")."
+            }
+            showFeedback(message, tone: result.conflicts.isEmpty ? .secondary : .warning)
+        } catch {
+            reload()
+            showFeedback("Could not make “\(profile.name)” the main account: \(error.localizedDescription)", tone: .error)
         }
     }
 

@@ -74,7 +74,7 @@ struct GPTAccountProfiles {
         homeDirectory.appendingPathComponent(".gpt-profiles", isDirectory: true)
     }
 
-    private var activeFileURL: URL {
+    var activeFileURL: URL {
         profilesRoot.appendingPathComponent(".active", isDirectory: false)
     }
 
@@ -385,6 +385,7 @@ struct GPTAccountProfiles {
         let dir = configDir(forProfile: name)
         guard !fileManager.fileExists(atPath: dir.path) else { throw CreateError.alreadyExists(name) }
         try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        GPTPromotedProfiles.shared.clear(name)
         return profile(named: name)
     }
 
@@ -400,6 +401,75 @@ struct GPTAccountProfiles {
             .trimmingCharacters(in: .whitespacesAndNewlines) == name {
             try? setActiveProfile(Self.mainProfileName)
         }
+    }
+
+    // MARK: - Als Hauptkonto übernehmen
+
+    enum PromoteError: LocalizedError, Equatable {
+        case cannotPromoteMain
+        case unknownProfile(String)
+        case notLoggedIn(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .cannotPromoteMain:
+                return "„main“ ist bereits das Hauptkonto."
+            case .unknownProfile(let name):
+                return "GPT-Konto-Profil „\(name)“ existiert nicht."
+            case .notLoggedIn(let name):
+                return "GPT-Konto-Profil „\(name)“ ist nicht angemeldet — bitte zuerst anmelden."
+            }
+        }
+    }
+
+    /// Macht den Grant eines Zusatzprofils zum Grant des Default-Stores
+    /// (`main`) und entfernt das Profil. Der bisherige main-Grant wird
+    /// verworfen. VERSCHIEBEN statt Kopieren: zwei Stores mit derselben
+    /// Refresh-Familie entwerteten sich beim ersten Refresh gegenseitig.
+    ///
+    /// Nur die Dateien — der Caller (`ClaudeCodeProxyManager.replaceMainGrant`)
+    /// muss die Instanz des Profils UND den main-Proxy vorher beenden, sonst
+    /// schreibt einer von beiden beim naechsten Refresh seinen alten Grant
+    /// zurueck. Session-Stempel zieht ebenfalls der Caller um.
+    func promoteToMain(_ name: String) throws {
+        guard name != Self.mainProfileName else { throw PromoteError.cannotPromoteMain }
+        let profileDir = configDir(forProfile: name)
+        guard Self.isValidProfileName(name), fileManager.fileExists(atPath: profileDir.path) else {
+            throw PromoteError.unknownProfile(name)
+        }
+        guard storedAccountID(forProfile: name) != nil else { throw PromoteError.notLoggedIn(name) }
+
+        let sourceAuth = authFileURL(forProfile: name)
+        let mainAuth = authFileURL(forProfile: Self.mainProfileName)
+        try fileManager.createDirectory(
+            at: mainAuth.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        // replaceItemAt tauscht atomar und uebernimmt die Rechte der Quelle
+        // (der Proxy legt den Store 0600 an).
+        if fileManager.fileExists(atPath: mainAuth.path) {
+            _ = try fileManager.replaceItemAt(mainAuth, withItemAt: sourceAuth)
+        } else {
+            try fileManager.moveItem(at: sourceAuth, to: mainAuth)
+        }
+
+        // Kontometadaten mitnehmen; fehlen sie, die des alten Kontos loeschen
+        // (sie gehoerten zu einem anderen Grant und wuerden ohnehin verworfen).
+        let sourceInfo = accountInfoFileURL(forProfile: name)
+        let mainInfo = accountInfoFileURL(forProfile: Self.mainProfileName)
+        try? fileManager.removeItem(at: mainInfo)
+        if fileManager.fileExists(atPath: sourceInfo.path) {
+            try? fileManager.createDirectory(at: profilesRoot, withIntermediateDirectories: true)
+            try? fileManager.moveItem(at: sourceInfo, to: mainInfo)
+        }
+
+        try fileManager.removeItem(at: profileDir)
+        if (try? String(contentsOf: activeFileURL, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) == name {
+            try? setActiveProfile(Self.mainProfileName)
+        }
+        GPTPromotedProfiles.shared.markPromoted(name)
+        Logger.agentStore.notice("gpt_profile_promoted_to_main name=\(name, privacy: .public)")
     }
 
     // MARK: - Anzeige
@@ -421,5 +491,38 @@ struct GPTAccountProfiles {
         case "free": return "Free"
         default: return planType.prefix(1).uppercased() + planType.dropFirst()
         }
+    }
+}
+
+/// Profile, die in diesem App-Lauf zum Hauptkonto wurden. Laufende Chats
+/// tragen ihren Profil-Header beim Spawn eingefroren (`X-WhisperM8-GPT-Profile`)
+/// und bekaemen nach dem Entfernen des Profils nur noch 503 — der Router
+/// leitet sie deshalb an main, wo ihr Grant jetzt liegt. Bewusst nur im
+/// Speicher: nach einem App-Neustart laufen diese PTYs nicht mehr, und neu
+/// gestartete Chats tragen den umgezogenen Stempel (`nil` = main).
+final class GPTPromotedProfiles: @unchecked Sendable {
+    static let shared = GPTPromotedProfiles()
+
+    private let lock = NSLock()
+    private var names: Set<String> = []
+
+    func markPromoted(_ name: String) {
+        lock.lock()
+        names.insert(name)
+        lock.unlock()
+    }
+
+    /// Ein neu angelegtes Profil gleichen Namens ist ein anderes Konto —
+    /// ab dann gilt der Header wieder woertlich.
+    func clear(_ name: String) {
+        lock.lock()
+        names.remove(name)
+        lock.unlock()
+    }
+
+    func wasPromoted(_ name: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return names.contains(name)
     }
 }

@@ -1200,6 +1200,37 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertNil(profileMock.lastRequest)
     }
 
+    func testRouterSendsHeaderOfPromotedProfileToMain() throws {
+        // Laufender Chat mit eingefrorenem Header eines Profils, das gerade
+        // zum Hauptkonto wurde: sein Grant liegt jetzt in main — kein 503.
+        let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        defer { mainMock.stop() }
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+        )
+        var started: [String] = []
+        router.profilesEnabledResolver = { true }
+        router.codexProxyURLResolver = { _ in nil }
+        router.profileLoggedInResolver = { _ in false }
+        router.profileInstanceStarter = { started.append($0) }
+        router.promotedProfileResolver = { $0 == "office" }
+        try router.start(port: 0).get()
+        defer { router.stop() }
+        let routerPort = try XCTUnwrap(router.listeningPort)
+
+        let response = try Self.sendRawRequest(
+            port: routerPort,
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer x",
+            extraHeaders: ["X-WhisperM8-GPT-Profile: office"]
+        )
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 201"), response.head)
+        XCTAssertEqual(mainMock.lastRequest?.jsonModel, "gpt-5.6-sol")
+        XCTAssertNil(mainMock.lastRequest?.header(named: "x-whisperm8-gpt-profile"))
+        XCTAssertTrue(started.isEmpty)
+    }
+
     func testRouterAnswers503WithoutStartForProfileThatIsNotLoggedIn() throws {
         let mainMock = try LocalHTTPMockServer(status: 201, responseChunks: [])
         defer { mainMock.stop() }

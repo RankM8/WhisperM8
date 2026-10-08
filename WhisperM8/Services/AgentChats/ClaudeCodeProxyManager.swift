@@ -10,6 +10,11 @@ enum ClaudeCodeProxyError: LocalizedError, Equatable {
     /// sonst still auf dem Default-Konto (Fallback des Proxys).
     case profileNotLoggedIn(String)
     case noFreePort
+    /// Der main-Proxy laeuft, wurde aber nicht von dieser App gestartet
+    /// (Terminal, Waise eines frueheren Laufs) — WhisperM8 kann ihn nicht
+    /// neu starten, und er schriebe seinen alten Grant zurueck.
+    case mainProxyExternal(port: Int)
+    case promoteFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +30,10 @@ enum ClaudeCodeProxyError: LocalizedError, Equatable {
             return "GPT-Konto „\(name)“ ist nicht angemeldet — bitte zuerst in den Einstellungen (GPT-Backend) anmelden."
         case .noFreePort:
             return "Kein freier Port fuer eine weitere GPT-Proxy-Instanz gefunden."
+        case .mainProxyExternal(let port):
+            return "Auf Port \(port) laeuft ein GPT-Proxy, den WhisperM8 nicht selbst gestartet hat. Bitte diesen Prozess beenden und erneut versuchen."
+        case .promoteFailed(let reason):
+            return "Das Konto konnte nicht zum Hauptkonto gemacht werden: \(reason)"
         }
     }
 }
@@ -599,6 +608,54 @@ final class ClaudeCodeProxyManager {
                 )
             }
         }
+    }
+
+    /// „Als Hauptkonto übernehmen": beendet die Instanz des Profils und den
+    /// main-Proxy, laesst `moveGrant` die Dateien tauschen und startet main
+    /// danach neu, falls er vorher lief. Beide Prozesse muessen vor dem
+    /// Tausch weg sein — jeder schreibt bei einem Refresh seinen Grant aus
+    /// dem Speicher in die Datei und haette den Tausch ueberschrieben. Unter
+    /// `ensureLock`, damit kein Chat-Start dazwischen einen der beiden mit
+    /// dem alten Grant wieder hochzieht.
+    func replaceMainGrant(
+        withProfile profile: String,
+        moveGrant: () throws -> Void
+    ) -> Result<Void, ClaudeCodeProxyError> {
+        let mainPort = mainPortResolver()
+        let mainWasRunning: Bool
+        do {
+            ensureLock.lock()
+            defer { ensureLock.unlock() }
+
+            processLock.lock()
+            let mainProcess = selfStartedProcess
+            let profileProcess = profileInstances[profile]?.process
+            processLock.unlock()
+            if mainProcess == nil, isReachable(port: mainPort) {
+                return .failure(.mainProxyExternal(port: mainPort))
+            }
+            mainWasRunning = mainProcess?.isRunning == true
+
+            stopInstanceLocked(profile: profile)
+            replaceSelfStartedProcess(with: nil)
+            // terminate() ist asynchron — auf das Ende warten, bevor die
+            // Datei getauscht wird (ein letzter Refresh beim Herunterfahren
+            // schriebe sonst den alten Grant zurueck).
+            for _ in 0..<max(0, retryAttempts)
+            where mainProcess?.isRunning == true || profileProcess?.isRunning == true {
+                sleepResolver(retryDelay)
+            }
+            do {
+                try moveGrant()
+            } catch {
+                return .failure(.promoteFailed(error.localizedDescription))
+            }
+        }
+        Logger.agentStore.notice(
+            "gpt_main_grant_replaced profile=\(profile, privacy: .public) restart=\(mainWasRunning)"
+        )
+        guard mainWasRunning else { return .success(()) }
+        return ensureRunning(port: mainPort)
     }
 
     /// `codex auth logout` im Store des Profils; die laufende Instanz wird

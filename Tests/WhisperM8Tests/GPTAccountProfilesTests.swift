@@ -322,3 +322,71 @@ final class GPTAccountProfilesTests: XCTestCase {
         XCTAssertEqual(usage?.isLive, true)
     }
 }
+
+// MARK: - Als Hauptkonto übernehmen
+
+extension GPTAccountProfilesTests {
+    func testPromoteToMainMovesGrantAndInfoAndRemovesProfile() throws {
+        let mainDir = service.configDir(forProfile: "main")
+        try writeAuthFile(accountID: "acct-alt", in: mainDir)
+        try service.writeAccountInfo(
+            GPTAccountInfo(accountID: "acct-alt", emailAddress: "alt@example.com", planType: "prolite", fetchedAt: Date()),
+            forProfile: "main"
+        )
+        let office = try makeProfileDir("office-promote-test")
+        try writeAuthFile(accountID: "acct-office", in: office)
+        try service.writeAccountInfo(
+            GPTAccountInfo(accountID: "acct-office", emailAddress: "office@example.com", planType: "pro", fetchedAt: Date()),
+            forProfile: "office-promote-test"
+        )
+        try service.setActiveProfile("office-promote-test")
+
+        try service.promoteToMain("office-promote-test")
+
+        let main = service.profile(named: "main")
+        XCTAssertEqual(main.accountID, "acct-office")
+        XCTAssertEqual(main.emailAddress, "office@example.com")
+        XCTAssertEqual(main.planType, "pro")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: office.path))
+        XCTAssertEqual(service.profiles().map(\.name), ["main"])
+        XCTAssertEqual(service.activeProfileName(), "main")
+        XCTAssertTrue(GPTPromotedProfiles.shared.wasPromoted("office-promote-test"))
+    }
+
+    func testPromoteToMainWorksWithoutPreviousMainGrant() throws {
+        let office = try makeProfileDir("frisch-promote-test")
+        try writeAuthFile(accountID: "acct-frisch", in: office)
+
+        try service.promoteToMain("frisch-promote-test")
+
+        XCTAssertEqual(service.storedAccountID(forProfile: "main"), "acct-frisch")
+        // Ohne eigene Metadaten darf main nicht die des alten Kontos zeigen.
+        XCTAssertNil(service.profile(named: "main").emailAddress)
+    }
+
+    func testPromoteToMainRefusesMainUnknownAndLoggedOut() throws {
+        _ = try makeProfileDir("leer")
+
+        XCTAssertThrowsError(try service.promoteToMain("main")) { error in
+            XCTAssertEqual(error as? GPTAccountProfiles.PromoteError, .cannotPromoteMain)
+        }
+        XCTAssertThrowsError(try service.promoteToMain("fehlt")) { error in
+            XCTAssertEqual(error as? GPTAccountProfiles.PromoteError, .unknownProfile("fehlt"))
+        }
+        XCTAssertThrowsError(try service.promoteToMain("leer")) { error in
+            XCTAssertEqual(error as? GPTAccountProfiles.PromoteError, .notLoggedIn("leer"))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.configDir(forProfile: "leer").path))
+    }
+
+    func testCreatingProfileWithPromotedNameClearsRouterAlias() throws {
+        let dir = try makeProfileDir("wieder-promote-test")
+        try writeAuthFile(accountID: "acct-x", in: dir)
+        try service.promoteToMain("wieder-promote-test")
+        XCTAssertTrue(GPTPromotedProfiles.shared.wasPromoted("wieder-promote-test"))
+
+        _ = try service.createProfile(named: "wieder-promote-test")
+
+        XCTAssertFalse(GPTPromotedProfiles.shared.wasPromoted("wieder-promote-test"))
+    }
+}

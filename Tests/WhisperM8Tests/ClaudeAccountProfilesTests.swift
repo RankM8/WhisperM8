@@ -785,3 +785,140 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(usage.primary?.usedPercent, 9.0)
     }
 }
+
+// MARK: - Als Hauptkonto übernehmen
+
+extension ClaudeAccountProfilesTests {
+    /// Keychain-Attrappe: Service-Name → Secret.
+    private func fakeKeychain(_ items: [String: String], failAdd: Bool = false) -> (box: KeychainBox, runner: ([String]) -> (Int32, String)) {
+        let box = KeychainBox(items: items)
+        let runner: ([String]) -> (Int32, String) = { arguments in
+            guard let serviceIndex = arguments.firstIndex(of: "-s") else { return (1, "") }
+            let service = arguments[serviceIndex + 1]
+            switch arguments.first {
+            case "find-generic-password":
+                guard let secret = box.items[service] else { return (44, "") }
+                return (0, secret + "\n")
+            case "add-generic-password":
+                if failAdd { return (1, "") }
+                let secretIndex = arguments.firstIndex(of: "-w")!
+                box.items[service] = arguments[secretIndex + 1]
+                return (0, "")
+            case "delete-generic-password":
+                box.items[service] = nil
+                return (0, "")
+            default:
+                return (1, "")
+            }
+        }
+        return (box, runner)
+    }
+
+    final class KeychainBox {
+        var items: [String: String]
+        init(items: [String: String]) { self.items = items }
+    }
+
+    func testPromoteToMainMovesLoginAccountAndChats() throws {
+        var service = ClaudeAccountProfiles(homeDirectory: home)
+        let profile = try service.createProfile(named: "ai3")
+        try service.setActiveProfile("ai3")
+        // main: totes Konto + weitere Schluessel, die erhalten bleiben muessen
+        try """
+        {"oauthAccount": {"emailAddress": "office@b.de"}, "numStartups": 42, "projects": {"/x": {}}}
+        """.write(to: home.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+        try writeClaudeJSON(email: "ai3@b.de", org: "ACME", to: profile.configDir.appendingPathComponent(".claude.json"))
+        let mainService = service.keychainService(forProfile: "main")
+        let profileService = service.keychainService(forProfile: "ai3")
+        let keychain = fakeKeychain([mainService: "old-secret", profileService: "ai3-secret"])
+        service.securityRunner = keychain.runner
+
+        // Gleicher Projekt-Ordner auf beiden Seiten, unterschiedliche Chats;
+        // memory/MEMORY.md existiert in beiden → Konflikt, nie ueberschreiben.
+        let cwd = "/Users/x/repos/demo"
+        let profileRoot = profile.configDir.appendingPathComponent("projects", isDirectory: true)
+        _ = try makeTranscript(inRoot: mainProjectsRoot, cwd: cwd, sessionID: "main-chat")
+        _ = try makeTranscript(inRoot: profileRoot, cwd: cwd, sessionID: "ai3-chat", withSubagents: true)
+        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        for root in [mainProjectsRoot, profileRoot] {
+            let memory = root.appendingPathComponent("\(encoded)/memory", isDirectory: true)
+            try FileManager.default.createDirectory(at: memory, withIntermediateDirectories: true)
+            try root.path.write(to: memory.appendingPathComponent("MEMORY.md"), atomically: true, encoding: .utf8)
+        }
+        let checkpoint = profile.configDir.appendingPathComponent("file-history/ai3-chat", isDirectory: true)
+        try FileManager.default.createDirectory(at: checkpoint, withIntermediateDirectories: true)
+        try "v1".write(to: checkpoint.appendingPathComponent("a@v1"), atomically: true, encoding: .utf8)
+
+        var trashed: [URL] = []
+        let result = try service.promoteToMain("ai3", trashItem: { trashed.append($0) })
+
+        // Login: Secret nach main verschoben, Profil-Item weg
+        XCTAssertEqual(keychain.box.items[mainService], "ai3-secret")
+        XCTAssertNil(keychain.box.items[profileService])
+        // oauthAccount ersetzt, Rest von ~/.claude.json unangetastet
+        XCTAssertEqual(service.profile(named: "main").emailAddress, "ai3@b.de")
+        let mainJSON = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: home.appendingPathComponent(".claude.json"))
+        ) as? [String: Any]
+        XCTAssertEqual(mainJSON?["numStartups"] as? Int, 42)
+        XCTAssertNotNil(mainJSON?["projects"])
+        // Chats + Subagents + Checkpoints in main, main-Chat unberuehrt
+        let mainProject = mainProjectsRoot.appendingPathComponent(encoded, isDirectory: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mainProject.appendingPathComponent("ai3-chat.jsonl").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mainProject.appendingPathComponent("ai3-chat/subagents/agent-1.jsonl").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mainProject.appendingPathComponent("main-chat.jsonl").path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: home.appendingPathComponent(".claude/file-history/ai3-chat/a@v1").path
+        ))
+        // Konflikt gemeldet, main-Version behalten
+        XCTAssertEqual(result.conflicts, ["projects/\(encoded)/memory/MEMORY.md"])
+        XCTAssertEqual(
+            try String(contentsOf: mainProject.appendingPathComponent("memory/MEMORY.md"), encoding: .utf8),
+            mainProjectsRoot.path
+        )
+        // Profil-Ordner in den Papierkorb, .active zurueck auf main
+        XCTAssertEqual(trashed.map(\.standardizedFileURL.path), [profile.configDir.standardizedFileURL.path])
+        XCTAssertEqual(service.activeProfileName(), "main")
+    }
+
+    func testPromoteToMainWithoutKeychainLoginChangesNothing() throws {
+        var service = ClaudeAccountProfiles(homeDirectory: home)
+        let profile = try service.createProfile(named: "halb")
+        try writeClaudeJSON(email: "halb@b.de", org: "X", to: profile.configDir.appendingPathComponent(".claude.json"))
+        try writeClaudeJSON(email: "office@b.de", org: "Y", to: home.appendingPathComponent(".claude.json"))
+        let keychain = fakeKeychain([service.keychainService(forProfile: "main"): "old-secret"])
+        service.securityRunner = keychain.runner
+
+        XCTAssertThrowsError(try service.promoteToMain("halb", trashItem: { _ in XCTFail("nichts loeschen") })) { error in
+            XCTAssertEqual(error as? ClaudeAccountProfiles.PromoteError, .notLoggedIn("halb"))
+        }
+        XCTAssertEqual(service.profile(named: "main").emailAddress, "office@b.de")
+        XCTAssertEqual(keychain.box.items[service.keychainService(forProfile: "main")], "old-secret")
+    }
+
+    func testPromoteToMainKeychainFailureLeavesMainAndProfileIntact() throws {
+        var service = ClaudeAccountProfiles(homeDirectory: home)
+        let profile = try service.createProfile(named: "ai3")
+        try writeClaudeJSON(email: "ai3@b.de", org: "X", to: profile.configDir.appendingPathComponent(".claude.json"))
+        try writeClaudeJSON(email: "office@b.de", org: "Y", to: home.appendingPathComponent(".claude.json"))
+        let profileRoot = profile.configDir.appendingPathComponent("projects", isDirectory: true)
+        let transcript = try makeTranscript(inRoot: profileRoot, cwd: "/x", sessionID: "s1")
+        let keychain = fakeKeychain([service.keychainService(forProfile: "ai3"): "ai3-secret"], failAdd: true)
+        service.securityRunner = keychain.runner
+
+        XCTAssertThrowsError(try service.promoteToMain("ai3", trashItem: { _ in XCTFail("nichts loeschen") }))
+
+        XCTAssertEqual(service.profile(named: "main").emailAddress, "office@b.de")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: transcript.path))
+        XCTAssertEqual(keychain.box.items[service.keychainService(forProfile: "ai3")], "ai3-secret")
+    }
+
+    func testPromoteToMainRefusesMainAndUnknown() {
+        XCTAssertThrowsError(try service.promoteToMain("main")) { error in
+            XCTAssertEqual(error as? ClaudeAccountProfiles.PromoteError, .cannotPromoteMain)
+        }
+        XCTAssertThrowsError(try service.promoteToMain("fehlt")) { error in
+            XCTAssertEqual(error as? ClaudeAccountProfiles.PromoteError, .profileMissing("fehlt"))
+        }
+    }
+}

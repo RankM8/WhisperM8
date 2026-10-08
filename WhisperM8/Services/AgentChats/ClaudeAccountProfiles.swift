@@ -48,7 +48,7 @@ struct ClaudeAccountProfiles {
         homeDirectory.appendingPathComponent(".claude-profiles", isDirectory: true)
     }
 
-    private var activeFileURL: URL {
+    var activeFileURL: URL {
         profilesRoot.appendingPathComponent(".active", isDirectory: false)
     }
 

@@ -394,8 +394,9 @@ struct AgentSessionStore {
 
     /// Zieht nach einem Profil-Rename die Stempel ALLER betroffenen Sessions
     /// nach — die Transcripts sind mit dem Verzeichnis bereits umgezogen,
-    /// nur die Metadaten zeigen noch auf den alten Namen.
-    func renameClaudeSessionProfiles(from oldName: String, to newName: String) throws {
+    /// nur die Metadaten zeigen noch auf den alten Namen. `nil` = main (nach
+    /// „Als Hauptkonto übernehmen").
+    func renameClaudeSessionProfiles(from oldName: String, to newName: String?) throws {
         try mutateWorkspaceIfChanged { workspace in
             var changed = false
             for index in workspace.sessions.indices
