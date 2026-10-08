@@ -86,7 +86,7 @@ defaults write com.whisperm8.app debugControlEnabled -bool YES   # wirkt sofort
 |---|---|
 | `whisperm8 debug state` | JSON: Fenster (Nummer, Titel, Identifier, Frame, key), Diktat-Phase, Anbieter/Modell/Sprache, GPT-Backend, Chats/PTYs. Keine Diktat-Texte, nur Längen. |
 | `whisperm8 debug open <ziel>` | `settings[/<seite>]`, `agent-chats`, `onboarding`. Bringt die App nach vorn (Fokus!). Seiten = `SettingsPage`-Rohwerte plus Alt-Routen. |
-| `whisperm8 debug snapshot [--window <name>\|key\|all] [--out <ordner>]` | Fotografiert sichtbare Fenster samt Titelleiste als PNG über ScreenCaptureKit (`SCShareableContent.currentProcess`, nur eigene Fenster, mindestens 2×). Feld `method` nennt den Weg; Rückfall `cacheDisplay`. Default-Ordner `~/Library/Application Support/WhisperM8/debug-snapshots/`. |
+| `whisperm8 debug snapshot [--window <name>\|key\|all] [--out <ordner>]` | Fotografiert sichtbare Fenster samt Titelleiste als PNG über ScreenCaptureKit (`SCShareableContent.currentProcess`, nur eigene Fenster, native Pixeldichte des Bildschirms). Feld `method` nennt den Weg; Rückfall `cacheDisplay`. Default-Ordner `~/Library/Application Support/WhisperM8/debug-snapshots/`. |
 | `whisperm8 debug dictate <datei> [--provider groq\|openai\|chatgpt] [--language de\|en\|auto] [--timeout <s>]` | Audiodatei durch den echten Transkriptions-Weg (Einstellungen, Zugangs-Gate, Service-Factory, ChatGPT-Abo inklusive). **Kein** Einfügen, keine Zwischenablage, kein Run-Report, keine Nachbearbeitung, `AppState` bleibt unberührt. |
 | `whisperm8 debug job <id>` | Stand eines Diktat-Auftrags. |
 
