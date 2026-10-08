@@ -199,12 +199,32 @@ final class GPTAccountProfilesTests: XCTestCase {
         XCTAssertEqual(service.environmentOverrides(forProfile: "main"), expected)
     }
 
-    func testEnvironmentOverridesForProfileSetConfigDir() throws {
+    func testEnvironmentOverridesForProfileSetConfigDirAndOwnHome() throws {
+        // Eigenes HOME: die Altlast-Datei des Proxys ($HOME/.config/
+        // claude-code-proxy/codex/auth.json) ist sonst der main-Store — Logout
+        // und abgelehnter Refresh eines Zusatzprofils loeschten ihn mit.
         let dir = try makeProfileDir("zweit")
         XCTAssertEqual(
             service.environmentOverrides(forProfile: "zweit"),
-            ["CCP_CONFIG_DIR": dir.path]
+            ["CCP_CONFIG_DIR": dir.path, "HOME": dir.path]
         )
+    }
+
+    func testMainKeepsRealHome() {
+        // main IST der Altlast-Pfad — dort darf HOME nicht umgebogen werden.
+        XCTAssertNil(service.environmentOverrides(forProfile: nil)["HOME"])
+        XCTAssertNil(service.environmentOverrides(forProfile: "main")["HOME"])
+    }
+
+    /// Wie der Proxy (v0.1.44, `paths.rs`) die Altlast-Datei bildet: immer
+    /// `$HOME/.config/claude-code-proxy/codex/auth.json`, unabhaengig von
+    /// `CCP_CONFIG_DIR`. Fuer ein Zusatzprofil darf sie nie der main-Store sein.
+    func testProfileLegacyAuthPathNeverHitsMainStore() throws {
+        try makeProfileDir("zweit")
+        let env = service.environmentOverrides(forProfile: "zweit")
+        let legacy = URL(fileURLWithPath: try XCTUnwrap(env["HOME"]))
+            .appendingPathComponent(".config/claude-code-proxy/codex/auth.json")
+        XCTAssertNotEqual(legacy.standardizedFileURL, service.authFileURL(forProfile: "main").standardizedFileURL)
     }
 
     func testEnvironmentOverridesForMissingProfileFallBackToEmpty() {
