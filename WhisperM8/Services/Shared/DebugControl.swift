@@ -95,7 +95,10 @@ enum DebugControl {
     /// Nur echte App-Fenster: AppKit führt in `NSApp.windows` auch
     /// Statusleisten-, Popover- und Menü-Hilfsfenster.
     static func isRelevant(_ info: WindowInfo) -> Bool {
-        let helperClasses = ["NSStatusBarWindow", "_NSPopoverWindow", "NSMenuWindowManagerWindow", "NSCarbonMenuWindow"]
+        let helperClasses = [
+            "NSStatusBarWindow", "_NSPopoverWindow", "NSMenuWindowManagerWindow", "NSCarbonMenuWindow",
+            "NSToolTipPanel", "TUINSWindow",
+        ]
         guard !helperClasses.contains(where: { info.className.contains($0) }) else { return false }
         return info.frame.width > 1 && info.frame.height > 1
     }
