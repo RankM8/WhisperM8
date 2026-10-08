@@ -23,8 +23,13 @@ enum SessionRefError: Error, Equatable {
 /// Schreib-Befehle. Fünf Stufen, erste treffende gewinnt:
 ///
 /// 1. `@self` → UUID aus der Aufrufer-Identität
-/// 2. Voll-UUID (case-insensitiv, exakt)
-/// 3. Hex-Präfix ≥ 8 Zeichen (Bindestriche optional) auf die UUID
+/// 2. Voll-UUID (case-insensitiv, exakt) — WhisperM8-ID, sonst die
+///    Session-ID der CLI (`externalSessionID`)
+/// 3. Hex-Präfix ≥ 8 Zeichen (Bindestriche optional) auf beide IDs
+///
+/// Die CLI-Session-ID gehört dazu, weil Agenten Chats oft über das Transcript
+/// finden (`~/.claude*/projects/…/<id>.jsonl`) und nur diese ID kennen — ohne
+/// sie meldete `show`/`resume` „nicht gefunden" für Chats, die existieren.
 /// 4. `projekt/titel-fragment` — beide Seiten fuzzy, Ergebnis muss eindeutig sein
 /// 5. Titel-Fragment global — muss eindeutig sein
 enum SessionRefResolver {
@@ -50,12 +55,18 @@ enum SessionRefResolver {
             return .success(entry)
         }
 
-        // Stufe 2: Voll-UUID
+        // Stufe 2: Voll-UUID. Die WhisperM8-ID gewinnt; erst ohne Treffer
+        // zählt die CLI-Session-ID. Die kann nach Kontowechsel/Fork an mehr
+        // als einer Session hängen — dann mehrdeutig statt erste Wahl.
         if let uuid = UUID(uuidString: trimmed) {
-            guard let entry = scope.first(where: { $0.session.id == uuid }) else {
-                return .failure(.notFound(ref: ref))
+            if let entry = scope.first(where: { $0.session.id == uuid }) {
+                return .success(entry)
             }
-            return .success(entry)
+            let wanted = compactID(uuid.uuidString)
+            let external = scope.filter { $0.session.externalSessionID.map(compactID) == wanted }
+            if external.count == 1 { return .success(external[0]) }
+            if external.count > 1 { return .failure(ambiguity(ref: ref, matches: external)) }
+            return .failure(.notFound(ref: ref))
         }
 
         // Stufe 3: Hex-Präfix ≥ 8. Gewinnt bewusst VOR dem Titel-Match —
@@ -66,8 +77,8 @@ enum SessionRefResolver {
         if hexCandidate.count >= minimumHexPrefixLength,
            hexCandidate.allSatisfy({ $0.isHexDigit }) {
             let matches = scope.filter {
-                $0.session.id.uuidString.replacingOccurrences(of: "-", with: "")
-                    .lowercased().hasPrefix(hexCandidate)
+                compactID($0.session.id.uuidString).hasPrefix(hexCandidate)
+                    || ($0.session.externalSessionID.map(compactID)?.hasPrefix(hexCandidate) ?? false)
             }
             if matches.count == 1 { return .success(matches[0]) }
             if matches.count > 1 { return .failure(ambiguity(ref: ref, matches: matches)) }
@@ -93,6 +104,11 @@ enum SessionRefResolver {
     }
 
     // MARK: - Matching
+
+    /// IDs ohne Bindestriche, lowercased — Vergleichsform für Voll- und Präfix-Match.
+    private static func compactID(_ raw: String) -> String {
+        raw.replacingOccurrences(of: "-", with: "").lowercased()
+    }
 
     private static func uniqueTitleMatch(
         ref: String,

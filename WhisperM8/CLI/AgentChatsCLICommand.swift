@@ -780,7 +780,10 @@ enum ChatsCLIHelp {
     LESEN (App optional; ohne App: Status aus Transcripts geschätzt)
       whisperm8 chats list [--project P] [--status S] [--attention]
                            [--scope active|recent|all] [--open] [--pinned] [--all]
-                           [--sort activity|attention] [--format table|board] [--json]
+                           [--sort activity|attention] [--format table|board]
+                           [--limit N] [--json]
+                           Tabelle/JSON zeigen höchstens 50 (--limit 0 = alle);
+                           die Kürzung meldet eine Zeile auf stderr.
       whisperm8 chats overview [--json]        Alias: list --sort attention --format board
       whisperm8 chats show <ref> [--all] [--json]
       whisperm8 chats tail <ref> [--turns N] [--chars N] [--raw] [--all] [--json]
@@ -883,8 +886,9 @@ enum ChatsCLIHelp {
     REFERENZEN (<ref>)
       projekt/titel-fragment   Fuzzy, muss eindeutig sein (sonst Exit 3 + Kandidaten)
       titel-fragment           Fuzzy über alle Projekte
-      UUID oder Präfix ≥ 8     exakt
-      @self                    die aufrufende Session (WHISPERM8_SESSION_ID)
+      UUID oder Präfix ≥ 8     exakt — WhisperM8-ID oder Session-ID der CLI
+                               (Transcript-Dateiname <id>.jsonl)
+      @self                   die aufrufende Session (WHISPERM8_SESSION_ID)
 
     EXIT-CODES
       0 ok · 1 Usage · 3 nicht gefunden/mehrdeutig · 4 Guard-Konflikt
