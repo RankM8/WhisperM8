@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-10-08
 ---
 
 # Transcription — Architektur
@@ -23,6 +23,13 @@ enthält nur dieses Protokoll; konkrete Provider-Logik lebt in
 Adapter. Sie rufen `ProviderConfig.openAI(model:)` beziehungsweise
 `ProviderConfig.groq(model:)` mit dem Modellnamen auf und delegieren jeden
 Call an `MultipartTranscriptionClient`.
+
+`ChatGPTSubscriptionTranscriptionService` ist der dritte Adapter (Anbieter
+„ChatGPT-Abo"). Er nutzt denselben Multipart-Client, aber mit
+`ProviderConfig.chatGPTProxy(port:)` — ohne Key, ohne `model`-Feld, direkt an
+den Port der lokalen GPT-Proxy-Instanz des aktiven Profils — und übersetzt
+HTTP-Fehler in `ChatGPTTranscriptionError`. Ablauf, Entscheidungen und
+Fehlermatrix: [chatgpt-subscription.md](chatgpt-subscription.md).
 
 `TranscriptionProvider` ist das fachliche Provider-Modell für Preferences,
 Settings und Service-Erzeugung. Es kennt Display-Namen, empfohlene Anzeige,
@@ -56,7 +63,11 @@ Transcription-Schicht nutzt es über die Provider-Keys `groq_apikey` und
 Funktionen übernehmen den Modellnamen, verwenden Bearer-Auth, denselben
 Multipart-Aufbau und ein konfiguriertes Limit von 25 MiB.
 
-Der Request-Body enthält immer `model` und `file`. Der Datei-Part schreibt im
+`ProviderConfig.chatGPTProxy(port:)` zeigt auf
+`http://127.0.0.1:<port>/v1/audio/transcriptions`, hat `model: nil` und wird
+ohne API-Key genutzt: kein `Authorization`-Header, kein `model`-Part.
+
+Der Request-Body enthält `model` (außer beim ChatGPT-Abo) und `file`. Der Datei-Part schreibt im
 Envelope fest `Content-Type: audio/m4a`. `language` wird nur bei nicht leerem
 Sprachcode geschrieben. `response_format` wird nur gesetzt, wenn der Aufrufer
 es explizit anfordert; das GUI-Diktat übergibt `nil`, der aktuelle CLI-
@@ -69,7 +80,9 @@ Transcribe-Pfad übergibt nur `verbose_json` für segmentfähige Modelle oder
    `transcribeAndDeliver` mit Audio-URL, Dauer, OutputMode und Kontextbundle.
 2. Der Provider-Resolver führt bei Bedarf die Settings-Migration aus und lädt
    den aktuellen Provider; der Modell-Resolver lädt das aktuelle Modell.
-3. Der API-Key-Resolver lädt `provider.keychainKey` aus `KeychainManager`.
+3. Der API-Key-Resolver lädt `provider.keychainKey` aus `KeychainManager`;
+   `TranscriptionCredentialGate` entscheidet über `missingAPIKey` (Anbieter
+   ohne Key — ChatGPT-Abo — bekommen `""`, der Resolver wird nicht gefragt).
 4. `provider.createService(apiKey:model:)` erzeugt den passenden Provider-
    Adapter und damit einen `MultipartTranscriptionClient`.
 5. `transcribe` lädt die Datei hoch und dekodiert die JSON-Antwort als
@@ -140,6 +153,7 @@ ist doppelt so hoch.
 - `WhisperM8/Services/Dictation/TranscriptionProviders.swift` enthält die OpenAI- und Groq-Adapter, die ProviderConfig und Modellnamen an den Multipart-Client übergeben.
 - `WhisperM8/Services/Dictation/TranscriptionModels.swift` enthält Response-DTOs, CLI-Detailmodelle, Segmenttypen, Response-Formate und Transkriptionsfehler.
 - `WhisperM8/Services/Dictation/MultipartTranscriptionClient.swift` enthält Timeout-Berechnung, Multipart-Datei-Writer, Größenprüfung, Upload, Fehler-Mapping und Response-Dekodierung.
+- `WhisperM8/Services/Dictation/ChatGPTSubscriptionTranscription.swift` enthält den ChatGPT-Abo-Adapter samt Abhängigkeiten, Fehler-Mapper und Prewarm.
 - `WhisperM8/Models/TranscriptionProvider.swift` enthält Provider-/Modell-Auswahl, Defaults, Keychain-Keys, Service-Erzeugung und Settings-Migration.
 - `WhisperM8/Services/Shared/KeychainManager.swift` enthält die macOS-Keychain-Anbindung mit Cache, Legacy-Migration, Existenzprüfung und Löschen.
 - `WhisperM8/Services/Dictation/RecordingCoordinator+Transcription.swift` enthält den GUI-Diktat-Datenfluss von Service-Aufruf bis Delivery und Run-Report.
@@ -150,5 +164,6 @@ ist doppelt so hoch.
 
 - `Tests/WhisperM8Tests/MultipartTranscriptionClientTests.swift` deckt erfolgreiche JSON-Antworten und Nicht-200-Fehler-Mapping über eine injizierte URLSession ab.
 - `Tests/WhisperM8Tests/TranscriptionUtilityTests.swift` deckt Timeout-Berechnung, Multipart-Envelope, Sprachfeld-Auslassung, Streaming großer Body-Dateien und Modell-Provider-Mapping ab.
-- `Tests/WhisperM8Tests/RecordingCoordinatorTranscriptionTests.swift` deckt API-Key-Fehler und Resolver-/Factory-Wiring des GUI-Diktatpfads ohne Keychain oder Netzwerk ab.
+- `Tests/WhisperM8Tests/RecordingCoordinatorTranscriptionTests.swift` deckt API-Key-Fehler und Resolver-/Factory-Wiring des GUI-Diktatpfads ohne Keychain oder Netzwerk ab, inklusive ChatGPT-Abo ohne Key.
+- `Tests/WhisperM8Tests/ChatGPTSubscriptionTranscriptionTests.swift` deckt den ChatGPT-Abo-Adapter ab: Request-Form, Fehler-Mapping, Bootstrap, Retry bei „Connection refused", Abbruch und Prewarm.
 - `Tests/WhisperM8Tests/CLITranscriptionTests.swift` deckt den CLI-Konsumenten ab, darunter Segmentfähigkeit und `response_format` im Multipart-Body; Parser-, Formatter-, Stitching- und Chunk-Details gehören zum Test-Cluster der CLI-Dokumentation.

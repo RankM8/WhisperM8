@@ -65,6 +65,76 @@ final class ClaudeCodeProxyOrphanGuardTests: XCTestCase {
         XCTAssertTrue(untouched.isEmpty)
     }
 
+    // MARK: - Transkriptions-Route (ChatGPT-Abo)
+
+    private func replace(
+        listener: ClaudeCodeProxyOrphanGuard.ListenerProcess,
+        requireRoute: Bool,
+        route: ClaudeCodeProxyTranscriptionRoute,
+        probes: inout Int
+    ) -> Bool {
+        var count = 0
+        // Binary existiert nicht → mtime nil → kein Alters-Kriterium; gleicher
+        // Pfad wie die Waise → kein Binary-Wechsel. Bleibt nur die Route.
+        let replaced = ClaudeCodeProxyOrphanGuard.replaceIfOutdated(
+            port: 18765,
+            resolvedBinaryPath: managed,
+            requireTranscriptionRoute: requireRoute,
+            routeProbe: { _ in count += 1; return route },
+            listenerResolver: { _ in listener },
+            terminator: { _ in },
+            isReachable: { _ in false },
+            sleep: { _ in }
+        )
+        probes = count
+        return replaced
+    }
+
+    func testReplacesCurrentOrphanWithoutTranscriptionRoute() {
+        var probes = 0
+        XCTAssertTrue(replace(listener: listener(), requireRoute: true, route: .missing, probes: &probes))
+        XCTAssertEqual(probes, 1)
+        XCTAssertEqual(
+            ClaudeCodeProxyOrphanGuard.replaceReason(
+                listener(), resolvedBinaryPath: managed, resolvedBinaryModifiedAt: nil,
+                lacksTranscriptionRoute: { true }
+            ),
+            .transcriptionRouteMissing
+        )
+    }
+
+    func testKeepsOrphanWithTranscriptionRouteOrUnknownProbe() {
+        var probes = 0
+        XCTAssertFalse(replace(listener: listener(), requireRoute: true, route: .available, probes: &probes))
+        XCTAssertFalse(replace(listener: listener(), requireRoute: true, route: .unknown, probes: &probes),
+                       "Unklare Probe ersetzt nie")
+    }
+
+    func testRouteProbeIsSkippedForNonOrphans() {
+        var probes = 0
+        XCTAssertFalse(replace(
+            listener: listener(ppid: 777), requireRoute: true, route: .missing, probes: &probes
+        ))
+        XCTAssertEqual(probes, 0, "Fremde/Terminal-Proxys werden nicht einmal abgefragt")
+    }
+
+    func testRouteProbeIsNeverCalledWhenNotRequired() {
+        var probes = 0
+        XCTAssertFalse(replace(listener: listener(), requireRoute: false, route: .missing, probes: &probes))
+        XCTAssertEqual(probes, 0)
+    }
+
+    func testOutdatedBinaryKeepsItsOwnReasonWithoutProbe() {
+        var probed = false
+        let reason = ClaudeCodeProxyOrphanGuard.replaceReason(
+            listener(path: "/Users/x/.local/bin/claude-code-proxy"),
+            resolvedBinaryPath: managed, resolvedBinaryModifiedAt: nil,
+            lacksTranscriptionRoute: { probed = true; return true }
+        )
+        XCTAssertEqual(reason, .binaryOutdated)
+        XCTAssertFalse(probed)
+    }
+
     func testListenerParsesLiveProcessTable() {
         // Kein Listener auf einem freien Port → nil statt Absturz.
         XCTAssertNil(ClaudeCodeProxyOrphanGuard.listener(port: 1))

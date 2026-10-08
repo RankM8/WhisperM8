@@ -339,9 +339,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             Task.detached(priority: .utility) {
                 // Veralteten Waisen-Proxy vom letzten App-Lauf (SIGTERM ohne
                 // willTerminate) räumen, bevor ensureRunning ihn weiterbenutzt.
+                // Mit aktiver ChatGPT-Abo-Transkription zusätzlich eine Waise
+                // ohne Transkriptions-Route (vor dem Flag gestartet) ersetzen.
                 ClaudeCodeProxyOrphanGuard.replaceIfOutdated(
                     port: AppPreferences.shared.claudeGPTBackendPort,
-                    resolvedBinaryPath: ClaudeCodeProxyManager.shared.resolvedBinaryPath()
+                    resolvedBinaryPath: ClaudeCodeProxyManager.shared.resolvedBinaryPath(),
+                    requireTranscriptionRoute: AppPreferences.shared.isChatGPTTranscriptionEnabled
                 )
                 _ = ClaudeCodeProxyManager.shared.ensureRunning(
                     port: AppPreferences.shared.claudeGPTBackendPort

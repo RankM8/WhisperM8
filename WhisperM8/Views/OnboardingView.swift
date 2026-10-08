@@ -154,7 +154,11 @@ struct OnboardingView: View {
         case .hotkey:
             return hotkeySet
         case .apiKey:
-            return !apiKey.isEmpty || apiKeyAvailable
+            return TranscriptionCredentialGate.isSatisfied(
+                provider: selectedProvider,
+                typedKey: apiKey,
+                hasSavedKey: apiKeyAvailable
+            )
         default:
             // Welcome, Profil (Default gewählt), Codex (optional), Test.
             return true
@@ -165,7 +169,11 @@ struct OnboardingView: View {
         return hotkeySet
             && micPermissionGranted
             && accessibilityGranted
-            && (!apiKey.isEmpty || apiKeyAvailable)
+            && TranscriptionCredentialGate.isSatisfied(
+                provider: selectedProvider,
+                typedKey: apiKey,
+                hasSavedKey: apiKeyAvailable
+            )
     }
 }
 
@@ -588,6 +596,13 @@ struct APIKeyStep: View {
     @Binding var selectedModel: TranscriptionModel
 
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled = true
+    /// „ChatGPT-Abo" nur anbieten, wenn das GPT-Backend aktiv ist oder der
+    /// Anbieter schon gewählt war — neue Nutzer haben kein GPT-Backend, die
+    /// Option wäre für sie eine Sackgasse. Einmal beim Erscheinen bestimmt,
+    /// damit die Option nicht verschwindet, sobald man wegklickt.
+    @State private var showsChatGPTOption = false
+    /// Aktives GPT-Konto für den Hinweis — Dateizugriff, deshalb im `.task`.
+    @State private var chatGPTActiveAccount: String?
 
     var body: some View {
         ScrollView {
@@ -606,26 +621,46 @@ struct APIKeyStep: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                TranscriptionProviderPicker(provider: providerBinding)
-
-                MaskedAPIKeyField(
-                    text: $apiKey,
-                    hasSavedKey: apiKeyAvailable,
-                    providerName: selectedProvider.displayName
+                TranscriptionProviderPicker(
+                    provider: providerBinding,
+                    options: TranscriptionProvider.selectableProviders(chatGPTAvailable: showsChatGPTOption)
                 )
-                .onChange(of: apiKey) { _, newValue in
-                    if newValue.isEmpty {
-                        return
+
+                if selectedProvider.requiresAPIKey, let keychainKey = selectedProvider.keychainKey {
+                    MaskedAPIKeyField(
+                        text: $apiKey,
+                        hasSavedKey: apiKeyAvailable,
+                        providerName: selectedProvider.displayName
+                    )
+                    .onChange(of: apiKey) { _, newValue in
+                        if newValue.isEmpty {
+                            return
+                        }
+                        KeychainManager.save(key: keychainKey, value: newValue)
+                        apiKeyAvailable = true
                     }
-                    KeychainManager.save(key: selectedProvider.keychainKey, value: newValue)
-                    apiKeyAvailable = true
-                }
 
-                Link("Get \(selectedProvider.displayName) API key \u{2192}", destination: selectedProvider.apiKeyLink)
-                    .font(.caption)
+                    if let apiKeyLink = selectedProvider.apiKeyLink {
+                        Link("Get \(selectedProvider.displayName) API key \u{2192}", destination: apiKeyLink)
+                            .font(.caption)
+                    }
 
-                if apiKeyAvailable && apiKey.isEmpty {
-                    TranscriptionKeychainStatusLabel()
+                    if apiKeyAvailable && apiKey.isEmpty {
+                        TranscriptionKeychainStatusLabel()
+                    }
+                } else {
+                    ChatGPTTranscriptionNotice(
+                        activeAccount: chatGPTActiveAccount,
+                        backendEnabled: AppPreferences.shared.claudeGPTBackendEnabled
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .task {
+                        chatGPTActiveAccount = await Task.detached(priority: .utility) {
+                            AppPreferences.shared.isGPTAccountProfilesEnabled
+                                ? GPTAccountProfiles().activeProfileName()
+                                : GPTAccountProfiles.mainProfileName
+                        }.value
+                    }
                 }
             }
             .padding()
@@ -698,8 +733,10 @@ struct APIKeyStep: View {
             TranscriptionSettings.migrateIfNeeded()
             selectedProvider = TranscriptionSettings.loadProvider()
             selectedModel = TranscriptionSettings.loadModel()
+            showsChatGPTOption = AppPreferences.shared.isChatGPTTranscriptionEnabled
+                && (AppPreferences.shared.claudeGPTBackendEnabled || selectedProvider == .chatgpt)
             apiKey = ""
-            apiKeyAvailable = KeychainManager.exists(key: selectedProvider.keychainKey)
+            apiKeyAvailable = selectedProvider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
         }
     }
 
@@ -715,12 +752,14 @@ struct APIKeyStep: View {
     private func handleProviderChange(to newProvider: TranscriptionProvider) {
         let oldProvider = selectedProvider
         // Getippten Key sichern, falls Provider gewechselt wird und etwas eingegeben wurde.
-        if !apiKey.isEmpty && oldProvider.keychainKey != newProvider.keychainKey {
-            KeychainManager.save(key: oldProvider.keychainKey, value: apiKey)
+        if !apiKey.isEmpty,
+           let oldKeychainKey = oldProvider.keychainKey,
+           oldKeychainKey != newProvider.keychainKey {
+            KeychainManager.save(key: oldKeychainKey, value: apiKey)
         }
         selectedProvider = newProvider
         apiKey = ""
-        apiKeyAvailable = KeychainManager.exists(key: newProvider.keychainKey)
+        apiKeyAvailable = newProvider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
         if selectedModel.provider != newProvider {
             selectedModel = newProvider.defaultModel
         }

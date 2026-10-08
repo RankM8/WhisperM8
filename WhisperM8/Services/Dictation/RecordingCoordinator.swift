@@ -68,6 +68,10 @@ final class RecordingCoordinator {
     let modelResolver: () -> TranscriptionModel
     let apiKeyResolver: (TranscriptionProvider) -> String?
     let transcriberFactory: (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol
+    /// Wärmt beim Aufnahmestart den Anbieter vor (ChatGPT-Abo: Proxy des
+    /// aktiven Profils hochfahren). Darf nicht blockieren — der Default
+    /// dispatcht sofort in den Hintergrund.
+    let transcriptionPrewarmer: (TranscriptionProvider) -> Void
 
     init(
         appState: AppState,
@@ -81,9 +85,14 @@ final class RecordingCoordinator {
             return TranscriptionSettings.loadProvider()
         },
         modelResolver: @escaping () -> TranscriptionModel = { TranscriptionSettings.loadModel() },
-        apiKeyResolver: @escaping (TranscriptionProvider) -> String? = { KeychainManager.load(key: $0.keychainKey) },
+        apiKeyResolver: @escaping (TranscriptionProvider) -> String? = { provider in
+            provider.keychainKey.flatMap { KeychainManager.load(key: $0) }
+        },
         transcriberFactory: @escaping (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol = { provider, model, apiKey in
             provider.createService(apiKey: apiKey, model: model)
+        },
+        transcriptionPrewarmer: @escaping (TranscriptionProvider) -> Void = { provider in
+            ChatGPTTranscriptionWarmup.prewarmIfNeeded(provider: provider)
         }
     ) {
         self.appState = appState
@@ -101,6 +110,7 @@ final class RecordingCoordinator {
         self.modelResolver = modelResolver
         self.apiKeyResolver = apiKeyResolver
         self.transcriberFactory = transcriberFactory
+        self.transcriptionPrewarmer = transcriptionPrewarmer
     }
 
     func startRecording() async {
@@ -190,6 +200,12 @@ final class RecordingCoordinator {
             sourceApp: contextSourceApp,
             agentChat: activeAgentChat
         )
+
+        // Aufnahme läuft — Budget hier schließen (`end` ist idempotent), der
+        // Prewarm gehört nicht in den Hotkey→Aufnahme-Pfad. Er dispatcht
+        // sofort in den Hintergrund und blockiert nicht.
+        PerfBudgets.recordingStart.end(startToken)
+        transcriptionPrewarmer(providerResolver())
     }
 
     /// Zeigt das Recording-Overlay mit dem vollständigen Callback-Wiring.
@@ -408,6 +424,8 @@ final class RecordingCoordinator {
             handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle)
         case .failure(let urlError as URLError):
             handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
+        case .failure(let chatGPTError as ChatGPTTranscriptionError):
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: chatGPTError.errorDescription ?? "Unknown error", logPrefix: "CHATGPT TRANSCRIPTION ERROR")
         case .failure(let transcriptionError as TranscriptionError):
             handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: transcriptionError.errorDescription ?? "Unknown error", logPrefix: "TRANSCRIPTION ERROR")
         case .failure(let error):

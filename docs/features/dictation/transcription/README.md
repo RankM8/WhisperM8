@@ -1,12 +1,15 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-10-08
 ---
 
 # Transcription — Speech-to-Text-Engine
 
 Die Transcription-Schicht wandelt lokale Audio-Dateien in Text um und kapselt
-dafür zwei Provider: OpenAI und Groq. Sie wird von zwei Pfaden genutzt: dem
+dafür zwei Key-Provider: OpenAI und Groq. Dazu kommt seit 2026-10 der
+opt-in-Anbieter „ChatGPT-Abo" über den GPT-Proxy (nur App-Diktat, kein
+API-Key) — Details in [chatgpt-subscription.md](chatgpt-subscription.md).
+Sie wird von zwei Pfaden genutzt: dem
 GUI-Diktat nach einer Hotkey-Aufnahme und dem CLI-Befehl `whisperm8
 transcribe` für Audio- oder Videodateien.
 
@@ -28,6 +31,14 @@ eine Modellliste und ein Default-Modell.
 |----------|---------|----------------------------|
 | OpenAI | `gpt-4o-transcribe`, `whisper-1` | `gpt-4o-transcribe` |
 | Groq | `whisper-large-v3`, `whisper-large-v3-turbo` | `whisper-large-v3` |
+| ChatGPT-Abo (`chatgpt`) | Pseudo-Modell `chatgpt-transcribe` (geht nie an den Server) | `chatgpt-transcribe` |
+
+`displayOrder` bleibt `[groq, openai]`; die Picker nutzen
+`selectableProviders(chatGPTAvailable:)`, das „ChatGPT-Abo" hinten anhängt,
+solange der Kill-Switch `chatGPTTranscriptionEnabled` an ist (im Onboarding
+zusätzlich nur bei aktivem GPT-Backend oder bereits gewähltem Anbieter).
+`keychainKey` und `apiKeyLink` sind für ihn `nil`; Onboarding und Diktat prüfen
+den Zugang einheitlich über `TranscriptionCredentialGate`.
 
 Die GUI-Settings speichern Provider und Modell getrennt in Preferences. Beim
 Provider-Wechsel wird ein Modell, das nicht zum neuen Provider gehört, auf
@@ -64,7 +75,8 @@ Lesen in die Keychain zu migrieren und entfernt den alten UserDefaults-Eintrag
 anschließend bedingungslos, also auch bei fehlgeschlagenem Keychain-Save.
 
 Das GUI-Diktat lädt den Key über den Provider-Keychain-Key. Fehlt er, endet der
-Lauf mit `TranscriptionError.missingAPIKey`. Die CLI sucht in dieser
+Lauf mit `TranscriptionError.missingAPIKey` — außer beim ChatGPT-Abo, das keinen
+Key braucht (die Factory bekommt `""`). Die CLI sucht in dieser
 Reihenfolge: `--api-key`, `GROQ_API_KEY` beziehungsweise `OPENAI_API_KEY`,
 danach WhisperM8-Keychain.
 
@@ -127,6 +139,7 @@ oder Modellantworten.
 - `WhisperM8/Services/Dictation/TranscriptionProviders.swift` implementiert die OpenAI- und Groq-Service-Wrapper über denselben Multipart-Client.
 - `WhisperM8/Services/Dictation/TranscriptionModels.swift` definiert Response-Modelle, detaillierte CLI-Ergebnisse, Response-Formate und `TranscriptionError`.
 - `WhisperM8/Services/Dictation/MultipartTranscriptionClient.swift` baut Multipart-Uploads, prüft Größenlimits, berechnet Timeouts und dekodiert einfache oder detaillierte Antworten.
+- `WhisperM8/Services/Dictation/ChatGPTSubscriptionTranscription.swift` ist der Anbieter „ChatGPT-Abo" (Proxy-Port, Bootstrap/Retry, Fehler-Mapping, Prewarm), siehe [chatgpt-subscription.md](chatgpt-subscription.md).
 - `WhisperM8/Models/TranscriptionProvider.swift` beschreibt Provider, verfügbare Modelle, Defaults, Keychain-Keys, Preisinfos und Settings-Migration.
 - `WhisperM8/Services/Shared/KeychainManager.swift` speichert, lädt, cached, migriert und löscht Provider-API-Keys im macOS-Keychain.
 - `WhisperM8/Services/Dictation/RecordingCoordinator+Transcription.swift` ist der GUI-Diktat-Konsument für Transkription, optionales Post-Processing, Delivery und Run-Report.
@@ -148,4 +161,7 @@ Segment-Timestamps, OutputMode, Post-Processing, `TranscriptionServiceProtocol`,
 `MultipartFormDataFileWriter`, `calculateTimeout`, `KeychainManager`,
 `RecordingCoordinator.transcribeAndDeliver`, `CLITranscribeCommand`,
 `CLIKeyResolver`, `CLIAudioChunker`, `whisperm8 transcribe`,
-`GROQ_API_KEY`, `OPENAI_API_KEY`, `groq_apikey`, `openai_apikey`.
+`GROQ_API_KEY`, `OPENAI_API_KEY`, `groq_apikey`, `openai_apikey`,
+ChatGPT-Abo, GPT-Backend, GPT-Proxy, `ChatGPTSubscriptionTranscriptionService`,
+`CCP_CODEX_TRANSCRIPTIONS_API`, `chatGPTTranscriptionEnabled`,
+`TranscriptionCredentialGate`.

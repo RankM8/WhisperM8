@@ -74,6 +74,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(launch?.1, ["serve", "--no-monitor", "--port", "19001"])
         XCTAssertEqual(launch?.2, [
             "CCP_BIND_ADDRESS": "127.0.0.1",
+            "CCP_CODEX_TRANSCRIPTIONS_API": "1",
             "PATH": "/login-shell/bin",
         ])
 
@@ -604,7 +605,81 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             "PATH": "/bin",
             "CCP_CONFIG_DIR": "/Users/x/.config/claude-code-proxy",
             "CCP_BIND_ADDRESS": "127.0.0.1",
+            "CCP_CODEX_TRANSCRIPTIONS_API": "1",
         ])
+    }
+
+    // MARK: - Transkriptions-Route (ChatGPT-Abo)
+
+    func testTranscriptionsFlagIsRemovedWhenKillSwitchOffEvenIfInherited() throws {
+        var launch: [String: String]?
+        let manager = makeManager(
+            reachability: { _ in launch != nil },
+            launcher: { _, _, environment in
+                launch = environment
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin", "CCP_CODEX_TRANSCRIPTIONS_API": "1"] },
+            retryAttempts: 1
+        )
+        manager.transcriptionsAPIEnabledResolver = { false }
+
+        try manager.ensureRunning(port: 18_765).get()
+        XCTAssertEqual(launch, [
+            "PATH": "/bin",
+            "CCP_BIND_ADDRESS": "127.0.0.1",
+        ])
+    }
+
+    func testInstanceOriginForMainDistinguishesSelfStartedExternalAndNotRunning() throws {
+        var externalReachable = false
+        var launched = false
+        let manager = makeManager(
+            reachability: { _ in externalReachable || launched },
+            launcher: { _, _, _ in
+                launched = true
+                return Self.processHandle()
+            },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 18_765 }
+
+        XCTAssertEqual(manager.instanceOrigin(forProfile: nil), .notRunning)
+        externalReachable = true
+        XCTAssertEqual(manager.instanceOrigin(forProfile: nil), .external)
+
+        externalReachable = false
+        try manager.ensureRunning(port: 18_765).get()
+        XCTAssertEqual(manager.instanceOrigin(forProfile: nil), .selfStarted)
+        XCTAssertEqual(manager.instanceOrigin(forProfile: "main"), .selfStarted)
+    }
+
+    func testInstanceOriginForProfileIsSelfStartedOnlyWithRunningInstance() throws {
+        var launched = false
+        let manager = makeManager(
+            reachability: { _ in launched },
+            launcher: { _, _, _ in
+                launched = true
+                return Self.processHandle()
+            },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/profiles/zweit"] }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+
+        XCTAssertEqual(manager.instanceOrigin(forProfile: "zweit"), .notRunning)
+        try manager.ensureRunning(profile: "zweit").get()
+        XCTAssertEqual(manager.instanceOrigin(forProfile: "zweit"), .selfStarted)
+    }
+
+    func testTranscriptionRouteProbeClassification() {
+        XCTAssertEqual(ClaudeCodeProxyManager.classifyTranscriptionRouteProbe(statusCode: 415), .available)
+        XCTAssertEqual(ClaudeCodeProxyManager.classifyTranscriptionRouteProbe(statusCode: 404), .missing)
+        XCTAssertEqual(ClaudeCodeProxyManager.classifyTranscriptionRouteProbe(statusCode: 200), .unknown)
+        XCTAssertEqual(ClaudeCodeProxyManager.classifyTranscriptionRouteProbe(statusCode: 500), .unknown)
+        XCTAssertEqual(ClaudeCodeProxyManager.classifyTranscriptionRouteProbe(statusCode: nil), .unknown)
     }
 
     func testEnsureRunningProfileLaunchesInstanceWithConfigDirAndOwnPort() throws {
@@ -635,6 +710,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             "PATH": "/bin",
             "CCP_CONFIG_DIR": "/profiles/zweit",
             "CCP_BIND_ADDRESS": "127.0.0.1",
+            "CCP_CODEX_TRANSCRIPTIONS_API": "1",
         ])
         XCTAssertEqual(manager.port(forProfile: "zweit"), 18_775)
         XCTAssertEqual(manager.port(forProfile: nil), 18_765)
@@ -1068,6 +1144,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         manager.profileEnvironmentResolver = { _ in [:] }
         manager.storedAccountIDResolver = { _ in nil }
         manager.profilesEnabledResolver = { true }
+        manager.transcriptionsAPIEnabledResolver = { true }
         return manager
     }
 

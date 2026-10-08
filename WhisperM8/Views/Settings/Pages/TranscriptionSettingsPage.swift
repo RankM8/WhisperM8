@@ -5,12 +5,23 @@ struct TranscriptionSettingsPage: View {
     @AppStorage("selectedModel") private var selectedModelRaw = TranscriptionModel.groq_whisper_v3.rawValue
     @AppStorage("language") private var language = "de"
 
+    @AppStorage(PreferenceKeys.claudeGPTBackendEnabled) private var gptBackendEnabled = false
+    @AppStorage(PreferenceKeys.chatGPTTranscriptionEnabled) private var chatGPTTranscriptionEnabled = true
+
     @State private var apiKey = ""
     @State private var apiKeyAvailable = false
     @State private var isConfirmingKeyRemoval = false
+    /// ChatGPT-Abo: aktives GPT-Konto und dessen Login — beides Datei-/
+    /// Subprozess-Zugriffe, deshalb nur aus dem `.task` befüllt.
+    @State private var chatGPTActiveAccount: String?
+    @State private var chatGPTAuthStatus: ClaudeCodeProxyAuthStatus?
 
+    /// Wie `TranscriptionSettings.loadProvider()`: ein gespeichertes
+    /// „ChatGPT-Abo" zählt bei abgeschaltetem Kill-Switch als Groq.
     private var provider: TranscriptionProvider {
-        TranscriptionProvider(rawValue: selectedProviderRaw) ?? .groq
+        let stored = TranscriptionProvider(rawValue: selectedProviderRaw) ?? .groq
+        if stored == .chatgpt, !chatGPTTranscriptionEnabled { return .groq }
+        return stored
     }
 
     /// Der Setter spiegelt die alte der früheren API-Seite-Logik: getippte Keys werden
@@ -33,53 +44,85 @@ struct TranscriptionSettingsPage: View {
             subtitle: "Speech-to-text provider, API key, model and language."
         ) {
             SettingsSection("Provider") {
-                TranscriptionProviderSegmentedRow(provider: providerBinding)
-
-                TranscriptionAPIKeyInputRow(
-                    text: $apiKey,
-                    hasSavedKey: apiKeyAvailable,
-                    providerName: provider.displayName
+                TranscriptionProviderSegmentedRow(
+                    provider: providerBinding,
+                    options: TranscriptionProvider.selectableProviders(
+                        chatGPTAvailable: chatGPTTranscriptionEnabled
+                    )
                 )
-                .onChange(of: apiKey) { _, newValue in
-                    guard !newValue.isEmpty else {
-                        return
-                    }
-                    KeychainManager.save(key: provider.keychainKey, value: newValue)
-                    apiKeyAvailable = true
-                }
 
-                if apiKeyAvailable && apiKey.isEmpty {
-                    SettingsStatusRow(
-                        title: "Saved Key",
-                        tone: .ok,
-                        detail: "API key saved in Keychain"
-                    ) {
-                        Button("Remove Key…") {
-                            isConfirmingKeyRemoval = true
+                if provider.requiresAPIKey, let keychainKey = provider.keychainKey {
+                    TranscriptionAPIKeyInputRow(
+                        text: $apiKey,
+                        hasSavedKey: apiKeyAvailable,
+                        providerName: provider.displayName
+                    )
+                    .onChange(of: apiKey) { _, newValue in
+                        guard !newValue.isEmpty else {
+                            return
                         }
-                        .buttonStyle(SettingsButtonStyle.destructive)
+                        KeychainManager.save(key: keychainKey, value: newValue)
+                        apiKeyAvailable = true
                     }
-                }
 
-                TranscriptionAPIKeyLinkRow(provider: provider)
+                    if apiKeyAvailable && apiKey.isEmpty {
+                        SettingsStatusRow(
+                            title: "Saved Key",
+                            tone: .ok,
+                            detail: "API key saved in Keychain"
+                        ) {
+                            Button("Remove Key…") {
+                                isConfirmingKeyRemoval = true
+                            }
+                            .buttonStyle(SettingsButtonStyle.destructive)
+                        }
+                    }
+
+                    TranscriptionAPIKeyLinkRow(provider: provider)
+                } else {
+                    SettingsStatusRow(
+                        title: "GPT-Backend",
+                        tone: gptBackendEnabled ? .ok : .warn,
+                        detail: gptBackendEnabled ? "Aktiv" : "Aus – unter GPT-Backend aktivieren"
+                    )
+                    if gptBackendEnabled {
+                        SettingsStatusRow(
+                            title: "ChatGPT-Konto",
+                            subtitle: "Aktives Konto des GPT-Backends",
+                            tone: chatGPTAuthTone,
+                            detail: chatGPTAuthText
+                        )
+                    }
+                    ChatGPTTranscriptionNotice(
+                        activeAccount: chatGPTActiveAccount,
+                        backendEnabled: gptBackendEnabled
+                    )
+                    .padding(.top, 8)
+                    .padding(.horizontal, 2)
+                }
             }
 
             SettingsSection("Model") {
-                SettingsPickerRow(
-                    title: "Model",
-                    selection: $selectedModelRaw,
-                    options: provider.availableModels.map(\.rawValue)
-                ) { rawValue in
-                    Text(TranscriptionModel(rawValue: rawValue)?.displayName ?? rawValue)
+                // Ein einziges Modell (ChatGPT-Abo) braucht keinen Picker.
+                if provider.availableModels.count > 1 {
+                    SettingsPickerRow(
+                        title: "Model",
+                        selection: $selectedModelRaw,
+                        options: provider.availableModels.map(\.rawValue)
+                    ) { rawValue in
+                        Text(TranscriptionModel(rawValue: rawValue)?.displayName ?? rawValue)
+                    }
                 }
 
-                if let currentModel {
+                if let currentModel, currentModel.provider == provider {
                     SettingsHelpText(modelHelpText(for: currentModel))
                 }
 
                 SettingsRow(
                     title: "Price",
-                    subtitle: "Static list price, as of 2026-07."
+                    subtitle: provider.requiresAPIKey
+                        ? "Static list price, as of 2026-07."
+                        : "Unklar, ob es auf die Nutzungslimits des ChatGPT-Kontos zählt."
                 ) {
                     Text(provider.priceInfo)
                         .font(.system(size: 12, design: .monospaced))
@@ -100,6 +143,11 @@ struct TranscriptionSettingsPage: View {
             }
         }
         .onAppear(perform: syncFromPreferencesAndKeychain)
+        // Konto + Login nur für ChatGPT-Abo und abseits des Main Threads:
+        // `authStatus` startet einen Subprozess (`codex auth status`).
+        .task(id: chatGPTStatusTaskID) {
+            await refreshChatGPTStatus()
+        }
         .confirmationDialog("Remove \(provider.displayName) API key?", isPresented: $isConfirmingKeyRemoval) {
             Button("Remove Key", role: .destructive) {
                 removeProviderKey()
@@ -119,12 +167,12 @@ struct TranscriptionSettingsPage: View {
         if selectedProviderRaw != providerRaw { selectedProviderRaw = providerRaw }
         if selectedModelRaw != modelRaw { selectedModelRaw = modelRaw }
         apiKey = ""
-        apiKeyAvailable = KeychainManager.exists(key: provider.keychainKey)
+        apiKeyAvailable = provider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
     }
 
     private func handleProviderChange(to newProvider: TranscriptionProvider) {
         apiKey = ""
-        apiKeyAvailable = KeychainManager.exists(key: newProvider.keychainKey)
+        apiKeyAvailable = newProvider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
         if let currentModel = TranscriptionModel(rawValue: selectedModelRaw),
            currentModel.provider != newProvider {
             selectedModelRaw = newProvider.defaultModel.rawValue
@@ -133,9 +181,56 @@ struct TranscriptionSettingsPage: View {
     }
 
     private func removeProviderKey() {
-        KeychainManager.delete(key: provider.keychainKey)
+        if let keychainKey = provider.keychainKey {
+            KeychainManager.delete(key: keychainKey)
+        }
         apiKey = ""
         apiKeyAvailable = false
+    }
+
+    /// Neu laden, wenn der Anbieter oder der Backend-Schalter wechselt.
+    private var chatGPTStatusTaskID: String {
+        "\(provider.rawValue)-\(gptBackendEnabled)"
+    }
+
+    private func refreshChatGPTStatus() async {
+        guard provider == .chatgpt else {
+            chatGPTAuthStatus = nil
+            return
+        }
+        let backendEnabled = gptBackendEnabled
+        let snapshot = await Task.detached(priority: .userInitiated) { () -> (String, ClaudeCodeProxyAuthStatus?) in
+            let profilesEnabled = AppPreferences.shared.isGPTAccountProfilesEnabled
+            let profile = profilesEnabled ? GPTAccountProfiles().activeProfileNameOrNil() : nil
+            let account = profile ?? GPTAccountProfiles.mainProfileName
+            guard backendEnabled else { return (account, nil) }
+            return (account, ClaudeCodeProxyManager.shared.authStatus(profile: profile))
+        }.value
+        guard !Task.isCancelled else { return }
+        chatGPTActiveAccount = snapshot.0
+        chatGPTAuthStatus = snapshot.1
+    }
+
+    private var chatGPTAuthText: String {
+        let account = chatGPTActiveAccount ?? "…"
+        switch chatGPTAuthStatus {
+        case .authenticated?:
+            return "\(account): angemeldet"
+        case .notAuthenticated?:
+            return "\(account): nicht angemeldet"
+        case .unknown?:
+            return "\(account): Status unbekannt"
+        case nil:
+            return "Wird geprüft…"
+        }
+    }
+
+    private var chatGPTAuthTone: SettingsStatusTone {
+        switch chatGPTAuthStatus {
+        case .authenticated?: return .ok
+        case .notAuthenticated?: return .warn
+        case .unknown?, nil: return .off
+        }
     }
 
     private func modelHelpText(for model: TranscriptionModel) -> String {
@@ -148,6 +243,8 @@ struct TranscriptionSettingsPage: View {
             return "Best quality at Groq, 299x real-time."
         case .groq_whisper_v3_turbo:
             return "Faster, 216x real-time."
+        case .chatgpt_transcribe:
+            return "Interne ChatGPT-Transkription über den GPT-Proxy – ein Modell, keine Auswahl."
         }
     }
 
@@ -165,6 +262,12 @@ struct TranscriptionSettingsPage: View {
 
 private struct TranscriptionProviderSegmentedRow: View {
     @Binding var provider: TranscriptionProvider
+    var options: [TranscriptionProvider]
+
+    /// Drei Segmente brauchen mehr Platz, sonst wird „ChatGPT-Abo" abgeschnitten.
+    private var pickerWidth: CGFloat {
+        options.count > 2 ? 300 : 190
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 18) {
@@ -194,13 +297,13 @@ private struct TranscriptionProviderSegmentedRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Picker("Provider", selection: $provider) {
-                ForEach(TranscriptionProvider.displayOrder, id: \.self) { option in
+                ForEach(options, id: \.self) { option in
                     Text(option.displayName).tag(option)
                 }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 190)
+            .frame(width: pickerWidth)
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 2)
@@ -266,9 +369,11 @@ private struct TranscriptionAPIKeyLinkRow: View {
 
     var body: some View {
         HStack {
-            Link("Get \(provider.displayName) API key →", destination: provider.apiKeyLink)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(AppTheme.accent)
+            if let apiKeyLink = provider.apiKeyLink {
+                Link("Get \(provider.displayName) API key →", destination: apiKeyLink)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(AppTheme.accent)
+            }
 
             Spacer()
         }

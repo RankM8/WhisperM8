@@ -35,14 +35,22 @@ private func createLongTimeoutSession(timeout: TimeInterval) -> URLSession {
 // MARK: - Multipart Client
 
 final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
-    private let apiKey: String
+    /// `nil` = kein `Authorization`-Header (lokaler GPT-Proxy für das
+    /// ChatGPT-Abo — er authentifiziert selbst gegenüber chatgpt.com).
+    private let apiKey: String?
     private let config: ProviderConfig
     /// Phase-3-Test-Seam: Default erzeugt die echte Long-Timeout-Session;
     /// Tests reichen eine URLProtocol-gestubte Session herein.
     private let sessionProvider: (TimeInterval) -> URLSession
 
+    /// Default-Session des Clients (lange Timeouts) — auch für Aufrufer, die
+    /// den Client nur mit eigenem Seam bauen (ChatGPT-Abo-Service).
+    static func defaultSession(timeout: TimeInterval) -> URLSession {
+        createLongTimeoutSession(timeout: timeout)
+    }
+
     init(
-        apiKey: String,
+        apiKey: String?,
         config: ProviderConfig,
         sessionProvider: @escaping (TimeInterval) -> URLSession = { createLongTimeoutSession(timeout: $0) }
     ) {
@@ -135,11 +143,13 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
         Logger.debug("\(config.name) transcription starting...")
         Logger.debug("- Timeout: \(Int(timeout))s")
         Logger.debug("- Audio duration: \(Int(audioDuration ?? 0))s")
-        Logger.debug("- Model: \(config.model)")
+        Logger.debug("- Model: \(config.model ?? "(keins)")")
 
         var request = URLRequest(url: config.endpoint)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if let apiKey {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeout
 
@@ -225,10 +235,12 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
 /// komplett in den Speicher zu laden (Chunk-Copy in 1-MiB-Schritten). Das
 /// Envelope-Format ist identisch zum früheren In-Memory-Builder.
 struct MultipartFormDataFileWriter {
+    /// `model: nil` lässt den `model`-Part weg (ChatGPT-Abo: der Proxy
+    /// verwirft ihn ohnehin). Mit Modell bleibt der Body byte-gleich.
     static func writeAudioTranscriptionBody(
         to destinationURL: URL,
         boundary: String,
-        model: String,
+        model: String?,
         audioFileURL: URL,
         filename: String,
         language: String?,
@@ -244,9 +256,11 @@ struct MultipartFormDataFileWriter {
         defer { try? output.close() }
 
         var prefix = Data()
-        prefix.append(Data("--\(boundary)\r\n".utf8))
-        prefix.append(Data("Content-Disposition: form-data; name=\"model\"\r\n\r\n".utf8))
-        prefix.append(Data("\(model)\r\n".utf8))
+        if let model {
+            prefix.append(Data("--\(boundary)\r\n".utf8))
+            prefix.append(Data("Content-Disposition: form-data; name=\"model\"\r\n\r\n".utf8))
+            prefix.append(Data("\(model)\r\n".utf8))
+        }
 
         if let language, !language.isEmpty {
             prefix.append(Data("--\(boundary)\r\n".utf8))
@@ -284,8 +298,22 @@ struct MultipartFormDataFileWriter {
 struct ProviderConfig: Sendable {
     let name: String
     let endpoint: URL
-    let model: String
+    /// `nil` = kein `model`-Feld im Multipart-Body (ChatGPT-Abo).
+    let model: String?
     let maxFileSizeBytes: Int
+
+    /// Lokaler GPT-Proxy (Diktat-Anbieter „ChatGPT-Abo"). Direkt an den
+    /// Instanz-Port, NICHT über den Mix-Router: der routet nach dem JSON-Feld
+    /// `model` und würde einen Multipart-Body an Anthropic weiterreichen.
+    /// 25 MB = `MAX_AUDIO_BYTES` des Proxys.
+    static func chatGPTProxy(port: Int) -> ProviderConfig {
+        ProviderConfig(
+            name: "ChatGPT-Abo",
+            endpoint: URL(string: "http://127.0.0.1:\(port)/v1/audio/transcriptions")!,
+            model: nil,
+            maxFileSizeBytes: 25 * 1024 * 1024
+        )
+    }
 
     static func openAI(model: String) -> ProviderConfig {
         ProviderConfig(

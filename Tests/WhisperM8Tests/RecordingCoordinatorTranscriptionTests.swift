@@ -79,4 +79,68 @@ final class RecordingCoordinatorTranscriptionTests: XCTestCase {
         XCTAssertEqual(recorded?.1, .groq_whisper_v3)
         XCTAssertEqual(recorded?.2, "secret-key")
     }
+
+    /// ChatGPT-Abo braucht keinen Key: kein `missingAPIKey`, die Factory
+    /// bekommt "" und der Key-Resolver wird gar nicht erst gefragt.
+    func testChatGPTProviderSkipsKeyCheckAndPassesEmptyKey() async throws {
+        let audio = try tempAudio()
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        var recorded: (TranscriptionProvider, TranscriptionModel, String)?
+        var keyResolverCalled = false
+        let coordinator = RecordingCoordinator(
+            appState: .shared,
+            providerResolver: { .chatgpt },
+            modelResolver: { .chatgpt_transcribe },
+            apiKeyResolver: { _ in
+                keyResolverCalled = true
+                return nil
+            },
+            transcriberFactory: { provider, model, apiKey in
+                recorded = (provider, model, apiKey)
+                return ThrowingTranscriptionService()
+            },
+            transcriptionPrewarmer: { _ in }
+        )
+
+        do {
+            try await coordinator.transcribeAndDeliver(
+                audioURL: audio, audioDuration: 1, outputMode: .defaultMode(), contextBundle: .empty
+            )
+            XCTFail("Expected SentinelError from fake service")
+        } catch is SentinelError {
+            // erwartet
+        }
+        XCTAssertEqual(recorded?.0, .chatgpt)
+        XCTAssertEqual(recorded?.1, .chatgpt_transcribe)
+        XCTAssertEqual(recorded?.2, "")
+        XCTAssertFalse(keyResolverCalled)
+    }
+
+    func testGroqWithEmptyKeyStillThrowsMissingAPIKey() async throws {
+        let audio = try tempAudio()
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        var factoryCalled = false
+        let coordinator = RecordingCoordinator(
+            appState: .shared,
+            providerResolver: { .groq },
+            modelResolver: { .groq_whisper_v3 },
+            apiKeyResolver: { _ in "" },
+            transcriberFactory: { _, _, _ in
+                factoryCalled = true
+                return ThrowingTranscriptionService()
+            }
+        )
+
+        do {
+            try await coordinator.transcribeAndDeliver(
+                audioURL: audio, audioDuration: 1, outputMode: .defaultMode(), contextBundle: .empty
+            )
+            XCTFail("Expected TranscriptionError.missingAPIKey")
+        } catch TranscriptionError.missingAPIKey {
+            // erwartet
+        }
+        XCTAssertFalse(factoryCalled)
+    }
 }

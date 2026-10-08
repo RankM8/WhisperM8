@@ -74,6 +74,41 @@ final class TranscriptionUtilityTests: XCTestCase {
         XCTAssertTrue(text.contains("audio"))
     }
 
+    /// ChatGPT-Abo: ohne Modell kein `model`-Part; der Proxy beantwortet jedes
+    /// unbekannte Feld (auch `response_format`) mit 400.
+    func testMultipartFileBodyWithoutModelOmitsModelPart() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MultipartWriterTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let audioURL = tempDir.appendingPathComponent("sample.m4a")
+        try Data("audio".utf8).write(to: audioURL)
+        let bodyURL = tempDir.appendingPathComponent("body.tmp")
+
+        for language in ["de", nil, ""] as [String?] {
+            try MultipartFormDataFileWriter.writeAudioTranscriptionBody(
+                to: bodyURL,
+                boundary: "boundary",
+                model: nil,
+                audioFileURL: audioURL,
+                filename: "sample.m4a",
+                language: language
+            )
+            let text = try String(contentsOf: bodyURL, encoding: .utf8)
+            XCTAssertFalse(text.contains("name=\"model\""))
+            XCTAssertFalse(text.contains("name=\"response_format\""))
+            XCTAssertTrue(text.contains("name=\"file\"; filename=\"sample.m4a\"\r\nContent-Type: audio/m4a\r\n"))
+            if language == "de" {
+                XCTAssertTrue(text.contains("name=\"language\"\r\n\r\nde\r\n"))
+                XCTAssertTrue(text.hasPrefix("--boundary\r\nContent-Disposition: form-data; name=\"language\""))
+            } else {
+                XCTAssertFalse(text.contains("name=\"language\""))
+                XCTAssertTrue(text.hasPrefix("--boundary\r\nContent-Disposition: form-data; name=\"file\""))
+            }
+        }
+    }
+
     func testMultipartFileBodyStreamsLargeFilesIntact() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("MultipartWriterTests-\(UUID().uuidString)", isDirectory: true)

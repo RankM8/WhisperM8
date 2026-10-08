@@ -463,6 +463,19 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.gptAccountProfilesEnabled) }
     }
 
+    /// Kill-Switch für den Transkriptions-Anbieter „ChatGPT-Abo (GPT-Backend)".
+    /// An (Default) heißt nur: der Anbieter ist wählbar und selbst gestartete
+    /// GPT-Proxys bekommen `CCP_CODEX_TRANSCRIPTIONS_API=1` — ausgewählt ist er
+    /// erst, wenn der Nutzer ihn wählt. Aus blendet ihn aus allen Pickern aus,
+    /// `TranscriptionSettings.loadProvider()` liefert dann Groq (der gespeicherte
+    /// Wert bleibt erhalten), Proxys starten ohne Flag und der Orphan-Guard
+    /// prüft die Transkriptions-Route nicht mehr.
+    /// `defaults write com.whisperm8.app chatGPTTranscriptionEnabled -bool NO`
+    var isChatGPTTranscriptionEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.chatGPTTranscriptionEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.chatGPTTranscriptionEnabled) }
+    }
+
     /// Kill-Switch für die Retention der CLI-Subagent-Spiegel. Aus heißt: die
     /// verwaisten Einträge bleiben für immer in der Sidebar stehen (der
     /// Zustand vor 2026-08-01):
@@ -712,6 +725,7 @@ enum PreferenceKeys {
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"
     static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
     static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"
+    static let chatGPTTranscriptionEnabled = "chatGPTTranscriptionEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
     static let agentCrashRecoveryEnabled = "agentCrashRecoveryEnabled"
     static let subagentJobRetentionDays = "subagentJobRetentionDays"
