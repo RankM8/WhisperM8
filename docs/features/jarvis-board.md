@@ -33,6 +33,7 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
 | Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …` |
 | User | `/board` Details (Panel), `/board an` / `aus`, `/board zu` / `auf` (einklappen); im Band `ctrl+x tab`, dann `z` / `a` |
+| User: Tab öffnen | Im Band ist der Name jeder Zeile ein Knopf (`1:` bis `9:`): die Ziffer im **leeren** Prompt, ein Klick oder `ctrl+x tab` + Ziffer öffnet den Tab des Chats (`chats open`, direkt aus der Mod, kein Turn von Jarvis). Im Panel `[ 1 Tab öffnen ]` je Chat. |
 | Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis, Ton, Prompt an Jarvis), `toast`, `aus` |
 
 Ampeln: `needsYou` (rot, User muss entscheiden), `done` (grün, Abnahme

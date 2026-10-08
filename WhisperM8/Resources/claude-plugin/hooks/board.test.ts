@@ -137,6 +137,24 @@ describe('Band', () => {
     expect(await ui.find({ text: /Opener-Schluss/ })).toBeDefined()
     await ui.unmount()
   })
+
+  test('der Name ist der Knopf: er öffnet den Tab des Chats, ohne Turn', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    const calls = world(on)
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({ ...band(120), surface })
+      // Oberste Zeile = wartender Chat (a3f2c1d0), Hotkey „1“.
+      await ui.press({ key: 'open-A3F2C1D0-0000-0000-0000-000000000001' })
+      await ui.unmount()
+    }
+    expect(calls.argv.filter(a => a.includes('open'))).toEqual([
+      ['whisperm8', 'chats', 'open', 'a3f2c1d0'],
+      ['whisperm8', 'chats', 'open', 'a3f2c1d0'],
+    ])
+    expect(calls.toasts).toContain('Geöffnet: Outreach Copy-Review')
+    expect(calls.prompts).toEqual([])
+  })
 })
 
 describe('Steuerung', () => {

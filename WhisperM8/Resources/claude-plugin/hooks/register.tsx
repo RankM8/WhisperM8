@@ -327,6 +327,18 @@ const say = (e: BoardEntry) => {
 const sorted = (entries: readonly BoardEntry[]) =>
   [...entries].sort((a, b) => ORDER[a.light] - ORDER[b.light] || Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
 
+const clip = (text: string, width: number) => (text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text)
+
+/**
+ * Holt den Tab des Chats nach vorn, direkt per CLI und ohne Turn von Jarvis:
+ * Der User hat ausdrücklich gedrückt. (Jarvis selbst nutzt im Aktiv-Workspace
+ * nie `chats open`, das reißt die Workspace-Ansicht weg.)
+ */
+const openChat = async ($: EngineInterface, entry: BoardEntry) => {
+  const ran = await cli($, ['chats', 'open', entry.ref])
+  $.ui.toast(ran.ok ? `Geöffnet: ${entry.title}` : `${entry.title}: ${ran.message || 'Öffnen fehlgeschlagen'}`)
+}
+
 // MARK: Hooks
 
 export const register: Register = (on, options) => {
@@ -489,15 +501,29 @@ export const register: Register = (on, options) => {
           </Box>
           <Button key="fold" label="zu" hotkey="z" plain dimColor onPress={() => update($, folded, () => true)} />
         </Box>
-        {shown.map(entry => (
+        {shown.map((entry, index) => (
           <Box key={entry.sessionID} flexDirection="row" columnGap={1}>
             <Box width={1} flexShrink={0}>
               <Text color={COLOR[entry.light]}>{GLYPH[entry.light]}</Text>
             </Box>
-            <Box width={nameWidth} flexShrink={0}>
-              <Text bold={entry.light === 'needsYou'} dimColor={entry.light === 'parked'} wrap="truncate-end">
-                {entry.title}
-              </Text>
+            {/* Der Name ist der Knopf: „1“ im leeren Prompt (oder Klick,
+                oder ctrl+x tab und „1“) öffnet den Tab des Chats. */}
+            <Box width={nameWidth + 3} flexShrink={0}>
+              {index < 9 ? (
+                <Button
+                  key={`open-${entry.sessionID}`}
+                  label={clip(entry.title, nameWidth)}
+                  hotkey={String(index + 1)}
+                  plain
+                  dimColor={entry.light === 'parked'}
+                  onPress={() => openChat($, entry)}
+                />
+              ) : (
+                <Text dimColor={entry.light === 'parked'} wrap="truncate-end">
+                  {'   '}
+                  {entry.title}
+                </Text>
+              )}
             </Box>
             {wide && (
               <Box width={8} flexShrink={0}>
@@ -536,7 +562,7 @@ export const register: Register = (on, options) => {
     if (list.length === 0) return <Text dimColor>Keine Chats auf dem Board.</Text>
     return (
       <Box flexDirection="column" rowGap={1}>
-        {list.map(entry => (
+        {list.map((entry, index) => (
           <Box key={entry.sessionID} flexDirection="column">
             <Text>
               <Text color={COLOR[entry.light]}>{GLYPH[entry.light]} </Text>
@@ -551,6 +577,13 @@ export const register: Register = (on, options) => {
             {entry.next !== '' && <Text dimColor>  Weiter: {entry.next}</Text>}
             {entry.otherOwners.length > 0 && <Text dimColor>  Auch auf dem Board von {entry.otherOwners.join(', ')}</Text>}
             <Box flexDirection="row" columnGap={2}>
+              <Button
+                key={`open-${entry.sessionID}`}
+                label={index < 9 ? `${index + 1} Tab öffnen` : 'Tab öffnen'}
+                hotkey={index < 9 ? String(index + 1) : undefined}
+                variant="primary"
+                onPress={() => openChat($, entry)}
+              />
               <Button
                 key={`ask-${entry.sessionID}`}
                 label="Stand fragen"
