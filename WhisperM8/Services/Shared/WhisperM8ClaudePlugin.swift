@@ -276,15 +276,35 @@ struct ClaudePluginSkillMigration {
 
     var skillsDirectory: URL { homeDirectory.appendingPathComponent(".claude/skills", isDirectory: true) }
 
-    func run(now: Date = Date()) -> Outcome {
-        let fm = FileManager.default
-        var outcome = Outcome()
+    func backupDirectory(now: Date) -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let backup = skillsDirectory
+        return skillsDirectory
             .appendingPathComponent(".whisperm8-backup", isDirectory: true)
             .appendingPathComponent(formatter.string(from: now), isDirectory: true)
+    }
+
+    /// Eine lose Kopie auf Zuruf in die Sicherung legen (Einstellungsseite,
+    /// „Remove Loose Copy“). Anders als der Umzug beim Start fragt sie nicht
+    /// nach lokalen Änderungen: Der User hat ausdrücklich gedrückt, und die
+    /// Sicherung bewahrt alles. Liefert den Ordner in der Sicherung.
+    @discardableResult
+    func moveToBackup(_ definition: CLISkillExporter.SkillDefinition, now: Date = Date()) throws -> URL {
+        let fm = FileManager.default
+        let exporter = CLISkillExporter(definition: definition, homeDirectory: homeDirectory, bundle: bundle)
+        let directory = exporter.claudeCodeSkillURL.deletingLastPathComponent()
+        let backup = backupDirectory(now: now)
+        try fm.createDirectory(at: backup, withIntermediateDirectories: true)
+        let target = backup.appendingPathComponent(definition.name, isDirectory: true)
+        try fm.moveItem(at: directory, to: target)
+        return target
+    }
+
+    func run(now: Date = Date()) -> Outcome {
+        let fm = FileManager.default
+        var outcome = Outcome()
+        let backup = backupDirectory(now: now)
 
         for definition in CLISkillExporter.SkillDefinition.plugin {
             let exporter = CLISkillExporter(definition: definition, homeDirectory: homeDirectory, bundle: bundle)
@@ -301,8 +321,7 @@ struct ClaudePluginSkillMigration {
                 continue
             }
             do {
-                try fm.createDirectory(at: backup, withIntermediateDirectories: true)
-                try fm.moveItem(at: directory, to: backup.appendingPathComponent(definition.name, isDirectory: true))
+                try moveToBackup(definition, now: now)
                 outcome.moved.append(definition.name)
                 outcome.backupDirectory = backup
             } catch {
@@ -310,6 +329,27 @@ struct ClaudePluginSkillMigration {
             }
         }
         return outcome
+    }
+}
+
+// MARK: - Einstellungsseite
+
+/// Was eine Skill-Karte unter „CLI & Skills“ anbietet. Mit aktivem Plugin
+/// kommt jeder Skill als `/whisperm8:<name>` in jede App-Session; eine lose
+/// Kopie in `~/.claude/skills` lädt er dort ein zweites Mal (beide
+/// Beschreibungen im Kontext, das Modell rät). Die lose Kopie bleibt nur für
+/// Claude außerhalb der App sinnvoll, das das Plugin nicht sieht.
+enum ClaudePluginSkillCardMode: Equatable {
+    /// Plugin aus: lose installieren wie vor dem Plugin.
+    case legacy
+    /// Plugin an, keine lose Kopie: alles richtig.
+    case viaPlugin
+    /// Plugin an UND lose Kopie: App-Sessions laden den Skill doppelt.
+    case duplicate
+
+    static func resolve(pluginEnabled: Bool, installState: CLISkillExporter.InstallState) -> Self {
+        guard pluginEnabled else { return .legacy }
+        return installState == .notInstalled ? .viaPlugin : .duplicate
     }
 }
 

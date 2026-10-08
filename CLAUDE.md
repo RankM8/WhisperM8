@@ -20,7 +20,7 @@ make build        # Release build only (creates local .app)
 make clean-install # Full reset (removes all app data + reinstall) — use to test onboarding/migrations
 make kill         # Kill running instances
 make dmg          # Create distributable DMG
-make skills       # Sync agent skills (Resources → ~/.claude/skills + repo mirrors) without build/restart
+make skills       # Sync agent skills (Resources → Claude-Code-Plugin whisperm8; loose ~/.claude/skills only with plugin off) without build/restart
 
 ```
 

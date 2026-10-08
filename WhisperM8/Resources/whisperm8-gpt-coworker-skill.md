@@ -28,6 +28,45 @@ Dieser Modus gilt ab Aufruf **session-weit**, bis der User ihn beendet
   ChatGPT-Credits (Gotcha „Kosten" in codex-subagent): bei größeren
   Fan-outs die Agent-Spanne nennen, sinnlose Doppel-Spawns vermeiden.
 
+## Beobachtungen aus der Praxis (laufend nachführen)
+
+**Stand 29.09.2026, ListM8-Merge-Reife (hunderte Review-/Fix-Agenten):**
+
+- **GPT ist deutlich langsamer** als Sonnet 5.5 — bei gleichem Prüfauftrag
+  merklich längere Laufzeit.
+- **Sonnet 5.5 (effort high) war als Gegenprüfer klar stärker:** Im direkten
+  Vergleich auf denselben Plan fand Sonnet 5 Faktenfehler (GPT 1) und 8 fehlende
+  Punkte (GPT 6), rechnete Behauptungen am Repo nach statt sie zu übernehmen und
+  entdeckte als Einziger den relevantesten Punkt (develop mit neuem
+  Akquise-Mandanten weiter). GPT ergänzte andere Prozess-Aspekte — kombiniert
+  am besten. Datenbasis noch klein (1 Direktvergleich + 1 Gegenprüfwelle).
+- **GPT prüft GPT übersieht systematisch:** Eine Opus-Abnahme fand nach
+  GPT-Umsetzung + GPT-Zweitprüfung noch 10 Punkte in einer Welle. Zweitprüfung
+  daher immer durch ein anderes Modell (Sonnet/Opus).
+- **Tempo gemessen (29.09.):** Gegenprüfung von 57 Paketen (366 Befunde) mit
+  Sonnet 5.5 high: 9 Minuten, 0 Fehler. Vergleichbare GPT-Gegenprüf-Läufe
+  (W2/W3) brauchten 50–100 Minuten. Verwerfungsquote ähnlich (Sonnet 8 %,
+  GPT 7–8 %), Sonnet stufte aber deutlich mehr Schweregrade realistisch herab
+  (105 von 366 auf niedrig).
+- **Zweite Meinung zu GPT-Gegenprüfungen (29.09.):** Sonnet 5.5 high prüfte 327
+  von GPT bereits bestätigte Befunde erneut: 22 widerlegt (7 %), 63 in der
+  Schwere herabgestuft (GPT stuft tendenziell zu hoch ein: 37 von 114 „hoch“
+  sind nach Sonnet mittel/niedrig). Umgekehrt waren GPTs Verwerfungen
+  verlässlich: 77 von 78 hielt Sonnet ebenfalls für unbegründet.
+- **Verbrauch:** Sonnet 5.5 belastete die Claude-Limits in diesen Läufen
+  spürbar weniger als erwartet.
+- **Gotchas im Workflow-Betrieb:** Nachrichten an laufende Workflow-Agenten
+  starteten eine zweite Instanz; zweimal beantworteten GPT-Agenten eine
+  Chatnachricht des Users statt ihres Auftrags — trotz Schutzsatz. Nachrichten der Hauptsitzung gelangen in
+  laufende Workflow-Agenten — am 29.09. auch in einen Opus-Umsetzer belegt, also
+  modellunabhängig. Deshalb Ergebnis immer auf Vollständigkeit prüfen
+  (je ID ein Urteil) und bei Lücken mit einem Claude-Modell nachprüfen.
+
+Folgerung (vom User am 29.09. bestätigt): **Sonnet 5.5 high macht die Hauptarbeit**
+(Reviews, Fixes), **GPT ist die unabhängige Zweitmeinung** (Gegenprüfung),
+Opus für Kernpfade, Schiedsrichter und Abnahme. Nie prüft das bauende Modell.
+Weitere Vergleiche hier nachtragen; die Arbeitsannahme oben ggf. anpassen.
+
 ## Harte Default-Regel: Subagent = GPT
 
 Für jeden Subagent-Spawn mit klar definiertem Auftrag gilt

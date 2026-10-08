@@ -16,7 +16,7 @@ help:
 	@echo "  make dev-reinstall     - Alias for 'make dev' (kept for backwards compatibility)."
 	@echo ""
 	@echo "  make skills            - Sync agent skills from WhisperM8/Resources to"
-	@echo "                            ~/.claude/skills (+ repo mirrors) without building"
+	@echo "                            the whisperm8 Claude Code plugin without building"
 	@echo "                            or restarting the app."
 	@echo ""
 	@echo "  make snapshots         - Render the UI snapshot gallery as PNGs (light + dark)"

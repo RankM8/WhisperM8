@@ -67,15 +67,16 @@ Jobs, Browser-QA mit Playwright-Storage-State oder `image_gen`. Es ist kein
 Fallback von `codex-verify`.
 
 Auswahlregeln, Befehle, Sicherheitsvorgaben und das Wrapper-Muster für solche
-Spezialfälle sind zentral im Skill `.claude/skills/codex-subagent/SKILL.md`
-dokumentiert. Aufruf:
+Spezialfälle sind zentral im Skill `codex-subagent` dokumentiert (Quelle
+`WhisperM8/Resources/whisperm8-agent-skill.md`, ausgeliefert über das Plugin
+`whisperm8`). Aufruf:
 
 ```text
-/codex-subagent --cli <Aufgabe>
+/whisperm8:codex-subagent --cli <Aufgabe>
 ```
 
 Die vertiefende Referenz
-`.claude/skills/codex-subagent/references/claude-workflows.md` beschreibt nur
+`references/claude-workflows.md` des Skills beschreibt nur
 diesen expliziten CLI-Spezialpfad. Dadurch bleibt die native Review-Architektur
 frei von CLI-Boilerplate, während das Codex-spezifische Betriebswissen an einer
 Stelle gepflegt wird.

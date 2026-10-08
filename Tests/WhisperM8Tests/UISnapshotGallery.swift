@@ -67,6 +67,24 @@ final class UISnapshotGallery: XCTestCase {
             transcription("transcription-chatgpt-backend-aus", provider: .chatgpt, model: .chatgpt_transcribe, backendEnabled: false),
             // Kill-Switch aus: gespeichertes „ChatGPT-Abo" erscheint als Groq, nur zwei Segmente.
             transcription("transcription-chatgpt-killswitch-aus", provider: .chatgpt, model: .chatgpt_transcribe, chatGPTEnabled: false),
+            // CLI & Skills: die drei Kartenzustände nebeneinander (Plugin an +
+            // nichts lose, Plugin an + lose Kopie = doppelt, Plugin aus).
+            Fixture(name: "cli-skills-karten", size: CGSize(width: 700, height: 640)) {
+                @MainActor func card(_ title: String, _ definition: CLISkillExporter.SkillDefinition, plugin: Bool, state: CLISkillExporter.InstallState) -> CLISkillSettingsCard {
+                    CLISkillSettingsCard(
+                        title: title,
+                        definition: definition,
+                        summary: "Kurzbeschreibung des Skills.",
+                        dependencies: CLISkillCardDependencies(pluginEnabled: { plugin }, installState: { _ in state })
+                    )
+                }
+                return AnyView(VStack(alignment: .leading, spacing: 12) {
+                    card("Jarvis Supervisor Skill", .jarvis, plugin: true, state: .notInstalled)
+                    card("GPT Coworker Skill", .gptCoworker, plugin: true, state: .modifiedLocally)
+                    card("GPT Workflow Skill (Plugin aus)", .gptWorkflow, plugin: false, state: .notInstalled)
+                }
+                .padding(24))
+            },
             Fixture(name: "onboarding-welcome", size: onboardingSize) {
                 AnyView(WelcomeStep().padding(24))
             },

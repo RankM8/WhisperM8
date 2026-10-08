@@ -100,6 +100,13 @@ struct CLISkillsSettingsPage: View {
     private var agentSkillsSection: some View {
         SettingsSection("Agent Skills") {
             VStack(alignment: .leading, spacing: 12) {
+                if AppPreferences.shared.isClaudePluginEnabled {
+                    // Seit dem Plugin `whisperm8` (08.10.2026) bringt die App die
+                    // Skills selbst in jede Session; „Install“ legte nur noch eine
+                    // zweite, doppelt geladene Kopie an.
+                    SettingsHelpText("Claude Code sessions started by WhisperM8 get all of these skills automatically through the whisperm8 plugin (as /whisperm8:<skill>, in every account profile). Nothing to install. Save, Copy, and View remain for other tools.")
+                }
+
                 CLISkillSettingsCard(
                     title: "Transcription Skill",
                     definition: .transcription,
@@ -113,9 +120,15 @@ struct CLISkillsSettingsPage: View {
                 )
 
                 CLISkillSettingsCard(
-                    title: "Agent Chats Skill (Jarvis)",
+                    title: "Agent Chats Skill",
                     definition: .chats,
                     summary: "Lets any chat see and manage all your agent sessions via `whisperm8 chats` — overview, read transcripts, send prompts, wait for events, interrupt, rename/archive. Includes the supervisor loop and safety rules (send confirmation, one-hop)."
+                )
+
+                CLISkillSettingsCard(
+                    title: "Jarvis Supervisor Skill",
+                    definition: .jarvis,
+                    summary: "Permanent supervisor mode over all agent sessions: naming, status reports, Active workspace, delegation, and verification. Turns on the Jarvis board above the prompt. Loads the Agent Chats Skill for the CLI mechanics."
                 )
 
                 CLISkillSettingsCard(
@@ -180,24 +193,47 @@ struct CLISkillsSettingsPage: View {
     }
 }
 
-private struct CLISkillSettingsCard: View {
+/// Was eine Skill-Karte von außen liest; im Snapshot (UISnapshotGallery)
+/// fest vorgegeben, damit nichts Echtes aus `~/.claude/skills` einfließt.
+struct CLISkillCardDependencies {
+    var pluginEnabled: () -> Bool
+    var installState: (CLISkillExporter.SkillDefinition) -> CLISkillExporter.InstallState
+
+    static let live = CLISkillCardDependencies(
+        pluginEnabled: { AppPreferences.shared.isClaudePluginEnabled },
+        installState: { CLISkillExporter(definition: $0).installState() }
+    )
+}
+
+struct CLISkillSettingsCard: View {
     let title: String
     let definition: CLISkillExporter.SkillDefinition
     let summary: String
+    private let dependencies: CLISkillCardDependencies
 
-    @State private var installState: CLISkillExporter.InstallState = .notInstalled
+    @State private var installState: CLISkillExporter.InstallState
     @State private var markdown = ""
     @State private var feedback: SettingsFeedbackState
     @State private var feedbackMessage: String?
     @State private var errorMessage: String?
     @State private var isPreviewPresented = false
     @State private var isReplaceConfirmPresented = false
+    @State private var isTerminalInstallConfirmPresented = false
+    @State private var pluginEnabled: Bool
 
     @MainActor
-    init(title: String, definition: CLISkillExporter.SkillDefinition, summary: String) {
+    init(
+        title: String,
+        definition: CLISkillExporter.SkillDefinition,
+        summary: String,
+        dependencies: CLISkillCardDependencies = .live
+    ) {
         self.title = title
         self.definition = definition
         self.summary = summary
+        self.dependencies = dependencies
+        self._installState = State(initialValue: dependencies.installState(definition))
+        self._pluginEnabled = State(initialValue: dependencies.pluginEnabled())
         self._feedback = State(initialValue: SettingsFeedbackState(duration: .milliseconds(2500)))
     }
 
@@ -207,6 +243,23 @@ private struct CLISkillSettingsCard: View {
 
     private var hasAttachments: Bool {
         !definition.references.isEmpty || !definition.assets.isEmpty
+    }
+
+    private var mode: ClaudePluginSkillCardMode {
+        .resolve(pluginEnabled: pluginEnabled, installState: installState)
+    }
+
+    private var locationText: String {
+        switch mode {
+        case .legacy:
+            return hasAttachments
+                ? "Claude Code reads from ~/.claude/skills; Save exports the complete skill folder including its supporting files."
+                : "Claude Code reads from ~/.claude/skills; other tools need the file copied manually."
+        case .viaPlugin:
+            return "Comes with the plugin as /whisperm8:\(definition.name). Install a loose copy only if you also run Claude outside the app (terminal)."
+        case .duplicate:
+            return "Also installed as a loose copy in ~/.claude/skills — sessions started by WhisperM8 load this skill twice (plugin + copy). Keep the copy only for Claude outside the app."
+        }
     }
 
     var body: some View {
@@ -222,27 +275,37 @@ private struct CLISkillSettingsCard: View {
 
                 SettingsHelpText(summary)
 
-                SettingsHelpText(
-                    hasAttachments
-                        ? "Claude Code reads from ~/.claude/skills; Save exports the complete skill folder including its supporting files."
-                        : "Claude Code reads from ~/.claude/skills; other tools need the file copied manually."
-                )
+                SettingsHelpText(locationText)
 
-                if let stateDetail {
+                if mode == .legacy, let stateDetail {
                     SettingsHelpText(stateDetail)
                 }
             }
 
             HStack(spacing: 8) {
-                Button(installButtonTitle) {
-                    if requiresReplaceConfirmation {
-                        isReplaceConfirmPresented = true
-                    } else {
-                        install()
+                switch mode {
+                case .legacy:
+                    Button(installButtonTitle) {
+                        if requiresReplaceConfirmation {
+                            isReplaceConfirmPresented = true
+                        } else {
+                            install()
+                        }
                     }
+                    .buttonStyle(SettingsButtonStyle.primary)
+                    .disabled(installState == .current)
+                case .viaPlugin:
+                    Button("Install for Terminal…") {
+                        isTerminalInstallConfirmPresented = true
+                    }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                case .duplicate:
+                    Button("Remove Loose Copy") {
+                        removeLooseCopy()
+                    }
+                    .buttonStyle(SettingsButtonStyle.primary)
+                    .help("Moves the copy to ~/.claude/skills/.whisperm8-backup/ — nothing is deleted.")
                 }
-                .buttonStyle(SettingsButtonStyle.primary)
-                .disabled(installState == .current)
 
                 Button("Save…") {
                     saveToDisk()
@@ -293,6 +356,15 @@ private struct CLISkillSettingsCard: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(replaceConfirmationMessage)
+        }
+        .confirmationDialog(
+            "Install a loose copy for the terminal?",
+            isPresented: $isTerminalInstallConfirmPresented
+        ) {
+            Button("Install Anyway") { install() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only Claude sessions outside WhisperM8 need this. Sessions started by the app already get the skill from the plugin and would then load it twice.")
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -350,8 +422,19 @@ private struct CLISkillSettingsCard: View {
         }
     }
 
+    private func removeLooseCopy() {
+        do {
+            try ClaudePluginSkillMigration().moveToBackup(definition)
+            refresh()
+            showFeedback("Moved to backup")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func refresh() {
-        installState = exporter.installState()
+        pluginEnabled = dependencies.pluginEnabled()
+        installState = dependencies.installState(definition)
         if markdown.isEmpty {
             markdown = (try? exporter.skillMarkdown()) ?? ""
         }

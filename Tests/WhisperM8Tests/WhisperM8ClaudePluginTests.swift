@@ -188,4 +188,29 @@ final class WhisperM8ClaudePluginTests: XCTestCase {
         let outcome = ClaudePluginSkillMigration(homeDirectory: home, bundle: .module).run()
         XCTAssertEqual(outcome, ClaudePluginSkillMigration.Outcome())
     }
+
+    // MARK: Einstellungsseite
+
+    func testRemoveLooseCopyBacksUpEvenLocallyModifiedSkill() throws {
+        // Der Umzug beim Start lässt lokal Geändertes liegen; der Knopf auf der
+        // Seite ist ein ausdrücklicher Wunsch und sichert es trotzdem weg.
+        let edited = try installLoose(.gptCoworker)
+        try "lokal geändert".write(to: edited.claudeCodeSkillURL, atomically: true, encoding: .utf8)
+
+        let target = try ClaudePluginSkillMigration(homeDirectory: home, bundle: .module)
+            .moveToBackup(.gptCoworker, now: Date(timeIntervalSince1970: 0))
+
+        XCTAssertEqual(edited.installState(), .notInstalled)
+        XCTAssertEqual(try String(contentsOf: target.appendingPathComponent("SKILL.md"), encoding: .utf8), "lokal geändert")
+        XCTAssertTrue(target.path.contains("/.claude/skills/.whisperm8-backup/"))
+    }
+
+    func testSkillCardModeFollowsPluginAndLooseCopy() {
+        XCTAssertEqual(ClaudePluginSkillCardMode.resolve(pluginEnabled: false, installState: .notInstalled), .legacy)
+        XCTAssertEqual(ClaudePluginSkillCardMode.resolve(pluginEnabled: false, installState: .current), .legacy)
+        XCTAssertEqual(ClaudePluginSkillCardMode.resolve(pluginEnabled: true, installState: .notInstalled), .viaPlugin)
+        for loose in [CLISkillExporter.InstallState.current, .modifiedLocally, .repoSynced, .unknownDrift] {
+            XCTAssertEqual(ClaudePluginSkillCardMode.resolve(pluginEnabled: true, installState: loose), .duplicate, "\(loose)")
+        }
+    }
 }
