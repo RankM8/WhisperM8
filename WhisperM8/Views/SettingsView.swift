@@ -171,7 +171,7 @@ struct SettingsView: View {
     }
 
     private func applySettingsRoute(_ request: WindowRequest?) {
-        guard let routeID = request?.settingsSectionID,
+        guard let routeID = windowRequestCenter.settingsRouteID(for: request),
               let target = SettingsRouteTarget.resolve(routeID: routeID) else {
             return
         }

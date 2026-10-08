@@ -25,6 +25,7 @@ Features, die quer zu den Säulen liegen und (noch) keinen eigenen Unterordner h
 |---|---|
 | [`agent-chats-cli.md`](agent-chats-cli.md) | `whisperm8 chats` — Agent-Sessions aus einem Chat heraus sehen und steuern |
 | [`voice-gate.md`](voice-gate.md) | Codewort-Steuerung der Codex-Sprachsitzung („Codex Voice Agent") |
+| [`ui-testing.md`](ui-testing.md) | UI-Tests ohne Computer Use: UI-Snapshots (`make snapshots`), Debug-Steuerkanal |
 
 ## Konventionen
 

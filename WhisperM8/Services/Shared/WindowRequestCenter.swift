@@ -112,7 +112,33 @@ final class WindowRequestCenter: ObservableObject {
         }
     }
 
+    /// Ziel-Seite des letzten Settings-Requests statt des festen Einstiegs
+    /// (`WindowRequest.settingsSectionID`). Gesetzt nur vom Debug-Steuerkanal
+    /// (`whisperm8 debug open settings/<seite>`), gelöscht von jedem normalen
+    /// `request(_:)`. Bewusst NICHT „einmal verbrauchen": die SettingsView
+    /// wertet die Route beim Öffnen zweimal aus (`onAppear` + Erstwert des
+    /// Publishers) — der zweite Lauf spränge sonst auf die Startseite zurück.
+    private(set) var pendingSettingsRouteID: String?
+
+    func requestSettings(routeID: String) {
+        // Vor dem Request setzen: `latestRequest` benachrichtigt synchron.
+        pendingSettingsRouteID = routeID
+        publish(.settings)
+    }
+
+    /// Route für die SettingsView: vorgemerkte Seite, sonst der Einstieg.
+    func settingsRouteID(for request: WindowRequest?) -> String? {
+        guard let request else { return nil }
+        if request == .settings, let pendingSettingsRouteID { return pendingSettingsRouteID }
+        return request.settingsSectionID
+    }
+
     func request(_ request: WindowRequest) {
+        pendingSettingsRouteID = nil
+        publish(request)
+    }
+
+    private func publish(_ request: WindowRequest) {
         // Ein expliziter Agent-Chats-Wunsch gibt das Primärfenster frei (auch in
         // Menüleisten-Profilen, z. B. via Menüleisten-Eintrag oder Profilwechsel).
         if request == .agentChats {
