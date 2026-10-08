@@ -110,6 +110,45 @@ private final class ClaudeCodeProxyInstallOutcome: @unchecked Sendable {
     }
 }
 
+/// Ergebnis-Box der Route-Probe (Semaphore-Bruecke wie bei `isReachable`).
+private final class ClaudeCodeProxyRouteProbeResult {
+    private let lock = NSLock()
+    private var storage: ClaudeCodeProxyTranscriptionRoute = .unknown
+
+    var value: ClaudeCodeProxyTranscriptionRoute {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func store(_ value: ClaudeCodeProxyTranscriptionRoute) {
+        lock.lock()
+        storage = value
+        lock.unlock()
+    }
+}
+
+/// Herkunft der Proxy-Instanz eines Profils (fuer die Fehlermeldung bei
+/// fehlender Transkriptions-Route).
+enum ClaudeCodeProxyInstanceOrigin: Equatable {
+    /// Von dieser App gestartet — das Flag ist gesetzt; fehlt die Route
+    /// trotzdem, ist das Binary zu alt.
+    case selfStarted
+    /// Antwortet auf dem Port, wurde aber nicht von dieser App gestartet
+    /// (Terminal, Waise eines frueheren App-Laufs).
+    case external
+    case notRunning
+}
+
+/// Befund der Route-Probe auf `/v1/audio/transcriptions`.
+enum ClaudeCodeProxyTranscriptionRoute: Equatable {
+    case available
+    case missing
+    /// Keine eindeutige Antwort (Timeout, anderer Status) — zaehlt nie als
+    /// „fehlt", damit nichts auf Verdacht ersetzt wird.
+    case unknown
+}
+
 enum ClaudeCodeProxyAuthStatus: Equatable {
     case authenticated(account: String, expires: String)
     case notAuthenticated
@@ -266,6 +305,14 @@ final class ClaudeCodeProxyManager {
     /// behandelt (ein Proxy, ein Konto).
     var profilesEnabledResolver: () -> Bool = { AppPreferences.shared.isGPTAccountProfilesEnabled }
 
+    /// Env-Variable, mit der der Proxy `/v1/audio/transcriptions` registriert
+    /// (Diktat-Anbieter „ChatGPT-Abo"). Ohne sie antwortet die Route mit 404.
+    static let transcriptionsAPIEnvironmentKey = "CCP_CODEX_TRANSCRIPTIONS_API"
+
+    /// Kill-Switch der ChatGPT-Abo-Transkription: aus → selbst gestartete
+    /// Instanzen bekommen das Flag nicht (eine geerbte Variable wird entfernt).
+    var transcriptionsAPIEnabledResolver: () -> Bool = { AppPreferences.shared.isChatGPTTranscriptionEnabled }
+
     /// Port des main-Proxys (Default-Store). Zusatzprofile bekommen Ports
     /// oberhalb davon (`profilePortRangeStart`).
     var mainPortResolver: () -> Int = { AppPreferences.shared.claudeGPTBackendPort }
@@ -376,27 +423,10 @@ final class ClaudeCodeProxyManager {
             do {
                 // main mit CCP_CONFIG_DIR auf dem Default-Store (Datei-Modus,
                 // siehe GPTAccountProfiles.environmentOverrides).
-                var environment = environment(forProfile: nil)
-                // Die Tier-Env des Proxy hat Vorrang vor jedem Modell-Alias
-                // und wuerde damit Toggle, plain /model sowie den guenstigen
-                // Haiku-Ersatz global ueberstimmen. Ein bewusster Override in
-                // der Proxy-Konfiguration oder einem externen Prozess bleibt.
-                if environment.removeValue(forKey: "CCP_CODEX_SERVICE_TIER") != nil {
-                    Logger.agentStore.warning(
-                        "claude_code_proxy_inherited_service_tier_removed key=CCP_CODEX_SERVICE_TIER"
-                    )
-                }
-                // Die echte Loopback-Garantie liefert das Binary selbst: der
-                // raine-Proxy bindet hart auf 127.0.0.1 (verifiziert per lsof;
-                // `serve` kennt keinen --host/--bind-Flag). CCP_BIND_ADDRESS
-                // setzen wir nur als Defense-in-Depth — falls eine kuenftige
-                // Version oder ein alternativer Proxy die Variable auswertet,
-                // erzwingt sie ebenfalls loopback statt 0.0.0.0.
-                environment["CCP_BIND_ADDRESS"] = "127.0.0.1"
                 process = try processLauncher(
                     executable,
                     ["serve", "--no-monitor", "--port", String(port)],
-                    environment
+                    launchEnvironment(forProfile: nil)
                 )
             } catch {
                 return .failure(.startFailed(error.localizedDescription))
@@ -485,17 +515,10 @@ final class ClaudeCodeProxyManager {
 
             let process: ClaudeCodeProxyProcessHandle
             do {
-                var environment = environment(forProfile: profile)
-                if environment.removeValue(forKey: "CCP_CODEX_SERVICE_TIER") != nil {
-                    Logger.agentStore.warning(
-                        "claude_code_proxy_inherited_service_tier_removed key=CCP_CODEX_SERVICE_TIER profile=\(profile, privacy: .public)"
-                    )
-                }
-                environment["CCP_BIND_ADDRESS"] = "127.0.0.1"
                 process = try processLauncher(
                     binary.path,
                     ["serve", "--no-monitor", "--port", String(port)],
-                    environment
+                    launchEnvironment(forProfile: profile)
                 )
             } catch {
                 return .failure(.startFailed(error.localizedDescription))
@@ -834,6 +857,119 @@ final class ClaudeCodeProxyManager {
         environment.removeValue(forKey: GPTAccountProfiles.configDirEnvironmentKey)
         environment.merge(profileEnvironmentResolver(profile)) { _, override in override }
         return environment
+    }
+
+    /// Env fuer den Start einer Proxy-Instanz (main und Zusatzprofile) — ein
+    /// Ort statt zwei kopierter Bloecke in den beiden Startpfaden.
+    private func launchEnvironment(forProfile profile: String?) -> [String: String] {
+        var environment = environment(forProfile: profile)
+        // Die Tier-Env des Proxy hat Vorrang vor jedem Modell-Alias
+        // und wuerde damit Toggle, plain /model sowie den guenstigen
+        // Haiku-Ersatz global ueberstimmen. Ein bewusster Override in
+        // der Proxy-Konfiguration oder einem externen Prozess bleibt.
+        if environment.removeValue(forKey: "CCP_CODEX_SERVICE_TIER") != nil {
+            let profileLabel = profile ?? GPTAccountProfiles.mainProfileName
+            Logger.agentStore.warning(
+                "claude_code_proxy_inherited_service_tier_removed key=CCP_CODEX_SERVICE_TIER profile=\(profileLabel, privacy: .public)"
+            )
+        }
+        // Die echte Loopback-Garantie liefert das Binary selbst: der
+        // raine-Proxy bindet hart auf 127.0.0.1 (verifiziert per lsof;
+        // `serve` kennt keinen --host/--bind-Flag). CCP_BIND_ADDRESS
+        // setzen wir nur als Defense-in-Depth — falls eine kuenftige
+        // Version oder ein alternativer Proxy die Variable auswertet,
+        // erzwingt sie ebenfalls loopback statt 0.0.0.0.
+        environment["CCP_BIND_ADDRESS"] = "127.0.0.1"
+        // Transkriptions-Route (`/v1/audio/transcriptions`) fuer den Diktat-
+        // Anbieter „ChatGPT-Abo". Bei JEDER selbst gestarteten Instanz, nicht
+        // nur bei gewaehltem Anbieter — sonst liefert ein spaeterer Wechsel
+        // 404, bis der Proxy neu startet. Kill-Switch aus → aktiv entfernen,
+        // auch eine aus der Login-Shell geerbte Variable.
+        if transcriptionsAPIEnabledResolver() {
+            environment[Self.transcriptionsAPIEnvironmentKey] = "1"
+        } else {
+            environment.removeValue(forKey: Self.transcriptionsAPIEnvironmentKey)
+        }
+        return environment
+    }
+
+    // MARK: - Transkriptions-Route
+
+    /// Woher die Instanz eines Profils stammt — entscheidet ueber die
+    /// Fehlermeldung, wenn die Transkriptions-Route fehlt (selbst gestartet →
+    /// Binary zu alt; extern → Flag fehlt beim fremden Start). Fuer main
+    /// blockiert die Health-Probe bis 0,5 s — nur abseits des Main Threads.
+    func instanceOrigin(forProfile profile: String?) -> ClaudeCodeProxyInstanceOrigin {
+        guard profilesEnabledResolver(), !Self.isMainProfile(profile), let profile else {
+            processLock.lock()
+            let selfStarted = selfStartedProcess?.isRunning == true
+            processLock.unlock()
+            if selfStarted { return .selfStarted }
+            return isReachable(port: mainPortResolver()) ? .external : .notRunning
+        }
+        processLock.lock()
+        defer { processLock.unlock() }
+        if let instance = profileInstances[profile], instance.process.isRunning {
+            return .selfStarted
+        }
+        return .notRunning
+    }
+
+    /// Prueft, ob der Proxy auf `port` die Transkriptions-Route kennt —
+    /// OHNE chatgpt.com anzusprechen: Der Handler prueft den Content-Type vor
+    /// allem anderen; `text/plain` mit leerem Body ergibt 415, wenn die Route
+    /// registriert ist, und 404 vom Fallback-Handler, wenn sie fehlt.
+    /// Blockiert bis 0,5 s — nie auf dem Main Thread rufen.
+    static func transcriptionRouteStatus(port: Int) -> ClaudeCodeProxyTranscriptionRoute {
+        guard
+            (1...65_535).contains(port),
+            let url = URL(string: "http://127.0.0.1:\(port)/v1/audio/transcriptions")
+        else { return .unknown }
+
+        var request = URLRequest(url: url, timeoutInterval: 0.4)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data()
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 0.4
+        configuration.timeoutIntervalForResource = 0.4
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        let delegate = ClaudeCodeProxyProbeDelegate()
+        let delegateQueue = OperationQueue()
+        delegateQueue.maxConcurrentOperationCount = 1
+        let session = URLSession(
+            configuration: configuration,
+            delegate: delegate,
+            delegateQueue: delegateQueue
+        )
+        let result = ClaudeCodeProxyRouteProbeResult()
+        let finished = DispatchSemaphore(value: 0)
+        let task = session.dataTask(with: request) { _, response, error in
+            let statusCode = error == nil ? (response as? HTTPURLResponse)?.statusCode : nil
+            result.store(classifyTranscriptionRouteProbe(statusCode: statusCode))
+            finished.signal()
+        }
+        task.resume()
+
+        guard finished.wait(timeout: .now() + 0.5) == .success else {
+            task.cancel()
+            session.invalidateAndCancel()
+            return .unknown
+        }
+        session.finishTasksAndInvalidate()
+        return result.value
+    }
+
+    /// Pur: Statuscode der Route-Probe → Befund. Nur die beiden eindeutigen
+    /// Antworten zaehlen; alles andere (auch kein Status) ist `.unknown`.
+    static func classifyTranscriptionRouteProbe(statusCode: Int?) -> ClaudeCodeProxyTranscriptionRoute {
+        switch statusCode {
+        case 415: return .available
+        case 404: return .missing
+        default: return .unknown
+        }
     }
 
     /// Pfad des gewaehlten Binarys — fuer Auth-Status und Device-Login, die

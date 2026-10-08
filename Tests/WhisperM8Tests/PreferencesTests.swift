@@ -275,6 +275,76 @@ final class PreferencesTests: XCTestCase {
         }
     }
 
+    // MARK: - ChatGPT-Abo
+
+    func testSaveChatGPTProviderSwitchesToPseudoModel() {
+        withIsolatedPreferences { preferences in
+            TranscriptionSettings.saveModel(.groq_whisper_v3)
+            TranscriptionSettings.saveProvider(.chatgpt)
+
+            XCTAssertEqual(preferences.selectedModelRaw, TranscriptionModel.chatgpt_transcribe.rawValue)
+            XCTAssertEqual(TranscriptionSettings.loadProvider(chatGPTEnabled: true), .chatgpt)
+            XCTAssertEqual(TranscriptionSettings.loadModel(chatGPTEnabled: true), .chatgpt_transcribe)
+            XCTAssertEqual(TranscriptionModel.chatgpt_transcribe.provider, .chatgpt)
+        }
+    }
+
+    func testKillSwitchFallsBackToGroqWithoutOverwritingStoredChoice() {
+        withIsolatedPreferences { preferences in
+            TranscriptionSettings.saveProvider(.chatgpt)
+
+            XCTAssertEqual(TranscriptionSettings.loadProvider(chatGPTEnabled: false), .groq)
+            XCTAssertEqual(TranscriptionSettings.loadModel(chatGPTEnabled: false), .groq_whisper_v3)
+            XCTAssertEqual(preferences.selectedProviderRaw, "chatgpt", "gespeicherte Wahl bleibt für das Wiedereinschalten")
+            XCTAssertEqual(preferences.selectedModelRaw, "chatgpt-transcribe")
+        }
+    }
+
+    func testKillSwitchPreferenceDefaultsToEnabled() {
+        withIsolatedPreferences { preferences in
+            XCTAssertTrue(preferences.isChatGPTTranscriptionEnabled)
+            preferences.isChatGPTTranscriptionEnabled = false
+            XCTAssertFalse(preferences.isChatGPTTranscriptionEnabled)
+            XCTAssertEqual(PreferenceKeys.chatGPTTranscriptionEnabled, "chatGPTTranscriptionEnabled")
+        }
+    }
+
+    func testSaveProviderWithKillSwitchOffDoesNotKeepChatGPTModel() {
+        withIsolatedPreferences { preferences in
+            TranscriptionSettings.saveProvider(.chatgpt)
+            preferences.isChatGPTTranscriptionEnabled = false
+            TranscriptionSettings.saveProvider(.groq)
+
+            XCTAssertEqual(preferences.selectedProviderRaw, "groq")
+            XCTAssertEqual(preferences.selectedModelRaw, TranscriptionModel.groq_whisper_v3.rawValue,
+                           "kein inkonsistentes Paar groq + chatgpt-transcribe")
+        }
+    }
+
+    func testSelectableProvidersAppendChatGPTOnlyWhenAvailable() {
+        XCTAssertEqual(TranscriptionProvider.selectableProviders(chatGPTAvailable: false), [.groq, .openai])
+        XCTAssertEqual(TranscriptionProvider.selectableProviders(chatGPTAvailable: true), [.groq, .openai, .chatgpt])
+        XCTAssertEqual(TranscriptionProvider.displayOrder, [.groq, .openai])
+        XCTAssertFalse(TranscriptionProvider.chatgpt.requiresAPIKey)
+        XCTAssertNil(TranscriptionProvider.chatgpt.keychainKey)
+        XCTAssertNil(TranscriptionProvider.chatgpt.apiKeyLink)
+        XCTAssertFalse(TranscriptionProvider.chatgpt.priceInfo.localizedCaseInsensitiveContains("kostenlos"))
+        XCTAssertEqual(TranscriptionProvider.chatgpt.availableModels, [.chatgpt_transcribe])
+        XCTAssertNil(TranscriptionProvider.chatgpt.recommendationBadge)
+    }
+
+    func testCredentialGate() {
+        for provider in [TranscriptionProvider.groq, .openai] {
+            XCTAssertFalse(TranscriptionCredentialGate.isSatisfied(provider: provider, typedKey: "", hasSavedKey: false))
+            XCTAssertTrue(TranscriptionCredentialGate.isSatisfied(provider: provider, typedKey: "k", hasSavedKey: false))
+            XCTAssertTrue(TranscriptionCredentialGate.isSatisfied(provider: provider, typedKey: "", hasSavedKey: true))
+            XCTAssertTrue(TranscriptionCredentialGate.isSatisfied(provider: provider, typedKey: "k", hasSavedKey: true))
+        }
+        for (typed, saved) in [("", false), ("k", false), ("", true), ("k", true)] {
+            XCTAssertTrue(TranscriptionCredentialGate.isSatisfied(provider: .chatgpt, typedKey: typed, hasSavedKey: saved))
+        }
+    }
+
     func testPreferenceKeysRawNamesAreStable() {
         let keys: [(String, String)] = [
             ("selectedProvider", PreferenceKeys.selectedProvider),

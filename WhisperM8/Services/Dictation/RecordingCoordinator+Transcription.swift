@@ -18,11 +18,23 @@ extension RecordingCoordinator {
         let model = modelResolver()
         Logger.debug("Using provider: \(provider.rawValue), model: \(model.rawValue)")
 
-        guard let apiKey = apiKeyResolver(provider), !apiKey.isEmpty else {
-            Logger.debug("ERROR: No API key found for \(provider.keychainKey)")
+        // Zugang über denselben Gate wie das Onboarding. Anbieter ohne Key
+        // (ChatGPT-Abo) bekommen "" — die Factory-Signatur bleibt, damit die
+        // Tests unverändert injizieren können; `createService` ignoriert den
+        // Key für `.chatgpt`.
+        let resolvedKey = provider.requiresAPIKey ? (apiKeyResolver(provider) ?? "") : ""
+        guard TranscriptionCredentialGate.isSatisfied(
+            provider: provider,
+            typedKey: resolvedKey,
+            hasSavedKey: false
+        ) else {
+            Logger.debug("ERROR: No API key found for \(provider.keychainKey ?? provider.rawValue)")
             throw TranscriptionError.missingAPIKey
         }
-        Logger.debug(" API key loaded (length: \(apiKey.count))")
+        let apiKey = resolvedKey
+        if provider.requiresAPIKey {
+            Logger.debug(" API key loaded (length: \(apiKey.count))")
+        }
 
         let language = AppPreferences.shared.language
         Logger.debug(" Language: \(language)")

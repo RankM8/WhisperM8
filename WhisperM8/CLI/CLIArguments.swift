@@ -90,17 +90,28 @@ enum CLIArgumentParser {
                 options.language = try nextValue(for: arg)
             case "--provider":
                 let raw = try nextValue(for: arg)
-                guard let provider = TranscriptionProvider(rawValue: raw.lowercased()) else {
-                    throw ParseError.invalidValue(flag: arg, value: raw, allowed: "groq, openai")
+                // „ChatGPT-Abo" gibt es nur im Diktat der App (braucht den
+                // laufenden GPT-Proxy). Ohne diese Ablehnung liefe er hier
+                // still als OpenAI — die CLI behandelt alles außer Groq so.
+                guard let provider = TranscriptionProvider(rawValue: raw.lowercased()),
+                      provider != .chatgpt else {
+                    throw ParseError.invalidValue(
+                        flag: arg,
+                        value: raw,
+                        allowed: Self.cliProviderHint(for: raw, base: "groq, openai")
+                    )
                 }
                 options.provider = provider
             case "--model":
                 let raw = try nextValue(for: arg)
-                guard let model = TranscriptionModel(rawValue: raw) else {
+                guard let model = TranscriptionModel(rawValue: raw), model.provider != .chatgpt else {
                     throw ParseError.invalidValue(
                         flag: arg,
                         value: raw,
-                        allowed: "whisper-large-v3-turbo, whisper-large-v3, gpt-4o-transcribe, whisper-1"
+                        allowed: Self.cliProviderHint(
+                            for: raw,
+                            base: "whisper-large-v3-turbo, whisper-large-v3, gpt-4o-transcribe, whisper-1"
+                        )
                     )
                 }
                 options.model = model
@@ -144,5 +155,13 @@ enum CLIArgumentParser {
             throw ParseError.noInput
         }
         return options
+    }
+
+    /// Erlaubte Werte; bei einem ChatGPT-Abo-Wert mit dem Hinweis, warum er
+    /// hier fehlt (die Liste selbst bleibt unverändert).
+    private static func cliProviderHint(for raw: String, base: String) -> String {
+        let isChatGPT = raw.lowercased() == TranscriptionProvider.chatgpt.rawValue
+            || raw == TranscriptionModel.chatgpt_transcribe.rawValue
+        return isChatGPT ? "\(base) (ChatGPT-Abo ist nur im Diktat der App verfügbar)" : base
     }
 }

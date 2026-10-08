@@ -308,12 +308,15 @@ enum CLITranscribeCommand {
 
 enum CLIKeyResolver {
     static func resolve(provider: TranscriptionProvider, explicit: String?) -> String? {
+        // Absicherung: Der Parser lehnt „ChatGPT-Abo" ab; käme er trotzdem
+        // hier an, darf er nicht still mit einem OpenAI-Key laufen.
+        guard provider != .chatgpt, let keychainKey = provider.keychainKey else { return nil }
         if let explicit, !explicit.isEmpty { return explicit }
         let envName = provider == .groq ? "GROQ_API_KEY" : "OPENAI_API_KEY"
         if let env = ProcessInfo.processInfo.environment[envName], !env.isEmpty {
             return env
         }
-        if let key = KeychainManager.load(key: provider.keychainKey), !key.isEmpty {
+        if let key = KeychainManager.load(key: keychainKey), !key.isEmpty {
             return key
         }
         return nil

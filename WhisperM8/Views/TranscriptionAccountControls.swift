@@ -10,11 +10,14 @@ import SwiftUI
 /// darunter eine dezente Empfehlungszeile (Badge + Hinweis) für den empfohlenen Provider.
 struct TranscriptionProviderPicker: View {
     @Binding var provider: TranscriptionProvider
+    /// Wählbare Anbieter — Default ohne „ChatGPT-Abo", siehe
+    /// `TranscriptionProvider.selectableProviders(chatGPTAvailable:)`.
+    var options: [TranscriptionProvider] = TranscriptionProvider.displayOrder
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Provider", selection: $provider) {
-                ForEach(TranscriptionProvider.displayOrder, id: \.self) { option in
+                ForEach(options, id: \.self) { option in
                     Text(option.displayName).tag(option)
                 }
             }
@@ -88,6 +91,47 @@ struct MaskedAPIKeyField: View {
             .buttonStyle(.borderless)
             .help(isRevealed ? "Hide typed key" : "Show typed key")
         }
+    }
+}
+
+/// Hinweise zum Anbieter „ChatGPT-Abo" — geteilt zwischen Settings und
+/// Onboarding. Bewusst deutsch wie die GPT-Backend-Seite, auf die er verweist.
+struct ChatGPTTranscriptionNotice: View {
+    /// Name des aktiven GPT-Kontos (`nil` = noch nicht gelesen).
+    var activeAccount: String?
+    /// Ist das GPT-Backend eingeschaltet? Ohne läuft kein Proxy.
+    var backendEnabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !backendEnabled {
+                Label(
+                    "Das GPT-Backend ist aus. Für „ChatGPT-Abo“ zuerst unter Einstellungen → GPT-Backend aktivieren.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(AppTheme.statusAwaiting)
+            }
+            noticeLine(
+                "Inoffizieller Endpoint:",
+                "Nutzt die interne ChatGPT-Transkription über den GPT-Proxy. Sie kann ohne Vorankündigung wegfallen oder sich ändern."
+            )
+            noticeLine("Speicherung:", "ChatGPT speichert die Aufnahme laut Antwort 30 Tage.")
+            noticeLine(
+                "Kein Vokabular/Prompt:",
+                "Nur Sprache wird übergeben, eigene Begriffe lassen sich nicht vorgeben."
+            )
+            noticeLine(
+                "Konto:",
+                "Nutzt den ChatGPT-Login des GPT-Backends (aktives Konto: \(activeAccount ?? "…")), nicht „codex login“."
+            )
+        }
+        .font(.system(size: 11.5))
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func noticeLine(_ title: String, _ text: String) -> some View {
+        (Text(title).fontWeight(.semibold) + Text(" ") + Text(text))
+            .foregroundStyle(AppTheme.textSecondary)
     }
 }
 

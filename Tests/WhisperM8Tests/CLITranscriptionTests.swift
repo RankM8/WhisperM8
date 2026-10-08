@@ -80,6 +80,25 @@ final class CLITranscriptionTests: XCTestCase {
         XCTAssertThrowsError(try CLIArgumentParser.parse(["a.mp4", "-o"]))          // fehlender Wert
     }
 
+    /// „ChatGPT-Abo" gibt es nur im App-Diktat — die CLI würde ihn sonst still
+    /// als OpenAI behandeln (alles außer Groq läuft dort als OpenAI).
+    func testChatGPTProviderAndModelAreRejected() {
+        for arguments in [
+            ["a.mp4", "--provider", "chatgpt"],
+            ["a.mp4", "--provider", "ChatGPT"],
+            ["a.mp4", "--model", "chatgpt-transcribe"],
+        ] {
+            XCTAssertThrowsError(try CLIArgumentParser.parse(arguments)) { error in
+                guard case CLIArgumentParser.ParseError.invalidValue(_, _, let allowed) = error else {
+                    return XCTFail("Erwartet invalidValue, erhalten \(error)")
+                }
+                XCTAssertTrue(allowed.contains("nur im Diktat der App"))
+                XCTAssertFalse(allowed.hasPrefix("chatgpt"))
+            }
+        }
+        XCTAssertNil(CLIKeyResolver.resolve(provider: .chatgpt, explicit: "sk-explicit"))
+    }
+
     // MARK: - Modell-Fähigkeiten
 
     func testModelSegmentSupport() {
