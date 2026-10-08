@@ -18,7 +18,9 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
     /// einer alten Generation ist damit erkennbar ungültig (statt still
     /// falsche Ergebnisse zu liefern).
     var journalId: String = ""
-    var sessionID: UUID
+    /// Betroffene Session. Nur bei Board-Ereignissen ohne Einzel-Chat
+    /// (`clear`/`activate`/`deactivate`) leer.
+    var sessionID: UUID?
     /// Vorheriger Laufzeitstatus (`nil` = es gab noch keine Meinung).
     var from: String?
     var to: String?
@@ -28,6 +30,20 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
     /// `hook` = belegt durch ein Hook-Event, `transcript` = aus dem Transkript
     /// geschätzt. Der Unterschied entscheidet, wie belastbar die Zeile ist.
     var source: String
+    /// Ereignisart. `nil` (alle Zeilen aus Vorversionen) = Statuswechsel einer
+    /// Konversation; `board` = Änderung am Jarvis-Board. Die folgenden Felder
+    /// sind optional, damit alte Zeilen unverändert lesbar bleiben.
+    var kind: String? = nil
+    /// Board: `set|remove|clear|activate|deactivate`.
+    var op: String? = nil
+    /// Board: Session-ID des Jarvis, dem das Board gehört.
+    var owner: UUID? = nil
+    /// Board: Ampel nach `set` bzw. vor `remove`.
+    var light: String? = nil
+
+    static let boardKind = "board"
+
+    var isBoardEvent: Bool { kind == Self.boardKind }
 }
 
 /// Append-only-Protokoll der Statuswechsel. Gleiche Bauart wie
@@ -61,9 +77,28 @@ final class ChatsStatusJournal: @unchecked Sendable {
         guard from != to else { return }
         lock.lock()
         defer { lock.unlock() }
-        let entry = ChatsStatusJournalEntry(
+        writeLocked(ChatsStatusJournalEntry(
             at: at, seq: nextSequence(), journalId: resolvedJournalId(),
-            sessionID: sessionID, from: from, to: to, signal: signal, source: source)
+            sessionID: sessionID, from: from, to: to, signal: signal, source: source))
+    }
+
+    /// Schreibt eine Board-Änderung. Läuft bewusst NICHT durch den
+    /// `from != to`-Guard von `append` — ein Board-Ereignis hat keinen
+    /// Statuswechsel und wäre dort immer verworfen worden. Selbe Sequenz und
+    /// Generation wie die Statuswechsel, damit ein einziger Cursor beides trägt.
+    func appendBoard(op: String, owner: UUID, sessionID: UUID?, light: String?, at: Date = Date()) {
+        lock.lock()
+        defer { lock.unlock() }
+        writeLocked(ChatsStatusJournalEntry(
+            at: at, seq: nextSequence(), journalId: resolvedJournalId(),
+            sessionID: sessionID, from: nil, to: nil, signal: "board.\(op)", source: Self.boardSource,
+            kind: ChatsStatusJournalEntry.boardKind, op: op, owner: owner, light: light))
+    }
+
+    static let boardSource = "board"
+
+    /// Aufrufer hält `lock`.
+    private func writeLocked(_ entry: ChatsStatusJournalEntry) {
         guard let data = try? Self.encoder.encode(entry) else { return }
         var line = data
         line.append(0x0A)
@@ -88,7 +123,9 @@ final class ChatsStatusJournal: @unchecked Sendable {
         for line in text.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
             guard let data = line.data(using: .utf8),
                   let entry = try? decoder.decode(ChatsStatusJournalEntry.self, from: data) else { continue }
-            guard entry.sessionID == sessionID else { continue }
+            // Board-Ereignisse sind keine Statuswechsel — die Historie einer
+            // Session (`chats show`) bliebe sonst nicht mehr erklärbar.
+            guard entry.sessionID == sessionID, !entry.isBoardEvent else { continue }
             found.append(entry)
             if found.count >= limit { break }
         }

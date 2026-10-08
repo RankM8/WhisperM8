@@ -54,6 +54,8 @@ enum AgentChatsCLICommand {
             return ChatsChangesCommand.since(rest)
         case "watch":
             return ChatsChangesCommand.watch(rest)
+        case "board":
+            return await ChatsBoardCommand.run(rest)
         case "enqueue":
             return ChatsQueueCommand.enqueue(rest)
         case "queue":
@@ -804,6 +806,23 @@ enum ChatsCLIHelp {
                                `gap: true` = Cursor abgelaufen → snapshot ziehen.
       whisperm8 chats watch [--cursor <c>] [--interval S] [--timeout S]
                                NDJSON-Strom derselben Ereignisse; für Sidecars.
+                               Enthält auch Board-Ereignisse ("kind": "board").
+
+    JARVIS-BOARD (ein Board je Jarvis-Session, Ablage jarvis-board.json)
+      whisperm8 chats board [--owner @self|<ref>] [--all] [--json]
+                               Board lesen (auch bei geschlossener App, wm8.board/1).
+                               Sortiert: needsYou, done, running, parked; darin
+                               ältestes updatedAt zuerst. Kein Board → isActive
+                               false, entries leer (Exit 0).
+      whisperm8 chats board set <ref> [--light needsYou|running|done|parked]
+                          [--mission "…"] [--needs "…"] [--next "…"] [--json]
+                               Eintrag auf dem EIGENEN Board anlegen/ändern; nicht
+                               genannte Felder bleiben, neu ohne --light = running.
+                               Texte einzeilig, max. 160 Zeichen. Legt das Board
+                               bei Bedarf an (aktiv). Der eigene Chat nie.
+      whisperm8 chats board remove <ref> [--json]        Eintrag entfernen
+      whisperm8 chats board clear [--json]               alle Einträge entfernen
+      whisperm8 chats board activate|deactivate [--json] eigenes Board ein-/ausschalten
 
       whisperm8 chats enqueue <ref> -- "<prompt>" [--json]
                                Folgeauftrag vormerken. Anders als `send` kein

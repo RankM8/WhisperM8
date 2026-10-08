@@ -70,7 +70,15 @@ enum ChatsChangesCommand {
         } else {
             if result.gap { CLIIO.out("⚠︎ Cursor abgelaufen — `chats snapshot` ziehen.") }
             for entry in result.entries {
-                CLIIO.out("\(entry.seq)  \(ChatsOutput.shortID(entry.sessionID))  "
+                if entry.isBoardEvent {
+                    let target = entry.sessionID.map { "  \(ChatsOutput.shortID($0))" } ?? ""
+                    let owner = entry.owner.map(ChatsOutput.shortID) ?? "?"
+                    CLIIO.out("\(entry.seq)  board \(entry.op ?? "?")  owner \(owner)\(target)"
+                              + (entry.light.map { "  \($0)" } ?? ""))
+                    continue
+                }
+                let ref = entry.sessionID.map(ChatsOutput.shortID) ?? "–"
+                CLIIO.out("\(entry.seq)  \(ref)  "
                           + "\(entry.from ?? "–") → \(entry.to ?? "–")  (\(entry.signal), \(entry.source))")
             }
             if result.entries.isEmpty, !result.gap { CLIIO.out("Keine Änderungen.") }
@@ -158,17 +166,41 @@ enum ChatsChangesCommand {
     // MARK: Gemeinsam
 
     static func changeJSON(_ entry: ChatsStatusJournalEntry) -> [String: Any] {
+        if entry.isBoardEvent { return boardChangeJSON(entry) }
         var dict: [String: Any] = [
             "seq": entry.seq,
             "at": ChatsOutput.iso(entry.at),
-            "ref": ChatsOutput.shortID(entry.sessionID),
-            "sessionID": entry.sessionID.uuidString,
             "kind": "conversation",
             "signal": entry.signal,
             "evidence": entry.source == "hook" ? "observed" : "inferred",
         ]
+        if let sessionID = entry.sessionID {
+            dict["ref"] = ChatsOutput.shortID(sessionID)
+            dict["sessionID"] = sessionID.uuidString
+        }
         if let from = entry.from { dict["from"] = from }
         if let to = entry.to { dict["to"] = to }
+        return dict
+    }
+
+    /// Board-Ereignis (Jarvis-Board). `clear`/`activate`/`deactivate` betreffen
+    /// das ganze Board und tragen deshalb weder `ref`/`sessionID` noch `light`.
+    static func boardChangeJSON(_ entry: ChatsStatusJournalEntry) -> [String: Any] {
+        var dict: [String: Any] = [
+            "seq": entry.seq,
+            "at": ChatsOutput.iso(entry.at),
+            "kind": ChatsStatusJournalEntry.boardKind,
+            "op": entry.op ?? "unknown",
+        ]
+        if let owner = entry.owner {
+            dict["owner"] = owner.uuidString
+            dict["ownerRef"] = ChatsOutput.shortID(owner)
+        }
+        if let sessionID = entry.sessionID {
+            dict["ref"] = ChatsOutput.shortID(sessionID)
+            dict["sessionID"] = sessionID.uuidString
+        }
+        if let light = entry.light { dict["light"] = light }
         return dict
     }
 }

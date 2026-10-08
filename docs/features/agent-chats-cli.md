@@ -450,6 +450,42 @@ Kompatibilität: Additive Felder ändern das Schema nicht; Agenten MÜSSEN
 unbekannte Felder ignorieren. Entfernen, Umbenennen oder Umdeuten eines Feldes
 erzwingt `/2`. Cursor sind opak und nur innerhalb derselben Generation gültig.
 
+## Jarvis-Board (`chats board`, seit 08.10.2026)
+
+Ein Board je Jarvis-Session (`owner` = deren WhisperM8-Session-ID): die Chats,
+die Jarvis aktiv betreut, mit Ampel (`needsYou | running | done | parked`),
+`mission`, `needs`, `next`. Die Anzeige über dem Prompt übernimmt die Mod des
+Plugins `whisperm8`, siehe `docs/features/jarvis-board.md`.
+
+```bash
+whisperm8 chats board [--owner @self|<ref>] [--all] [--json]   # lesen, App optional
+whisperm8 chats board set <ref> [--light L] [--mission M] [--needs N] [--next X] [--json]
+whisperm8 chats board remove <ref> | clear | activate | deactivate [--json]
+```
+
+- **Lesen** direkt von der Platte (`jarvis-board.json`, `wm8.board/1`): je
+  Eintrag zusätzlich `ref`, `title`, `project`, Live-`status` und
+  `statusSince` (aus dem Journal) sowie `otherOwners`, dazu der aktuelle
+  `cursor` für `watch`. Kein Board → `isActive: false`, `entries: []`, Exit 0.
+  `--all --json` liefert `{schema, cursor, boards: […]}`.
+- **Handeln** nur über den Socket an die laufende App (einziger Schreiber)
+  und nur auf dem **eigenen** Board; die App verlangt ein gültiges
+  Session-Token (die nackte Session-ID reicht nicht). Texte werden einzeilig,
+  getrimmt und auf 160 Zeichen gekürzt. Ein neuer Eintrag ohne `--light` ist
+  `running`; ein `set` ohne Änderung liefert `changed: false` und kein
+  Ereignis.
+- **Exit-Codes:** 3 unbekannter Ref, 4 eigener Chat auf eigenem Board
+  (`selfSend`), 5 App nicht erreichbar, 1 Kill-Switch/ungültige Eingabe.
+  `remove` auf einen nicht eingetragenen oder archivierten Chat ist ok.
+- **Ereignisse:** Jede echte Änderung ist ein Journal-Eintrag, den `since` und
+  `watch` mit demselben Cursor wie die Konversationsereignisse liefern:
+  `{"kind":"board","op":"set|remove|clear|activate|deactivate","owner","ownerRef","ref","sessionID","light",…}`
+  (bei `clear`/`activate`/`deactivate` ohne `ref`, `sessionID`, `light`).
+  Konversationsereignisse sind unverändert; die Statushistorie von `show`
+  blendet Board-Ereignisse aus.
+- **Kill-Switch:** `defaults write com.whisperm8.app jarvisBoardEnabled -bool NO`
+  — Handeln antwortet `unsupported`, Lesen liefert ein leeres Board.
+
 ## Sichtbarkeit von Workspaces und Grid (nur lesend)
 
 `workspace list --json` und `window list --json` liefern zusätzlich, was ein

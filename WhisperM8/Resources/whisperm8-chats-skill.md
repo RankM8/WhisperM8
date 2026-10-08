@@ -35,6 +35,18 @@ whisperm8 chats wait [--ref R]… [--until attention|idle|statusChange] \
 whisperm8 chats audit [--limit N] [--session <ref>]
 whisperm8 chats archived [query] [--project P] [--group G] [--provider claude|codex] \
                          [--since 30d|2026-06-01] [--until D] [--content "text"] [--json]
+whisperm8 chats board [--owner @self|<ref>] [--all] [--json]
+                                                     # Jarvis-Board lesen (wm8.board/1): betreute Chats mit
+                                                     # Ampel, Auftrag, Anliegen, nächstem Schritt + Live-Status
+```
+
+Board pflegen (App muss laufen; ändert nur das **eigene** Board, keine fremde
+Session — deshalb ohne Rückfrage erlaubt). Arbeitsweise: Skill `jarvis`,
+Abschnitt „Board". In der App gleichwertig über das Tool `mcp__whisperm8__board`.
+```bash
+whisperm8 chats board set <ref> [--light needsYou|running|done|parked] \
+                                [--mission "…"] [--needs "…"] [--next "…"]
+whisperm8 chats board remove <ref> | clear | activate | deactivate
 ```
 
 Handeln (App muss laufen — sonst Exit 5). **Vor jeder dieser Aktionen: Regeln unten beachten.**

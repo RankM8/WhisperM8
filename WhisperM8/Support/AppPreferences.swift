@@ -429,6 +429,35 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.chatsPromptGuardEnabled) }
     }
 
+    /// Jarvis-Board (`whisperm8 chats board`): Aus = Handeln-Befehle antworten
+    /// mit Fehlermeldung, Lesen liefert ein leeres Board. Die CLI liest den
+    /// Schalter über `JarvisBoardSettings` (feste App-Domain).
+    /// `defaults write com.whisperm8.app jarvisBoardEnabled -bool NO`
+    var isJarvisBoardEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.jarvisBoardEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.jarvisBoardEnabled) }
+    }
+
+    /// Claude-Code-Plugin `whisperm8` (Skills + Jarvis-Board-Mod): Die App legt
+    /// es beim Start unter Application Support ab und gibt es jeder
+    /// Claude-Session per `CLAUDE_CODE_PLUGIN_DIRS` mit. Aus = keine Variable,
+    /// kein Ablegen, keine Migration; die Skills lassen sich dann wieder über
+    /// die Settings nach `~/.claude/skills` installieren. Wirkt für NEU
+    /// gestartete Sessions.
+    /// `defaults write com.whisperm8.app claudePluginEnabled -bool NO`
+    var isClaudePluginEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.claudePluginEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudePluginEnabled) }
+    }
+
+    /// Einmal-Flag: Die losen Skill-Kopien in `~/.claude/skills` wurden beim
+    /// ersten Start mit Plugin weggeräumt (gesichert, nicht gelöscht). Danach
+    /// nie wieder — wer einen Skill per Settings neu installiert, behält ihn.
+    var claudePluginSkillMigrationDone: Bool {
+        get { defaults.bool(forKey: Keys.claudePluginSkillMigrationDone) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudePluginSkillMigrationDone) }
+    }
+
     var isAgentEventDrivenWatchEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.agentEventDrivenWatchEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.agentEventDrivenWatchEnabled) }
@@ -709,6 +738,9 @@ enum PreferenceKeys {
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
+    static let jarvisBoardEnabled = "jarvisBoardEnabled"
+    static let claudePluginEnabled = "claudePluginEnabled"
+    static let claudePluginSkillMigrationDone = "claudePluginSkillMigrationDone"
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"
     static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
     static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"

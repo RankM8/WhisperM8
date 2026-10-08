@@ -58,6 +58,11 @@ let package = Package(
                 .copy("Resources/whisperm8-cli-skill.md"),
                 .copy("Resources/whisperm8-agent-skill.md"),
                 .copy("Resources/whisperm8-chats-skill.md"),
+                .copy("Resources/whisperm8-jarvis-skill.md"),
+                // Gerüst des Claude-Code-Plugins `whisperm8` (Manifest, Mods,
+                // Typvertrag); die Skills setzt `WhisperM8ClaudePlugin` beim
+                // Ablegen aus den Skill-Ressourcen oben dazu.
+                .copy("Resources/claude-plugin"),
                 .copy("Resources/whisperm8-gpt-coworker-skill.md"),
                 .copy("Resources/whisperm8-gpt-workflow-skill.md"),
                 .copy("Resources/whisperm8-gpt-workflow-example-code-review.js"),

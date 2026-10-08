@@ -126,7 +126,101 @@ copy_if_changed() {
 
 overall_changed=0
 
-for entry in "${SKILLS[@]}"; do
+# --- Plugin `whisperm8` ------------------------------------------------------
+# Seit dem Plugin kommen die Skills nicht mehr lose aus ~/.claude/skills,
+# sondern als `whisperm8:<skill>` aus dem Plugin-Ordner, den die App jeder
+# Session per CLAUDE_CODE_PLUGIN_DIRS mitgibt (WhisperM8ClaudePlugin.swift).
+# Dieser Block legt denselben Aufbau aus dem Repo ab — gleiche Ablage
+# (versions/<hash>/whisperm8 + Symlink, atomar umgebogen), damit laufende
+# Sessions nicht mitten im Turn neu laden. Ohne App-Build: neue Sessions sehen
+# den Repo-Stand sofort.
+#
+# WHISPERM8_PLUGIN_MODE: 1 = Plugin (Default, solange claudePluginEnabled
+# nicht NO ist), 0 = alte lose Kopien. Mit WHISPERM8_SKILLS_HOME (Tests,
+# explizites Ziel) ist der Default 0.
+PLUGIN_ROOT="${WHISPERM8_PLUGIN_ROOT:-$HOME/Library/Application Support/WhisperM8/claude-plugin}"
+plugin_mode="${WHISPERM8_PLUGIN_MODE:-auto}"
+if [[ "$plugin_mode" == auto ]]; then
+  if [[ -n "${WHISPERM8_SKILLS_HOME:-}" ]]; then
+    plugin_mode=0
+  elif [[ "$(defaults read com.whisperm8.app claudePluginEnabled 2>/dev/null || echo 1)" == 0 ]]; then
+    plugin_mode=0
+  else
+    plugin_mode=1
+  fi
+fi
+
+PLUGIN_SKILLS=("${SKILLS[@]}" "jarvis|whisperm8-jarvis-skill||")
+
+sync_plugin() {
+  local skeleton="$RESOURCES/claude-plugin" versions="$PLUGIN_ROOT/versions"
+  local staging plugin rev hash entry name resource refs assets ref asset rel
+  [[ -f "$skeleton/plugin.json" ]] || { echo "FEHLER: Plugin-Gerüst fehlt: $skeleton" >&2; return 1; }
+  mkdir -p "$versions"
+  staging="$(mktemp -d "$versions/.staging-XXXXXX")"
+  plugin="$staging/whisperm8"
+  mkdir -p "$plugin/.claude-plugin"
+
+  # Gerüst (Mods, Typen) ohne Tests; Manifest mit Repo-Stand als Version.
+  (cd "$skeleton" && find . -type f ! -name '*.test.ts' ! -name '*.test.tsx' ! -name '.DS_Store' ! -name 'plugin.json') |
+    while IFS= read -r rel; do
+      mkdir -p "$plugin/$(dirname "$rel")"
+      cp "$skeleton/$rel" "$plugin/$rel"
+    done
+  rev="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo local)"
+  sed -E "s/\"version\": *\"[^\"]*\"/\"version\": \"0.0.0-dev+$rev\"/" "$skeleton/plugin.json" >"$plugin/.claude-plugin/plugin.json"
+
+  for entry in "${PLUGIN_SKILLS[@]}"; do
+    IFS='|' read -r name resource refs assets <<<"$entry"
+    mkdir -p "$plugin/skills/$name"
+    cp "$RESOURCES/$resource.md" "$plugin/skills/$name/SKILL.md"
+    if [[ -n "$refs" ]]; then
+      IFS=',' read -ra ref_list <<<"$refs"
+      mkdir -p "$plugin/skills/$name/references"
+      for ref in "${ref_list[@]}"; do
+        cp "$RESOURCES/${ref#*=}.md" "$plugin/skills/$name/references/${ref%%=*}"
+      done
+    fi
+    if [[ -n "$assets" ]]; then
+      IFS=',' read -ra asset_list <<<"$assets"
+      for asset in "${asset_list[@]}"; do
+        mkdir -p "$plugin/skills/$name/$(dirname "${asset%%=*}")"
+        cp "$RESOURCES/${asset#*=}" "$plugin/skills/$name/${asset%%=*}"
+      done
+    fi
+  done
+
+  hash="$(cd "$plugin" && find . -type f | LC_ALL=C sort | while IFS= read -r rel; do printf '%s\n' "$rel"; shasum -a 256 "$rel"; done | shasum -a 256 | cut -c1-16)"
+  if [[ -f "$versions/$hash/whisperm8/.claude-plugin/plugin.json" ]]; then
+    rm -rf "$staging"
+    PLUGIN_RESULT=unchanged
+  else
+    rm -rf "${versions:?}/$hash"
+    mv "$staging" "$versions/$hash"
+    PLUGIN_RESULT=synced
+  fi
+  touch "$versions/$hash"
+  # Symlink atomar umbiegen: neuer Link daneben, dann rename(2).
+  ln -s "versions/$hash/whisperm8" "$PLUGIN_ROOT/.whisperm8-link-$$"
+  perl -e 'rename($ARGV[0], $ARGV[1]) or die "rename: $!\n"' "$PLUGIN_ROOT/.whisperm8-link-$$" "$PLUGIN_ROOT/whisperm8"
+  # Alte Stände: die fünf jüngsten bleiben (laufende Sessions stehen darauf).
+  (cd "$versions" && ls -1t | grep -v '^\.' | tail -n +6 | while IFS= read -r old; do rm -rf "${versions:?}/$old"; done)
+}
+
+LOOSE_SKILLS=()
+if [[ "$plugin_mode" == 1 ]]; then
+  sync_plugin || exit 1
+  if [[ "$PLUGIN_RESULT" == synced ]]; then
+    echo "✓ plugin whisperm8 — synchronisiert ($PLUGIN_ROOT/whisperm8)"
+    overall_changed=1
+  else
+    echo "· plugin whisperm8 — unverändert"
+  fi
+else
+  LOOSE_SKILLS=("${SKILLS[@]}")
+fi
+
+for entry in ${LOOSE_SKILLS[@]+"${LOOSE_SKILLS[@]}"}; do
   IFS='|' read -r name resource refs assets <<<"$entry"
   src_skill="$RESOURCES/$resource.md"
   if [[ ! -f "$src_skill" ]]; then
