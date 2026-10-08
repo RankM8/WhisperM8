@@ -1,6 +1,39 @@
 import SwiftUI
 
+/// Lesende Datenquellen der Seite. Live = Preferences, Keychain, GPT-Proxy;
+/// UI-Snapshots reichen feste Werte herein — ohne Keychain-Abfrage und ohne
+/// Subprozess (`codex auth status`). Schreibende Aktionen (Key speichern/
+/// löschen) bleiben live, sie laufen nur auf Nutzer-Klick.
+struct TranscriptionSettingsDependencies {
+    /// Gespeicherte Auswahl (Rohwerte) aus den App-Preferences.
+    var storedSelection: () -> (provider: String, model: String)
+    /// Liegt für diesen Keychain-Schlüssel ein API-Key vor?
+    var hasSavedKey: (String) -> Bool
+    /// Aktives GPT-Konto und dessen Login. Blockiert live (Subprozess) —
+    /// die Seite ruft es nur abseits des Main Threads auf.
+    var chatGPTStatus: @Sendable (_ backendEnabled: Bool) -> (account: String, status: ClaudeCodeProxyAuthStatus?)
+
+    static let live = TranscriptionSettingsDependencies(
+        storedSelection: {
+            (
+                AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.groq.rawValue,
+                AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.groq_whisper_v3.rawValue
+            )
+        },
+        hasSavedKey: { KeychainManager.exists(key: $0) },
+        chatGPTStatus: { backendEnabled in
+            let profilesEnabled = AppPreferences.shared.isGPTAccountProfilesEnabled
+            let profile = profilesEnabled ? GPTAccountProfiles().activeProfileNameOrNil() : nil
+            let account = profile ?? GPTAccountProfiles.mainProfileName
+            guard backendEnabled else { return (account, nil) }
+            return (account, ClaudeCodeProxyManager.shared.authStatus(profile: profile))
+        }
+    )
+}
+
 struct TranscriptionSettingsPage: View {
+    var dependencies: TranscriptionSettingsDependencies = .live
+
     @AppStorage("selectedProvider") private var selectedProviderRaw = TranscriptionProvider.groq.rawValue
     @AppStorage("selectedModel") private var selectedModelRaw = TranscriptionModel.groq_whisper_v3.rawValue
     @AppStorage("language") private var language = "de"
@@ -34,8 +67,22 @@ struct TranscriptionSettingsPage: View {
         )
     }
 
+    /// Das Modell, das die Diktat-Logik tatsächlich nimmt: gehört das
+    /// gespeicherte nicht zum angezeigten Anbieter (Kill-Switch aus, gespeichert
+    /// „ChatGPT-Abo"), dessen Default — wie `TranscriptionSettings.loadModel()`.
+    /// Nur Anzeige: die gespeicherte Wahl bleibt, bis der Nutzer selbst wählt,
+    /// damit sie beim Wiedereinschalten zurückkommt. UI-Snapshot-Befund
+    /// 2026-10-08: der Picker stand sonst leer.
     private var currentModel: TranscriptionModel? {
-        TranscriptionModel(rawValue: selectedModelRaw)
+        guard let stored = TranscriptionModel(rawValue: selectedModelRaw) else { return nil }
+        return stored.provider == provider ? stored : provider.defaultModel
+    }
+
+    private var modelSelection: Binding<String> {
+        Binding(
+            get: { currentModel?.rawValue ?? selectedModelRaw },
+            set: { selectedModelRaw = $0 }
+        )
     }
 
     var body: some View {
@@ -107,7 +154,7 @@ struct TranscriptionSettingsPage: View {
                 if provider.availableModels.count > 1 {
                     SettingsPickerRow(
                         title: "Model",
-                        selection: $selectedModelRaw,
+                        selection: modelSelection,
                         options: provider.availableModels.map(\.rawValue)
                     ) { rawValue in
                         Text(TranscriptionModel(rawValue: rawValue)?.displayName ?? rawValue)
@@ -162,17 +209,16 @@ struct TranscriptionSettingsPage: View {
         // Migration läuft zentral beim App-Start (RecordingCoordinator) — hier
         // nur LESEN und nur bei echter Abweichung zurückschreiben, damit das
         // bloße Öffnen der Seite keine Preferences mutiert (Review-Befund K2).
-        let providerRaw = AppPreferences.shared.selectedProviderRaw ?? TranscriptionProvider.groq.rawValue
-        let modelRaw = AppPreferences.shared.selectedModelRaw ?? TranscriptionModel.groq_whisper_v3.rawValue
+        let (providerRaw, modelRaw) = dependencies.storedSelection()
         if selectedProviderRaw != providerRaw { selectedProviderRaw = providerRaw }
         if selectedModelRaw != modelRaw { selectedModelRaw = modelRaw }
         apiKey = ""
-        apiKeyAvailable = provider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
+        apiKeyAvailable = provider.keychainKey.map(dependencies.hasSavedKey) ?? false
     }
 
     private func handleProviderChange(to newProvider: TranscriptionProvider) {
         apiKey = ""
-        apiKeyAvailable = newProvider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
+        apiKeyAvailable = newProvider.keychainKey.map(dependencies.hasSavedKey) ?? false
         if let currentModel = TranscriptionModel(rawValue: selectedModelRaw),
            currentModel.provider != newProvider {
             selectedModelRaw = newProvider.defaultModel.rawValue
@@ -199,12 +245,9 @@ struct TranscriptionSettingsPage: View {
             return
         }
         let backendEnabled = gptBackendEnabled
-        let snapshot = await Task.detached(priority: .userInitiated) { () -> (String, ClaudeCodeProxyAuthStatus?) in
-            let profilesEnabled = AppPreferences.shared.isGPTAccountProfilesEnabled
-            let profile = profilesEnabled ? GPTAccountProfiles().activeProfileNameOrNil() : nil
-            let account = profile ?? GPTAccountProfiles.mainProfileName
-            guard backendEnabled else { return (account, nil) }
-            return (account, ClaudeCodeProxyManager.shared.authStatus(profile: profile))
+        let chatGPTStatus = dependencies.chatGPTStatus
+        let snapshot = await Task.detached(priority: .userInitiated) {
+            chatGPTStatus(backendEnabled)
         }.value
         guard !Task.isCancelled else { return }
         chatGPTActiveAccount = snapshot.0

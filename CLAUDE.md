@@ -39,6 +39,8 @@ swift test --filter testLoginShellEnvironment # by test-name substring
 
 `DEVELOPER_DIR` must point at the Xcode toolchain (SwiftUI macros); the Makefile sets it automatically, plain `swift build`/`swift test` does not.
 
+**UI ansehen ohne App-Start** (Doku `docs/features/ui-testing.md`): `make snapshots [ONLY=<name>]` rendert die Fixtures aus `Tests/WhisperM8Tests/UISnapshotGallery.swift` hell + dunkel als PNG nach `.build/ui-snapshots/<zeit>/` — sicher aus einem Agent-Chat, die PNGs lassen sich direkt lesen. Nach UI-Änderungen an einer Ansicht mit Fixture: rendern und ansehen. Ansichten mit Keychain-/Proxy-/Datei-Zugriffen bekommen für Snapshots eine Abhängigkeits-Struktur mit `.live`-Default (Muster `TranscriptionSettingsDependencies`).
+
 Test convention: dependency injection via plain closures and small protocols (e.g. `commandResolver: { _ in "/path" }`, `ProcessRunner` spies) — no DI framework. Agent-Chats coverage is split across thematic files in `Tests/WhisperM8Tests/` (e.g. `AgentSessionStoreTests.swift`, `AgentCommandBuilderTests.swift`); shared helpers live in `AgentTestSupport.swift`.
 
 ## Debugging

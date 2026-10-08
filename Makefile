@@ -1,4 +1,4 @@
-.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall skills plugin-test _install_bundle
+.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall skills plugin-test snapshots _install_bundle
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -18,6 +18,10 @@ help:
 	@echo "  make skills            - Sync agent skills from WhisperM8/Resources to"
 	@echo "                            ~/.claude/skills (+ repo mirrors) without building"
 	@echo "                            or restarting the app."
+	@echo ""
+	@echo "  make snapshots         - Render the UI snapshot gallery as PNGs (light + dark)"
+	@echo "                            into .build/ui-snapshots/<time>/ — no app start,"
+	@echo "                            safe from inside an agent chat. ONLY=<name> filters."
 	@echo ""
 	@echo "  make build             - Build release bundle in project directory only."
 	@echo "  make install           - Build and in-place sync to /Applications."
@@ -80,6 +84,9 @@ skills:
 # Mods des Claude-Code-Plugins `whisperm8` prüfen (claude plugin validate + test).
 plugin-test:
 	@bash scripts/test-claude-plugin.sh
+
+snapshots:
+	@bash scripts/ui-snapshots.sh "$(ONLY)"
 
 # ------------------------------------------------------------------------------
 # Build / install (without launching)
