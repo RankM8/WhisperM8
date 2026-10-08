@@ -61,6 +61,9 @@ struct GPTAccountProfiles {
     /// Env-Variable, mit der der Proxy seine Konfigurations- und Store-Wurzel
     /// umhaengt (verifiziert 2026-09-16 mit Fork 0.1.36-whisperm8.1).
     static let configDirEnvironmentKey = "CCP_CONFIG_DIR"
+    /// Zusatzprofile bekommen zusaetzlich ein eigenes `HOME` (siehe
+    /// `environmentOverrides`).
+    static let homeEnvironmentKey = "HOME"
     static let accountInfoFileName = "whisperm8-account.json"
 
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -308,6 +311,17 @@ struct GPTAccountProfiles {
     /// rein dateibasiert und schreibt jeden Refresh zurueck. Leer nur fuer
     /// Profile, deren Verzeichnis nicht (mehr) existiert — ein frisch
     /// angelegtes, leeres Config-Dir liefe sonst still auf dem Default-Konto.
+    ///
+    /// Zusatzprofile laufen mit `HOME` = Profil-Verzeichnis. Der Proxy kennt
+    /// neben `<CCP_CONFIG_DIR>/codex/auth.json` eine Altlast-Datei unter
+    /// `$HOME/.config/claude-code-proxy/codex/auth.json` — das IST der
+    /// main-Store. Er liest sie, wenn die Profil-Datei fehlt (stiller
+    /// Kontowechsel auf main), und `clear_auth` loescht BEIDE: bei
+    /// `codex auth logout` eines Zusatzprofils und bei einem abgelehnten
+    /// Refresh (reproduziert 2026-10-08 mit v0.1.44, Wegwerf-HOME + Sentinel).
+    /// Ohne eigenes `HOME` meldete „Abmelden" eines Zusatzkontos also main mit
+    /// ab. Sonst nutzt der Proxy `HOME` nur fuer `~/.local/state` (Fehler-Logs,
+    /// landen jetzt im Profil-Ordner); der Config-Dir kommt aus `CCP_CONFIG_DIR`.
     func environmentOverrides(forProfile name: String?) -> [String: String] {
         guard let name, name != Self.mainProfileName else {
             return [Self.configDirEnvironmentKey: configDir(forProfile: Self.mainProfileName).path]
@@ -328,7 +342,7 @@ struct GPTAccountProfiles {
             )
             return [:]
         }
-        return [Self.configDirEnvironmentKey: dir.path]
+        return [Self.configDirEnvironmentKey: dir.path, Self.homeEnvironmentKey: dir.path]
     }
 
     // MARK: - Profil anlegen / entfernen
