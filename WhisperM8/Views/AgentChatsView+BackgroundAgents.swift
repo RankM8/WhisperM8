@@ -150,7 +150,11 @@ extension AgentChatsView {
                 subAgent: request.subAgent,
                 permissionMode: request.permissionMode,
                 extraArguments: extraArgs,
-                environmentOverrides: routerEnvironment ?? [:]
+                // Plugin `whisperm8` auch für den vom Supervisor gehosteten
+                // Worker — ob der Daemon die Umgebung durchreicht, ist offen
+                // (Plan whisperm8-plugin.md, Prototyp-Ergebnis Punkt 7).
+                environmentOverrides: (routerEnvironment ?? [:])
+                    .merging(ClaudePluginBootstrap.launchEnvironment()) { _, plugin in plugin }
             )
             // 4. Short-ID persistieren + Hook-Tracking starten + Attach triggern.
             try store.setBackgroundShortID(localSessionID: session.id, shortID: result.shortID)

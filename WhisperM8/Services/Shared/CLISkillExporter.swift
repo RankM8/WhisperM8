@@ -103,6 +103,18 @@ struct CLISkillExporter {
             .gptCoworker,
             .gptWorkflow,
         ]
+
+        /// Supervisor-Arbeitsmodus über alle Chats. Nur im Plugin `whisperm8`
+        /// ausgeliefert (als `whisperm8:jarvis`), deshalb nicht in `all`: die
+        /// Settings sollen ihn nicht zusätzlich lose nach `~/.claude/skills`
+        /// legen.
+        static let jarvis = SkillDefinition(
+            name: "jarvis",
+            resourceName: "whisperm8-jarvis-skill"
+        )
+
+        /// Alle Skills des Plugins `whisperm8`.
+        static let plugin: [SkillDefinition] = all + [.jarvis]
     }
 
     /// Rückwärtskompatibler Alias (Tests/ältere Aufrufer).

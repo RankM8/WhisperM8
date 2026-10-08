@@ -1,4 +1,4 @@
-.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall skills _install_bundle
+.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall skills plugin-test _install_bundle
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
@@ -76,6 +76,10 @@ dev-reinstall: dev
 # Skills ohne Build/Neustart nachziehen (sicher aus einem Agent-Chat heraus).
 skills:
 	@bash scripts/sync-skills.sh
+
+# Mods des Claude-Code-Plugins `whisperm8` prüfen (claude plugin validate + test).
+plugin-test:
+	@bash scripts/test-claude-plugin.sh
 
 # ------------------------------------------------------------------------------
 # Build / install (without launching)

@@ -233,6 +233,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         sigterm.resume()
         sigtermSource = sigterm
 
+        // Claude-Code-Plugin `whisperm8` ablegen, bevor der erste Chat
+        // startet (Crash-Recovery, Tabs): jede Claude-Session bekommt es per
+        // `CLAUDE_CODE_PLUGIN_DIRS`. Synchron und klein (eine Handvoll
+        // Dateien, nur bei neuem Stand geschrieben).
+        ClaudePluginBootstrap.run()
+
         // Agent-Notifications: Delegate VOR der Permission-Anfrage setzen,
         // damit Banner auch im Vordergrund erscheinen und Klicks zum
         // richtigen Chat routen (siehe UNUserNotificationCenterDelegate unten).

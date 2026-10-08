@@ -1,0 +1,16 @@
+{
+  "name": "whisperm8",
+  "version": "0.0.0-dev",
+  "description": "WhisperM8: Agent-Skills (Chats, Jarvis, Codex-Subagents, GPT-Workflows, Transkription) und das Jarvis-Board über dem Prompt.",
+  "author": { "name": "WhisperM8" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "wecken": {
+      "type": "string",
+      "title": "Jarvis wecken",
+      "description": "Wenn ein Board-Chat auf dich wartet oder fertig ist: turn = Hinweis, Ton und ein Prompt an Jarvis; toast = nur Hinweis und Ton; aus = nichts.",
+      "options": ["turn", "toast", "aus"],
+      "default": "turn"
+    }
+  }
+}

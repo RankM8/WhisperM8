@@ -78,6 +78,13 @@ struct AgentCommandBuilder {
         AppPreferences.shared.claudeGPTBackendEnabled
     }
 
+    /// `CLAUDE_CODE_PLUGIN_DIRS` für das Plugin `whisperm8` (Skills +
+    /// Jarvis-Board). Leer bei Kill-Switch oder wenn das Plugin nicht abgelegt
+    /// ist. Im Test überschreibbar.
+    var claudePluginEnvironmentResolver: () -> [String: String] = {
+        ClaudePluginBootstrap.launchEnvironment()
+    }
+
     /// Name des GPT-Konto-Profils, den die Session als Request-Header an den
     /// Router traegt. Bei aktivem Kill-Switch IMMER gesetzt — auch „main"
     /// ausdruecklich: ohne Header faellt der Router auf das gerade aktive
@@ -473,8 +480,12 @@ struct AgentCommandBuilder {
         // Der Router gilt bewusst fuer jede Claude-PTY-Session. So koennen
         // auch Sessions ohne GPT-Stempel spaeter per `/model` wechseln und
         // konfigurierte GPT-Subagents verwenden.
+        // Plugin `whisperm8` für jeden Claude-Start (Chat, Resume, Attach,
+        // Agents-View): alle Pfade laufen durch `applyRouterEnvironment`.
+        let pluginEnvironment = claudePluginEnvironmentResolver()
         let applyRouterEnvironment: ([String: String]) -> [String: String] = {
-            baseEnvironment in
+            profileEnvironment in
+            let baseEnvironment = profileEnvironment.merging(pluginEnvironment) { _, plugin in plugin }
             guard let routerEnvironment = gptRouterCoreEnvironment() else {
                 return baseEnvironment
             }

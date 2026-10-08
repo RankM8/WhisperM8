@@ -73,6 +73,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await queueMutation(request)
         case "session.moveAccount":
             return await sessionMoveAccount(request)
+        case let method where Self.boardMethods.contains(method):
+            return await boardMutation(request)
         default:
             return .failure(requestID: request.requestID, code: .unsupported,
                             message: "Unbekannte Methode: \(request.method)")
