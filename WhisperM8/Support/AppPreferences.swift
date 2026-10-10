@@ -438,6 +438,30 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.jarvisBoardEnabled) }
     }
 
+    /// Gesprochene Ansagen (`whisperm8 speak`, Skill `whisperm8:callout`):
+    /// Aus = die App lehnt jede Ansage ab, der Stumm-Schalter verschwindet aus
+    /// der Menüleiste.
+    /// `defaults write com.whisperm8.app speechCalloutsEnabled -bool NO`
+    var isSpeechCalloutsEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.speechCalloutsEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.speechCalloutsEnabled) }
+    }
+
+    /// Stumm-Schalter der Menüleiste: Ansagen werden angenommen, aber nicht
+    /// gesprochen (die Mod meldet „stumm“).
+    var isSpeechCalloutsMuted: Bool {
+        get { defaults.bool(forKey: Keys.speechCalloutsMuted) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.speechCalloutsMuted) }
+    }
+
+    /// Stimme für Ansagen (`AVSpeechSynthesisVoice.identifier`); leer = beste
+    /// installierte deutsche Stimme.
+    /// `defaults write com.whisperm8.app speechCalloutVoiceIdentifier com.apple.voice.premium.de-DE.Anna`
+    var speechCalloutVoiceIdentifier: String? {
+        get { defaults.string(forKey: Keys.speechCalloutVoiceIdentifier).flatMap { $0.isEmpty ? nil : $0 } }
+        nonmutating set { setOptionalString(newValue, forKey: Keys.speechCalloutVoiceIdentifier) }
+    }
+
     /// Claude-Code-Plugin `whisperm8` (Skills + Jarvis-Board-Mod): Die App legt
     /// es beim Start unter Application Support ab und gibt es jeder
     /// Claude-Session per `CLAUDE_CODE_PLUGIN_DIRS` mit. Aus = keine Variable,
@@ -763,6 +787,9 @@ enum PreferenceKeys {
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
     static let jarvisBoardEnabled = "jarvisBoardEnabled"
+    static let speechCalloutsEnabled = "speechCalloutsEnabled"
+    static let speechCalloutsMuted = "speechCalloutsMuted"
+    static let speechCalloutVoiceIdentifier = "speechCalloutVoiceIdentifier"
     static let claudePluginEnabled = "claudePluginEnabled"
     static let claudePluginSkillMigrationDone = "claudePluginSkillMigrationDone"
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"

@@ -73,6 +73,8 @@ enum CLIModeDetector {
         "chats",
         // Debug-Steuerkanal (UI-Tests ohne Computer Use) — docs/features/ui-testing.md.
         "debug",
+        // Gesprochene Ansagen der Chats — docs/features/speech-callouts.md.
+        "speak",
     ]
 
     static func shouldRunCLI(_ arguments: [String]) -> Bool {
@@ -134,6 +136,8 @@ enum CLICommand {
             return await AgentChatsCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "debug":
             return await DebugCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "speak":
+            return await SpeakCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "agent-supervise":
             // Interner Detach-Modus — wird nur vom AgentSupervisorLauncher
             // gestartet, nie von Hand.
@@ -181,6 +185,7 @@ enum CLIHelp {
       whisperm8 agent run [optionen] "<prompt>"   (Codex-Subagents — siehe `whisperm8 agent help`)
       whisperm8 chats <befehl>                    (Agent-Sessions sehen/verwalten — siehe `whisperm8 chats help`)
       whisperm8 debug <befehl>                    (Debug-Steuerkanal der App — siehe `whisperm8 debug help`)
+      whisperm8 speak "<text>"                    (kurze Ansage über die App vorlesen — siehe `whisperm8 speak --help`)
       whisperm8 --help | --version
 
     TRANSCRIBE

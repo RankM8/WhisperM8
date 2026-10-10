@@ -10,6 +10,7 @@ struct MenuBarView: View {
     /// Voice Gate (Codewort-Steuerung der Codex-Sprachsitzung). Der Abschnitt
     /// erscheint nur, wenn das Feature eingeschaltet ist.
     @State private var voiceGate = VoiceGateCoordinator.shared
+    @State private var speechCallouts = SpeechCalloutCenter.shared
 
     var body: some View {
         Group {
@@ -91,6 +92,15 @@ struct MenuBarView: View {
         if voiceGate.isEnabled {
             Divider()
             VoiceGateMenuSection(gate: voiceGate)
+        }
+
+        // Ansagen der Agent-Chats (`whisperm8 speak`); weg bei Kill-Switch.
+        if speechCallouts.isEnabled {
+            Divider()
+            Toggle("Mute Chat Callouts", isOn: Binding(
+                get: { speechCallouts.isMuted },
+                set: { speechCallouts.setMuted($0) }
+            ))
         }
 
         Divider()

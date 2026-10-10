@@ -23,6 +23,9 @@ enum Logger {
     /// Filter im `log stream` mit `category == "voice.gate"`. Erkannte Woerter
     /// werden nur mit dem ausdruecklichen Diagnose-Schalter protokolliert.
     static let voiceGate = os.Logger(subsystem: subsystem, category: "voice.gate")
+    /// Gesprochene Ansagen der Agent-Chats (`whisperm8 speak`). Texte werden
+    /// nie protokolliert, nur Längen und Entscheidungen.
+    static let speechCallouts = os.Logger(subsystem: subsystem, category: "speech.callouts")
 
     // MARK: - Optional File Logging
 

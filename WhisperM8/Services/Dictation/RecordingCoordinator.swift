@@ -123,6 +123,9 @@ final class RecordingCoordinator {
 
         let hotkeyAt = Date()
         isProcessing = true
+        // Eine laufende Ansage (`whisperm8 speak`) bricht ab und kommt nach
+        // der Aufnahme von vorn — das Mikrofon nähme sie sonst mit auf.
+        SpeechCalloutCenter.shared.holdForRecording()
         recordingTimer.stop()
         overlayController.hide()
         contextSourceApp = NSWorkspace.shared.frontmostApplication
