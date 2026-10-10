@@ -43,6 +43,19 @@ final class ClaudeAccountProfilesTests: XCTestCase {
         XCTAssertEqual(names, ["main", "alpha", "zeta"])
     }
 
+    /// Claudes Refresh-Lock `<config-dir>.lock` liegt neben dem Profil und
+    /// darf nie als eigenes Profil erscheinen (Vorfall 2026-10-10).
+    func testProfilesIgnoreRefreshLockAndInvalidNames() throws {
+        _ = try makeProfileDir("PowerUser")
+        _ = try makeProfileDir("PowerUser.lock")
+        _ = try makeProfileDir("mein konto")
+        _ = try makeProfileDir("main")
+
+        let names = service.profiles().map(\.name)
+
+        XCTAssertEqual(names, ["main", "PowerUser"])
+    }
+
     func testProfileReadsAccountInfoFromClaudeJSON() throws {
         let dir = try makeProfileDir("firma")
         try writeClaudeJSON(email: "a@b.de", org: "ACME", to: dir.appendingPathComponent(".claude.json"))

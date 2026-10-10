@@ -55,7 +55,13 @@ struct ClaudeAccountProfiles {
     // MARK: - Discovery
 
     /// Alle Profile, `main` immer zuerst. Zusatzprofile = Unterordner von
-    /// `~/.claude-profiles` (versteckte Ordner ausgenommen).
+    /// `~/.claude-profiles` mit gueltigem Profilnamen (versteckte Ordner
+    /// ausgenommen). Der Namensfilter haelt vor allem Claudes Refresh-Lock
+    /// `<config-dir>.lock` heraus, das als Geschwister-Ordner des Profils
+    /// entsteht und nach einem Abbruch liegen bleibt (Vorfall 2026-10-10:
+    /// `PowerUser.lock` erschien als eigenes Profil, wurde eingeloggt — und
+    /// ein nicht leerer Lock-Ordner blockiert Claudes Stale-Lock-Steal, also
+    /// den Token-Refresh von `PowerUser`).
     func profiles() -> [ClaudeAccountProfile] {
         var result = [profile(named: Self.mainProfileName)]
         let entries = (try? fileManager.contentsOfDirectory(
@@ -66,6 +72,7 @@ struct ClaudeAccountProfiles {
         let names = entries
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             .map(\.lastPathComponent)
+            .filter(Self.isValidProfileName)
             .sorted()
         result.append(contentsOf: names.map { profile(named: $0) })
         return result
