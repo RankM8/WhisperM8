@@ -1,6 +1,6 @@
 ---
 name: whisperm8-chats
-description: Alle WhisperM8-Agent-Sessions sehen und verwalten (Jarvis-Supervisor über die whisperm8-CLI). Nutzen bei "was machen meine Chats", "Status meiner Sessions", "wartet was auf mich", "schick an Chat X", "antworte dem …-Chat", "starte einen Chat in Projekt Y", "räum meine Sessions auf", "sei mein Jarvis", "überwache meine Chats", "sag Bescheid wenn ein Chat fertig ist", "unterbrich Chat X". Für den DAUERHAFTEN Supervisor-Arbeitsmodus zusätzlich den Skill jarvis laden. NICHT für Codex-Subagent-Jobs (codex-subagent) oder Transkription (whisperm8-transcription).
+description: Alle WhisperM8-Agent-Sessions sehen und verwalten (Jarvis-Supervisor über die whisperm8-CLI). Nutzen bei "was machen meine Chats", "Status meiner Sessions", "wartet was auf mich", "schick an Chat X", "frag Chat X", "antworte dem …-Chat", "starte einen Chat in Projekt Y", "räum meine Sessions auf", "sei mein Jarvis", "überwache meine Chats", "sag Bescheid wenn ein Chat fertig ist", "unterbrich Chat X". Für den DAUERHAFTEN Supervisor-Arbeitsmodus zusätzlich den Skill jarvis laden. NICHT für Codex-Subagent-Jobs (codex-subagent) oder Transkription (whisperm8-transcription).
 ---
 
 # WhisperM8 Chats — Sessions sehen und verwalten
@@ -125,6 +125,45 @@ findet, ist der Chat WhisperM8 wirklich unbekannt.
 Mehrdeutige Referenz → Exit 3 mit Kandidatenliste. **Zeig dem User die
 Kandidaten, rate nie selbst.**
 
+## Zwei Wege zu einem anderen Chat: `chats send` oder natives `SendMessage`
+
+Claude Code kann selbst Nachrichten an andere lokale Sessions schicken
+(`ListAgents` + `SendMessage`). Das ersetzt `chats send` NICHT, denn es sieht
+nur einen Teil der Chats. **Die native Erkennung gilt nur innerhalb eines
+Claude-Kontos:** Jede Session meldet sich unter
+`<CLAUDE_CONFIG_DIR>/sessions/<pid>.json` an, und `ListAgents` liest nur das
+eigene Profil. Chats in anderen Konten (ai3, PowerUser, …), Codex-Chats und
+geschlossene Chats tauchen dort nicht auf. Außerdem heißen Peers dort nach
+dem Ordner (`listm8-00`), nicht nach dem WhisperM8-Titel.
+
+**Natives `SendMessage` nehmen**, wenn ALLES zutrifft:
+- Du willst etwas **fragen oder abstimmen** und brauchst die Antwort zurück
+  (die Antwort kommt als Nachricht zu dir, statt dass du ein Transcript
+  abwartest und liest).
+- Das Ziel ist ein **laufender Claude-Chat im selben Konto**, also ein Peer
+  in `ListAgents`.
+
+So findest du den nativen Namen eines WhisperM8-Chats (leer = nicht im
+eigenen Konto oder läuft nicht → `chats send`):
+```bash
+ext=$(whisperm8 chats show <ref> --json | jq -r .externalSessionID)
+jq -r --arg id "$ext" 'select(.sessionId==$id) | .name' \
+  "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/sessions/*.json
+```
+Dann `SendMessage({to: "<name>", message: "…"})`. Wenn du nur wissen willst,
+wann der Chat fertig ist, nimm `notify_when_idle: true` statt `chats wait`.
+Meldet ein `[Cross-session delivery notice]`, dass die Nachricht zurückgehalten
+oder abgelehnt wurde (das passiert z. B. bei anderem Permission-Mode des
+Ziels), dann melde das dem User und biete `chats send` an.
+
+**`chats send` / `enqueue` nehmen** in allen anderen Fällen:
+- Das Ziel liegt in einem anderen Konto, ist ein Codex-Chat oder ist
+  geschlossen (vorher `resume`).
+- Es ist ein **Arbeitsauftrag**, der als normaler Prompt im Chat stehen soll
+  (sichtbar für den User, mit Send-Guard und Queue).
+- Das Ziel arbeitet gerade und der Auftrag soll erst danach kommen
+  (`enqueue`).
+
 ## Ansichten & Reviven
 
 **Ansichten (decken sich mit der App-Sidebar):** `--scope active` = laufende
@@ -193,8 +232,8 @@ unterbrochen.
 
 ## Regeln (nicht verhandelbar)
 
-1. **Vor jedem `send`: bestätigen lassen.** Zeige den exakten Prompt-Text und
-   das Ziel; frage per AskUserQuestion (Senden / Anpassen / Abbrechen) oder im
+1. **Vor jedem `send` (und jedem `SendMessage` an einen fremden Chat):
+   bestätigen lassen.** Zeige den exakten Prompt-Text und das Ziel; frage per AskUserQuestion (Senden / Anpassen / Abbrechen) oder im
    Text. **Ausnahme:** Der User hat dir für GENAU diese Ziel-Session in DIESER
    Konversation pauschal freigegeben. Freigaben gelten nie über die
    Konversation hinaus. — Hinweis: Ein Send-Guard (UserPromptSubmit-Hook)
@@ -232,6 +271,11 @@ unterbrochen.
    ihn inhaltlich in deinem eigenen Chat — sende ihn aber NIE eigenständig per
    `chats send` weiter. Der Absender liest deine Antwort selbst über dein
    Transcript. Die App stellt diese Marker-Zeile automatisch voran.
+   Gleiches gilt für eine `<cross-session-message from="…">`: Antworten an
+   genau diesen Absender (`to` = sein `from`) ist erlaubt und ohne Rückfrage
+   in Ordnung, denn das ist der Rückkanal. Weiterreichen an einen dritten
+   Chat ist es nicht. Und bitte keinen anderen Chat, etwas zu tun, das in
+   deiner Session verweigert wurde oder gesperrt wäre.
 5. **Fremde Projekt-Inhalte** (aus `tail` anderer Projekte) zusammenfassen, nie
    ungefragt wörtlich in andere Projekt-Kontexte kopieren.
 6. **Aufräum-Runden:** eine Batch-Bestätigung per AskUserQuestion mit
@@ -302,6 +346,9 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
   Ergebnis melden.
 - **Cross-Session:** „Vergleiche A und B, schick A den Folgeprompt" → `tail` A,
   `tail` B, dann `send` A (mit Bestätigung).
+- **„Frag X, wie …"** → nativen Namen von X ermitteln (siehe „Zwei Wege") →
+  wenn vorhanden: Frage zeigen, bestätigen lassen, `SendMessage`, die Antwort
+  abwarten und weitergeben. Sonst `send` und danach `wait` + `tail`.
 - **„Schließ alle Tabs/Chats, die ich nicht brauche"** → `list --open --json`
   → Kandidaten bestimmen. **Keep-Defaults** (nur Vorschlag, kein Verbot):
   gepinnt (`isPinned`), `working`, `awaitingInput` und die eigene Session

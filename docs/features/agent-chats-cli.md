@@ -550,11 +550,23 @@ Privacy-Default). Nur die App schreibt; `chats audit` liest.
 
 ## Skill
 
-`whisperm8-chats` (`skills/whisperm8-chats/SKILL.md`): macht aus Befehlen
+`whisperm8-chats` (`WhisperM8/Resources/whisperm8-chats-skill.md`): macht aus Befehlen
 Verhalten. Autonomie-Stufen (Beobachten/Zuarbeiten/Supervisor), Send-Gate über
 AskUserQuestion, Ein-Hop-Regel, Batch-Aufräumen, Supervisor-Loop
 (`overview → wait → tail → berichten`). Interrupt nur nach expliziter
 User-Freigabe.
+
+**Verhältnis zum nativen Cross-Session-Messaging** (Claude Code
+`ListAgents`/`SendMessage`, geprüft 10.10.2026): Es ersetzt `chats send` nicht.
+Die native Erkennung liest nur `<CLAUDE_CONFIG_DIR>/sessions/<pid>.json` des
+eigenen Profils. Von 7 laufenden WhisperM8-Chats in drei Konten waren
+deshalb nur die 2 anderen im selben Konto sichtbar, unter abgeleiteten
+Namen (`listm8-00`) statt der WhisperM8-Titel. Codex-Chats und geschlossene
+Chats fehlen ganz. Der Skill nimmt `SendMessage` deshalb nur für Rückfragen
+an laufende Claude-Chats im selben Konto, weil es dort einen Antwortkanal und
+`notify_when_idle` gibt. Für alles andere bleibt es bei `chats send`/`enqueue`.
+Die Zuordnung läuft über `externalSessionID` ↔ `sessionId` der
+Registry-Datei.
 
 ## Zentrale Dateien
 
