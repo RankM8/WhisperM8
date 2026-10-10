@@ -89,6 +89,9 @@ describe('Band', () => {
       expect(await wide.find({ text: /Opener-Schluss A oder B/ })).toBeDefined()
       expect(await wide.find({ text: '4 min' })).toBeDefined()
       expect(await wide.find({ text: /fertig · Ergebnis prüfen/ })).toBeDefined()
+      // Bedien-Hinweis statt Knopf: „z“ griffe nur nach ctrl+x tab.
+      expect(await wide.find({ text: 'Ziffer = Tab öffnen' })).toBeDefined()
+      expect(await wide.find({ key: 'fold' })).toBeUndefined()
       await wide.unmount()
 
       // Der Kopf kürzt nach Platz, nicht nach fester Stufe: erst „· Board“ weg …
@@ -125,15 +128,16 @@ describe('Band', () => {
     await ui.unmount()
   })
 
-  test('zu klappt auf die Summenzeile ein', async ($, on) => {
+  test('/board zu klappt auf die Summenzeile ein, /board auf wieder auf', async ($, on) => {
     mock.clock(on, { now: NOW })
     world(on)
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
-    await ui.press({ key: 'fold' })
+    await $.command.run({ command: 'board', args: 'zu' })
     expect(await ui.find({ text: /Opener-Schluss/ })).toBeUndefined()
     expect(await ui.find({ text: /1 wartet/ })).toBeDefined()
-    await ui.press({ key: 'open' })
+    expect(await ui.find({ text: '/board auf' })).toBeDefined()
+    await $.command.run({ command: 'board', args: 'auf' })
     expect(await ui.find({ text: /Opener-Schluss/ })).toBeDefined()
     await ui.unmount()
   })

@@ -122,23 +122,36 @@ const counts = (entries: readonly BoardEntry[]) => {
 }
 
 /**
- * Kopfzeile so ausführlich, wie sie in `room` Spalten passt: erst fällt
- * „· Board“ weg, dann die Wörter außer „wartet“, das ist die Zahl, die zählt.
+ * Kopfzeile so ausführlich, wie sie in `room` Spalten passt: erst wird der
+ * Bedien-Hinweis rechts kürzer, dann fällt „· Board“ weg, dann der Hinweis,
+ * zuletzt die Wörter außer „wartet“, das ist die Zahl, die zählt.
  * Feste Breitenstufen reichten nicht: Bei 67 Spalten brach der Kopf um.
  */
-const fitHeader = (c: Record<BoardLight, number>, room: number, title: string, withBoard: boolean) => {
+const fitHeader = (c: Record<BoardLight, number>, room: number, title: string, withBoard: boolean, hints: string[]) => {
   const parts = (words: boolean) =>
     (['needsYou', 'running', 'done', 'parked'] as const)
       .filter(l => c[l] > 0)
       .map(l => ({ light: l, text: `${GLYPH[l]} ${c[l]}${words || l === 'needsYou' ? ` ${LABEL[l]}` : ''}  ` }))
-  const candidates: [string, boolean][] = [[title, true], [title, false]]
-  if (withBoard) candidates.unshift([`${title} · Board`, true])
-  for (const [head, words] of candidates) {
-    const fitted = parts(words)
-    if (head.length + 2 + fitted.reduce((n, p) => n + p.text.length, 0) <= room) return { head, parts: fitted }
+  const fits = (head: string, words: boolean, hint: string) =>
+    head.length + 2 + parts(words).reduce((n, p) => n + p.text.length, 0) + hint.length <= room
+  const heads = withBoard ? [`${title} · Board`, title] : [title]
+  for (const head of heads) {
+    for (const hint of hints) if (fits(head, true, hint)) return { head, parts: parts(true), hint }
   }
-  return { head: title, parts: parts(false) }
+  for (const [head, words] of heads.map(h => [h, true] as const).concat([[title, false]])) {
+    if (fits(head, words, '')) return { head, parts: parts(words), hint: '' }
+  }
+  return { head: title, parts: parts(false), hint: '' }
 }
+
+/**
+ * Bedien-Hinweise statt Knöpfen „z: zu“ / „a: auf“: Buchstaben-Hotkeys
+ * greifen nur nach ctrl+x tab, und Klicks meldet Claude Code nur im
+ * Vollbild-Terminal; App-Sessions laufen im Main-Screen. Eine Ziffer im
+ * leeren Prompt geht dagegen überall.
+ */
+const OPEN_HINTS = ['Ziffer = Tab öffnen', 'Ziffer: Tab']
+const FOLDED_HINTS = ['/board auf']
 
 
 /** Aktiv: Schema ab Turn 1 in der Liste. Sonst nur der Name (ToolSearch). */
@@ -430,7 +443,9 @@ export const register: Register = (on, options) => {
     await refresh($).catch(() => undefined)
     const view = await read($, board)
     if (view === null || !view.isActive) return { text: 'Kein aktives Board in dieser Session. /board an schaltet es ein.' }
-    await $.ui.open({ id: PANE, title: 'Jarvis-Board' })
+    // Mit Fokus, damit die Ziffern sofort greifen (Klicks gibt es im
+    // Main-Screen der App-Sessions nicht); Escape schließt es wieder.
+    await $.ui.open({ id: PANE, title: 'Jarvis-Board', focus: true, closeOnEscape: true })
     return { text: `Board: ${view.entries.length} Chats.` }
   })
 
@@ -446,9 +461,12 @@ export const register: Register = (on, options) => {
     const c = counts(list)
     const wide = cols >= 90
     const narrow = cols < 64
-    // Platz für Titel und Zahlen: ohne Knopf („z: zu“ / „a: auf“) und Abstand,
-    // offen zusätzlich ohne Rahmen und Innenabstand.
-    const header = isFolded ? fitHeader(c, cols - 7, '▸ Jarvis', false) : fitHeader(c, cols - 10, 'Jarvis', true)
+    // Platz für Titel, Zahlen und Hinweis: eine Spalte Luft, offen
+    // zusätzlich ohne Rahmen und Innenabstand.
+    const header = isFolded
+      ? fitHeader(c, cols - 1, '▸ Jarvis', false, FOLDED_HINTS)
+      : fitHeader(c, cols - 5, 'Jarvis', true, OPEN_HINTS)
+    const hint = header.hint ? <Text dimColor>{header.hint}</Text> : null
     const summary = header.parts.map(p => (
       <Text color={COLOR[p.light]} bold={p.light === 'needsYou'}>
         {p.text}
@@ -476,7 +494,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="row" flexGrow={1}>
             {summary}
           </Box>
-          <Button key="open" label="auf" hotkey="a" plain dimColor onPress={() => update($, folded, () => false)} />
+          {hint}
         </Box>
       )
     }
@@ -499,15 +517,15 @@ export const register: Register = (on, options) => {
           <Box flexDirection="row" flexGrow={1}>
             {summary}
           </Box>
-          <Button key="fold" label="zu" hotkey="z" plain dimColor onPress={() => update($, folded, () => true)} />
+          {hint}
         </Box>
         {shown.map((entry, index) => (
           <Box key={entry.sessionID} flexDirection="row" columnGap={1}>
             <Box width={1} flexShrink={0}>
               <Text color={COLOR[entry.light]}>{GLYPH[entry.light]}</Text>
             </Box>
-            {/* Der Name ist der Knopf: „1“ im leeren Prompt (oder Klick,
-                oder ctrl+x tab und „1“) öffnet den Tab des Chats. */}
+            {/* Der Name ist der Knopf: „1“ im leeren Prompt (oder ctrl+x tab
+                und „1“; ein Klick nur im Vollbild-Terminal) öffnet den Tab. */}
             <Box width={nameWidth + 3} flexShrink={0}>
               {index < 9 ? (
                 <Button

@@ -18,11 +18,11 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
 
 ```
 ╭──────────────────────────────────────────────────────────────────────────────────╮
-│ Jarvis · Board  ● 2 wartet  ● 2 läuft  ● 1 fertig  ○ 1 geparkt             z: zu │
-│ ● Akquise Import     Freigabe: 500 Leads importieren                         12m │
-│ ● Outreach Copy-Rev… Entscheidung: Opener-Schluss A oder B                    4m │
-│ ● Tab-Switcher Revi… fertig · Ergebnis prüfen                                 2m │
-│ ● ListM8 Lead-Run    Qualifizierung 40/150                                   18m │
+│ Jarvis · Board  ● 2 wartet  ● 2 läuft  ● 1 fertig           Ziffer = Tab öffnen │
+│ ● 1: Akquise Import     Freigabe: 500 Leads importieren                      12m │
+│ ● 2: Outreach Copy-Rev… Entscheidung: Opener-Schluss A oder B                 4m │
+│ ● 3: Tab-Switcher Revi… fertig · Ergebnis prüfen                              2m │
+│ ● 4: ListM8 Lead-Run    Qualifizierung 40/150                                18m │
 ╰──────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -32,8 +32,14 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
 |---|---|
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
 | Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …` |
-| User | `/board` Details (Panel), `/board an` / `aus`, `/board zu` / `auf` (einklappen); im Band `ctrl+x tab`, dann `z` / `a` |
-| User: Tab öffnen | Im Band ist der Name jeder Zeile ein Knopf (`1:` bis `9:`): die Ziffer im **leeren** Prompt, ein Klick oder `ctrl+x tab` + Ziffer öffnet den Tab des Chats (`chats open`, direkt aus der Mod, kein Turn von Jarvis). Im Panel `[ 1 Tab öffnen ]` je Chat. |
+| User | `/board` Details (Panel, öffnet mit Fokus, Escape schließt), `/board an` / `aus`, `/board zu` / `auf` (einklappen) |
+| User: Tab öffnen | Im Band ist der Name jeder Zeile ein Knopf (`1:` bis `9:`): die Ziffer im **leeren** Prompt (ohne Enter) öffnet den Tab des Chats (`chats open`, direkt aus der Mod, kein Turn von Jarvis). Im Panel `[ 1 Tab öffnen ]` je Chat, ebenfalls per Ziffer. |
+
+**Kein Klick in der App:** Claude Code meldet Mausklicks nur im
+Vollbild-Terminal. App-Sessions laufen im Main-Screen, dort landet ein Klick
+beim Terminal der App (Textauswahl). Deshalb trägt der Kopf rechts einen
+Bedien-Hinweis statt Knöpfen: Buchstaben-Hotkeys wie früher „z: zu“ greifen
+nur nach `ctrl+x tab`, eine Ziffer im leeren Prompt dagegen immer.
 | Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis, Ton, Prompt an Jarvis), `toast`, `aus` |
 
 Ampeln: `needsYou` (rot, User muss entscheiden), `done` (grün, Abnahme
@@ -98,8 +104,9 @@ mehreren Boards stehen (`otherOwners`).
   der Chat wieder arbeitet. Geparkte Chats wecken nicht.
 - **Anzeige:** Band nach den gemessenen Breiten: ab 90 Spalten mit Ref und
   breiter Altersangabe, darunter knapper. Der Kopf kürzt nach Platz: erst
-  fällt „· Board“ weg, dann jedes Wort außer „wartet“ (live geprüft bei 50,
-  58, 72 und 120 Spalten; feste Stufen ließen ihn bei 72 umbrechen). Keine
+  wird der Hinweis rechts kürzer, dann fällt „· Board“ weg, dann der
+  Hinweis, zuletzt jedes Wort außer „wartet“ (live geprüft bei 50, 58, 72
+  und 120 Spalten; feste Stufen ließen ihn bei 72 umbrechen). Keine
   Statuszeile: Claude Code setzt „⚠“ vor jede Plugin-Statuszeile, sie sah
   nach einer Warnung aus und wiederholte nur das Band. `/board` öffnet
   das Panel; dessen Knöpfe legen Jarvis eine Frage in den Prompt. Das
