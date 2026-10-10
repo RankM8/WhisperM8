@@ -113,8 +113,15 @@ struct CLISkillExporter {
             resourceName: "whisperm8-jarvis-skill"
         )
 
+        /// Gesprochene Ansagen am Turn-Ende (`whisperm8 speak`). Wie `jarvis`
+        /// nur im Plugin: das Tool dazu bringt die Mod mit.
+        static let callout = SkillDefinition(
+            name: "callout",
+            resourceName: "whisperm8-callout-skill"
+        )
+
         /// Alle Skills des Plugins `whisperm8`.
-        static let plugin: [SkillDefinition] = all + [.jarvis]
+        static let plugin: [SkillDefinition] = all + [.jarvis, .callout]
     }
 
     /// Rückwärtskompatibler Alias (Tests/ältere Aufrufer).

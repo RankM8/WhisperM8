@@ -40,6 +40,8 @@ declare module 'claude-code' {
       now: number
       /** Schon geweckte Zustände je Chat (`<sessionID>:<zustand>`), gegen Doppel-Wecken. */
       woken: string[]
+      /** Callout-Modus der Session: Claude darf am Turn-Ende sprechen. */
+      callout: boolean
     }
   }
 }

@@ -150,7 +150,7 @@ if [[ "$plugin_mode" == auto ]]; then
   fi
 fi
 
-PLUGIN_SKILLS=("${SKILLS[@]}" "jarvis|whisperm8-jarvis-skill||")
+PLUGIN_SKILLS=("${SKILLS[@]}" "jarvis|whisperm8-jarvis-skill||" "callout|whisperm8-callout-skill||")
 
 sync_plugin() {
   local skeleton="$RESOURCES/claude-plugin" versions="$PLUGIN_ROOT/versions"

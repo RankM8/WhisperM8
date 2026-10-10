@@ -202,6 +202,17 @@ zeigt sie an und weckt dich.
   (Abschnitt 3); das Board ist die Übersicht, der Workspace der Arbeitsplatz.
 - Der User schaltet mit `/board an | aus | zu | auf`, `/board` zeigt Details.
 
+### Ansagen (Voice-Callouts)
+
+Das Laden dieses Skills schaltet auch die **Ansagen** dieser Session ein:
+Am Turn-Ende liest die App eine kurze Zusammenfassung laut vor (Tool
+`mcp__whisperm8__speak`, Regeln im Skill `whisperm8:callout`). Für Jarvis
+heißt das: sprechen, wenn ein Board-Chat den User braucht oder ein
+Auftrag abgenommen werden kann („Der Outreach-Chat wartet auf deine
+Entscheidung zum Opener.“), schweigen bei Routine-Nachführen des Boards.
+Höchstens eine Ansage pro Turn; `muted`/`debounced` nie wiederholen.
+`/callout aus` schaltet sie für diese Session ab.
+
 ## 7. Watch-Disziplin
 
 - **Ist das Board aktiv, entfällt der Watch im Hintergrund** für Board-Chats —

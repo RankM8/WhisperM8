@@ -1,6 +1,6 @@
 ---
-status: S1–S5 umgesetzt (08.10.2026), S6–S8 (Voice-Callouts) offen
-stand: 2026-10-08
+status: S1–S7 umgesetzt (S6/S7 Voice-Callouts mit Systemstimme 10.10.2026), S8 (ChatGPT-Stimme) zurückgestellt
+stand: 2026-10-10
 ---
 
 # WhisperM8-Plugin mit Jarvis-Board
@@ -210,7 +210,7 @@ Code hat ein eingebautes `/voice` für das Diktat. `jarvis` lädt ihn mit.
 - **Wie:** höchstens zwei Sätze auf Deutsch. Keine Pfade, kein Code, keine
   IDs. Den Namen des Chats nennt die App, nicht das Modell.
 
-**Mod `callout.tsx`** (neben `register.tsx`, von dort importiert).
+**Mod-Teil Voice-Callouts** (umgesetzt in `register.tsx` selbst: die Engine folgt `$` und `on` nie über einen Import und erlaubt nur einen `session.start` ohne Matcher je Plugin; Feature-Doku `docs/features/speech-callouts.md`).
 - **An und Aus:** Der Hook `skill.prompt` mit den vollen Namen
   `whisperm8:callout` und `whisperm8:jarvis` schaltet den Modus an. Der
   Zustand liegt in `$.state` und überlebt so ein Neuladen. Zusätzlich gibt es
@@ -298,7 +298,7 @@ Ausgabe-Modalität `audio`.
 | S5 | Skill `jarvis` und `whisperm8-chats` nachziehen, Feature-Doku | Arbeitsweise passt zur Mod |
 | S6 | App: `whisperm8 speak`, `SpeechCalloutCenter` (Warteschlange, Sperre während Aufnahme, Stumm-Schalter, Kill-Switch), Systemstimme, Tests. Unabhängig vom Plugin baubar. | Jede Session (auch Codex) kann sprechen |
 | S7 | Skill `whisperm8:callout`, Mod `callout.tsx` mit Tool `speak` und `/callout`, Anbindung an `jarvis` | Claude spricht bei Bedarf am Turn-Ende |
-| S8 | ChatGPT-Abo-Stimme: Spike in Swift (WebRTC-Paket oder `codex-voice-host`), warme Session, wörtliches Vorlesen | Natürliche Stimme ohne API-Key |
+| S8 | **Zurückgestellt (10.10.2026).** ChatGPT-Abo-Stimme: Spike in Swift (WebRTC-Paket oder `codex-voice-host`), warme Session, wörtliches Vorlesen | Natürliche Stimme ohne API-Key |
 
 ## Offene Punkte
 

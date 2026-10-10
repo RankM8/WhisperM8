@@ -10,15 +10,23 @@ import type { BoardEntry, BoardLight, BoardView } from '../types'
 //
 // Ausgeschaltet (kein aktives Board dieser Session) zeichnet die Mod nichts und
 // startet keinen Prozess; das Tool steht dann nur hinter ToolSearch.
+//
+// Zweiter Teil (MARK: Voice-Callouts): Claude spricht am Turn-Ende eine kurze
+// Ansage über die App (`whisperm8 speak`). Eigentlich als callout.tsx geplant,
+// aber die Engine folgt `$` und `on` nie über einen Import und erlaubt je
+// Plugin nur einen `session.start` ohne Matcher — deshalb in dieser Datei.
 
 const board = atom({ plugin: 'whisperm8', key: 'board' } as const, null as BoardView | null)
 const folded = atom({ plugin: 'whisperm8', key: 'folded' } as const, false)
 const now = atom({ plugin: 'whisperm8', key: 'now' } as const, 0)
 const woken = atom({ plugin: 'whisperm8', key: 'woken' } as const, [] as string[])
+const callout = atom({ plugin: 'whisperm8', key: 'callout' } as const, false)
 
 const TOOL = 'mcp__whisperm8__board'
 const PANE = 'whisperm8-board'
 const JARVIS_SKILL = 'whisperm8:jarvis'
+const SPEAK_TOOL = 'mcp__whisperm8__speak'
+const CALLOUT_SKILL = 'whisperm8:callout'
 const MIN = 60_000
 /** Mehrere Weck-Gründe kurz hintereinander werden zu einem Prompt gebündelt. */
 const WAKE_COALESCE_MS = 5_000
@@ -36,6 +44,7 @@ let watchRunning = false
 let sessionEnded = false
 let refreshPending = false
 let toolDeferred: boolean | null = null
+let speakToolDeferred: boolean | null = null
 let wakeQueue: string[] = []
 let wakeTimerArmed = false
 let lastWakeAt = 0
@@ -352,6 +361,65 @@ const openChat = async ($: EngineInterface, entry: BoardEntry) => {
   $.ui.toast(ran.ok ? `Geöffnet: ${entry.title}` : `${entry.title}: ${ran.message || 'Öffnen fehlgeschlagen'}`)
 }
 
+// MARK: Voice-Callouts
+
+/** Bei aktivem Modus steht `speak` direkt in der Liste, sonst hinter ToolSearch. */
+const syncSpeakTool = async ($: EngineInterface, active: boolean) => {
+  const deferred = !active
+  if (speakToolDeferred === deferred) return
+  speakToolDeferred = null
+  await $.tool.register({
+    name: 'speak',
+    description:
+      'Kurze gesprochene Ansage an den User am Ende des Turns (Skill whisperm8:callout): nur wenn der Turn auf ihn wartet, eine längere Aufgabe fertig ist oder du festhängst. text = höchstens zwei Sätze Deutsch, ohne Pfade, Code, IDs oder Markdown; den Namen des Chats stellt die App voran.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Höchstens zwei kurze Sätze, gesprochene Sprache' },
+      },
+      required: ['text'],
+    },
+    isDeferred: deferred,
+  })
+  speakToolDeferred = deferred
+}
+
+const setCallout = async ($: EngineInterface, active: boolean) => {
+  await update($, callout, () => active)
+  await syncSpeakTool($, active).catch(() => undefined)
+}
+
+/** Skill geladen: Modus an, Hinweis für das Modell an den Skill-Text. */
+const calloutOnSkill = async ($: EngineInterface, text: string): Promise<string> => {
+  if (sessionID === null) return text
+  await setCallout($, true)
+  return `${text}\n\n[whisperm8] Ansagen sind in dieser Session an: am Turn-Ende bei Bedarf ${SPEAK_TOOL} (Regeln im Skill ${CALLOUT_SKILL}). /callout aus schaltet sie ab.`
+}
+
+type SpeakReply = { status?: string }
+
+/** Die App antwortet, sobald die Ansage in der Warteschlange steht: der Turn blockiert nicht. */
+const speak = async ($: EngineInterface, text: string): Promise<string> => {
+  const ran = await cli($, ['speak', text], 10_000)
+  if (!ran.ok) return `FEHLER: ${ran.message}`
+  let reply: SpeakReply = {}
+  try {
+    reply = JSON.parse(ran.stdout) as SpeakReply
+  } catch {
+    // Ohne lesbare Antwort gilt die Ansage als angenommen (Exit 0).
+  }
+  switch (reply.status) {
+    case 'muted':
+      $.ui.toast('🔇 stumm, nicht vorgelesen')
+      return 'muted: Der User hat Ansagen stumm geschaltet. Nicht erneut versuchen.'
+    case 'debounced':
+      return 'debounced: Dieser Chat hat eben erst gesprochen. Nicht erneut versuchen.'
+    default:
+      $.ui.toast('🔊 vorgelesen')
+      return `${reply.status ?? 'queued'}: wird vorgelesen.`
+  }
+}
+
 // MARK: Hooks
 
 export const register: Register = (on, options) => {
@@ -361,13 +429,16 @@ export const register: Register = (on, options) => {
     const started = await next(e)
     sessionEnded = false
     sessionID = (await $.env.get('WHISPERM8_SESSION_ID')) ?? null
-    // Außerhalb eines WhisperM8-Chats gibt es kein Board.
+    // Außerhalb eines WhisperM8-Chats gibt es weder Board noch Ansagen.
     if (sessionID === null) return started
     try {
       await $.command.register({ name: 'board', description: 'Jarvis-Board: Details anzeigen; an | aus | zu | auf' })
+      await $.command.register({ name: 'callout', description: 'Gesprochene Ansagen am Turn-Ende: an | aus' })
     } catch {
       // Ohne Befehl bleiben Band und Tool.
     }
+    // Callout-Modus nach Neustart oder Reload: er steht in $.state und bleibt.
+    await syncSpeakTool($, await read($, callout)).catch(() => undefined)
     try {
       await syncTool($, false)
     } catch {
@@ -386,15 +457,39 @@ export const register: Register = (on, options) => {
   })
 
   // Jarvis startet: Board einschalten, unabhängig davon, ob das Modell daran denkt.
+  // Jarvis spricht außerdem immer: Callout-Modus mit an.
   on('skill.prompt', { skill: JARVIS_SKILL }, async ($, e, next) => {
     const result = await next(e)
     if (sessionID === null) return result
+    const text = await calloutOnSkill($, result.text).catch(() => result.text)
     const ran = await cli($, ['chats', 'board', 'activate', '--json'])
-    if (!ran.ok) return result
+    if (!ran.ok) return { text }
     await refresh($).catch(() => undefined)
     return {
-      text: `${result.text}\n\n[whisperm8] Das Jarvis-Board dieser Session ist aktiv. Pflege es mit dem Tool ${TOOL} (oder whisperm8 chats board …).`,
+      text: `${text}\n\n[whisperm8] Das Jarvis-Board dieser Session ist aktiv. Pflege es mit dem Tool ${TOOL} (oder whisperm8 chats board …).`,
     }
+  })
+
+  on('skill.prompt', { skill: CALLOUT_SKILL }, async ($, e, next) => {
+    const result = await next(e)
+    return { text: await calloutOnSkill($, result.text) }
+  })
+
+  on('tool.call', { tool: SPEAK_TOOL }, async ($, e) => {
+    const input = e as unknown as { text?: string }
+    if (!(await read($, callout))) return { result: 'aus: Ansagen sind in dieser Session aus (/callout an).' }
+    const text = (input.text ?? '').trim()
+    if (text === '') return { result: 'FEHLER: text fehlt.' }
+    return { result: await speak($, text) }
+  })
+
+  on('command.run', { command: 'callout' }, async ($, e) => {
+    const arg = e.args.trim()
+    if (arg === 'an' || arg === 'aus') {
+      await setCallout($, arg === 'an')
+      return { text: arg === 'an' ? 'Ansagen an.' : 'Ansagen aus.' }
+    }
+    return { text: `Ansagen sind ${(await read($, callout)) ? 'an' : 'aus'}. /callout an | aus` }
   })
 
   on('tool.call', { tool: TOOL }, async ($, e) => {

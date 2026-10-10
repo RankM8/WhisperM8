@@ -8,8 +8,9 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
 - **Plugin `whisperm8`:** Ein Claude-Code-Plugin mit allen Agent-Skills der
   App (`whisperm8:whisperm8-chats`, `whisperm8:jarvis`,
   `whisperm8:codex-subagent`, `whisperm8:gpt-coworker`,
-  `whisperm8:gpt-workflow`, `whisperm8:whisperm8-transcription`) und der Mod
-  „Jarvis-Board“. Jede Claude-Session, die die App startet, lädt es, in jedem
+  `whisperm8:gpt-workflow`, `whisperm8:whisperm8-transcription`,
+  `whisperm8:callout`) und der Mod „Jarvis-Board“ samt Voice-Callouts
+  (`docs/features/speech-callouts.md`). Jede Claude-Session, die die App startet, lädt es, in jedem
   Profil und ohne `claude plugin install`.
 - **Jarvis-Board:** Ein Band über dem Prompt der Jarvis-Session. Es zeigt die
   Chats, die Jarvis aktiv betreut, mit Ampel, Anliegen oder nächstem Schritt
