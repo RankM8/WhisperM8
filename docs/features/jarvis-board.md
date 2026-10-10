@@ -41,7 +41,7 @@ Vollbild-Terminal. App-Sessions laufen im Main-Screen, dort landet ein Klick
 beim Terminal der App (Textauswahl). Deshalb trägt der Kopf rechts einen
 Bedien-Hinweis statt Knöpfen: Buchstaben-Hotkeys wie früher „z: zu“ greifen
 nur nach `ctrl+x tab`, eine Ziffer im leeren Prompt dagegen immer.
-| Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis, Ton, Prompt an Jarvis), `toast`, `aus` |
+| Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis und Prompt an Jarvis), `toast`, `aus` |
 
 Ampeln: `needsYou` (rot, User muss entscheiden), `done` (grün, Abnahme
 offen), `running` (gelb), `parked` (grau, bewusst angehalten). Der Rahmen
@@ -99,7 +99,7 @@ mehreren Boards stehen (`otherOwners`).
   Session. Endet er, setzt die Mod mit Backoff (2 s bis 60 s) und frischem
   Stand neu an; bei `session.end` hört sie auf.
 - **Wecken:** Ein Board-Chat geht auf `awaitingInput` oder beendet seinen
-  Turn (`working → idle`). Daraufhin kommen Hinweis und Ton, und je nach
+  Turn (`working → idle`). Daraufhin kommt ein Hinweis (bewusst ohne Ton), und je nach
   Einstellung ein Prompt `[Board] <Name> (<ref>): …` an Jarvis. Gebündelt
   über 5 s, höchstens ein Prompt je Minute, einmal je Chat und Zustand, bis
   der Chat wieder arbeitet. Geparkte Chats wecken nicht.

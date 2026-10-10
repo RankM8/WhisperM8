@@ -8,7 +8,7 @@
     "wecken": {
       "type": "string",
       "title": "Jarvis wecken",
-      "description": "Wenn ein Board-Chat auf dich wartet oder fertig ist: turn = Hinweis, Ton und ein Prompt an Jarvis; toast = nur Hinweis und Ton; aus = nichts.",
+      "description": "Wenn ein Board-Chat auf dich wartet oder fertig ist: turn = Hinweis und ein Prompt an Jarvis; toast = nur Hinweis; aus = nichts.",
       "options": ["turn", "toast", "aus"],
       "default": "turn"
     }

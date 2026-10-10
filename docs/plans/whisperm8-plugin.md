@@ -18,7 +18,7 @@ ausschalten.
 | Wer bestimmt, was auf dem Board steht? | Jarvis selbst über ein eigenes Tool. Die übrigen Sessions erscheinen nicht. |
 | Wo liegt die Liste? | In der App, gepflegt über neue CLI-Befehle `whisperm8 chats board …`, nicht in einer Datei der Mod |
 | Anzeige | Band über dem Prompt (immer), Panel auf `/board` (Details, Buttons). Keine Statuszeile (siehe „Was sich am Plan ändert“) |
-| Wecken | Toast und Ton, wenn ein Board-Chat auf den User wartet oder fertig ist. Zusätzlich reiht die Mod einen Prompt bei Jarvis ein. |
+| Wecken | Toast (Ton am 10.10.2026 entfernt, unerwünscht), wenn ein Board-Chat auf den User wartet oder fertig ist. Zusätzlich reiht die Mod einen Prompt bei Jarvis ein. |
 | Verpackung | **Ein** Plugin `whisperm8` mit allen Skills und Mods; der Namensraum (`/whisperm8:jarvis`) ist in Ordnung |
 | Vorgehen | Erst dieser Plan, dann Freigabe zum Bau |
 

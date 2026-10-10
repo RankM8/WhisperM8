@@ -321,7 +321,6 @@ const flushWake = async ($: EngineInterface) => {
   if (lines.length === 0) return
   lastWakeAt = Date.now()
   $.ui.toast(lines.length === 1 ? lines[0]! : `${lines[0]} (+${lines.length - 1})`)
-  void $.audio.play({ asset: 'sounds/board.wav' }).catch(() => undefined)
   if (wakeMode !== 'turn') return
   await $.prompt.submit({ text: `${lines.join('\n')}\nStand prüfen und das Board nachführen.` })
 }

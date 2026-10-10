@@ -43,11 +43,11 @@ const band = (bodyColumns: number, maxRows = 12) => ({
   props: { hasSurvey: false, isWorking: false, maxRows, bodyColumns, scroll: { offset: 0, bodyRows: maxRows }, view: {} },
 })
 
-type Calls = { argv: string[][]; prompts: string[]; toasts: string[] }
+type Calls = { argv: string[][]; prompts: string[]; toasts: string[]; sounds: number }
 
 /** Engine unter der Mod: Session, CLI (`whisperm8 …`) und watch-Strom gespielt. */
 const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string | null } = {}): Calls => {
-  const calls: Calls = { argv: [], prompts: [], toasts: [] }
+  const calls: Calls = { argv: [], prompts: [], toasts: [], sounds: 0 }
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine'] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('skill.prompt', (_$, e) => ({ text: e.text }))
@@ -71,8 +71,11 @@ const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string 
     calls.toasts.push(String((e as { text?: string }).text ?? ''))
     return { value: undefined } as never
   })
-  on('audio.play', () => ({ value: undefined }) as never)
   on('ui.status', () => ({ value: undefined }) as never)
+  on('audio.play', () => {
+    calls.sounds += 1
+    return { value: undefined } as never
+  })
   return calls
 }
 
@@ -196,6 +199,7 @@ describe('Wecken', () => {
     await clock.advance(6_000)
     await clock.settle()
     expect(calls.toasts).toEqual(['[Board] ListM8 Lead-Run (e45d0000): wartet auf dich'])
+    expect(calls.sounds).toBe(0) // Wecken bewusst ohne Ton
     expect(calls.prompts.length).toBe(1)
     expect(calls.prompts[0]).toContain('[Board] ListM8 Lead-Run (e45d0000): wartet auf dich')
   })
