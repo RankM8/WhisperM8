@@ -1,6 +1,6 @@
 # Plan: Claude-Konto per Klick wechseln — ohne Stoppen, gemeinsames Gedächtnis
 
-**Stand:** 2026-10-10 · **Status:** Entwurf, nicht freigegeben · **Scope:** Agent Chats (Claude), Settings-Seite „Accounts“, CLI `whisperm8 chats move-account`
+**Stand:** 2026-10-10 · **Status:** Entwurf, Slice 0 (Prototyp) erledigt · **Scope:** Agent Chats (Claude), Settings-Seite „Accounts“, CLI `whisperm8 chats move-account`
 **Vorgänger:** `claude-account-switcher.md` (Profile via `CLAUDE_CONFIG_DIR`), `claude-account-routing.md` (Slice 5–6: Default-Profil, Umzug mit Journal). Dieser Plan baut darauf auf und ersetzt nichts davon.
 
 ## Ziel
@@ -120,6 +120,32 @@ Manuell in einem Wegwerf-Repo, Claude Code 2.1.296. Ergebnis kommt als Abschnitt
 | P4 | Ablauf messen: Turn-Ende → Ctrl+C ×2 → Prozessende → Umzug → `--resume` bereit | Zeit in Sekunden notieren (Zielwert < 5 s). |
 | P5 | `--settings` mit `autoMemoryDirectory` + bestehende Hook-Settings zusammen | Hooks feuern weiter (Hook-Bridge, Prompt-Guard). |
 
+### Prototyp-Befunde (10.10.2026, Claude Code 2.1.296)
+
+Wegwerf-Repo mit Unterordner, Worktree und Nicht-Git-Ordner; Konten ai3 (A) und ai2 (B); Claude
+mit leerer Umgebung gestartet (ohne WhisperM8-Variablen und Router), `-p` und interaktiv per tmux.
+
+| # | Ergebnis | Befund |
+|---|---|---|
+| P1 | ✅ | `autoMemoryDirectory` per `--settings` wirkt: ai3 schreibt (`MEMORY.md` + Einzeldatei) in den angegebenen Ordner, ai2 liest es in einer neuen Session; ohne die Einstellung kennt ai2 nichts. **Keine Freigabe-Rückfrage**, weder im Auto-Modus noch mit `--permission-mode default` (`permission_denials` leer), auch nicht im TUI. Der Trust-Dialog erwähnt die Einstellung nicht — sie gilt nur für Ordner-Settings als prüfpflichtig (Binary: `MPs`-Liste, „This folder changes where automatic memory is written“), Flag-Settings sind davon frei. |
+| P2 | ✅ | Memory-Ordner = `<config>/projects/<kodiert>/memory/`. `<kodiert>` aus dem **Haupt-Repo-Root** (Unterordner und Worktree teilen ihn), ohne Git aus dem `cwd`, jeweils als **realpath** (`/tmp` → `/private/tmp`; die App speichert Projektpfade als `/tmp/…`, Slice 1 muss auflösen). Regel aus dem Binary: jedes UTF-16-Zeichen außer `[a-zA-Z0-9]` → `-`; länger als 200 → `prefix(200) + "-" + base36(abs(h))` mit `h = (h << 5) - h + charCode` über UTF-16, Int32-Überlauf. Die App berechnet diesen Namen heute nirgends selbst — Slice 1 baut ihn neu, mit diesen Fällen als Test-Fixtures. |
+| P3 | ✅ mit Folgen | Opus 5.5 und Fable 5.1 setzen nach Umzug + `--resume` unter B fehlerfrei fort, der sichtbare Verlauf ist vollständig. Claude Code kennt den Fall selbst und zeigt im TUI: *„Claude can't use thinking from another organization … It isn't deleted: resume this session signed in to that organization to use it again … next responses may be slower and use more tokens because it has to reread this session.“* Also: früheres Thinking fällt beim Wechsel weg (kommt beim Zurückwechseln wieder), und der Prompt-Cache wird im Zielkonto neu aufgebaut — ein großer Chat kostet dort einmal den vollen Kontext. **Trust** gilt pro Konto: Zielkonto ohne Trust → Dialog beim Resume, **vorausgewählt „No, exit“**. **User-MCP-Server** sind pro Konto verschieden (z. B. main: atlassian/gooseworks/meta-ads, ai2: akquise/playwright, ai3: apify/fireflies/meta-ads) — ein Chat verliert nach dem Wechsel Tools. Trust für whisperm8 fehlt in ai. (Nebenbefund: eine Frage nach dem „gedachten“ Wert löst bei Opus den Filter `reasoning_extraction` aus — Testartefakt, kein Kontoproblem.) |
+| P4 | ✅ | 2× Ctrl+C → Prozessende **≈ 1,0 s**, Umzug **36 ms**, Start → TUI sichtbar **0,5 s** — zusammen ≈ 1,5 s (Ziel < 5 s). Mit Trust-Dialog kommen Bestätigen + ≈ 2,8 s bis `SessionStart` dazu. |
+| P5 | ✅ | Hooks und `autoMemoryDirectory` in **einer** Settings-Datei: `SessionStart` (`startup`/`resume`), `UserPromptSubmit`, `Stop`, `SessionEnd` feuern unverändert, auch nach dem Kontowechsel. |
+
+**Folgen für die Slices:**
+
+- **Slice 1** wie geplant; Pfad über realpath + Git-Common-Dir, Kodierung inkl. 200er-Kürzung und Hash.
+- **Slice 2:** Trust ist ein **harter** Vorab-Check (nur lesend, `projects[<realpath>].hasTrustDialogAccepted`
+  aus der `.claude.json` des Zielkontos): fehlt er, wechselt der Chat **nie automatisch nach dem Turn**,
+  sondern nur nach ausdrücklicher Bestätigung mit Hinweis „Claude fragt beim Start nach Freigabe“.
+  Trust wird nie von der App geschrieben (Leitplanke). Fehlende MCP-Server und der einmalige
+  Cache-Neuaufbau bei großen Chats (Kontextgröße anzeigen) werden im Dialog genannt.
+- Gleichen der MCP-Server über alle Konten ist eine User-Entscheidung (Konfiguration je Konto), kein
+  Automatismus der App.
+- Aufräumen: Die App indiziert auch Sessions aus Wegwerf-Ordnern und legt dafür Projekte an
+  (hier 4 Test-Projekte) — Prototypen künftig außerhalb der Indexer-Roots oder Projekte danach entfernen.
+
 ## Slice 1 — Gemeinsames Gedächtnis
 
 **Ziel:** Alle App-Chats eines Projekts nutzen das Memory von main.
@@ -181,7 +207,9 @@ Manuell in einem Wegwerf-Repo, Claude Code 2.1.296. Ergebnis kommt als Abschnitt
    `targetTranscriptExists`.
 3. **Vorab-Prüfung im Bestätigungsdialog** (nur lesend): fehlende User-MCP-Server im Zielkonto
    (Vergleich der `mcpServers` aus beiden `.claude.json`), Ziel nicht eingeloggt (blockiert),
-   Hinweis auf Prompt-Cache-Neuaufbau. Je nach Befund aus P3 auch Trust- oder Modell-Hinweis.
+   Hinweis auf Prompt-Cache-Neuaufbau und früheres Thinking (P3). **Trust fehlt im Zielkonto** →
+   kein automatischer Wechsel nach dem Turn, nur nach Bestätigung (P3: Dialog mit Vorauswahl
+   „No, exit“).
 4. **CLI:** `whisperm8 chats move-account --to X` nutzt den Coordinator; Standard ist „nach dem
    Turn“. `--stop-and-resume` bleibt als Alias, `--force` (sofort, auch bei Entwurf) bleibt. Die
    eigene Session wird nie gestoppt. Skill `whisperm8-chats` anpassen.
@@ -245,8 +273,8 @@ CLAUDE.md (Abschnitt Agent Chats: Kontowechsel nach dem Turn, gemeinsames Memory
 |---|---|
 | Claude ändert Sanitizing oder Git-Root-Regel des Memory-Pfads | P2 als Unit-Test-Fixtures festhalten; Kill-Switch; Abweichung fällt nur als „Memory leer“ auf, nichts geht verloren |
 | `autoMemoryDirectory` über `--settings` löst Freigabe-Prompts aus | P1 prüft das vor jedem Code; sonst E2 neu entscheiden |
-| Ziel-Konto ohne MCP-Server oder ohne Trust für das Projekt | Vorab-Prüfung im Dialog (Slice 2.3); Trust-Dialog erscheint höchstens einmal je Projekt und Konto |
-| Modell im Zielplan nicht verfügbar (z. B. Fable) | P3 klärt das Verhalten; dann Hinweis im Dialog |
+| Ziel-Konto ohne MCP-Server oder ohne Trust für das Projekt | Vorab-Prüfung im Dialog (Slice 2.3); ohne Trust kein Auto-Wechsel nach dem Turn; Trust-Dialog erscheint höchstens einmal je Projekt und Konto |
+| Thinking und Prompt-Cache gehen beim Wechsel verloren (P3) | von Claude Code vorgesehen und angezeigt; Hinweis im Dialog, beim Zurückwechseln ist das Thinking wieder da |
 | Wechsel beendet einen Turn, der gar nicht fertig war (Status falsch `idle`) | nur bei `idle` und ohne Entwurf; Prompt-Guard verhindert Wiedervorlage; Fehlerfall = Chat setzt per `--resume` fort, nichts geht verloren |
 | Gleichzeitige Memory-Writes zweier Chats auf verschiedenen Konten | wie heute bei zwei Chats unter einem Konto; Claude schreibt Einzeldateien |
 | Thinking-Blöcke (Sonnet/Haiku 5.5) gehen nach Wechsel still verloren | dokumentiertes API-Verhalten; im Dialog als „Reasoning des alten Kontos wird nicht mitgenommen“ erwähnen |
