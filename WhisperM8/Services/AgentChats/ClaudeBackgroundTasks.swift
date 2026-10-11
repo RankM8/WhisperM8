@@ -50,13 +50,18 @@ struct ClaudeBackgroundTaskTracker {
         defer { try? handle.close() }
         do {
             try handle.seek(toOffset: offset)
-            guard let data = try handle.readToEnd() else { return }
-            offset += UInt64(data.count)
-            consume(data)
+            // Blockweise statt `readToEnd`: ein 65-MB-Transcript läge sonst
+            // komplett im Speicher (Analyse 11.10.2026).
+            while let chunk = try handle.read(upToCount: Self.chunkSize), !chunk.isEmpty {
+                offset += UInt64(chunk.count)
+                consume(chunk)
+            }
         } catch {
             return
         }
     }
+
+    static let chunkSize = 4 * 1024 * 1024
 
     mutating func consume(_ data: Data) {
         var buffer = partialLine
@@ -141,45 +146,84 @@ enum ProcessStartTime {
 }
 
 /// Hält je Session einen Tracker, damit wiederholte Prüfungen (Vormerkungen
-/// alle 2 s) nur angehängte Bytes lesen.
-@MainActor
-final class ClaudeBackgroundTaskMonitor {
+/// alle 2 s) nur angehängte Bytes lesen. Thread-sicher: der teure erste
+/// Durchlauf läuft per `prefetch` im Hintergrund (Analyse 11.10.2026: 0,2–0,4 s
+/// je 22–65 MB auf dem Main Thread), danach liest `openTaskCount` auf dem
+/// MainActor nur noch Neues. I/O passiert nie unter dem Lock.
+final class ClaudeBackgroundTaskMonitor: @unchecked Sendable {
     static let shared = ClaudeBackgroundTaskMonitor()
+    private let lock = NSLock()
     private var trackers: [UUID: ClaudeBackgroundTaskTracker] = [:]
+
+    /// Tracker herausnehmen, außerhalb des Locks aktualisieren, zurücklegen.
+    private func updatedTracker(sessionID: UUID, transcriptURL: URL) -> ClaudeBackgroundTaskTracker {
+        lock.lock()
+        var tracker = trackers[sessionID] ?? ClaudeBackgroundTaskTracker()
+        lock.unlock()
+        tracker.update(from: transcriptURL)
+        lock.lock()
+        // Ein parallel weiter gelesener Tracker gewinnt.
+        if let current = trackers[sessionID], current.offset > tracker.offset {
+            tracker = current
+        } else {
+            trackers[sessionID] = tracker
+        }
+        lock.unlock()
+        return tracker
+    }
 
     /// Anzahl offener Hintergrund-Tasks des laufenden Prozesses; 0, wenn das
     /// Transcript (noch) nicht auffindbar ist.
     func openTaskCount(sessionID: UUID, transcriptURL: URL?, processID: pid_t?) -> Int {
         guard let transcriptURL else { return 0 }
-        var tracker = trackers[sessionID] ?? ClaudeBackgroundTaskTracker()
-        tracker.update(from: transcriptURL)
-        trackers[sessionID] = tracker
+        let tracker = updatedTracker(sessionID: sessionID, transcriptURL: transcriptURL)
         let processStart = processID.flatMap(ProcessStartTime.of(pid:))
         return tracker.openTaskIDs(startedAfter: processStart).count
     }
 
-    /// Für eine laufende App-Session: Transcript über Workspace + Locator
-    /// (ohne Glob — läuft im 2-s-Takt), PID aus der Terminal-Registry.
-    func openTaskCount(liveSessionID id: UUID) -> Int {
+    /// Transcript (Workspace + Locator, ohne Glob — läuft im 2-s-Takt) und PID
+    /// (Terminal-Registry) einer laufenden App-Session.
+    @MainActor
+    func liveTarget(sessionID id: UUID) -> (url: URL?, pid: pid_t?) {
         let workspace = AgentWorkspaceUIModel.shared.workspace
         guard let session = workspace.sessions.first(where: { $0.id == id }),
               session.provider == .claude,
               let externalID = session.externalSessionID, !externalID.isEmpty,
-              let cwd = AccountMoveFacts.cwd(for: session, projects: workspace.projects) else { return 0 }
+              let cwd = AccountMoveFacts.cwd(for: session, projects: workspace.projects) else { return (nil, nil) }
         let url = AgentTranscriptLocator.locate(
             provider: .claude,
             externalSessionID: externalID,
             cwd: AgentSessionStore.canonicalProjectPath(cwd),
             globFallback: false
         )
-        return openTaskCount(
-            sessionID: id,
-            transcriptURL: url,
-            processID: AgentTerminalRegistry.shared.controller(for: id)?.processID
-        )
+        return (url, AgentTerminalRegistry.shared.controller(for: id)?.processID)
+    }
+
+    @MainActor
+    func openTaskCount(liveSessionID id: UUID) -> Int {
+        let target = liveTarget(sessionID: id)
+        return openTaskCount(sessionID: id, transcriptURL: target.url, processID: target.pid)
+    }
+
+    /// Erster Durchlauf im Hintergrund — vor dem Umzugs-Sheet bzw. dem
+    /// CLI-Umzug, damit `decide()` synchron bleiben kann und trotzdem nur
+    /// noch angehängte Bytes liest.
+    @MainActor
+    func prefetch(liveSessionIDs ids: [UUID]) async {
+        let targets = ids.compactMap { id -> (UUID, URL)? in
+            liveTarget(sessionID: id).url.map { (id, $0) }
+        }
+        guard !targets.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for (id, url) in targets {
+                group.addTask { [self] in _ = updatedTracker(sessionID: id, transcriptURL: url) }
+            }
+        }
     }
 
     func forget(sessionID: UUID) {
+        lock.lock()
         trackers.removeValue(forKey: sessionID)
+        lock.unlock()
     }
 }

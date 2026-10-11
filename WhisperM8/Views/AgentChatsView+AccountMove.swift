@@ -23,6 +23,20 @@ extension AgentChatsView {
     /// Nebenwirkungen, die benannt gehoeren.
     func requestAccountMove(_ sessions: [AgentChatSession], toProfileNamed targetName: String) {
         guard !sessions.isEmpty else { return }
+        // Hintergrund-Task-Scan laufender Chats off-main vorwärmen (der erste
+        // Durchlauf liest das ganze Transcript), dann synchron entscheiden.
+        let runningIDs = sessions.map(\.id).filter { terminalRegistry.controller(for: $0)?.isRunning == true }
+        guard !runningIDs.isEmpty else {
+            presentAccountMove(sessions, toProfileNamed: targetName)
+            return
+        }
+        Task { @MainActor in
+            await ClaudeBackgroundTaskMonitor.shared.prefetch(liveSessionIDs: runningIDs)
+            presentAccountMove(sessions, toProfileNamed: targetName)
+        }
+    }
+
+    private func presentAccountMove(_ sessions: [AgentChatSession], toProfileNamed targetName: String) {
         let target = AccountMovePlanner.normalize(targetName)
         let profiles = ClaudeAccountProfiles()
         let targetIsLoggedIn = target == nil || profiles.profile(named: targetName).isLoggedIn

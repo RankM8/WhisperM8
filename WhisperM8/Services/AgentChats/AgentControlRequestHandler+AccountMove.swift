@@ -101,6 +101,10 @@ extension AgentControlRequestHandler {
         let requestedIDs = deduped
         let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
 
+        // Hintergrund-Task-Scan off-main vorwärmen — Phase 1 liest danach nur
+        // noch angehängte Bytes (der erste Durchlauf liest das ganze Transcript).
+        await ClaudeBackgroundTaskMonitor.shared.prefetch(liveSessionIDs: requestedIDs)
+
         // Phase 1 — planen und (nur bei echter Ausfuehrung) anhalten. EIN
         // MainActor-Block: Laufzustand, Status und Stop sehen denselben Stand.
         let phase: MoveAccountPhase = await MainActor.run {

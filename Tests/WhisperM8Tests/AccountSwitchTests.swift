@@ -456,6 +456,22 @@ final class ClaudeBackgroundTaskTrackerTests: XCTestCase {
         XCTAssertEqual(tracker.openTaskIDs(), [])
     }
 
+    /// Monitor: ein im Hintergrund vorgewärmter Tracker liest danach nur Neues.
+    func testMonitorReadsOnlyAppendedBytesAfterFirstScan() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bgmon-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try bashStart("ba1").write(to: url, atomically: false, encoding: .utf8)
+        let monitor = ClaudeBackgroundTaskMonitor()
+        let id = UUID()
+        XCTAssertEqual(monitor.openTaskCount(sessionID: id, transcriptURL: url, processID: nil), 1)
+
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(notification(["ba1"]).utf8))
+        try handle.close()
+        XCTAssertEqual(monitor.openTaskCount(sessionID: id, transcriptURL: url, processID: nil), 0)
+    }
+
     func testIdleChatWithBackgroundTasksWaits() {
         XCTAssertEqual(
             AccountSwitchPlanner.waitReason(status: .idle, mayHaveUnsentInput: false, openBackgroundTasks: 1),
