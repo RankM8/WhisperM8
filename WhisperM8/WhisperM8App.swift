@@ -283,6 +283,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             _ = AgentSessionRetentionService().prune(liveLocalSessionIDs: liveIDs)
         }
 
+        // Einmalig: Auto-Memory der Zusatzprofile nach main zusammenführen —
+        // seit dem gemeinsamen Memory lesen alle Konten dort (mit Backup,
+        // ohne zu überschreiben; die Profil-Ordner bleiben stehen).
+        Task.detached(priority: .background) {
+            ClaudeMemoryMigration.runOnceIfNeeded()
+        }
+
         // CLI-Symlink (~/.local/bin/whisperm8) idempotent anlegen, damit
         // `whisperm8 transcribe …` aus Claude Code / Terminal sofort verfügbar
         // ist und denselben Keychain-Eintrag wie die App nutzt.

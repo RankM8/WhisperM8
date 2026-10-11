@@ -1,6 +1,6 @@
 # Plan: Claude-Konto per Klick wechseln — ohne Stoppen, gemeinsames Gedächtnis
 
-**Stand:** 2026-10-10 · **Status:** Entwurf, Slice 0 (Prototyp) erledigt · **Scope:** Agent Chats (Claude), Settings-Seite „Accounts“, CLI `whisperm8 chats move-account`
+**Stand:** 2026-10-10 · **Status:** Slice 0 (Prototyp) und Slice 1 (gemeinsames Memory) umgesetzt · **Scope:** Agent Chats (Claude), Settings-Seite „Accounts“, CLI `whisperm8 chats move-account`
 **Vorgänger:** `claude-account-switcher.md` (Profile via `CLAUDE_CONFIG_DIR`), `claude-account-routing.md` (Slice 5–6: Default-Profil, Umzug mit Journal). Dieser Plan baut darauf auf und ersetzt nichts davon.
 
 ## Ziel
@@ -184,6 +184,18 @@ mit leerer Umgebung gestartet (ohne WhisperM8-Variablen und Router), `-p` und in
 - Neuer Chat unter ai3 im whisperm8-Repo sieht die 42 Memories von main plus die migrierten.
 - Ein `/memory`-Eintrag aus einem PowerUser-Chat erscheint im nächsten ai2-Chat.
 - Nach Kill-Switch fällt alles auf den Zustand vor Slice 1 zurück, ohne Datenverlust.
+
+### Umsetzungsstand (11.10.2026)
+
+Umgesetzt wie geplant, mit zwei Abweichungen:
+- **`main` bekommt kein Fragment** — dort ist der Ordner Claudes Standard; so bleibt `main` exakt wie
+  vorher, selbst falls die Pfadberechnung einmal abweicht.
+- **Pfad ohne Foundation-Normalisierung:** `standardizingPath` kürzt `/private/var` still zu `/var`
+  (vom Worktree-Test gefunden) — Auflösung von `.`/`..` jetzt rein textuell wie Node `path.resolve`.
+
+Probelauf der Migration auf einer Kopie der echten Daten: 20 Projekte, 122 Dateien kopiert,
+7 identisch, 2 Konflikte als `<name>.<profil>.md`, 120 Index-Zeilen, kein toter Verweis; zweiter Lauf
+ohne Änderung. Größter Index danach 99 Zeilen / 13 KB (Claude liest 200 Zeilen bzw. 25 KB).
 
 ## Slice 2 — Wechsel nach dem Turn, ohne Stoppen
 

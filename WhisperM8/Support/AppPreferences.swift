@@ -429,6 +429,24 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.chatsPromptGuardEnabled) }
     }
 
+    /// Gemeinsames Auto-Memory: Chats von Zusatzprofilen bekommen per
+    /// `autoMemoryDirectory` das Memory von `main` (Plan
+    /// claude-account-switch-ohne-stopp.md, Slice 1). Aus = jedes Profil nutzt
+    /// wieder sein eigenes Memory, dessen Bestand unberührt geblieben ist;
+    /// wirkt für NEU gestartete Sessions.
+    /// `defaults write com.whisperm8.app claudeSharedMemoryEnabled -bool NO`
+    var isClaudeSharedMemoryEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.claudeSharedMemoryEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeSharedMemoryEnabled) }
+    }
+
+    /// Merker der einmaligen Memory-Zusammenführung nach `main`
+    /// (`ClaudeMemoryMigration.runOnceIfNeeded`).
+    var claudeSharedMemoryMigrationDone: Bool {
+        get { defaults.bool(forKey: Keys.claudeSharedMemoryMigrationDone) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeSharedMemoryMigrationDone) }
+    }
+
     /// Jarvis-Board (`whisperm8 chats board`): Aus = Handeln-Befehle antworten
     /// mit Fehlermeldung, Lesen liefert ein leeres Board. Die CLI liest den
     /// Schalter über `JarvisBoardSettings` (feste App-Domain).
@@ -794,6 +812,8 @@ enum PreferenceKeys {
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
+    static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
+    static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let jarvisBoardEnabled = "jarvisBoardEnabled"
     static let speechCalloutsEnabled = "speechCalloutsEnabled"
     static let speechCalloutsMuted = "speechCalloutsMuted"

@@ -68,6 +68,7 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         )
         coordinator.terminalExternalIDUpdater = { _, _ in }
         coordinator.gptModelsFragmentResolver = { _ in nil }
+        coordinator.sharedMemoryFragmentResolver = { _, _ in nil }
         return (coordinator, session.id, poster, sounds, preferences)
     }
 
@@ -613,6 +614,28 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         )
         XCTAssertEqual(nothing.settingsArguments, [])
         XCTAssertFalse(nothing.hooksActive)
+    }
+
+    func testPrepareLaunchSettingsMergesSharedMemoryFragment() throws {
+        let (coordinator, sessionID, _, _, preferences) = try makeCoordinator()
+        var seenSession: UUID?
+        coordinator.sharedMemoryFragmentResolver = { session, _ in
+            seenSession = session.id
+            return ["autoMemoryDirectory": "/Users/x/.claude/projects/-repo/memory"]
+        }
+
+        let prepared = coordinator.prepareLaunchSettings(localSessionID: sessionID)
+        XCTAssertEqual(seenSession, sessionID)
+        let data = try Data(contentsOf: URL(fileURLWithPath: try XCTUnwrap(prepared.settingsFilePath)))
+        let settings = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(Set(settings.keys), ["hooks", "autoMemoryDirectory"])
+        XCTAssertEqual(settings["autoMemoryDirectory"] as? String, "/Users/x/.claude/projects/-repo/memory")
+
+        // Auch ohne Hooks wird die Datei allein für das Memory geschrieben.
+        preferences.value.hooksEnabled = false
+        let memoryOnly = coordinator.prepareLaunchSettings(localSessionID: sessionID)
+        XCTAssertFalse(memoryOnly.hooksActive)
+        XCTAssertNotNil(memoryOnly.settingsFilePath)
     }
 
     func testPrepareLaunchSettingsWritesWorkerEnvironmentWithoutHooks() throws {

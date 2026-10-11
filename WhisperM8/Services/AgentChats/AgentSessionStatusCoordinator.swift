@@ -78,6 +78,18 @@ final class AgentSessionStatusCoordinator {
         )
     }
 
+    /// Gemeinsames Auto-Memory (`autoMemoryDirectory` → Memory von `main`) für
+    /// Chats von Zusatzprofilen. Als Closure injizierbar wie der GPT-Katalog.
+    var sharedMemoryFragmentResolver: (AgentChatSession, AgentProject) -> [String: Any]? = { session, project in
+        ClaudeSharedMemoryPath.settingsFragment(
+            provider: session.provider,
+            profileName: session.claudeProfileName,
+            workingDirectory: project.path,
+            profiles: ClaudeAccountProfiles(),
+            isEnabled: AppPreferences.shared.isClaudeSharedMemoryEnabled
+        )
+    }
+
     private(set) var states: [UUID: AgentSessionLifecycleState] = [:]
     private var notificationThrottle = AgentNotificationThrottle()
     private var launchGraceTasks: [UUID: Task<Void, Never>] = [:]
@@ -189,16 +201,21 @@ final class AgentSessionStatusCoordinator {
         workerEnvironment: [String: String]? = nil
     ) -> LaunchSettingsPreparation {
         let hooksEnabled = loadPreferences().hooksEnabled
-        let sessionModel = store.loadWorkspace().sessions
-            .first(where: { $0.id == localSessionID })?
-            .claudeBackendModel
+        let workspace = store.loadWorkspace()
+        let session = workspace.sessions.first(where: { $0.id == localSessionID })
+        let sessionModel = session?.claudeBackendModel
         let gptModelsFragment = includeGPTModelCatalog
             ? gptModelsFragmentResolver(sessionModel) ?? [:]
             : [:]
         let workerFragment: [String: Any] = workerEnvironment.map { ["env": $0] } ?? [:]
+        let memoryFragment: [String: Any] = session.flatMap { session in
+            workspace.projects.first(where: { $0.id == session.projectID })
+                .flatMap { sharedMemoryFragmentResolver(session, $0) }
+        } ?? [:]
         let fragment = ClaudeHookSettingsBuilder.merged([
             gptModelsFragment,
             workerFragment,
+            memoryFragment,
         ])
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         let path = hookBridge.prepareSettingsFile(
