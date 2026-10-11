@@ -18,7 +18,10 @@ final class FileEventSource {
     var onFileGone: (() -> Void)?
 
     /// O_CLOEXEC: sonst erbt jeder Chat-Prozess (forkpty + execve) den FD.
-    static let defaultOpenFile: (String) -> Int32 = { open($0, O_EVTONLY | O_CLOEXEC) }
+    /// `nonisolated`: wird als Default-Argument außerhalb des MainActors ausgewertet.
+    nonisolated static func defaultOpenFile(_ path: String) -> Int32 {
+        open(path, O_EVTONLY | O_CLOEXEC)
+    }
 
     init(url: URL, openFile: @escaping (String) -> Int32 = FileEventSource.defaultOpenFile) {
         self.url = url
