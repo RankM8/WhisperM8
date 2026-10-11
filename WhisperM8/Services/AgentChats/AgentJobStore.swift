@@ -199,7 +199,7 @@ struct AgentJobStore {
             throw StoreError.jobNotFound(shortId)
         }
         let lockURL = directory.appendingPathComponent(".claim.lock")
-        let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o644)
+        let fd = open(lockURL.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o644)
         guard fd >= 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }

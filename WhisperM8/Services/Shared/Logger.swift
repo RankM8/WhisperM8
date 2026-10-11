@@ -53,7 +53,9 @@ enum Logger {
     static func info(_ message: String) {
         debugLog.info("\(message, privacy: .public)")
 
-        #if DEBUG
+        // Nicht im installierten Dev-Build (`make dev` baut Debug mit -O):
+        // dort liest niemand stdout, jedes print kostet nur.
+        #if DEBUG && !WHISPERM8_INSTALLED
         print("[WhisperM8] \(message)")
         #endif
     }
@@ -61,7 +63,9 @@ enum Logger {
     static func debug(_ message: String) {
         debugLog.debug("\(message, privacy: .public)")
 
-        #if DEBUG
+        // Nicht im installierten Dev-Build (`make dev` baut Debug mit -O):
+        // dort liest niemand stdout, jedes print kostet nur.
+        #if DEBUG && !WHISPERM8_INSTALLED
         print("[WhisperM8] \(message)")
         #endif
 

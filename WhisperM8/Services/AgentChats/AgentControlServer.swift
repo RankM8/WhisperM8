@@ -112,7 +112,12 @@ final class AgentControlServer: @unchecked Sendable {
         // Socket überschreiben). Alle Fehlerpfade ab hier räumen den lockFD
         // über `cleanupPartialStart()` auf, damit ein erneuter `start` keinen
         // FD leakt.
-        lockFD = open(ChatsControlProtocol.lockFileURL().path, O_CREAT | O_RDWR, 0o600)
+        // O_CLOEXEC: Chat-Prozesse (forkpty + execve) erben sonst den Lock und
+        // halten ihn über das Ende der App hinaus — nach einem Neustart hing der
+        // Server bis zu ~19 s im Retry, ein langlebiger Prozess aus einer
+        // Chat-Shell hielte ihn unbegrenzt (Analyse 11.10.2026, `lsof` zeigte
+        // sechs `claude`-Prozesse mit dem Lock).
+        lockFD = open(ChatsControlProtocol.lockFileURL().path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
         guard lockFD >= 0 else {
             Logger.agentStore.error("control_server_lock_open_failed errno=\(errno)")
             return
@@ -183,6 +188,13 @@ final class AgentControlServer: @unchecked Sendable {
         armAccept()
     }
 
+    /// Socket-FDs haben kein `O_CLOEXEC` beim Anlegen — nachträglich setzen,
+    /// damit Chat-Prozesse sie nicht erben (gleicher Grund wie beim Lock).
+    static func setCloseOnExec(_ fd: Int32) {
+        let flags = fcntl(fd, F_GETFD)
+        if flags >= 0 { _ = fcntl(fd, F_SETFD, flags | FD_CLOEXEC) }
+    }
+
     private func bindListen(at url: URL) -> Bool {
         // Bestehenden Socket sicher entfernen (Stale-Handling).
         reclaimStaleSocketIfSafe(at: url)
@@ -192,6 +204,7 @@ final class AgentControlServer: @unchecked Sendable {
             Logger.agentStore.error("control_server_socket_failed errno=\(errno)")
             return false
         }
+        Self.setCloseOnExec(fd)
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -285,6 +298,7 @@ final class AgentControlServer: @unchecked Sendable {
     private func acceptOne() {
         let clientFD = accept(listenFD, nil, nil)
         guard clientFD >= 0 else { return }
+        Self.setCloseOnExec(clientFD)
 
         // Peer-Credential-Prüfung: Cross-User-Zugriff hart ausschließen.
         var euid: uid_t = 0

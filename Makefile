@@ -1,8 +1,10 @@
-.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-reinstall skills plugin-test snapshots _install_bundle
+.PHONY: run build install install-cli kill clean clean-apps help dmg clean-install dev dev-release dev-reinstall skills plugin-test snapshots _install_bundle _build_dev _dev_finish _guard_chat
 
 APP_NAME = WhisperM8
 APP_BUNDLE = $(APP_NAME).app
 INSTALLED_APP = /Applications/$(APP_BUNDLE)
+# Build-Ordner für _bundle (dev nutzt .build-dev, alles andere .build).
+BUILD_DIR ?= .build
 
 # Use Xcode toolchain for SwiftUI Preview macro support
 export DEVELOPER_DIR = /Applications/Xcode.app/Contents/Developer
@@ -71,8 +73,65 @@ help:
 #   "No conversation found" (incident 2026-07-13). The app strips the variable
 #   too (LoginShellEnvironment); this is belt-and-braces at the launch site.
 # ------------------------------------------------------------------------------
-dev: install
+# Schneller Entwickler-Neustart (seit 11.10.2026): Debug-Build MIT -O in einem
+# eigenen Build-Ordner statt `-c release`. Gemessen: Release übersetzt bei jeder
+# Änderung das ganze Modul auf einem Kern (~98 s), Debug+O nur das Geänderte
+# (5–10 s). Der eigene Ordner (.build-dev) verhindert außerdem, dass ein
+# `swift build`/`swift test` anderer Chats den gemeinsamen .build-Lock hält.
+# TCC bleibt unberührt — die Designated Requirement hängt am Zertifikat, nicht
+# am Binary. Performance-Messungen (Budgets sind auf Release kalibriert) mit
+# `make dev-release`; `build`/`dmg`/Brew bleiben Release.
+#
+# Schutz: Aus einem WhisperM8-Chat/-Terminal (WHISPERM8_SESSION_ID gesetzt)
+# würde `kill` die App beenden, die Shell bekäme SIGHUP und `make` stürbe
+# zwischen Kill und Start — die App bliebe aus. Deshalb Abbruch; mit FORCE=1
+# läuft alles nach dem Build abgekoppelt (nohup) weiter.
+DEV_SCRATCH = .build-dev
+DEV_LOG = $(TMPDIR)whisperm8-make-dev.log
+
+dev: _guard_chat _build_dev
+	@if [ -n "$$WHISPERM8_SESSION_ID" ]; then \
+		echo "↪︎ Neustart läuft abgekoppelt weiter — Log: $(DEV_LOG)"; \
+		nohup $(MAKE) _dev_finish > "$(DEV_LOG)" 2>&1 & \
+	else \
+		$(MAKE) _dev_finish; \
+	fi
+
+_dev_finish:
+	@$(MAKE) kill
+	@$(MAKE) _install_bundle
+	@echo "✅ Installed: $(INSTALLED_APP)"
 	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)"
+
+# Wie früher: Release-Build, installieren, starten — für Messläufe.
+dev-release: _guard_chat install
+	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)"
+
+_guard_chat:
+	@if [ -n "$$WHISPERM8_SESSION_ID" ] && [ -z "$(FORCE)" ]; then \
+		echo "⛔ Läuft in einem WhisperM8-Chat/-Terminal: der Neustart würde die App"; \
+		echo "   samt allen Chats beenden. Im normalen Terminal ausführen — oder"; \
+		echo "   bewusst mit FORCE=1 (Neustart läuft dann abgekoppelt weiter)."; \
+		exit 1; \
+	fi
+
+_build_dev:
+	@echo "🔨 Building $(APP_NAME) (debug -O, $(DEV_SCRATCH))..."
+	@rm -rf "$(APP_BUNDLE)"
+	@swift build -c debug -Xswiftc -O -Xswiftc -DWHISPERM8_INSTALLED --disable-sandbox --scratch-path $(DEV_SCRATCH) || { \
+		echo "♻️  Build fehlgeschlagen — entsperre Resource-Accessors und versuche Regeneration (Self-Healing)..."; \
+		find $(DEV_SCRATCH) -path "*/debug/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
+		swift build -c debug -Xswiftc -O -Xswiftc -DWHISPERM8_INSTALLED --disable-sandbox --scratch-path $(DEV_SCRATCH); \
+	}
+	@scripts/patch-resource-accessors.sh debug $(DEV_SCRATCH); status=$$?; \
+	if [ $$status -eq 3 ]; then \
+		echo "♻️  Resource-Accessors frisch gepatcht — Rebuild..."; \
+		find $(DEV_SCRATCH) -path "*/debug/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
+		swift build -c debug -Xswiftc -O -Xswiftc -DWHISPERM8_INSTALLED --disable-sandbox --scratch-path $(DEV_SCRATCH); \
+	elif [ $$status -ne 0 ]; then \
+		exit $$status; \
+	fi
+	@$(MAKE) _bundle BUILD=debug BUILD_DIR=$(DEV_SCRATCH)
 
 # Backwards-compatible alias.
 dev-reinstall: dev
@@ -125,7 +184,7 @@ build:
 # Quick debug iteration: bundle stays in the project directory, gets its own
 # TCC entry separate from /Applications. Useful for frontend-only changes
 # where you don't want to touch the installed app's permissions at all.
-run:
+run: _guard_chat
 	@echo "Building debug..."
 	@rm -rf "$(APP_BUNDLE)"
 	@swift build
@@ -135,7 +194,7 @@ run:
 
 # Same in-place strategy as `dev`, but without launching afterwards.
 # Kill erst NACH dem Build (unmittelbar vor dem Sync) — minimale Downtime.
-install: build
+install: _guard_chat build
 	@$(MAKE) kill
 	@$(MAKE) _install_bundle
 	@echo "✅ Installed: $(INSTALLED_APP)"
@@ -205,7 +264,7 @@ kill:
 
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -rf .build $(APP_BUNDLE)
+	@rm -rf .build $(DEV_SCRATCH) $(APP_BUNDLE)
 	@echo "Done"
 
 # Remove every WhisperM8.app bundle on disk. Use when Spotlight shows
@@ -244,7 +303,7 @@ dmg:
 # Permissions. Genau das richtige Werkzeug, wenn du Onboarding-Flow oder
 # Migrations-Verhalten testen willst — oder simulieren, was ein neuer User sieht.
 # ------------------------------------------------------------------------------
-clean-install:
+clean-install: _guard_chat
 	@./scripts/clean-install.sh
 	@$(MAKE) install
 
@@ -252,7 +311,7 @@ clean-install:
 _bundle:
 	@mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
-	@cp ".build/$(BUILD)/$(APP_NAME)" "$(APP_BUNDLE)/Contents/MacOS/"
+	@cp "$(BUILD_DIR)/$(BUILD)/$(APP_NAME)" "$(APP_BUNDLE)/Contents/MacOS/"
 	@cp "WhisperM8/Info.plist" "$(APP_BUNDLE)/Contents/"
 	@cp "WhisperM8/Resources/AppIcon.icns" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/MenuBarIcon.png" "$(APP_BUNDLE)/Contents/Resources/"
@@ -277,7 +336,7 @@ _bundle:
 	@# auch findet, wird der generierte Accessor von scripts/patch-resource-accessors.sh
 	@# auf resourceURL gepatcht (siehe dev/build). Read-only Files vom letzten
 	@# Build vorab loeschen, sonst schlaegt `cp` mit Permission denied fehl.
-	@for bundle in .build/$(BUILD)/*.bundle; do \
+	@for bundle in $(BUILD_DIR)/$(BUILD)/*.bundle; do \
 		if [ -e "$$bundle" ]; then \
 			bundle_name=$$(basename "$$bundle"); \
 			rm -rf "$(APP_BUNDLE)/Contents/Resources/$$bundle_name"; \

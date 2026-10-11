@@ -149,7 +149,7 @@ final class ClaudeHookBridge {
             attachedAt: Date()
         )
 
-        let fd = open(eventURL.path, O_EVTONLY)
+        let fd = open(eventURL.path, O_EVTONLY | O_CLOEXEC)
         guard fd >= 0 else {
             Logger.claudeBinding.warning("hook_open_failed localID=\(localSessionID.uuidString, privacy: .public) path=\(eventURL.path, privacy: .public) errno=\(errno)")
             return

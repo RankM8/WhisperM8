@@ -8,6 +8,7 @@ xcuserdata/
 
 # Swift Package Manager
 .build/
+.build-dev/
 .swiftpm/
 
 # App Bundle (build artifact)

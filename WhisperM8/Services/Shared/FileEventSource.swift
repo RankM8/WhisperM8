@@ -17,7 +17,10 @@ final class FileEventSource {
     /// der Aufrufer entscheidet über Re-Arm (Datei kann neu erscheinen).
     var onFileGone: (() -> Void)?
 
-    init(url: URL, openFile: @escaping (String) -> Int32 = { open($0, O_EVTONLY) }) {
+    /// O_CLOEXEC: sonst erbt jeder Chat-Prozess (forkpty + execve) den FD.
+    static let defaultOpenFile: (String) -> Int32 = { open($0, O_EVTONLY | O_CLOEXEC) }
+
+    init(url: URL, openFile: @escaping (String) -> Int32 = FileEventSource.defaultOpenFile) {
         self.url = url
         self.openFile = openFile
     }

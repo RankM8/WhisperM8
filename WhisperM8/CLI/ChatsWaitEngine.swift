@@ -163,7 +163,7 @@ final class ChatsWaitEngine {
         semaphore: DispatchSemaphore,
         deliver: @escaping (Event) -> Void
     ) {
-        let fd = open(path, O_EVTONLY)
+        let fd = open(path, O_EVTONLY | O_CLOEXEC)
         guard fd >= 0 else { return }
         fileDescriptors.append(fd)
         let source = DispatchSource.makeFileSystemObjectSource(

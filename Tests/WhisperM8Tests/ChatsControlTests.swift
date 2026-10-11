@@ -702,3 +702,27 @@ final class AgentControlServerLockRetryTests: XCTestCase {
         flock(contenderFD, LOCK_UN)
     }
 }
+
+/// Analyse 11.10.2026: Ohne close-on-exec erbten alle Chat-Prozesse
+/// (forkpty + execve) Lock und Socket des Control-Servers und hielten den Lock
+/// nach einem Neustart bis zu ~19 s fest.
+final class ControlServerCloseOnExecTests: XCTestCase {
+    func testSocketGetsCloseOnExec() {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        XCTAssertEqual(fcntl(fd, F_GETFD) & FD_CLOEXEC, 0, "Sockets kommen ohne das Flag")
+        AgentControlServer.setCloseOnExec(fd)
+        XCTAssertEqual(fcntl(fd, F_GETFD) & FD_CLOEXEC, FD_CLOEXEC)
+    }
+
+    func testFileEventSourceOpensWithCloseOnExec() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("cloexec-\(UUID().uuidString)")
+        try Data().write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let fd = FileEventSource.defaultOpenFile(url.path)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        XCTAssertEqual(fcntl(fd, F_GETFD) & FD_CLOEXEC, FD_CLOEXEC)
+    }
+}

@@ -23,7 +23,8 @@
 # (alles schon gepatcht) entfällt er komplett. Nach `make clean` oder einem
 # Toolchain-Wechsel greift automatisch wieder der volle Patch+Rebuild-Pfad.
 #
-# Usage: scripts/patch-resource-accessors.sh [release|debug]   (default: release)
+# Usage: scripts/patch-resource-accessors.sh [release|debug] [build-ordner]
+#        (Default: release, .build — `make dev` baut in .build-dev)
 #
 # Exit-Codes (fürs Makefile):
 #   0 — alle Accessors bereits gepatcht, kein Rebuild nötig
@@ -33,6 +34,7 @@
 set -euo pipefail
 
 CONFIG="${1:-release}"
+BUILD_DIR="${2:-.build}"
 
 # Unabhängig vom Aufrufverzeichnis auf dem Repo-Root arbeiten.
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -61,7 +63,7 @@ while IFS= read -r f; do
     chmod 444 "$f"
     changed=1
     echo "  patched: $f"
-done < <(find .build -path "*/${CONFIG}/*/DerivedSources/resource_bundle_accessor.swift" 2>/dev/null)
+done < <(find "$BUILD_DIR" -path "*/${CONFIG}/*/DerivedSources/resource_bundle_accessor.swift" 2>/dev/null)
 
 if [ "$found" -eq 0 ]; then
     echo "❌ Keine resource_bundle_accessor.swift für config '${CONFIG}' gefunden — ohne Patch crasht die App auf fremden Macs (DMG/Homebrew)." >&2
