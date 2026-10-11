@@ -179,6 +179,18 @@ final class ClaudeAccountLimitPingerTests: XCTestCase {
         XCTAssertTrue(runner.calls.isEmpty)
     }
 
+    /// Befund 11.10.2026: `CLAUDE_CONFIG_DIR=~/.claude` für main liest einen
+    /// anderen Keychain-Eintrag — main muss ohne Variable laufen.
+    func testMainIsPingedWithoutConfigDirOverride() async throws {
+        let runner = RunnerSpy()
+        let (pinger, _) = makePinger(runner: runner)
+
+        _ = await pinger.ping(profileNamed: ClaudeAccountProfiles.mainProfileName)
+
+        let call = try XCTUnwrap(runner.calls.first)
+        XCTAssertNil(call.environmentOverrides["CLAUDE_CONFIG_DIR"])
+    }
+
     func testPingProjectsDirectoryDetection() {
         XCTAssertTrue(ClaudeAccountLimitPinger.isPingProjectsDirectory(
             "-Users-x-Library-Application Support-WhisperM8-whisperm8-limit-ping"

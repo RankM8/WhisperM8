@@ -21,6 +21,9 @@ extension ClaudeAccountProfiles {
         case notLoggedIn(String)
         case mainConfigUnreadable(String)
         case keychainWriteFailed(String)
+        /// Plugins/Marketplaces sind über den Profilordner registriert — der
+        /// Ordner wandert in den Papierkorb, sie wären für alle Konten kaputt.
+        case pluginsRegisteredViaProfile(String, [String])
 
         var errorDescription: String? {
             switch self {
@@ -34,6 +37,8 @@ extension ClaudeAccountProfiles {
                 return "Could not read ~/.claude.json: \(detail)"
             case .keychainWriteFailed(let detail):
                 return "Could not write the main Keychain login: \(detail)"
+            case .pluginsRegisteredViaProfile(let name, let references):
+                return ClaudeAccountProfiles.pluginRegistryBlockMessage(profile: name, references: references)
             }
         }
     }
@@ -72,6 +77,10 @@ extension ClaudeAccountProfiles {
         let profileDir = configDir(forProfile: name)
         guard Self.isValidProfileName(name), fileManager.fileExists(atPath: profileDir.path) else {
             throw PromoteError.profileMissing(name)
+        }
+        let pluginReferences = pluginRegistryReferences(toProfile: name)
+        guard pluginReferences.isEmpty else {
+            throw PromoteError.pluginsRegisteredViaProfile(name, pluginReferences)
         }
 
         // Vorab alles lesen, was gebraucht wird — bevor irgendetwas geändert ist.
@@ -226,7 +235,7 @@ extension ClaudeAccountProfiles {
         }
     }
 
-    private static func readJSONObject(at url: URL) -> [String: Any]? {
+    static func readJSONObject(at url: URL) -> [String: Any]? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }

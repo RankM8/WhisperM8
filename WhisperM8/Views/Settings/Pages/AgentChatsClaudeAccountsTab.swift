@@ -608,6 +608,15 @@ struct AgentChatsClaudeAccountsTab: View {
     }
 
     private func removeProfile(_ profile: ClaudeAccountProfile) {
+        // Plugins, die über diesen Ordner registriert sind, wären nach dem
+        // Entfernen für alle Konten kaputt — vorher abbrechen (Befund 11.10.2026).
+        let pluginReferences = ClaudeAccountProfiles().pluginRegistryReferences(toProfile: profile.name)
+        guard pluginReferences.isEmpty else {
+            showFeedback(
+                ClaudeAccountProfiles.pluginRegistryBlockMessage(profile: profile.name, references: pluginReferences),
+                tone: .error)
+            return
+        }
         let alert = NSAlert()
         alert.messageText = "Remove account profile “\(profile.name)”?"
         alert.informativeText = "Moves \(profile.configDir.path) — including its chat history — to the Trash, so you can restore it if needed. The Keychain login entry is kept — remove it via Keychain Access if you want it gone. Sessions that ran under this profile can no longer be resumed while the folder is in the Trash."

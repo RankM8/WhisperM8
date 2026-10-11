@@ -314,8 +314,14 @@ struct ClaudeAccountProfiles {
     /// `projects/`, `history.jsonl`.
     static let sharedItems = [
         "settings.json", "keybindings.json", "statusline-command.sh",
-        "commands", "agents", "skills", "plugins", "CLAUDE.md",
+        "commands", "agents", "skills", "plugins", "CLAUDE.md", "output-styles",
     ]
+
+    /// Ordner unter den geteilten Einträgen — fehlen sie in main, werden sie
+    /// angelegt statt übersprungen. Sonst legte Claude später im Profil einen
+    /// echten Ordner an, und neue Einträge in main kämen dort nie an (Befund
+    /// 11.10.2026: `agents/` war in vier Profilen eine Kopie).
+    static let sharedDirectories: Set<String> = ["commands", "agents", "skills", "plugins", "output-styles"]
 
     enum CreateError: LocalizedError, Equatable {
         case invalidName(String)
@@ -351,6 +357,9 @@ struct ClaudeAccountProfiles {
         for item in Self.sharedItems {
             let source = mainDir.appendingPathComponent(item)
             let target = dir.appendingPathComponent(item)
+            if Self.sharedDirectories.contains(item), !fileManager.fileExists(atPath: source.path) {
+                try? fileManager.createDirectory(at: source, withIntermediateDirectories: true)
+            }
             guard fileManager.fileExists(atPath: source.path),
                   !fileManager.fileExists(atPath: target.path) else { continue }
             try? fileManager.createSymbolicLink(at: target, withDestinationURL: source)

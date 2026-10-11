@@ -288,6 +288,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // ohne zu überschreiben; die Profil-Ordner bleiben stehen).
         Task.detached(priority: .background) {
             ClaudeMemoryMigration.runOnceIfNeeded()
+            // Geteilte Einträge (agents, output-styles, …) in allen Profilen
+            // als Link — inhaltsgleiche Kopien werden ersetzt, Abweichendes bleibt.
+            ClaudeAccountProfiles.healSharedItemsAtLaunch()
         }
 
         // CLI-Symlink (~/.local/bin/whisperm8) idempotent anlegen, damit

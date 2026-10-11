@@ -107,7 +107,13 @@ struct ClaudeAccountLimitPinger {
                     "--session-id", makeSessionID().uuidString.lowercased(),
                 ],
                 workingDirectory: workDirectory.path,
-                environmentOverrides: ["CLAUDE_CONFIG_DIR": configDir.path],
+                // `main` OHNE Variable: mit `CLAUDE_CONFIG_DIR=~/.claude` liest
+                // Claude einen anderen Keychain-Eintrag (Hash-Suffix) und eine
+                // eigene `~/.claude/.claude.json` — ein zweiter Token-Speicher
+                // für dasselbe Konto (Befund 11.10.2026).
+                environmentOverrides: name == ClaudeAccountProfiles.mainProfileName
+                    ? [:]
+                    : ["CLAUDE_CONFIG_DIR": configDir.path],
                 timeout: timeout
             )
         } catch {
