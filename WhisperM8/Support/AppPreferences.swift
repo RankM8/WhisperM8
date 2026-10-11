@@ -227,6 +227,15 @@ struct AppPreferences {
     /// Aktiviert automatische Chat-Zusammenfassungen (Headless-CLI nach
     /// Session-Ende + Start-Abgleich). Default: an. Manueller Refresh in der
     /// Summary-Karte funktioniert unabhängig davon.
+    /// Zusammenfassungen beim App-Start für die zuletzt offenen Tabs (bis zu 6
+    /// `claude -p` auf dem Hauptkonto). Seit 11.10.2026 standardmäßig aus —
+    /// erzeugt wird beim Anzeigen der Karte.
+    /// `defaults write com.whisperm8.app summaryStartupReconciliationEnabled -bool YES`
+    var isStartupSummaryReconciliationEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.summaryStartupReconciliationEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.summaryStartupReconciliationEnabled) }
+    }
+
     var isAutoSummaryEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.isAutoSummaryEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.isAutoSummaryEnabled) }
@@ -805,6 +814,7 @@ enum PreferenceKeys {
     static let defaultAgentProvider = "defaultAgentProvider"
     static let isAutoChatRenameEnabled = "isAutoChatRenameEnabled"
     static let isAutoSummaryEnabled = "isAutoSummaryEnabled"
+    static let summaryStartupReconciliationEnabled = "summaryStartupReconciliationEnabled"
     static let isTerminalBellEnabled = "isTerminalBellEnabled"
     static let codexExtraArguments = "codexExtraArguments"
     static let claudeExtraArguments = "claudeExtraArguments"

@@ -135,6 +135,17 @@ final class AgentSessionSummarizer {
         }
     }
     private var terminationTasks: [UUID: Task<Void, Never>] = [:]
+    private var displayTasks: [UUID: Task<Void, Never>] = [:]
+
+    /// Pause nach Fehlschlag automatischer Läufe (Analyse 11.10.2026: beim
+    /// Start scheiterten sechs Läufe am abgemeldeten Hauptkonto, und jeder
+    /// Neustart versuchte es wieder). Global, weil der Grund meist das Konto
+    /// ist; je Session länger. Manuelle Läufe (Knopf) sind ausgenommen.
+    static let failureBackoff: TimeInterval = 30 * 60
+    static let sessionFailureBackoff: TimeInterval = 2 * 60 * 60
+    private var lastAutomaticFailure: Date?
+    private var sessionFailures: [UUID: Date] = [:]
+    var now: () -> Date = Date.init
 
     init(store: AgentSessionStore = AgentSessionStore(), generator: AgentSummaryGenerator = .live) {
         self.store = store
@@ -215,8 +226,15 @@ final class AgentSessionSummarizer {
     /// T4: Start-Abgleich — nur die beim letzten Lauf offenen Tabs, hart
     /// gedeckelt und SERIELL (nie 6 parallele CLI-Läufe). Kurze Wartezeit,
     /// damit der erste Scan externe Session-IDs nachbinden kann.
+    ///
+    /// Seit 11.10.2026 standardmäßig AUS (`summaryStartupReconciliationEnabled`):
+    /// Kandidaten sind die beim Start offenen Tabs — meist laufen sie gleich
+    /// wieder, die Karte ist dann unsichtbar und die Zusammenfassung veraltet,
+    /// bevor jemand sie sieht. Jeder Lauf war ein `claude -p` auf dem
+    /// Hauptkonto. Ersatz: Erzeugen beim Anzeigen (`requestSummaryOnDisplay`).
     func runStartupReconciliation(openTabIDs: [UUID]) {
-        guard AppPreferences.shared.isAutoSummaryEnabled else { return }
+        guard AppPreferences.shared.isAutoSummaryEnabled,
+              AppPreferences.shared.isStartupSummaryReconciliationEnabled else { return }
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(10))
             guard let self else { return }
@@ -234,6 +252,48 @@ final class AgentSessionSummarizer {
         }
     }
 
+    /// T6: Die Karte ist sichtbar (Chat beendet) und die Zusammenfassung fehlt
+    /// oder ist veraltet — kurz entprellt, damit schnelles Durchklicken keine
+    /// Läufe auslöst. Digest-Guard und Pause nach Fehlschlag greifen wie immer.
+    func requestSummaryOnDisplay(sessionID: UUID) {
+        guard AppPreferences.shared.isAutoSummaryEnabled else { return }
+        displayTasks[sessionID]?.cancel()
+        displayTasks[sessionID] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            self.displayTasks[sessionID] = nil
+            await self.summarizeIfNeeded(sessionID: sessionID, force: false, reason: "display")
+        }
+    }
+
+    /// Karte verschwindet → noch nicht gestarteten Lauf verwerfen.
+    func cancelSummaryOnDisplay(sessionID: UUID) {
+        displayTasks.removeValue(forKey: sessionID)?.cancel()
+    }
+
+    /// Darf ein automatischer Lauf jetzt starten? Pur bis auf den Zustand.
+    func automaticRunAllowed(sessionID: UUID) -> Bool {
+        let current = now()
+        if let failure = lastAutomaticFailure, current.timeIntervalSince(failure) < Self.failureBackoff {
+            return false
+        }
+        if let failure = sessionFailures[sessionID], current.timeIntervalSince(failure) < Self.sessionFailureBackoff {
+            return false
+        }
+        return true
+    }
+
+    func recordAutomaticFailure(sessionID: UUID) {
+        let failedAt = now()
+        lastAutomaticFailure = failedAt
+        sessionFailures[sessionID] = failedAt
+    }
+
+    func recordSuccess(sessionID: UUID) {
+        sessionFailures[sessionID] = nil
+        lastAutomaticFailure = nil
+    }
+
     /// T5: manueller Refresh (Karte) bzw. Einzel-Trigger.
     func requestSummary(sessionID: UUID, force: Bool, reason: String) {
         Task { [weak self] in
@@ -244,6 +304,10 @@ final class AgentSessionSummarizer {
     /// Kern-Worker mit allen Guards; awaitbar für serielle Abarbeitung.
     func summarizeIfNeeded(sessionID: UUID, force: Bool, reason: String) async {
         guard force || AppPreferences.shared.isAutoSummaryEnabled else { return }
+        guard force || automaticRunAllowed(sessionID: sessionID) else {
+            Logger.agentPerformance.debug("summarizer_skipped_backoff session=\(sessionID) reason=\(reason, privacy: .public)")
+            return
+        }
         guard !inFlight.contains(sessionID) else { return }
         guard let session = store.loadWorkspace().sessions.first(where: { $0.id == sessionID }),
               !session.isSubagentJob,
@@ -283,9 +347,11 @@ final class AgentSessionSummarizer {
                 evidence: evidence.isEmpty ? nil : evidence
             )
             try store.applySummary(id: sessionID, summary: summary)
+            recordSuccess(sessionID: sessionID)
             Logger.agentPerformance.debug("summarizer_done session=\(sessionID)")
         } catch {
-            Logger.agentPerformance.warning("summarizer_failed session=\(sessionID) error=\(error.localizedDescription, privacy: .public)")
+            if !force { recordAutomaticFailure(sessionID: sessionID) }
+            Logger.agentPerformance.warning("summarizer_failed session=\(sessionID) reason=\(reason, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
         }
     }
 }

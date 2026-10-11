@@ -62,6 +62,14 @@ struct SessionSummaryCard: View {
         }
         .task(id: session.summary) {
             refreshRuntimeState()
+            // Erzeugen beim Anzeigen statt beim App-Start: die Karte ist nur
+            // bei beendeten Chats sichtbar — genau dann lohnt sich der Lauf.
+            if isStale, !isGenerating {
+                AgentSessionSummarizer.shared.requestSummaryOnDisplay(sessionID: session.id)
+            }
+        }
+        .onDisappear {
+            AgentSessionSummarizer.shared.cancelSummaryOnDisplay(sessionID: session.id)
         }
     }
 

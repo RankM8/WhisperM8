@@ -173,3 +173,40 @@ final class SummaryStartupPlannerTests: XCTestCase {
         XCTAssertEqual(ids, [sharedID], "eine Planung pro ID, kein Crash")
     }
 }
+
+/// Analyse 11.10.2026: Fehlschläge wiederholten sich bei jedem Start.
+@MainActor
+final class SummaryBackoffTests: XCTestCase {
+    func testFailurePausesAllAutomaticRunsThenOnlyThatSession() {
+        let summarizer = AgentSessionSummarizer()
+        var clock = Date()
+        summarizer.now = { clock }
+        let failed = UUID(), other = UUID()
+        XCTAssertTrue(summarizer.automaticRunAllowed(sessionID: failed))
+
+        summarizer.recordAutomaticFailure(sessionID: failed)
+        XCTAssertFalse(summarizer.automaticRunAllowed(sessionID: other), "globale Pause (meist das Konto)")
+
+        clock = clock.addingTimeInterval(AgentSessionSummarizer.failureBackoff + 1)
+        XCTAssertTrue(summarizer.automaticRunAllowed(sessionID: other))
+        XCTAssertFalse(summarizer.automaticRunAllowed(sessionID: failed), "längere Pause je Session")
+
+        clock = clock.addingTimeInterval(AgentSessionSummarizer.sessionFailureBackoff)
+        XCTAssertTrue(summarizer.automaticRunAllowed(sessionID: failed))
+    }
+
+    func testSuccessClearsThePause() {
+        let summarizer = AgentSessionSummarizer()
+        let id = UUID()
+        summarizer.recordAutomaticFailure(sessionID: id)
+        summarizer.recordSuccess(sessionID: id)
+        XCTAssertTrue(summarizer.automaticRunAllowed(sessionID: id))
+    }
+
+    func testStartupReconciliationIsOffByDefault() throws {
+        let suite = "summary-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertFalse(AppPreferences(defaults: defaults).isStartupSummaryReconciliationEnabled)
+    }
+}
