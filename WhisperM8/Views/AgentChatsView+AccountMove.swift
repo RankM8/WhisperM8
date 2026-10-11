@@ -57,6 +57,7 @@ extension AgentChatsView {
             missingMCPServers: ClaudeAccountPreflight.missingMCPServers(
                 sourceProfiles: Set(startsInTarget.map { AccountMovePlanner.normalize($0.currentProfile) }),
                 targetProfile: target,
+                cwds: Array(Set(startsInTarget.compactMap { cwdByID[$0.sessionID] })),
                 profiles: profiles
             )
         )

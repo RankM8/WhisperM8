@@ -171,7 +171,7 @@ struct AgentMoveToAccountSheet: View {
     }
 
     private var waitGroups: [(reason: AccountSwitchPlanner.WaitReason, titles: [String])] {
-        let order: [AccountSwitchPlanner.WaitReason] = [.turnRunning, .awaitingInput, .unsentInput]
+        let order: [AccountSwitchPlanner.WaitReason] = [.turnRunning, .backgroundTasks, .awaitingInput, .unsentInput]
         return order.compactMap { reason in
             let titles = decision.waitForTurn.filter { $0.reason == reason }.map(\.candidate.title)
             return titles.isEmpty ? nil : (reason, titles)

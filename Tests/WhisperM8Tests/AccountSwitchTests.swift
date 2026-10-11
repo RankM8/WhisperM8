@@ -86,6 +86,7 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
         var running: Set<UUID> = []
         var status: [UUID: AgentSessionRuntimeStatus] = [:]
         var drafts: Set<UUID> = []
+        var backgroundTasks: [UUID: Int] = [:]
         /// Prozesse, die sich trotz Terminate nicht beenden.
         var hanging: Set<UUID> = []
         var pids: [UUID: pid_t] = [:]
@@ -125,6 +126,7 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
                 },
                 status: { [unowned self] in status[$0] },
                 mayHaveUnsentInput: { [unowned self] in drafts.contains($0) },
+                openBackgroundTasks: { [unowned self] in backgroundTasks[$0] ?? 0 },
                 workspace: { [unowned self] in AgentWorkspace(projects: [project], sessions: sessions) },
                 plan: { [unowned self] sessions, _, targetName in
                     AccountMovePlanner.plan(
@@ -280,6 +282,21 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
         XCTAssertEqual(outcome.failed.map(\.title), ["hängt"])
     }
 
+    func testIdleChatWithBackgroundTasksWaitsUntilTheyFinish() async {
+        let world = World()
+        let id = world.addSession("bg-task", running: true, status: .idle)
+        world.backgroundTasks[id] = 1
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        _ = await decideAndRun(world, coordinator, [id])
+        XCTAssertEqual(coordinator.pending[id]?.reason, .backgroundTasks)
+        XCTAssertTrue(world.terminated.isEmpty, "Hintergrund-Task stürbe mit dem Prozess")
+
+        world.backgroundTasks[id] = 0
+        await coordinator.recheckPending()
+        XCTAssertEqual(world.terminated, [id])
+    }
+
     func testDisabledFeatureKeepsOldSkipBehavior() async {
         let world = World()
         world.enabled = false
@@ -312,5 +329,103 @@ final class ClaudeAccountPreflightTests: XCTestCase {
         XCTAssertFalse(ClaudeAccountPreflight.trustsProject(
             cwd: "/Users/x/repos/app", claudeJSON: dir.appendingPathComponent("fehlt.json")))
         XCTAssertEqual(ClaudeAccountPreflight.userMCPServers(claudeJSON: json), ["akquise", "playwright"])
+    }
+
+    func testMissingMCPServersIncludeLocalScopeOfTheProject() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("mcp-\(UUID().uuidString)")
+        let profileDir = home.appendingPathComponent(".claude-profiles/ai2")
+        try FileManager.default.createDirectory(at: profileDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try JSONSerialization.data(withJSONObject: [
+            "mcpServers": ["atlassian": [:]],
+            "projects": ["/Users/x/repos/app": ["mcpServers": ["rankm8": [:]]],
+                         "/Users/x/repos/other": ["mcpServers": ["fremd": [:]]]],
+        ]).write(to: home.appendingPathComponent(".claude.json"))
+        try JSONSerialization.data(withJSONObject: ["mcpServers": ["atlassian": [:]]])
+            .write(to: profileDir.appendingPathComponent(".claude.json"))
+
+        let missing = ClaudeAccountPreflight.missingMCPServers(
+            sourceProfiles: [nil], targetProfile: "ai2", cwds: ["/Users/x/repos/app"],
+            profiles: ClaudeAccountProfiles(homeDirectory: home))
+        XCTAssertEqual(missing, ["rankm8"], "Local-Scope des Projekts zählt, fremde Projekte nicht")
+    }
+}
+
+/// E2E-Befund 11.10.2026: Turn fertig ≠ Arbeit fertig — Hintergrund-Tasks.
+final class ClaudeBackgroundTaskTrackerTests: XCTestCase {
+    private func line(_ object: [String: Any]) -> String {
+        String(data: try! JSONSerialization.data(withJSONObject: object), encoding: .utf8)! + "\n"
+    }
+
+    private func bashStart(_ id: String, at ts: String = "2026-10-11T13:47:10.000Z") -> String {
+        line(["type": "user", "timestamp": ts,
+              "message": ["role": "user", "content": [["type": "tool_result", "content": "Command running in background with ID: \(id)"]]],
+              "toolUseResult": ["stdout": "", "backgroundTaskId": id]])
+    }
+
+    private func agentStart(_ id: String) -> String {
+        line(["type": "user", "timestamp": "2026-10-11T13:47:11.000Z",
+              "toolUseResult": ["isAsync": true, "status": "async_launched", "agentId": id]])
+    }
+
+    private func notification(_ ids: [String], status: String = "completed", asQueue: Bool = true) -> String {
+        let text = "<task-notification>\n" + ids.map { "<task-id>\($0)</task-id>\n" }.joined() + "<status>\(status)</status>\n</task-notification>"
+        return asQueue
+            ? line(["type": "queue-operation", "operation": "enqueue", "content": text])
+            : line(["type": "user", "message": ["role": "user", "content": text]])
+    }
+
+    func testStartedMinusFinishedIsOpen() {
+        var tracker = ClaudeBackgroundTaskTracker()
+        tracker.consume(Data((bashStart("ba1") + agentStart("ag1") + notification(["ba1"], status: "killed")).utf8))
+        XCTAssertEqual(tracker.openTaskIDs(), ["ag1"])
+        tracker.consume(Data(notification(["ag1"], asQueue: false).utf8))
+        XCTAssertEqual(tracker.openTaskIDs(), [])
+    }
+
+    func testToolOutputMentioningTaskIDsIsNoNotification() {
+        var tracker = ClaudeBackgroundTaskTracker()
+        let quoted = line(["type": "user", "message": ["role": "user", "content": [[
+            "type": "tool_result", "content": "<task-notification><task-id>ba1</task-id></task-notification>"]]]])
+        tracker.consume(Data((bashStart("ba1") + quoted).utf8))
+        XCTAssertEqual(tracker.openTaskIDs(), ["ba1"], "zitierte Meldung in einer Tool-Ausgabe beendet nichts")
+    }
+
+    func testLineSplitAcrossReadsIsParsedOnce() {
+        var tracker = ClaudeBackgroundTaskTracker()
+        let data = Data(bashStart("ba1").utf8)
+        tracker.consume(data.prefix(40))
+        XCTAssertEqual(tracker.openTaskIDs(), [])
+        tracker.consume(data.dropFirst(40))
+        XCTAssertEqual(tracker.openTaskIDs(), ["ba1"])
+    }
+
+    func testTasksOfEarlierProcessAreIgnored() {
+        var tracker = ClaudeBackgroundTaskTracker()
+        tracker.consume(Data(bashStart("alt", at: "2026-10-11T10:00:00.000Z").utf8))
+        let processStart = ISO8601DateFormatter().date(from: "2026-10-11T12:00:00Z")!
+        XCTAssertEqual(tracker.openTaskIDs(startedAfter: processStart), [])
+    }
+
+    func testIncrementalFileReadAndReset() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bg-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try bashStart("ba1").write(to: url, atomically: false, encoding: .utf8)
+        var tracker = ClaudeBackgroundTaskTracker()
+        tracker.update(from: url)
+        XCTAssertEqual(tracker.openTaskIDs(), ["ba1"])
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(notification(["ba1"]).utf8))
+        try handle.close()
+        tracker.update(from: url)
+        XCTAssertEqual(tracker.openTaskIDs(), [])
+    }
+
+    func testIdleChatWithBackgroundTasksWaits() {
+        XCTAssertEqual(
+            AccountSwitchPlanner.waitReason(status: .idle, mayHaveUnsentInput: false, openBackgroundTasks: 1),
+            .backgroundTasks)
+        XCTAssertNil(AccountSwitchPlanner.waitReason(status: .idle, mayHaveUnsentInput: false, openBackgroundTasks: 0))
     }
 }

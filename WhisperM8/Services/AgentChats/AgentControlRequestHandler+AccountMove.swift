@@ -150,7 +150,12 @@ extension AgentControlRequestHandler {
                 plan: plan,
                 force: stopAndResume && force,
                 isCaller: { $0 == actorID },
-                isWorking: { statusStore.status(for: $0) == .working },
+                // Offene Hintergrund-Tasks zählen wie ein laufender Turn —
+                // sie stürben mit dem Prozess.
+                isWorking: {
+                    statusStore.status(for: $0) == .working
+                        || ClaudeBackgroundTaskMonitor.shared.openTaskCount(liveSessionID: $0) > 0
+                },
                 mayHaveUnsentInput: {
                     registry.controller(for: $0)?.composerDraft.mayHaveUnsentInput == true
                 }
@@ -200,7 +205,8 @@ extension AgentControlRequestHandler {
                           ClaudeAccountPreflight.trustsProject(cwd: cwd, trustedPaths: trusted) else { continue }
                     let reason = AccountSwitchPlanner.waitReason(
                         status: statusStore.status(for: id),
-                        mayHaveUnsentInput: registry.controller(for: id)?.composerDraft.mayHaveUnsentInput == true
+                        mayHaveUnsentInput: registry.controller(for: id)?.composerDraft.mayHaveUnsentInput == true,
+                        openBackgroundTasks: ClaudeBackgroundTaskMonitor.shared.openTaskCount(liveSessionID: id)
                     ) ?? .turnRunning
                     toSchedule.append((id, reason))
                     items[id]?.outcome = "scheduled"

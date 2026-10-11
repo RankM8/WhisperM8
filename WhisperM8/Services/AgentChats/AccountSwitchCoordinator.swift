@@ -36,6 +36,8 @@ final class AccountSwitchCoordinator {
         var waitForExit: @Sendable (pid_t) async -> Bool
         var status: (UUID) -> AgentSessionRuntimeStatus?
         var mayHaveUnsentInput: (UUID) -> Bool
+        /// Offene Hintergrund-Tasks des laufenden Prozesses (Transcript).
+        var openBackgroundTasks: (UUID) -> Int
         var workspace: () -> AgentWorkspace
         /// Fakten sammeln + `AccountMovePlanner` (inkl. Login-Prüfung des Ziels).
         var plan: (_ sessions: [AgentChatSession], _ projects: [AgentProject], _ targetName: String) -> AccountMovePlanner.Plan
@@ -77,6 +79,7 @@ final class AccountSwitchCoordinator {
             isCaller: isCaller,
             status: dependencies.status,
             mayHaveUnsentInput: dependencies.mayHaveUnsentInput,
+            openBackgroundTasks: dependencies.openBackgroundTasks,
             targetTrustsProject: targetTrustsProject
         )
     }
@@ -160,7 +163,8 @@ final class AccountSwitchCoordinator {
                 pending.removeValue(forKey: id)
             } else if let reason = AccountSwitchPlanner.waitReason(
                 status: dependencies.status(id),
-                mayHaveUnsentInput: dependencies.mayHaveUnsentInput(id)
+                mayHaveUnsentInput: dependencies.mayHaveUnsentInput(id),
+                openBackgroundTasks: dependencies.openBackgroundTasks(id)
             ) {
                 pending[id]?.reason = reason
             } else {
@@ -281,6 +285,7 @@ extension AccountSwitchCoordinator.Dependencies {
             mayHaveUnsentInput: {
                 AgentTerminalRegistry.shared.controller(for: $0)?.composerDraft.mayHaveUnsentInput == true
             },
+            openBackgroundTasks: { ClaudeBackgroundTaskMonitor.shared.openTaskCount(liveSessionID: $0) },
             workspace: { AgentWorkspaceUIModel.shared.workspace },
             plan: { sessions, projects, targetName in
                 let profiles = ClaudeAccountProfiles()

@@ -19,12 +19,17 @@ enum AccountSwitchPlanner {
         /// Im Eingabefeld steht vermutlich ungesendeter Text; ein Beenden der
         /// TUI verwürfe ihn. Abschicken oder leeren, dann wechselt der Chat.
         case unsentInput
+        /// Turn fertig, aber Hintergrund-Tasks (Bash `run_in_background`,
+        /// Subagents) laufen noch — sie stürben mit dem Prozess (E2E-Test
+        /// 11.10.2026: ein `sleep 25` im Hintergrund wurde `killed`).
+        case backgroundTasks
 
         var label: String {
             switch self {
             case .turnRunning: return "Arbeitet — wechselt nach dem Turn"
             case .awaitingInput: return "Wartet auf deine Antwort — wechselt danach"
             case .unsentInput: return "Text im Eingabefeld — wechselt nach dem Absenden"
+            case .backgroundTasks: return "Hintergrund-Tasks laufen noch — wechselt danach"
             }
         }
     }
@@ -77,6 +82,7 @@ enum AccountSwitchPlanner {
         isCaller: (UUID) -> Bool = { _ in false },
         status: (UUID) -> AgentSessionRuntimeStatus?,
         mayHaveUnsentInput: (UUID) -> Bool,
+        openBackgroundTasks: (UUID) -> Int = { _ in 0 },
         targetTrustsProject: (UUID) -> Bool
     ) -> Decision {
         var decision = Decision(targetProfile: plan.targetProfile, moveNow: plan.movable)
@@ -104,7 +110,11 @@ enum AccountSwitchPlanner {
                 decision.blocked.append((candidate, .ownSession))
                 continue
             }
-            if let reason = waitReason(status: status(id), mayHaveUnsentInput: mayHaveUnsentInput(id)) {
+            if let reason = waitReason(
+                status: status(id),
+                mayHaveUnsentInput: mayHaveUnsentInput(id),
+                openBackgroundTasks: openBackgroundTasks(id)
+            ) {
                 if targetTrustsProject(id) {
                     decision.waitForTurn.append((candidate, reason))
                 } else {
@@ -119,10 +129,15 @@ enum AccountSwitchPlanner {
 
     /// `nil` = darf jetzt wechseln. Unbekannter Status zählt als beschäftigt:
     /// lieber einen Moment warten als einen Turn abschießen.
-    static func waitReason(status: AgentSessionRuntimeStatus?, mayHaveUnsentInput: Bool) -> WaitReason? {
+    static func waitReason(
+        status: AgentSessionRuntimeStatus?,
+        mayHaveUnsentInput: Bool,
+        openBackgroundTasks: Int = 0
+    ) -> WaitReason? {
         switch status {
         case .idle?, .stopped?, .errored?:
-            return mayHaveUnsentInput ? .unsentInput : nil
+            if mayHaveUnsentInput { return .unsentInput }
+            return openBackgroundTasks > 0 ? .backgroundTasks : nil
         case .awaitingInput?:
             return .awaitingInput
         case .working?, nil:
@@ -164,15 +179,36 @@ enum ClaudeAccountPreflight {
         Set((readJSON(claudeJSON)?["mcpServers"] as? [String: Any])?.keys.map { $0 } ?? [])
     }
 
-    /// MCP-Server, die die Herkunftskonten haben, das Zielkonto aber nicht.
+    /// Projektbezogene MCP-Server (Local-Scope, `projects[<pfad>].mcpServers`)
+    /// für die genannten Arbeitsverzeichnisse — roh und als realpath, weil
+    /// Claude den Schlüssel so ablegt, wie das Verzeichnis beim Anlegen hieß.
+    static func localMCPServers(claudeJSON: URL, cwds: [String]) -> Set<String> {
+        guard let projects = readJSON(claudeJSON)?["projects"] as? [String: Any] else { return [] }
+        var names: Set<String> = []
+        for cwd in cwds {
+            for key in Set([cwd, ClaudeSharedMemoryPath.realPath(cwd)]) {
+                if let servers = (projects[key] as? [String: Any])?["mcpServers"] as? [String: Any] {
+                    names.formUnion(servers.keys)
+                }
+            }
+        }
+        return names
+    }
+
+    /// MCP-Server, die die Herkunftskonten haben, das Zielkonto aber nicht —
+    /// User-Scope plus Local-Scope der betroffenen Projekte (Analyse
+    /// 11.10.2026: in main hängen 17 Local-Server an 13 Repos, die Profile
+    /// haben fast keine; die erste Fassung verglich nur den User-Scope).
+    /// Projekt-Scope (`.mcp.json`) gilt ohnehin für jedes Konto.
     static func missingMCPServers(
         sourceProfiles: Set<String?>,
         targetProfile: String?,
+        cwds: [String] = [],
         profiles: ClaudeAccountProfiles = ClaudeAccountProfiles()
     ) -> [String] {
         func servers(_ profile: String?) -> Set<String> {
-            userMCPServers(claudeJSON: profiles.claudeJSONURL(
-                forProfile: profile ?? ClaudeAccountProfiles.mainProfileName))
+            let json = profiles.claudeJSONURL(forProfile: profile ?? ClaudeAccountProfiles.mainProfileName)
+            return userMCPServers(claudeJSON: json).union(localMCPServers(claudeJSON: json, cwds: cwds))
         }
         let target = servers(targetProfile)
         let sources = sourceProfiles.reduce(into: Set<String>()) { $0.formUnion(servers($1)) }
