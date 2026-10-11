@@ -128,7 +128,8 @@ _build_dev:
 	if [ $$status -eq 3 ]; then \
 		echo "♻️  Resource-Accessors frisch gepatcht — Rebuild..."; \
 		find $(DEV_SCRATCH) -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
-		swift build -c release --disable-sandbox --scratch-path $(DEV_SCRATCH); \
+		swift build -c release --disable-sandbox --scratch-path $(DEV_SCRATCH) || exit 1; \
+		find $(DEV_SCRATCH) -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod 444 {} + 2>/dev/null || true; \
 	elif [ $$status -ne 0 ]; then \
 		exit $$status; \
 	fi
@@ -163,6 +164,9 @@ snapshots:
 # will SwiftPM sie beim Planen neu schreiben und scheitert hart mit
 # "error: invalid access". Dann: entsperren, einmal regenerieren lassen —
 # der Patch+Rebuild-Pfad (Exit 3) greift danach automatisch.
+# Nach dem Rebuild werden die Accessors WIEDER gesperrt (444): ohne das blieben
+# sie beschreibbar, SwiftPM erzeugte sie beim nächsten Lauf ungepatcht neu, und
+# jeder Lauf baute doppelt (gemessen 11.10.2026: 181 s statt 2 s ohne Änderung).
 build:
 	@echo "🔨 Building $(APP_NAME) (release)..."
 	@rm -rf "$(APP_BUNDLE)"
@@ -175,7 +179,8 @@ build:
 	if [ $$status -eq 3 ]; then \
 		echo "♻️  Resource-Accessors frisch gepatcht — Rebuild..."; \
 		find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
-		swift build -c release --disable-sandbox; \
+		swift build -c release --disable-sandbox || exit 1; \
+		find .build -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod 444 {} + 2>/dev/null || true; \
 	elif [ $$status -ne 0 ]; then \
 		exit $$status; \
 	fi
