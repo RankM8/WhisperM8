@@ -23,7 +23,13 @@ final class AccountSwitchCoordinator {
         var targetProfile: String?
         var targetName: String
         var reason: AccountSwitchPlanner.WaitReason
+        var since: Date = Date()
     }
+
+    /// Länger wartet keine Vormerkung (Review 11.10.2026): ein Dev-Server im
+    /// Hintergrund oder ein vergessener Entwurf hielte den Wechsel sonst ewig
+    /// offen — und Stunden später würde der Chat überraschend neu gestartet.
+    static let maxPendingAge: TimeInterval = 30 * 60
 
     /// Alles, was die Kette von außen braucht — als Closures, damit Tests ohne
     /// Terminals, Prozesse und Produktionsdaten auskommen.
@@ -45,6 +51,7 @@ final class AccountSwitchCoordinator {
         /// `shouldLaunchOnOpen` + Tab sicherstellen — Start beim Anzeigen.
         var scheduleResume: (UUID) -> Void
         var isEnabled: () -> Bool
+        var now: () -> Date = Date.init
     }
 
     private let dependencies: Dependencies
@@ -105,16 +112,35 @@ final class AccountSwitchCoordinator {
         }
         for (candidate, reason) in decision.waitForTurn {
             pending[candidate.sessionID] = PendingSwitch(
-                targetProfile: decision.targetProfile, targetName: targetName, reason: reason)
+                targetProfile: decision.targetProfile, targetName: targetName, reason: reason,
+                since: dependencies.now())
         }
         if !decision.waitForTurn.isEmpty {
             Logger.agentStore.info(
                 "account_switch_scheduled count=\(decision.waitForTurn.count) target=\(targetName, privacy: .public)")
             pendingDidChange()
         }
-        if !decision.switchNow.isEmpty {
-            outcome.merge(await switchRunning(
-                decision.switchNow.map(\.sessionID), targetName: targetName, batchID: batchID))
+        // Zwischen Öffnen des Sheets und dem Klick kann ein Turn begonnen haben
+        // (Jarvis, Queue, Task-Notification) — dann nicht mitten hinein
+        // anhalten, sondern vormerken (Review 11.10.2026).
+        var stillIdle: [UUID] = []
+        for candidate in decision.switchNow {
+            let id = candidate.sessionID
+            if let reason = AccountSwitchPlanner.waitReason(
+                status: dependencies.status(id),
+                mayHaveUnsentInput: dependencies.mayHaveUnsentInput(id),
+                openBackgroundTasks: dependencies.openBackgroundTasks(id)
+            ) {
+                pending[id] = PendingSwitch(
+                    targetProfile: decision.targetProfile, targetName: targetName, reason: reason,
+                    since: dependencies.now())
+                pendingDidChange()
+            } else {
+                stillIdle.append(id)
+            }
+        }
+        if !stillIdle.isEmpty {
+            outcome.merge(await switchRunning(stillIdle, targetName: targetName, batchID: batchID))
         }
         return outcome
     }
@@ -129,7 +155,8 @@ final class AccountSwitchCoordinator {
         guard !entries.isEmpty else { return }
         for entry in entries {
             pending[entry.sessionID] = PendingSwitch(
-                targetProfile: targetProfile, targetName: targetName, reason: entry.reason)
+                targetProfile: targetProfile, targetName: targetName, reason: entry.reason,
+                since: dependencies.now())
         }
         Logger.agentStore.info(
             "account_switch_scheduled count=\(entries.count) target=\(targetName, privacy: .public)")
@@ -154,6 +181,12 @@ final class AccountSwitchCoordinator {
             guard let session = workspace.sessions.first(where: { $0.id == id }),
                   session.status != .archived else {
                 pending.removeValue(forKey: id)  // geschlossen und archiviert/gelöscht
+                continue
+            }
+            if dependencies.now().timeIntervalSince(entry.since) > Self.maxPendingAge {
+                pending.removeValue(forKey: id)
+                Logger.agentStore.info(
+                    "account_switch_expired session=\(id.uuidString, privacy: .public) reason=\(entry.reason.rawValue, privacy: .public)")
                 continue
             }
             if !dependencies.isRunning(id) {

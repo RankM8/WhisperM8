@@ -132,12 +132,15 @@ enum AccountSwitchPlanner {
     static func waitReason(
         status: AgentSessionRuntimeStatus?,
         mayHaveUnsentInput: Bool,
-        openBackgroundTasks: Int = 0
+        openBackgroundTasks: @autoclosure () -> Int = 0
     ) -> WaitReason? {
         switch status {
         case .idle?, .stopped?, .errored?:
             if mayHaveUnsentInput { return .unsentInput }
-            return openBackgroundTasks > 0 ? .backgroundTasks : nil
+            // Erst hier auswerten: der erste Scan liest das ganze Transcript
+            // (Review 11.10.2026: ~0,3 s bei 29 MB) — für arbeitende Chats
+            // oder solche mit Entwurf ist die Antwort ohnehin schon klar.
+            return openBackgroundTasks() > 0 ? .backgroundTasks : nil
         case .awaitingInput?:
             return .awaitingInput
         case .working?, nil:

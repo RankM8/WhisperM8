@@ -96,6 +96,7 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
         var batchIDs: Set<UUID> = []
         var resumed: [UUID] = []
         var enabled = true
+        var clock = Date()
 
         func addSession(_ title: String, running isRunning: Bool, status: AgentSessionRuntimeStatus? = nil) -> UUID {
             let session = AgentChatSession(
@@ -145,7 +146,8 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
                     return AccountMoveService.Outcome()
                 },
                 scheduleResume: { [unowned self] in resumed.append($0) },
-                isEnabled: { [unowned self] in enabled })
+                isEnabled: { [unowned self] in enabled },
+                now: { [unowned self] in clock })
         }
 
         func plan(_ ids: [UUID]) -> AccountMovePlanner.Plan {
@@ -295,6 +297,38 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
         world.backgroundTasks[id] = 0
         await coordinator.recheckPending()
         XCTAssertEqual(world.terminated, [id])
+    }
+
+    /// Review 11.10.2026: Zwischen Öffnen des Sheets und Klick kann ein Turn
+    /// begonnen haben — nie mitten hinein anhalten.
+    func testTurnStartedAfterPreviewIsScheduledInsteadOfStopped() async {
+        let world = World()
+        let id = world.addSession("ruht", running: true, status: .idle)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+        let decision = coordinator.decide(plan: world.plan([id]), targetTrustsProject: { _ in true })
+        XCTAssertEqual(decision.switchNow.map(\.sessionID), [id])
+
+        world.status[id] = .working
+        _ = await coordinator.execute(decision, targetName: "ai2")
+
+        XCTAssertTrue(world.terminated.isEmpty)
+        XCTAssertEqual(coordinator.pending[id]?.reason, .turnRunning)
+    }
+
+    func testPendingSwitchExpiresAfterMaxAge() async {
+        let world = World()
+        let id = world.addSession("dev-server", running: true, status: .idle)
+        world.backgroundTasks[id] = 1
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+        _ = await decideAndRun(world, coordinator, [id])
+        XCTAssertNotNil(coordinator.pending[id])
+
+        world.clock = world.clock.addingTimeInterval(AccountSwitchCoordinator.maxPendingAge + 1)
+        world.backgroundTasks[id] = 0
+        await coordinator.recheckPending()
+
+        XCTAssertNil(coordinator.pending[id])
+        XCTAssertTrue(world.terminated.isEmpty, "verfallen statt Stunden später überraschend neu gestartet")
     }
 
     func testDisabledFeatureKeepsOldSkipBehavior() async {

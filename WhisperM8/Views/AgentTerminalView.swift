@@ -933,7 +933,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // gedrosselten Hintergrund-Pane verloren gehen (Review-Finding:
         // „nie Byte-Verlust" hatte am Teardown eine Lücke).
         terminal.flushPendingOutput()
-        let pid = processID
+        // Nur ein noch laufender Prozess braucht das Abholen — nach einem
+        // natürlichen Ende hat SwiftTerm schon `waitpid` gerufen, und
+        // `shellPid` bleibt gesetzt (wiederverwendete PID wäre fremd).
+        let pid = isRunning ? processID : nil
         // Terminal-Stand JETZT sichern — nach dem Flush steht der komplette
         // Exit-Output (inkl. `claude --resume …`-Hinweis) im Normal-Buffer,
         // und die Registry entfernt den Controller direkt nach terminate().

@@ -73,14 +73,15 @@ help:
 #   "No conversation found" (incident 2026-07-13). The app strips the variable
 #   too (LoginShellEnvironment); this is belt-and-braces at the launch site.
 # ------------------------------------------------------------------------------
-# Schneller Entwickler-Neustart (seit 11.10.2026): Debug-Build MIT -O in einem
-# eigenen Build-Ordner statt `-c release`. Gemessen: Release übersetzt bei jeder
-# Änderung das ganze Modul auf einem Kern (~98 s), Debug+O nur das Geänderte
-# (5–10 s). Der eigene Ordner (.build-dev) verhindert außerdem, dass ein
-# `swift build`/`swift test` anderer Chats den gemeinsamen .build-Lock hält.
-# TCC bleibt unberührt — die Designated Requirement hängt am Zertifikat, nicht
-# am Binary. Performance-Messungen (Budgets sind auf Release kalibriert) mit
-# `make dev-release`; `build`/`dmg`/Brew bleiben Release.
+# Entwickler-Neustart: Release-Build in einem EIGENEN Build-Ordner (.build-dev),
+# damit ein `swift build`/`swift test` anderer Chats den gemeinsamen .build-Lock
+# nicht hält (Analyse 11.10.2026: ein Build stand 25 s nur in der Warteschlange).
+# Bewusst NICHT Debug+O, obwohl inkrementell ~6 s statt ~98 s: Debug baut
+# SwiftTerm mit -DDEBUG, und dort brechen vier Setter in Buffer.swift bei einem
+# negativen Cursorwert per abort() ab — die ganze App samt Chats —, wo Release
+# den Wert still verwirft. Erst nach einem Patch im SwiftTerm-Fork umstellen.
+# Release ohne Whole-Module-Optimierung hilft nicht (gemessen 132 s, baut alles).
+# Performance-Budgets sind auf Release kalibriert — passt so.
 #
 # Schutz: Aus einem WhisperM8-Chat/-Terminal (WHISPERM8_SESSION_ID gesetzt)
 # würde `kill` die App beenden, die Shell bekäme SIGHUP und `make` stürbe
@@ -103,7 +104,7 @@ _dev_finish:
 	@echo "✅ Installed: $(INSTALLED_APP)"
 	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)"
 
-# Wie früher: Release-Build, installieren, starten — für Messläufe.
+# Release-Build im gemeinsamen .build (wie vor dem 11.10.2026).
 dev-release: _guard_chat install
 	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)"
 
@@ -116,22 +117,22 @@ _guard_chat:
 	fi
 
 _build_dev:
-	@echo "🔨 Building $(APP_NAME) (debug -O, $(DEV_SCRATCH))..."
+	@echo "🔨 Building $(APP_NAME) (release, $(DEV_SCRATCH))..."
 	@rm -rf "$(APP_BUNDLE)"
-	@swift build -c debug -Xswiftc -O -Xswiftc -DWHISPERM8_INSTALLED --disable-sandbox --scratch-path $(DEV_SCRATCH) || { \
+	@swift build -c release --disable-sandbox --scratch-path $(DEV_SCRATCH) || { \
 		echo "♻️  Build fehlgeschlagen — entsperre Resource-Accessors und versuche Regeneration (Self-Healing)..."; \
-		find $(DEV_SCRATCH) -path "*/debug/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
-		swift build -c debug -Xswiftc -O -Xswiftc -DWHISPERM8_INSTALLED --disable-sandbox --scratch-path $(DEV_SCRATCH); \
+		find $(DEV_SCRATCH) -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
+		swift build -c release --disable-sandbox --scratch-path $(DEV_SCRATCH); \
 	}
-	@scripts/patch-resource-accessors.sh debug $(DEV_SCRATCH); status=$$?; \
+	@scripts/patch-resource-accessors.sh release $(DEV_SCRATCH); status=$$?; \
 	if [ $$status -eq 3 ]; then \
 		echo "♻️  Resource-Accessors frisch gepatcht — Rebuild..."; \
-		find $(DEV_SCRATCH) -path "*/debug/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
-		swift build -c debug -Xswiftc -O -Xswiftc -DWHISPERM8_INSTALLED --disable-sandbox --scratch-path $(DEV_SCRATCH); \
+		find $(DEV_SCRATCH) -path "*/release/*/DerivedSources/resource_bundle_accessor.swift" -exec chmod u+w {} + 2>/dev/null || true; \
+		swift build -c release --disable-sandbox --scratch-path $(DEV_SCRATCH); \
 	elif [ $$status -ne 0 ]; then \
 		exit $$status; \
 	fi
-	@$(MAKE) _bundle BUILD=debug BUILD_DIR=$(DEV_SCRATCH)
+	@$(MAKE) _bundle BUILD=release BUILD_DIR=$(DEV_SCRATCH)
 
 # Backwards-compatible alias.
 dev-reinstall: dev
