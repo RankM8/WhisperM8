@@ -77,7 +77,8 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     private static let bottomThreshold: Double = 0.985
 
     override func bell(source: Terminal) {
-        guard AppPreferences.shared.isTerminalBellEnabled else { return }
+        guard AppPreferences.shared.isTerminalBellEnabled,
+              !AppPreferences.shared.agentAlertLevel.silencesNotifications else { return }
         super.bell(source: source)
     }
 

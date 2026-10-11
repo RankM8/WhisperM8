@@ -1966,9 +1966,13 @@ struct AgentChatsView: View {
                     Image(systemName: "gearshape")
                         .font(.system(size: 12, weight: .medium))
                         .frame(width: 16)
+                    // Einzeilig: seit dem Glocken-Knopf ist der Footer so voll,
+                    // dass „Settings" sonst in „Setting / s" umbricht.
                     Text("Settings")
                         .font(.system(size: 12, weight: .medium))
-                    Spacer()
+                        .lineLimit(1)
+                        .fixedSize()
+                    Spacer(minLength: 0)
                 }
                 .foregroundStyle(AgentTheme.textSecondary)
                 .padding(.horizontal, 8)
@@ -1995,6 +1999,9 @@ struct AgentChatsView: View {
             }
             .buttonStyle(.plain)
             .help(archiveModeActive ? "Archiv verlassen" : "Archiv (\(archivedSidebarSessions.count))")
+
+            // Ruhe-Stufe: Fertig-Ton / Mitteilungen per Klick dämpfen
+            SidebarAlertLevelButton()
 
             // Usage-Limits der verbundenen Claude-/ChatGPT-Accounts
             SidebarUsageButtons()

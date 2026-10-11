@@ -685,6 +685,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentAwaitingNotificationEnabled) }
     }
 
+    /// Ruhe-Stufe des Glocken-Schalters in der Sidebar — überlagert Fertig-Ton,
+    /// Mitteilungen, Terminal-Glocke und Voice-Callouts, ohne deren Schalter zu
+    /// ändern (siehe `AgentAlertLevel`). Default `.all` = keine Überlagerung.
+    var agentAlertLevel: AgentAlertLevel {
+        get { defaults.string(forKey: Keys.agentAlertLevel).flatMap(AgentAlertLevel.init(rawValue:)) ?? .all }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.agentAlertLevel) }
+    }
+
     /// Automatischer Update-Check gegen die GitHub-Releases (Start + 24 h).
     /// Kill-Switch ohne Rebuild:
     /// `defaults write com.whisperm8.app updateCheckEnabled -bool NO`
@@ -808,6 +816,7 @@ enum PreferenceKeys {
     static let claudeHooksEnabled = "claudeHooksEnabled"
     static let agentStopNotificationEnabled = "agentStopNotificationEnabled"
     static let agentAwaitingNotificationEnabled = "agentAwaitingNotificationEnabled"
+    static let agentAlertLevel = "agentAlertLevel"
     static let updateCheckEnabled = "updateCheckEnabled"
     static let codexVoiceGateEnabled = "codexVoiceGateEnabled"
     static let codexVoiceGateDryRun = "codexVoiceGateDryRun"

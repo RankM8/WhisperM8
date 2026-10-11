@@ -17,6 +17,7 @@ final class SpeechCalloutTests: XCTestCase {
         var blocked = false
         var muted = false
         var enabled = true
+        var silenced = false
         var scheduled: [@MainActor () -> Void] = []
 
         @MainActor
@@ -35,7 +36,8 @@ final class SpeechCalloutTests: XCTestCase {
             storeMuted: { world.muted = $0 },
             isBlocked: { world.blocked },
             now: { world.now },
-            schedule: { _, action in world.scheduled.append(action) }
+            schedule: { _, action in world.scheduled.append(action) },
+            isSilenced: { world.silenced }
         ))
         return (center, engine, world)
     }
@@ -48,6 +50,26 @@ final class SpeechCalloutTests: XCTestCase {
         let outcome = center.enqueue(sessionID: jarvis, speaker: "Jarvis", text: "Der Outreach-Chat wartet.")
         XCTAssertEqual(outcome, .queued(position: 1))
         XCTAssertEqual(engine.spoken, ["Jarvis: Der Outreach-Chat wartet."])
+    }
+
+    func testSidebarSilenceDropsCalloutsWithoutTouchingStoredMute() {
+        let (center, engine, world) = makeCenter()
+        world.silenced = true
+        XCTAssertEqual(center.enqueue(sessionID: jarvis, speaker: "Jarvis", text: "Fertig."), .muted)
+        XCTAssertTrue(engine.spoken.isEmpty)
+        XCTAssertFalse(world.muted)
+        XCTAssertFalse(center.isMuted)
+    }
+
+    func testDiscardAllStopsCurrentAndDropsPending() {
+        let (center, engine, world) = makeCenter()
+        _ = center.enqueue(sessionID: jarvis, speaker: "Jarvis", text: "Eins.")
+        _ = center.enqueue(sessionID: other, speaker: "Outreach", text: "Zwei.")
+        center.discardAll()
+        XCTAssertEqual(engine.stops, 1)
+        XCTAssertNil(center.current)
+        XCTAssertTrue(center.pending.isEmpty)
+        XCTAssertFalse(world.muted)
     }
 
     func testNeverTwoAtOnce() {

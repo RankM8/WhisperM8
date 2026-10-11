@@ -58,6 +58,23 @@ final class UISnapshotGallery: XCTestCase {
             }
         }
 
+        func sidebarAlertLevel(_ level: AgentAlertLevel) -> Fixture {
+            Fixture(
+                name: "sidebar-glocke-\(level.rawValue)",
+                size: CGSize(width: 260, height: 60),
+                storage: [PreferenceKeys.agentAlertLevel: level.rawValue]
+            ) {
+                AnyView(HStack(spacing: 8) {
+                    SidebarAlertLevelButton()
+                    Text(SidebarAlertLevelButton.title(for: level))
+                        .font(.system(size: 11))
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .background(AppTheme.sidebar))
+            }
+        }
+
         return [
             transcription("transcription-groq-ohne-key", provider: .groq, model: .groq_whisper_v3),
             transcription("transcription-groq-mit-key", provider: .groq, model: .groq_whisper_v3, hasKey: true),
@@ -85,6 +102,10 @@ final class UISnapshotGallery: XCTestCase {
                 }
                 .padding(24))
             },
+            // Glocken-Schalter im Sidebar-Footer: eine Fixture je Ruhe-Stufe.
+            sidebarAlertLevel(.all),
+            sidebarAlertLevel(.soundOff),
+            sidebarAlertLevel(.off),
             Fixture(name: "onboarding-welcome", size: onboardingSize) {
                 AnyView(WelcomeStep().padding(24))
             },

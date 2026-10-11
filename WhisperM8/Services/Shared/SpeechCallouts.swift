@@ -176,6 +176,9 @@ final class SpeechCalloutCenter {
         var now: () -> Date
         /// Erneuter Versuch nach einer Sperre.
         var schedule: (_ delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> Void
+        /// Ruhe-Stufe der Sidebar („Ton aus"/„Alles aus") — wirkt wie Stumm,
+        /// ohne den eigenen Stumm-Schalter der Menüleiste umzulegen.
+        var isSilenced: () -> Bool = { false }
 
         static let live = Dependencies(
             isEnabled: { AppPreferences.shared.isSpeechCalloutsEnabled },
@@ -185,7 +188,8 @@ final class SpeechCalloutCenter {
             now: Date.init,
             schedule: { delay, action in
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { action() } }
-            }
+            },
+            isSilenced: { AppPreferences.shared.agentAlertLevel.silencesSound }
         )
     }
 
@@ -222,7 +226,7 @@ final class SpeechCalloutCenter {
     func enqueue(sessionID: UUID?, speaker: String?, text: String) -> SpeechCalloutOutcome {
         let cleaned = SpeechCalloutText.clean(text)
         guard !cleaned.isEmpty else { return .empty }
-        guard !isMuted else {
+        guard !isMuted, !dependencies.isSilenced() else {
             Logger.speechCallouts.info("callout_muted chars=\(cleaned.count, privacy: .public)")
             return .muted
         }
@@ -256,6 +260,12 @@ final class SpeechCalloutCenter {
         isMuted = muted
         dependencies.storeMuted(muted)
         guard muted else { return }
+        discardAll()
+    }
+
+    /// Vom Sidebar-Schalter, sobald er Ton stumm schaltet: wie Stumm schalten,
+    /// nur ohne den gespeicherten Stumm-Zustand anzufassen.
+    func discardAll() {
         pending.removeAll()
         if current != nil {
             engine.stop()

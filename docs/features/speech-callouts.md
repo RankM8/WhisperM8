@@ -23,6 +23,7 @@ fertig, der Chat hängt fest.
 | Claude (Modell) | Tool `mcp__whisperm8__speak` mit `text` (Skill `whisperm8:callout` regelt das Wann und Wie) |
 | Jeder Prozess | `whisperm8 speak "<text>"` oder `echo … \| whisperm8 speak -` |
 | User | Menüleiste → „Mute Chat Callouts“ (bleibt über Neustarts), `/callout an \| aus` je Session |
+| User (Sidebar) | Glocken-Schalter im Sidebar-Footer auf „Ton aus“ oder „Alles aus“ schweigt ebenfalls (ohne den Menüleisten-Schalter umzulegen) |
 | Stimme | `defaults write com.whisperm8.app speechCalloutVoiceIdentifier <kennung>`; leer = beste deutsche Stimme |
 
 **Bessere Stimme:** Systemeinstellungen → Bedienungshilfen → Gesprochene

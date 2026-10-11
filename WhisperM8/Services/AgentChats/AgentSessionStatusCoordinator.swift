@@ -11,13 +11,15 @@ struct AgentStatusPreferences {
 
     static func current() -> AgentStatusPreferences {
         let prefs = AppPreferences.shared
-        return AgentStatusPreferences(
+        // Der Sidebar-Schalter überlagert die Einstellungen an genau dieser
+        // Stelle — Ton, Mitteilungen und Subagent-Meldungen lesen alle hier.
+        return prefs.agentAlertLevel.applied(to: AgentStatusPreferences(
             hooksEnabled: prefs.isClaudeHooksEnabled,
             stopNotificationEnabled: prefs.isAgentStopNotificationEnabled,
             awaitingNotificationEnabled: prefs.isAgentAwaitingNotificationEnabled,
             stopSoundEnabled: prefs.isAgentStopSoundEnabled,
             stopSoundName: prefs.agentStopSoundName
-        )
+        ))
     }
 }
 

@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-10-04
+updated: 2026-10-10
 ---
 
 # UI — Fenster, Sidebar, Tabs, Terminal, Timeline
@@ -84,6 +84,29 @@ ungelesene fertige Kinder vor gelesenen sortiert. Ihre sichtbare Row trägt bei
 Idle beziehungsweise fehlendem Live-Status einen blauen Dot. Die Unread-ID wird
 bei Tab-/Session-Selektion und zusätzlich beim Öffnen der Job-Detailansicht
 gelöscht.
+
+### Glocken-Schalter im Footer (Ruhe-Stufe)
+
+Neben dem Archiv-Button sitzt `SidebarAlertLevelButton` (seit 10.10.2026).
+Ein Klick schaltet die Ruhe-Stufe `AgentAlertLevel` weiter:
+
+| Stufe | Symbol | Fertig-Ton + Voice-Callouts | Mitteilungen (Fertig, Rückfrage, Subagent) + Terminal-Glocke |
+|---|---|---|---|
+| `all` | `bell.and.waves.left.and.right` | wie in den Einstellungen | wie in den Einstellungen |
+| `soundOff` | `bell` (Akzentfarbe) | aus | wie in den Einstellungen |
+| `off` | `bell.slash` (Akzentfarbe) | aus | aus |
+
+Die Stufe **überlagert** die Einstellungen, statt deren Schalter umzulegen —
+„alles an" heißt deshalb immer genau das, was unter Settings → Agent Chats →
+Notifications steht, auch wenn man dort einzelne Meldungen abgeschaltet hat.
+Angewendet wird sie an einer Stelle (`AgentStatusPreferences.current()`), dazu
+in `AgentTerminalView.bell` und über `SpeechCalloutCenter.Dependencies.isSilenced`
+(ohne den eigenen Stumm-Schalter der Menüleiste anzufassen; beim Umschalten
+bricht eine laufende Ansage ab). „Ton aus" wird übersprungen, wenn es nichts
+stumm zu schalten gibt (Fertig-Ton aus und Callouts aus oder stumm). Die
+Stufe bleibt über Neustarts (`agentAlertLevel`); die Notifications-Seite
+zeigt einen Hinweis, solange sie nicht auf `all` steht. Hooks und
+Status-Erkennung bleiben in jeder Stufe unberührt. Log: `alert_level_changed`.
 
 ## Tabs
 

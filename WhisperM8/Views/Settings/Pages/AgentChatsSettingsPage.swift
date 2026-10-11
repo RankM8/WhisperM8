@@ -186,6 +186,7 @@ private struct AgentChatsNotificationsSettingsTab: View {
     @AppStorage(PreferenceKeys.agentStopSoundEnabled) private var stopSoundEnabled = true
     @AppStorage(PreferenceKeys.agentStopSoundName) private var stopSoundName = SystemSoundCatalog.fallbackSoundName
     @AppStorage(PreferenceKeys.isTerminalBellEnabled) private var isTerminalBellEnabled = true
+    @AppStorage(PreferenceKeys.agentAlertLevel) private var alertLevel: AgentAlertLevel = .all
 
     @State private var notificationAuthStatus: UNAuthorizationStatus?
     @State private var availableSounds: [String] = []
@@ -200,6 +201,10 @@ private struct AgentChatsNotificationsSettingsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             SettingsSection("Notifications & Sounds") {
+                if let alertLevelOverride {
+                    SettingsHelpText(alertLevelOverride, tone: .warning)
+                }
+
                 SettingsToggleRow(
                     title: "When an agent finishes",
                     subtitle: "Banner also shows while WhisperM8 is frontmost; clicking opens the chat.",
@@ -237,6 +242,19 @@ private struct AgentChatsNotificationsSettingsTab: View {
             }
         }
         .onAppear(perform: refresh)
+    }
+
+    /// Hinweis, solange der Glocken-Schalter der Sidebar diese Einstellungen
+    /// überlagert — sonst wirkten die Schalter hier scheinbar nicht.
+    private var alertLevelOverride: String? {
+        switch alertLevel {
+        case .all:
+            return nil
+        case .soundOff:
+            return "The bell button in the sidebar footer currently mutes the completion sound and chat callouts. Notifications follow the settings below."
+        case .off:
+            return "The bell button in the sidebar footer currently mutes sounds, notifications and the terminal bell. The settings below apply again once it is switched back on."
+        }
     }
 
     private var completionSoundRow: some View {
