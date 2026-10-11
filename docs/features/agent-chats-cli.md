@@ -114,8 +114,9 @@ vorhandenen. Refs werden vorab alle aufgelöst (alles oder nichts), ohne
 Nachfrage — die Bestätigung holt der aufrufende Agent vorher ein.
 
 Ergebnis je Chat (`--json`: `result.results[]`): `outcome` = `wouldMove`
-(Vorschau) · `moved` · `skipped` (+ `reason` = Skip-Grund des Planers) ·
-`failed` · `notFound`. Exit: Vorschau 0; sonst 0 nur, wenn danach **jeder**
+(Vorschau) · `moved` · `scheduled` (vorgemerkt, wechselt nach dem Turn;
+`reason` = `turnRunning`/`awaitingInput`/`unsentInput`) · `skipped`
+(+ `reason` = Skip-Grund des Planers) · `failed` · `notFound`. Exit: Vorschau 0; sonst 0 nur, wenn danach **jeder**
 genannte Chat im Zielkonto ist (umgezogen oder schon dort), andernfalls 4 —
 ein Supervisor erkennt „nicht alles erledigt" am Exit-Code.
 
@@ -139,7 +140,17 @@ passiert für diese Chats:
 
 Geschützt bleiben: **arbeitende** Chats (ein Turn würde abgebrochen) und Chats,
 in deren Eingabefeld **vermutlich ungesendeter Text** steht (das Beenden der
-TUI verwirft ihn) — beide nur mit `--force`. Die Entwurfs-Schätzung
+TUI verwirft ihn). Seit 11.10.2026 werden sie **vorgemerkt** (`scheduled`)
+statt blockiert: der `AccountSwitchCoordinator` der App prüft alle 2 s und
+wechselt sie, sobald ihr Turn fertig und kein Entwurf mehr zu vermuten ist
+(Rückfrage offen → wartet weiter). Nicht vorgemerkt wird, wenn das Zielkonto
+den Ordner nie im Trust-Dialog freigegeben hat — der unbeobachtete Neustart
+landete sonst in Claudes Dialog mit Vorauswahl „No, exit"; diese Chats bleiben
+blockiert. Vormerkungen sind flüchtig (App-Neustart verwirft sie), aufheben
+geht im Kontextmenü („Kontowechsel zu … aufheben"). `--force` hält auch
+arbeitende Chats sofort an. Kill-Switch:
+`defaults write com.whisperm8.app accountSwitchAfterTurnEnabled -bool NO`
+(dann wieder blockiert wie vorher). Die Entwurfs-Schätzung
 (`TerminalComposerDraftTracker`) ist konservativ: getippte Zeichen, Einfügen,
 Datei-Drop und `send --no-submit` markieren, Return (ohne Shift/Option),
 Ctrl+C und ein zugestellter `send` heben die Markierung auf. Die

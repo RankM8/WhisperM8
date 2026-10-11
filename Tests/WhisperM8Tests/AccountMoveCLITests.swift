@@ -395,6 +395,18 @@ final class ChatsMoveAccountCLITests: XCTestCase {
         XCTAssertEqual(skipped, "– übersprungen: whisperm8/Chat — läuft gerade (mit --stop-and-resume umziehbar)")
     }
 
+    func testScheduledLineSummaryAndExitCode() {
+        let scheduled = item("scheduled", reason: "turnRunning", reasonLabel: "Arbeitet — wechselt nach dem Turn")
+        XCTAssertEqual(
+            ChatsMoveAccountSupport.humanLine(for: scheduled, toProfile: "ai3", fallbackLabel: nil),
+            "⏱ vorgemerkt: whisperm8/Chat (main → ai3) — Arbeitet — wechselt nach dem Turn")
+        XCTAssertEqual(
+            ChatsMoveAccountSupport.summaryLine(for: [item("moved"), scheduled], dryRun: false),
+            "1 umgezogen · 1 vorgemerkt (wechseln nach dem Turn)")
+        // Vorgemerkt heißt: noch nicht im Ziel — ein Supervisor soll das sehen.
+        XCTAssertEqual(ChatsMoveAccountSupport.exitCode(for: [item("moved"), scheduled], dryRun: false), ChatsCLIExit.conflict)
+    }
+
     func testSummaryCountsOutcomes() {
         let items = [item("moved"), item("moved"), item("skipped"), item("failed")]
         XCTAssertEqual(

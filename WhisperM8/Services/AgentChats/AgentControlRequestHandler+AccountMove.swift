@@ -22,7 +22,7 @@ extension AgentControlRequestHandler {
         var title: String?
         var project: String?
         var fromProfile: String?
-        /// moved | wouldMove | skipped | failed | notFound
+        /// moved | wouldMove | scheduled | skipped | failed | notFound
         var outcome: String
         /// Skip-Grund des Planers (`AccountMovePlanner.SkipReason.rawValue`)
         /// oder Fehlerart (`stopTimeout`, `moveFailed`, `projectPathMissing`).
@@ -181,6 +181,34 @@ extension AgentControlRequestHandler {
                         items[id]?.reasonLabel = "\(skip.reason.label) — \(blocked.label)"
                     }
                 }
+            }
+
+            // Kontowechsel nach dem Turn (Slice 2): Statt „arbeitet gerade —
+            // nur mit --force" merkt sich die App den Chat vor und wechselt ihn,
+            // sobald sein Turn fertig ist. Nicht, wenn das Zielkonto den Ordner
+            // nie freigegeben hat — ein unbeobachteter Neustart landete im
+            // Trust-Dialog mit Vorauswahl „No, exit".
+            let switchCoordinator = AccountSwitchCoordinator.shared
+            if stopAndResume, !dryRun, switchCoordinator.isEnabled {
+                let trusted = ClaudeAccountPreflight.trustedPaths(
+                    claudeJSON: profiles.claudeJSONURL(forProfile: targetName))
+                var toSchedule: [(sessionID: UUID, reason: AccountSwitchPlanner.WaitReason)] = []
+                for blocked in selection.blocked where blocked.reason != .ownSession {
+                    let id = blocked.candidate.sessionID
+                    guard let session = sessions.first(where: { $0.id == id }),
+                          let cwd = AccountMoveFacts.cwd(for: session, projects: workspace.projects),
+                          ClaudeAccountPreflight.trustsProject(cwd: cwd, trustedPaths: trusted) else { continue }
+                    let reason = AccountSwitchPlanner.waitReason(
+                        status: statusStore.status(for: id),
+                        mayHaveUnsentInput: registry.controller(for: id)?.composerDraft.mayHaveUnsentInput == true
+                    ) ?? .turnRunning
+                    toSchedule.append((id, reason))
+                    items[id]?.outcome = "scheduled"
+                    items[id]?.reason = reason.rawValue
+                    items[id]?.reasonLabel = reason.label
+                    items[id]?.stopBlocked = nil
+                }
+                switchCoordinator.schedule(toSchedule, targetProfile: target, targetName: targetName)
             }
 
             var stopped: [(id: UUID, pid: pid_t?)] = []
@@ -359,6 +387,7 @@ extension AgentControlRequestHandler {
             "targetLoggedIn": preparation.targetIsLoggedIn,
             "movedCount": count("moved"),
             "wouldMoveCount": count("wouldMove"),
+            "scheduledCount": count("scheduled"),
             "skippedCount": count("skipped"),
             "failedCount": count("failed"),
             "journal": AccountMoveJournal.defaultFileURL().path,

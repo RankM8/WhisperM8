@@ -83,7 +83,8 @@ whisperm8 chats move-account <ref> [<ref>…] --to <profil> [--dry-run]
                                                      # Chats werden übersprungen. Exit 0 = alle im Ziel, 4 = nicht alle
 whisperm8 chats move-account <ref>… --to <profil> --stop-and-resume [--force]
                                                      # laufende Chats anhalten → umziehen → Neustart vormerken;
-                                                     # working/Entwurf im Composer nur mit --force, @self nie
+                                                     # working/Entwurf: vorgemerkt (outcome scheduled), wechseln
+                                                     # selbst nach dem Turn; sofort nur mit --force, @self nie
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel).
 whisperm8 chats rename <ref> --reset                  # hebt den Namen auf → nativer Titel des CLI (Claudes /rename bzw. generierter Titel, sonst erster Prompt)
                                                      # Titel-Konvention des Users: Thema (1-2 Worte)
@@ -368,11 +369,13 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
 - **„Zieh alle aktiven Chats auf Konto ai3"** → `list --scope active --json`
   → Claude-Chats sammeln → `move-account <refs…> --to ai3 --dry-run` →
   Vorschau zeigen (umziehbar / übersprungen mit Grund; bei „läuft gerade"
-  sagen, ob `--stop-and-resume` sie mitnähme oder was sie blockiert:
-  arbeitet, Entwurf im Eingabefeld, eigene Session) → bestätigen lassen →
+  sagen, ob `--stop-and-resume` sie mitnähme, nach dem Turn vormerkte
+  (arbeitet, Entwurf im Eingabefeld) oder was sie blockiert (eigene Session,
+  Ordner im Zielkonto nicht freigegeben) → bestätigen lassen →
   `move-account <refs…> --to ai3` (bzw. mit `--stop-and-resume`, wenn der
-  User laufende Chats mitnehmen will). Danach melden: N umgezogen, M
-  übersprungen (Grund), Neustarts starten beim Anzeigen des Tabs;
+  User laufende Chats mitnehmen will). Danach melden: N umgezogen, K
+  vorgemerkt (wechseln nach dem Turn), M übersprungen (Grund), Neustarts
+  starten beim Anzeigen des Tabs;
   Rückgängig geht in der App („Letzten Kontowechsel rückgängig machen").
   Hintergrund-Agenten bleiben immer im Haupt-Account.
 - **„Unterbrich X"** → bestätigen lassen → `interrupt X --if-status working`

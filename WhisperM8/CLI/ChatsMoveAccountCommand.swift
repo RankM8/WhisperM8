@@ -67,7 +67,7 @@ struct ChatsMoveAccountResultItem: Equatable {
     var title: String?
     var project: String?
     var fromProfile: String
-    /// moved | wouldMove | skipped | failed | notFound
+    /// moved | wouldMove | scheduled | skipped | failed | notFound
     var outcome: String
     var reason: String?
     var reasonLabel: String?
@@ -129,6 +129,8 @@ enum ChatsMoveAccountSupport {
             return "✓ umgezogen, Neustart vorgemerkt: \(name) (\(route))"
         case "moved":
             return "✓ umgezogen: \(name) (\(route))"
+        case "scheduled":
+            return "⏱ vorgemerkt: \(name) (\(route))\(why)"
         case "skipped":
             var line = "– übersprungen: \(name)\(why)"
             if item.stopAndResumePossible {
@@ -157,6 +159,8 @@ enum ChatsMoveAccountSupport {
         } else {
             parts.append("\(count("moved")) umgezogen")
         }
+        let scheduled = count("scheduled")
+        if scheduled > 0 { parts.append("\(scheduled) vorgemerkt (wechseln nach dem Turn)") }
         let skipped = count("skipped")
         if skipped > 0 { parts.append("\(skipped) übersprungen") }
         let failed = count("failed")

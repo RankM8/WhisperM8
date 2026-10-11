@@ -1,0 +1,300 @@
+import Darwin
+import XCTest
+@testable import WhisperM8
+
+/// Slice 2 (Plan claude-account-switch-ohne-stopp.md): Kontowechsel ohne
+/// Stoppen — Entscheidung pur, Ausführung über eine Fake-Welt ohne Terminals.
+final class AccountSwitchPlannerTests: XCTestCase {
+    private func candidate(_ title: String, running: Bool = false, conflict: Bool = false) -> AccountMovePlanner.Candidate {
+        AccountMovePlanner.Candidate(
+            sessionID: UUID(), title: title, currentProfile: nil, provider: .claude,
+            kind: .chat, isRunning: running, hasTargetConflict: conflict)
+    }
+
+    private func decide(
+        _ candidates: [AccountMovePlanner.Candidate],
+        status: [UUID: AgentSessionRuntimeStatus] = [:],
+        drafts: Set<UUID> = [],
+        caller: UUID? = nil,
+        untrusted: Set<UUID> = []
+    ) -> AccountSwitchPlanner.Decision {
+        let plan = AccountMovePlanner.plan(candidates: candidates, targetProfile: "ai2", targetIsLoggedIn: true)
+        return AccountSwitchPlanner.decide(
+            plan: plan,
+            isCaller: { $0 == caller },
+            status: { status[$0] },
+            mayHaveUnsentInput: { drafts.contains($0) },
+            targetTrustsProject: { !untrusted.contains($0) })
+    }
+
+    func testStoppedChatMovesNowAndIdleRunningChatSwitchesNow() {
+        let stopped = candidate("aus")
+        let idle = candidate("ruht", running: true)
+        let decision = decide([stopped, idle], status: [idle.sessionID: .idle])
+        XCTAssertEqual(decision.moveNow.map(\.title), ["aus"])
+        XCTAssertEqual(decision.switchNow.map(\.title), ["ruht"])
+        XCTAssertTrue(decision.waitForTurn.isEmpty)
+    }
+
+    func testBusyChatsWaitWithReason() {
+        let working = candidate("arbeitet", running: true)
+        let asking = candidate("fragt", running: true)
+        let drafting = candidate("entwurf", running: true)
+        let unknown = candidate("unbekannt", running: true)
+        let decision = decide(
+            [working, asking, drafting, unknown],
+            status: [working.sessionID: .working, asking.sessionID: .awaitingInput, drafting.sessionID: .idle],
+            drafts: [drafting.sessionID])
+        XCTAssertEqual(decision.waitForTurn.map(\.candidate.title), ["arbeitet", "fragt", "entwurf", "unbekannt"])
+        XCTAssertEqual(decision.waitForTurn.map(\.reason), [.turnRunning, .awaitingInput, .unsentInput, .turnRunning])
+        XCTAssertTrue(decision.switchNow.isEmpty)
+    }
+
+    func testMissingTrustBlocksOnlyTheUnwatchedSwitch() {
+        let idle = candidate("ruht", running: true)
+        let working = candidate("arbeitet", running: true)
+        let decision = decide(
+            [idle, working],
+            status: [idle.sessionID: .idle, working.sessionID: .working],
+            untrusted: [idle.sessionID, working.sessionID])
+        XCTAssertEqual(decision.switchNow.map(\.title), ["ruht"], "ruhend = User schaut hin, Trust-Dialog ist ok")
+        XCTAssertEqual(decision.blocked.map(\.reason), [.trustMissing])
+    }
+
+    func testOwnSessionIsNeverStopped() {
+        let me = candidate("ich", running: true)
+        let decision = decide([me], status: [me.sessionID: .idle], caller: me.sessionID)
+        XCTAssertEqual(decision.blocked.map(\.reason), [.ownSession])
+        XCTAssertTrue(decision.switchNow.isEmpty)
+    }
+
+    func testOtherSkipReasonsWinBeforeStopping() {
+        let conflicting = candidate("kollidiert", running: true, conflict: true)
+        let decision = decide([conflicting], status: [conflicting.sessionID: .idle])
+        XCTAssertEqual(decision.skipped.map(\.reason), [.targetConflict], "nie anhalten, was danach nicht umziehen darf")
+        XCTAssertEqual(decision.actionableCount, 0)
+    }
+}
+
+@MainActor
+final class AccountSwitchCoordinatorTests: XCTestCase {
+    /// Fake-Welt: Prozesse, Status, Entwürfe und was die Kette mit ihnen tut.
+    @MainActor
+    final class World {
+        var project = AgentProject(name: "app", path: "/Users/x/app")
+        var sessions: [AgentChatSession] = []
+        var running: Set<UUID> = []
+        var status: [UUID: AgentSessionRuntimeStatus] = [:]
+        var drafts: Set<UUID> = []
+        /// Prozesse, die sich trotz Terminate nicht beenden.
+        var hanging: Set<UUID> = []
+        var pids: [UUID: pid_t] = [:]
+        var terminated: [UUID] = []
+        var moved: [AccountMoveService.Move] = []
+        var batchIDs: Set<UUID> = []
+        var resumed: [UUID] = []
+        var enabled = true
+
+        func addSession(_ title: String, running isRunning: Bool, status: AgentSessionRuntimeStatus? = nil) -> UUID {
+            let session = AgentChatSession(
+                provider: .claude, projectID: project.id, externalSessionID: UUID().uuidString, title: title)
+            sessions.append(session)
+            pids[session.id] = pid_t(1000 + sessions.count)
+            if isRunning { running.insert(session.id) }
+            if let status { self.status[session.id] = status }
+            return session.id
+        }
+
+        var dependencies: AccountSwitchCoordinator.Dependencies {
+            AccountSwitchCoordinator.Dependencies(
+                isRunning: { [unowned self] in running.contains($0) },
+                processID: { [unowned self] in pids[$0] },
+                terminate: { [unowned self] id in
+                    terminated.append(id)
+                    if !hanging.contains(id) { running.remove(id) }
+                },
+                waitForExit: { [unowned self] pid in
+                    await MainActor.run {
+                        guard let id = self.pids.first(where: { $0.value == pid })?.key else { return true }
+                        return !self.running.contains(id)
+                    }
+                },
+                status: { [unowned self] in status[$0] },
+                mayHaveUnsentInput: { [unowned self] in drafts.contains($0) },
+                workspace: { [unowned self] in AgentWorkspace(projects: [project], sessions: sessions) },
+                plan: { [unowned self] sessions, _, targetName in
+                    AccountMovePlanner.plan(
+                        candidates: sessions.map {
+                            AccountMovePlanner.Candidate(
+                                sessionID: $0.id, title: $0.title, currentProfile: $0.claudeProfileName,
+                                provider: $0.provider, kind: $0.effectiveKind,
+                                isRunning: running.contains($0.id), hasTargetConflict: false)
+                        },
+                        targetProfile: AccountMovePlanner.normalize(targetName),
+                        targetIsLoggedIn: true)
+                },
+                perform: { [unowned self] moves, batchID in
+                    moved += moves
+                    batchIDs.insert(batchID)
+                    return AccountMoveService.Outcome()
+                },
+                scheduleResume: { [unowned self] in resumed.append($0) },
+                isEnabled: { [unowned self] in enabled })
+        }
+
+        func plan(_ ids: [UUID]) -> AccountMovePlanner.Plan {
+            dependencies.plan(sessions.filter { ids.contains($0.id) }, [project], "ai2")
+        }
+    }
+
+    private func decideAndRun(_ world: World, _ coordinator: AccountSwitchCoordinator, _ ids: [UUID]) async -> AccountSwitchPlanner.Decision {
+        let decision = coordinator.decide(plan: world.plan(ids), targetTrustsProject: { _ in true })
+        _ = await coordinator.execute(decision, targetName: "ai2")
+        return decision
+    }
+
+    func testIdleRunningChatIsStoppedMovedAndResumed() async {
+        let world = World()
+        let id = world.addSession("ruht", running: true, status: .idle)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        _ = await decideAndRun(world, coordinator, [id])
+
+        XCTAssertEqual(world.terminated, [id])
+        XCTAssertEqual(world.moved.map(\.sessionID), [id])
+        XCTAssertEqual(world.moved.first?.toProfile, "ai2")
+        XCTAssertEqual(world.resumed, [id])
+        XCTAssertTrue(coordinator.pending.isEmpty)
+    }
+
+    func testStoppedAndIdleChatsShareOneJournalBatch() async {
+        let world = World()
+        let stopped = world.addSession("aus", running: false)
+        let idle = world.addSession("ruht", running: true, status: .idle)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        _ = await decideAndRun(world, coordinator, [stopped, idle])
+
+        XCTAssertEqual(Set(world.moved.map(\.sessionID)), [stopped, idle])
+        XCTAssertEqual(world.batchIDs.count, 1, "ein „Rückgängig“ nimmt die ganze Aktion zurück")
+        XCTAssertEqual(world.resumed, [idle], "ein gestoppter Chat wird nicht ungefragt gestartet")
+    }
+
+    func testWorkingChatWaitsForTurnEnd() async {
+        let world = World()
+        let id = world.addSession("arbeitet", running: true, status: .working)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        _ = await decideAndRun(world, coordinator, [id])
+        XCTAssertEqual(coordinator.pending[id]?.reason, .turnRunning)
+        XCTAssertTrue(world.terminated.isEmpty)
+
+        await coordinator.recheckPending()
+        XCTAssertTrue(world.terminated.isEmpty, "noch working → weiter warten")
+
+        world.status[id] = .awaitingInput
+        await coordinator.recheckPending()
+        XCTAssertEqual(coordinator.pending[id]?.reason, .awaitingInput)
+        XCTAssertTrue(world.terminated.isEmpty, "Rückfrage offen → nie mitten hinein beenden")
+
+        world.status[id] = .idle
+        await coordinator.recheckPending()
+        XCTAssertEqual(world.terminated, [id])
+        XCTAssertEqual(world.moved.map(\.sessionID), [id])
+        XCTAssertEqual(world.resumed, [id])
+        XCTAssertNil(coordinator.pending[id])
+    }
+
+    func testDraftKeepsWaitingUntilSubmitted() async {
+        let world = World()
+        let id = world.addSession("entwurf", running: true, status: .idle)
+        world.drafts.insert(id)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        _ = await decideAndRun(world, coordinator, [id])
+        await coordinator.recheckPending()
+        XCTAssertEqual(coordinator.pending[id]?.reason, .unsentInput)
+        XCTAssertTrue(world.terminated.isEmpty)
+
+        world.drafts.remove(id)
+        await coordinator.recheckPending()
+        XCTAssertEqual(world.terminated, [id])
+    }
+
+    func testCancelDropsPendingSwitch() async {
+        let world = World()
+        let id = world.addSession("arbeitet", running: true, status: .working)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+        _ = await decideAndRun(world, coordinator, [id])
+
+        coordinator.cancel(sessionID: id)
+        world.status[id] = .idle
+        await coordinator.recheckPending()
+
+        XCTAssertTrue(world.terminated.isEmpty)
+        XCTAssertTrue(world.moved.isEmpty)
+    }
+
+    func testChatStoppedByUserWhilePendingMovesWithoutRestart() async {
+        let world = World()
+        let id = world.addSession("arbeitet", running: true, status: .working)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+        _ = await decideAndRun(world, coordinator, [id])
+
+        world.running.remove(id)
+        await coordinator.recheckPending()
+
+        XCTAssertEqual(world.moved.map(\.sessionID), [id])
+        XCTAssertTrue(world.terminated.isEmpty)
+        XCTAssertTrue(world.resumed.isEmpty)
+    }
+
+    func testHangingProcessIsNeitherMovedNorRestarted() async {
+        let world = World()
+        let id = world.addSession("hängt", running: true, status: .idle)
+        world.hanging.insert(id)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        let decision = coordinator.decide(plan: world.plan([id]), targetTrustsProject: { _ in true })
+        let outcome = await coordinator.execute(decision, targetName: "ai2")
+
+        XCTAssertEqual(world.terminated, [id])
+        XCTAssertTrue(world.moved.isEmpty, "Prozess lebt noch — er könnte weiter in die alte Datei schreiben")
+        XCTAssertTrue(world.resumed.isEmpty)
+        XCTAssertEqual(outcome.failed.map(\.title), ["hängt"])
+    }
+
+    func testDisabledFeatureKeepsOldSkipBehavior() async {
+        let world = World()
+        world.enabled = false
+        let id = world.addSession("ruht", running: true, status: .idle)
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        let decision = await decideAndRun(world, coordinator, [id])
+
+        XCTAssertEqual(decision.skipped.map(\.reason), [.running])
+        XCTAssertTrue(world.terminated.isEmpty)
+    }
+}
+
+final class ClaudeAccountPreflightTests: XCTestCase {
+    func testTrustIsInheritedFromParentAndMissingFileMeansNo() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("preflight-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let json = dir.appendingPathComponent(".claude.json")
+        try JSONSerialization.data(withJSONObject: [
+            "projects": [
+                "/Users/x/repos": ["hasTrustDialogAccepted": true],
+                "/Users/x/other": ["hasTrustDialogAccepted": false],
+            ],
+            "mcpServers": ["akquise": [:], "playwright": [:]],
+        ]).write(to: json)
+
+        XCTAssertTrue(ClaudeAccountPreflight.trustsProject(cwd: "/Users/x/repos/app", claudeJSON: json))
+        XCTAssertFalse(ClaudeAccountPreflight.trustsProject(cwd: "/Users/x/other/app", claudeJSON: json))
+        XCTAssertFalse(ClaudeAccountPreflight.trustsProject(
+            cwd: "/Users/x/repos/app", claudeJSON: dir.appendingPathComponent("fehlt.json")))
+        XCTAssertEqual(ClaudeAccountPreflight.userMCPServers(claudeJSON: json), ["akquise", "playwright"])
+    }
+}

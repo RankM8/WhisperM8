@@ -1,6 +1,6 @@
 # Plan: Claude-Konto per Klick wechseln — ohne Stoppen, gemeinsames Gedächtnis
 
-**Stand:** 2026-10-10 · **Status:** Slice 0 (Prototyp) und Slice 1 (gemeinsames Memory) umgesetzt · **Scope:** Agent Chats (Claude), Settings-Seite „Accounts“, CLI `whisperm8 chats move-account`
+**Stand:** 2026-10-10 · **Status:** Slice 0 (Prototyp), Slice 1 (gemeinsames Memory) und Slice 2 (Wechsel nach dem Turn) umgesetzt · **Scope:** Agent Chats (Claude), Settings-Seite „Accounts“, CLI `whisperm8 chats move-account`
 **Vorgänger:** `claude-account-switcher.md` (Profile via `CLAUDE_CONFIG_DIR`), `claude-account-routing.md` (Slice 5–6: Default-Profil, Umzug mit Journal). Dieser Plan baut darauf auf und ersetzt nichts davon.
 
 ## Ziel
@@ -246,6 +246,24 @@ Projekt üblich. Drag/Menü/Kennzeichen → manuelle QA.
 - Nach dem Wechsel liegt jede JSONL genau einmal (im Zielkonto), `log stream` ohne
   `claude_profile_stamp_mismatch`.
 - „Rückgängig“ stellt Stempel und Ablageort wieder her.
+
+### Umsetzungsstand (11.10.2026)
+
+Umgesetzt mit `AccountSwitchPlanner` (pur), `AccountSwitchCoordinator` (Ausführung + Vormerkungen)
+und `ClaudeAccountPreflight` (Trust, MCP — nur lesend). Abweichungen vom Entwurf:
+- **Ruhende laufende Chats wechseln sofort** (anhalten, umziehen, im Tab fortsetzen); vorgemerkt
+  werden nur arbeitende, solche mit offener Rückfrage und solche mit vermutetem Entwurf. Unbekannter
+  Status zählt als beschäftigt.
+- **Vormerkungen werden per 2-s-Timer geprüft** statt über Status-Publisher — läuft nur, solange es
+  Vormerkungen gibt, und erkennt auch einen geleerten Entwurf ohne Statuswechsel.
+- **Trust ohne Freigabe-Knopf:** fehlt er, wird ein arbeitender Chat nicht vorgemerkt (blockiert,
+  „nach dem Turn erneut wechseln"); ein ruhender wechselt mit Warnung im Sheet, weil der User dann
+  hinschaut. „Trotzdem"-Knopf für Entwürfe entfällt — Absenden oder Leeren löst den Wechsel aus.
+- **CLI-Standard bleibt unverändert:** ohne Flag werden laufende Chats weiter übersprungen (Agenten
+  sollen Chats nicht ungefragt anhalten). Mit `--stop-and-resume` werden arbeitende/Entwurf-Chats
+  jetzt vorgemerkt (`outcome: scheduled`) statt blockiert; `--force` hält sofort an.
+- Kennzeichen „→ ai2" an Tab/Sidebar bleibt Slice 3; bis dahin zeigt das Sheet die Vormerkungen, und
+  das Kontextmenü bietet „Kontowechsel zu … aufheben".
 
 ## Slice 3 — Konten-Seite und Sichtbarkeit
 

@@ -922,8 +922,7 @@ struct AgentChatsView: View {
         }
         .sheet(item: $pendingAccountMove) { pending in
             AgentMoveToAccountSheet(
-                plan: pending.plan,
-                targetDisplayName: pending.targetDisplayName,
+                pending: pending,
                 phase: $accountMovePhase,
                 onConfirm: { commitAccountMove(pending) },
                 onCancelRun: { accountMoveCancelRequested = true },

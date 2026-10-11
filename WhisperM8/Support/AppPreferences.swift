@@ -440,6 +440,16 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeSharedMemoryEnabled) }
     }
 
+    /// Kontowechsel ohne Stoppen: laufende Chats wechseln selbst — ruhende
+    /// sofort (anhalten, umziehen, im Tab neu starten), arbeitende nach dem
+    /// Turn (Plan claude-account-switch-ohne-stopp.md, Slice 2). Aus = laufende
+    /// Chats werden beim Kontowechsel wie früher übersprungen.
+    /// `defaults write com.whisperm8.app accountSwitchAfterTurnEnabled -bool NO`
+    var isAccountSwitchAfterTurnEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.accountSwitchAfterTurnEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.accountSwitchAfterTurnEnabled) }
+    }
+
     /// Merker der einmaligen Memory-Zusammenführung nach `main`
     /// (`ClaudeMemoryMigration.runOnceIfNeeded`).
     var claudeSharedMemoryMigrationDone: Bool {
@@ -814,6 +824,7 @@ enum PreferenceKeys {
     static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
+    static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
     static let jarvisBoardEnabled = "jarvisBoardEnabled"
     static let speechCalloutsEnabled = "speechCalloutsEnabled"
     static let speechCalloutsMuted = "speechCalloutsMuted"

@@ -102,6 +102,29 @@ final class UISnapshotGallery: XCTestCase {
                 }
                 .padding(24))
             },
+            // Kontowechsel ohne Stoppen: alle Gruppen und Hinweise auf einmal.
+            Fixture(name: "konto-wechsel-vorschau", size: CGSize(width: 520, height: 600)) {
+                func candidate(_ title: String) -> AccountMovePlanner.Candidate {
+                    AccountMovePlanner.Candidate(
+                        sessionID: UUID(), title: title, currentProfile: nil, provider: .claude,
+                        kind: .chat, isRunning: false, hasTargetConflict: false)
+                }
+                var decision = AccountSwitchPlanner.Decision(targetProfile: "ai2")
+                decision.moveNow = [candidate("Alte Recherche"), candidate("Doku-Review")]
+                decision.switchNow = [candidate("Login-Bug")]
+                decision.waitForTurn = [(candidate("Refactor Sidebar"), .turnRunning), (candidate("Plan Schritt 3"), .awaitingInput)]
+                decision.blocked = [(candidate("Kunde XY"), .trustMissing)]
+                decision.skipped = [.init(candidate: candidate("Hintergrund-Job"), reason: .backgroundAgent)]
+                let pending = PendingAccountMove(
+                    plan: AccountMovePlanner.Plan(targetProfile: "ai2", movable: [], skipped: []),
+                    decision: decision,
+                    targetDisplayName: "ai2",
+                    untrustedTitles: ["Login-Bug"],
+                    missingMCPServers: ["atlassian", "meta-ads"])
+                return AnyView(AgentMoveToAccountSheet(
+                    pending: pending, phase: .constant(.preview),
+                    onConfirm: {}, onCancelRun: {}, onUndo: {}, onClose: {}))
+            },
             // Glocken-Schalter im Sidebar-Footer: eine Fixture je Ruhe-Stufe.
             sidebarAlertLevel(.all),
             sidebarAlertLevel(.soundOff),

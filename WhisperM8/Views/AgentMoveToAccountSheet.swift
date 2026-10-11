@@ -15,13 +15,15 @@ struct AgentMoveToAccountSheet: View {
         case finished(AccountMoveService.Outcome)
     }
 
-    let plan: AccountMovePlanner.Plan
-    let targetDisplayName: String
+    let pending: PendingAccountMove
     @Binding var phase: Phase
     let onConfirm: () -> Void
     let onCancelRun: () -> Void
     let onUndo: () -> Void
     let onClose: () -> Void
+
+    private var decision: AccountSwitchPlanner.Decision { pending.decision }
+    private var targetDisplayName: String { pending.targetDisplayName }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -50,11 +52,11 @@ struct AgentMoveToAccountSheet: View {
     private var title: String {
         switch phase {
         case .preview:
-            return plan.movable.count == 1
+            return decision.actionableCount == 1
                 ? "Chat in anderes Konto verschieben?"
-                : "\(plan.movable.count) Chats in anderes Konto verschieben?"
+                : "\(decision.actionableCount) Chats in anderes Konto verschieben?"
         case .running:
-            return "Verschiebe …"
+            return decision.switchNow.isEmpty ? "Verschiebe …" : "Verschiebe und setze fort …"
         case .finished:
             return "Umzug abgeschlossen"
         }
@@ -73,6 +75,11 @@ struct AgentMoveToAccountSheet: View {
                 Text("\(done) von \(total) verschoben")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                if !decision.switchNow.isEmpty {
+                    Text("Laufende Chats werden angehalten, umgezogen und im Tab fortgesetzt — das dauert wenige Sekunden.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Text("Der Abbruch wirkt nach dem aktuellen Chat — ein Transcript wird nie halb verschoben.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -85,18 +92,56 @@ struct AgentMoveToAccountSheet: View {
     private var previewContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                if plan.movable.isEmpty {
+                if decision.actionableCount == 0 {
                     Label("Kein Chat aus dieser Auswahl kann umziehen.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
-                } else {
+                }
+                if decision.actionableCount > 0,
+                   !pending.missingMCPServers.isEmpty || !pending.untrustedTitles.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !pending.missingMCPServers.isEmpty {
+                            Label("Im Zielkonto fehlen MCP-Server: \(pending.missingMCPServers.joined(separator: ", ")).",
+                                  systemImage: "puzzlepiece.extension")
+                        }
+                        if !pending.untrustedTitles.isEmpty {
+                            Label("\(targetDisplayName) hat den Ordner noch nicht freigegeben: Claude fragt beim Start nach — dort „Yes, I trust this folder“ wählen (vorausgewählt ist „No, exit“). Betrifft: \(pending.untrustedTitles.prefix(3).joined(separator: ", "))\(pending.untrustedTitles.count > 3 ? " …" : "")",
+                                  systemImage: "lock.shield")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                if !decision.moveNow.isEmpty {
                     section(
-                        title: "Wird verschoben (\(plan.movable.count))",
+                        title: "Wird verschoben (\(decision.moveNow.count))",
                         systemImage: "arrow.right.circle",
-                        titles: plan.movable.map(\.title)
+                        titles: decision.moveNow.map(\.title)
                     )
                 }
-
-                ForEach(plan.skippedByReason(), id: \.reason) { group in
+                if !decision.switchNow.isEmpty {
+                    section(
+                        title: "Läuft — wird angehalten, verschoben und im Tab fortgesetzt (\(decision.switchNow.count))",
+                        systemImage: "arrow.triangle.2.circlepath",
+                        titles: decision.switchNow.map(\.title)
+                    )
+                }
+                ForEach(waitGroups, id: \.reason) { group in
+                    section(
+                        title: "\(group.reason.label) (\(group.titles.count))",
+                        systemImage: "clock",
+                        titles: group.titles
+                    )
+                }
+                ForEach(blockedGroups, id: \.reason) { group in
+                    section(
+                        title: "Nicht gewechselt — \(group.reason.label) (\(group.titles.count))",
+                        systemImage: "hand.raised",
+                        titles: group.titles,
+                        muted: true
+                    )
+                }
+                ForEach(skippedGroups, id: \.reason) { group in
                     section(
                         title: "Übersprungen — \(group.reason.label) (\(group.candidates.count))",
                         systemImage: "minus.circle",
@@ -105,12 +150,16 @@ struct AgentMoveToAccountSheet: View {
                     )
                 }
 
-                if !plan.movable.isEmpty {
+                if decision.actionableCount > 0 {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Ab dem nächsten Start zahlt das Kontingent von \(targetDisplayName).",
                               systemImage: "gauge.with.needle")
                         Label("Der Gesprächsverlauf zieht vollständig mit. Checkpoints und Datei-Historie (Rewind) bleiben im bisherigen Konto zurück.",
                               systemImage: "clock.arrow.circlepath")
+                        if !decision.switchNow.isEmpty || !decision.waitForTurn.isEmpty {
+                            Label("Im neuen Konto liest Claude den Verlauf einmal ohne Cache neu ein — bei großen Chats kostet das spürbar Kontingent. Früheres Thinking bleibt beim alten Konto.",
+                                  systemImage: "arrow.clockwise")
+                        }
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -118,7 +167,30 @@ struct AgentMoveToAccountSheet: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: 300)
+        .frame(maxHeight: 400)
+    }
+
+    private var waitGroups: [(reason: AccountSwitchPlanner.WaitReason, titles: [String])] {
+        let order: [AccountSwitchPlanner.WaitReason] = [.turnRunning, .awaitingInput, .unsentInput]
+        return order.compactMap { reason in
+            let titles = decision.waitForTurn.filter { $0.reason == reason }.map(\.candidate.title)
+            return titles.isEmpty ? nil : (reason, titles)
+        }
+    }
+
+    private var blockedGroups: [(reason: AccountSwitchPlanner.BlockReason, titles: [String])] {
+        let order: [AccountSwitchPlanner.BlockReason] = [.trustMissing, .ownSession]
+        return order.compactMap { reason in
+            let titles = decision.blocked.filter { $0.reason == reason }.map(\.candidate.title)
+            return titles.isEmpty ? nil : (reason, titles)
+        }
+    }
+
+    /// Skip-Gründe des Planers, ohne „läuft gerade" — das entscheidet jetzt
+    /// `decision` (bei abgeschaltetem Feature steht es dort wieder drin).
+    private var skippedGroups: [(reason: AccountMovePlanner.SkipReason, candidates: [AccountMovePlanner.Candidate])] {
+        AccountMovePlanner.Plan(targetProfile: decision.targetProfile, movable: [], skipped: decision.skipped)
+            .skippedByReason()
     }
 
     private func finishedContent(_ outcome: AccountMoveService.Outcome) -> some View {
@@ -130,6 +202,16 @@ struct AgentMoveToAccountSheet: View {
                         systemImage: "checkmark.circle",
                         titles: outcome.moved.map(\.sessionTitle)
                     )
+                }
+                if !decision.waitForTurn.isEmpty {
+                    section(
+                        title: "Vorgemerkt — wechselt nach dem Turn (\(decision.waitForTurn.count))",
+                        systemImage: "clock",
+                        titles: decision.waitForTurn.map(\.candidate.title)
+                    )
+                    Text("Aufheben: Rechtsklick auf den Chat → Zu Account verschieben → Kontowechsel aufheben.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 if !outcome.skippedRunning.isEmpty {
                     section(
@@ -196,11 +278,11 @@ struct AgentMoveToAccountSheet: View {
                 Button("Abbrechen", role: .cancel, action: onClose)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(plan.movable.count == 1 ? "Verschieben" : "\(plan.movable.count) verschieben") {
+                Button(decision.actionableCount == 1 ? "Verschieben" : "\(decision.actionableCount) verschieben") {
                     onConfirm()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(plan.movable.isEmpty)
+                .disabled(decision.actionableCount == 0)
             }
         case .running:
             HStack {

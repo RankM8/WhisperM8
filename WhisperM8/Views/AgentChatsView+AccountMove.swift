@@ -31,37 +31,81 @@ extension AgentChatsView {
             targetProfile: target,
             targetIsLoggedIn: targetIsLoggedIn
         )
+        // Vorab-Prüfungen nur lesend gegen die `.claude.json` des Ziels:
+        // Trust einmal lesen, für alle Chats prüfen (Prototyp P3).
+        let trusted = ClaudeAccountPreflight.trustedPaths(claudeJSON: profiles.claudeJSONURL(forProfile: targetName))
+        let cwdByID = Dictionary(
+            sessions.compactMap { session in
+                AccountMoveFacts.cwd(for: session, projects: workspace.projects).map { (session.id, $0) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let trusts: (UUID) -> Bool = { id in
+            cwdByID[id].map { ClaudeAccountPreflight.trustsProject(cwd: $0, trustedPaths: trusted) } ?? true
+        }
+        let decision = AccountSwitchCoordinator.shared.decide(plan: plan, targetTrustsProject: trusts)
+        let startsInTarget = decision.moveNow + decision.switchNow + decision.waitForTurn.map(\.candidate)
         accountMovePhase = .preview
         accountMoveCancelRequested = false
-        pendingAccountMove = PendingAccountMove(plan: plan, targetDisplayName: targetName)
+        pendingAccountMove = PendingAccountMove(
+            plan: plan,
+            decision: decision,
+            targetDisplayName: targetName,
+            untrustedTitles: (decision.moveNow + decision.switchNow)
+                .filter { !trusts($0.sessionID) }
+                .map(\.title),
+            missingMCPServers: ClaudeAccountPreflight.missingMCPServers(
+                sourceProfiles: Set(startsInTarget.map { AccountMovePlanner.normalize($0.currentProfile) }),
+                targetProfile: target,
+                profiles: profiles
+            )
+        )
     }
 
     // MARK: - Ausfuehrung
 
     func commitAccountMove(_ pending: PendingAccountMove) {
-        let plan = pending.plan
-        guard !plan.movable.isEmpty else { return }
+        let decision = pending.decision
+        guard decision.actionableCount > 0 else { return }
+        let batchID = UUID()
+        let plan = AccountMovePlanner.Plan(
+            targetProfile: decision.targetProfile, movable: decision.moveNow, skipped: [])
         let moves = AccountMoveFacts.moves(
             for: plan,
             sessions: workspace.sessions,
             projects: workspace.projects
         ).moves
-        guard !moves.isEmpty else { return }
 
-        accountMovePhase = .running(done: 0, total: moves.count)
+        accountMovePhase = .running(done: 0, total: moves.count + decision.switchNow.count)
         // Synchron auf dem MainActor: der Store ist MainActor-gebunden, und die
         // Bewegungen sind Dateisystem-Renames innerhalb desselben Volumes.
         // Der Fortschritt wird trotzdem gefuehrt — bei sehr grossen Auswahlen
         // bleibt so sichtbar, wo der Vorgang steht.
         let outcome = AccountMoveService().perform(
             moves,
+            batchID: batchID,
             progress: { done, total in
-                accountMovePhase = .running(done: done, total: total)
+                accountMovePhase = .running(done: done, total: total + decision.switchNow.count)
             },
             shouldCancel: { accountMoveCancelRequested }
         )
-        accountMovePhase = .finished(outcome)
         AccountMenuData.invalidateAll()
+        guard !outcome.wasCancelled, !decision.switchNow.isEmpty || !decision.waitForTurn.isEmpty else {
+            accountMovePhase = .finished(outcome)
+            return
+        }
+        // Laufende Chats: ruhende jetzt anhalten, umziehen und im Tab
+        // fortsetzen, arbeitende vormerken — derselbe Journal-Batch, damit
+        // „Rückgängig“ die ganze Aktion zurücknimmt.
+        var running = decision
+        running.moveNow = []
+        Task { @MainActor in
+            var combined = outcome
+            combined.merge(await AccountSwitchCoordinator.shared.execute(
+                running, targetName: pending.targetDisplayName, batchID: batchID))
+            accountMovePhase = .finished(combined)
+            AccountMenuData.invalidateAll()
+        }
     }
 
     /// Nimmt den zuletzt protokollierten Umzug zurueck.
@@ -136,6 +180,12 @@ extension AgentChatsView {
                         .disabled(!profile.isLoggedIn)
                     }
                 }
+                if let pendingSwitch = AccountSwitchCoordinator.shared.pending[session.id] {
+                    Divider()
+                    Button("Kontowechsel zu \(pendingSwitch.targetName) aufheben", systemImage: "xmark.circle") {
+                        AccountSwitchCoordinator.shared.cancel(sessionID: session.id)
+                    }
+                }
                 if hasUndoableAccountMove {
                     Divider()
                     Button("Letzten Kontowechsel rückgängig machen", systemImage: "arrow.uturn.backward") {
@@ -151,5 +201,11 @@ extension AgentChatsView {
 struct PendingAccountMove: Identifiable, Equatable {
     let id = UUID()
     let plan: AccountMovePlanner.Plan
+    /// Wie jeder Chat ins Ziel kommt (sofort, angehalten + fortgesetzt, nach dem Turn).
+    let decision: AccountSwitchPlanner.Decision
     let targetDisplayName: String
+    /// Chats, die im Ziel beim Start nach Freigabe des Ordners fragen werden.
+    var untrustedTitles: [String] = []
+    /// User-MCP-Server der Herkunftskonten, die dem Ziel fehlen.
+    var missingMCPServers: [String] = []
 }
